@@ -1,1 +1,1 @@
-# elections-model
+# MT Elections Model
