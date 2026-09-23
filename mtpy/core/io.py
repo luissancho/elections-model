@@ -1,3 +1,4 @@
+import glob
 import gzip
 import io
 import joblib
@@ -129,7 +130,7 @@ class FileSystem(object):
 
         return os.path.isfile(path) or os.path.isdir(path)
     
-    def copy(self, name: str, target: str) -> None:
+    def copy(self, name: str, target: str) -> str:
         """
         Copy the given file to the target file.
 
@@ -147,7 +148,7 @@ class FileSystem(object):
 
         return tgt_path
     
-    def move(self, name: str, target: str) -> None:
+    def move(self, name: str, target: str) -> str:
 
         """
         Move the given file to the target file.
@@ -220,6 +221,14 @@ class FileSystem(object):
         os.makedirs(path, exist_ok=True)
 
         return path
+    
+    def glob(self, pattern: str) -> list[str]:
+        path = self.get_path(pattern)
+
+        return [
+            i.replace(self.path + '/', '')
+            for i in sorted(glob.glob(path))
+        ]
 
     @staticmethod
     def assure_local_file(name: str, force: bool = False) -> str:
@@ -430,7 +439,7 @@ class FileSystem(object):
         path = self.get_path(name, force=True)
 
         if is_array(image):
-            image = Image.fromarray(np.asarray(image))
+            image = Image.fromarray(np.array(image))
 
         image.save(path)
 

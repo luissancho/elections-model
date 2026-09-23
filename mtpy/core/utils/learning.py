@@ -36,33 +36,6 @@ def pca(x, n=None, svd_solver='full', model=None, seed=None, **kwargs):
     return d, exp_var, model
 
 
-def umap(x, n=2, n_neighbors=15, min_dist=0.1, metric='euclidean', init='spectral', densmap=False, seed=None, **kwargs):
-    from umap import UMAP  # Lazy load library due to slow importing
-
-    if not isinstance(init, (np.ndarray, str)):
-        init = np.array(init)
-
-    index = x.index
-    x = np.array(x)
-
-    model = UMAP(
-        n_components=n,
-        n_neighbors=n_neighbors,
-        min_dist=min_dist,
-        metric=metric,
-        init=init,
-        densmap=densmap,
-        random_state=seed,
-        transform_seed=seed,
-        **kwargs
-    )
-
-    d = model.fit_transform(x)
-    d = pd.DataFrame(d, index=index)
-
-    return d, model
-
-
 def tsne(x, n=2, perplexity=30, lr=200, epochs=1000, init='random', seed=None, **kwargs):
     from sklearn.manifold import TSNE  # Lazy load library due to slow importing
 

@@ -46,20 +46,15 @@ class PostgreSQL(SQLAdapter):
         if path is None:
             path = ''
 
-        bpath = f'{self.app.fspath}/{path}*'
-        files = sorted(glob.glob(bpath))
+        files = self.app.fs.glob(f'{path}*')
 
         try:
             for fn in files:
-                with open(fn, 'rb') as fh:
-                    if fn[-3:] == '.gz':
-                        with gzip.GzipFile(mode='rb', fileobj=fh) as gz:
-                            buffer = io.BytesIO(gz.read())
-                    else:
-                        buffer = io.BytesIO(fh.read())
+                compression = 'gzip' if fn[-3:] == '.gz' else None
+                buffer = io.StringIO(self.app.fs.read(fn, compression=compression))
 
-                    buffer.seek(0)
-                    cursor.copy_expert(query, buffer)
+                buffer.seek(0)
+                cursor.copy_expert(query, buffer)
 
             connection.commit()
         except Exception as e:
@@ -82,17 +77,17 @@ class PostgreSQL(SQLAdapter):
         connection = self._client.raw_connection()
         cursor = connection.cursor()
 
+        result = None
         try:
-            if path is not None:
-                with open(f'{self.app.fspath}/{path}', 'wb') as fh:
-                    cursor.copy_expert(query, fh)
+            with tempfile.TemporaryFile() as tf:
+                cursor.copy_expert(query, tf)
 
-                result = 1
-            else:
-                with tempfile.TemporaryFile() as tf:
-                    cursor.copy_expert(query, tf)
-
-                    tf.seek(0)
+                tf.seek(0)
+                if path is not None:
+                    compression = 'gzip' if path[-3:] == '.gz' else None
+                    self.app.fs.write(tf.read(), path, compression=compression)
+                    result = 1
+                else:
                     result = pd.read_csv(tf)
         except Exception as e:
             raise e
@@ -311,7 +306,7 @@ class PostgreSQL(SQLAdapter):
                 self.rename_autokey(f'{schema}.{sequence}', sname)
 
             if vmax != vlast and count > 0:
-                self.reset_autokey((f'{schema}.{tname}', key))
+                self.reset_autokey(f'{schema}.{sname}', f'{schema}.{tname}', key)
 
         return self
 

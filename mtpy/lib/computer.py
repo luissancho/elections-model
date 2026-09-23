@@ -26,6 +26,7 @@ from .utils import (
     build_blocks, group_results, norm_range
 )
 
+
 class Computer(Core):
 
     def __init__(
@@ -467,7 +468,7 @@ class Computer(Core):
         # but are present in the polls, in order to prevent missing names errors
         for n in self.names:
             if n not in self.errors.columns:
-                self.errors[n] = np.NaN
+                self.errors[n] = np.nan
         self.errors = self.errors[self.names]
 
         return self
@@ -542,7 +543,7 @@ class Computer(Core):
             print('Compute sample...')
 
         # We need to fix the sample size of the polls that didn't report it
-        df['sample_size'] = df['sample_size'].where(df['sample_size'] > 0, np.NaN)
+        df['sample_size'] = df['sample_size'].where(df['sample_size'] > 0, np.nan)
         # First, we compute the median sample size of the polls published by the same pollster for the same event
         msizes_loc = df.groupby(['event_date', 'pollster'])['sample_size'].median().dropna()
         # If there are no polls published by the same pollster for the same event, we compute the median sample size
@@ -1052,7 +1053,7 @@ class Computer(Core):
         if bname is not None:
             for dt in events.index.get_level_values(0).astype(str).unique().tolist():
                 missing = [n for n in names if n not in list(self.event_params[dt]['bmaps'][bname])]
-                events.loc[dt, missing] = np.NaN
+                events.loc[dt, missing] = np.nan
         
         # In case we are evaluating the error over the margin gap between the two main blocks of parties,
         # we need to compute the difference between the last and the first block of parties
@@ -1246,7 +1247,7 @@ class Computer(Core):
         float
             The bias.
         """
-        x = np.asarray(x)
+        x = np.array(x)
 
         return (np.exp(x) - 1) * 100
 
@@ -1267,7 +1268,7 @@ class Computer(Core):
         float
             The log odds ratio.
         """
-        x = np.asarray(x)
+        x = np.array(x)
 
         return np.log((x / 100) + 1)
 
@@ -1288,7 +1289,7 @@ class Computer(Core):
         np.ndarray
             The overlap/overflow weight of the polls.
         """
-        x = np.asarray(x)
+        x = np.array(x)
         n = len(x)
 
         # All polls are initially assigned a weight of 1
@@ -1348,7 +1349,7 @@ class Computer(Core):
         np.ndarray
             The adjusted mean (updated estimation) and standard deviation (updated error) of the polls.
         """
-        x = np.asarray(x)
+        x = np.array(x)
 
         # Get the mean, standard deviation and lambda parameters of the polls
         data_mean = x[:, 0]

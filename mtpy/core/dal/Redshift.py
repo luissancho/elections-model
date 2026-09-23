@@ -6,8 +6,6 @@ from ..data import SQLAdapter
 
 class Redshift(SQLAdapter):
 
-    alias = ['redshift']
-
     driver = 'redshift+psycopg2'
     default_port = 5439
     quote = '"'

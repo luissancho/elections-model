@@ -31,5 +31,11 @@
     },
     "cwl": {
         "group": "${CWL_GROUP}"
+    },
+    "pushover": {
+        "url": "https://api.pushover.net/1",
+        "user": "${PUSHOVER_USER}",
+        "token": "${PUSHOVER_TOKEN}",
+        "subject": "ManyThings"
     }
 }

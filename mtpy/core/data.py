@@ -1685,7 +1685,10 @@ class SQLAdapter(DBAdapter):
         self.drop(table)
         self.rename(tmp_name, name)
         if autokey:
-            self.rename_autokey(tmp_name, key, name)
+            self.rename_autokey(
+                sequence=(tmp_name, key),
+                name=(name, key)
+            )
 
         return self
 
@@ -1841,40 +1844,71 @@ class SQLAdapter(DBAdapter):
 
         return self
 
-    def rename_autokey(
+    def create_autokey(
         self,
         table: str,
-        key: str,
-        name: str
+        key: str
+    ) -> Self:
+        """
+        Create the AUTOINCREMENT key for a table.
+
+        Parameters
+        ----------
+        table : str
+            Table name to create the AUTOINCREMENT key for.
+        key : str
+            Column to create the AUTOINCREMENT key for.
+        """
+        return self
+
+    def rename_autokey(
+        self,
+        sequence: str | tuple[str, str],
+        name: str | tuple[str, str]
     ) -> Self:
         """
         Rename the AUTOINCREMENT key for a table.
 
         Parameters
         ----------
-        table : str
-            Table name to rename.
-        key : str
-            Column to rename the AUTOINCREMENT key for.
-        name : str
-            New key name.
+        sequence : str or tuple[str, str]
+            Sequence name to rename.
+        name : str or tuple[str, str]
+            New sequence name.
         """
         return self
 
     def reset_autokey(
         self,
-        table: str,
-        key: str
+        sequence: str | tuple[str, str],
+        table: Optional[str] = None,
+        key: Optional[str] = None
     ) -> Self:
         """
-        Reset the AUTOINCREMENT key for a table.
+        Reset the AUTOINCREMENT key sequence for a table.
 
         Parameters
         ----------
-        table : str
+        sequence : str or tuple[str, str]
+            Sequence name to reset.
+        table : str, optional
             Table name to reset.
-        key : str
+        key : str, optional
             Column to reset the AUTOINCREMENT key for.
+        """
+        return self
+
+    def drop_autokey(
+        self,
+        sequence: str | tuple[str, str]
+    ) -> Self:
+        """
+        Drop the AUTOINCREMENT key sequence for a table.
+
+        Parameters
+        ----------
+        sequence : str or tuple[str, str]
+            Sequence name to drop.
         """
         return self
 
@@ -2523,30 +2557,71 @@ class Model(Core):
         self._dal.rename(self.table, name)
 
         if self.autokey:
-            self._dal.rename_autokey(self.table, self.key, name)
+            self.rename_autokey(
+                name=(name, self.key)
+            )
 
         return self
-    
+
+    def create_autokey(self) -> Self:
+        """
+        Create the AUTOINCREMENT key sequence for a table.
+        """
+        if self.autokey:
+            self._dal.create_autokey(
+                table=self.table,
+                key=self.key
+            )
+
+        return self
+
     def rename_autokey(self, name: str) -> Self:
         """
-        Rename the AUTOINCREMENT key for the table.
+        Rename the AUTOINCREMENT key sequence for the table.
 
         Parameters
         ----------
         name : str
-            New table name.
+            New sequence name.
         """
         if self.autokey:
-            self._dal.rename_autokey(self.table, self.key, name)
+            self._dal.rename_autokey(
+                sequence=(self.table, self.key),
+                name=name
+            )
 
         return self
 
     def reset_autokey(self):
         """
-        Reset the AUTOINCREMENT key for the table.
+        Reset the AUTOINCREMENT key sequence for the table.
         """
         if self.autokey:
-            self._dal.reset_autokey(self.table, self.key)
+            self._dal.reset_autokey(
+                sequence=(self.table, self.key)
+            )
+
+        return self
+
+    def drop_autokey(self) -> Self:
+        """
+        Drop the AUTOINCREMENT key sequence for the table.
+        """
+        if self.autokey:
+            self._dal.drop_autokey(
+                sequence=(self.table, self.key)
+            )
+
+        return self
+
+    def assure_autokeys(self) -> Self:
+        """
+        Assure the AUTOINCREMENT key sequences for the table.
+        """
+        if self.autokey:
+            self._dal.assure_autokeys(
+                table=self.table
+            )
 
         return self
 

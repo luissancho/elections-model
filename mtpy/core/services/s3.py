@@ -1,3 +1,4 @@
+import glob
 import gzip
 import io
 import joblib
@@ -125,6 +126,16 @@ class S3(FileSystem):
         self._client.makedirs(path, exist_ok=True)
 
         return path
+    
+    def glob(self, pattern: str) -> list[str]:
+        self.connect()
+
+        path = self.get_path(pattern)
+
+        return [
+            i.replace(self.bucket + '/', '')
+            for i in sorted(self._client.glob(path))
+        ]
 
     @staticmethod
     def assure_remote_file(name: str, force: bool = False) -> str:
@@ -163,30 +174,36 @@ class S3(FileSystem):
         **kwargs
     ) -> pd.DataFrame:
         if self.is_url(name):
-            return self.read_url(name, format=format, compression=compression, **kwargs)
+            return self.read_url(
+                name=name,
+                format=format,
+                compression=compression,
+                **kwargs
+            )
 
         self.connect()
 
         path = self.get_path(name)
-        content = io.StringIO()
+        encoding = kwargs.get('encoding')
+        mode = 'rb' if compression == 'gzip' or format == 'excel' else 'r'
 
-        mode = 'r'
-        if compression == 'gzip':
-            mode = 'rb'
-
-        with self._client.open(path, mode) as fh:
+        with self._client.open(path, mode, encoding=encoding) as fh:
             if compression == 'gzip':
                 with gzip.GzipFile(mode='rb', fileobj=fh) as gz:
-                    content = io.StringIO(gz.read().decode('UTF-8'))
+                    buffer = io.StringIO(gz.read().decode('utf-8'))
+            elif format == 'excel':
+                buffer = io.BytesIO(fh.read())
             else:
-                content = io.StringIO(fh.read())
+                buffer = io.StringIO(fh.read())
 
-            if format == 'csv':
-                df = pd.read_csv(content, **kwargs)
-            elif format == 'json':
-                df = pd.read_json(content, **kwargs)
-            else:
-                df = content.getvalue()
+        if format == 'csv':
+            df = pd.read_csv(buffer, **kwargs)
+        elif format == 'json':
+            df = pd.read_json(buffer, **kwargs)
+        elif format == 'excel':
+            df = pd.read_excel(buffer, **kwargs)
+        else:
+            df = buffer.getvalue()
 
         return df
 
@@ -201,25 +218,32 @@ class S3(FileSystem):
         self.connect()
 
         path = self.get_path(name, force=True)
-        content = io.StringIO()
 
         if format == 'csv':
-            df.to_csv(content, **kwargs)
+            buffer = io.StringIO()
+            df.to_csv(buffer, **kwargs)
         elif format == 'json':
-            df.to_json(content, **kwargs)
+            buffer = io.StringIO()
+            df.to_json(buffer, **kwargs)
+        elif format == 'excel':
+            buffer = io.BytesIO()
+            df.to_excel(buffer, **kwargs)
         else:
-            content = io.StringIO(df)
+            buffer = io.StringIO(df)
 
-        mode = 'w'
         if compression == 'gzip':
-            mode = 'wb'
-            gz_content = io.BytesIO()
-            with gzip.GzipFile(mode='wb', fileobj=gz_content) as gz:
-                gz.write(bytes(content.getvalue(), 'utf-8'))
-            content = gz_content
+            gz_buffer = io.BytesIO()
+            with gzip.GzipFile(mode='wb', fileobj=gz_buffer) as gz:
+                if isinstance(buffer, io.StringIO):
+                    gz.write(bytes(buffer.getvalue(), 'utf-8'))
+                else:
+                    gz.write(buffer.getvalue())
+            buffer = gz_buffer
+
+        mode = 'wb' if isinstance(buffer, io.BytesIO) else 'w'
 
         with self._client.open(path, mode) as fh:
-            fh.write(content.getvalue())
+            fh.write(buffer.getvalue())
 
         return path
 

@@ -7,8 +7,6 @@ from ..data import SQLAdapter
 
 class BigQuery(SQLAdapter):
 
-    alias = ['bq', 'bigquery']
-
     driver = 'bigquery'
     quote = ''
 

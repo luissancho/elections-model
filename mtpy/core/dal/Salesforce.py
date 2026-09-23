@@ -9,8 +9,6 @@ from ..data import DBAdapter
 
 class Salesforce(DBAdapter):
 
-    alias = ['salesforce', 'sf']
-
     stypes_map = {
         'id': 'str',
         'boolean': 'bin',

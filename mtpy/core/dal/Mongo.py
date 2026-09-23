@@ -11,8 +11,6 @@ from ..io import FileSystem
 
 class Mongo(DBAdapter):
 
-    alias = ['mongo', 'mongodb']
-
     def _build_client(self) -> Self:
         db_params = self.params.copy()
 

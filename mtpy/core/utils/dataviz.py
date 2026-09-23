@@ -676,7 +676,7 @@ def create_figure(ax=None, n=None, **kwargs):
     )
 
     if not is_array(axs):
-        axs = np.asarray([axs])
+        axs = np.array([axs])
     axs = axs.flatten()
 
     return fig, axs
@@ -762,7 +762,7 @@ def print_styler(dfs=None, margin=0.05, show=True, path=None):
 def save_styler(dfs=None, margin=0.05, path=None):
     if dfs is not None and path is not None:
         try:
-            import dataframe_image as dfi
+            import dataframe_image as dfi  # type: ignore
 
             with tempfile.TemporaryFile() as tf:
                 ext = path.split('.')[-1]

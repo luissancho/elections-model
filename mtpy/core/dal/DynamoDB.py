@@ -10,8 +10,6 @@ from ..data import DBAdapter
 
 class DynamoDB(DBAdapter):
 
-    alias = ['dynamo', 'dynamodb']
-
     def _build_client(self) -> Self:
         self._client = boto3.client('dynamodb', **self.params)
 

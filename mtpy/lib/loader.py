@@ -239,7 +239,7 @@ class InfoElectoralLoader(Core):
     @property
     def votes(self) -> pd.DataFrame:
         df = self.data['votes'].rename_axis(None)
-        df = df.where(df > 0, np.NaN)
+        df = df.where(df > 0, np.nan)
         df.index = df.index.map(self.provinces).fillna('TOTAL')
 
         return df
@@ -247,7 +247,7 @@ class InfoElectoralLoader(Core):
     @property
     def seats(self) -> pd.DataFrame:
         df = self.data['seats'].rename_axis(None)
-        df = df.where(df > 0, np.NaN)
+        df = df.where(df > 0, np.nan)
         df.index = df.index.map(self.provinces).fillna('TOTAL')
 
         return df
@@ -747,6 +747,6 @@ class WikipediaLoader(Core):
             )
             for p in parties
         }, index=['event', 'polls'])
-        df = df.where(df > 0, np.NaN)
+        df = df.where(df > 0, np.nan)
 
         return df

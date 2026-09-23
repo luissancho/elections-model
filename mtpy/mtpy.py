@@ -9,6 +9,7 @@ from .core.api import Api, Router
 from .core.app import App, Config, Log
 from .core.io import FileSystem
 from .core.services.aws import CloudWatchLogHandler
+from .core.services.pushover import Pushover
 from .core.services.s3 import S3
 from .core.utils.helpers import is_empty, is_number
 
@@ -25,7 +26,7 @@ def run(fspath=None):
 
     app.set('abspath', abspath)
 
-    shpath = abspath + '/../shared'
+    shpath = abspath + '/../../shared'
     if not os.path.exists(shpath):
         shpath = abspath
 
@@ -47,21 +48,21 @@ def run(fspath=None):
 
     app.set('config', config)
 
-    adapter = dal.adapters.get(config.db.adapter, config.db.adapter)
-    if adapter == 'Redshift':
+    adapter = getattr(dal, config.db.adapter)
+    if config.db.adapter == 'Redshift':
         db_params = {**config.db.params.to_dict(), **config.aws.to_dict(), **config.s3.to_dict()}
     else:
         db_params = config.db.params.to_dict()
-    db = getattr(dal, adapter)(db_params, config.db.database)
+    db = adapter(db_params, config.db.database)
 
     app.set('db', db)
 
     dbs = {}
     for name, src in config.dbs.to_dict().items():
-        adapter = dal.adapters.get(src['adapter'], src['adapter'])
-        if adapter == 'Redshift':
+        adapter = getattr(dal, src['adapter'])
+        if src['adapter'] == 'Redshift':
             src['params'] = {**src['params'], **config.aws.to_dict(), **config.s3.to_dict()}
-        dbs[name] = getattr(dal, adapter)(src['params'], src['database'])
+        dbs[name] = adapter(src['params'], src['database'])
 
     app.set('dbs', dbs)
 
@@ -83,6 +84,10 @@ def run(fspath=None):
 
     app.set('fs', fs)
 
+    ps = Pushover(config.pushover.to_dict())
+
+    app.set('ps', ps)
+
     np.random.seed(config.app.seed)
 
     return app
@@ -96,11 +101,6 @@ def api():
 
     router = Router()
     router.add_route('/', 'index')
-
-    router.add_route('/clients/{client_id:num}/{resource:str}', 'clients', 'list', ['GET'])
-    router.add_route('/clients/{client_id:num}/{resource:str}/load', 'clients', 'load', ['POST'])
-
-    router.add_route('/clients/{client_id:num}/report/{report:str}', 'clients', 'report', ['POST'])
 
     app.set('router', router)
 

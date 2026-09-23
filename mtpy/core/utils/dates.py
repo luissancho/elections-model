@@ -221,9 +221,9 @@ class Freq(str, Enum):
                     else:
                         return Freq.parse(default, errors=errors)
                 else:
-                    seq = np.asarray(x.index)
+                    seq = np.array(x.index)
             else:
-                seq = np.asarray(x)
+                seq = np.array(x)
 
             # Try to convert array elements to datetime and drop all invalid types -> infer freq
             # Only if we have a datetime sequence
@@ -437,12 +437,12 @@ def get_delta(
     freq = Freq.parse(freq)
 
     if pd.isna(dt_from) or pd.isna(dt_to):
-        return np.NaN
+        return np.nan
     
     td = dt_to.to_period(freq.pd_freq) - dt_from.to_period(freq.pd_freq)
 
     if not hasattr(td, 'n'):
-        return np.NaN
+        return np.nan
 
     return td.n
 
@@ -653,7 +653,7 @@ def ts_diff(
     Calculate the n-th discrete difference along the given axis.
 
     It uses the `numpy.diff` function to calculate the difference,
-    but also fills the first `n` periods with `np.NaN` values, in order to keep array shape.
+    but also fills the first `n` periods with `np.nan` values, in order to keep array shape.
 
     See `numpy.diff` for more details.
 
@@ -674,7 +674,7 @@ def ts_diff(
     -------
     array-like
         The n-th differences. The shape of the output is preserved by filling
-        the first `n` periods with `np.NaN` values.
+        the first `n` periods with `np.nan` values.
         The type of the output is the same as the input.
     """
     if not is_timeseries(x):
@@ -697,7 +697,7 @@ def ts_diff(
     # Compute the difference along the given axis and set results as a float ndarray
     td = (np.diff(ts, periods, axis=axis) / np.timedelta64(1, freq.pd_freq)).astype(float)
 
-    # Fill the first `n` periods of the given axis with `np.NaN` values
+    # Fill the first `n` periods of the given axis with `np.nan` values
     td = np.concatenate((np.full((periods if axis == 0 else td.shape[0], periods if axis == 1 else td.shape[1]), np.nan), td), axis=axis)
 
     if ndim == 1:

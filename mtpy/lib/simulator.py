@@ -286,7 +286,7 @@ class Simulator(Core):
             if c not in df.columns:
                 df.loc[:, c] = .0
 
-        df = df.where(df > 0, np.NaN).loc[ix, cols]
+        df = df.where(df > 0, np.nan).loc[ix, cols]
 
         return df
     
@@ -577,7 +577,7 @@ class Simulator(Core):
 
                     prev_pcts[key] = prev_pcts[key].where(rix, .0)
 
-        prev_pcts = prev_pcts.where(prev_pcts > 0, np.NaN)[self.params['names']]
+        prev_pcts = prev_pcts.where(prev_pcts > 0, np.nan)[self.params['names']]
 
         total_votes = self.prev_results['votes'].fillna(0).sum(axis=1).astype(int)
         n_votes = total_votes.loc[self.default_region]

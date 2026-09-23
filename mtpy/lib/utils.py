@@ -91,7 +91,7 @@ def group_results(
     results = df.rename(columns=block_map).groupby(level=0, axis=1).sum(min_count=1)
     for col in blocks.index:
         if col not in results.columns:
-            results[col] = np.NaN
+            results[col] = np.nan
 
     return results[blocks.index.tolist()]
 

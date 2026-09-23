@@ -834,7 +834,7 @@ def format_data_bin(
     }
 
     d = format_data_str(x).str.lower().map(bin_map).astype(float, errors='ignore').apply(
-        lambda v: True if v == 1 else False if v == 0 else np.NaN
+        lambda v: True if v == 1 else False if v == 0 else np.nan
     )
 
     if default is not None:
@@ -1001,7 +1001,7 @@ def get_histogram(
         if bins is not None:
             bin_edges = np.arange(ds.min(), ds.max() + bins, bins)
         else:
-            bin_edges = np.asarray([])
+            bin_edges = np.array([])
     else:
         if bins is not None:
             bin_edges = np.histogram_bin_edges(ds, bins=bins)
@@ -1184,13 +1184,6 @@ def is_string(x):
     return isinstance(x, str)
 
 
-def is_bytes(x):
-    if x is None:
-        return False
-
-    return isinstance(x, bytes)
-
-
 def is_object(x):
     if x is None:
         return False
@@ -1215,10 +1208,6 @@ def is_json(x):
     return True
 
 
-def is_dict(x):
-    return isinstance(x, dict)
-
-
 def is_array(x):
     return isinstance(x, (list, tuple)) or (hasattr(x, '__array__') and hasattr(x, '__iter__'))
 
@@ -1234,7 +1223,6 @@ def is_frame(x):
 def is_series(x):
     return isinstance(x, pd.Series)
 
-
 def is_index(x):
     return isinstance(x, pd.Index)
 
@@ -1245,6 +1233,15 @@ def is_empty(x):
     elif is_array(x):
         return len(x) == 0
     elif pd.isnull(x) or not x:
+        return True
+
+    return False
+
+
+def is_null(x):
+    if x is None:
+        return True
+    elif pd.isnull(x):
         return True
 
     return False
@@ -1466,7 +1463,7 @@ def to_pandas(
     elif isinstance(d, dict):  # A dictionary
         ds = pd.DataFrame.from_dict(d, orient=orient)
     elif isinstance(d, (list, tuple)):  # A list or tuple
-        if len(np.asarray(d).shape) > 1:
+        if len(np.array(d).shape) > 1:
             ds = pd.DataFrame.from_dict(
                 dict(zip(np.arange(len(d)), d)),
                 orient=orient

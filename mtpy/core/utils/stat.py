@@ -101,7 +101,7 @@ class Stat(metaclass=StatMeta):
     def set_params(self):
         self.nobs = len(self.data)
         self.vind = ~np.isnan(self.data)
-        self.weights[~self.vind] = np.NaN
+        self.weights[~self.vind] = np.nan
 
         # Compute effective sample size and adjust weights so that they add up to it
         self.neff = np.square(np.sum(self.weights[self.vind])) / np.sum(np.square(self.weights[self.vind]))
@@ -288,7 +288,7 @@ class Kernel(object):
             if isinstance(self.bw[i], str):
                 self.bw[i] = self.get_bw_fixed(self.data[:, i], self.weights, self.bw[i])
 
-        self.bw = np.asfarray(self.bw)
+        self.bw = np.array(self.bw, dtype=np.float64)
 
     @staticmethod
     def kernel_gaussian(x, p, bw):
@@ -311,8 +311,8 @@ class Kernel(object):
 
     @staticmethod
     def isj_fixed_point(x, n, i_sq, a_sq):
-        i_sq = np.asfarray(i_sq, dtype=np.float64)
-        a_sq = np.asfarray(a_sq, dtype=np.float64)
+        i_sq = np.array(i_sq, dtype=np.float64)
+        a_sq = np.array(a_sq, dtype=np.float64)
 
         ell = 7
         f = 0.5 * np.pi ** (2 * ell) * np.sum(np.power(i_sq, ell) * a_sq * np.exp(-i_sq * np.power(np.pi, 2) * x))
@@ -600,10 +600,10 @@ class Estimator(object):
         if self.is_ts.any() and self.ts_freq is None:
             self.ts_freq = Freq.DAY
 
-        self.exog = np.asfarray(self.exog)
+        self.exog = np.array(self.exog, dtype=np.float64)
         if self.endog is not None:
-            self.endog = np.asfarray(self.endog)
-        self.weights = np.asfarray(self.weights)
+            self.endog = np.array(self.endog, dtype=np.float64)
+        self.weights = np.array(self.weights, dtype=np.float64)
 
         return self
 
@@ -626,7 +626,7 @@ class Estimator(object):
                     freq=self.ts_freq
                 )
 
-        self.pred = np.asfarray(self.pred)
+        self.pred = np.array(self.pred, dtype=np.float64)
 
         return self
 
@@ -1090,7 +1090,7 @@ class KernelDensityEstimator(Estimator):
 
     @property
     def r2_score(self) -> float:
-        return np.NaN
+        return np.nan
 
     def get_kernel(self) -> Kernel:
         return Kernel(

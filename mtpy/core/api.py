@@ -40,7 +40,7 @@ class Request(Core):
         if isinstance(qs, bytes):
             qs = qs.decode('latin-1')
 
-        return dict(parse_qsl(qs))
+        return parse_qsl(qs)
 
     async def get_body(self):
         body = b''

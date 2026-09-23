@@ -6,8 +6,6 @@ from ..data import SQLAdapter
 
 class MySQL(SQLAdapter):
 
-    alias = ['mysql']
-
     driver = 'mysql+pymysql'
     default_port = 3306
     quote = '`'
