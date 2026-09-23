@@ -50,8 +50,10 @@ class PostgreSQL(SQLAdapter):
 
         try:
             for fn in files:
-                compression = 'gzip' if fn[-3:] == '.gz' else None
-                buffer = io.StringIO(self.app.fs.read(fn, compression=compression))
+                content = self.app.fs.read_bytes(fn)
+                if fn[-3:] == '.gz':
+                    content = gzip.decompress(content)
+                buffer = io.BytesIO(content)
 
                 buffer.seek(0)
                 cursor.copy_expert(query, buffer)

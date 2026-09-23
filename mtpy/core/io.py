@@ -296,8 +296,9 @@ class FileSystem(object):
         path = self.get_path(name)
         encoding = kwargs.get('encoding')
         mode = 'rb' if compression == 'gzip' or format == 'excel' else 'r'
+        open_kwargs = {} if 'b' in mode else {'encoding': encoding}
 
-        with open(path, mode, encoding=encoding) as fh:
+        with open(path, mode, **open_kwargs) as fh:
             if compression == 'gzip':
                 with gzip.GzipFile(mode='rb', fileobj=fh) as gz:
                     buffer = io.StringIO(gz.read().decode('utf-8'))
@@ -358,7 +359,13 @@ class FileSystem(object):
             buffer = io.BytesIO()
             df.to_excel(buffer, **kwargs)
         else:
-            buffer = io.StringIO(df)
+            if isinstance(df, pd.DataFrame):
+                buffer = io.StringIO()
+                df.to_csv(buffer, **kwargs)
+            elif isinstance(df, (bytes, bytearray, memoryview)):
+                buffer = io.BytesIO(bytes(df))
+            else:
+                buffer = io.StringIO('' if df is None else df)
 
         if compression == 'gzip':
             gz_buffer = io.BytesIO()
