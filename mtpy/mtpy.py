@@ -2,7 +2,6 @@ from dotenv import load_dotenv
 import numpy as np
 import os
 import re
-import warnings
 
 from .core import dal
 from .core.api import Api, Router
@@ -12,8 +11,6 @@ from .core.services.aws import CloudWatchLogHandler
 from .core.services.pushover import Pushover
 from .core.services.s3 import S3
 from .core.utils.helpers import is_empty, is_number
-
-warnings.filterwarnings('ignore')
 
 
 def run(fspath=None):
@@ -35,6 +32,11 @@ def run(fspath=None):
     fspath = fspath or shpath + '/files'
 
     app.set('fspath', fspath)
+
+    # Input data (needed for execution) lives apart from the runtime files
+    datapath = abspath + '/data'
+
+    app.set('datapath', datapath)
 
     if os.path.exists(shpath + '/.env'):
         load_dotenv(dotenv_path=shpath + '/.env')
@@ -83,6 +85,8 @@ def run(fspath=None):
         fs = FileSystem(fspath)
 
     app.set('fs', fs)
+
+    app.set('data', FileSystem(datapath))
 
     ps = Pushover(config.pushover.to_dict())
 

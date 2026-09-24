@@ -64,7 +64,7 @@ def get_event_params(
 
     if path is not None:
         params = json.loads(
-            App.get_().fs.read(f'{path}/params.json')
+            App.get_().data.read('params.json')
         )[scope]
 
         event_params = {dt: params[dt] if dt in params else {} for dt in event_dates}
@@ -109,7 +109,7 @@ def get_event_params(
             'vs': {'Derecha': [], 'Izquierda': []}
         }
 
-        for block, names in parties.groupby('block')['name'].apply(list).to_dict().items():
+        for block, names in parties.groupby('block', observed=True)['name'].apply(list).to_dict().items():
             block_parties = [p for p in names if p in all_parties]
             if len(block_parties) > 0 and block in bmaps['blocks']:
                 bmaps['blocks'][block].extend(block_parties)
@@ -303,7 +303,7 @@ def get_poll_series(
     if isinstance(drop_mtypes, (list, tuple)) and len(drop_mtypes) > 0:
         filters.append("(t.mtype IS NULL OR t.mtype NOT IN ('{}'))".format("', '".join(drop_mtypes)))
     if isinstance(drop_contexts, (list, tuple)) and len(drop_contexts) > 0:
-        filters.append("(t.context IS NULL OR t.context NOT IN ('{}'))".format("', '".join(drop_contexts)))
+        filters.append("(t.ctype IS NULL OR t.ctype NOT IN ('{}'))".format("', '".join(drop_contexts)))
 
     polls = Polls().get_results(query=dict(
         filters=filters
@@ -409,14 +409,8 @@ def save_model_data(
     # Use the model formatter to get the data in the correct types to be saved
     df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)[keys + columns]
 
-    # Remove previous data for the same election event
-    model.execute("UPDATE {} SET {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
-        model.table,
-        ', '.join(['{} = NULL'.format(col) for col in columns]),
-        "', '".join(df.event_scope.unique()),
-        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
-    ))
-
+    # The upsert overwrites the computed columns of the rows present in `df`; rows of the same event
+    # that are not in `df` (incremental runs) keep their previous values
     return model.upsert(df)
 
 

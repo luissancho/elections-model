@@ -1,0 +1,80 @@
+{
+    "es": {
+        "2027-08-22": {
+            "results": "https://en.wikipedia.org/wiki/Next_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_next_Spanish_general_election",
+            "years": ["2023", "2024", "2025", "2026"]
+        },
+        "2023-07-23": {
+            "results": "https://en.wikipedia.org/wiki/2023_Spanish_general_election",
+            "polls": [
+                "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2023_Spanish_general_election",
+                "https://en.wikipedia.org/wiki/Nationwide_opinion_polling_for_the_2023_Spanish_general_election_(2022)",
+                "https://en.wikipedia.org/wiki/Nationwide_opinion_polling_for_the_2023_Spanish_general_election_(2019%E2%80%932021)"
+            ],
+            "years": ["2019", "2020", "2021", "2022", "2023"]
+        },
+        "2019-11-10": {
+            "results": "https://en.wikipedia.org/wiki/November_2019_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_November_2019_Spanish_general_election"
+        },
+        "2019-04-28": {
+            "results": "https://en.wikipedia.org/wiki/April_2019_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_April_2019_Spanish_general_election",
+            "years": ["2016", "2017", "2018", "2019"]
+        },
+        "2016-06-26": {
+            "results": "https://en.wikipedia.org/wiki/2016_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2016_Spanish_general_election"
+        },
+        "2015-12-20": {
+            "results": "https://en.wikipedia.org/wiki/2015_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2015_Spanish_general_election",
+            "years": ["2011", "2012", "2013", "2014", "2015"]
+        },
+        "2011-11-20": {
+            "results": "https://en.wikipedia.org/wiki/2011_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2011_Spanish_general_election"
+        },
+        "2008-03-09": {
+            "results": "https://en.wikipedia.org/wiki/2008_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2008_Spanish_general_election"
+        },
+        "2004-03-14": {
+            "results": "https://en.wikipedia.org/wiki/2004_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2004_Spanish_general_election"
+        },
+        "2000-03-12": {
+            "results": "https://en.wikipedia.org/wiki/2000_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2000_Spanish_general_election"
+        },
+        "1996-03-03": {
+            "results": "https://en.wikipedia.org/wiki/1996_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1996_Spanish_general_election"
+        },
+        "1993-06-06": {
+            "results": "https://en.wikipedia.org/wiki/1993_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1993_Spanish_general_election"
+        },
+        "1989-10-29": {
+            "results": "https://en.wikipedia.org/wiki/1989_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1989_Spanish_general_election"
+        },
+        "1986-06-22": {
+            "results": "https://en.wikipedia.org/wiki/1986_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1986_Spanish_general_election"
+        },
+        "1982-10-28": {
+            "results": "https://en.wikipedia.org/wiki/1982_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1982_Spanish_general_election"
+        },
+        "1979-03-01": {
+            "results": "https://en.wikipedia.org/wiki/1979_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1979_Spanish_general_election"
+        },
+        "1977-06-15": {
+            "results": "https://en.wikipedia.org/wiki/1977_Spanish_general_election",
+            "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1977_Spanish_general_election"
+        }
+    }
+}

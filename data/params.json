@@ -1,0 +1,158 @@
+{
+    "es": {
+        "2027-08-22": {
+            "parties": {
+                "event": [
+                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF",
+                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "UPN"
+                ],
+                "polls": [
+                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF",
+                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "UPN"
+                ]
+            },
+            "bmaps": {
+                "max": [
+                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF"
+                ],
+                "min": {
+                    "PP": "PP",
+                    "PSOE": "PSOE",
+                    "VOX+SALF": ["VOX", "SALF"],
+                    "SUMAR+UP": ["SUMAR", "UP"]
+                },
+                "main": [
+                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "SALF"],
+                    "Izquierda": ["PSOE", "UP", "SUMAR"],
+                    "Regionalista": ["PNV", "CC", "BNG", "UPN"],
+                    "Separatista": ["ERC", "JxCat", "EHB"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "SALF"],
+                    "Izquierda": ["PSOE", "SUMAR", "UP"]
+                }
+            },
+            "smap": {
+                "UP": {"type": "sub", "names": ["SUMAR"]},
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        },
+        "2023-07-23": {
+            "parties": {
+                "event": [
+                    "PP", "PSOE", "VOX", "SUMAR", "ERC", "JxCat",
+                    "EHB", "PNV", "BNG", "CC", "CUP", "UPN"
+                ],
+                "polls": [
+                    "PP", "PSOE", "VOX", "SUMAR", "ERC", "JxCat",
+                    "EHB", "PNV", "BNG", "CC", "CUP", "UPN",
+                    "UP", "Cs", "MP", "NA+", "PRC"
+                ]
+            },
+            "bmaps": {
+                "max": [
+                    "PP", "PSOE", "VOX", "SUMAR", "UP", "MP", "Cs"
+                ],
+                "min": {
+                    "PP": ["PP", "Cs"],
+                    "PSOE": "PSOE",
+                    "VOX": "VOX",
+                    "SUMAR": ["SUMAR", "UP", "MP"]
+                },
+                "main": [
+                    "PP", "PSOE", "VOX", "SUMAR"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "SUMAR", "MP"],
+                    "Regionalista": ["PNV", "CC", "BNG", "NA+", "PRC", "UPN"],
+                    "Separatista": ["ERC", "JxCat", "EHB", "CUP"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX"],
+                    "Izquierda": ["PSOE", "SUMAR"]
+                }
+            },
+            "smap": {
+                "PP": {"type": "agg", "names": ["Cs"]},
+                "SUMAR": {"type": "agg", "names": ["UP", "MP", "MES", "CHA"]},
+                "NA+": {"type": "split", "names": ["PP", "UPN"]},
+                "PRC": {"type": "split", "names": ["PP", "PSOE"]}
+            }
+        },
+        "2019-11-10": {
+            "parties": {
+                "event": [
+                    "PSOE", "PP", "VOX", "UP", "Cs", "ERC", "MP",
+                    "JxCat", "PNV", "EHB", "CUP", "CC", "NA+", "PRC"
+                ],
+                "polls": [
+                    "PSOE", "PP", "VOX", "UP", "Cs", "ERC", "MP",
+                    "JxCat", "PNV", "EHB", "CUP", "CC", "NA+", "PRC",
+                    "COMPROMIS"
+                ]
+            },
+            "bmaps": {
+                "min": {
+                    "PP": ["PP", "Cs"],
+                    "PSOE": "PSOE",
+                    "VOX": "VOX",
+                    "UP": ["UP", "MP"]
+                },
+                "main": [
+                    "PSOE", "PP", "VOX", "UP", "Cs", "MP"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "MP"],
+                    "Regionalista": ["PNV", "CC", "NA+", "PRC", "COMPROMIS"],
+                    "Separatista": ["ERC", "JxCat", "EHB", "CUP"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "MP"]
+                }
+            },
+            "smap": {
+                "MP": [{"type": "sub", "names": ["UP"]}, {"type": "agg", "names": ["COMPROMIS"]}],
+                "CUP": {"type": "sub", "names": ["ERC", "JxCat"]}
+            }
+        },
+        "2019-04-28": {
+            "parties": {
+                "event": [
+                    "PSOE", "PP", "Cs", "UP", "VOX", "ERC", "JxCat",
+                    "PNV", "PACMA", "EHB", "COMPROMIS", "CC", "NA+"
+                ],
+                "polls": [
+                    "PSOE", "PP", "Cs", "UP", "VOX", "ERC", "JxCat",
+                    "PNV", "PACMA", "EHB", "COMPROMIS", "CC", "NA+",
+                    "PDeCAT"
+                ]
+            },
+            "bmaps": {
+                "main": [
+                    "PSOE", "PP", "Cs", "UP", "VOX"
+                ],
+                "blocks": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "PACMA"],
+                    "Regionalista": ["PNV", "CC", "NA+", "COMPROMIS"],
+                    "Separatista": ["ERC", "JxCat", "EHB", "PDeCAT"]
+                },
+                "vs": {
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP"]
+                }
+            },
+            "smap": {
+                "JxCat": {"type": "agg", "names": ["CDC"]},
+                "COMPROMIS": {"type": "agg", "names": ["UP"], "regions": ["3", "12", "46"]},
+                "NA+": {"type": "agg", "names": ["PP", "Cs"], "regions": ["31"]}
+            }
+        }
+    }
+}

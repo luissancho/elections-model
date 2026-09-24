@@ -36,7 +36,7 @@ class InfoElectoralLoader(Core):
         self.scope = scope
         self.event_date = event_date
         self.verbose = verbose
-        self.path = path or os.getcwd()
+        self.path = path or '.'  # Relative to the app file system root (files/)
 
         self.headers = None
         self.names = None
@@ -54,12 +54,12 @@ class InfoElectoralLoader(Core):
         self.m_totals = EventsData()
         self.m_results = EventsResults()
 
-        self.regions = self.app.fs.read_csv(f'{self.path}/es-regions.csv').set_index('code').region
-        self.provinces = self.app.fs.read_csv(f'{self.path}/es-provinces.csv').set_index('code').province
+        self.regions = self.app.data.read_csv('es-regions.csv').set_index('code').region
+        self.provinces = self.app.data.read_csv('es-provinces.csv').set_index('code').province
 
         self.parties = Parties().get_results(formatted=True)
-        if self.app.fs.exists(f'{self.path}/infoelectoral/{self.scope}/{self.fname}.json'):
-            self.parties_colmap = json.loads(self.app.fs.read(f'{self.path}/infoelectoral/{self.scope}/{self.fname}.json'))
+        if self.app.data.exists(f'infoelectoral/{self.scope}/{self.fname}.json'):
+            self.parties_colmap = json.loads(self.app.data.read(f'infoelectoral/{self.scope}/{self.fname}.json'))
         else:
             self.parties_colmap = {}
         self.parties_idmap = self.parties.set_index('name').id.to_dict()
@@ -67,7 +67,7 @@ class InfoElectoralLoader(Core):
         self.parties_missing = []
 
     def read_file(self) -> pd.DataFrame:
-        xls = pd.ExcelFile(f'{self.app.fspath}/{self.path}/infoelectoral/{self.scope}/{self.fname}.xlsx')
+        xls = pd.ExcelFile(self.app.data.get_path(f'infoelectoral/{self.scope}/{self.fname}.xlsx'))
         df = xls.parse(xls.sheet_names[0]).dropna(how='all')
 
         loc_headers = df.loc[df[df.columns[1]].notnull()].index[0]
@@ -142,12 +142,12 @@ class InfoElectoralLoader(Core):
 
         votes = results[[results.columns[i] for i in range(0, len(results.columns), 2)]]
         votes.columns = party_cols
-        votes = votes.groupby(level=0, axis=1).sum()[results_cols]
+        votes = votes.T.groupby(level=0).sum().T[results_cols]
         votes.columns = pd.MultiIndex.from_product([['votes'], votes.columns])
 
         seats = results[[results.columns[i] for i in range(1, len(results.columns), 2)]]
         seats.columns = party_cols
-        seats = seats.groupby(level=0, axis=1).sum()[results_cols]
+        seats = seats.T.groupby(level=0).sum().T[results_cols]
         seats.columns = pd.MultiIndex.from_product([['seats'], seats.columns])
 
         self.data = pd.concat([totals, votes, seats], axis=1).fillna(0).astype(int)
@@ -279,7 +279,7 @@ class WikipediaLoader(Core):
         self.years = years
         self.exclude = exclude
         self.verbose = verbose
-        self.path = path or os.getcwd()
+        self.path = path or '.'  # Relative to the app file system root (files/)
 
         self.data = None
         self.polls = None
@@ -302,8 +302,8 @@ class WikipediaLoader(Core):
             ]
         })
 
-        self.urls = json.loads(self.app.fs.read(f'{self.path}/wikipedia/wp-urls.json'))
-        self.maps = json.loads(self.app.get_().fs.read(f'{self.path}/wikipedia/wp-maps.json'))
+        self.urls = json.loads(self.app.data.read('wikipedia/wp-urls.json'))
+        self.maps = json.loads(self.app.data.read('wikipedia/wp-maps.json'))
         self.params = self.urls[self.scope][self.event_date]
 
         self.parties = Parties().get_results(formatted=True)
@@ -516,7 +516,7 @@ class WikipediaLoader(Core):
 
             cols = self.read_cols(cols, parties, year)
             if len(cols) > 0:
-                cols['context'] = context
+                cols['ctype'] = context
                 data.append(cols)
             remainder = next_remainder
 

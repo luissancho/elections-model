@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sys
 
 
@@ -152,6 +153,8 @@ class Log(object):
         self.path = path
         self.verbose = verbose
         self.loggers = {}
+
+        os.makedirs(self.path, exist_ok=True)
 
         for level, name in Log.levels.items():
             self.add_logger(level, name)

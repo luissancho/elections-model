@@ -1020,9 +1020,9 @@ def ts_impute(
     limit_area = None if fill_out else 'inside'
 
     if method == 'ffill':
-        ds = ds.fillna(method='ffill')
+        ds = ds.ffill()
     elif method == 'bfill':
-        ds = ds.fillna(method='bfill')
+        ds = ds.bfill()
     elif method == 'spline':
         ds = ds.interpolate(method='spline', order=2, limit_area=limit_area)
     elif method == 'linear':

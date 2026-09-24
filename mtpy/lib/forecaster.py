@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
+import warnings
 from tqdm import tqdm
 
 from typing import Any, Optional
@@ -88,7 +89,8 @@ class Forecaster(Core):
         verbose : int, optional
             Level of verbosity.
         path : str, optional
-            Path to store model files.
+            Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
+            (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
         """
         super().__init__()
 
@@ -102,10 +104,10 @@ class Forecaster(Core):
         self.reg_params = self.set_reg_params(reg_params)
 
         self.verbose = verbose
-        self.path = path or os.getcwd()
+        self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
         self.event_params = json.loads(
-            self.app.fs.read(f'{self.path}/params.json')
+            self.app.data.read('params.json')
         )[self.scope][self.event_date]
 
         if isinstance(self.bmap, str):
@@ -267,7 +269,11 @@ class Forecaster(Core):
         series['tte'] = [(self.date_end - dt).days for dt in series.date]  # tte: time to end
 
         # Set poll weights as the product of the all computed weights
-        series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(self.pollsters.set_index('id').quality))
+        # Pollsters without a computed rating fall back to their prior `quality` (0-100), mapped onto the
+        # same scale as `weight_rating` (see `Computer.pollster_ratings`)
+        quality = self.pollsters.set_index('id').quality.astype(float).div(100)
+        weight_quality = np.log1p(quality) / np.log1p(quality.mean())
+        series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(weight_quality))
         series['weight'] = series.weight_over * series.weight_sample * series.weight_rating
 
         # Sort index and columns
@@ -388,17 +394,24 @@ class Forecaster(Core):
 
         names_ = tqdm(names) if self.verbose > 0 else names  # Show progress bar if verbose
         for name in names_:
-            dreg, dstat = self.fit(name, max_fc=max_fc, ret_stat=True)
+            res = self.fit(name, max_fc=max_fc, ret_stat=True)
+            if res is None:
+                warnings.warn('No polls available for `{}`: skipped'.format(name))
+                continue
 
+            dreg, dstat = res
             self.forecast.loc[dreg.index, name] = dreg
-            # Assign the remaining percentage to a new 'others' block
-            self.forecast['-'] = 100. - self.forecast[names].sum(axis=1, min_count=1)
             self.fc_stat.loc[dstat.index, name] = dstat
+
+        # Assign the remaining percentage to the 'others' block
+        self.forecast['-'] = 100. - self.forecast[self.names].sum(axis=1, min_count=1)
 
         # Populate the forecast and statistics frames, filling the missing values with the last available estimation
         if fillna:
-            self.forecast = self.forecast.fillna(method='ffill')
-            self.fc_stat = self.fc_stat.fillna(method='ffill')
+            self.forecast = self.forecast.ffill()
+            # `fc_stat` holds a dict per cell (object dtype): forward-fill column by column, skipping the
+            # columns that were not fitted, to avoid pandas' object downcasting on all-NaN columns
+            self.fc_stat = self.fc_stat.apply(lambda col: col.ffill() if col.notnull().any() else col)
 
         return self.forecast
 
@@ -469,7 +482,7 @@ class Forecaster(Core):
 
             self.fc_stat = self.app.fs.read_csv(
                 self.get_path('fc/{}-stat.csv'.format(prefix))
-            ).set_index('date').applymap(lambda x: literal_eval(x) if isinstance(x, str) else x)
+            ).set_index('date').map(lambda x: literal_eval(x) if isinstance(x, str) else x)
             self.fc_stat.index = pd.DatetimeIndex(self.fc_stat.index)
         else:
             self.fit_forecast()

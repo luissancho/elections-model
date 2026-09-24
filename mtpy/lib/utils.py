@@ -52,7 +52,8 @@ def build_blocks(
             p = {'parties': [parties[-1]] + [i for i in names[:-1] if i not in pinc]}
 
         if 'color' not in p:
-            p['color'] = parties[p['parties'][0]] if isinstance(parties, dict) else get_color(random.choice(palette))
+            default_color = get_color(random.choice(palette))
+            p['color'] = parties.get(p['parties'][0], default_color) if isinstance(parties, dict) else default_color
 
         blocks[b] = p
 
@@ -88,7 +89,8 @@ def group_results(
             return df
 
     block_map = {n: b for b, p in blocks.parties.items() for n in p if n in df.columns and n != b}
-    results = df.rename(columns=block_map).groupby(level=0, axis=1).sum(min_count=1)
+    cols = list(dict.fromkeys(n for p in blocks.parties for n in p if n in df.columns))
+    results = df[cols].rename(columns=block_map).T.groupby(level=0).sum(min_count=1).T
     for col in blocks.index:
         if col not in results.columns:
             results[col] = np.nan

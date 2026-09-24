@@ -129,7 +129,7 @@ class Stat(metaclass=StatMeta):
             self.data = self.data[x_in]
             self.weights = self.weights[x_in]
         elif action == 'group':
-            self.data = np.where(x_in, self.data, np.max(self.data[x_in]))
+            self.data = np.clip(self.data, np.min(self.data[x_in]), np.max(self.data[x_in]))
 
         return self.set_params()
     
@@ -159,14 +159,17 @@ class Stat(metaclass=StatMeta):
 
     @pstatic
     def quantile(self, q: float) -> float:
-        sind = np.argsort(self.data[self.vind])
-        values = self.data[sind]
-        cweights = np.cumsum(self.weights[sind])
+        data = self.data[self.vind]
+        weights = self.weights[self.vind]
+
+        sind = np.argsort(data)
+        values = data[sind]
+        cweights = np.cumsum(weights[sind])
 
         tgt = q * self.neff
-        i = np.searchsorted(cweights, tgt)
+        i = min(int(np.searchsorted(cweights, tgt)), len(values) - 1)
 
-        if np.isclose(tgt, cweights[i]) and i < self.neff - 1:
+        if np.isclose(tgt, cweights[i]) and i < len(values) - 1:
             return (values[i] + values[i + 1]) / 2
 
         return values[i]
@@ -180,8 +183,8 @@ class Stat(metaclass=StatMeta):
 
     @pstatic
     def conf(self, alpha: int | float = 0.05) -> float:
-        if alpha >= 1:  # Corresponding to a multiple of sigma (std)
-            q = erf(alpha / np.sqrt(2))
+        if alpha >= 1:  # Corresponding to a multiple of sigma (std): two-sided coverage erf(n / sqrt(2))
+            q = (1 + erf(alpha / np.sqrt(2))) / 2
         else:
             q = 1 - alpha / 2
 
@@ -200,8 +203,8 @@ class Stat(metaclass=StatMeta):
 
     @pstatic
     def conf_mean(self, alpha: float = 0.05) -> float:
-        if alpha >= 1:  # Corresponding to a multiple of sigma (std)
-            q = erf(alpha / np.sqrt(2))
+        if alpha >= 1:  # Corresponding to a multiple of sigma (std): two-sided coverage erf(n / sqrt(2))
+            q = (1 + erf(alpha / np.sqrt(2))) / 2
         else:
             q = 1 - alpha / 2
 
@@ -281,8 +284,12 @@ class Kernel(object):
             self.weights = np.ones(self.nobs)
             self.neff = self.nobs
 
+        # Use a plain list: `np.repeat` on a string builds a fixed-width string array that would
+        # truncate the numeric bandwidths assigned below (e.g. 71.62 -> 71.0 with dtype '<U3').
         if not is_array(self.bw):
-            self.bw = np.repeat(self.bw, self.kvar)
+            self.bw = [self.bw] * self.kvar
+        else:
+            self.bw = list(self.bw)
 
         for i in np.arange(self.kvar):
             if isinstance(self.bw[i], str):
@@ -336,7 +343,7 @@ class Kernel(object):
         bw = 0.
 
         lb = 0.
-        rb = 0.01 * (n - 50) / 1000
+        rb = 1e-12 + 0.01 * (n - 50) / 1000  # Tiny offset so that the bracket can grow when n <= 50
 
         found = False
         iter = 0
@@ -380,6 +387,9 @@ class Kernel(object):
         x_range = x.max() - x.min()
         nobs = x.shape[0]
 
+        # Floor for the bandwidth: 2*pi times the mean spacing between sorted observations. It prevents
+        # bandwidths narrower than the data resolution (e.g. poll dates) and is also the fallback value
+        # when the fixed-point equation has no root.
         dist = np.diff(np.sort(x))
         min_bw = 2 * np.pi * np.mean(dist)
         min_t = np.power(min_bw / x_range, 2)
@@ -612,11 +622,12 @@ class Estimator(object):
         p: Optional[np.ndarray] = None
     ) -> Self:
         if p is None:
-            self.pred = self.exog.copy()
-        else:
-            self.pred = np.array(p)
+            # `exog` is already numeric (dates were converted to deltas in `build_input`)
+            self.pred = np.array(self.exog, dtype=np.float64)
 
-        self.pred = array_adjust(self.pred, self.kvar)
+            return self
+
+        self.pred = array_adjust(np.array(p), self.kvar)
 
         for i in np.arange(self.kvar):
             if self.is_ts[i]:
@@ -719,7 +730,7 @@ class LeastSquaresEstimator(Estimator):
                     exog = np.column_stack([exog, term])
 
         self.exog = exog
-        self.dof = self.neff - self.poly_deg - self.kvar
+        self.dof = self.neff - self.exog.shape[1]  # Effective sample size minus number of coefficients
 
         if self.dof <= 0:
             raise ValueError('Degrees of freedom must be greater than zero.')
@@ -780,12 +791,13 @@ class LeastSquaresEstimator(Estimator):
 
     @property
     def r2_score(self) -> float:
-        resid = self.wresid.squeeze()
-        y = self.wendog.squeeze()
-        y_bar = np.mean(y)
+        resid = self.resid.squeeze()
+        y = self.endog.squeeze()
+        weights = self.weights.squeeze()
+        y_bar = np.average(y, weights=weights)
 
-        ssr = np.sum(np.square(resid))
-        sst = np.sum(np.square(y - y_bar))
+        ssr = np.sum(weights * np.square(resid))
+        sst = np.sum(weights * np.square(y - y_bar))
 
         return 1 - (ssr / sst)
 
@@ -888,7 +900,9 @@ class LocalKernelEstimator(Estimator):
         y = self.endog.squeeze()
         weights = self.weights.squeeze()
 
+        result = self.result  # `predict` overwrites `result`; restore it afterwards
         y_hat = self.predict().values
+        self.result = result
         y_bar = np.average(y_hat, weights=weights)
 
         r2_numer = np.square(np.sum(weights * (y - y_bar) * (y_hat - y_bar)))
@@ -917,14 +931,18 @@ class LocalKernelEstimator(Estimator):
         if not np.isfinite(self.endog[vind]).any():
             return
 
-        return LeastSquaresEstimator(
-            self.exog[vind],
-            self.endog[vind],
-            weights=weights[vind],
-            poly_deg=self.poly_deg,
-            cov_type=self.cov_type,
-            cov_kwargs=self.cov_kwargs
-        )
+        try:
+            return LeastSquaresEstimator(
+                self.exog[vind],
+                self.endog[vind],
+                weights=weights[vind],
+                poly_deg=self.poly_deg,
+                cov_type=self.cov_type,
+                cov_kwargs=self.cov_kwargs
+            )
+        except ValueError:
+            # Not enough effective observations in this window: the prediction is left as NaN
+            return
 
     def fit(
         self,
@@ -1065,17 +1083,29 @@ class KernelDensityEstimator(Estimator):
         y = self.data[:, -1] if self.kvar > 1 else None
         w = self.weights.squeeze()
 
-        x_samp = Stat(x, weights=w, dropna=True, outliers=self.outliers, n_dev=self.n_dev)
-        if y is not None:
-            y_samp = Stat(y, weights=w, dropna=True, outliers=self.outliers, n_dev=self.n_dev)
-            vind = np.all(np.vstack([x_samp.vind, y_samp.vind]), axis=0)
-        else:
-            vind = x_samp.vind
+        def limits(v):
+            fin = np.isfinite(v)
+            samp = Stat(v[fin], weights=w[fin])
+            return samp.dev(self.n_dev) if self.n_dev >= 1 else samp.ci(1 - self.n_dev)
 
-        x = x[vind]
+        x_min, x_max = limits(x)
+        x_in = np.isfinite(x) & (x >= x_min) & (x <= x_max)
         if y is not None:
-            y = y[vind]
-        w = w[vind]
+            y_min, y_max = limits(y)
+            y_in = np.isfinite(y) & (y >= y_min) & (y <= y_max)
+            vind = x_in & y_in
+        else:
+            vind = x_in
+
+        if self.outliers == 'remove':
+            x = x[vind]
+            if y is not None:
+                y = y[vind]
+            w = w[vind]
+        else:  # 'group': clip the outliers to the inner range
+            x = np.clip(x, np.min(x[x_in]), np.max(x[x_in]))
+            if y is not None:
+                y = np.clip(y, np.min(y[y_in]), np.max(y[y_in]))
 
         self.data = array_adjust(x, 1)
         if self.kvar > 1:

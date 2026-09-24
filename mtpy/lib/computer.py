@@ -104,7 +104,8 @@ class Computer(Core):
         verbose : int, optional
             Level of verbosity.
         path : str, optional
-            Path to store model files.
+            Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
+            (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
         """
         super().__init__()
 
@@ -129,7 +130,7 @@ class Computer(Core):
         self.error_weights = error_weights
 
         self.verbose = verbose  # Print progress
-        self.path = path or os.getcwd()  # Path to store model files
+        self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
         self.event_params = get_event_params(
             scope=self.scope,
@@ -197,11 +198,16 @@ class Computer(Core):
         bm = {}
 
         for event_date in self.event_params.keys():
-            map = self.event_params[event_date]['bmaps'][name]
+            map = self.event_params[event_date]['bmaps'].get(name)
+            if map is None:
+                continue
             if isinstance(map, (tuple, list)):
                 map = dict(zip(map, map))
 
             for party, block in map.items():
+                # Normalize to a fresh list so that a single party is not iterated character by character
+                # and the event params are never mutated
+                block = [block] if isinstance(block, str) else list(block)
                 if party not in bm:
                     bm[party] = block
                 else:
@@ -466,10 +472,7 @@ class Computer(Core):
 
         # Check for parties that don't have any errors computed (not participated in any final event)
         # but are present in the polls, in order to prevent missing names errors
-        for n in self.names:
-            if n not in self.errors.columns:
-                self.errors[n] = np.nan
-        self.errors = self.errors[self.names]
+        self.errors = self.errors.reindex(columns=self.names)
 
         return self
 
@@ -1133,10 +1136,11 @@ class Computer(Core):
         dr['quality'] = self.pollsters.set_index('name').quality.astype(float).div(100)
 
         # Get the total number of events concurred and polls published by each pollster
-        dr['num_events'] = df.groupby('pollster')['event_date'].nunique().reindex(dr.index)
-        dr['num_polls'] = df.groupby('pollster')['event_date'].count().reindex(dr.index)
+        # Pollsters without evaluable polls contribute zero evidence, so their rating equals their prior quality
+        dr['num_events'] = df.groupby('pollster', observed=True)['event_date'].nunique().reindex(dr.index).fillna(0)
+        dr['num_polls'] = df.groupby('pollster', observed=True)['event_date'].count().reindex(dr.index).fillna(0)
         # Weighted number of polls, giving more importance to the most recent polls
-        dr['num_polls_w'] = df.groupby('pollster')['weight'].sum().reindex(dr.index)
+        dr['num_polls_w'] = df.groupby('pollster', observed=True)['weight'].sum().reindex(dr.index).fillna(0)
 
         # Compute the weighted mean of each pollster's poll errors
         for col in ['error_avg', 'error_blocks', 'bias_avg', 'bias_blocks', 'bias']:

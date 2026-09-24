@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import warnings
 import pandas as pd
 import os
 from tqdm import tqdm
@@ -76,7 +77,8 @@ class Simulator(Core):
         verbose : int, optional
             Level of verbosity.
         path : str, optional
-            Path to store model files.
+            Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
+            (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
         """
         super().__init__()
 
@@ -93,10 +95,10 @@ class Simulator(Core):
 
         self.seed = seed  # Base random seed
         self.verbose = verbose  # Print progress
-        self.path = path or os.getcwd()  # Path to store model files
+        self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
         self.event_params = json.loads(
-            self.app.fs.read(f'{self.path}/params.json')
+            self.app.data.read('params.json')
         )[self.scope][self.event_date]
 
         self.names = self.event_params['parties']['event']
@@ -171,7 +173,7 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load region totals...')
 
-        self.default_region = self.scope
+        self.default_region = 0  # `region_id` of the national total (see `get_reg_totals`)
         self.reg_totals = self.get_reg_totals()
 
         self.regions = self.reg_totals.index.tolist()
@@ -241,9 +243,12 @@ class Simulator(Core):
             A DataFrame with total votes and seats available for each region.
         """
         df = get_event_data(self.scope, self.event_date)
-        df['region'] = unset_categorical(df['region']).fillna(self.default_region)
+        # Regions are indexed by `region_id` (the official province code; 0 = national total), which is
+        # what the `smap` rules refer to. The names are kept aside for display purposes.
+        df['region_id'] = df['region_id'].astype(int)
+        self.region_names = dict(zip(df['region_id'], unset_categorical(df['region']).fillna(self.scope)))
 
-        return df.set_index('region')[['votes', 'seats']]
+        return df.set_index('region_id')[['votes', 'seats']]
     
     def get_prev_results(self) -> pd.DataFrame:
         """
@@ -258,7 +263,7 @@ class Simulator(Core):
 
         df = get_event_results(self.scope, prev_date)
         df = df.loc[df['party_id'] > 0]
-        df['region'] = unset_categorical(df['region']).fillna(self.default_region)
+        df['region_id'] = df['region_id'].astype(int)
 
         names = []
         for n in df['party'].unique():
@@ -274,12 +279,12 @@ class Simulator(Core):
                     if name not in names:
                         names.append(name)
 
-        df = df.sort_values(['region_id', 'party_id']).groupby(['region', 'party'], sort=False, observed=True, dropna=False)[[
+        df = df.sort_values(['region_id', 'party_id']).groupby(['region_id', 'party'], sort=False, observed=True, dropna=False)[[
             'votes', 'pct', 'seats'
         ]].sum()
-        df = df.reset_index().pivot_table(columns='party', index='region', sort=False, observed=True, dropna=False)
+        df = df.reset_index().pivot_table(columns='party', index='region_id', sort=False, observed=True, dropna=False)
 
-        ix = pd.Index(self.regions, name='region')
+        ix = pd.Index(self.regions, name='region_id')
         cols = pd.MultiIndex.from_product([['votes', 'pct', 'seats'], names], names=[None, 'party'])
 
         for c in cols:
@@ -357,8 +362,21 @@ class Simulator(Core):
             dtype=float
         )
 
-    def unit(self, loc: int = 0, region: str = None) -> pd.DataFrame:
-        rloc = self.params['regions'].index(region) if region is not None else 0
+    def region_id(self, region: int | str) -> int:
+        """
+        Resolve a region given either its `region_id` (province code, 0 = national) or its name.
+        """
+        if isinstance(region, str) and not region.isdigit():
+            ids = [i for i, n in self.region_names.items() if n == region]
+            if len(ids) == 0:
+                raise KeyError(region)
+
+            return ids[0]
+
+        return int(region)
+
+    def unit(self, loc: int = 0, region: Optional[int | str] = None) -> pd.DataFrame:
+        rloc = self.params['regions'].index(self.region_id(region)) if region is not None else 0
 
         return pd.DataFrame(
             self.units[loc, rloc],
@@ -374,7 +392,7 @@ class Simulator(Core):
         return pd.DataFrame(
             self.results[loc],
             columns=self.params['names'],
-            index=self.params['regions'],
+            index=pd.Index([self.region_names.get(r, r) for r in self.params['regions']], name='region'),
             dtype=int
         )
 
@@ -418,7 +436,7 @@ class Simulator(Core):
             
             # Then distribute any remaining seats
             for i in idx_sorted[:remaining]:
-                ds[i] += 1
+                ds.iloc[i] += 1
         elif diff < 0:
             idx_sorted = np.argsort(remainders)
 
@@ -432,7 +450,7 @@ class Simulator(Core):
             
             # Then remove any remaining seats
             for i in idx_sorted[:remaining]:
-                ds[i] -= 1
+                ds.iloc[i] -= 1
 
         if sort:
             ds = ds.sort_values(ascending=False)
@@ -534,7 +552,7 @@ class Simulator(Core):
 
             # Add noise to the forecasted percentage, based on the calculated error
             df.loc[vind, 'rand'] = np.clip(
-                df.loc[vind, 'pct'] + df.loc[vind, 'std_err'] * self.rng.standard_t(df.loc[vind, 'nobs'] - 2),
+                df.loc[vind, 'pct'] + df.loc[vind, 'std_err'] * self.rng.standard_t(np.clip(df.loc[vind, 'nobs'].fillna(3) - 2, 3, None)),
                 0, None
             )
 
@@ -557,11 +575,20 @@ class Simulator(Core):
                     if type == 'agg':
                         prev_pcts[key] = prev_pcts[[key] + names].sum(axis=1)
                     elif type == 'sub':
+                        if key not in frame.index or any(n not in frame.index for n in names):
+                            # The rule needs forecasts for every party involved: skip it otherwise
+                            continue
+
                         fc_k = frame.loc[key]['vpred']
                         fc_v = frame.loc[names]['vpred'].sum()
                         prev_v = prev_pcts[names].sum(axis=1)
 
-                        prev_pcts[key] = np.round(prev_v / ((fc_v / fc_k) + 1), 2)
+                        # Share of the previous vote of the source parties inherited by the new party,
+                        # in proportion to the current forecasts: prev_v * fc_k / (fc_k + fc_v)
+                        if fc_k + fc_v > 0:
+                            prev_pcts[key] = np.round(prev_v * fc_k / (fc_k + fc_v), 2)
+                        else:
+                            prev_pcts[key] = 0.
                         unit_factor = prev_pcts[key] / len(names)
                         prev_pcts[names] = prev_pcts[names].sub(unit_factor, axis=0)
                     elif type == 'split':
@@ -570,12 +597,23 @@ class Simulator(Core):
                             prev_pcts[name] += (prev_k / len(names))
                 
                 if regions is not None:
+                    # Regions are province codes (`region_id`), given as strings or ints in params.json
                     if 'exclude' in regions:
-                        rix = [r == self.default_region or r not in regions['exclude'] for r in prev_pcts.index]
+                        excluded = [int(r) for r in regions['exclude']]
+                        rix = [r == self.default_region or r not in excluded for r in prev_pcts.index]
                     else:
-                        rix = [r == self.default_region or r in regions for r in prev_pcts.index]
+                        included = [int(r) for r in regions]
+                        rix = [r == self.default_region or r in included for r in prev_pcts.index]
 
                     prev_pcts[key] = prev_pcts[key].where(rix, .0)
+
+                    # Keep the national share consistent with the provinces kept by the rule, so that the
+                    # proportional swing reproduces the national forecast within those provinces
+                    reg_votes = self.prev_results['votes'].fillna(0).sum(axis=1)
+                    provinces = [r for r in prev_pcts.index if r != self.default_region]
+                    prev_pcts.loc[self.default_region, key] = np.round(
+                        (prev_pcts.loc[provinces, key] * reg_votes.loc[provinces]).sum() / reg_votes.loc[self.default_region], 2
+                    )
 
         prev_pcts = prev_pcts.where(prev_pcts > 0, np.nan)[self.params['names']]
 
@@ -587,8 +625,12 @@ class Simulator(Core):
         fmul = fc_votes[self.params['names']] / prev_votes.loc[self.default_region][self.params['names']]
         vpred_pcts = prev_pcts.mul(fmul)
 
+        orphans = [n for n in self.params['names'] if fc_votes[n] > 0 and not np.isfinite(fmul[n])]
+        if len(orphans) > 0 and self.verbose > 0:
+            warnings.warn('Parties without previous results nor an applicable smap rule get no seats: {}'.format(orphans))
+
         metrics = ['prev_pct', 'vpred_pct']
-        ix = pd.Index(self.params['regions'], name='region')
+        ix = pd.Index(self.params['regions'], name='region_id')
         cols = pd.MultiIndex.from_product([metrics, self.params['names']], names=[None, 'party'])
 
         df = pd.concat([prev_pcts, vpred_pcts], axis=1, keys=metrics).loc[ix, cols].round(2)
