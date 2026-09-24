@@ -63,8 +63,11 @@ Datos corregidos en `files/params.json` (no versionado todavía; evento 2019-04-
 
 ## Pendiente (decisiones de método, fases siguientes)
 
-`totals()` (B2, resúmenes por mediana forzada a 350), barrera del 3 % (M1), composición y correlación entre partidos (M2), ruido provincial (M4), house effects (M5), `r2_score` de `LocalKernelEstimator` con índice temporal, y la clasificación de casas online (`mtype` sólo informado en 10 de 95).
+composición y correlación entre partidos (M2), ruido provincial (M4), house effects (M5), `r2_score` de `LocalKernelEstimator` con índice temporal, y la clasificación de casas online (`mtype` sólo informado en 10 de 95).
 
 ## Reubicación de las entradas en `data/` (24-09-2026)
 
 `files/` queda solo para lo generado en ejecución (`fc/`, `img/`) y sigue ignorado. Todo lo que el código lee pasa a `data/`, versionado: `params.json`, `es-*.csv`, `wikipedia/*.json` e `infoelectoral/es/*.{json,xlsx}` (1,3 MB; ver `data/README.md` para origen y licencias). `mtpy.run()` expone una segunda raíz de solo lectura, `app.data` (`app.datapath`, configurable con `DATA_PATH`), y las ocho lecturas de entradas (`lib/data.py`, `forecaster.py`, `simulator.py`, `loader.py`) la usan; las escrituras siguen en `app.fs`. El parámetro `path` de las clases del modelo afecta ahora solo a las salidas, así que los notebooks no cambian (salvo la lectura de `es-provinces.csv` en `PollsSimulations`). `.dockerignore` exceptúa `data/`. Nuevo `tests/test_data_files.py` comprueba que los códigos de `regions` del `smap` existen como provincias y que cada XLSX de Infoelectoral tiene su JSON de mapeo.
+
+
+Hecho después de la fase 0: barrera del 3 % y bloque "otros" explícito (M1), ver `metodo-1-otros-barrera.md`; resúmenes de la simulación (B2), ver `metodo-2-resumenes.md`.

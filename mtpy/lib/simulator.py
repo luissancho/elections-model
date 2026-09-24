@@ -5,7 +5,7 @@ import pandas as pd
 import os
 from tqdm import tqdm
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from typing_extensions import Self
 
 from ..core.app import Core
@@ -19,11 +19,13 @@ from .data import (
     get_event_dates, get_event_results, get_event_data, get_parties
 )
 from .utils import (
-    norm_range
+    build_blocks, group_results, norm_range
 )
 
 
 class Simulator(Core):
+
+    OTHERS = '-'  # Residual category: other candidatures and blank votes (same label as the Forecaster)
 
     def __init__(
         self,
@@ -37,6 +39,7 @@ class Simulator(Core):
         add_errors: bool = True,
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
+        threshold: Optional[float] = 3.0,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -72,6 +75,10 @@ class Simulator(Core):
             If `None`, the default parameters will be used.
         smap: dict[str, str], optional
             The party source map.
+        threshold : float, optional
+            Legal threshold, as a percentage of the valid votes of each district, below which a candidature
+            is excluded from the seat allocation (art. 163.1.a LOREG: 3 %). Applied when `split=True`;
+            `None` disables it.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -92,6 +99,7 @@ class Simulator(Core):
         self.add_errors = add_errors
         self.reg_params = reg_params
         self.smap = smap
+        self.threshold = threshold
 
         self.seed = seed  # Base random seed
         self.verbose = verbose  # Print progress
@@ -128,6 +136,9 @@ class Simulator(Core):
             verbose=self.verbose,
             path=self.path
         ).build_series()
+
+        # Previous election (base of the provincial projection): first non-poll row of the Forecaster series
+        self.prev_date = self.model.nfc_series.index[0].strftime('%Y-%m-%d')
 
         event_dates = get_event_dates(
             scope=self.scope,
@@ -189,6 +200,7 @@ class Simulator(Core):
             print('Load previous results...')
 
         self.prev_results = self.get_prev_results()
+        self.prev_totals = self.get_prev_totals()
 
         self.params = None
         self.rng = None
@@ -259,9 +271,7 @@ class Simulator(Core):
         pd.DataFrame
             A DataFrame with previous results for each party at each region.
         """
-        prev_date = self.model.nfc_series.index[0].strftime('%Y-%m-%d')
-
-        df = get_event_results(self.scope, prev_date)
+        df = get_event_results(self.scope, self.prev_date)
         df = df.loc[df['party_id'] > 0]
         df['region_id'] = df['region_id'].astype(int)
 
@@ -294,7 +304,49 @@ class Simulator(Core):
         df = df.where(df > 0, np.nan).loc[ix, cols]
 
         return df
-    
+
+    def get_prev_totals(self) -> pd.DataFrame:
+        """
+        Valid votes (candidatures + blank) and blank share of the previous election, per `region_id`.
+
+        `votes` is the base of `events_results.pct` and of the legal threshold; `blank_pct` is assumed
+        to stay unchanged in the simulated election.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `region_id`, with columns `votes` and `blank_pct`.
+        """
+        df = get_event_data(self.scope, self.prev_date)
+        df['region_id'] = df['region_id'].astype(int)
+        df = df.set_index('region_id').reindex(self.regions)
+
+        # Stored as int32 in the database: cast before any arithmetic to prevent overflows
+        votes = df['votes'].astype('float64')
+        blank = df['blank'].astype('float64').fillna(0.)
+
+        if votes.isnull().any():
+            warnings.warn('Valid votes missing for {} in some regions: using the sum of party votes'.format(self.prev_date))
+            votes = votes.fillna(self.prev_results['votes'].fillna(0).sum(axis=1).astype('float64'))
+
+        totals = pd.DataFrame({'votes': votes, 'blank_pct': (100. * blank / votes).round(2)})
+        totals.index.name = 'region_id'
+
+        return totals
+
+    def categories(self) -> list[str]:
+        """
+        Parties being simulated plus the residual category `'-'` (other candidatures and blank votes).
+        """
+        return self.params['names'] + [self.OTHERS]
+
+    @property
+    def n_seats(self) -> int:
+        """
+        Seats of the chamber (national total of `reg_totals`).
+        """
+        return int(self.reg_totals.loc[self.default_region, 'seats'])
+
     def fit_forecast(self, **kwargs) -> pd.DataFrame:
         self.model.fit_forecast(**kwargs)
         self.forecast = self.build_forecast()
@@ -315,26 +367,32 @@ class Simulator(Core):
     def build_forecast(self) -> pd.DataFrame:
         weeks = (self.model.drange[0] + 1) // 7
 
+        names = self.params['names']
+
         fc = pd.DataFrame({
             n: (
                 self.model.forecast[n].loc[self.limit_date],
                 self.model.fc_stat[n].loc[self.limit_date]['err'],
                 self.model.fc_stat[n].loc[self.limit_date]['nobs']
-            ) for n in self.params['names']
+            ) for n in names
         }, index=['mean', 'err', 'nobs']).T
 
-        fc['regional'] = fc.index.map(
-            self.parties.set_index('name').loc[fc.index].regional.to_dict()
-        ).astype(int)
+        # Residual of the poll average (other candidatures and blank votes): never fitted, no statistics
+        fc.loc[self.OTHERS] = (max(0., 100. - fc['mean'].sum()), np.nan, np.nan)
 
+        regional = self.parties.set_index('name').loc[names].regional.astype(int).to_dict()
+        regional[self.OTHERS] = 0
+        fc['regional'] = fc.index.map(regional).astype(int)
+
+        fc['error'] = np.nan
         if self.v2err is not None:
             p = np.column_stack([
-                fc[['mean', 'regional']].values,
-                np.repeat(weeks, fc.shape[0])
+                fc.loc[names, ['mean', 'regional']].values,
+                np.repeat(weeks, len(names))
             ])
-            fc['error'] = self.v2err.predict(p).values
+            fc.loc[names, 'error'] = self.v2err.predict(p).values
         else:
-            fc['error'] = fc['err']
+            fc.loc[names, 'error'] = fc.loc[names, 'err']
 
         fc = fc[self.cols_forecast]
 
@@ -342,23 +400,24 @@ class Simulator(Core):
 
     def frame(self, loc: int = 0) -> pd.DataFrame:
         """
-        Get a parameter frame for a given location.
+        Get the feature frame of one simulation: forecast, error and simulated national share (`vpred`)
+        of each party, plus the residual `'-'` (other candidatures and blank votes, `100 - sum`).
 
         Parameters
         ----------
         loc : int, optional
-            The location index.
+            The simulation index.
 
         Returns
         -------
         pd.DataFrame
-            The simulation results for the given location.
+            One row per category (`categories()`), columns `cols_frame`.
         """
 
         return pd.DataFrame(
             self.frames[loc],
             columns=self.cols_frame,
-            index=self.params['names'],
+            index=self.categories(),
             dtype=float
         )
 
@@ -376,12 +435,24 @@ class Simulator(Core):
         return int(region)
 
     def unit(self, loc: int = 0, region: Optional[int | str] = None) -> pd.DataFrame:
+        """
+        Get the provincial shares of one simulation for a region: previous election (`prev_pct`) and
+        simulated (`vpred_pct`), both over valid votes and summing 100 with the residual `'-'`.
+        `vpred_pct` are exactly the shares fed to the seat allocation.
+
+        Parameters
+        ----------
+        loc : int, optional
+            The simulation index.
+        region : int or str, optional
+            `region_id` or region name; the national total (0) by default.
+        """
         rloc = self.params['regions'].index(self.region_id(region)) if region is not None else 0
 
         return pd.DataFrame(
             self.units[loc, rloc],
             columns=self.cols_unit,
-            index=self.params['names'],
+            index=self.categories(),
             dtype=float
         )
 
@@ -412,53 +483,145 @@ class Simulator(Core):
             dtype=int
         )
 
-    def totals(self, sort: bool = False) -> pd.Series:
+    def shares(self) -> pd.DataFrame:
+        """
+        Simulated national vote shares (`vpred`) of each party, one row per simulation. The residual `'-'`
+        (other candidatures and blank votes) is available through `frame(loc)`.
+        """
+        if self.frames is None:
+            return
+
+        return pd.DataFrame(
+            self.frames[:, :, self.cols_frame.index('vpred')],
+            columns=self.categories(),
+            dtype=float
+        )[self.params['names']]
+
+    def totals(
+        self,
+        sort: bool = False,
+        method: Literal['median', 'mean'] = 'median'
+    ) -> pd.Series:
+        """
+        Headline seats of each party: the central statistic of the simulated distribution (`median` by
+        default, or `mean`) expanded proportionally to the size of the chamber and rounded by largest
+        remainders (see `round_proportional`). Parties without seats in any simulation stay at 0.
+
+        With `split=True` every simulation sums the chamber size, so `method='mean'` is an exact rounding
+        and the medians only need a small expansion. In the regression modes (`split=False`) the seats
+        estimator is not constrained and the expansion is large: those headlines are only indicative.
+
+        Parameters
+        ----------
+        sort : bool, optional
+            Sort by descending seats (stable: ties keep the order of `names`).
+        method : {'median', 'mean'}, optional
+            Central statistic.
+        """
         if self.results is None:
             return
 
-        n_seats = self.reg_totals.loc[self.default_region]['seats']
-        medians = self.dist().apply(lambda x: Stat(x).median(), axis=0).sort_values(ascending=False)
-
-        ds = medians.apply(np.floor).astype(int)
-        diff = n_seats - ds.sum()
-        remainders = medians - ds
-
-        if diff > 0:
-            idx_sorted = np.argsort(-remainders)
-
-            # Calculate how many times we need to cycle through all parties
-            cycles = int(diff // len(idx_sorted))
-            remaining = int(diff % len(idx_sorted))
-            
-            # Add full cycles first
-            if cycles > 0:
-                ds += cycles
-            
-            # Then distribute any remaining seats
-            for i in idx_sorted[:remaining]:
-                ds.iloc[i] += 1
-        elif diff < 0:
-            idx_sorted = np.argsort(remainders)
-
-            # Similar logic for negative diff
-            cycles = int(abs(diff) // len(idx_sorted))
-            remaining = int(abs(diff) % len(idx_sorted))
-            
-            # Subtract full cycles first
-            if cycles > 0:
-                ds -= cycles
-            
-            # Then remove any remaining seats
-            for i in idx_sorted[:remaining]:
-                ds.iloc[i] -= 1
+        ds = self.round_proportional(self.central(self.dist(), method), self.n_seats)
 
         if sort:
-            ds = ds.sort_values(ascending=False)
-        else:
-            ds = ds.loc[self.params['names']]
+            return ds.sort_values(ascending=False, kind='stable')
 
-        return ds
-    
+        return ds.loc[self.params['names']]
+
+    def scenario(self, method: Literal['median', 'mean'] = 'median') -> int:
+        """
+        Index of the simulation closest to the central statistic of the seats (L1 distance; ties by L2 and
+        then the lowest index). `result(sim.scenario())` is a coherent, publishable province-by-party
+        table: a real simulation whose rows are D'Hondt allocations summing the chamber size.
+        """
+        dist = self._require_dist()
+
+        return self.closest_simulation(dist, self.central(dist, method))
+
+    def blocks(self, names: str | dict[str, Any] | list | tuple) -> pd.DataFrame:
+        """
+        Blocks of parties: a `bmap` name of the event params (`blocks`, `vs`, `main`, ...), a dict or a
+        list, with the party colors (same resolution as `plot_forecast_output`).
+        """
+        if isinstance(names, str):
+            names = self.model.bmaps[names]
+
+        return build_blocks(names, self.model.colors)
+
+    def summary(
+        self,
+        names: Optional[str | dict[str, Any] | list | tuple] = None,
+        alpha: Optional[float] = None,
+        method: Literal['median', 'mean'] = 'median'
+    ) -> pd.DataFrame:
+        """
+        Summary table of the simulation, by party or by block of parties.
+
+        Columns: `pct` (forecast point estimate), `pct_mean`, `pct_lo`, `pct_hi` (simulated national
+        shares), `seats` (headline, see `totals`), `seats_mean`, `seats_median`, `seats_lo`, `seats_hi`,
+        `seats_min`, `seats_max`, `p_seats`, `p_majority`, `p_first` (see `summarize_seats`). Intervals
+        are empirical quantiles at `alpha / 2` and `1 - alpha / 2`.
+
+        Parameters
+        ----------
+        names : str, dict or list, optional
+            Blocks of parties (a `bmap` name, a dict or a list, as in `plot_forecast_output`); one row per
+            party if `None`.
+        alpha : float, optional
+            Confidence level of the intervals; the one given to the constructor by default.
+        method : {'median', 'mean'}, optional
+            Central statistic of the headline seats.
+        """
+        alpha = self.alpha if alpha is None else alpha
+        parties = self.params['names']
+
+        dist = self._require_dist()
+        shares = self.shares()
+        seats = self.totals(method=method)
+        pct = self.forecast.loc[parties, 'mean']
+
+        if names is not None:
+            blocks = self.blocks(names)
+            dist = group_results(dist, blocks=blocks)
+            shares = group_results(shares, blocks=blocks)
+            seats = group_results(seats.to_frame().T, blocks=blocks).iloc[0]
+            pct = group_results(pct.to_frame().T, blocks=blocks).iloc[0]
+
+        table = self.summarize_seats(dist, self.n_seats, alpha=alpha, method=method, headline=seats)
+        desc = self.describe_dist(shares, alpha=alpha)
+
+        return pd.concat([
+            pd.DataFrame({'pct': pct, 'pct_mean': desc['mean'], 'pct_lo': desc['lo'], 'pct_hi': desc['hi']}),
+            table
+        ], axis=1)
+
+    def probabilities(
+        self,
+        groups: str | dict[str, Any] | list | tuple,
+        majority: Optional[int] = None
+    ) -> pd.Series:
+        """
+        Probability that each block or coalition of parties reaches `majority` seats (the absolute
+        majority, `n_seats // 2 + 1`, by default).
+
+        Parameters
+        ----------
+        groups : str, dict or list
+            A `bmap` name (`vs`, `blocks`, ...) or a dict `{name: [parties]}`; coalitions may overlap.
+        majority : int, optional
+            Seats needed.
+        """
+        majority = self.n_seats // 2 + 1 if majority is None else int(majority)
+        groups = self.model.bmaps[groups] if isinstance(groups, str) else groups
+
+        return self.majority_probs(self._require_dist(), majority, groups=groups)
+
+    def _require_dist(self) -> pd.DataFrame:
+        if self.results is None:
+            raise ValueError('No simulations available: call `run()` first.')
+
+        return self.dist()
+
     def plot_forecast_output(
         self,
         data: Optional[pd.DataFrame] = None,
@@ -482,11 +645,15 @@ class Simulator(Core):
         regional: bool = False,
         **kwargs
     ) -> None:
+        # Ridges ordered by headline seats, then by mean (deterministic for the small parties)
+        key = pd.DataFrame({'seats': self.totals(), 'mean': self.dist().mean()})
         names = [
-            n for n in self.totals().sort_values(ascending=False).index
+            n for n in key.sort_values(['seats', 'mean'], ascending=False, kind='stable').index
             if self.forecast.loc[n].regional == int(regional)
         ]
 
+        # The interval drawn is the empirical one, the same as in `summary()`
+        kwargs.setdefault('ci_method', 'quantile')
         kwargs['cm'] = np.vectorize(self.parties.set_index('name').color.get)(names).tolist()
         if kwargs.get('path') is not None:
             kwargs['path'] = self.get_path(kwargs['path'])
@@ -511,6 +678,225 @@ class Simulator(Core):
 
         return seats
 
+    @staticmethod
+    def alloc_seats(
+        d_votes: dict[str, float],
+        n_seats: int,
+        valid_votes: Optional[float] = None,
+        threshold: Optional[float] = None
+    ) -> dict[str, int]:
+        """
+        D'Hondt allocation with the legal threshold (art. 163.1.a LOREG): candidatures with less than
+        `threshold` percent of the valid votes of the district are excluded from the allocation.
+
+        Parameters
+        ----------
+        d_votes : dict
+            Votes of each candidature.
+        n_seats : int
+            Seats of the district.
+        valid_votes : float, optional
+            Base of the threshold (votes to candidatures plus blank votes). The sum of `d_votes` if `None`.
+        threshold : float, optional
+            Percentage of the valid votes needed to take part in the allocation. `None` disables it.
+
+        Returns
+        -------
+        dict
+            Seats of each candidature (0 for the excluded ones). If no candidature qualifies, no seat is
+            allocated.
+        """
+        base = valid_votes if valid_votes else sum(d_votes.values())
+        eligible = {
+            n: v for n, v in d_votes.items()
+            if v > 0 and (threshold is None or base <= 0 or 100. * v / base >= threshold)
+        }
+
+        seats = {n: 0 for n in d_votes.keys()}
+        if n_seats > 0 and len(eligible) > 0:
+            seats.update(Simulator.alloc_dhondt(eligible, n_seats))
+
+        return seats
+
+    # --- Summaries of the simulated distributions (pure functions) ---------------------------------
+
+    @staticmethod
+    def round_proportional(
+        values: pd.Series,
+        total: int
+    ) -> pd.Series:
+        """
+        Scale a vector of non-negative values so that it sums `total` and round it to integers by largest
+        remainders (Hamilton): the "proportional expansion" of a central statistic to the size of the
+        chamber.
+
+        Zeros stay zero (a party without seats in any simulation never receives one), the sum is exact for
+        any base (e.g. 326 for the linear seats estimator, 347 for medians, 350 for means) and ties are
+        broken by descending remainder, descending scaled value and original position.
+
+        Parameters
+        ----------
+        values : pd.Series
+            Non-negative values (NaN counts as 0).
+        total : int
+            Target sum.
+
+        Returns
+        -------
+        pd.Series
+            Integers with the same index, summing `total`.
+        """
+        v = pd.Series(values, dtype=float).fillna(0.).clip(lower=0.)
+        total = int(total)
+
+        if total <= 0 or v.sum() <= 0:
+            return pd.Series(0, index=v.index, dtype=int)
+
+        scaled = v * total / v.sum()
+        floors = np.floor(scaled).astype(int)
+        remainders = np.round(scaled - floors, 9)
+        missing = total - int(floors.sum())
+
+        order = np.lexsort((np.arange(len(v)), -scaled.values, -remainders.values))
+        out = floors.copy()
+        out.iloc[order[:missing]] += 1
+
+        return out
+
+    @staticmethod
+    def central(
+        dist: pd.DataFrame,
+        method: Literal['median', 'mean'] = 'median'
+    ) -> pd.Series:
+        """
+        Central statistic of each column of `dist`: the median (weighted inverted CDF of `Stat`, the same
+        estimator used by the plots) or the mean. Columns without finite values give NaN.
+        """
+        if method == 'median':
+            return dist.apply(
+                lambda x: Stat(x, dropna=True).median() if np.isfinite(x.to_numpy(dtype=float)).any() else np.nan,
+                axis=0
+            )
+        if method == 'mean':
+            return dist.mean()
+
+        raise ValueError('Method `{}` does not exist (use `median` or `mean`).'.format(method))
+
+    @staticmethod
+    def describe_dist(
+        df: pd.DataFrame,
+        alpha: float = 0.05
+    ) -> pd.DataFrame:
+        """
+        Mean, median, empirical quantiles (`alpha / 2` and `1 - alpha / 2`), minimum and maximum of each
+        column of `df`. Columns without finite values get a row of NaN.
+        """
+        columns = ['mean', 'median', 'lo', 'hi', 'min', 'max']
+        rows = {}
+
+        for col in df.columns:
+            x = df[col].to_numpy(dtype=float)
+            if not np.isfinite(x).any():
+                rows[col] = dict.fromkeys(columns, np.nan)
+                continue
+
+            samp = Stat(x, dropna=True)
+            rows[col] = {
+                'mean': samp.mean(), 'median': samp.median(),
+                'lo': samp.quantile(alpha / 2), 'hi': samp.quantile(1 - alpha / 2),
+                'min': samp.min(), 'max': samp.max()
+            }
+
+        return pd.DataFrame.from_dict(rows, orient='index', columns=columns).astype(float)
+
+    @staticmethod
+    def summarize_seats(
+        dist: pd.DataFrame,
+        n_seats: int,
+        alpha: float = 0.05,
+        method: Literal['median', 'mean'] = 'median',
+        headline: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
+        """
+        Summary of the simulated seats of each column of `dist` (parties or blocks).
+
+        Columns: `seats` (headline: the central statistic expanded proportionally to `n_seats`, or the
+        `headline` given), `seats_mean`, `seats_median`, `seats_lo`, `seats_hi`, `seats_min`, `seats_max`,
+        `p_seats` (probability of at least one seat), `p_majority` (probability of an absolute majority,
+        `n_seats // 2 + 1`) and `p_first` (probability of being the largest; ties go to the first column).
+        """
+        desc = Simulator.describe_dist(dist, alpha=alpha)
+        valid = dist.notnull().any(axis=0)
+        majority = int(n_seats) // 2 + 1
+
+        if headline is None:
+            headline = Simulator.round_proportional(Simulator.central(dist, method), n_seats)
+        headline = pd.Series(headline).reindex(dist.columns)
+
+        out = pd.DataFrame(index=dist.columns)
+        out['seats'] = headline
+        out['seats_mean'] = desc['mean']
+        out['seats_median'] = desc['median']
+        out['seats_lo'] = desc['lo']
+        out['seats_hi'] = desc['hi']
+        out['seats_min'] = desc['min']
+        out['seats_max'] = desc['max']
+        out['p_seats'] = (dist > 0).mean().where(valid)
+        out['p_majority'] = (dist >= majority).mean().where(valid)
+
+        present = dist.loc[:, valid]
+        if present.shape[1] > 0:
+            p_first = present.idxmax(axis=1).value_counts(normalize=True)
+        else:
+            p_first = pd.Series(dtype=float)
+        out['p_first'] = p_first.reindex(dist.columns).fillna(0.).where(valid)
+
+        return out
+
+    @staticmethod
+    def majority_probs(
+        dist: pd.DataFrame,
+        majority: int,
+        groups: Optional[pd.DataFrame | dict[str, Any] | list | tuple] = None
+    ) -> pd.Series:
+        """
+        Probability that the seats of each group (blocks or coalitions of parties, or the columns of `dist`
+        if `groups` is `None`) reach `majority`. Groups may overlap (each one is summed independently);
+        groups without any party present give NaN.
+        """
+        if groups is not None:
+            if isinstance(groups, pd.DataFrame):
+                members = groups['parties'].to_dict()
+            elif isinstance(groups, dict):
+                members = {k: ([v] if isinstance(v, str) else list(v)) for k, v in groups.items()}
+            else:
+                members = {n: [n] for n in groups}
+
+            dist = pd.DataFrame({
+                name: dist[[p for p in parties if p in dist.columns]].sum(axis=1, min_count=1)
+                if any(p in dist.columns for p in parties) else np.nan
+                for name, parties in members.items()
+            }, index=dist.index)
+
+        valid = dist.notnull().any(axis=0)
+
+        return (dist >= majority).mean().where(valid).rename('p_majority')
+
+    @staticmethod
+    def closest_simulation(
+        dist: pd.DataFrame,
+        target: pd.Series
+    ) -> int:
+        """
+        Index of the simulation (row of `dist`) closest to `target`: L1 distance, ties broken by L2 and then
+        by the lowest index.
+        """
+        diff = np.nan_to_num(dist[target.index].to_numpy(dtype=float) - target.to_numpy(dtype=float))
+        l1 = np.abs(diff).sum(axis=1)
+        l2 = np.square(diff).sum(axis=1)
+
+        return int(np.lexsort((np.arange(len(l1)), l2, l1))[0])
+
     def build_frame(self) -> pd.DataFrame:
         """
         Build a feature frame to be used as input for the simulation.
@@ -526,13 +912,17 @@ class Simulator(Core):
 
         weeks = (self.model.drange[0] + 1) // 7
 
-        # Initialize the feature frame with the forecasted results for each party
-        df = pd.DataFrame(columns=(self.cols_frame), index=self.params['names'], dtype=float)
-        df[self.cols_forecast] = self.forecast.loc[self.params['names']].values
+        cats = self.categories()
+        names = self.params['names']
+
+        # Initialize the feature frame with the forecasted results for each party and the residual '-'
+        df = pd.DataFrame(columns=(self.cols_frame), index=cats, dtype=float)
+        df.loc[cats, self.cols_forecast] = self.forecast.loc[cats].values
 
         df['pct'] = df['mean']  # Estimated global vote percentage calculated by the forcaster for this party
         df['regional'] = df['regional'].astype(int)  # Is the party a regional party (only representing a certain region)?
         vind = df['pct'] > 0  # Only parties with a forecasted percentage greater than 0 are considered
+        vind[self.OTHERS] = False  # The residual is never drawn: it absorbs the deviation of the parties' draws
 
         # If random is set to True, add noise to the forecasted percentage, based on the forcasted error
         if self.params['random']:
@@ -559,6 +949,9 @@ class Simulator(Core):
             df['vpred'] = df['rand']
         else:
             df['vpred'] = df['pct']
+
+        # Other candidatures and blank votes: the remainder of the simulated national shares
+        df.loc[self.OTHERS, 'vpred'] = max(0., 100. - df.loc[names, 'vpred'].sum())
 
         return df[self.cols_frame]
     
@@ -609,31 +1002,51 @@ class Simulator(Core):
 
                     # Keep the national share consistent with the provinces kept by the rule, so that the
                     # proportional swing reproduces the national forecast within those provinces
-                    reg_votes = self.prev_results['votes'].fillna(0).sum(axis=1)
+                    reg_votes = self.prev_totals['votes']
                     provinces = [r for r in prev_pcts.index if r != self.default_region]
                     prev_pcts.loc[self.default_region, key] = np.round(
                         (prev_pcts.loc[provinces, key] * reg_votes.loc[provinces]).sum() / reg_votes.loc[self.default_region], 2
                     )
 
-        prev_pcts = prev_pcts.where(prev_pcts > 0, np.nan)[self.params['names']]
+        names = self.params['names']
+        prev_pcts = prev_pcts.where(prev_pcts > 0, np.nan)[names]
 
-        total_votes = self.prev_results['votes'].fillna(0).sum(axis=1).astype(int)
-        n_votes = total_votes.loc[self.default_region]
-        prev_votes = prev_pcts.mul(total_votes / 100, axis=0).round()
-        fc_votes = (frame['vpred'] * n_votes / 100).round().astype(int)
+        # Base: valid votes (candidatures + blank) of the previous election, per region
+        valid = self.prev_totals['votes']
+        blank = self.prev_totals['blank_pct']
+        # Other candidatures: everything not simulated (nor moved by the smap rules), net of blank votes
+        prev_otros = (100. - prev_pcts.fillna(0).sum(axis=1) - blank).clip(lower=0.).round(2)
 
-        fmul = fc_votes[self.params['names']] / prev_votes.loc[self.default_region][self.params['names']]
+        n_votes = valid.loc[self.default_region]
+        prev_votes = prev_pcts.mul(valid / 100, axis=0).round()
+        fc_votes = (frame['vpred'] * n_votes / 100).round()
+
+        # Proportional swing: each party keeps its previous geography, scaled by its national ratio
+        fmul = fc_votes[names] / prev_votes.loc[self.default_region][names]
         vpred_pcts = prev_pcts.mul(fmul)
 
-        orphans = [n for n in self.params['names'] if fc_votes[n] > 0 and not np.isfinite(fmul[n])]
+        orphans = [n for n in names if fc_votes[n] > 0 and not np.isfinite(fmul[n])]
         if len(orphans) > 0 and self.verbose > 0:
             warnings.warn('Parties without previous results nor an applicable smap rule get no seats: {}'.format(orphans))
 
-        metrics = ['prev_pct', 'vpred_pct']
-        ix = pd.Index(self.params['regions'], name='region_id')
-        cols = pd.MultiIndex.from_product([metrics, self.params['names']], names=[None, 'party'])
+        # The residual of the poll average, net of the (constant) blank share, swings like any other party
+        otros_fc = max(0., frame.loc[self.OTHERS, 'vpred'] - blank.loc[self.default_region])
+        if prev_otros.loc[self.default_region] > 0:
+            vpred_otros = prev_otros * (otros_fc / prev_otros.loc[self.default_region])
+        else:
+            vpred_otros = pd.Series(otros_fc, index=prev_otros.index)
+        prev_pcts[self.OTHERS] = prev_otros + blank
+        vpred_pcts[self.OTHERS] = vpred_otros + blank
 
-        df = pd.concat([prev_pcts, vpred_pcts], axis=1, keys=metrics).loc[ix, cols].round(2)
+        # Shares fed to the allocation: renormalized over all the categories, so that only the small
+        # inconsistencies of the swing are corrected (not the votes to other candidatures)
+        vpred_pcts = vpred_pcts.mul(100. / vpred_pcts.fillna(0).sum(axis=1).replace(0., np.nan), axis=0)
+
+        cats = self.categories()
+        ix = pd.Index(self.params['regions'], name='region_id')
+        cols = pd.MultiIndex.from_product([self.cols_unit, cats], names=[None, 'party'])
+
+        df = pd.concat([prev_pcts, vpred_pcts], axis=1, keys=self.cols_unit).loc[ix, cols].round(2)
 
         return df
 
@@ -642,6 +1055,11 @@ class Simulator(Core):
         frame: Optional[pd.DataFrame] = None,
         umat: Optional[pd.DataFrame] = None
     ) -> pd.DataFrame:
+        """
+        Allocate the seats of one simulation. With `split=True`, D'Hondt with the legal threshold in each
+        province over the provincial shares of `umat`; otherwise the national seats estimator.
+        The residual `'-'` never gets seats.
+        """
         if frame is None:
             frame = self.build_frame()
 
@@ -655,28 +1073,33 @@ class Simulator(Core):
                 if region == self.default_region:
                     continue
 
-                d_pcts = umat.loc[region]['vpred_pct'].fillna(0)
-                d_adj = d_pcts * 100 / d_pcts.sum()
-
-                total_votes = self.prev_results['votes'].fillna(0).sum(axis=1).astype(int)
-                d_votes = d_adj.mul(total_votes.loc[region] / 100, axis=0).round().to_dict()
+                # Shares over valid votes (already summing 100 with the residual, see `build_umat`)
+                shares = umat.loc[region]['vpred_pct'].fillna(0)
+                valid = float(self.prev_totals.loc[region, 'votes'])
+                d_votes = (shares[self.params['names']] * valid / 100).round().to_dict()
                 n_seats = int(self.reg_totals.loc[region]['seats'])
 
-                result.loc[region] = self.alloc_dhondt(d_votes, n_seats)
+                result.loc[region] = self.alloc_seats(d_votes, n_seats, valid_votes=valid, threshold=self.threshold)
 
             result.loc[self.default_region] = result.loc[result.index != self.default_region].sum(axis=0)
         else:
-            p = frame[['vpred', 'regional']].fillna(0).values
+            p = frame.loc[self.params['names'], ['vpred', 'regional']].fillna(0).values
 
             result.loc[self.default_region] = self.v2seats.predict(p).clip(0).values
 
         return result
 
     def run(self, reset: bool = True, **kwargs) -> Self:
+        """
+        Run `n_sim` simulations. Each one draws the national shares (`build_frame`), projects them to the
+        provinces (`build_umat`) and allocates the seats (`simulate`), storing `frames`, `units` and `results`.
+        """
         self.set_params(reset=reset, **kwargs)
 
-        self.frames = np.zeros((self.params['n_sim'], len(self.params['names']), len(self.cols_frame)))
-        self.units = np.zeros((self.params['n_sim'], len(self.params['regions']), len(self.params['names']), len(self.cols_unit)))
+        cats = self.categories()
+
+        self.frames = np.zeros((self.params['n_sim'], len(cats), len(self.cols_frame)))
+        self.units = np.zeros((self.params['n_sim'], len(self.params['regions']), len(cats), len(self.cols_unit)))
         self.results = np.zeros((self.params['n_sim'], len(self.params['regions']), len(self.params['names'])))
 
         if not self.params['split'] and self.v2seats is None:
@@ -689,14 +1112,12 @@ class Simulator(Core):
         for i in _iters:
             frame = self.build_frame()
             umat = self.build_umat(frame)
-            units = umat.stack(level=0, future_stack=True).unstack(level=1).values.reshape(
-                len(self.params['regions']), len(self.params['names']), len(self.cols_unit)
-            )
+            units = np.stack([umat[m].loc[self.params['regions'], cats].values for m in self.cols_unit], axis=-1)
 
             result = self.simulate(frame, umat)
 
-            self.frames[i] = np.array(frame)
-            self.units[i] = np.array(units)
+            self.frames[i] = frame.loc[cats, self.cols_frame].values
+            self.units[i] = units
             self.results[i] = np.array(result)
 
         self.frames = self.frames.round(2).astype(float)

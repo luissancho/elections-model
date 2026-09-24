@@ -2076,7 +2076,7 @@ def plot_kde_1d(data, p=1000, weights=None, ax=None, show=True, path=None, **kwa
         xlim=None, xmin=None, xmax=None, xticks=None, xfmt=None,
         ylim=None, ymin=None, ymax=None, yticks=None, yfmt=None,
         show_mean=False, show_median=False, show_std=False, show_ci=False, show_ridge=False,
-        std_n=1, ci_alpha=0.05, ridge_share=False, stats_dec=2, cm=None, lw=3, ls='-', alpha=1,
+        std_n=1, ci_alpha=0.05, ci_method='normal', ridge_share=False, stats_dec=2, cm=None, lw=3, ls='-', alpha=1,
         grid=True, vlines=None, hlines=None, legend=True, title=None, note=None
     )
     _fig_params = dict(
@@ -2151,7 +2151,12 @@ def plot_kde_1d(data, p=1000, weights=None, ax=None, show=True, path=None, **kwa
                 format_number(std, plt_params['stats_dec'])
             ))
         if plt_params['show_ci']:
-            cmin, cmax = np.clip(samp.ci(alpha=plt_params['ci_alpha']), np.min(x), np.max(x))
+            if plt_params['ci_method'] == 'quantile':
+                # Empirical interval: the same quantiles published in the summary tables
+                cmin = samp.quantile(plt_params['ci_alpha'] / 2)
+                cmax = samp.quantile(1 - plt_params['ci_alpha'] / 2)
+            else:
+                cmin, cmax = np.clip(samp.ci(alpha=plt_params['ci_alpha']), np.min(x), np.max(x))
             lines.append(cmin)
             lines.append(cmax)
             labels[2].append('CI ({}%): {} - {}'.format(
