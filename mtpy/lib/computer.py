@@ -22,7 +22,7 @@ from ..core.utils.dataviz import (
 from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
-    get_drift, save_drift_data
+    get_drift, save_drift_data, get_house_effects, save_house_effects_data
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -168,7 +168,7 @@ class Computer(Core):
         bias_dev_tau: Optional[float] = .01,
         min_polls: Optional[int] = 3,
         ratings_margin: Optional[float] = .05,
-        error_weights: Optional[dict[str, float]] = {'avg': .7, 'blocks': .3},
+        error_weights: Optional[dict[str, float]] = {'blocks': .7, 'within': .3},
         verbose: int = 0,
         path: Optional[str] = None
     ) -> None:
@@ -269,6 +269,7 @@ class Computer(Core):
         self.biases = None
         self.ratings = None
         self.drift = None  # Drift table of the current events (see `get_drift_data`)
+        self.house_effects = None  # House effects table of the current events (see `get_house_effects_data`)
 
         self.seats_estimator = None
         self.error_estimator = None
@@ -571,7 +572,7 @@ class Computer(Core):
             'start_date', 'end_date', 'pollster', 'sponsor',
             'mtype', 'ctype', 'computed', 'featured',
             'sample_size', 'parties', 'days', 'proc_sample', 'rating',
-            'error_avg', 'error_blocks', 'bias_avg', 'bias_blocks', 'bias',
+            'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias',
             'bias_dev_adj', 'bias_dev_err', 'weight_sample', 'weight_over', 'weight_rating'
         ]
 
@@ -772,13 +773,20 @@ class Computer(Core):
             - error_blocks
                 The error/bias of the poll prediction over the margin gap between the two main blocks of parties.
                 These are defined at the event parameters `vs` bmap.
+            - error_within
+                The part of the error of the parties of the `vs` blocks that only redistributes votes within a
+                block (percentage points, see `block_error_decomposition`).
             - bias_avg
                 The average bias over the most important parties for each event (usually predicted by all pollsters).
                 These are defined at the event parameters `main` bmap.
             - bias_blocks
-                The bias of the poll prediction over the margin gap between the two main blocks of parties.
+                The bias of the poll prediction over the two main blocks of parties (log-odds, absolute).
+            - bias_within
+                The bias in the split of each block between its parties (see `within_block_bias`): the error
+                that only redistributes votes between allies.
             - bias
-                The bias of the poll prediction over all the parties.
+                The mix that feeds the pollster ratings: `error_weights` over `bias_blocks` and `bias_within`
+                (`{'blocks': .7, 'within': .3}` by default, M6b).
 
         Parameters
         ----------
@@ -790,7 +798,7 @@ class Computer(Core):
         pd.DataFrame
             A table containing the computed values of each poll.
         """
-        columns = ['error_avg', 'error_blocks', 'bias_avg', 'bias_blocks', 'bias']
+        columns = ['error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias']
         df = self.polls.drop(columns=columns)
         results = self.events.drop(columns=columns)
 
@@ -852,7 +860,15 @@ class Computer(Core):
             weights=x['event'].loc[x['error'].dropna().index]
         ).mean(), axis=1).rename('bias_blocks')
 
-        dp = pd.concat([error_avg, error_blocks, bias_avg, bias_blocks], axis=1)
+        # Bias in the split of each `vs` block between its parties (log-odds, see `within_block_bias`), so
+        # that a poll that gets the blocks right but swaps votes between allies is told apart
+        bias_within = self.within_block_bias(
+            errors_pct['poll'].mul(100), errors_pct['event'].mul(100), self.merge_bmaps('vs')
+        )
+        # The same split in percentage points: the error that redistributes votes within a block
+        error_within = self.block_error_decomposition(errors_pct['error'].mul(100), self.merge_bmaps('vs'))['error_within']
+
+        dp = pd.concat([error_avg, error_blocks, error_within, bias_avg, bias_blocks, bias_within], axis=1)
 
         if self.verbose > 0:
             print('Set computed biases...')
@@ -864,7 +880,7 @@ class Computer(Core):
             print('Process data...')
 
         dp[['error_avg', 'error_blocks']] = dp[['error_avg', 'error_blocks']].mul(100)
-        dp[['bias_avg', 'bias_blocks', 'bias']] = dp[['bias_avg', 'bias_blocks', 'bias']].apply(self.lor_to_bias)
+        dp[['bias_avg', 'bias_blocks', 'bias_within', 'bias']] = dp[['bias_avg', 'bias_blocks', 'bias_within', 'bias']].apply(self.lor_to_bias)
 
         df = df.merge(
             dp,
@@ -1033,7 +1049,7 @@ class Computer(Core):
         columns = ['rating', 'weight_rating']
         rparams = [
             'quality', 'num_events', 'num_polls', 'num_polls_w',
-            'error_avg', 'error_blocks', 'bias_avg', 'bias_blocks', 'bias',
+            'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias',
             'bias_dev_adj', 'bias_dev_err', 'rating_adj', 'rating', 'weight_rating'
         ]
         rkeys = ['event_date', 'pollster_id']
@@ -1041,12 +1057,12 @@ class Computer(Core):
         polls = self.filter_polls().drop(columns=columns + self.names + ['-'])
 
         # Scale absolute percentage errors to the range [0, 1]
-        polls[['error_avg', 'error_blocks']] = polls[['error_avg', 'error_blocks']].div(100)
+        polls[['error_avg', 'error_blocks', 'error_within']] = polls[['error_avg', 'error_blocks', 'error_within']].div(100)
         # Scale bias deviations to the log odds ratio scale
         polls[[
-            'bias_avg', 'bias_blocks', 'bias', 'bias_dev_adj', 'bias_dev_err'
+            'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err'
         ]] = polls[[
-            'bias_avg', 'bias_blocks', 'bias', 'bias_dev_adj', 'bias_dev_err'
+            'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err'
         ]].apply(self.bias_to_lor)
 
         dr = pd.DataFrame(columns=rkeys + rparams)
@@ -1082,15 +1098,15 @@ class Computer(Core):
 
         # Rescale absolute percentage errors to the range [0, 100]
         dr[[
-            'quality', 'error_avg', 'error_blocks', 'rating_adj', 'rating'
+            'quality', 'error_avg', 'error_blocks', 'error_within', 'rating_adj', 'rating'
         ]] = dr[[
-            'quality', 'error_avg', 'error_blocks', 'rating_adj', 'rating'
+            'quality', 'error_avg', 'error_blocks', 'error_within', 'rating_adj', 'rating'
         ]].mul(100)
         # Rescale log odds ratio deviations to the bias scale
         dr[[
-            'bias_avg', 'bias_blocks', 'bias', 'bias_dev_adj', 'bias_dev_err'
+            'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err'
         ]] = dr[[
-            'bias_avg', 'bias_blocks', 'bias', 'bias_dev_adj', 'bias_dev_err'
+            'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err'
         ]].apply(self.lor_to_bias)
 
         dr = dr.set_index(rkeys).sort_index().round(2).astype(float)
@@ -1264,7 +1280,7 @@ class Computer(Core):
         dr['num_polls_w'] = df.groupby('pollster', observed=True)['weight'].sum().reindex(dr.index).fillna(0)
 
         # Compute the weighted mean of each pollster's poll errors
-        for col in ['error_avg', 'error_blocks', 'bias_avg', 'bias_blocks', 'bias']:
+        for col in ['error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias']:
             dr[col] = df.groupby('pollster').apply(
                 lambda x: np.sum(x[col] * x['weight']) / np.sum(x['weight'])
             ).reindex(dr.index)
@@ -1578,7 +1594,7 @@ class Computer(Core):
         df[['days', 'sample_size', 'proc_sample']] = df[['days', 'sample_size', 'proc_sample']].fillna(0).astype(int)
         df['weight'] = df.weight_over * df.weight_sample
         df = df.set_index(['event', 'pollster', 'days']).sort_index(ascending=(True, True, False))[[
-            'sample_size', 'proc_sample', 'weight', 'error_avg', 'bias_avg', 'error_blocks', 'bias_blocks', 'bias'
+            'sample_size', 'proc_sample', 'weight', 'error_avg', 'bias_avg', 'error_blocks', 'bias_blocks', 'error_within', 'bias_within', 'bias'
         ] + names]
 
         return df
@@ -1892,6 +1908,347 @@ class Computer(Core):
             df = get_drift(scope=self.scope)
 
         return DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg)
+
+
+    def get_house_effects_data(
+        self,
+        he_params: Optional[dict[str, Any]] = None,
+        he_min_polls: int = 3
+    ) -> pd.DataFrame:
+        """
+        Measure the house effects in the past election cycles: for each featured event with results, pollster
+        and party, the deviation of the pollster from the official result (its polls of the last `n_days`
+        days, precision-weighted) and its deviation from the consensus of the cycle (`Forecaster.fit_house_effects`
+        without prior). The deviations from the result are centred across pollsters (weights: number of
+        polls) so that they measure the tilt of the house relative to the industry; the industry-wide mean
+        is kept apart (`industry`).
+
+        Parameters
+        ----------
+        he_params : dict, optional
+            Parameters of the house effects estimation (see `Forecaster.set_he_params`); `n_days` is the
+            window before the election of the deviation from the result.
+        he_min_polls : int, optional
+            Polls a pollster needs in the window to get a deviation from the result.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event, pollster and party: `event_date`, `event_scope`, `pollster_id`, `party_id`,
+            `pollster`, `party`, `level` (official share), `n_result`, `dev_result`, `dev_result_err`,
+            `dev_result_c`, `industry`, `n_cycle`, `dev_cycle`, `dev_cycle_err` (percentage points).
+        """
+        from .forecaster import Forecaster
+
+        params = Forecaster.set_he_params(None, he_params)
+        parties = get_parties().set_index('name')
+        pollsters = self.pollsters.set_index('id')['name']
+        keys = ['event_date', 'pollster_id', 'party']
+
+        # (a) Deviation from the official result over the last `n_days` days of each cycle
+        polls = self.filter_polls(featured=True, drange=(0, params['n_days']), n_last=None)
+        weight = (polls['weight_over'] * polls['weight_sample']).astype(float).rename('w')
+        errors = self.errors.reindex(polls.index)
+        names = [n for n in errors.columns if n in parties.index]
+        long = errors[names].stack(future_stack=True).rename('e').reset_index()
+        long = long.rename(columns={long.columns[-2]: 'party'}) if 'party' not in long.columns else long
+        long['w'] = weight.reindex(pd.MultiIndex.from_frame(long[self.keys])).to_numpy()
+        long = long.dropna(subset=['e', 'w'])
+        long = long.loc[long['w'] > 0]
+
+        def agg_result(g):
+            w, e = g['w'].to_numpy(), g['e'].to_numpy()
+            n, sw = len(e), w.sum()
+            dev = float((w * e).sum() / sw)
+            if n > 1:
+                denom = sw - np.square(w).sum() / sw
+                var = float((w * np.square(e - dev)).sum() / denom) if denom > 0 else 0.
+                err = float(np.sqrt(max(var, 0.) / (sw ** 2 / np.square(w).sum())))
+            else:
+                err = np.nan
+            return pd.Series({'n_result': n, 'dev_result': dev, 'dev_result_err': err})
+
+        result = long.groupby(keys, observed=True)[['w', 'e']].apply(agg_result).reset_index()
+        result = result.loc[result['n_result'] >= he_min_polls]
+
+        # Centre across pollsters, per event and party: the industry-wide deviation is kept apart
+        def centre(g):
+            industry = float((g['dev_result'] * g['n_result']).sum() / g['n_result'].sum())
+            return g.assign(industry=industry, dev_result_c=g['dev_result'] - industry)
+
+        result = result.groupby(['event_date', 'party'], observed=True, group_keys=False)[result.columns].apply(centre)
+
+        # (b) Deviation from the consensus of the cycle, all polls, no prior
+        rows = []
+        events = sorted(pd.to_datetime(result['event_date']).dt.strftime('%Y-%m-%d').unique())
+        events_ = tqdm(events) if self.verbose > 0 else events
+        for event_date in events_:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                fc = Forecaster(
+                    scope=self.scope,
+                    event_date=event_date,
+                    drop_mtypes=self.drop_mtypes,
+                    drange=None,
+                    alpha=self.alpha,
+                    bmap=None,
+                    reg_params=self.reg_params,
+                    house_effects=True,
+                    he_params=dict(params, prior=None),
+                    verbose=0,
+                    path=self.path
+                ).build_series()
+                effects = fc.fit_house_effects(prior=None)
+            for (pid, name), r in effects.iterrows():
+                rows.append({
+                    'event_date': pd.Timestamp(event_date), 'pollster_id': int(pid), 'party': name,
+                    'n_cycle': int(r['n']), 'dev_cycle': float(r['dev']),
+                    'dev_cycle_err': float(r['dev_err']) if np.isfinite(r['dev_err']) else np.nan
+                })
+        cycle = pd.DataFrame(rows, columns=keys + ['n_cycle', 'dev_cycle', 'dev_cycle_err'])
+
+        result['event_date'] = pd.to_datetime(result['event_date'])
+        df = result.merge(cycle, on=keys, how='outer')
+        df = df.loc[df['party'].isin(parties.index)]
+        df['event_scope'] = self.scope
+        df['party_id'] = df['party'].map(parties['id']).astype(int)
+        df['pollster'] = df['pollster_id'].map(pollsters)
+        events = self.events
+        df['level'] = [
+            float(events.loc[dt, party]) if (dt in events.index and party in events.columns) else np.nan
+            for dt, party in zip(df['event_date'], df['party'])
+        ]
+
+        columns = [
+            'event_date', 'event_scope', 'pollster_id', 'party_id', 'pollster', 'party', 'level',
+            'n_result', 'dev_result', 'dev_result_err', 'dev_result_c', 'industry', 'n_cycle', 'dev_cycle', 'dev_cycle_err'
+        ]
+
+        return df[columns].sort_values(['event_date', 'pollster_id', 'party_id'], ignore_index=True)
+
+    def compute_house_effects(
+        self,
+        save: bool = False,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Compute the house effects table of the current events (see `get_house_effects_data`) and, optionally,
+        save it into the `pollsters_parties` table of the database, replacing the rows of the same events.
+        """
+        if self.verbose > 0:
+            print('Compute house effects...')
+
+        df = self.get_house_effects_data(**kwargs)
+
+        if save:
+            if self.verbose > 0:
+                print('Save house effects data...')
+
+            nrows = save_house_effects_data(df)
+
+            if self.verbose > 0:
+                print('{} rows updated...'.format(nrows))
+
+        self.house_effects = df
+
+        return df
+
+    # --- House effects and error decomposition (M6): pure helpers -------------------------------------------
+
+    @staticmethod
+    def block_error_decomposition(
+        errors: pd.DataFrame,
+        blocks: dict[str, list[str]]
+    ) -> pd.DataFrame:
+        """
+        Split the error of a poll over the parties of the blocks into the part that crosses the blocks and
+        the part that only redistributes votes within a block: `error_main = Σ|e_p|` (parties of the blocks),
+        `error_between = Σ_blocks |Σ_p e_p|`, `error_within = error_main − error_between` (≥ 0). Percentage
+        points, one row per poll; parties outside the blocks do not count.
+
+        Parameters
+        ----------
+        errors : pd.DataFrame
+            Signed errors (poll − result) per party, one row per poll.
+        blocks : dict
+            `{block: [parties]}`.
+        """
+        members = {b: [p for p in ps if p in errors.columns] for b, ps in blocks.items()}
+        parties = [p for ps in members.values() for p in ps]
+        main = errors[parties].abs().sum(axis=1, min_count=1)
+        between = pd.concat(
+            [errors[ps].sum(axis=1, min_count=1).abs() for ps in members.values() if len(ps) > 0], axis=1
+        ).sum(axis=1, min_count=1)
+
+        return pd.DataFrame({'error_main': main, 'error_between': between, 'error_within': main - between})
+
+    @staticmethod
+    def within_block_bias(
+        polls: pd.DataFrame,
+        events: pd.DataFrame,
+        blocks: dict[str, list[str]]
+    ) -> pd.Series:
+        """
+        Bias of a poll in the split of each block between its parties, in log-odds: for each party, the odds
+        of its share within its block in the poll against the same share in the result, in absolute value,
+        weighted by the share of the party in the result. It is 0 when every block is split as in the result,
+        whatever the size of the blocks: the error between blocks is measured apart (`bias_blocks`).
+
+        Parameters
+        ----------
+        polls, events : pd.DataFrame
+            Percentages per party (0-100), one row per poll (the result row repeated per poll).
+        blocks : dict
+            `{block: [parties]}`.
+        """
+        num = pd.Series(0., index=polls.index)
+        den = pd.Series(0., index=polls.index)
+        for ps in blocks.values():
+            ps = [p for p in ps if p in polls.columns and p in events.columns]
+            if len(ps) < 2:
+                continue  # A block of one party has no split to get wrong
+            # Both totals over the parties the poll reports: a poll that omits a party of the block is not
+            # penalised for it (its split is judged among the parties it publishes)
+            mask = polls[ps].notnull()
+            pb, eb = polls[ps].sum(axis=1, min_count=1), events[ps].where(mask).sum(axis=1, min_count=1)
+            for p in ps:
+                sp, se = polls[p] / pb, events[p] / eb
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    lor = np.abs(np.log((sp / (1 - sp)) / (se / (1 - se))))
+                ok = np.isfinite(lor) & events[p].notnull() & mask[p]
+                num = num + np.where(ok, lor * events[p], 0.)
+                den = den + np.where(ok, events[p], 0.)
+
+        return (num / den.where(den > 0)).rename('bias_within')
+
+    @staticmethod
+    def house_effects_summary(
+        data: pd.DataFrame,
+        blocks: dict[str, list[str]],
+        current: Optional[str] = None,
+        year_decay: float = 0.9,
+        n_cap: int = 10
+    ) -> pd.DataFrame:
+        """
+        Summary of the house effects of each pollster by party and by block (the sum of its parties): the
+        decayed mean of its centred deviations from the results of the past elections (`hist`), the trend of
+        those deviations (`trend`, points per year, weighted slope, NaN with fewer than two elections) and its
+        deviation from the consensus in the current cycle (`cycle`).
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Rows of `pollsters_parties` (see `get_house_effects_data`); the current cycle may be present with
+            `dev_cycle` only.
+        blocks : dict
+            `{block: [parties]}`.
+        current : str, optional
+            Date of the current event (rows at that date give `cycle`; the others are the history). By default
+            the last event of the data.
+        year_decay : float, optional
+            Yearly decay of the weight of a past election, counted from `current`.
+        n_cap : int, optional
+            Cap of the polls of a past election counted in its weight.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `(pollster, name)`: `n_events`, `hist`, `trend`, `cycle`, `n_cycle`.
+        """
+        df = data.copy()
+        df['event_date'] = pd.to_datetime(df['event_date'])
+        current = pd.Timestamp(current) if current is not None else df['event_date'].max()
+        hist = df.loc[(df['event_date'] < current) & df['dev_result_c'].notnull() & (df['n_result'] > 0)]
+        cyc = df.loc[df['event_date'] == current]
+
+        rows = []
+        for (pollster, party), g in hist.groupby(['pollster', 'party'], observed=True):
+            years = ((current - g['event_date']).dt.days / 365.25).to_numpy()
+            w = np.power(year_decay, years) * np.minimum(g['n_result'].astype(float).to_numpy(), n_cap)
+            y = g['dev_result_c'].astype(float).to_numpy()
+            mean = float((w * y).sum() / w.sum())
+            if len(y) > 1 and np.ptp(years) > 0:
+                x = -years  # time runs forward
+                xm = (w * x).sum() / w.sum()
+                trend = float((w * (x - xm) * (y - mean)).sum() / (w * np.square(x - xm)).sum())
+            else:
+                trend = np.nan
+            rows.append({'pollster': pollster, 'name': party, 'n_events': int(len(y)), 'hist': mean, 'trend': trend})
+        out = pd.DataFrame(rows, columns=['pollster', 'name', 'n_events', 'hist', 'trend'])
+
+        # Current cycle rows (pollsters without history included)
+        cycle = cyc[['pollster', 'party', 'dev_cycle', 'n_cycle']].rename(columns={'party': 'name', 'dev_cycle': 'cycle'})
+        out = out.merge(cycle, on=['pollster', 'name'], how='outer')
+        out['n_events'] = out['n_events'].fillna(0).astype(int)
+
+        # Blocks: the sum of the parties of the block
+        parts = []
+        for block, ps in blocks.items():
+            sub = out.loc[out['name'].isin(ps)]
+            if sub.shape[0] == 0:
+                continue
+            agg = sub.groupby('pollster', observed=True).agg(
+                n_events=('n_events', 'max'), hist=('hist', lambda s: s.sum(min_count=1)),
+                trend=('trend', lambda s: s.sum(min_count=1)), cycle=('cycle', lambda s: s.sum(min_count=1)),
+                n_cycle=('n_cycle', 'max')
+            ).reset_index()
+            agg['name'] = block
+            parts.append(agg)
+        if parts:
+            out = pd.concat([out] + parts, ignore_index=True)
+
+        return out.set_index(['pollster', 'name']).sort_index()[['n_events', 'hist', 'trend', 'cycle', 'n_cycle']]
+
+    def print_house_effects(
+        self,
+        names: Optional[list[str]] = None,
+        current: Optional[str] = None,
+        min_events: int = 1
+    ) -> pd.DataFrame:
+        """
+        Table of house effects by pollster, party and block (`vs` blocks of the current event): history,
+        trend and current cycle (see `house_effects_summary`). The history comes from `house_effects` (or the
+        database); the current cycle is measured with a `Forecaster` on the polls of `current` (the next
+        event by default), without prior.
+
+        Parameters
+        ----------
+        names : list of str, optional
+            Parties to show (the `main` parties of the current event by default); blocks are always shown.
+        current : str, optional
+            Current event date.
+        min_events : int, optional
+            Pollsters with fewer past elections and no current polls are left out.
+        """
+        from .forecaster import Forecaster
+
+        data = self.house_effects if self.house_effects is not None else get_house_effects(scope=self.scope)
+        current = current or get_next_event_date(scope=self.scope, date_from=self.event_dates[-1]) or self.event_dates[-1]
+        params = get_event_params(scope=self.scope, event_dates=[current], path=self.path)[current]
+        blocks = params['bmaps']['vs']
+        names = names or params['bmaps'].get('main', [])
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            fc = Forecaster(scope=self.scope, event_date=current, drop_mtypes=self.drop_mtypes, drange=None, alpha=self.alpha,
+                            bmap=None, reg_params=self.reg_params, house_effects=True, he_params={'prior': None},
+                            verbose=0, path=self.path).build_series()
+            effects = fc.fit_house_effects(prior=None).reset_index()
+        cycle = pd.DataFrame({
+            'event_date': pd.Timestamp(current), 'pollster': effects['pollster'], 'party': effects['name'],
+            'dev_cycle': effects['dev'], 'n_cycle': effects['n']
+        })
+        history = data.loc[pd.to_datetime(data['event_date']) < pd.Timestamp(current)]
+        frames = [f for f in (history, cycle) if f.shape[0] > 0]
+        data = pd.concat(frames, ignore_index=True) if len(frames) > 0 else cycle
+
+        table = self.house_effects_summary(data, blocks, current=current, year_decay=self.year_decay)
+        keep = [n for n in names if n in table.index.get_level_values('name')] + list(blocks)
+        table = table.loc[table.index.get_level_values('name').isin(keep)]
+        table = table.loc[(table['n_events'] >= min_events) | table['n_cycle'].fillna(0).gt(0)]
+        pollsters = table.index.get_level_values('pollster').unique()
+
+        return table.reindex(pd.MultiIndex.from_product([pollsters, keep], names=['pollster', 'name'])).dropna(how='all')
 
     def get_seats_estimator_data(self) -> pd.DataFrame:
         """
@@ -2288,7 +2645,7 @@ class Computer(Core):
 
         weight_cols = ['weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year']
         df = df.set_index(['event_date', 'days'])[[
-            'parties', 'proc_sample', 'error_avg', 'error_blocks', 'bias_avg', 'bias_blocks',
+            'parties', 'proc_sample', 'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within',
             'bias', 'bias_dev_adj', 'weight'
         ] + weight_cols].rename(columns={i: i.replace('weight_', 'w_') for i in weight_cols})
 

@@ -44,6 +44,9 @@ class Simulator(Core):
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
         threshold: Optional[float] = 3.0,
+        house_effects: bool = True,
+        industry_bias: bool = False,
+        he_params: Optional[dict[str, Any]] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -87,6 +90,16 @@ class Simulator(Core):
             Legal threshold, as a percentage of the valid votes of each district, below which a candidature
             is excluded from the seat allocation (art. 163.1.a LOREG: 3 %). Applied when `split=True`;
             `None` disables it.
+        house_effects : bool, optional
+            Subtract the house effect of each pollster (its systematic deviation on each series, estimated in
+            the cycle with a prior from its past elections) from its polls before averaging. See
+            `Forecaster.fit_house_effects`.
+        industry_bias : bool, optional
+            Shift the poll average of each party by the industry-wide bias measured in the past elections
+            (see `Forecaster.industry_bias`), adding its uncertainty to the error. Off by default: the bias is
+            inconsistent between elections for most parties.
+        he_params : dict, optional
+            Parameters of the house effects estimation, see `Forecaster.set_he_params`.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -99,6 +112,10 @@ class Simulator(Core):
 
         self.scope = scope
         self.event_date = event_date
+        self.house_effects = bool(house_effects)
+        self.industry_bias = bool(industry_bias)
+        self.he_params = he_params
+        self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
         self.drange = norm_range(drange)
@@ -149,6 +166,8 @@ class Simulator(Core):
             drop_mtypes=self.drop_mtypes,
             reg_params=self.reg_params,
             alpha=self.alpha,
+            house_effects=self.house_effects,
+            he_params=self.he_params,
             verbose=self.verbose,
             path=self.path
         ).build_series()
@@ -465,6 +484,17 @@ class Simulator(Core):
 
         if fc['mean'].isnull().all():
             warnings.warn('No fitted value at `as_of` {}: the forecast is empty'.format(self.as_of.date()))
+
+        # Industry-wide bias (optional): shift the average by the bias of the polls of the past elections
+        if self.industry_bias:
+            p = self.model.he_params
+            table = self.model.industry_bias(
+                self.model.load_house_history(), fc.loc[names, 'mean'], pd.Timestamp(self.event_date),
+                year_decay=p['year_decay'], prior_events=p['prior_events'], level_floor=p['level_floor'], rel_cap=p['rel_cap']
+            )
+            fc.loc[names, 'mean'] = fc.loc[names, 'mean'] - table['bias'].reindex(names).fillna(0.)
+            fc.loc[names, 'err'] = np.sqrt(np.square(fc.loc[names, 'err']) + np.square(table['bias_err'].reindex(names).fillna(0.)))
+            self.industry_bias_table = table
 
         # Residual of the poll average (other candidatures and blank votes): never fitted, no statistics
         fc.loc[self.OTHERS] = (max(0., 100. - fc['mean'].sum()), np.nan, np.nan)

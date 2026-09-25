@@ -79,8 +79,10 @@ class PollstersRatings(Model):
         'num_polls_w': 'num',
         'error_avg': 'num',
         'error_blocks': 'num',
+        'error_within': 'num',
         'bias_avg': 'num',
         'bias_blocks': 'num',
+        'bias_within': 'num',
         'bias': 'num',
         'bias_dev_adj': 'num',
         'bias_dev_err': 'num',
@@ -91,6 +93,12 @@ class PollstersRatings(Model):
 
 
 class PollstersParties(Model):
+    """
+    House effects: deviation of each pollster for each party in each election (see
+    `Computer.compute_house_effects`), percentage points. `dev_result` is the mean signed error of its polls
+    of the last `n_days` against the official result (`dev_result_c` centred across pollsters, `industry` the
+    industry-wide mean it was centred with); `dev_cycle` its deviation from the consensus of the cycle.
+    """
 
     table = 'elections.pollsters_parties'
 
@@ -101,7 +109,18 @@ class PollstersParties(Model):
         'event_date': 'dtd',
         'event_scope': 'cat',
         'pollster_id': ['int', 3],
-        'party_id': ['int', 3]
+        'party_id': ['int', 3],
+        'pollster': 'cat',
+        'party': 'cat',
+        'level': ['num', [10, 4]],
+        'n_result': ['int', 2],
+        'dev_result': ['num', [10, 4]],
+        'dev_result_err': ['num', [10, 4]],
+        'dev_result_c': ['num', [10, 4]],
+        'industry': ['num', [10, 4]],
+        'n_cycle': ['int', 2],
+        'dev_cycle': ['num', [10, 4]],
+        'dev_cycle_err': ['num', [10, 4]]
     }
 
 
@@ -160,8 +179,10 @@ class Polls(Model):
         'rating': 'num',
         'error_avg': 'num',
         'error_blocks': 'num',
+        'error_within': 'num',
         'bias_avg': 'num',
         'bias_blocks': 'num',
+        'bias_within': 'num',
         'bias': 'num',
         'bias_dev_adj': 'num',
         'bias_dev_err': 'num',

@@ -49,3 +49,22 @@ def test_run_case_horizon_run_2023_90_days(app):
     only = run_case('es', '2023-07-23', 90, n_sim=20, seed=42, nowcast_only=True)
     assert 'lo95_h' not in only['shares'].columns
     assert only['shares']['lo95'].tolist() == pytest.approx(shares['lo95'].tolist())
+
+
+def test_run_case_house_effects_flags_and_raw_baselines(app):
+    """M6: el caso registra los efectos de casa aplicados y las líneas base se calculan con la serie bruta."""
+    from mtpy.lib.backtest import run_case
+
+    case = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
+    meta = case['meta'].iloc[0]
+    assert bool(meta['house_effects']) is True
+    assert meta['he_pollsters'] > 0 and np.isfinite(meta['he_mean_abs']) and meta['he_max_abs'] >= meta['he_mean_abs']
+
+    off = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True, house_effects=False)
+    assert bool(off['meta'].iloc[0]['house_effects']) is False and off['meta'].iloc[0]['he_pollsters'] == 0
+    # Las líneas base (última encuesta, media de 4 semanas) no dependen de la corrección
+    a, b = case['shares'].set_index('party'), off['shares'].set_index('party')
+    assert a['last_poll'].tolist() == pytest.approx(b['last_poll'].tolist(), nan_ok=True)
+    assert a['mean_4w'].tolist() == pytest.approx(b['mean_4w'].tolist(), nan_ok=True)
+    # El promedio sí cambia con la corrección
+    assert not np.allclose(a.loc[['PP', 'PSOE'], 'model'], b.loc[['PP', 'PSOE'], 'model'])

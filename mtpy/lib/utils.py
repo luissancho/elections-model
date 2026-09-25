@@ -131,3 +131,59 @@ def norm_range(
         return drange[0], dmax
     else:
         return tuple(list(drange)[:2])
+
+
+def normal_update(
+    mean: float | np.ndarray,
+    err: float | np.ndarray,
+    prior_mean: float | np.ndarray,
+    prior_err: float | np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Normal-normal update of a prior `N(prior_mean, prior_err²)` with an estimate `mean ± err`: the posterior
+    mean weighs both by their precisions and the posterior error combines them.
+
+    Degenerate cases are handled so that the result is always finite: an estimate without a usable error
+    (`err` NaN or infinite, or `mean` NaN) contributes nothing and the prior is returned; a prior without
+    uncertainty on the data side (`prior_err` infinite) returns the estimate; `err = 0` is an exact estimate.
+
+    Parameters
+    ----------
+    mean, err : float or array-like
+        Estimate and its standard error.
+    prior_mean, prior_err : float or array-like
+        Prior mean and standard deviation.
+
+    Returns
+    -------
+    tuple of np.ndarray
+        Posterior mean and posterior standard error (arrays, broadcast to the common shape).
+    """
+    mean, err, prior_mean, prior_err = np.broadcast_arrays(
+        *[np.asarray(x, dtype=float) for x in (mean, err, prior_mean, prior_err)]
+    )
+    mean, err, prior_mean, prior_err = (np.array(x, dtype=float) for x in (mean, err, prior_mean, prior_err))
+
+    # Estimates without a usable error or value carry no information (infinite error)
+    no_data = ~np.isfinite(mean) | ~np.isfinite(err) | (err < 0)
+    err = np.where(no_data, np.inf, err)
+    mean = np.where(no_data, 0., mean)
+    prior_err = np.where(np.isfinite(prior_err) & (prior_err >= 0), prior_err, np.inf)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        data_lambda = np.where(err > 0, 1. / np.square(err), np.inf)
+        prior_lambda = np.where(prior_err > 0, 1. / np.square(prior_err), np.inf)
+        post_lambda = data_lambda + prior_lambda
+
+        post_mean = np.where(
+            np.isinf(data_lambda), mean,
+            np.where(np.isinf(prior_lambda), prior_mean, (data_lambda * mean + prior_lambda * prior_mean) / post_lambda)
+        )
+        post_err = np.where(np.isinf(post_lambda), 0., np.sqrt(1. / post_lambda))
+
+    # Neither side informative: keep the prior mean with an infinite error
+    none = (post_lambda == 0)
+    post_mean = np.where(none, prior_mean, post_mean)
+    post_err = np.where(none, np.inf, post_err)
+
+    return post_mean, post_err

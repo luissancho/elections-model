@@ -1,10 +1,12 @@
 {
- "run_at": "2026-09-24T21:11:58",
- "commit": "74bbedf",
+ "run_at": "2026-09-25T19:13:24",
+ "commit": "8a7db0a",
  "n_sim": 500,
  "seed": 42,
  "max_fc": 10,
  "nowcast_only": false,
+ "house_effects": true,
+ "industry_bias": false,
  "events": [
   "2015-12-20",
   "2016-06-26",

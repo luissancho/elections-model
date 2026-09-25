@@ -86,7 +86,9 @@ class Stat(metaclass=StatMeta):
 
         self.data = array_adjust(self.data, 0)
         if self.weights is not None:
-            self.weights = array_adjust(self.weights, 0)
+            # Own copy: the weights are rescaled in place below, and the caller's array (often reused row
+            # after row, as a pandas Series) must not be touched
+            self.weights = np.array(array_adjust(self.weights, 0), dtype=float, copy=True)
         else:
             self.weights = np.ones(len(self.data))
         

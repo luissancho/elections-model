@@ -4,6 +4,7 @@ Run the model backtest on past elections and write the results to `backtest/resu
 
 Usage (from the repository root):
     python backtest/run_backtest.py [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 500] [--seed 42] [--nowcast-only]
+                                    [--no-house-effects] [--industry-bias]
 """
 import argparse
 import json
@@ -25,6 +26,8 @@ def main():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--max-fc', type=int, default=10)
     parser.add_argument('--nowcast-only', action='store_true', help='skip the horizon run of each case (columns `_h`)')
+    parser.add_argument('--no-house-effects', dest='house_effects', action='store_false', help='do not subtract the house effects (M6)')
+    parser.add_argument('--industry-bias', action='store_true', help='shift the average by the industry-wide bias of past elections (M6)')
     parser.add_argument('--out', default=os.path.join(ROOT, 'backtest', 'results'))
     args = parser.parse_args()
 
@@ -36,7 +39,8 @@ def main():
 
     results = run_backtest(
         scope=args.scope, events=args.events, horizons=args.horizons,
-        n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc, nowcast_only=args.nowcast_only, verbose=1
+        n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc, nowcast_only=args.nowcast_only,
+        house_effects=args.house_effects, industry_bias=args.industry_bias, verbose=1
     )
 
     os.makedirs(args.out, exist_ok=True)
@@ -51,6 +55,7 @@ def main():
     meta = {
         'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': commit,
         'n_sim': args.n_sim, 'seed': args.seed, 'max_fc': args.max_fc, 'nowcast_only': args.nowcast_only,
+        'house_effects': args.house_effects, 'industry_bias': args.industry_bias,
         'events': results['metrics']['event_date'].unique().tolist(), 'horizons': sorted(results['metrics']['horizon'].unique().tolist()),
         'db_polls': int(polls.shape[0]), 'db_last_poll': str(polls['date'].max().date())
     }

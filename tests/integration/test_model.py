@@ -9,8 +9,19 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope='module')
 def sim27(app):
+    """Simulador de referencia (sin efectos de casa): la base de las regresiones numéricas."""
+    from mtpy.lib.simulator import Simulator
+    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', house_effects=False)
+    sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
+    return sim
+
+
+@pytest.fixture(scope='module')
+def sim27_he(app):
+    """Simulador con efectos de casa (M6, el modo por defecto)."""
     from mtpy.lib.simulator import Simulator
     sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.')
+    assert sim.house_effects is True
     sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
     return sim
 
@@ -224,11 +235,16 @@ def test_anchor_is_last_fitted_day_not_deadline(sim27):
     assert sim27.v2drift is not None and sim27.v2drift.k > 0
 
 
+# Regresión numérica de referencia (MT n=200, semilla 42, sin efectos de casa). Era 137 / 112 / 62 / 8 hasta M6b:
+# el nuevo `bias` del rating cambió `weight_rating` y con él el promedio (ver `metodo-6-house-effects.md`).
+REGRESSION_TOTALS = [139, 111, 62, 8]
+
+
 def test_nowcast_regression_seed_42(sim27):
-    """La secuencia aleatoria del nowcast no cambia con M5: reproduce la tabla de fase-0.md."""
+    """La secuencia aleatoria del nowcast no cambia con M5: reproduce la regresión de referencia."""
     sim27.run(split=True, random=True, n_sim=200)
     assert (sim27.horizons == 0).all()
-    assert sim27.totals()[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == [137, 112, 62, 8]
+    assert sim27.totals()[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
     assert (sim27.frame(0)['drift'].drop('-') == 0).all()
 
 
@@ -288,3 +304,46 @@ def test_fan_widths_grow_with_horizon(sim27):
     fc = sim27.forecast.loc['PP']
     assert pp['mean'] == pytest.approx(fc['mean'])
     assert pp['sd'] == pytest.approx(np.sqrt(fc['err'] ** 2 + fc['error'] ** 2), abs=1e-6)
+
+
+# --- M6: efectos de casa ---
+
+def test_house_effects_are_fitted_and_centered(sim27, sim27_he):
+    import pandas as pd
+    he = sim27_he.model.house_effects
+    assert list(he.index.names) == ['pollster_id', 'name']
+    cis = he.loc[he['pollster'] == 'CIS'].reset_index().set_index('name')
+    assert cis.loc['PP', 'effect'] < -3 and cis.loc['PSOE', 'effect'] > 2
+    assert cis.loc['PP', 'n'] >= 10
+    # Recentrado por nombre: el nivel del promedio no depende de la corrección
+    for name, g in he.groupby(level='name'):
+        assert abs((g['effect'] * g['w']).sum() / g['w'].sum()) < 1e-6, name
+    # La serie corregida sólo cambia en las filas de encuestas; el promedio corregido del PP queda cerca del bruto
+    raw, corr = sim27_he.model.series_raw, sim27_he.model.series
+    events = raw['pollster'].isnull()
+    assert raw.loc[events, sim27_he.model.names].equals(corr.loc[events, sim27_he.model.names])
+    assert not raw.loc[~events, 'PP'].equals(corr.loc[~events, 'PP'])
+    assert abs(sim27_he.forecast.loc['PP', 'mean'] - sim27.forecast.loc['PP', 'mean']) < 1.0
+    # El prior histórico se cargó (hay casas con prior distinto de 0)
+    assert (he['prior'].abs() > 0).any()
+
+
+def test_simulator_without_house_effects_keeps_regression(sim27):
+    assert sim27.house_effects is False and sim27.model.house_effects is None
+    assert sim27.model.series['PP'].equals(sim27.model.series_raw['PP'])
+    sim27.run(split=True, random=True, n_sim=200)
+    assert sim27.totals()[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+
+
+def test_industry_bias_shifts_the_forecast(app, sim27_he):
+    """El sesgo del sector (opcional) desplaza el consenso y ensancha su error; no toca los efectos de casa."""
+    from mtpy.lib.simulator import Simulator
+    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', industry_bias=True)
+    sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
+    bias = sim.industry_bias_table
+    assert {'bias', 'bias_err'} <= set(bias.columns)
+    assert bias.loc['PSOE', 'bias'] < 0          # las encuestas subestiman al PSOE: el pronóstico sube
+    for name in ['PP', 'PSOE']:
+        assert sim.forecast.loc[name, 'mean'] == pytest.approx(sim27_he.forecast.loc[name, 'mean'] - bias.loc[name, 'bias'], abs=1e-6)
+        assert sim.forecast.loc[name, 'err'] >= sim27_he.forecast.loc[name, 'err']
+    assert sim27_he.industry_bias is False and sim27_he.industry_bias_table is None

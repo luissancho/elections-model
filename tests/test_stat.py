@@ -132,3 +132,16 @@ def test_local_estimator_recovers_a_line(rng):
     est = LocalKernelEstimator(x, y, bw=100.0, bw_type='fixed', cov_type=None)
     res = est.predict(np.array([2.5, 7.5]))
     assert np.allclose(res.values, [8., 18.], atol=1e-6)
+
+
+def test_stat_does_not_mutate_the_callers_weights():
+    """M6 (revisión): `Stat` reescalaba los pesos recibidos in situ; reutilizarlos fila a fila los corrompía en cuanto un dato era NaN."""
+    import pandas as pd
+    from mtpy.core.utils.stat import Stat
+    w = pd.Series([0.6, 0.4], index=['a', 'b'])
+    assert Stat(pd.Series([1., np.nan], index=['a', 'b']), weights=w).mean() == pytest.approx(1.)
+    assert w.tolist() == [0.6, 0.4]
+    assert Stat(pd.Series([1., 3.], index=['a', 'b']), weights=w).mean() == pytest.approx(1.8)
+    arr = np.array([0.6, 0.4])
+    Stat(np.array([np.nan, 2.]), weights=arr).mean()
+    assert arr.tolist() == [0.6, 0.4]

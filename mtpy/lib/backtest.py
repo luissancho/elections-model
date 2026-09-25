@@ -103,6 +103,8 @@ def run_case(
     max_fc: int = 10,
     min_polls: int = 5,
     nowcast_only: bool = False,
+    house_effects: bool = True,
+    industry_bias: bool = False,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -114,6 +116,10 @@ def run_case(
     the true horizon (`horizon='deadline'`: the deadline of a past election is the election itself, so the
     drift of the opinion from `as_of` to the election is added: columns with the suffix `_h`).
 
+    `house_effects` and `industry_bias` are passed to the `Simulator` (M6): the effects of the cycle are
+    estimated with the polls up to `limit_date` only, and their prior with the elections before `event_date`;
+    the baselines are computed on the raw polls.
+
     Returns
     -------
     dict
@@ -124,7 +130,10 @@ def run_case(
     t0 = time.time()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        sim = Simulator(scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose)
+        sim = Simulator(
+            scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
+            house_effects=house_effects, industry_bias=industry_bias
+        )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
 
@@ -138,7 +147,9 @@ def run_case(
 
     names = sim.params['names']
     official = official_results(scope, event_date).reindex(names)
-    polls = sim.model.fc_series
+    # Baselines are computed on the raw polls: the house effects correction must not leak into them
+    raw = sim.model.series_raw if sim.model.series_raw is not None else sim.model.series
+    polls = raw.loc[raw['pollster'].notnull()].reset_index(raw.index.names[1:])
     if polls.shape[0] < min_polls:
         raise ValueError('Only {} polls published at least {} days before {} (minimum {})'.format(
             polls.shape[0], horizon, event_date, min_polls
@@ -219,10 +230,19 @@ def run_case(
         rows.append(row)
     blocks_df = pd.DataFrame(rows)
 
+    he = sim.model.house_effects
+    he_main = he.loc[he.index.get_level_values('name').isin(names)] if he is not None else None
+    # Houses informed by the cycle (enough polls: finite deviation error); the others sit at their prior
+    he_active = he_main.loc[np.isfinite(he_main['dev_err'].astype(float))] if he_main is not None else None
+
     meta = pd.DataFrame([{
         'event_date': event_date, 'horizon': horizon, 'limit_date': sim.limit_date, 'prev_date': sim.prev_date,
         'as_of': str(sim.as_of.date()), 'horizon_max': sim.horizon_max,
         'drift_k': sim.v2drift.k if sim.v2drift is not None else np.nan,
+        'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias),
+        'he_pollsters': int(he_active.index.get_level_values('pollster_id').nunique()) if he_active is not None else 0,
+        'he_mean_abs': float(he_active['effect'].abs().mean()) if he_active is not None and len(he_active) else np.nan,
+        'he_max_abs': float(he_active['effect'].abs().max()) if he_active is not None and len(he_active) else np.nan,
         'n_polls': int(polls.shape[0]), 'last_poll': str(last_date.date()), 'n_parties': len(names),
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1)
     }])
@@ -291,6 +311,8 @@ def run_backtest(
     max_fc: int = 10,
     min_polls: int = 5,
     nowcast_only: bool = False,
+    house_effects: bool = True,
+    industry_bias: bool = False,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -315,7 +337,7 @@ def run_backtest(
             try:
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
-                    nowcast_only=nowcast_only
+                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
