@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
-    Events, EventsData, EventsResults, Polls, PollsResults,
+    Drift, Events, EventsData, EventsResults, Polls, PollsResults,
     Pollsters, PollstersRatings, Parties
 )
 
@@ -452,6 +452,72 @@ def save_ratings_data(
     pmodel.upsert(dp)
 
     return nrows
+
+
+def get_drift(
+    scope: str = 'es',
+    event_dates: Optional[list[str]] = None
+) -> pd.DataFrame:
+    """
+    Load the drift table (see `Computer.get_drift_data`): one row per past election, party and horizon.
+    An empty frame with the model columns is returned when the table has not been created yet.
+
+    Parameters
+    ----------
+    scope : str, default 'es'
+        Election scope.
+    event_dates : list of str, optional
+        Restrict to these elections (e.g. the ones before the event being forecast, for a backtest).
+
+    Returns
+    -------
+    pd.DataFrame
+        Drift data.
+    """
+    model = Drift()
+    if not model.table_exists():
+        return pd.DataFrame(columns=model.columns)
+
+    filters = ["event_scope = '{}'".format(scope)]
+    if event_dates is not None:
+        if len(event_dates) == 0:
+            return pd.DataFrame(columns=model.columns)
+        filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+
+    return model.get_results(query=dict(filters=filters), formatted=True)
+
+
+def save_drift_data(
+    data: pd.DataFrame
+) -> int:
+    """
+    Save the drift data into the database, replacing the rows of the same elections. The table is
+    created when missing (never replaced: `create(replace=True)` would drop it).
+
+    Returns
+    -------
+    int
+        Number of rows updated.
+    """
+    model = Drift()
+    if not model.table_exists():
+        model.create(replace=False)
+
+    df = data.copy().reset_index(drop=True)
+    if df.shape[0] == 0:
+        return 0
+
+    # Use the model formatter to get the data in the correct types to be saved
+    df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)
+
+    # Remove previous data for the same election events
+    model.execute("DELETE FROM {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
+        model.table,
+        "', '".join(df.event_scope.unique()),
+        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
+    ))
+
+    return model.upsert(df)
 
 
 def get_event_dates(

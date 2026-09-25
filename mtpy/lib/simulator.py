@@ -3,9 +3,10 @@ import numpy as np
 import warnings
 import pandas as pd
 import os
+from scipy.stats import t as student_t
 from tqdm import tqdm
 
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 from typing_extensions import Self
 
 from ..core.app import Core
@@ -16,7 +17,7 @@ from ..core.utils.dataviz import plot_kde_1d
 from .forecaster import Forecaster
 from .computer import Computer
 from .data import (
-    get_event_dates, get_event_results, get_event_data, get_parties
+    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -26,6 +27,8 @@ from .utils import (
 class Simulator(Core):
 
     OTHERS = '-'  # Residual category: other candidatures and blank votes (same label as the Forecaster)
+    TERMINAL_WEEKS = 1  # The polling error is always the terminal one (last week); the drift is added apart
+    DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
 
     def __init__(
         self,
@@ -35,6 +38,7 @@ class Simulator(Core):
         drange: Optional[tuple[int, int] | int] = None,
         alpha: float = 0.05,
         limit_date: Optional[str] = None,
+        as_of: Optional[str] = None,
         n_last: int = 1,
         add_errors: bool = True,
         reg_params: Optional[dict[str, Any]] = None,
@@ -65,6 +69,10 @@ class Simulator(Core):
         limit_date: str, optional
             The date to be used as cut-off date for the polls and the forecast.
             If not provided, the date will be set to the last day of the campaign period (defined by `drange`).
+        as_of: str, optional
+            The day on which the forecast is read: the anchor of the nowcast. By default the last day actually
+            fitted (`last poll + max_fc`) or `limit_date`, whichever comes first. The horizons of the simulation
+            (see `run`) are counted from this day up to `event_date`, treated as the deadline of the legislature.
         n_last: int, optional
             The number of last polls to include by each pollster.
             If not provided, only each pollster's last poll will be included.
@@ -105,9 +113,8 @@ class Simulator(Core):
         self.verbose = verbose  # Print progress
         self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
-        self.event_params = json.loads(
-            self.app.data.read('params.json')
-        )[self.scope][self.event_date]
+        # Event params: derived from the data and overridden by `data/params.json` when the event is listed
+        self.event_params = get_event_params(self.scope, self.event_date, path=self.path)
 
         self.names = self.event_params['parties']['event']
 
@@ -118,6 +125,13 @@ class Simulator(Core):
                 pd.to_datetime(self.event_date) - pd.DateOffset(days=self.drange[0])
             ).strftime('%Y-%m-%d')
 
+        # `event_date` is the deadline of the legislature, not necessarily the election day: the forecast is
+        # anchored at `as_of` (set by `build_forecast`) and `horizon_max` days remain up to the deadline
+        self.deadline = pd.Timestamp(self.event_date)
+        self._as_of = pd.Timestamp(as_of) if as_of is not None else None
+        self.as_of = None
+        self.horizon_max = None
+
         if self.smap is None:
             self.smap = self.event_params.get('smap', {})
 
@@ -125,11 +139,13 @@ class Simulator(Core):
             if isinstance(rules, dict):
                 self.smap[key] = [rules]
 
+        # The poll average of each party also counts the polls of the parties it inherits (smap `agg` rules):
+        # e.g. the polls of UP and MP before SUMAR existed, or of Cs for PP in 2023
         self.model = Forecaster(
             scope=self.scope,
             event_date=self.event_date,
             drange=self.drange,
-            bmap=self.names,
+            bmap=self.poll_blocks(self.names, self.smap),
             drop_mtypes=self.drop_mtypes,
             reg_params=self.reg_params,
             alpha=self.alpha,
@@ -146,6 +162,10 @@ class Simulator(Core):
             date_to=self.event_date,
             skip=1
         )
+        # Durations (days) of the past legislatures: the empirical prior of the election date (see `horizon_candidates`)
+        all_dates = pd.to_datetime(get_event_dates(scope=self.scope, date_to=self.event_date, skip=1))
+        self.durations = [int(d) for d in np.diff(all_dates.values).astype('timedelta64[D]').astype(int)]
+
         if len(event_dates) > 0:
             self.computer = Computer(
                 scope=self.scope,
@@ -159,7 +179,7 @@ class Simulator(Core):
 
         self.parties = get_parties()
         self.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']
-        self.cols_frame = self.cols_forecast + ['pct', 'pct_err', 'std_err', 'rand', 'vpred']
+        self.cols_frame = self.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred']
         self.cols_unit = ['prev_pct', 'vpred_pct']
 
         if self.verbose > 0:
@@ -182,6 +202,15 @@ class Simulator(Core):
             self.v2err = None
 
         if self.verbose > 0:
+            print('Load drift estimator...')
+
+        # Drift of the opinion with the horizon (random walk fitted on the past cycles), see `Computer.get_drift_estimator`
+        if self.add_errors and self.computer is not None:
+            self.v2drift = self.computer.get_drift_estimator()
+        else:
+            self.v2drift = None
+
+        if self.verbose > 0:
             print('Load region totals...')
 
         self.default_region = 0  # `region_id` of the national total (see `get_reg_totals`)
@@ -193,7 +222,9 @@ class Simulator(Core):
             'split': False,
             'random': False,
             'names': None,
-            'regions': None
+            'regions': None,
+            'horizon': None,
+            'date_prior': 'historical'
         }
 
         if self.verbose > 0:
@@ -204,6 +235,7 @@ class Simulator(Core):
 
         self.params = None
         self.rng = None
+        self.horizons = None  # Horizon (days from `as_of`) of each simulation, see `build_horizons`
         self.frames = None
         self.units = None
         self.results = None
@@ -237,6 +269,19 @@ class Simulator(Core):
             self.params['regions'] = list(self.params['regions'])
         else:
             self.params['regions'] = self.regions
+
+        horizon = self.params['horizon']
+        if horizon is not None and horizon not in ('deadline', 'random'):
+            if isinstance(horizon, (str, bool)) or int(horizon) < 0:
+                raise ValueError("`horizon` must be None, a non-negative number of days, 'deadline' or 'random'")
+            self.params['horizon'] = int(horizon)
+
+        prior = self.params['date_prior']
+        if isinstance(prior, str):
+            if prior not in ('historical', 'uniform'):
+                raise ValueError("`date_prior` must be 'historical', 'uniform' or an array of days")
+        else:
+            self.params['date_prior'] = np.asarray(prior, dtype=int)
 
         if self.params['random']:
             self.rng = np.random.default_rng(self.seed)
@@ -364,18 +409,62 @@ class Simulator(Core):
 
         return self.forecast
 
+    def _set_anchor(self) -> None:
+        """
+        Set `as_of`, the day the forecast is read, and `horizon_max`, the days from `as_of` to the deadline.
+        By default `as_of` is the last day actually fitted (`Forecaster.date_fit_last`, or the last poll when
+        the forecast was loaded from a file) or `limit_date`, whichever comes first.
+        """
+        forecast = self.model.forecast
+        if self.model.date_fit_last is not None:
+            fit_last = pd.Timestamp(self.model.date_fit_last)
+        else:
+            fit_last = pd.Timestamp(self.model.date_last)
+
+        as_of = self._as_of if self._as_of is not None else min(pd.Timestamp(self.limit_date), fit_last)
+
+        if as_of not in forecast.index:
+            raise ValueError('`as_of` {} is outside the forecast range ({} to {})'.format(
+                as_of.date(), forecast.index.min().date(), forecast.index.max().date()
+            ))
+        if as_of > self.deadline:
+            raise ValueError('`as_of` {} is after the deadline {}'.format(as_of.date(), self.deadline.date()))
+        if self._as_of is not None and as_of < pd.Timestamp(self.model.date_last):
+            warnings.warn(
+                '`as_of` {} precedes the last poll: the kernel average is two-sided, so the value read there '
+                'uses later polls and is not a freeze (use `limit_date` for that)'.format(as_of.date())
+            )
+
+        self.as_of = as_of
+        self.horizon_max = int((self.deadline - as_of).days)
+
     def build_forecast(self) -> pd.DataFrame:
-        weeks = (self.model.drange[0] + 1) // 7
+        """
+        Read the forecast of each party at `as_of` (see `_set_anchor`) and add the residual `'-'`, the
+        regional flag and the terminal polling error (`error`, the historical error of the polls of the
+        last week, from the `Computer` estimator).
+        """
+        self._set_anchor()
+        weeks = self.TERMINAL_WEEKS
 
         names = self.params['names']
 
+        def stat(name, key):
+            # Parties that could not be fitted (too few polls) have no statistics: NaN
+            value = self.model.fc_stat[name].loc[self.as_of]
+
+            return value.get(key, np.nan) if isinstance(value, dict) else np.nan
+
         fc = pd.DataFrame({
             n: (
-                self.model.forecast[n].loc[self.limit_date],
-                self.model.fc_stat[n].loc[self.limit_date]['err'],
-                self.model.fc_stat[n].loc[self.limit_date]['nobs']
+                self.model.forecast[n].loc[self.as_of],
+                stat(n, 'err'),
+                stat(n, 'nobs')
             ) for n in names
         }, index=['mean', 'err', 'nobs']).T
+
+        if fc['mean'].isnull().all():
+            warnings.warn('No fitted value at `as_of` {}: the forecast is empty'.format(self.as_of.date()))
 
         # Residual of the poll average (other candidatures and blank votes): never fitted, no statistics
         fc.loc[self.OTHERS] = (max(0., 100. - fc['mean'].sum()), np.nan, np.nan)
@@ -616,6 +705,73 @@ class Simulator(Core):
 
         return self.majority_probs(self._require_dist(), majority, groups=groups)
 
+    def fan(
+        self,
+        horizons: Optional[list[int] | tuple[int, ...]] = None,
+        alpha: Optional[float] = None,
+        wide: bool = False
+    ) -> pd.DataFrame:
+        """
+        Fan of intervals of the national vote share of each party by horizon: the analytic counterpart of
+        the draw of `build_frame`, `mean ± t(1 - alpha / 2, nobs - 2) · sqrt(err² + pct_err² + drift(h)²)`,
+        before the seat allocation. Horizon 0 is the nowcast; the drift grows with the horizon and with
+        the level of the party (`mean · sqrt(k · h)`).
+
+        Parameters
+        ----------
+        horizons : list of int, optional
+            Horizons in days (`DEFAULT_FAN` plus `horizon_max` by default), clipped to `horizon_max`.
+        alpha : float, optional
+            Confidence level of the intervals; the one given to the constructor by default.
+        wide : bool, optional
+            One row per party with the `lo` and `hi` bounds by horizon as columns.
+
+        Returns
+        -------
+        pd.DataFrame
+            `party`, `horizon`, `mean`, `sd`, `lo`, `hi` (long) or the wide table.
+        """
+        if self.forecast is None or self.horizon_max is None:
+            raise ValueError('No forecast available: call `fit_forecast()` first.')
+
+        alpha = self.alpha if alpha is None else alpha
+        if horizons is None:
+            horizons = sorted(set(self.DEFAULT_FAN) | {self.horizon_max})
+        horizons = [int(h) for h in horizons if 0 <= int(h) <= self.horizon_max]
+
+        names = self.params['names']
+        fc = self.forecast.loc[names]
+
+        rows = []
+        for n in fc.index[fc['mean'] > 0]:
+            mean, err, nobs, regional = [float(fc.loc[n, c]) for c in ['mean', 'err', 'nobs', 'regional']]
+            if self.v2err is not None:
+                p = np.array([[mean, regional, self.TERMINAL_WEEKS]])
+                pct_err = float(np.asarray(self.v2err.predict(p)).ravel()[0])
+            else:
+                pct_err = 0.
+
+            dof = max((nobs if np.isfinite(nobs) else 3.) - 2, 3.)  # same degrees of freedom as `build_frame`
+            q = float(student_t.ppf(1 - alpha / 2, dof))
+            base = np.nan_to_num(err) ** 2 + pct_err ** 2
+
+            for h in horizons:
+                drift_var = self.v2drift.var(h, mean) if self.v2drift is not None else 0.
+                sd = float(np.sqrt(base + drift_var))
+                rows.append({
+                    'party': n, 'horizon': h, 'mean': mean, 'sd': sd,
+                    'lo': max(mean - q * sd, 0.), 'hi': mean + q * sd
+                })
+
+        df = pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'sd', 'lo', 'hi'])
+
+        if wide:
+            order = [n for n in names if n in set(df['party'])]
+
+            return df.pivot(index='party', columns='horizon', values=['lo', 'hi']).loc[order]
+
+        return df
+
     def _require_dist(self) -> pd.DataFrame:
         if self.results is None:
             raise ValueError('No simulations available: call `run()` first.')
@@ -717,6 +873,46 @@ class Simulator(Core):
             seats.update(Simulator.alloc_dhondt(eligible, n_seats))
 
         return seats
+
+    @staticmethod
+    def poll_blocks(
+        names: list[str],
+        smap: dict[str, Any]
+    ) -> dict[str, list[str]]:
+        """
+        Blocks used to build the poll average of the simulated parties: each party plus the poll labels of
+        the parties it inherits according to the `agg` rules of the source map (`smap`) that have no
+        regional restriction. The polls of a predecessor (UP and MP before SUMAR, Cs for PP in 2023,
+        PDeCAT for JxCat in 2019) then count for the successor instead of falling into the residual `'-'`.
+
+        Parameters
+        ----------
+        names : list of str
+            Parties being simulated.
+        smap : dict
+            Source map of the event: `{party: [{'type': 'agg' | 'sub' | 'split', 'names': [...], 'regions': ...}]}`.
+
+        Returns
+        -------
+        dict
+            `{party: [party, predecessor, ...]}`, in the order of `names`.
+        """
+        blocks = {n: [n] for n in names}
+
+        for key, rules in smap.items():
+            if key not in blocks:
+                continue
+
+            for rule in (rules if isinstance(rules, list) else [rules]):
+                if rule.get('type') != 'agg' or rule.get('regions') is not None:
+                    continue
+
+                for source in rule.get('names', []):
+                    # A source that is itself simulated keeps its own polls
+                    if source not in blocks and source not in blocks[key]:
+                        blocks[key].append(source)
+
+        return blocks
 
     # --- Summaries of the simulated distributions (pure functions) ---------------------------------
 
@@ -897,12 +1093,108 @@ class Simulator(Core):
 
         return int(np.lexsort((np.arange(len(l1)), l2, l1))[0])
 
-    def build_frame(self) -> pd.DataFrame:
+    @staticmethod
+    def horizon_candidates(
+        kind: str | np.ndarray | list | tuple,
+        horizon_max: int,
+        elapsed_days: Optional[int] = None,
+        durations: Optional[list[int]] = None
+    ) -> np.ndarray:
+        """
+        Candidate horizons (days until the election) of a prior on the election date.
+
+        Parameters
+        ----------
+        kind : str or array-like
+            `'deadline'`: the legislature runs to its end (`horizon_max`); `'uniform'`: every day from 0 to
+            `horizon_max`; `'historical'`: the past legislatures that lasted at least `elapsed_days`, each one
+            giving the candidate `duration - elapsed_days` capped at `horizon_max` (equally likely); or an
+            explicit array of days, clipped to `[0, horizon_max]`.
+        horizon_max : int
+            Days from the anchor to the deadline.
+        elapsed_days : int, optional
+            Days elapsed since the previous election (`'historical'` only).
+        durations : list of int, optional
+            Durations (days) of the past legislatures (`'historical'` only).
+        """
+        horizon_max = int(horizon_max)
+
+        if isinstance(kind, str):
+            if kind == 'deadline':
+                return np.array([horizon_max], dtype=int)
+            if kind == 'uniform':
+                return np.arange(horizon_max + 1, dtype=int)
+            if kind == 'historical':
+                cands = [
+                    min(int(d) - int(elapsed_days), horizon_max)
+                    for d in (durations or []) if int(d) >= int(elapsed_days)
+                ]
+                if len(cands) == 0:
+                    warnings.warn('No past legislature lasted {} days or more: using a uniform prior'.format(elapsed_days))
+                    return np.arange(horizon_max + 1, dtype=int)
+
+                return np.array(sorted(cands), dtype=int)
+
+            raise ValueError("Unknown date prior '{}'".format(kind))
+
+        return np.clip(np.asarray(kind, dtype=int), 0, horizon_max)
+
+    @staticmethod
+    def horizon_sampler(
+        kind: str | np.ndarray | list | tuple,
+        horizon_max: int,
+        elapsed_days: Optional[int] = None,
+        durations: Optional[list[int]] = None
+    ) -> Callable[[np.random.Generator, Optional[int]], np.ndarray]:
+        """
+        Sampler of horizons: a function `(rng, size) -> days` drawing uniformly from `horizon_candidates`.
+        """
+        cands = Simulator.horizon_candidates(kind, horizon_max, elapsed_days=elapsed_days, durations=durations)
+
+        return lambda rng, size=None: rng.choice(cands, size=size)
+
+    def build_horizons(self) -> np.ndarray:
+        """
+        Horizon (days from `as_of`) of each of the `n_sim` simulations, from the `horizon` param: `None` (0,
+        nowcast), an integer, `'deadline'` (`horizon_max`) or `'random'` (drawn once from the `date_prior`
+        with the simulation generator, before any other draw).
+        """
+        n, horizon = self.params['n_sim'], self.params['horizon']
+
+        if horizon is None:
+            return np.zeros(n, dtype=int)
+
+        if self.horizon_max is None:
+            raise ValueError('No forecast available: call `fit_forecast()` first.')
+
+        if horizon == 'deadline':
+            return np.full(n, self.horizon_max, dtype=int)
+
+        if horizon == 'random':
+            if self.rng is None:
+                raise ValueError("`horizon='random'` requires `random=True`")
+
+            elapsed = int((self.as_of - pd.Timestamp(self.prev_date)).days)
+            sampler = self.horizon_sampler(self.params['date_prior'], self.horizon_max, elapsed, self.durations)
+
+            return np.asarray(sampler(self.rng, n), dtype=int)
+
+        return np.full(n, int(horizon), dtype=int)
+
+    def build_frame(self, horizon: Optional[int] = None) -> pd.DataFrame:
         """
         Build a feature frame to be used as input for the simulation.
 
         Each row represents the feature space for a single party, with its forecast result
         and an estimation of vote percentage for each simulation.
+
+        Parameters
+        ----------
+        horizon : int, optional
+            Days from `as_of` to the simulated election: the drift of the opinion over that period
+            (`drift`, proportional to the level of the party, see `Computer.get_drift_estimator`) is added
+            in quadrature to the polling error.
+            `None` or 0 is the nowcast.
 
         Returns
         -------
@@ -910,7 +1202,7 @@ class Simulator(Core):
             The feature frame for the simulation.
         """
 
-        weeks = (self.model.drange[0] + 1) // 7
+        weeks = self.TERMINAL_WEEKS
 
         cats = self.categories()
         names = self.params['names']
@@ -926,6 +1218,13 @@ class Simulator(Core):
 
         # If random is set to True, add noise to the forecasted percentage, based on the forcasted error
         if self.params['random']:
+            # Drift of the opinion over the horizon (relative to the level of each party), added in quadrature
+            if self.v2drift is not None and horizon:
+                drift = np.asarray(self.v2drift.sigma(horizon, df.loc[vind, 'pct'].fillna(0)), dtype=float)
+            else:
+                drift = 0.
+            df.loc[vind, 'drift'] = drift
+
             if self.v2err is not None:
                 # If an error estimator is available, use it to estimate the error of the forecasted percentage
                 # This estimator uses historical data to estimate the error of the forecasted percentage
@@ -935,10 +1234,12 @@ class Simulator(Core):
                     np.repeat(weeks, df.loc[vind].shape[0])
                 ])
                 df.loc[vind, 'pct_err'] = self.v2err.predict(p).values
-                df.loc[vind, 'std_err'] = np.sqrt(np.square(df.loc[vind, 'err']) + np.square(df.loc[vind, 'pct_err']))
+                df.loc[vind, 'std_err'] = np.sqrt(
+                    np.square(df.loc[vind, 'err']) + np.square(df.loc[vind, 'pct_err']) + np.square(drift)
+                )
             else:
                 # If no error estimator available, use the purely statistical error provided by the forcaster
-                df.loc[vind, 'std_err'] = df.loc[vind, 'err']
+                df.loc[vind, 'std_err'] = np.sqrt(np.square(df.loc[vind, 'err']) + np.square(drift))
 
             # Add noise to the forecasted percentage, based on the calculated error
             df.loc[vind, 'rand'] = np.clip(
@@ -1093,10 +1394,17 @@ class Simulator(Core):
         """
         Run `n_sim` simulations. Each one draws the national shares (`build_frame`), projects them to the
         provinces (`build_umat`) and allocates the seats (`simulate`), storing `frames`, `units` and `results`.
+
+        Params (`set_params`): `n_sim`, `split`, `random`, `names`, `regions`, and the horizon of the
+        simulated election: `horizon=None` (nowcast: the election is held now, only the polling error),
+        an integer (days from `as_of`, adding the drift of the opinion), `'deadline'` (the legislature runs
+        to its end) or `'random'` (each simulation draws its horizon from `date_prior`: `'historical'`,
+        `'uniform'` or an array of days, see `horizon_candidates`). The horizons are stored in `horizons`.
         """
         self.set_params(reset=reset, **kwargs)
 
         cats = self.categories()
+        self.horizons = self.build_horizons()
 
         self.frames = np.zeros((self.params['n_sim'], len(cats), len(self.cols_frame)))
         self.units = np.zeros((self.params['n_sim'], len(self.params['regions']), len(cats), len(self.cols_unit)))
@@ -1110,7 +1418,7 @@ class Simulator(Core):
 
         _iters = tqdm(np.arange(self.params['n_sim'])) if self.verbose > 0 else np.arange(self.params['n_sim'])
         for i in _iters:
-            frame = self.build_frame()
+            frame = self.build_frame(horizon=int(self.horizons[i]))
             umat = self.build_umat(frame)
             units = np.stack([umat[m].loc[self.params['regions'], cats].values for m in self.cols_unit], axis=-1)
 

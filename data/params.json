@@ -149,9 +149,22 @@
                 }
             },
             "smap": {
-                "JxCat": {"type": "agg", "names": ["CDC"]},
+                "JxCat": {"type": "agg", "names": ["CDC", "PDeCAT"]},
                 "COMPROMIS": {"type": "agg", "names": ["UP"], "regions": ["3", "12", "46"]},
                 "NA+": {"type": "agg", "names": ["PP", "Cs"], "regions": ["31"]}
+            }
+        },
+        "2016-06-26": {
+            "smap": {
+                "UP": {"type": "agg", "names": ["IU"]}
+            }
+        },
+        "2015-12-20": {
+            "smap": {
+                "UP": [],
+                "Cs": [],
+                "CDC": {"type": "agg", "names": ["CiU"]},
+                "EHB": {"type": "agg", "names": ["AMAIUR"]}
             }
         }
     }

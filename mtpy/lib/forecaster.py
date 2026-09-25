@@ -22,7 +22,7 @@ from ..core.utils.dataviz import (
 )
 
 from .data import (
-    get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters
+    get_event_dates, get_event_params, get_event_series, get_poll_series, get_parties, get_pollsters
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -106,9 +106,9 @@ class Forecaster(Core):
         self.verbose = verbose
         self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
-        self.event_params = json.loads(
-            self.app.data.read('params.json')
-        )[self.scope][self.event_date]
+        # Event params: derived from the data (parties with results, blocks, new parties) and overridden by
+        # the entries of `data/params.json` when the event is listed there
+        self.event_params = get_event_params(self.scope, self.event_date, path=self.path)
 
         if isinstance(self.bmap, str):
             self.bmap = self.event_params['bmaps'][self.bmap]
@@ -129,6 +129,7 @@ class Forecaster(Core):
         self.date_first = None  # Date of the first poll published for the current election event
         self.date_last = None  # Date of the last poll published for the current election event
         self.date_end = None  # Date of the current election event
+        self.date_fit_last = None  # Last day with a fitted value (before any forward fill), see `fit_forecast`
 
     @property
     def bmaps(self) -> dict[str, Any]:
@@ -340,9 +341,12 @@ class Forecaster(Core):
             Fitted estimation of the percentage of votes for the party or block in the election event.
             If `ret_stat` is `True`, returns a tuple with the standard error and confidence interval of the forecast.
         """
-        df = self.fc_series[self.fc_series[name].notnull()]
+        # Polls with a value for the party and a positive weight (zero-weight polls do not enter the fit and
+        # would only break the bandwidth selection); a local linear fit needs at least three of them
+        df = self.fc_series[self.fc_series[name].notnull() & (self.fc_series['weight'] > 0)]
 
-        if df.empty:
+        if df.shape[0] < 3:
+            warnings.warn('Fewer than three usable polls for `{}`: not fitted'.format(name))
             return
 
         ix = self.fc_index
@@ -389,6 +393,12 @@ class Forecaster(Core):
         -------
         pd.DataFrame
             Fitted estimation of the percentage of votes for each party or block in the election event.
+
+        Notes
+        -----
+        `date_fit_last` records the last day with a fitted value for any party (`last poll + max_fc`) before the
+        forward fill, so that a forecast read at a later date can be traced back to the day it was actually
+        estimated. Parties fitted on fewer polls may end earlier and keep their last value from that day on.
         """
         names = names or self.names
 
@@ -402,6 +412,10 @@ class Forecaster(Core):
             dreg, dstat = res
             self.forecast.loc[dreg.index, name] = dreg
             self.fc_stat.loc[dstat.index, name] = dstat
+
+        # Last day actually estimated for any party: the anchor of a nowcast read after the forward fill
+        fitted = self.forecast[self.names].notnull().any(axis=1)
+        self.date_fit_last = fitted[fitted].index.max() if fitted.any() else None
 
         # Assign the remaining percentage to the 'others' block
         self.forecast['-'] = 100. - self.forecast[self.names].sum(axis=1, min_count=1)
@@ -484,6 +498,7 @@ class Forecaster(Core):
                 self.get_path('fc/{}-stat.csv'.format(prefix))
             ).set_index('date').map(lambda x: literal_eval(x) if isinstance(x, str) else x)
             self.fc_stat.index = pd.DatetimeIndex(self.fc_stat.index)
+            self.date_fit_last = None  # A saved forecast is already forward filled: the anchor falls back to `date_last`
         else:
             self.fit_forecast()
 

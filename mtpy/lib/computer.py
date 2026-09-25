@@ -5,6 +5,7 @@ import pandas as pd
 import os
 from scipy.stats import norm
 from tqdm import tqdm
+import warnings
 
 from typing import Any, Literal, Optional
 from typing_extensions import Self
@@ -20,11 +21,130 @@ from ..core.utils.dataviz import (
 
 from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
-    get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params
+    get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
+    get_drift, save_drift_data
 )
 from .utils import (
     build_blocks, group_results, norm_range
 )
+
+
+class DriftEstimator:
+    """
+    Drift of the poll average with the horizon, modelled as a relative random walk: after `d` days the share of
+    a party at level `p` has moved by `sigma(d, p) = p · sqrt(k · d)` percentage points (`var = k · d · p²`),
+    the same relative drift for every party. Measured over every party polled in the Spanish cycles, the drift
+    is proportional to the level (elasticity of the variance on the level ≈ 2): a regional party at 1 % moves a
+    few hundredths of a point in a month, a party at 30 % moves a couple of points.
+
+    `k` is the weighted geometric mean of `rms² / (d · level²)` over the rows of the drift table with
+    `horizon >= d_min`, with weights `n · decay^years` (increments, discounted by the age of the cycle relative
+    to the most recent one). The geometric mean is the typical established party: the parties born or dissolved
+    within a cycle (VOX in 2019, Cs in 2015) drift several times more and dominate the quadratic mean
+    (`agg='quadratic'`: the weighted mean of `rms² / (d · level²)`, the variance a random party experiences).
+    Shorter horizons are excluded because the increments of a kernel-smoothed series understate the movement
+    there (the fitted series is locally linear, so their variance grows like `d²`). The decay matters: the
+    cycles of the two-party era (up to 2011) drift less than the fragmented ones since 2015.
+    `curve` keeps the weighted geometric mean of `rms / level` by horizon (all rows).
+    """
+
+    def __init__(
+        self,
+        k: float,
+        d_min: int = 60,
+        decay: Optional[float] = None,
+        agg: Literal['geometric', 'quadratic'] = 'geometric',
+        curve: Optional[pd.Series] = None
+    ) -> None:
+        self.k = float(k)
+        self.d_min = int(d_min)
+        self.decay = decay
+        self.agg = agg
+        self.curve = curve
+
+    @classmethod
+    def fit(
+        cls,
+        data: pd.DataFrame,
+        d_min: int = 60,
+        decay: Optional[float] = None,
+        agg: Literal['geometric', 'quadratic'] = 'geometric'
+    ) -> 'DriftEstimator':
+        """
+        Fit the relative random-walk constant from a drift table with columns `horizon`, `level`, `n` and
+        `rms` (and `event_date` when `decay` is given).
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            Drift table (see `Computer.get_drift_data`).
+        d_min : int, optional
+            Minimum horizon (days) of the rows used in the fit.
+        decay : float, optional
+            Yearly decay of the weight of a cycle with its age, relative to the most recent cycle of the table
+            (`None`: every cycle weighs the same).
+        agg : {'geometric', 'quadratic'}, optional
+            Mean of the relative drift across rows: geometric (the typical established party, default) or
+            quadratic (the variance a random party experiences, dominated by the parties born within a cycle).
+        """
+        if agg not in ('geometric', 'quadratic'):
+            raise ValueError("`agg` must be 'geometric' or 'quadratic'")
+
+        df = data.dropna(subset=['horizon', 'level', 'n', 'rms'])
+        df = df.loc[(df['n'] > 0) & (df['level'] > 0) & (df['rms'] > 0)]
+
+        weight = df['n'].astype(float)
+        if decay is not None and df.shape[0] > 0:
+            dates = pd.to_datetime(df['event_date'])
+            years = (dates.max() - dates).dt.days / 365.25
+            weight = weight * np.power(float(decay), years)
+
+        horizon = df['horizon'].astype(int)
+        relative = df['rms'].astype(float) / df['level'].astype(float)  # relative drift of each row
+
+        # Transform in which the rows are averaged (log for the geometric mean, square for the quadratic one)
+        fwd, inv = (np.log, np.exp) if agg == 'geometric' else (np.square, np.sqrt)
+
+        if df.shape[0] > 0:
+            means = (weight * fwd(relative)).groupby(horizon).sum() / weight.groupby(horizon).sum()
+            curve = inv(means).rename('relative')
+        else:
+            curve = pd.Series(dtype=float, name='relative')
+        curve.index.name = 'horizon'
+
+        rows = horizon >= d_min
+        if rows.sum() == 0:
+            warnings.warn('No drift data at horizons of {} days or more: the drift is set to 0'.format(d_min))
+            k = np.nan
+        else:
+            z = fwd(relative[rows] / np.sqrt(horizon[rows].astype(float)))  # rows of sqrt(k): relative / sqrt(d)
+            k = float(inv((weight[rows] * z).sum() / weight[rows].sum()) ** 2)
+
+        return cls(k, d_min=d_min, decay=decay, agg=agg, curve=curve)
+
+    def var(
+        self,
+        d: int | float | np.ndarray,
+        level: float | np.ndarray | pd.Series = 1.
+    ) -> float | np.ndarray:
+        """
+        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted).
+        """
+        days = np.clip(np.asarray(d, dtype=float), 0, None)
+        var = (self.k if np.isfinite(self.k) else 0.) * days * np.square(np.asarray(level, dtype=float))
+
+        return float(var) if np.ndim(var) == 0 else var
+
+    def sigma(
+        self,
+        d: int | float | np.ndarray,
+        level: float | np.ndarray | pd.Series = 1.
+    ) -> float | np.ndarray:
+        """
+        Standard deviation of the drift after `d` days of a share at `level`, in percentage points
+        (`level · sqrt(k · d)`).
+        """
+        return np.sqrt(self.var(d, level))
 
 
 class Computer(Core):
@@ -148,6 +268,7 @@ class Computer(Core):
         self.errors = None
         self.biases = None
         self.ratings = None
+        self.drift = None  # Drift table of the current events (see `get_drift_data`)
 
         self.seats_estimator = None
         self.error_estimator = None
@@ -1608,6 +1729,169 @@ class Computer(Core):
             y=df['error'],
             weights=df['weight']
         ).fit()
+
+    def get_drift_data(
+        self,
+        horizons: tuple[int, ...] = (7, 14, 30, 60, 90, 180, 365),
+        min_polls: int = 10,
+        bmap: Optional[str] = None,
+        max_fc: int = 0
+    ) -> pd.DataFrame:
+        """
+        Measure the drift of the poll average in the past election cycles: for each featured event with
+        enough polls, the daily series of each party (`bmap` blocks) is fitted with the `Forecaster` and the
+        increments `mu(t + d) - mu(t)` over every day `t` of the cycle are summarised for each horizon `d`.
+
+        Parameters
+        ----------
+        horizons : tuple of int, optional
+            Horizons in days.
+        min_polls : int, optional
+            Minimum number of usable polls of an event to be included.
+        bmap : str, optional
+            Block map of the event params used to name the series (`main`, ...); every party polled in the
+            cycle by default, so that the drift can be measured against the level of the party.
+        max_fc : int, optional
+            Days forecast after the last poll of each cycle (0: only the fitted range).
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event, party and horizon: `event_date`, `event_scope`, `party_id`, `party`, `horizon`,
+            `level` (mean share of the party over the cycle), `n` (number of increments), `rms` (root mean
+            square of the increments, percentage points) and `bias` (mean increment).
+        """
+        from .forecaster import Forecaster
+
+        polls = self.filter_polls(featured=True, drange=None, n_last=None)
+        if 'event_date' in polls.index.names:
+            events = pd.Series(polls.index.get_level_values('event_date'))
+        else:
+            events = polls['event_date']
+        counts = events.value_counts()
+        dates = sorted(pd.to_datetime(counts[counts >= min_polls].index).strftime('%Y-%m-%d'))
+
+        parties = get_parties().set_index('name')
+        columns = ['event_date', 'event_scope', 'party_id', 'party', 'horizon', 'level', 'n', 'rms', 'bias']
+
+        rows = []
+        dates_ = tqdm(dates) if self.verbose > 0 else dates
+        for event_date in dates_:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                fc = Forecaster(
+                    scope=self.scope,
+                    event_date=event_date,
+                    drop_mtypes=self.drop_mtypes,
+                    drange=None,
+                    alpha=self.alpha,
+                    bmap=bmap if (bmap is not None and bmap in self.event_params[event_date]['bmaps']) else None,
+                    reg_params=self.reg_params,
+                    verbose=0,
+                    path=self.path
+                ).build_series()
+                fc.fit_forecast(max_fc=max_fc)
+
+            for name in fc.names:
+                if name not in parties.index:
+                    continue
+
+                mu = fc.forecast[name].astype(float)
+                if mu.notnull().sum() == 0:
+                    continue
+
+                for d in horizons:
+                    delta = (mu.shift(-int(d)) - mu).dropna()
+                    if delta.shape[0] == 0:
+                        continue
+
+                    rows.append({
+                        'event_date': pd.Timestamp(event_date),
+                        'event_scope': self.scope,
+                        'party_id': int(parties.loc[name, 'id']),
+                        'party': name,
+                        'horizon': int(d),
+                        'level': float(mu.mean()),
+                        'n': int(delta.shape[0]),
+                        'rms': float(np.sqrt(np.mean(np.square(delta)))),
+                        'bias': float(delta.mean())
+                    })
+
+        df = pd.DataFrame(rows, columns=columns)
+
+        return df.sort_values(['event_date', 'party_id', 'horizon'], ignore_index=True)
+
+    def compute_drift(
+        self,
+        save: bool = False,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Compute the drift table of the current events (see `get_drift_data`) and, optionally, save it into
+        the `drift` table of the database, replacing the rows of the same events.
+
+        Parameters
+        ----------
+        save : bool, optional
+            Whether to save the data into the database.
+        **kwargs
+            Passed to `get_drift_data`.
+        """
+        if self.verbose > 0:
+            print('Compute drift...')
+
+        df = self.get_drift_data(**kwargs)
+
+        if save:
+            if self.verbose > 0:
+                print('Save drift data...')
+
+            nrows = save_drift_data(df)
+
+            if self.verbose > 0:
+                print('{} rows updated...'.format(nrows))
+
+        self.drift = df
+
+        return df
+
+    def load_drift(self) -> pd.DataFrame:
+        """
+        Load the drift table of the current events from the database (empty if it was never computed).
+        """
+        self.drift = get_drift(scope=self.scope, event_dates=self.event_dates)
+
+        return self.drift
+
+    def get_drift_estimator(
+        self,
+        d_min: int = 60,
+        agg: Literal['geometric', 'quadratic'] = 'geometric'
+    ) -> DriftEstimator:
+        """
+        Build the drift estimator from the drift table of the current events, discounting the older cycles
+        with `year_decay` (the same decay used for the pollster ratings). When the table is empty the data
+        is computed on the fly (slower, not saved); when no event has rows at `d_min` days or more (the
+        first cycles), the whole table is used with a warning (in-sample constant).
+
+        Parameters
+        ----------
+        d_min : int, optional
+            Minimum horizon (days) of the rows used in the fit (see `DriftEstimator.fit`).
+        agg : {'geometric', 'quadratic'}, optional
+            Mean of the relative drift across parties (see `DriftEstimator.fit`).
+        """
+        df = self.load_drift()
+
+        if df.shape[0] == 0:
+            warnings.warn('No drift data saved for these events: computing it on the fly (see `compute_drift`)')
+            df = self.get_drift_data()
+
+        if (df['horizon'] >= d_min).sum() == 0:
+            warnings.warn('No drift data at {} days or more for these events: using every event'.format(d_min))
+            df = get_drift(scope=self.scope)
+
+        return DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg)
 
     def get_seats_estimator_data(self) -> pd.DataFrame:
         """

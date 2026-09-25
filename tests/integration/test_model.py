@@ -189,3 +189,102 @@ def test_ls_totals_respect_zero_parties(sim27):
     totals = sim27.totals()
     assert int(totals.sum()) == 350
     assert (totals[sim27.dist().max() == 0] == 0).all()
+
+
+# --- M4: sucesión de partidos en las encuestas ---
+
+def test_predecessor_polls_count_for_successor_2023(app):
+    """M4: las encuestas de UP y MP anteriores a SUMAR entran en el promedio de SUMAR (y las de Cs en el del PP)."""
+    from mtpy.lib.simulator import Simulator
+    sim = Simulator(scope='es', event_date='2023-07-23', drange=90, seed=42, verbose=0)
+    blocks = sim.model.blocks
+    assert set(blocks.loc['SUMAR', 'parties']) >= {'SUMAR', 'UP', 'MP'}
+    assert set(blocks.loc['PP', 'parties']) >= {'PP', 'Cs'}
+    assert blocks.loc['ERC', 'parties'] == ['ERC']
+
+    sim.fit_forecast(names=sim.params['names'], max_fc=10, fillna=True)
+    fc = sim.forecast['mean']
+    assert fc['SUMAR'] > 8          # antes del cambio quedaba muy por debajo (los sondeos listaban UP y MP)
+    assert fc['-'] < 8              # el residuo ya no absorbe a los predecesores
+
+
+# --- M5: nowcast, horizonte y fecha incierta ---
+
+def test_anchor_is_last_fitted_day_not_deadline(sim27):
+    """El pronóstico se lee en `as_of` (última encuesta + max_fc), no en `deadline - drange`."""
+    import pandas as pd
+    date_last = pd.Timestamp(sim27.model.date_last)
+    assert sim27.as_of == pd.Timestamp(sim27.model.date_fit_last)
+    assert date_last <= sim27.as_of <= date_last + pd.Timedelta(days=3)  # max_fc=3 en la fixture
+    assert sim27.as_of < pd.Timestamp(sim27.limit_date)
+    assert sim27.horizon_max == (sim27.deadline - sim27.as_of).days
+    assert sim27.horizon_max > 0
+    assert sim27.forecast.loc['PP', 'mean'] == pytest.approx(sim27.model.forecast.loc[sim27.as_of, 'PP'])
+    assert len(sim27.durations) >= 12 and max(sim27.durations) <= 1491
+    assert sim27.v2drift is not None and sim27.v2drift.k > 0
+
+
+def test_nowcast_regression_seed_42(sim27):
+    """La secuencia aleatoria del nowcast no cambia con M5: reproduce la tabla de fase-0.md."""
+    sim27.run(split=True, random=True, n_sim=200)
+    assert (sim27.horizons == 0).all()
+    assert sim27.totals()[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == [137, 112, 62, 8]
+    assert (sim27.frame(0)['drift'].drop('-') == 0).all()
+
+
+def test_deadline_horizon_widens_intervals(sim27):
+    sim27.run(split=True, random=True, n_sim=100)
+    now = sim27.summary()
+    sim27.run(split=True, random=True, n_sim=100, horizon='deadline')
+    fwd = sim27.summary()
+    assert (sim27.horizons == sim27.horizon_max).all()
+    assert (sim27.dist().sum(axis=1) == 350).all()
+    for party in ['PP', 'PSOE', 'VOX']:
+        assert fwd.loc[party, 'pct_hi'] - fwd.loc[party, 'pct_lo'] > now.loc[party, 'pct_hi'] - now.loc[party, 'pct_lo'], party
+    frame = sim27.frame(0)
+    assert frame.loc['PP', 'drift'] > 0
+    expected = sim27.v2drift.sigma(sim27.horizon_max, sim27.forecast.loc['PP', 'mean'])
+    assert frame.loc['PP', 'drift'] == pytest.approx(expected, abs=0.01)
+    # La deriva es proporcional al nivel: una regional al 1 % se mueve mucho menos que el PP
+    assert frame.loc['PNV', 'drift'] < 0.2 * frame.loc['PP', 'drift']
+
+
+def test_random_horizon_uses_the_date_prior(sim27):
+    import pandas as pd
+    from mtpy.lib.simulator import Simulator
+    sim27.run(split=True, random=True, n_sim=50, horizon='random')
+    h = sim27.horizons
+    assert h.shape == (50,) and h.min() >= 0 and h.max() <= sim27.horizon_max
+    assert len(set(h.tolist())) > 1
+    elapsed = (sim27.as_of - pd.Timestamp(sim27.prev_date)).days
+    cands = Simulator.horizon_candidates('historical', sim27.horizon_max, elapsed, sim27.durations)
+    assert set(h.tolist()) <= set(cands.tolist())
+    assert (sim27.dist().sum(axis=1) == 350).all()
+
+    first, results = h.copy(), sim27.results.copy()
+    sim27.run(split=True, random=True, n_sim=50, horizon='random')
+    assert np.array_equal(first, sim27.horizons) and np.array_equal(results, sim27.results)
+
+    sim27.run(split=True, random=True, n_sim=20, horizon='random', date_prior='uniform')
+    assert 0 <= sim27.horizons.min() and sim27.horizons.max() <= sim27.horizon_max
+    with pytest.raises(ValueError):
+        sim27.run(split=True, random=False, horizon='random')
+    with pytest.raises(ValueError):
+        sim27.run(split=True, random=True, n_sim=2, horizon='tomorrow')
+
+
+def test_fan_widths_grow_with_horizon(sim27):
+    fan = sim27.fan()
+    assert list(fan.columns) == ['party', 'horizon', 'mean', 'sd', 'lo', 'hi']
+    assert {0, 30, 90, 180, sim27.horizon_max} <= set(fan['horizon'])
+    for party, g in fan.groupby('party'):
+        g = g.sort_values('horizon')
+        assert (np.diff(g['hi'] - g['lo']) >= -1e-9).all(), party
+    wide = sim27.fan(wide=True)
+    assert wide.shape[0] == fan['party'].nunique()
+    assert ('lo', 0) in wide.columns and ('hi', sim27.horizon_max) in wide.columns
+    # A horizonte 0 la desviación es la del nowcast: sqrt(err² + error²) del pronóstico
+    pp = fan[(fan['party'] == 'PP') & (fan['horizon'] == 0)].iloc[0]
+    fc = sim27.forecast.loc['PP']
+    assert pp['mean'] == pytest.approx(fc['mean'])
+    assert pp['sd'] == pytest.approx(np.sqrt(fc['err'] ** 2 + fc['error'] ** 2), abs=1e-6)

@@ -105,6 +105,31 @@ class PollstersParties(Model):
     }
 
 
+class Drift(Model):
+    """
+    Drift of the fitted poll average of each party over `horizon` days, per past election (see
+    `Computer.get_drift_data`): `n` increments `mu(t + horizon) - mu(t)`, their root mean square `rms` and
+    mean `bias` (percentage points), and the mean `level` of the party over the cycle.
+    """
+
+    table = 'elections.drift'
+
+    key = ['event_date', 'event_scope', 'party_id', 'horizon']
+    sort = ['event_date', 'event_scope', 'party_id', 'horizon']
+
+    meta = {
+        'event_date': 'dtd',
+        'event_scope': 'cat',
+        'party_id': ['int', 3],
+        'horizon': ['int', 2],
+        'party': 'cat',
+        'level': ['num', [10, 4]],
+        'n': ['int', 2],
+        'rms': ['num', [10, 4]],
+        'bias': ['num', [10, 4]]
+    }
+
+
 class Polls(Model):
 
     table = 'elections.polls'

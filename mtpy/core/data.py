@@ -2691,6 +2691,20 @@ class Model(Core):
 
         return self
     
+    def table_exists(self) -> bool:
+        """
+        Check whether the model table exists in the database, resolving a schema-qualified name
+        (`schema.table`) through the schema listing of the adapter.
+
+        Returns
+        -------
+        bool
+            Whether the table exists.
+        """
+        schema, name = self.get_table_parts()
+
+        return name in self._dal.get_tables(schema)
+
     def get_table_parts(self) -> tuple[str, str]:
         """
         Split table name into schema and name components.
