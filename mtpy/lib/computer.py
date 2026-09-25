@@ -2250,6 +2250,76 @@ class Computer(Core):
 
         return table.reindex(pd.MultiIndex.from_product([pollsters, keep], names=['pollster', 'name'])).dropna(how='all')
 
+    @staticmethod
+    def composition_ratio(
+        industry: pd.DataFrame,
+        ref_date: pd.Timestamp,
+        year_decay: float = 0.9,
+        min_events: int = 3,
+        floor: float = 0.05
+    ) -> float:
+        """
+        Ratio between the variance of the sum of the errors of the main parties and the sum of their
+        variances, `r = Σ_e w_e S_e² / Σ_e w_e Q_e` with `S_e = Σ_p e_p`, `Q_e = Σ_p e_p²` and `w_e =
+        year_decay^years`, over the past elections. It is 1 when the errors are independent and 0 when they
+        cancel out exactly (a fixed total); the Spanish elections give about 0.25. Clipped to `[floor, 1]`.
+
+        Parameters
+        ----------
+        industry : pd.DataFrame
+            Columns `event_date`, `party`, `industry` (industry-wide error per party and election, percentage
+            points), already restricted to the main parties of each election.
+        ref_date : pd.Timestamp
+            Date the ages are counted from.
+        year_decay : float, optional
+            Yearly decay of the weight of an election.
+        min_events : int, optional
+            Elections (with at least two parties) needed; otherwise 1 with a warning.
+        floor : float, optional
+            Lower bound of the ratio.
+        """
+        df = industry.dropna(subset=['industry']).copy()
+        df['event_date'] = pd.to_datetime(df['event_date'])
+        per = df.groupby('event_date')['industry'].agg(S='sum', Q=lambda x: float(np.square(x).sum()), k='size')
+        per = per.loc[per['k'] >= 2]
+        if per.shape[0] < min_events:
+            warnings.warn('Composition ratio needs {} elections with two or more main parties ({} available): using 1'.format(
+                min_events, per.shape[0]
+            ))
+            return 1.0
+
+        years = ((pd.Timestamp(ref_date) - per.index) / pd.Timedelta(days=365.25)).to_numpy(dtype=float)
+        w = np.power(float(year_decay), np.clip(years, 0, None))
+        q = float((w * per['Q'].to_numpy()).sum())
+        if q <= 0:
+            return 1.0  # No error at all: nothing to learn from
+        r = float((w * np.square(per['S'].to_numpy())).sum() / q)
+
+        return float(np.clip(r, floor, 1.0))
+
+    def get_composition_ratio(
+        self,
+        min_events: int = 3
+    ) -> float:
+        """
+        Composition ratio of the current events (see `composition_ratio`), from the industry-wide errors
+        stored in `pollsters_parties` (`Computer.compute_house_effects`) of the **national** parties: the same
+        population the correlation is imposed on in `Simulator.build_frame`.
+        """
+        he = get_house_effects(scope=self.scope, event_dates=self.event_dates)
+        if he.shape[0] == 0:
+            warnings.warn('No house effects data for these events: composition ratio set to 1 (independent draws)')
+            return 1.0
+
+        he = he.dropna(subset=['industry']).copy()
+        he['event_date'] = pd.to_datetime(he['event_date'])
+        ind = he.groupby(['event_date', 'party'], observed=True)['industry'].first().reset_index()
+
+        regional = get_parties().set_index('name')['regional'].astype(int)
+        ind = ind.loc[ind['party'].map(regional).fillna(1).astype(int) == 0]
+
+        return self.composition_ratio(ind, pd.Timestamp(self.event_dates[-1]), year_decay=self.year_decay, min_events=min_events)
+
     def get_seats_estimator_data(self) -> pd.DataFrame:
         """
         Load data used to fit the seats estimator.

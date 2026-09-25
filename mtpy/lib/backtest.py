@@ -105,6 +105,7 @@ def run_case(
     nowcast_only: bool = False,
     house_effects: bool = True,
     industry_bias: bool = False,
+    composition: Optional[float | str] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -118,7 +119,9 @@ def run_case(
 
     `house_effects` and `industry_bias` are passed to the `Simulator` (M6): the effects of the cycle are
     estimated with the polls up to `limit_date` only, and their prior with the elections before `event_date`;
-    the baselines are computed on the raw polls.
+    the baselines are computed on the raw polls. `composition` sets the joint noise of the national parties
+    (M7): `'auto'` estimates the ratio from the elections before `event_date`; `None` or 1 (default) draws
+    them independently.
 
     Returns
     -------
@@ -132,13 +135,15 @@ def run_case(
         warnings.simplefilter('ignore')
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
-            house_effects=house_effects, industry_bias=industry_bias
+            house_effects=house_effects, industry_bias=industry_bias, composition=composition
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
 
         sim.run(split=True, random=True, n_sim=n_sim)
         now = _collect(sim, vs)
+        clip_rate = sim.clip_rate()
+        composition_rho = float(sim.composition_rho)  # Of the nowcast draws (the horizon run adds the drift)
 
         fwd = None
         if not nowcast_only:
@@ -240,6 +245,8 @@ def run_case(
         'as_of': str(sim.as_of.date()), 'horizon_max': sim.horizon_max,
         'drift_k': sim.v2drift.k if sim.v2drift is not None else np.nan,
         'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias),
+        'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
+        'clip_rate': float(clip_rate),
         'he_pollsters': int(he_active.index.get_level_values('pollster_id').nunique()) if he_active is not None else 0,
         'he_mean_abs': float(he_active['effect'].abs().mean()) if he_active is not None and len(he_active) else np.nan,
         'he_max_abs': float(he_active['effect'].abs().max()) if he_active is not None and len(he_active) else np.nan,
@@ -313,6 +320,7 @@ def run_backtest(
     nowcast_only: bool = False,
     house_effects: bool = True,
     industry_bias: bool = False,
+    composition: Optional[float | str] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -337,7 +345,8 @@ def run_backtest(
             try:
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
-                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias
+                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias,
+                    composition=composition
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal

@@ -68,3 +68,14 @@ def test_run_case_house_effects_flags_and_raw_baselines(app):
     assert a['mean_4w'].tolist() == pytest.approx(b['mean_4w'].tolist(), nan_ok=True)
     # El promedio sí cambia con la corrección
     assert not np.allclose(a.loc[['PP', 'PSOE'], 'model'], b.loc[['PP', 'PSOE'], 'model'])
+
+
+def test_run_case_records_composition(app):
+    """M7: el caso registra la razón de composición usada y la tasa de recorte del residuo."""
+    from mtpy.lib.backtest import run_case
+    case = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True, composition='auto')
+    meta = case['meta'].iloc[0]
+    assert np.isfinite(meta['composition_ratio']) and meta['composition_ratio'] < 1
+    assert 0 <= meta['clip_rate'] <= 1
+    ref = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
+    assert ref['meta'].iloc[0]['composition_ratio'] == 1   # independiente por defecto

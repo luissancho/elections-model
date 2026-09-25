@@ -62,3 +62,25 @@ def test_within_block_bias_ignores_parties_the_poll_does_not_report():
     blocks = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'UP', 'MP']}
     # El reparto entre los partidos que sí publica es exacto: sesgo 0
     assert Computer.within_block_bias(polls, events, blocks).iloc[0] == pytest.approx(0.)
+
+
+# --- M7: razón de varianza de la suma (composición) ---
+
+def test_composition_ratio_from_industry_errors():
+    industry = pd.DataFrame({
+        'event_date': pd.to_datetime(['2019-04-28'] * 3 + ['2023-07-23'] * 3), 'party': ['A', 'B', 'C'] * 2,
+        'industry': [2., -1., -1., 1., 1., -3.]
+    })
+    ref = pd.Timestamp('2027-08-22')
+    # Sin decaimiento: S = (0, -1), Q = (6, 11) -> r = 1 / 17
+    assert Computer.composition_ratio(industry, ref, year_decay=1.0, min_events=2) == pytest.approx(1 / 17)
+    w = [0.9 ** ((ref - d).days / 365.25) for d in pd.to_datetime(['2019-04-28', '2023-07-23'])]
+    assert Computer.composition_ratio(industry, ref, year_decay=0.9, min_events=2) == pytest.approx(w[1] * 1 / (w[0] * 6 + w[1] * 11))
+    # Acotada a [0,05, 1]; pocas elecciones -> 1 con aviso
+    same = industry.assign(industry=[2., 2., 2.] * 2)
+    assert Computer.composition_ratio(same, ref, min_events=2) == 1.0
+    with pytest.warns(UserWarning):
+        assert Computer.composition_ratio(industry, ref, min_events=3) == 1.0
+    # Errores exactamente nulos: sin información, 1 (no NaN)
+    zeros = industry.assign(industry=0.)
+    assert Computer.composition_ratio(zeros, ref, min_events=2) == 1.0

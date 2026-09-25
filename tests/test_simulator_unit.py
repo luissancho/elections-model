@@ -249,3 +249,41 @@ def test_horizon_sampler_stays_within_bounds_and_is_reproducible():
     assert np.array_equal(draws, sampler(np.random.default_rng(0), 500))
     hist = Simulator.horizon_sampler('historical', 450, 1000, [600, 1200, 1400, 1491])(np.random.default_rng(1), 300)
     assert set(hist.tolist()) <= {200, 400, 450}
+
+
+# --- M7: ruido conjunto composicional (funciones puras) ---
+
+def test_equicorrelation_from_sum_variance_ratio():
+    rho, corr = Simulator.equicorrelation(np.array([1., 1., 1., 1.]), 1.0)
+    assert rho == 0 and np.array_equal(corr, np.eye(4))
+    rho, corr = Simulator.equicorrelation(np.array([1., 1., 1., 1.]), 0.25)
+    assert rho == pytest.approx(-0.25)
+    assert corr[0, 1] == pytest.approx(-0.25) and corr[2, 2] == 1
+    # Con varianzas distintas la varianza de la suma bajo R es exactamente r · Σσ²
+    sig = np.array([3., 2., 1.])
+    rho, corr = Simulator.equicorrelation(sig, 0.4)
+    assert float(sig @ corr @ sig) == pytest.approx(0.4 * np.square(sig).sum())
+    assert np.all(np.linalg.eigvalsh(corr) > 0)
+    # Un partido solo: sin correlación que imponer
+    assert Simulator.equicorrelation(np.array([2.]), 0.2)[0] == 0
+
+
+def test_equicorrelation_is_floored_to_keep_the_matrix_positive_definite():
+    with pytest.warns(UserWarning):
+        rho, corr = Simulator.equicorrelation(np.array([1., 1., 1.]), 0.0)
+    assert rho == pytest.approx(-0.5, abs=1e-5) and rho > -0.5
+    assert np.all(np.linalg.eigvalsh(corr) > 0)
+
+
+def test_draw_correlated_t_keeps_t_marginals_and_imposes_correlation():
+    corr = np.array([[1., -0.3, 0.], [-0.3, 1., 0.], [0., 0., 1.]])
+    x = Simulator.draw_correlated_t(np.random.default_rng(0), np.array([30., 30., 30.]), corr, size=20000)
+    assert x.shape == (20000, 3)
+    c = np.corrcoef(x.T)
+    assert c[0, 1] == pytest.approx(-0.3, abs=0.03) and abs(c[0, 2]) < 0.03
+    assert x.std(axis=0)[0] == pytest.approx(np.sqrt(30 / 28), rel=0.03)
+    assert abs(x.mean()) < 0.03
+    # Con la identidad, sin correlación; y un solo sorteo devuelve un vector
+    y = Simulator.draw_correlated_t(np.random.default_rng(1), np.array([5., 5.]), np.eye(2), size=20000)
+    assert abs(np.corrcoef(y.T)[0, 1]) < 0.03
+    assert Simulator.draw_correlated_t(np.random.default_rng(2), np.array([5., 5.]), np.eye(2)).shape == (2,)

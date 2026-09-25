@@ -9,18 +9,18 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope='module')
 def sim27(app):
-    """Simulador de referencia (sin efectos de casa): la base de las regresiones numéricas."""
+    """Simulador de referencia (sin efectos de casa ni ruido conjunto): la base de las regresiones numéricas."""
     from mtpy.lib.simulator import Simulator
-    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', house_effects=False)
+    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', house_effects=False, composition=1.0)
     sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
     return sim
 
 
 @pytest.fixture(scope='module')
 def sim27_he(app):
-    """Simulador con efectos de casa (M6, el modo por defecto)."""
+    """Simulador con efectos de casa (M6, por defecto) y ruido conjunto (M7, opcional)."""
     from mtpy.lib.simulator import Simulator
-    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.')
+    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', composition='auto')
     assert sim.house_effects is True
     sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
     return sim
@@ -347,3 +347,28 @@ def test_industry_bias_shifts_the_forecast(app, sim27_he):
         assert sim.forecast.loc[name, 'mean'] == pytest.approx(sim27_he.forecast.loc[name, 'mean'] - bias.loc[name, 'bias'], abs=1e-6)
         assert sim.forecast.loc[name, 'err'] >= sim27_he.forecast.loc[name, 'err']
     assert sim27_he.industry_bias is False and sim27_he.industry_bias_table is None
+
+
+# --- M7: ruido conjunto composicional ---
+
+def test_composition_ratio_reduces_block_variance_not_marginals(sim27, sim27_he):
+    """M7: los intervalos por partido no cambian; la suma de los bloques y el recorte del residuo sí."""
+    assert sim27.composition_ratio == 1.0
+    assert 0.1 < sim27_he.composition_ratio < 0.6
+    sim27.run(split=True, random=True, n_sim=400)
+    ref = sim27.shares(); ref_clip = sim27.clip_rate()
+    sim27_he.run(split=True, random=True, n_sim=400)
+    new = sim27_he.shares()
+    assert sim27_he.composition_rho < 0
+    assert (sim27_he.dist().sum(axis=1) == 350).all()
+    # Marginal del PP: misma escala (el error de encuesta difiere algo con los efectos de casa)
+    assert new['PP'].std() == pytest.approx(ref['PP'].std(), rel=0.15)
+    # La suma de los nacionales se contrae hacia sqrt(r) veces la independiente; un par (PP + VOX) sólo algo
+    national = [n for n in sim27_he.params['names'] if sim27_he.forecast.loc[n, 'regional'] == 0]
+    total = new[national].sum(axis=1).std(); indep_total = np.sqrt(new[national].var().sum())
+    assert total < 0.7 * indep_total, (total, indep_total)
+    assert ref[national].sum(axis=1).std() > 0.85 * np.sqrt(ref[national].var().sum())
+    assert sim27_he.composition_rho < -0.1
+    assert (new['PP'] + new['VOX']).std() < 0.97 * np.sqrt(new['PP'].var() + new['VOX'].var())
+    # El residuo se recorta menos
+    assert sim27_he.clip_rate() <= ref_clip

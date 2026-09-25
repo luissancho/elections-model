@@ -3,7 +3,7 @@ import numpy as np
 import warnings
 import pandas as pd
 import os
-from scipy.stats import t as student_t
+from scipy.stats import norm, t as student_t
 from tqdm import tqdm
 
 from typing import Any, Callable, Literal, Optional
@@ -47,6 +47,7 @@ class Simulator(Core):
         house_effects: bool = True,
         industry_bias: bool = False,
         he_params: Optional[dict[str, Any]] = None,
+        composition: Optional[float | str] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -100,6 +101,12 @@ class Simulator(Core):
             inconsistent between elections for most parties.
         he_params : dict, optional
             Parameters of the house effects estimation, see `Forecaster.set_he_params`.
+        composition : float or 'auto', optional
+            Joint noise of the national parties: the ratio between the variance of the sum of their errors and
+            the sum of their variances (`Computer.composition_ratio`). `'auto'` estimates it from the past
+            elections (about 0.2); a number fixes it; `None` (default) or 1 draws every party independently.
+            The marginal intervals are the same in every case (see `build_frame`); the backtest is neutral
+            between the two, slightly better independent at short horizons and joint at long ones (M7).
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -115,6 +122,7 @@ class Simulator(Core):
         self.house_effects = bool(house_effects)
         self.industry_bias = bool(industry_bias)
         self.he_params = he_params
+        self.composition = composition
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -228,6 +236,24 @@ class Simulator(Core):
             self.v2drift = self.computer.get_drift_estimator()
         else:
             self.v2drift = None
+
+        # Composition of the national errors: a common negative correlation between the national parties,
+        # set by the ratio between the variance of their sum and the sum of their variances (M7)
+        if composition is None or (not isinstance(composition, str) and float(composition) >= 1):
+            self.composition_ratio = 1.0
+        elif isinstance(composition, str):
+            if composition != 'auto':
+                raise ValueError("`composition` must be 'auto', a number in (0, 1] or None")
+            if self.computer is None:
+                warnings.warn('No past elections to estimate the composition ratio: independent draws')
+                self.composition_ratio = 1.0
+            else:
+                self.composition_ratio = self.computer.get_composition_ratio()
+        else:
+            if float(composition) <= 0:
+                raise ValueError('`composition` must be positive (1: independent draws)')
+            self.composition_ratio = float(np.clip(float(composition), 0.05, 1.0))
+        self.composition_rho = 0.  # Correlation imposed in the last draw (see `build_frame`)
 
         if self.verbose > 0:
             print('Load region totals...')
@@ -1124,6 +1150,80 @@ class Simulator(Core):
         return int(np.lexsort((np.arange(len(l1)), l2, l1))[0])
 
     @staticmethod
+    def equicorrelation(
+        sigmas: np.ndarray,
+        r: float
+    ) -> tuple[float, np.ndarray]:
+        """
+        Common correlation between the national parties that makes the variance of the sum of their errors
+        equal to `r` times the sum of their variances: `rho = (r - 1) · Σσ² / ((Σσ)² - Σσ²)`, exact whatever
+        the sizes of the parties. `rho` is floored at `-1 / (k - 1)` (plus a margin) so that the matrix stays
+        positive definite. Returns `rho` and the `k × k` correlation matrix.
+
+        Parameters
+        ----------
+        sigmas : np.ndarray
+            Standard deviation of the error of each party.
+        r : float
+            Ratio of the variance of the sum to the sum of the variances (1: independent).
+        """
+        s = np.asarray(sigmas, dtype=float)
+        k = len(s)
+        if k < 2 or r >= 1:
+            return 0., np.eye(k)
+
+        cross = np.square(s.sum()) - np.square(s).sum()
+        rho = float((r - 1.) * np.square(s).sum() / cross) if cross > 0 else 0.
+        floor = -1. / (k - 1) + 1e-6
+        if rho < floor:
+            warnings.warn('Composition ratio {:.3f} needs a correlation below -1/(k-1) with {} parties: floored'.format(r, k))
+            rho = floor
+
+        return rho, (1. - rho) * np.eye(k) + rho * np.ones((k, k))
+
+    @staticmethod
+    def draw_correlated_t(
+        rng: np.random.Generator,
+        dof: np.ndarray,
+        corr: np.ndarray,
+        size: Optional[int] = None
+    ) -> np.ndarray:
+        """
+        Draw Student t variables with the given degrees of freedom per coordinate and the correlation
+        structure `corr`, through a Gaussian copula: the marginals are exactly `t(dof)` and the correlation
+        of the underlying normals is `corr`.
+
+        Parameters
+        ----------
+        rng : np.random.Generator
+            Random generator.
+        dof : np.ndarray
+            Degrees of freedom of each coordinate.
+        corr : np.ndarray
+            Correlation matrix (positive definite).
+        size : int, optional
+            Number of draws (`(size, k)`); a single draw (`(k,)`) by default.
+        """
+        k = corr.shape[0]
+        chol = np.linalg.cholesky(corr)
+        z = rng.standard_normal((size, k) if size is not None else k) @ chol.T
+        u = np.clip(norm.cdf(z), 1e-12, 1 - 1e-12)
+
+        return student_t.ppf(u, np.asarray(dof, dtype=float))
+
+    def clip_rate(self) -> float:
+        """
+        Fraction of the simulations in which the residual `'-'` was clipped to 0 (the drawn shares of the
+        parties summed more than 100): a diagnostic of the joint noise.
+        """
+        if self.frames is None:
+            raise ValueError('No simulations available: call `run()` first.')
+
+        vpred = self.frames[:, self.categories().index(self.OTHERS), self.cols_frame.index('vpred')]
+
+        return float(np.mean(vpred <= 0))
+
+    @staticmethod
     def horizon_candidates(
         kind: str | np.ndarray | list | tuple,
         horizon_max: int,
@@ -1271,11 +1371,24 @@ class Simulator(Core):
                 # If no error estimator available, use the purely statistical error provided by the forcaster
                 df.loc[vind, 'std_err'] = np.sqrt(np.square(df.loc[vind, 'err']) + np.square(drift))
 
-            # Add noise to the forecasted percentage, based on the calculated error
-            df.loc[vind, 'rand'] = np.clip(
-                df.loc[vind, 'pct'] + df.loc[vind, 'std_err'] * self.rng.standard_t(np.clip(df.loc[vind, 'nobs'].fillna(3) - 2, 3, None)),
-                0, None
-            )
+            # Add noise to the forecasted percentage, based on the calculated error: a Student t per party
+            # (`nobs - 2` degrees of freedom), drawn jointly for the national parties with the common negative
+            # correlation set by `composition_ratio` (Gaussian copula, so the marginals are the same), or
+            # independently when the ratio is 1
+            dof = np.clip(df.loc[vind, 'nobs'].fillna(3) - 2, 3, None).to_numpy(dtype=float)
+            sig = df.loc[vind, 'std_err'].to_numpy(dtype=float)
+            national = (df.loc[vind, 'regional'].to_numpy() == 0) & np.isfinite(sig)
+            if self.composition_ratio < 1 and national.sum() >= 2:
+                rho, corr_nat = self.equicorrelation(sig[national], self.composition_ratio)
+                corr = np.eye(len(sig))
+                idx = np.flatnonzero(national)
+                corr[np.ix_(idx, idx)] = corr_nat
+                self.composition_rho = rho
+                noise = self.draw_correlated_t(self.rng, dof, corr)
+            else:
+                self.composition_rho = 0.
+                noise = self.rng.standard_t(dof)
+            df.loc[vind, 'rand'] = np.clip(df.loc[vind, 'pct'] + df.loc[vind, 'std_err'] * noise, 0, None)
 
             df['vpred'] = df['rand']
         else:
