@@ -1,0 +1,3416 @@
+[
+ {
+  "title": "save=True con overwrite=False anula los pesos de las encuestas ya calculadas del mismo evento",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/lib/data.py",
+  "line": 404,
+  "evidence": "save_model_data ejecuta `UPDATE polls SET mtype=NULL, proc_sample=NULL, weight_*=NULL, computed=NULL, featured=NULL WHERE event_scope IN (...) AND event_date IN (...)` para todas las filas de los eventos presentes y luego `model.upsert(df)` solo con las filas nuevas (computer.py:618-625 pasa únicamente las encuestas ~computed).",
+  "impact": "Pérdida silenciosa de datos: las encuestas antiguas del evento quedan con computed=NULL y sin pesos; el Forecaster las descarta (forecaster.py:296) y filter_polls también.",
+  "fix": "Restringir el UPDATE a las claves de df, eliminarlo (el upsert ya sobrescribe) o forzar overwrite=True cuando save=True.",
+  "how_to_test": "Sobre una copia de la BD: marcar una encuesta de 2027 como computed=false, ejecutar compute_weights(save=True) y contar `SELECT count(*) FROM elections.polls WHERE event_date='2027-08-22' AND weight_sample IS NULL` (esperado >0 con el bug).",
+  "source": "computer-weights",
+  "id": "F001",
+  "sources": [
+   "computer-weights"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El modo incremental (overwrite=False) produce pesos distintos al recálculo completo",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 531,
+  "evidence": "`df = df.loc[~df['computed']]` y todo lo posterior (msizes_loc/tot/all 549-556, winsorización 567-572, sample_medians 577, poll_overweights 590-597) se calcula solo sobre las encuestas nuevas.",
+  "impact": "Verificado marcando las 60 últimas encuestas de 2027 como no calculadas: 22/59 weight_sample cambian (hasta 0.07), un proc_sample cambia 153 unidades (mediana 1291 vs 1304); además una encuesta nueva que solape con una ya calculada no la pone a 0.",
+  "fix": "Calcular todos los estadísticos (medianas, winsorización, solapes) sobre self.polls completo y escribir solo las filas nuevas.",
+  "how_to_test": "comp.build_series(); full=comp.compute_weights(overwrite=True); comp.series.loc[últimas 60 de 2027,'computed']=False; inc=comp.compute_weights(overwrite=False); comparar inc vs full.",
+  "source": "computer-weights",
+  "id": "F002",
+  "sources": [
+   "computer-weights"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Stat.winsorize(action='group') sustituye los valores bajos por el máximo",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 132,
+  "evidence": "`self.data = np.where(x_in, self.data, np.max(self.data[x_in]))` aplica el máximo del rango tanto a outliers altos como bajos.",
+  "impact": "Latente en proc_sample (μ−3σ<0), pero la función es parte de la librería estadística divulgativa y devolvería resultados erróneos con cualquier dato con cola izquierda.",
+  "fix": "np.clip(self.data, np.min(self.data[x_in]), np.max(self.data[x_in]))",
+  "how_to_test": "Stat(np.array([1.]+[100.]*20), outliers='group', n_dev=1).data[0] devuelve 100.0 (debería ser 100 solo si se recorta por arriba; el valor bajo debería ir al mínimo del rango).",
+  "source": "computer-weights",
+  "id": "F003",
+  "sources": [
+   "computer-weights"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "merge_bmaps itera cadenas carácter a carácter, lanza KeyError si falta el bmap y muta event_params",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 200,
+  "evidence": "`map = self.event_params[event_date]['bmaps'][name]` (KeyError si el evento no define name); `bm[party] = block` (alias de la lista original); `for b in block: ... bm[party].append(b)` (si block es str itera caracteres; si bm[party] es str, .append falla).",
+  "impact": "Verificado: con event_dates de 2019-11/2023/2027, merge_bmaps('min') devuelve {'PP': ['PP','Cs','P'], ...} (partido fantasma 'P'); con todos los eventos merge_bmaps('max') lanza KeyError 'max'; tras merge_bmaps('vs') el bloque Derecha de 1977 en self.event_params pasa de 3 a 9 partidos. Hoy inocuo (compute_errors usa main/vs y poll_errors usa claves), pero rompe cualquier uso de bmap='max'|'min' en Computer.",
+  "fix": "Normalizar str→[str], copiar listas (list(block)), usar .get(name) y saltar eventos sin ese bmap.",
+  "how_to_test": "Computer(scope='es', event_dates=['2019-11-10','2023-07-23','2027-08-22'], path=<files>).merge_bmaps('min') y comparar event_params antes/después con copy.deepcopy.",
+  "source": "computer-weights",
+  "id": "F004",
+  "sources": [
+   "computer-weights"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "rating=0 implica weight_rating=0 y exclusión total de la encuestadora del promedio",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1181,
+  "evidence": "`dr['weight_rating'] = np.log1p(dr['rating']) / np.log1p(dr['rating'].mean())` → log1p(0)=0; el Forecaster multiplica (forecaster.py:271).",
+  "impact": "33 filas de ratings (3 casas con quality=0) tienen weight_rating=0; 23 sondeos de KeyData para 2027 pesan exactamente 0. Exclusión dura no documentada.",
+  "fix": "Documentarlo si es intencionado; si no, usar un suelo (rating_floor) o weight_rating=(rating+ε)/(mean+ε).",
+  "how_to_test": "SELECT pollster_id, count(*) FROM elections.polls WHERE event_date='2027-08-22' AND weight_rating=0 GROUP BY 1;",
+  "source": "computer-weights",
+  "id": "F005",
+  "sources": [
+   "computer-weights"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El Forecaster rellena weight_rating ausente con quality en escala 0-100",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 270,
+  "evidence": "`series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(self.pollsters.set_index('id').quality))`; en la BD quality ∈ [0,78] mientras weight_rating ∈ [0,3.08].",
+  "impact": "Latente para 2027 (todas las casas tienen rating), pero afecta a las 188 encuestas pre-1996 y a cualquier casa nueva si no se recalculan ratings antes de pronosticar: su peso sería ~50× el normal.",
+  "fix": "fillna(np.log1p(quality/100)/np.log1p(mean_rating)) o recalcular ratings antes del forecast.",
+  "how_to_test": "Forecaster(scope='es', event_date='1993-06-06').build_series().series.weight_rating.describe() — valores >3 indican el bug.",
+  "source": "computer-weights",
+  "id": "F006",
+  "sources": [
+   "computer-weights"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Verosimilitud del shrinkage por sondeo mal especificada (SE de la media usado como σ del dato; τ 3.8× menor que la dispersión real)",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 822,
+  "evidence": "df[['bias_dev_adj','bias_dev_err']] = self.bayes_adjust(df[['bias_dev','bias_err']], params={'mean':0,'std':self.bias_dev_tau}) — bias_err es el 'err' de LocalKernelEstimator (SE de la media local, stat.py:837-841), no la dispersión de bias_dev. Empíricamente std(bias_dev)=0.038 LOR vs τ=0.01; factor de shrinkage mediana 0.49 (p5–p95 0.20–0.89).",
+  "impact": "Las desviaciones se encogen según la densidad de sondeos en la fecha, no según el ruido del sondeo; el prior N(0,0.01²) es inconsistente con los datos (declara ±2 % de odds cuando el 90 % central va de −6 a +6 %). Es un regularizador ad hoc presentado como actualización bayesiana.",
+  "fix": "Modelo jerárquico dev_k ~ N(θ_p, σ² + SE_t²), θ_p ~ N(0, τ²) con σ y τ estimados por Bayes empírico/REML; o al menos σ_dat = sqrt(σ_resid² + bias_err²) y τ = std empírica de las medias por encuestadora.",
+  "how_to_test": "Ejecutar fit_bias_estimator sobre 2-3 eventos (script q3.py del scratchpad): comparar std(lor − bias_mean) con bias_dev_tau y calcular λ_dat/(λ_dat+λ_prior) por sondeo.",
+  "source": "computer-ratings",
+  "id": "F016",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Doble shrinkage con incertidumbres ya posteriores",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1165,
+  "evidence": "dr[['bias_dev_adj','bias_dev_err']] = self.bayes_adjust(dr[['bias_dev_adj','bias_dev_err']], params={'mean':0,'std':self.bias_dev_tau}) — los bias_dev_adj agregados ya fueron encogidos por sondeo y se_p se calcula a partir de bias_dev_err posteriores (≤ τ), nunca de la varianza muestral de las desviaciones de la encuestadora.",
+  "impact": "El prior se cuenta dos veces y la incertidumbre por encuestadora no refleja su dispersión real; una encuestadora con 1 sondeo y otra con 20 tienen se_p del mismo orden.",
+  "fix": "Aplicar un único shrinkage a nivel de encuestadora usando desviaciones brutas y se_p = sqrt(var_ponderada/neff) o el modelo jerárquico de F1.",
+  "how_to_test": "Para encuestadoras con ≥5 sondeos comparar dr['bias_dev_err'] con std(bias_dev)/sqrt(n) calculado a mano sobre polls filtrados.",
+  "source": "computer-ratings",
+  "id": "F017",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "bias_dev_tau sobrecargado: prior, escala de rating_adj y límites de gráficos; rating_adj satura",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1173,
+  "evidence": "dr['rating_adj'] = dr['bias_dev_adj'].mul(-1).apply(norm.cdf, scale=self.bias_dev_tau) — el mismo τ es σ del prior (líneas 828, 1168) y límite de plots (2163, 2259-2280). En BD: Noxa (6 sondeos, dev −2.14 %) rating_adj 98.5; Encuestamos (6) 95.0; Opinometre (1 sondeo) 95.6.",
+  "impact": "Una desviación de −2.5 % de odds ya da rating_adj≈99: el mapa desviación→rating es casi binario y cambiar τ altera simultáneamente el prior y la escala del rating.",
+  "fix": "Parámetro independiente para la escala del rating (p. ej. std empírica de bias_dev_adj_p) o una función logística con escala calibrada.",
+  "how_to_test": "Histograma de rating_adj en pollsters_ratings para el último evento: concentración en los extremos con num_polls pequeño.",
+  "source": "computer-ratings",
+  "id": "F018",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Docstring de compute_ratings describe un algoritmo distinto al implementado",
+  "kind": "docs",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 866,
+  "evidence": "Docstring: 'error_adjusted = (num_related * error_related + min_related * error_expected) / (...)', 'prior_weight = quality * num_polls / (num_polls + num_polls.mean())', 'scaled to the range [5-95]'. Código real (1094-1190): dos bayes_adjust, rating_adj = Φ(−dev/τ), rating = (n_w·rating_adj + min_polls·quality)/(n_w+min_polls). También 1183-1185: 'logarithm gives more weight to pollsters with rating close to 1' cuando log1p es cóncavo.",
+  "impact": "Un lector técnico documentaría fórmulas inexistentes; incompatible con un repositorio científico.",
+  "fix": "Reescribir la docstring con las fórmulas de §4.6 del informe.",
+  "how_to_test": "Lectura comparada de 866-897 vs 1094-1190.",
+  "source": "computer-ratings",
+  "id": "F019",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "plot_ratings_prior referencia la columna inexistente rating_prior",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 2348,
+  "evidence": "df = df.loc[df.rating_prior.notnull()][['quality','num_polls_w','rating_prior']] — rparams (911-915) y PollstersRatings.meta (elections.py:72-90) no incluyen rating_prior.",
+  "impact": "AttributeError al llamar al método; resto de una versión anterior del algoritmo.",
+  "fix": "Eliminar el método o calcular y persistir rating_prior.",
+  "how_to_test": "comp.plot_ratings_prior() tras build_series().",
+  "source": "computer-ratings",
+  "id": "F021",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Métricas de bloque dependen del conjunto de eventos cargado y merge_bmaps muta event_params",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 206,
+  "evidence": "if party not in bm: bm[party] = block  else: for b in block: ... bm[party].append(b) — bm aliasa la lista del primer evento y los append la modifican; además la unión depende de event_dates. Verificado: con event_dates=['2016-06-26','2019-11-10'] 146 filas (todo 2016) cambian error_blocks/bias_blocks/bias respecto a la BD (hasta 7.8 pts / 17.8 %) porque IU deja de pertenecer a Izquierda; y event_params['2016-06-26']['bmaps']['vs'] pasa a incluir VOX y MP tras merge_bmaps('vs').",
+  "impact": "El error de un sondeo no es una función del sondeo y su evento, sino de qué otros eventos se cargaron; efectos secundarios silenciosos sobre event_params.",
+  "fix": "Agrupar por bloques definidos por evento (event_params[dt]) y copiar listas (list(block)) en merge_bmaps.",
+  "how_to_test": "Comparar compute_errors(save=False) con la BD para Computer con 2 eventos vs todos (scripts q3.py/q4.py).",
+  "source": "computer-ratings",
+  "id": "F022",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Sumas parciales de bloques cuando el sondeo omite un partido del bloque",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/utils.py",
+  "line": 96,
+  "evidence": "results = df.rename(columns=block_map).groupby(level=0, axis=1).sum(min_count=1) — en poll_errors (computer.py:1047-1049) un sondeo sin VOX en 2019-04 (180 casos) o sin IU en 2011 (68) obtiene un gap con bloque incompleto.",
+  "impact": "error_blocks/bias_blocks contaminados por partidos omitidos; se mezclan con sustituciones legítimas (UP/SUMAR en 2023, 693 casos) que el código no distingue.",
+  "fix": "Exigir que los partidos con resultado > umbral estén en el sondeo (o resolverlos vía smap) y devolver NaN en caso contrario.",
+  "how_to_test": "Script q5.py: tabla de partidos ausentes por evento y media de |error_blocks| completos vs parciales.",
+  "source": "computer-ratings",
+  "id": "F023",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Encuestadoras sin sondeos obtienen num_polls_w=0 sólo por groupby(observed=False) sobre categórica",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1126,
+  "evidence": "dr['num_polls_w'] = df.groupby('pollster')['weight'].sum().reindex(dr.index) — pandas 2.2 emite FutureWarning 'The default of observed=False is deprecated and will be changed to True'; con observed=True las ausentes serían NaN y rating = (NaN·rating_adj + 3·q)/(NaN+3) = NaN (línea 1179-1181).",
+  "impact": "Al actualizar pandas todas las encuestadoras nuevas perderían su rating (y weight_rating) silenciosamente.",
+  "fix": "groupby(..., observed=True).reindex(dr.index).fillna(0) explícito para num_events/num_polls/num_polls_w.",
+  "how_to_test": "len(comp.polls.groupby('pollster', observed=True)['days'].count()) < 92.",
+  "source": "computer-ratings",
+  "id": "F024",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Forecaster rellena weight_rating nulo con quality en escala 0-100",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 270,
+  "evidence": "series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(self.pollsters.set_index('id').quality)) — quality vale 5-78 mientras weight_rating vale 0-3.08.",
+  "impact": "Los 53 sondeos de 1993 (sin rating previo, verificado NaN en BD) y cualquier encuestadora sin fila en pollsters_ratings reciben pesos 5-78× superiores al resto.",
+  "fix": "Dividir quality por 100 y pasar por la misma transformación log1p/log1p(media), o rellenar con la mediana de weight_rating.",
+  "how_to_test": "Forecaster(scope='es', event_date='1993-06-06', ...).build_series().series.weight_rating.describe().",
+  "source": "computer-ratings",
+  "id": "F026",
+  "sources": [
+   "computer-ratings"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Truncamiento `seats > 0` elimina el 46 % de las observaciones y sesga el estimador de escaños",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1635,
+  "evidence": "df = df[(df.pct >= 0.1) & (df.seats > 0)].dropna()",
+  "impact": "De 349 combinaciones evento-partido con pct>=0.1, 162 (84 nacionales, 78 regionales) tienen 0 escaños y se descartan. El modelo nunca ve que un nacional con 1.76 % (CDS 1993) o un regional con 0.7 % obtiene 0; el intercepto regional (+15.71-16.95 = -1.24) implica ≥1 escaño desde 0.28 % nacional, sobreestimando a regionales pequeños en el Simulator (modos LS/MC).",
+  "how_to_test": "Reproducir get_seats_estimator_data sin el filtro seats>0 (o con un modelo Tobit/isotónico) y comparar predicciones en (0.5,1),(1,1),(2,0): actualmente 1.0, 3.3 y 0 (clip). Contar filas excluidas: full[(full.pct>=0.1)&(full.seats==0)] → 162.",
+  "fix": "Modelar con censura (Tobit), o regresión isotónica/monótona por tipo de partido incluyendo los ceros, o al menos documentar el truncamiento como supuesto explícito.",
+  "source": "computer-estimators",
+  "id": "F039",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Estimador de escaños lineal sin restricción de suma ni convexidad D'Hondt",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1675,
+  "evidence": "LeastSquaresEstimator(x=df[['pct','regional']], y=df['seats'], ...) → seats = -16.95 + 4.51·pct + 15.71·regional",
+  "impact": "Residuo medio por tramo: (3,10] -2.2, (10,20] -4.5, (20,30] +4.2 escaños (convexidad de D'Hondt no capturada). Suma de escaños predichos sobre los % reales entre 316 y 376 (2023 → 359.7 en vez de 350). Predicciones negativas para nacionales < 3.76 % (15 in-sample). Simulator clip(0) por simulación y sólo `totals` ajusta la mediana a 350, así que las distribuciones simuladas no respetan la cámara.",
+  "how_to_test": "est=comp.get_seats_estimator(); s=comp.get_seats_estimator_data(); pred=est.predict(s[['pct','regional']].values); s.assign(pred=pred).groupby('years').agg(seats=('seats','sum'),pred=('pred','sum')). LOEO CV: RMSE 4.94 grado 1 vs 4.92 grado 2 (poly_deg=2 no ayuda).",
+  "fix": "Sustituir por reparto D'Hondt sobre una distribución provincial media (ya existe en split=True) o por un modelo monótono con renormalización a 350 por simulación; documentar LS/MC como baseline aproximado.",
+  "source": "computer-estimators",
+  "id": "F040",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Regresión lineal sobre error absoluto produce predicciones negativas y es heterocedástica",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1603,
+  "evidence": "LeastSquaresEstimator(x=df[['pct','regional','weeks']], y=df['error'], weights=df['weight']).fit() con df['error']=|error| (1559)",
+  "impact": "2565 de 14716 predicciones in-sample negativas (17 %); (pct=0.1, regional=1, weeks=1) → -0.47, (2,1,1) → -0.38. Desv. típica del residuo 1.07 en (0,1] frente a 3.99 en (30,50]; R²=0.38. El Simulator eleva al cuadrado la predicción (std_err = sqrt(err²+pct_err²)), así que un error negativo aporta varianza en vez de cero.",
+  "how_to_test": "d=comp.get_error_estimator_data(); est=comp.get_error_estimator(); (est.predict(d[['pct','regional','weeks']].values)<0).sum() → 2565. Residuos por pd.cut(d.pct,[0,1,3,10,20,30,50]).",
+  "fix": "Modelo multiplicativo: log|e| ~ log(pct) + regional + weeks, o |e| ∝ sqrt(pct·(100-pct)/n) con factor de diseño; o al menos clip(0) y documentar.",
+  "source": "computer-estimators",
+  "id": "F041",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Simulator usa el MAE predicho como desviación típica y mezcla error de encuesta individual con error del promedio",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 530,
+  "evidence": "df.loc[vind,'std_err'] = np.sqrt(np.square(df.loc[vind,'err']) + np.square(df.loc[vind,'pct_err'])); rand = pct + std_err * rng.standard_t(nobs-2)",
+  "impact": "Para ruido gaussiano E|X| = σ·sqrt(2/π) ≈ 0.80σ: usar el error absoluto medio como σ subestima la dispersión ~20 %. Además v2err se ajusta sobre errores de encuestas individuales (computer.py 1536), no sobre el error histórico del promedio ponderado del Forecaster, que es lo que se está perturbando.",
+  "how_to_test": "Calcular, para cada evento pasado, el error del Forecaster (media local a limit_date) frente al resultado y compararlo con v2err.predict; y comparar la cobertura empírica de los intervalos simulados en elecciones pasadas.",
+  "fix": "Calibrar v2err sobre el error del promedio por evento (backtest), o multiplicar por sqrt(π/2) si se mantiene el MAE; documentar la interpretación.",
+  "source": "computer-estimators",
+  "id": "F042",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "`weeks` en el Simulator no depende de limit_date: siempre (drange[0]+1)//7",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 509,
+  "evidence": "weeks = (self.model.drange[0] + 1) // 7  (también en 311)",
+  "impact": "Con drange=6 se evalúa el error 'a 1 semana' aunque se simule 11 meses antes de las elecciones (2027-08-22 con datos de 2026-09). El coeficiente β3=0.013/semana (≈0.66 pts/año) queda sin usar y los intervalos son demasiado estrechos lejos de la elección.",
+  "how_to_test": "Simulator(scope='es', event_date='2027-08-22', drange=6, limit_date='2026-09-01') y comprobar que fc['error'] es idéntico a limit_date='2027-08-16'.",
+  "fix": "weeks = ((event_date - limit_date).days + 1)//7 o exponer el parámetro.",
+  "source": "computer-estimators",
+  "id": "F043",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Un 35 % de la clase Computer es código de visualización/impresión",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1681,
+  "evidence": "Métodos plot_deviations, plot_errors, print_rating_weights, print_ratings, plot_ratings, plot_ratings_grid, plot_ratings_prior, plot_bias_weights, print_bias_weights ocupan 1681-2610 (930 de 2625 líneas); imports matplotlib/adjustText/dataviz en 1-19",
+  "impact": "El núcleo numérico depende de matplotlib y adjustText; dificulta tests, lectura y reutilización científica; plot_bias_weights/print_bias_weights duplican la lógica de fit_bias_estimator (2401-2402, 2422-2426, 2534-2535) con filtros distintos (drop_ctypes=None en 2394).",
+  "how_to_test": "awk 'NR>=1681 && NR<=2610' mtpy/lib/computer.py | wc -l → 930",
+  "fix": "Mover a mtpy/lib/plots/computer.py como funciones que reciben el Computer; reutilizar fit_bias_estimator en los plots.",
+  "source": "computer-estimators",
+  "id": "F044",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Computer no es reproducible desde la raíz del repo: params.json en directorio ignorado y path=cwd",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 131,
+  "evidence": "self.path = path or os.getcwd(); get_event_params lee f'{path}/params.json' (data.py:67); files/ está en .gitignore",
+  "impact": "Computer(scope='es') lanza FileNotFoundError: '/Users/luiss/HD/Proyectos/Code/elections-model/params.json'. Los estimadores dependen de un fichero no versionado y de la base de datos local; no hay forma de reproducir coeficientes sin ambos.",
+  "how_to_test": "cd repo && python -c \"from mtpy import mtpy; mtpy.run(); from mtpy.lib.computer import Computer; Computer(scope='es')\"",
+  "fix": "Versionar params.json (o un ejemplo), resolver el path por defecto relativo al paquete, y exportar los datasets de los estimadores (CSV) para reproducibilidad.",
+  "source": "computer-estimators",
+  "id": "F045",
+  "sources": [
+   "computer-estimators"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El ancho de banda calculado por método ('isj'/'scott') se trunca a 3-5 caracteres al asignarlo en un array de strings",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 285,
+  "evidence": "`self.bw = np.repeat(self.bw, self.kvar)` (285) crea un array dtype '<U3' cuando bw='isj'; `self.bw[i] = self.get_bw_fixed(...)` (289) convierte el float a cadena truncada; después `np.array(self.bw, dtype=np.float64)` (291). Ejecutado: Kernel.get_bw_isj(x, ones) = 0.33630 -> Kernel(x, bw='isj').bw[0] = 0.30000; para el eje temporal del PP el ISJ queda exactamente en 71.0 días.",
+  "impact": "Ancho de banda incorrecto (-11 % en el ejemplo, decimales perdidos para h>=100); en datos a escala pequeña (h<0.1) se convierte en 0.0 y produce división por cero en el núcleo. Afecta a todos los ajustes con bw por método.",
+  "fix": "Usar una lista Python: `self.bw = [self.bw] * self.kvar` antes del bucle (o `np.empty(kvar, dtype=object)`), y sólo al final convertir a float64.",
+  "how_to_test": "x = rng.normal(size=300); assert np.isclose(Kernel(x, bw='isj', bw_type='fixed').bw[0], Kernel.get_bw_isj(x, np.ones(300))) -> falla actualmente (0.3 vs 0.3363).",
+  "source": "forecaster",
+  "id": "F055",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El ancho de banda adaptativo depende de la rejilla de predicción (la media geométrica se calcula sobre los puntos pedidos)",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 473,
+  "evidence": "`pdf = np.sum(self.kernel_gaussian(x, p, kbw) * weights, axis=1)` (471) y `gm = gmean(pdf)` (473) se evalúan en p (rejilla), no en la muestra. Ejecutado (PP, última fecha 2026-09-11): h = 128.6 días con rejilla completa, 83.7 con los últimos 41 días, 120.7 con rejilla +90 días; estimación 31.907/err 0.668 frente a 31.938/0.821.",
+  "impact": "fit(max_fc=0) y fit(max_fc=10) devuelven valores distintos para la misma fecha; print_weights/plot_weights (rejilla sin max_fc) muestran pesos distintos de los usados en fit_forecast(max_fc=10); resultados no reproducibles entre llamadas.",
+  "fix": "Calcular la densidad piloto y G en los puntos muestrales t_i (Abramson clásico) y evaluar h en p por interpolación, o fijar G a partir de la muestra independientemente de p.",
+  "how_to_test": "est = LocalKernelEstimator(df['PP'], weights=w, **reg_params); comparar est.fit(rejilla_completa).loc[last] con est.fit(rejilla_corta).loc[last].",
+  "source": "forecaster",
+  "id": "F056",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "La densidad piloto no se normaliza en las iteraciones >= 2: el esquema deja de ser Abramson y el ancho de banda de frontera se infla con n_iter",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 474,
+  "evidence": "`kbws[n, :] = kbws[n - 1, :] * np.sqrt(gm / pdf)` con pdf ∝ h_p·f(p) (sin dividir por h_p), luego el punto fijo es h_p ∝ f_p^(-1/3). Ejecutado (PP): h en la última fecha = 71.0 (n_iter=0), 98.8 (1), 117.5 (2), 128.6 (3, defecto), 140.9 (10), 141.0 (30); la mediana apenas cambia (70.4 -> 69.6).",
+  "impact": "La fecha más relevante (última) usa una ventana ~2x la del interior; el 'promedio actual' es el más suavizado y el más rezagado ante cambios recientes.",
+  "fix": "Dividir f̃_p por h_p·sqrt(2π)·Σw en cada iteración; documentar que es un estimador balloon; considerar un tope h_p <= c·h0 en la frontera.",
+  "how_to_test": "Kernel(x, weights=w, bw='isj', n_iter=k).get_bw_adaptive(p=z)[-1] para k en 1..30; regresar log h_p sobre log f_p y comprobar que la pendiente tiende a -1/3.",
+  "source": "forecaster",
+  "id": "F057",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El error estándar HAC ignora la correlación intra-encuestadora (house effects) y subestima el IC",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 763,
+  "evidence": "HAC con 1 lag en orden de filas (varios sondeos el mismo día, huecos irregulares). fit() sólo usa df[name] y df.weight (forecaster.py:337-352); las columnas bias/bias_dev_adj no se restan. Ejecutado en la ventana de la última fecha (100 sondeos, 19 casas): SE modelo 0.668 < HC0 0.744 < HC1 0.760 < cluster por pollster_id 0.890 (0.914 con G/(G-1)); sd de residuos medios por casa 2.78 pp frente a sd residual 3.11.",
+  "impact": "IC ~35 % demasiado estrecho; el err que alimenta Simulator.build_forecast hereda la infraestimación.",
+  "fix": "Añadir cov_type='cluster' agrupando por pollster_id en get_robust_cov, o estimar y restar los efectos de casa antes del suavizado (modelo con δ_casa).",
+  "how_to_test": "Reproducir el sandwich agrupado: meat = Σ_casa (Σ_{i∈casa} ω_i x_i r_i)(...)ᵀ y comparar sqrt([1,p]V[1,p]ᵀ) con loc_est.predict(...)['err'].",
+  "source": "forecaster",
+  "id": "F058",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Con fillna=True el pronóstico y su error quedan congelados desde date_last+max_fc hasta la fecha electoral",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 400,
+  "evidence": "`self.forecast = self.forecast.fillna(method='ffill')` y `self.fc_stat = self.fc_stat.fillna(method='ffill')` (400-401). Ejecutado: fc_stat['PP']['err'] = 0.6756 el 2026-09-14 y el 2027-08-16; forecast idéntico; get_forecast() devuelve la fecha 2027-08-22. Simulator lee ese valor en limit_date (simulator.py:313-317).",
+  "impact": "La incertidumbre no crece con el horizonte (11 meses en el caso de prueba); el 'pronóstico electoral' es en realidad el promedio en date_last+max_fc.",
+  "fix": "Modelar la deriva con el horizonte (Var_h = err² + h·σ_ε², con σ_ε² estimado de los incrementos históricos del promedio) o documentar explícitamente que es un snapshot.",
+  "how_to_test": "fc.fit_forecast(names=['PP'], max_fc=3, fillna=True); comparar fc.fc_stat['PP'].loc['2026-09-14'] y .loc['2027-08-16'].",
+  "source": "forecaster",
+  "id": "F059",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "fit_forecast revienta si un bloque no tiene datos y build_series revienta si el primer partido de un bloque no aparece en los sondeos",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 391,
+  "evidence": "`if df.empty: return` (339-340) devuelve None y `dreg, dstat = self.fit(...)` (391) lanza TypeError (reproducido: 'cannot unpack non-iterable NoneType object'). bmap={'PP':'PP','X':['CUP']} -> KeyError 'CUP' en utils.py:59 (`parties[p['parties'][0]]`). El docstring (376) dice que se ignorarán.",
+  "impact": "Cualquier bmap con un partido sin sondeos en el período (partidos nuevos, regionales) impide ejecutar el modelo; mensaje de error no informativo.",
+  "fix": "En fit_forecast: `res = self.fit(...); if res is None: warn; continue`. En build_blocks: `parties.get(first, color_aleatorio)`.",
+  "how_to_test": "fc.series['ZZ']=np.nan; fc.forecast['ZZ']=np.nan; fc.fc_stat['ZZ']=None; fc.fit_forecast(names=['ZZ']) -> TypeError.",
+  "source": "forecaster",
+  "id": "F060",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "APIs de pandas deprecadas (fillna(method), applymap, groupby(axis=1)) y versiones de requirements no coincidentes con el entorno",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 400,
+  "evidence": "FutureWarning capturados durante fit_forecast: 'DataFrame.fillna with method is deprecated' y 'Downcasting object dtype arrays on .fillna'. applymap en 472 y 1046-1047; groupby(level=0, axis=1) en utils.py:99. requirements.txt fija numpy 1.25.2 / scipy 1.9.3 pero el intérprete usa numpy 2.4.4 / scipy 1.17.",
+  "impact": "Con pandas 3 el módulo deja de funcionar; resultados no reproducibles entre entornos.",
+  "fix": "`.ffill()`, `.map`, `df.T.groupby(level=0).sum(min_count=1).T`; fijar versiones probadas (o rangos) y añadir un test mínimo de humo.",
+  "how_to_test": "python -W error::FutureWarning -c 'fc.fit_forecast(fillna=True)'.",
+  "source": "forecaster",
+  "id": "F064",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "files/params.json (mapas de partidos y bloques) está ignorado por git: el módulo no es ejecutable desde un clon",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 107,
+  "evidence": "`self.event_params = json.loads(self.app.fs.read(f'{self.path}/params.json'))[self.scope][self.event_date]` (107-109); `git check-ignore -v files/params.json` -> .gitignore:2 files/. El notebook usa path='.' y no existe notebooks/params.json.",
+  "impact": "Bloqueo total de reproducibilidad para un repositorio científico: sin el fichero Forecaster.__init__ falla; depende del directorio de trabajo.",
+  "fix": "Versionar la configuración (config/params.json) y resolver la ruta relativa al paquete o por parámetro explícito; documentar el esquema.",
+  "how_to_test": "git clone + Forecaster('es','2027-08-22') -> FileNotFoundError.",
+  "source": "forecaster",
+  "id": "F065",
+  "sources": [
+   "forecaster"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "build_umat lanza KeyError si names no incluye todos los partidos del smap",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/lib/simulator.py",
+  "line": 560,
+  "evidence": "for key, rules in self.smap.items(): ... fc_k = frame.loc[key]['vpred']; fc_v = frame.loc[names]['vpred'].sum() — frame solo tiene filas de params['names'] (build_frame:512). run() llama a build_umat siempre (:649).",
+  "impact": "El parámetro names de run()/set_params es inutilizable con cualquier evento que tenga smap (todos los configurados); falla también con split=False.",
+  "fix": "Saltar reglas cuyo key o names no estén en params['names'] (o filtrar smap al construir) y avisar.",
+  "how_to_test": "sim.run(split=True, random=False, names=['PP','PSOE','VOX']) -> KeyError: 'UP' (reproducido en es/2027-08-22).",
+  "source": "simulator",
+  "id": "F077",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "La regla regions del smap compara códigos INE con nombres de provincia",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 574,
+  "evidence": "rix = [r == self.default_region or r in regions for r in prev_pcts.index] — prev_pcts.index son nombres ('Álava', 'Albacete'…, get_prev_results:261) mientras params.json 2019-04-28 usa regions ['3','13','46'] y ['34'].",
+  "impact": "COMPROMIS y NA+ quedan a 0 en todas las provincias en modo DH/MT (0 escaños; reales 1 y 2).",
+  "fix": "Mapear códigos<->nombres (files/es-provinces.csv) o indexar prev_results por region_id.",
+  "how_to_test": "Simulator('es','2019-04-28',drange=6).fit_forecast(max_fc=3,fillna=True); build_umat(build_frame())['vpred_pct'][['COMPROMIS','NA+']].notnull().sum() -> 1 (solo 'es'). Reproducido.",
+  "source": "simulator",
+  "id": "F078",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Partidos sin voto previo y sin regla smap aplicable reciben 0 escaños en DH/MT sin aviso",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 587,
+  "evidence": "fmul = fc_votes / prev_votes.loc['es'] con prev NaN -> vpred_pcts NaN -> d_pcts = ...fillna(0) en simulate:616.",
+  "impact": "Un partido con forecast alto pero sin equivalencia en la elección previa obtiene 0 votos en todas las provincias; error silencioso.",
+  "fix": "Lanzar excepción o warning si prev_pct_es[p] es NaN y vpred[p] > 0; ofrecer reparto por defecto (uniforme o por censo).",
+  "how_to_test": "En 2019-04-28, JxCat (forecast 1.31 %, regla agg con PDeCAT que no coincide con 2016) -> 0 escaños en DH (reales 7). Reproducido.",
+  "source": "simulator",
+  "id": "F079",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "No se aplica la barrera legal del 3 % provincial (art. 163.1.a LOREG)",
+  "kind": "stat",
+  "severity": "high",
+  "file": "mtpy/lib/simulator.py",
+  "line": 489,
+  "evidence": "alloc_dhondt reparte entre todos los partidos con votos; además la base es d_adj renormalizado a 100 entre partidos incluidos (:617), no votos válidos.",
+  "impact": "En Madrid (37) y Barcelona (32) partidos entre ~2 y 3 % de válidos pueden recibir escaños que la ley les niega; la base renormalizada impide aplicar el umbral correctamente.",
+  "fix": "Conservar 'otros' y voto en blanco en umat, calcular pct sobre válidos (la BD tiene pct sobre válidos y events_data.blank) y excluir < 3 % antes de D'Hondt.",
+  "how_to_test": "Simulator.alloc_dhondt({'A':60,'B':37,'C':2.9}, 37) da 1 escaño a C. En MT, contar simulaciones con vpred_pct < 3 en Madrid y escaño > 0.",
+  "source": "simulator",
+  "id": "F080",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "totals() reparte escaños por ciclos a partidos con mediana 0 y fuerza la suma de medianas a 350",
+  "kind": "stat",
+  "severity": "high",
+  "file": "mtpy/lib/simulator.py",
+  "line": 412,
+  "evidence": "cycles = int(diff // len(idx_sorted)); if cycles > 0: ds += cycles — con diff > n_partidos todos reciben +1. LS: suma bruta 326 -> UP 0->2, SALF 0->1, UPN 0->1; MC: SALF 0->1, UP 0->1.",
+  "impact": "Las cifras publicadas en los gráficos incluyen escaños inventados para partidos con 0; el vector de medianas marginales no es un escenario y forzarlo a 350 no tiene base probabilística.",
+  "fix": "Para DH/MT publicar media (suma 350 en esperanza) o la simulación más cercana a la mediana; si se mantiene el ajuste, restos mayores puro y nunca añadir a partidos con 0.",
+  "how_to_test": "sim.run(split=False, random=False); sim.results.sum() (326) vs sim.totals().sum() (350) y comparar sim.result().loc['es'] con sim.totals().",
+  "source": "simulator",
+  "id": "F081",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Estimador de escaños (LS/MC) lineal, entrenado solo con seats>0 y sin restricción a 350",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1635,
+  "evidence": "df[(df.pct >= 0.1) & (df.seats > 0)] y LeastSquaresEstimator(x=df[['pct','regional']]); coeficientes obtenidos (-16.80, 4.48, 15.59); clip(0) en simulator.py:629.",
+  "impact": "Predice negativos para nacionales < 3.75 %, +15.6 de intercepto a todo regional; MC dist().sum(axis=1) media 328, rango 291-358 -> IC por partido incluyen escenarios imposibles.",
+  "fix": "Documentar LS/MC como línea base didáctica; incluir ceros, añadir término no lineal (pct^2 o log) o renormalizar a 350 por simulación.",
+  "how_to_test": "sim.v2seats.predict(np.array([[0.5,0],[1,1],[33,0]])) -> [-14.6, -1.2, 131]; sim.run(split=False, random=True, n_sim=30); sim.dist().sum(axis=1).describe().",
+  "source": "simulator",
+  "id": "F082",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Errores por partido independientes, sin restricción de suma ni correlación entre partidos",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 537,
+  "evidence": "df.loc[vind,'pct'] + df.loc[vind,'std_err'] * self.rng.standard_t(df.loc[vind,'nobs'] - 2) — un sorteo independiente por partido; el bloque '-' no se usa. Sum vpred: media 94.6, sd 4.3, rango 84-102.",
+  "impact": "Las correlaciones negativas dentro de bloque (PP/VOX, PSOE/SUMAR) que determinan mayorías no se modelan; en LS/MC no hay corrección alguna; en DH/MT la renormalización provincial absorbe el exceso pero no la estructura de covarianza.",
+  "fix": "Muestrear composiciones (Dirichlet o normal multivariante sobre logits con Sigma estimada de errores históricos conjuntos; el Computer ya calcula error_blocks).",
+  "how_to_test": "np.corrcoef(sim.frames[:, idx_PP, 9], sim.frames[:, idx_VOX, 9]) ~ 0 con n_sim=1000.",
+  "source": "simulator",
+  "id": "F083",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Sin componente provincial aleatoria: el swing es determinista dado el sorteo nacional",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 588,
+  "evidence": "vpred_pcts = prev_pcts.mul(fmul) — toda la varianza provincial proviene de 13 números nacionales; para regionales E|e| ≈ 0.12-0.18 (coef regional -1.19).",
+  "impact": "Distribuciones de escaños demasiado estrechas y sin sorpresas locales (MT sd ERC 1.5, EHB 0.7, PNV 1.3 escaños).",
+  "fix": "Añadir ruido provincial eps[r,p] con varianza de los residuos históricos del swing proporcional (14 elecciones con datos provinciales) o modelar el error regional sobre el porcentaje en su comunidad.",
+  "how_to_test": "sim.units[:, r, p, 1] / sim.frames[:, p, 9] es constante entre simulaciones para toda provincia r.",
+  "source": "simulator",
+  "id": "F084",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "weeks se fija en 1 aunque el último sondeo sea muy anterior a la elección",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 509,
+  "evidence": "weeks = (self.model.drange[0] + 1) // 7 (también :311). Último sondeo 2026-09-11, evento 2027-08-22 (49 semanas), forecast arrastrado con fillna.",
+  "impact": "El error se evalúa como a 1 semana de la elección; infravalora la incertidumbre cuando los sondeos son antiguos (beta3 = 0.013/semana). Supuesto no documentado.",
+  "fix": "weeks = (event_date - date_last)//7 o parámetro explícito as_of documentado como 'si la elección fuera hoy'.",
+  "how_to_test": "sim.v2err.predict(np.array([[32,0,1],[32,0,49]])) y comparar.",
+  "source": "simulator",
+  "id": "F085",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "standard_t(nobs-2) puede fallar (df<=0), dar NaN o degenerar en Cauchy",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 537,
+  "evidence": "self.rng.standard_t(df.loc[vind, 'nobs'] - 2): numpy lanza ValueError df <= 0 si nobs <= 2; NaN si nobs NaN; con nobs=3 df=1 (Cauchy, varianza infinita). nobs es un recuento de sondeos con peso >= 0.01, no neff.",
+  "impact": "Fallo o sorteos extremos con partidos poco sondeados o drange amplios; en la config actual nobs 73-104, así que no se manifiesta.",
+  "fix": "df = max(neff - 2, 3) (neff está en fc_stat) o normal si df grande; fillna explícito de nobs.",
+  "how_to_test": "np.random.default_rng(0).standard_t(np.array([5.,0.])) -> ValueError (comprobado); inspeccionar sim.forecast['nobs'].min() con drange=(6,20) o un partido con pocos sondeos.",
+  "source": "simulator",
+  "id": "F087",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Reproducibilidad: seed=None por defecto, np.random.seed del notebook inefectivo, datos y params.json fuera del repo",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 228,
+  "evidence": "self.rng = np.random.default_rng(self.seed) con seed=None por defecto (:39); el notebook hace np.random.seed(SEED) que no afecta a default_rng; files/params.json y los datos están en .gitignore.",
+  "impact": "Sin semilla explícita nada es reproducible; un tercero no puede reproducir forecast ni simulación aunque tenga el código.",
+  "fix": "Exigir semilla, registrar semilla/versión de datos/parámetros en sim.csv; versionar params.json y un volcado CSV de sondeos y resultados.",
+  "how_to_test": "Dos Simulator(seed=None).run(random=True) dan resultados distintos; con seed=42 np.array_equal es True (comprobado); git check-ignore files/params.json.",
+  "source": "simulator",
+  "id": "F088",
+  "sources": [
+   "simulator"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Ancho de banda truncado al asignar un float sobre un array de cadenas (np.repeat de 'isj'/'scott')",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 285,
+  "evidence": "self.bw = np.repeat(self.bw, self.kvar) crea dtype '<U3' para 'isj'; luego self.bw[i] = self.get_bw_fixed(...) (l. 289) convierte el float a cadena truncada a 3 caracteres antes de np.array(self.bw, dtype=np.float64) (l. 291). Verificado: Kernel(x, bw='isj').bw=[0.8] vs 0.816132 exacto; datos reales del Forecaster (PP): ISJ 71.0 vs 71.6196 días, Scott 109.6 vs 109.6024. La salida en notebooks/lab/PollsOptimize.ipynb:756-758 ({'scott': 109.6, 'isj': 71.0}) muestra la huella del bug.",
+  "impact": "Pérdida silenciosa de precisión en el ancho de banda con la configuración por defecto del Forecaster y Computer (bw='isj'); el truncado depende de la longitud del nombre del método (3, 5 o 9 caracteres) y del orden de magnitud del bw.",
+  "fix": "self.bw = [self.bw] * self.kvar (lista) o np.empty(self.kvar, dtype=float) rellenado en el bucle; añadir test de igualdad con get_bw_isj directo.",
+  "how_to_test": "Kernel(x, bw='isj', bw_type='fixed').bw vs Kernel(x, bw=['isj']).bw y Kernel.get_bw_isj(x, np.ones(n)); comprobar que difieren.",
+  "source": "stat",
+  "id": "F094",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "conf/conf_mean con alpha>=1 (múltiplos de sigma) usan erf(n/√2) como cuantil",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 183,
+  "evidence": "q = erf(alpha / np.sqrt(2)) (l. 184 y 204) y luego self.ppf(q) * self.std(). erf(n/√2)=P(|Z|<n) es la cobertura bilateral, no 1-α/2. Verificado: conf(1)/std=0.475, conf(2)/std=1.69, conf(3)/std=2.78.",
+  "impact": "Intervalos ±nσ incorrectos si alguien usa la API con múltiplos de sigma. Latente: no hay call sites con alpha>=1 en mtpy/lib (dataviz.py:2156 usa ci_alpha<1) y winsorize usa dev() para n_dev>=1.",
+  "fix": "q = 0.5 * (1 + erf(alpha / np.sqrt(2))) o directamente return alpha * self.std() cuando dist='norm'.",
+  "how_to_test": "assert np.isclose(Stat(x).conf(2), 2*Stat(x).std())",
+  "source": "stat",
+  "id": "F095",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "KernelDensityEstimator.process_outliers: 'remove' lanza IndexError y 'group' no tiene efecto",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 1071,
+  "evidence": "vind = x_samp.vind tras Stat(..., outliers='remove'), pero Stat.winsorize llama a set_params (l. 134) que reasigna self.vind = ~np.isnan(self.data) sobre los datos ya reducidos (l. 103); x[vind] falla ('size of axis is 202 but boolean axis is 200', verificado). Con 'group' el código toma x (original) en vez de x_samp.data, así que los datos winsorizados se descartan (data.max()=40 tras 'group', verificado).",
+  "impact": "Dos de los tres modos de outliers del KDE están rotos; plot_kde/plot_dist con outliers!='keep' fallan o no hacen nada.",
+  "fix": "Que winsorize('remove') conserve una máscara sobre los datos originales (p.ej. self.mask) y que process_outliers use x_samp.data/x_samp.weights en lugar de reindexar x.",
+  "how_to_test": "KernelDensityEstimator(np.r_[np.random.normal(size=200), 30, 40], outliers='remove', n_dev=3) → IndexError; con 'group', .data.max() sigue siendo 40.",
+  "source": "stat",
+  "id": "F096",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Stat.winsorize('group') sustituye los outliers bajos por el máximo interior",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 131,
+  "evidence": "self.data = np.where(x_in, self.data, np.max(self.data[x_in])): ambas colas van a max. Verificado: [-100,10,11,12,13,12,11,10,200] con n_dev=1 → [13,10,11,12,13,12,11,10,13].",
+  "impact": "Winsorización incorrecta por abajo. Se usa en computer.py:564 sobre tamaños muestrales (outliers='group', n_dev=3, datos en [0,5000]); latente porque μ-3σ suele ser negativo, pero aparecería con n_dev pequeño o distribuciones estrechas.",
+  "fix": "np.clip(self.data, vmin, vmax) (winsorización clásica).",
+  "how_to_test": "Stat(np.array([-100.,10,11,12,13,200]), outliers='group', n_dev=1).data[0] debería ser vmin, no 13.",
+  "source": "stat",
+  "id": "F097",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Las bandas cmin/cmax/err son intervalos de confianza de la media, no intervalos de predicción, pese a la documentación",
+  "kind": "docs",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 833,
+  "evidence": "self.perr = sqrt(einsum('ij,jk,ik->i', pred, mcov, pred)) y cint = t.ppf(1-α/2, dof)*perr; no se suma scale. El comentario en l. 688 dice 'self.cint = None  # Prediction intervals' y Forecaster.fit (forecaster.py:331-334) habla del 'standard error and confidence interval of the forecast'. Verificado: perr=0.31 ≈ se_mean de statsmodels (0.285) frente a se_obs=2.43.",
+  "impact": "Riesgo de interpretar las bandas del promedio de encuestas como intervalos del resultado. El Simulator combina err² con pct_err² (simulator.py:530), lo cual es coherente solo si se documenta como 'incertidumbre del promedio + error sistemático histórico'.",
+  "fix": "Renombrar (ci_mean) y documentar; opcionalmente añadir un modo prediction=True que use sqrt(perr² + scale).",
+  "how_to_test": "Comparar predict(p, alpha).err con sm.WLS(...).get_prediction(P).se_mean y se_obs.",
+  "source": "stat",
+  "id": "F098",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El ancho de banda de la regresión se elige con reglas de densidad (ISJ/Scott/Silverman) sobre las fechas de las encuestas",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 899,
+  "evidence": "get_kernel() construye Kernel(data=self.exog, weights, bw=self.bw) y get_bw_isj/scott/silverman solo miran la distribución de x (fechas), nunca y. Con datos reales (PP, 306 encuestas) el piloto ISJ es 71.6 días y el adaptativo 61-130 días (mediana 70).",
+  "impact": "El suavizado no está optimizado para E[y|x]: con h≈70 días el kernel gaussiano promedia encuestas de ±4-7 meses (umbral 1e-2 ⇒ ±212 días). Es la decisión con más impacto en la predicción y no está justificada ni evaluada en el código.",
+  "fix": "Seleccionar h por validación cruzada leave-one-out/GCV o AICc sobre los residuos de y (con pesos), o al menos documentar y exponer h como hiperparámetro calibrado en notebooks/lab/PollsOptimize.",
+  "how_to_test": "Barrer h en [7..120] días en Forecaster.fit y medir el error LOO ponderado frente a los resultados electorales de eventos pasados (Computer.compute_errors).",
+  "source": "stat",
+  "id": "F099",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "ISJ con n<=50 cae siempre y silenciosamente al fallback 2π·spacing",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 335,
+  "evidence": "n = max(min(1050, n), 50); rb = 0.01 * (n - 50) / 1000 → rb=0 para n<=50; brentq(fn, 0, 0) lanza ValueError, rb*=2 sigue en 0, tras maxiter devuelve bw=0 → get_bw_isj devuelve min_bw (l. 397). KDEpy usa 10e-12 + 0.01(n-50)/1000. Verificado: n=20,40,50,51 devuelven exactamente 2π·mean(diff(sort(x))).",
+  "impact": "Series cortas (partidos nuevos, eventos con pocas encuestas, ventanas locales) usan una heurística no documentada en lugar de ISJ, sin aviso.",
+  "fix": "rb = 1e-11 + 0.01*(n-50)/1000; avisar (warnings.warn) al usar el fallback; documentar min_bw.",
+  "how_to_test": "Kernel.get_bw_isj(np.random.normal(size=40), np.ones(40)) == 2π·mean(diff(sort(x))).",
+  "source": "stat",
+  "id": "F100",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "ISJ no es invariante a la escala de los pesos y mezcla el rango del histograma con x_range",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 373,
+  "evidence": "grid, _ = np.histogram(x, ..., weights=weights); grid /= x.shape[0] (l. 374): con pesos normalizados a neff el histograma suma neff/n<1 y el punto fijo depende de esa escala. Verificado: get_bw_isj(x,w)=0.664, (x,2w)=0.366, (x,w·n/Σw)=0.772, sin pesos 0.816. Además bw = sqrt(opt_t) * x_range (l. 398) mientras t* está en unidades del rango del histograma [min-σ/2, max+σ/2] (Botev usa el rango extendido; ratio 0.86 en el test).",
+  "impact": "El ancho ISJ ponderado del Forecaster está sesgado respecto al algoritmo de Botev y cambia si se reescalan los pesos.",
+  "fix": "grid /= grid.sum(); usar R = r_max - r_min en bw = sqrt(t*)·R; N = número de valores únicos; considerar 2^10 bins con linear binning.",
+  "how_to_test": "assert np.isclose(get_bw_isj(x, w), get_bw_isj(x, 3*w)); comparar con KDEpy.bw_selection.improved_sheather_jones.",
+  "source": "stat",
+  "id": "F101",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El KDE no integra a 1 (kernel sin constante, pesos que suman neff, 2-D sin 2π·h1·h2)",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 1135,
+  "evidence": "result / (self.nobs * kernel.bw) en 1-D y / self.nobs en 2-D, con kernel_gaussian = exp(-d²/(2h²)) sin 1/(√(2π)h). Verificado: integral 1-D = 2.487 (≈√(2π)·neff/n), ponderada 2.23; integral 2-D = 0.585 ≈ 2π·h1·h2 (0.592).",
+  "impact": "Para una librería divulgativa 'KernelDensityEstimator' devuelve algo proporcional a la densidad, no una densidad; ridge_share en dataviz compara alturas sin normalizar. Con bw adaptativo además se divide por el h fijo.",
+  "fix": "f = Σ w_i K_h(p-x_i) / (Σw · (2π)^{d/2} · Π h_j), con h por punto si es adaptativo.",
+  "how_to_test": "np.trapezoid(KernelDensityEstimator(x).fit(grid).values, grid) ≈ 1; comparar con scipy.stats.gaussian_kde(x, bw_method=h/σ).",
+  "source": "stat",
+  "id": "F102",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Una ventana local con neff<=2 aborta toda la predicción del LocalKernelEstimator",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 920,
+  "evidence": "get_local_estimator construye LeastSquaresEstimator(...) sin capturar el ValueError('Degrees of freedom must be greater than zero.') de build_input (l. 737-738); solo protege el caso 'todo NaN' (l. 917). Verificado: LocalKernelEstimator(np.array([0.,10.,20.]), ..., bw=1.0).fit([10.]) y una predicción a 240 días con bw fijo lanzan ValueError.",
+  "impact": "Fallo completo de Forecaster.fit si algún día de predicción (inicio de serie, max_fc lejos de la última encuesta, bw pequeño) tiene menos de ~3 encuestas efectivas con ω>=1e-2.",
+  "fix": "Capturar la excepción (o comprobar neff local antes) y dejar NaN en esa fila; opcionalmente degradar a poly_deg=0.",
+  "how_to_test": "LocalKernelEstimator(x3, y3, bw=1.0, bw_type='fixed').fit(np.array([10.]), alpha=0.05).",
+  "source": "stat",
+  "id": "F103",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "predict()/r2_score sin puntos de predicción fallan con índice temporal y r2_score sobrescribe result",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 620,
+  "evidence": "Estimator.build_pred(None) copia self.exog (ya deltas float) y aplica ts_to_delta a cada columna is_ts → ValueError('Input of type ndarray is not a valid time series') (verificado en LeastSquaresEstimator.predict() y LocalKernelEstimator.r2_score). LocalKernelEstimator.r2_score (l. 891) llama a self.predict() y self.result pasa de 2 a 50 filas (verificado).",
+  "impact": "El R² de la regresión local no es calculable sobre los datos del modelo; si se calcula sobre datos numéricos destruye el resultado previo.",
+  "fix": "Guardar el exog original (fechas) para p=None o marcar que ya está en deltas; que r2_score no toque self.result (usar una variable local).",
+  "how_to_test": "LeastSquaresEstimator(pd.Series(y, index=fechas)).fit().predict().",
+  "source": "stat",
+  "id": "F104",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "LeastSquaresEstimator.r2_score usa la media de √w·y como centro",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 785,
+  "evidence": "y = self.wendog.squeeze(); y_bar = np.mean(y); sst = Σ(y - y_bar)². El R² ponderado correcto es 1 - Σwe²/Σw(y-ȳ_w)² con ȳ_w=Σwy/Σw. Verificado: 0.445 frente a 0.211 de sm.WLS(...).fit().rsquared.",
+  "impact": "R² inflado en la leyenda de plot_scatter (dataviz.py:2718) y en cualquier reporte.",
+  "fix": "y_bar = np.average(endog, weights=weights); sst = Σ w (y - y_bar)².",
+  "how_to_test": "Comparar est.r2_score con statsmodels WLS rsquared sobre datos con pesos heterogéneos.",
+  "source": "stat",
+  "id": "F105",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Ancho adaptativo: piloto sin normalizar por h en iteraciones >1, gmean sobre puntos de predicción y h=0/nan cuando pdf=0",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 470,
+  "evidence": "pdf = np.sum(kernel_gaussian(x, p, kbw) * weights, axis=1) con kbw variable por punto y sin dividir por kbw; kbws[n] = kbws[n-1]*sqrt(gmean(pdf)/pdf) (l. 473). Verificado: con datos reales las iteraciones no convergen (RMS 6.2, 3.9, 2.4 días); con p lejos de los datos se obtienen bw 0 y nan.",
+  "impact": "El esquema iterado (n_iter=3 en el modelo) no corresponde al estimador de Abramson ni a un pilot estimator consistente; el resultado depende del número de iteraciones de forma no interpretable.",
+  "fix": "Dividir el piloto por h(p) (o usar el piloto fijo una sola vez, n_iter=1), calcular gmean sobre la muestra (estimador sample-point) y acotar h con un mínimo; documentar que es un estimador 'balloon'.",
+  "how_to_test": "Kernel(x, bw=0.3, bw_type='adaptive').get_bw_adaptive(p=[0, 5, 50]) → [0, 0, nan].",
+  "source": "stat",
+  "id": "F106",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Stat.quantile indexa mal con NaN presentes y usa neff como longitud",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 162,
+  "evidence": "sind = np.argsort(self.data[self.vind]); values = self.data[sind]; cweights = np.cumsum(self.weights[sind]) aplican los índices del subconjunto válido al array completo. Verificado: Stat([nan,1,2,3,100,nan,5]).median() = nan (con dropna=True, 3.0). La guarda 'i < self.neff - 1' (l. 169) compara un índice entero con el neff (float).",
+  "impact": "Cuantiles incorrectos si hay NaN y dropna=False (por defecto); con pesos muy desiguales la regla de promediado se desactiva arbitrariamente.",
+  "fix": "valid = self.data[self.vind]; w = self.weights[self.vind]; sind = argsort(valid); usar len(valid)-1 en la guarda; proteger i==len con clip.",
+  "how_to_test": "Stat(np.array([np.nan,1.,2.,3.,100.,np.nan,5.])).median() debería ser 3.",
+  "source": "stat",
+  "id": "F107",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "@pstatic: los argumentos posicionales del método se envían al constructor",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 46,
+  "evidence": "cls_kwargs = {cls_params[i]: arg for i, arg in enumerate(args) ...}; attr_kwargs solo toma kwargs. Verificado: Stat.quantile(x, 0.5) → IndexError (0.5 se interpreta como weights); Stat.quantile(x, q=0.5) funciona.",
+  "impact": "API sorprendente y difícil de documentar en un repositorio divulgativo; errores crípticos.",
+  "fix": "Sustituir la metaclase por funciones de módulo explícitas (wmean, wvar, wquantile, ...) o por classmethods con firma explícita.",
+  "how_to_test": "Stat.quantile(np.arange(8.), 0.5).",
+  "source": "stat",
+  "id": "F108",
+  "sources": [
+   "stat"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "El contexto exit/wban detectado por el loader nunca llega a la columna ctype",
+  "kind": "bug",
+  "severity": "high",
+  "file": "mtpy/lib/loader.py",
+  "line": 519,
+  "evidence": "read_rows guarda `cols['context'] = context` (l. 519) pero Polls.meta define `ctype` (models/elections.py:128); helpers.format_data (l. 85-89) reindexa a meta y descarta 'context'. Dry-run 2023: 13 filas con context='wban' en loader.data y loader.polls.ctype.notna().sum() == 0. En BD la serie 2027 tiene 0 ctype.",
+  "impact": "Computer usa drop_ctypes=['wban','exit'] por defecto; las encuestas de veda y a pie de urna cargadas con el loader actual no se excluyen. Los 84 ctype existentes proceden de otra vía.",
+  "fix": "Renombrar la clave a 'ctype' en read_rows (o mapear context→ctype en build_series) y añadir un test con una fila de fondo #FFEAEA.",
+  "how_to_test": "WikipediaLoader('es','2023-07-23',years=['2023'],path='.').read_data().build_series(); comparar pd.Series([d.get('context') for d in loader.data]).value_counts() con loader.polls['ctype'].notna().sum().",
+  "source": "data",
+  "id": "F118",
+  "sources": [
+   "data"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Scraping de Wikipedia en vivo sin snapshot ni revisión: dataset no reproducible",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": "mtpy/lib/loader.py",
+  "line": 562,
+  "evidence": "requests.get(url) (l. 566) sobre la página actual; no se guarda HTML ni oldid; dedup por clave (l. 598) y filtrado de encuestadores desconocidos (l. 400) dependen del estado de la página y de la BD en ese momento.",
+  "impact": "Dos ejecuciones dan datasets distintos; no es posible citar la fuente exacta ni auditar cambios de Wikipedia.",
+  "fix": "Archivar el HTML crudo con el oldid (o usar ?oldid= en la URL), guardar source_url/source_revision/retrieved_at por encuesta y permitir read_data desde fichero.",
+  "how_to_test": "Ejecutar read_data() dos veces separadas por días y comparar len(loader.data) y las claves.",
+  "source": "data",
+  "id": "F119",
+  "sources": [
+   "data"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "files/ ignorado por git: configuración y datos de entrada no versionados",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": ".gitignore",
+  "line": 2,
+  "evidence": "`files/` en .gitignore; params.json, wikipedia/wp-urls.json, wp-maps.json, es-provinces.csv, es-regions.csv, infoelectoral/es/*.{xlsx,json} solo existen localmente (git ls-files no los lista).",
+  "impact": "El repositorio publicado no contiene ni los parámetros de los eventos ni los mapas de candidaturas/encuestadores; nadie puede reproducir el modelo.",
+  "fix": "Mover configuración y datos de entrada a data/ o config/ versionados; dejar en .gitignore solo salidas (fc/, img/, stage/).",
+  "how_to_test": "git check-ignore -v files/params.json",
+  "source": "data",
+  "id": "F120",
+  "sources": [
+   "data"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Sin DDL, volcado ni seeds de la BD: catálogos y curaciones solo existen en la PostgreSQL del autor",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": "mtpy/models/elections.py",
+  "line": 1,
+  "evidence": "Las 13 clases definen meta pero no hay script de creación ni datos semilla; pg_constraint muestra solo PK/NOT NULL; parties (515), pollsters (95, con quality manual), sponsors (81), events (17, con featured y placeholder 2027), provinces (52) y events_data de 2027 (copia manual de 2023) no están en el repo.",
+  "impact": "Imposible ejecutar Computer/Forecaster/Simulator sin la BD del autor.",
+  "fix": "Exportar esquema (pg_dump --schema-only -n elections) y CSV por tabla con datapackage.json; proveer un SQLite construido por script.",
+  "how_to_test": "Clonar el repo en una máquina limpia e intentar mtpy.run() + Computer('es').build_series().",
+  "source": "data",
+  "id": "F121",
+  "sources": [
+   "data"
+  ],
+  "status": "UNVERIFIED",
+  "votes": [],
+  "_bucket": "unverified"
+ },
+ {
+  "title": "Los decaimientos del rating reducen el conjunto efectivo al 15 % de las encuestas",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1123,
+  "evidence": "w = over·sample·0.5^pos·0.7^weeks·0.9^years y `df = df[df['weight'] >= 1e-2]`.",
+  "impact": "343 de 2238 encuestas filtradas sobreviven (99,5 % del peso): solo seq_pos≤4 y weeks≤11; 15 de 68 casas quedan sin encuestas y su rating es solo el prior. Defendible (538 usa 21 días) pero no documentado ni calibrado.",
+  "fix": "Documentar el efecto y justificar los decaimientos con una calibración (PollstersOptimize), o relajar pos_decay.",
+  "how_to_test": "Recalcular w sin redondeo sobre comp.filter_polls() y contar (w>=1e-2).sum() → 342/2238; el redondeo no es la causa.",
+  "source": "computer-weights",
+  "id": "F007",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "weeks es relativo a la última encuesta del evento y el +1 acorta la semana 0",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1219,
+  "evidence": "`df['weeks'] = ((df['days'] - df['event_dlimits'] + 1) // 7).clip(0)` con event_dlimits = min(days) por evento (6-11 días).",
+  "impact": "La semana 0 dura 6 días y su origen cambia entre eventos, así que weight_week no es comparable entre elecciones.",
+  "fix": "weeks = (days − dmin_e)//7, o mejor semanas absolutas hasta la elección.",
+  "how_to_test": "((np.arange(6,20) - 6 + 1)//7) → seis ceros seguidos de siete unos.",
+  "source": "computer-weights",
+  "id": "F008",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "weight_year usa el año natural y el último evento del historial como referencia",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1225,
+  "evidence": "`df['years'] = df['event_year'].max() - df['event_year']`; `weight_year = year_decay ** years`.",
+  "impact": "2019-04 y 2019-11 reciben el mismo peso; 2015-12 y 2016-06 difieren un 10 %; para el rating de 2027 las encuestas de 2023 pesan 1.0 en vez de 0.9^4.",
+  "fix": "Decaer por número de elecciones transcurridas o por días hasta el evento objetivo.",
+  "how_to_test": "comp.print_rating_weights() y revisar la columna weight_year por evento.",
+  "source": "computer-weights",
+  "id": "F009",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Empates de campo entre sponsors se resuelven por un argsort no estable",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1301,
+  "evidence": "`sind = np.argsort(x[:, 1])` (quicksort) y el grupo de apply_agg_func no incluye sponsor_id; con (start,end) idénticos el que queda a 0 depende del orden interno.",
+  "impact": "3 casos en la BD (Metra Seis 1977, Celeste Tel 2011, Data10 2027 Okdiario/OKDiario). Resultado determinista pero arbitrario y sensible a cambios de numpy.",
+  "fix": "np.argsort(..., kind='stable') y regla explícita para empates exactos (promediar o conservar la última por date/sponsor).",
+  "how_to_test": "polls.groupby(['event_date','pollster_id','start_date','end_date']).size()>1 y ver weight_over de cada fila.",
+  "source": "computer-weights",
+  "id": "F010",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Docstrings que no describen el código",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 56,
+  "evidence": "Docstring de clase: peso por 'proximity to election date' (no existe en compute_weights); compute_ratings (857-899) describe prior_weight, dev_reverted y escala [5-95] que pollster_ratings (1166-1176) no implementa; pos/week/year_decay solo 'Position decay'; ratings_margin y alpha no se usan en el módulo; el docstring de compute_weights omite que solo msizes_all excluye drop_mtypes (551-556).",
+  "impact": "Documentación engañosa para un repositorio científico.",
+  "fix": "Reescribir docstrings a partir de las fórmulas reconstruidas en el informe.",
+  "how_to_test": "Lectura comparada de computer.py:56-59 y 857-899 frente a 539-611 y 1147-1181.",
+  "source": "computer-weights",
+  "id": "F011",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "El tope de proc_sample es un estadístico de toda la población 1977-2027",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 567,
+  "evidence": "Stat(clip(x,0,5000), outliers='group', n_dev=3) sobre todas las encuestas: μ=1662.8, σ=1054.7, μ+3σ=4826.9 → tope efectivo 4715 (max en rango), 192 encuestas en el tope.",
+  "impact": "ol_max=5000 nunca es el tope real; cada carga de encuestas cambia los pesos de las antiguas al recalcular con overwrite=True.",
+  "fix": "Tope fijo (ol_max) o winsorización por evento/época, documentando el valor.",
+  "how_to_test": "Comparar df.proc_sample.max() antes y después de añadir encuestas ficticias con sample_size grande.",
+  "source": "computer-weights",
+  "id": "F012",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "proc_sample falla si no queda ninguna muestra imputable",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 567,
+  "evidence": "Stat(..., dropna=True).data tiene menos filas que df si msizes_all es NaN; `.round().astype(int)` y la asignación fallan.",
+  "impact": "Solo en cargas nuevas sin ningún sample_size (evento nuevo con todas las muestras desconocidas).",
+  "fix": "fillna con un valor por defecto documentado y no usar dropna.",
+  "how_to_test": "Ejecutar compute_weights sobre un Computer con event_dates de un evento sin sample_size.",
+  "source": "computer-weights",
+  "id": "F013",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Serie ancha (3842×511) y bucles fila a fila",
+  "kind": "performance",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 577,
+  "evidence": "`df.apply(lambda x: np.sqrt(x['proc_sample'] / sample_medians.loc[x['event_date']]), axis=1)` y `df.apply(lambda dr: (...), axis=1)` (585-588); poll_overweights O(n²) por grupo; 488 columnas de partidos casi vacías.",
+  "impact": "Aceptable hoy (segundos), pero costoso de mantener y explicar; formato largo sería más natural para un repositorio público.",
+  "fix": "np.sqrt(df.proc_sample / df.event_date.map(sample_medians)); vectorizar wrange; almacenar resultados en formato largo.",
+  "how_to_test": "%timeit compute_weights(overwrite=True) antes/después.",
+  "source": "computer-weights",
+  "id": "F014",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Dependencia de ficheros no versionados y del cwd",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 66,
+  "evidence": "get_event_params lee `f'{path}/params.json'` vía App.fs (relativo a files/); files/params.json está en .gitignore; Computer.path por defecto es os.getcwd().",
+  "impact": "Sin params.json y sin la BD PostgreSQL nada es reproducible por terceros.",
+  "fix": "Versionar params.json y publicar un volcado CSV/Parquet de polls, polls_results, events_*, pollsters.",
+  "how_to_test": "git check-ignore files/params.json; clonar el repo en limpio e instanciar Computer.",
+  "source": "computer-weights",
+  "id": "F015",
+  "sources": [
+   "computer-weights"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Parámetro ratings_margin nunca usado",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 128,
+  "evidence": "self.ratings_margin = ratings_margin — única referencia además de la firma (línea 49) y la docstring (100); grep en mtpy/lib no encuentra otro uso.",
+  "impact": "Parámetro documentado ('margin around [0,1]') sin efecto; resto del escalado [5-95] descrito en la docstring.",
+  "fix": "Eliminarlo o implementar el escalado que describe.",
+  "how_to_test": "grep -n ratings_margin mtpy/lib/*.py",
+  "source": "computer-ratings",
+  "id": "F020",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "weight_rating normalizado por la media de rating de todas las encuestadoras registradas (incl. inactivas)",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1186,
+  "evidence": "dr['weight_rating'] = np.log1p(dr['rating']) / np.log1p(dr['rating'].mean()) — la media incluye ~50 encuestadoras con 0 sondeos y quality 0.05 (media 0.22 en BD; 0.39 con sólo dos eventos).",
+  "impact": "Dar de alta una encuestadora en la tabla cambia todos los pesos del Forecaster; la escala de weight_rating no es interpretable.",
+  "fix": "Normalizar sobre las encuestadoras con sondeos en la ventana o sobre la media ponderada por num_polls_w.",
+  "how_to_test": "Comparar dr['rating'].mean() con dr.loc[dr.num_polls_w>0,'rating'].mean() en la última fecha de ratings.",
+  "source": "computer-ratings",
+  "id": "F025",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Nomenclatura invertida: bias_* son errores absolutos, error_blocks es el sesgo con signo; 'bias' es cambio porcentual de odds",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 721,
+  "evidence": "error_blocks = errors_gap_vs['error','gap'] (con signo) frente a bias_avg/bias_blocks = Stat(x['error'].dropna().abs(), ...).mean() (absolutos); lor_to_bias = (exp(x)−1)·100.",
+  "impact": "Confunde al lector: en la literatura (538) 'bias' es con signo y 'error' absoluto.",
+  "fix": "Renombrar (abs_lor_error, gap_bias, odds_change) o documentar explícitamente la convención.",
+  "how_to_test": "Lectura de 717-741 y 1233-1273.",
+  "source": "computer-ratings",
+  "id": "F027",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "error_weights sólo se aplica a bias (no a error_avg/error_blocks)",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 736,
+  "evidence": "bias_weights = pd.Series(self.error_weights).add_prefix('bias_'); dp['bias'] = dp[bias_weights.index].apply(...)",
+  "impact": "La docstring ('Weights for our custom error metric') sugiere una métrica de error combinada que no existe.",
+  "fix": "Renombrar a bias_weights o documentar.",
+  "how_to_test": "grep error_weights mtpy/lib/computer.py",
+  "source": "computer-ratings",
+  "id": "F028",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Transformación no lineal y redondeo de una desviación típica (bias_dev_err)",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 836,
+  "evidence": "df = df[columns].sort_index().apply(self.lor_to_bias).round(2) — se aplica (exp(σ)−1)·100 y redondeo a 2 decimales a bias_dev_err (≈0.65 %), y en compute_ratings (920-927) se revierte con bias_to_lor.",
+  "impact": "La σ recuperada no es la original (error relativo ~1 %); conceptualmente una σ no se transforma con la función del parámetro.",
+  "fix": "Persistir bias_dev_adj/bias_dev_err en LOR sin redondeo.",
+  "how_to_test": "Comparar bias_to_lor(round(lor_to_bias(err),2)) con err para err en [0.003, 0.01].",
+  "source": "computer-ratings",
+  "id": "F029",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Auto-inclusión del sondeo en la media de referencia bias_mean(t)",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 818,
+  "evidence": "df['bias_dev'] = df['bias'] - df['bias_mean'] con bias_mean estimada por fit_bias_estimator sobre todos los sondeos del evento, incluido el propio (1461-1508).",
+  "impact": "En fechas con pocos sondeos la desviación se sesga hacia 0 (el sondeo arrastra la media); 538 compara con 'los demás sondeos'.",
+  "fix": "Leave-one-out o excluir la encuestadora al evaluar la media local en la fecha del sondeo.",
+  "how_to_test": "Refit excluyendo un sondeo y comparar su bias_dev en fechas con neff bajo.",
+  "source": "computer-ratings",
+  "id": "F030",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Ventana efectiva (~82 días) y pseudo-recuento min_polls no documentados",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1109,
+  "evidence": "df = df[df['weight'] >= 1e-2] con weight_week = 0.7^(days//7): 0.7^13 ≈ 0.0097; verificado: 343 de 2 238 sondeos sobreviven, max days = 82. num_polls_w ≤ ~2 por evento (pos_decay .5) frente a min_polls=3.",
+  "impact": "El rating se construye con ~3 meses de sondeos y min_polls equivale a ~1.5 elecciones, no a '3 sondeos' como sugiere la docstring (98-99).",
+  "fix": "Documentar la ventana efectiva y expresar min_polls en unidades de num_polls_w (o usar un drange explícito).",
+  "how_to_test": "Script q5.py (recuento de sondeos con peso ≥ 1e-2 y max days).",
+  "source": "computer-ratings",
+  "id": "F031",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Computer.path por defecto os.getcwd() y params.json gitignored",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 132,
+  "evidence": "self.path = path or os.getcwd() y get_event_params lee f'{path}/params.json' (data.py:67): Computer(scope='es') desde la raíz lanza FileNotFoundError; files/params.json está gitignored y sólo cubre 4 eventos; sin él, main/vs se derivan automáticamente (data.py:100-123).",
+  "impact": "Un tercero no puede reproducir error_avg/error_blocks sin el fichero ni conocer la ruta correcta.",
+  "fix": "Versionar params.json (o un esquema) y hacer que path apunte por defecto al directorio files del proyecto.",
+  "how_to_test": "cd repo && python -c \"from mtpy import mtpy; mtpy.run(); from mtpy.lib.computer import Computer; Computer('es')\"",
+  "source": "computer-ratings",
+  "id": "F032",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Último evento sin sucesor produce event_date NaT; get_next_event_date sin ORDER BY",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 947,
+  "evidence": "ratings['event_date'] = pd.to_datetime(event_date) if event_date is not None else pd.NaT — con save=True se intentaría guardar una clave nula; data.py:524-543 usa get_var(limit=1) sin ordenación.",
+  "impact": "Tras celebrarse 2027 y antes de registrar otro evento futuro, compute_ratings(save=True) fallaría o guardaría filas inválidas; con varios eventos futuros el elegido es indeterminado.",
+  "fix": "Omitir la iteración o exigir un evento futuro; añadir sort='date' a la consulta.",
+  "how_to_test": "Revisar build_select_query en core/data.py para ver si añade ORDER BY por defecto.",
+  "source": "computer-ratings",
+  "id": "F033",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "compute_ratings salta un evento entero si cualquier bias es nulo",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 938,
+  "evidence": "if iter_polls.shape[0] == 0 or iter_polls['bias'].isnull().any(): continue — mientras pollster_ratings ya filtra polls['bias'].notnull() (1113).",
+  "impact": "Hoy no se activa (0 nulos en featured), pero un solo sondeo corrupto dejaría sin ratings a todos los eventos posteriores (iter_polls es acumulativo).",
+  "fix": "Sustituir por un filtro de nulos y un aviso.",
+  "how_to_test": "Poner bias=NaN en un sondeo de comp.series en memoria y ejecutar compute_ratings(save=False).",
+  "source": "computer-ratings",
+  "id": "F034",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Ponderación por cuota electoral en bias_avg/error_avg no documentada",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 717,
+  "evidence": "Stat(x['error'].dropna().abs(), weights=x['event'].loc[...]).mean() — pesos = cuota real de cada partido.",
+  "impact": "Los errores en partidos pequeños pesan poco, mientras que el LOR amplifica esos mismos errores (bias_avg máx. 243 %); la interacción no está justificada.",
+  "fix": "Documentar la elección o usar pesos sqrt(r_j)/truncados.",
+  "how_to_test": "Recalcular bias_avg con pesos uniformes y comparar el ranking de encuestadoras.",
+  "source": "computer-ratings",
+  "id": "F035",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Sin house effects con signo ni herding (diferencia principal con 538)",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1129,
+  "evidence": "error_blocks con signo se agrega por encuestadora (1129-1133) pero no entra en rating ni lo usa forecaster.py (sólo weight_*); no existe ninguna medida de varianza inter-sondeo por encuestadora.",
+  "impact": "El modelo no corrige sesgos sistemáticos de encuestadora en la predicción ni penaliza el herding.",
+  "fix": "Usar error_blocks_p (o bias por partido) como house effect restado en Forecaster; añadir un índice de herding (varianza observada / esperada por muestreo).",
+  "how_to_test": "Correlacionar error_blocks_p entre eventos consecutivos: si es persistente, hay house effect aprovechable.",
+  "source": "computer-ratings",
+  "id": "F036",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Inflación ad hoc sqrt((n_w+1)/n_w) del error estándar por encuestadora",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1142,
+  "evidence": ".reindex(dr.index) * np.sqrt((dr['num_polls_w'] + 1) / dr['num_polls_w'])",
+  "impact": "Sin justificación estadística; para n_w=0.01 multiplica por 10, para n_w=5 por 1.1.",
+  "fix": "Usar cuantiles t con neff−1 g.l. o documentar como heurística.",
+  "how_to_test": "Comparar se_p con y sin el factor para la distribución de num_polls_w en BD.",
+  "source": "computer-ratings",
+  "id": "F037",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Prior quality subjetivo sin rúbrica documentada",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1118,
+  "evidence": "dr['quality'] = self.pollsters.set_index('name').quality.astype(float).div(100) — en BD 53/95 encuestadoras valen 5, tres 0, CIS 10, máx. 78; ninguna fuente en el código.",
+  "impact": "El rating de encuestadoras nuevas y una parte relevante del de las consolidadas (min_polls=3) depende de una puntuación manual no reproducible.",
+  "fix": "Derivar quality de criterios verificables (transparencia, método, muestra, historial) y publicar la rúbrica.",
+  "how_to_test": "SELECT quality, count(*) FROM elections.pollsters GROUP BY 1.",
+  "source": "computer-ratings",
+  "id": "F038",
+  "sources": [
+   "computer-ratings"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Decaimiento anual 0.97 codificado a mano y ausencia de decaimiento en el estimador de error",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1642,
+  "evidence": "df['weight'] = np.power(0.97, df.years).round(2)  frente a self.year_decay = .9 (líneas 47, 125, 1225)",
+  "impact": "Inconsistencia de parámetros: los ratings usan 0.9/año, los escaños 0.97/año (1977 pesa 0.25) y el estimador de error nada (una encuesta de 1993 pesa igual que una de 2023, sólo weight_over·weight_sample en 1535).",
+  "how_to_test": "grep -n '0.97\\|year_decay' mtpy/lib/computer.py",
+  "fix": "Exponer seats_decay/error_decay como parámetros del constructor o reutilizar year_decay.",
+  "source": "computer-estimators",
+  "id": "F046",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Covarianza HAC Newey-West aplicada a datos de sección cruzada ordenados por pct",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1567,
+  "evidence": "get_error_estimator_data y get_seats_estimator_data devuelven sort_values('pct') (1567, 1646) y LeastSquaresEstimator usa cov_type='hac', hac_lags=1 por defecto (stat.py 669, 753-780)",
+  "impact": "El 'retardo' es el vecino en % de voto, no en el tiempo; los IC (mcov) carecen de interpretación. Sólo afecta a predict(alpha=...) (el Simulator llama predict sin alpha, así que no altera las simulaciones).",
+  "how_to_test": "LeastSquaresEstimator(X,y,weights=w,cov_type=None).fit().predict([[30,0]],alpha=.05) → err 0.77; con 'hac' → err 1.35.",
+  "fix": "Usar cov_type=None o HC (heterocedasticidad-robusta) en los estimadores de sección cruzada; reservar HAC para LocalKernelEstimator temporal.",
+  "source": "computer-estimators",
+  "id": "F047",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Grados de libertad incorrectos en LeastSquaresEstimator cuando poly_deg > 1",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 722,
+  "evidence": "self.dof = self.neff - self.poly_deg - self.kvar, pero con poly_deg=2 y kvar=2 el diseño tiene 6 columnas (build_input 713-719)",
+  "impact": "scale, serr y los IC de get_seats_estimator(poly_deg=2) (kwargs expuestos en 1652-1679) usan dof demasiado grande; las predicciones puntuales no cambian.",
+  "how_to_test": "comp.get_seats_estimator(poly_deg=2).dof frente a exog.shape[1]: dof usa 4 parámetros y el diseño tiene 6.",
+  "fix": "self.dof = self.neff - self.exog.shape[1].",
+  "source": "computer-estimators",
+  "id": "F048",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Docstrings de get_error_estimator y plot_deviations citan parámetros inexistentes",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1586,
+  "evidence": "'computed : bool, optional' y '- drop_contexts : list of str' (1586, 1593; también 1710, 1725) mientras la firma es featured y el filtro es drop_ctypes",
+  "impact": "Documentación engañosa para un repositorio divulgativo.",
+  "how_to_test": "grep -n 'computed : bool\\|drop_contexts' mtpy/lib/computer.py",
+  "fix": "Renombrar en los docstrings a featured / drop_ctypes.",
+  "source": "computer-estimators",
+  "id": "F049",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "get_path devuelve None cuando name es None, en contra del docstring y de la anotación",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 2611,
+  "evidence": "def get_path(self, name=None) -> str: ... if name: return '{}/{}'.format(self.path, name)  (sin else); docstring: 'If None, the path to the current polls will be returned'",
+  "impact": "Retorno implícito None; la anotación -> str es falsa (Forecaster.get_path sí declara str | None).",
+  "how_to_test": "Computer(scope='es', path='files').get_path() is None",
+  "fix": "Devolver self.path (o documentar None y anotar Optional[str]).",
+  "source": "computer-estimators",
+  "id": "F050",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Atributos seats_estimator, error_estimator y bias_estimator nunca se asignan",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 151,
+  "evidence": "self.seats_estimator = None; self.error_estimator = None; self.bias_estimator = None (151-153); ningún método los escribe (grep)",
+  "impact": "Sugieren un caché que no existe; cada llamada a get_*_estimator reajusta.",
+  "how_to_test": "grep -n 'seats_estimator\\|error_estimator\\|bias_estimator' mtpy/lib/computer.py → sólo 151-153",
+  "fix": "Eliminarlos o usarlos como caché.",
+  "source": "computer-estimators",
+  "id": "F051",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Rejilla de fit_bias_estimator empieza en la primera encuesta sin filtrar mientras el ajuste usa las filtradas",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1492,
+  "evidence": "dt_start = self.polls.loc[dt].index.get_level_values(0).min()  (self.polls, no df filtrado)",
+  "impact": "En 2008 (28 días) y 2023 (15 días) la curva se extrapola al inicio del periodo; inocuo pero inconsistente y puede producir NaN si el kernel se anula.",
+  "how_to_test": "Comparar comp.polls.loc[dt].index.min() con comp.filter_polls().loc[dt].index.min() para cada evento.",
+  "fix": "Usar d.index.min() o documentar.",
+  "source": "computer-estimators",
+  "id": "F052",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "La columna 'bias' suavizada es un error absoluto medio, no un sesgo signado",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1477,
+  "evidence": "df['lor'] = df['bias'].apply(self.bias_to_lor); bias = 0.7·bias_avg + 0.3·bias_blocks con bias_avg = media ponderada de |error lor| (727-745)",
+  "impact": "Los docstrings ('error/bias', 'mean bias') y los nombres inducen a interpretar la curva como sesgo direccional; en realidad mide precisión (lor ≥ 0, p. ej. 11.5 % al final de 2016).",
+  "how_to_test": "comp.fit_bias_estimator()['mean'].min() ≥ 0 y comp.polls['bias'].min() ≥ 0.",
+  "fix": "Renombrar a 'abs_error_lor' o documentar explícitamente que es una magnitud.",
+  "source": "computer-estimators",
+  "id": "F053",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Filtro |error| > 0 descarta observaciones válidas con error exactamente nulo",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1554,
+  "evidence": "df = df[(df.pct > 0) & (df.error.abs() > 0)]",
+  "impact": "Sesgo al alza (pequeño) del nivel de error, sobre todo en partidos pequeños con % redondeados a un decimal donde el acierto exacto es frecuente.",
+  "how_to_test": "Contar filas con error==0 y pct>0 antes del filtro y reajustar el estimador sin él; comparar β0.",
+  "fix": "Usar error.notna() en lugar de abs()>0.",
+  "source": "computer-estimators",
+  "id": "F054",
+  "sources": [
+   "computer-estimators"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "poly_deg=0 (Nadaraya-Watson) no funciona: la matriz de diseño queda 1-D",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 715,
+  "evidence": "`exog = np.ones(self.exog.shape[0])` (715) sin segunda dimensión cuando poly_deg != 1; el bucle de términos queda vacío para grado 0. Reproducido: ValueError 'shapes (41,) and (54,1) not aligned'.",
+  "impact": "No se puede comparar local linear con NW, comparación natural en un repositorio divulgativo; contradice la documentación de poly_deg.",
+  "fix": "`exog = np.ones((self.exog.shape[0], 1))` en build_input y build_pred.",
+  "how_to_test": "LocalKernelEstimator(df['PP'], weights=w, **(reg_params | {'poly_deg': 0})).fit(px, alpha=0.05).",
+  "source": "forecaster",
+  "id": "F061",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Kernel.get_bw_isj(x) sin pesos falla por división in-place sobre un histograma entero",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 373,
+  "evidence": "`grid, _ = np.histogram(x, ..., weights=weights)` devuelve int64 con weights=None y `grid /= x.shape[0]` lanza UFuncTypeError (reproducido).",
+  "impact": "La API estática no es usable sin pesos; sólo la instancia (weights=ones) evita el fallo.",
+  "fix": "`grid = grid.astype(float) / x.shape[0]`.",
+  "how_to_test": "Kernel.get_bw_isj(np.random.normal(size=300)).",
+  "source": "forecaster",
+  "id": "F062",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "La columna '-' se calcula con el subconjunto names y se recalcula en cada iteración del bucle",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 395,
+  "evidence": "`self.forecast['-'] = 100. - self.forecast[names].sum(axis=1, min_count=1)` dentro del bucle for. Ejecutado con names=['PP','PSOE']: '-' = 40.99 en la última fila.",
+  "impact": "'-' deja de significar 'otros'; llamadas sucesivas con distintos names dejan la columna inconsistente; trabajo repetido.",
+  "fix": "Calcular una vez tras el bucle con self.names.",
+  "how_to_test": "fc.fit_forecast(names=['PP','PSOE']); fc.forecast['-'].iloc[-1].",
+  "source": "forecaster",
+  "id": "F063",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Ida y vuelta CSV de fc_stat falla si algún dict contiene nan (literal_eval)",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 472,
+  "evidence": "`.applymap(lambda x: literal_eval(x) if isinstance(x, str) else x)`; literal_eval(str({'a': np.nan})) -> ValueError (reproducido). En la prueba no apareció nan, fallo latente.",
+  "impact": "load_forecast puede fallar en escenarios con varianza no finita.",
+  "fix": "Guardar fc_stat en formato largo (columnas err, cmin, cmax, nobs, neff) o JSON; evitar dicts en celdas.",
+  "how_to_test": "literal_eval(\"{'mean': 1.0, 'cmin': nan}\").",
+  "source": "forecaster",
+  "id": "F066",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "fc_stat almacena un dict por celda (object dtype)",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 356,
+  "evidence": "`dstat = pd.Series(reg.to_dict(orient='index')).where(reg['mean'].notnull(), None)` (356) y asignación en 396; consumo con applymap en 1046-1047 y simulator.py:316-317.",
+  "impact": "Impide operaciones vectorizadas, obliga a applymap y a la serialización frágil de H12.",
+  "fix": "DataFrame con MultiIndex de columnas (name, stat).",
+  "how_to_test": "type(fc.fc_stat['PP'].iloc[-1]) is dict.",
+  "source": "forecaster",
+  "id": "F067",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "`if block_map is not None` siempre cierto en plot_forecast_series",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 1042,
+  "evidence": "block_map se asigna a True/False en todas las ramas (1032-1040); las condiciones en 1042, 1063, 1082, 1101 siempre se cumplen.",
+  "impact": "Inofensivo (group_results con bloques identidad) pero engañoso para el lector.",
+  "fix": "`if block_map:`.",
+  "how_to_test": "Lectura.",
+  "source": "forecaster",
+  "id": "F068",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Etiqueta 'CI 95%' fija aunque alpha sea configurable",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 653,
+  "evidence": "`lbl_reg = 'Forecast: {} | CI 95%: {}'` mientras dr se calcula con alpha=self.alpha (642).",
+  "impact": "Gráficos mal etiquetados con alpha != 0.05.",
+  "fix": "Formatear con 100*(1-alpha).",
+  "source": "forecaster",
+  "id": "F069",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "print_weights pasa df.tfs como variable dependiente",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 508,
+  "evidence": "`est = LocalKernelEstimator(df.tfs, weights=weights, **self.reg_params)`; Estimator toma el índice como x y tfs como y (stat.py:558-560). Sólo se usan los pesos de núcleo, así que funciona por accidente.",
+  "impact": "Confuso; cualquier uso futuro de est.endog sería incorrecto.",
+  "fix": "Usar df[name] como en plot_weights (641).",
+  "source": "forecaster",
+  "id": "F070",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Cada regresión local se evalúa sobre toda la rejilla (O(N²))",
+  "kind": "performance",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 964,
+  "evidence": "`rloc = loc_est.fit(self.pred, alpha=alpha)` predice en todos los puntos y sólo se conserva `rloc.loc[tuple(self.pred[pos])]` (973). Medido: 0,7 s/partido para 1135 días.",
+  "impact": "No es cuello de botella hoy; crece cuadráticamente con la longitud del ciclo.",
+  "fix": "`loc_est.fit(self.pred[pos:pos+1], alpha=alpha)`.",
+  "how_to_test": "Cronometrar fit con rejillas de 500/1000/2000 días.",
+  "source": "forecaster",
+  "id": "F071",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Detalles de la implementación ISJ que la separan de Botev (2010)",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 380,
+  "evidence": "Histograma sobre [min-0.5σ, max+0.5σ] (368-369) pero h = sqrt(t*)·(max-min) sin el relleno (380, 398); grid dividido por nobs aunque los pesos suman n_eff (373); fallback 2π·mean(Δt) (384-386) y recorte n∈[50,1050] del bracket (335) sin documentar.",
+  "impact": "Sesgo sistemático (pequeño) del piloto; comportamiento indocumentado en muestras pequeñas.",
+  "fix": "Usar R = rango con relleno para reescalar, normalizar grid a suma 1, documentar los fallbacks.",
+  "how_to_test": "Comparar con KDEpy.bw_selection.improved_sheather_jones en muestras gaussianas de distintos tamaños.",
+  "source": "forecaster",
+  "id": "F072",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Sin restricción composicional: la suma de pronósticos no está acotada y '-' puede ser negativo",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 298,
+  "evidence": "Cada bloque se ajusta por separado; '-' = 100 - Σ (298, 395) sin renormalización ni transformación.",
+  "impact": "Incoherencias al repartir escaños en Simulator; '-' negativo posible.",
+  "fix": "Ajustar en log-ratio (ALR/ILR) o renormalizar al final documentándolo.",
+  "how_to_test": "Comprobar min(fc.forecast['-']) y Σ de bloques con bmap='max' vs 'min'.",
+  "source": "forecaster",
+  "id": "F073",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Semántica de pesos y grados de libertad: triple renormalización Kish y umbral 1e-2 sobre pesos no normalizados",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 915,
+  "evidence": "Kish en 574 (global), 278 (Kernel) y 709 (local); dof = n_eff_local - 2 (722); `vind = np.abs(weights) >= 1e-2` sobre K·w (915), luego la ventana depende de la escala de w.",
+  "impact": "Convenciones heurísticas que deben documentarse para un repositorio científico; ventana no invariante a reescalado de pesos.",
+  "fix": "Umbralizar sólo K (o K·w/max) y documentar la convención de dof.",
+  "how_to_test": "Multiplicar df.weight por 10 y comparar nobs locales.",
+  "source": "forecaster",
+  "id": "F074",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Docstrings desactualizados o incorrectos",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 45,
+  "evidence": "'Polls corresponding to a single election event' (45) no describe la clase; 'If a party or block is not included in the analysis, it will be ignored' (376) es falso (H6); set_reg_params no indica que kernel/cov_type sólo admiten un valor.",
+  "impact": "Confusión para lectores del repositorio divulgativo.",
+  "fix": "Actualizar docstrings y añadir referencias (Fan & Gijbels 1996; Botev 2010; Abramson 1982; Newey-West 1987).",
+  "source": "forecaster",
+  "id": "F075",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Constante mágica para date_start cuando sólo existe un evento",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 191,
+  "evidence": "`self.date_start = self.date_end - pd.DateOffset(days=6) - pd.DateOffset(months=12)`.",
+  "impact": "Comportamiento indocumentado para scopes nuevos.",
+  "fix": "Parámetro explícito o documentación.",
+  "source": "forecaster",
+  "id": "F076",
+  "sources": [
+   "forecaster"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "La escala del ruido es E|e| (error absoluto), no sigma, y se combina con un error estándar",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 530,
+  "evidence": "std_err = sqrt(err^2 + pct_err^2) con pct_err = regresión de df.error.abs() (computer.py:1559). E|z| = 0.798 sigma para errores normales.",
+  "impact": "sigma infraestimada ~20 % si los errores son normales; la regresión lineal puede dar valores negativos para pct pequeño (se elevan al cuadrado sin comprobar signo).",
+  "fix": "Regresión sobre e^2 (o log|e|) y usar sqrt como sigma, o escalar por sqrt(pi/2); comprobar signo.",
+  "how_to_test": "Backtest de cobertura: Simulator('es','2023-07-23') con random=True y comparar IC 95 % con resultados reales; numéricamente mean(|N(0,1)|)=0.7968.",
+  "source": "simulator",
+  "id": "F086",
+  "sources": [
+   "simulator"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "totals() usa indexación posicional ds[i] sobre una Series etiquetada (rompe en pandas 3)",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 421,
+  "evidence": "for i in idx_sorted[:remaining]: ds[i] += 1 (también :435) con i entero de argsort e índice de nombres de partido.",
+  "impact": "FutureWarning en pandas 2.2.2 (reproducido con -W error); en pandas 3 será búsqueda por etiqueta -> KeyError.",
+  "fix": "ds.iloc[i] += 1. (Análogos en forecaster.py:400-401 fillna(method='ffill') y :472 applymap.)",
+  "how_to_test": "python -W error::FutureWarning con ds=pd.Series([3,0,1],index=['PP','PSOE','VOX']); ds[0]+=1 -> FutureWarning.",
+  "source": "simulator",
+  "id": "F089",
+  "sources": [
+   "simulator"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Docstrings desajustados o ausentes; alpha no produce ningún IC",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 339,
+  "evidence": "frame() documenta 'The simulation results for the given location' pero devuelve el feature frame; alpha documentado como 'Confidence interval' (:59-60) solo se reenvía al Forecaster; build_umat, simulate, run, dist, totals, alloc_dhondt sin docstring; get_reg_totals promete votes que son NaN para el evento futuro.",
+  "impact": "Para un repositorio divulgativo, el usuario no sabe que los IC solo existen en plot_dist_kde y no como datos.",
+  "fix": "Añadir summary(alpha) que devuelva media, mediana y cuantiles de dist() y de frames[...,'vpred']; corregir docstrings.",
+  "how_to_test": "grep -n '\"\"\"' mtpy/lib/simulator.py y revisar; buscar cualquier método que devuelva cuantiles (no hay).",
+  "source": "simulator",
+  "id": "F090",
+  "sources": [
+   "simulator"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Cálculo redundante y código muerto en el bucle de simulación",
+  "kind": "performance",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 649,
+  "evidence": "umat = self.build_umat(frame) en run() incluso con split=False; pct_err (:525-529) recalcula lo mismo que forecast['error'] (:325-330) en cada iteración; reg_totals['votes'] y prev_results['seats'] no se usan; smap del usuario se muta in place (:114-116); load_forecast(prefix=None) (:304-308) reajusta sin max_fc/fillna dejando NaN en limit_date.",
+  "impact": "Coste innecesario (menor) y comportamiento sorprendente de load_forecast() sin prefijo.",
+  "fix": "Calcular umat solo si split; reutilizar forecast['error']; documentar o eliminar columnas no usadas; copiar smap.",
+  "how_to_test": "Comparar sim.frames[:, :, 6] (pct_err) con sim.forecast['error'] -> idénticos; sim.load_forecast() sin prefijo y ver sim.forecast.",
+  "source": "simulator",
+  "id": "F091",
+  "sources": [
+   "simulator"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "'Otros' desaparecen y la participación no se modela",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 617,
+  "evidence": "d_adj = d_pcts * 100 / d_pcts.sum() y total_votes = suma de votos previos de los partidos incluidos (:582, :619): el voto a no incluidos y blanco se redistribuye proporcionalmente; D'Hondt es invariante a la escala de total_votes.",
+  "impact": "Simplificación aceptable pero no documentada; prerrequisito para aplicar la barrera del 3 % y para cualquier efecto de participación diferencial.",
+  "fix": "Mantener columna 'otros' (y blanco) en umat y documentar el supuesto.",
+  "how_to_test": "umat['vpred_pct'].sum(axis=1) en Barcelona = 88.7 antes de renormalizar (comprobado).",
+  "source": "simulator",
+  "id": "F092",
+  "sources": [
+   "simulator"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "get_event_dates(skip=1) supone que event_date existe en la tabla events",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 134,
+  "evidence": "get_event_dates(scope, '1980-01-01', self.event_date, skip=1) descarta la última fecha <= event_date; si event_date no está en events, descarta la elección anterior real.",
+  "impact": "El Computer perdería la última elección al simular una fecha no registrada; también get_prev_results (:257) depende de que el Forecaster halle dos eventos.",
+  "fix": "Filtrar date < event_date en lugar de skip=1.",
+  "how_to_test": "Añadir en una copia de params.json una fecha no existente en events y comprobar sim.computer.event_dates.",
+  "source": "simulator",
+  "id": "F093",
+  "sources": [
+   "simulator"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "dof incorrecto para poly_deg>1 con más de una variable",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 736,
+  "evidence": "self.dof = self.neff - self.poly_deg - self.kvar; con poly_deg=2, kvar=2 el diseño tiene 6 columnas (l. 728-733) y dof = n-4 en lugar de n-6 (verificado: 56 vs 54).",
+  "impact": "scale, HAC y t.ppf ligeramente sesgados en el estimador de escaños/errores si se usa poly_deg>1 con varias variables.",
+  "fix": "self.dof = self.neff - exog.shape[1].",
+  "how_to_test": "LeastSquaresEstimator(X(n,2), y, poly_deg=2).dof == n - 6.",
+  "source": "stat",
+  "id": "F109",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "HAC por defecto sobre datos sin orden temporal y con lags en índice de fila",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 767,
+  "evidence": "xu[lag:].T @ xu[:-lag] usa el orden de las filas. Computer.get_error_estimator/get_seats_estimator (computer.py:1602,1674) pasan tablas ordenadas por evento/partido/provincia, no por tiempo; en el Forecaster hay varias encuestas por día y huecos irregulares. No hay HC0-HC3 ni cluster.",
+  "impact": "La 'robustez' HAC no corresponde a la estructura de dependencia real (house effects por encuestadora, heterocedasticidad por tamaño muestral).",
+  "fix": "Ofrecer cov_type in {'nonrobust','HC1','HC3','cluster'} y usar HC/cluster por encuestadora o evento en esos call sites; documentar que HAC requiere orden temporal.",
+  "how_to_test": "Permutar filas y comprobar que mcov cambia con cov_type='hac' y no con HC1.",
+  "source": "stat",
+  "id": "F110",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Divisiones/multiplicaciones in-place fallan con enteros (isj_grid sin pesos, scale_weights)",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 374,
+  "evidence": "grid /= x.shape[0] con np.histogram sin weights (int64) → UFuncTypeError (verificado con Kernel.get_bw_isj(x)); self.data *= ... en scale_weights (l. 244) con datos enteros → UFuncTypeError (verificado).",
+  "impact": "Las funciones estáticas no se pueden usar sin pesos ni con datos enteros.",
+  "fix": "grid = grid.astype(float) / grid.sum(); self.data = self.data * ...",
+  "how_to_test": "Kernel.get_bw_isj(np.random.normal(size=100)); Stat(np.array([1,2,3])).scale_weights().",
+  "source": "stat",
+  "id": "F111",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "winsorize con n_dev<1 usa ci(1-n_dev): semántica invertida",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 123,
+  "evidence": "vmin, vmax = self.ci(1 - n_dev). Verificado: n_dev=0.05 → ci(0.95) → q=0.525 → banda central de ±0.06σ (recorta el 95% de los datos); n_dev=0.95 → ci(0.05).",
+  "impact": "Confuso para el usuario; probablemente se pretendía que n_dev=0.05 recortara el 5% exterior.",
+  "fix": "Definir el parámetro como cobertura (p.ej. 0.95) y usar ci(1-cobertura), y documentarlo.",
+  "how_to_test": "Stat(np.random.normal(size=2000), outliers='remove', n_dev=0.05).nobs debería ser ≈1900, no ≈100.",
+  "source": "stat",
+  "id": "F112",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Ramas de código que no funcionan: kernel_gaussian k>1 y KDE.build_pred con array 2-D",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 1052,
+  "evidence": "En build_pred: p[(self.data[:, 1].min() <= p[:, 1]) & (p[:, 1] <= self.data[:, 0].max())] (typo data[:,0]) y column_stack de arrays de distinta longitud. En kernel_gaussian (l. 300-304) bw con k>1 se ajusta a (k,k) y no hace broadcasting con (n_p,n_x); nunca se llama con k>1 porque get_weights itera por columna.",
+  "impact": "Código muerto/erróneo que confunde al lector.",
+  "fix": "Eliminar la rama k>1 de kernel_gaussian (documentar que es 1-D y se usa como kernel producto) y corregir/eliminar la rama array del KDE 2-D.",
+  "how_to_test": "KernelDensityEstimator(x, y).fit(np.column_stack([gx, gy])) y Kernel.kernel_gaussian(X2d, P2d, [1.,1.]).",
+  "source": "stat",
+  "id": "F113",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Conversión fechas→deltas frágil: floats asignados sobre datetime64 y fracciones truncadas",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 600,
+  "evidence": "self.exog[:, i] = ts_to_delta(...) escribe floats en un array datetime64 (funciona porque numpy castea float→ns→float); ts_to_delta (dates.py:801) castea a datetime64[freq] antes de restar, truncando fracciones. Verificado: marcas horarias con freq día → deltas [0,0,1,2] en vez de [0,0.5,1,2.25].",
+  "impact": "Comportamiento dependiente de versión de numpy y pérdida silenciosa de resolución temporal.",
+  "fix": "Construir exog numérico en un array float nuevo y calcular deltas como (ts - t0)/np.timedelta64(1, unit) sin castear.",
+  "how_to_test": "LeastSquaresEstimator(pd.Series([1.,2.,3.,4.], index=pd.to_datetime(['2024-01-01 00:00','2024-01-01 12:00','2024-01-02','2024-01-03 06:00']))).exog[:,1].",
+  "source": "stat",
+  "id": "F114",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Recomputación de ISJ/adaptativo en cada predict y ajuste local sobre todos los puntos de predicción",
+  "kind": "performance",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 966,
+  "evidence": "rloc = loc_est.fit(self.pred, alpha=alpha) predice en todos los puntos y solo se usa rloc.loc[tuple(self.pred[pos])] (l. 975); get_kernel() (l. 944) recalcula ISJ y el adaptativo en cada llamada; fit() no hace nada (l. 929-936).",
+  "impact": "Trabajo O(n_pred²) innecesario y bandwidth recalculado en cada gráfico/predicción (0.11 s por 239 días en test; escala con el número de partidos y llamadas).",
+  "fix": "loc_est.fit(self.pred[[pos]], alpha); cachear el Kernel en fit().",
+  "how_to_test": "Cronometrar predict con 60/120/240 puntos.",
+  "source": "stat",
+  "id": "F115",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Sin docstrings y anotaciones de tipo incorrectas en todo el módulo",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/core/utils/stat.py",
+  "line": 69,
+  "evidence": "Ninguna clase ni método tiene docstring (AGENTS.md exige 'docstrings for all functions'); Stat.dev anotado '-> Self' devuelve una tupla (l. 175); Estimator.fit anotado 'Self | pd.Series | pd.DataFrame' según se pase p; nombres poco descriptivos (conf, dev, pstatic, perr/serr, wexog).",
+  "impact": "Obstáculo principal para un repositorio científico/divulgativo: las fórmulas y convenciones (neff de Kish, reliability weights, bandas de la media) no están explicadas en ningún sitio.",
+  "fix": "Docstrings numpy-style con la fórmula, referencias (Kish 1965; Botev 2010; Newey-West 1987; Abramson 1982) y ejemplos; corregir anotaciones.",
+  "how_to_test": "pydocstyle mtpy/core/utils/stat.py.",
+  "source": "stat",
+  "id": "F116",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Pines de dependencias desactualizados y uso de scipy.fftpack (legado)",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "requirements.txt",
+  "line": 26,
+  "evidence": "requirements.txt fija numpy==1.25.2 y scipy==1.9.3; el entorno de ejecución tiene numpy 2.4.4 y scipy 1.17.0. stat.py:5 importa scipy.fftpack (módulo legado; scipy.fft es la API actual).",
+  "impact": "Los resultados publicados (p.ej. CSV en files/fc) pueden no ser reproducibles con las versiones pinadas; el comportamiento del casteo float→datetime64 depende de la versión de numpy.",
+  "fix": "Actualizar pines a las versiones probadas, migrar a scipy.fft.dct y añadir CI con esas versiones.",
+  "how_to_test": "pip install -r requirements.txt en un venv limpio y ejecutar la suite de tests.",
+  "source": "stat",
+  "id": "F117",
+  "sources": [
+   "stat"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "drop_contexts filtra por una columna inexistente (t.context en vez de t.ctype)",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/data.py",
+  "line": 306,
+  "evidence": "filters.append(\"(t.context IS NULL OR t.context NOT IN ('{}'))\") — la columna en elections.polls es ctype (information_schema).",
+  "impact": "Cualquier llamada con drop_contexts falla con UndefinedColumn; el parámetro es dead code engañoso.",
+  "fix": "Renombrar a drop_ctypes y usar t.ctype, o eliminar el parámetro (Computer ya filtra ctype en pandas).",
+  "how_to_test": "get_poll_series('es','2023-07-23',drop_contexts=['wban']) → psycopg2.errors.UndefinedColumn.",
+  "source": "data",
+  "id": "F122",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Encuestas con nota en el nombre del encuestador (CIS subcontratado) se descartan en silencio",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/loader.py",
+  "line": 400,
+  "evidence": "Sin '/' se concatena la nota del <span> al nombre (l. 385-386) → 'CIS (Target Point)'; si no está en pollsters_idmap la fila devuelve {} (l. 400-401). Dry-run 2026: pollsters_missing = ['CIS (Ateneo del Dato)','CIS (Logoslab)','CIS (Sondaxe)','CIS (Target Point)','Sumar']; notebook: 9 etiquetas perdidas.",
+  "impact": "Pérdida sistemática de encuestas del CIS (mtype 'state', las de mayor muestra) en la serie 2027; sesgo de selección no documentado.",
+  "fix": "Separar la nota del nombre (guardarla en notes) o añadir alias en wp-maps.json; registrar en log las filas descartadas.",
+  "how_to_test": "Tras read_data(), contar filas de la tabla 2026 cuyo primer td empieza por 'CIS' y compararlas con las cargadas con pollster_id=1.",
+  "source": "data",
+  "id": "F123",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "overwrite=True destruye columnas curadas manualmente (ctype, notes, url)",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/lib/loader.py",
+  "line": 667,
+  "evidence": "save_polls con overwrite ejecuta DELETE FROM polls WHERE event… (l. 667-668) y reinserta self.polls, que no contiene ctype/notes/url informados (build_series l. 606-651).",
+  "impact": "Una recarga completa borra la curación existente (84 ctype); no hay forma de recuperarla desde el loader.",
+  "fix": "Hacer upsert solo de columnas crudas producidas por el loader o preservar columnas curadas antes del DELETE.",
+  "how_to_test": "Comparar columnas no nulas de polls para un evento antes y después de select_series/save_polls(overwrite=True) en una BD de prueba.",
+  "source": "data",
+  "id": "F124",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "groupby(axis=1) deprecado en pandas 2.x y eliminado en 3.0",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "mtpy/lib/loader.py",
+  "line": 143,
+  "evidence": "votes.groupby(level=0, axis=1).sum() (l. 143 y 148) y lib/utils.py:91 results.groupby(level=0, axis=1).sum(min_count=1). Con pandas 2.2.2 y warnings.simplefilter('error') lanza FutureWarning: 'DataFrame.groupby with axis=1 is deprecated'.",
+  "impact": "El loader de resultados y group_results dejarán de funcionar al actualizar pandas.",
+  "fix": "Usar df.T.groupby(level=0).sum().T o df.groupby(df.columns, axis=…) → df.T.groupby(...).",
+  "how_to_test": "python -W error -c 'import pandas as pd; pd.DataFrame([[1,2]],columns=[\"a\",\"a\"]).groupby(level=0,axis=1).sum()'",
+  "source": "data",
+  "id": "F125",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "requirements.txt desfasado respecto al entorno real y con dependencias ajenas al modelo",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "requirements.txt",
+  "line": 1,
+  "evidence": "numpy==1.25.2, scipy==1.9.3, scikit-learn==1.2.0… mientras el intérprete usado tiene numpy 2.4.4 y scipy 1.17.0; incluye boto3, dask, gunicorn, pyzbar, statsmodels, sqlalchemy, s3fs… del framework genérico.",
+  "impact": "Instalación irreproducible o fallida; barrera de entrada para terceros.",
+  "fix": "requirements mínimo (numpy, pandas, scipy, lxml, requests, openpyxl, matplotlib, psycopg2 opcional) generado desde el entorno probado, o pyproject con rangos.",
+  "how_to_test": "pip install -r requirements.txt en un venv limpio con Python 3.11 y ejecutar los notebooks.",
+  "source": "data",
+  "id": "F126",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Columnas crudas y calculadas mezcladas en polls/polls_results; save_model_data anula columnas de toda la serie",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/lib/data.py",
+  "line": 413,
+  "evidence": "UPDATE polls SET proc_sample=NULL, rating=NULL, … WHERE event_scope IN … AND event_date IN … (l. 413-418) antes del upsert; Polls.meta mezcla sample_size/ctype con weight_* y bias_* (models/elections.py:115-147).",
+  "impact": "El dataset crudo no es estable ni publicable tal cual; un fallo a mitad de compute_* deja la tabla con NULL; difícil distinguir procedencia.",
+  "fix": "Separar en tablas polls_weights / polls_errors (o CSV derivados) con la misma clave.",
+  "how_to_test": "Revisar columnas de polls con information_schema y trazar qué método escribe cada una.",
+  "source": "data",
+  "id": "F127",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "get_next_event_date sin ORDER BY: resultado indefinido con más de un evento futuro",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 532,
+  "evidence": "Events().get_var(query=dict(filters=[scope, date > date_from])); Model.get_var (core/data.py:2221-2238) no añade sort ni columns → SELECT \"t\".* … LIMIT 1 y devuelve data[0] (primera columna física).",
+  "impact": "Con dos eventos futuros (o al añadir scopes autonómicos) puede devolver el equivocado; depende del orden físico de columnas.",
+  "fix": "Pasar columns=['date'] y sort=['date'] en la query.",
+  "how_to_test": "Insertar dos eventos futuros en una BD de prueba y comprobar la fecha devuelta.",
+  "source": "data",
+  "id": "F128",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "get_event_data / get_event_results / get_poll_results fallan con event_dates=None pese a declararlo Optional",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 154,
+  "evidence": "\"date IN ('{}')\".format(\"', '\".join(event_dates)) con event_dates=None → TypeError (l. 154, 181, 264); get_event_series/get_poll_series sí resuelven None con get_event_dates.",
+  "impact": "API inconsistente; llamadas legítimas revientan.",
+  "fix": "Añadir la rama `if event_dates is None: event_dates = get_event_dates(scope)`.",
+  "how_to_test": "get_event_data('es') → TypeError.",
+  "source": "data",
+  "id": "F129",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "pollsters.rating se guarda truncado (astype(int)) en vez de redondeado",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 453,
+  "evidence": "dp['rating'] = dp['id'].map(rlast).fillna(0).astype(int); BD: Sigma Dos 73 vs 73.92 en pollsters_ratings (56 discrepancias).",
+  "impact": "Sesgo sistemático a la baja de hasta 1 punto en el rating resumen; inconsistencia entre tablas.",
+  "fix": "Guardar el valor decimal (columna es numeric) o usar round().",
+  "how_to_test": "SELECT ps.rating, r.rating FROM pollsters ps JOIN LATERAL (último rating) …",
+  "source": "data",
+  "id": "F130",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "pub_date es siempre end_date: la columna no representa la fecha de publicación",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 648,
+  "evidence": "polls['pub_date'] = polls.end_date; en BD 3825/3825 filas cumplen pub_date = end_date = date.",
+  "impact": "Cualquier uso futuro (p. ej. peso de sobre-publicación o veda) basado en pub_date sería erróneo; documentación engañosa del esquema.",
+  "fix": "Eliminar la columna o documentar que es un placeholder; si se necesita, extraer la fecha de publicación de la referencia de Wikipedia.",
+  "how_to_test": "SELECT count(*) FROM polls WHERE pub_date <> end_date → 0.",
+  "source": "data",
+  "id": "F131",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "mtype es un atributo del encuestador copiado a cada encuesta (73 % nulo)",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 649,
+  "evidence": "polls['mtype'] = polls.pollster_id.map(self.pollsters.set_index('id').mtype); solo 10 de 95 encuestadores tienen mtype; en polls: NULL 2787, online 541, aggr 295, state 202.",
+  "impact": "La metodología real por encuesta (CATI/online/mixta) no se captura; los filtros drop_mtypes actúan a nivel de encuestador.",
+  "fix": "Documentar el significado (state/online/aggr como tipo de encuestador) o renombrar a pollster_type.",
+  "how_to_test": "SELECT mtype, count(*) FROM polls GROUP BY 1.",
+  "source": "data",
+  "id": "F132",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "path por defecto os.getcwd() incompatible con la raíz files/ del sistema de ficheros",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 39,
+  "evidence": "self.path = path or os.getcwd() (l. 39, 289; computer.py:132) mientras app.fs = FileSystem(fspath=<repo>/files) (mtpy.py:35); con path='files' el error fue '…/mtpy/../files/files/wikipedia/wp-urls.json'.",
+  "impact": "Instanciar loaders o modelos sin path='.' falla con FileNotFoundError; API confusa para terceros.",
+  "fix": "Default path='.' (relativo a fspath) y documentarlo.",
+  "how_to_test": "WikipediaLoader('es','2027-08-22') sin path.",
+  "source": "data",
+  "id": "F133",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "InfoElectoralLoader.read_file usa app.fspath local en vez de app.fs",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 70,
+  "evidence": "pd.ExcelFile(f'{self.app.fspath}/{self.path}/infoelectoral/…') mientras el resto de lecturas usan self.app.fs.read/read_csv.",
+  "impact": "Rompe si app.fs es S3; inconsistencia de la capa de IO.",
+  "fix": "Usar app.fs.read(..., format='excel') o documentar que requiere FS local.",
+  "how_to_test": "Definir S3_BUCKET y ejecutar read_file().",
+  "source": "data",
+  "id": "F134",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Sin 'years' en wp-urls.json solo se procesa la primera wikitable de la página",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 603,
+  "evidence": "if len(years) == 0: break tras la primera tabla; los eventos 2019-11-10, 2016, 2011, 2008, … no tienen 'years'.",
+  "impact": "Si la página tiene varias tablas (p. ej. por año o sub-periodo) se pierden encuestas sin aviso.",
+  "fix": "Iterar todas las tablas y descartar solo las que no sean de encuestas (comprobar cabecera).",
+  "how_to_test": "Para 2019-11-10 contar tables = r.xpath(\"//table[contains(@class,'wikitable')]\") y comparar con len(loader.data).",
+  "source": "data",
+  "id": "F135",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Deduplicación por (date, pollster_id, sponsor_id) pisa encuestas legítimas",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 598,
+  "evidence": "data[(row['date'], row['pollster_id'], row['sponsor_id'])] = row: la última fila con la misma clave sobrescribe (p. ej. dos encuestas del mismo encuestador con distinta pregunta o ámbito el mismo día).",
+  "impact": "Pérdida silenciosa; es además la PK de la tabla, por lo que no hay forma de almacenar ambas.",
+  "fix": "Registrar colisiones en verbose; considerar un discriminador (name/notes) en la clave.",
+  "how_to_test": "Contar filas parseadas antes y después del dict.",
+  "source": "data",
+  "id": "F136",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "get_poll_series une polls y results sin event_date",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 322,
+  "evidence": "polls.merge(results, on=['date','pollster_id','sponsor_id'], how='left'); hoy 0 tripletas compartidas entre eventos (consulta), pero la PK incluye event_date.",
+  "impact": "Duplicación de filas si en el futuro una encuesta se asigna a dos eventos (p. ej. elecciones repetidas).",
+  "fix": "Incluir event_date y event_scope en las claves de merge.",
+  "how_to_test": "SELECT date,pollster_id,sponsor_id FROM polls GROUP BY 1,2,3 HAVING count(distinct event_date)>1.",
+  "source": "data",
+  "id": "F137",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Fusión superficial de params.json con los parámetros automáticos",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 134,
+  "evidence": "event_params[dt] = smap | params reemplaza dicts completos ('bmaps', 'smap'); 2019-04-28 carece de 'max' y 'min'; Computer.merge_bmaps(name) (computer.py:195-221) accede a event_params[e]['bmaps'][name] para todos los eventos.",
+  "impact": "KeyError al pedir un bmap que no exista en todos los eventos; comportamiento implícito difícil de documentar.",
+  "fix": "Fusión profunda por clave (bmaps.main, bmaps.blocks…) y validación del esquema de params.json.",
+  "how_to_test": "Computer('es').merge_bmaps('max').",
+  "source": "data",
+  "id": "F138",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Candidatura ausente en el JSON de Infoelectoral produce un ValueError críptico por desalineación de columnas",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 117,
+  "evidence": "Nombres no mapeados van a parties_missing sin añadirse a party_cols (l. 117-121); luego votes.columns = party_cols (l. 141-142) con longitud distinta.",
+  "impact": "Falla ruidosamente pero sin indicar qué candidaturas faltan.",
+  "fix": "Abortar tras read_file con la lista de parties_missing antes de asignar columnas.",
+  "how_to_test": "Eliminar una entrada del JSON de 2023 y ejecutar read_data().",
+  "source": "data",
+  "id": "F139",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "events_data de 2027 es una copia manual de 2023 (hipótesis de reparto de escaños no documentada)",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/models/elections.py",
+  "line": 233,
+  "evidence": "Consulta: las 53 filas de 2027-08-22 tienen seats, votes y registered idénticos a 2023-07-23 (solo population difiere); no existe PROV_02_202708 ni código que las genere.",
+  "impact": "El Simulator asume el reparto provincial de 2023 para la próxima elección; el reparto real se fija en el decreto de convocatoria.",
+  "fix": "Generar el evento futuro con un script (copia de la última elección + cálculo del reparto de escaños por población) y documentarlo.",
+  "how_to_test": "SELECT … FROM events_data a JOIN events_data b USING (region_id) WHERE a.date='2027-08-22' AND b.date='2023-07-23' AND a.seats<>b.seats.",
+  "source": "data",
+  "id": "F140",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Docstrings ausentes o incorrectos en data.py",
+  "kind": "docs",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 484,
+  "evidence": "get_event_dates documenta min_polls 'default 1' (real 0); get_event_dmat, get_event_params, get_event_data, get_event_results, get_poll_results, get_poll_series, get_ratings, get_parties, get_pollsters y get_next_event_date no tienen docstring (AGENTS.md exige docstrings).",
+  "impact": "Dificulta la documentación científica y el uso por terceros.",
+  "fix": "Añadir docstrings numpydoc con formas de salida (índices/columnas).",
+  "how_to_test": "python -c \"import inspect, mtpy.lib.data as d; print([n for n,f in inspect.getmembers(d, inspect.isfunction) if not f.__doc__])\"",
+  "source": "data",
+  "id": "F141",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Código y datos muertos: self.regions, clave results de wp-urls, tabla provinces, pollsters_parties, forecasts*, pipelines/events",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 57,
+  "evidence": "self.regions solo se asigna (l. 57); wp-urls.json['results'] nunca se lee; Provinces/PollstersParties/Forecasts/ForecastsResults sin uso en mtpy/lib (grep) y tablas vacías o sin consumidor; mtpy/models/sources/elections.py está vacío mientras pipelines/events/Events.py y EventsResults.py importan sources.Events/EventsResults; Electomania-Rankings.xlsx y es-regions-ages.csv sin referencia.",
+  "impact": "Ruido para un repositorio divulgativo; imports rotos si se ejecutan los pipelines.",
+  "fix": "Eliminar o mover a un módulo legacy; conservar solo lo que usa el modelo.",
+  "how_to_test": "python -c 'import mtpy.pipelines.events.Events' tras mtpy.run() → AttributeError.",
+  "source": "data",
+  "id": "F142",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "SQL construido por concatenación de strings",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 153,
+  "evidence": "\"scope = '{}'\".format(scope), \"date IN ('{}')\".format(...), \"mtype NOT IN ('{}')\"… en todas las funciones; el hack filters.replace('t.', 'p.') (l. 317).",
+  "impact": "Frágil ante comillas o valores inesperados; sin inyección real por ser uso interno, pero poco robusto para un paquete público.",
+  "fix": "Parámetros ligados (SQLAlchemy text con bindparams) o constructor de filtros tipado.",
+  "how_to_test": "get_event_series(\"es'\") → error de sintaxis SQL.",
+  "source": "data",
+  "id": "F143",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "166 encuestas con solo 2 partidos (suma de pct ≈ 52-60 %) conviven con encuestas completas",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/loader.py",
+  "line": 606,
+  "evidence": "BD: polls.parties=2 en 166 filas (p. ej. InvyMark/La Sexta 2012-2013 con PP y PSOE); suma mínima de pct por encuesta 52.1 en la serie 2015.",
+  "impact": "Si Computer no filtra por nº de partidos, estas encuestas parciales entran en errores/pesos con cobertura muy distinta.",
+  "fix": "Documentar el tratamiento (o exigir parties >= k) y marcar el tipo de encuesta.",
+  "how_to_test": "SELECT parties, count(*) FROM polls GROUP BY 1; revisar filter_polls en computer.py.",
+  "source": "data",
+  "id": "F144",
+  "sources": [
+   "data"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "mtpy.run() falla en un clon limpio porque log/ no existe",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": "mtpy/core/app.py",
+  "line": 173,
+  "evidence": "handler = logging.FileHandler(path) en Log.add_logger con path = shpath + '/log/info.log' (mtpy/mtpy.py:73); log/ está en .gitignore:3. Ejecutado Log('<dir inexistente>') -> FileNotFoundError: No such file or directory '.../nonexistent_log_dir/info.log'.",
+  "impact": "Cualquier usuario que clone el repo no puede ejecutar mtpy.run() sin crear log/ a mano; el Dockerfile lo evita con mkdir -p files log (Dockerfile:57) pero el flujo local no.",
+  "fix": "os.makedirs(self.path, exist_ok=True) en Log.__init__, o usar logging estándar con handler a stdout y fichero opcional; añadir log/.gitkeep.",
+  "how_to_test": "git clone en un directorio limpio (sin log/), crear .env, ejecutar python -c 'from mtpy import mtpy; mtpy.run()' -> FileNotFoundError.",
+  "source": "infra",
+  "id": "F145",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Importar el modelo carga xgboost/mlxtend/sklearn por un import innecesario de learning en dataviz",
+  "kind": "design",
+  "severity": "high",
+  "file": "mtpy/core/utils/dataviz.py",
+  "line": 34,
+  "evidence": "from .learning import (clusters_silhouette, cv_model_train, feature_collinearity, ...) (dataviz.py:34-43); learning.py:5-13 importa mlxtend, sklearn, statsmodels y xgboost. Prueba de humo: import mtpy.lib.simulator carga 211 módulos incluidos xgboost, mlxtend, sklearn, dask, sqlalchemy, sshtunnel. Sólo plot_collinearity_grid (3848), plot_feature_rank (3941) y print_feature_split (4550) usan learning y ninguna es alcanzable desde el modelo.",
+  "impact": "xgboost no está en requirements.txt: en un entorno instalado desde requirements.txt el modelo no importa. Tiempo de importación y huella de dependencias innecesarios para un paquete científico.",
+  "fix": "Eliminar el import de learning en dataviz (importar de forma diferida dentro de las 3 funciones) o extraer un módulo viz reducido con las 33 funciones alcanzables.",
+  "how_to_test": "pip install -r requirements.txt en un venv limpio y python -c 'import mtpy.lib.computer' -> ModuleNotFoundError: xgboost. O: python -X importtime -c 'import mtpy.lib.simulator' | grep xgboost.",
+  "source": "infra",
+  "id": "F146",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "requirements.txt desfasado, incompleto y sobredimensionado",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": "requirements.txt",
+  "line": 18,
+  "evidence": "Pines numpy==1.25.2, scipy==1.9.3, scikit-learn==1.2.0, statsmodels==0.13.5, matplotlib==3.8.0 frente a instalados 2.4.4, 1.17.0, 1.8.0, 0.14.6, 3.10.8. Faltan xgboost (learning.py:13), lxml (loader.py:2), openpyxl (loader.py:70). Sin uso por el modelo: boto3, s3fs, dnspython, jinja2, oauth2client, pdf2image, proto-plus, protobuf, PyJWT, pyzbar, unidecode, xlsxwriter, cmake, cython, gunicorn, uvicorn, nbconvert, mlxtend, contractions, emoji, ftfy, sacremoses, dask, sshtunnel.",
+  "impact": "El entorno declarado no es el entorno con el que se han producido los resultados; pip install puede fallar (numpy 1.25.2 no tiene wheels para Python >= 3.12) o instalar decenas de paquetes innecesarios.",
+  "fix": "pyproject.toml con dependencias mínimas (numpy, pandas, scipy, matplotlib, seaborn, tqdm, adjustText, husl, Pillow, python-dotenv) y extras [db], [ingest], [notebooks], [dev]; generar lock con uv/pip-compile desde el entorno real.",
+  "how_to_test": "python -m venv v && v/bin/pip install -r requirements.txt && v/bin/python -c 'import mtpy.lib.computer'.",
+  "source": "infra",
+  "id": "F147",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Uso de APIs de pandas eliminadas en 3.0 (fillna(method=), applymap, groupby(axis=1), freq='M')",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 400,
+  "evidence": "forecaster.py:400-401 self.forecast.fillna(method='ffill'); forecaster.py:472,1031-1032 .applymap(...); forecaster.py:723,961 freq='M'; lib/utils.py:91 y loader.py:145,150 groupby(level=0, axis=1); dates.py:1023-1025 fillna(method=); dataviz.py:3269 applymap.",
+  "impact": "Con pandas >= 3.0 estas llamadas lanzan TypeError/AttributeError; hoy sólo emiten FutureWarning que el filtro global oculta.",
+  "fix": "Sustituir por .ffill()/.bfill(), DataFrame.map, .T.groupby(level=0).sum().T (o groupby con columnas), freq='ME'.",
+  "how_to_test": "python -W error::FutureWarning -c \"...\" sobre Forecaster.fit_forecast con max_fc=1, o instalar pandas 3.0 en un venv y ejecutar los notebooks.",
+  "source": "infra",
+  "id": "F148",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "warnings.filterwarnings('ignore') global al importar mtpy",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/mtpy.py",
+  "line": 16,
+  "evidence": "warnings.filterwarnings('ignore') a nivel de módulo; tras mtpy.run() warnings.filters[0] == ('ignore', None, Warning, None, 0). Al reactivar warnings en Computer.build_series() aparecen 338 PerformanceWarning (computer.py:469-471), 17 FutureWarning (lib/data.py:112) y 2 FutureWarning (helpers.py:860).",
+  "impact": "Silencia advertencias numéricas y de deprecación de NumPy/SciPy/pandas en todo el proceso del usuario; en un repositorio divulgativo oculta problemas reales.",
+  "fix": "Eliminar el filtro global; si hace falta, usar warnings.catch_warnings() localmente o filtros por categoría/módulo concretos.",
+  "how_to_test": "import warnings; from mtpy import mtpy; print(warnings.filters[0]).",
+  "source": "infra",
+  "id": "F149",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "pipelines/events, jobs/Update, crontab y Worker referencian código inexistente",
+  "kind": "dead-code",
+  "severity": "medium",
+  "file": "mtpy/pipelines/events/Events.py",
+  "line": 33,
+  "evidence": "Events.py:33 sources.Events() pero mtpy/models/sources/elections.py está vacío (1 línea); Events.py:36-38 self.app.config.elections.path/key/names no existen en config.json; Events.py:144 self.target.dal.query(...) pero Model sólo define _dal y execute (grep 'def dal|def query' vacío). jobs/Update.py:6-13 referencia pipelines stripe_*/aemet_* inexistentes; deploy/docker/crontab:1 llama a job.py rep y mtpy/jobs/ sólo tiene Pipeline, Test, Update; core/worker.py:32 self.app.qs nunca se registra en mtpy.run().",
+  "impact": "Código muerto que no puede ejecutarse; confunde a lectores y a herramientas de análisis; arrastra dependencias (requests verify=False, SQS).",
+  "fix": "Eliminar mtpy/pipelines, mtpy/jobs, mtpy/controllers, mtpy/learners, mtpy/models/sources, core/worker.py, core/api.py y los entrypoints api.py/worker.py/job.py/pipeline.py del repositorio científico.",
+  "how_to_test": "python -c \"from mtpy import mtpy; mtpy.run(); from mtpy.pipelines.events.Events import Events; Events()\" -> AttributeError en sources.Events.",
+  "source": "infra",
+  "id": "F150",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Credenciales reales dentro del árbol del repositorio (no versionadas)",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "deploy/elections.env",
+  "line": 1,
+  "evidence": "deploy/elections.env contiene AWS_KEY (20 caracteres), AWS_SECRET (40), DB_PASSWORD (8), PUSHOVER_TOKEN (30) y DB_HOST remoto (48); deploy/docker.env contiene AWS_KEY/AWS_SECRET. git ls-files y git log --all -- '*.env' confirman que nunca se han versionado (.gitignore:16 *.env). No hay .env.example.",
+  "impact": "Riesgo de fuga por git add -f, cambio de .gitignore, zip/copia del directorio o inclusión en artefactos; sin plantilla, los usuarios no saben qué variables necesitan.",
+  "fix": "Mover credenciales fuera del repo (gestor de secretos o ~/.config), rotar las claves AWS/Pushover/DB, añadir deploy/.env.example con valores vacíos y documentar las variables.",
+  "how_to_test": "git check-ignore -v deploy/elections.env (ignorado) y grep -c 'AWS_SECRET=' deploy/elections.env; verificar en consola AWS si la clave sigue activa.",
+  "source": "infra",
+  "id": "F151",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Notebooks almacenados en Git LFS",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": ".gitattributes",
+  "line": 1,
+  "evidence": "*.ipynb filter=lfs diff=lfs merge=lfs -text; git lfs ls-files lista los 5 notebooks raíz; git show HEAD:notebooks/PollsErrors.ipynb devuelve un puntero 'version https://git-lfs.github.com/spec/v1'.",
+  "impact": "Clonar sin git-lfs deja punteros en vez de notebooks; GitHub no renderiza ni muestra diffs; cuota de ancho de banda LFS; incompatibilidad con nbviewer/Binder.",
+  "fix": "Quitar el filtro LFS, usar nbstripout (sin outputs) y/o jupytext (pares .py) para versionar notebooks ligeros; migrar el historial con git lfs migrate export.",
+  "how_to_test": "git clone sin git-lfs instalado y abrir notebooks/PollsErrors.ipynb.",
+  "source": "infra",
+  "id": "F152",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Paquete no instalable; los notebooks dependen de sys.path.append('..')",
+  "kind": "design",
+  "severity": "medium",
+  "file": "notebooks/PollsForecast.ipynb",
+  "line": 1,
+  "evidence": "Todos los notebooks incluyen sys.path.append('..') o sys.path.append('../..') antes de from mtpy import mtpy; no existe pyproject.toml ni setup.py; mtpy/__init__.py vacío sin __version__.",
+  "impact": "No se puede pip install el modelo ni fijar una versión citable; los notebooks sólo funcionan desde su directorio.",
+  "fix": "pyproject.toml (src layout, requires-python >= 3.11, extras) y pip install -e .; eliminar los sys.path hacks.",
+  "how_to_test": "pip install . desde la raíz -> falla por ausencia de metadatos de proyecto.",
+  "source": "infra",
+  "id": "F153",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Inputs imprescindibles (files/params.json, CSV de provincias, mapas Wikipedia) no versionados",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": ".gitignore",
+  "line": 2,
+  "evidence": ".gitignore:2 ignora files/; forecaster.py:108, simulator.py:99 y lib/data.py:67 leen f'{path}/params.json'; loader.py:57-58 lee es-regions.csv/es-provinces.csv; loader.py:305-306 lee wikipedia/wp-urls.json y wp-maps.json. En disco: params.json (5,9 KB), es-provinces.csv (1,6 KB), es-regions.csv, wikipedia/ (16 KB).",
+  "impact": "Sin estos ficheros Forecaster/Simulator no pueden construirse; el repo publicado no es ejecutable.",
+  "fix": "Crear data/ versionado con los inputs (≈60 KB) y mantener ignorados sólo outputs (img/, fc/, stage/) y datos brutos voluminosos (infoelectoral/*.xlsx si su licencia lo impide).",
+  "how_to_test": "git clone limpio y Forecaster(scope='es', event_date='2027-08-22', path='.') -> FileNotFoundError en params.json.",
+  "source": "infra",
+  "id": "F154",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "save_ratings_data trunca el rating decimal a entero al guardarlo en pollsters",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 455,
+  "evidence": "dp['rating'] = dp['id'].map(rlast).fillna(0).astype(int); la columna elections.pollsters.rating es numeric(16,2) y pollsters_ratings.rating tiene valores como 84.77 (SELECT max(rating)); en pollsters sólo hay enteros (0, 5, 6, 7...).",
+  "impact": "Pérdida de precisión (84.77 -> 84) y discrepancia entre pollsters.rating y el último rating real; posible impacto en cualquier consumidor que lea pollsters.rating.",
+  "fix": "Eliminar .astype(int) (o .round(2)) si el rating es decimal; si debe ser entero, cambiar meta/DDL a 'int' y documentarlo.",
+  "how_to_test": "SELECT p.id, p.rating, r.rating FROM elections.pollsters p JOIN elections.pollsters_ratings r ON r.pollster_id=p.id AND r.event_date='2027-08-22' WHERE r.rating <> floor(r.rating) LIMIT 5.",
+  "source": "infra",
+  "id": "F155",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Model importado desde core.worker en lugar de core.data",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 7,
+  "evidence": "from ..core.worker import Model (re-export: worker.py:12 from .data import Model); en lib/data.py Model sólo se usa en anotaciones (l. 382, 390).",
+  "impact": "Arrastra worker.py (signal, import_module de jobs, SequenceJob) al importar el modelo; dificulta la extracción.",
+  "fix": "from ..core.data import Model (o TYPE_CHECKING).",
+  "how_to_test": "python -X importtime -c 'import mtpy.lib.data' | grep worker.",
+  "source": "infra",
+  "id": "F156",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "App.__getattr__ devuelve None para dependencias no registradas",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/core/app.py",
+  "line": 25,
+  "evidence": "def __getattr__(self, key): if key in self.deps: return self.deps[key]  (sin else -> None). Verificado: App.get_().some_unknown_dependency is None. Ejemplo real: Worker usa self.app.qs (worker.py:32) que nunca se define.",
+  "impact": "Errores tardíos y opacos ('NoneType' object has no attribute ...) en lugar de AttributeError inmediato.",
+  "fix": "raise AttributeError(key) cuando la clave no existe.",
+  "how_to_test": "from mtpy.core.app import App; print(App.get_().foo)  # None",
+  "source": "infra",
+  "id": "F157",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "App.class_exists/get_class no funcionan con nombres con punto",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/core/app.py",
+  "line": 46,
+  "evidence": "parts = name.rsplit('.', 1); return hasattr(parts[0], parts[1]) -> hasattr sobre una cadena, no sobre el módulo. App.class_exists('os.path') -> False.",
+  "impact": "Ninguno para el modelo (no se usa con cadenas), pero es código erróneo que un lector puede intentar reutilizar.",
+  "fix": "importlib.import_module(parts[0]) antes de hasattr/getattr, o eliminar la funcionalidad.",
+  "how_to_test": "from mtpy.core.app import App; App.class_exists('os.path').",
+  "source": "infra",
+  "id": "F158",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Variables de entorno ausentes se sustituyen silenciosamente por cadena vacía",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/mtpy.py",
+  "line": 44,
+  "evidence": "dconfig.replace('${' + env_var + '}', os.getenv(env_var, '')); luego getattr(dal, '') (mtpy.py:51) produce un error críptico de import_module; Config.offset_is_empty no es recursivo (app.py:91-103; Config('{\"db\":{\"adapter\":\"\"}}').offset_is_empty('db') -> False).",
+  "impact": "Errores de configuración difíciles de diagnosticar para nuevos usuarios.",
+  "fix": "Validar variables requeridas al arrancar (lista explícita) y fallar con mensaje claro; o usar pydantic-settings.",
+  "how_to_test": "env -i /Users/luiss/.pyenv/versions/3.11.9/bin/python -c 'from mtpy import mtpy; mtpy.run()' desde un directorio sin .env.",
+  "source": "infra",
+  "id": "F159",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Loggers con nombres globales genéricos ('info', 'error', 'debug')",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/core/app.py",
+  "line": 163,
+  "evidence": "logger = logging.getLogger(name) con name in {'debug','info','error'}; el logger 'debug' no recibe FileHandler y sin verbose tampoco StreamHandler (app.py:166-176).",
+  "impact": "Colisión con cualquier otra librería que use esos nombres; mensajes debug perdidos con verbose=0.",
+  "fix": "Usar logging.getLogger('<paquete>') con niveles estándar y configuración por dictConfig.",
+  "how_to_test": "logging.getLogger('info').handlers tras mtpy.run().",
+  "source": "infra",
+  "id": "F160",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Semilla global legacy np.random.seed(42) en el arranque",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/mtpy.py",
+  "line": 91,
+  "evidence": "np.random.seed(config.app.seed) con seed 42 (config.json:16); verificado np.random.uniform() == 0.3745401188473625 tras run().",
+  "impact": "La reproducibilidad depende del orden de ejecución de celdas y de cualquier llamada intermedia a np.random; el RNG global es compartido con librerías de terceros.",
+  "fix": "Inyectar un numpy.random.Generator (default_rng(seed)) en Simulator/Computer y no sembrar globalmente.",
+  "how_to_test": "Ejecutar dos veces Simulator.run(n_sim=10, seed=None) tras distintas celdas y comparar totals().",
+  "source": "infra",
+  "id": "F161",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "SQL construido por interpolación de cadenas en las rutas de guardado",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/data.py",
+  "line": 413,
+  "evidence": "model.execute(\"UPDATE {} SET {} WHERE event_scope IN ('{}') AND event_date IN ('{}')\".format(...)) (data.py:413-418); DELETE análogo en data.py:442-446 y loader.py:187,206,675,695.",
+  "impact": "Frágil ante comillas o valores inesperados; no es un vector de ataque externo pero no es buena práctica para un repo de referencia.",
+  "fix": "Usar sqlalchemy.text con parámetros ligados (:scope, :dates) o el propio build_delete_query del adaptador.",
+  "how_to_test": "Revisión de código; ejecutar con un event_scope que contenga una comilla simple.",
+  "source": "infra",
+  "id": "F162",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "PerformanceWarning masivo y groupby categórico sin observed=",
+  "kind": "performance",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 469,
+  "evidence": "for n in self.names: if n not in self.errors.columns: self.errors[n] = np.nan (computer.py:469-471) -> 338 PerformanceWarning 'DataFrame is highly fragmented'; lib/data.py:112 parties.groupby('block') -> 17 FutureWarning observed=False; helpers.py:860 fillna downcasting.",
+  "impact": "Rendimiento subóptimo y comportamiento que cambiará en pandas futuras (observed=True por defecto).",
+  "fix": "self.errors = self.errors.reindex(columns=self.names); groupby('block', observed=False) explícito; infer_objects tras fillna.",
+  "how_to_test": "Reactivar warnings (warnings.simplefilter('always')) y ejecutar Computer(scope='es', path='files').build_series().",
+  "source": "infra",
+  "id": "F163",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "CITATION.cff incompleto y README de una línea",
+  "kind": "docs",
+  "severity": "low",
+  "file": "CITATION.cff",
+  "line": 1,
+  "evidence": "CITATION.cff sólo tiene cff-version, message, title, authors (sin ORCID), date-released 2025-02-18 y url; README.md contiene únicamente '# MT Elections Model'; LICENSE MIT con año 2019.",
+  "impact": "No es citable con versión/DOI; el repositorio no explica cómo instalar, ejecutar ni qué método implementa.",
+  "fix": "Completar CITATION.cff (version, license: MIT, repository-code, abstract, keywords, identifiers con DOI de Zenodo, orcid), README con instalación, datos, flujo y referencias.",
+  "how_to_test": "cffconvert --validate.",
+  "source": "infra",
+  "id": "F164",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Infraestructura Docker/nginx/supervisor/cron ajena al modelo",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "Dockerfile",
+  "line": 4,
+  "evidence": "Dockerfile instala nginx, supervisor, supercronic, cmake, build-essential; deploy/docker/supervisord.conf define gunicorn/nginx/worker/crontab; crontab ejecuta 'python /app/job.py rep' (job inexistente); .gitignore:4 ignora AGENTS.md.",
+  "impact": "Confunde el propósito del repo y añade superficie de mantenimiento; la imagen construye un servicio web que el modelo no ofrece.",
+  "fix": "Eliminar Dockerfile/deploy del repo científico (o reducirlo a una imagen jupyter mínima); versionar AGENTS.md/CONTRIBUTING.md.",
+  "how_to_test": "docker build . y docker run -e RUN_JOB=rep -> AttributeError en jobs.Rep.",
+  "source": "infra",
+  "id": "F165",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Carga dinámica de módulos por __getattr__ de paquete oculta dependencias",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/core/dal/__init__.py",
+  "line": 5,
+  "evidence": "def __getattr__(name): module = import_module('.' + name, __name__) en dal/__init__.py, jobs/__init__.py, pipelines/__init__.py, learners/__init__.py, controllers/__init__.py; mtpy.py:51 hace getattr(dal, config.db.adapter).",
+  "impact": "Los linters, mypy y el análisis de dependencias no ven qué adaptadores se usan; errores de nombre se convierten en ModuleNotFoundError tardíos.",
+  "fix": "Registro explícito de adaptadores {'PostgreSQL': PostgreSQL} o import directo en el paquete científico.",
+  "how_to_test": "ruff/mypy no detectan referencias a dal.PostgreSQL; grep 'from .PostgreSQL' vacío.",
+  "source": "infra",
+  "id": "F166",
+  "sources": [
+   "infra"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Nada del flujo es ejecutable desde un clon del repositorio (files/, BD y .env no versionados)",
+  "kind": "reproducibility",
+  "severity": "high",
+  "file": ".gitignore",
+  "line": 2,
+  "evidence": "`.gitignore` excluye `files/` completo; `Simulator.__init__` lee `f'{self.path}/params.json'` (simulator.py:98-101), los loaders leen `es-regions.csv`, `es-provinces.csv`, `wikipedia/wp-urls.json`, `wp-maps.json` (loader.py:57-58, 305-307) y el XLSX de infoelectoral (loader.py:71); `mtpy.run()` exige PostgreSQL con credenciales en `.env` (mtpy.py:36-58)",
+  "impact": "Un lector externo no puede ejecutar ningún notebook ni reproducir una sola figura; incompatible con un repositorio científico/divulgativo",
+  "fix": "Versionar params.json, wp-*.json, CSV de provincias y XLSX infoelectoral (datos públicos); exportar el esquema `elections` a Parquet/CSV en `data/` (o Zenodo con DOI) y añadir a `mtpy.lib.data` un backend de ficheros; documentar `.env.example`",
+  "how_to_test": "git clone en un directorio limpio, pip install -r requirements.txt, ejecutar la celda 2 de notebooks/PollsForecast.ipynb -> falla en mtpy.run() o en la lectura de files/params.json",
+  "source": "notebooks",
+  "id": "F167",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "PollsForecast.ipynb (y events/*) usan np.NaN, eliminado en NumPy 2; el entorno real tiene numpy 2.4.4",
+  "kind": "bug",
+  "severity": "high",
+  "file": "notebooks/PollsForecast.ipynb",
+  "line": 6,
+  "evidence": "Celdas 6, 7 y 8: `.replace(0, np.NaN)`; verificado en el intérprete: `AttributeError: np.NaN was removed in the NumPy 2.0 release`. requirements.txt fija numpy==1.25.2 pero /Users/luiss/.pyenv/versions/3.11.9 tiene 2.4.4 (los outputs de lab/PollsOptimize muestran `np.float64(...)`, prueba de que se ejecuta con numpy 2). También en PollstersEvent c.5 (rama show_fc=True) y en los 6 notebooks de events/*",
+  "impact": "El notebook de forecast, pieza central del modelo, no puede ejecutarse de principio a fin con el entorno actual",
+  "fix": "Sustituir np.NaN por np.nan; añadir lockfile coherente con el intérprete usado",
+  "how_to_test": "jupyter nbconvert --to notebook --execute notebooks/PollsForecast.ipynb -> error en la celda 6",
+  "source": "notebooks",
+  "id": "F168",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Simulator.totals() reparte el déficit de escaños 'por ciclos' y asigna escaños a partidos con 0 en todas las simulaciones",
+  "kind": "stat",
+  "severity": "high",
+  "file": "mtpy/lib/simulator.py",
+  "line": 405,
+  "evidence": "simulator.py:401-427: `ds = floor(medianas)`, `diff = 350 - ds.sum()`; si `diff > 0`, `cycles = diff // n_partidos` y `ds += cycles` a TODOS los partidos antes de repartir restos. En LS/MC `v2seats.predict` no está restringido a sumar 350 (simulator.py:616-618). Verificado con n_sim=30: medianas suman 329 -> 21 de déficit = 1 ciclo + 8 restos -> SALF y UPN reciben 1 escaño con max=0 en las 30 simulaciones, CC pasa de 1 a 2. La tabla resumen del notebook (LS/MC: SALF 1, CC 1, UPN 1; LS == MC exactamente) refleja el bug",
+  "impact": "Las cifras de escaños publicadas en los modos LS y MC están sesgadas (+1 uniforme a todos los partidos) y no son coherentes con las distribuciones simuladas",
+  "fix": "Repartir el déficit sólo entre partidos con mediana > 0 por mayores restos, o renormalizar la salida de v2seats para que sume 350 antes de la mediana; alternativamente tomar la mediana de escaños ya normalizados por simulación",
+  "how_to_test": "sim.run(split=False, random=True, n_sim=30); print(sim.dist().max()); print(sim.totals()) -> partidos con max 0 reciben 1 escaño",
+  "source": "notebooks",
+  "id": "F169",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Los 6 notebooks de events/* y varios de build/ importan mtpy.lib.elections.*, módulo inexistente, con sys.path a 4 niveles y path='elections'",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "notebooks/events/es-202307/PollsAnalysis.ipynb",
+  "line": 0,
+  "evidence": "Celda 0: `sys.path.append('../../../..')` (apunta al padre del repo) y `from mtpy.lib.elections.forecaster import Forecaster`; verificado: `ModuleNotFoundError: No module named 'mtpy.lib.elections'`. Celda 1: `path = 'elections'` -> escribiría en files/elections/. Mismo patrón en es-201911/* y en build/EventParams, Test, Test2",
+  "impact": "Notebooks históricos (backtests 2019-11 y 2023-07) irreproducibles; confunden al lector sobre cuál es la versión canónica",
+  "fix": "Eliminar events/* y regenerarlos con papermill desde los notebooks canónicos parametrizados por event_date; borrar build/ o moverlo fuera del repo",
+  "how_to_test": "Ejecutar la celda 0 de cualquier notebook de notebooks/events/",
+  "source": "notebooks",
+  "id": "F170",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "sim.result() tras el modo MT muestra una única simulación aleatoria (loc=0) como tabla provincia x partido",
+  "kind": "design",
+  "severity": "medium",
+  "file": "mtpy/lib/simulator.py",
+  "line": 370,
+  "evidence": "`result(self, loc=0)` devuelve `self.results[loc]` (simulator.py:370-378). PollsSimulations c.15 lo muestra tras run(split=True, random=True, n_sim=1000). Verificado: result(0).loc['es'] PP=136, result(1) PP=149, totals() PP=136. En el notebook publicado la fila `es` de esa tabla (PP 124 / PSOE 127) contradice la tabla resumen MT (PP 126 / PSOE 118)",
+  "impact": "El desglose provincial mostrado en el notebook para MT es un sorteo individual, no un estadístico de la simulación; induce a error en la divulgación",
+  "fix": "Añadir Simulator.result_median() (mediana por provincia y partido con reparto a los escaños de cada provincia) o usar en el notebook np.median(sim.results, axis=0); documentar `loc`",
+  "how_to_test": "sim.run(split=True, random=True, n_sim=5); comparar sim.result(0).loc['es'], sim.result(1).loc['es'] y sim.totals()",
+  "source": "notebooks",
+  "id": "F171",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "'Run All' en los notebooks de data-load escribe y borra en PostgreSQL sin confirmación",
+  "kind": "design",
+  "severity": "medium",
+  "file": "notebooks/data-load/PollsCompute.ipynb",
+  "line": 1,
+  "evidence": "PollsCompute c.1 `save = True` -> compute_weights(save=save, overwrite=True), compute_errors/deviations/ratings(save=save); PollsLoadWikipedia c.1 `save = True` y c.8 `compute_series(save=save, overwrite=True)`; save_polls con overwrite=True ejecuta `DELETE FROM ... WHERE event` (loader.py:672-676)",
+  "impact": "Una ejecución accidental sobrescribe pesos/ratings históricos sin copia de seguridad ni versionado de la BD",
+  "fix": "save=False por defecto, parámetro explícito de papermill o CLI con --save; export automático de las tablas antes de escribir",
+  "how_to_test": "grep -n 'save = True' notebooks/data-load/*.ipynb",
+  "source": "notebooks",
+  "id": "F172",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Docstring de compute_ratings describe una fórmula distinta a la implementada y ratings_margin no se usa",
+  "kind": "docs",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 895,
+  "evidence": "computer.py:895-905 describe `prior_weight = quality * num_polls / (num_polls + num_polls.mean())`, `dev_reverted` y 'rating scaled to [5-95]'; el código real (computer.py:1173-1186, y su copia en lab/PollstersOptimize c.18) hace `rating_adj = norm.cdf(-bias_dev_adj, scale=bias_dev_tau)`, `rating = (num_polls_w*rating_adj + min_polls*quality)/(num_polls_w+min_polls)`, `weight_rating = log1p(rating)/log1p(rating.mean())`. `ratings_margin=.05` sólo aparece en __init__ (computer.py:50,100,128)",
+  "impact": "La documentación metodológica (base del material divulgativo) no corresponde al modelo que produce las figuras",
+  "fix": "Reescribir el docstring con la fórmula real; eliminar ratings_margin o implementarlo",
+  "how_to_test": "grep -n 'ratings_margin\\|prior_weight\\|dev_reverted' mtpy/lib/computer.py",
+  "source": "notebooks",
+  "id": "F173",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "lab/PollstersOptimize duplica ~60 líneas de Computer.pollster_ratings",
+  "kind": "design",
+  "severity": "medium",
+  "file": "notebooks/lab/PollstersOptimize.ipynb",
+  "line": 18,
+  "evidence": "Celdas 17-18 reproducen literalmente computer.py:1094-1190 (bias_to_lor, poll_rating_weights, agregación por casa, bayes_adjust, norm.cdf, log1p)",
+  "impact": "Divergencia silenciosa entre notebook y librería ante cualquier cambio; el lector no sabe cuál es la fuente de verdad",
+  "fix": "Que el notebook llame a comp.pollster_ratings(iter_polls) y sólo muestre resultados intermedios, o exponer pasos como métodos pequeños",
+  "how_to_test": "diff entre la celda 18 y computer.py:1140-1186",
+  "source": "notebooks",
+  "id": "F174",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Notebooks en Git LFS con outputs embebidos y stale respecto a la BD",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": ".gitattributes",
+  "line": 1,
+  "evidence": "`*.ipynb filter=lfs`; tamaños 1-4,7 MB con hasta 16 PNG base64; el commit HEAD sólo cambia `oid/size` en 5 notebooks. Outputs raíz del 29-dic-2025 (última encuesta 2025-12-15) mientras PollsLoadWikipedia (22-sep-2026) cargó encuestas hasta 2026-07-09 y PollsOptimize (hoy) muestra 2026-09-11; files/img/2708-* mezcla figuras de mar-2025 y dic-2025",
+  "impact": "GitHub no renderiza notebooks LFS, los diffs de código son invisibles y las figuras/outputs publicados no corresponden al estado de los datos",
+  "fix": "Sacar .ipynb de LFS, nbstripout en pre-commit, ejecutar los notebooks en CI/Jupyter Book y publicar outputs en outputs/{event}/",
+  "how_to_test": "git show HEAD -- notebooks/lab/EventsSeats.ipynb (sólo oid/size); comparar fc.date_last con SELECT max(date) FROM elections.polls",
+  "source": "notebooks",
+  "id": "F175",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Deprecaciones de pandas ocultas por warnings.filterwarnings('ignore') que romperán con pandas 3",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 400,
+  "evidence": "forecaster.py:400-401 `fillna(method='ffill')` (usado por Simulator.fit_forecast con fillna=True); forecaster.py:470 `applymap` (load_forecast, rama fc_fit=False); PollstersOptimize c.14 `applymap`; todos los notebooks empiezan con warnings.filterwarnings('ignore')",
+  "impact": "Actualizar pandas rompe la simulación y la carga de forecasts guardados sin aviso previo",
+  "fix": ".ffill(), DataFrame.map; limitar el filtro de warnings",
+  "how_to_test": "python -W error::FutureWarning -c \"...fc.load_forecast('fc')\"",
+  "source": "notebooks",
+  "id": "F176",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "requirements.txt incoherente con el entorno de ejecución y sin lockfile ni kernel propio",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "requirements.txt",
+  "line": 19,
+  "evidence": "numpy==1.25.2, scipy==1.9.3, matplotlib==3.8.0, nbconvert==6.4.4, ipython==7.29.0 frente a numpy 2.4.4, scipy 1.17.0, matplotlib 3.10.8 instalados; kernelspec genérico `python3` en todos los notebooks",
+  "impact": "Imposible saber con qué versiones se generaron las figuras publicadas",
+  "fix": "pyproject.toml + uv/pip-compile lock; kernel `elections-model`",
+  "how_to_test": "pip check / comparar pip freeze con requirements.txt",
+  "source": "notebooks",
+  "id": "F177",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "sys.path.append relativo en cuatro variantes en lugar de paquete instalable",
+  "kind": "design",
+  "severity": "low",
+  "file": "notebooks/PollstersRatings.ipynb",
+  "line": 0,
+  "evidence": "'..' x5, '../..' x6, '../../..' x14, '../../../..' x6 (grep sobre notebooks/); depende de que el CWD del kernel sea la carpeta del notebook",
+  "impact": "Fallos al ejecutar con papermill/nbconvert desde otro directorio; frágil al mover notebooks",
+  "fix": "pip install -e . con pyproject.toml y eliminar los sys.path.append",
+  "how_to_test": "cd /tmp && jupyter nbconvert --execute <ruta absoluta del notebook> -> ModuleNotFoundError mtpy",
+  "source": "notebooks",
+  "id": "F178",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Constantes hard-coded en notebooks (encuestadoras destacadas, ventana 6-41, 350 escaños, nota de autor)",
+  "kind": "design",
+  "severity": "low",
+  "file": "notebooks/PollsForecast.ipynb",
+  "line": 15,
+  "evidence": "`pollsters = ['CIS','GAD3','GESOP','40dB']` (PollsForecast c.15, PollstersRatings c.7), ids `[1,2,3,15]` en events/*, `days.between(6, 41)` (c.7) frente a drange=(6,42) en otros notebooks, `vmax=350` en PollsSimulations (disponible en sim.reg_totals), nota 'Luis Sancho - @luis_sancho'",
+  "impact": "Difícil parametrizar por evento/país; inconsistencias entre notebooks",
+  "fix": "Campo `featured` en pollsters o parámetro; usar sim.reg_totals.loc['es'].seats; nota en config",
+  "how_to_test": "grep -n \"'CIS', 'GAD3'\\|between(6, 41)\\|vmax=350\" notebooks/*.ipynb",
+  "source": "notebooks",
+  "id": "F179",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Código muerto e inconsistencias menores en notebooks",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "notebooks/PollsSimulations.ipynb",
+  "line": 1,
+  "evidence": "c.1 carga `parties` y `provinces` (es-provinces.csv) sin usarlos; c.5 `'Promedio de sondeos'.format(...)` sin marcador; PollstersEvent importa Forecaster/norm_range/group_results sólo para show_fc; PollsForecast c.5 `d = fc.fc_series[['sample_size']]; d['poll'] = 1` (SettingWithCopy); events/*/PollsAnalysis c.17-18 tiene dos figuras por bloques por encuestadora que PollsForecast ya no genera",
+  "impact": "Ruido para el lector; posible pérdida de figuras útiles",
+  "fix": "Limpiar imports/variables; recuperar las figuras por bloques si se desean",
+  "how_to_test": "Inspección de las celdas citadas",
+  "source": "notebooks",
+  "id": "F180",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "PollstersEvent mezcla ventanas temporales en los paneles de métricas por encuestadora",
+  "kind": "stat",
+  "severity": "low",
+  "file": "notebooks/PollstersEvent.ipynb",
+  "line": 4,
+  "evidence": "`dp` = get_polls_metric(metric='error', bmap) sin drange/n_last (incluye CEMOP a 431 días) mientras `df` usa n_last=1; el panel 'Mean Absolute Error' agrega errores de encuestas de hasta 4 años antes y se compara con 'Last Poll Absolute Error'",
+  "impact": "Comparación entre paneles no homogénea; penaliza a casas con series largas",
+  "fix": "Explicitar drange en dp (p. ej. (0, 365)) o etiquetar el panel con la ventana usada",
+  "how_to_test": "comp.get_polls_metric(metric='error', bmap='vs').reset_index().days.describe()",
+  "source": "notebooks",
+  "id": "F181",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "print_df(path=) depende de dataframe_image, no incluido en requirements",
+  "kind": "reproducibility",
+  "severity": "low",
+  "file": "mtpy/core/utils/dataviz.py",
+  "line": 762,
+  "evidence": "save_styler importa `dataframe_image` en tiempo de ejecución (dataviz.py:762-765); no está en requirements.txt. Hoy ningún notebook pasa path a print_df",
+  "impact": "Fallará si se quiere exportar tablas de ratings como imagen",
+  "fix": "Añadir dependencia opcional o exportar tablas a HTML/Markdown",
+  "how_to_test": "comp.print_ratings(path='img/x.png') con la firma correspondiente",
+  "source": "notebooks",
+  "id": "F182",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Figuras huérfanas y duplicadas en files/img/",
+  "kind": "dead-code",
+  "severity": "low",
+  "file": "files/img",
+  "line": 0,
+  "evidence": "12 ficheros fig1_censo_mensual.png … fig_prima_bloque.png no los genera ningún notebook; variantes -full/-min/-vs de ejecuciones de mar-2025; files/img/2307/ (34 PNG, ene-2025) duplica 2307-* de la raíz; files/img/7706/ de un evento 1977",
+  "impact": "Confusión sobre qué figuras son las vigentes",
+  "fix": "Regenerar todas las figuras con un script y borrar el resto; salida por evento en outputs/{event}/",
+  "how_to_test": "ls files/img | grep -v -E '^(1911|2307|2708)-'",
+  "source": "notebooks",
+  "id": "F183",
+  "sources": [
+   "notebooks"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "El parámetro `path` es relativo a la raíz del FileSystem (files/), pero su default es os.getcwd()",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 106,
+  "evidence": "`self.path = path or os.getcwd()` seguido de `self.app.fs.read(f'{self.path}/params.json')` (forecaster.py:106-110; simulator.py:106-110; computer.py:130-136). FileSystem.get_path (core/io.py:38-52) devuelve tal cual las rutas que empiezan por '/' y prefija con fspath=<repo>/files las relativas. Probado: path='.' desde notebooks/ funciona; path=None falla con FileNotFoundError notebooks/params.json; path='files' desde la raíz produce files/files/params.json.",
+  "impact": "Cualquier usuario que instancie Forecaster/Simulator/Computer sin `path` (o con una ruta relativa al cwd, como sugiere el docstring 'Path to store model files') obtiene FileNotFoundError. Los notebooks solo funcionan porque usan path='.'.",
+  "fix": "Eliminar el default os.getcwd(); usar `path=''`/`'.'` y documentar que es relativo a app.fs (files/). Idealmente exponer `app.fspath` y leer params.json desde ahí.",
+  "how_to_test": "cd notebooks && python -c \"from mtpy import mtpy; mtpy.run(); from mtpy.lib.forecaster import Forecaster; Forecaster('es','2027-08-22')\" -> FileNotFoundError; con path='.' -> OK (step6.py).",
+  "source": "smoke",
+  "id": "F184",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "requirements.txt fija numpy 1.25.2 / scipy 1.9.3 pero el código corre (y se ha probado) con numpy 2.4.4 / scipy 1.17.0",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "requirements.txt",
+  "line": 1,
+  "evidence": "Pins `numpy==1.25.2`, `pandas==2.2.2`, `scipy==1.9.3`; el intérprete /Users/luiss/.pyenv/versions/3.11.9 tiene numpy 2.4.4, scipy 1.17.0 y todo el flujo Computer→Forecaster→Simulator funciona sin excepciones (step1-5).",
+  "impact": "Un tercero que instale desde requirements.txt no reproduce el entorno real; además scipy 1.9.3 no tiene wheels para Python 3.11 en macOS ARM en muchos casos.",
+  "fix": "Actualizar pins a las versiones verificadas (numpy>=2,<3; pandas==2.2.x; scipy>=1.14) y añadir un pyproject/lock.",
+  "how_to_test": "pip install -r requirements.txt en un venv limpio con Python 3.11 y comparar con `pip freeze` del entorno que funciona.",
+  "source": "smoke",
+  "id": "F185",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "np.NaN en notebooks principales rompe bajo numpy 2",
+  "kind": "bug",
+  "severity": "medium",
+  "file": "notebooks/PollsForecast.ipynb",
+  "line": 428,
+  "evidence": "grep: `np.NaN` en PollsForecast.ipynb (428, 450, 484), PollstersEvent.ipynb (1031, 1034, 1036), events/es-201911/*, events/es-202307/*, build/EventsData.ipynb:1070. Ejecutado: `np.NaN` -> AttributeError con numpy 2.4.4 (step7.py).",
+  "impact": "Las celdas de gráficos mensuales/por encuestadora de los notebooks de divulgación fallan con el entorno actual.",
+  "fix": "Reemplazar por `np.nan` (sed sobre los .ipynb).",
+  "how_to_test": "python -c 'import numpy as np; np.NaN' -> AttributeError.",
+  "source": "smoke",
+  "id": "F186",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Todos los FutureWarning de pandas quedan silenciados globalmente al importar mtpy",
+  "kind": "reproducibility",
+  "severity": "medium",
+  "file": "mtpy/mtpy.py",
+  "line": 15,
+  "evidence": "`warnings.filterwarnings('ignore')` a nivel de módulo. Reactivando warnings tras mtpy.run() (step5.py) aparecen: utils.py:91 groupby(axis=1); forecaster.py:400-401 fillna(method='ffill'); forecaster.py:472,1031-1032 applymap; helpers.py:860 downcasting; data.py:112 groupby observed=False (~15 veces por Simulator.__init__); data.py:93,97 PerformanceWarning lexsort.",
+  "impact": "Código que romperá en pandas 3 (groupby axis=1, fillna(method=), applymap) pasa desapercibido; para un repositorio científico oculta información de reproducibilidad.",
+  "fix": "Quitar el filtro global (o limitarlo a categorías concretas) y migrar: `df.T.groupby(level=0).sum(min_count=1).T`, `.ffill()`, `.map()`, `observed=True`, `sort_index()` antes de indexar MultiIndex.",
+  "how_to_test": "python -W default -c \"from mtpy import mtpy; mtpy.run(); import warnings; warnings.simplefilter('default'); from mtpy.lib.simulator import Simulator; Simulator('es','2027-08-22',drange=6,path='/Users/luiss/HD/Proyectos/Code/elections-model/files')\"",
+  "source": "smoke",
+  "id": "F187",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "El estimador lineal de escaños (modos LS/MC) predice escaños negativos y +15.7 fijos a regionales",
+  "kind": "stat",
+  "severity": "medium",
+  "file": "mtpy/lib/computer.py",
+  "line": 1652,
+  "evidence": "get_seats_estimator ajusta `seats ~ pct + regional` (poly_deg=1) sobre 187 filas; coeficientes obtenidos [-16.95, 4.51, 15.71]. predict: 3% nacional -> -3.4 escaños, 0.5% regional -> 1.0, 3% regional -> 12.3. simulate() recorta con `.clip(0)` (simulator.py:630) y totals() fuerza la suma a 350 repartiendo el déficit por ciclos a todos los partidos (simulator.py:411-422), de modo que en LS SALF (2.07%) recibe 1 escaño y UPN 1.",
+  "impact": "Los modos LS y MC no son una asignación de escaños creíble; sus totales (PP 128 vs DH 139) difieren del modo D'Hondt por artefactos del modelo lineal, no por incertidumbre.",
+  "fix": "Presentar DH/MT como el resultado del modelo y LS/MC como baseline; o sustituir el estimador por uno no lineal/monótono (p.ej. poly_deg=2 sin intercepto, o isotónico) con truncado explícito en 0 antes de renormalizar.",
+  "how_to_test": "comp.get_seats_estimator().predict(np.array([[3.,0],[3.,1]])) -> [-3.42, 12.29] (step23.log).",
+  "source": "smoke",
+  "id": "F188",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Simulator.build_forecast requiere fit_forecast(fillna=True) pero no lo valida",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 313,
+  "evidence": "`self.model.forecast[n].loc[self.limit_date]` y `self.model.fc_stat[n].loc[self.limit_date]['err']` con limit_date=2027-08-16, mientras la última encuesta es 2026-09-11 (+max_fc). Sin fillna=True esas celdas son NaN/None (fc_stat contiene dicts o None) y `['err']` sobre None lanza TypeError.",
+  "impact": "Un uso natural `sim.fit_forecast(max_fc=10)` (sin fillna) fallará o producirá NaN silenciosos en la simulación.",
+  "fix": "Forzar `fillna=True` dentro de Simulator.fit_forecast o hacer ffill en build_forecast; documentar que el forecast se congela en la última fecha con encuestas.",
+  "how_to_test": "sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=False); sim.run(split=False, random=False) -> esperado TypeError/NaN (no ejecutado en este smoke).",
+  "source": "smoke",
+  "id": "F189",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "La columna '-' (resto) de Forecaster.forecast se calcula solo con los partidos ajustados",
+  "kind": "design",
+  "severity": "low",
+  "file": "mtpy/lib/forecaster.py",
+  "line": 394,
+  "evidence": "`self.forecast['-'] = 100. - self.forecast[names].sum(axis=1, min_count=1)` dentro del bucle; con fit_forecast(names=['PP','PSOE']) get_forecast(sort=True) devuelve `-  40.99` como primer elemento.",
+  "impact": "Con ajustes parciales el 'resto' es engañoso y aparece como si fuera el partido mayoritario; además '-' colisiona con el partido literal '-' que existe en elections.parties (comp.names lo incluye).",
+  "fix": "Calcular '-' solo cuando names == self.names, o excluirlo de get_forecast(sort=True); renombrar el bloque residual (p.ej. 'others').",
+  "how_to_test": "fc.fit_forecast(names=['PP','PSOE'], max_fc=3); fc.get_forecast(sort=True) (step4.log).",
+  "source": "smoke",
+  "id": "F190",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "Ruido de la simulación usa t de Student con nobs-2 grados de libertad, no neff",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 538,
+  "evidence": "`self.rng.standard_t(df.loc[vind, 'nobs'] - 2)` mientras el LocalKernelEstimator devuelve nobs=101 y neff=48.4 para PP (step4.log); el error estándar `err` ya está calculado con neff.",
+  "impact": "Colas de la distribución simulada ligeramente más estrechas de lo que implica el tamaño efectivo de muestra ponderado; efecto pequeño a nobs≈100 pero incoherente con la teoría del kernel ponderado.",
+  "fix": "Usar `neff - 2` (disponible en fc_stat) como grados de libertad.",
+  "how_to_test": "Comparar cuantiles de dist() con standard_t(nobs-2) vs standard_t(neff-2) para n_sim=1000.",
+  "source": "smoke",
+  "id": "F191",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "sample_size NaN convertido a 0 en get_polls_metric",
+  "kind": "bug",
+  "severity": "low",
+  "file": "mtpy/lib/computer.py",
+  "line": 1447,
+  "evidence": "`df[['days','sample_size','proc_sample']] = ....fillna(0).astype(int)`; en el resultado, Target Point 2023 aparece con sample_size=0 y proc_sample=1004 (step23.log).",
+  "impact": "Describe/plots de tamaños de muestra muestran ceros ficticios (min=0 en describe).",
+  "fix": "Mantener NaN (usar Int64 nullable) o rellenar sample_size con proc_sample.",
+  "how_to_test": "comp.get_polls_metric('error', bmap='vs', drange=(6,42), n_last=1).query('sample_size == 0').",
+  "source": "smoke",
+  "id": "F192",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "El error estimador con drange=(6,None) incluye encuestas hasta 192 semanas antes del evento",
+  "kind": "stat",
+  "severity": "low",
+  "file": "mtpy/lib/simulator.py",
+  "line": 162,
+  "evidence": "Simulator llama get_error_estimator(drange=self.drange=(6,None), n_last=1); los datos resultantes tienen weeks max 192, media 12.7 (step23.log), aunque la simulación siempre evalúa en weeks=(drange[0]+1)//7=1.",
+  "impact": "El coeficiente de `weeks` (0.013/semana) se estima con una nube de puntos muy heterogénea (última encuesta de cada casa aunque sea de años antes), y luego se extrapola en el extremo weeks=1.",
+  "fix": "Acotar drange superior (p.ej. (6, 90)) al ajustar v2err o ponderar por cercanía; documentar la elección.",
+  "how_to_test": "comp.get_error_estimator_data(True, drange=(6,None), n_last=1).weeks.describe().",
+  "source": "smoke",
+  "id": "F193",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ },
+ {
+  "title": "No existen tests; los scripts de humo son convertibles en pytest",
+  "kind": "docs",
+  "severity": "low",
+  "file": "README.md",
+  "line": 1,
+  "evidence": "README de una línea; ningún directorio tests/. Los scripts step1.py…step5b.py ejecutan el flujo completo en <30 s con n_sim<=200.",
+  "impact": "Sin red de seguridad para migraciones de pandas/numpy ni para refactors hacia un repositorio científico.",
+  "fix": "Añadir tests/test_smoke.py con fixtures (Computer, Forecaster 1 partido, Simulator n_sim=10, seed fijo) y comprobar sumas=350, reproducibilidad por semilla y ausencia de NaN.",
+  "how_to_test": "pytest -q tras copiar los scripts adaptados.",
+  "source": "smoke",
+  "id": "F194",
+  "sources": [
+   "smoke"
+  ],
+  "_bucket": "low_unverified"
+ }
+]

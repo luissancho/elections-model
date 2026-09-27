@@ -837,11 +837,16 @@ def format_data_bin(
         lambda v: True if v == 1 else False if v == 0 else np.nan
     )
 
+    # `d` holds True/False/NaN as objects: fill missing values without the object-downcasting
+    # path of `fillna`, which pandas deprecates
+    def _fill_missing_bin(values, fill):
+        return values.map(lambda v: fill if pd.isna(v) else v)
+
     if default is not None:
-        d = d.fillna(default)
+        d = _fill_missing_bin(d, default)
 
     if prevent_nulls:
-        d = d.fillna(False)
+        d = _fill_missing_bin(d, False)
 
     if bin_type == 'category':
         d = d.astype('category', errors='ignore')
@@ -855,9 +860,9 @@ def format_data_bin(
     elif bin_type == 'nullable':
         d = d.astype('boolean', errors='ignore')
     elif bin_type == 'strict':
-        d = d.fillna(False)
+        d = _fill_missing_bin(d, False).astype(bool)
     else:
-        d = d.fillna(False).astype(bool)
+        d = _fill_missing_bin(d, False).astype(bool)
 
     return d
 

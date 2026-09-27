@@ -1,0 +1,1920 @@
+code,region,age,population
+1,Andalucía,0,63931
+1,Andalucía,1,71140
+1,Andalucía,2,75609
+1,Andalucía,3,80897
+1,Andalucía,4,82416
+1,Andalucía,5,84430
+1,Andalucía,6,83191
+1,Andalucía,7,88264
+1,Andalucía,8,90960
+1,Andalucía,9,93417
+1,Andalucía,10,96176
+1,Andalucía,11,102005
+1,Andalucía,12,98723
+1,Andalucía,13,99547
+1,Andalucía,14,96705
+1,Andalucía,15,94787
+1,Andalucía,16,92482
+1,Andalucía,17,89439
+1,Andalucía,18,90207
+1,Andalucía,19,91017
+1,Andalucía,20,89695
+1,Andalucía,21,87463
+1,Andalucía,22,88998
+1,Andalucía,23,88435
+1,Andalucía,24,90031
+1,Andalucía,25,91381
+1,Andalucía,26,95774
+1,Andalucía,27,98525
+1,Andalucía,28,98559
+1,Andalucía,29,99811
+1,Andalucía,30,100992
+1,Andalucía,31,102056
+1,Andalucía,32,103693
+1,Andalucía,33,106152
+1,Andalucía,34,109048
+1,Andalucía,35,114142
+1,Andalucía,36,117986
+1,Andalucía,37,124104
+1,Andalucía,38,127500
+1,Andalucía,39,134544
+1,Andalucía,40,136199
+1,Andalucía,41,140887
+1,Andalucía,42,141964
+1,Andalucía,43,142942
+1,Andalucía,44,141237
+1,Andalucía,45,139869
+1,Andalucía,46,136980
+1,Andalucía,47,136936
+1,Andalucía,48,134268
+1,Andalucía,49,133832
+1,Andalucía,50,133110
+1,Andalucía,51,133128
+1,Andalucía,52,135348
+1,Andalucía,53,130660
+1,Andalucía,54,129827
+1,Andalucía,55,132689
+1,Andalucía,56,124354
+1,Andalucía,57,117393
+1,Andalucía,58,114174
+1,Andalucía,59,114338
+1,Andalucía,60,109872
+1,Andalucía,61,108590
+1,Andalucía,62,104522
+1,Andalucía,63,94504
+1,Andalucía,64,91743
+1,Andalucía,65,85709
+1,Andalucía,66,86939
+1,Andalucía,67,84757
+1,Andalucía,68,78473
+1,Andalucía,69,71038
+1,Andalucía,70,76270
+1,Andalucía,71,80064
+1,Andalucía,72,72674
+1,Andalucía,73,65841
+1,Andalucía,74,70689
+1,Andalucía,75,64975
+1,Andalucía,76,65198
+1,Andalucía,77,52632
+1,Andalucía,78,45524
+1,Andalucía,79,56514
+1,Andalucía,80,39851
+1,Andalucía,81,40013
+1,Andalucía,82,41566
+1,Andalucía,83,42389
+1,Andalucía,84,38648
+1,Andalucía,85,34235
+1,Andalucía,86,33000
+1,Andalucía,87,29342
+1,Andalucía,88,24209
+1,Andalucía,89,20819
+1,Andalucía,90,16909
+1,Andalucía,91,13708
+1,Andalucía,92,10018
+1,Andalucía,93,7988
+1,Andalucía,94,5935
+1,Andalucía,95,4472
+1,Andalucía,96,3119
+1,Andalucía,97,2279
+1,Andalucía,98,1434
+1,Andalucía,99,985
+1,Andalucía,100,2597
+2,Aragón,0,9441
+2,Aragón,1,10244
+2,Aragón,2,10931
+2,Aragón,3,11481
+2,Aragón,4,12016
+2,Aragón,5,12279
+2,Aragón,6,12181
+2,Aragón,7,12443
+2,Aragón,8,12942
+2,Aragón,9,13165
+2,Aragón,10,13293
+2,Aragón,11,13841
+2,Aragón,12,13495
+2,Aragón,13,13098
+2,Aragón,14,12785
+2,Aragón,15,12992
+2,Aragón,16,12698
+2,Aragón,17,12408
+2,Aragón,18,12842
+2,Aragón,19,12791
+2,Aragón,20,12724
+2,Aragón,21,12455
+2,Aragón,22,12778
+2,Aragón,23,12826
+2,Aragón,24,12764
+2,Aragón,25,13094
+2,Aragón,26,13173
+2,Aragón,27,13471
+2,Aragón,28,13533
+2,Aragón,29,13583
+2,Aragón,30,14295
+2,Aragón,31,14721
+2,Aragón,32,14810
+2,Aragón,33,15436
+2,Aragón,34,15879
+2,Aragón,35,16402
+2,Aragón,36,16547
+2,Aragón,37,17682
+2,Aragón,38,18639
+2,Aragón,39,19875
+2,Aragón,40,20381
+2,Aragón,41,21238
+2,Aragón,42,22018
+2,Aragón,43,22143
+2,Aragón,44,22334
+2,Aragón,45,21830
+2,Aragón,46,21345
+2,Aragón,47,21551
+2,Aragón,48,21035
+2,Aragón,49,21068
+2,Aragón,50,20457
+2,Aragón,51,20502
+2,Aragón,52,20578
+2,Aragón,53,20211
+2,Aragón,54,19893
+2,Aragón,55,20338
+2,Aragón,56,19625
+2,Aragón,57,19182
+2,Aragón,58,18747
+2,Aragón,59,18733
+2,Aragón,60,18219
+2,Aragón,61,17715
+2,Aragón,62,17396
+2,Aragón,63,16341
+2,Aragón,64,15796
+2,Aragón,65,14633
+2,Aragón,66,14654
+2,Aragón,67,14762
+2,Aragón,68,13513
+2,Aragón,69,13338
+2,Aragón,70,13678
+2,Aragón,71,13994
+2,Aragón,72,12843
+2,Aragón,73,12549
+2,Aragón,74,12624
+2,Aragón,75,11877
+2,Aragón,76,11527
+2,Aragón,77,10268
+2,Aragón,78,9336
+2,Aragón,79,10259
+2,Aragón,80,7059
+2,Aragón,81,7424
+2,Aragón,82,8372
+2,Aragón,83,9275
+2,Aragón,84,8852
+2,Aragón,85,8283
+2,Aragón,86,7969
+2,Aragón,87,7446
+2,Aragón,88,6443
+2,Aragón,89,5699
+2,Aragón,90,4912
+2,Aragón,91,3994
+2,Aragón,92,3265
+2,Aragón,93,2565
+2,Aragón,94,1990
+2,Aragón,95,1612
+2,Aragón,96,1186
+2,Aragón,97,879
+2,Aragón,98,593
+2,Aragón,99,378
+2,Aragón,100,611
+3,Asturias,0,5073
+3,Asturias,1,5746
+3,Asturias,2,6157
+3,Asturias,3,6550
+3,Asturias,4,6716
+3,Asturias,5,6897
+3,Asturias,6,6927
+3,Asturias,7,7801
+3,Asturias,8,7974
+3,Asturias,9,7989
+3,Asturias,10,8507
+3,Asturias,11,8520
+3,Asturias,12,8280
+3,Asturias,13,8204
+3,Asturias,14,8202
+3,Asturias,15,8032
+3,Asturias,16,7906
+3,Asturias,17,7657
+3,Asturias,18,7836
+3,Asturias,19,7883
+3,Asturias,20,7741
+3,Asturias,21,7579
+3,Asturias,22,7693
+3,Asturias,23,7705
+3,Asturias,24,7742
+3,Asturias,25,7621
+3,Asturias,26,7932
+3,Asturias,27,8263
+3,Asturias,28,8408
+3,Asturias,29,8427
+3,Asturias,30,8753
+3,Asturias,31,9246
+3,Asturias,32,9930
+3,Asturias,33,10505
+3,Asturias,34,11012
+3,Asturias,35,11426
+3,Asturias,36,12252
+3,Asturias,37,12838
+3,Asturias,38,13854
+3,Asturias,39,14635
+3,Asturias,40,15409
+3,Asturias,41,16264
+3,Asturias,42,17032
+3,Asturias,43,17371
+3,Asturias,44,17348
+3,Asturias,45,17211
+3,Asturias,46,16642
+3,Asturias,47,16957
+3,Asturias,48,16672
+3,Asturias,49,16087
+3,Asturias,50,16125
+3,Asturias,51,15851
+3,Asturias,52,16459
+3,Asturias,53,16023
+3,Asturias,54,16111
+3,Asturias,55,16735
+3,Asturias,56,16169
+3,Asturias,57,16285
+3,Asturias,58,16262
+3,Asturias,59,16625
+3,Asturias,60,16611
+3,Asturias,61,16326
+3,Asturias,62,16356
+3,Asturias,63,15768
+3,Asturias,64,15099
+3,Asturias,65,14497
+3,Asturias,66,14465
+3,Asturias,67,14218
+3,Asturias,68,13194
+3,Asturias,69,13118
+3,Asturias,70,13348
+3,Asturias,71,13630
+3,Asturias,72,12302
+3,Asturias,73,12235
+3,Asturias,74,12015
+3,Asturias,75,10919
+3,Asturias,76,10386
+3,Asturias,77,8381
+3,Asturias,78,7894
+3,Asturias,79,8139
+3,Asturias,80,6304
+3,Asturias,81,7008
+3,Asturias,82,7304
+3,Asturias,83,8297
+3,Asturias,84,7746
+3,Asturias,85,7660
+3,Asturias,86,7065
+3,Asturias,87,6715
+3,Asturias,88,5667
+3,Asturias,89,5183
+3,Asturias,90,4177
+3,Asturias,91,3570
+3,Asturias,92,2772
+3,Asturias,93,2178
+3,Asturias,94,1804
+3,Asturias,95,1359
+3,Asturias,96,965
+3,Asturias,97,716
+3,Asturias,98,453
+3,Asturias,99,321
+3,Asturias,100,562
+4,Baleares,0,8802
+4,Baleares,1,10473
+4,Baleares,2,10538
+4,Baleares,3,11203
+4,Baleares,4,11443
+4,Baleares,5,11581
+4,Baleares,6,11346
+4,Baleares,7,11725
+4,Baleares,8,11890
+4,Baleares,9,12344
+4,Baleares,10,12268
+4,Baleares,11,13063
+4,Baleares,12,12472
+4,Baleares,13,12403
+4,Baleares,14,11809
+4,Baleares,15,11904
+4,Baleares,16,11706
+4,Baleares,17,11594
+4,Baleares,18,11646
+4,Baleares,19,11946
+4,Baleares,20,11884
+4,Baleares,21,11918
+4,Baleares,22,12415
+4,Baleares,23,12719
+4,Baleares,24,13311
+4,Baleares,25,13740
+4,Baleares,26,14430
+4,Baleares,27,15462
+4,Baleares,28,15796
+4,Baleares,29,16267
+4,Baleares,30,16475
+4,Baleares,31,16818
+4,Baleares,32,16874
+4,Baleares,33,17221
+4,Baleares,34,17852
+4,Baleares,35,18274
+4,Baleares,36,18583
+4,Baleares,37,19357
+4,Baleares,38,19958
+4,Baleares,39,20775
+4,Baleares,40,20768
+4,Baleares,41,21136
+4,Baleares,42,21189
+4,Baleares,43,21327
+4,Baleares,44,21186
+4,Baleares,45,21107
+4,Baleares,46,20388
+4,Baleares,47,20239
+4,Baleares,48,19830
+4,Baleares,49,19002
+4,Baleares,50,18387
+4,Baleares,51,18083
+4,Baleares,52,17820
+4,Baleares,53,17316
+4,Baleares,54,16971
+4,Baleares,55,16844
+4,Baleares,56,16009
+4,Baleares,57,15040
+4,Baleares,58,14528
+4,Baleares,59,14799
+4,Baleares,60,13746
+4,Baleares,61,13533
+4,Baleares,62,12956
+4,Baleares,63,12074
+4,Baleares,64,11756
+4,Baleares,65,11240
+4,Baleares,66,10953
+4,Baleares,67,11127
+4,Baleares,68,10160
+4,Baleares,69,9686
+4,Baleares,70,9698
+4,Baleares,71,10244
+4,Baleares,72,9219
+4,Baleares,73,8725
+4,Baleares,74,8400
+4,Baleares,75,8024
+4,Baleares,76,7698
+4,Baleares,77,6603
+4,Baleares,78,5670
+4,Baleares,79,6235
+4,Baleares,80,4751
+4,Baleares,81,4602
+4,Baleares,82,4802
+4,Baleares,83,4763
+4,Baleares,84,4545
+4,Baleares,85,4010
+4,Baleares,86,3861
+4,Baleares,87,3394
+4,Baleares,88,2834
+4,Baleares,89,2479
+4,Baleares,90,2168
+4,Baleares,91,1736
+4,Baleares,92,1483
+4,Baleares,93,1151
+4,Baleares,94,826
+4,Baleares,95,654
+4,Baleares,96,476
+4,Baleares,97,352
+4,Baleares,98,217
+4,Baleares,99,167
+4,Baleares,100,271
+5,Canarias,0,12541
+5,Canarias,1,14767
+5,Canarias,2,16253
+5,Canarias,3,17140
+5,Canarias,4,17567
+5,Canarias,5,18055
+5,Canarias,6,17478
+5,Canarias,7,19122
+5,Canarias,8,19334
+5,Canarias,9,20006
+5,Canarias,10,20738
+5,Canarias,11,22177
+5,Canarias,12,22209
+5,Canarias,13,22541
+5,Canarias,14,22329
+5,Canarias,15,22662
+5,Canarias,16,22274
+5,Canarias,17,22078
+5,Canarias,18,22692
+5,Canarias,19,23012
+5,Canarias,20,23518
+5,Canarias,21,22710
+5,Canarias,22,23433
+5,Canarias,23,24007
+5,Canarias,24,24527
+5,Canarias,25,25270
+5,Canarias,26,26290
+5,Canarias,27,27222
+5,Canarias,28,27059
+5,Canarias,29,27712
+5,Canarias,30,28506
+5,Canarias,31,29227
+5,Canarias,32,28813
+5,Canarias,33,29049
+5,Canarias,34,29382
+5,Canarias,35,30356
+5,Canarias,36,31611
+5,Canarias,37,33333
+5,Canarias,38,34606
+5,Canarias,39,36051
+5,Canarias,40,36550
+5,Canarias,41,37283
+5,Canarias,42,37494
+5,Canarias,43,38502
+5,Canarias,44,38826
+5,Canarias,45,39698
+5,Canarias,46,40178
+5,Canarias,47,40320
+5,Canarias,48,39927
+5,Canarias,49,39146
+5,Canarias,50,38202
+5,Canarias,51,37228
+5,Canarias,52,37262
+5,Canarias,53,36631
+5,Canarias,54,36445
+5,Canarias,55,36314
+5,Canarias,56,34282
+5,Canarias,57,32965
+5,Canarias,58,31189
+5,Canarias,59,29994
+5,Canarias,60,27694
+5,Canarias,61,26554
+5,Canarias,62,25827
+5,Canarias,63,24706
+5,Canarias,64,23956
+5,Canarias,65,22745
+5,Canarias,66,21978
+5,Canarias,67,21471
+5,Canarias,68,20608
+5,Canarias,69,19553
+5,Canarias,70,18831
+5,Canarias,71,18174
+5,Canarias,72,17160
+5,Canarias,73,16708
+5,Canarias,74,16657
+5,Canarias,75,15359
+5,Canarias,76,14351
+5,Canarias,77,13625
+5,Canarias,78,11555
+5,Canarias,79,12111
+5,Canarias,80,8767
+5,Canarias,81,8971
+5,Canarias,82,8939
+5,Canarias,83,9293
+5,Canarias,84,8632
+5,Canarias,85,7914
+5,Canarias,86,7158
+5,Canarias,87,6447
+5,Canarias,88,5040
+5,Canarias,89,4312
+5,Canarias,90,3507
+5,Canarias,91,2872
+5,Canarias,92,2083
+5,Canarias,93,1637
+5,Canarias,94,1238
+5,Canarias,95,983
+5,Canarias,96,676
+5,Canarias,97,494
+5,Canarias,98,330
+5,Canarias,99,222
+5,Canarias,100,721
+6,Cantabria,0,3465
+6,Cantabria,1,3867
+6,Cantabria,2,4278
+6,Cantabria,3,4508
+6,Cantabria,4,4608
+6,Cantabria,5,4766
+6,Cantabria,6,4992
+6,Cantabria,7,5229
+6,Cantabria,8,5510
+6,Cantabria,9,5690
+6,Cantabria,10,5814
+6,Cantabria,11,6051
+6,Cantabria,12,5679
+6,Cantabria,13,5673
+6,Cantabria,14,5773
+6,Cantabria,15,5618
+6,Cantabria,16,5498
+6,Cantabria,17,5293
+6,Cantabria,18,5145
+6,Cantabria,19,5284
+6,Cantabria,20,5127
+6,Cantabria,21,4831
+6,Cantabria,22,4939
+6,Cantabria,23,4829
+6,Cantabria,24,4780
+6,Cantabria,25,4835
+6,Cantabria,26,5071
+6,Cantabria,27,5308
+6,Cantabria,28,5296
+6,Cantabria,29,5489
+6,Cantabria,30,5475
+6,Cantabria,31,5882
+6,Cantabria,32,5987
+6,Cantabria,33,6283
+6,Cantabria,34,6697
+6,Cantabria,35,7065
+6,Cantabria,36,7446
+6,Cantabria,37,7951
+6,Cantabria,38,8553
+6,Cantabria,39,9134
+6,Cantabria,40,9405
+6,Cantabria,41,9943
+6,Cantabria,42,10025
+6,Cantabria,43,10283
+6,Cantabria,44,10185
+6,Cantabria,45,9770
+6,Cantabria,46,9652
+6,Cantabria,47,9699
+6,Cantabria,48,9212
+6,Cantabria,49,9595
+6,Cantabria,50,9216
+6,Cantabria,51,9158
+6,Cantabria,52,9283
+6,Cantabria,53,9216
+6,Cantabria,54,9155
+6,Cantabria,55,8855
+6,Cantabria,56,8916
+6,Cantabria,57,8658
+6,Cantabria,58,8721
+6,Cantabria,59,8786
+6,Cantabria,60,8891
+6,Cantabria,61,8731
+6,Cantabria,62,8708
+6,Cantabria,63,7963
+6,Cantabria,64,7735
+6,Cantabria,65,7353
+6,Cantabria,66,7320
+6,Cantabria,67,7171
+6,Cantabria,68,6778
+6,Cantabria,69,6695
+6,Cantabria,70,6662
+6,Cantabria,71,6736
+6,Cantabria,72,6097
+6,Cantabria,73,5739
+6,Cantabria,74,5452
+6,Cantabria,75,5174
+6,Cantabria,76,4878
+6,Cantabria,77,4285
+6,Cantabria,78,3920
+6,Cantabria,79,4123
+6,Cantabria,80,2920
+6,Cantabria,81,3343
+6,Cantabria,82,3590
+6,Cantabria,83,3859
+6,Cantabria,84,3610
+6,Cantabria,85,3502
+6,Cantabria,86,3237
+6,Cantabria,87,3052
+6,Cantabria,88,2641
+6,Cantabria,89,2380
+6,Cantabria,90,1980
+6,Cantabria,91,1680
+6,Cantabria,92,1292
+6,Cantabria,93,1085
+6,Cantabria,94,784
+6,Cantabria,95,646
+6,Cantabria,96,488
+6,Cantabria,97,302
+6,Cantabria,98,237
+6,Cantabria,99,146
+6,Cantabria,100,268
+7,C. León,0,13624
+7,C. León,1,15057
+7,C. León,2,15742
+7,C. León,3,17150
+7,C. León,4,18111
+7,C. León,5,18328
+7,C. León,6,18288
+7,C. León,7,19393
+7,C. León,8,20018
+7,C. León,9,20582
+7,C. León,10,20684
+7,C. León,11,21688
+7,C. León,12,20902
+7,C. León,13,20774
+7,C. León,14,20927
+7,C. León,15,20777
+7,C. León,16,20458
+7,C. León,17,20226
+7,C. León,18,20319
+7,C. León,19,20959
+7,C. León,20,20539
+7,C. León,21,20216
+7,C. León,22,21144
+7,C. León,23,20689
+7,C. León,24,20556
+7,C. León,25,20682
+7,C. León,26,21402
+7,C. León,27,21756
+7,C. León,28,21747
+7,C. León,29,22275
+7,C. León,30,22760
+7,C. León,31,23012
+7,C. León,32,23830
+7,C. León,33,24722
+7,C. León,34,25940
+7,C. León,35,27063
+7,C. León,36,27843
+7,C. León,37,29294
+7,C. León,38,30781
+7,C. León,39,32538
+7,C. León,40,33912
+7,C. León,41,35622
+7,C. León,42,35920
+7,C. León,43,37362
+7,C. León,44,36454
+7,C. León,45,36903
+7,C. León,46,36408
+7,C. León,47,36654
+7,C. León,48,37146
+7,C. León,49,36924
+7,C. León,50,37848
+7,C. León,51,37516
+7,C. León,52,38323
+7,C. León,53,37918
+7,C. León,54,38607
+7,C. León,55,39417
+7,C. León,56,38437
+7,C. León,57,37806
+7,C. León,58,37460
+7,C. León,59,37843
+7,C. León,60,36969
+7,C. León,61,35895
+7,C. León,62,35483
+7,C. León,63,33744
+7,C. León,64,31847
+7,C. León,65,30155
+7,C. León,66,30052
+7,C. León,67,29346
+7,C. León,68,27365
+7,C. León,69,27719
+7,C. León,70,27918
+7,C. León,71,28704
+7,C. León,72,25570
+7,C. León,73,24575
+7,C. León,74,25961
+7,C. León,75,24630
+7,C. León,76,24519
+7,C. León,77,21481
+7,C. León,78,20105
+7,C. León,79,21947
+7,C. León,80,15747
+7,C. León,81,16312
+7,C. León,82,18084
+7,C. León,83,21213
+7,C. León,84,19225
+7,C. León,85,18428
+7,C. León,86,17261
+7,C. León,87,16460
+7,C. León,88,14655
+7,C. León,89,13215
+7,C. León,90,11020
+7,C. León,91,9621
+7,C. León,92,7670
+7,C. León,93,6501
+7,C. León,94,5010
+7,C. León,95,3944
+7,C. León,96,3028
+7,C. León,97,2224
+7,C. León,98,1480
+7,C. León,99,928
+7,C. León,100,1631
+8,C. La Mancha,0,14337
+8,C. La Mancha,1,16146
+8,C. La Mancha,2,17558
+8,C. La Mancha,3,18965
+8,C. La Mancha,4,19463
+8,C. La Mancha,5,19646
+8,C. La Mancha,6,19887
+8,C. La Mancha,7,20924
+8,C. La Mancha,8,21612
+8,C. La Mancha,9,21968
+8,C. La Mancha,10,22472
+8,C. La Mancha,11,23459
+8,C. La Mancha,12,22624
+8,C. La Mancha,13,22556
+8,C. La Mancha,14,21844
+8,C. La Mancha,15,21796
+8,C. La Mancha,16,21497
+8,C. La Mancha,17,20867
+8,C. La Mancha,18,21029
+8,C. La Mancha,19,21759
+8,C. La Mancha,20,21577
+8,C. La Mancha,21,21131
+8,C. La Mancha,22,21432
+8,C. La Mancha,23,21147
+8,C. La Mancha,24,21443
+8,C. La Mancha,25,21534
+8,C. La Mancha,26,21838
+8,C. La Mancha,27,22719
+8,C. La Mancha,28,22557
+8,C. La Mancha,29,22711
+8,C. La Mancha,30,23222
+8,C. La Mancha,31,23653
+8,C. La Mancha,32,24257
+8,C. La Mancha,33,24841
+8,C. La Mancha,34,25095
+8,C. La Mancha,35,26498
+8,C. La Mancha,36,27497
+8,C. La Mancha,37,28838
+8,C. La Mancha,38,30246
+8,C. La Mancha,39,31754
+8,C. La Mancha,40,32430
+8,C. La Mancha,41,33810
+8,C. La Mancha,42,33606
+8,C. La Mancha,43,34522
+8,C. La Mancha,44,33661
+8,C. La Mancha,45,33317
+8,C. La Mancha,46,32760
+8,C. La Mancha,47,32378
+8,C. La Mancha,48,31868
+8,C. La Mancha,49,32253
+8,C. La Mancha,50,32154
+8,C. La Mancha,51,32290
+8,C. La Mancha,52,31925
+8,C. La Mancha,53,31150
+8,C. La Mancha,54,31232
+8,C. La Mancha,55,31902
+8,C. La Mancha,56,30210
+8,C. La Mancha,57,29065
+8,C. La Mancha,58,28708
+8,C. La Mancha,59,28842
+8,C. La Mancha,60,27609
+8,C. La Mancha,61,26248
+8,C. La Mancha,62,24964
+8,C. La Mancha,63,22445
+8,C. La Mancha,64,21247
+8,C. La Mancha,65,20021
+8,C. La Mancha,66,19975
+8,C. La Mancha,67,19992
+8,C. La Mancha,68,17854
+8,C. La Mancha,69,18089
+8,C. La Mancha,70,18327
+8,C. La Mancha,71,19054
+8,C. La Mancha,72,17050
+8,C. La Mancha,73,15258
+8,C. La Mancha,74,16103
+8,C. La Mancha,75,15799
+8,C. La Mancha,76,15876
+8,C. La Mancha,77,13242
+8,C. La Mancha,78,11334
+8,C. La Mancha,79,17058
+8,C. La Mancha,80,8417
+8,C. La Mancha,81,11308
+8,C. La Mancha,82,12841
+8,C. La Mancha,83,12784
+8,C. La Mancha,84,11935
+8,C. La Mancha,85,11151
+8,C. La Mancha,86,11082
+8,C. La Mancha,87,9953
+8,C. La Mancha,88,8680
+8,C. La Mancha,89,8100
+8,C. La Mancha,90,6652
+8,C. La Mancha,91,5514
+8,C. La Mancha,92,4369
+8,C. La Mancha,93,3425
+8,C. La Mancha,94,2642
+8,C. La Mancha,95,1982
+8,C. La Mancha,96,1457
+8,C. La Mancha,97,1032
+8,C. La Mancha,98,668
+8,C. La Mancha,99,443
+8,C. La Mancha,100,759
+9,Cataluña,0,60256
+9,Cataluña,1,64926
+9,Cataluña,2,68785
+9,Cataluña,3,72249
+9,Cataluña,4,74453
+9,Cataluña,5,75645
+9,Cataluña,6,75025
+9,Cataluña,7,79758
+9,Cataluña,8,82237
+9,Cataluña,9,84548
+9,Cataluña,10,85395
+9,Cataluña,11,88842
+9,Cataluña,12,85094
+9,Cataluña,13,84981
+9,Cataluña,14,83671
+9,Cataluña,15,82956
+9,Cataluña,16,81092
+9,Cataluña,17,78772
+9,Cataluña,18,78956
+9,Cataluña,19,80644
+9,Cataluña,20,78993
+9,Cataluña,21,77401
+9,Cataluña,22,79745
+9,Cataluña,23,79486
+9,Cataluña,24,81091
+9,Cataluña,25,83670
+9,Cataluña,26,86763
+9,Cataluña,27,90248
+9,Cataluña,28,89784
+9,Cataluña,29,91754
+9,Cataluña,30,92571
+9,Cataluña,31,94994
+9,Cataluña,32,95212
+9,Cataluña,33,97229
+9,Cataluña,34,100708
+9,Cataluña,35,103273
+9,Cataluña,36,106541
+9,Cataluña,37,112850
+9,Cataluña,38,117713
+9,Cataluña,39,123561
+9,Cataluña,40,127686
+9,Cataluña,41,133924
+9,Cataluña,42,136162
+9,Cataluña,43,137539
+9,Cataluña,44,137675
+9,Cataluña,45,135698
+9,Cataluña,46,131183
+9,Cataluña,47,128953
+9,Cataluña,48,125067
+9,Cataluña,49,122868
+9,Cataluña,50,118521
+9,Cataluña,51,116675
+9,Cataluña,52,116641
+9,Cataluña,53,113575
+9,Cataluña,54,111571
+9,Cataluña,55,111904
+9,Cataluña,56,104514
+9,Cataluña,57,101617
+9,Cataluña,58,98385
+9,Cataluña,59,98377
+9,Cataluña,60,96019
+9,Cataluña,61,94512
+9,Cataluña,62,91655
+9,Cataluña,63,85912
+9,Cataluña,64,83613
+9,Cataluña,65,80727
+9,Cataluña,66,79974
+9,Cataluña,67,79367
+9,Cataluña,68,74146
+9,Cataluña,69,71659
+9,Cataluña,70,74586
+9,Cataluña,71,78089
+9,Cataluña,72,70576
+9,Cataluña,73,65598
+9,Cataluña,74,68292
+9,Cataluña,75,63081
+9,Cataluña,76,60450
+9,Cataluña,77,50691
+9,Cataluña,78,46901
+9,Cataluña,79,57028
+9,Cataluña,80,31492
+9,Cataluña,81,37366
+9,Cataluña,82,43694
+9,Cataluña,83,44276
+9,Cataluña,84,40363
+9,Cataluña,85,37421
+9,Cataluña,86,35464
+9,Cataluña,87,32216
+9,Cataluña,88,28048
+9,Cataluña,89,24991
+9,Cataluña,90,20372
+9,Cataluña,91,17003
+9,Cataluña,92,13731
+9,Cataluña,93,11364
+9,Cataluña,94,8518
+9,Cataluña,95,6536
+9,Cataluña,96,4734
+9,Cataluña,97,3362
+9,Cataluña,98,2197
+9,Cataluña,99,1537
+9,Cataluña,100,2511
+10,Valencia,0,35557
+10,Valencia,1,38853
+10,Valencia,2,41935
+10,Valencia,3,44886
+10,Valencia,4,46460
+10,Valencia,5,47383
+10,Valencia,6,47132
+10,Valencia,7,50022
+10,Valencia,8,51452
+10,Valencia,9,53217
+10,Valencia,10,54230
+10,Valencia,11,57767
+10,Valencia,12,56120
+10,Valencia,13,55421
+10,Valencia,14,54091
+10,Valencia,15,53522
+10,Valencia,16,52642
+10,Valencia,17,50407
+10,Valencia,18,50711
+10,Valencia,19,51617
+10,Valencia,20,50502
+10,Valencia,21,49287
+10,Valencia,22,50064
+10,Valencia,23,50119
+10,Valencia,24,50534
+10,Valencia,25,50688
+10,Valencia,26,52246
+10,Valencia,27,53810
+10,Valencia,28,54051
+10,Valencia,29,54825
+10,Valencia,30,55530
+10,Valencia,31,57083
+10,Valencia,32,57758
+10,Valencia,33,59439
+10,Valencia,34,61762
+10,Valencia,35,64624
+10,Valencia,36,66494
+10,Valencia,37,71208
+10,Valencia,38,75136
+10,Valencia,39,79725
+10,Valencia,40,82625
+10,Valencia,41,86630
+10,Valencia,42,88058
+10,Valencia,43,88553
+10,Valencia,44,87315
+10,Valencia,45,87191
+10,Valencia,46,84005
+10,Valencia,47,83203
+10,Valencia,48,82525
+10,Valencia,49,81483
+10,Valencia,50,80427
+10,Valencia,51,79605
+10,Valencia,52,80053
+10,Valencia,53,77503
+10,Valencia,54,75957
+10,Valencia,55,77259
+10,Valencia,56,73076
+10,Valencia,57,70460
+10,Valencia,58,68819
+10,Valencia,59,69175
+10,Valencia,60,67852
+10,Valencia,61,65424
+10,Valencia,62,63591
+10,Valencia,63,58573
+10,Valencia,64,57929
+10,Valencia,65,54724
+10,Valencia,66,54708
+10,Valencia,67,55569
+10,Valencia,68,51909
+10,Valencia,69,50449
+10,Valencia,70,51064
+10,Valencia,71,53001
+10,Valencia,72,48547
+10,Valencia,73,45759
+10,Valencia,74,45269
+10,Valencia,75,43471
+10,Valencia,76,41448
+10,Valencia,77,35605
+10,Valencia,78,32064
+10,Valencia,79,41634
+10,Valencia,80,23505
+10,Valencia,81,28029
+10,Valencia,82,29003
+10,Valencia,83,26633
+10,Valencia,84,25077
+10,Valencia,85,23310
+10,Valencia,86,22010
+10,Valencia,87,18884
+10,Valencia,88,16262
+10,Valencia,89,14511
+10,Valencia,90,11545
+10,Valencia,91,9641
+10,Valencia,92,7232
+10,Valencia,93,6105
+10,Valencia,94,4420
+10,Valencia,95,3200
+10,Valencia,96,2356
+10,Valencia,97,1658
+10,Valencia,98,1102
+10,Valencia,99,675
+10,Valencia,100,1373
+11,Extremadura,0,7062
+11,Extremadura,1,7761
+11,Extremadura,2,8492
+11,Extremadura,3,8813
+11,Extremadura,4,8844
+11,Extremadura,5,9172
+11,Extremadura,6,8970
+11,Extremadura,7,9705
+11,Extremadura,8,9961
+11,Extremadura,9,10184
+11,Extremadura,10,10561
+11,Extremadura,11,11025
+11,Extremadura,12,10592
+11,Extremadura,13,10624
+11,Extremadura,14,10547
+11,Extremadura,15,10461
+11,Extremadura,16,10497
+11,Extremadura,17,10456
+11,Extremadura,18,10672
+11,Extremadura,19,10901
+11,Extremadura,20,10798
+11,Extremadura,21,10698
+11,Extremadura,22,10943
+11,Extremadura,23,10969
+11,Extremadura,24,11107
+11,Extremadura,25,11275
+11,Extremadura,26,11534
+11,Extremadura,27,11930
+11,Extremadura,28,12040
+11,Extremadura,29,12026
+11,Extremadura,30,12368
+11,Extremadura,31,12432
+11,Extremadura,32,12652
+11,Extremadura,33,12759
+11,Extremadura,34,12703
+11,Extremadura,35,13094
+11,Extremadura,36,13623
+11,Extremadura,37,14348
+11,Extremadura,38,14453
+11,Extremadura,39,15047
+11,Extremadura,40,15199
+11,Extremadura,41,15620
+11,Extremadura,42,15466
+11,Extremadura,43,16143
+11,Extremadura,44,15902
+11,Extremadura,45,16018
+11,Extremadura,46,16221
+11,Extremadura,47,16343
+11,Extremadura,48,16361
+11,Extremadura,49,16221
+11,Extremadura,50,16576
+11,Extremadura,51,16957
+11,Extremadura,52,17092
+11,Extremadura,53,16969
+11,Extremadura,54,17181
+11,Extremadura,55,17870
+11,Extremadura,56,17166
+11,Extremadura,57,16743
+11,Extremadura,58,16269
+11,Extremadura,59,16393
+11,Extremadura,60,15600
+11,Extremadura,61,15129
+11,Extremadura,62,14040
+11,Extremadura,63,12886
+11,Extremadura,64,12277
+11,Extremadura,65,11509
+11,Extremadura,66,11686
+11,Extremadura,67,11530
+11,Extremadura,68,10785
+11,Extremadura,69,9855
+11,Extremadura,70,10337
+11,Extremadura,71,10965
+11,Extremadura,72,9818
+11,Extremadura,73,8878
+11,Extremadura,74,9694
+11,Extremadura,75,9791
+11,Extremadura,76,9633
+11,Extremadura,77,7693
+11,Extremadura,78,6316
+11,Extremadura,79,8751
+11,Extremadura,80,6061
+11,Extremadura,81,6100
+11,Extremadura,82,6669
+11,Extremadura,83,7866
+11,Extremadura,84,7345
+11,Extremadura,85,6535
+11,Extremadura,86,6185
+11,Extremadura,87,5837
+11,Extremadura,88,4967
+11,Extremadura,89,3924
+11,Extremadura,90,3350
+11,Extremadura,91,2828
+11,Extremadura,92,2124
+11,Extremadura,93,1762
+11,Extremadura,94,1374
+11,Extremadura,95,988
+11,Extremadura,96,673
+11,Extremadura,97,466
+11,Extremadura,98,341
+11,Extremadura,99,210
+11,Extremadura,100,400
+12,Galicia,0,15313
+12,Galicia,1,16998
+12,Galicia,2,19045
+12,Galicia,3,19856
+12,Galicia,4,20217
+12,Galicia,5,20424
+12,Galicia,6,20513
+12,Galicia,7,21809
+12,Galicia,8,22346
+12,Galicia,9,22919
+12,Galicia,10,23554
+12,Galicia,11,24328
+12,Galicia,12,23100
+12,Galicia,13,23024
+12,Galicia,14,22940
+12,Galicia,15,22790
+12,Galicia,16,22490
+12,Galicia,17,21524
+12,Galicia,18,21846
+12,Galicia,19,22293
+12,Galicia,20,21726
+12,Galicia,21,21489
+12,Galicia,22,21769
+12,Galicia,23,21640
+12,Galicia,24,21982
+12,Galicia,25,22817
+12,Galicia,26,24477
+12,Galicia,27,24748
+12,Galicia,28,24902
+12,Galicia,29,25431
+12,Galicia,30,26367
+12,Galicia,31,27229
+12,Galicia,32,28204
+12,Galicia,33,28694
+12,Galicia,34,30572
+12,Galicia,35,32319
+12,Galicia,36,34181
+12,Galicia,37,36221
+12,Galicia,38,38714
+12,Galicia,39,40907
+12,Galicia,40,42580
+12,Galicia,41,44955
+12,Galicia,42,45434
+12,Galicia,43,46425
+12,Galicia,44,45912
+12,Galicia,45,45049
+12,Galicia,46,43624
+12,Galicia,47,43868
+12,Galicia,48,42979
+12,Galicia,49,42395
+12,Galicia,50,42698
+12,Galicia,51,42566
+12,Galicia,52,42240
+12,Galicia,53,41231
+12,Galicia,54,40362
+12,Galicia,55,40301
+12,Galicia,56,39158
+12,Galicia,57,38773
+12,Galicia,58,38993
+12,Galicia,59,39567
+12,Galicia,60,38387
+12,Galicia,61,37642
+12,Galicia,62,36908
+12,Galicia,63,35854
+12,Galicia,64,34376
+12,Galicia,65,33769
+12,Galicia,66,33655
+12,Galicia,67,33611
+12,Galicia,68,30992
+12,Galicia,69,31733
+12,Galicia,70,33028
+12,Galicia,71,33581
+12,Galicia,72,29795
+12,Galicia,73,31257
+12,Galicia,74,31631
+12,Galicia,75,29245
+12,Galicia,76,28588
+12,Galicia,77,24661
+12,Galicia,78,23347
+12,Galicia,79,24629
+12,Galicia,80,17845
+12,Galicia,81,18242
+12,Galicia,82,20829
+12,Galicia,83,23262
+12,Galicia,84,21800
+12,Galicia,85,20592
+12,Galicia,86,18967
+12,Galicia,87,17377
+12,Galicia,88,14270
+12,Galicia,89,12683
+12,Galicia,90,10673
+12,Galicia,91,9104
+12,Galicia,92,7072
+12,Galicia,93,5622
+12,Galicia,94,4340
+12,Galicia,95,3292
+12,Galicia,96,2598
+12,Galicia,97,1816
+12,Galicia,98,1213
+12,Galicia,99,873
+12,Galicia,100,1832
+13,Madrid,0,54832
+13,Madrid,1,58445
+13,Madrid,2,61451
+13,Madrid,3,65127
+13,Madrid,4,66952
+13,Madrid,5,67343
+13,Madrid,6,66502
+13,Madrid,7,69834
+13,Madrid,8,70988
+13,Madrid,9,72041
+13,Madrid,10,73254
+13,Madrid,11,75182
+13,Madrid,12,72105
+13,Madrid,13,70697
+13,Madrid,14,69304
+13,Madrid,15,70208
+13,Madrid,16,69019
+13,Madrid,17,66842
+13,Madrid,18,66823
+13,Madrid,19,68544
+13,Madrid,20,67768
+13,Madrid,21,66680
+13,Madrid,22,68645
+13,Madrid,23,69660
+13,Madrid,24,71596
+13,Madrid,25,74753
+13,Madrid,26,78600
+13,Madrid,27,81479
+13,Madrid,28,80849
+13,Madrid,29,82445
+13,Madrid,30,84872
+13,Madrid,31,85401
+13,Madrid,32,87149
+13,Madrid,33,88920
+13,Madrid,34,92193
+13,Madrid,35,95701
+13,Madrid,36,97277
+13,Madrid,37,102770
+13,Madrid,38,106325
+13,Madrid,39,109032
+13,Madrid,40,113061
+13,Madrid,41,117511
+13,Madrid,42,119237
+13,Madrid,43,122630
+13,Madrid,44,121364
+13,Madrid,45,120630
+13,Madrid,46,116403
+13,Madrid,47,114272
+13,Madrid,48,112479
+13,Madrid,49,108384
+13,Madrid,50,106827
+13,Madrid,51,105319
+13,Madrid,52,104224
+13,Madrid,53,100521
+13,Madrid,54,99438
+13,Madrid,55,98900
+13,Madrid,56,94524
+13,Madrid,57,90633
+13,Madrid,58,86464
+13,Madrid,59,85933
+13,Madrid,60,82891
+13,Madrid,61,80321
+13,Madrid,62,78487
+13,Madrid,63,72768
+13,Madrid,64,70321
+13,Madrid,65,66279
+13,Madrid,66,65969
+13,Madrid,67,64974
+13,Madrid,68,61111
+13,Madrid,69,60202
+13,Madrid,70,62022
+13,Madrid,71,64829
+13,Madrid,72,58008
+13,Madrid,73,53928
+13,Madrid,74,55764
+13,Madrid,75,53259
+13,Madrid,76,50824
+13,Madrid,77,42326
+13,Madrid,78,37909
+13,Madrid,79,47212
+13,Madrid,80,28374
+13,Madrid,81,32270
+13,Madrid,82,34168
+13,Madrid,83,35140
+13,Madrid,84,31764
+13,Madrid,85,29973
+13,Madrid,86,28348
+13,Madrid,87,25721
+13,Madrid,88,22245
+13,Madrid,89,19678
+13,Madrid,90,16769
+13,Madrid,91,14168
+13,Madrid,92,11244
+13,Madrid,93,9067
+13,Madrid,94,7058
+13,Madrid,95,5456
+13,Madrid,96,3916
+13,Madrid,97,3030
+13,Madrid,98,2010
+13,Madrid,99,1350
+13,Madrid,100,2373
+14,Murcia,0,14048
+14,Murcia,1,14799
+14,Murcia,2,15288
+14,Murcia,3,16028
+14,Murcia,4,16507
+14,Murcia,5,16958
+14,Murcia,6,16686
+14,Murcia,7,17207
+14,Murcia,8,17721
+14,Murcia,9,18032
+14,Murcia,10,18513
+14,Murcia,11,19327
+14,Murcia,12,18646
+14,Murcia,13,18446
+14,Murcia,14,17871
+14,Murcia,15,17695
+14,Murcia,16,17600
+14,Murcia,17,17112
+14,Murcia,18,17221
+14,Murcia,19,17303
+14,Murcia,20,16691
+14,Murcia,21,16811
+14,Murcia,22,17073
+14,Murcia,23,16834
+14,Murcia,24,16734
+14,Murcia,25,16551
+14,Murcia,26,17482
+14,Murcia,27,17916
+14,Murcia,28,17991
+14,Murcia,29,18165
+14,Murcia,30,18416
+14,Murcia,31,18643
+14,Murcia,32,18860
+14,Murcia,33,18931
+14,Murcia,34,19718
+14,Murcia,35,20284
+14,Murcia,36,21551
+14,Murcia,37,22957
+14,Murcia,38,24215
+14,Murcia,39,25428
+14,Murcia,40,25580
+14,Murcia,41,26694
+14,Murcia,42,26434
+14,Murcia,43,26413
+14,Murcia,44,25958
+14,Murcia,45,25893
+14,Murcia,46,24939
+14,Murcia,47,24556
+14,Murcia,48,23864
+14,Murcia,49,23826
+14,Murcia,50,23349
+14,Murcia,51,23169
+14,Murcia,52,23280
+14,Murcia,53,22755
+14,Murcia,54,21911
+14,Murcia,55,21794
+14,Murcia,56,20576
+14,Murcia,57,19037
+14,Murcia,58,18741
+14,Murcia,59,18644
+14,Murcia,60,18176
+14,Murcia,61,17554
+14,Murcia,62,16831
+14,Murcia,63,14602
+14,Murcia,64,14449
+14,Murcia,65,13520
+14,Murcia,66,13649
+14,Murcia,67,13327
+14,Murcia,68,12726
+14,Murcia,69,12075
+14,Murcia,70,12082
+14,Murcia,71,12630
+14,Murcia,72,11374
+14,Murcia,73,10912
+14,Murcia,74,11376
+14,Murcia,75,9937
+14,Murcia,76,9148
+14,Murcia,77,7983
+14,Murcia,78,7654
+14,Murcia,79,9803
+14,Murcia,80,5719
+14,Murcia,81,7554
+14,Murcia,82,7113
+14,Murcia,83,6941
+14,Murcia,84,6364
+14,Murcia,85,5966
+14,Murcia,86,5469
+14,Murcia,87,4808
+14,Murcia,88,4134
+14,Murcia,89,3792
+14,Murcia,90,2920
+14,Murcia,91,2440
+14,Murcia,92,1723
+14,Murcia,93,1462
+14,Murcia,94,1075
+14,Murcia,95,779
+14,Murcia,96,505
+14,Murcia,97,389
+14,Murcia,98,238
+14,Murcia,99,126
+14,Murcia,100,254
+15,Navarra,0,5184
+15,Navarra,1,5560
+15,Navarra,2,6012
+15,Navarra,3,6373
+15,Navarra,4,6611
+15,Navarra,5,6778
+15,Navarra,6,6608
+15,Navarra,7,7210
+15,Navarra,8,7319
+15,Navarra,9,7292
+15,Navarra,10,7359
+15,Navarra,11,7537
+15,Navarra,12,7142
+15,Navarra,13,7271
+15,Navarra,14,6938
+15,Navarra,15,7068
+15,Navarra,16,7132
+15,Navarra,17,6774
+15,Navarra,18,6988
+15,Navarra,19,7075
+15,Navarra,20,7059
+15,Navarra,21,6968
+15,Navarra,22,6933
+15,Navarra,23,6856
+15,Navarra,24,6626
+15,Navarra,25,6732
+15,Navarra,26,6615
+15,Navarra,27,6760
+15,Navarra,28,6809
+15,Navarra,29,6769
+15,Navarra,30,6940
+15,Navarra,31,7222
+15,Navarra,32,7026
+15,Navarra,33,7505
+15,Navarra,34,7743
+15,Navarra,35,8071
+15,Navarra,36,8391
+15,Navarra,37,8972
+15,Navarra,38,9566
+15,Navarra,39,9905
+15,Navarra,40,10104
+15,Navarra,41,10692
+15,Navarra,42,11061
+15,Navarra,43,11278
+15,Navarra,44,11294
+15,Navarra,45,11093
+15,Navarra,46,10696
+15,Navarra,47,10647
+15,Navarra,48,10612
+15,Navarra,49,10525
+15,Navarra,50,10493
+15,Navarra,51,10094
+15,Navarra,52,10109
+15,Navarra,53,9956
+15,Navarra,54,9780
+15,Navarra,55,9882
+15,Navarra,56,9478
+15,Navarra,57,9163
+15,Navarra,58,8982
+15,Navarra,59,8757
+15,Navarra,60,8490
+15,Navarra,61,8211
+15,Navarra,62,8258
+15,Navarra,63,7802
+15,Navarra,64,7394
+15,Navarra,65,6995
+15,Navarra,66,6937
+15,Navarra,67,6882
+15,Navarra,68,6557
+15,Navarra,69,6318
+15,Navarra,70,6511
+15,Navarra,71,6662
+15,Navarra,72,6169
+15,Navarra,73,5947
+15,Navarra,74,6136
+15,Navarra,75,5429
+15,Navarra,76,5446
+15,Navarra,77,4733
+15,Navarra,78,4299
+15,Navarra,79,4460
+15,Navarra,80,3382
+15,Navarra,81,3396
+15,Navarra,82,3413
+15,Navarra,83,3871
+15,Navarra,84,3755
+15,Navarra,85,3287
+15,Navarra,86,3186
+15,Navarra,87,2991
+15,Navarra,88,2508
+15,Navarra,89,2437
+15,Navarra,90,1927
+15,Navarra,91,1663
+15,Navarra,92,1266
+15,Navarra,93,1076
+15,Navarra,94,851
+15,Navarra,95,652
+15,Navarra,96,479
+15,Navarra,97,388
+15,Navarra,98,238
+15,Navarra,99,154
+15,Navarra,100,246
+16,País Vasco,0,15266
+16,País Vasco,1,16302
+16,País Vasco,2,17384
+16,País Vasco,3,18760
+16,País Vasco,4,19521
+16,País Vasco,5,20078
+16,País Vasco,6,19853
+16,País Vasco,7,21223
+16,País Vasco,8,21862
+16,País Vasco,9,22150
+16,País Vasco,10,21748
+16,País Vasco,11,22414
+16,País Vasco,12,21669
+16,País Vasco,13,21448
+16,País Vasco,14,21265
+16,País Vasco,15,21438
+16,País Vasco,16,21313
+16,País Vasco,17,20511
+16,País Vasco,18,20431
+16,País Vasco,19,20531
+16,País Vasco,20,20301
+16,País Vasco,21,19449
+16,País Vasco,22,20030
+16,País Vasco,23,19984
+16,País Vasco,24,19597
+16,País Vasco,25,19565
+16,País Vasco,26,20319
+16,País Vasco,27,20719
+16,País Vasco,28,20671
+16,País Vasco,29,20899
+16,País Vasco,30,21431
+16,País Vasco,31,22588
+16,País Vasco,32,22912
+16,País Vasco,33,24060
+16,País Vasco,34,25112
+16,País Vasco,35,25965
+16,País Vasco,36,27238
+16,País Vasco,37,28856
+16,País Vasco,38,30511
+16,País Vasco,39,31870
+16,País Vasco,40,33385
+16,País Vasco,41,35685
+16,País Vasco,42,36651
+16,País Vasco,43,37871
+16,País Vasco,44,37495
+16,País Vasco,45,37166
+16,País Vasco,46,36287
+16,País Vasco,47,36487
+16,País Vasco,48,35993
+16,País Vasco,49,35113
+16,País Vasco,50,34729
+16,País Vasco,51,34340
+16,País Vasco,52,34812
+16,País Vasco,53,34532
+16,País Vasco,54,34704
+16,País Vasco,55,35293
+16,País Vasco,56,33839
+16,País Vasco,57,32887
+16,País Vasco,58,32310
+16,País Vasco,59,32531
+16,País Vasco,60,32537
+16,País Vasco,61,31285
+16,País Vasco,62,30760
+16,País Vasco,63,29216
+16,País Vasco,64,27920
+16,País Vasco,65,26588
+16,País Vasco,66,26578
+16,País Vasco,67,26205
+16,País Vasco,68,24410
+16,País Vasco,69,24620
+16,País Vasco,70,25278
+16,País Vasco,71,25664
+16,País Vasco,72,23362
+16,País Vasco,73,22935
+16,País Vasco,74,23109
+16,País Vasco,75,21580
+16,País Vasco,76,20541
+16,País Vasco,77,17144
+16,País Vasco,78,16131
+16,País Vasco,79,17337
+16,País Vasco,80,12691
+16,País Vasco,81,13185
+16,País Vasco,82,14065
+16,País Vasco,83,15307
+16,País Vasco,84,14059
+16,País Vasco,85,13637
+16,País Vasco,86,12671
+16,País Vasco,87,11696
+16,País Vasco,88,9929
+16,País Vasco,89,8798
+16,País Vasco,90,7168
+16,País Vasco,91,6199
+16,País Vasco,92,4831
+16,País Vasco,93,3845
+16,País Vasco,94,2917
+16,País Vasco,95,2239
+16,País Vasco,96,1641
+16,País Vasco,97,1141
+16,País Vasco,98,730
+16,País Vasco,99,470
+16,País Vasco,100,731
+17,La Rioja,0,2411
+17,La Rioja,1,2443
+17,La Rioja,2,2724
+17,La Rioja,3,2809
+17,La Rioja,4,2916
+17,La Rioja,5,3050
+17,La Rioja,6,2982
+17,La Rioja,7,3231
+17,La Rioja,8,3183
+17,La Rioja,9,3390
+17,La Rioja,10,3327
+17,La Rioja,11,3478
+17,La Rioja,12,3330
+17,La Rioja,13,3248
+17,La Rioja,14,3274
+17,La Rioja,15,3330
+17,La Rioja,16,3262
+17,La Rioja,17,3024
+17,La Rioja,18,3011
+17,La Rioja,19,3053
+17,La Rioja,20,3081
+17,La Rioja,21,3011
+17,La Rioja,22,3126
+17,La Rioja,23,2986
+17,La Rioja,24,2902
+17,La Rioja,25,3038
+17,La Rioja,26,2934
+17,La Rioja,27,3006
+17,La Rioja,28,3104
+17,La Rioja,29,3270
+17,La Rioja,30,3350
+17,La Rioja,31,3417
+17,La Rioja,32,3404
+17,La Rioja,33,3572
+17,La Rioja,34,3817
+17,La Rioja,35,3938
+17,La Rioja,36,4073
+17,La Rioja,37,4319
+17,La Rioja,38,4576
+17,La Rioja,39,4853
+17,La Rioja,40,5149
+17,La Rioja,41,5482
+17,La Rioja,42,5404
+17,La Rioja,43,5565
+17,La Rioja,44,5473
+17,La Rioja,45,5335
+17,La Rioja,46,5252
+17,La Rioja,47,5215
+17,La Rioja,48,5080
+17,La Rioja,49,4992
+17,La Rioja,50,5058
+17,La Rioja,51,4867
+17,La Rioja,52,5011
+17,La Rioja,53,4770
+17,La Rioja,54,4757
+17,La Rioja,55,4843
+17,La Rioja,56,4645
+17,La Rioja,57,4573
+17,La Rioja,58,4582
+17,La Rioja,59,4558
+17,La Rioja,60,4585
+17,La Rioja,61,4178
+17,La Rioja,62,4246
+17,La Rioja,63,3970
+17,La Rioja,64,3750
+17,La Rioja,65,3624
+17,La Rioja,66,3533
+17,La Rioja,67,3401
+17,La Rioja,68,3268
+17,La Rioja,69,3163
+17,La Rioja,70,3266
+17,La Rioja,71,3291
+17,La Rioja,72,3033
+17,La Rioja,73,2911
+17,La Rioja,74,2964
+17,La Rioja,75,2757
+17,La Rioja,76,2769
+17,La Rioja,77,2355
+17,La Rioja,78,2265
+17,La Rioja,79,2514
+17,La Rioja,80,1612
+17,La Rioja,81,1620
+17,La Rioja,82,1791
+17,La Rioja,83,2144
+17,La Rioja,84,1955
+17,La Rioja,85,1942
+17,La Rioja,86,1740
+17,La Rioja,87,1729
+17,La Rioja,88,1398
+17,La Rioja,89,1352
+17,La Rioja,90,1036
+17,La Rioja,91,873
+17,La Rioja,92,724
+17,La Rioja,93,612
+17,La Rioja,94,462
+17,La Rioja,95,398
+17,La Rioja,96,262
+17,La Rioja,97,202
+17,La Rioja,98,143
+17,La Rioja,99,79
+17,La Rioja,100,133
+18,Ceuta,0,798
+18,Ceuta,1,911
+18,Ceuta,2,991
+18,Ceuta,3,1004
+18,Ceuta,4,1078
+18,Ceuta,5,1174
+18,Ceuta,6,1101
+18,Ceuta,7,1106
+18,Ceuta,8,1231
+18,Ceuta,9,1288
+18,Ceuta,10,1260
+18,Ceuta,11,1295
+18,Ceuta,12,1231
+18,Ceuta,13,1189
+18,Ceuta,14,1199
+18,Ceuta,15,1188
+18,Ceuta,16,1128
+18,Ceuta,17,1047
+18,Ceuta,18,1074
+18,Ceuta,19,1070
+18,Ceuta,20,1129
+18,Ceuta,21,1071
+18,Ceuta,22,1108
+18,Ceuta,23,1053
+18,Ceuta,24,1076
+18,Ceuta,25,1046
+18,Ceuta,26,1181
+18,Ceuta,27,1119
+18,Ceuta,28,1096
+18,Ceuta,29,1088
+18,Ceuta,30,1120
+18,Ceuta,31,1160
+18,Ceuta,32,1112
+18,Ceuta,33,1126
+18,Ceuta,34,1213
+18,Ceuta,35,1141
+18,Ceuta,36,1200
+18,Ceuta,37,1243
+18,Ceuta,38,1244
+18,Ceuta,39,1335
+18,Ceuta,40,1290
+18,Ceuta,41,1269
+18,Ceuta,42,1281
+18,Ceuta,43,1289
+18,Ceuta,44,1368
+18,Ceuta,45,1260
+18,Ceuta,46,1221
+18,Ceuta,47,1258
+18,Ceuta,48,1191
+18,Ceuta,49,1215
+18,Ceuta,50,1172
+18,Ceuta,51,1128
+18,Ceuta,52,1179
+18,Ceuta,53,1180
+18,Ceuta,54,1131
+18,Ceuta,55,1307
+18,Ceuta,56,1110
+18,Ceuta,57,1148
+18,Ceuta,58,1056
+18,Ceuta,59,1145
+18,Ceuta,60,1061
+18,Ceuta,61,997
+18,Ceuta,62,921
+18,Ceuta,63,833
+18,Ceuta,64,824
+18,Ceuta,65,749
+18,Ceuta,66,711
+18,Ceuta,67,661
+18,Ceuta,68,539
+18,Ceuta,69,561
+18,Ceuta,70,520
+18,Ceuta,71,499
+18,Ceuta,72,476
+18,Ceuta,73,454
+18,Ceuta,74,466
+18,Ceuta,75,425
+18,Ceuta,76,403
+18,Ceuta,77,381
+18,Ceuta,78,321
+18,Ceuta,79,373
+18,Ceuta,80,309
+18,Ceuta,81,268
+18,Ceuta,82,249
+18,Ceuta,83,287
+18,Ceuta,84,248
+18,Ceuta,85,218
+18,Ceuta,86,186
+18,Ceuta,87,145
+18,Ceuta,88,159
+18,Ceuta,89,128
+18,Ceuta,90,106
+18,Ceuta,91,76
+18,Ceuta,92,55
+18,Ceuta,93,51
+18,Ceuta,94,29
+18,Ceuta,95,21
+18,Ceuta,96,26
+18,Ceuta,97,8
+18,Ceuta,98,12
+18,Ceuta,99,2
+18,Ceuta,100,22
+19,Melilla,0,1185
+19,Melilla,1,1294
+19,Melilla,2,1259
+19,Melilla,3,1355
+19,Melilla,4,1349
+19,Melilla,5,1475
+19,Melilla,6,1364
+19,Melilla,7,1400
+19,Melilla,8,1426
+19,Melilla,9,1361
+19,Melilla,10,1330
+19,Melilla,11,1351
+19,Melilla,12,1211
+19,Melilla,13,1269
+19,Melilla,14,1153
+19,Melilla,15,1116
+19,Melilla,16,1189
+19,Melilla,17,1135
+19,Melilla,18,1250
+19,Melilla,19,1251
+19,Melilla,20,1176
+19,Melilla,21,1203
+19,Melilla,22,1223
+19,Melilla,23,1184
+19,Melilla,24,1249
+19,Melilla,25,1214
+19,Melilla,26,1232
+19,Melilla,27,1201
+19,Melilla,28,1139
+19,Melilla,29,1174
+19,Melilla,30,1130
+19,Melilla,31,1150
+19,Melilla,32,1147
+19,Melilla,33,1171
+19,Melilla,34,1205
+19,Melilla,35,1209
+19,Melilla,36,1276
+19,Melilla,37,1231
+19,Melilla,38,1273
+19,Melilla,39,1341
+19,Melilla,40,1282
+19,Melilla,41,1279
+19,Melilla,42,1322
+19,Melilla,43,1182
+19,Melilla,44,1208
+19,Melilla,45,1183
+19,Melilla,46,1090
+19,Melilla,47,1148
+19,Melilla,48,1171
+19,Melilla,49,1137
+19,Melilla,50,1212
+19,Melilla,51,1094
+19,Melilla,52,1214
+19,Melilla,53,1161
+19,Melilla,54,1154
+19,Melilla,55,1160
+19,Melilla,56,1080
+19,Melilla,57,1067
+19,Melilla,58,1033
+19,Melilla,59,1124
+19,Melilla,60,1047
+19,Melilla,61,1023
+19,Melilla,62,987
+19,Melilla,63,872
+19,Melilla,64,789
+19,Melilla,65,711
+19,Melilla,66,666
+19,Melilla,67,663
+19,Melilla,68,535
+19,Melilla,69,534
+19,Melilla,70,468
+19,Melilla,71,432
+19,Melilla,72,390
+19,Melilla,73,375
+19,Melilla,74,390
+19,Melilla,75,390
+19,Melilla,76,355
+19,Melilla,77,356
+19,Melilla,78,268
+19,Melilla,79,324
+19,Melilla,80,257
+19,Melilla,81,234
+19,Melilla,82,258
+19,Melilla,83,261
+19,Melilla,84,229
+19,Melilla,85,182
+19,Melilla,86,146
+19,Melilla,87,129
+19,Melilla,88,115
+19,Melilla,89,138
+19,Melilla,90,95
+19,Melilla,91,76
+19,Melilla,92,60
+19,Melilla,93,49
+19,Melilla,94,33
+19,Melilla,95,26
+19,Melilla,96,21
+19,Melilla,97,8
+19,Melilla,98,8
+19,Melilla,99,11
+19,Melilla,100,13

@@ -31,16 +31,14 @@ from .dates import (
     is_timeseries,
     ts_range
 )
-from .learning import (
-    clusters_silhouette,
-    cv_model_train,
-    feature_collinearity,
-    feature_correlations,
-    feature_regression,
-    feature_stat_test,
-    feature_vif,
-    shap_values
-)
+
+
+def _learning(name):
+    # Imported lazily: `learning` pulls in scikit-learn, xgboost and mlxtend, which only a few plots need
+    from . import learning
+
+    return getattr(learning, name)
+
 from .stat import (
     LeastSquaresEstimator,
     LocalKernelEstimator,
@@ -2078,7 +2076,7 @@ def plot_kde_1d(data, p=1000, weights=None, ax=None, show=True, path=None, **kwa
         xlim=None, xmin=None, xmax=None, xticks=None, xfmt=None,
         ylim=None, ymin=None, ymax=None, yticks=None, yfmt=None,
         show_mean=False, show_median=False, show_std=False, show_ci=False, show_ridge=False,
-        std_n=1, ci_alpha=0.05, ridge_share=False, stats_dec=2, cm=None, lw=3, ls='-', alpha=1,
+        std_n=1, ci_alpha=0.05, ci_method='normal', ridge_share=False, stats_dec=2, cm=None, lw=3, ls='-', alpha=1,
         grid=True, vlines=None, hlines=None, legend=True, title=None, note=None
     )
     _fig_params = dict(
@@ -2153,7 +2151,12 @@ def plot_kde_1d(data, p=1000, weights=None, ax=None, show=True, path=None, **kwa
                 format_number(std, plt_params['stats_dec'])
             ))
         if plt_params['show_ci']:
-            cmin, cmax = np.clip(samp.ci(alpha=plt_params['ci_alpha']), np.min(x), np.max(x))
+            if plt_params['ci_method'] == 'quantile':
+                # Empirical interval: the same quantiles published in the summary tables
+                cmin = samp.quantile(plt_params['ci_alpha'] / 2)
+                cmax = samp.quantile(1 - plt_params['ci_alpha'] / 2)
+            else:
+                cmin, cmax = np.clip(samp.ci(alpha=plt_params['ci_alpha']), np.min(x), np.max(x))
             lines.append(cmin)
             lines.append(cmax)
             labels[2].append('CI ({}%): {} - {}'.format(
@@ -2376,9 +2379,9 @@ def plot_prevalence(data, ax=None, show=True, path=None, **kwargs):
     s = s.sort_values()
 
     if plt_params['show_any']:
-        s = s.append(pd.Series({
+        s = pd.concat([s, pd.Series({
             '[any]': x.any(axis=1).sum() / n_rows
-        }))
+        })])
 
     s = s[::-1] * 100
 
@@ -3266,7 +3269,7 @@ def plot_series_mesh(data, ax=None, show=True, path=None, **kwargs):
 
     annot = plt_params['annot']
     if annot is True:
-        annot = df.applymap(format_number)
+        annot = df.map(format_number)
     elif annot is not None:
         annot = to_pandas(annot, pdtype='DataFrame').reindex(df.index).fillna('')
 
@@ -3845,10 +3848,10 @@ def plot_collinearity_grid(data, ax=None, show=True, path=None, **kwargs):
     )
 
     # Collinearity
-    w, v, det, cond = feature_collinearity(data)
+    w, v, det, cond = _learning('feature_collinearity')(data)
 
     # VIF
-    vif = feature_vif(data)
+    vif = _learning('feature_vif')(data)
 
     plt_params = get_params(_plt_params, None, 'plt_params', **kwargs)
     fig_params = get_params(_fig_params, None, 'fig_params', **kwargs)
@@ -3938,14 +3941,14 @@ def plot_feature_rank(x, y, return_df=False, ax=None, show=True, path=None, **kw
 
     # Feature/Target Univariate Correlation
     fcorr = pd.DataFrame(
-        feature_correlations(x, y, method=plt_params['corr_method']).rename('fcorr')
+        _learning('feature_correlations')(x, y, method=plt_params['corr_method']).rename('fcorr')
     )
     # Perform T-test on each feature and mask features with high p-value
-    fcorr['mask'] = feature_stat_test(x, y) < plt_params['p_value_thr']
+    fcorr['mask'] = _learning('feature_stat_test')(x, y) < plt_params['p_value_thr']
     df['fcorr'] = fcorr.fcorr
 
     # Feature/Target Multivariate Regression
-    flreg = feature_regression(x, y)
+    flreg = _learning('feature_regression')(x, y)
     # Normalize Odds Ratio and it's limits in order to visualize the contribution of each feature
     flreg[['odds_ratio', 'or_lo', 'or_up']] = flreg[['odds_ratio', 'or_lo', 'or_up']] - 1
     flreg['or_lo'] = flreg.odds_ratio - flreg.or_lo
@@ -3956,7 +3959,7 @@ def plot_feature_rank(x, y, return_df=False, ax=None, show=True, path=None, **kw
 
     if plt_params['show_cv']:
         # Model CV
-        cv_model = cv_model_train(
+        cv_model = _learning('cv_model_train')(
             x, y,
             cv=plt_params['cv'],
             estimator=plt_params['estimator'],
@@ -3976,7 +3979,7 @@ def plot_feature_rank(x, y, return_df=False, ax=None, show=True, path=None, **kw
         df['fimp'] = fimp[0]
 
         # Shap Values
-        fshap = [np.mean(np.abs(shap_values(x, i)), axis=0) for i in cv_model['estimator']]
+        fshap = [np.mean(np.abs(_learning('shap_values')(x, i)), axis=0) for i in cv_model['estimator']]
         fshap = pd.DataFrame([
             np.mean(fshap, axis=0),
             np.mean(fshap, axis=0) - np.min(fshap, axis=0),
@@ -4132,7 +4135,7 @@ def plot_clusters_grid(data, labels, pos=None, centroids=None, show=True, path=N
     axs[0].set_xlim([-0.1, 1])
     axs[0].set_ylim([0, len(data[clustered])])
 
-    score, samples = clusters_silhouette(data[clustered], labels[clustered])
+    score, samples = _learning('clusters_silhouette')(data[clustered], labels[clustered])
 
     # Silhouette graph
     y_lower = 0
@@ -4547,10 +4550,10 @@ def print_feature_split(x, y, return_df=False, show=True, path=None, **kwargs):
             x_, _ = to_tensor(x, scale=True, impute=True)
             y_ = y.map(dict(zip(splits, np.arange(len(splits))))) if not is_numeric(y) else y.copy()
 
-            test_ind = feature_stat_test(x_, y_)
+            test_ind = _learning('feature_stat_test')(x_, y_)
             df.loc[:, ('test_ind', 'p_value')] = test_ind.values
 
-            reg_mul = feature_regression(x_, y_)
+            reg_mul = _learning('feature_regression')(x_, y_)
             df.loc[:, ('reg_mul', 'p_value')] = reg_mul.p_value.values
             df.loc[:, ('reg_mul', 'odds_ratio')] = reg_mul.odds_ratio.values
         except Exception:

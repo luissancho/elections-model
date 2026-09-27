@@ -217,7 +217,7 @@ class NLProcessor(object):
             kps = []
             for s in list(kps_agg.index):
                 s = [w for w in s.split() if w.isalpha() and w not in self.model.Defaults.stop_words]
-                if any(np.in1d(s, pos_tokens)):
+                if any(np.isin(s, pos_tokens)):
                     kps.append(' '.join(s))
         else:
             kps = list(kps_agg.index)

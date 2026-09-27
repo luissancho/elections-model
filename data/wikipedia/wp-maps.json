@@ -1,0 +1,322 @@
+{
+    "parties": {
+        "PSOE": [
+            "Spanish_Socialist_Workers%27_Party",
+            "Spanish_Socialist_Workers'_Party"
+        ],
+        "PP": [
+            "People%27s_Party_(Spain)",
+            "People's_Party_(Spain)"
+        ],
+        "AP": [
+            "People%27s_Alliance_(Spain)",
+            "People%27s_Coalition_(Spain)"
+        ],
+        "CD": [
+            "Democratic_Coalition_(Spain)"
+        ],
+        "VOX": [
+            "Vox_(political_party)"
+        ],
+        "UP": [
+            "Unidas_Podemos",
+            "Podemos_(Spanish_political_party)",
+            "Unidos_Podemos"
+        ],
+        "SUMAR": [
+            "Sumar_(electoral_platform)"
+        ],
+        "Cs": [
+            "Citizens_(Spanish_political_party)"
+        ],
+        "MP": [
+            "M%C3%A1s_Pa%C3%ADs"
+        ],
+        "ERC": [
+            "Republican_Left_of_Catalonia%E2%80%93Catalonia_Yes",
+            "Republican_Left_of_Catalonia",
+            "Republican_Left_of_Catalonia%E2%80%93Sovereigntists"
+        ],
+        "JxCat": [
+            "Together_for_Catalonia_(2020)",
+            "Together_for_Catalonia_(2017)",
+            "Together_for_Catalonia_(2017) Together_for_Catalonia_(2020)"
+        ],
+        "PDeCAT": [
+            "Catalan_European_Democratic_Party"
+        ],
+        "PNV": [
+            "Basque_Nationalist_Party"
+        ],
+        "EHB": [
+            "EH_Bildu"
+        ],
+        "AMAIUR": [
+            "Amaiur"
+        ],
+        "CUP": [
+            "Popular_Unity_Candidacy"
+        ],
+        "CC": [
+            "Canarian_Coalition",
+            "Canarian_Coalition%E2%80%93New_Canaries"
+        ],
+        "BNG": [
+            "Galician_Nationalist_Bloc"
+        ],
+        "NA+": [
+            "Navarra_Suma",
+            "Navarra_Suma Navarrese_People%27s_Union"
+        ],
+        "PRC": [
+            "Regionalist_Party_of_Cantabria"
+        ],
+        "TE": [
+            "Teruel_Existe"
+        ],
+        "EV": [
+            "Empty_Spain"
+        ],
+        "UPN": [
+            "Navarrese_People%27s_Union",
+            "Navarrese_People's_Union"
+        ],
+        "PACMA": [
+            "Animalist_Party_Against_Mistreatment_of_Animals",
+            "Animalist_Party_with_the_Environment"
+        ],
+        "COMPROMIS": [
+            "Coalici%C3%B3_Comprom%C3%ADs"
+        ],
+        "IU": [
+            "Popular_Unity_(Spain)",
+            "Plural_Left_(Spain,_2011)",
+            "United_Left_(Spain)"
+        ],
+        "CiU": [
+            "Convergence_and_Union"
+        ],
+        "CDC": [
+            "Democratic_Convergence_of_Catalonia",
+            "Democracy_and_Freedom"
+        ],
+        "UPyD": [
+            "Union,_Progress_and_Democracy"
+        ],
+        "HB": [
+            "Herri_Batasuna",
+            "Euskal_Herritarrok"
+        ],
+        "SALF": [
+            "Se_Acab%C3%B3_La_Fiesta",
+            "Se_Acabó_La_Fiesta"
+        ],
+        "IC": [
+            "Initiative_for_Catalonia",
+            "Democratic_Party_of_the_New_Left"
+        ],
+        "UCD": [
+            "Union_of_the_Democratic_Centre_(Spain)",
+            "Democratic_and_Social_Centre_(Spain)"
+        ],
+        "CDS": [
+            "Democratic_and_Social_Centre_(Spain)"
+        ],
+        "PCE": [
+            "Communist_Party_of_Spain"
+        ],
+        "MUC": [
+            "Communists%27_Unity_Board"
+        ],
+        "PSP": [
+            "People%27s_Socialist_Party_(Spain)"
+        ],
+        "PDPC": [
+            "Democratic_Pact_for_Catalonia"
+        ],
+        "EDC": [
+            "Christian_Democratic_Team_of_the_Spanish_State"
+        ],
+        "ASDCI": [
+            "Socialist_Action_Party_(Spain)"
+        ],
+        "FDI": [
+            "Democratic_Left_Front_(Spain)"
+        ],
+        "AN18": [
+            "National_Alliance_July_18"
+        ],
+        "EE": [
+            "Euskadiko_Ezkerra"
+        ],
+        "PSV": [
+            "Basque_Socialist_Party"
+        ],
+        "FN": [
+            "National_Union_(Spain)",
+            "New_Force_(Spain)"
+        ],
+        "PA": [
+            "Andalusian_Party"
+        ],
+        "PAP": [
+            "Andalusian_Progress_Party"
+        ],
+        "PRD": [
+            "Democratic_Reformist_Party"
+        ],
+        "CG": [
+            "Galician_Coalition"
+        ],
+        "ARM": [
+            "Ruiz-Mateos_Group"
+        ],
+        "EA": [
+            "Eusko_Alkartasuna"
+        ],
+        "UV": [
+            "Valencian_Union"
+        ],
+        "LV": [
+            "Confederation_of_the_Greens"
+        ],
+        "PAR": [
+            "Aragonese_Party"
+        ],
+        "PAD": [
+            "Democratic_Action_Party_(Spain)"
+        ],
+        "AC": [
+            "Catalan_Alliance"
+        ],
+        "ADELANTE": [
+            "Adelante_Andalucía_(2021)"
+        ]
+    },
+    "pollsters": {
+        "GAD3": [
+            "GAD"
+        ],
+        "Sigma Dos": [
+            "SigmaDos",
+            "TC-Sigma Dos",
+            "TC",
+            "Sigma Dos-Vox Pública"
+        ],
+        "40dB": [
+            "MyWord",
+            "40\\xa0dB"
+        ],
+        "Demoscopia": [
+            "Demoscopia y Servicios",
+            "Demoscopia Servicios"
+        ],
+        "Opinometre": [
+            "Opinòmetre"
+        ],
+        "SyM Consulting": [
+            "SyM",
+            "SYM Consulting"
+        ],
+        "Hamalgama": [
+            "Hamalgama Métrica"
+        ],
+        "Deimos": [
+            "Deimos Estadística"
+        ],
+        "CSA": [
+            "Consultores CSA"
+        ],
+        "InvyMark": [
+            "Invymark"
+        ],
+        "Ipsos": [
+            "Ipsos-Eco"
+        ],
+        "TNS Demoscopia": [
+            "TNS"
+        ],
+        "Grupo ANA": [
+            "ANA"
+        ],
+        "Instituto Alef": [
+            "Alef"
+        ],
+        "Gallup": [
+            "ICSA-Gallup"
+        ],
+        "EIDOS": [
+            "Equipo Eidos"
+        ],
+        "Iope Etmar": [
+            "Iope-Etmar"
+        ],
+        "Instituto ECO": [
+            "ECO"
+        ],
+        "Celeste Tel": [
+            "Celeste-Tel"
+        ],
+        "ICP Research": [
+            "ICP-Research"
+        ],
+        "Emopública": [
+            "Emopública-Burke"
+        ],
+        "Vox Pública": [
+            "Vox Pública-Iope"
+        ],
+        "OTR": [
+            "OTR-IS"
+        ],
+        "EM Analytics": [
+            "EM-Analytics"
+        ]
+    },
+    "sponsors": {
+        "RTVE": [
+            "RTVE-FORTA"
+        ],
+        "elDiario.es": [
+            "eldiario.es"
+        ],
+        "La Sexta": [
+            "laSexta"
+        ],
+        "El Debate": [
+            "eldebate.es"
+        ],
+        "El Periódico":[
+            "El Periòdic"
+        ],
+        "Telecinco": [
+            "Tele 5"
+        ],
+        "Diario16": [
+            "Diario 16",
+            "Grupo 16",
+            "Cambio 16"
+        ],
+        "InfoLibre": [
+            "infoLibre"
+        ],
+        "Diario Ya": [
+            "Ya"
+        ],
+        "Actualidad Económica": [
+            "Actualidad"
+        ],
+        "Levante EMV": [
+            "Levante-EMV"
+        ],
+        "VozPópuli": [
+            "Vozpópuli"
+        ],
+        "OKDiario": [
+            "Okdiario"
+        ],
+        "Mediaflows UV": [
+            "Mediaflows-UV"
+        ]
+    }
+}

@@ -1,0 +1,54 @@
+# Backtest del modelo
+
+Evaluación fuera de muestra del modelo completo (promedio de encuestas, intervalos, escaños y probabilidades de mayoría) sobre las elecciones generales con resultado oficial desde 2015. Es distinto del backtest de las encuestadoras que hace el `Computer` (errores de cada encuesta, ratings): aquí se evalúa la **salida del modelo**.
+
+## Protocolo
+
+Para cada elección `E` y cada horizonte `d ∈ {6, 14, 30, 60, 90, 180}` días:
+
+1. Se congela el modelo en `limit_date = E − d`: solo entran las encuestas publicadas al menos `d` días antes (`Simulator(drange=d)`), y los ratings, el estimador de error y el estimador de escaños del `Computer` se calculan solo con las elecciones anteriores a `E` (por construcción del `Simulator`, `get_event_dates(..., skip=1)`). Cada caso es genuinamente fuera de muestra.
+2. Se ajusta el promedio (`fit_forecast(max_fc=10, fillna=True)`) y se simulan 500 elecciones en modo MT (`split=True`, `random=True`, `seed=42`) **dos veces con la misma semilla**: como *nowcast* (la elección celebrada en el ancla `as_of` del pronóstico, solo con el error de las encuestas; columnas sin sufijo) y **a horizonte** (`horizon='deadline'`: en una elección pasada el límite es la propia elección, así que se añade la deriva de la opinión desde `as_of` hasta ella; columnas con sufijo `_h`). Ver `docs/analisis-2026-09/metodo-5-nowcast-horizonte.md`.
+3. Se compara con el resultado oficial nacional (`events_results`, `pct` sobre votos válidos, escaños).
+
+Desde el método 6 el `Simulator` resta a cada encuesta el efecto de su casa (`house_effects=True`): el efecto del ciclo se estima solo con las encuestas hasta `limit_date` y su prior con las elecciones anteriores a `E` (tabla `pollsters_parties`), así que sigue siendo fuera de muestra. Las líneas base (`last_poll`, `mean_4w`) se calculan siempre con las encuestas brutas. `--no-house-effects` desactiva la corrección y `--industry-bias` añade el desplazamiento por el sesgo del sector (ver `docs/analisis-2026-09/metodo-6-house-effects.md`). El método 7 permite sortear juntos los partidos nacionales con una correlación negativa común fijada por la razón de composición estimada en las elecciones anteriores (`--composition auto`, o un valor fijo); por defecto se sortean independientes, porque el backtest no lo favorece a corto plazo (ver `metodo-7-composicion.md`). Desde el método 9 la proyección provincial lleva oscilaciones por comunidad autónoma y por provincia (`regional_noise=True`, por defecto), estimadas con las elecciones anteriores a cada una; `--no-regional-noise` deja el swing proporcional determinista (ver `metodo-9-oscilaciones-autonomicas.md`).
+
+Elecciones: 2015-12-20, 2016-06-26, 2019-04-28, 2019-11-10 y 2023-07-23. Los parámetros de 2015 y 2016 se derivan automáticamente de los datos (`get_event_params`), porque no tienen entrada en `data/params.json`. En 2015, UP y Cs no tienen resultado previo ni regla de herencia (`smap`), así que sus escaños no pueden proyectarse: el caso queda marcado `seats_valid = False` y solo cuenta para las métricas de porcentaje de voto.
+
+## Métricas
+
+Por caso (elección × horizonte), sobre los partidos principales (`bmaps.main`):
+
+| Métrica | Qué mide |
+|---|---|
+| `mae_shares`, `rmse_shares` | Error absoluto medio y cuadrático del promedio (`forecast['mean']`) frente al porcentaje oficial |
+| `mae_last_poll`, `mae_mean_4w`, `mae_prev_result` | Lo mismo para las tres líneas base: la última encuesta publicada, la media simple de las encuestas de las cuatro semanas anteriores al corte, y el resultado de la elección anterior |
+| `bias_sum` | Error con signo de la suma de los partidos principales (negativo: el promedio dejó en `'-'` voto que fue a esos partidos) |
+| `cov_fc95` | Cobertura del intervalo del 95 % del propio `Forecaster` (`fc_stat`: solo el error estadístico de la media local, con cluster por casa desde el método 10). Mide dónde está el consenso de las casas, no el resultado: es baja por construcción y no es una prueba de calibración (ver `metodo-10-error-estandar-cluster.md`) |
+| `cov_shares50/80/95` | Cobertura de los intervalos empíricos de las cuotas simuladas (`shares()`, que incluyen el error histórico) |
+| `mae_seats`, `mae_seats_all` | Error absoluto medio de escaños (titular `totals()`) en los principales y en todos los partidos |
+| `cov_seats50/80/95` | Cobertura de los intervalos de escaños simulados |
+| `crps_seats` | CRPS medio de la distribución de escaños de los principales (`E|X − y| − E|X − X'|/2`; es el error absoluto cuando la distribución es un punto) |
+| `brier_vs`, `log_score_vs` | Calidad de la probabilidad de mayoría absoluta de los bloques `vs` (Derecha/Izquierda) frente a lo ocurrido |
+| `cov_shares50/80/95_h`, `cov_seats50/80/95_h` | Coberturas de la ejecución a horizonte (con la deriva de la opinión hasta la elección) |
+| `mae_seats_h`, `crps_seats_h`, `brier_vs_h`, `log_score_vs_h` | Las mismas métricas de escaños y de mayoría para la ejecución a horizonte |
+| `cov_prov_shares50/80/95`, `mae_prov_shares`, `rmse_prov_shares`, `n_prov_cells`, `n_prov_missing` | Calibración y error de las **cuotas por provincia** (celdas provincia × partido con cuota oficial o simulada ≥ 1 % que el modelo proyecta; `n_prov_missing` cuenta las que no proyecta, por falta de geografía previa), nowcast; solo en los casos con escaños válidos |
+| `cov_prov_seats95`, `crps_prov_seats`, `mae_prov_seats` | Lo mismo para los escaños por provincia |
+
+`meta.csv` registra además si se aplicaron efectos de casa (`house_effects`, `industry_bias`), cuántas casas se corrigieron entre los partidos principales (`he_pollsters`) y el tamaño de los efectos (`he_mean_abs`, `he_max_abs`, puntos), la razón de composición y la correlación usadas (`composition_ratio`, `composition_rho`) y la fracción de simulaciones con el residuo `'-'` recortado a 0 (`clip_rate`).
+
+Los casos con menos de 5 encuestas útiles se omiten (`meta.csv` registra el motivo). `by_horizon.csv` promedia las métricas de las elecciones para cada horizonte e indica cuántos casos entran (`n_cases`, `n_seats_cases`). Un modelo bien calibrado tiene coberturas cercanas al nivel nominal (0,50, 0,80, 0,95); si son menores, los intervalos son demasiado estrechos. El nowcast responde a "si las elecciones fueran hoy" y solo está calibrado a horizontes cortos; la comparación honesta a `d` días es la ejecución `_h`. `meta.csv` guarda además el ancla (`as_of`), los días hasta la elección (`horizon_max`) y la constante de deriva usada (`drift_k`, ajustada solo con los ciclos anteriores a cada elección).
+
+## Ejecutar
+
+```
+python backtest/run_backtest.py                          # todo (unos 15 minutos con la base de datos local)
+python backtest/run_backtest.py --events 2023-07-23 --horizons 6 30 --n-sim 200
+python backtest/run_backtest.py --nowcast-only           # sin la ejecución a horizonte (la mitad de tiempo)
+python backtest/run_backtest.py --no-house-effects       # sin restar los efectos de casa (referencia del método 6)
+python backtest/run_backtest.py --industry-bias --out backtest/results_ib   # con el sesgo del sector, en otra carpeta
+python backtest/run_backtest.py --composition auto --out backtest/results_comp   # sorteo conjunto (método 7)
+```
+
+La deriva se lee de la tabla `elections.drift`; si está vacía, cada `Simulator` la calcula al vuelo (más lento). Se rellena con `Computer.compute_drift(save=True)` (notebook `data-load/PollsCompute`).
+
+Escribe en `backtest/results/`: `shares.csv`, `seats.csv`, `blocks.csv` (una fila por partido o bloque y caso), `provinces.csv` (una fila por provincia, partido y caso), `meta.csv` (cortes, encuestas usadas, tiempos), `metrics.csv` (una fila por caso), `by_horizon.csv` y `run.json` (commit, fecha, estado de la base de datos). La lógica está en `mtpy/lib/backtest.py` (`run_case`, `summarize_case`, `run_backtest`), reutilizable desde los notebooks.

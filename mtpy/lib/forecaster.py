@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
+import warnings
 from tqdm import tqdm
 
 from typing import Any, Optional
@@ -20,8 +21,10 @@ from ..core.utils.dataviz import (
     set_title, table_styles
 )
 
+from .utils import normal_update
 from .data import (
-    get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters
+    get_event_dates, get_event_params, get_event_series, get_poll_series, get_parties, get_pollsters,
+    get_house_effects
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -38,6 +41,8 @@ class Forecaster(Core):
         alpha: float = 0.05,
         bmap: Optional[dict[str, Any] | str] = None,
         reg_params: Optional[dict[str, Any]] = None,
+        house_effects: bool = False,
+        he_params: Optional[dict[str, Any]] = None,
         verbose: int = 0,
         path: Optional[str] = None
     ) -> None:
@@ -85,10 +90,16 @@ class Forecaster(Core):
         reg_params : dict of str, optional
             Parameters for the regression estimator.
             If `None`, the default parameters will be used.
+        house_effects : bool, optional
+            Estimate the house effect of each pollster on each series (backfitting against the average, with a
+            prior from its past elections) and subtract it from its polls before averaging. See `fit_house_effects`.
+        he_params : dict, optional
+            Parameters of the house effects estimation, see `set_he_params`.
         verbose : int, optional
             Level of verbosity.
         path : str, optional
-            Path to store model files.
+            Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
+            (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
         """
         super().__init__()
 
@@ -100,13 +111,15 @@ class Forecaster(Core):
         self.alpha = alpha
         self.bmap = bmap
         self.reg_params = self.set_reg_params(reg_params)
+        self.he_enabled = bool(house_effects)  # Estimate and subtract the house effects before averaging (M6)
+        self.he_params = self.set_he_params(he_params)
 
         self.verbose = verbose
-        self.path = path or os.getcwd()
+        self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
-        self.event_params = json.loads(
-            self.app.fs.read(f'{self.path}/params.json')
-        )[self.scope][self.event_date]
+        # Event params: derived from the data (parties with results, blocks, new parties) and overridden by
+        # the entries of `data/params.json` when the event is listed there
+        self.event_params = get_event_params(self.scope, self.event_date, path=self.path)
 
         if isinstance(self.bmap, str):
             self.bmap = self.event_params['bmaps'][self.bmap]
@@ -120,6 +133,9 @@ class Forecaster(Core):
         self.colors = None  # Colors of the parties included in the polls published for this election event
 
         self.series = None  # DataFrame to build containing the series of polls, weights and results
+        self.series_raw = None  # The same series before subtracting the house effects (see `fit_house_effects`)
+        self.party_first_polls = None  # First poll of each party (raw party columns, before grouping into blocks)
+        self.house_effects = None  # House effect of each pollster on each series, once fitted
         self.forecast = None  # Fitted estimation of the percentage of votes for each party in the election event
         self.fc_stat = None  # Standard error and confidence interval of the forecast for each estimation
 
@@ -127,6 +143,7 @@ class Forecaster(Core):
         self.date_first = None  # Date of the first poll published for the current election event
         self.date_last = None  # Date of the last poll published for the current election event
         self.date_end = None  # Date of the current election event
+        self.date_fit_last = None  # Last day with a fitted value (before any forward fill), see `fit_forecast`
 
     @property
     def bmaps(self) -> dict[str, Any]:
@@ -171,14 +188,57 @@ class Forecaster(Core):
                 'min_delta': None  # Minimum change in bandwidth estimate to be achieved in order to stop iterations
             }),
             'poly_deg': reg_params.get('poly_deg', 1),  # Degree of the polynomial used to fit the local data
-            'cov_type': reg_params.get('cov_type', 'hac'),  # Type of robust covariance estimator
+            # Robust covariance of the local fit: 'cluster' by pollster (the residuals of a house are correlated;
+            # M10), 'hc1' or 'hac' (Newey-West over the row order, the former default)
+            'cov_type': reg_params.get('cov_type', 'cluster'),
             'cov_kwargs': reg_params.get('cov_kwargs', {  # Robust covariance estimator parameters
                 'hac_lags': 1,  # Number of lags used to compute the HAC estimator
                 'kernel': 'bartlett'  # Kernel used to compute the HAC estimator
             })
         }
+        if reg_params['cov_type'] != 'hac':
+            # The HAC parameters mean nothing to the other estimators (stored parameter sets may carry them)
+            reg_params['cov_kwargs'] = {k: v for k, v in reg_params['cov_kwargs'].items() if k not in ('hac_lags', 'kernel')}
 
         return reg_params
+
+    def set_he_params(
+        self,
+        he_params: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
+        """
+        Normalize the parameters of the house effects estimation (see `fit_house_effects`).
+
+        Parameters
+        ----------
+        he_params : dict, optional
+            - n_iter : backfitting iterations (3).
+            - min_polls : polls a pollster needs in the cycle to inform its effect (5).
+            - tau : prior standard deviation of an effect, relative to the level of the series (0.08).
+            - prior_events : shrinkage of the historical prior toward 0, in elections of `n_cap` polls (1).
+            - n_cap : cap of the polls of a past election counted in the prior weight (10).
+            - year_decay : yearly decay of the weight of a past election, and of a poll within the cycle (0.9).
+            - n_days : window before a past election used to measure the deviation from its result (90).
+            - level_floor : floor of the level in the relative deviations, percentage points (2).
+            - rel_cap : cap of the absolute relative deviation of a past election (0.5).
+            - err_floor : floor of the standard error of a measured deviation, as a fraction of the prior sd (0.25).
+            - prior : `'auto'` (history from the database) or `None` (prior 0), see `fit_house_effects`.
+        """
+        he_params = he_params if he_params is not None else dict()
+
+        return {
+            'n_iter': int(he_params.get('n_iter', 3)),
+            'min_polls': int(he_params.get('min_polls', 5)),
+            'tau': float(he_params.get('tau', 0.08)),
+            'prior_events': float(he_params.get('prior_events', 1.)),
+            'n_cap': int(he_params.get('n_cap', 10)),
+            'year_decay': float(he_params.get('year_decay', 0.9)),
+            'n_days': int(he_params.get('n_days', 90)),
+            'level_floor': float(he_params.get('level_floor', 2.)),
+            'rel_cap': float(he_params.get('rel_cap', 0.5)),
+            'err_floor': float(he_params.get('err_floor', 0.25)),
+            'prior': he_params.get('prior', 'auto')
+        }
 
     def load_events(self) -> pd.DataFrame:
         event_dates = get_event_dates(scope=self.scope, date_to=self.event_date)
@@ -252,7 +312,7 @@ class Forecaster(Core):
         data_cols = [
             'tfs', 'tte', 'start_date', 'end_date', 'pollster', 'sponsor', 'computed',
             'sample_size', 'parties', 'days', 'mtype', 'proc_sample', 'rating',
-            'error_avg', 'error_blocks', 'bias_avg', 'bias_blocks', 'bias', 'bias_dev_adj', 'bias_dev_err',
+            'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err',
             'weight_over', 'weight_sample', 'weight_rating', 'weight'
         ]
 
@@ -267,7 +327,11 @@ class Forecaster(Core):
         series['tte'] = [(self.date_end - dt).days for dt in series.date]  # tte: time to end
 
         # Set poll weights as the product of the all computed weights
-        series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(self.pollsters.set_index('id').quality))
+        # Pollsters without a computed rating fall back to their prior `quality` (0-100), mapped onto the
+        # same scale as `weight_rating` (see `Computer.pollster_ratings`)
+        quality = self.pollsters.set_index('id').quality.astype(float).div(100)
+        weight_quality = np.log1p(quality) / np.log1p(quality.mean())
+        series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(weight_quality))
         series['weight'] = series.weight_over * series.weight_sample * series.weight_rating
 
         # Sort index and columns
@@ -276,6 +340,17 @@ class Forecaster(Core):
         ]).sort_index()[
             data_cols + party_names
         ]
+
+        # First poll listing each party in this cycle (raw party columns, before grouping into blocks): the
+        # birth of a party born in the cycle is the date pollsters started listing it, not the first poll of
+        # the predecessors its block inherits
+        polls_only = series.loc[series.pollster.notnull() & series.computed.fillna(False).astype(bool)]
+        first = {}
+        for name in party_names:
+            mask = polls_only[name].notnull().to_numpy()
+            if mask.any():
+                first[name] = polls_only.index.get_level_values('date')[mask].min()
+        self.party_first_polls = pd.Series(first, dtype='datetime64[ns]', name='first_poll')
 
         # Build blocks using the defined mapping and aggregate the results of each group of parties
         if self.bmap is None:
@@ -286,16 +361,30 @@ class Forecaster(Core):
         self.names = self.blocks.index.tolist()
 
         # Replace the parties results with the blocks results, then sort index and columns
-        self.series = pd.concat([
+        series = pd.concat([
             series[data_cols],
             block_results
         ], axis=1)[
             data_cols + self.names
         ].sort_index()
-        # Remove polls with incomplete results
-        self.series = self.series.loc[self.series.pollster.isnull() | self.series.computed]
+
+        self.series_raw = None
+        self.house_effects = None
+        self._set_series(series)
+
+        return self
+
+    def _set_series(self, series: pd.DataFrame) -> Self:
+        """
+        Set the working series (blocks): drop the polls with incomplete results, recompute the residual
+        `'-'` and reset the forecast frames. The first series set is kept as `series_raw` (uncorrected).
+        """
+        series = series.loc[series.pollster.isnull() | series.computed.fillna(False).astype(bool)].copy()
         # Assign the remaining percentage to a new 'others' block
-        self.series['-'] = 100. - self.series[self.names].sum(axis=1, min_count=1)
+        series['-'] = 100. - series[self.names].sum(axis=1, min_count=1)
+        self.series = series
+        if self.series_raw is None:
+            self.series_raw = series.copy()
 
         # Initialize the forecast and statistics frames
         self.forecast = pd.DataFrame(
@@ -334,9 +423,12 @@ class Forecaster(Core):
             Fitted estimation of the percentage of votes for the party or block in the election event.
             If `ret_stat` is `True`, returns a tuple with the standard error and confidence interval of the forecast.
         """
-        df = self.fc_series[self.fc_series[name].notnull()]
+        # Polls with a value for the party and a positive weight (zero-weight polls do not enter the fit and
+        # would only break the bandwidth selection); a local linear fit needs at least three of them
+        df = self.fc_series[self.fc_series[name].notnull() & (self.fc_series['weight'] > 0)]
 
-        if df.empty:
+        if df.shape[0] < 3:
+            warnings.warn('Fewer than three usable polls for `{}`: not fitted'.format(name))
             return
 
         ix = self.fc_index
@@ -344,10 +436,13 @@ class Forecaster(Core):
 
         weights = df.weight.values
         alpha = self.alpha if ret_stat else None
+        # Cluster-robust standard error by pollster (M10): the polls of a house share its remaining deviation
+        groups = df['pollster_id'].to_numpy() if self.reg_params.get('cov_type') == 'cluster' else None
 
         reg = LocalKernelEstimator(
             df[name],
             weights=weights,
+            groups=groups,
             **self.reg_params
         ).fit(px, alpha=alpha).reindex(ix)
 
@@ -383,22 +478,43 @@ class Forecaster(Core):
         -------
         pd.DataFrame
             Fitted estimation of the percentage of votes for each party or block in the election event.
+
+        Notes
+        -----
+        `date_fit_last` records the last day with a fitted value for any party (`last poll + max_fc`) before the
+        forward fill, so that a forecast read at a later date can be traced back to the day it was actually
+        estimated. Parties fitted on fewer polls may end earlier and keep their last value from that day on.
         """
         names = names or self.names
 
+        # House effects (M6): estimated once on every series and subtracted from the polls before averaging
+        if self.he_enabled and self.house_effects is None:
+            self.fit_house_effects()
+
         names_ = tqdm(names) if self.verbose > 0 else names  # Show progress bar if verbose
         for name in names_:
-            dreg, dstat = self.fit(name, max_fc=max_fc, ret_stat=True)
+            res = self.fit(name, max_fc=max_fc, ret_stat=True)
+            if res is None:
+                warnings.warn('No polls available for `{}`: skipped'.format(name))
+                continue
 
+            dreg, dstat = res
             self.forecast.loc[dreg.index, name] = dreg
-            # Assign the remaining percentage to a new 'others' block
-            self.forecast['-'] = 100. - self.forecast[names].sum(axis=1, min_count=1)
             self.fc_stat.loc[dstat.index, name] = dstat
+
+        # Last day actually estimated for any party: the anchor of a nowcast read after the forward fill
+        fitted = self.forecast[self.names].notnull().any(axis=1)
+        self.date_fit_last = fitted[fitted].index.max() if fitted.any() else None
+
+        # Assign the remaining percentage to the 'others' block
+        self.forecast['-'] = 100. - self.forecast[self.names].sum(axis=1, min_count=1)
 
         # Populate the forecast and statistics frames, filling the missing values with the last available estimation
         if fillna:
-            self.forecast = self.forecast.fillna(method='ffill')
-            self.fc_stat = self.fc_stat.fillna(method='ffill')
+            self.forecast = self.forecast.ffill()
+            # `fc_stat` holds a dict per cell (object dtype): forward-fill column by column, skipping the
+            # columns that were not fitted, to avoid pandas' object downcasting on all-NaN columns
+            self.fc_stat = self.fc_stat.apply(lambda col: col.ffill() if col.notnull().any() else col)
 
         return self.forecast
 
@@ -469,12 +585,393 @@ class Forecaster(Core):
 
             self.fc_stat = self.app.fs.read_csv(
                 self.get_path('fc/{}-stat.csv'.format(prefix))
-            ).set_index('date').applymap(lambda x: literal_eval(x) if isinstance(x, str) else x)
+            ).set_index('date').map(lambda x: literal_eval(x) if isinstance(x, str) else x)
             self.fc_stat.index = pd.DatetimeIndex(self.fc_stat.index)
+            self.date_fit_last = None  # A saved forecast is already forward filled: the anchor falls back to `date_last`
         else:
             self.fit_forecast()
 
         return self.forecast
+
+    # --- House effects (M6) ------------------------------------------------------------------------------
+
+    def load_house_history(self) -> pd.DataFrame:
+        """
+        Historical deviations of the pollsters in the elections before this one (table `pollsters_parties`,
+        see `Computer.compute_house_effects`): the source of the prior of each house effect.
+        """
+        dates = get_event_dates(scope=self.scope, date_to=self.event_date, skip=1)
+
+        return get_house_effects(scope=self.scope, event_dates=dates)
+
+    def fit_house_effects(
+        self,
+        n_iter: Optional[int] = None,
+        min_polls: Optional[int] = None,
+        prior: Optional[str | pd.DataFrame] = 'default'
+    ) -> pd.DataFrame:
+        """
+        Estimate the house effect of each pollster on each series and subtract it from its polls.
+
+        Backfitting: the average of each series is fitted on the corrected polls of the previous iteration
+        (the raw polls the first time); the deviation of each pollster is the weighted mean of the residuals
+        of its raw polls against that average (`house_deviations`, precision weights `weight_over ·
+        weight_sample` decayed with the age of the poll); it is combined with the prior of the pollster on
+        that series (`house_prior`: its centred deviations from the results of past elections, or 0) by a
+        normal-normal update (`normal_update`); the effects are re-centred so that their weighted mean is 0
+        (`center_effects`: the level of the average never depends on the correction) and subtracted from the
+        raw polls (`apply_house_effects`). Rows of official results are never touched; `series_raw` keeps
+        the uncorrected series and `house_effects` the table of effects.
+
+        Parameters
+        ----------
+        n_iter : int, optional
+            Backfitting iterations (`he_params['n_iter']` by default).
+        min_polls : int, optional
+            Polls a pollster needs in the cycle to inform its effect (`he_params['min_polls']` by default).
+        prior : {'auto'}, pd.DataFrame or None, optional
+            `'auto'` loads the history from the database (`load_house_history`); a frame with the columns of
+            `pollsters_parties` uses it directly; `None` uses a prior of 0 for every pollster (the effect is
+            the deviation of the cycle alone). By default, `he_params['prior']`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `(pollster_id, name)`: `pollster`, `n`, `w`, `level`, `dev`, `dev_err`, `prior`,
+            `prior_err`, `effect`, `effect_err`, `center`.
+        """
+        p = self.he_params
+        n_iter = p['n_iter'] if n_iter is None else int(n_iter)
+        min_polls = p['min_polls'] if min_polls is None else int(min_polls)
+        if isinstance(prior, str) and prior == 'default':
+            prior = p['prior']
+
+        if isinstance(prior, str) and prior == 'auto':
+            history = self.load_house_history()
+        elif isinstance(prior, pd.DataFrame):
+            history = prior
+        else:
+            history = None
+        if history is not None and history.shape[0] > 0:
+            history = history.loc[history['dev_result_c'].notnull()]
+            history_groups = {k: g for k, g in history.groupby(['pollster_id', 'party'], observed=True)}
+        else:
+            history_groups = {}
+
+        raw = self.series_raw
+        is_poll = raw['pollster'].notnull()
+        polls = raw.loc[is_poll].reset_index(raw.index.names[1:])
+        pollster_names = polls.groupby('pollster_id', observed=True)['pollster'].first()
+
+        # Precision weights of the polls, decayed with their age (the current methodology of a pollster
+        # matters more than the one of the beginning of the cycle)
+        age = (pd.Timestamp(self.date_last) - polls.index).days / 365.25
+        weights = (
+            polls['weight_over'].astype(float) * polls['weight_sample'].astype(float)
+            * np.power(p['year_decay'], np.clip(age, 0, None))
+        ).fillna(0.)
+
+        ref_date = pd.Timestamp(self.date_end)
+        names = list(self.names)
+        effects = None
+        current = raw
+
+        for _ in range(max(n_iter, 1)):
+            self._set_series(current)
+
+            fitted = {}
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                for name in names:
+                    reg = self.fit(name, max_fc=0, ret_stat=False)
+                    if reg is not None:
+                        fitted[name] = reg
+            if len(fitted) == 0:
+                break
+            fitted = pd.DataFrame(fitted)
+
+            dev = self.house_deviations(polls, fitted, list(fitted.columns), weights, min_polls=min_polls)
+            if dev.shape[0] == 0:
+                break
+
+            # Level of each series: mean of the fitted average over its last 30 days
+            level = {n: float(np.nanmean(fitted[n].dropna().iloc[-30:])) if fitted[n].notnull().any() else 0. for n in fitted.columns}
+
+            priors = np.array([
+                self.house_prior(
+                    history_groups.get((pid, name)), level[name], ref_date,
+                    year_decay=p['year_decay'], he_tau=p['tau'], he_prior_events=p['prior_events'],
+                    n_cap=p['n_cap'], level_floor=p['level_floor'], rel_cap=p['rel_cap']
+                ) for pid, name in dev.index
+            ])
+            dev['level'] = [level[name] for _, name in dev.index]
+            dev['prior'], dev['prior_err'] = priors[:, 0], priors[:, 1]
+            # A handful of near-identical polls must not produce an overconfident deviation
+            dev_err = np.maximum(dev['dev_err'].to_numpy(dtype=float), p['err_floor'] * dev['prior_err'].to_numpy(dtype=float))
+            dev['effect'], dev['effect_err'] = normal_update(
+                dev['dev'].to_numpy(dtype=float), dev_err, dev['prior'].to_numpy(dtype=float), dev['prior_err'].to_numpy(dtype=float)
+            )
+
+            effects = self.center_effects(dev)  # weighted by the weight of each pollster on each series
+            current = self.apply_house_effects(raw, effects, names)
+
+        self._set_series(current)
+
+        if effects is None:
+            effects = pd.DataFrame(
+                columns=['n', 'w', 'dev', 'dev_err', 'level', 'prior', 'prior_err', 'effect', 'effect_err', 'center'],
+                index=pd.MultiIndex.from_tuples([], names=['pollster_id', 'name'])
+            )
+        effects.insert(0, 'pollster', effects.index.get_level_values('pollster_id').map(pollster_names))
+        self.house_effects = effects
+
+        return effects
+
+    # --- House effects (M6): pure helpers -----------------------------------------------------------------
+
+    @staticmethod
+    def industry_bias(
+        history: pd.DataFrame,
+        levels: pd.Series,
+        ref_date: pd.Timestamp,
+        year_decay: float = 0.9,
+        prior_events: float = 1.,
+        level_floor: float = 2.,
+        rel_cap: float = 0.5
+    ) -> pd.DataFrame:
+        """
+        Industry-wide bias of the polls on each series, from the past elections: the decayed mean over the
+        elections of the relative industry deviation (`industry / level`, the mean error of every pollster
+        against the result), shrunk toward 0, scaled to the current level; its uncertainty is the dispersion
+        between elections (the bias itself when there is only one: no evidence of stability).
+
+        Parameters
+        ----------
+        history : pd.DataFrame
+            Rows of `pollsters_parties` (`event_date`, `party`, `industry`, `level`).
+        levels : pd.Series
+            Current level of each series (percentage points), indexed by name.
+        ref_date : pd.Timestamp
+            Date the ages are counted from.
+        year_decay, prior_events, level_floor, rel_cap : see `house_prior`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by name: `n_events`, `rel`, `rel_err`, `bias`, `bias_err` (percentage points).
+        """
+        rows = []
+        if history is None or history.shape[0] == 0:
+            hist = None
+        else:
+            hist = history.dropna(subset=['industry', 'level']).groupby(['event_date', 'party'], observed=True)[['industry', 'level']].first().reset_index()
+
+        for name, level in levels.items():
+            lvl = max(float(level) if np.isfinite(level) else 0., level_floor)
+            h = hist.loc[hist['party'] == name] if hist is not None else None
+            if h is None or h.shape[0] == 0:
+                rows.append({'name': name, 'n_events': 0, 'rel': 0., 'rel_err': 0., 'bias': 0., 'bias_err': 0.})
+                continue
+
+            years = (pd.Timestamp(ref_date) - pd.to_datetime(h['event_date'])).dt.days / 365.25
+            w = np.power(year_decay, years.clip(lower=0)).to_numpy()
+            r = np.clip(h['industry'].astype(float) / np.maximum(h['level'].astype(float), level_floor), -rel_cap, rel_cap).to_numpy()
+            rel = float((w * r).sum() / (w.sum() + prior_events))
+            if len(r) > 1:
+                rel_err = float(np.sqrt((w * np.square(r - rel)).sum() / w.sum()))
+            else:
+                rel_err = abs(rel)
+            rows.append({'name': name, 'n_events': int(len(r)), 'rel': rel, 'rel_err': rel_err, 'bias': rel * lvl, 'bias_err': rel_err * lvl})
+
+        return pd.DataFrame(rows, columns=['name', 'n_events', 'rel', 'rel_err', 'bias', 'bias_err']).set_index('name')
+
+    @staticmethod
+    def house_deviations(
+        polls: pd.DataFrame,
+        fitted: pd.DataFrame,
+        names: list[str],
+        weights: pd.Series | np.ndarray,
+        min_polls: int = 5
+    ) -> pd.DataFrame:
+        """
+        Deviation of each pollster from the fitted average, per series name: the weighted mean of the
+        residuals `poll - average(date)` of its polls and the standard error of that mean.
+
+        Parameters
+        ----------
+        polls : pd.DataFrame
+            Polls indexed by date (duplicates allowed), with a `pollster_id` column and the `names` columns.
+        fitted : pd.DataFrame
+            Fitted average with a daily index and the `names` columns (NaN where not fitted).
+        names : list of str
+            Series to evaluate.
+        weights : pd.Series or np.ndarray
+            Precision weight of each poll (aligned with `polls` rows).
+        min_polls : int, optional
+            Pollsters with fewer residuals get an infinite standard error (no information).
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `(pollster_id, name)`, columns `n`, `w` (total weight), `dev`, `dev_err`.
+        """
+        w_all = np.asarray(weights, dtype=float)
+        rows = []
+        for name in names:
+            if name not in polls.columns or name not in fitted.columns:
+                continue
+
+            resid = polls[name].to_numpy(dtype=float) - fitted[name].reindex(polls.index).to_numpy(dtype=float)
+            frame = pd.DataFrame({'pollster_id': polls['pollster_id'].to_numpy(), 'r': resid, 'w': w_all})
+            frame = frame.loc[np.isfinite(frame['r']) & np.isfinite(frame['w']) & (frame['w'] > 0)]
+
+            for pid, g in frame.groupby('pollster_id'):
+                w, r = g['w'].to_numpy(), g['r'].to_numpy()
+                n = len(r)
+                sw = w.sum()
+                dev = float((w * r).sum() / sw)
+                if n >= min_polls and n > 1:
+                    neff = sw ** 2 / np.square(w).sum()
+                    denom = sw - np.square(w).sum() / sw  # unbiased weighted variance (reliability weights)
+                    var = float((w * np.square(r - dev)).sum() / denom) if denom > 0 else 0.
+                    dev_err = float(np.sqrt(max(var, 0.) / neff))
+                else:
+                    dev_err = np.inf
+                rows.append({'pollster_id': pid, 'name': name, 'n': n, 'w': float(sw), 'dev': dev, 'dev_err': dev_err})
+
+        out = pd.DataFrame(rows, columns=['pollster_id', 'name', 'n', 'w', 'dev', 'dev_err'])
+
+        return out.set_index(['pollster_id', 'name']).sort_index()
+
+    @staticmethod
+    def apply_house_effects(
+        series: pd.DataFrame,
+        effects: pd.DataFrame,
+        names: list[str]
+    ) -> pd.DataFrame:
+        """
+        Subtract the house effect of each pollster from its polls (rows with a pollster), series by series.
+        Rows of official results are never touched. Returns a copy.
+
+        Parameters
+        ----------
+        series : pd.DataFrame
+            Forecaster series with `pollster`, `pollster_id` and the `names` columns.
+        effects : pd.DataFrame
+            Indexed by `(pollster_id, name)` with an `effect` column (percentage points).
+        names : list of str
+            Series to correct.
+        """
+        out = series.copy()
+        is_poll = out['pollster'].notnull().to_numpy()
+        if 'pollster_id' in out.index.names:
+            pids = out.index.get_level_values('pollster_id').to_numpy()
+        else:
+            pids = out['pollster_id'].to_numpy()
+
+        for name in names:
+            if name not in out.columns:
+                continue
+            eff = effects.xs(name, level='name')['effect'] if name in effects.index.get_level_values('name') else None
+            if eff is None or eff.empty:
+                continue
+            shift = pd.Series(pids).map(eff).fillna(0.).to_numpy(dtype=float)
+            out[name] = out[name].to_numpy(dtype=float) - np.where(is_poll, shift, 0.)
+
+        return out
+
+    @staticmethod
+    def house_prior(
+        history: pd.DataFrame,
+        level: float,
+        ref_date: pd.Timestamp,
+        year_decay: float = 0.9,
+        he_tau: float = 0.08,
+        he_prior_events: float = 1.,
+        n_cap: int = 10,
+        level_floor: float = 2.,
+        rel_cap: float = 0.5
+    ) -> tuple[float, float]:
+        """
+        Prior of the house effect of one pollster on one series for the current cycle, from its history in
+        past elections: the decayed mean of its relative deviation (`dev_result_c / level`, centred across
+        pollsters) shrunk toward 0 and scaled to the current level, with a fixed relative uncertainty.
+
+        Parameters
+        ----------
+        history : pd.DataFrame
+            Rows `event_date`, `dev_result_c`, `level`, `n_result` of the pollster and party in past elections.
+        level : float
+            Current level of the series (percentage points).
+        ref_date : pd.Timestamp
+            Date the ages are counted from (the current event).
+        year_decay : float, optional
+            Yearly decay of the weight of a past election.
+        he_tau : float, optional
+            Prior standard deviation, relative to the level.
+        he_prior_events : float, optional
+            Shrinkage toward 0, in "elections of `n_cap` polls" worth of weight.
+        n_cap : int, optional
+            Cap of the number of polls of an election counted in its weight.
+        level_floor : float, optional
+            Floor of the level used in the relative deviations (percentage points).
+        rel_cap : float, optional
+            Cap of the absolute relative deviation of an election.
+
+        Returns
+        -------
+        tuple of float
+            Prior mean and standard deviation, in percentage points.
+        """
+        lvl = max(float(level) if np.isfinite(level) else 0., level_floor)
+        prior_err = float(he_tau * lvl)
+
+        if history is None or history.shape[0] == 0:
+            return 0., prior_err
+
+        h = history.dropna(subset=['dev_result_c', 'level', 'n_result'])
+        h = h.loc[h['n_result'] > 0]
+        if h.shape[0] == 0:
+            return 0., prior_err
+
+        years = (pd.Timestamp(ref_date) - pd.to_datetime(h['event_date'])).dt.days / 365.25
+        w = np.power(year_decay, years.clip(lower=0)) * np.minimum(h['n_result'].astype(float), n_cap)
+        rel = np.clip(h['dev_result_c'].astype(float) / np.maximum(h['level'].astype(float), level_floor), -rel_cap, rel_cap)
+        rel_mean = float((w * rel).sum() / (w.sum() + n_cap * he_prior_events))
+
+        return float(rel_mean * lvl), prior_err
+
+    @staticmethod
+    def center_effects(
+        effects: pd.DataFrame,
+        totals: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
+        """
+        Re-centre the effects of each series so that their mean, weighted by the weight of each pollster on
+        that series (`w` column, or `totals` per pollster if given), is 0: subtracting them then leaves the
+        level of the average unchanged. Adds the `center` column (the shift applied) and returns a copy.
+
+        Parameters
+        ----------
+        effects : pd.DataFrame
+            Indexed by `(pollster_id, name)` with `effect` and `w` columns.
+        totals : pd.Series, optional
+            Total weight of each pollster (indexed by `pollster_id`), instead of the per-series `w`.
+        """
+        out = effects.copy()
+        pids = out.index.get_level_values('pollster_id')
+        if totals is not None:
+            w = pd.Series(pids).map(totals).fillna(0.).to_numpy(dtype=float)
+        else:
+            w = out['w'].fillna(0.).to_numpy(dtype=float)
+        frame = pd.DataFrame({'name': out.index.get_level_values('name'), 'e': out['effect'].to_numpy(dtype=float), 'w': w})
+        frame['we'] = frame['e'] * frame['w']
+        sums = frame.groupby('name')[['we', 'w']].sum()
+        center = (sums['we'] / sums['w'].where(sums['w'] > 0)).fillna(0.)
+        out['center'] = pd.Series(frame['name']).map(center).to_numpy(dtype=float)
+        out['effect'] = out['effect'] - out['center']
+
+        return out
 
     def print_weights(
         self,

@@ -1,13 +1,14 @@
 import json
 import pandas as pd
+import warnings
 
 from typing import Literal, Optional
 
 from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
-    Events, EventsData, EventsResults, Polls, PollsResults,
-    Pollsters, PollstersRatings, Parties
+    Drift, Events, EventsData, EventsResults, Polls, PollsResults,
+    Pollsters, PollstersParties, PollstersRatings, Parties
 )
 
 
@@ -64,7 +65,7 @@ def get_event_params(
 
     if path is not None:
         params = json.loads(
-            App.get_().fs.read(f'{path}/params.json')
+            App.get_().data.read('params.json')
         )[scope]
 
         event_params = {dt: params[dt] if dt in params else {} for dt in event_dates}
@@ -109,7 +110,7 @@ def get_event_params(
             'vs': {'Derecha': [], 'Izquierda': []}
         }
 
-        for block, names in parties.groupby('block')['name'].apply(list).to_dict().items():
+        for block, names in parties.groupby('block', observed=True)['name'].apply(list).to_dict().items():
             block_parties = [p for p in names if p in all_parties]
             if len(block_parties) > 0 and block in bmaps['blocks']:
                 bmaps['blocks'][block].extend(block_parties)
@@ -303,7 +304,7 @@ def get_poll_series(
     if isinstance(drop_mtypes, (list, tuple)) and len(drop_mtypes) > 0:
         filters.append("(t.mtype IS NULL OR t.mtype NOT IN ('{}'))".format("', '".join(drop_mtypes)))
     if isinstance(drop_contexts, (list, tuple)) and len(drop_contexts) > 0:
-        filters.append("(t.context IS NULL OR t.context NOT IN ('{}'))".format("', '".join(drop_contexts)))
+        filters.append("(t.ctype IS NULL OR t.ctype NOT IN ('{}'))".format("', '".join(drop_contexts)))
 
     polls = Polls().get_results(query=dict(
         filters=filters
@@ -409,14 +410,8 @@ def save_model_data(
     # Use the model formatter to get the data in the correct types to be saved
     df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)[keys + columns]
 
-    # Remove previous data for the same election event
-    model.execute("UPDATE {} SET {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
-        model.table,
-        ', '.join(['{} = NULL'.format(col) for col in columns]),
-        "', '".join(df.event_scope.unique()),
-        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
-    ))
-
+    # The upsert overwrites the computed columns of the rows present in `df`; rows of the same event
+    # that are not in `df` (incremental runs) keep their previous values
     return model.upsert(df)
 
 
@@ -458,6 +453,141 @@ def save_ratings_data(
     pmodel.upsert(dp)
 
     return nrows
+
+
+def get_drift(
+    scope: str = 'es',
+    event_dates: Optional[list[str]] = None
+) -> pd.DataFrame:
+    """
+    Load the drift table (see `Computer.get_drift_data`): one row per past election, party and horizon.
+    An empty frame with the model columns is returned when the table has not been created yet.
+
+    Parameters
+    ----------
+    scope : str, default 'es'
+        Election scope.
+    event_dates : list of str, optional
+        Restrict to these elections (e.g. the ones before the event being forecast, for a backtest).
+
+    Returns
+    -------
+    pd.DataFrame
+        Drift data.
+    """
+    model = Drift()
+    if not model.table_exists():
+        return pd.DataFrame(columns=model.columns)
+
+    filters = ["event_scope = '{}'".format(scope)]
+    if event_dates is not None:
+        if len(event_dates) == 0:
+            return pd.DataFrame(columns=model.columns)
+        filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+
+    return model.get_results(query=dict(filters=filters), formatted=True)
+
+
+def save_drift_data(
+    data: pd.DataFrame
+) -> int:
+    """
+    Save the drift data into the database, replacing the rows of the same elections. The table is
+    created when missing (never replaced: `create(replace=True)` would drop it).
+
+    Returns
+    -------
+    int
+        Number of rows updated.
+    """
+    model = Drift()
+    if not model.table_exists():
+        model.create(replace=False)
+
+    df = data.copy().reset_index(drop=True)
+    if df.shape[0] == 0:
+        return 0
+
+    # Use the model formatter to get the data in the correct types to be saved
+    df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)
+
+    # Remove previous data for the same election events
+    model.execute("DELETE FROM {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
+        model.table,
+        "', '".join(df.event_scope.unique()),
+        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
+    ))
+
+    return model.upsert(df)
+
+
+def get_house_effects(
+    scope: str = 'es',
+    event_dates: Optional[list[str]] = None
+) -> pd.DataFrame:
+    """
+    Load the house effects table (see `Computer.compute_house_effects`): one row per election, pollster and
+    party. An empty frame with the model columns is returned when the table is missing or has no columns yet.
+
+    Parameters
+    ----------
+    scope : str, default 'es'
+        Election scope.
+    event_dates : list of str, optional
+        Restrict to these elections (e.g. the ones before the event being forecast).
+    """
+    model = PollstersParties()
+    if not model.table_exists() or set(model.columns) - set(model._dal.get_columns(model.table)):
+        return pd.DataFrame(columns=model.columns)
+
+    filters = ["event_scope = '{}'".format(scope)]
+    if event_dates is not None:
+        if len(event_dates) == 0:
+            return pd.DataFrame(columns=model.columns)
+        filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+
+    return model.get_results(query=dict(filters=filters), formatted=True)
+
+
+def save_house_effects_data(
+    data: pd.DataFrame
+) -> int:
+    """
+    Save the house effects data into the database, replacing the rows of the same elections. The table
+    is created with its columns when it has none of them yet (it was created key-only and empty); if it
+    already holds rows, the schema is extended with `Model.modify` (which rebuilds the table).
+
+    Returns
+    -------
+    int
+        Number of rows updated.
+    """
+    model = PollstersParties()
+    if not model.table_exists():
+        model.create(replace=False)
+    elif set(model.columns) - set(model._dal.get_columns(model.table)):
+        if model.get_results(query=dict(columns=list(model.key))).shape[0] == 0:
+            model.create(replace=True)  # Empty key-only table: recreate it with the full schema
+        else:
+            warnings.warn('Extending the schema of {} (the table is rebuilt)'.format(model.table))
+            model.modify()
+
+    df = data.copy().reset_index(drop=True)
+    df = df.loc[df['party_id'].notnull() & df['pollster_id'].notnull()]
+    if df.shape[0] == 0:
+        return 0
+
+    # Use the model formatter to get the data in the correct types to be saved
+    df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)
+
+    # Remove previous data for the same election events
+    model.execute("DELETE FROM {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
+        model.table,
+        "', '".join(df.event_scope.unique()),
+        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
+    ))
+
+    return model.upsert(df)
 
 
 def get_event_dates(
