@@ -22,7 +22,7 @@ from ..core.utils.dataviz import (
 from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
-    get_drift, save_drift_data, get_house_effects, save_house_effects_data
+    get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -46,6 +46,11 @@ class DriftEstimator:
     there (the fitted series is locally linear, so their variance grows like `d²`). The decay matters: the
     cycles of the two-party era (up to 2011) drift less than the fragmented ones since 2015.
     `curve` keeps the weighted geometric mean of `rms / level` by horizon (all rows).
+
+    Young parties (M8): when the table carries the `age` of the party at each election (years since its first
+    poll), a second constant `k_young` is fitted on the rows with `age < age_max` and the drift of a young party
+    is multiplied by `multiplier = sqrt(k_young / k)` (never below 1): parties less than four years old drift
+    about three times more than the established ones, and the effect vanishes afterwards.
     """
 
     def __init__(
@@ -54,13 +59,21 @@ class DriftEstimator:
         d_min: int = 60,
         decay: Optional[float] = None,
         agg: Literal['geometric', 'quadratic'] = 'geometric',
-        curve: Optional[pd.Series] = None
+        curve: Optional[pd.Series] = None,
+        k_young: float = np.nan,
+        age_max: float = 4.,
+        n_young: int = 0
     ) -> None:
         self.k = float(k)
         self.d_min = int(d_min)
         self.decay = decay
         self.agg = agg
         self.curve = curve
+        self.k_young = float(k_young)
+        self.age_max = float(age_max)
+        self.n_young = int(n_young)
+        ratio = self.k_young / self.k if (np.isfinite(self.k_young) and np.isfinite(self.k) and self.k > 0) else np.nan
+        self.multiplier = float(np.sqrt(ratio)) if np.isfinite(ratio) and ratio > 1 else 1.
 
     @classmethod
     def fit(
@@ -68,7 +81,9 @@ class DriftEstimator:
         data: pd.DataFrame,
         d_min: int = 60,
         decay: Optional[float] = None,
-        agg: Literal['geometric', 'quadratic'] = 'geometric'
+        agg: Literal['geometric', 'quadratic'] = 'geometric',
+        age_max: float = 4.,
+        min_young: int = 6
     ) -> 'DriftEstimator':
         """
         Fit the relative random-walk constant from a drift table with columns `horizon`, `level`, `n` and
@@ -86,6 +101,10 @@ class DriftEstimator:
         agg : {'geometric', 'quadratic'}, optional
             Mean of the relative drift across rows: geometric (the typical established party, default) or
             quadratic (the variance a random party experiences, dominated by the parties born within a cycle).
+        age_max : float, optional
+            Parties younger than this (years, column `age`) are fitted apart (`k_young`).
+        min_young : int, optional
+            Young rows (at `d_min` or more) needed to fit `k_young`; otherwise the multiplier is 1 with a warning.
         """
         if agg not in ('geometric', 'quadratic'):
             raise ValueError("`agg` must be 'geometric' or 'quadratic'")
@@ -112,39 +131,225 @@ class DriftEstimator:
             curve = pd.Series(dtype=float, name='relative')
         curve.index.name = 'horizon'
 
-        rows = horizon >= d_min
+        def fit_k(mask):
+            # rows of sqrt(k): relative / sqrt(d), averaged in the transformed scale
+            z = fwd(relative[mask] / np.sqrt(horizon[mask].astype(float)))
+            return float(inv((weight[mask] * z).sum() / weight[mask].sum()) ** 2)
+
+        # Young parties (age below `age_max` at that election) are fitted apart; rows without age are established
+        age = df['age'].astype(float) if 'age' in df.columns else pd.Series(np.nan, index=df.index)
+        if 'age' in df.columns and df.shape[0] > 0 and age.isnull().all():
+            warnings.warn('The `age` column is missing for every row: no age multiplier (check the party names)')
+        young = age.notnull() & (age < age_max)
+        rows = (horizon >= d_min) & ~young
         if rows.sum() == 0:
             warnings.warn('No drift data at horizons of {} days or more: the drift is set to 0'.format(d_min))
             k = np.nan
         else:
-            z = fwd(relative[rows] / np.sqrt(horizon[rows].astype(float)))  # rows of sqrt(k): relative / sqrt(d)
-            k = float(inv((weight[rows] * z).sum() / weight[rows].sum()) ** 2)
+            k = fit_k(rows)
 
-        return cls(k, d_min=d_min, decay=decay, agg=agg, curve=curve)
+        rows_young = (horizon >= d_min) & young
+        n_young = int(rows_young.sum())
+        if young.any() and n_young < min_young:
+            warnings.warn('Only {} drift rows of parties younger than {} years at {} days or more: no age multiplier'.format(
+                n_young, age_max, d_min
+            ))
+        k_young = fit_k(rows_young) if n_young >= min_young else np.nan
+
+        return cls(k, d_min=d_min, decay=decay, agg=agg, curve=curve, k_young=k_young, age_max=age_max, n_young=n_young)
 
     def var(
         self,
         d: int | float | np.ndarray,
-        level: float | np.ndarray | pd.Series = 1.
+        level: float | np.ndarray | pd.Series = 1.,
+        age: Optional[float | np.ndarray | pd.Series] = None
     ) -> float | np.ndarray:
         """
-        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted).
+        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted);
+        parties younger than `age_max` (years, `age`) get `multiplier²` times more. A missing age counts as
+        established.
         """
         days = np.clip(np.asarray(d, dtype=float), 0, None)
         var = (self.k if np.isfinite(self.k) else 0.) * days * np.square(np.asarray(level, dtype=float))
+        if age is not None and self.multiplier > 1:
+            a = np.asarray(age, dtype=float)
+            var = var * np.where(np.isfinite(a) & (a < self.age_max), np.square(self.multiplier), 1.)
 
         return float(var) if np.ndim(var) == 0 else var
 
     def sigma(
         self,
         d: int | float | np.ndarray,
-        level: float | np.ndarray | pd.Series = 1.
+        level: float | np.ndarray | pd.Series = 1.,
+        age: Optional[float | np.ndarray | pd.Series] = None
     ) -> float | np.ndarray:
         """
         Standard deviation of the drift after `d` days of a share at `level`, in percentage points
-        (`level · sqrt(k · d)`).
+        (`level · sqrt(k · d)`, times `multiplier` for a party younger than `age_max`).
         """
-        return np.sqrt(self.var(d, level))
+        return np.sqrt(self.var(d, level, age=age))
+
+
+class SwingNoise:
+    """
+    Deviations of the provinces from the proportional swing between two elections (M9). The relative residual
+    `log(actual / (previous · national ratio))` of a party in a province splits into the mean of its autonomous
+    community (`reg_mean`: the regional swing, 86 % of the variance) and the deviation within it (`within`).
+    Both variances decrease with the predicted level `L` of the party in the province as `a + b / L`
+    (a sampling-like term plus a floor), fitted by weighted least squares over level bins.
+
+    `sigma_region(level)` and `sigma_province(level)` return the relative standard deviations used to draw the
+    multiplicative shocks in `Simulator.build_umat`.
+    """
+
+    def __init__(
+        self,
+        a_r: float = 0.,
+        b_r: float = 0.,
+        a_p: float = 0.,
+        b_p: float = 0.,
+        n: int = 0,
+        level_floor: float = 1.
+    ) -> None:
+        self.a_r, self.b_r, self.a_p, self.b_p = float(a_r), float(b_r), float(a_p), float(b_p)
+        self.n = int(n)
+        self.level_floor = float(level_floor)
+
+    @staticmethod
+    def decompose(residuals: pd.DataFrame) -> pd.DataFrame:
+        """
+        Split the residual `logres` of each (pair, party, province) row into the mean of its autonomous community
+        (`reg_mean`, over the provinces of the same `pair`, `party` and `group`) and the deviation within it
+        (`within`), and add `k` (provinces of that community for the pair and party) and `n_groups`
+        (communities where the party has rows in the pair). Both counts feed the unbiased fit.
+        """
+        df = residuals.copy()
+        if df.shape[0] == 0:
+            df['reg_mean'] = pd.Series(dtype=float)
+            df['within'] = pd.Series(dtype=float)
+            df['k'] = pd.Series(dtype=int)
+            df['n_groups'] = pd.Series(dtype=int)
+            return df
+
+        g = df.groupby(['pair', 'party', 'group'], dropna=False)['logres']
+        df['reg_mean'] = g.transform('mean')
+        df['within'] = df['logres'] - df['reg_mean']
+        df['k'] = g.transform('size').astype(int)
+        df['n_groups'] = df.groupby(['pair', 'party'])['group'].transform('nunique').astype(int)
+
+        return df
+
+    @staticmethod
+    def wls_nonneg(L, y, n) -> tuple[float, float]:
+        """
+        Weighted least squares of `y = a + b / L` with weights `n` and `a, b ≥ 0`. With two parameters the
+        constrained optimum is the free fit when feasible, or the best of the two boundary fits (`a = 0` with
+        `b` refitted through the origin, `b = 0` with `a` the weighted mean) and `(0, 0)`: the free fit is never
+        clipped coefficient by coefficient, which would leave the other one unadjusted.
+        """
+        x = 1. / np.asarray(L, dtype=float)
+        y = np.asarray(y, dtype=float)
+        w = np.asarray(n, dtype=float)
+        sw = np.sqrt(w)
+        X = np.column_stack([np.ones(x.shape[0]), x])
+        a, b = np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)[0]
+        if a >= 0 and b >= 0:
+            return float(a), float(b)
+
+        candidates = [
+            (0., max(float((w * y * x).sum() / (w * x * x).sum()), 0.)),
+            (max(float((w * y).sum() / w.sum()), 0.), 0.),
+            (0., 0.)
+        ]
+        sse = [float((w * (y - (a_ + b_ * x)) ** 2).sum()) for a_, b_ in candidates]
+
+        return candidates[int(np.argmin(sse))]
+
+    @classmethod
+    def fit(
+        cls,
+        residuals: pd.DataFrame,
+        bins: tuple[float, ...] = (2., 3., 5., 10., 20.),
+        min_pairs: int = 3,
+        level_floor: float = 1.
+    ) -> 'SwingNoise':
+        """
+        Fit the level curves from a residuals table with columns `pair`, `level`, `reg_mean` and `within`
+        (see `decompose` and `Computer.get_swing_residuals`), plus `k` and `n_groups` when available.
+
+        The deviation within a community of `k` provinces has variance `σ_w² (1 − 1/k)` (zero in the
+        uniprovincial ones), so the provincial curve is fitted on the communities with `k ≥ 2` with `within`
+        scaled by `√(k / (k − 1))`; the community mean carries `σ_w² / k` of that provincial noise, which is
+        subtracted (with the fitted provincial curve) before fitting the regional one. Parties present in a
+        single community are left out of the regional fit: their community mean is zero by construction (the
+        national ratio is their own). Without `k` the correction is skipped (a table with `reg_mean` and
+        `within` drawn directly).
+
+        Parameters
+        ----------
+        residuals : pd.DataFrame
+            One row per election pair, party and province.
+        bins : tuple of float, optional
+            Inner edges of the level bins (percentage points).
+        min_pairs : int, optional
+            Election pairs needed; otherwise no noise, with a warning.
+        level_floor : float, optional
+            Lower bound of the level in the curves.
+        """
+        df = residuals.dropna(subset=['level', 'reg_mean', 'within'])
+        if df['pair'].nunique() < min_pairs:
+            warnings.warn('Swing residuals of {} election pairs (minimum {}): no regional noise'.format(df['pair'].nunique(), min_pairs))
+            return cls(level_floor=level_floor)
+
+        level = df['level'].to_numpy(dtype=float)
+        k = df['k'].to_numpy(dtype=float) if 'k' in df.columns else np.full(df.shape[0], np.inf)
+        n_groups = df['n_groups'].to_numpy(dtype=float) if 'n_groups' in df.columns else np.full(df.shape[0], 2.)
+        edges = [0.] + list(bins) + [np.inf]
+        bin_of = pd.cut(df['level'], bins=edges, labels=False).to_numpy()
+
+        def binned(mask, values, correction=None):
+            d = pd.DataFrame({'bin': bin_of[mask], 'L': level[mask], 'v': values[mask], 'c': 0. if correction is None else correction[mask]})
+            agg = d.groupby('bin').agg(n=('v', 'size'), L=('L', 'mean'), var=('v', 'var'), c=('c', 'mean'))
+            agg['var'] = agg['var'] - agg['c']
+            return agg.loc[agg['n'] >= 3].dropna()
+
+        finite_k = np.isfinite(k)
+        k_safe = np.where(finite_k, np.maximum(k, 1.), 2.)   # only used where `k` is finite
+        within_adj = df['within'].to_numpy(dtype=float) * np.where(finite_k, np.sqrt(k_safe / np.maximum(k_safe - 1., 1.)), 1.)
+        agg_p = binned(k >= 2, within_adj)
+        if agg_p.shape[0] < 2:
+            warnings.warn('Not enough level bins in the swing residuals: no regional noise')
+            return cls(level_floor=level_floor)
+        a_p, b_p = cls.wls_nonneg(agg_p['L'], agg_p['var'], agg_p['n'])
+
+        var_p = a_p + b_p / np.clip(level, level_floor, None)
+        agg_r = binned(n_groups >= 2, df['reg_mean'].to_numpy(dtype=float), np.where(finite_k, var_p / k_safe, 0.))
+        if agg_r.shape[0] < 2:
+            warnings.warn('Not enough level bins in the regional swing residuals: no regional noise')
+            return cls(level_floor=level_floor)
+        a_r, b_r = cls.wls_nonneg(agg_r['L'], agg_r['var'], agg_r['n'])
+
+        return cls(a_r, b_r, a_p, b_p, n=int(df.shape[0]), level_floor=level_floor)
+
+    def _var(self, a: float, b: float, level) -> float | np.ndarray:
+        lvl = np.clip(np.asarray(level, dtype=float), self.level_floor, None)
+        var = np.clip(a + b / lvl, 0., None)
+
+        return float(var) if np.ndim(var) == 0 else var
+
+    def var_region(self, level) -> float | np.ndarray:
+        """Variance of the regional (autonomous community) relative shock at a given level."""
+        return self._var(self.a_r, self.b_r, level)
+
+    def var_province(self, level) -> float | np.ndarray:
+        """Variance of the province relative shock, net of the regional one, at a given level."""
+        return self._var(self.a_p, self.b_p, level)
+
+    def sigma_region(self, level) -> float | np.ndarray:
+        return np.sqrt(self.var_region(level))
+
+    def sigma_province(self, level) -> float | np.ndarray:
+        return np.sqrt(self.var_province(level))
 
 
 class Computer(Core):
@@ -1879,10 +2084,39 @@ class Computer(Core):
 
         return self.drift
 
+    def party_first_polls(self) -> pd.Series:
+        """
+        Birth date of each party in the data: the first poll listing it (over the polls of the current events
+        that enter the model: pollster types not dropped, positive weight), indexed by party name. The age of a
+        party is counted from it. The first official result is deliberately not used: a party that ran
+        marginally for years (Cs in 2008, VOX in 2015) starts to drift when pollsters start listing it.
+        """
+        polls = self.filter_polls(featured=False, drange=None, n_last=None)
+        dates = polls.index.get_level_values('date')
+        first = {}
+        for name in [n for n in self.names if n in polls.columns and n != '-']:
+            mask = polls[name].notnull().to_numpy()
+            if mask.any():
+                first[name] = dates[mask].min()
+
+        return pd.Series(first, dtype='datetime64[ns]', name='first_poll')
+
+    def party_ages(
+        self,
+        date: str | pd.Timestamp
+    ) -> pd.Series:
+        """
+        Age of each party at `date`, in years since its first poll (NaN for unknown parties).
+        """
+        first = self.party_first_polls()
+
+        return ((pd.Timestamp(date) - first).dt.days / 365.25).rename('age')
+
     def get_drift_estimator(
         self,
         d_min: int = 60,
-        agg: Literal['geometric', 'quadratic'] = 'geometric'
+        agg: Literal['geometric', 'quadratic'] = 'geometric',
+        age_max: float = 4.
     ) -> DriftEstimator:
         """
         Build the drift estimator from the drift table of the current events, discounting the older cycles
@@ -1896,6 +2130,9 @@ class Computer(Core):
             Minimum horizon (days) of the rows used in the fit (see `DriftEstimator.fit`).
         agg : {'geometric', 'quadratic'}, optional
             Mean of the relative drift across parties (see `DriftEstimator.fit`).
+        age_max : float, optional
+            Parties younger than this (years since their first poll, at each election) get their own constant
+            and a drift multiplier (M8, see `DriftEstimator`).
         """
         df = self.load_drift()
 
@@ -1907,7 +2144,12 @@ class Computer(Core):
             warnings.warn('No drift data at {} days or more for these events: using every event'.format(d_min))
             df = get_drift(scope=self.scope)
 
-        return DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg)
+        # Age of the party at each election: years since its first poll in the cycles of this Computer
+        first = self.party_first_polls()
+        df = df.copy()
+        df['age'] = (pd.to_datetime(df['event_date']) - df['party'].map(first)).dt.days / 365.25
+
+        return DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg, age_max=age_max)
 
 
     def get_house_effects_data(
@@ -2319,6 +2561,62 @@ class Computer(Core):
         ind = ind.loc[ind['party'].map(regional).fillna(1).astype(int) == 0]
 
         return self.composition_ratio(ind, pd.Timestamp(self.event_dates[-1]), year_decay=self.year_decay, min_events=min_events)
+
+    def get_swing_residuals(
+        self,
+        min_level: float = 1.
+    ) -> pd.DataFrame:
+        """
+        Residuals of the proportional swing between consecutive elections of the current events (M9): for each
+        pair, party (national share above 1 % in both) and province, `logres = log(actual / (previous ·
+        national ratio))`, the predicted level, the autonomous community of the province (`reg_code` of
+        `data/es-provinces.csv`), the mean residual of the community for that pair and party (`reg_mean`) and
+        the deviation within it (`within`), with the counts `k` and `n_groups` of `SwingNoise.decompose`.
+
+        Parameters
+        ----------
+        min_level : float, optional
+            Minimum previous share of the party in the province to keep the cell.
+        """
+        groups = self.app.data.read_csv('es-provinces.csv').set_index('code')['reg_code']
+        dates = list(self.event_dates)
+        res = get_event_results(self.scope, dates)
+        res = res.loc[res['party_id'] > 0].copy()
+        res['region_id'] = res['region_id'].astype(int)
+        pct = res.pivot_table(index=['date', 'region_id'], columns='party', values='pct', aggfunc='sum', observed=True)
+        available = pct.index.get_level_values('date').unique()
+
+        rows = []
+        for a, b in zip(dates[:-1], dates[1:]):
+            ta, tb = pd.Timestamp(a), pd.Timestamp(b)
+            if ta not in available or tb not in available:
+                continue
+            pa, pb = pct.loc[ta], pct.loc[tb]
+            if 0 not in pa.index or 0 not in pb.index:
+                continue
+            parties = [p for p in pa.columns if p in pb.columns and pa.loc[0, p] > 1 and pb.loc[0, p] > 1]
+            for p in parties:
+                ratio = pb.loc[0, p] / pa.loc[0, p]
+                for r in pa.index:
+                    if r == 0 or r not in pb.index:
+                        continue
+                    prev, act = pa.loc[r, p], pb.loc[r, p]
+                    if not (np.isfinite(prev) and np.isfinite(act)) or prev < min_level or act <= 0:
+                        continue
+                    pred = prev * ratio
+                    rows.append({'pair': b, 'party': p, 'region': int(r), 'group': groups.get(int(r), np.nan),
+                                 'level': float(pred), 'logres': float(np.log(act / pred))})
+
+        df = pd.DataFrame(rows, columns=['pair', 'party', 'region', 'group', 'level', 'logres'])
+
+        return SwingNoise.decompose(df)
+
+    def get_swing_noise(self) -> SwingNoise:
+        """
+        Estimator of the regional and provincial deviations from the proportional swing (see `SwingNoise`),
+        fitted on the elections of the current events.
+        """
+        return SwingNoise.fit(self.get_swing_residuals())
 
     def get_seats_estimator_data(self) -> pd.DataFrame:
         """

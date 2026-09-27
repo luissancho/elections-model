@@ -134,6 +134,7 @@ class Forecaster(Core):
 
         self.series = None  # DataFrame to build containing the series of polls, weights and results
         self.series_raw = None  # The same series before subtracting the house effects (see `fit_house_effects`)
+        self.party_first_polls = None  # First poll of each party (raw party columns, before grouping into blocks)
         self.house_effects = None  # House effect of each pollster on each series, once fitted
         self.forecast = None  # Fitted estimation of the percentage of votes for each party in the election event
         self.fc_stat = None  # Standard error and confidence interval of the forecast for each estimation
@@ -334,6 +335,17 @@ class Forecaster(Core):
         ]).sort_index()[
             data_cols + party_names
         ]
+
+        # First poll listing each party in this cycle (raw party columns, before grouping into blocks): the
+        # birth of a party born in the cycle is the date pollsters started listing it, not the first poll of
+        # the predecessors its block inherits
+        polls_only = series.loc[series.pollster.notnull() & series.computed.fillna(False).astype(bool)]
+        first = {}
+        for name in party_names:
+            mask = polls_only[name].notnull().to_numpy()
+            if mask.any():
+                first[name] = polls_only.index.get_level_values('date')[mask].min()
+        self.party_first_polls = pd.Series(first, dtype='datetime64[ns]', name='first_poll')
 
         # Build blocks using the defined mapping and aggregate the results of each group of parties
         if self.bmap is None:

@@ -77,5 +77,24 @@ def test_run_case_records_composition(app):
     meta = case['meta'].iloc[0]
     assert np.isfinite(meta['composition_ratio']) and meta['composition_ratio'] < 1
     assert 0 <= meta['clip_rate'] <= 1
+    # M8: multiplicador de deriva por edad y partidos jóvenes del caso (SUMAR nació en 2023)
+    assert meta['drift_multiplier'] >= 1 and 'SUMAR' in str(meta['young_parties'])
     ref = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
     assert ref['meta'].iloc[0]['composition_ratio'] == 1   # independiente por defecto
+
+
+def test_run_case_provincial_metrics(app):
+    """M9: el caso evalúa también las cuotas y escaños por provincia."""
+    from mtpy.lib.backtest import run_case, summarize_case
+    case = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
+    prov = case['provinces']
+    assert {'region', 'party', 'official_pct', 'model_pct', 'lo50_pct', 'hi95_pct', 'official_seats', 'model_seats', 'crps_seats'} <= set(prov.columns)
+    assert prov.shape[0] > 200
+    m = summarize_case(case['shares'], case['seats'], case['blocks'], prov)
+    for key in ('cov_prov_shares50', 'cov_prov_shares95', 'mae_prov_shares', 'rmse_prov_shares', 'crps_prov_seats', 'mae_prov_seats'):
+        assert np.isfinite(m[key])
+    assert 0 <= m['cov_prov_shares95'] <= 1
+    assert bool(case['meta'].iloc[0]['regional_noise']) is True
+    off = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True, regional_noise=False)
+    assert bool(off['meta'].iloc[0]['regional_noise']) is False
+    assert np.allclose(off['shares']['model'], case['shares']['model'])   # el nowcast nacional no cambia

@@ -11,7 +11,7 @@ pytestmark = pytest.mark.integration
 def sim27(app):
     """Simulador de referencia (sin efectos de casa ni ruido conjunto): la base de las regresiones numéricas."""
     from mtpy.lib.simulator import Simulator
-    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', house_effects=False, composition=1.0)
+    sim = Simulator(scope='es', event_date='2027-08-22', drange=6, seed=42, verbose=0, path='.', house_effects=False, composition=1.0, regional_noise=False)
     sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
     return sim
 
@@ -372,3 +372,69 @@ def test_composition_ratio_reduces_block_variance_not_marginals(sim27, sim27_he)
     assert (new['PP'] + new['VOX']).std() < 0.97 * np.sqrt(new['PP'].var() + new['VOX'].var())
     # El residuo se recorta menos
     assert sim27_he.clip_rate() <= ref_clip
+
+
+# --- M8: multiplicador de deriva por edad del partido ---
+
+def test_party_ages_and_drift_multiplier(sim27_he):
+    ages = sim27_he.ages
+    assert ages['SALF'] < 4 < ages['VOX'] and ages['PP'] > 30
+    assert 2 <= sim27_he.v2drift.multiplier <= 5 and sim27_he.v2drift.n_young >= 6
+    sim27_he.run(split=True, random=True, n_sim=50, horizon='deadline')
+    frame = sim27_he.frame(0)
+    rel = frame['drift'] / frame['pct']
+    # Los jóvenes (SUMAR, SALF) derivan `multiplier` veces más que los establecidos, en proporción a su cuota
+    assert rel['SUMAR'] == pytest.approx(sim27_he.v2drift.multiplier * rel['PSOE'], rel=0.05)
+    assert rel['VOX'] == pytest.approx(rel['PSOE'], rel=0.05)
+    # En el abanico, la varianza añadida entre 0 y el límite es la de la deriva: `multiplier²` veces mayor en los jóvenes
+    h = sim27_he.horizon_max
+    fan = sim27_he.fan(horizons=[0, h]).pivot(index='party', columns='horizon', values='sd')
+    added = (fan[h] ** 2 - fan[0] ** 2) / (sim27_he.forecast.loc[fan.index, 'mean'] ** 2 * sim27_he.v2drift.k * h)
+    assert added['PP'] == pytest.approx(1., rel=0.02) and added['VOX'] == pytest.approx(1., rel=0.02)
+    assert added['SALF'] == pytest.approx(sim27_he.v2drift.multiplier ** 2, rel=0.02)
+    assert added['SUMAR'] == pytest.approx(sim27_he.v2drift.multiplier ** 2, rel=0.02)
+
+
+def test_party_age_uses_the_raw_party_not_its_block(app):
+    """M8 (revisión): SUMAR nació en 2023 aunque su bloque herede las encuestas de UP y MP desde 2019."""
+    from mtpy.lib.simulator import Simulator
+    sim = Simulator(scope='es', event_date='2023-07-23', drange=30, seed=42, verbose=0, path='.')
+    sim.fit_forecast(names=sim.params['names'], max_fc=10, fillna=True)
+    assert sim.ages['SUMAR'] < 1.0
+    assert sim.ages['PP'] > 30 and sim.ages['VOX'] < 10
+    assert 'SUMAR' in sim.model.party_first_polls.index
+
+
+# --- M9: oscilaciones autonómicas y provinciales ---
+
+def test_regional_noise_widens_provinces_but_not_the_national_draw(sim27_he):
+    import pandas as pd
+    assert sim27_he.regional_noise is True and sim27_he.v2swing is not None
+    assert sim27_he.v2swing.b_r > 0 and sim27_he.v2swing.sigma_region(30.) > sim27_he.v2swing.sigma_province(30.)
+    # Sin oscilaciones primero, para que la fixture quede en su estado por defecto (con ellas) al terminar
+    sim27_he.regional_noise = False
+    try:
+        sim27_he.run(split=True, random=True, n_sim=100)
+        shares_off = sim27_he.shares().copy()
+        madrid_off = np.array([sim27_he.unit(i, 'Madrid').loc['PP', 'vpred_pct'] for i in range(100)])
+        provinces = [r for r in sim27_he.params['regions'] if r != sim27_he.default_region]
+        pp_off = {i: np.array([sim27_he.unit(i, r).loc['PP', 'vpred_pct'] for r in provinces]) for i in (0, 7)}
+    finally:
+        sim27_he.regional_noise = True
+    sim27_he.run(split=True, random=True, n_sim=100)
+    shares_on = sim27_he.shares().copy()
+    madrid_on = np.array([sim27_he.unit(i, 'Madrid').loc['PP', 'vpred_pct'] for i in range(100)])
+    assert np.allclose(shares_on.to_numpy(), shares_off.to_numpy(), equal_nan=True)   # mismo sorteo nacional
+    assert madrid_on.std() > 1.2 * madrid_off.std()                                   # más dispersión provincial
+    assert (sim27_he.dist().sum(axis=1) == 350).all()
+    # Las oscilaciones conservan la media nacional ponderada de las cuotas provinciales de cada simulación
+    # (la de la proyección determinista, que a su vez queda a una o dos décimas del sorteo nacional)
+    w = sim27_he.prev_totals.loc[provinces, 'votes'].to_numpy()
+    for i in (0, 7):
+        u = np.array([sim27_he.unit(i, r).loc['PP', 'vpred_pct'] for r in provinces])
+        assert (u * w).sum() / w.sum() == pytest.approx((pp_off[i] * w).sum() / w.sum(), abs=0.1)   # dos pasadas: ~0,05, hasta 0,06
+        assert (u * w).sum() / w.sum() == pytest.approx(sim27_he.frame(i).loc['PP', 'vpred'], abs=0.3)
+    summary = sim27_he.unit_summary('Barcelona')
+    assert {'pct', 'pct_lo', 'pct_hi', 'seats', 'seats_lo', 'seats_hi', 'p_seats'} <= set(summary.columns)
+    assert summary.loc['ERC', 'pct_hi'] > summary.loc['ERC', 'pct_lo']
+    assert summary.loc['PP', 'pct_hi'] - summary.loc['PP', 'pct_lo'] > 6   # IC 95 % del PP en Barcelona, con oscilaciones

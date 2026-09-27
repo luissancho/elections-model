@@ -98,3 +98,38 @@ def test_summarize_case_horizon_columns():
     assert m['crps_seats_h'] == pytest.approx(4.5)
     assert m['brier_vs_h'] == pytest.approx(0.065)
     assert m['log_score_vs_h'] == pytest.approx(0.25)
+
+
+def test_summarize_case_provincial_metrics_skip_cells_without_projection():
+    """M9 (revisión): las cuotas provinciales se evalúan sólo donde el modelo proyecta (mediana finita), con el
+    mismo denominador en cobertura y error; un caso huérfano (escaños no válidos) no aporta métricas provinciales."""
+    shares = pd.DataFrame({
+        'party': ['A'], 'main': [True], 'official': [30.], 'model': [31.], 'last_poll': [33.], 'mean_4w': [32.],
+        'prev_result': [28.], 'fc_lo': [30.5], 'fc_hi': [31.5], 'lo50': [30.], 'hi50': [32.], 'lo80': [29.], 'hi80': [33.],
+        'lo95': [28.], 'hi95': [34.],
+    })
+    seats = pd.DataFrame({
+        'party': ['A'], 'main': [True], 'official': [120.], 'model': [125.], 'mean': [125.], 'crps': [3.], 'seats_valid': [True],
+        'lo50': [122.], 'hi50': [128.], 'lo80': [118.], 'hi80': [132.], 'lo95': [115.], 'hi95': [135.],
+    })
+    blocks = pd.DataFrame({'block': ['D'], 'brier': [0.04], 'log_score': [0.2], 'seats_valid': [True]})
+    provinces = pd.DataFrame({
+        'region': [1, 1, 2, 2], 'party': ['A', 'B', 'A', 'B'], 'official_pct': [30., 10., 20., 5.],
+        'model_pct': [31., 12., 22., np.nan], 'official_seats': [3., 1., 2., 1.], 'model_seats': [3., 1., 2., 0.],
+        'crps_seats': [0.1, 0.2, 0.3, 1.0],
+        'lo50_pct': [30., 11., 21., np.nan], 'hi50_pct': [32., 13., 23., np.nan],
+        'lo80_pct': [29., 10., 20., np.nan], 'hi80_pct': [33., 14., 24., np.nan],
+        'lo95_pct': [28., 9., 19., np.nan], 'hi95_pct': [34., 15., 25., np.nan],
+        'lo95_seats': [2., 0., 1., 0.], 'hi95_seats': [4., 2., 3., 0.],
+    })
+
+    m = summarize_case(shares, seats, blocks, provinces)
+    assert m['n_prov_cells'] == 3 and m['n_prov_missing'] == 1
+    assert m['cov_prov_shares50'] == pytest.approx(1 / 3)          # 30 ∈ [30, 32]; 10 ∉ [11, 13]; 20 ∉ [21, 23]
+    assert m['cov_prov_shares95'] == pytest.approx(1.0)
+    assert m['mae_prov_shares'] == pytest.approx(5 / 3)             # |1| + |2| + |2| sobre las tres celdas proyectadas
+    assert m['cov_prov_seats95'] == pytest.approx(0.75)             # la celda sin proyección cuenta como 0 escaños
+    assert m['crps_prov_seats'] == pytest.approx(0.4)
+
+    m = summarize_case(shares, seats.assign(seats_valid=False), blocks.assign(seats_valid=False), provinces)
+    assert np.isnan(m['cov_prov_shares50']) and np.isnan(m['mae_prov_shares']) and np.isnan(m['n_prov_cells'])

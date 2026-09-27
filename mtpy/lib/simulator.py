@@ -48,6 +48,7 @@ class Simulator(Core):
         industry_bias: bool = False,
         he_params: Optional[dict[str, Any]] = None,
         composition: Optional[float | str] = None,
+        regional_noise: bool = True,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -107,6 +108,11 @@ class Simulator(Core):
             elections (about 0.2); a number fixes it; `None` (default) or 1 draws every party independently.
             The marginal intervals are the same in every case (see `build_frame`); the backtest is neutral
             between the two, slightly better independent at short horizons and joint at long ones (M7).
+        regional_noise : bool, optional
+            Add to the provincial projection the deviations from the proportional swing observed between
+            elections: a multiplicative shock per party and autonomous community and a smaller one per
+            province, keeping the national share of each party (M9, `apply_swing_noise`). The national draw
+            is identical with or without them (own random generator, `seed + 1`).
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -123,6 +129,7 @@ class Simulator(Core):
         self.industry_bias = bool(industry_bias)
         self.he_params = he_params
         self.composition = composition
+        self.regional_noise = bool(regional_noise)
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -156,6 +163,7 @@ class Simulator(Core):
         self._as_of = pd.Timestamp(as_of) if as_of is not None else None
         self.as_of = None
         self.horizon_max = None
+        self.ages = None  # Age of each party at `as_of` (years since its first poll), see `party_ages`
 
         if self.smap is None:
             self.smap = self.event_params.get('smap', {})
@@ -237,6 +245,16 @@ class Simulator(Core):
         else:
             self.v2drift = None
 
+        if self.verbose > 0:
+            print('Load swing noise estimator...')
+
+        # Regional and provincial deviations from the proportional swing (M9), see `Computer.get_swing_noise`
+        if self.regional_noise and self.computer is not None:
+            self.v2swing = self.computer.get_swing_noise()
+        else:
+            self.v2swing = None
+        self.region_groups = self.app.data.read_csv('es-provinces.csv').set_index('code')['reg_code'].to_dict()
+
         # Composition of the national errors: a common negative correlation between the national parties,
         # set by the ratio between the variance of their sum and the sum of their variances (M7)
         if composition is None or (not isinstance(composition, str) and float(composition) >= 1):
@@ -280,6 +298,7 @@ class Simulator(Core):
 
         self.params = None
         self.rng = None
+        self.rng_swing = None
         self.horizons = None  # Horizon (days from `as_of`) of each simulation, see `build_horizons`
         self.frames = None
         self.units = None
@@ -330,8 +349,11 @@ class Simulator(Core):
 
         if self.params['random']:
             self.rng = np.random.default_rng(self.seed)
+            # Own generator for the provincial shocks: the national draws do not depend on them
+            self.rng_swing = np.random.default_rng(self.seed + 1 if self.seed is not None else None)
         else:
             self.rng = None
+            self.rng_swing = None
 
         return self
 
@@ -483,6 +505,28 @@ class Simulator(Core):
         self.as_of = as_of
         self.horizon_max = int((self.deadline - as_of).days)
 
+    def party_ages(self) -> pd.Series:
+        """
+        Age of each simulated party at `as_of`, in years since the first poll listing it: the earliest of
+        its first poll in the past cycles (`Computer.party_first_polls`) and in the current cycle
+        (`Forecaster.party_first_polls`, raw party columns before grouping: a party born in the cycle must not
+        inherit the polls of the predecessors its block absorbs). A block of `bmap` takes the age of its
+        head party.
+        """
+        past = self.computer.party_first_polls() if self.computer is not None else pd.Series(dtype='datetime64[ns]')
+
+        current = self.model.party_first_polls
+        if current is None:
+            current = pd.Series(dtype='datetime64[ns]')
+        current = current.reindex([n for n in self.names if n in current.index])
+
+        first = pd.concat([past, current]).groupby(level=0).min() if (past.shape[0] + current.shape[0]) > 0 else current
+        as_of = pd.Timestamp(self.as_of)
+
+        return pd.Series(
+            {n: (as_of - first[n]).days / 365.25 if n in first.index else np.nan for n in self.names}, name='age', dtype=float
+        )
+
     def build_forecast(self) -> pd.DataFrame:
         """
         Read the forecast of each party at `as_of` (see `_set_anchor`) and add the residual `'-'`, the
@@ -490,6 +534,7 @@ class Simulator(Core):
         last week, from the `Computer` estimator).
         """
         self._set_anchor()
+        self.ages = self.party_ages()
         weeks = self.TERMINAL_WEEKS
 
         names = self.params['names']
@@ -812,7 +857,8 @@ class Simulator(Core):
             base = np.nan_to_num(err) ** 2 + pct_err ** 2
 
             for h in horizons:
-                drift_var = self.v2drift.var(h, mean) if self.v2drift is not None else 0.
+                age = float(self.ages.get(n, np.nan)) if self.ages is not None else np.nan
+                drift_var = self.v2drift.var(h, mean, age=age) if self.v2drift is not None else 0.
                 sd = float(np.sqrt(base + drift_var))
                 rows.append({
                     'party': n, 'horizon': h, 'mean': mean, 'sd': sd,
@@ -1150,6 +1196,81 @@ class Simulator(Core):
         return int(np.lexsort((np.arange(len(l1)), l2, l1))[0])
 
     @staticmethod
+    def lognormal_shocks(
+        rng: np.random.Generator,
+        sigma: np.ndarray
+    ) -> np.ndarray:
+        """
+        Normal shocks with the given standard deviations, centred so that their multiplier `exp(shock)` has
+        mean 1 (`-σ²/2`): otherwise the province renormalisation would systematically squeeze the parties that
+        absorb the others' positive shocks.
+        """
+        sigma = np.asarray(sigma, dtype=float)
+
+        return rng.standard_normal(sigma.shape) * sigma - np.square(sigma) / 2.
+
+    @staticmethod
+    def apply_swing_noise(
+        shares: pd.DataFrame,
+        weights: pd.Series,
+        target: pd.Series,
+        shocks_region: pd.DataFrame,
+        shocks_province: pd.DataFrame,
+        groups: pd.Series,
+        names: list[str],
+        others: str,
+        n_pass: int = 2
+    ) -> pd.DataFrame:
+        """
+        Apply multiplicative regional and provincial shocks to the provincial shares of the proportional
+        swing, keeping the national share of each party (its weighted mean over the provinces) and the
+        provincial totals (100 with the residual): shares × exp(ε[group, party] + η[province, party]), then
+        `n_pass` rounds of rescaling each party to its `target` mean and renormalising each province.
+
+        Parameters
+        ----------
+        shares : pd.DataFrame
+            Provincial shares (index: province, columns: `names` plus `others`), NaN where a party is absent.
+        weights : pd.Series
+            Valid votes of each province (the weights of the national mean).
+        target : pd.Series
+            National share of each party to preserve.
+        shocks_region : pd.DataFrame
+            ε by group (index) and party (columns).
+        shocks_province : pd.DataFrame
+            η by province (index) and party (columns).
+        groups : pd.Series
+            Group (autonomous community) of each province.
+        names : list of str
+            Parties that receive the shocks.
+        others : str
+            Residual category, untouched by the shocks and adjusted by the renormalisation.
+        """
+        out = shares.copy()
+        w = weights.reindex(out.index).astype(float)
+        cols = [n for n in names if n in out.columns]
+        grp = groups.reindex(out.index)
+
+        eps = shocks_region.reindex(index=grp.to_numpy(), columns=cols).fillna(0.).to_numpy(dtype=float)
+        eta = shocks_province.reindex(index=out.index, columns=cols).fillna(0.).to_numpy(dtype=float)
+        out[cols] = out[cols].to_numpy(dtype=float) * np.exp(eps + eta)
+
+        for _ in range(max(int(n_pass), 1)):
+            # Each party back to its national share
+            for n in cols:
+                col = out[n].to_numpy(dtype=float)
+                present = np.isfinite(col)
+                mean = float((col[present] * w.to_numpy()[present]).sum() / w.sum()) if present.any() else 0.
+                tgt = float(target.get(n, np.nan))
+                if mean > 0 and np.isfinite(tgt):
+                    out[n] = col * (tgt / mean)
+            # Each province back to 100 with the residual
+            total = out.fillna(0.).sum(axis=1).replace(0., np.nan)
+            out = out.mul(100. / total, axis=0)
+
+        return out
+
+    @staticmethod
     def equicorrelation(
         sigmas: np.ndarray,
         r: float
@@ -1350,7 +1471,8 @@ class Simulator(Core):
         if self.params['random']:
             # Drift of the opinion over the horizon (relative to the level of each party), added in quadrature
             if self.v2drift is not None and horizon:
-                drift = np.asarray(self.v2drift.sigma(horizon, df.loc[vind, 'pct'].fillna(0)), dtype=float)
+                ages = self.ages.reindex(df.index[vind]).to_numpy(dtype=float) if self.ages is not None else None
+                drift = np.asarray(self.v2drift.sigma(horizon, df.loc[vind, 'pct'].fillna(0), age=ages), dtype=float)
             else:
                 drift = 0.
             df.loc[vind, 'drift'] = drift
@@ -1482,6 +1604,10 @@ class Simulator(Core):
         prev_pcts[self.OTHERS] = prev_otros + blank
         vpred_pcts[self.OTHERS] = vpred_otros + blank
 
+        # Regional and provincial deviations from the proportional swing (M9), keeping the national shares
+        if self.regional_noise and self.params['random'] and self.v2swing is not None and self.rng_swing is not None:
+            vpred_pcts = self._add_swing_noise(vpred_pcts, names, valid)
+
         # Shares fed to the allocation: renormalized over all the categories, so that only the small
         # inconsistencies of the swing are corrected (not the votes to other candidatures)
         vpred_pcts = vpred_pcts.mul(100. / vpred_pcts.fillna(0).sum(axis=1).replace(0., np.nan), axis=0)
@@ -1493,6 +1619,79 @@ class Simulator(Core):
         df = pd.concat([prev_pcts, vpred_pcts], axis=1, keys=self.cols_unit).loc[ix, cols].round(2)
 
         return df
+
+    def _add_swing_noise(
+        self,
+        vpred_pcts: pd.DataFrame,
+        names: list[str],
+        valid: pd.Series
+    ) -> pd.DataFrame:
+        """
+        Draw the regional (autonomous community) and provincial shocks of one simulation with `rng_swing`,
+        with relative standard deviations from `v2swing` at the predicted level of each party in the community
+        and in the province, and apply them with `apply_swing_noise` (national shares preserved).
+        """
+        provinces = [r for r in vpred_pcts.index if r != self.default_region]
+        # Work on the provincial shares as the allocation will see them (each province renormalised to 100
+        # with the residual): the shocks must keep the mean structure of the deterministic projection, whose
+        # raw swing rows do not sum to 100 (e.g. below it in the Basque provinces)
+        prov = vpred_pcts.loc[provinces]
+        prov = prov.mul(100. / prov.fillna(0.).sum(axis=1).replace(0., np.nan), axis=0)
+        groups = pd.Series({r: self.region_groups.get(int(r), np.nan) for r in provinces})
+        w = valid.loc[provinces].astype(float)
+        # Target: the national share implied by the (normalised) provincial projection itself, so that the
+        # shocks never shift a province on average
+        target = prov[names].fillna(0.).mul(w, axis=0).sum() / w.sum()
+
+        level_prov = prov[names].fillna(0.)
+        level_reg = level_prov.mul(w, axis=0).groupby(groups.to_numpy()).sum().div(w.groupby(groups.to_numpy()).sum(), axis=0)
+
+        eps = pd.DataFrame(
+            self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy())),
+            index=level_reg.index, columns=names
+        )
+        eta = pd.DataFrame(
+            self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_province(level_prov.to_numpy())),
+            index=prov.index, columns=names
+        )
+
+        out = vpred_pcts.copy()
+        out.loc[provinces] = self.apply_swing_noise(prov, w, target, eps, eta, groups, names, self.OTHERS)
+
+        return out
+
+    def unit_summary(
+        self,
+        region: int | str,
+        alpha: Optional[float] = None
+    ) -> pd.DataFrame:
+        """
+        Summary of one province over the simulations: median and interval of the share of each party
+        (`pct`, `pct_lo`, `pct_hi`) and of its seats (`seats`, `seats_mean`, `seats_lo`, `seats_hi`) and the
+        probability of at least one seat (`p_seats`).
+
+        Parameters
+        ----------
+        region : int or str
+            `region_id` or region name.
+        alpha : float, optional
+            Confidence level of the intervals; the one given to the constructor by default.
+        """
+        if self.units is None or self.results is None:
+            raise ValueError('No simulations available: call `run()` first.')
+
+        alpha = self.alpha if alpha is None else alpha
+        rloc = self.params['regions'].index(self.region_id(region))
+        names = self.params['names']
+        pct = pd.DataFrame(self.units[:, rloc, :, self.cols_unit.index('vpred_pct')], columns=self.categories())[names]
+        seats = pd.DataFrame(self.results[:, rloc, :], columns=names)
+        lo, hi = alpha / 2, 1 - alpha / 2
+
+        return pd.DataFrame({
+            'pct': pct.median(), 'pct_lo': pct.quantile(lo), 'pct_hi': pct.quantile(hi),
+            'seats': seats.median(), 'seats_mean': seats.mean(), 'seats_lo': seats.quantile(lo), 'seats_hi': seats.quantile(hi),
+            'p_seats': (seats > 0).mean()
+        })
 
     def simulate(
         self,

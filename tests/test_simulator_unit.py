@@ -287,3 +287,96 @@ def test_draw_correlated_t_keeps_t_marginals_and_imposes_correlation():
     y = Simulator.draw_correlated_t(np.random.default_rng(1), np.array([5., 5.]), np.eye(2), size=20000)
     assert abs(np.corrcoef(y.T)[0, 1]) < 0.03
     assert Simulator.draw_correlated_t(np.random.default_rng(2), np.array([5., 5.]), np.eye(2)).shape == (2,)
+
+
+# --- M8: multiplicador de deriva por edad del partido ---
+
+def test_drift_estimator_age_multiplier_is_a_step():
+    old = _drift_table(k=1e-4).assign(age=10.)                 # establecidos
+    young = _drift_table(k=9e-4).assign(age=1.)                # jóvenes: deriva 3 veces mayor
+    young['party'] = young['party'] + '_y'
+    table = pd.concat([old, young], ignore_index=True)
+    est = DriftEstimator.fit(table, d_min=60, age_max=4.)
+    assert est.k == pytest.approx(1e-4) and est.k_young == pytest.approx(9e-4)
+    assert est.multiplier == pytest.approx(3.) and est.age_max == 4.
+    assert est.sigma(90, 10., age=1.) == pytest.approx(3 * est.sigma(90, 10., age=10.))
+    assert est.sigma(90, 10., age=np.nan) == pytest.approx(est.sigma(90, 10.))   # sin edad: establecido
+    vec = est.sigma(90, np.array([10., 10.]), age=np.array([1., 10.]))
+    assert vec[0] == pytest.approx(3 * vec[1])
+    assert est.var(90, 10., age=3.9) == pytest.approx(9 * est.var(90, 10., age=4.))
+
+
+def test_drift_estimator_without_age_or_young_rows_keeps_single_k():
+    est = DriftEstimator.fit(_drift_table(k=1e-4), d_min=60)
+    assert est.multiplier == 1 and est.k == pytest.approx(1e-4) and np.isnan(est.k_young)
+    old = _drift_table(k=1e-4).assign(age=10.)
+    few = pd.concat([old, _drift_table(k=9e-4).assign(age=1.).iloc[:3]], ignore_index=True)  # jóvenes sólo a < 60 días
+    with pytest.warns(UserWarning):
+        est = DriftEstimator.fit(few, d_min=60, age_max=4., min_young=6)
+    assert est.multiplier == 1 and est.k == pytest.approx(1e-4)
+    # El multiplicador nunca baja de 1: unos jóvenes más tranquilos que los establecidos no se estrechan
+    calm = pd.concat([old, _drift_table(k=2.5e-5).assign(age=1.).assign(party=lambda d: d.party + '_y')], ignore_index=True)
+    assert DriftEstimator.fit(calm, d_min=60, age_max=4.).multiplier == 1
+
+
+def test_drift_estimator_warns_when_the_age_column_is_all_missing():
+    table = _drift_table(k=1e-4).assign(age=np.nan)
+    with pytest.warns(UserWarning, match='age'):
+        est = DriftEstimator.fit(table, d_min=60, age_max=4.)
+    assert est.multiplier == 1 and est.k == pytest.approx(1e-4)
+
+
+# --- M9: aplicación de las oscilaciones autonómicas y provinciales ---
+
+def _swing_frame():
+    # Tres provincias (dos de la misma comunidad), dos partidos y el residuo; cuotas ya normalizadas a 100
+    shares = pd.DataFrame({'PP': [40., 30., 20.], 'PSOE': [30., 40., 50.], '-': [30., 30., 30.]}, index=pd.Index([1, 2, 3], name='region_id'))
+    weights = pd.Series([100., 300., 600.], index=shares.index)
+    groups = pd.Series({1: 'A', 2: 'A', 3: 'B'})
+    target = (shares[['PP', 'PSOE']].mul(weights, axis=0).sum() / weights.sum())
+    return shares, weights, groups, target
+
+
+def test_apply_swing_noise_with_zero_shocks_is_the_identity():
+    shares, weights, groups, target = _swing_frame()
+    eps = pd.DataFrame(0., index=['A', 'B'], columns=['PP', 'PSOE'])
+    eta = pd.DataFrame(0., index=shares.index, columns=['PP', 'PSOE'])
+    out = Simulator.apply_swing_noise(shares, weights, target, eps, eta, groups, ['PP', 'PSOE'], '-')
+    assert np.allclose(out.values, shares.values)
+
+
+def test_apply_swing_noise_preserves_national_means_and_row_sums():
+    shares, weights, groups, target = _swing_frame()
+    eps = pd.DataFrame({'PP': [0.2, -0.1], 'PSOE': [-0.1, 0.05]}, index=['A', 'B'])
+    eta = pd.DataFrame({'PP': [0.05, -0.05, 0.0], 'PSOE': [0.0, 0.02, -0.02]}, index=shares.index)
+    out = Simulator.apply_swing_noise(shares, weights, target, eps, eta, groups, ['PP', 'PSOE'], '-')
+    assert np.allclose(out.sum(axis=1), 100.)
+    means = out[['PP', 'PSOE']].mul(weights, axis=0).sum() / weights.sum()
+    assert np.allclose(means, target, atol=0.05)
+    # Las provincias de la comunidad A suben en PP frente al swing y la de B baja (antes del reescalado común)
+    ratio = out['PP'] / shares['PP']
+    assert ratio[1] > ratio[3] and ratio[2] > ratio[3]
+    assert not np.allclose(out.values, shares.values)
+
+
+def test_apply_swing_noise_keeps_absent_parties_absent():
+    shares, weights, groups, target = _swing_frame()
+    shares.loc[3, 'PP'] = np.nan; shares.loc[3, '-'] = 50.
+    target = shares[['PP', 'PSOE']].fillna(0).mul(weights, axis=0).sum() / weights.sum()
+    eps = pd.DataFrame({'PP': [0.3, 0.3], 'PSOE': [0., 0.]}, index=['A', 'B'])
+    eta = pd.DataFrame(0., index=shares.index, columns=['PP', 'PSOE'])
+    out = Simulator.apply_swing_noise(shares, weights, target, eps, eta, groups, ['PP', 'PSOE'], '-')
+    assert np.isnan(out.loc[3, 'PP']) and np.allclose(out.fillna(0).sum(axis=1), 100.)
+    means = out[['PP', 'PSOE']].fillna(0).mul(weights, axis=0).sum() / weights.sum()
+    assert np.allclose(means, target, atol=0.05)
+
+
+def test_lognormal_shocks_have_unit_mean_multiplier():
+    """M9: los choques se centran (ε − σ²/2) para que exp(ε) tenga media 1 y no comprima a los demás partidos."""
+    rng = np.random.default_rng(0)
+    sigma = np.array([[0.1, 0.3], [0.2, 0.05]])
+    draws = np.stack([Simulator.lognormal_shocks(rng, sigma) for _ in range(20000)])
+    mult = np.exp(draws).mean(axis=0)
+    assert np.allclose(mult, 1., atol=0.02)
+    assert draws[:, 0, 1].std() == pytest.approx(0.3, rel=0.03)
+    assert Simulator.lognormal_shocks(rng, np.zeros((2, 2))).tolist() == [[0., 0.], [0., 0.]]

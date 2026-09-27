@@ -134,7 +134,7 @@ Para 2027 la consecuencia práctica: el abanico y los modos a horizonte son una 
 ## Salvedades
 
 - **Error terminal supuesto igual "hoy" que en campaña**: `σ_enc` es el error de las encuestas de la última semana, la única calibración verificable. Las encuestas de campaña suelen ser algo mejores, así que el nowcast a un año vista es, si acaso, algo estrecho.
-- **Partidos nuevos o en disolución** derivan varias veces más que el partido establecido típico que representa `k` (media geométrica). En 2027 afecta a SALF (nacido en 2024) y a la evolución de UP y SUMAR; sus intervalos a horizonte son demasiado estrechos. Una extensión natural: un multiplicador por edad del partido.
+- **Partidos nuevos o en disolución** derivan varias veces más que el partido establecido típico que representa `k` (media geométrica). En 2027 afecta a SALF (nacido en 2024) y a la evolución de UP y SUMAR; sus intervalos a horizonte son demasiado estrechos. Resuelto para los partidos jóvenes en el método 8 (`metodo-8-edad-partido.md`): multiplicador de deriva por edad; la disolución sigue sin modelarse.
 - **Fecha y resultado no son independientes**: el prior histórico es una hipótesis declarada.
 - **Artefacto de suavizado** a menos de 60 días: la ley `√(k·h)` es conservadora ahí; el nowcast (h = 0) no se ve afectado.
 - **`k` en muestra para los primeros ciclos del backtest** (2015 solo ve ciclos bipartidistas): es la evolución fuera de muestra honesta, no un fallo del estimador.

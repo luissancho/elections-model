@@ -84,3 +84,85 @@ def test_composition_ratio_from_industry_errors():
     # Errores exactamente nulos: sin información, 1 (no NaN)
     zeros = industry.assign(industry=0.)
     assert Computer.composition_ratio(zeros, ref, min_events=2) == 1.0
+
+
+# --- M9: oscilaciones autonómicas y provinciales del swing ---
+
+def test_swing_noise_fit_recovers_level_curves():
+    from mtpy.lib.computer import SwingNoise
+    rng = np.random.default_rng(0)
+    a_r, b_r, a_p, b_p = 0.006, 0.16, 0.002, 0.012
+    rows = []
+    for L in (1.5, 2.5, 4., 7., 15., 40.):
+        for _ in range(600):
+            rows.append({'pair': rng.choice(['a', 'b', 'c', 'd']), 'level': L,
+                         'reg_mean': rng.normal(0, np.sqrt(a_r + b_r / L)), 'within': rng.normal(0, np.sqrt(a_p + b_p / L))})
+    res = pd.DataFrame(rows)
+    noise = SwingNoise.fit(res)
+    assert noise.a_r == pytest.approx(a_r, rel=0.25) and noise.b_r == pytest.approx(b_r, rel=0.15)
+    assert noise.a_p == pytest.approx(a_p, rel=0.35) and noise.b_p == pytest.approx(b_p, rel=0.35)
+    assert noise.n == res.shape[0]
+    # Curvas: decrecientes con el nivel, nivel acotado por abajo, siempre finitas
+    assert noise.sigma_region(30.) < noise.sigma_region(10.) < noise.sigma_region(3.)
+    assert noise.sigma_region(0.1) == noise.sigma_region(1.0)
+    assert np.isfinite(noise.sigma_province(np.array([1., 5., 50.]))).all()
+    assert noise.sigma_region(30.) == pytest.approx(np.sqrt(noise.a_r + noise.b_r / 30.))
+
+
+def test_swing_noise_without_enough_pairs_is_zero():
+    from mtpy.lib.computer import SwingNoise
+    res = pd.DataFrame({'pair': ['a'] * 10, 'level': np.linspace(2, 30, 10), 'reg_mean': 0.1, 'within': 0.05})
+    with pytest.warns(UserWarning):
+        noise = SwingNoise.fit(res, min_pairs=3)
+    assert noise.sigma_region(10.) == 0 and noise.sigma_province(10.) == 0
+
+
+def test_swing_noise_decompose_and_fit_are_unbiased_with_small_communities():
+    """M9 (revisión): la desviación dentro de una comunidad de k provincias tiene varianza σ_w²(1 − 1/k) y la media
+    de la comunidad arrastra σ_w²/k; el ajuste corrige ambas cosas y excluye de la parte autonómica a los
+    partidos presentes en una sola comunidad (su media autonómica es nula por construcción)."""
+    from mtpy.lib.computer import SwingNoise
+    rng = np.random.default_rng(1)
+    a_r, b_r, a_p, b_p = 0.006, 0.16, 0.003, 0.02
+    sizes = {'g1': 1, 'g2': 1, 'g3': 1, 'g4': 2, 'g5': 2, 'g6': 3, 'g7': 5}
+    rows = []
+    for pair in range(40):
+        for party, L in (('P1', 30.), ('P2', 12.), ('P3', 7.), ('P4', 4.), ('P5', 2.5), ('P6', 1.8)):
+            for g, k in sizes.items():
+                eps = rng.normal(0, np.sqrt(a_r + b_r / L))
+                for r in range(k):
+                    rows.append({'pair': pair, 'party': party, 'group': g, 'region': '{}{}'.format(g, r), 'level': L,
+                                 'logres': eps + rng.normal(0, np.sqrt(a_p + b_p / L))})
+        # Partido de una sola comunidad: su residuo autonómico es nulo (la razón nacional es la suya)
+        for r in range(3):
+            rows.append({'pair': pair, 'party': 'R1', 'group': 'g6', 'region': 'g6{}'.format(r), 'level': 20.,
+                         'logres': rng.normal(0, np.sqrt(a_p + b_p / 20.))})
+    df = SwingNoise.decompose(pd.DataFrame(rows))
+    assert {'reg_mean', 'within', 'k', 'n_groups'} <= set(df.columns)
+    assert (df.loc[df['group'] == 'g1', 'within'] == 0).all() and (df.loc[df['group'] == 'g7', 'k'] == 5).all()
+    assert (df.loc[df['party'] == 'R1', 'n_groups'] == 1).all() and (df.loc[df['party'] == 'P1', 'n_groups'] == 7).all()
+
+    noise = SwingNoise.fit(df)
+    assert noise.a_r == pytest.approx(a_r, abs=0.003) and noise.b_r == pytest.approx(b_r, rel=0.2)
+    assert noise.a_p == pytest.approx(a_p, abs=0.0015) and noise.b_p == pytest.approx(b_p, rel=0.3)
+    # Sin corrección, la varianza provincial saldría a menos de dos tercios (uniprovinciales y comunidades de 2)
+    assert noise.var_province(4.) > 0.85 * (a_p + b_p / 4.)
+
+
+def test_swing_noise_wls_keeps_the_fit_when_a_coefficient_is_clipped():
+    """M9 (revisión): con un coeficiente negativo se reajusta el otro con la restricción, no se recorta a posteriori."""
+    from mtpy.lib.computer import SwingNoise
+    L = np.array([2., 5., 20.])
+    n = np.array([100., 100., 100.])
+    # Varianza creciente con el nivel: pendiente negativa → b = 0 y a = media ponderada
+    a, b = SwingNoise.wls_nonneg(L, np.array([0.01, 0.02, 0.03]), n)
+    assert b == 0 and a == pytest.approx(0.02)
+    # Ordenada negativa: a = 0 y b ajustado por el origen sobre 1/L (no el b sin restricción)
+    L = np.array([1.5, 5., 50.])
+    y = np.array([0.1, 0.02, 0.])
+    a, b = SwingNoise.wls_nonneg(L, y, n)
+    x = 1. / L
+    assert a == 0 and b == pytest.approx((n * y * x).sum() / (n * x * x).sum())
+    # Sin restricción activa, el resultado es el de mínimos cuadrados ponderados ordinario
+    a, b = SwingNoise.wls_nonneg(L, 0.01 + 0.2 * x, n)
+    assert a == pytest.approx(0.01) and b == pytest.approx(0.2)
