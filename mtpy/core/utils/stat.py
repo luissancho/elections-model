@@ -1,5 +1,6 @@
 import inspect
 import itertools
+import warnings
 import numpy as np
 import pandas as pd
 from scipy import fftpack
@@ -537,6 +538,7 @@ class Estimator(object):
         x: np.ndarray,
         y: Optional[np.ndarray] = None,
         weights: Optional[np.ndarray] = None,
+        groups: Optional[np.ndarray] = None,
         verbose: int = 0
     ) -> None:
         self.verbose = verbose  # Print progress
@@ -544,6 +546,7 @@ class Estimator(object):
         self.exog = None
         self.endog = None
         self.weights = None
+        self.groups = None  # Cluster of each observation (e.g. the pollster), for the robust covariance
 
         self.nobs = None
         self.neff = None
@@ -557,13 +560,14 @@ class Estimator(object):
         self.pred = None
         self.result = None
 
-        self.build_input(x, y, weights)
+        self.build_input(x, y, weights, groups)
 
     def build_input(
         self,
         x: np.ndarray | pd.Series,
         y: Optional[np.ndarray] = None,
-        weights: Optional[np.ndarray] = None
+        weights: Optional[np.ndarray] = None,
+        groups: Optional[np.ndarray] = None
     ) -> Self:
         if y is not None:
             self.exog = np.array(x)
@@ -588,6 +592,13 @@ class Estimator(object):
         else:
             self.weights = np.ones((self.nobs, 1))
             self.neff = self.nobs
+
+        if groups is not None:
+            self.groups = np.asarray(groups).reshape(-1)
+            if self.groups.shape[0] != self.nobs:
+                raise ValueError('Param `groups` must have one value per observation.')
+        else:
+            self.groups = None
 
         self.is_ts = np.repeat(False, self.kvar)
         self.ranges = []
@@ -678,11 +689,18 @@ class LeastSquaresEstimator(Estimator):
         x: np.ndarray,
         y: Optional[np.ndarray] = None,
         weights: Optional[np.ndarray] = None,
+        groups: Optional[np.ndarray] = None,
         poly_deg: int = 1,
-        cov_type: Optional[Literal['hac']] = 'hac',
+        cov_type: Optional[Literal['hac', 'hc1', 'cluster']] = 'hac',
         cov_kwargs: Optional[dict[str, Any]] = None,
         verbose: int = 0
     ) -> None:
+        """
+        Weighted least squares (Kish effective sample size, see `build_input`) with a robust covariance of the
+        coefficients: `'hac'` (Newey-West over the row order), `'hc1'` (heteroskedasticity-robust sandwich) or
+        `'cluster'` (sandwich over the `groups` of the observations: the residuals of a group may be
+        correlated, e.g. the polls of one pollster), all with the small-sample factor `neff / dof`.
+        """
         self.poly_deg = poly_deg
         self.cov_type = cov_type
         self.cov_kwargs = cov_kwargs if cov_kwargs is not None else dict()
@@ -692,6 +710,7 @@ class LeastSquaresEstimator(Estimator):
         self.wresid = None
 
         self.dof = None  # Degrees of freedom
+        self.dof_t = None  # Degrees of freedom of the t reference of the bands (`G - 1` with cluster covariance)
         self.scale = None  # Variance scale parameter
         self.covb = None  # Covariance params
         self.mcov = None  # Covariance matrix
@@ -701,15 +720,16 @@ class LeastSquaresEstimator(Estimator):
         self.perr = None  # Standard error of the predictions
         self.cint = None  # Prediction intervals
 
-        super().__init__(x, y, weights=weights, verbose=verbose)
+        super().__init__(x, y, weights=weights, groups=groups, verbose=verbose)
 
     def build_input(
         self,
         x: np.ndarray,
         y: Optional[np.ndarray] = None,
-        weights: Optional[np.ndarray] = None
+        weights: Optional[np.ndarray] = None,
+        groups: Optional[np.ndarray] = None
     ) -> Self:
-        super().build_input(x, y, weights)
+        super().build_input(x, y, weights, groups)
 
         if self.endog is not None:
             vind = np.isfinite(self.endog).any(axis=1)
@@ -717,6 +737,8 @@ class LeastSquaresEstimator(Estimator):
             self.exog = self.exog[vind]
             self.endog = self.endog[vind]
             self.weights = self.weights[vind]
+            if self.groups is not None:
+                self.groups = self.groups[vind]
 
             self.nobs = self.exog.shape[0]
             self.neff = np.square(np.sum(self.weights)) / np.sum(np.square(self.weights))
@@ -733,6 +755,7 @@ class LeastSquaresEstimator(Estimator):
 
         self.exog = exog
         self.dof = self.neff - self.exog.shape[1]  # Effective sample size minus number of coefficients
+        self.dof_t = self.dof
 
         if self.dof <= 0:
             raise ValueError('Degrees of freedom must be greater than zero.')
@@ -765,29 +788,55 @@ class LeastSquaresEstimator(Estimator):
 
     def get_robust_cov(
         self,
-        cov_type: Optional[Literal['hac']] = None,
+        cov_type: Optional[Literal['hac', 'hc1', 'cluster']] = None,
         hac_lags: int = 1,
         kernel: Literal['bartlett'] = 'bartlett'
     ) -> np.ndarray:
+        """
+        Sandwich covariance of the coefficients, `covb · Σ · covb`, with `Σ` built from the scores
+        `s_i = (w x e)_i` (whitened design times whitened residual):
+
+        - `'hac'`: Newey-West with `hac_lags` lags over the row order and `kernel` weights.
+        - `'hc1'`: `Σ_i s_i s_iᵀ` (heteroskedasticity-robust).
+        - `'cluster'`: `Σ_g u_g u_gᵀ` with `u_g = Σ_{i ∈ g} s_i` over the `groups` of the observations, with the
+          CR1 factor `G / (G − 1) · (neff − 1) / neff`; the sum of the scores of a group is robust to any
+          correlation inside it. The bands then use a t with `G − 1` degrees of freedom (`dof_t`). Without
+          groups, or with a single one, it falls back to `'hc1'` with a warning.
+
+        All of them carry the small-sample factor `neff / dof` (`n / (n − k)` with equal weights), so with
+        equal weights `'hc1'` is the HC1 of statsmodels and `'cluster'` its `cov_type='cluster'` (CR1).
+        """
+        xu = self.wexog * self.wresid
+        labels, inverse = np.unique(self.groups, return_inverse=True) if self.groups is not None else (None, None)
+        self.dof_t = self.dof
+
         if cov_type == 'hac':
             # Newey-West (HAC) with kernel weights
             kernel_fn = getattr(Kernel, 'kernel_' + kernel)
-
-            xu = self.wexog * self.wresid
 
             kws = kernel_fn(hac_lags + 1)
             sigma = kws[0] * np.dot(xu.T, xu)
             for lag in np.arange(1, hac_lags + 1):
                 s = np.dot(xu[lag:].T, xu[:-lag])
                 sigma += kws[lag] * (s + s.T)
-
-            # HAC adjusted variance/covariance matrix
-            mcov = self.covb @ sigma @ self.covb.T
-
-            # Sample size correction (adjust model variance for small sample sizes)
-            mcov *= self.neff / self.dof
+            factor = 1.
+        elif cov_type == 'cluster' and labels is not None and labels.shape[0] >= 2:
+            ug = np.zeros((labels.shape[0], xu.shape[1]))
+            np.add.at(ug, inverse, xu)
+            sigma = np.dot(ug.T, ug)
+            # CR1: `G / (G − 1) · (n − 1) / (n − k)`, with `neff` for `n`; the bands use `G − 1` degrees of freedom
+            factor = labels.shape[0] / (labels.shape[0] - 1.) * (self.neff - 1.) / self.neff
+            self.dof_t = min(self.dof, labels.shape[0] - 1)
+        elif cov_type in ('hc1', 'cluster'):
+            if cov_type == 'cluster':
+                warnings.warn('Cluster covariance without groups (or with a single one): using `hc1` instead')
+            sigma = np.dot(xu.T, xu)
+            factor = 1.
         else:
             raise ValueError('Param `cov_type` does not exist.')
+
+        # Robust variance/covariance matrix, with the sample size correction (small samples)
+        mcov = self.covb @ sigma @ self.covb.T * factor * self.neff / self.dof
 
         return mcov
 
@@ -842,7 +891,7 @@ class LeastSquaresEstimator(Estimator):
         if alpha is not None:
             # self.perr = np.sqrt(np.diag(self.pred @ self.mcov @ self.pred.T))
             self.perr = np.sqrt(np.einsum('ij,jk,ik->i', self.pred, self.mcov, self.pred))
-            self.cint = t.ppf(1 - alpha / 2, self.dof) * self.perr
+            self.cint = t.ppf(1 - alpha / 2, self.dof_t) * self.perr
 
             result = pd.DataFrame(result)
             result['cmin'] = y_hat - self.cint
@@ -877,15 +926,22 @@ class LocalKernelEstimator(Estimator):
         x: np.ndarray,
         y: Optional[np.ndarray] = None,
         weights: Optional[np.ndarray] = None,
+        groups: Optional[np.ndarray] = None,
         kernel: Literal['gaussian'] = 'gaussian',
         bw_type: Literal['fixed', 'adaptive'] = 'adaptive',
         bw: int | float | tuple[int | float] | Literal['scott', 'silverman', 'isj'] = 'isj',
         bw_kwargs: Optional[dict[str, Any]] = None,
         poly_deg: int = 1,
-        cov_type: Optional[Literal['hac']] = 'hac',
+        cov_type: Optional[Literal['hac', 'hc1', 'cluster']] = 'hac',
         cov_kwargs: Optional[dict[str, Any]] = None,
         verbose: int = 0
     ) -> None:
+        """
+        Local polynomial regression with kernel weights (`Kernel`): at each prediction point a
+        `LeastSquaresEstimator` is fitted on the observations with a non-negligible kernel weight, with the
+        robust covariance `cov_type` (`'cluster'` needs `groups`, one per observation; the local fit gets
+        the groups of its window).
+        """
         self.kernel = kernel
         self.bw_type = bw_type
         self.bw = bw
@@ -895,7 +951,7 @@ class LocalKernelEstimator(Estimator):
         self.cov_type = cov_type
         self.cov_kwargs = cov_kwargs if cov_kwargs is not None else dict()
 
-        super().__init__(x, y, weights=weights, verbose=verbose)
+        super().__init__(x, y, weights=weights, groups=groups, verbose=verbose)
 
     @property
     def r2_score(self) -> float:
@@ -938,6 +994,7 @@ class LocalKernelEstimator(Estimator):
                 self.exog[vind],
                 self.endog[vind],
                 weights=weights[vind],
+                groups=None if self.groups is None else self.groups[vind],
                 poly_deg=self.poly_deg,
                 cov_type=self.cov_type,
                 cov_kwargs=self.cov_kwargs
@@ -977,20 +1034,25 @@ class LocalKernelEstimator(Estimator):
             )
 
         locs_ = tqdm(np.arange(self.pred.shape[0])) if self.verbose > 1 else np.arange(self.pred.shape[0])
-        for pos in locs_:
-            loc_est = self.get_local_estimator(kws, pos)
+        # The local fits repeat the same warning (e.g. the cluster fallback) at every point: emit each once
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            for pos in locs_:
+                loc_est = self.get_local_estimator(kws, pos)
 
-            if loc_est is not None:
-                rloc = loc_est.fit(self.pred, alpha=alpha)
+                if loc_est is not None:
+                    rloc = loc_est.fit(self.pred, alpha=alpha)
 
-                if not isinstance(rloc.index, pd.MultiIndex):
-                    rloc.index = pd.MultiIndex.from_arrays([rloc.index])
+                    if not isinstance(rloc.index, pd.MultiIndex):
+                        rloc.index = pd.MultiIndex.from_arrays([rloc.index])
 
-                if alpha is not None:
-                    rloc['nobs'] = loc_est.nobs
-                    rloc['neff'] = loc_est.neff
+                    if alpha is not None:
+                        rloc['nobs'] = loc_est.nobs
+                        rloc['neff'] = loc_est.neff
 
-                result.loc[tuple(self.pred[pos])] = rloc.loc[tuple(self.pred[pos])]
+                    result.loc[tuple(self.pred[pos])] = rloc.loc[tuple(self.pred[pos])]
+        for category, message in dict.fromkeys((w.category, str(w.message)) for w in caught):
+            warnings.warn(message, category, stacklevel=2)
 
         for i in np.arange(self.kvar):
             if self.is_ts[i]:
@@ -1044,9 +1106,10 @@ class KernelDensityEstimator(Estimator):
         self,
         x: np.ndarray,
         y: Optional[np.ndarray] = None,
-        weights: Optional[np.ndarray] = None
+        weights: Optional[np.ndarray] = None,
+        groups: Optional[np.ndarray] = None
     ) -> Self:
-        super().build_input(x, y, weights)
+        super().build_input(x, y, weights, groups)
 
         self.data = self.exog.copy()
         if self.endog is not None:

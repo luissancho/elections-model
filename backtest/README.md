@@ -23,7 +23,7 @@ Por caso (elección × horizonte), sobre los partidos principales (`bmaps.main`)
 | `mae_shares`, `rmse_shares` | Error absoluto medio y cuadrático del promedio (`forecast['mean']`) frente al porcentaje oficial |
 | `mae_last_poll`, `mae_mean_4w`, `mae_prev_result` | Lo mismo para las tres líneas base: la última encuesta publicada, la media simple de las encuestas de las cuatro semanas anteriores al corte, y el resultado de la elección anterior |
 | `bias_sum` | Error con signo de la suma de los partidos principales (negativo: el promedio dejó en `'-'` voto que fue a esos partidos) |
-| `cov_fc95` | Cobertura del intervalo del 95 % del propio `Forecaster` (`fc_stat`: solo error estadístico de la media local) |
+| `cov_fc95` | Cobertura del intervalo del 95 % del propio `Forecaster` (`fc_stat`: solo el error estadístico de la media local, con cluster por casa desde el método 10). Mide dónde está el consenso de las casas, no el resultado: es baja por construcción y no es una prueba de calibración (ver `metodo-10-error-estandar-cluster.md`) |
 | `cov_shares50/80/95` | Cobertura de los intervalos empíricos de las cuotas simuladas (`shares()`, que incluyen el error histórico) |
 | `mae_seats`, `mae_seats_all` | Error absoluto medio de escaños (titular `totals()`) en los principales y en todos los partidos |
 | `cov_seats50/80/95` | Cobertura de los intervalos de escaños simulados |

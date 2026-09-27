@@ -188,12 +188,17 @@ class Forecaster(Core):
                 'min_delta': None  # Minimum change in bandwidth estimate to be achieved in order to stop iterations
             }),
             'poly_deg': reg_params.get('poly_deg', 1),  # Degree of the polynomial used to fit the local data
-            'cov_type': reg_params.get('cov_type', 'hac'),  # Type of robust covariance estimator
+            # Robust covariance of the local fit: 'cluster' by pollster (the residuals of a house are correlated;
+            # M10), 'hc1' or 'hac' (Newey-West over the row order, the former default)
+            'cov_type': reg_params.get('cov_type', 'cluster'),
             'cov_kwargs': reg_params.get('cov_kwargs', {  # Robust covariance estimator parameters
                 'hac_lags': 1,  # Number of lags used to compute the HAC estimator
                 'kernel': 'bartlett'  # Kernel used to compute the HAC estimator
             })
         }
+        if reg_params['cov_type'] != 'hac':
+            # The HAC parameters mean nothing to the other estimators (stored parameter sets may carry them)
+            reg_params['cov_kwargs'] = {k: v for k, v in reg_params['cov_kwargs'].items() if k not in ('hac_lags', 'kernel')}
 
         return reg_params
 
@@ -431,10 +436,13 @@ class Forecaster(Core):
 
         weights = df.weight.values
         alpha = self.alpha if ret_stat else None
+        # Cluster-robust standard error by pollster (M10): the polls of a house share its remaining deviation
+        groups = df['pollster_id'].to_numpy() if self.reg_params.get('cov_type') == 'cluster' else None
 
         reg = LocalKernelEstimator(
             df[name],
             weights=weights,
+            groups=groups,
             **self.reg_params
         ).fit(px, alpha=alpha).reindex(ix)
 

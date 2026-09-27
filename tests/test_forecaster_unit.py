@@ -200,3 +200,27 @@ def test_industry_bias_from_history_is_relative_decayed_and_uncertain():
     # Una sola elección: la propia magnitud es la incertidumbre (no hay evidencia de estabilidad)
     one = Forecaster.industry_bias(history.iloc[2:], pd.Series({'PSOE': 27.}), ref)
     assert one.loc['PSOE', 'bias_err'] == pytest.approx(abs(one.loc['PSOE', 'bias']))
+
+
+# --- M10: error estándar del promedio con cluster por casa ---
+
+def test_reg_params_default_is_cluster_by_pollster():
+    fc, _, _ = _synthetic_forecaster()
+    assert fc.reg_params['cov_type'] == 'cluster'
+    assert 'hac_lags' not in fc.reg_params['cov_kwargs']
+    hac = Forecaster.set_reg_params(fc, {'cov_type': 'hac'})
+    assert hac['cov_kwargs'] == {'hac_lags': 1, 'kernel': 'bartlett'}
+
+
+def test_fit_cluster_error_exceeds_hac_when_houses_disagree():
+    """Sobre la serie bruta (casas desplazadas +2 / -1 / 0 / +0.5) el error con cluster por casa es mayor que el
+    HAC en orden de filas, que no ve la dependencia por casa."""
+    fc, _, _ = _synthetic_forecaster()
+    _, stat_cluster = fc.fit('PP', ret_stat=True)
+    fc.reg_params = Forecaster.set_reg_params(fc, {'cov_type': 'hac'})
+    _, stat_hac = fc.fit('PP', ret_stat=True)
+    err_cluster = stat_cluster.dropna().apply(lambda d: d['err'])
+    err_hac = stat_hac.dropna().apply(lambda d: d['err'])
+    ratio = (err_cluster / err_hac).dropna()
+    assert ratio.median() > 1.2, ratio.describe()
+

@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from scipy.special import erf
 
-from mtpy.core.utils.stat import Kernel, LeastSquaresEstimator, LocalKernelEstimator, Stat
+from mtpy.core.utils.stat import Kernel, KernelDensityEstimator, LeastSquaresEstimator, LocalKernelEstimator, Stat
 
 
 @pytest.fixture
@@ -145,3 +145,120 @@ def test_stat_does_not_mutate_the_callers_weights():
     arr = np.array([0.6, 0.4])
     Stat(np.array([np.nan, 2.]), weights=arr).mean()
     assert arr.tolist() == [0.6, 0.4]
+
+
+# --- M10: error estándar robusto por grupos (casas) ---
+
+def _grouped_sample(rng, n_groups=10, per_group=15, sd_group=1., sd_noise=0.5):
+    """Regresión lineal con un efecto aleatorio por grupo: los residuos de un grupo están correlados."""
+    g = np.repeat(np.arange(n_groups), per_group)
+    x = rng.normal(size=(g.size, 2))
+    y = 1 + x @ np.array([1., -2.]) + rng.normal(0, sd_group, size=n_groups)[g] + rng.normal(0, sd_noise, size=g.size)
+    return x, y, g
+
+
+def test_wls_cluster_matches_statsmodels(rng):
+    """M10: con pesos iguales, la covarianza `cluster` (CR1) coincide con statsmodels `cov_type='cluster'`."""
+    sm = pytest.importorskip('statsmodels.api')
+    x, y, g = _grouped_sample(rng)
+    est = LeastSquaresEstimator(x, y, groups=g, cov_type='cluster').fit()
+    ref = sm.OLS(y, sm.add_constant(x)).fit(cov_type='cluster', cov_kwds={'groups': g})
+    assert np.allclose(est.coef.squeeze(), ref.params)
+    assert np.allclose(np.sqrt(np.diag(est.mcov)), ref.bse, rtol=1e-6), (np.sqrt(np.diag(est.mcov)), ref.bse)
+
+
+def test_wls_hc1_matches_statsmodels(rng):
+    """M10: `hc1` (sándwich con la corrección `neff / dof`) es el HC1 de statsmodels cuando los pesos son iguales."""
+    sm = pytest.importorskip('statsmodels.api')
+    x, y, g = _grouped_sample(rng)
+    est = LeastSquaresEstimator(x, y, cov_type='hc1').fit()
+    ref = sm.OLS(y, sm.add_constant(x)).fit(cov_type='HC1')
+    assert np.allclose(np.sqrt(np.diag(est.mcov)), ref.bse, rtol=1e-6)
+
+
+def test_cluster_error_captures_group_effects_and_hc1_does_not(rng):
+    """M10 (Monte Carlo): con efectos por grupo, la sd real de la media ajustada la da el error `cluster`,
+    no el `hc1`, también con pesos desiguales."""
+    means, err_cluster, err_hc1 = [], [], []
+    for _ in range(300):
+        x, y, g = _grouped_sample(rng, n_groups=12, per_group=8)
+        w = rng.uniform(0.5, 2., size=y.size)
+        p = np.zeros((1, 2))
+        est = LeastSquaresEstimator(x, y, weights=w, groups=g, cov_type='cluster').fit(p, alpha=0.05)
+        means.append(float(est['mean'].iloc[0]))
+        err_cluster.append(float(est['err'].iloc[0]))
+        err_hc1.append(float(LeastSquaresEstimator(x, y, weights=w, cov_type='hc1').fit(p, alpha=0.05)['err'].iloc[0]))
+    sd = float(np.std(means))
+    assert np.mean(err_cluster) == pytest.approx(sd, rel=0.15), (np.mean(err_cluster), sd)
+    assert np.mean(err_hc1) < 0.7 * sd
+
+
+def test_groups_follow_the_rows_dropped_for_missing_values(rng):
+    """M10: `groups` se filtra con las mismas filas que `y` (NaN) y sobrevive con el tamaño de la muestra."""
+    x, y, g = _grouped_sample(rng)
+    y[[3, 17, 40]] = np.nan
+    est = LeastSquaresEstimator(x, y, groups=g, cov_type='cluster').fit()
+    assert est.groups.shape[0] == est.nobs == y.size - 3
+    assert np.array_equal(est.groups, g[np.isfinite(y)])
+
+
+def test_local_estimator_passes_the_groups_of_the_window(rng):
+    """M10: el estimador local recibe los grupos de las observaciones de su ventana; sin grupos (o con uno
+    solo) cae al `hc1` con aviso, sin romper el ajuste."""
+    x = np.arange(100, dtype=float)
+    g = x // 10
+    y = 5 + rng.normal(0, 1, size=10)[g.astype(int)] + rng.normal(0, 0.3, size=100)
+    est = LocalKernelEstimator(x, y, groups=g, bw=4.0, bw_type='fixed', cov_type='cluster')
+    kws = est.build_pred(np.array([50.])).get_kernel().get_weights(est.pred)
+    loc = est.get_local_estimator(kws, 0)
+    vind = np.abs(kws[0] * est.weights.squeeze()) >= 1e-2
+    assert np.array_equal(loc.groups, g[vind]) and len(np.unique(loc.groups)) >= 2
+    res = est.predict(np.array([50.]), alpha=0.05)
+    hc1 = LocalKernelEstimator(x, y, bw=4.0, bw_type='fixed', cov_type='hc1').predict(np.array([50.]), alpha=0.05)
+    assert np.isfinite(res['err'].iloc[0]) and res['err'].iloc[0] != pytest.approx(hc1['err'].iloc[0])
+    with pytest.warns(UserWarning):
+        none = LocalKernelEstimator(x, y, bw=4.0, bw_type='fixed', cov_type='cluster').predict(np.array([50.]), alpha=0.05)
+    assert none['err'].iloc[0] == pytest.approx(hc1['err'].iloc[0])
+    with pytest.warns(UserWarning):
+        one = LocalKernelEstimator(x, y, groups=np.zeros(100), bw=4.0, bw_type='fixed', cov_type='cluster').predict(np.array([50.]), alpha=0.05)
+    assert one['err'].iloc[0] == pytest.approx(hc1['err'].iloc[0])
+
+
+def test_cluster_band_uses_g_minus_one_degrees_of_freedom(rng):
+    """M10 (revisión): con covarianza `cluster` la banda usa la t con `G − 1` grados de libertad (convención
+    CR1), nunca más que `dof`."""
+    from scipy.stats import t
+    x, y, g = _grouped_sample(rng, n_groups=6, per_group=20)
+    p = np.zeros((1, 2))
+    est = LeastSquaresEstimator(x, y, groups=g, cov_type='cluster')
+    res = est.fit(p, alpha=0.05)
+    assert est.dof_t == 5
+    assert res['cmax'].iloc[0] - res['mean'].iloc[0] == pytest.approx(t.ppf(0.975, 5) * est.perr[0])
+    plain = LeastSquaresEstimator(x, y, cov_type='hc1')
+    plain.fit(p, alpha=0.05)
+    assert plain.dof_t == plain.dof
+
+
+def test_kernel_density_estimator_still_constructs(rng):
+    """M10 (revisión): la firma nueva de `build_input` (`groups`) no rompe al estimador de densidad."""
+    est = KernelDensityEstimator(rng.normal(size=100))
+    assert est.data.shape == (100, 1)
+
+
+def test_local_estimator_keeps_the_category_of_warnings_raised_in_the_loop(rng, monkeypatch):
+    """M10 (revisión): los avisos de los ajustes locales se emiten una vez, con su categoría original."""
+    x = np.arange(60, dtype=float)
+    y = 5 + rng.normal(0, 0.3, size=60)
+    original = LeastSquaresEstimator.fit
+
+    def noisy_fit(self, p=None, alpha=None):
+        import warnings
+        warnings.warn('numerical trouble', RuntimeWarning)
+        return original(self, p, alpha)
+
+    monkeypatch.setattr(LeastSquaresEstimator, 'fit', noisy_fit)
+    est = LocalKernelEstimator(x, y, bw=4.0, bw_type='fixed', cov_type='hc1')
+    with pytest.warns(RuntimeWarning, match='numerical trouble') as record:
+        est.predict(np.array([10., 20., 30.]), alpha=0.05)
+    assert len([w for w in record if w.category is RuntimeWarning]) == 1
+

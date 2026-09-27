@@ -438,3 +438,25 @@ def test_regional_noise_widens_provinces_but_not_the_national_draw(sim27_he):
     assert {'pct', 'pct_lo', 'pct_hi', 'seats', 'seats_lo', 'seats_hi', 'p_seats'} <= set(summary.columns)
     assert summary.loc['ERC', 'pct_hi'] > summary.loc['ERC', 'pct_lo']
     assert summary.loc['PP', 'pct_hi'] - summary.loc['PP', 'pct_lo'] > 6   # IC 95 % del PP en Barcelona, con oscilaciones
+
+
+# --- M10: error estándar del promedio con cluster por casa ---
+
+def test_average_error_is_cluster_robust_by_pollster(sim27_he):
+    model = sim27_he.model
+    assert model.reg_params['cov_type'] == 'cluster'
+    err = model.fc_stat['PP'].loc[sim27_he.as_of]['err']
+    assert np.isfinite(err) and 0.1 < err < 1.0
+    # Mismo ajuste (misma rejilla, `max_fc` de la fixture) con los tres estimadores: el cluster por casa es
+    # mayor que el Newey-West en orden de filas, que no ve la dependencia por casa (medido: 0,25 frente a 0,20)
+    params = model.reg_params
+    errs = {}
+    try:
+        for cov_type in ('cluster', 'hac', 'hc1'):
+            model.reg_params = model.set_reg_params({'cov_type': cov_type})
+            _, stat = model.fit('PP', max_fc=3, ret_stat=True)
+            errs[cov_type] = stat.loc[sim27_he.as_of]['err']
+    finally:
+        model.reg_params = params
+    assert errs['cluster'] == pytest.approx(err, rel=1e-6)
+    assert errs['cluster'] > errs['hac'] and errs['cluster'] > errs['hc1']
