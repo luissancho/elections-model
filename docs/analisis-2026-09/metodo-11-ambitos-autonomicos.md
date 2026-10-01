@@ -111,8 +111,8 @@ Invariantes comprobados: con `scopes=None`, los 1.012 ratings de `es` son idént
 |---|---|---|---|
 | MAE de cuotas, modelo / último sondeo / media de 4 semanas | 1,83 / 1,84 / 1,89 | 2,39 / 2,57 / 2,32 | 1,63 / 1,74 / 1,86 |
 | Cobertura de cuotas al 50 / 80 / 95 % | 0,46 / 0,76 / 0,96 | 0,43 / 0,75 / 0,92 | 0,48 / 0,78 / 0,96 |
-| MAE de escaños por partido principal (casos válidos) | 1,89 (24) | 2,35 (26) | 6,44 (sobre 350) |
-| Cobertura de escaños al 50 / 80 / 95 % | 0,62 / 0,79 / 0,96 | 0,54 / 0,78 / 0,91 | 0,55 / 0,84 / 1,00 |
+| MAE de escaños por partido principal (casos válidos) | 1,90 (24) | 2,35 (26) | 6,44 (sobre 350) |
+| Cobertura de escaños al 50 / 80 / 95 % | 0,62 / 0,79 / 0,96 | 0,53 / 0,78 / 0,91 | 0,55 / 0,84 / 1,00 |
 | Cobertura de cuotas por circunscripción al 50 / 80 / 95 % | 0,52 / 0,78 / 0,93 | 0,47 / 0,74 / 0,89 | 0,58 / 0,87 / 0,94 |
 | Brier de la mayoría absoluta de bloque | 0,055 | 0,048 | 0,033 |
 
@@ -128,7 +128,7 @@ Por ámbito, a 6 días:
 | `es-cb` | 2023 | 1,47 | 0,60 / 1,00 / 1,00 | 1,2 |
 | `es-cl` | 2022, 2026 | 1,31 | 0,40 / 0,74 / 0,87 | 0,9 |
 | `es-cm` | 2023 | 2,06 | 0,33 / 1,00 / 1,00 | 1,3 |
-| `es-cn` | 2023 | 1,87 | 0,40 / 0,80 / 1,00 | 1,8 |
+| `es-cn` | 2023 | 1,87 | 0,40 / 0,80 / 1,00 | 2,0 |
 | `es-ct` | 2021, 2024 | 1,09 | 0,69 / 0,88 / 0,94 | 2,1 |
 | `es-ex` | 2023, 2025 | 1,77 | 0,50 / 0,75 / 1,00 | 1,5 |
 | `es-ga` | 2020, 2024 | 2,03 | 0,50 / 0,75 / 0,88 | 2,4 |
