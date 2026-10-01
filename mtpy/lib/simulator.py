@@ -17,7 +17,8 @@ from ..core.utils.dataviz import plot_kde_1d
 from .forecaster import Forecaster
 from .computer import Computer
 from .data import (
-    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds
+    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
+    get_districts, get_scope_parent
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -128,6 +129,7 @@ class Simulator(Core):
 
         self.scope = scope
         self.event_date = event_date
+        self.parent = get_scope_parent(scope)  # Parent scope (`es` for the autonomous communities), if any
         self.house_effects = bool(house_effects)
         self.industry_bias = bool(industry_bias)
         self.he_params = he_params
@@ -197,26 +199,21 @@ class Simulator(Core):
         # Previous election (base of the provincial projection): first non-poll row of the Forecaster series
         self.prev_date = self.model.nfc_series.index[0].strftime('%Y-%m-%d')
 
-        event_dates = get_event_dates(
-            scope=self.scope,
-            date_from='1980-01-01',
-            date_to=self.event_date,
-            skip=1
-        )
         # Durations (days) of the past legislatures: the empirical prior of the election date (see `horizon_candidates`)
         all_dates = pd.to_datetime(get_event_dates(scope=self.scope, date_to=self.event_date, skip=1))
         self.durations = [int(d) for d in np.diff(all_dates.values).astype('timedelta64[D]').astype(int)]
 
-        if len(event_dates) > 0:
-            self.computer = Computer(
-                scope=self.scope,
-                event_dates=event_dates,
-                drop_mtypes=self.drop_mtypes,
-                verbose=self.verbose,
-                path=self.path
-            ).build_series()
+        # The estimators (seats, polling error, drift, composition) are fitted on the past elections of the
+        # scope when it has enough of them, and on those of its parent scope otherwise (see `estimator_scope`)
+        n_featured = len([d for d in get_event_dates(scope=self.scope, featured=True) if d < self.event_date])
+        self.est_scope = self.estimator_scope(self.scope, self.parent, n_featured)
+        self.computer = self._past_computer(self.est_scope)
+
+        # Past polls of the scope itself: the age of its parties is counted from them (see `party_ages`)
+        if self.est_scope == self.scope:
+            self.computer_own = self.computer
         else:
-            self.computer = None
+            self.computer_own = self._past_computer(self.scope, min_polls=1)
 
         self.parties = get_parties()
         self.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']
@@ -254,12 +251,20 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load swing noise estimator...')
 
-        # Regional and provincial deviations from the proportional swing (M9), see `Computer.get_swing_noise`
-        if self.regional_noise and self.computer is not None:
-            self.v2swing = self.computer.get_swing_noise()
+        # Regional and provincial deviations from the proportional swing (M9), see `Computer.get_swing_noise`.
+        # They are always estimated on the national elections: within an autonomous community only the
+        # deviation per district applies (see `_add_swing_noise`), with the provincial curve of `es`
+        if not self.regional_noise:
+            swing_computer = None
+        elif self.parent is None or self.est_scope == self.parent:
+            swing_computer = self.computer
         else:
-            self.v2swing = None
-        self.region_groups = self.app.data.read_csv('es-provinces.csv').set_index('code')['reg_code'].to_dict()
+            swing_computer = self._past_computer(self.parent)
+        self.v2swing = swing_computer.get_swing_noise() if swing_computer is not None else None
+
+        # Districts of the scope: autonomous community of each one (the groups of the regional shocks)
+        self.districts = get_districts(self.scope).set_index('region_id')
+        self.region_groups = self.districts['reg_code'].to_dict()
 
         # Composition of the national errors: a common negative correlation between the national parties,
         # set by the ratio between the variance of their sum and the sum of their variances (M7)
@@ -363,6 +368,46 @@ class Simulator(Core):
 
         return self
 
+    @staticmethod
+    def estimator_scope(
+        scope: str,
+        parent: Optional[str],
+        n_featured: int,
+        min_events: int = 3
+    ) -> str:
+        """
+        Scope whose past elections fit the estimators of the simulator: the scope itself when it has at least
+        `min_events` featured elections before the event (or no parent), its parent scope otherwise.
+        """
+        if parent is None or n_featured >= min_events:
+            return scope
+
+        return parent
+
+    def _past_computer(
+        self,
+        scope: str,
+        min_polls: int = 0
+    ) -> Optional[Computer]:
+        """
+        Computer of the elections of `scope` held strictly before the event (from 1980), or `None` when there
+        is none. With `min_polls`, only the elections with at least that many polls.
+        """
+        dates = [
+            d for d in get_event_dates(scope=scope, date_from='1980-01-01', min_polls=min_polls)
+            if d < self.event_date
+        ]
+        if len(dates) == 0:
+            return None
+
+        return Computer(
+            scope=scope,
+            event_dates=dates,
+            drop_mtypes=self.drop_mtypes,
+            verbose=self.verbose,
+            path=self.path
+        ).build_series()
+
     def get_reg_totals(self) -> pd.DataFrame:
         """
         Get each region's total votes and seats available for the event.
@@ -376,7 +421,10 @@ class Simulator(Core):
         # Regions are indexed by `region_id` (the official province code; 0 = national total), which is
         # what the `smap` rules refer to. The names are kept aside for display purposes.
         df['region_id'] = df['region_id'].astype(int)
-        self.region_names = dict(zip(df['region_id'], unset_categorical(df['region']).fillna(self.scope)))
+        # Names of the catalogue of districts; those stored with the event, or the scope for the total, otherwise
+        stored = dict(zip(df['region_id'], unset_categorical(df['region']).fillna(self.scope)))
+        names = self.districts['name'].to_dict()
+        self.region_names = {r: names.get(r, stored[r]) if r != self.default_region else stored[r] for r in stored}
 
         return df.set_index('region_id')[['votes', 'seats']]
     
@@ -519,7 +567,7 @@ class Simulator(Core):
         inherit the polls of the predecessors its block absorbs). A block of `bmap` takes the age of its
         head party.
         """
-        past = self.computer.party_first_polls() if self.computer is not None else pd.Series(dtype='datetime64[ns]')
+        past = self.computer_own.party_first_polls() if self.computer_own is not None else pd.Series(dtype='datetime64[ns]')
 
         current = self.model.party_first_polls
         if current is None:
@@ -577,6 +625,9 @@ class Simulator(Core):
         fc.loc[self.OTHERS] = (max(0., 100. - fc['mean'].sum()), np.nan, np.nan)
 
         regional = self.parties.set_index('name').loc[names].regional.astype(int).to_dict()
+        if self.parent is not None:
+            # Within an autonomous community no party is "regional" in the sense of the estimators
+            regional = {n: 0 for n in names}
         regional[self.OTHERS] = 0
         fc['regional'] = fc.index.map(regional).astype(int)
 
@@ -1656,6 +1707,8 @@ class Simulator(Core):
         and in the province, and apply them with `apply_swing_noise` (national shares preserved).
         """
         provinces = [r for r in vpred_pcts.index if r != self.default_region]
+        if len(provinces) < 2:
+            return vpred_pcts  # A single district is the whole scope: nothing to redistribute
         # Work on the provincial shares as the allocation will see them (each province renormalised to 100
         # with the residual): the shocks must keep the mean structure of the deterministic projection, whose
         # raw swing rows do not sum to 100 (e.g. below it in the Basque provinces)
@@ -1668,12 +1721,17 @@ class Simulator(Core):
         target = prov[names].fillna(0.).mul(w, axis=0).sum() / w.sum()
 
         level_prov = prov[names].fillna(0.)
-        level_reg = level_prov.mul(w, axis=0).groupby(groups.to_numpy()).sum().div(w.groupby(groups.to_numpy()).sum(), axis=0)
+        if groups.nunique(dropna=False) > 1:
+            level_reg = level_prov.mul(w, axis=0).groupby(groups.to_numpy()).sum().div(w.groupby(groups.to_numpy()).sum(), axis=0)
 
-        eps = pd.DataFrame(
-            self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy())),
-            index=level_reg.index, columns=names
-        )
+            eps = pd.DataFrame(
+                self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy())),
+                index=level_reg.index, columns=names
+            )
+        else:
+            # Every district belongs to the same community (a regional scope): no shock per community, which
+            # would be a shift of the whole scope
+            eps = pd.DataFrame()
         eta = pd.DataFrame(
             self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_province(level_prov.to_numpy())),
             index=prov.index, columns=names
@@ -1758,7 +1816,8 @@ class Simulator(Core):
         else:
             p = frame.loc[self.params['names'], ['vpred', 'regional']].fillna(0).values
 
-            result.loc[self.default_region] = self.v2seats.predict(p).clip(0).values
+            # The estimator predicts the share of the seats of the chamber (see `Computer.get_seats_estimator`)
+            result.loc[self.default_region] = self.v2seats.predict(p).clip(0).values * self.n_seats
 
         return result
 

@@ -224,3 +224,12 @@ def test_fit_cluster_error_exceeds_hac_when_houses_disagree():
     ratio = (err_cluster / err_hac).dropna()
     assert ratio.median() > 1.2, ratio.describe()
 
+
+
+def test_usable_history_needs_three_events():
+    """M11: con menos de 3 elecciones previas el prior de los efectos de casa se anula."""
+    dates = pd.to_datetime(['2015-05-24', '2019-05-26', '2021-05-04'])
+    history = pd.DataFrame({'event_date': dates.repeat(2), 'pollster_id': [1, 2] * 3, 'dev_result_c': 1.})
+    assert Forecaster.usable_history(history).shape[0] == 6
+    short = Forecaster.usable_history(history.iloc[:4])
+    assert short.shape[0] == 0 and list(short.columns) == list(history.columns)

@@ -602,7 +602,34 @@ class Forecaster(Core):
         """
         dates = get_event_dates(scope=self.scope, date_to=self.event_date, skip=1)
 
-        return get_house_effects(scope=self.scope, event_dates=dates)
+        return self.usable_history(get_house_effects(scope=self.scope, event_dates=dates))
+
+    @staticmethod
+    def usable_history(
+        history: pd.DataFrame,
+        min_events: int = 3
+    ) -> pd.DataFrame:
+        """
+        History of house effects usable as a prior: with fewer than `min_events` past elections (a regional
+        scope with a short record) it is discarded, so that the prior is 0 and only the deviation of the
+        cycle acts.
+
+        Parameters
+        ----------
+        history : pd.DataFrame
+            Rows of `pollsters_parties` of the past elections.
+        min_events : int, optional
+            Elections needed.
+
+        Returns
+        -------
+        pd.DataFrame
+            `history`, or an empty frame with its columns.
+        """
+        if history.shape[0] == 0 or history['event_date'].nunique() < min_events:
+            return history.iloc[:0]
+
+        return history
 
     def fit_house_effects(
         self,

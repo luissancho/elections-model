@@ -22,7 +22,8 @@ from ..core.utils.dataviz import (
 from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
-    get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes
+    get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
+    get_scope_parent
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -503,6 +504,18 @@ class Computer(Core):
             A DataFrame with the polls predictions.
         """
         return self.series.loc[self.series.pollster.notnull()]
+
+    def regional_flags(self) -> pd.Series:
+        """
+        `regional` flag of every party (1: it only runs in part of the territory of the scope), indexed by
+        name. Within an autonomous community no party is "regional" in that sense, so the flag is 0 for all
+        of them in the scopes that have a parent.
+        """
+        flags = get_parties().set_index('name')['regional'].astype(int)
+        if get_scope_parent(self.scope) is not None:
+            flags[:] = 0
+
+        return flags
 
     def merge_bmaps(
         self,
@@ -2038,7 +2051,7 @@ class Computer(Core):
 
         df['error'] = df.error.abs()
         df['pollster'] = df.pollster_id.map(self.pollsters.set_index('id').name)
-        df['regional'] = df.party.map(self.parties.set_index('name').regional).astype(int)
+        df['regional'] = df.party.map(self.regional_flags()).astype(int)
         df['color'] = df.party.map(self.parties.set_index('name').color)
         df['weeks'] = (df.days + 1) // 7
 
@@ -2691,7 +2704,7 @@ class Computer(Core):
         he['event_date'] = pd.to_datetime(he['event_date'])
         ind = he.groupby(['event_date', 'party'], observed=True)['industry'].first().reset_index()
 
-        regional = get_parties().set_index('name')['regional'].astype(int)
+        regional = self.regional_flags()
         ind = ind.loc[ind['party'].map(regional).fillna(1).astype(int) == 0]
 
         return self.composition_ratio(ind, pd.Timestamp(self.event_dates[-1]), year_decay=self.year_decay, min_events=min_events)
@@ -2762,10 +2775,12 @@ class Computer(Core):
             A table containing the data.
         """
         df = pd.DataFrame()
+        seats_total = None
 
         for metric in ['pct', 'seats']:
             d = self.load_events(metric)
             if metric == 'seats':
+                seats_total = d['seats'].astype(float)  # Seats of the chamber in each election
                 d = d.drop(columns=['seats'])
 
             names = [n for n in self.names if n in d.columns]
@@ -2782,16 +2797,19 @@ class Computer(Core):
             (df.pct >= 0.1) & (df.seats > 0)
         ].dropna().reset_index().sort_values(['date', 'pct'], ascending=[True, False], ignore_index=True)
 
-        df['regional'] = df.party.map(self.parties.set_index('name').regional.to_dict()).astype(int)
+        df['regional'] = df.party.map(self.regional_flags().to_dict()).astype(int)
         df['color'] = df.party.map(self.parties.set_index('name').color.to_dict())
         df['year'] = df.date.dt.year.astype(int)
         df['years'] = df.year.max() - df.year
         df['weight'] = np.power(0.97, df.years).round(2)
         df['ratio'] = (df.seats / df.pct).fillna(0).round(2)
         df['pos'] = df.groupby('date').cumcount() + 1
+        # Share of the seats of the chamber: comparable between parliaments of different sizes
+        df['seats_total'] = df.date.map(seats_total)
+        df['share'] = df.seats / df.seats_total
 
         df = df.sort_values('pct', ignore_index=True)[[
-            'party', 'regional', 'pct', 'seats', 'pos', 'color', 'years', 'weight', 'ratio'
+            'party', 'regional', 'pct', 'seats', 'pos', 'color', 'years', 'weight', 'ratio', 'seats_total', 'share'
         ]]
 
         return df
@@ -2803,8 +2821,9 @@ class Computer(Core):
         """
         Build an estimator of the seats based on the percentage of votes.
 
-        Runs a regression analysis that predicts the number of seats based on the
-        percentage of votes and whether the party is regional or not.
+        Runs a regression analysis that predicts the share of the seats of the chamber (`seats / seats_total`,
+        so that parliaments of 33 and 350 seats are comparable) based on the percentage of votes and whether
+        the party is regional or not. Multiply the prediction by the seats of the chamber to get seats.
 
         Parameters
         ----------
@@ -2820,7 +2839,7 @@ class Computer(Core):
 
         return LeastSquaresEstimator(
             x=df[['pct', 'regional']],
-            y=df['seats'],
+            y=df['share'],
             weights=df['weight'],
             **kwargs
         ).fit()

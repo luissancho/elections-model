@@ -47,6 +47,18 @@ def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
     return districts
 
 
+def get_scope_parent(scope: str) -> Optional[str]:
+    """
+    Parent of a scope in the catalogue (`es` for the autonomous communities); `None` for the national scope
+    and for a scope that is not in the catalogue.
+    """
+    scopes = get_scopes()
+    if scope not in scopes.index or pd.isnull(scopes.loc[scope, 'parent']):
+        return None
+
+    return str(scopes.loc[scope, 'parent'])
+
+
 def resolve_thresholds(
     scope_row: Mapping[str, Any],
     event_conf: Optional[Mapping[str, Any]] = None

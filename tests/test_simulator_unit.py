@@ -398,3 +398,23 @@ def test_alloc_seats_scope_threshold_only():
     below, above = {'A': 60., 'B': 35.1, 'C': 4.9}, {'A': 60., 'B': 34., 'C': 6.}
     assert Simulator.alloc_seats(votes, 20, valid_votes=100, scope_shares=below, threshold_scope=5.0)['C'] == 0
     assert Simulator.alloc_seats(votes, 20, valid_votes=100, scope_shares=above, threshold_scope=5.0) == {'A': 12, 'B': 7, 'C': 1}
+
+
+# --- M11: estimadores con caída al ámbito padre y ruido sólo por circunscripción ---
+
+def test_estimator_scope_falls_back_to_the_parent():
+    assert Simulator.estimator_scope('es-md', 'es', 2) == 'es'
+    assert Simulator.estimator_scope('es-md', 'es', 3) == 'es-md'
+    assert Simulator.estimator_scope('es', None, 0) == 'es'
+
+
+def test_apply_swing_noise_without_regional_shocks_keeps_means():
+    # Ámbito autonómico: sólo el choque por circunscripción; la cuota del ámbito se conserva
+    shares = pd.DataFrame({'A': [40., 30., 20.], 'B': [30., 40., 50.], '-': [30., 30., 30.]}, index=[5, 9, 24])
+    weights, groups = pd.Series([1., 2., 3.], index=shares.index), pd.Series(7, index=shares.index)
+    target = shares[['A', 'B']].mul(weights, axis=0).sum() / weights.sum()
+    eta = pd.DataFrame({'A': [.1, -.1, 0.], 'B': [0., .05, -.05]}, index=shares.index)
+    out = Simulator.apply_swing_noise(shares, weights, target, pd.DataFrame(), eta, groups, ['A', 'B'], '-')
+    assert np.allclose(out.sum(axis=1), 100)
+    assert np.allclose(out[['A', 'B']].mul(weights, axis=0).sum() / weights.sum(), target, atol=0.1)
+    assert not np.allclose(out['A'], shares['A'])
