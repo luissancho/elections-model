@@ -451,8 +451,13 @@ def run_backtest(
                 parts[key].append(case[key])
             metrics.append({'event_date': event_date, 'horizon': horizon} | summarize_case(case['shares'], case['seats'], case['blocks'], case['provinces']))
 
-    out = {key: pd.concat(frames, ignore_index=True) for key, frames in parts.items()}
+    out = {key: pd.concat(frames, ignore_index=True) if len(frames) > 0 else pd.DataFrame() for key, frames in parts.items()}
     out['metrics'] = pd.DataFrame(metrics)
+    if len(metrics) == 0:
+        # Every case was skipped (recorded in `meta`): nothing to aggregate
+        out['by_horizon'] = pd.DataFrame()
+        return out
+
     numeric = [c for c in out['metrics'].columns if c not in ('event_date', 'horizon', 'seats_valid')]
     by_horizon = out['metrics'].groupby('horizon')[numeric].mean()
     by_horizon.insert(0, 'n_cases', out['metrics'].groupby('horizon')['mae_shares'].count())

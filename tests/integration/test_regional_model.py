@@ -121,3 +121,13 @@ def test_new_party_without_inheritance_rule_does_not_break_the_projection(app):
     sim.run(split=True, random=True, n_sim=10)
     assert (sim.dist().sum(axis=1) == 109).all() and (sim.dist()['JM+'] == 0).all()
     assert (sim.dist()['PorA'] > 0).all()        # hereda la geografía de Adelante Andalucía 2018 (regla `agg`)
+
+
+def test_districts_that_changed_since_the_previous_election(app):
+    """Murcia 2019 se votó en distrito único y 2015 en cinco distritos: la base del distrito nuevo es el
+    total de la elección anterior."""
+    sim = regional_sim('es-mc', '2019-05-26')
+    assert sim.regions == [0, 30] and sim.prev_date == '2015-05-24'
+    sim.run(split=True, random=True, n_sim=10)
+    assert (sim.dist().sum(axis=1) == 45).all()
+    assert sim.prev_results['pct'].loc[30].equals(sim.prev_results['pct'].loc[0])

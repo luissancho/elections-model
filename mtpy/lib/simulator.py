@@ -473,6 +473,13 @@ class Simulator(Core):
             if c not in df.columns:
                 df.loc[:, c] = .0
 
+        # A district that did not exist in the previous election (Murcia became a single district in 2019; the
+        # Canarian regional list dates from 2019) takes the results of the whole scope as its base
+        missing = [r for r in ix if r not in df.index]
+        df = df.reindex(df.index.append(pd.Index(missing)))
+        for region in missing:
+            df.loc[region] = df.loc[self.default_region].to_numpy()
+
         df = df.where(df > 0, np.nan).loc[ix, cols]
 
         return df
@@ -491,7 +498,12 @@ class Simulator(Core):
         """
         df = get_event_data(self.scope, self.prev_date)
         df['region_id'] = df['region_id'].astype(int)
-        df = df.set_index('region_id').reindex(self.regions)
+        df = df.set_index('region_id')
+        # Districts that did not exist then take the totals of the whole scope (see `get_prev_results`)
+        missing = [r for r in self.regions if r not in df.index]
+        df = df.reindex(self.regions)
+        for region in missing:
+            df.loc[region] = df.loc[self.default_region].to_numpy()
 
         # Stored as int32 in the database: cast before any arithmetic to prevent overflows
         votes = df['votes'].astype('float64')

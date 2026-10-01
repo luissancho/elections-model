@@ -145,3 +145,19 @@ def test_results_dir_keeps_es_at_the_root():
     spec.loader.exec_module(module)
     assert module.results_dir('backtest/results', 'es') == 'backtest/results'
     assert module.results_dir('backtest/results', 'es-md') == os.path.join('backtest/results', 'es-md')
+
+
+def test_run_backtest_survives_when_every_case_is_skipped(monkeypatch):
+    """M11: un ámbito cuyos casos fallan todos devuelve tablas vacías, no una excepción."""
+    import warnings
+    from mtpy.lib import backtest
+
+    def failing_case(*args, **kwargs):
+        raise ValueError('no usable polls')
+
+    monkeypatch.setattr(backtest, 'run_case', failing_case)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        out = backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30])
+    assert out['metrics'].shape[0] == 0 and out['by_horizon'].shape[0] == 0
+    assert out['meta'].shape[0] == 2 and out['meta']['error'].eq('no usable polls').all()
