@@ -8,6 +8,7 @@ import requests
 
 from typing import Any, Optional
 from typing_extensions import Self
+from urllib.parse import unquote
 
 from ..core.app import Core
 from ..models.elections import (
@@ -304,7 +305,7 @@ class WikipediaLoader(Core):
 
         self.urls = json.loads(self.app.data.read('wikipedia/wp-urls.json'))
         self.maps = json.loads(self.app.data.read('wikipedia/wp-maps.json'))
-        self.params = self.urls[self.scope][self.event_date]
+        self.params = self.urls[self.scope][self.event_date]  # `polls` is optional: an event may have results only
 
         self.parties = Parties().get_results(formatted=True)
         self.parties_colmap = self.get_colmap('parties')
@@ -322,7 +323,16 @@ class WikipediaLoader(Core):
         self.sponsors_missing = []
 
     def get_colmap(self, key: str) -> dict[str, str]:
-        return {i: p for p, v in self.maps[key].items() for i in v}
+        """
+        Aliases of `key` (`parties`, `pollsters` or `sponsors`) mapped to their canonical names: the global
+        ones of `wp-maps.json` plus those of the scope (`scopes[scope][key]`), which prevail. Wikipedia links
+        come percent-encoded or not, so every alias is decoded.
+        """
+        colmap = {unquote(i): p for p, v in self.maps[key].items() for i in v}
+        scoped = self.maps.get('scopes', {}).get(self.scope, {}).get(key, {})
+        colmap.update({unquote(i): p for p, v in scoped.items() for i in v})
+
+        return colmap
 
     def get_idmap(self, key: str) -> dict[str, str]:
         return getattr(self, key).set_index('name').id.to_dict()
@@ -334,7 +344,73 @@ class WikipediaLoader(Core):
         if not x:
             return
 
-        return re.sub(r'^(.*\/wiki\/)?(.+)$', r'\2', x.strip())
+        return unquote(re.sub(r'^(.*\/wiki\/)?(.+)$', r'\2', x.strip()))
+
+    @staticmethod
+    def find_poll_table(doc: html.HtmlElement) -> Optional[html.HtmlElement]:
+        """
+        Table of voting intention polls of an election article: the first `wikitable` whose first row starts
+        with "Polling firm" and whose closest previous heading (h2, h3 or h4) contains "Voting intention";
+        otherwise, the first one hanging directly from the heading "Opinion polls" (small articles have no
+        subsections).
+
+        Parameters
+        ----------
+        doc : html.HtmlElement
+            Parsed article.
+
+        Returns
+        -------
+        html.HtmlElement or None
+            The table, or `None` when the article has no polls table.
+        """
+        fallback = None
+        for table in doc.xpath("//table[contains(@class, 'wikitable')]"):
+            first = table.xpath('.//tr[1]')
+            if len(first) == 0 or not ' '.join(first[0].text_content().split()).startswith('Polling firm'):
+                continue
+
+            heading = table.xpath('preceding::*[self::h2 or self::h3 or self::h4][1]')
+            heading = ' '.join(heading[0].text_content().split()) if len(heading) > 0 else ''
+            if 'Voting intention' in heading:
+                return table
+            if fallback is None and heading.startswith('Opinion polls'):
+                fallback = table
+
+        return fallback
+
+    @staticmethod
+    def read_header(table: html.HtmlElement) -> tuple[dict[int, str], Optional[int]]:
+        """
+        Party columns and "Lead" column of a polls table, from the cells of its first row.
+
+        Parameters
+        ----------
+        table : html.HtmlElement
+            Polls table.
+
+        Returns
+        -------
+        tuple
+            `{column index: wiki key}` of the cells that link to an article (not to a `File:`), and the index
+            of the cell whose text is "Lead" (`None` when it is not in that row). Indexes count `colspan`.
+        """
+        parties = {}
+        lead = None
+        index = 0
+        for th in table.xpath('.//tr[1]/th'):
+            hrefs = [unquote(re.sub(r'^(.*\/wiki\/)?(.+)$', r'\2', h.strip())) for h in th.xpath('.//a/@href')]
+            hrefs = [h for h in hrefs if h and not h.startswith('File:') and not h.startswith('#')]
+            text = ' '.join(th.text_content().split())
+
+            if text == 'Lead':
+                lead = index
+            elif len(hrefs) > 0:
+                parties[index] = hrefs[0]
+
+            index += int(array_shift(th.xpath('./@colspan')) or 1)
+
+        return parties, lead
 
     def parse_dates(
         self,
@@ -362,7 +438,8 @@ class WikipediaLoader(Core):
     def read_cols(
         self,
         cols: list[html.HtmlElement],
-        parties: list[str],
+        parties: dict[int, str],
+        lead_col: Optional[int],
         year: str
     ) -> dict[str, Any]:
         is_election = (array_shift(cols[0].xpath('./b//text()')) or '').strip()
@@ -419,14 +496,20 @@ class WikipediaLoader(Core):
         sample_size = array_shift(cols[2].xpath('.//text()')).replace(',', '').strip()
         data['sample_size'] = pd.to_numeric(sample_size, errors='coerce') if is_number(sample_size) else None
 
-        lead = array_shift(cols[-1].xpath('.//text()'))
+        # The "Lead" cell tells polls from other rows; it is the last one when the header does not place it
+        lead_col = lead_col if lead_col is not None and lead_col < len(cols) else len(cols) - 1
+        lead = array_shift(cols[lead_col].xpath('.//text()'))
         if not is_number(lead):
             return {}
 
-        for i, col in enumerate(cols[4:-1]):
+        for i, party in parties.items():
+            if i >= len(cols):
+                continue
+
+            col = cols[i]
             result = {
                 'party_id': None,
-                'party': parties[i],
+                'party': party,
                 'pct': None,
                 'seats': None,
                 'seats_min': None,
@@ -441,7 +524,7 @@ class WikipediaLoader(Core):
                 self.parties_missing.append(result['party'])
 
             result['pct'] = pd.to_numeric(
-                array_shift(col.xpath('.//text()')).strip(' ' + self.charsep),
+                (array_shift(col.xpath('.//text()')) or '').strip(' ' + self.charsep),
                 errors='coerce'
             )
 
@@ -468,7 +551,8 @@ class WikipediaLoader(Core):
     def read_rows(
         self,
         rows: list[html.HtmlElement],
-        parties: list[str],
+        parties: dict[int, str],
+        lead_col: Optional[int],
         year: str
     ) -> list[dict[str, Any]]:
         data = []  # list of rows
@@ -514,7 +598,7 @@ class WikipediaLoader(Core):
                 if prev_rowspan > 1:
                     next_remainder.append((prev_i, prev_text, prev_rowspan - 1))
 
-            cols = self.read_cols(cols, parties, year)
+            cols = self.read_cols(cols, parties, lead_col, year)
             if len(cols) > 0:
                 cols['ctype'] = context
                 data.append(cols)
@@ -529,7 +613,7 @@ class WikipediaLoader(Core):
                 if prev_rowspan > 1:
                     next_remainder.append((prev_i, prev_text, prev_rowspan - 1))
 
-            cols = self.read_cols(cols, parties, year)
+            cols = self.read_cols(cols, parties, lead_col, year)
             if len(cols) > 0:
                 data.append(cols)
             remainder = next_remainder
@@ -541,14 +625,15 @@ class WikipediaLoader(Core):
         table: html.HtmlElement,
         year: Optional[str] = None
     ) -> list[dict[str, Any]]:
-        parties = [self.parse_party(th.xpath('.//a[1]/@href | ./text()')[0].strip()) for th in table.xpath('.//tr[1]/th')[4:-1]]
+        parties, lead_col = self.read_header(table)
         if year is None:
             year = array_shift(table.xpath('./preceding-sibling::div[1]/*[self::h5 or self::h4 or self::h3]//text()'), '')[:4]
 
         if not is_number(year):
             return
 
-        rows = self.read_rows(table.xpath('.//tr')[2:], parties, year)
+        # Header rows have no `td`, so `read_rows` skips them
+        rows = self.read_rows(table.xpath('.//tr'), parties, lead_col, year)
 
         return rows
 
@@ -559,7 +644,7 @@ class WikipediaLoader(Core):
         self.pollsters_missing = []
         self.sponsors_missing = []
 
-        urls = self.params['polls']
+        urls = self.params.get('polls', [])
         if not isinstance(urls, list):
             urls = [urls]
 
@@ -578,6 +663,11 @@ class WikipediaLoader(Core):
             r = html.fromstring(requests.get(url, headers=headers).content)
             tables = r.xpath("//table[contains(@class, 'wikitable')]")
 
+            if len(years) == 0:
+                # A single table: the voting intention one (the first table of the page when not found)
+                table = self.find_poll_table(r)
+                tables = [table] if table is not None else tables[:1]
+
             for table in tables:
                 year = array_shift(table.xpath('./preceding-sibling::div[1]/*[self::h5 or self::h4 or self::h3]//text()'), '')[:4]
 
@@ -585,7 +675,7 @@ class WikipediaLoader(Core):
                     continue
 
                 if not is_number(year):
-                    year = str(self.event['date'].year)
+                    year = self.event_date[:4]
 
                 rows = self.read_table(table, year)
 
@@ -625,8 +715,8 @@ class WikipediaLoader(Core):
                     continue
 
                 results.append({
-                    'event_date': self.event['date'],
-                    'event_scope': self.event['scope'],
+                    'event_date': pd.to_datetime(self.event_date),
+                    'event_scope': self.scope,
                     'date': row['date'],
                     'pollster_id': row['pollster_id'],
                     'sponsor_id': row['sponsor_id']
@@ -639,8 +729,8 @@ class WikipediaLoader(Core):
             polls.append(poll)
 
         polls = pd.DataFrame(polls)
-        polls['event_date'] = pd.to_datetime(self.event['date'])
-        polls['event_scope'] = self.event['scope']
+        polls['event_date'] = pd.to_datetime(self.event_date)
+        polls['event_scope'] = self.scope
         polls['pub_date'] = polls.end_date
         polls['mtype'] = polls.pollster_id.map(self.pollsters.set_index('id').mtype)
         polls['computed'] = False
