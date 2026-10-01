@@ -455,6 +455,12 @@ class Simulator(Core):
                     if name not in names:
                         names.append(name)
 
+        # Simulated parties without previous results nor a rule (the rules of `params.json` replace the derived
+        # ones, which list every new party): kept as empty columns, they get no seats (see `build_umat`)
+        for n in self.names:
+            if n not in names:
+                names.append(n)
+
         df = df.sort_values(['region_id', 'party_id']).groupby(['region_id', 'party'], sort=False, observed=True, dropna=False)[[
             'votes', 'pct', 'seats'
         ]].sum()
@@ -984,6 +990,8 @@ class Simulator(Core):
             n for n in key.sort_values(['seats', 'mean'], ascending=False, kind='stable').index
             if self.forecast.loc[n].regional == int(regional)
         ]
+        if len(names) == 0:
+            return  # No party of that kind in this scope: nothing to plot
 
         # The interval drawn is the empirical one, the same as in `summary()`
         kwargs.setdefault('ci_method', 'quantile')

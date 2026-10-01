@@ -99,6 +99,8 @@ def test_random_run_in_a_single_district_scope(app):
     md = regional_sim('es-md', '2023-05-28')
     md.run(split=True, random=True, n_sim=20)
     assert (md.dist().sum(axis=1) == 135).all()
+    # Sin partidos "regionales" (distrito único) el gráfico de sus distribuciones no tiene nada que pintar
+    assert md.plot_dist_kde(regional=True) is None
     md.run(split=False, random=False)
     assert int(md.totals().sum()) == 135
 
@@ -109,3 +111,13 @@ def test_previous_event_without_polls_is_a_valid_base(app):
     assert sim.prev_date == '2019-05-26'
     sim.run(split=True, random=True, n_sim=10)
     assert (sim.dist().sum(axis=1) == 45).all()
+
+
+def test_new_party_without_inheritance_rule_does_not_break_the_projection(app):
+    """Andalucía 2022: Jaén Merece Más no tiene resultado previo ni regla en `smap` (las de `params.json`
+    sustituyen a las derivadas): se queda sin escaños, pero la simulación se hace y reparte los 109."""
+    sim = regional_sim('es-an', '2022-06-19')
+    assert 'JM+' in sim.names and 'JM+' not in sim.smap
+    sim.run(split=True, random=True, n_sim=10)
+    assert (sim.dist().sum(axis=1) == 109).all() and (sim.dist()['JM+'] == 0).all()
+    assert (sim.dist()['PorA'] > 0).all()        # hereda la geografía de Adelante Andalucía 2018 (regla `agg`)

@@ -51,6 +51,10 @@ def build_blocks(
         elif p is None:
             p = {'parties': [parties[-1]] + [i for i in names[:-1] if i not in pinc]}
 
+        # A block without parties (e.g. no regionalist party in the scope) is not a block
+        if len(p['parties']) == 0:
+            continue
+
         if 'color' not in p:
             default_color = get_color(random.choice(palette))
             p['color'] = parties.get(p['parties'][0], default_color) if isinstance(parties, dict) else default_color

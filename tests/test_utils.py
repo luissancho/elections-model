@@ -71,3 +71,9 @@ def test_partial_parties_run_where_less_than_half_of_the_votes_are():
     # UPL: 40 % del voto; PSOE: 90 %; EV: 80 %; NEW no concurrió: no se marca
     assert partial_parties(pct, votes) == ['UPL']
     assert partial_parties(pct.iloc[:1], votes.iloc[:1]) == []      # distrito único
+
+
+def test_build_blocks_skips_blocks_without_parties():
+    """M11: en una comunidad sin partidos regionalistas ni separatistas esos bloques quedan vacíos."""
+    blocks = build_blocks({'Derecha': ['PP', 'VOX'], 'Regionalista': [], 'Separatista': []}, {'PP': '#0000ff', 'VOX': '#00ff00'})
+    assert blocks.index.tolist() == ['Derecha']
