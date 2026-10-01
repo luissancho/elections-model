@@ -105,7 +105,42 @@ Invariantes comprobados: con `scopes=None`, los 1.012 ratings de `es` son idént
 
 **Ratings.** Con los sondeos autonómicos al 0,5, las casas con sondeos evaluables en el último rating de `es` pasan de 53 a 84. Entre las que ya tenían, el rating cambia 4,9 puntos de media en valor absoluto y la correlación con el anterior es 0,96. Los mayores cambios: GAD3 +18,9 (de 15 a 74 sondeos evaluables), CIS −16,9 (de 16 a 80), Target Point +14,5, 40dB −14,2, Data10 +13,6, CEMOP +13,4, Simple Lógica −10,8, InvyMark +10,8, Sigma Dos −10,6, Ipsos −10,6 y GESOP −10,4. Sondaxe no se mueve (+0,1). Las casas nuevas entran entre 5 y 30 (Gizaker 30,4 con 13 sondeos). La tabla completa está en `files/stage/m11_ratings_impact.csv`. **Los ratings transversales están guardados para los eventos autonómicos; los de `es` siguen siendo los de antes** hasta que se revise ese cambio.
 
-**Backtest.** BACKTEST_PLACEHOLDER
+**Backtest.** `python backtest/run_backtest.py --scopes all --horizons 6 30 --n-sim 500` evalúa las elecciones `featured` de cada ámbito desde 2019: 29 casos por horizonte en los 17 ámbitos (`backtest/results/{scope}/`). Entre uno y tres casos por ámbito es poco para juzgar cada comunidad por separado; el conjunto sí dice algo.
+
+| Conjunto de los 17 ámbitos | 6 días | 30 días | `es` a 6 días (referencia) |
+|---|---|---|---|
+| MAE de cuotas, modelo / último sondeo / media de 4 semanas | 1,83 / 1,84 / 1,89 | 2,39 / 2,57 / 2,32 | 1,63 / 1,74 / 1,86 |
+| Cobertura de cuotas al 50 / 80 / 95 % | 0,46 / 0,76 / 0,96 | 0,43 / 0,75 / 0,92 | 0,48 / 0,78 / 0,96 |
+| MAE de escaños por partido principal (casos válidos) | 1,89 (24) | 2,35 (26) | 6,44 (sobre 350) |
+| Cobertura de escaños al 50 / 80 / 95 % | 0,62 / 0,79 / 0,96 | 0,54 / 0,78 / 0,91 | 0,55 / 0,84 / 1,00 |
+| Cobertura de cuotas por circunscripción al 50 / 80 / 95 % | 0,52 / 0,78 / 0,93 | 0,47 / 0,74 / 0,89 | 0,58 / 0,87 / 0,94 |
+| Brier de la mayoría absoluta de bloque | 0,055 | 0,048 | 0,033 |
+
+Los intervalos de cuotas están tan bien calibrados como en las generales, y los de escaños también. El promedio no mejora al último sondeo a 6 días (en las autonómicas hay menos sondeos y más recientes), y a 30 días queda entre las dos líneas base. Un caso tiene escaños "no válidos" cuando un partido con escaño carecía de base para proyectarse (Teruel Existe 2023, Soria ¡Ya! 2022, UPN y PP tras Navarra Suma).
+
+Por ámbito, a 6 días:
+
+| Ámbito | Elecciones | MAE cuotas | Cobertura 50 / 80 / 95 | MAE escaños |
+|---|---|---|---|---|
+| `es-an` | 2022, 2026 | 1,74 | 0,60 / 0,80 / 1,00 | 2,8 |
+| `es-ar` | 2023, 2026 | 1,34 | 0,66 / 0,80 / 1,00 | 1,1 |
+| `es-as` | 2023 | 1,38 | 0,60 / 0,80 / 1,00 | 0,6 |
+| `es-cb` | 2023 | 1,47 | 0,60 / 1,00 / 1,00 | 1,2 |
+| `es-cl` | 2022, 2026 | 1,31 | 0,40 / 0,74 / 0,87 | 0,9 |
+| `es-cm` | 2023 | 2,06 | 0,33 / 1,00 / 1,00 | 1,3 |
+| `es-cn` | 2023 | 1,87 | 0,40 / 0,80 / 1,00 | 1,8 |
+| `es-ct` | 2021, 2024 | 1,09 | 0,69 / 0,88 / 0,94 | 2,1 |
+| `es-ex` | 2023, 2025 | 1,77 | 0,50 / 0,75 / 1,00 | 1,5 |
+| `es-ga` | 2020, 2024 | 2,03 | 0,50 / 0,75 / 0,88 | 2,4 |
+| `es-ib` | 2023 | 2,46 | 0,17 / 0,67 / 0,83 | 1,7 |
+| `es-mc` | 2019, 2023 | 3,75 | 0,00 / 0,50 / 1,00 | 3,5 |
+| `es-md` | 2019, 2021, 2023 | 1,23 | 0,71 / 0,78 / 1,00 | 2,6 |
+| `es-nc` | 2019, 2023 | 2,55 | 0,29 / 0,36 / 1,00 | — |
+| `es-pv` | 2020, 2024 | 1,28 | 0,42 / 0,83 / 0,83 | 1,0 |
+| `es-ri` | 2023 | 2,09 | 0,40 / 0,80 / 1,00 | 0,4 |
+| `es-vc` | 2019, 2023 | 2,23 | 0,25 / 0,83 / 0,92 | 2,7 |
+
+El criterio de la especificación (coberturas dentro de ±0,15 del nominal en los ámbitos con tres o más elecciones) sólo es aplicable a Madrid, el único con tres casos desde 2019: cumple al 80 y al 95 % (0,78 y 1,00) y se pasa de cobertura al 50 % (0,71). Murcia es el peor ámbito (MAE 3,75, ninguna cuota dentro del intervalo del 50 %): en 2019 el promedio daba a Cs seis puntos de más (18,1 frente a 12,0) y al PP cinco de menos (27,1 frente a 32,4).
 
 ## Salvedades
 

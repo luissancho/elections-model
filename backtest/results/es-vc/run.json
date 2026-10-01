@@ -1,0 +1,23 @@
+{
+ "run_at": "2026-10-01T23:01:49",
+ "commit": "a69cbc1",
+ "scope": "es-vc",
+ "n_sim": 500,
+ "seed": 42,
+ "max_fc": 10,
+ "nowcast_only": false,
+ "house_effects": true,
+ "industry_bias": false,
+ "composition": null,
+ "regional_noise": true,
+ "events": [
+  "2019-04-28",
+  "2023-05-28"
+ ],
+ "horizons": [
+  6,
+  30
+ ],
+ "db_polls": 210,
+ "db_last_poll": "2026-09-10"
+}
