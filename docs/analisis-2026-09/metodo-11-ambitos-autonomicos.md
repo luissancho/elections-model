@@ -1,288 +1,123 @@
-# Método 11: ámbitos autonómicos (spec, 28-09-2026)
+# Método 11: ámbitos autonómicos (01-10-2026)
 
-Estado: **diseño aprobado, pendiente de implementación**. Este documento es la especificación; el plan de
-implementación por tareas se escribirá a partir de él. Cuando se implemente, la cabecera pasará al formato
-de los métodos anteriores (cambios, tests, impacto numérico).
+Cambios: catálogos `data/es-scopes.csv` y `data/es-districts.csv` (modelos `Scopes` y `Districts`, que sustituyen a `Provinces`); `WikipediaLoader` generalizado y `WikipediaResultsLoader` nuevo (`mtpy/lib/loader.py`); carga por lotes `load/run_load.py`; `Computer.compute_ratings(scopes=...)`, `rating_pool`, `rate_events` y `regional_flags` (`mtpy/lib/computer.py`); umbral por ámbito, circunscripciones, ruido sólo por circunscripción y estimadores con caída al ámbito padre en el `Simulator` (`mtpy/lib/simulator.py`); `get_scopes`, `get_districts`, `get_thresholds`, `update_featured` (`mtpy/lib/data.py`); backtest por ámbito (`backtest/run_backtest.py --scopes`). Tests: `tests/test_loader_unit.py`, `tests/test_data_unit.py`, `tests/test_data_files.py`, `tests/test_computer_unit.py`, `tests/test_simulator_unit.py`, `tests/integration/test_regional_load.py`, `test_ratings_scopes.py`, `test_regional_model.py`, `test_scopes.py`. Notebooks: `data-load/ResultsLoadWikipedia`, `events/es-md-202305/`. Plan de implementación: `metodo-11-plan.md`.
 
-## Objetivo
+## Problema
 
-Que el modelo trate cualquier proceso autonómico igual que el general:
+El modelo sólo conocía las elecciones generales (`scope = 'es'`). Las autonómicas tienen sus propios sondeos, sus propias circunscripciones y su propia barrera legal, y además son una fuente de información sobre las casas: quien se equivoca en Madrid o en Cataluña dice algo de cómo trabaja. El objetivo es que cualquier elección autonómica se trate igual que la general:
 
-1. **Recopilar** encuestas y resultados de las 17 comunidades autónomas, con un `scope` por comunidad
-   definido en una tabla de ámbitos.
-2. **Alimentar el ranking** de casas con los errores cometidos en las autonómicas, con menor peso que los
-   nacionales.
-3. **Pronosticar y simular** una elección autonómica con el `Forecaster` y el `Simulator` actuales:
-   promedio, intervalos, escaños por circunscripción y probabilidades.
+1. **Recopilar** sondeos y resultados de las 17 comunidades.
+2. **Alimentar el ranking** de casas con sus errores en las autonómicas, con menos peso que los nacionales.
+3. **Pronosticar y simular** una elección autonómica con el `Forecaster` y el `Simulator` de siempre: promedio, intervalos, escaños por circunscripción y probabilidades.
 
-## Decisiones tomadas
+## Decisiones
 
 | Id | Decisión |
 |---|---|
-| D1 | Códigos de ámbito ISO 3166-2 en minúsculas: `es-md` Madrid, `es-cl` Castilla y León, `es-ct` Cataluña… El ámbito nacional sigue siendo `es` |
-| D2 | Un partido conserva su sigla nacional cuando la candidatura es su federación regional (PP, PSOE, VOX, UP, SUMAR, Cs). Las marcas propias son partidos con `parent_id` hacia el nacional cuando lo tienen (PSC, PSE-EE, Más Madrid, Comuns, Compromís) o sin él (CHA, PRC, UPL, CC, BNG…) |
-| D3 | Peso inicial de los errores autonómicos en el rating: `rating_weight = 0.5`; el nacional vale 1. Se calibra después con el backtest de ratings |
-| D4 | Votos válidos por circunscripción: híbrido. Se reparten por censo al cargar (marcados como estimados) y se sustituyen por la cifra oficial en los eventos donde sea fácil obtenerla |
-| D5 | Alcance temporal: elecciones autonómicas desde 2009-2011, que es donde la Wikipedia inglesa tiene tablas de sondeos |
-| D6 | La spec vive aquí, en la serie de métodos, no en `docs/superpowers/specs/` |
+| D1 | Códigos de ámbito ISO 3166-2 en minúsculas: `es-md` Madrid, `es-cl` Castilla y León, `es-ct` Cataluña… El nacional sigue siendo `es` |
+| D2 | Un partido conserva su sigla nacional cuando la candidatura es su federación regional (PP, PSOE, VOX, UP, SUMAR, Cs). Las marcas propias son partidos aparte, con `parent_id` cuando lo tienen (PSC, PSE-EE, Más Madrid) o sin él (CHA, PRC, UPL, CC, BNG…) |
+| D3 | Peso de los errores autonómicos en el rating: `rating_weight = 0,5`; el nacional vale 1. Pendiente de calibrar |
+| D4 | Votos válidos por circunscripción: se reparten por población al cargar (`estimated`) y se sustituyen por la cifra oficial donde se cure un CSV |
+| D5 | Alcance temporal: elecciones autonómicas desde 2009 |
+| D6 | Esta especificación vive en la serie de métodos |
 
-## Contexto: lo que hay y lo que no
+Se adoptó el enfoque en el que datos, pesos, errores y desviaciones siguen siendo **por ámbito y por evento**, como antes, y sólo el paso de ratings se hace **transversal**. Se descartaron un `Computer` por ámbito con ratings separados (los errores autonómicos nunca llegarían al ranking nacional) y un modelo jerárquico conjunto de errores por casa y ámbito (no hay datos para estimarlo todavía).
 
-Hallazgos de la exploración (27-09-2026) que condicionan el diseño:
+## Datos
 
-- **Sondeos.** En la Wikipedia inglesa no existen páginas "Opinion polling for the … regional election". Las
-  tablas están dentro del artículo de cada elección, `https://en.wikipedia.org/wiki/{año}_{gentilicio}_regional_election`
-  y `Next_{gentilicio}_regional_election`, sección *Opinion polls › Voting intention estimates*. El formato
-  es el mismo que el nacional: `Polling firm/Commissioner | Fieldwork date | Sample size | Turnout | un th
-  por partido (enlace) | Lead`, con las filas de resultado electoral en negrita y fondo `#EFEFEF`.
-  Inventario 2009-2026: **3.479 filas** en 17 comunidades (Cataluña 587, Andalucía 326, Madrid 339,
-  Galicia 343, País Vasco 289, Valencia 294); Asturias, Cantabria, La Rioja y Murcia sólo tienen tablas
-  desde 2023. En algunos artículos pequeños de 2011-2019 la tabla cuelga del `h2` "Opinion polls" sin
-  `h3`, y en `Next_Madrilenian` el `th` "Lead" no está en la primera fila de cabecera (SALF ocupa la última
-  posición), así que el cargador no puede asumir "Lead" por posición.
-- **Resultados.** No están en Infoelectoral (competencia de cada comunidad). El mismo artículo trae
-  *Results › Overall* (votos, %, escaños de cada candidatura; votos válidos, nulos, emitidos, abstención y
-  censo del conjunto) y *Results › Distribution by constituency* (% y escaños por circunscripción, **sin
-  votos**; cabecera de tres filas con `colspan=2` por partido y subcolumnas `%`/`S`; celdas vacías con
-  `rowspan`/`colspan` para candidaturas que no concurren). Archivo Histórico Electoral de la Generalitat
-  (Argos, `http://www.argos.gva.es/ahe/`, sólo http) tiene resultados por provincia de todas las
-  comunidades, pero el servidor devolvía *Service Unavailable* durante la exploración: no puede ser la
-  fuente primaria.
-- **Circunscripciones.** No siempre son provincias: Asturias tiene tres zonas (Central, Occidental,
-  Oriental), Canarias siete islas más una lista autonómica desde 2019, Baleares cuatro islas. Madrid,
-  Murcia (desde 2019), Navarra, La Rioja y Cantabria son distrito único.
-- **Umbral legal.** Varía por comunidad y por reforma (3 % en Cataluña, Andalucía o Castilla y León; 5 % en
-  Madrid, Galicia o Extremadura; Canarias combina un umbral autonómico con uno insular). El `Simulator`
-  tiene hoy el 3 % de la LOREG fijo.
-- **Códigos.** `data/es-regions.csv` y `es-regions-ages.csv` usan la numeración de comunidades del
-  Ministerio del Interior (07 Castilla-La Mancha, 08 Castilla y León, 12 Madrid…) mientras
-  `es-provinces.csv.reg_code` usa la del INE (07 Castilla y León, 08 Castilla-La Mancha, 13 Madrid…).
-  La tabla `elections.provinces` (`ncode`, `scode`, `seats`) no la usa ningún módulo de `mtpy/lib`.
+**Fuente.** La Wikipedia inglesa no tiene páginas de sondeos autonómicos aparte: las tablas están dentro del artículo de cada elección (`{año}_{gentilicio}_regional_election`, sección *Opinion polls*), con el mismo formato que las nacionales. El mismo artículo trae los resultados: *Results › Overall* (votos, porcentaje y escaños de cada candidatura y los totales del conjunto) y *Distribution by constituency* (porcentaje y escaños por circunscripción, sin votos). Infoelectoral no cubre las autonómicas.
 
-## Enfoque
+**Inventario.** `load/run_load.py --what urls` recorre los artículos desde el de la próxima elección hacia atrás por el enlace "elección anterior" de cada ficha: 95 eventos, 78 celebrados desde 2009 y 17 próximos. Los 78 tienen tabla de sondeos. Aragón, Castilla y León y Extremadura no tienen todavía artículo de la próxima elección (votaron entre diciembre de 2025 y marzo de 2026): su evento próximo se fecha cuatro años después y no tiene sondeos; Andalucía, que votó en mayo de 2026, tampoco.
 
-Se descartan dos alternativas. **A**, un `Computer` por ámbito con ratings separados, es barato pero los
-errores autonómicos nunca llegan al ranking nacional. **C**, un modelo jerárquico conjunto de errores por
-casa y ámbito, exige rehacer el `Computer` y no hay datos para estimarlo bien todavía.
+**Qué se ha cargado.**
 
-Se adopta **B**: la capa de datos, los pesos, los errores y las desviaciones siguen siendo **por ámbito y
-por evento**, exactamente como hoy. Sólo el paso de ratings se hace **transversal**: para cada evento reúne
-los sondeos de todos los ámbitos con elección anterior a la suya y multiplica el peso de cada sondeo por el
-`rating_weight` de su ámbito. Cambia un método (`compute_ratings`) y las consultas que lo alimentan.
+| Ámbito | Circunscripciones | Umbral | Elecciones (featured) | Sondeos | Casas | Próxima (sondeos) |
+|---|---|---|---|---|---|---|
+| `es-an` Andalucía | 8 provincias | 3 | 5 (5) | 325 | 39 | 2030-06-16 (0) |
+| `es-ar` Aragón | 3 provincias | 3 | 5 (3) | 133 | 24 | 2030-02-08 (0) |
+| `es-as` Asturias | 3 zonas | 3 | 5 (2) | 93 | 20 | 2027-05-23 (10) |
+| `es-ib` Baleares | 4 islas | 5 | 4 (3) | 97 | 13 | 2027-06-27 (6) |
+| `es-cn` Canarias | 7 islas y lista autonómica | 15 insular o 4 autonómico | 4 (3) | 101 | 20 | 2027-06-27 (6) |
+| `es-cb` Cantabria | 1 | 5 | 4 (3) | 73 | 14 | 2027-05-23 (3) |
+| `es-cl` Castilla y León | 9 provincias | 3 | 5 (3) | 144 | 21 | 2030-03-15 (0) |
+| `es-cm` Castilla-La Mancha | 5 provincias | 3 | 4 (3) | 124 | 24 | 2027-05-23 (17) |
+| `es-ct` Cataluña | 4 provincias | 3 | 6 (6) | 481 | 43 | 2028-06-26 (19) |
+| `es-vc` C. Valenciana | 3 provincias | 5 autonómico | 4 (4) | 210 | 34 | 2027-06-27 (34) |
+| `es-ex` Extremadura | 2 provincias | 5 provincial o 5 autonómico | 5 (4) | 116 | 24 | 2029-12-21 (0) |
+| `es-ga` Galicia | 4 provincias | 5 | 5 (5) | 255 | 31 | 2028-03-25 (10) |
+| `es-md` Madrid | 1 | 5 | 5 (5) | 271 | 31 | 2027-05-23 (14) |
+| `es-mc` Murcia | 1 (5 distritos hasta 2015) | 3 (5 autonómico hasta 2015) | 4 (4) | 123 | 20 | 2027-05-23 (23) |
+| `es-nc` Navarra | 1 | 3 | 4 (4) | 103 | 18 | 2027-05-23 (8) |
+| `es-pv` País Vasco | 3 provincias | 3 | 5 (5) | 214 | 32 | 2028-05-21 (8) |
+| `es-ri` La Rioja | 1 | 5 | 4 (3) | 79 | 15 | 2027-05-23 (4) |
+| **Total** | 66 | | 78 (65) | 2.942 | 88 | |
 
-## Diseño
+Una elección es `featured` cuando tiene resultado oficial y al menos 10 sondeos útiles (computados, con peso de solapamiento positivo y sin agregadores, paneles online, sondeos en veda ni a pie de urna). Quedan fuera 13, nueve de ellas de mayo de 2019, donde dominan los trackings de ElectoPanel.
 
-### 1. Catálogos
+**Cobertura de sondeos.** Las tablas de los 78 artículos suman 3.687 filas: 347 son filas de resultado (la propia elección, la anterior y las generales intercaladas), 204 son sondeos que sólo publican escaños y 3.100 tienen estimación de voto y ventaja numérica. De éstas, 31 son sondeos internos de partido (la "casa" es PP, PSOE, PSPV, ERC…), que no se cargan. De las 3.069 restantes están cargadas 2.942, el **95,9 %**. Lo que falta: 92 sondeos de 81 casas con uno o dos sondeos, que no se han dado de alta; unos 20 con la fecha sin día ("Dec 2019"); 15 con empate en cabeza ("Tie"), que el cargador descartaba ya en las generales; y unos 20 con la ventaja dada como rango. El inventario de la especificación inicial (3.479 filas) contaba todas las filas de las tablas, también las de resultado.
 
-**Tabla `scopes`** (`mtpy/models/elections.py`, `Scopes`, clave `scode`), versionada en `data/es-scopes.csv`
-y cargada con el mismo mecanismo que el resto de tablas manuales:
+**Curación.** 151 enlaces de partido de Wikipedia: 103 van a partidos que ya existían (las federaciones a la sigla nacional, D2), 14 a 13 partidos nuevos (PSC, PSE-EE, MM, PorA, JxSí, SCI, ASG, AHI, DO, El Pi, MxMe, GxF, Sa Unió) y 34 se quedan en "otros" (sin escaños en ninguna elección). 39 casas nuevas, las que tienen tres o más sondeos, con `quality` 5 (casa sin historial); 53 patrocinadores nuevos. Los alias de partido son por ámbito (`wp-maps.json › scopes`), porque el enlace del "People's Party of the Community of Madrid" es `PP` sólo en Madrid.
 
-| Columna | Tipo | Contenido |
-|---|---|---|
-| `scode` | cat | `es`, `es-an`, … (ISO 3166-2 en minúsculas) |
-| `name` | str | Nombre de la comunidad |
-| `ine_code` | int | Código INE de la comunidad (0 para `es`) |
-| `parent` | cat | Ámbito padre (`es` para las comunidades, nulo para `es`) |
-| `demonym` | str | Gentilicio inglés que usa Wikipedia en los títulos (`Madrilenian`, `Castilian-Leonese`…) |
-| `threshold` | num | Umbral legal vigente, % de votos válidos de la circunscripción |
-| `threshold_scope` | num | Umbral alternativo sobre el conjunto de la comunidad (Canarias); nulo si no aplica |
-| `rating_weight` | num | Peso de sus errores en el rating (1 nacional, 0,5 autonómicas) |
-| `seats` | int | Escaños del parlamento actual (informativo; los de cada evento van en `events_data`) |
+## Método
 
-Catálogo inicial (los umbrales son los vigentes en 2026 según la ley de cada comunidad y **deben
-verificarse ley por ley en la fase R0**; los históricos que cambiaron se registran como override por evento
-en `params.json`, ver §4):
+### Catálogos
 
-| `scode` | Comunidad | INE | Gentilicio | Circunscripciones | Umbral |
-|---|---|---|---|---|---|
-| es-an | Andalucía | 01 | Andalusian | 8 provincias | 3 |
-| es-ar | Aragón | 02 | Aragonese | 3 provincias | 3 |
-| es-as | Asturias | 03 | Asturian | 3 zonas | 3 |
-| es-ib | Baleares | 04 | Balearic | 4 islas | 5 |
-| es-cn | Canarias | 05 | Canarian | 7 islas + lista autonómica (desde 2019) | 15 insular ó 4 autonómico (6/30 antes de 2019) |
-| es-cb | Cantabria | 06 | Cantabrian | 1 | 5 |
-| es-cl | Castilla y León | 07 | Castilian-Leonese | 9 provincias | 3 |
-| es-cm | Castilla-La Mancha | 08 | Castilian-Manchegan | 5 provincias | 3 |
-| es-ct | Cataluña | 09 | Catalan | 4 provincias | 3 |
-| es-vc | Comunidad Valenciana | 10 | Valencian | 3 provincias | 5 autonómico (verificar la reforma de 2022) |
-| es-ex | Extremadura | 11 | Extremaduran | 2 provincias | 5 autonómico |
-| es-ga | Galicia | 12 | Galician | 4 provincias | 5 |
-| es-md | Madrid | 13 | Madrilenian | 1 | 5 |
-| es-mc | Murcia | 14 | Murcian | 1 (5 hasta 2015) | 3 (5 hasta 2015) |
-| es-nc | Navarra | 15 | Navarrese | 1 | 3 |
-| es-pv | País Vasco | 16 | Basque | 3 provincias | 3 |
-| es-ri | La Rioja | 17 | Riojan | 1 | 5 |
+`data/es-scopes.csv` da a cada ámbito su código, comunidad, ámbito padre, gentilicio inglés (para construir los títulos de Wikipedia), umbral legal, peso en el rating y escaños que elige la próxima elección. `data/es-districts.csv` da las circunscripciones de cada ámbito, también las 52 de `es`. Las provincias conservan su código INE (1-52) en cualquier ámbito, de modo que las reglas `regions` del `smap` siguen valiendo; las circunscripciones que no son provincias empiezan en 100 (zonas de Asturias 101-103, islas de Baleares 101-104, islas de Canarias 101-107 y lista autonómica 100, distritos de Murcia hasta 2015 101-105). El código lee los CSV; las tablas `scopes` y `districts` son su réplica en la base de datos (`save_catalogues()`). `data/` usa ya una sola numeración de comunidades, la del INE.
 
-**Tabla `districts`** sustituye a `provinces` (que se elimina del modelo; nadie la lee). Clave
-`(scope, region_id)`: `name`, `slug`, `ine_code` (código INE de la provincia cuando la circunscripción es
-una provincia; nulo si no), `group` (comunidad INE a la que pertenece, para el método 9). Convención de
-`region_id`:
+Los umbrales se comprobaron contra la sección *Electoral system* del artículo de la última elección de cada comunidad, que cita el estatuto y la ley electoral (tabla en `data/README.md`). Una candidatura entra en el reparto si supera el umbral de su circunscripción **o** el del conjunto del ámbito; un umbral vacío no se puede superar. Así caben los tres casos que existen: sólo circunscripción (la mayoría), sólo conjunto (Comunidad Valenciana; Murcia hasta 2015) y los dos (Canarias, 15 % insular o 4 % autonómico; Extremadura). Los umbrales históricos distintos del vigente van por evento en `params.json` (Canarias 2011 y 2015: 30 y 6; Murcia 2011 y 2015: 5 autonómico).
 
-- `0` es siempre el total del ámbito (como hoy el total nacional).
-- Las provincias conservan su **código INE** (1-52) en cualquier ámbito, de modo que `es-provinces.csv`
-  y las reglas `regions` del `smap` siguen valiendo.
-- Las circunscripciones no provinciales reciben códigos **a partir de 100**, únicos dentro del ámbito:
-  zonas de Asturias 101-103, islas de Baleares 101-104, islas de Canarias 101-107 y lista autonómica
-  canaria 100. Las cinco circunscripciones de Murcia hasta 2015 usan 101-105.
+### Ingesta
 
-`data/es-districts.csv` recoge las circunscripciones de los 17 ámbitos con su población, para el reparto
-por censo de D4. `es-regions.csv` y `es-regions-ages.csv` pasan a códigos INE (una sola numeración en
-`data/`); `es-provinces.csv` no cambia.
+**Sondeos** (`WikipediaLoader`). La tabla es la primera `wikitable` cuya primera fila empieza por "Polling firm" bajo un encabezado que contenga "Voting intention"; si no hay, la que cuelga directamente de "Opinion polls" (artículos pequeños sin subsecciones). Las columnas de partido son las celdas de cabecera con enlace a un artículo, y "Lead" se localiza por su texto, no por posición. Los enlaces se normalizan (llegan unas veces codificados y otras no). Dos columnas del mismo sondeo que acaban en el mismo partido (miembros de una coalición posterior) se suman. Una celda de fecha sin día descarta la fila.
 
-### 2. Parámetros y URLs por ámbito
+**Resultados** (`WikipediaResultsLoader`). El total del ámbito (`region_id = 0`) sale de *Overall* y es exacto; las filas de los miembros de una coalición se ignoran, porque sus votos y escaños ya están en la fila de la coalición. La tabla por circunscripción da porcentaje y escaños, así que:
 
-- `data/params.json` ya está indexado por ámbito (`{"es": {...}}`); se añaden las entradas de cada
-  `es-*` que las necesite. `get_event_params` deja de fallar cuando el ámbito no tiene entrada
-  (`params.get(scope, {})`).
-- `data/wikipedia/wp-urls.json` se indexa igual: `{"es": {...}, "es-md": {"2023-05-28": {"results": url,
-  "polls": url}, "2027-05-30": {...}}}`. Una única URL sirve para sondeos y resultados en las autonómicas,
-  porque están en el mismo artículo; la fecha del próximo evento es el límite legal de la legislatura,
-  como en `es`.
-- `data/wikipedia/wp-maps.json` gana un nivel opcional por ámbito:
-  `{"parties": {...}, "pollsters": {...}, "sponsors": {...}, "scopes": {"es-md": {"parties": {"PP":
-  ["People%27s_Party_of_the_Community_of_Madrid"], "MM": ["M%C3%A1s_Madrid"]}}}}`. El cargador resuelve
-  primero el alias del ámbito y después el global. Con ello el enlace regional del PP se mapea a `PP`
-  (D2) y el de Más Madrid a su propio partido.
-- Umbrales históricos: `params.json` admite `"threshold"` y `"threshold_scope"` por evento, que
-  prevalecen sobre `scopes` (Murcia hasta 2015, Canarias hasta 2019, Valencia según la verificación).
+- los votos válidos de cada circunscripción son los del conjunto repartidos en proporción a su población (`events_data.estimated`), salvo que `data/results/{scope}/{fecha}.csv` traiga la cifra oficial. No afecta al reparto de escaños ni a la barrera, que operan con porcentajes dentro de la circunscripción;
+- las candidaturas con resultado en el conjunto pero sin columna en esa tabla (no sacaron escaño en ninguna parte) llevan en cada circunscripción su porcentaje del conjunto, limitado al voto que dejan las demás. Es una estimación plana, y es lo que permite proyectar a un partido que después crece (VOX antes de 2019);
+- un distrito único tiene una fila de circunscripción igual a la del total; la lista autonómica canaria usa su propio porcentaje y la vota todo el archipiélago;
+- una circunscripción cuyo nombre no está en el catálogo (ni como alias) detiene la carga con un error que la nombra;
+- las erratas de la tabla se corrigen con `data/results/{scope}/{fecha}-seats.csv`. Hay una: Cataluña 2010 da a CiU 8 escaños en Lleida y fueron 9.
 
-### 3. Ingesta
+Para el evento próximo se crean el evento y sus circunscripciones con los escaños del catálogo, sin votos.
 
-**`WikipediaLoader`** (sondeos), cambios mínimos:
+**Comprobación.** En las 78 elecciones, los votos de las candidaturas suman los válidos menos los blancos (la mayor diferencia, 952 votos de 2,6 millones en la Comunidad Valenciana de 2019, es del propio artículo) y los escaños por circunscripción suman los del parlamento. Y, sobre todo, **D'Hondt con los umbrales del catálogo reproduce los escaños oficiales en 287 de 291 circunscripciones**; las cuatro restantes bailan un escaño en el último cociente porque los porcentajes de la tabla llevan un decimal.
 
-- Selección de la tabla: la primera `wikitable` cuyo encabezado más cercano (h2, h3 o h4) contenga
-  "Voting intention"; si no hay ninguna, la primera `wikitable` bajo el `h2` "Opinion polls" cuya primera
-  fila empiece por "Polling firm". Hoy sólo mira `h3/h4/h5` en el `div` hermano anterior.
-- Columnas: los partidos son los `th` de la primera fila con enlace a un artículo que no sea `File:`;
-  "Lead" se detecta por texto (o por ausencia de enlace en el último `th`), no por posición `[4:-1]`.
-- Alias por ámbito (§2). El resto (rowspan, fechas, tamaño de muestra, contexto `exit`/`wban`, `exclude`)
-  no cambia.
+### Ratings transversales
 
-**`WikipediaResultsLoader`** (nuevo, `mtpy/lib/loader.py`), misma interfaz que `InfoElectoralLoader`
-(`read_data → build_series → save_totals/save_results`, `parties_missing`, `show_summary`):
+`Computer.compute_ratings(scopes='all')` reúne los sondeos filtrados de todos los ámbitos con peso positivo y, para cada evento del ámbito del `Computer` (y el próximo), puntúa a las casas con los sondeos de las elecciones celebradas **estrictamente antes**, de cualquier ámbito. Las doce autonómicas de un mismo día no se ven entre sí; la general de julio de 2023 sí ve las de mayo. El peso de cada sondeo se multiplica por el `rating_weight` de su ámbito; la posición del sondeo y la semana se cuentan por ámbito y evento, y `num_events` cuenta pares de ámbito y fecha. Los ámbitos con peso 0 se descartan antes de calcular ningún peso. `scopes=None` (por defecto) conserva el comportamiento anterior.
 
-- Lee *Results › Overall*: por candidatura, votos, % y escaños; del pie, votos válidos, nulos, emitidos,
-  abstención y censo. Las candidaturas se mapean a partidos con los alias del ámbito y los globales, con
-  el nombre entre paréntesis de la celda ("People's Party (PP)") como clave alternativa; las no mapeadas
-  suman a `'-'` (id 0), como en Infoelectoral. Con ello rellena `events_data` y `events_results` de
-  `region_id = 0`, exactos.
-- Lee *Results › Distribution by constituency*: reutiliza la lógica de `rowspan`/`colspan` de
-  `WikipediaLoader.read_rows`; cada fila da `pct` y `seats` por partido y circunscripción. El nombre de
-  la circunscripción se resuelve contra `districts` por nombre o alias (`Biscay` → Vizcaya, `Gipuzkoa` →
-  Guipúzcoa, `Girona` → Gerona; los alias van en `es-districts.csv`).
-- Votos por circunscripción (D4): `votes_i = votes_total · census_i / Σ census` con el censo de
-  `es-districts.csv` (o el censo por provincia del INE cuando la circunscripción es una provincia);
-  `votes` de cada partido en la circunscripción = `pct · votes_i / 100`. `events_data` gana una columna
-  `estimated` (bin) que marca esas filas. Si existe `data/results/{scope}/{fecha}.csv` con votos válidos
-  oficiales por circunscripción, se usan y `estimated = False`. El artículo en Wikipedia de la comunidad
-  y Argos son las fuentes para curar esos CSV.
-- Distrito único: sólo la fila `region_id = 0` y una fila de circunscripción idéntica con `region_id`
-  = código INE de la provincia (Madrid 28, Murcia 30, Navarra 31, La Rioja 26, Cantabria 39), para que
-  el `Simulator` tenga al menos una unidad de reparto.
-- Lista autonómica canaria: circunscripción `100` cuyo `pct` es el del total; los escaños los da la
-  tabla si los publica y, si no, la diferencia entre el total y la suma insular.
-- Evento próximo: crea la fila de `events`, y las de `events_data` con los escaños de cada circunscripción
-  del artículo `Next_…` (tabla *Electoral system*) o de `es-districts.csv`, sin votos.
+Invariantes comprobados: con `scopes=None`, los 1.012 ratings de `es` son idénticos a los guardados; con peso 0 en todos los autonómicos, `scopes='all'` da lo mismo que `scopes=None`.
 
-**Carga por lotes**: `load/run_load.py --scopes es-md es-cl … --what polls results --since 2009` recorre
-`wp-urls.json`, ejecuta ambos cargadores por evento e imprime por ámbito los partidos, casas y
-patrocinadores sin mapear, para completar `wp-maps.json` y `parties` en dos o tres pasadas. Las doce
-autonómicas del 28-05-2023 se cargan en la misma pasada. `computed`/`featured`: un evento autonómico es
-`featured` cuando tiene resultado oficial y al menos 10 sondeos útiles.
+### Simulator
 
-### 4. Computer
+- **Umbral.** `Simulator(threshold=None)` toma los umbrales del ámbito y del evento; un número fija el de circunscripción y `0` lo desactiva.
+- **Estimadores.** El error de sondeo, los escaños por regresión, la deriva y la razón de composición se ajustan con las elecciones del propio ámbito cuando tiene al menos 3 `featured` anteriores, y con las del ámbito padre (`es`) si no. El estimador de escaños regresa la **cuota** de escaños de la cámara, para que parlamentos de 33 y 350 escaños sean comparables. El prior de los efectos de casa se anula con menos de 3 elecciones previas.
+- **Partidos "regionales".** En `es` la marca es la curada en la tabla de partidos. Dentro de una comunidad se deriva de los resultados: un partido es regional cuando sólo concurrió en circunscripciones que suman menos de la mitad del voto válido (UPL, Por Ávila, los partidos de una isla). La especificación decía cero para todos, y con eso un partido del 0,4 % recibía el error de sondeo de uno de ámbito completo (1,3 puntos): Sa Unió perdía el escaño de Formentera en el 37 % de las simulaciones, dejando 52 de 300 con un escaño sin repartir, y Por Ávila lo perdía en el 43 %. Con la marca derivada, ninguna simulación de Baleares queda corta y Por Ávila conserva el suyo en más del 80 %.
+- **Ruido del método 9.** Dentro de una comunidad no hay componente por comunidad: sólo el choque por circunscripción, con la curva provincial estimada en `es`. En un distrito único no hay nada que redistribuir.
+- **Partidos sin base.** Un partido simulado sin resultado previo ni regla de herencia se queda sin escaños, pero no rompe la proyección. Las reglas (`smap` en `params.json`) cubren los casos claros: SALF hereda de VOX, SUMAR de UP, Más Madrid de UP en 2019, VOX en Cataluña 2021 de PP y Cs, Aliança Catalana de Junts, Por Andalucía de la Adelante de 2018, y Navarra Suma y su ruptura.
+- **Errores claros.** Un evento sin sondeos, o con tan pocos que el promedio no se puede ajustar, falla con un mensaje que lo dice, en vez de devolver ceros.
 
-- `build_series`, `compute_weights`, `compute_errors`, `compute_deviations`, `get_house_effects_data`,
-  `get_drift_data` y `get_swing_residuals` **no cambian**: ya trabajan por ámbito y evento, y los bloques
-  (`main`, `vs`, `blocks`) salen de `get_event_params` con los partidos presentes en cada ámbito.
-- **`compute_ratings(save, scopes=None)`** se hace transversal. `scopes=None` conserva el comportamiento
-  actual (sólo el ámbito del `Computer`); `scopes='all'` toma de `scopes` los ámbitos con
-  `rating_weight > 0`. Algoritmo:
-  1. Carga los sondeos con `bias` calculado de todos los ámbitos seleccionados (`get_poll_series` por
-     ámbito, concatenados con un nivel `event_scope` en el índice; `self.keys` pasa a incluirlo).
-  2. Para cada evento `(fecha, ámbito)` de los ámbitos del `Computer` (y el próximo de cada uno), toma
-     los sondeos de los eventos con **fecha estrictamente anterior**, de cualquier ámbito. Las doce
-     autonómicas de un mismo día no se ven entre sí; la general de julio de 2023 sí ve las de mayo.
-  3. `poll_rating_weights` agrupa por `(event_date, event_scope, pollster_id)` para `weight_pos`, por
-     `(event_date, event_scope)` para `weight_week`, y calcula `weight_year` con el año máximo del
-     conjunto. Se añade `weight_scope = rating_weight[event_scope]` al producto que forma `weight`.
-  4. `pollster_ratings` no cambia. `num_events` cuenta eventos de cualquier ámbito.
-  5. Guarda `pollsters_ratings` con el `event_scope` de cada evento y `polls.rating/weight_rating` de
-     los sondeos de ese evento; `pollsters.rating` guarda el último rating del ámbito `es`.
-- Invariante de regresión: con `rating_weight = 0` en todos los `es-*`, los ratings de `es` coinciden con
-  los actuales (test de integración).
-- Estimadores de error, escaños y deriva: se ajustan con los eventos del ámbito cuando tiene al menos
-  **3 eventos featured**; si no, con los del ámbito padre (`es`). La variable `regional` de los
-  estimadores vale 0 para todos los partidos en los ámbitos autonómicos (dentro de una comunidad no hay
-  partidos "de una parte del territorio" en el sentido que usa el estimador). El estimador de escaños
-  pasa a regresar la **cuota de escaños** (`seats / seats_total` del evento) y a multiplicar por los
-  escaños del ámbito al predecir, para que sea comparable entre parlamentos de 33 y 350 escaños.
-- Efectos de casa (M6): prior del propio ámbito; con menos de 3 eventos el prior se anula y sólo actúa
-  el efecto del ciclo, como ya prevé `Forecaster.fit_house_effects`. Prior compartido por `parent_id`
-  queda como mejora posterior.
+## Resultados
 
-### 5. Forecaster y Simulator
+**Reparto determinista a 6 días.** Error absoluto medio de escaños de los partidos principales: Castilla y León 2022, 1,25; Asturias 2023, 0,6; Canarias 2023, 1,4. Madrid 2023 da 3,2: los sondeos ponían a Podemos-IU en el 5,1 % y sacó el 4,76 %, por debajo de la barrera, así que el modelo le da 7 escaños que no tuvo. Sin ese partido el error es 0,5. Es un fallo de pronóstico en el borde de la barrera, no del reparto.
 
-- Ambos reciben `scope` como hoy; `get_event_dates`, `get_event_series`, `get_poll_series` y
-  `get_event_params` filtran por él, así que el promedio, la deriva (M5), la edad del partido (M8) y los
-  intervalos con cluster (M10) funcionan sin cambios.
-- `Simulator.threshold` por defecto pasa a `None` = "el del ámbito": lee `threshold` y `threshold_scope`
-  de `scopes` con el override por evento de `params.json`. `alloc_seats` acepta el umbral alternativo:
-  una candidatura participa si supera el umbral de la circunscripción **o** el autonómico (Canarias).
-- Circunscripciones: `get_reg_totals` y `get_prev_results` ya se indexan por `region_id`; con
-  `events_data` del ámbito el `Simulator` reparte por sus circunscripciones sin cambios. `region_names`
-  sale de `districts`.
-- Ruido del método 9: en los ámbitos autonómicos el componente por comunidad no existe (todas las
-  circunscripciones son de la misma). `Simulator` usa `region_groups` de `districts.group`; cuando el
-  ámbito no es `es`, `_add_swing_noise` aplica sólo el choque por circunscripción, con la curva
-  provincial estimada en `es` (`SwingNoise.sigma_province`) mientras el ámbito no tenga 3 pares de
-  elecciones propias.
-- `smap` por evento y ámbito en `params.json`, como hoy (herencias de Cs → PP, UP → SUMAR, etc.).
+**Próximas elecciones.** De los 17 ámbitos, 11 se pueden simular hoy; 4 no tienen sondeos todavía (Andalucía, Aragón, Castilla y León, Extremadura) y 2 tienen demasiado pocos para ajustar el promedio (Cantabria 3, La Rioja 4).
 
-### 6. Backtest, notebooks y documentación
+**Ratings.** Con los sondeos autonómicos al 0,5, las casas con sondeos evaluables en el último rating de `es` pasan de 53 a 84. Entre las que ya tenían, el rating cambia 4,9 puntos de media en valor absoluto y la correlación con el anterior es 0,96. Los mayores cambios: GAD3 +18,9 (de 15 a 74 sondeos evaluables), CIS −16,9 (de 16 a 80), Target Point +14,5, 40dB −14,2, Data10 +13,6, CEMOP +13,4, Simple Lógica −10,8, InvyMark +10,8, Sigma Dos −10,6, Ipsos −10,6 y GESOP −10,4. Sondaxe no se mueve (+0,1). Las casas nuevas entran entre 5 y 30 (Gizaker 30,4 con 13 sondeos). La tabla completa está en `files/stage/m11_ratings_impact.csv`. **Los ratings transversales están guardados para los eventos autonómicos; los de `es` siguen siendo los de antes** hasta que se revise ese cambio.
 
-- `run_backtest(scope=...)` ya está parametrizado; `backtest/run_backtest.py --scope es-md` y un bucle
-  `--scopes all` escriben en `backtest/results/{scope}/`. Elecciones evaluables: las autonómicas con
-  resultado oficial y al menos 5 sondeos útiles a cada horizonte (2019-2026, sobre todo las doce de
-  2023 y Cataluña, Galicia y País Vasco 2024).
-- Notebooks `data-load/*` parametrizados por `scope` (una celda); `PollsForecast` y `PollsSimulations`
-  igual. Nuevo `notebooks/events/es-md-202305/` como ejemplo autonómico.
-- `data/README.md` documenta `es-scopes.csv`, `es-districts.csv` y `results/`; `backtest/README.md`
-  los ámbitos; este documento pasa a describir los cambios hechos y su impacto.
+**Backtest.** BACKTEST_PLACEHOLDER
 
-## Fases
+## Salvedades
 
-Orden por dependencias. Cada fase cierra con sus tests en verde y un commit.
+- **Formato de Wikipedia.** El cargador depende de la estructura de los artículos. Los tests usan una instantánea del 01-10-2026 de seis artículos (`tests/fixtures/wikipedia/`); `load/run_load.py` sin `--save` enseña qué ha cambiado antes de escribir nada.
+- **Votos y cuotas estimados.** Los votos por circunscripción y las cuotas por circunscripción de las candidaturas sin escaño son estimaciones. Pesan en la agregación entre circunscripciones y en el voto en blanco, no en el reparto.
+- **Partidos locales sin sondeos.** Los sondeos de la próxima elección canaria no listan a ASG ni a AHI, así que el modelo no les da los escaños de La Gomera y El Hierro. Lo mismo vale para cualquier partido de una sola circunscripción que las casas no publiquen.
+- **Recién llegados territoriales.** Teruel Existe en 2023, Soria ¡Ya! en 2022, Democracia Ourensana en 2024 y AHI en 2023 no tenían geografía previa ni partido del que heredarla: la proyección no les da escaños.
+- **Estimadores propios con pocos datos.** Con tres o cuatro elecciones, el estimador de error del ámbito es ruidoso; en Baleares deja a un partido regional del 1,5 % con un error de 0,04 puntos, demasiado estrecho.
+- **Peso 0,5.** Es un valor de partida (D3). El cambio de rating de las casas grandes es considerable y conviene revisarlo antes de adoptarlo en `es`.
+- **Sondeos con empate en cabeza.** Se descartan, también en las generales. Son 15 en las autonómicas.
+- **Extremadura.** El umbral autonómico alternativo exige concurrir en las dos provincias; no se modela.
 
-| Fase | Contenido | Tests y criterio de cierre |
-|---|---|---|
-| R0 | `Scopes` y `Districts` en el modelo y en `data/`; `es-regions*.csv` a códigos INE; `params.json`, `wp-urls.json` y `wp-maps.json` por ámbito; `get_event_params` tolerante; eliminación de `Provinces` | `test_data_files`: códigos ISO válidos, `region_id` únicos por ámbito, todo ámbito de `wp-urls` existe en `scopes`, umbrales en (0, 100]; suite actual en verde |
-| R1 | `WikipediaLoader` generalizado; alias por ámbito; carga de sondeos de los 17 ámbitos 2009-2026 | Unit: detección de "Lead" y de la tabla con fixtures HTML (Madrid 2023, Next Madrid, CyL 2022, Asturias 2019). Integración: recuento por ámbito ≥ 95 % del inventario (3.479 filas) y cero casas sin mapear entre las que tienen ≥ 3 sondeos |
-| R2 | `WikipediaResultsLoader`; `events_data.estimated`; eventos próximos; `load/run_load.py` | Unit: parseo de Overall y de la tabla por circunscripción con fixtures (CyL 2022, Canarias 2023, Asturias 2023). Integración: por evento, `Σ votes` de partidos = válidos − blancos ± 0,1 % y `Σ seats` por circunscripción = escaños del parlamento |
-| R3 | `compute_ratings` transversal con `weight_scope` | Unit: con sondeos sintéticos, peso 0 reproduce el rating de un solo ámbito y peso 1 iguala a mezclar los eventos. Integración: ratings de `es` con `rating_weight = 0` idénticos a los actuales; con 0,5, informe de las 15 casas cuyo rating más cambia |
-| R4 | Umbral por ámbito y alternativo, `districts` en `Simulator`, ruido M9 sólo provincial, estimadores con caída al padre, cuota de escaños | Unit: `alloc_seats` con umbral doble; lookup de umbral con override. Integración: `Simulator('es-md', '2023-05-28', drange=6)` y `('es-cl', '2022-02-13')` en modo determinista reproducen los escaños reales con error absoluto medio ≤ 1,5 por partido principal |
-| R5 | Backtest de las autonómicas 2019-2026, notebooks por ámbito, `data/README.md`, este documento | `by_horizon.csv` por ámbito; coberturas del 50/80/95 % en cuotas dentro de ±0,15 del nominal a 6 días en los ámbitos con ≥ 3 eventos |
+## Fuera de alcance
 
-## Riesgos y salvedades
-
-- **Formato de Wikipedia.** Las tablas antiguas (2009-2015) de comunidades pequeñas tienen variantes
-  (sin columna Turnout, sin `h3`); R1 las acomoda con fixtures y acepta perder algunas filas, dentro del
-  criterio del 95 %.
-- **Identidad de los partidos.** D2 exige curar alias por ámbito y crear partidos con `parent_id`. Es
-  trabajo manual en `wp-maps.json` y `parties`; el cargador por lotes lo hace iterativo listando lo que
-  falta.
-- **Votos por circunscripción estimados.** No afectan al reparto de escaños ni al umbral (ambos operan
-  con porcentajes dentro de la circunscripción), sólo al peso relativo entre circunscripciones al
-  agregar y al voto en blanco. El flag `estimated` permite medir su efecto y sustituirlos.
-- **Ratings.** El peso 0,5 es un prior; el `Computer` pierde la propiedad de que un evento sólo ve sondeos
-  de su ámbito, y hay que comprobar que el rating de casas puramente regionales (Sondaxe, GESOP,
-  Ikertalde) no se dispara ni se hunde por tener pocos eventos.
-- **Rendimiento.** `compute_ratings` sobre ~7.300 sondeos y ~100 eventos sigue en el rango de un minuto;
-  `get_house_effects_data` y `get_drift_data` se ejecutan por ámbito y crecen linealmente.
-- **Argos e Infoelectoral** quedan como fuentes de verificación, no de carga.
-
-## Fuera de alcance (mejoras posteriores)
-
-Prior de efectos de casa compartido por `parent_id` entre ámbitos; transferencia de las encuestas
-autonómicas al pronóstico provincial de las generales (swing por comunidad informado por sondeos
-autonómicos); calibración de `rating_weight` por comunidad; elecciones municipales y europeas.
+Prior de efectos de casa compartido por `parent_id` entre ámbitos; transferencia de los sondeos autonómicos al pronóstico provincial de las generales; calibración de `rating_weight` por comunidad; curva de ruido por circunscripción propia de cada comunidad; elecciones municipales y europeas.

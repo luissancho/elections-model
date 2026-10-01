@@ -47,7 +47,11 @@ python backtest/run_backtest.py --nowcast-only           # sin la ejecución a h
 python backtest/run_backtest.py --no-house-effects       # sin restar los efectos de casa (referencia del método 6)
 python backtest/run_backtest.py --industry-bias --out backtest/results_ib   # con el sesgo del sector, en otra carpeta
 python backtest/run_backtest.py --composition auto --out backtest/results_comp   # sorteo conjunto (método 7)
+python backtest/run_backtest.py --scope es-md                                    # un ámbito autonómico (método 11)
+python backtest/run_backtest.py --scopes all --horizons 6 30                     # todos los autonómicos, cada uno en su carpeta
 ```
+
+Desde el método 11 el backtest vale para cualquier ámbito del catálogo (`data/es-scopes.csv`). `--scope es` (por defecto) escribe en `backtest/results/`, como siempre; cada ámbito autonómico escribe en `backtest/results/{scope}/` y, sin `--events`, evalúa sus elecciones `featured` (resultado oficial y al menos 10 sondeos útiles) celebradas desde 2019. Un ámbito sin elecciones evaluables se anuncia y se salta. En los ámbitos autonómicos las "provincias" de `provinces.csv` son sus circunscripciones (provincias, islas o zonas), y la cuota oficial por circunscripción de las candidaturas sin escaño es una estimación plana (ver `metodo-11-ambitos-autonomicos.md`).
 
 La deriva se lee de la tabla `elections.drift`; si está vacía, cada `Simulator` la calcula al vuelo (más lento). Se rellena con `Computer.compute_drift(save=True)` (notebook `data-load/PollsCompute`).
 
