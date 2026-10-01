@@ -166,3 +166,72 @@ def test_swing_noise_wls_keeps_the_fit_when_a_coefficient_is_clipped():
     # Sin restricción activa, el resultado es el de mínimos cuadrados ponderados ordinario
     a, b = SwingNoise.wls_nonneg(L, 0.01 + 0.2 * x, n)
     assert a == pytest.approx(0.01) and b == pytest.approx(0.2)
+
+
+# --- M11: ratings transversales (sondeos de varios ámbitos con peso por ámbito) ---
+
+def bare_computer():
+    """Computer sin base de datos: sólo los atributos que usa el algoritmo de ratings."""
+    c = Computer.__new__(Computer)
+    c.scope = 'es'
+    c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
+    c.pos_decay, c.week_decay, c.year_decay = .5, .7, .9
+    c.bias_dev_tau, c.min_polls, c.verbose = .01, 3, 0
+    c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
+    return c
+
+
+def pool(rows):
+    """Un sondeo por tupla (ámbito, fecha del evento, casa), 10 días antes del evento."""
+    ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
+    data = []
+    for scope, event_date, pollster in rows:
+        event_date = pd.Timestamp(event_date)
+        dev = .01 if pollster in ('A', 'C') else -.01
+        data.append({
+            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=10),
+            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': 10,
+            'weight_over': 1., 'weight_sample': 1.,
+            'error_avg': .03, 'error_blocks': .01, 'error_within': .02,
+            'bias_avg': .2, 'bias_blocks': .1, 'bias_within': .1, 'bias': .15,
+            'bias_dev_adj': dev, 'bias_dev_err': .01
+        })
+    return pd.DataFrame(data).set_index(['event_scope', 'event_date', 'date', 'pollster_id', 'sponsor_id']).sort_index()
+
+
+ES19 = [('es', '2019-11-10', 'A'), ('es', '2019-11-10', 'B')]
+MD21 = [('es-md', '2021-05-04', 'A'), ('es-md', '2021-05-04', 'C')]
+REG23 = [('es-md', '2023-05-28', 'C'), ('es-cl', '2023-05-28', 'D')]
+JULY23, MAY23 = pd.Timestamp('2023-07-23'), pd.Timestamp('2023-05-28')
+
+
+def test_scope_weight_zero_reproduces_single_scope_ratings():
+    c = bare_computer()
+    mixed = c.rate_events(pool(ES19 + MD21), [JULY23], {'es': 1., 'es-md': 0.}, c.pollsters)
+    alone = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
+    pd.testing.assert_frame_equal(mixed, alone)
+
+
+def test_scope_weight_one_equals_merging_the_events():
+    c = bare_computer()
+    mixed = c.rate_events(pool(ES19 + MD21), [JULY23], {'es': 1., 'es-md': 1.}, c.pollsters)
+    merged = c.rate_events(pool(ES19 + [('es', d, p) for _, d, p in MD21]), [JULY23], {'es': 1.}, c.pollsters)
+    pd.testing.assert_frame_equal(mixed, merged)
+
+
+def test_same_day_events_do_not_see_each_other():
+    c = bare_computer()
+    weights = {'es': 1., 'es-md': .5, 'es-cl': .5}
+    assert c.rate_events(pool(REG23), [MAY23], weights, c.pollsters).shape[0] == 0
+    july = c.rate_events(pool(REG23), [JULY23], weights, c.pollsters).set_index('pollster_id')
+    assert (july.loc[[3, 4], 'num_polls'] > 0).all()
+
+
+def test_regional_only_pollster_is_rated_and_events_are_scope_date_pairs():
+    # Foco 5: C sólo publica en Madrid y aun así tiene rating en un evento de `es`
+    c = bare_computer()
+    out = c.rate_events(pool(ES19 + MD21 + REG23), [JULY23], {'es': 1., 'es-md': .5, 'es-cl': .5}, c.pollsters)
+    out = out.set_index('pollster_id')
+    assert out.loc[3, 'num_events'] == 2 and out.loc[3, 'num_polls'] == 2      # C: Madrid 2021 y 2023
+    assert out.loc[1, 'num_events'] == 2                                       # A: es 2019 y Madrid 2021
+    assert out.loc[3, 'rating'] != out.loc[3, 'quality']

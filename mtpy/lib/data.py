@@ -487,11 +487,20 @@ def save_model_data(
 
 
 def save_ratings_data(
-    data: pd.DataFrame
+    data: pd.DataFrame,
+    update_pollsters: bool = True
 ) -> int:
     """
     Save data to the ratings table into the database.
     Also save each pollster's last rating to the pollsters table.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Ratings indexed by `event_scope`, `event_date` and `pollster_id`.
+    update_pollsters : bool, optional
+        Whether to write the last rating of each pollster to `pollsters.rating`. That column holds the
+        rating of the national scope, so the ratings of a regional scope must not touch it.
 
     Returns
     -------
@@ -512,6 +521,9 @@ def save_ratings_data(
     ))
 
     nrows = rmodel.upsert(dr)
+    if not update_pollsters:
+        return nrows
+
     rlast = dr.groupby('pollster_id')['rating'].last()
 
     pmodel = Pollsters()
