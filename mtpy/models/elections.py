@@ -45,20 +45,54 @@ class Sponsors(Model):
     }
 
 
-class Provinces(Model):
+class Scopes(Model):
+    """
+    Election scopes: `es` (national) and the autonomous communities (`es-*`, ISO 3166-2 in lower case).
+    Replica of `data/es-scopes.csv` (see `mtpy.lib.data.save_catalogues`): legal threshold of the district
+    (`threshold`) and of the whole scope (`threshold_scope`), percentage of valid votes, and the weight of
+    the errors of its polls in the pollster ratings (`rating_weight`).
+    """
 
-    table = 'elections.provinces'
+    table = 'elections.scopes'
 
-    autokey = True
+    key = ['scode']
+    sort = ['scode']
 
     meta = {
-        'id': ['int', 3],
-        'country': ['cat', 5],
+        'scode': ['cat', 10],
+        'name': ['str', None, False],
+        'ine_code': ['int', 2],
+        'parent': ['cat', 10],
+        'demonym': 'str',
+        'threshold': 'num',
+        'threshold_scope': 'num',
+        'rating_weight': 'num',
+        'seats': ['int', 3]
+    }
+
+
+class Districts(Model):
+    """
+    Electoral districts of each scope. Replica of `data/es-districts.csv`: `region_id` is the INE code of
+    the province when the district is a province (`ine_code`) and a code from 100 otherwise; `reg_code` is
+    the INE code of its autonomous community; `seats` is empty for the districts no longer in force.
+    """
+
+    table = 'elections.districts'
+
+    key = ['scope', 'region_id']
+    sort = ['scope', 'region_id']
+
+    meta = {
+        'scope': ['cat', 10],
+        'region_id': ['int', 3],
         'name': ['str', None, False],
         'slug': 'str',
-        'ncode': ['cat', 10],
-        'scode': ['cat', 10],
-        'seats': ['int', 2]
+        'ine_code': ['int', 2],
+        'reg_code': ['int', 2],
+        'population': 'int',
+        'seats': ['int', 3],
+        'aliases': 'str'
     }
 
 

@@ -7,9 +7,69 @@ from typing import Literal, Optional
 from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
-    Drift, Events, EventsData, EventsResults, Polls, PollsResults,
-    Pollsters, PollstersParties, PollstersRatings, Parties
+    Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
+    Pollsters, PollstersParties, PollstersRatings, Parties, Scopes
 )
+
+
+def get_scopes() -> pd.DataFrame:
+    """
+    Catalogue of election scopes (`data/es-scopes.csv`): `es` and the autonomous communities (`es-*`).
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by `scode`: `name`, `ine_code`, `parent`, `demonym`, `threshold`, `threshold_scope`,
+        `rating_weight` and `seats`.
+    """
+    return App.get_().data.read_csv('es-scopes.csv').set_index('scode')
+
+
+def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
+    """
+    Catalogue of electoral districts (`data/es-districts.csv`).
+
+    Parameters
+    ----------
+    scope : str, optional
+        Only the districts of this scope.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per district: `scope`, `region_id`, `name`, `slug`, `ine_code`, `reg_code`, `population`,
+        `seats` and `aliases`.
+    """
+    districts = App.get_().data.read_csv('es-districts.csv')
+    if scope is not None:
+        districts = districts.loc[districts['scope'] == scope].reset_index(drop=True)
+
+    return districts
+
+
+def save_catalogues() -> dict[str, int]:
+    """
+    Replicate the versioned catalogues of scopes and districts into the database. The tables are created
+    when missing (never replaced) and their rows upserted by key.
+
+    Returns
+    -------
+    dict
+        Rows written to `scopes` and `districts`.
+    """
+    out = {}
+    for name, model, data in [
+        ('scopes', Scopes(), get_scopes().reset_index()),
+        ('districts', Districts(), get_districts())
+    ]:
+        if not model.table_exists():
+            model.create(replace=False)
+
+        df = model.format_data(data, int_type='nullable', bin_type='nullable', sort=True)
+        model.upsert(df)
+        out[name] = int(df.shape[0])
+
+    return out
 
 
 def get_event_dmat(
@@ -26,13 +86,21 @@ def get_event_dmat(
     if parties is None:
         parties = get_parties()
 
-    dpolls = polls.loc[event_date][[p for p in parties['name'] if p in polls.columns]].dropna(axis=1, how='all')
+    poll_cols = [p for p in parties['name'] if p in polls.columns]
+    if event_date in polls.index.get_level_values(0):
+        dpolls = polls.loc[event_date][poll_cols].dropna(axis=1, how='all')
+    else:
+        # An election without polls (e.g. the one before the first polled one of a regional scope)
+        dpolls = polls.iloc[:0].droplevel(0)[poll_cols].dropna(axis=1, how='all')
     poll_parties = dpolls.mean().sort_values(ascending=False).index.tolist()
 
     devent = events.loc[event_date].loc[[p for p in parties['name'] if p in events.columns]].dropna()
     event_parties = devent.sort_values(ascending=False).index.tolist()
 
-    final_parties = [p for p in event_parties if p in poll_parties]
+    if dpolls.shape[0] > 0:
+        final_parties = [p for p in event_parties if p in poll_parties]
+    else:
+        final_parties = event_parties
     all_parties = final_parties + [p for p in poll_parties if p not in final_parties]
 
     dpolls = dpolls.reindex(all_parties, axis=1)[all_parties]
@@ -42,7 +110,10 @@ def get_event_dmat(
         dpolls = dpolls.loc[1:42]
 
     dagg = dpolls.agg(['count', 'mean', 'std'])
-    dagg.loc['count'] /= dpolls.shape[0] / 100
+    if dpolls.shape[0] > 0:
+        dagg.loc['count'] /= dpolls.shape[0] / 100
+    else:
+        dagg.loc[['count', 'mean', 'std']] = float('nan')
     dagg.loc['result'] = devent
     dagg['days'] = 0
     dagg = dagg.rename_axis('pollster').reset_index().set_index(['days', 'pollster']).round(2)[all_parties]
@@ -66,7 +137,7 @@ def get_event_params(
     if path is not None:
         params = json.loads(
             App.get_().data.read('params.json')
-        )[scope]
+        ).get(scope, {})
 
         event_params = {dt: params[dt] if dt in params else {} for dt in event_dates}
     else:

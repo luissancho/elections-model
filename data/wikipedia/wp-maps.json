@@ -318,5 +318,6 @@
         "Mediaflows UV": [
             "Mediaflows-UV"
         ]
-    }
+    },
+    "scopes": {}
 }
