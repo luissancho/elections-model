@@ -76,5 +76,415 @@
             "results": "https://en.wikipedia.org/wiki/1977_Spanish_general_election",
             "polls": "https://en.wikipedia.org/wiki/Opinion_polling_for_the_1977_Spanish_general_election"
         }
+    },
+    "es-an": {
+        "2030-06-16": {
+            "results": "https://en.wikipedia.org/wiki/Next_Andalusian_regional_election"
+        },
+        "2026-05-17": {
+            "results": "https://en.wikipedia.org/wiki/2026_Andalusian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2026_Andalusian_regional_election"
+        },
+        "2022-06-19": {
+            "results": "https://en.wikipedia.org/wiki/2022_Andalusian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2022_Andalusian_regional_election"
+        },
+        "2018-12-02": {
+            "results": "https://en.wikipedia.org/wiki/2018_Andalusian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2018_Andalusian_regional_election"
+        },
+        "2015-03-22": {
+            "results": "https://en.wikipedia.org/wiki/2015_Andalusian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Andalusian_regional_election"
+        },
+        "2012-03-25": {
+            "results": "https://en.wikipedia.org/wiki/2012_Andalusian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2012_Andalusian_regional_election"
+        }
+    },
+    "es-ar": {
+        "2030-02-08": {
+            "results": "https://en.wikipedia.org/wiki/Next_Aragonese_regional_election"
+        },
+        "2026-02-08": {
+            "results": "https://en.wikipedia.org/wiki/2026_Aragonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2026_Aragonese_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Aragonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Aragonese_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Aragonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Aragonese_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Aragonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Aragonese_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Aragonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Aragonese_regional_election"
+        }
+    },
+    "es-as": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Asturian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Asturian_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Asturian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Asturian_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Asturian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Asturian_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Asturian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Asturian_regional_election"
+        },
+        "2012-03-25": {
+            "results": "https://en.wikipedia.org/wiki/2012_Asturian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2012_Asturian_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Asturian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Asturian_regional_election"
+        }
+    },
+    "es-ib": {
+        "2027-06-27": {
+            "results": "https://en.wikipedia.org/wiki/Next_Balearic_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Balearic_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Balearic_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Balearic_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Balearic_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Balearic_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Balearic_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Balearic_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Balearic_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Balearic_regional_election"
+        }
+    },
+    "es-cn": {
+        "2027-06-27": {
+            "results": "https://en.wikipedia.org/wiki/Next_Canarian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Canarian_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Canarian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Canarian_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Canarian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Canarian_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Canarian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Canarian_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Canarian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Canarian_regional_election"
+        }
+    },
+    "es-cb": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Cantabrian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Cantabrian_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Cantabrian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Cantabrian_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Cantabrian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Cantabrian_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Cantabrian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Cantabrian_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Cantabrian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Cantabrian_regional_election"
+        }
+    },
+    "es-cl": {
+        "2030-03-15": {
+            "results": "https://en.wikipedia.org/wiki/Next_Castilian-Leonese_regional_election"
+        },
+        "2026-03-15": {
+            "results": "https://en.wikipedia.org/wiki/2026_Castilian-Leonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2026_Castilian-Leonese_regional_election"
+        },
+        "2022-02-13": {
+            "results": "https://en.wikipedia.org/wiki/2022_Castilian-Leonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2022_Castilian-Leonese_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Castilian-Leonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Castilian-Leonese_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Castilian-Leonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Castilian-Leonese_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Castilian-Leonese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Castilian-Leonese_regional_election"
+        }
+    },
+    "es-cm": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Castilian-Manchegan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Castilian-Manchegan_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Castilian-Manchegan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Castilian-Manchegan_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Castilian-Manchegan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Castilian-Manchegan_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Castilian-Manchegan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Castilian-Manchegan_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Castilian-Manchegan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Castilian-Manchegan_regional_election"
+        }
+    },
+    "es-ct": {
+        "2028-06-26": {
+            "results": "https://en.wikipedia.org/wiki/Next_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Catalan_regional_election"
+        },
+        "2024-05-12": {
+            "results": "https://en.wikipedia.org/wiki/2024_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2024_Catalan_regional_election"
+        },
+        "2021-02-14": {
+            "results": "https://en.wikipedia.org/wiki/2021_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2021_Catalan_regional_election"
+        },
+        "2017-12-21": {
+            "results": "https://en.wikipedia.org/wiki/2017_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2017_Catalan_regional_election"
+        },
+        "2015-09-27": {
+            "results": "https://en.wikipedia.org/wiki/2015_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Catalan_regional_election"
+        },
+        "2012-11-25": {
+            "results": "https://en.wikipedia.org/wiki/2012_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2012_Catalan_regional_election"
+        },
+        "2010-11-28": {
+            "results": "https://en.wikipedia.org/wiki/2010_Catalan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2010_Catalan_regional_election"
+        }
+    },
+    "es-vc": {
+        "2027-06-27": {
+            "results": "https://en.wikipedia.org/wiki/Next_Valencian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Valencian_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Valencian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Valencian_regional_election"
+        },
+        "2019-04-28": {
+            "results": "https://en.wikipedia.org/wiki/2019_Valencian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Valencian_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Valencian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Valencian_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Valencian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Valencian_regional_election"
+        }
+    },
+    "es-ex": {
+        "2029-12-21": {
+            "results": "https://en.wikipedia.org/wiki/Next_Extremaduran_regional_election"
+        },
+        "2025-12-21": {
+            "results": "https://en.wikipedia.org/wiki/2025_Extremaduran_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2025_Extremaduran_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Extremaduran_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Extremaduran_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Extremaduran_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Extremaduran_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Extremaduran_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Extremaduran_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Extremaduran_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Extremaduran_regional_election"
+        }
+    },
+    "es-ga": {
+        "2028-03-25": {
+            "results": "https://en.wikipedia.org/wiki/Next_Galician_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Galician_regional_election"
+        },
+        "2024-02-18": {
+            "results": "https://en.wikipedia.org/wiki/2024_Galician_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2024_Galician_regional_election"
+        },
+        "2020-07-12": {
+            "results": "https://en.wikipedia.org/wiki/2020_Galician_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2020_Galician_regional_election"
+        },
+        "2016-09-25": {
+            "results": "https://en.wikipedia.org/wiki/2016_Galician_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2016_Galician_regional_election"
+        },
+        "2012-10-21": {
+            "results": "https://en.wikipedia.org/wiki/2012_Galician_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2012_Galician_regional_election"
+        },
+        "2009-03-01": {
+            "results": "https://en.wikipedia.org/wiki/2009_Galician_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2009_Galician_regional_election"
+        }
+    },
+    "es-md": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Madrilenian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Madrilenian_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Madrilenian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Madrilenian_regional_election"
+        },
+        "2021-05-04": {
+            "results": "https://en.wikipedia.org/wiki/2021_Madrilenian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2021_Madrilenian_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Madrilenian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Madrilenian_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Madrilenian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Madrilenian_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Madrilenian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Madrilenian_regional_election"
+        }
+    },
+    "es-mc": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Murcian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Murcian_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Murcian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Murcian_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Murcian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Murcian_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Murcian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Murcian_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Murcian_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Murcian_regional_election"
+        }
+    },
+    "es-nc": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Navarrese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Navarrese_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Navarrese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Navarrese_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Navarrese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Navarrese_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Navarrese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Navarrese_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Navarrese_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Navarrese_regional_election"
+        }
+    },
+    "es-pv": {
+        "2028-05-21": {
+            "results": "https://en.wikipedia.org/wiki/Next_Basque_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Basque_regional_election"
+        },
+        "2024-04-21": {
+            "results": "https://en.wikipedia.org/wiki/2024_Basque_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2024_Basque_regional_election"
+        },
+        "2020-07-12": {
+            "results": "https://en.wikipedia.org/wiki/2020_Basque_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2020_Basque_regional_election"
+        },
+        "2016-09-25": {
+            "results": "https://en.wikipedia.org/wiki/2016_Basque_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2016_Basque_regional_election"
+        },
+        "2012-10-21": {
+            "results": "https://en.wikipedia.org/wiki/2012_Basque_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2012_Basque_regional_election"
+        },
+        "2009-03-01": {
+            "results": "https://en.wikipedia.org/wiki/2009_Basque_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2009_Basque_regional_election"
+        }
+    },
+    "es-ri": {
+        "2027-05-23": {
+            "results": "https://en.wikipedia.org/wiki/Next_Riojan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/Next_Riojan_regional_election"
+        },
+        "2023-05-28": {
+            "results": "https://en.wikipedia.org/wiki/2023_Riojan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2023_Riojan_regional_election"
+        },
+        "2019-05-26": {
+            "results": "https://en.wikipedia.org/wiki/2019_Riojan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2019_Riojan_regional_election"
+        },
+        "2015-05-24": {
+            "results": "https://en.wikipedia.org/wiki/2015_Riojan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2015_Riojan_regional_election"
+        },
+        "2011-05-22": {
+            "results": "https://en.wikipedia.org/wiki/2011_Riojan_regional_election",
+            "polls": "https://en.wikipedia.org/wiki/2011_Riojan_regional_election"
+        }
     }
 }

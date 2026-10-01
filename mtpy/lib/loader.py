@@ -8,17 +8,76 @@ import requests
 
 from typing import Any, Optional
 from typing_extensions import Self
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from ..core.app import Core
 from ..models.elections import (
     Events, EventsData, EventsResults, Parties, Polls, PollsResults, Pollsters, Sponsors
 )
+from .data import get_districts, get_scopes
 from ..core.utils.helpers import (
     array_shift, format_number, is_number
 )
 
 from .computer import Computer
+
+HEADERS = {
+    'User-Agent': 'ManyThings/1.0 (https://manythings.pro/; info@manythings.pro) mtpy/elections/1.0'
+}
+
+
+def scope_colmap(maps: dict, scope: str, key: str) -> dict[str, str]:
+    """
+    Aliases of `key` (`parties`, `pollsters` or `sponsors`) of `wp-maps.json` mapped to their canonical names:
+    the global ones plus those of the scope (`maps['scopes'][scope][key]`), which prevail. Every alias is
+    percent-decoded.
+    """
+    colmap = {unquote(i): p for p, v in maps[key].items() for i in v}
+    scoped = maps.get('scopes', {}).get(scope, {}).get(key, {})
+    colmap.update({unquote(i): p for p, v in scoped.items() for i in v})
+
+    return colmap
+
+
+def fetch_page(
+    url: str,
+    cache_dir: Optional[str] = None,
+    refresh: bool = False
+) -> bytes:
+    """
+    Download a Wikipedia article, keeping a copy in `cache_dir` so that repeated loads (the curation of
+    aliases is iterative) do not hit the network again.
+
+    Parameters
+    ----------
+    url : str
+        Address of the article.
+    cache_dir : str, optional
+        Directory of the cache; no cache when `None`.
+    refresh : bool, optional
+        Download again even if the article is cached.
+
+    Returns
+    -------
+    bytes
+        HTML of the article. A response with an error status raises `requests.HTTPError`.
+    """
+    fname = None
+    if cache_dir is not None:
+        fname = os.path.join(cache_dir, quote(unquote(url.split('/wiki/')[-1]), safe='()_-,') + '.html')
+        if not refresh and os.path.exists(fname):
+            with open(fname, 'rb') as fh:
+                return fh.read()
+
+    r = requests.get(url, headers=HEADERS, timeout=60)
+    r.raise_for_status()
+
+    if fname is not None:
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(fname, 'wb') as fh:
+            fh.write(r.content)
+
+    return r.content
 
 
 class InfoElectoralLoader(Core):
@@ -281,6 +340,7 @@ class WikipediaLoader(Core):
         self.exclude = exclude
         self.verbose = verbose
         self.path = path or '.'  # Relative to the app file system root (files/)
+        self.cache_dir = None  # Directory where the downloaded articles are cached (see `fetch_page`)
 
         self.data = None
         self.polls = None
@@ -328,11 +388,7 @@ class WikipediaLoader(Core):
         ones of `wp-maps.json` plus those of the scope (`scopes[scope][key]`), which prevail. Wikipedia links
         come percent-encoded or not, so every alias is decoded.
         """
-        colmap = {unquote(i): p for p, v in self.maps[key].items() for i in v}
-        scoped = self.maps.get('scopes', {}).get(self.scope, {}).get(key, {})
-        colmap.update({unquote(i): p for p, v in scoped.items() for i in v})
-
-        return colmap
+        return scope_colmap(self.maps, self.scope, key)
 
     def get_idmap(self, key: str) -> dict[str, str]:
         return getattr(self, key).set_index('name').id.to_dict()
@@ -416,7 +472,23 @@ class WikipediaLoader(Core):
         self,
         x: str,
         year: str
-    ) -> tuple[pd.Timestamp, pd.Timestamp]:
+    ) -> Optional[tuple[pd.Timestamp, pd.Timestamp]]:
+        """
+        Fieldwork dates of a poll from the text of its cell ("5–7 Apr 2005", "30 Mar–6 Apr 2005",
+        "17 Apr 2005"). An unknown start ("?–16 May 2015") takes the end date.
+
+        Parameters
+        ----------
+        x : str
+            Text of the cell.
+        year : str
+            Year used when the cell does not state it.
+
+        Returns
+        -------
+        tuple of pd.Timestamp or None
+            Start and end dates; `None` when the cell is empty or holds no day (e.g. "Dec 2019", "?").
+        """
         if not x:
             return
 
@@ -427,9 +499,16 @@ class WikipediaLoader(Core):
             start.append(end[1])
         if len(end) > 2 and len(end[2]) == 4:
             year = end[2]
+        if len(end) < 2 or not end[0].isdigit():
+            return
+        if len(start) < 2 or not start[0].isdigit():
+            start = end
 
-        started_at = pd.to_datetime('{}-{}-{}'.format(year, start[1], start[0].zfill(2)))
-        ended_at = pd.to_datetime('{}-{}-{}'.format(year, end[1], end[0].zfill(2)))
+        try:
+            started_at = pd.to_datetime('{}-{}-{}'.format(year, start[1], start[0].zfill(2)))
+            ended_at = pd.to_datetime('{}-{}-{}'.format(year, end[1], end[0].zfill(2)))
+        except ValueError:
+            return
         if started_at > ended_at:
             started_at -= pd.DateOffset(years=1)
 
@@ -489,8 +568,10 @@ class WikipediaLoader(Core):
         if data['sponsor_id'] is None:
             data['sponsor_id'] = 0
 
-        dates = array_shift(cols[1].xpath('.//text()')).strip()
-        data['start_date'], data['end_date'] = self.parse_dates(dates, year)
+        dates = self.parse_dates((array_shift(cols[1].xpath('.//text()')) or '').strip(), year)
+        if dates is None:
+            return {}
+        data['start_date'], data['end_date'] = dates
         data['date'] = data['end_date']
 
         sample_size = array_shift(cols[2].xpath('.//text()')).replace(',', '').strip()
@@ -655,12 +736,8 @@ class WikipediaLoader(Core):
         else:
             years = []
         
-        headers = {
-            'User-Agent': 'ManyThings/1.0 (https://manythings.pro/; info@manythings.pro) mtpy/elections/1.0'
-        }
-
         for url in urls:
-            r = html.fromstring(requests.get(url, headers=headers).content)
+            r = html.fromstring(fetch_page(url, self.cache_dir))
             tables = r.xpath("//table[contains(@class, 'wikitable')]")
 
             if len(years) == 0:
@@ -723,6 +800,10 @@ class WikipediaLoader(Core):
                 } | result)
 
                 n_parties += 1
+
+            # A poll without any mapped party has no rows in `polls_results`: left out
+            if n_parties == 0:
+                continue
 
             poll['parties'] = n_parties
 
@@ -840,3 +921,614 @@ class WikipediaLoader(Core):
         df = df.where(df > 0, np.nan)
 
         return df
+
+
+def table_grid(rows: list[html.HtmlElement]) -> list[list[Optional[html.HtmlElement]]]:
+    """
+    Expand the rows of an HTML table into a rectangular grid: a cell with `colspan` or `rowspan` is repeated
+    in every position it covers, so that columns can be addressed by index.
+
+    Parameters
+    ----------
+    rows : list of html.HtmlElement
+        `tr` elements.
+
+    Returns
+    -------
+    list of list
+        One list of cells (`th` or `td`) per row; `None` where the row has no cell.
+    """
+    grid = []
+    pending = {}  # column index -> (cell, rows left)
+
+    for tr in rows:
+        line = []
+        cells = tr.xpath('./th|./td')
+        index = 0
+        pos = 0
+        while pos < len(cells) or index in pending:
+            if index in pending:
+                cell, left = pending[index]
+                line.append(cell)
+                if left > 1:
+                    pending[index] = (cell, left - 1)
+                else:
+                    del pending[index]
+                index += 1
+                continue
+
+            cell = cells[pos]
+            pos += 1
+            rowspan = int(array_shift(cell.xpath('./@rowspan')) or 1)
+            colspan = int(array_shift(cell.xpath('./@colspan')) or 1)
+            for _ in range(colspan):
+                line.append(cell)
+                if rowspan > 1:
+                    pending[index] = (cell, rowspan - 1)
+                index += 1
+
+        grid.append(line)
+
+    return grid
+
+
+def cell_text(cell: Optional[html.HtmlElement]) -> str:
+    """Text of a table cell with the white space collapsed (empty for a missing cell)."""
+    return ' '.join(cell.text_content().split()) if cell is not None else ''
+
+
+def cell_key(cell: html.HtmlElement) -> Optional[str]:
+    """Decoded wiki key of the first article linked from a cell (`None` when it links none)."""
+    for href in cell.xpath('.//a/@href'):
+        key = unquote(re.sub(r'^(.*\/wiki\/)?(.+)$', r'\2', href.strip()))
+        if key and not key.startswith('File:') and not key.startswith('#') and 'cite_note' not in key:
+            return key
+
+    return None
+
+
+def cell_number(text: str) -> Optional[float]:
+    """Number of a table cell ("1,217,164", "31.40", "−" for none); `None` when it is not a number."""
+    text = text.replace(',', '').replace('−', '-').strip()
+
+    return float(text) if is_number(text) else None
+
+
+class WikipediaResultsLoader(Core):
+    """
+    Official results of a regional election from its article in the English Wikipedia: *Results › Overall*
+    (votes, share and seats of every candidacy, and the totals of the scope) and *Results › Distribution by
+    constituency* (share and seats per district, without votes).
+    """
+
+    OTHERS = '-'  # Candidacies without a mapped party (id 0), as in `InfoElectoralLoader`
+    REGIONAL_LIST = 100  # `region_id` of the Canarian regional list: the whole scope votes in it
+    MONTHS = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre',
+        'Noviembre', 'Diciembre'
+    ]
+
+    def __init__(
+        self,
+        scope: str,
+        event_date: str,
+        verbose: int = 0,
+        path: Optional[str] = None
+    ) -> None:
+        """
+        Parameters
+        ----------
+        scope : str
+            Regional scope (`es-*`).
+        event_date : str
+            Date of the election, as listed in `data/wikipedia/wp-urls.json`.
+        verbose : int, optional
+            Level of verbosity.
+        path : str, optional
+            Relative to the app file system root (`files/`).
+        """
+        super().__init__()
+
+        self.scope = scope
+        self.event_date = event_date
+        self.verbose = verbose
+        self.path = path or '.'
+        self.cache_dir = None  # Directory where the downloaded articles are cached (see `fetch_page`)
+
+        self.overall = None  # Candidacies of the *Overall* table (see `parse_overall`)
+        self.overall_totals = None
+        self.constituencies = None  # Rows of the table by constituency (see `parse_constituencies`)
+
+        self.event = None
+        self.totals = None
+        self.results = None
+
+        self.filters = [
+            f"scope = '{self.scope}'",
+            f"date = '{self.event_date}'"
+        ]
+
+        self.m_events = Events()
+        self.m_totals = EventsData()
+        self.m_results = EventsResults()
+
+        self.urls = json.loads(self.app.data.read('wikipedia/wp-urls.json'))
+        self.maps = json.loads(self.app.data.read('wikipedia/wp-maps.json'))
+        self.params = self.urls[self.scope][self.event_date]
+
+        self.scope_info = get_scopes().loc[self.scope]
+        self.districts = get_districts(self.scope)
+
+        self.parties = Parties().get_results(formatted=True)
+        self.parties_colmap = scope_colmap(self.maps, self.scope, 'parties')
+        self.parties_idmap = self.parties.set_index('name').id.to_dict()
+        self.parties_missing = []
+
+    @property
+    def is_upcoming(self) -> bool:
+        """Whether the event has not been held yet (no results to read)."""
+        return pd.Timestamp(self.event_date) > pd.Timestamp.now().normalize()
+
+    def read_data(self) -> Self:
+        """
+        Download the article of the election and read its results tables. Nothing is read for an upcoming
+        event. `parties_missing` lists the candidacies without a mapped party that won seats or at least 1 %
+        of the valid votes (the rest add to "others" silently).
+        """
+        self.parties_missing = []
+        if self.is_upcoming:
+            return self
+
+        doc = html.fromstring(fetch_page(self.params['results'], self.cache_dir))
+        overall, constituencies = self.find_results_tables(doc)
+        if overall is None:
+            raise ValueError('No overall results table in {}'.format(self.params['results']))
+
+        self.overall, self.overall_totals = self.parse_overall(overall)
+        self.constituencies = self.parse_constituencies(constituencies) if constituencies is not None else None
+
+        names = self.overall.apply(lambda r: self.party_name(r['key'], r['abbr'], self.parties_colmap), axis=1)
+        relevant = (self.overall['seats'] > 0) | (self.overall['pct'] >= 1)
+        missing = self.overall.loc[(names == self.OTHERS) & relevant]
+        self.parties_missing = [k if k is not None else a for k, a in zip(missing['key'], missing['abbr'].fillna(missing['label']))]
+
+        return self
+
+    def build_series(self) -> Self:
+        """
+        Build the rows of `events`, `events_data` and `events_results` of the event: from the tables read
+        (see `build_frames`) or, for an upcoming event, the seats of the districts in force without votes.
+        """
+        date = pd.Timestamp(self.event_date)
+        name = 'Próximas' if self.is_upcoming else '{} {}'.format(self.MONTHS[date.month - 1], date.year)
+        self.event = pd.DataFrame([{
+            'date': date, 'scope': self.scope, 'name': 'Elecciones {} {}'.format(self.scope_info['name'], name),
+            'featured': False
+        }])
+
+        if self.is_upcoming:
+            totals = self.districts.loc[self.districts['seats'].notnull(), ['region_id', 'name', 'population', 'seats']]
+            totals = totals.rename(columns={'name': 'region'})
+            total = pd.DataFrame([{'region_id': 0, 'region': None, 'population': None, 'seats': totals['seats'].sum()}])
+            totals = pd.concat([total, totals], ignore_index=True)
+            totals['date'] = date
+            totals['scope'] = self.scope
+            results = pd.DataFrame(columns=['date', 'scope', 'region_id', 'region', 'party', 'votes', 'pct', 'seats'])
+        else:
+            official = None
+            fname = 'results/{}/{}.csv'.format(self.scope, self.event_date)
+            if self.app.data.exists(fname):
+                official = self.app.data.read_csv(fname)
+
+            totals, results = self.build_frames(
+                self.scope, self.event_date, self.overall, self.overall_totals, self.constituencies,
+                self.districts, self.parties_colmap, official=official
+            )
+
+        results['party_id'] = results['party'].map(lambda n: 0 if n == self.OTHERS else self.parties_idmap.get(n))
+        unknown = sorted(set(results.loc[results['party_id'].isnull(), 'party']))
+        if len(unknown) > 0:
+            raise ValueError('Parties mapped in wp-maps.json but missing in the parties table: {}'.format(unknown))
+
+        self.totals = self.m_totals.format_data(totals, int_type='nullable', bin_type='nullable', sort=True)
+        self.results = self.m_results.format_data(results, int_type='nullable', bin_type='nullable', sort=True)
+
+        return self
+
+    def save_event(self) -> Self:
+        """
+        Create the row of the event in `events`, or update its name; `featured` of an existing row is kept
+        (it is set by `mtpy.lib.data.update_featured`).
+        """
+        current = self.m_events.get_results(query={'filters': self.filters}, formatted=True)
+        event = self.event.copy()
+        if current.shape[0] > 0:
+            event['featured'] = bool(current['featured'].iloc[0])
+
+        self.m_events.upsert(self.m_events.format_data(event, int_type='nullable', bin_type='nullable', sort=True))
+
+        return self
+
+    def save_totals(self) -> Self:
+        """Replace the rows of the event in `events_data`."""
+        return self._save(self.m_totals, self.totals)
+
+    def save_results(self) -> Self:
+        """Replace the rows of the event in `events_results`."""
+        return self._save(self.m_results, self.results)
+
+    def _save(self, model: Any, data: pd.DataFrame) -> Self:
+        """Delete the rows of the event from the table of `model` and write `data`."""
+        if data is None or data.shape[0] == 0:
+            return self
+
+        model.execute('DELETE FROM {} WHERE {}'.format(model.table, ' AND '.join(self.filters)))
+        nrows = model.upsert(data)
+        if self.verbose > 0:
+            print(f'{nrows} rows updated...')
+
+        return self
+
+    def show_summary(self) -> None:
+        """Print the consistency checks of the event: votes of the parties against the valid votes, and seats."""
+        if self.results is None or self.results.shape[0] == 0:
+            print('Upcoming event: {} districts, {} seats'.format(
+                self.totals.shape[0] - 1, format_number(self.totals.loc[self.totals['region_id'] == 0, 'seats'].iloc[0])
+            ))
+            return
+
+        total = self.totals.loc[self.totals['region_id'] == 0].iloc[0]
+        t_votes = total['votes'] - total['blank']
+        n_votes = self.results.loc[self.results['region_id'] == 0, 'votes'].sum()
+        n_seats = self.results.loc[self.results['region_id'] == 0, 'seats'].sum()
+        d_seats = self.results.loc[self.results['region_id'] > 0, 'seats'].sum()
+
+        print('Total: {} | Votes: {} | Diff: {} | Seats: {} | District seats: {}'.format(
+            format_number(t_votes), format_number(n_votes), format_number(n_votes - t_votes),
+            format_number(n_seats), format_number(d_seats)
+        ))
+
+    @staticmethod
+    def party_name(key: Optional[str], abbr: Optional[str], party_names: dict[str, str]) -> str:
+        """
+        Party of a candidacy: the alias of its wiki key or, failing that, of its abbreviation; "others" when
+        neither is mapped (never the party table directly: abbreviations collide between communities).
+        """
+        if key is not None and key in party_names:
+            return party_names[key]
+        if abbr is not None and abbr in party_names:
+            return party_names[abbr]
+
+        return WikipediaResultsLoader.OTHERS
+
+    @staticmethod
+    def build_frames(
+        scope: str,
+        event_date: str,
+        overall: pd.DataFrame,
+        totals: dict[str, int],
+        constituencies: Optional[pd.DataFrame],
+        districts: pd.DataFrame,
+        party_names: dict[str, str],
+        official: Optional[pd.DataFrame] = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Rows of `events_data` and `events_results` of a past election from its parsed tables.
+
+        The total of the scope (`region_id = 0`) is exact. The article gives shares and seats per district but
+        no votes: the valid votes of the scope are split among the districts in proportion to their population
+        (`estimated = True`) unless `official` brings the figure; the votes of a party in a district are its
+        share of them. The Canarian regional list (`REGIONAL_LIST`) is voted by the whole scope, so it takes
+        the valid votes of the total. A single-district community gets one district row equal to the total.
+
+        Parameters
+        ----------
+        scope : str
+            Regional scope.
+        event_date : str
+            Date of the election.
+        overall : pd.DataFrame
+            Candidacies of the scope (see `parse_overall`).
+        totals : dict
+            Totals of the scope (see `parse_overall`).
+        constituencies : pd.DataFrame, optional
+            Shares and seats per district (see `parse_constituencies`); `None` in a single-district scope.
+        districts : pd.DataFrame
+            Districts of the scope (`data/es-districts.csv`).
+        party_names : dict
+            Party of each wiki key or abbreviation; candidacies in neither add to "others".
+        official : pd.DataFrame, optional
+            Official valid votes per district: `region_id`, `votes` and, optionally, `blank`.
+
+        Returns
+        -------
+        tuple of pd.DataFrame
+            `events_data` rows (`date`, `scope`, `region_id`, `region`, `seats`, `population`, `registered`,
+            `counted`, `votes`, `abstentions`, `blank`, `invalid`, `estimated`) and `events_results` rows
+            (`date`, `scope`, `region_id`, `region`, `party`, `votes`, `pct`, `seats`).
+        """
+        cls = WikipediaResultsLoader
+        valid, blank = int(totals['votes']), int(totals.get('blank', 0))
+
+        # --- Total of the scope
+        parties = overall.assign(party=[cls.party_name(k, a, party_names) for k, a in zip(overall['key'], overall['abbr'])])
+        res0 = parties.groupby('party', sort=False)[['votes', 'seats']].sum().reset_index()
+        res0['pct'] = (100. * res0['votes'] / valid).round(2)
+        res0['region_id'] = 0
+        res0['region'] = None
+
+        data = [{
+            'region_id': 0, 'region': None, 'seats': int(totals['seats']), 'population': None,
+            'registered': totals.get('registered'), 'counted': totals.get('counted'), 'votes': valid,
+            'abstentions': totals.get('abstentions'), 'blank': blank, 'invalid': totals.get('invalid'),
+            'estimated': False
+        }]
+        results = [res0]
+
+        if constituencies is None:
+            # --- Single district: one unit of allocation equal to the total
+            single = districts.loc[districts['seats'].notnull()]
+            if single.shape[0] != 1:
+                raise ValueError('{} has no table by constituency and {} districts in force'.format(scope, single.shape[0]))
+            single = single.iloc[0]
+            data.append(data[0] | {'region_id': int(single['region_id']), 'region': single['name'], 'population': single['population']})
+            results.append(res0.assign(region_id=int(single['region_id']), region=single['name']))
+        else:
+            # --- Districts: resolved by name or alias
+            lookup = {}
+            for _, d in districts.iterrows():
+                lookup[d['name']] = d
+                for alias in str(d['aliases']).split('|') if isinstance(d['aliases'], str) else []:
+                    if alias:
+                        lookup[alias] = d
+            unknown = sorted(set(constituencies['district']) - set(lookup))
+            if len(unknown) > 0:
+                raise ValueError('Constituencies of {} {} not in es-districts.csv (name or alias): {}'.format(scope, event_date, unknown))
+
+            const = constituencies.assign(
+                region_id=[int(lookup[n]['region_id']) for n in constituencies['district']],
+                party=[cls.party_name(k, a, party_names) for k, a in zip(constituencies['key'], constituencies['abbr'])]
+            )
+            regions = districts.set_index('region_id').loc[sorted(const['region_id'].unique())]
+
+            split = regions.loc[regions.index != cls.REGIONAL_LIST]
+            votes = cls.split_votes(valid, split['population'])
+            estimated = pd.Series(True, index=regions.index)
+            blanks = (blank * votes / valid).round()
+            if cls.REGIONAL_LIST in regions.index:
+                votes.loc[cls.REGIONAL_LIST] = valid
+                blanks.loc[cls.REGIONAL_LIST] = blank
+            if official is not None:
+                off = official.set_index('region_id')
+                for rid in [r for r in off.index if r in regions.index]:
+                    votes.loc[rid] = int(off.loc[rid, 'votes'])
+                    estimated.loc[rid] = False
+                    if 'blank' in off.columns and pd.notnull(off.loc[rid, 'blank']):
+                        blanks.loc[rid] = int(off.loc[rid, 'blank'])
+                    else:
+                        blanks.loc[rid] = round(blank * votes.loc[rid] / valid)
+
+            res = const.groupby(['region_id', 'party'], sort=False)[['pct', 'seats']].sum().reset_index()
+            res['votes'] = (res['pct'] * res['region_id'].map(votes) / 100.).round().astype(int)
+
+            # "Others" of each district: what is left of its valid votes, net of the blank ballots
+            listed = res.loc[res['party'] != cls.OTHERS].groupby('region_id')['votes'].sum()
+            rest = (votes - blanks - listed.reindex(votes.index).fillna(0)).clip(lower=0)
+            others = res.loc[res['party'] == cls.OTHERS].set_index('region_id')['seats'].reindex(votes.index).fillna(0)
+            res = pd.concat([
+                res.loc[res['party'] != cls.OTHERS],
+                pd.DataFrame({
+                    'region_id': votes.index, 'party': cls.OTHERS, 'votes': rest.astype(int).values,
+                    'pct': (100. * rest / votes).round(2).values, 'seats': others.astype(int).values
+                })
+            ], ignore_index=True)
+            res['region'] = res['region_id'].map(regions['name'])
+            results.append(res)
+
+            seats = res.groupby('region_id')['seats'].sum()
+            for rid, d in regions.iterrows():
+                data.append({
+                    'region_id': int(rid), 'region': d['name'], 'seats': int(seats.loc[rid]),
+                    'population': d['population'] if pd.notnull(d['population']) else None,
+                    'registered': None, 'counted': None, 'votes': int(votes.loc[rid]), 'abstentions': None,
+                    'blank': int(blanks.loc[rid]), 'invalid': None, 'estimated': bool(estimated.loc[rid])
+                })
+
+        data = pd.DataFrame(data)
+        results = pd.concat(results, ignore_index=True)
+        for df in (data, results):
+            df.insert(0, 'scope', scope)
+            df.insert(0, 'date', pd.Timestamp(event_date))
+
+        return data, results[['date', 'scope', 'region_id', 'region', 'party', 'votes', 'pct', 'seats']]
+
+    @staticmethod
+    def find_results_tables(doc: html.HtmlElement) -> tuple[Optional[html.HtmlElement], Optional[html.HtmlElement]]:
+        """
+        Results tables of an election article.
+
+        Parameters
+        ----------
+        doc : html.HtmlElement
+            Parsed article.
+
+        Returns
+        -------
+        tuple
+            The *Overall* table (the `wikitable` whose caption contains "Summary of") and the table by
+            constituency (first header cell "Constituency"); `None` for the one that is missing, as the
+            second in the single-district communities.
+        """
+        overall = None
+        constituencies = None
+        for table in doc.xpath("//table[contains(@class, 'wikitable')]"):
+            caption = table.xpath('./caption')
+            if overall is None and len(caption) > 0 and 'Summary of' in cell_text(caption[0]):
+                overall = table
+                continue
+
+            first = table.xpath('.//tr[1]/th[1]')
+            if constituencies is None and len(first) > 0 and cell_text(first[0]) == 'Constituency':
+                constituencies = table
+
+        return overall, constituencies
+
+    @staticmethod
+    def parse_overall(table: html.HtmlElement) -> tuple[pd.DataFrame, dict[str, int]]:
+        """
+        Read the *Overall* table: one row per candidacy and the totals of the scope.
+
+        The columns are located by their header cells ("Votes", "%" and the "Total" of the seats), not by
+        position; with two blocks of votes (Canary Islands: island and regional constituencies) the first
+        one is read.
+
+        Parameters
+        ----------
+        table : html.HtmlElement
+            The *Overall* table.
+
+        Returns
+        -------
+        tuple
+            A frame with `key` (wiki key of the linked article, or `None`), `label`, `abbr` (text of the last
+            parentheses), `votes`, `pct` and `seats`; and a dict with `votes` (valid), `blank`, `invalid`,
+            `counted`, `abstentions`, `registered` and `seats`.
+        """
+        grid = table_grid(table.xpath('.//tr'))
+        rows = table.xpath('.//tr')
+
+        # Header: the last row made only of `th` cells before the first candidacy
+        cols = {}
+        for tr, line in zip(rows, grid):
+            if len(tr.xpath('./td')) > 0 and len(cols) > 0:
+                break
+            labels = [cell_text(c) for c in line]
+            if 'Votes' in labels and '%' in labels:
+                cols = {
+                    'votes': labels.index('Votes'), 'pct': labels.index('%'),
+                    'seats': max(i for i, v in enumerate(labels) if v in ('Total', 'Won', 'Seats'))
+                }
+        if len(cols) == 0:
+            raise ValueError('Header of the overall results table not found')
+
+        totals_map = {
+            'Blank ballots': 'blank', 'Total': 'total', 'Valid votes': 'votes', 'Invalid votes': 'invalid',
+            'Votes cast / turnout': 'counted', 'Abstentions': 'abstentions', 'Registered voters': 'registered'
+        }
+        data = []
+        totals = {}
+        for tr, line in zip(rows, grid):
+            tds = tr.xpath('./td')
+            if len(tds) < 2:
+                continue
+
+            first = cell_text(tds[0])
+            if first in totals_map:
+                name = totals_map[first]
+                if name == 'total':
+                    seats = cell_number(cell_text(line[cols['seats']]))
+                    if seats is not None:
+                        totals['seats'] = int(seats)
+                else:
+                    value = cell_number(cell_text(line[cols['votes']]))
+                    if value is not None:
+                        totals[name] = int(value)
+                continue
+
+            # Rows of the members of a coalition hang from the colour cell of its row (`rowspan`): skipped,
+            # their votes and seats are already in the row of the coalition
+            if len(line) <= cols['seats'] or line[0] is not tds[0]:
+                continue
+
+            votes = cell_number(cell_text(line[cols['votes']]))
+            label = cell_text(line[1])
+            if votes is None or not label:
+                continue
+
+            abbr = re.findall(r'\(([^()]*)\)[^()]*$', label)
+            pct = cell_number(cell_text(line[cols['pct']]))
+            seats = cell_number(cell_text(line[cols['seats']]))
+            data.append({
+                'key': cell_key(line[1]), 'label': label, 'abbr': abbr[0] if len(abbr) > 0 else None,
+                'votes': int(votes), 'pct': pct if pct is not None else 0., 'seats': int(seats) if seats is not None else 0
+            })
+
+        return pd.DataFrame(data, columns=['key', 'label', 'abbr', 'votes', 'pct', 'seats']), totals
+
+    @staticmethod
+    def parse_constituencies(table: html.HtmlElement) -> pd.DataFrame:
+        """
+        Read the table by constituency: share and seats of each candidacy in each district.
+
+        Parameters
+        ----------
+        table : html.HtmlElement
+            The *Distribution by constituency* table (three header rows, two columns per party: `%` and `S`).
+
+        Returns
+        -------
+        pd.DataFrame
+            Long format with `district`, `key` (wiki key of the party), `abbr` (header text), `pct` and `seats`
+            (0 where the cell is "−"). The row "Total" and the empty cells (candidacies that did not run in
+            the district) are left out.
+        """
+        rows = table.xpath('.//tr')
+        grid = table_grid(rows)
+
+        header = grid[0]
+        parties = {}  # first column of each party -> (key, abbr)
+        for i, cell in enumerate(header):
+            if i == 0 or cell is None or (i > 1 and header[i - 1] is cell):
+                continue
+            parties[i] = (cell_key(cell), cell_text(cell))
+
+        data = []
+        for tr, line in zip(rows, grid):
+            if len(tr.xpath('./td')) < 2:
+                continue
+
+            district = cell_text(line[0])
+            if not district or district == 'Total':
+                continue
+
+            for i, (key, abbr) in parties.items():
+                if i + 1 >= len(line):
+                    continue
+                pct = cell_number(cell_text(line[i]))
+                if pct is None:
+                    continue
+                seats = cell_number(cell_text(line[i + 1]))
+                data.append({
+                    'district': district, 'key': key, 'abbr': abbr, 'pct': pct,
+                    'seats': int(seats) if seats is not None else 0
+                })
+
+        return pd.DataFrame(data, columns=['district', 'key', 'abbr', 'pct', 'seats'])
+
+    @staticmethod
+    def split_votes(total: int, weights: pd.Series) -> pd.Series:
+        """
+        Split an integer total in proportion to `weights` by largest remainders, so that the parts add up
+        exactly to `total`.
+
+        Parameters
+        ----------
+        total : int
+            Amount to split.
+        weights : pd.Series
+            Positive weights (e.g. population of each district).
+
+        Returns
+        -------
+        pd.Series
+            Integer parts, with the index of `weights`.
+        """
+        w = weights.astype(float)
+        exact = total * w / w.sum()
+        out = np.floor(exact).astype(int)
+        rest = int(total - out.sum())
+        if rest > 0:
+            order = (exact - out).sort_values(ascending=False, kind='stable').index[:rest]
+            out.loc[order] += 1
+
+        return out

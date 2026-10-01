@@ -661,6 +661,52 @@ def save_house_effects_data(
     return model.upsert(df)
 
 
+def update_featured(
+    scope: str,
+    min_polls: int = 10,
+    drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+    drop_ctypes: Optional[list[str]] = ['wban', 'exit']
+) -> int:
+    """
+    Mark as `featured` the events of a scope with an official result and at least `min_polls` useful polls:
+    computed (see `Computer.compute_weights`), with a positive overlap weight and not of the dropped
+    methodology or context types. The other events of the scope are unmarked.
+
+    Parameters
+    ----------
+    scope : str
+        Election scope.
+    min_polls : int, optional
+        Useful polls needed.
+    drop_mtypes : list of str, optional
+        Methodology types that do not count (aggregators and online panels).
+    drop_ctypes : list of str, optional
+        Context types that do not count (polls within the ban and exit polls).
+
+    Returns
+    -------
+    int
+        Number of featured events of the scope.
+    """
+    model = Events()
+    events = model.get_results(query=dict(filters=["scope = '{}'".format(scope)]), formatted=True)
+
+    data = EventsData().get_results(query=dict(
+        filters=["scope = '{}'".format(scope), 'region_id = 0', 'votes IS NOT NULL']
+    ), formatted=True)
+
+    polls = Polls().get_results(query=dict(filters=["event_scope = '{}'".format(scope)]), formatted=True)
+    useful = polls.loc[
+        polls['computed'].fillna(False).astype(bool) & (polls['weight_over'] > 0)
+        & ~polls['mtype'].isin(drop_mtypes or []) & ~polls['ctype'].isin(drop_ctypes or [])
+    ].groupby('event_date', observed=True).size()
+
+    events['featured'] = events['date'].isin(data['date']) & (events['date'].map(useful).fillna(0) >= min_polls)
+    model.upsert(model.format_data(events, int_type='nullable', bin_type='nullable', sort=True))
+
+    return int(events['featured'].sum())
+
+
 def get_event_dates(
     scope: str = 'es',
     date_from: Optional[str] = None,
