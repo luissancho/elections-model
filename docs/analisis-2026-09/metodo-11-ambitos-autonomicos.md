@@ -50,7 +50,7 @@ Se adoptó el enfoque en el que datos, pesos, errores y desviaciones siguen sien
 | `es-nc` Navarra | 1 | 3 | 4 (4) | 103 | 18 | 2027-05-23 (8) |
 | `es-pv` País Vasco | 3 provincias | 3 | 5 (5) | 214 | 32 | 2028-05-21 (8) |
 | `es-ri` La Rioja | 1 | 5 | 4 (3) | 79 | 15 | 2027-05-23 (4) |
-| **Total** | 66 | | 78 (65) | 2.942 | 88 | |
+| **Total** | 61 vigentes y 5 de Murcia hasta 2015 | | 78 (65) | 2.942 | 88 | |
 
 Una elección es `featured` cuando tiene resultado oficial y al menos 10 sondeos útiles (computados, con peso de solapamiento positivo y sin agregadores, paneles online, sondeos en veda ni a pie de urna). Quedan fuera 13, nueve de ellas de mayo de 2019, donde dominan los trackings de ElectoPanel.
 
@@ -68,7 +68,7 @@ Los umbrales se comprobaron contra la sección *Electoral system* del artículo 
 
 ### Ingesta
 
-**Sondeos** (`WikipediaLoader`). La tabla es la primera `wikitable` cuya primera fila empieza por "Polling firm" bajo un encabezado que contenga "Voting intention"; si no hay, la que cuelga directamente de "Opinion polls" (artículos pequeños sin subsecciones). Las columnas de partido son las celdas de cabecera con enlace a un artículo, y "Lead" se localiza por su texto, no por posición. Los enlaces se normalizan (llegan unas veces codificados y otras no). Dos columnas del mismo sondeo que acaban en el mismo partido (miembros de una coalición posterior) se suman. Una celda de fecha sin día descarta la fila.
+**Sondeos** (`WikipediaLoader`). La tabla es la primera `wikitable` cuya primera fila empieza por "Polling firm" bajo un encabezado que contenga "Voting intention"; si no hay, la que cuelga directamente de "Opinion polls" (artículos pequeños sin subsecciones). Las columnas de partido son las celdas de cabecera con enlace a un artículo y, entre ellas, las que sólo traen un texto o un logo (su clave es ese texto, para que aparezcan como pendientes de mapear en vez de perderse); "Lead" se localiza por su texto, no por posición. Los enlaces se normalizan (llegan unas veces codificados y otras no). Dos columnas del mismo sondeo que acaban en el mismo partido (miembros de una coalición posterior) se suman. Una celda de fecha sin día descarta la fila.
 
 **Resultados** (`WikipediaResultsLoader`). El total del ámbito (`region_id = 0`) sale de *Overall* y es exacto; las filas de los miembros de una coalición se ignoran, porque sus votos y escaños ya están en la fila de la coalición. La tabla por circunscripción da porcentaje y escaños, así que:
 
@@ -93,7 +93,7 @@ Invariantes comprobados: con `scopes=None`, los 1.012 ratings de `es` son idént
 - **Umbral.** `Simulator(threshold=None)` toma los umbrales del ámbito y del evento; un número fija el de circunscripción y `0` lo desactiva.
 - **Estimadores.** El error de sondeo, los escaños por regresión, la deriva y la razón de composición se ajustan con las elecciones del propio ámbito cuando tiene al menos 3 `featured` anteriores, y con las del ámbito padre (`es`) si no. El estimador de escaños regresa la **cuota** de escaños de la cámara, para que parlamentos de 33 y 350 escaños sean comparables. El prior de los efectos de casa se anula con menos de 3 elecciones previas.
 - **Partidos "regionales".** En `es` la marca es la curada en la tabla de partidos. Dentro de una comunidad se deriva de los resultados: un partido es regional cuando sólo concurrió en circunscripciones que suman menos de la mitad del voto válido (UPL, Por Ávila, los partidos de una isla). La especificación decía cero para todos, y con eso un partido del 0,4 % recibía el error de sondeo de uno de ámbito completo (1,3 puntos): Sa Unió perdía el escaño de Formentera en el 37 % de las simulaciones, dejando 52 de 300 con un escaño sin repartir, y Por Ávila lo perdía en el 43 %. Con la marca derivada, ninguna simulación de Baleares queda corta y Por Ávila conserva el suyo en más del 80 %.
-- **Ruido del método 9.** Dentro de una comunidad no hay componente por comunidad: sólo el choque por circunscripción, con la curva provincial estimada en `es`. En un distrito único no hay nada que redistribuir.
+- **Ruido del método 9.** Dentro de una comunidad no hay componente por comunidad: sólo el choque por circunscripción, con la curva provincial estimada en `es`. En un distrito único no hay nada que redistribuir, y la lista autonómica canaria, que vota todo el archipiélago, queda fuera del choque.
 - **Partidos sin base.** Un partido simulado sin resultado previo ni regla de herencia se queda sin escaños, pero no rompe la proyección. Las reglas (`smap` en `params.json`) cubren los casos claros: SALF hereda de VOX, SUMAR de UP, Más Madrid de UP en 2019, VOX en Cataluña 2021 de PP y Cs, Aliança Catalana de Junts, Por Andalucía de la Adelante de 2018, y Navarra Suma y su ruptura.
 - **Errores claros.** Un evento sin sondeos, o con tan pocos que el promedio no se puede ajustar, falla con un mensaje que lo dice, en vez de devolver ceros.
 
@@ -116,7 +116,7 @@ Invariantes comprobados: con `scopes=None`, los 1.012 ratings de `es` son idént
 | Cobertura de cuotas por circunscripción al 50 / 80 / 95 % | 0,52 / 0,78 / 0,93 | 0,47 / 0,74 / 0,89 | 0,58 / 0,87 / 0,94 |
 | Brier de la mayoría absoluta de bloque | 0,055 | 0,048 | 0,033 |
 
-Los intervalos de cuotas están tan bien calibrados como en las generales, y los de escaños también. El promedio no mejora al último sondeo a 6 días (en las autonómicas hay menos sondeos y más recientes), y a 30 días queda entre las dos líneas base. Un caso tiene escaños "no válidos" cuando un partido con escaño carecía de base para proyectarse (Teruel Existe 2023, Soria ¡Ya! 2022, UPN y PP tras Navarra Suma).
+Los intervalos de cuotas están tan bien calibrados como en las generales, y los de escaños también. El promedio no mejora al último sondeo a 6 días (en las autonómicas hay menos sondeos y más recientes), y a 30 días queda entre las dos líneas base. Un caso queda sin métricas de escaños cuando un partido con escaño carecía de base para proyectarse (Teruel Existe 2023, Soria ¡Ya! 2022) y también en Navarra 2023, donde el modelo sí proyecta a UPN y PP con la regla `split` de Navarra Suma pero la comprobación de huérfanos del backtest no reconoce ese tipo de regla.
 
 Por ámbito, a 6 días:
 
@@ -151,7 +151,10 @@ El criterio de la especificación (coberturas dentro de ±0,15 del nominal en lo
 - **Estimadores propios con pocos datos.** Con tres o cuatro elecciones, el estimador de error del ámbito es ruidoso; en Baleares deja a un partido regional del 1,5 % con un error de 0,04 puntos, demasiado estrecho.
 - **Peso 0,5.** Es un valor de partida (D3). El cambio de rating de las casas grandes es considerable y conviene revisarlo antes de adoptarlo en `es`.
 - **Sondeos con empate en cabeza.** Se descartan, también en las generales. Son 15 en las autonómicas.
-- **Extremadura.** El umbral autonómico alternativo exige concurrir en las dos provincias; no se modela.
+- **Umbrales.** En Extremadura el umbral autonómico alternativo exige concurrir en las dos provincias; no se modela. En la Comunidad Valenciana la base legal del 5 % son los votos emitidos, no los válidos. En Canarias, hasta 2015, también entraba la lista más votada de cada isla; tampoco se modela.
+- **Sondeos encargados por partidos.** Se descartan los sondeos cuya "casa" es un partido (31). Los encargados por un partido a una casa (Celeste Tel/PSOE, Sigma Dos/PP…, hasta 92 filas) se cargan como cualquier otro, sin patrocinador, igual que en las generales.
+- **Estimadores propios sin validar.** El backtest de 2023 usó casi siempre los estimadores de `es`, porque los ámbitos tenían menos de tres elecciones `featured` anteriores; las próximas elecciones usarán los propios en todos los ámbitos salvo Asturias. Esa configuración no está validada todavía.
+- **Caché del cargador por lotes.** `load/run_load.py` en seco lee la copia local de los artículos; con `--save` los descarga de nuevo salvo que se pida `--cached`.
 
 ## Fuera de alcance
 

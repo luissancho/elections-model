@@ -427,3 +427,20 @@ def test_require_forecast_rejects_an_average_without_values():
     empty = pd.DataFrame({'mean': [np.nan, np.nan, 100.]}, index=['PP', 'PSOE', '-'])
     with pytest.raises(ValueError, match='Not enough polls to fit the average of es-cb 2027-05-23'):
         Simulator.require_forecast(empty, 'es-cb', '2027-05-23')
+
+
+def test_swing_noise_leaves_the_regional_list_alone():
+    # La lista autonómica canaria (100) la vota todo el archipiélago: no es una isla más del ruido M9
+    from mtpy.lib.computer import SwingNoise
+    sim = Simulator.__new__(Simulator)
+    sim.default_region = 0
+    sim.region_groups = {100: 5, 101: 5, 102: 5}
+    sim.v2swing = SwingNoise(a_r=0.01, b_r=0.1, a_p=0.01, b_p=0.05, n=100)
+    sim.rng_swing = np.random.default_rng(1)
+    vpred = pd.DataFrame({'A': [35., 36., 40., 30.], 'B': [45., 44., 40., 50.], '-': [20.] * 4}, index=[0, 100, 101, 102])
+    valid = pd.Series([1000., 1000., 600., 400.], index=[0, 100, 101, 102])
+    out = sim._add_swing_noise(vpred, ['A', 'B'], valid)
+    assert out.loc[100].equals(vpred.loc[100]) and out.loc[0].equals(vpred.loc[0])
+    islands, w = [101, 102], valid.loc[[101, 102]]
+    assert not np.allclose(out.loc[islands, 'A'], vpred.loc[islands, 'A'])
+    assert (out.loc[islands, 'A'] * w).sum() / w.sum() == pytest.approx((vpred.loc[islands, 'A'] * w).sum() / w.sum(), abs=0.1)

@@ -1745,7 +1745,9 @@ class Simulator(Core):
         with relative standard deviations from `v2swing` at the predicted level of each party in the community
         and in the province, and apply them with `apply_swing_noise` (national shares preserved).
         """
-        provinces = [r for r in vpred_pcts.index if r != self.default_region]
+        # The Canarian regional list is voted by the whole scope: it is not one more district to perturb, and
+        # with the valid votes of the whole archipelago it would dominate the mean the shocks must preserve
+        provinces = [r for r in vpred_pcts.index if r not in (self.default_region, REGIONAL_LIST_ID)]
         if len(provinces) < 2:
             return vpred_pcts  # A single district is the whole scope: nothing to redistribute
         # Work on the provincial shares as the allocation will see them (each province renormalised to 100

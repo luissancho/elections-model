@@ -5,12 +5,13 @@ polls, results, computed series and ratings.
 
 Usage (from the repository root):
     python load/run_load.py --scopes es-md es-cl | all --what urls polls results compute ratings
-                            [--since 2009] [--save] [--overwrite] [--refresh]
+                            [--since 2009] [--save] [--overwrite] [--refresh] [--cached]
 
 Without `--save` nothing is written to the database (dry run): the report lists, per scope and event, what
 was read and the parties, pollsters and sponsors that are not mapped yet in `data/wikipedia/wp-maps.json`.
 The report is saved to `files/stage/load_report.csv` and the downloaded articles are cached in
-`files/stage/wikipedia/`.
+`files/stage/wikipedia/`. A dry run reads the cache (the curation of aliases is iterative); with `--save` the
+articles are downloaded again unless `--cached` is given. Only regional scopes are accepted.
 """
 import argparse
 import json
@@ -152,12 +153,68 @@ def build_urls(scope: str, since: int = 2009, cache: Optional[str] = None, refre
     return dict(sorted(events.items(), reverse=True))
 
 
+def check_scopes(scopes: list[str], catalogue: pd.DataFrame) -> list[str]:
+    """
+    Validate the scopes of a batch load: only the regional ones of the catalogue (those with a parent). The
+    national scope has its own loaders and curated inventory, which this script would overwrite.
+
+    Raises
+    ------
+    ValueError
+        When a scope is unknown or has no parent.
+    """
+    bad = [s for s in scopes if s not in catalogue.index or pd.isnull(catalogue.loc[s, 'parent'])]
+    if len(bad) > 0:
+        raise ValueError('run_load only handles regional scopes of data/es-scopes.csv, not {}'.format(bad))
+
+    return list(scopes)
+
+
+def merge_urls(existing: dict, rebuilt: dict, today: Optional[str] = None) -> tuple[dict, Optional[tuple[str, str]]]:
+    """
+    Merge a rebuilt inventory of a scope into the one already kept. The past events of both are kept (the
+    rebuilt ones prevail). The date of an upcoming event already inventoried is respected, because it may
+    have been corrected by hand and the polls stored are keyed by it; it takes the addresses just rebuilt.
+
+    Returns
+    -------
+    tuple
+        The merged inventory (most recent first) and, when the date of the upcoming event was kept instead
+        of the rebuilt one, the pair `(kept, rebuilt)`; `None` otherwise.
+    """
+    today = today or pd.Timestamp.now().strftime('%Y-%m-%d')
+    merged = {d: conf for d, conf in existing.items() if d <= today} | {d: conf for d, conf in rebuilt.items() if d <= today}
+
+    kept = None
+    old = sorted(d for d in existing if d > today)
+    new = sorted(d for d in rebuilt if d > today)
+    if len(old) > 0 and len(new) > 0 and old[0] != new[0]:
+        merged[old[0]] = rebuilt[new[0]]
+        kept = (old[0], new[0])
+    elif len(new) > 0:
+        merged[new[0]] = rebuilt[new[0]]
+    elif len(old) > 0:
+        merged[old[0]] = existing[old[0]]
+
+    return dict(sorted(merged.items(), reverse=True)), kept
+
+
+def effective_refresh(refresh: bool, save: bool, cached: bool) -> bool:
+    """
+    Whether the articles are downloaded again: always with `--refresh`, and by default when saving (a load
+    must not write a stale copy without saying so) unless `--cached` asks for the cache.
+    """
+    return bool(refresh or (save and not cached))
+
+
 def top(names: list[str]) -> list[str]:
     """Distinct names ordered by frequency, as `name (n)`."""
     return ['{} ({})'.format(name, n) for name, n in Counter(names).most_common()]
 
 
-def load_polls(scope: str, event_date: str, save: bool, overwrite: bool, cache: Optional[str], verbose: int) -> dict:
+def load_polls(
+    scope: str, event_date: str, save: bool, overwrite: bool, cache: Optional[str], verbose: int, refresh: bool = False
+) -> dict:
     """
     Read the polls of one event and, with `save`, write them to the database.
 
@@ -169,7 +226,7 @@ def load_polls(scope: str, event_date: str, save: bool, overwrite: bool, cache: 
     from mtpy.lib.loader import WikipediaLoader
 
     loader = WikipediaLoader(scope, event_date, verbose=max(verbose - 1, 0))
-    loader.cache_dir = cache
+    loader.cache_dir, loader.refresh = cache, refresh
     loader.read_data()
 
     out = {
@@ -182,15 +239,14 @@ def load_polls(scope: str, event_date: str, save: bool, overwrite: bool, cache: 
         return out
 
     loader.build_series()
-    if save:
-        loader.select_series(overwrite=overwrite)
-        out['polls_saved'] = int(loader.polls.shape[0])
-        loader.save_polls(overwrite=overwrite).save_results(overwrite=overwrite)
+    loader.select_series(overwrite=overwrite)
+    out['polls_saved'] = int(loader.polls.shape[0])
+    loader.save_polls(overwrite=overwrite).save_results(overwrite=overwrite)
 
     return out
 
 
-def load_results(scope: str, event_date: str, save: bool, cache: Optional[str], verbose: int) -> dict:
+def load_results(scope: str, event_date: str, save: bool, cache: Optional[str], verbose: int, refresh: bool = False) -> dict:
     """
     Read the results of one event (or the districts and seats of an upcoming one) and, with `save`, write
     its rows of `events`, `events_data` and `events_results`.
@@ -204,7 +260,7 @@ def load_results(scope: str, event_date: str, save: bool, cache: Optional[str], 
     from mtpy.lib.loader import WikipediaResultsLoader
 
     loader = WikipediaResultsLoader(scope, event_date, verbose=max(verbose - 1, 0))
-    loader.cache_dir = cache
+    loader.cache_dir, loader.refresh = cache, refresh
     loader.read_data().build_series()
 
     total = loader.totals.loc[loader.totals['region_id'] == 0].iloc[0]
@@ -262,6 +318,7 @@ def run_load(
     save: bool = False,
     overwrite: bool = False,
     refresh: bool = False,
+    cached: bool = False,
     verbose: int = 1
 ) -> pd.DataFrame:
     """
@@ -282,6 +339,8 @@ def run_load(
         Replace the polls already stored for the event instead of adding only the new ones.
     refresh : bool, optional
         Download the articles again instead of using the cache.
+    cached : bool, optional
+        With `save`, use the cached articles instead of downloading them again (see `effective_refresh`).
     verbose : int, optional
         Level of verbosity.
 
@@ -294,14 +353,20 @@ def run_load(
     if len(unknown) > 0:
         raise ValueError('Unknown steps: {}'.format(unknown))
 
+    from mtpy.lib.data import get_scopes
+
+    scopes = check_scopes(scopes, get_scopes())
     cache = cache_dir()
+    refresh = effective_refresh(refresh, save, cached)
 
     if 'urls' in what:
         urls = read_urls()
         for scope in scopes:
             if verbose > 0:
                 print('Inventory of {}...'.format(scope))
-            urls[scope] = build_urls(scope, since=since, cache=cache, refresh=refresh)
+            urls[scope], kept = merge_urls(urls.get(scope, {}), build_urls(scope, since=since, cache=cache, refresh=refresh))
+            if kept is not None:
+                print('{}: upcoming event kept at {} (the article now says {}); review it by hand'.format(scope, *kept))
         with open(URLS, 'w') as fh:
             fh.write(dump_urls(urls))
 
@@ -316,11 +381,11 @@ def run_load(
             if 'polls' in what:
                 if verbose > 0:
                     print('Polls of {} {}...'.format(scope, event_date))
-                row.update(load_polls(scope, event_date, save, overwrite, cache, verbose))
+                row.update(load_polls(scope, event_date, save, overwrite, cache, verbose, refresh))
             if 'results' in what:
                 if verbose > 0:
                     print('Results of {} {}...'.format(scope, event_date))
-                row.update(load_results(scope, event_date, save, cache, verbose))
+                row.update(load_results(scope, event_date, save, cache, verbose, refresh))
             rows.append(row)
 
         if 'compute' in what:
@@ -347,6 +412,7 @@ def main() -> None:
     parser.add_argument('--save', action='store_true', help='write to the database (dry run otherwise)')
     parser.add_argument('--overwrite', action='store_true', help='replace the polls already stored')
     parser.add_argument('--refresh', action='store_true', help='download the articles again')
+    parser.add_argument('--cached', action='store_true', help='with --save, use the cached articles instead of downloading them again')
     args = parser.parse_args()
 
     from mtpy import mtpy
@@ -357,7 +423,10 @@ def main() -> None:
     scopes = get_scopes()
     scopes = scopes.loc[scopes['parent'].notnull()].index.tolist() if args.scopes == ['all'] else args.scopes
 
-    report = run_load(scopes, args.what, since=args.since, save=args.save, overwrite=args.overwrite, refresh=args.refresh)
+    report = run_load(
+        scopes, args.what, since=args.since, save=args.save, overwrite=args.overwrite, refresh=args.refresh,
+        cached=args.cached
+    )
 
     out = os.path.join(app.fspath, 'stage', 'load_report.csv')
     os.makedirs(os.path.dirname(out), exist_ok=True)

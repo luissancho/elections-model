@@ -341,6 +341,7 @@ class WikipediaLoader(Core):
         self.verbose = verbose
         self.path = path or '.'  # Relative to the app file system root (files/)
         self.cache_dir = None  # Directory where the downloaded articles are cached (see `fetch_page`)
+        self.refresh = False  # Download the articles again even if they are cached
 
         self.data = None
         self.polls = None
@@ -448,23 +449,38 @@ class WikipediaLoader(Core):
         Returns
         -------
         tuple
-            `{column index: wiki key}` of the cells that link to an article (not to a `File:`), and the index
-            of the cell whose text is "Lead" (`None` when it is not in that row). Indexes count `colspan`.
+            `{column index: wiki key}` of the cells that link to an article (not to a `File:`), plus the text
+            of the unlinked cells among them, and the index of the cell whose text is "Lead" (`None` when it
+            is not in that row). Indexes count `colspan`.
         """
-        parties = {}
+        cells = []
         lead = None
         index = 0
         for th in table.xpath('.//tr[1]/th'):
             hrefs = [unquote(re.sub(r'^(.*\/wiki\/)?(.+)$', r'\2', h.strip())) for h in th.xpath('.//a/@href')]
             hrefs = [h for h in hrefs if h and not h.startswith('File:') and not h.startswith('#')]
             text = ' '.join(th.text_content().split())
+            if not text and len(hrefs) == 0:
+                # Only a logo: its caption (title of the file link, or alternative text of the image)
+                text = (array_shift(th.xpath('.//a/@title | .//img/@alt')) or '').strip()
 
             if text == 'Lead':
                 lead = index
-            elif len(hrefs) > 0:
-                parties[index] = hrefs[0]
+            else:
+                cells.append((index, hrefs[0] if len(hrefs) > 0 else None, text))
 
             index += int(array_shift(th.xpath('./@colspan')) or 1)
+
+        # Party columns run from the first linked cell to "Lead"; a cell without a link among them (a party
+        # without an article) is keyed by its text, so that it is reported as unmapped instead of vanishing
+        linked = [i for i, key, _ in cells if key is not None]
+        parties = {}
+        for i, key, text in cells:
+            if key is not None:
+                parties[i] = key
+            elif len(linked) > 0 and i > linked[0] and (lead is None or i < lead) and text and text not in ('?', 'N') \
+                    and not text.startswith('Other'):
+                parties[i] = text
 
         return parties, lead
 
@@ -539,7 +555,9 @@ class WikipediaLoader(Core):
             'results': []
         }
 
-        poll = array_shift(cols[0].xpath('.//text()')).strip().replace(self.charsep, '-').split('/')
+        poll = (array_shift(cols[0].xpath('.//text()')) or '').strip().replace(self.charsep, '-').split('/')
+        if not poll[0].strip():
+            return {}  # Row without a polling firm
         if len(poll) > 1:
             data['pollster'], data['sponsor'] = poll
         else:
@@ -580,7 +598,7 @@ class WikipediaLoader(Core):
         data['start_date'], data['end_date'] = dates
         data['date'] = data['end_date']
 
-        sample_size = array_shift(cols[2].xpath('.//text()')).replace(',', '').strip()
+        sample_size = (array_shift(cols[2].xpath('.//text()')) or '').replace(',', '').strip()
         data['sample_size'] = pd.to_numeric(sample_size, errors='coerce') if is_number(sample_size) else None
 
         # The "Lead" cell tells polls from other rows; it is the last one when the header does not place it
@@ -757,7 +775,7 @@ class WikipediaLoader(Core):
             years = []
         
         for url in urls:
-            r = html.fromstring(fetch_page(url, self.cache_dir))
+            r = html.fromstring(fetch_page(url, self.cache_dir, self.refresh))
             tables = r.xpath("//table[contains(@class, 'wikitable')]")
 
             if len(years) == 0:
@@ -1054,6 +1072,7 @@ class WikipediaResultsLoader(Core):
         self.verbose = verbose
         self.path = path or '.'
         self.cache_dir = None  # Directory where the downloaded articles are cached (see `fetch_page`)
+        self.refresh = False  # Download the articles again even if they are cached
 
         self.overall = None  # Candidacies of the *Overall* table (see `parse_overall`)
         self.overall_totals = None
@@ -1099,7 +1118,7 @@ class WikipediaResultsLoader(Core):
         if self.is_upcoming:
             return self
 
-        doc = html.fromstring(fetch_page(self.params['results'], self.cache_dir))
+        doc = html.fromstring(fetch_page(self.params['results'], self.cache_dir, self.refresh))
         overall, constituencies = self.find_results_tables(doc)
         if overall is None:
             raise ValueError('No overall results table in {}'.format(self.params['results']))

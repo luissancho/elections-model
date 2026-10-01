@@ -308,3 +308,107 @@ def test_parties_outside_the_constituency_table_get_flat_district_shares():
     blank = data.set_index('region_id')['blank'] / data.set_index('region_id')['votes'] * 100
     total = res.loc[res['region_id'] > 0].groupby('region_id')['pct'].sum() + blank.reindex(range(1, 53)).dropna()
     assert total.between(99.5, 100.5).all()
+
+
+# --- Revisión final de la rama: caché, columnas sin enlace, celdas vacías, guardas del cargador por lotes ---
+
+def fixture_bytes(page):
+    with open(os.path.join(FIXTURES, page + '.html'), 'rb') as fh:
+        return fh.read()
+
+
+def test_read_data_passes_refresh_to_the_download(monkeypatch):
+    # Sin esto, `--refresh` no llegaba a los cargadores y se releía siempre la copia en caché
+    from mtpy.lib import loader as loader_module
+    calls = []
+
+    def fake_fetch(url, cache_dir=None, refresh=False):
+        calls.append((url, cache_dir, refresh))
+        return fixture_bytes('2023_Madrilenian_regional_election')
+
+    monkeypatch.setattr(loader_module, 'fetch_page', fake_fetch)
+
+    polls = bare_loader('es-md')
+    polls.params, polls.years, polls.verbose, polls.event_date = {'polls': 'https://x/wiki/A'}, None, 0, '2023-05-28'
+    polls.cache_dir, polls.refresh = 'cache', True
+    polls.read_data()
+    assert calls == [('https://x/wiki/A', 'cache', True)] and len(polls.data) == 50
+
+    results = WikipediaResultsLoader.__new__(WikipediaResultsLoader)
+    results.scope, results.event_date, results.params = 'es-md', '2023-05-28', {'results': 'https://x/wiki/B'}
+    results.parties_colmap, results.cache_dir, results.refresh = {}, 'cache', True
+    results.read_data()
+    assert calls[-1] == ('https://x/wiki/B', 'cache', True) and results.overall_totals['seats'] == 135
+
+
+POLLS_TABLE = '''<table class="wikitable">
+<tr><th rowspan="2">Polling firm/Commissioner</th><th rowspan="2">Fieldwork date</th><th rowspan="2">Sample size</th>
+<th rowspan="2">Turnout</th><th><a href="/wiki/PP_X">logo</a></th><th>JUEx</th><th rowspan="2">Lead</th></tr>
+<tr><th></th><th></th></tr>
+<tr><td>GAD3/RTVE</td><td>1–2 May 2023</td><td>1,000</td><td>?</td><td>40.0</td><td>2.5</td><td>10.0</td></tr>
+<tr><td>Sigma Dos</td><td>3 May 2023</td><td></td><td>?</td><td>41.0</td><td>3.0</td><td>9.0</td></tr>
+<tr><td></td><td>4 May 2023</td><td>800</td><td>?</td><td>42.0</td><td>3.5</td><td>8.0</td></tr>
+</table>'''
+
+
+def test_party_column_without_link_uses_its_text():
+    # Foco 2: una columna de partido sin enlace (JUEx) no puede desaparecer: su texto es la clave
+    table = html.fromstring(POLLS_TABLE)
+    parties, lead = WikipediaLoader.read_header(table)
+    assert parties == {4: 'PP_X', 5: 'JUEx'} and lead == 6
+    loader = bare_loader('es-ex')
+    rows = loader.read_table(table, '2023')
+    assert 'JUEx' in loader.parties_missing and [r['party'] for r in rows[0]['results']] == ['PP_X', 'JUEx']
+
+
+def test_empty_cells_do_not_abort_the_table():
+    # Foco 3: una celda vacía de muestra deja el tamaño sin valor; una de casa descarta la fila
+    rows = bare_loader('es-ex').read_table(html.fromstring(POLLS_TABLE), '2023')
+    assert [row['pollster'] for row in rows] == ['GAD3', 'Sigma Dos']
+    assert rows[0]['sample_size'] == 1000 and pd.isnull(rows[1]['sample_size'])
+
+
+def run_load_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('run_load', os.path.join(ROOT, 'load', 'run_load.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_run_load_rejects_the_national_scope():
+    # El cargador por lotes es de los ámbitos autonómicos: con `es` borraría su inventario y sus `featured`
+    module = run_load_module()
+    catalogue = pd.read_csv(os.path.join(DATA, 'es-scopes.csv')).set_index('scode')
+    assert module.check_scopes(['es-md', 'es-cl'], catalogue) == ['es-md', 'es-cl']
+    for bad in (['es'], ['es-md', 'es-xx']):
+        with pytest.raises(ValueError, match='regional scopes'):
+            module.check_scopes(bad, catalogue)
+
+
+def test_merge_urls_keeps_a_hand_corrected_upcoming_event():
+    module = run_load_module()
+    existing = {'2027-06-20': {'results': 'next'}, '2023-05-28': {'results': 'a', 'polls': 'a'}}
+    rebuilt = {'2027-06-27': {'results': 'next', 'polls': 'next'}, '2023-05-28': {'results': 'a', 'polls': 'a'},
+               '2019-05-26': {'results': 'b', 'polls': 'b'}}
+    merged, kept = module.merge_urls(existing, rebuilt, today='2026-10-01')
+    # La fecha del evento próximo ya inventariado se respeta (pudo corregirse a mano), con las URL nuevas
+    assert list(merged) == ['2027-06-20', '2023-05-28', '2019-05-26'] and kept == ('2027-06-20', '2027-06-27')
+    assert merged['2027-06-20'] == {'results': 'next', 'polls': 'next'}
+    merged, kept = module.merge_urls({}, rebuilt, today='2026-10-01')
+    assert merged == rebuilt and kept is None
+
+
+def test_effective_refresh_downloads_again_when_saving():
+    module = run_load_module()
+    assert module.effective_refresh(refresh=False, save=True, cached=False) is True
+    assert module.effective_refresh(refresh=False, save=True, cached=True) is False
+    assert module.effective_refresh(refresh=False, save=False, cached=False) is False
+    assert module.effective_refresh(refresh=True, save=False, cached=True) is True
+
+
+def test_party_column_with_only_a_logo_uses_its_caption():
+    # Una columna con sólo el logo (enlace a `File:`) se identifica por el título de la imagen
+    table = html.fromstring(POLLS_TABLE.replace('<th>JUEx</th>', '<th><a href="/wiki/File:Logo_JUEx.svg" title="JUEx"></a></th>'))
+    parties, lead = WikipediaLoader.read_header(table)
+    assert parties == {4: 'PP_X', 5: 'JUEx'} and lead == 6
