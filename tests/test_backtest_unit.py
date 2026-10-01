@@ -133,3 +133,15 @@ def test_summarize_case_provincial_metrics_skip_cells_without_projection():
 
     m = summarize_case(shares, seats.assign(seats_valid=False), blocks.assign(seats_valid=False), provinces)
     assert np.isnan(m['cov_prov_shares50']) and np.isnan(m['mae_prov_shares']) and np.isnan(m['n_prov_cells'])
+
+
+def test_results_dir_keeps_es_at_the_root():
+    """M11: los resultados de `es` siguen en la raíz; cada ámbito autonómico tiene su carpeta."""
+    import importlib.util
+    import os
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.results_dir('backtest/results', 'es') == 'backtest/results'
+    assert module.results_dir('backtest/results', 'es-md') == os.path.join('backtest/results', 'es-md')

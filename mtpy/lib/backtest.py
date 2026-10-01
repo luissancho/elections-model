@@ -19,7 +19,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
-from .data import get_event_results
+from .data import get_event_dates, get_event_results
 from .simulator import Simulator
 
 DEFAULT_EVENTS = ['2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10', '2023-07-23']
@@ -61,6 +61,17 @@ def log_score(p: float, y: bool | int, eps: float = 1e-3) -> float:
 
 def covered(lo: float, hi: float, y: float) -> bool:
     return bool(np.isfinite(lo) and np.isfinite(hi) and lo <= y <= hi)
+
+
+def default_events(scope: str, since: str = '2019-01-01') -> list[str]:
+    """
+    Elections evaluated by default in the backtest of a scope: `DEFAULT_EVENTS` in the national one; in the
+    others, their featured elections (official result and enough polls) held from `since`.
+    """
+    if scope == 'es':
+        return list(DEFAULT_EVENTS)
+
+    return get_event_dates(scope=scope, date_from=since, featured=True)
 
 
 def official_provinces(scope: str, event_date: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -414,7 +425,7 @@ def run_backtest(
         `shares`, `seats`, `blocks`, `meta` (concatenated per case), `metrics` (one row per case) and
         `by_horizon` (means over the events, per horizon).
     """
-    events = events or DEFAULT_EVENTS
+    events = events or default_events(scope)
     horizons = horizons or DEFAULT_HORIZONS
 
     parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'meta': []}
