@@ -239,3 +239,47 @@ def test_unknown_constituency_raises_with_its_name():
     districts = districts.loc[districts['scope'] == 'es-as'].assign(aliases='')
     with pytest.raises(ValueError, match='Eastern'):
         WikipediaResultsLoader.build_frames('es-as', '2023-05-28', rows.reset_index(), totals, const, districts, {})
+
+
+def test_skipped_pollsters_and_sponsors_are_not_reported():
+    # Sondeos internos de partido: la casa de la lista `skip` se descarta sin figurar como pendiente;
+    # un patrocinador de la lista deja el sondeo sin patrocinador (id 0), tampoco pendiente
+    maps = {
+        'parties': {}, 'pollsters': {}, 'sponsors': {}, 'scopes': {},
+        'skip': {'pollsters': ['GAD3'], 'sponsors': ['La Razón']}
+    }
+    loader = bare_loader('es-md', maps=maps)
+    loader.pollsters_idmap = {'NC Report': 7}
+    loader.sponsors_idmap = {}
+    rows = loader.read_table(WikipediaLoader.find_poll_table(load('2023_Madrilenian_regional_election')), '2023')
+    assert {row['pollster'] for row in rows} == {'NC Report'}
+    assert all(row['sponsor_id'] == 0 for row in rows)
+    assert 'GAD3' not in loader.pollsters_missing and 'Sigma Dos' in loader.pollsters_missing
+    assert 'La Razón' not in loader.sponsors_missing
+
+
+def test_columns_mapped_to_the_same_party_are_merged():
+    # Dos columnas del mismo sondeo que acaban en el mismo partido (miembros de una coalición posterior):
+    # un solo resultado con la suma, no dos filas con la misma clave
+    maps = {
+        'parties': {}, 'pollsters': {}, 'sponsors': {},
+        'scopes': {'es-md': {'parties': {'X': ["People's_Party_of_the_Community_of_Madrid", 'Más_Madrid']}}}
+    }
+    loader = bare_loader('es-md', maps=maps, party_ids={'X': 9})
+    first = loader.read_table(WikipediaLoader.find_poll_table(load('2023_Madrilenian_regional_election')), '2023')[0]
+    merged = [r for r in first['results'] if r['party'] == 'X']
+    assert len(merged) == 1
+    assert merged[0]['pct'] == pytest.approx(49.5 + 14.3)
+    assert (merged[0]['seats_min'], merged[0]['seats_max']) == (90, 92)
+
+
+def test_build_frames_seat_fixes_correct_the_article():
+    # Erratas del artículo (Cataluña 2010: CiU 8 en Lleida, fueron 9): correcciones por circunscripción y candidatura
+    fixes = pd.DataFrame({'region_id': [5], 'key': ["People's_Party_of_Castile_and_León"], 'seats': [4]})
+    data, res = frames('2022_Castilian-Leonese_regional_election', 'es-cl', '2022-02-13', seat_fixes=fixes)
+    assert data.set_index('region_id').loc[5, 'seats'] == 8
+    avila = res.loc[(res['region_id'] == 5) & (res['party'] == "People's_Party_of_Castile_and_León")]
+    assert avila['seats'].tolist() == [4]
+    with pytest.raises(ValueError, match='not in the table'):
+        frames('2022_Castilian-Leonese_regional_election', 'es-cl', '2022-02-13',
+               seat_fixes=pd.DataFrame({'region_id': [5], 'key': ['Nobody'], 'seats': [1]}))

@@ -547,8 +547,14 @@ class WikipediaLoader(Core):
             data['pollster'] = ' '.join([poll[0], note]).strip()
             data['sponsor'] = None
 
+        # Names listed under `skip` in wp-maps.json are left out on purpose (internal polls of the parties):
+        # the poll of a skipped pollster is dropped and a skipped sponsor is ignored, without reporting them
+        skip = self.maps.get('skip', {})
+
         if data['pollster'] in self.pollsters_colmap:
             data['pollster'] = self.pollsters_colmap[data['pollster']]
+        if data['pollster'] in skip.get('pollsters', []):
+            return {}
         if data['pollster'] in self.pollsters_idmap:
             data['pollster_id'] = self.pollsters_idmap[data['pollster']]
         elif data['pollster'] is not None:
@@ -558,7 +564,7 @@ class WikipediaLoader(Core):
             data['sponsor'] = self.sponsors_colmap[data['sponsor']]
         if data['sponsor'] in self.sponsors_idmap:
             data['sponsor_id'] = self.sponsors_idmap[data['sponsor']]
-        elif data['sponsor'] is not None:
+        elif data['sponsor'] is not None and data['sponsor'] not in skip.get('sponsors', []):
             self.sponsors_missing.append(data['sponsor'])
 
         data['name'] = data['pollster'] + (' / ' + data['sponsor'] if data['sponsor'] is not None else '')
@@ -621,6 +627,20 @@ class WikipediaLoader(Core):
                     result['seats_min'] = seats_parts[0]
                     result['seats_max'] = seats_parts[1] if len(seats_parts) > 1 else result['seats_min']
                     result['seats'] = np.floor(np.mean([result['seats_min'], result['seats_max']]))
+
+            # Two columns of the same poll that map to the same party (members of a later coalition) are one
+            # result: shares and seats add up
+            same = [r for r in data['results'] if result['party_id'] is not None and r['party_id'] == result['party_id']]
+            if len(same) > 0:
+                same[0]['pct'] += result['pct']
+                for key in ['seats_min', 'seats_max']:
+                    if same[0][key] is not None and result[key] is not None:
+                        same[0][key] += result[key]
+                    elif result[key] is not None:
+                        same[0][key] = result[key]
+                if same[0]['seats_min'] is not None:
+                    same[0]['seats'] = np.floor(np.mean([same[0]['seats_min'], same[0]['seats_max']]))
+                continue
 
             data['results'].append(result)
 
@@ -1109,20 +1129,24 @@ class WikipediaResultsLoader(Core):
         if self.is_upcoming:
             totals = self.districts.loc[self.districts['seats'].notnull(), ['region_id', 'name', 'population', 'seats']]
             totals = totals.rename(columns={'name': 'region'})
-            total = pd.DataFrame([{'region_id': 0, 'region': None, 'population': None, 'seats': totals['seats'].sum()}])
-            totals = pd.concat([total, totals], ignore_index=True)
+            total = {'region_id': 0, 'region': None, 'population': None, 'seats': totals['seats'].sum()}
+            totals = pd.DataFrame([total] + totals.to_dict('records'))
             totals['date'] = date
             totals['scope'] = self.scope
             results = pd.DataFrame(columns=['date', 'scope', 'region_id', 'region', 'party', 'votes', 'pct', 'seats'])
         else:
-            official = None
+            # Curated overrides of the event: official valid votes per district and errata of the seats
+            official, seat_fixes = None, None
             fname = 'results/{}/{}.csv'.format(self.scope, self.event_date)
             if self.app.data.exists(fname):
                 official = self.app.data.read_csv(fname)
+            fname = 'results/{}/{}-seats.csv'.format(self.scope, self.event_date)
+            if self.app.data.exists(fname):
+                seat_fixes = self.app.data.read_csv(fname)
 
             totals, results = self.build_frames(
                 self.scope, self.event_date, self.overall, self.overall_totals, self.constituencies,
-                self.districts, self.parties_colmap, official=official
+                self.districts, self.parties_colmap, official=official, seat_fixes=seat_fixes
             )
 
         results['party_id'] = results['party'].map(lambda n: 0 if n == self.OTHERS else self.parties_idmap.get(n))
@@ -1210,7 +1234,8 @@ class WikipediaResultsLoader(Core):
         constituencies: Optional[pd.DataFrame],
         districts: pd.DataFrame,
         party_names: dict[str, str],
-        official: Optional[pd.DataFrame] = None
+        official: Optional[pd.DataFrame] = None,
+        seat_fixes: Optional[pd.DataFrame] = None
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Rows of `events_data` and `events_results` of a past election from its parsed tables.
@@ -1239,6 +1264,10 @@ class WikipediaResultsLoader(Core):
             Party of each wiki key or abbreviation; candidacies in neither add to "others".
         official : pd.DataFrame, optional
             Official valid votes per district: `region_id`, `votes` and, optionally, `blank`.
+        seat_fixes : pd.DataFrame, optional
+            Corrections of errata of the table by constituency: `region_id`, `key` (wiki key or header
+            abbreviation of the candidacy) and its `seats` in that district. A row that matches no cell of the
+            table raises `ValueError`.
 
         Returns
         -------
@@ -1289,6 +1318,15 @@ class WikipediaResultsLoader(Core):
                 region_id=[int(lookup[n]['region_id']) for n in constituencies['district']],
                 party=[cls.party_name(k, a, party_names) for k, a in zip(constituencies['key'], constituencies['abbr'])]
             )
+            if seat_fixes is not None:
+                for _, fix in seat_fixes.iterrows():
+                    cell = (const['region_id'] == int(fix['region_id'])) & ((const['key'] == fix['key']) | (const['abbr'] == fix['key']))
+                    if cell.sum() != 1:
+                        raise ValueError('Seat fix of {} {} not in the table by constituency: {} in {}'.format(
+                            scope, event_date, fix['key'], fix['region_id']
+                        ))
+                    const.loc[cell, 'seats'] = int(fix['seats'])
+
             regions = districts.set_index('region_id').loc[sorted(const['region_id'].unique())]
 
             split = regions.loc[regions.index != cls.REGIONAL_LIST]

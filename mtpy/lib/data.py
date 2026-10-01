@@ -162,12 +162,14 @@ def get_event_dmat(
     if dpolls.loc[1:42].shape[0] > 0:
         dpolls = dpolls.loc[1:42]
 
-    dagg = dpolls.agg(['count', 'mean', 'std'])
     if dpolls.shape[0] > 0:
+        dagg = dpolls.agg(['count', 'mean', 'std'])
         dagg.loc['count'] /= dpolls.shape[0] / 100
     else:
-        dagg.loc[['count', 'mean', 'std']] = float('nan')
-    dagg.loc['result'] = devent
+        # No polls (and, for an upcoming event, no parties either): empty statistics
+        dagg = pd.DataFrame(float('nan'), index=['count', 'mean', 'std', 'result'], columns=all_parties)
+    if len(all_parties) > 0:
+        dagg.loc['result'] = devent
     dagg['days'] = 0
     dagg = dagg.rename_axis('pollster').reset_index().set_index(['days', 'pollster']).round(2)[all_parties]
 

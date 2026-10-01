@@ -239,6 +239,11 @@ def compute_scope(scope: str, save: bool, verbose: int) -> None:
     comp.compute_weights(save=save, overwrite=True)
     comp.compute_errors(save=save)
     comp.compute_deviations(save=save)
+    if not save:
+        return
+
+    # Drift and house effects read the errors stored by the steps above: a fresh series is needed
+    comp = Computer(scope=scope, verbose=max(verbose - 1, 0)).build_series()
     comp.compute_drift(save=save)
     comp.compute_house_effects(save=save)
 

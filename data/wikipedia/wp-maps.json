@@ -271,6 +271,9 @@
         ],
         "EM Analytics": [
             "EM-Analytics"
+        ],
+        "Ágora Integral": [
+            "Agora Integral"
         ]
     },
     "sponsors": {
@@ -286,7 +289,7 @@
         "El Debate": [
             "eldebate.es"
         ],
-        "El Periódico":[
+        "El Periódico": [
             "El Periòdic"
         ],
         "Telecinco": [
@@ -319,5 +322,417 @@
             "Mediaflows-UV"
         ]
     },
-    "scopes": {}
+    "scopes": {
+        "es-an": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Andalusia"
+                ],
+                "PSOE": [
+                    "Spanish_Socialist_Workers'_Party_of_Andalusia"
+                ],
+                "IU": [
+                    "United_Left/The_Greens–Assembly_for_Andalusia"
+                ],
+                "UP": [
+                    "Podemos_Andalusia",
+                    "Adelante_Andalucía_(2018)",
+                    "Unidas_Podemos_por_Andalucía"
+                ],
+                "PorA": [
+                    "Por_Andalucía"
+                ],
+                "ADELANTE": [
+                    "Andaluces_Levantaos"
+                ],
+                "JM+": [
+                    "Jaén_Merece_Más"
+                ],
+                "AxSi": [
+                    "Andalucía_por_Sí"
+                ]
+            }
+        },
+        "es-ar": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Aragon"
+                ],
+                "PSOE": [
+                    "Socialists'_Party_of_Aragon"
+                ],
+                "CHA": [
+                    "Chunta_Aragonesista"
+                ],
+                "IU": [
+                    "United_Left_of_Aragon"
+                ],
+                "TE": [
+                    "Aragón_Existe"
+                ]
+            }
+        },
+        "es-as": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Asturias"
+                ],
+                "PSOE": [
+                    "Asturian_Socialist_Federation"
+                ],
+                "FAC": [
+                    "Asturias_Forum"
+                ],
+                "UP": [
+                    "Podemos_Asturias"
+                ],
+                "IU": [
+                    "United_Left_of_Asturias",
+                    "Assembly_for_Asturias"
+                ]
+            }
+        },
+        "es-ib": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_the_Balearic_Islands"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_the_Balearic_Islands"
+                ],
+                "MESM": [
+                    "Més_per_Mallorca"
+                ],
+                "PSM": [
+                    "Socialist_Party_of_Mallorca"
+                ],
+                "El Pi": [
+                    "Proposta_per_les_Illes"
+                ],
+                "MxMe": [
+                    "Més_per_Menorca",
+                    "Socialist_Party_of_Menorca"
+                ],
+                "GxF": [
+                    "Gent_per_Formentera"
+                ],
+                "Sa Unió": [
+                    "Sa_Unió_de_Formentera"
+                ],
+                "IU": [
+                    "United_Left_of_the_Balearic_Islands",
+                    "Guanyem_les_Illes_Balears"
+                ],
+                "UM": [
+                    "Majorcan_Union"
+                ]
+            }
+        },
+        "es-cn": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_the_Canary_Islands"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_the_Canaries"
+                ],
+                "CC": [
+                    "Agreement_of_Nationalist_Unity"
+                ],
+                "NC": [
+                    "New_Canaries"
+                ],
+                "UP": [
+                    "Sí_Podemos_Canarias"
+                ],
+                "IU": [
+                    "Canarian_United_Left",
+                    "Canaries_Decides"
+                ],
+                "ASG": [
+                    "Gomera_Socialist_Group"
+                ],
+                "AHI": [
+                    "Independent_Herrenian_Group"
+                ]
+            }
+        },
+        "es-cb": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Cantabria"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_Cantabria"
+                ],
+                "IU": [
+                    "United_Left_of_Cantabria"
+                ]
+            }
+        },
+        "es-cl": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Castile_and_León"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_Castile_and_León"
+                ],
+                "UP": [
+                    "Podemos_Castile_and_León"
+                ],
+                "IU": [
+                    "United_Left_of_Castile_and_León"
+                ],
+                "UPL": [
+                    "Leonese_People's_Union"
+                ],
+                "XAV": [
+                    "For_Ávila"
+                ],
+                "EV": [
+                    "Soria_¡Ya!"
+                ]
+            }
+        },
+        "es-cm": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Castilla–La_Mancha"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_Castilla–La_Mancha"
+                ],
+                "IU": [
+                    "Ganemos_Castilla–La_Mancha"
+                ]
+            }
+        },
+        "es-ct": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Catalonia"
+                ],
+                "PSC": [
+                    "Socialists'_Party_of_Catalonia"
+                ],
+                "JxSí": [
+                    "Junts_pel_Sí"
+                ],
+                "ECP": [
+                    "Catalunya_Sí_que_es_Pot",
+                    "Catalunya_en_Comú–Podem",
+                    "En_Comú_Podem",
+                    "Comuns_Sumar",
+                    "Initiative_for_Catalonia_Greens–United_and_Alternative_Left",
+                    "ICV–EUiA"
+                ],
+                "SCI": [
+                    "Catalan_Solidarity_for_Independence"
+                ],
+                "PxC": [
+                    "Platform_for_Catalonia"
+                ],
+                "UDC": [
+                    "Democratic_Union_of_Catalonia"
+                ]
+            }
+        },
+        "es-vc": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_the_Valencian_Community"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_the_Valencian_Country"
+                ],
+                "COMPROMIS": [
+                    "Valencian_Nationalist_Bloc"
+                ],
+                "IU": [
+                    "United_Left_of_the_Valencian_Country",
+                    "Acord_Ciutadà"
+                ]
+            }
+        },
+        "es-ex": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Extremadura"
+                ],
+                "PSOE": [
+                    "Spanish_Socialist_Workers'_Party_of_Extremadura"
+                ],
+                "UP": [
+                    "Unidas_por_Extremadura",
+                    "Podemos_Extremadura"
+                ],
+                "IU": [
+                    "United_Left_Extremadura"
+                ]
+            }
+        },
+        "es-ga": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Galicia"
+                ],
+                "PSOE": [
+                    "Socialists'_Party_of_Galicia"
+                ],
+                "EM": [
+                    "En_Marea"
+                ],
+                "AGE": [
+                    "Galician_Left_Alternative"
+                ],
+                "UP": [
+                    "Galicia_en_Común"
+                ],
+                "DO": [
+                    "Ourensan_Democracy"
+                ],
+                "IU": [
+                    "United_Left_(Galicia)"
+                ],
+                "CxG": [
+                    "Commitment_to_Galicia"
+                ]
+            }
+        },
+        "es-md": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_the_Community_of_Madrid"
+                ],
+                "PSOE": [
+                    "Spanish_Socialist_Workers'_Party_of_the_Community_of_Madrid",
+                    "Socialist_Party_of_Madrid"
+                ],
+                "MM": [
+                    "Más_Madrid"
+                ],
+                "IU": [
+                    "United_Left_of_the_Community_of_Madrid",
+                    "United_Left–Madrid"
+                ],
+                "EQUO": [
+                    "Equo"
+                ]
+            }
+        },
+        "es-mc": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_the_Region_of_Murcia"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_the_Region_of_Murcia"
+                ],
+                "UP": [
+                    "Podemos_Region_of_Murcia"
+                ],
+                "IU": [
+                    "United_Left–Greens_of_the_Region_of_Murcia",
+                    "Ganar_la_Región_de_Murcia"
+                ]
+            }
+        },
+        "es-nc": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_Navarre"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_Navarre"
+                ],
+                "GBAI": [
+                    "Geroa_Bai"
+                ],
+                "NaBai": [
+                    "Nafarroa_Bai"
+                ],
+                "EHB": [
+                    "Bildu"
+                ],
+                "UP": [
+                    "Contigo_Navarra"
+                ],
+                "IU": [
+                    "Izquierda-Ezkerra"
+                ],
+                "CDN": [
+                    "Convergence_of_Democrats_of_Navarre"
+                ]
+            }
+        },
+        "es-pv": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_the_Basque_Country",
+                    "PP+Cs"
+                ],
+                "PSE-EE": [
+                    "Socialist_Party_of_the_Basque_Country–Basque_Country_Left"
+                ],
+                "UP": [
+                    "Elkarrekin_Podemos",
+                    "Podemos_Euskadi"
+                ],
+                "ARALAR": [
+                    "Aralar_(Basque_political_party)"
+                ],
+                "IU": [
+                    "United_Left–Greens",
+                    "Ezker_Anitza"
+                ],
+                "EQUO": [
+                    "Equo"
+                ]
+            }
+        },
+        "es-ri": {
+            "parties": {
+                "PP": [
+                    "People's_Party_of_La_Rioja"
+                ],
+                "PSOE": [
+                    "Socialist_Party_of_La_Rioja"
+                ],
+                "PR+": [
+                    "Riojan_Party"
+                ]
+            }
+        }
+    },
+    "skip": {
+        "pollsters": [
+            "CDC",
+            "Compromís",
+            "Cs",
+            "ERC",
+            "PP",
+            "PSOE",
+            "PSPV",
+            "PSdeG",
+            "UPN",
+            "Vox"
+        ],
+        "sponsors": [
+            "CC",
+            "Compromís",
+            "Cs",
+            "EH Bildu",
+            "ERC",
+            "IU",
+            "PP",
+            "PRC",
+            "PSN",
+            "PSOE",
+            "PSPV",
+            "PSdeG",
+            "Podemos",
+            "UPN"
+        ]
+    }
 }

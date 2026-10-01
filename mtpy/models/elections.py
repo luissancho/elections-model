@@ -330,7 +330,8 @@ class EventsData(Model):
         'votes': 'int',
         'abstentions': 'int',
         'blank': 'int',
-        'invalid': 'int'
+        'invalid': 'int',
+        'estimated': 'bin'
     }
 
 

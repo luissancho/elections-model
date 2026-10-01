@@ -2357,15 +2357,23 @@ class Computer(Core):
                 err = np.nan
             return pd.Series({'n_result': n, 'dev_result': dev, 'dev_result_err': err})
 
-        result = long.groupby(keys, observed=True)[['w', 'e']].apply(agg_result).reset_index()
+        if long.shape[0] > 0:
+            result = long.groupby(keys, observed=True)[['w', 'e']].apply(agg_result).reset_index()
+        else:
+            # No poll with a computed error in the window (e.g. the first load of a scope)
+            result = pd.DataFrame(columns=keys + ['n_result', 'dev_result', 'dev_result_err'])
         result = result.loc[result['n_result'] >= he_min_polls]
 
         # Centre across pollsters, per event and party: the industry-wide deviation is kept apart
-        def centre(g):
-            industry = float((g['dev_result'] * g['n_result']).sum() / g['n_result'].sum())
-            return g.assign(industry=industry, dev_result_c=g['dev_result'] - industry)
+        result = self.centre_house_results(result)
 
-        result = result.groupby(['event_date', 'party'], observed=True, group_keys=False)[result.columns].apply(centre)
+        columns = [
+            'event_date', 'event_scope', 'pollster_id', 'party_id', 'pollster', 'party', 'level',
+            'n_result', 'dev_result', 'dev_result_err', 'dev_result_c', 'industry', 'n_cycle', 'dev_cycle', 'dev_cycle_err'
+        ]
+        if result.shape[0] == 0:
+            # No pollster with enough polls in the campaign of any event: no house effects for this scope
+            return pd.DataFrame(columns=columns)
 
         # (b) Deviation from the consensus of the cycle, all polls, no prior
         rows = []
@@ -2408,12 +2416,36 @@ class Computer(Core):
             for dt, party in zip(df['event_date'], df['party'])
         ]
 
-        columns = [
-            'event_date', 'event_scope', 'pollster_id', 'party_id', 'pollster', 'party', 'level',
-            'n_result', 'dev_result', 'dev_result_err', 'dev_result_c', 'industry', 'n_cycle', 'dev_cycle', 'dev_cycle_err'
-        ]
-
         return df[columns].sort_values(['event_date', 'pollster_id', 'party_id'], ignore_index=True)
+
+    @staticmethod
+    def centre_house_results(
+        result: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Centre the deviations of the pollsters from the official result across pollsters, per event and party:
+        `industry` is the mean deviation of the industry (weighted by the polls of each pollster, `n_result`)
+        and `dev_result_c` the deviation of each pollster from it.
+
+        Parameters
+        ----------
+        result : pd.DataFrame
+            One row per event, pollster and party with `n_result` and `dev_result`. It may be empty (a scope
+            where no pollster has enough polls in the campaign).
+
+        Returns
+        -------
+        pd.DataFrame
+            `result` with the columns `industry` and `dev_result_c`.
+        """
+        if result.shape[0] == 0:
+            return result.assign(industry=pd.Series(dtype=float), dev_result_c=pd.Series(dtype=float))
+
+        def centre(g):
+            industry = float((g['dev_result'] * g['n_result']).sum() / g['n_result'].sum())
+            return g.assign(industry=industry, dev_result_c=g['dev_result'] - industry)
+
+        return result.groupby(['event_date', 'party'], observed=True, group_keys=False)[result.columns].apply(centre)
 
     def compute_house_effects(
         self,

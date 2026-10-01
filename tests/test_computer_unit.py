@@ -235,3 +235,16 @@ def test_regional_only_pollster_is_rated_and_events_are_scope_date_pairs():
     assert out.loc[3, 'num_events'] == 2 and out.loc[3, 'num_polls'] == 2      # C: Madrid 2021 y 2023
     assert out.loc[1, 'num_events'] == 2                                       # A: es 2019 y Madrid 2021
     assert out.loc[3, 'rating'] != out.loc[3, 'quality']
+
+
+def test_centre_house_results_handles_scopes_without_enough_polls():
+    """M11: en un ámbito con pocas encuestas por casa ninguna supera el mínimo; el centrado no debe fallar."""
+    cols = ['event_date', 'pollster_id', 'party', 'n_result', 'dev_result', 'dev_result_err']
+    result = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-05-28'] * 2), 'pollster_id': [1, 2], 'party': ['PP', 'PP'],
+        'n_result': [10, 10], 'dev_result': [1., 3.], 'dev_result_err': [.1, .1]
+    })
+    out = Computer.centre_house_results(result)
+    assert out['industry'].tolist() == [2., 2.] and out['dev_result_c'].tolist() == [-1., 1.]
+    empty = Computer.centre_house_results(result.iloc[:0])
+    assert empty.shape[0] == 0 and list(empty.columns) == cols + ['industry', 'dev_result_c']
