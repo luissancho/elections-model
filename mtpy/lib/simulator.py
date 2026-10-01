@@ -476,9 +476,10 @@ class Simulator(Core):
         # A district that did not exist in the previous election (Murcia became a single district in 2019; the
         # Canarian regional list dates from 2019) takes the results of the whole scope as its base
         missing = [r for r in ix if r not in df.index]
-        df = df.reindex(df.index.append(pd.Index(missing)))
-        for region in missing:
-            df.loc[region] = df.loc[self.default_region].to_numpy()
+        if len(missing) > 0:
+            df = df.reindex(df.index.tolist() + missing)
+            for region in missing:
+                df.loc[region] = df.loc[self.default_region].to_numpy()
 
         df = df.where(df > 0, np.nan).loc[ix, cols]
 
