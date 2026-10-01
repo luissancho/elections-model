@@ -187,3 +187,41 @@ def normal_update(
     post_err = np.where(none, np.inf, post_err)
 
     return post_mean, post_err
+
+
+REGIONAL_LIST_ID = 100  # `region_id` of a list voted by the whole scope (Canary Islands): not a part of it
+
+
+def partial_parties(
+    pct: pd.DataFrame,
+    votes: pd.Series,
+    max_share: float = 0.5
+) -> list[str]:
+    """
+    Parties that run only in part of the territory of a scope: those whose districts hold less than
+    `max_share` of the valid votes of the scope. They are the "regional" parties of the estimators within an
+    autonomous community (UPL, Por Ávila, the parties of a single island).
+
+    Parameters
+    ----------
+    pct : pd.DataFrame
+        Shares of one election by district (index) and party (columns); NaN or 0 where the party did not run.
+    votes : pd.Series
+        Valid votes of each district.
+    max_share : float, optional
+        Share of the votes of the scope below which the party counts as partial.
+
+    Returns
+    -------
+    list of str
+        Names of the partial parties, in the order of the columns. A party without any district is not one.
+    """
+    w = votes.reindex(pct.index).astype(float)
+    total = w.sum()
+    if pct.shape[0] < 2 or not total > 0:
+        return []
+
+    present = pct.fillna(0.).gt(0)
+    covered = present.mul(w, axis=0).sum() / total
+
+    return [n for n in pct.columns if present[n].any() and covered[n] < max_share]

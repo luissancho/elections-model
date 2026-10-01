@@ -290,7 +290,7 @@ class Forecaster(Core):
         if self.verbose > 0:
             print('Load polls...')
 
-        polls = self.load_polls()
+        polls = self.require_polls(self.load_polls(), self.scope, self.event_date)
 
         if self.verbose > 0:
             print('Load parties...')
@@ -603,6 +603,21 @@ class Forecaster(Core):
         dates = get_event_dates(scope=self.scope, date_to=self.event_date, skip=1)
 
         return self.usable_history(get_house_effects(scope=self.scope, event_dates=dates))
+
+    @staticmethod
+    def require_polls(
+        polls: pd.DataFrame,
+        scope: str,
+        event_date: str
+    ) -> pd.DataFrame:
+        """
+        Polls of the event, or a `ValueError` naming it when there is none (e.g. the next election of a
+        community that has just voted): nothing can be forecast without polls.
+        """
+        if polls.shape[0] == 0:
+            raise ValueError('No polls for {} {}: nothing to forecast'.format(scope, event_date))
+
+        return polls
 
     @staticmethod
     def usable_history(

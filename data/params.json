@@ -168,7 +168,40 @@
             }
         }
     },
+    "es-an": {
+        "2026-05-17": {
+            "smap": {
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        },
+        "2022-06-19": {
+            "smap": {
+                "PorA": {"type": "agg", "names": ["UP"]},
+                "ADELANTE": {"type": "sub", "names": ["PorA"]}
+            }
+        }
+    },
+    "es-ar": {
+        "2026-02-08": {
+            "smap": {
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        }
+    },
+    "es-as": {
+        "2027-05-23": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["IU"]}
+            }
+        }
+    },
     "es-cn": {
+        "2027-06-27": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["UP"]},
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        },
         "2015-05-24": {
             "threshold": 30,
             "threshold_scope": 6
@@ -178,7 +211,76 @@
             "threshold_scope": 6
         }
     },
+    "es-cl": {
+        "2026-03-15": {
+            "smap": {
+                "IU": {"type": "sub", "names": ["UP"]},
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        }
+    },
+    "es-cm": {
+        "2027-05-23": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["UP"]},
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        }
+    },
+    "es-ct": {
+        "2028-06-26": {
+            "smap": {
+                "SALF": {"type": "sub", "names": ["VOX"]},
+                "UP": {"type": "sub", "names": ["ECP"]}
+            }
+        },
+        "2024-05-12": {
+            "smap": {
+                "AC": {"type": "sub", "names": ["JxCat"]}
+            }
+        },
+        "2021-02-14": {
+            "smap": {
+                "VOX": {"type": "sub", "names": ["PP", "Cs"]},
+                "PDeCAT": {"type": "sub", "names": ["JxCat"]}
+            }
+        }
+    },
+    "es-vc": {
+        "2027-06-27": {
+            "smap": {
+                "SALF": {"type": "sub", "names": ["VOX"]},
+                "SUMAR": {"type": "sub", "names": ["UP"]}
+            }
+        }
+    },
+    "es-ga": {
+        "2024-02-18": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["UP"]}
+            }
+        },
+        "2020-07-12": {
+            "smap": {
+                "UP": {"type": "agg", "names": ["EM"]},
+                "VOX": {"type": "sub", "names": ["PP"]}
+            }
+        }
+    },
+    "es-md": {
+        "2019-05-26": {
+            "smap": {
+                "MM": {"type": "sub", "names": ["UP"]}
+            }
+        }
+    },
     "es-mc": {
+        "2027-05-23": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["UP"]},
+                "SALF": {"type": "sub", "names": ["VOX"]}
+            }
+        },
         "2015-05-24": {
             "threshold": null,
             "threshold_scope": 5
@@ -186,6 +288,30 @@
         "2011-05-22": {
             "threshold": null,
             "threshold_scope": 5
+        }
+    },
+    "es-nc": {
+        "2027-05-23": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["UP"]}
+            }
+        },
+        "2023-05-28": {
+            "smap": {
+                "NA+": {"type": "split", "names": ["UPN", "PP"]}
+            }
+        },
+        "2019-05-26": {
+            "smap": {
+                "NA+": {"type": "agg", "names": ["UPN", "PP", "Cs"]}
+            }
+        }
+    },
+    "es-pv": {
+        "2024-04-21": {
+            "smap": {
+                "SUMAR": {"type": "sub", "names": ["UP"]}
+            }
         }
     }
 }

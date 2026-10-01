@@ -1215,13 +1215,15 @@ class WikipediaResultsLoader(Core):
     @staticmethod
     def party_name(key: Optional[str], abbr: Optional[str], party_names: dict[str, str]) -> str:
         """
-        Party of a candidacy: the alias of its wiki key or, failing that, of its abbreviation; "others" when
-        neither is mapped (never the party table directly: abbreviations collide between communities).
+        Party of a candidacy: the alias of its abbreviation or, failing that, of its wiki key; "others" when
+        neither is mapped (never the party table directly: abbreviations collide between communities). The
+        abbreviation goes first because the row of a coalition may link to one of its members (Andalusia
+        2022: "PorA" links to IULV-CA); abbreviations are only aliases where the maps list them on purpose.
         """
-        if key is not None and key in party_names:
-            return party_names[key]
         if abbr is not None and abbr in party_names:
             return party_names[abbr]
+        if key is not None and key in party_names:
+            return party_names[key]
 
         return WikipediaResultsLoader.OTHERS
 
@@ -1347,6 +1349,18 @@ class WikipediaResultsLoader(Core):
                         blanks.loc[rid] = round(blank * votes.loc[rid] / valid)
 
             res = const.groupby(['region_id', 'party'], sort=False)[['pct', 'seats']].sum().reset_index()
+
+            # Mapped parties without a column in the table (no seats anywhere): their share of the scope in
+            # every district, the neutral base of the swing if they grow later (e.g. VOX before 2019)
+            # (scaled down where the listed parties leave less room than that).
+            flat = res0.loc[(res0['party'] != cls.OTHERS) & ~res0['party'].isin(res['party']), ['party', 'pct']]
+            if flat.shape[0] > 0:
+                room = 100. - 100. * blanks / votes - res.groupby('region_id')['pct'].sum().reindex(votes.index).fillna(0.)
+                scale = (room.clip(lower=0.) / flat['pct'].sum()).clip(upper=1.)
+                res = pd.concat([res] + [
+                    flat.assign(region_id=rid, seats=0, pct=(flat['pct'] * scale.loc[rid]).round(2)) for rid in regions.index
+                ], ignore_index=True)
+
             res['votes'] = (res['pct'] * res['region_id'].map(votes) / 100.).round().astype(int)
 
             # "Others" of each district: what is left of its valid votes, net of the blank ballots

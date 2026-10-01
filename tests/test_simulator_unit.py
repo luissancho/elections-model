@@ -418,3 +418,12 @@ def test_apply_swing_noise_without_regional_shocks_keeps_means():
     assert np.allclose(out.sum(axis=1), 100)
     assert np.allclose(out[['A', 'B']].mul(weights, axis=0).sum() / weights.sum(), target, atol=0.1)
     assert not np.allclose(out['A'], shares['A'])
+
+
+def test_require_forecast_rejects_an_average_without_values():
+    # Con tres o cuatro sondeos en toda la legislatura el promedio no se puede ajustar: error claro, no ceros
+    fc = pd.DataFrame({'mean': [30., 20., 50.]}, index=['PP', 'PSOE', '-'])
+    assert Simulator.require_forecast(fc, 'es-md', '2027-05-23') is fc
+    empty = pd.DataFrame({'mean': [np.nan, np.nan, 100.]}, index=['PP', 'PSOE', '-'])
+    with pytest.raises(ValueError, match='Not enough polls to fit the average of es-cb 2027-05-23'):
+        Simulator.require_forecast(empty, 'es-cb', '2027-05-23')

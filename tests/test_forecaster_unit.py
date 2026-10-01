@@ -233,3 +233,11 @@ def test_usable_history_needs_three_events():
     assert Forecaster.usable_history(history).shape[0] == 6
     short = Forecaster.usable_history(history.iloc[:4])
     assert short.shape[0] == 0 and list(short.columns) == list(history.columns)
+
+
+def test_require_polls_names_the_event_without_polls():
+    """M11: un evento sin sondeos (una comunidad que acaba de votar) falla con un mensaje claro."""
+    polls = pd.DataFrame({'PP': [30.]}, index=pd.to_datetime(['2026-01-01']))
+    assert Forecaster.require_polls(polls, 'es-md', '2027-05-23') is polls
+    with pytest.raises(ValueError, match='No polls for es-an 2030-06-16'):
+        Forecaster.require_polls(polls.iloc[:0], 'es-an', '2030-06-16')

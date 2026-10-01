@@ -55,3 +55,19 @@ def test_normal_update_degenerate_cases_and_nan():
     assert mean.tolist() == pytest.approx([2.0]) and err.tolist() == pytest.approx([0.0])
     # Escalares
     assert normal_update(2.0, 1.0, 0.0, 1.0)[0] == pytest.approx(1.0)
+
+
+def test_partial_parties_run_where_less_than_half_of_the_votes_are():
+    """M11: dentro de una comunidad, un partido es "regional" si sólo concurre en circunscripciones que suman
+    menos de la mitad del voto (UPL en León, Zamora y Salamanca; Por Ávila; los partidos de una isla)."""
+    import numpy as np
+    import pandas as pd
+    from mtpy.lib.utils import partial_parties
+    pct = pd.DataFrame({
+        'PSOE': [30., 25., 28., np.nan], 'UPL': [20., np.nan, np.nan, np.nan], 'EV': [5., 4., np.nan, 6.],
+        'NEW': [np.nan] * 4
+    }, index=[1, 2, 3, 4])
+    votes = pd.Series([40., 30., 20., 10.], index=[1, 2, 3, 4])
+    # UPL: 40 % del voto; PSOE: 90 %; EV: 80 %; NEW no concurrió: no se marca
+    assert partial_parties(pct, votes) == ['UPL']
+    assert partial_parties(pct.iloc[:1], votes.iloc[:1]) == []      # distrito único

@@ -283,3 +283,28 @@ def test_build_frames_seat_fixes_correct_the_article():
     with pytest.raises(ValueError, match='not in the table'):
         frames('2022_Castilian-Leonese_regional_election', 'es-cl', '2022-02-13',
                seat_fixes=pd.DataFrame({'region_id': [5], 'key': ['Nobody'], 'seats': [1]}))
+
+
+def test_party_name_prefers_the_abbreviation_alias():
+    # Andalucía 2022: la fila de Por Andalucía enlaza a IULV-CA pero su abreviatura es PorA
+    names = {'United_Left/The_Greens–Assembly_for_Andalusia': 'IU', 'PorA': 'PorA'}
+    name = WikipediaResultsLoader.party_name
+    assert name('United_Left/The_Greens–Assembly_for_Andalusia', 'PorA', names) == 'PorA'
+    assert name('United_Left/The_Greens–Assembly_for_Andalusia', 'IULV–CA', names) == 'IU'
+    assert name(None, 'XYZ', names) == '-'
+
+
+def test_parties_outside_the_constituency_table_get_flat_district_shares():
+    # Un partido con resultado en el conjunto pero sin columna en la tabla por circunscripción (sin escaños)
+    # recibe en cada circunscripción su cuota del conjunto: es la base del swing si después crece (VOX 2019)
+    data, res = frames('2022_Castilian-Leonese_regional_election', 'es-cl', '2022-02-13')
+    pacma = res.loc[res['party'] == 'Animalist_Party_Against_Mistreatment_of_Animals']
+    assert sorted(pacma['region_id']) == [0, 5, 9, 24, 34, 37, 40, 42, 47, 49]
+    by_region = pacma.set_index('region_id')['pct']
+    # 0,54 % donde cabe; menos en Soria, donde Soria ¡Ya! deja poco voto para el resto
+    assert by_region.loc[9] == 0.54 and (by_region.drop(0) <= 0.54).all() and by_region.loc[42] < 0.54
+    assert pacma['seats'].sum() == 0
+    # Las cuotas de cada circunscripción siguen sumando 100 con los votos en blanco
+    blank = data.set_index('region_id')['blank'] / data.set_index('region_id')['votes'] * 100
+    total = res.loc[res['region_id'] > 0].groupby('region_id')['pct'].sum() + blank.reindex(range(1, 53)).dropna()
+    assert total.between(99.5, 100.5).all()

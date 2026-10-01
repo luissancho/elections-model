@@ -21,7 +21,7 @@ from .data import (
     get_districts, get_scope_parent
 )
 from .utils import (
-    build_blocks, group_results, norm_range
+    build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -515,9 +515,24 @@ class Simulator(Core):
 
     def fit_forecast(self, **kwargs) -> pd.DataFrame:
         self.model.fit_forecast(**kwargs)
-        self.forecast = self.build_forecast()
+        self.forecast = self.require_forecast(self.build_forecast(), self.scope, self.event_date)
 
         return self.forecast
+
+    @staticmethod
+    def require_forecast(
+        forecast: pd.DataFrame,
+        scope: str,
+        event_date: str
+    ) -> pd.DataFrame:
+        """
+        Forecast of the event, or a `ValueError` when the average of no party could be fitted (a handful of
+        polls scattered over the legislature): the simulation would otherwise give every party zero seats.
+        """
+        if forecast.drop(index=Simulator.OTHERS, errors='ignore')['mean'].notnull().sum() == 0:
+            raise ValueError('Not enough polls to fit the average of {} {}'.format(scope, event_date))
+
+        return forecast
     
     def save_forecast(self, prefix: str) -> Self:
         self.model.save_forecast(prefix)
@@ -626,8 +641,11 @@ class Simulator(Core):
 
         regional = self.parties.set_index('name').loc[names].regional.astype(int).to_dict()
         if self.parent is not None:
-            # Within an autonomous community no party is "regional" in the sense of the estimators
-            regional = {n: 0 for n in names}
+            # Within an autonomous community the curated flag does not apply: a party is "regional" when it ran
+            # only in part of the districts in the previous election (see `partial_parties`)
+            prev = self.prev_results['pct'].drop(index=[self.default_region, REGIONAL_LIST_ID], errors='ignore')
+            partial = partial_parties(prev, self.prev_totals['votes'])
+            regional = {n: int(n in partial) for n in names}
         regional[self.OTHERS] = 0
         fc['regional'] = fc.index.map(regional).astype(int)
 

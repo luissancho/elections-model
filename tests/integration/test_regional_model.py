@@ -11,16 +11,66 @@ def regional_sim(scope, event_date, **kwargs):
     return sim
 
 
-@pytest.mark.parametrize('scope, event_date', [('es-md', '2023-05-28'), ('es-cl', '2022-02-13')])
-def test_deterministic_seats_are_close_to_the_official_ones(app, scope, event_date):
+def seats_error(sim, scope, event_date):
+    """Error absoluto medio de escaños de los partidos principales en modo determinista."""
     from mtpy.lib.backtest import official_results
-    sim = regional_sim(scope, event_date)
-    sim.run(split=True, random=False)
     model = sim.result().loc[scope]
     official = official_results(scope, event_date)['seats']
-    main = sim.event_params['bmaps']['main']
+    main = [n for n in sim.event_params['bmaps']['main'] if n in model.index]
     assert int(model.sum()) == sim.n_seats
-    assert (model[main] - official.reindex(main).fillna(0)).abs().mean() <= 1.5
+    return (model[main] - official.reindex(main).fillna(0)).abs().mean()
+
+
+@pytest.mark.parametrize('scope, event_date', [('es-cl', '2022-02-13'), ('es-as', '2023-05-28'), ('es-cn', '2023-05-28')])
+def test_deterministic_seats_are_close_to_the_official_ones(app, scope, event_date):
+    # Nueve provincias, tres zonas no provinciales, e islas con lista autonómica y doble umbral
+    sim = regional_sim(scope, event_date)
+    sim.run(split=True, random=False)
+    assert seats_error(sim, scope, event_date) <= 1.5
+
+
+def test_madrid_2023_miss_is_the_threshold_cliff(app):
+    """Madrid 2023: los sondeos daban a Podemos-IU un 5,1 % y sacó el 4,76 %, por debajo de la barrera del 5 %.
+    Con la barrera mal resuelta el error es de 3,2 escaños por partido; sin ese partido, el reparto es bueno."""
+    sim = regional_sim('es-md', '2023-05-28')
+    sim.run(split=True, random=False)
+    assert sim.frame().loc['UP', 'vpred'] >= 5 and sim.result().loc['es-md', 'UP'] > 0
+    assert seats_error(sim, 'es-md', '2023-05-28') > 1.5
+    sim.run(split=True, random=False, names=[n for n in sim.names if n != 'UP'])
+    assert seats_error(sim, 'es-md', '2023-05-28') <= 1.5
+
+
+def test_dhondt_with_scope_thresholds_reproduces_official_district_seats(app):
+    """Los umbrales del catálogo (y sus excepciones por evento) con D'Hondt sobre los resultados cargados
+    reproducen los escaños oficiales de cada circunscripción. Los votos por circunscripción se estiman de
+    porcentajes con un decimal, así que se admite algún baile de un escaño en el último cociente."""
+    from mtpy.lib.data import get_thresholds
+    from mtpy.lib.simulator import Simulator
+    from mtpy.models.elections import EventsData, EventsResults
+    data = EventsData().get_results(query=dict(filters=["scope <> 'es'", 'votes IS NOT NULL']), formatted=True)
+    res = EventsResults().get_results(query=dict(filters=["scope <> 'es'", 'party_id > 0']), formatted=True)
+    total, wrong = 0, []
+    for (scope, date), d in data.groupby(['scope', 'date'], observed=True):
+        threshold, threshold_scope = get_thresholds(scope, date.strftime('%Y-%m-%d'))
+        r = res.loc[(res['scope'] == scope) & (res['date'] == date)]
+        shares = r.loc[r['region_id'] == 0].groupby('party', observed=True)['pct'].sum().to_dict()
+        # Sólo las candidaturas con escaño en alguna circunscripción: las cuotas por circunscripción del resto
+        # son las del conjunto (estimación plana), no un dato
+        seated = r.loc[(r['region_id'] > 0) & (r['seats'] > 0), 'party'].unique()
+        r = r.loc[r['party'].isin(seated)]
+        for _, row in d.loc[d['region_id'] > 0].iterrows():
+            rr = r.loc[r['region_id'] == row['region_id']]
+            votes = rr.groupby('party', observed=True)['votes'].sum().astype(float).to_dict()
+            official = rr.groupby('party', observed=True)['seats'].sum().astype(int).to_dict()
+            model = Simulator.alloc_seats(
+                votes, sum(official.values()), valid_votes=float(row['votes']), threshold=threshold,
+                scope_shares=shares, threshold_scope=threshold_scope
+            )
+            total += 1
+            if model != official:
+                wrong.append((scope, date, int(row['region_id'])))
+                assert max(abs(model[k] - official[k]) for k in model) == 1, wrong[-1]
+    assert total >= 280 and len(wrong) <= 0.02 * total, wrong
 
 
 def test_scope_settings_are_resolved(app):
@@ -31,6 +81,18 @@ def test_scope_settings_are_resolved(app):
     assert (md.frame()['regional'] == 0).all()
     cn = regional_sim('es-cn', '2023-05-28')
     assert (cn.threshold, cn.threshold_scope) == (15.0, 4.0) and 100 in cn.regions
+
+
+def test_parties_of_part_of_the_community_are_regional(app):
+    """Por Ávila y UPL sólo concurren en parte de Castilla y León: son "regionales" para los estimadores,
+    con un error de sondeo acorde a su tamaño, y Por Ávila conserva su escaño en la mayoría de simulaciones."""
+    cl = regional_sim('es-cl', '2022-02-13')
+    cl.run(split=True, random=True, n_sim=200)
+    frame = cl.frame()
+    assert frame.loc[['XAV', 'UPL'], 'regional'].tolist() == [1, 1]
+    assert frame.loc[['PP', 'PSOE', 'VOX'], 'regional'].tolist() == [0, 0, 0]
+    assert frame.loc['XAV', 'std_err'] < 0.5
+    assert (cl.dist()['XAV'] > 0).mean() > 0.8
 
 
 def test_random_run_in_a_single_district_scope(app):

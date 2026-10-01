@@ -23,10 +23,10 @@ from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
     get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
-    get_scope_parent
+    get_scope_parent, get_event_data
 )
 from .utils import (
-    build_blocks, group_results, norm_range
+    build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -508,12 +508,27 @@ class Computer(Core):
     def regional_flags(self) -> pd.Series:
         """
         `regional` flag of every party (1: it only runs in part of the territory of the scope), indexed by
-        name. Within an autonomous community no party is "regional" in that sense, so the flag is 0 for all
-        of them in the scopes that have a parent.
+        name. In the national scope it is the curated flag of the parties table. Within an autonomous
+        community it is derived from the results by district of the current events: a party is regional when,
+        in the last election it ran, its districts held less than half of the valid votes of the community
+        (see `partial_parties`: UPL or Por Ávila in Castilla y León, the parties of a single island).
         """
         flags = get_parties().set_index('name')['regional'].astype(int)
-        if get_scope_parent(self.scope) is not None:
-            flags[:] = 0
+        if get_scope_parent(self.scope) is None:
+            return flags
+
+        flags[:] = 0
+        dates = list(self.event_dates)
+        res = get_event_results(self.scope, dates)
+        res = res.loc[(res['party_id'] > 0) & (res['region_id'] > 0) & (res['region_id'] != REGIONAL_LIST_ID)]
+        data = get_event_data(self.scope, dates)
+        for date, g in res.groupby('date', sort=True):
+            pct = g.pivot_table(index='region_id', columns='party', values='pct', aggfunc='sum', observed=True)
+            votes = data.loc[data['date'] == date].set_index('region_id')['votes'].astype(float)
+            partial = partial_parties(pct, votes)
+            for name in pct.columns:
+                if name in flags.index and pct[name].fillna(0).gt(0).any():
+                    flags[name] = int(name in partial)
 
         return flags
 
