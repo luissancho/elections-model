@@ -17,7 +17,7 @@ from ..core.utils.dataviz import plot_kde_1d
 from .forecaster import Forecaster
 from .computer import Computer
 from .data import (
-    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties
+    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -43,7 +43,7 @@ class Simulator(Core):
         add_errors: bool = True,
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
-        threshold: Optional[float] = 3.0,
+        threshold: Optional[float] = None,
         house_effects: bool = True,
         industry_bias: bool = False,
         he_params: Optional[dict[str, Any]] = None,
@@ -90,8 +90,11 @@ class Simulator(Core):
             The party source map.
         threshold : float, optional
             Legal threshold, as a percentage of the valid votes of each district, below which a candidature
-            is excluded from the seat allocation (art. 163.1.a LOREG: 3 %). Applied when `split=True`;
-            `None` disables it.
+            is excluded from the seat allocation. Applied when `split=True`. `None` (default) takes the
+            thresholds of the scope (`data/es-scopes.csv`: 3 % in `es`, art. 163.1.a LOREG; some communities
+            have an alternative one over the whole scope, `threshold_scope`), with the override of the event
+            in `data/params.json`. A number fixes the district threshold and drops the alternative; 0
+            disables it.
         house_effects : bool, optional
             Subtract the house effect of each pollster (its systematic deviation on each series, estimated in
             the cycle with a prior from its past elections) from its polls before averaging. See
@@ -139,7 +142,10 @@ class Simulator(Core):
         self.add_errors = add_errors
         self.reg_params = reg_params
         self.smap = smap
-        self.threshold = threshold
+        if threshold is None:
+            self.threshold, self.threshold_scope = get_thresholds(self.scope, self.event_date)
+        else:
+            self.threshold, self.threshold_scope = float(threshold), None
 
         self.seed = seed  # Base random seed
         self.verbose = verbose  # Print progress
@@ -941,11 +947,18 @@ class Simulator(Core):
         d_votes: dict[str, float],
         n_seats: int,
         valid_votes: Optional[float] = None,
-        threshold: Optional[float] = None
+        threshold: Optional[float] = None,
+        scope_shares: Optional[dict[str, float]] = None,
+        threshold_scope: Optional[float] = None
     ) -> dict[str, int]:
         """
         D'Hondt allocation with the legal threshold (art. 163.1.a LOREG): candidatures with less than
         `threshold` percent of the valid votes of the district are excluded from the allocation.
+
+        Some regional laws add or substitute a threshold over the whole scope (Canary Islands: 15 % in the
+        island or 4 % in the archipelago; Valencian Community: only 5 % in the community). A candidature
+        takes part when it passes the threshold of the district **or** that of the scope; a threshold that is
+        `None` cannot be passed, and with both `None` there is no threshold.
 
         Parameters
         ----------
@@ -956,7 +969,11 @@ class Simulator(Core):
         valid_votes : float, optional
             Base of the threshold (votes to candidatures plus blank votes). The sum of `d_votes` if `None`.
         threshold : float, optional
-            Percentage of the valid votes needed to take part in the allocation. `None` disables it.
+            Percentage of the valid votes of the district needed to take part in the allocation.
+        scope_shares : dict, optional
+            Share of each candidature in the whole scope (percentage), for `threshold_scope`.
+        threshold_scope : float, optional
+            Alternative threshold: percentage of the valid votes of the whole scope.
 
         Returns
         -------
@@ -965,10 +982,17 @@ class Simulator(Core):
             allocated.
         """
         base = valid_votes if valid_votes else sum(d_votes.values())
-        eligible = {
-            n: v for n, v in d_votes.items()
-            if v > 0 and (threshold is None or base <= 0 or 100. * v / base >= threshold)
-        }
+        scope_shares = scope_shares if scope_shares is not None else {}
+
+        def qualifies(name, votes):
+            if (threshold is None and threshold_scope is None) or base <= 0:
+                return True
+            if threshold is not None and 100. * votes / base >= threshold:
+                return True
+
+            return threshold_scope is not None and scope_shares.get(name, 0.) >= threshold_scope
+
+        eligible = {n: v for n, v in d_votes.items() if v > 0 and qualifies(n, v)}
 
         seats = {n: 0 for n in d_votes.keys()}
         if n_seats > 0 and len(eligible) > 0:
@@ -1712,6 +1736,9 @@ class Simulator(Core):
             if umat is None:
                 umat = self.build_umat(frame)
 
+            # Shares of the whole scope in this simulation, for the alternative threshold of some communities
+            scope_shares = frame.loc[self.params['names'], 'vpred'].fillna(0).to_dict()
+
             for region in self.params['regions']:
                 if region == self.default_region:
                     continue
@@ -1722,7 +1749,10 @@ class Simulator(Core):
                 d_votes = (shares[self.params['names']] * valid / 100).round().to_dict()
                 n_seats = int(self.reg_totals.loc[region]['seats'])
 
-                result.loc[region] = self.alloc_seats(d_votes, n_seats, valid_votes=valid, threshold=self.threshold)
+                result.loc[region] = self.alloc_seats(
+                    d_votes, n_seats, valid_votes=valid, threshold=self.threshold,
+                    scope_shares=scope_shares, threshold_scope=self.threshold_scope
+                )
 
             result.loc[self.default_region] = result.loc[result.index != self.default_region].sum(axis=0)
         else:

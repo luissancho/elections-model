@@ -380,3 +380,21 @@ def test_lognormal_shocks_have_unit_mean_multiplier():
     assert np.allclose(mult, 1., atol=0.02)
     assert draws[:, 0, 1].std() == pytest.approx(0.3, rel=0.03)
     assert Simulator.lognormal_shocks(rng, np.zeros((2, 2))).tolist() == [[0., 0.], [0., 0.]]
+
+
+# --- M11: umbral por ámbito y umbral alternativo ---
+
+def test_alloc_seats_alternative_scope_threshold():
+    # Canarias: 15 % en la isla o 4 % en el conjunto
+    votes, shares = {'A': 50, 'B': 36, 'C': 14}, {'A': 40., 'B': 30., 'C': 5.}
+    assert Simulator.alloc_seats(votes, 10, valid_votes=100, threshold=15.0)['C'] == 0
+    assert Simulator.alloc_seats(votes, 10, valid_votes=100, threshold=15.0, scope_shares=shares, threshold_scope=4.0) == {'A': 5, 'B': 4, 'C': 1}
+    assert Simulator.alloc_seats(votes, 10, valid_votes=100, threshold=15.0, scope_shares={**shares, 'C': 3.9}, threshold_scope=4.0)['C'] == 0
+
+
+def test_alloc_seats_scope_threshold_only():
+    # Comunidad Valenciana: sólo 5 % autonómico
+    votes = {'A': 60, 'B': 34, 'C': 6}
+    below, above = {'A': 60., 'B': 35.1, 'C': 4.9}, {'A': 60., 'B': 34., 'C': 6.}
+    assert Simulator.alloc_seats(votes, 20, valid_votes=100, scope_shares=below, threshold_scope=5.0)['C'] == 0
+    assert Simulator.alloc_seats(votes, 20, valid_votes=100, scope_shares=above, threshold_scope=5.0) == {'A': 12, 'B': 7, 'C': 1}

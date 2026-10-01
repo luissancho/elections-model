@@ -167,5 +167,25 @@
                 "EHB": {"type": "agg", "names": ["AMAIUR"]}
             }
         }
+    },
+    "es-cn": {
+        "2015-05-24": {
+            "threshold": 30,
+            "threshold_scope": 6
+        },
+        "2011-05-22": {
+            "threshold": 30,
+            "threshold_scope": 6
+        }
+    },
+    "es-mc": {
+        "2015-05-24": {
+            "threshold": null,
+            "threshold_scope": 5
+        },
+        "2011-05-22": {
+            "threshold": null,
+            "threshold_scope": 5
+        }
     }
 }

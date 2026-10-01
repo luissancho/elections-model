@@ -2,7 +2,7 @@ import json
 import pandas as pd
 import warnings
 
-from typing import Literal, Optional
+from typing import Any, Literal, Mapping, Optional
 
 from ..core.app import App
 from ..core.worker import Model
@@ -45,6 +45,47 @@ def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
         districts = districts.loc[districts['scope'] == scope].reset_index(drop=True)
 
     return districts
+
+
+def resolve_thresholds(
+    scope_row: Mapping[str, Any],
+    event_conf: Optional[Mapping[str, Any]] = None
+) -> tuple[Optional[float], Optional[float]]:
+    """
+    Legal thresholds of an event: those of its scope unless the event overrides them.
+
+    Parameters
+    ----------
+    scope_row : Mapping
+        Row of the scope in the catalogue: `threshold` (district) and `threshold_scope` (whole scope).
+    event_conf : Mapping, optional
+        Entry of the event in `data/params.json`. The keys `threshold` and `threshold_scope` present in it
+        prevail even when they are null (e.g. Murcia until 2015: no district threshold, 5 % regional).
+
+    Returns
+    -------
+    tuple
+        District and scope thresholds, as percentages; `None` where there is none.
+    """
+    out = []
+    for key in ('threshold', 'threshold_scope'):
+        value = event_conf[key] if event_conf is not None and key in event_conf else scope_row[key]
+        out.append(None if value is None or pd.isnull(value) else float(value))
+
+    return out[0], out[1]
+
+
+def get_thresholds(
+    scope: str,
+    event_date: str
+) -> tuple[Optional[float], Optional[float]]:
+    """
+    Legal thresholds of an event (see `resolve_thresholds`), from the catalogue of scopes and the entry of
+    the event in `data/params.json`.
+    """
+    params = json.loads(App.get_().data.read('params.json')).get(scope, {})
+
+    return resolve_thresholds(get_scopes().loc[scope], params.get(event_date))
 
 
 def save_catalogues() -> dict[str, int]:

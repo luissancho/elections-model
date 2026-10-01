@@ -98,3 +98,18 @@ def test_regions_use_ine_codes():
     assert set(provinces['reg_code']) <= set(regions.index)
     assert set(ages['code']) == set(regions.index)
     assert (ages.groupby('code')['region'].first() == regions['region']).all()
+
+
+def test_threshold_overrides_are_valid():
+    """M11: los umbrales históricos por evento de `params.json` son nulos o están en (0, 100]."""
+    params = json.load(open(os.path.join(DATA, 'params.json')))
+    found = 0
+    for scope, events in params.items():
+        for event_date, conf in events.items():
+            for key in ('threshold', 'threshold_scope'):
+                if key in conf:
+                    found += 1
+                    assert conf[key] is None or 0 < conf[key] <= 100, (scope, event_date, key)
+    assert params['es-mc']['2015-05-24'] == {'threshold': None, 'threshold_scope': 5}
+    assert params['es-cn']['2011-05-22'] == {'threshold': 30, 'threshold_scope': 6}
+    assert found >= 8
