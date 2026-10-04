@@ -21,10 +21,10 @@ from ..core.utils.dataviz import (
     set_title, table_styles
 )
 
-from .utils import normal_update
+from .utils import normal_update, party_roots
 from .data import (
     get_event_dates, get_event_params, get_event_series, get_poll_series, get_parties, get_pollsters,
-    get_house_effects
+    get_house_effects, get_scopes
 )
 from .utils import (
     build_blocks, group_results, norm_range
@@ -597,12 +597,23 @@ class Forecaster(Core):
 
     def load_house_history(self) -> pd.DataFrame:
         """
-        Historical deviations of the pollsters in the elections before this one (table `pollsters_parties`,
-        see `Computer.compute_house_effects`): the source of the prior of each house effect.
+        History of house effects usable as a prior for this event (M11b: global): the rows of
+        `pollsters_parties` of **every** scope for the elections held strictly before the event, with the
+        weight of their scope (`w_scope`: the `rating_weight` of the catalogue, 1 national and 0.5 regional) and
+        the root of their party (`root`, by `parent_id`: what the CIS does with the PSOE in the general elections
+        informs the PSC in Catalonia, and the other way round).
         """
-        dates = get_event_dates(scope=self.scope, date_to=self.event_date, skip=1)
+        history = self.usable_history(get_house_effects(scope=None, date_to=self.event_date))
+        if history.shape[0] == 0:
+            return history
 
-        return self.usable_history(get_house_effects(scope=self.scope, event_dates=dates))
+        weights = get_scopes()['rating_weight']
+        roots = party_roots(get_parties())
+        history = history.copy()
+        history['w_scope'] = history['event_scope'].astype(str).map(weights).fillna(1.).astype(float)
+        history['root'] = history['party'].astype(str).map(roots).fillna(history['party'].astype(str))
+
+        return history
 
     @staticmethod
     def require_polls(
@@ -625,9 +636,8 @@ class Forecaster(Core):
         min_events: int = 3
     ) -> pd.DataFrame:
         """
-        History of house effects usable as a prior: with fewer than `min_events` past elections (a regional
-        scope with a short record) it is discarded, so that the prior is 0 and only the deviation of the
-        cycle acts.
+        History of house effects usable as a prior: with fewer than `min_events` past elections (pairs of
+        scope and date) it is discarded, so that the prior is 0 and only the deviation of the cycle acts.
 
         Parameters
         ----------
@@ -641,7 +651,10 @@ class Forecaster(Core):
         pd.DataFrame
             `history`, or an empty frame with its columns.
         """
-        if history.shape[0] == 0 or history['event_date'].nunique() < min_events:
+        if history.shape[0] == 0:
+            return history
+        keys = ['event_scope', 'event_date'] if 'event_scope' in history.columns else ['event_date']
+        if history[keys].drop_duplicates().shape[0] < min_events:
             return history.iloc[:0]
 
         return history
@@ -694,9 +707,15 @@ class Forecaster(Core):
             history = prior
         else:
             history = None
+        roots = {}
         if history is not None and history.shape[0] > 0:
             history = history.loc[history['dev_result_c'].notnull()]
-            history_groups = {k: g for k, g in history.groupby(['pollster_id', 'party'], observed=True)}
+            # The history of a party is that of its root lineage (`load_house_history`); a frame given by the
+            # caller without `root` is grouped by party
+            key = 'root' if 'root' in history.columns else 'party'
+            history_groups = {k: g for k, g in history.groupby(['pollster_id', key], observed=True)}
+            if key == 'root':
+                roots = party_roots(get_parties()).to_dict()
         else:
             history_groups = {}
 
@@ -741,7 +760,7 @@ class Forecaster(Core):
 
             priors = np.array([
                 self.house_prior(
-                    history_groups.get((pid, name)), level[name], ref_date,
+                    history_groups.get((pid, roots.get(name, name))), level[name], ref_date,
                     year_decay=p['year_decay'], he_tau=p['tau'], he_prior_events=p['prior_events'],
                     n_cap=p['n_cap'], level_floor=p['level_floor'], rel_cap=p['rel_cap']
                 ) for pid, name in dev.index
@@ -790,7 +809,9 @@ class Forecaster(Core):
         Parameters
         ----------
         history : pd.DataFrame
-            Rows of `pollsters_parties` (`event_date`, `party`, `industry`, `level`).
+            Rows of `pollsters_parties` (`event_date`, `party`, `industry`, `level`); optional `event_scope`
+            and `w_scope` (weight of the scope of each election, 1 when missing) and `root` (lineage of the
+            party, used instead of `party` when present).
         levels : pd.Series
             Current level of each series (percentage points), indexed by name.
         ref_date : pd.Timestamp
@@ -803,20 +824,28 @@ class Forecaster(Core):
             Indexed by name: `n_events`, `rel`, `rel_err`, `bias`, `bias_err` (percentage points).
         """
         rows = []
+        roots = {}
         if history is None or history.shape[0] == 0:
             hist = None
         else:
-            hist = history.dropna(subset=['industry', 'level']).groupby(['event_date', 'party'], observed=True)[['industry', 'level']].first().reset_index()
+            h = history.dropna(subset=['industry', 'level']).copy()
+            party = 'root' if 'root' in h.columns else 'party'
+            if 'w_scope' not in h.columns:
+                h['w_scope'] = 1.
+            keys = ['event_scope', 'event_date', party] if 'event_scope' in h.columns else ['event_date', party]
+            hist = h.groupby(keys, observed=True)[['industry', 'level', 'w_scope']].first().reset_index().rename(columns={party: 'party'})
+            if party == 'root':
+                roots = party_roots(get_parties()).to_dict()
 
         for name, level in levels.items():
             lvl = max(float(level) if np.isfinite(level) else 0., level_floor)
-            h = hist.loc[hist['party'] == name] if hist is not None else None
+            h = hist.loc[hist['party'] == roots.get(name, name)] if hist is not None else None
             if h is None or h.shape[0] == 0:
                 rows.append({'name': name, 'n_events': 0, 'rel': 0., 'rel_err': 0., 'bias': 0., 'bias_err': 0.})
                 continue
 
             years = (pd.Timestamp(ref_date) - pd.to_datetime(h['event_date'])).dt.days / 365.25
-            w = np.power(year_decay, years.clip(lower=0)).to_numpy()
+            w = (np.power(year_decay, years.clip(lower=0)) * h['w_scope'].astype(float)).to_numpy()
             r = np.clip(h['industry'].astype(float) / np.maximum(h['level'].astype(float), level_floor), -rel_cap, rel_cap).to_numpy()
             rel = float((w * r).sum() / (w.sum() + prior_events))
             if len(r) > 1:
@@ -942,7 +971,8 @@ class Forecaster(Core):
         Parameters
         ----------
         history : pd.DataFrame
-            Rows `event_date`, `dev_result_c`, `level`, `n_result` of the pollster and party in past elections.
+            Rows `event_date`, `dev_result_c`, `level`, `n_result` of the pollster and party in past elections;
+            an optional `w_scope` weighs each election by its scope (1 when missing).
         level : float
             Current level of the series (percentage points).
         ref_date : pd.Timestamp
@@ -977,7 +1007,8 @@ class Forecaster(Core):
             return 0., prior_err
 
         years = (pd.Timestamp(ref_date) - pd.to_datetime(h['event_date'])).dt.days / 365.25
-        w = np.power(year_decay, years.clip(lower=0)) * np.minimum(h['n_result'].astype(float), n_cap)
+        w_scope = h['w_scope'].astype(float) if 'w_scope' in h.columns else 1.
+        w = np.power(year_decay, years.clip(lower=0)) * np.minimum(h['n_result'].astype(float), n_cap) * w_scope
         rel = np.clip(h['dev_result_c'].astype(float) / np.maximum(h['level'].astype(float), level_floor), -rel_cap, rel_cap)
         rel_mean = float((w * rel).sum() / (w.sum() + n_cap * he_prior_events))
 

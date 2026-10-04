@@ -660,8 +660,9 @@ def save_drift_data(
 
 
 def get_house_effects(
-    scope: str = 'es',
-    event_dates: Optional[list[str]] = None
+    scope: Optional[str] = 'es',
+    event_dates: Optional[list[str]] = None,
+    date_to: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Load the house effects table (see `Computer.compute_house_effects`): one row per election, pollster and
@@ -669,20 +670,26 @@ def get_house_effects(
 
     Parameters
     ----------
-    scope : str, default 'es'
-        Election scope.
+    scope : str, optional
+        Election scope; `None` loads every scope (the global prior of the house effects, M11).
     event_dates : list of str, optional
         Restrict to these elections (e.g. the ones before the event being forecast).
+    date_to : str, optional
+        Only the elections held strictly before this date.
     """
     model = PollstersParties()
     if not model.table_exists() or set(model.columns) - set(model._dal.get_columns(model.table)):
         return pd.DataFrame(columns=model.columns)
 
-    filters = ["event_scope = '{}'".format(scope)]
+    filters = []
+    if scope is not None:
+        filters.append("event_scope = '{}'".format(scope))
     if event_dates is not None:
         if len(event_dates) == 0:
             return pd.DataFrame(columns=model.columns)
         filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+    if date_to is not None:
+        filters.append("event_date < '{}'".format(pd.Timestamp(date_to).strftime('%Y-%m-%d')))
 
     return model.get_results(query=dict(filters=filters), formatted=True)
 

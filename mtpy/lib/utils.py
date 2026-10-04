@@ -229,3 +229,36 @@ def partial_parties(
     covered = present.mul(w, axis=0).sum() / total
 
     return [n for n in pct.columns if present[n].any() and covered[n] < max_share]
+
+
+def party_roots(parties: pd.DataFrame) -> pd.Series:
+    """
+    Root of each party following `parent_id`: a regional brand (PSC, PSE-EE, Más Madrid) resolves to its
+    national party, a successor (PDeCAT, JxCat) to the lineage it comes from (CiU). The house effects measured
+    on any party of the lineage inform the prior of all of them.
+
+    Parameters
+    ----------
+    parties : pd.DataFrame
+        Parties table with `id`, `name` and `parent_id`.
+
+    Returns
+    -------
+    pd.Series
+        Root name indexed by party name (the party itself when it has no parent, or on a cycle).
+    """
+    by_id = parties.set_index('id')
+    names = by_id['name'].to_dict()
+    parents = by_id['parent_id'].to_dict()
+    roots = {}
+    for pid, name in names.items():
+        current, seen = pid, {pid}
+        while True:
+            parent = parents.get(current)
+            if parent is None or pd.isnull(parent) or int(parent) not in names or int(parent) in seen:
+                break
+            current = int(parent)
+            seen.add(current)
+        roots[name] = names[current]
+
+    return pd.Series(roots, name='root')

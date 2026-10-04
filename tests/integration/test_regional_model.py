@@ -131,3 +131,22 @@ def test_districts_that_changed_since_the_previous_election(app):
     sim.run(split=True, random=True, n_sim=10)
     assert (sim.dist().sum(axis=1) == 45).all()
     assert sim.prev_results['pct'].loc[30].equals(sim.prev_results['pct'].loc[0])
+
+
+def test_house_effects_prior_is_global(app):
+    """M11b: el prior del efecto de una casa se nutre de todas las elecciones, de cualquier ámbito, con el peso de
+    cada ámbito, y el partido se resuelve por su raíz: el PSOE de Madrid hereda lo medido en las generales y
+    en otras comunidades."""
+    from mtpy.lib.forecaster import Forecaster
+    fc = Forecaster(scope='es-md', event_date='2027-05-23', drange=6, verbose=0, path='.').build_series()
+    history = fc.load_house_history()
+    assert history['event_scope'].nunique() > 1 and (history['event_date'] < '2027-05-23').all()
+    assert set(history['w_scope'].unique()) == {1.0, 0.5}
+    assert (history.loc[history['event_scope'] == 'es', 'w_scope'] == 1.0).all()
+    effects = fc.fit_house_effects()
+    gad3 = effects.loc[effects['pollster'] == 'GAD3'].reset_index().set_index('name')
+    assert gad3.loc['PSOE', 'prior'] != 0 and gad3.loc['PP', 'prior'] != 0
+    assert (effects['prior'] != 0).mean() > 0.8      # casi todas las casas traen historia de otros ámbitos
+    # Lo mismo visto desde `es`: la historia incluye las autonómicas al 0,5
+    nat = Forecaster(scope='es', event_date='2027-08-22', drange=6, verbose=0, path='.').build_series().load_house_history()
+    assert (nat['event_scope'] != 'es').any() and nat.loc[nat['event_scope'] != 'es', 'w_scope'].eq(0.5).all()

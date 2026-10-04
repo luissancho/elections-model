@@ -241,3 +241,43 @@ def test_require_polls_names_the_event_without_polls():
     assert Forecaster.require_polls(polls, 'es-md', '2027-05-23') is polls
     with pytest.raises(ValueError, match='No polls for es-an 2030-06-16'):
         Forecaster.require_polls(polls.iloc[:0], 'es-an', '2030-06-16')
+
+
+# --- M11b: prior de efectos de casa global (todas las elecciones, con peso por ámbito y partido raíz) ---
+
+def test_house_prior_weighs_regional_elections_by_their_scope_weight():
+    """Dos elecciones a la misma distancia y con los mismos sondeos: la nacional pesa 1 y la autonómica 0,5."""
+    ref = pd.Timestamp('2027-05-23')
+    dates = pd.to_datetime(['2023-07-23', '2023-05-28'])
+    history = pd.DataFrame({
+        'event_date': dates, 'event_scope': ['es', 'es-md'], 'dev_result_c': [2., -2.], 'level': [20., 20.],
+        'n_result': [10, 10], 'w_scope': [1., .5]
+    })
+    years = ((ref - dates).days / 365.25).to_numpy()
+    w = 0.9 ** years * 10 * np.array([1., .5])
+    expected = float((w * np.array([.1, -.1])).sum() / (w.sum() + 10 * 1.)) * 30.
+    mean, err = Forecaster.house_prior(history, 30., ref, year_decay=0.9, he_tau=0.08, he_prior_events=1., n_cap=10)
+    assert mean == pytest.approx(expected) and mean > 0 and err == pytest.approx(0.08 * 30.)
+    # Sin la columna, todas las elecciones pesan igual (comportamiento anterior)
+    same, _ = Forecaster.house_prior(history.drop(columns='w_scope'), 30., ref, year_decay=0.9)
+    assert same < mean
+
+
+def test_industry_bias_weighs_elections_by_their_scope_weight():
+    history = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23', '2023-05-28']), 'event_scope': ['es', 'es-md'], 'party': ['PP', 'PP'],
+        'industry': [2., -2.], 'level': [20., 20.], 'w_scope': [1., .5]
+    })
+    weighted = Forecaster.industry_bias(history, pd.Series({'PP': 30.}), pd.Timestamp('2027-05-23'))
+    flat = Forecaster.industry_bias(history.drop(columns='w_scope'), pd.Series({'PP': 30.}), pd.Timestamp('2027-05-23'))
+    assert weighted.loc['PP', 'bias'] > 0 and weighted.loc['PP', 'bias'] > flat.loc['PP', 'bias']
+
+
+def test_usable_history_counts_scope_and_date_pairs():
+    """Tres autonómicas del mismo día son tres elecciones."""
+    history = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-05-28'] * 3), 'event_scope': ['es-md', 'es-cl', 'es-vc'],
+        'pollster_id': [1, 1, 1], 'dev_result_c': 1.
+    })
+    assert Forecaster.usable_history(history).shape[0] == 3
+    assert Forecaster.usable_history(history.iloc[:2]).shape[0] == 0

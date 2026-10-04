@@ -77,3 +77,15 @@ def test_build_blocks_skips_blocks_without_parties():
     """M11: en una comunidad sin partidos regionalistas ni separatistas esos bloques quedan vacíos."""
     blocks = build_blocks({'Derecha': ['PP', 'VOX'], 'Regionalista': [], 'Separatista': []}, {'PP': '#0000ff', 'VOX': '#00ff00'})
     assert blocks.index.tolist() == ['Derecha']
+
+
+def test_party_roots_follow_parent_id():
+    """M11b: la historia de efectos de casa de una marca regional es la de su raíz (PSC → PSOE, PDeCAT → CiU)."""
+    import pandas as pd
+    from mtpy.lib.utils import party_roots
+    parties = pd.DataFrame({
+        'id': [1, 25, 9, 20, 515, 999], 'name': ['PSOE', 'CiU', 'JxCat', 'PDeCAT', 'PSC', 'LOOP'],
+        'parent_id': [None, None, 25, 25, 1, 999]
+    })
+    roots = party_roots(parties)
+    assert roots.to_dict() == {'PSOE': 'PSOE', 'CiU': 'CiU', 'JxCat': 'CiU', 'PDeCAT': 'CiU', 'PSC': 'PSOE', 'LOOP': 'LOOP'}

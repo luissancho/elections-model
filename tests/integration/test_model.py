@@ -347,7 +347,9 @@ def test_industry_bias_shifts_the_forecast(app, sim27_he):
     sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
     bias = sim.industry_bias_table
     assert {'bias', 'bias_err'} <= set(bias.columns)
-    assert bias.loc['PSOE', 'bias'] < 0          # las encuestas subestiman al PSOE: el pronóstico sube
+    # En las generales las encuestas subestimaban al PSOE (sesgo −1 punto); con la historia global del método 11
+    # (autonómicas al 0,5) el sesgo del sector con el PSOE queda cerca de 0: sólo se comprueba la mecánica
+    assert bias.loc['PSOE', 'bias'] != 0 and abs(bias.loc['PSOE', 'bias']) < 1
     for name in ['PP', 'PSOE']:
         assert sim.forecast.loc[name, 'mean'] == pytest.approx(sim27_he.forecast.loc[name, 'mean'] - bias.loc[name, 'bias'], abs=1e-6)
         assert sim.forecast.loc[name, 'err'] >= sim27_he.forecast.loc[name, 'err']
