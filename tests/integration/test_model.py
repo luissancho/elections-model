@@ -236,8 +236,11 @@ def test_anchor_is_last_fitted_day_not_deadline(sim27):
 
 
 # Regresión numérica de referencia (MT n=200, semilla 42, sin efectos de casa). Era 137 / 112 / 62 / 8 hasta M6b:
-# el nuevo `bias` del rating cambió `weight_rating` y con él el promedio (ver `metodo-6-house-effects.md`).
-REGRESSION_TOTALS = [139, 111, 62, 8]
+# el nuevo `bias` del rating cambió `weight_rating` y con él el promedio (ver `metodo-6-house-effects.md`);
+# 139 / 111 / 62 / 8 hasta los cuatro sondeos cargados a finales de septiembre de 2026 (140 / 109 / 61 / 8); y
+# desde el método 11 los ratings son globales (todas las elecciones, autonómicas al 0,5), lo que vuelve a
+# mover `weight_rating` (ver `metodo-11-ambitos-autonomicos.md`). Depende de los sondeos y ratings guardados.
+REGRESSION_TOTALS = [141, 107, 62, 8]
 
 
 def test_nowcast_regression_seed_42(sim27):
@@ -319,11 +322,13 @@ def test_house_effects_are_fitted_and_centered(sim27, sim27_he):
     for name, g in he.groupby(level='name'):
         assert abs((g['effect'] * g['w']).sum() / g['w'].sum()) < 1e-6, name
     # La serie corregida sólo cambia en las filas de encuestas; el promedio corregido del PP queda cerca del bruto
+    # (con los ratings globales del método 11 la diferencia es de 1,0 puntos: las casas con efecto positivo en
+    # el PP pesan más en la ventana que en el centrado)
     raw, corr = sim27_he.model.series_raw, sim27_he.model.series
     events = raw['pollster'].isnull()
     assert raw.loc[events, sim27_he.model.names].equals(corr.loc[events, sim27_he.model.names])
     assert not raw.loc[~events, 'PP'].equals(corr.loc[~events, 'PP'])
-    assert abs(sim27_he.forecast.loc['PP', 'mean'] - sim27.forecast.loc['PP', 'mean']) < 1.0
+    assert abs(sim27_he.forecast.loc['PP', 'mean'] - sim27.forecast.loc['PP', 'mean']) < 1.5
     # El prior histórico se cargó (hay casas con prior distinto de 0)
     assert (he['prior'].abs() > 0).any()
 
