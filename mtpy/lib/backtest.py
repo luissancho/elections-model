@@ -167,6 +167,7 @@ def run_case(
     industry_bias: bool = False,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    min_events: Optional[int] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -182,7 +183,10 @@ def run_case(
     estimated with the polls up to `limit_date` only, and their prior with the elections before `event_date`;
     the baselines are computed on the raw polls. `composition` sets the joint noise of the national parties
     (M7): `'auto'` estimates the ratio from the elections before `event_date`; `None` or 1 (default) draws
-    them independently.
+    them independently. `min_events` is the number of featured elections of the scope before the event from
+    which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
+    `None`, the default, always takes the parent); `meta` records the scope used (`est_scope`) and the count
+    (`n_featured`).
 
     Returns
     -------
@@ -196,7 +200,8 @@ def run_case(
         warnings.simplefilter('ignore')
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
-            house_effects=house_effects, industry_bias=industry_bias, composition=composition, regional_noise=regional_noise
+            house_effects=house_effects, industry_bias=industry_bias, composition=composition, regional_noise=regional_noise,
+            min_events=min_events
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -313,6 +318,8 @@ def run_case(
         'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias),
         'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
         'regional_noise': bool(regional_noise),
+        'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured),
+        'min_events': int(min_events) if min_events is not None else np.nan,
         'swing_ar': sim.v2swing.a_r if sim.v2swing is not None else np.nan, 'swing_br': sim.v2swing.b_r if sim.v2swing is not None else np.nan,
         'clip_rate': float(clip_rate),
         'he_pollsters': int(he_active.index.get_level_values('pollster_id').nunique()) if he_active is not None else 0,
@@ -414,6 +421,7 @@ def run_backtest(
     industry_bias: bool = False,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    min_events: Optional[int] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -439,7 +447,7 @@ def run_backtest(
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias,
-                    composition=composition, regional_noise=regional_noise
+                    composition=composition, regional_noise=regional_noise, min_events=min_events
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal

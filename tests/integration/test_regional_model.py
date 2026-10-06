@@ -150,3 +150,14 @@ def test_house_effects_prior_is_global(app):
     # Lo mismo visto desde `es`: la historia incluye las autonómicas al 0,5
     nat = Forecaster(scope='es', event_date='2027-08-22', drange=6, verbose=0, path='.').build_series().load_house_history()
     assert (nat['event_scope'] != 'es').any() and nat.loc[nat['event_scope'] != 'es', 'w_scope'].eq(0.5).all()
+
+
+def test_min_events_selects_the_scope_of_the_estimators(app):
+    """Validación del mínimo (M11): `min_events` decide si los estimadores se ajustan con el ámbito o con `es`."""
+    from mtpy.lib.simulator import Simulator
+
+    own = Simulator(scope='es-md', event_date='2023-05-28', drange=6, seed=42, verbose=0, path='.', min_events=3)
+    parent = Simulator(scope='es-md', event_date='2023-05-28', drange=6, seed=42, verbose=0, path='.')
+
+    assert (own.n_featured, own.est_scope, own.computer.scope) == (4, 'es-md', 'es-md')
+    assert (parent.n_featured, parent.est_scope, parent.computer.scope) == (4, 'es', 'es')

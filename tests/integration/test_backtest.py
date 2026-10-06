@@ -106,3 +106,16 @@ def test_run_case_regional_2023_6_days(app):
     assert '2023-05-28' in default_events('es-md') and '2027-08-22' not in default_events('es')
     case = run_case('es-md', '2023-05-28', 6, n_sim=50, nowcast_only=True)
     assert case['shares'].shape[0] >= 4 and int(case['seats']['official'].sum()) == 135
+
+
+def test_run_case_records_the_scope_of_the_estimators(app):
+    """Validación del mínimo (M11): `min_events` llega al Simulator y `meta` registra con qué ámbito se ajustó."""
+    from mtpy.lib.backtest import run_case
+
+    import pandas as pd
+
+    own = run_case('es-md', '2023-05-28', 6, n_sim=10, nowcast_only=True, min_events=3)['meta'].loc[0]
+    parent = run_case('es-md', '2023-05-28', 6, n_sim=10, nowcast_only=True)['meta'].loc[0]
+
+    assert (own['est_scope'], own['n_featured'], own['min_events']) == ('es-md', 4, 3)
+    assert (parent['est_scope'], parent['n_featured']) == ('es', 4) and pd.isnull(parent['min_events'])

@@ -1,6 +1,7 @@
 {
- "run_at": "2026-09-27T17:51:51",
- "commit": "f44a76b",
+ "run_at": "2026-10-06T16:25:31",
+ "commit": "3269d18",
+ "scope": "es",
  "n_sim": 500,
  "seed": 42,
  "max_fc": 10,
@@ -9,6 +10,7 @@
  "industry_bias": false,
  "composition": null,
  "regional_noise": true,
+ "min_events": null,
  "events": [
   "2015-12-20",
   "2016-06-26",
@@ -24,6 +26,6 @@
   90,
   180
  ],
- "db_polls": 3825,
- "db_last_poll": "2026-09-18"
+ "db_polls": 3836,
+ "db_last_poll": "2026-10-03"
 }

@@ -161,3 +161,21 @@ def test_run_backtest_survives_when_every_case_is_skipped(monkeypatch):
         out = backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30])
     assert out['metrics'].shape[0] == 0 and out['by_horizon'].shape[0] == 0
     assert out['meta'].shape[0] == 2 and out['meta']['error'].eq('no usable polls').all()
+
+
+def test_run_backtest_passes_min_events_to_every_case(monkeypatch):
+    """Validación del mínimo (M11): `run_backtest` traslada `min_events` a cada caso."""
+    import warnings
+    from mtpy.lib import backtest
+
+    seen = []
+
+    def failing_case(*args, **kwargs):
+        seen.append(kwargs.get('min_events'))
+        raise ValueError('no usable polls')
+
+    monkeypatch.setattr(backtest, 'run_case', failing_case)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30], min_events=99)
+    assert seen == [99, 99]

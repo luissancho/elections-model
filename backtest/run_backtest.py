@@ -50,7 +50,7 @@ def run_scope(args: argparse.Namespace, scope: str, composition) -> bool:
         scope=scope, events=events, horizons=args.horizons,
         n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc, nowcast_only=args.nowcast_only,
         house_effects=args.house_effects, industry_bias=args.industry_bias, composition=composition,
-        regional_noise=args.regional_noise, verbose=1
+        regional_noise=args.regional_noise, min_events=args.min_events, verbose=1
     )
     if results['metrics'].shape[0] == 0:
         print('{}: no case could be evaluated, skipped'.format(scope))
@@ -70,7 +70,7 @@ def run_scope(args: argparse.Namespace, scope: str, composition) -> bool:
         'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': commit, 'scope': scope,
         'n_sim': args.n_sim, 'seed': args.seed, 'max_fc': args.max_fc, 'nowcast_only': args.nowcast_only,
         'house_effects': args.house_effects, 'industry_bias': args.industry_bias, 'composition': composition,
-        'regional_noise': args.regional_noise,
+        'regional_noise': args.regional_noise, 'min_events': args.min_events,
         'events': results['metrics']['event_date'].unique().tolist(), 'horizons': sorted(results['metrics']['horizon'].unique().tolist()),
         'db_polls': int(polls.shape[0]), 'db_last_poll': str(polls['date'].max().date())
     }
@@ -98,6 +98,7 @@ def main():
     parser.add_argument('--industry-bias', action='store_true', help='shift the average by the industry-wide bias of past elections (M6)')
     parser.add_argument('--composition', default=None, help="joint noise of the national parties (M7): 'auto' or a ratio in (0, 1]; independent draws by default")
     parser.add_argument('--no-regional-noise', dest='regional_noise', action='store_false', help='deterministic proportional swing per province (no M9 shocks)')
+    parser.add_argument('--min-events', type=int, default=None, help='featured elections of a regional scope needed to fit the estimators on the scope itself instead of on `es` (M11); by default always `es`, 1 forces the own ones')
     parser.add_argument('--out', default=os.path.join(ROOT, 'backtest', 'results'))
     args = parser.parse_args()
 

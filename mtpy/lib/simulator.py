@@ -50,6 +50,7 @@ class Simulator(Core):
         he_params: Optional[dict[str, Any]] = None,
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
+        min_events: Optional[int] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -117,6 +118,12 @@ class Simulator(Core):
             elections: a multiplicative shock per party and autonomous community and a smaller one per
             province, keeping the national share of each party (M9, `apply_swing_noise`). The national draw
             is identical with or without them (own random generator, `seed + 1`).
+        min_events : int, optional
+            Featured elections of the scope held before the event needed to fit the estimators (polling
+            error, drift, seats, composition) on the scope itself; with fewer, they are fitted on its parent
+            scope (`es`). `None` (default) always uses the parent: the own estimators of the regional scopes
+            did not improve the backtest (M11 validation). A scope without parent always uses its own
+            elections. See `estimator_scope`.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -135,6 +142,7 @@ class Simulator(Core):
         self.he_params = he_params
         self.composition = composition
         self.regional_noise = bool(regional_noise)
+        self.min_events = None if min_events is None else int(min_events)
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -204,9 +212,9 @@ class Simulator(Core):
         self.durations = [int(d) for d in np.diff(all_dates.values).astype('timedelta64[D]').astype(int)]
 
         # The estimators (seats, polling error, drift, composition) are fitted on the past elections of the
-        # scope when it has enough of them, and on those of its parent scope otherwise (see `estimator_scope`)
-        n_featured = len([d for d in get_event_dates(scope=self.scope, featured=True) if d < self.event_date])
-        self.est_scope = self.estimator_scope(self.scope, self.parent, n_featured)
+        # parent scope, or on those of the scope itself with `min_events` (see `estimator_scope`)
+        self.n_featured = len([d for d in get_event_dates(scope=self.scope, featured=True) if d < self.event_date])
+        self.est_scope = self.estimator_scope(self.scope, self.parent, self.n_featured, min_events=self.min_events)
         self.computer = self._past_computer(self.est_scope)
 
         # Past polls of the scope itself: the age of its parties is counted from them (see `party_ages`)
@@ -373,13 +381,14 @@ class Simulator(Core):
         scope: str,
         parent: Optional[str],
         n_featured: int,
-        min_events: int = 3
+        min_events: Optional[int] = None
     ) -> str:
         """
-        Scope whose past elections fit the estimators of the simulator: the scope itself when it has at least
-        `min_events` featured elections before the event (or no parent), its parent scope otherwise.
+        Scope whose past elections fit the estimators of the simulator: the scope itself when it has no parent
+        or when `min_events` is given and it has at least that many featured elections before the event; its
+        parent scope otherwise (always, with `min_events=None`).
         """
-        if parent is None or n_featured >= min_events:
+        if parent is None or (min_events is not None and n_featured >= min_events):
             return scope
 
         return parent

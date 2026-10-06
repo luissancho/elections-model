@@ -403,8 +403,11 @@ def test_alloc_seats_scope_threshold_only():
 # --- M11: estimadores con caída al ámbito padre y ruido sólo por circunscripción ---
 
 def test_estimator_scope_falls_back_to_the_parent():
-    assert Simulator.estimator_scope('es-md', 'es', 2) == 'es'
-    assert Simulator.estimator_scope('es-md', 'es', 3) == 'es-md'
+    """Validación del mínimo (M11): por defecto un ámbito con padre usa siempre los estimadores del padre;
+    con `min_events`, los propios a partir de ese número de elecciones featured anteriores."""
+    assert Simulator.estimator_scope('es-md', 'es', 5) == 'es'
+    assert Simulator.estimator_scope('es-md', 'es', 2, min_events=3) == 'es'
+    assert Simulator.estimator_scope('es-md', 'es', 3, min_events=3) == 'es-md'
     assert Simulator.estimator_scope('es', None, 0) == 'es'
 
 
