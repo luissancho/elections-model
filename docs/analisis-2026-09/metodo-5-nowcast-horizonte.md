@@ -8,6 +8,8 @@ El `Simulator` respondía a "¿quién ganaría si las elecciones fueran ya?" con
 
 Pero la salida se anclaba en `2027-08-22`, que no es la fecha de la elección sino el **límite de la legislatura**: `limit_date = 2027-08-22 − 6`, el promedio se arrastraba once meses con `fillna` hasta esa fecha y la tabla se presentaba como pronóstico del 22 de agosto de 2027 con la incertidumbre de la última semana de campaña. Faltaba todo lo que la opinión puede moverse hasta la fecha real, que además no se conoce: el Gobierno puede convocar en cualquier momento.
 
+*Nota del 06-10-2026: las elecciones se convocaron ese día para el 29-11-2026. El evento `es` pasó de `2027-08-22` a `2026-11-29` en la base de datos (claves de `events`, `events_data`, `polls`, `polls_results` y `pollsters_ratings`, con `days` recalculado y el reparto de escaños del real decreto: Madrid 38, Cádiz 8) y en `wp-urls.json`, `params.json`, notebooks y tests. Desde entonces `horizon='deadline'` es la fecha real de la elección, no el límite de la legislatura.*
+
 En el backtest ese mismo mecanismo hacía otra cosa: con `drange = d` días, `weeks = d // 7`, y el error de las encuestas publicadas `d` días antes incluye la deriva hasta la elección. La deriva estaba escondida dentro del error de encuesta, mezclada con él y sin forma de separarla del horizonte.
 
 ## Solución: separar el error de las encuestas de la deriva de la opinión

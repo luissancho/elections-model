@@ -148,7 +148,7 @@ def test_house_effects_prior_is_global(app):
     assert gad3.loc['PSOE', 'prior'] != 0 and gad3.loc['PP', 'prior'] != 0
     assert (effects['prior'] != 0).mean() > 0.8      # casi todas las casas traen historia de otros ámbitos
     # Lo mismo visto desde `es`: la historia incluye las autonómicas al 0,5
-    nat = Forecaster(scope='es', event_date='2027-08-22', drange=6, verbose=0, path='.').build_series().load_house_history()
+    nat = Forecaster(scope='es', event_date='2026-11-29', drange=6, verbose=0, path='.').build_series().load_house_history()
     assert (nat['event_scope'] != 'es').any() and nat.loc[nat['event_scope'] != 'es', 'w_scope'].eq(0.5).all()
 
 

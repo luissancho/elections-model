@@ -10,4 +10,4 @@ def test_catalogues_are_synced_and_es_params_unchanged(app):
     assert save_catalogues() == {'scopes': 18, 'districts': 118}
     assert Scopes().get_results(formatted=True).shape[0] == get_scopes().shape[0] == 18
     assert Districts().get_results(formatted=True).shape[0] == get_districts().shape[0] == 118
-    assert get_event_params('es', '2027-08-22', path='.')['bmaps']['main'][:2] == ['PP', 'PSOE']
+    assert get_event_params('es', '2026-11-29', path='.')['bmaps']['main'][:2] == ['PP', 'PSOE']

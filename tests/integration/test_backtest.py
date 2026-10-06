@@ -103,7 +103,7 @@ def test_run_case_provincial_metrics(app):
 def test_run_case_regional_2023_6_days(app):
     """M11: un caso autonómico (Madrid 2023 a 6 días) con los eventos por defecto de su ámbito."""
     from mtpy.lib.backtest import default_events, run_case
-    assert '2023-05-28' in default_events('es-md') and '2027-08-22' not in default_events('es')
+    assert '2023-05-28' in default_events('es-md') and '2026-11-29' not in default_events('es')
     case = run_case('es-md', '2023-05-28', 6, n_sim=50, nowcast_only=True)
     assert case['shares'].shape[0] >= 4 and int(case['seats']['official'].sum()) == 135
 
