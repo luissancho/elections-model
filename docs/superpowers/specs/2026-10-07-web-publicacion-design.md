@@ -1,0 +1,420 @@
+<!-- Especificación de diseño aprobada por Luis el 2026-10-07 (sesión de planificación con Claude Code). -->
+
+# Plan: interfaz web y API para publicar los resultados del modelo
+
+## Contexto
+
+Luis quiere publicar los resultados del modelo electoral en una web: pronósticos de voto, simulaciones de
+escaños y mayorías, análisis de casas (errores, sesgos y camino hacia el rating) y eventos electorales
+(errores por casa). Hoy esos resultados solo existen en notebooks (`notebooks/Polls*.ipynb`,
+`notebooks/Pollsters*.ipynb`) y en ficheros locales gitignorados (`files/`).
+
+El framework `mtpy` que envuelve el proyecto trae un sistema de API (gunicorn + uvicorn, nginx delante,
+supervisord en el contenedor) que puede servir también una web. Criterios de Luis: sencillez del código,
+reproducibilidad y dockerización.
+
+Restricciones previas (memoria del proyecto): PostgreSQL es el sistema de registro y base de un servicio
+de consulta; los datos son publicables (Wikipedia CC BY-SA 4.0, Infoelectoral con atribución, curación
+propia); objetivo científico y divulgativo; los cambios de esquema en la base los hace Luis a mano.
+
+## Decisiones del usuario (2026-10-07)
+
+- Audiencia: público general, sin login; solo español.
+- Interacción: consulta de resultados precalculados con filtros (ámbito, modo, agrupación, casa, evento,
+  distrito). El modelo no se ejecuta en el servidor.
+- Cadencia: publicación manual con un comando tras cargar y revisar sondeos. Sin cron.
+- Hosting: servidor propio con Docker, evolucionando la imagen actual.
+- Gráficos: Python publica datos JSON; módulos JavaScript pequeños los dibujan con una librería interactiva.
+  Frontend HTML + JS moderno sin build (módulos ES nativos, librería vendorizada; ni Node ni bundler).
+- API `/api/v1` con URL estables; JSON y descargas CSV.
+- **Capa HTTP en `mtpy/controllers` y lógica de backend en `mtpy/lib`, como el resto del modelo.** El
+  desacople de mtpy se verá más adelante; no diseñar fuera del framework.
+- **Backend con PostgreSQL en producción**: los controladores consultan la base para las tablas de datos;
+  las salidas del modelo se precalculan.
+- Paquete precalculado entregado por **S3** vía `app.fs` (`S3_BUCKET`; en local escribe en `files/`).
+- V1: `es` + ámbitos autonómicos simulables (11 hoy), solo MT, conmutador nowcast/forecast, casas, eventos
+  pasados, precisión del modelo. LS/MC/DH se quedan en los notebooks.
+- Páginas de evento tras cargar los resultados oficiales, a mano. Sin feed de resultados provisionales.
+- Base de producción: **la RDS existente** de `deploy/elections.env`; Luis trabajará directamente contra
+  ella (notebooks, `run_load`, publicar). La PostgreSQL local pasa a ser copia opcional de desarrollo.
+
+## Hallazgos de la exploración (workflow de 10 agentes, solo lectura)
+
+- **API de mtpy**: `mtpy.api()` devuelve un ASGI escrito a mano (`mtpy/core/api.py`). Rutas registradas
+  solo en `mtpy/mtpy.py:106-107` (una: `/` → `Index`). Controladores `mtpy/controllers/<Nombre>.py`,
+  clase `<Nombre>`, acciones `async <accion>_action(**params)`. Respuesta: dict → JSON (`json.dumps` con
+  NaN), str/bytes → text/plain siempre, int → error JSON, list → 500 (`mtpy/core/api.py:121-151`). Sin
+  estáticos, CORS ni cabeceras de caché. Alias de parámetros de ruta `[0-9a-z_\-]+` (minúsculas, sin
+  puntos; `mtpy/core/api.py:181`). Query como lista de tuplas. Arranque sin base (motor perezoso); cada
+  worker importa la pila científica completa.
+- **nginx** (`deploy/docker/nginx.conf`): sin `root`; `try_files $uri @proxy_to_app` → proxy puro a
+  gunicorn :8000; gzip solo HTML. Puerto 8042.
+- **Modelo**: un Simulator completo tarda 31-64 s en `es` y 13-27 s en autonómicos
+  (`backtest/results/**/meta.csv`); no apto por petición. Salidas en memoria: `summary`, `probabilities`,
+  `fan`, `vote_forecast`, `projection`, `dist`, `unit_summary`, `result(scenario())`, `totals`;
+  `Forecaster.forecast/fc_stat/fc_series_raw/nfc_series/house_effects/dispersion`;
+  `Computer.get_polls_metric/get_error_estimator_data/house_effects_summary/herding_summary`. Solo se
+  persiste el promedio (`files/fc/{prefix}*.csv`) y PNG. `Simulator.mode` es un atributo llano
+  (`simulator.py:158`); `horizon`, `vote_forecast` y `projection` lo siguen (`:1020-1062`), pero el
+  horizonte por defecto de `run` se fija en el constructor (`:332`): pasar `horizon='deadline'` explícito.
+- **Datos**: la base es imprescindible para ejecutar el modelo; los datos maestros solo existen en la base;
+  `run_load.py` rechaza `es` (carga nacional por notebooks). `app.fs` abstrae `files/` o S3
+  (`read_bytes`/`write_bytes`/`exists`/`listdir`, `mtpy/core/services/s3.py:77-275`); `app.data` es
+  `data/` versionado. Tabla `pollsters_herding` nueva (M13, sin commit).
+- **Historia del pronóstico**: no se puede regenerar fielmente (suavizado bilateral, pesos reescritos,
+  ratings "de hoy", cambio de fecha del evento) → cada publicación es una instantánea inmutable con
+  procedencia (patrón `backtest/run_backtest.py:59-78`, que omite el flag de árbol sucio).
+- **Docker**: `.dockerignore` tiene semántica de raíz, así que `deploy/*.env` (credenciales reales), `.git`
+  (127 MB), notebooks y `.superpowers/` entrarían en la imagen con `COPY . .`. Bloqueante de seguridad.
+  Imagen única con build tools; supervisord sin `nodaemon`; crontab `job.py rep` inexistente.
+- **Vistas de los notebooks**: V1 portada, V2 voto, V3 serie con sondeos, V4 sondeos del ciclo, V5
+  efectos de casa del ciclo, V6 escaños MT, V7 distritos, V8 abanico por horizonte, V9 didáctica (fuera),
+  V10 ranking, V11 perfil de casa, V12 errores del sector, V13 evento pasado, V14 precisión, V15 metodología.
+- Otros: `bmap='max'` solo existe para `es`; etiquetas de evento ambiguas en `computer.py:1962` → añadir
+  `event_date`; resultados oficiales llegan 25-121 días después de la elección; LOREG art. 69.7 (24 a 28
+  de noviembre); SQL por formato de cadenas en `mtpy/lib/data.py` → validar toda entrada.
+
+## Alternativas consideradas
+
+- Sitio totalmente estático (nginx o GitHub Pages, sin Python): descartado, Luis quiere consultas en vivo
+  sobre PostgreSQL y los controladores de mtpy.
+- Backend fino sin base (controladores que solo sirven el paquete): descartado por Luis.
+- Framework web moderno fuera de mtpy (FastAPI/Starlette): descartado por ahora; el contrato de API se
+  diseña para que una migración futura no afecte al frontend.
+
+Elegida: híbrida dentro de mtpy. Tres borradores independientes (simplicidad, contrato de datos,
+operación) se han fusionado aquí; los conflictos resueltos se indican en cada apartado.
+
+## Arquitectura
+
+```
+ portátil de Luis                                   servidor (un contenedor Docker)
+ ────────────────                                   ───────────────────────────────
+ notebooks / run_load ────► PostgreSQL (RDS) ◄────── controladores mtpy (gunicorn+uvicorn :8000, usuario
+ python job.py publish ───► S3 site/v1/… ◄──────────┘  de solo lectura)       ▲
+   Simulator + Computer → JSON/CSV + procedencia                               │ /api/ proxy + caché 60 s
+                                                     nginx :8042 ── web/ estática (HTML + ES modules + ECharts)
+```
+
+Publicar: cargar sondeos como hoy → revisar → `python job.py publish '{"what":["forecast"],"scopes":"all"}'`
+→ por ámbito: un Simulator, `fit_forecast` una vez, `run` nowcast y `run` forecast con la misma semilla →
+exporta a `site/v1/runs/{scope}/{run_id}/` → valida → reconstruye `history.json` → al final reescribe
+`manifest.json` (único puntero). La web no necesita redespliegue.
+
+Consultar: navegador → nginx (`web/`) → `fetch('/api/v1/...')` → proxy con caché → controlador →
+`mtpy/lib/webapi.py` → paquete (S3 con caché en memoria) o PostgreSQL (caché TTL) → JSON.
+
+### Módulos nuevos y cambios
+
+| Fichero | Papel |
+|---|---|
+| `mtpy/lib/bundle.py` (nuevo) | Disposición del paquete: `PREFIX='site/v1'`, `CONTRACT=1`, `run_id()`, `BundleWriter`/`BundleReader` sobre `app.fs` (`write_bytes(json.dumps(..., allow_nan=False, default=json_default))`, `read_bytes`, `exists`, `listdir`), `json_default` (numpy, Timestamp, NaN → null), `SCHEMAS` + `validate(name, obj)`. Único sitio que conoce rutas de ficheros. |
+| `mtpy/lib/publish.py` (nuevo) | Exportadores puros (`export_meta`, `export_headline`, `export_series`, `export_polls`, `export_fan`, `export_house_effects`, `export_dispersion`, `export_vote`, `export_summary`, `export_dist`, `export_districts`, `export_scenario`, `export_projection`, `export_analysis`, `export_event`, `export_backtest`) y orquestadores `publish_forecast(scope, writer, ...)`, `publish_analysis`, `publish_event`, `publish_backtest`, `write_manifest`, `point`, `unpublish`. Sin estado. |
+| `mtpy/jobs/Publish.py` (nuevo) | `class Publish(Job)`: parsea parámetros, itera ámbitos con aislamiento de errores, `alert()` final. Elegido frente a un script argparse porque es el mecanismo del framework, funciona con `RUN_JOB` en Docker y avisa por Pushover; la lógica vive en `publish.py`. |
+| `mtpy/lib/webapi.py` (nuevo) | Capa de servicio de la API: validadores (`check_scope`, `check_date`, `check_run`, `check_mode`, `check_part`, `check_int`), `HttpError`, `TTLCache`, lectura cacheada del paquete, consultas a base (`query_parties`, `query_pollsters`, `query_pollster`, `query_ratings`, `query_polls`, `query_results`, `query_events`, `query_house_effects`, `query_herding`, `query_drift`) sobre los lectores de `mtpy/lib/data.py`, `frame_to_records`, `frame_to_csv`, tabla `ROUTES` y `add_routes(router)`. |
+| `mtpy/controllers/Base.py` (nuevo) | `Base(Controller)`: query string a dict, `HttpError` → JSON de error, `cache()` (`Cache-Control`/`ETag`), `csv()` (`text/csv` + `Content-Disposition`), aviso `freeze`. |
+| `mtpy/controllers/Forecast.py`, `Analysis.py`, `Data.py` (nuevos) | Un controlador por familia de rutas (paquete de pronósticos; análisis, eventos y backtest; tablas de base). Solo validan, llaman a `webapi` y devuelven dict/list/bytes. |
+| `web/` (nuevo) | Multipágina: `index.html`, `promedio.html`, `escanos.html`, `casas.html`, `elecciones.html`, `modelo.html`, `metodo.html`; `js/{api,state,format,catalog,seats}.js`, `js/charts/*.js`, `js/pages/*.js`; `css/site.css`; `vendor/echarts.min.js` + licencia. |
+| `deploy/web.env.example`, `deploy/publish.env.example`, `deploy/sql/web_reader.sql`, `deploy/smoke.sh`, `deploy/README.md` (nuevos) | Configuración sin secretos, rol de solo lectura, humo Docker y runbook. |
+| `docs/web/contrato.md` (nuevo) | Copia legible de `SCHEMAS` y de la tabla de rutas. |
+| `tests/test_bundle_unit.py`, `test_publish_unit.py`, `test_webapi_unit.py`, `test_api_asgi.py`, `test_web_routes.py`, `tests/integration/test_publish.py` (nuevos) | Ver Pruebas. |
+| `mtpy/core/api.py` (cambia) | Ver "Cambios en el núcleo". |
+| `mtpy/mtpy.py:100-111` (cambia) | `api(routes=None)`: registra `/` y además las rutas recibidas. |
+| `api.py` raíz (cambia) | `api = mtpy.api(routes=webapi.ROUTES)`. |
+| `mtpy/lib/computer.py:1962` (cambia) | `get_polls_metric` añade la columna `event_date` ISO junto a la etiqueta ambigua. Aditivo. |
+| `config.json`, `.env.example` (cambian) | Sección `"web": {"prefix": "${WEB_PREFIX}", "cache_ttl": "${WEB_CACHE_TTL}", "freeze": "${WEB_FREEZE}"}`; vacíos → valores por defecto en código. |
+| `deploy/docker/nginx.conf`, `supervisord.conf`, `init.sh`, `Dockerfile`, `.dockerignore`, `requirements.txt` (cambian) | Ver Infraestructura. |
+
+### Paquete publicado (`site/v1/` en `app.fs`: `files/site/v1/` en local, `s3://{bucket}/site/v1/` en producción)
+
+```
+site/v1/manifest.json                                    único puntero; se reescribe al final de cada publicación
+site/v1/runs/{scope}/history.json                        reconstruido desde los headline.json de los runs
+site/v1/runs/{scope}/{run_id}/meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json
+site/v1/runs/{scope}/{run_id}/{nowcast|forecast}/{vote,summary,dist,districts,scenario,projection}.json
+site/v1/runs/{scope}/{run_id}/csv/*.csv                  gemelos CSV en formato largo
+site/v1/analysis/{scope}/{meta,house-effects,herding,poll-errors,error-data}.json (+ csv/)
+site/v1/events/{scope}/{date}/{meta,pollsters,polls,results,model}.json (+ csv/)
+site/v1/backtest/{scope}/{meta,metrics,by-horizon,blocks,shares,seats}.json (+ csv/)
+```
+
+- `run_id` = `YYYYMMDD-HHMMSS` en UTC, uno por invocación (compartido por todos los ámbitos); cabe en el
+  alias de ruta y ordena lexicográficamente. Un run nunca se reescribe.
+- Sobre común de todo JSON: `{"schema": "<nombre>@1", "contract": 1, "scope", "run_id"|null, "mode"|null,
+  "generated_at", "data": ...}`. Convenciones: `null` por NaN, fechas `YYYY-MM-DD`, instantes ISO con `Z`,
+  partidos por `name` con catálogo (`id`, `fullname`, `color`, `block`, `regional`) en `meta.parties`,
+  series largas en orientación columnar, tablas en `records`, porcentajes con 2 decimales y
+  probabilidades con 3.
+- `meta.json`: `run_id`, `run_at`, `commit`, `dirty` (`git status --porcelain`), `versions`, `scope`,
+  `event_date`, `as_of`, `date_last`, `date_fit_last`, `horizon_max`, `n_sim`, `seed`, `drange`, `max_fc`,
+  `alpha`, `correctors`, `n_polls`, `n_pollsters`, `db_polls`, `db_last_poll`, `n_seats`, `majority`,
+  `parties`, `bmaps`, `smap`, `regions`, `diagnostics` (`drift_k`, `multiplier`, `ages`, `composition`,
+  `clip_rate`), `seconds` por paso, `freeze`.
+- `headline.json`: por modo, `pct/lo/hi/seats/seats_lo/seats_hi/p_first` por partido y `p_majority` por
+  bloque `vs`; alimenta `history.json` (evolución del pronóstico publicado, no regenerable).
+- Fuentes: `series` ← `fc.forecast` + `fc.fc_stat` (`cmin`/`cmax`) cortados en `date_fit_last`; `polls` ←
+  `fc.fc_series_raw` (sondeos como se publicaron) + `fc.nfc_series` (resultado anterior); `fan` ←
+  `sim.fan()`; `house-effects` ← `fc.house_effects`; `dispersion` ← `fc.dispersion`; por modo: `vote` ←
+  `sim.vote_forecast()`, `summary` ← `sim.summary()`, `summary('vs')`, `summary('blocks')`,
+  `probabilities('vs')`, `totals()`; `dist` ← `sim.dist()` (matriz n_sim × partidos, ~11 KB gz, base de
+  histogramas y coaliciones en el navegador); `districts` ← `sim.unit_summary(r)` por distrito; `scenario`
+  ← `sim.result(sim.scenario())`; `projection` ← `sim.projection()` (también `vs` y `blocks`).
+- `analysis/{scope}` (cambia tras elecciones; se sobrescribe): `house-effects` ← `Computer.print_house_effects`
+  / `house_effects_summary`; `herding` ← `herding_summary` + `get_herding`; `poll-errors` ←
+  `get_polls_metric('error', bmap='vs', drange=(6, 42), n_last=1)`; `error-data` ← `get_error_estimator_data`.
+- `events/{scope}/{date}` (manual tras resultados): tablas de PollstersEvent (`get_polls_metric` del evento,
+  todas y última por casa), resultados región 0, filas del backtest de ese evento (sustituye la rama
+  `show_fc` rota del notebook). `backtest/{scope}`: conversión de `backtest/results[/{scope}]/*.csv`.
+- Retirada: `point` reescribe la entrada del ámbito en `manifest.json` a un run anterior (no destructivo);
+  `unpublish` borra un run malo y reconstruye `history`. Las cachés caducan en ≤ 2 min.
+
+### Comando de publicar
+
+```
+python job.py publish '{"what":["forecast"],"scopes":["es"]}'
+python job.py publish '{"what":["forecast"],"scopes":"all"}'                 # es + autonómicos con sondeos
+python job.py publish '{"what":["analysis","backtest"],"scopes":"all"}'
+python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'
+python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
+python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
+python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'   # a site-dry/, sin punteros
+```
+
+Parámetros: `what`, `scopes`, `event_date` (por defecto `get_next_event_date`), `n_sim=1000`, `seed=42`,
+`drange=6`, `max_fc=10`, `alpha=0.05`, `correctors`, `freeze`, `run`, `dry_run`, `force`. En Docker:
+`RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'` (JSON sin espacios: `init.sh` no entrecomilla).
+
+Pasos por ámbito: `Simulator(scope, event_date, drange, seed, mode='nowcast', verbose=0)` →
+`fit_forecast(max_fc)` → `run(split=True, random=True, n_sim)` → exporta `nowcast/` → `sim.mode='forecast'`
+→ `run(..., horizon='deadline')` (misma semilla: `set_params` recrea el RNG) → exporta `forecast/` →
+ficheros comunes, CSV, `meta.json` y por último `headline.json` → `validate` de cada objeto antes de
+escribir → `history.json` → al terminar todos los ámbitos, `manifest.json` (los ámbitos fallidos conservan
+su entrada anterior). `ValueError` de `require_forecast` (ámbito sin sondeos) → `skipped` con motivo;
+cualquier otra excepción → `failed`, el resto continúa; resumen en pantalla, `app.logger` y `alert()`;
+código de salida 1 si hay fallos. Guarda LOREG: con `scope='es'` y fecha dentro de los 5 días previos a
+la elección se niega a publicar salvo `force`. Duración estimada: `es` 1,5-2 min; autonómico 0,5-1 min;
+`all` 10-15 min desde el portátil contra la RDS (medir en la fase 1).
+
+### Contrato de API (`/api/v1`, solo GET, JSON; `?format=csv` donde hay gemelo)
+
+| Ruta | Fuente | Contenido |
+|---|---|---|
+| `/api/v1/health` | estático | `{status, contract}` sin tocar base ni S3 (HEALTHCHECK) |
+| `/api/v1/manifest` | paquete | puntero, ámbitos, `freeze`, atribución |
+| `/api/v1/scopes` | CSV `data/` + paquete | catálogo de ámbitos cruzado con `manifest` (`simulable`, `latest`) |
+| `/api/v1/forecast/{scope}` | paquete | `meta.json` del último run o de `?run=` |
+| `/api/v1/forecast/{scope}/runs` | paquete | `history.json` |
+| `/api/v1/forecast/{scope}/{part}` | paquete | `part` ∈ meta, headline, series, polls, fan, house-effects, dispersion |
+| `/api/v1/forecast/{scope}/{mode:str}/{part}` | paquete | `mode` ∈ nowcast, forecast; `part` ∈ vote, summary, dist, districts, scenario, projection |
+| `/api/v1/analysis/{scope}/{part}` | paquete | `part` ∈ meta, house-effects, herding, poll-errors, error-data |
+| `/api/v1/events/{scope}` | base + paquete | eventos del ámbito con `featured` y `has_page` |
+| `/api/v1/events/{scope}/{date}/{part}` | paquete | `part` ∈ meta, pollsters, polls, results, model |
+| `/api/v1/backtest/{scope}/{part}` | paquete | `part` ∈ meta, metrics, by-horizon, blocks, shares, seats |
+| `/api/v1/parties` | base | `get_parties()` |
+| `/api/v1/pollsters` | base | `get_pollsters()` |
+| `/api/v1/pollsters/{id:num}` | base | perfil: ratings por elección (camino al rating), `pollsters_parties`, `pollsters_herding` |
+| `/api/v1/ratings?scope=&event=` | base | `get_ratings` (por defecto el próximo evento) |
+| `/api/v1/polls?scope=&event=&pollster=&limit=` | base | sondeos con columna por partido y pesos/errores (tope 5.000) |
+| `/api/v1/results/{scope}/{date}?region=` | base | `get_event_results` (región 0 por defecto) |
+| `/api/v1/house-effects?scope=`, `/herding?scope=`, `/drift?scope=` | base | tablas `pollsters_parties`, `pollsters_herding`, `drift` |
+
+Reglas: las rutas fijas se registran antes que las genéricas (primera coincidencia gana,
+`mtpy/core/api.py:256-265`); toda entrada pasa por listas cerradas antes de llegar a `mtpy/lib/data.py`
+(ámbito en `get_scopes()`, fecha ISO válida, `run` con `^\d{8}-\d{6}$`, `part`/`mode` en listas, ids
+enteros). Errores `{"status":"error","message"}` con 400/404/503/500. Cabeceras: `Cache-Control:
+public, max-age=60` (punteros y base), `max-age=31536000, immutable` con `?run=` explícito,
+`Access-Control-Allow-Origin: *` (solo GET, sin preflight). CSV `text/csv; charset=utf-8` con
+`Content-Disposition: attachment`.
+
+### Servicio y caché
+
+- Caché por proceso en `webapi.py` (4 workers = 4 cachés): `manifest.json`, `history.json`, `analysis/*`,
+  `events/*` y respuestas de base con TTL 60 s (`web.cache_ttl`); ficheros de run inmutables en LRU de
+  200 entradas sin caducidad. nginx `proxy_cache` 60 s absorbe el tráfico restante.
+- Consultas síncronas dentro de acciones `async` (decenas de ms); `asyncio.to_thread` solo si el p95 lo
+  pide (seguro: `Controller.__init__` captura `request`/`response`; nunca leer `self.app.request` tras un
+  `await`).
+- Base: rol `web_reader` de solo lectura con `statement_timeout` (`deploy/sql/web_reader.sql`, lo ejecuta
+  Luis); `DB_STAGE_DIR` vacío en el contenedor web.
+
+### Cambios en el núcleo (`mtpy/core/api.py`, con tests)
+
+1. `Response.set_content` (`:121-151`): `list`/`tuple` → JSON; `json.dumps(..., ensure_ascii=False,
+   allow_nan=False, default=json_default)`; si la acción ya fijó `content-type`, `str`/`bytes` no lo
+   sobrescriben (CSV). Añadir 422 y 503 a `status_codes` (`:73-82`). `Response.set_cache(seconds,
+   immutable=False)` y `set_etag`.
+2. `Request.query` (propiedad): dict con el primer valor de cada clave (`:37-43` devuelve tuplas).
+3. `Controller.dispatch` (`:300-310`): `try/except`; `HttpError` → código y mensaje; otra excepción →
+   `app.logger.error(traceback)` y 500 JSON (hoy sube hasta uvicorn sin log).
+4. `Router.handle` rama `not_found` con prefijo (`:267-273`): `self.params = {}` (bug latente).
+5. `Api.__call__` (`:12-22`): responder `lifespan.startup/shutdown` y volver si `scope['type'] != 'http'`
+   (hoy `KeyError` en `Request.__init__`, `:33`).
+6. `mtpy.api(routes=None)` en `mtpy/mtpy.py:100-111`.
+
+Pospuesto: despachar sobre variables locales en vez del estado del router (necesario solo con
+`to_thread`), soporte `HEAD`.
+
+### Frontend (`web/`, multipágina, sin build)
+
+- Estado en la query string (`?scope=es-md&mode=forecast&group=vs&run=...`); nginx `try_files $uri
+  $uri.html $uri/ =404` da URLs limpias (`/escanos?scope=es`). Sin router JS (elegido frente a SPA por
+  simplicidad).
+- Páginas: `/` portada (V1, V2, hemiciclo, p_mayoría, evolución del `headline`), `/promedio` (V3, V4),
+  `/escanos` (V6, V7, V8, calculadora de coaliciones sobre `dist`), `/casas` (V10, V5, herding; `?id=`
+  perfil V11), `/elecciones` (lista; `?date=` página V13; V12), `/modelo` (V14), `/metodo` (V15, texto).
+- Módulos: `api.js` (fetch + caché en `Map`, propaga `run`), `state.js` (query string y selectores de
+  ámbito/modo rellenados desde `/api/v1/manifest`), `format.js` (`Intl` es-ES), `catalog.js` (colores y
+  nombres por partido desde `meta.parties`; bloque = color del primer partido; Otros gris), `seats.js`
+  (de `dist` a histogramas, cuantiles y `P(suma ≥ mayoría)` de cualquier coalición), `charts/*.js`
+  (banda + línea + puntos de sondeos, barra apilada 100 %, histogramas por partido, abanico, diana,
+  barras divergentes, mapa de calor casa × partido, hemiciclo), `pages/*.js`.
+- Librería: **ECharts 5** vendorizada (~1 MB, ~330 KB gz; un fichero, canvas, tooltips y zoom táctil;
+  cubre todas las figuras, hemiciclo con `pie` `startAngle: 180, endAngle: 0`). Elegida frente a
+  Plotly.js (más pesado) y Observable Plot (más ligero pero sin zoom ni tooltips ricos); el contrato no
+  cambia si se sustituye.
+- Pie de cada página: run activo, "Estimación a {as_of}", "último sondeo {date_last}", commit (y "sucio"
+  si procede), atribución de fuentes. Banner si `manifest.freeze.active` y, por defecto, ocultación de las
+  vistas derivadas de sondeos (Luis decide si lo activa).
+- Móvil: una columna < 720 px, `chart.resize()` con `ResizeObserver`, tablas con scroll horizontal.
+
+### Infraestructura
+
+- `.dockerignore` con semántica de Docker: `.git`, `.superpowers/`, `notebooks/`, `docs/`, `files/`,
+  `log/`, `tests/`, `**/*.env`, `**/env.*`, `**/__pycache__/`, `**/.DS_Store`, `**/.ipynb_checkpoints/`,
+  `*.code-workspace`; sin `*.csv` global. Además el `Dockerfile` sustituye `COPY . .` por una lista
+  explícita (`api.py job.py config.json requirements.txt mtpy/ data/ web/ deploy/docker/`): aunque
+  `.dockerignore` fallara, las credenciales no entran.
+- `Dockerfile`: `PYTHONUNBUFFERED=1`, `pip install --no-cache-dir`, apt solo `nginx supervisor curl
+  ca-certificates libpq5` (comprobar en la fase 0 que todos los pins tienen wheel; si no, mantener
+  `gcc libpq-dev`), `HEALTHCHECK` sobre `/api/v1/health`, `ARG GIT_COMMIT` → `ENV`, sin supercronic ni
+  crontab (job inexistente). Multietapa con venv: opcional, fase 6.
+- `deploy/docker/nginx.conf`: `root /app/web; index index.html`; `location = /healthz { return 200 }`;
+  `location /api/` con `limit_req` (20 r/s, burst 40), `proxy_cache` (60 s, `use_stale`), cabeceras
+  `X-Forwarded-*`, `proxy_pass http://app_server` sin barra final; `gzip_types` para JSON, JS, CSS, CSV y
+  SVG; `/vendor/` `immutable`; `try_files $uri $uri.html $uri/ =404`; logs a stdout/stderr;
+  `X-Content-Type-Options`, `Referrer-Policy`, CSP `default-src 'self'`; se eliminan
+  `client_max_body_size 4G`, `proxy_buffering off` y `ssl_protocols` (TLS lo termina el proxy del
+  servidor).
+- `supervisord.conf`: `nodaemon=true`, `logfile=/dev/null`, programas con `autostart=%(ENV_SV_NGINX)s` /
+  `%(ENV_SV_GUNICORN)s` / `%(ENV_SV_WORKER)s`, logs a `/dev/stdout`; gunicorn `-w
+  %(ENV_GUNICORN_WORKERS)s` (defecto 2, cada worker carga ~400 MB) `--access-logfile - --error-logfile -
+  --timeout 60`. `init.sh`: calcula `SV_*` desde `APP_API`/`APP_QUEUE`, exporta `GUNICORN_WORKERS` y hace
+  `exec supervisord`; con `RUN_JOB`, `exec python /app/job.py $RUN_JOB`. Así `docker logs` muestra nginx y
+  gunicorn y `docker stop` para limpio.
+- `deploy/web.env.example`: `APP_ENV=pro APP_API=api DB_ADAPTER=PostgreSQL DB_HOST= DB_PORT=5432
+  DB_USERNAME=web_reader DB_PASSWORD= DB_DATABASE= DB_STAGE_DIR= AWS_KEY= AWS_SECRET= AWS_REGION=eu-west-1
+  S3_BUCKET= WEB_PREFIX=site/v1 WEB_CACHE_TTL=60 WEB_FREEZE= GUNICORN_WORKERS=2` (más las claves vacías que
+  `config.json` espera). `publish.env.example`: usuario de base normal e IAM de escritura. Políticas IAM:
+  web `s3:GetObject`/`ListBucket` sobre `site/*`; publish añade `PutObject`; ninguna `DeleteObject`
+  (salvo `unpublish`, que puede hacerse desde el portátil).
+- `requirements.txt`: `gunicorn==20.1.0` → `23.0.0` (CVE-2024-1135/6827); `uvicorn==0.18.3` se mantiene
+  (conserva `uvicorn.workers.UvicornWorker`). Poda de paquetes no importados: opcional, fase 6.
+- Procedimiento reproducible (`deploy/README.md`): `docker build --build-arg GIT_COMMIT=$(git rev-parse
+  HEAD) -t elections-web:$(git rev-parse --short HEAD) .` → `docker run -d --restart unless-stopped -p
+  127.0.0.1:8042:8042 --env-file ~/.config/elections-model/web.env elections-web:<sha>` → `curl /healthz`,
+  `/api/v1/manifest`. Sin S3: `S3_BUCKET=` y `-v $PWD/files:/app/files`. Publicar desde el portátil con
+  `.env` apuntando a la RDS y al bucket, o `docker run --rm --env-file publish.env -e RUN_JOB=...`.
+
+### Seguridad
+
+- Credenciales nunca en la imagen ni en git; mover los `.env` reales fuera del repo
+  (`~/.config/elections-model/`, modo 600). Rotar ahora el par de claves AWS compartido por
+  `deploy/docker.env` y `deploy/elections.env`, y la contraseña de la RDS (han estado a un `docker build`
+  de acabar en una imagen).
+- Rol `web_reader` de solo lectura con `statement_timeout = '5s'`; grupo de seguridad de la RDS limitado al
+  servidor y al portátil; `sslmode=require` si el adaptador lo admite (comprobar `mtpy/core/dal/PostgreSQL.py`).
+- Validación en listas cerradas antes de cualquier SQL; `limit_req` en nginx; solo GET.
+- Datos publicados con atribución (Wikipedia CC BY-SA 4.0; "Origen de los datos: Ministerio del
+  Interior") en `manifest.attribution` y pie de página.
+- Copias: backups automáticos de la RDS (14 días) y `pg_dump -Fc -n elections` semanal a S3 durante la
+  campaña (recomendación; los datos maestros no se pueden reconstruir desde el repo).
+
+### Pruebas
+
+- `tests/test_bundle_unit.py`: `run_id()` casa con el alias de ruta; `json_default` con `np.int64`, NaN,
+  `Timestamp`, `NaT`; `validate` acepta fixtures de `tests/fixtures/bundle/` y rechaza claves ausentes.
+- `tests/test_publish_unit.py` (sin base): exportadores sobre un `Simulator` reconstruido con `__new__` y
+  arrays sintéticos (patrón `tests/test_simulator_unit.py:438`): esquema, `null` por NaN, cada fila de
+  `dist` suma `n_seats`; `publish_forecast` con un `FakeSim` y `BundleWriter(FileSystem(tmp_path))` crea
+  la disposición, escribe `headline.json` antes de los punteros, `history.json` idempotente;
+  `export_meta` con `subprocess` parcheado; `point`, `unpublish`, `freeze`, guarda LOREG con fecha simulada.
+- `tests/test_webapi_unit.py`: validadores (rechazan `'`, `;`, ámbitos fuera del CSV), TTL con reloj
+  inyectado, LRU, `frame_to_records`, `frame_to_csv`, lectura de un paquete en `tmp_path`.
+- `tests/test_api_asgi.py`: arnés ASGI de 20 líneas sin `mtpy.run()` (`App.get_()`, `app.set('fs',
+  FileSystem(tmp_path))`, `set('logger', ...)`, `set('router', ...)`), scope `http` y `send` falsos:
+  JSON y cabeceras, 400 en ámbito inválido, 404 en run inexistente, CSV con `content-type`, lista JSON,
+  `not_found` sin arrastrar `params`, `Index` sigue devolviendo `API Home`; rutas de base con los
+  `query_*` parcheados.
+- `tests/test_web_routes.py`: cada literal `/api/v1/...` de `web/js/**/*.js` (plantillas `${x}`
+  sustituidas) casa con un patrón de `ROUTES`; cada `<script src>` y `<link>` de `web/*.html` existe.
+- `tests/integration/test_publish.py` (marcado): `publish_forecast('es', writer=FileSystem(tmp_path),
+  n_sim=20, seed=42)`: esquema válido, `dist` suma 350, probabilidades en [0, 1], partidos ⊆ `params.json`,
+  `vote_forecast` tras `sim.mode='forecast'` coincide con un `Simulator(mode='forecast')`; dos ejecuciones
+  con la misma semilla dan `dist` idéntico y dos entradas en `history`.
+- `deploy/smoke.sh`: build, run con `--env-file`, `curl` a `/healthz`, `/api/v1/health`, `/api/v1/manifest`,
+  `/`, `/escanos?scope=es`; comprueba que la imagen no contiene `*.env`; `docker stop` en < 10 s.
+- `pytest -m "not integration"` sin base; `FutureWarning` es error (evitar `applymap` y `groupby.apply`
+  sin `include_groups` en los exportadores).
+
+## Fases (hoy 2026-10-07; elección 2026-11-29)
+
+| # | Fase | Entregables | Depende | Esfuerzo |
+|---|---|---|---|---|
+| 0 | Cimientos y seguridad | commit de los cambios M13 pendientes; `.dockerignore` y `Dockerfile` con `COPY` explícito; spike `s3fs==0.4.2` (write/read/listdir/exists contra el bucket desde la imagen; si falla, subir pin o `S3` sobre `boto3`); cambios de `mtpy/core/api.py` + `mtpy.api(routes=)` con tests; rol `web_reader` e IAM (Luis); `web.env.example`; gunicorn 23 | — | 1,5-2 d |
+| 1 | Paquete y comando | `bundle.py`, `publish.py`, `jobs/Publish.py`, tests unitarios e integración; `es` publicado en `files/site/v1` y en S3; medición de duración contra la RDS | 0 | 3-4 d |
+| 2 | API y sitio mínimo (primer despliegue) | `webapi.py`, `Base`/`Forecast`, nginx, supervisord e `init.sh`, `index.html`, `promedio.html`, `api.js`, `state.js`, ECharts, `smoke.sh`; producción con `es` (≈ 20-22 oct) | 1 | 3-4 d |
+| 3 | Escaños, autonómicos, histórico | `escanos.html` (V6-V8, coaliciones), selector de ámbito con `scopes: all`, evolución del `headline`, CSV | 2 | 3-4 d |
+| 4 | Casas | `Data` y `Analysis`, `publish analysis`, `casas.html` (ranking, perfil y camino al rating, efectos de casa, herding) | 2 | 3-4 d |
+| 5 | Elecciones y modelo | `publish event` y `backtest`, `elecciones.html`, `modelo.html`, `metodo.html`; eventos `es` 2015-2023 | 4 | 2-3 d |
+| 6 | Endurecimiento | prueba de carga con `proxy_cache`, ensayo de `point`/`unpublish`, ensayo de `freeze`, backups, `deploy/README.md` final, poda de requirements y multietapa opcionales; cerrar antes del 24-11 | 2-5 | 2 d |
+
+Total ≈ 18-23 días de trabajo. Tras la fase 2 hay web pública; las fases 4 y 5 son independientes entre sí.
+
+## Verificación
+
+- Fase 0: `pytest -m "not integration"` en verde; `docker build` termina y `docker run --rm img ls
+  /app/deploy` no lista `*.env`; spike S3 escribe y lee `site/v1/_smoke.json`.
+- Fase 1: `python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'` →
+  inspeccionar `files/site-dry/`; `pytest -m integration -k publish`; `vote` y `summary` coinciden con las
+  tablas de PollsSimulations para la misma semilla; publicación real a S3 y lectura de `manifest.json`.
+- Fase 2: `uvicorn api:api --port 8000` y `curl` de cada ruta de la tabla (JSON válido, cabeceras,
+  404/400); `deploy/smoke.sh`; recorrer portada y promedio en escritorio y móvil sin errores de consola;
+  `docker logs` muestra nginx y gunicorn.
+- Fases 3-5: cada vista comparada con la figura equivalente del notebook (mismos números); `pytest`
+  completo; `test_web_routes` en verde.
+- Fase 6: 200 peticiones concurrentes a `/api/v1/forecast/es/nowcast/summary` con `X-Cache: HIT`;
+  `point` a un run anterior visible en ≤ 2 min; `freeze` activado y desactivado; restauración de un
+  `pg_dump` en la base local.
+
+## Riesgos
+
+- `s3fs 0.4.2` (2020) con `fsspec`/`botocore` actuales nunca ejercitado: spike en la fase 0; plan B `S3`
+  sobre `boto3` con la misma interfaz, cambio contenido en `mtpy/core/services/s3.py`.
+- RDS: puede no tener el esquema `elections` o estar desactualizada → migración inicial con `pg_dump
+  --schema=elections` local y `pg_restore` (Luis); latencia portátil → RDS en cargas y publicaciones
+  (medir; publicar `es` a diario y `all` semanalmente si hace falta).
+- Árbol sucio (M13 sin commit): `meta.dirty` lo delata; commitear en la fase 0; etiquetar
+  (`git tag web-YYYYMMDD`) antes de publicar en campaña.
+- Memoria: 4 workers × pila científica ≈ 1,6 GB → `GUNICORN_WORKERS=2`.
+- `as_of` posterior a hoy (`date_fit_last` = último sondeo + 10): la portada muestra "Estimación a
+  {as_of}" y "último sondeo {date_last}".
+- LOREG 24-28 nov: interruptor listo en la fase 6; decisión editorial de Luis.
+- Plazo: 53 días; tras la fase 2 (≈ día 11) ya hay sitio público.
+
+## Preguntas abiertas (solo Luis; no bloquean el inicio)
+
+- Dominio y TLS: ¿qué proxy hay delante del puerto 8042 en el servidor?
+- Política durante la veda: congelar, ocultar vistas de sondeos o seguir con aviso.
+- Agrupación por defecto en `es` (`max` o `main`); en autonómicos solo hay `main/blocks/vs`.
+- Casas destacadas en los paneles (hoy CIS, GAD3, GESOP y 40dB fijos) o por rating.
+- ¿Publicar el cubo de escaños por provincia (~53 KB gz) o bastan `districts` + `scenario`?
+- Diagnósticos de experto (deriva, composición, `clip_rate`) visibles o solo en `meta.json`.
+- Cadencia de publicación prevista (diaria `es`, semanal `all`).
+- Prefijo S3 `site/v1` en el bucket actual o bucket aparte; nombre del rol de solo lectura.
+- Texto de atribución y licencia de la curación propia.
+
+## Siguiente paso tras la aprobación
+
+Guardar este diseño como especificación en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`,
+guardar en memoria la corrección sobre `mtpy/controllers` y `mtpy/lib`, y generar el plan de
+implementación por tareas con la skill `writing-plans`, empezando por la fase 0.
