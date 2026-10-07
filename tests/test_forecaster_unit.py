@@ -102,9 +102,13 @@ def test_center_effects_weighted_mean_is_zero_per_name():
 
 # --- M6: backfitting completo sin base de datos ---
 
-def _synthetic_forecaster(seed=0):
-    """Forecaster sin base de datos: serie sintética de 300 días, dos nombres, cuatro casas con desplazamiento."""
+def _synthetic_forecaster(seed=0, noise=None):
+    """
+    Forecaster sin base de datos: serie sintética de 300 días, dos nombres, cuatro casas con desplazamiento.
+    `noise` fija la desviación típica del ruido de una casa (0,8 por defecto; muestras de 1.000).
+    """
     rng = np.random.default_rng(seed)
+    noise = noise or {}
     start, end = pd.Timestamp('2026-01-01'), pd.Timestamp('2026-10-27')
     days = pd.date_range(start, end, freq='D')
     t = np.arange(len(days))
@@ -114,9 +118,10 @@ def _synthetic_forecaster(seed=0):
     rows = []
     for pid, (off_pp, off_psoe, span) in houses.items():
         for d in span[pid::10]:
+            sd = noise.get(pid, 0.8)
             rows.append({'date': d, 'pollster_id': pid, 'sponsor_id': 0, 'pollster': 'H{}'.format(pid), 'computed': True,
-                         'weight_over': 1., 'weight_sample': 1., 'weight_rating': 1., 'weight': 1.,
-                         'PP': truth.loc[d, 'PP'] + off_pp + rng.normal(0, 0.8), 'PSOE': truth.loc[d, 'PSOE'] + off_psoe + rng.normal(0, 0.8)})
+                         'proc_sample': 1000, 'weight_over': 1., 'weight_sample': 1., 'weight_rating': 1., 'weight': 1.,
+                         'PP': truth.loc[d, 'PP'] + off_pp + rng.normal(0, sd), 'PSOE': truth.loc[d, 'PSOE'] + off_psoe + rng.normal(0, sd)})
     series = pd.DataFrame(rows).set_index(['date', 'pollster_id', 'sponsor_id']).sort_index()
     series['-'] = 100. - series[['PP', 'PSOE']].sum(axis=1)
 
@@ -129,6 +134,7 @@ def _synthetic_forecaster(seed=0):
     fc.reg_params = Forecaster.set_reg_params(fc, None)
     fc.he_params = Forecaster.set_he_params(fc, {'prior': None})
     fc.he_enabled, fc.house_effects, fc.date_fit_last = True, None, None
+    fc.disp_enabled, fc.disp_params, fc.dispersion = False, Forecaster.set_disp_params(fc, None), None
     fc.series_raw = None
     fc._set_series(series)
     return fc, truth, houses
@@ -225,6 +231,50 @@ def test_plot_forecast_series_draws_the_published_polls_not_the_corrected_ones()
     assert np.allclose(house, np.sort(raw.loc[raw.pollster_id == 1, 'PP']))
     assert np.allclose(others, np.sort(raw.loc[raw.pollster_id != 1, 'PP']))
     matplotlib.pyplot.close('all')
+
+
+# --- Muestra efectiva: dispersión de cada casa frente a su error muestral ---
+
+def test_house_dispersion_measures_the_excess_noise_of_a_house():
+    # Casa 1: ruido de muestreo puro (n = 1000, sd ≈ 1,45 puntos); casa 2: el triple
+    rng = np.random.default_rng(1)
+    truth = {'PP': 30., 'PSOE': 20.}
+    rows = []
+    for pid, sd_mult in [(1, 1.), (2, 3.)]:
+        for i in range(200):
+            rows.append({'date': pd.Timestamp('2026-01-01') + pd.Timedelta(days=i), 'pollster_id': pid, 'proc_sample': 1000,
+                         'PP': 30. + rng.normal(0, sd_mult * 100 * np.sqrt(.3 * .7 / 1000)),
+                         'PSOE': 20. + rng.normal(0, sd_mult * 100 * np.sqrt(.2 * .8 / 1000))})
+    polls = pd.DataFrame(rows).set_index('date').sort_index()
+    disp = Forecaster.house_dispersion(polls, _fitted(polls.index, truth), ['PP', 'PSOE'], min_polls=5, n_prior=0)
+    assert disp.loc[1, 'ratio'] == pytest.approx(1., abs=0.15)
+    assert disp.loc[2, 'ratio'] == pytest.approx(3., abs=0.4)
+    assert disp.loc[1, 'factor'] == 1.                        # nunca se premia la poca dispersión
+    assert disp.loc[2, 'factor'] == pytest.approx(1. / disp.loc[2, 'ratio'])
+    # Con pocas encuestas no hay medida: ratio 1; y el encogimiento acerca la ratio a 1
+    few = Forecaster.house_dispersion(polls.iloc[:3], _fitted(polls.index, truth), ['PP'], min_polls=5)
+    assert (few['ratio'] == 1.).all()
+    shrunk = Forecaster.house_dispersion(polls, _fitted(polls.index, truth), ['PP', 'PSOE'], min_polls=5, n_prior=200)
+    assert 1. < shrunk.loc[2, 'ratio'] < disp.loc[2, 'ratio']
+
+
+def test_fit_dispersion_rescales_the_sample_weight_of_the_noisy_house_only():
+    fc, _, _ = _synthetic_forecaster(noise={3: 4.5})
+    fc.disp_enabled = True
+    before = fc.fc_series.groupby('pollster_id')[['weight_sample', 'weight']].mean()
+
+    disp = fc.fit_dispersion()
+    after = fc.fc_series.groupby('pollster_id')[['weight_sample', 'weight']].mean()
+    assert disp.loc[3, 'ratio'] > 2.
+    assert after.loc[3, 'weight_sample'] == pytest.approx(before.loc[3, 'weight_sample'] * disp.loc[3, 'factor'])
+    assert after.loc[3, 'weight'] == pytest.approx(before.loc[3, 'weight'] * disp.loc[3, 'factor'])
+    for pid in (1, 2, 4):
+        assert after.loc[pid, 'weight'] == pytest.approx(before.loc[pid, 'weight'])
+    # Los pesos cambian también en la serie publicada, para que los efectos de casa los usen
+    assert fc.fc_series_raw.groupby('pollster_id')['weight'].mean().loc[3] == pytest.approx(after.loc[3, 'weight'])
+    # fit_forecast lo aplica una sola vez
+    fc.fit_forecast(names=['PP'], max_fc=0)
+    assert fc.fc_series.groupby('pollster_id')['weight'].mean().loc[3] == pytest.approx(after.loc[3, 'weight'])
 
 
 def test_industry_bias_from_history_is_relative_decayed_and_uncertain():

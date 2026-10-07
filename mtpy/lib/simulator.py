@@ -48,6 +48,7 @@ class Simulator(Core):
         house_effects: bool = True,
         industry_bias: bool = False,
         he_params: Optional[dict[str, Any]] = None,
+        dispersion: bool = True,
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
         min_events: Optional[int] = None,
@@ -107,6 +108,9 @@ class Simulator(Core):
             inconsistent between elections for most parties.
         he_params : dict, optional
             Parameters of the house effects estimation, see `Forecaster.set_he_params`.
+        dispersion : bool, optional
+            Weigh the polls of each pollster by its effective sample, the one that would produce the
+            dispersion of its figures around the average (M12). See `Forecaster.fit_dispersion`.
         composition : float or 'auto', optional
             Joint noise of the national parties: the ratio between the variance of the sum of their errors and
             the sum of their variances (`Computer.composition_ratio`). `'auto'` estimates it from the past
@@ -140,6 +144,7 @@ class Simulator(Core):
         self.house_effects = bool(house_effects)
         self.industry_bias = bool(industry_bias)
         self.he_params = he_params
+        self.dispersion = bool(dispersion)
         self.composition = composition
         self.regional_noise = bool(regional_noise)
         self.min_events = None if min_events is None else int(min_events)
@@ -200,6 +205,7 @@ class Simulator(Core):
             alpha=self.alpha,
             house_effects=self.house_effects,
             he_params=self.he_params,
+            dispersion=self.dispersion,
             verbose=self.verbose,
             path=self.path
         ).build_series()

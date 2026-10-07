@@ -29,8 +29,8 @@ Once elecciones (1993-2023), 1963 filas, 97 s. Los efectos por bloque no se guar
 El efecto de la casa `h` en la serie `b` para el ciclo actual es un posterior normal-normal (`normal_update`):
 
 - **Prior** (`house_prior`): media de sus desviaciones relativas pasadas `dev_result_c / nivel` (nivel con suelo de 2 puntos, desviación relativa acotada a ±0,5), con peso `year_decay^años · min(n, 10)` y encogida hacia 0 con el peso de una elección "vacía" (`prior_events = 1`); en puntos, multiplicada por el nivel actual. Desviación típica del prior: `tau = 0,08` × nivel (la dispersión relativa observada entre casas es 0,03-0,13). Sin historia, prior 0.
-- **Dato**: la desviación de sus encuestas brutas frente al promedio (`house_deviations`), con pesos de precisión decaídos por la antigüedad de la encuesta dentro del ciclo, y su error típico (suelo: un cuarto de la desviación típica del prior; casas con menos de 5 encuestas no informan).
-- **Backfitting** (3 iteraciones): promedio sobre las encuestas corregidas → desviaciones de las brutas frente a él → posterior → **recentrado** por serie con el peso de cada casa en esa serie (`center_effects`: la media ponderada de los efectos es 0, así que el nivel del promedio no depende de qué casas se corrigen) → resta a las encuestas brutas (`apply_house_effects`; las filas de resultados nunca se tocan) → repetir. `series_raw` conserva la serie sin corregir.
+- **Dato**: la desviación de sus encuestas brutas frente al promedio (`house_deviations`), con los pesos de las encuestas en el promedio (solapamiento, muestra y rating; desde el 07-10-2026, ver más abajo: antes pesos de precisión sin rating) decaídos por la antigüedad de la encuesta dentro del ciclo, y su error típico (suelo: un cuarto de la desviación típica del prior; casas con menos de 5 encuestas no informan).
+- **Backfitting** (3 iteraciones): promedio sobre las encuestas corregidas → desviaciones de las brutas frente a él → posterior → **recentrado** por serie con el peso de cada casa en esa serie (`center_effects`: la media ponderada de los efectos es 0 con los mismos pesos que usa el promedio, así que el nivel medio del promedio en el ciclo no depende de la corrección; localmente sí cambia, que es justo lo que se corrige: qué casas publican alrededor de cada fecha) → resta a las encuestas brutas (`apply_house_effects`; las filas de resultados nunca se tocan) → repetir. `series_raw` conserva la serie sin corregir, y los gráficos (`plot_forecast_series`) dibujan siempre los sondeos publicados (`fc_series_raw`): la corrección sólo entra en la media.
 
 La corrección opera sobre las series que de verdad se promedian, los bloques de `bmap` (en 2023, PP = PP+Cs y SUMAR = SUMAR+UP+MP; en 2027 cada partido es su bloque), y el prior de un bloque es la historia de su partido cabecera.
 
@@ -108,7 +108,54 @@ Al corregir la revisión de este método se encontró y arregló un bug latente 
 
 - **Momento frente a inclinación**: una casa que solo publica en un periodo mezcla su inclinación con el momento del ciclo; el backfitting contra el promedio de las demás lo atenúa y el decaimiento por antigüedad privilegia la metodología actual, pero no lo elimina.
 - **Autoinfluencia**: el consenso incluye a la propia casa; una casa con muchas encuestas ve su desviación algo encogida. Dejar fuera la casa multiplicaría el coste por el número de casas.
-- **Doble cuenta parcial**: la casa sesgada se corrige y además pesa menos (`weight_rating`), como en 538. Las desviaciones se estiman con pesos de precisión, no con el rating.
+- **Doble cuenta parcial**: la casa sesgada se corrige y además pesa menos (`weight_rating`), como en 538. Desde el 07-10-2026 las desviaciones y el recentrado usan los pesos del promedio, rating incluido (antes, pesos de precisión sin rating: ver el apartado final).
 - **Partidos nuevos y sucesiones**: sin historia, prior 0; SUMAR no hereda la historia de UP.
 - **Sesgo del sector**: inconsistente entre elecciones salvo el PSOE; solo debe activarse si el backtest lo respalda.
 - **Coste**: unos 25 s más por `Simulator` (13 series × 3 iteraciones); `compute_house_effects` ≈ 100 s en el pipeline.
+
+## 07-10-2026: recentrado con los pesos del promedio y muestra efectiva (M12)
+
+Cambios: `Forecaster.fit_house_effects` (pesos del dato y del recentrado), `Forecaster.fit_dispersion` / `house_dispersion` / `apply_dispersion` / `set_disp_params`, parámetros `dispersion` / `disp_params` (`Forecaster`, `Simulator`), `fc_series_raw` y `plot_forecast_series` (`mtpy/lib/forecaster.py`, `mtpy/lib/simulator.py`); backtest con `--no-dispersion` (`mtpy/lib/backtest.py`, `backtest/run_backtest.py`). Tests: `tests/test_forecaster_unit.py` (5 nuevos), regresión de `tests/integration/test_model.py` re-fijada a 141 / 107 / 62 / 8. Notebook `PollsForecast` con `house_effects=True`.
+
+### Problema
+
+Con los ratings globales (M11) el promedio del PP con efectos de casa quedaba **1,0 puntos por debajo** del bruto a 13-10-2026 (32,96 → 31,95) y el PSOE 0,7 por encima, no las dos décimas de la sección anterior, y la diferencia era estructural: entre −0,35 y −0,85 en todos los trimestres del ciclo. La causa era el recentrado: los efectos sumaban cero con pesos de precisión (solapamiento × muestra, sin rating), un consenso en el que el CIS pesaba el 17,6 % por sus 35 barómetros de 4.000 entrevistas, mientras que en el promedio, con su rating (0,89 frente a 1,8–3,3 de las casas grandes), pesaba el 7 % en el ciclo y el 5 % en la ventana. El CIS, 5 puntos por debajo en el PP, arrastraba el cero: el resto de casas quedaba de media 1,06 por encima y, al corregirlas, el promedio bajaba. Es decir, con los efectos de casa activados el nivel del promedio dejaba de obedecer al rating y el CIS recuperaba por el recentrado el peso que el rating le quitaba. Descomposición medida con un contrafactual: −0,57 por el recentrado y −0,44 por la mezcla de casas que han publicado desde agosto (las más inclinadas al PP: DYM +2,4, InvyMark +2,3, NC Report +2,2, SocioMétrica +1,9).
+
+### Cambios
+
+1. **Un solo juego de pesos.** El dato (`house_deviations`) y el recentrado (`center_effects`) usan los pesos de las encuestas en el promedio (`weight`, rating incluido) decaídos por antigüedad. La diferencia media en el ciclo entre el promedio corregido y el bruto pasa de −0,64 a 0,00 en el PP (y a cero en todos los partidos); a 13-10-2026 queda −0,44, que oscila entre −0,43 y +0,34 a lo largo del ciclo: la mezcla de casas. El efecto del CIS en el PP pasa de −4,97 a −5,65 y el de GAD3 de +0,80 a +0,12; la cuota del CIS en el consenso, del 17,6 % al 7 %.
+2. **Muestra efectiva** (`fit_dispersion`, antes de los efectos de casa). Para cada casa con 5 o más encuestas se compara la dispersión de sus encuestas alrededor del promedio, neta de su efecto (residuos centrados por partido, sumados sobre las series), con la varianza muestral `p (1 − p) / n` de sus muestras al nivel del promedio. La ratio, encogida hacia 1 con `n / (n + 5)` y acotada a [1, 10], divide `weight_sample` (que es proporcional a la raíz de la muestra): una casa cuyas cifras oscilan más de lo que su muestra permite pesa como la muestra que produciría esa dispersión. Nunca se premia la poca dispersión. Los pesos cambian en `series` y `series_raw`, de modo que los efectos de casa los usan. Medido en el ciclo actual: el CIS tiene una ratio de 2,95 (2,71 encogida; sus barómetros de 4.000 oscilan como una muestra de unas 460) y pesa un 37 %; **todas las demás casas están entre 0,46 y 0,98**, es decir, menos dispersas que su muestra: herding o cocina generalizados, con Hamalgama (0,51), NC Report (0,56), Celeste Tel (0,57) y Simple Lógica (0,59) como las más estables. La cuota del CIS en el promedio desde junio baja del 5 % al 2 %.
+
+Promedio a 13-10-2026 con efectos de casa: PP 31,95 → 32,52 → 32,75 y PSOE 26,88 → 26,44 → 26,29 (bruto: 32,96 y 26,16).
+
+### Backtest
+
+Cinco elecciones, seis horizontes, 500 simulaciones, semilla 42, ratings actuales. Las referencias calculadas sobre sondeos brutos coinciden exactamente entre ejecuciones.
+
+| Media de los 28 casos | MAE voto | RMSE voto | CRPS escaños | Brier mayoría `vs` |
+|---|---|---|---|---|
+| Sin efectos de casa | 2,355 | 2,887 | 6,98 | 0,072 |
+| Recentrado anterior (pesos de precisión) | 2,322 | 2,823 | 6,89 | 0,064 |
+| Recentrado con los pesos del promedio | 2,367 | 2,890 | 7,01 | 0,069 |
+| Recentrado con los pesos del promedio + muestra efectiva | 2,399 | 2,936 | 7,09 | 0,072 |
+
+| MAE de voto por horizonte (días) | 6 | 14 | 30 | 60 | 90 | 180 |
+|---|---|---|---|---|---|---|
+| Sin efectos de casa | 1,62 | 2,02 | 2,24 | 2,82 | 2,72 | 2,96 |
+| Recentrado anterior | 1,64 | 1,91 | 2,11 | 2,81 | 2,76 | 2,94 |
+| Recentrado con los pesos del promedio | 1,68 | 1,95 | 2,18 | 2,86 | 2,80 | 3,00 |
+| + muestra efectiva | 1,68 | 1,96 | 2,21 | 2,86 | 2,88 | 3,07 |
+
+Lecturas:
+
+1. **El backtest no premia ninguno de los dos cambios.** Cada uno empeora alrededor de un 1,5–2 % (acumulado, MAE 2,32 → 2,40 y CRPS 6,89 → 7,09); el primero en 20 de 28 casos y en 4 de 5 elecciones, el segundo en 20 de 25 casos con diferencia. La cobertura al 95 % no cambia salvo a 180 días con la muestra efectiva (0,87 → 0,80).
+2. **Casi todo es el PSOE de 2023**, que el modelo subestimaba 5,1 puntos con el recentrado anterior, 5,4 con el nuevo y 5,5 con la muestra efectiva (5,5 sin efectos): las casas con mal rating daban más al PSOE y acertaron. El PP queda igual (2,17) y con menos sesgo. Las tres manipulaciones quitan voz al CIS en el nivel, y las tres pierden un poco: la ganancia medida de los efectos de casa en la sección anterior venía del consenso sin rating, no de corregir quién publica, y con el rating sólo queda a 14–30 días.
+3. **Ámbitos autonómicos** (`backtest/results/{scope}/`, 6 y 30 días, 58 casos, mismos casos y mismas referencias brutas que la ejecución del 06-10-2026): neutro. Media por ámbito del MAE de voto 2,10 → 2,13 y del CRPS de escaños 1,37 → 1,38; sólo Castilla-La Mancha (dos casos) empeora de forma visible (2,49 → 3,01).
+4. **Decisión: los dos cambios quedan activados por defecto**, por coherencia (un solo juego de pesos decide el nivel; los efectos de casa corrigen quién publica; cada casa pesa por la precisión que demuestra), aceptando que el backtest no lo respalda: las diferencias están dentro del ruido de cinco elecciones, aunque su signo es consistente. La muestra efectiva se desactiva con `Simulator(dispersion=False)` o `--no-dispersion`; el recentrado anterior no tiene interruptor (es una línea de `fit_house_effects`: los pesos del dato). `backtest/results/` contiene la ejecución con los dos cambios.
+
+### Pendientes
+
+- **Herding**: la medida de dispersión dice que todas las casas menos el CIS son más estables de lo que su muestra permite. 538 lo penaliza en el rating (ADPA frente al mínimo teórico); aquí el rating lo premia, porque mide el error relativo al consenso. Penalizarlo iría en contra de lo que el backtest acaba de premiar (más peso al nivel del CIS); no se ha probado.
+- **Nivel del CIS**: tres experimentos consistentes sugieren que el nivel del CIS aportaba información que el consenso ponderado por rating no tiene, sobre todo en el PSOE. Puede ser el sesgo del sector sobre el PSOE (que `industry_bias` no logra capturar) o casualidad de 2023.
+- **Varianza esperada**: usa muestreo aleatorio simple; el efecto de diseño real (1,2–1,5) y el error del propio promedio harían las ratios algo menores. No cambia el orden de las casas.
+- `dev_cycle` de `pollsters_parties` se recalcula con los nuevos pesos en la próxima ejecución del pipeline (`compute_house_effects`); es diagnóstico, no alimenta el modelo.

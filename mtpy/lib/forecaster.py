@@ -43,6 +43,8 @@ class Forecaster(Core):
         reg_params: Optional[dict[str, Any]] = None,
         house_effects: bool = False,
         he_params: Optional[dict[str, Any]] = None,
+        dispersion: bool = True,
+        disp_params: Optional[dict[str, Any]] = None,
         verbose: int = 0,
         path: Optional[str] = None
     ) -> None:
@@ -95,6 +97,12 @@ class Forecaster(Core):
             prior from its past elections) and subtract it from its polls before averaging. See `fit_house_effects`.
         he_params : dict, optional
             Parameters of the house effects estimation, see `set_he_params`.
+        dispersion : bool, optional
+            Weigh the polls of each pollster by its effective sample: the sample size its polls would have if
+            their dispersion around the average were pure sampling error. A pollster whose published figures
+            swing more than its samples allow counts less, never more (M12). See `fit_dispersion`.
+        disp_params : dict, optional
+            Parameters of the dispersion measure, see `set_disp_params`.
         verbose : int, optional
             Level of verbosity.
         path : str, optional
@@ -113,6 +121,8 @@ class Forecaster(Core):
         self.reg_params = self.set_reg_params(reg_params)
         self.he_enabled = bool(house_effects)  # Estimate and subtract the house effects before averaging (M6)
         self.he_params = self.set_he_params(he_params)
+        self.disp_enabled = bool(dispersion)  # Weigh each pollster by its effective sample (M12)
+        self.disp_params = self.set_disp_params(disp_params)
 
         self.verbose = verbose
         self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
@@ -136,6 +146,7 @@ class Forecaster(Core):
         self.series_raw = None  # The same series before subtracting the house effects (see `fit_house_effects`)
         self.party_first_polls = None  # First poll of each party (raw party columns, before grouping into blocks)
         self.house_effects = None  # House effect of each pollster on each series, once fitted
+        self.dispersion = None  # Dispersion of each pollster around the average and its weight factor, once fitted
         self.forecast = None  # Fitted estimation of the percentage of votes for each party in the election event
         self.fc_stat = None  # Standard error and confidence interval of the forecast for each estimation
 
@@ -246,6 +257,29 @@ class Forecaster(Core):
             'rel_cap': float(he_params.get('rel_cap', 0.5)),
             'err_floor': float(he_params.get('err_floor', 0.25)),
             'prior': he_params.get('prior', 'auto')
+        }
+
+    def set_disp_params(
+        self,
+        disp_params: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
+        """
+        Normalize the parameters of the effective sample measure (see `fit_dispersion`).
+
+        Parameters
+        ----------
+        disp_params : dict, optional
+            - min_polls : polls a pollster needs in the cycle to measure its dispersion (5).
+            - n_prior : shrinkage of the dispersion ratio toward 1, in polls (5): a few noisy polls do not
+              condemn a pollster.
+            - max_ratio : cap of the ratio, hence of the weight reduction (10).
+        """
+        disp_params = disp_params if disp_params is not None else dict()
+
+        return {
+            'min_polls': int(disp_params.get('min_polls', 5)),
+            'n_prior': float(disp_params.get('n_prior', 5.)),
+            'max_ratio': float(disp_params.get('max_ratio', 10.))
         }
 
     def load_events(self) -> pd.DataFrame:
@@ -378,6 +412,7 @@ class Forecaster(Core):
 
         self.series_raw = None
         self.house_effects = None
+        self.dispersion = None
         self._set_series(series)
 
         return self
@@ -495,6 +530,10 @@ class Forecaster(Core):
         """
         names = names or self.names
 
+        # Effective sample (M12): the weight of each pollster is set once, before anything else is fitted
+        if self.disp_enabled and self.dispersion is None:
+            self.fit_dispersion()
+
         # House effects (M6): estimated once on every series and subtracted from the polls before averaging
         if self.he_enabled and self.house_effects is None:
             self.fit_house_effects()
@@ -600,6 +639,159 @@ class Forecaster(Core):
             self.fit_forecast()
 
         return self.forecast
+
+    # --- Effective sample (M12) --------------------------------------------------------------------------
+
+    def fit_dispersion(self) -> pd.DataFrame:
+        """
+        Measure the dispersion of the polls of each pollster around the average, relative to the sampling
+        error of their samples, and rescale its sample weight accordingly.
+
+        The average of each series is fitted with the current weights; the residuals of the polls of a
+        pollster, net of its mean (its house effect), are compared with the sampling variance of their
+        samples at the level of the series (`house_dispersion`). A pollster whose figures swing more than
+        its samples allow gets the weight of the sample that would produce that dispersion (its effective
+        sample): `weight_sample` is proportional to the square root of the sample, so it is divided by the
+        ratio (`apply_dispersion`). A pollster less dispersed than its samples allow (herding) is never
+        given more weight. The weights change in `series` and `series_raw`, so that every later fit, the
+        house effects included, uses them.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `pollster_id`: `pollster`, `n`, `ss_obs`, `ss_exp`, `ratio_raw`, `ratio`, `factor`.
+        """
+        p = self.disp_params
+        raw = self.series_raw
+        polls = raw.loc[raw['pollster'].notnull()].reset_index(raw.index.names[1:])
+        pollster_names = polls.groupby('pollster_id', observed=True)['pollster'].first()
+
+        fitted = {}
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            for name in self.names:
+                reg = self.fit(name, max_fc=0, ret_stat=False)
+                if reg is not None:
+                    fitted[name] = reg
+
+        if len(fitted) == 0:
+            disp = pd.DataFrame(columns=['n', 'ss_obs', 'ss_exp', 'ratio_raw', 'ratio', 'factor'], index=pd.Index([], name='pollster_id'))
+        else:
+            disp = self.house_dispersion(
+                polls, pd.DataFrame(fitted), list(fitted.keys()),
+                min_polls=p['min_polls'], n_prior=p['n_prior'], max_ratio=p['max_ratio']
+            )
+            self.series_raw = self.apply_dispersion(self.series_raw, disp)
+            self.series = self.apply_dispersion(self.series, disp)
+
+        disp.insert(0, 'pollster', disp.index.map(pollster_names))
+        self.dispersion = disp
+
+        return disp
+
+    @staticmethod
+    def house_dispersion(
+        polls: pd.DataFrame,
+        fitted: pd.DataFrame,
+        names: list[str],
+        min_polls: int = 5,
+        n_prior: float = 5.,
+        max_ratio: float = 10.
+    ) -> pd.DataFrame:
+        """
+        Dispersion of the polls of each pollster around the fitted average, relative to their sampling error,
+        pooled over the series: the ratio between the sum of squares of its residuals net of their mean and
+        the sum expected from the sampling variance of its samples, `p (1 - p) / n` at the level `p` of the
+        average (times `1 - 1 / k` for the mean removed).
+
+        Parameters
+        ----------
+        polls : pd.DataFrame
+            Polls indexed by date (duplicates allowed), with `pollster_id`, `proc_sample` and the `names`.
+        fitted : pd.DataFrame
+            Fitted average with a daily index and the `names` columns.
+        names : list of str
+            Series to pool.
+        min_polls : int, optional
+            Polls a pollster needs for a measure; below it the ratio is 1.
+        n_prior : float, optional
+            Shrinkage of the ratio toward 1, in polls: `1 + (ratio - 1) · n / (n + n_prior)`.
+        max_ratio : float, optional
+            Cap of the ratio.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `pollster_id`: `n` (polls), `ss_obs`, `ss_exp`, `ratio_raw`, `ratio` (shrunk, clipped to
+            `[1, max_ratio]`) and `factor` (`1 / ratio`, the multiplier of the sample weight).
+        """
+        rows = []
+        for name in names:
+            if name not in polls.columns or name not in fitted.columns:
+                continue
+
+            avg = fitted[name].reindex(polls.index).to_numpy(dtype=float)
+            resid = polls[name].to_numpy(dtype=float) - avg
+            level = np.clip(avg / 100., 0.005, 0.995)
+            var = 1e4 * level * (1. - level) / polls['proc_sample'].to_numpy(dtype=float)
+            frame = pd.DataFrame({'pollster_id': polls['pollster_id'].to_numpy(), 'r': resid, 'var': var})
+            frame = frame.loc[np.isfinite(frame['r']) & np.isfinite(frame['var']) & (frame['var'] > 0)]
+
+            for pid, g in frame.groupby('pollster_id'):
+                k = len(g)
+                if k < 2:
+                    continue
+                r = g['r'].to_numpy()
+                rows.append({
+                    'pollster_id': pid, 'name': name, 'k': k,
+                    'ss_obs': float(np.square(r - r.mean()).sum()), 'ss_exp': float((1. - 1. / k) * g['var'].sum())
+                })
+
+        if len(rows) == 0:
+            return pd.DataFrame(columns=['n', 'ss_obs', 'ss_exp', 'ratio_raw', 'ratio', 'factor'], index=pd.Index([], name='pollster_id'))
+
+        out = pd.DataFrame(rows).groupby('pollster_id').agg(n=('k', 'max'), ss_obs=('ss_obs', 'sum'), ss_exp=('ss_exp', 'sum'))
+        out['ratio_raw'] = np.sqrt(out['ss_obs'] / out['ss_exp'])
+        shrink = out['n'] / (out['n'] + float(n_prior))
+        ratio = 1. + (out['ratio_raw'] - 1.) * shrink
+        ratio = ratio.where(out['n'] >= int(min_polls), 1.)
+        out['ratio'] = ratio.clip(lower=1., upper=float(max_ratio))
+        out['factor'] = 1. / out['ratio']
+
+        return out
+
+    @staticmethod
+    def apply_dispersion(
+        series: pd.DataFrame,
+        dispersion: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Multiply the sample weight of the polls of each pollster by its `factor` and recompute the total
+        weight (`weight_over · weight_sample · weight_rating`). Rows of official results are never touched.
+        Returns a copy.
+
+        Parameters
+        ----------
+        series : pd.DataFrame
+            Forecaster series with `pollster`, `pollster_id` (column or index level) and the weight columns.
+        dispersion : pd.DataFrame
+            Indexed by `pollster_id` with a `factor` column (see `house_dispersion`).
+        """
+        out = series.copy()
+        is_poll = out['pollster'].notnull().to_numpy()
+        if 'pollster_id' in out.index.names:
+            pids = out.index.get_level_values('pollster_id').to_numpy()
+        else:
+            pids = out['pollster_id'].to_numpy()
+
+        factor = pd.Series(pids).map(dispersion['factor']).fillna(1.).to_numpy(dtype=float)
+        factor = np.where(is_poll, factor, 1.)
+        out['weight_sample'] = out['weight_sample'].to_numpy(dtype=float) * factor
+        out['weight'] = (
+            out['weight_over'].to_numpy(dtype=float) * out['weight_sample'].to_numpy(dtype=float) * out['weight_rating'].to_numpy(dtype=float)
+        )
+
+        return out
 
     # --- House effects (M6) ------------------------------------------------------------------------------
 

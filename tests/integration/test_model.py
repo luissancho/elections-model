@@ -242,7 +242,10 @@ def test_anchor_is_last_fitted_day_not_deadline(sim26):
 # mover `weight_rating` (ver `metodo-11-ambitos-autonomicos.md`). Depende de los sondeos y ratings guardados.
 # Desde el 06-10-2026 el evento es 2026-11-29 (elecciones convocadas) con el reparto de escaños del real decreto,
 # Madrid 38 y Cádiz 8: un escaño pasa del PP (Cádiz) a VOX (Madrid), 141 / 107 / 62 / 8 -> 140 / 107 / 63 / 8.
-REGRESSION_TOTALS = [140, 107, 63, 8]
+# Desde el 07-10-2026 cada casa pesa por su muestra efectiva (M12, `Forecaster.fit_dispersion`): el CIS, cuyos
+# barómetros se dispersan 2,7 veces más de lo que su muestra permite, pesa un tercio; el PP sube 0,27 puntos de
+# media en el ciclo y un escaño vuelve de VOX al PP, 140 / 107 / 63 / 8 -> 141 / 107 / 62 / 8.
+REGRESSION_TOTALS = [141, 107, 62, 8]
 
 
 def test_nowcast_regression_seed_42(sim26):
@@ -327,8 +330,8 @@ def test_house_effects_are_fitted_and_centered(sim26, sim26_he):
     for name, g in he.groupby(level='name'):
         assert abs((g['effect'] * g['w']).sum() / g['w'].sum()) < 1e-6, name
     # La serie corregida sólo cambia en las filas de encuestas; el promedio corregido del PP queda cerca del bruto
-    # (con los ratings globales del método 11 la diferencia es de 1,0 puntos: las casas con efecto positivo en
-    # el PP pesan más en la ventana que en el centrado)
+    # (desde el 07-10-2026 los efectos se recentran con los pesos del promedio, rating incluido, así que el nivel
+    # medio del ciclo no cambia y la diferencia en la ventana, unas 4 décimas, es la mezcla de casas que publican)
     raw, corr = sim26_he.model.series_raw, sim26_he.model.series
     events = raw['pollster'].isnull()
     assert raw.loc[events, sim26_he.model.names].equals(corr.loc[events, sim26_he.model.names])

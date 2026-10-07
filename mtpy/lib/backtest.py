@@ -165,6 +165,7 @@ def run_case(
     nowcast_only: bool = False,
     house_effects: bool = True,
     industry_bias: bool = False,
+    dispersion: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
@@ -181,7 +182,8 @@ def run_case(
 
     `house_effects` and `industry_bias` are passed to the `Simulator` (M6): the effects of the cycle are
     estimated with the polls up to `limit_date` only, and their prior with the elections before `event_date`;
-    the baselines are computed on the raw polls. `composition` sets the joint noise of the national parties
+    the baselines are computed on the raw polls. `dispersion` weighs each pollster by its effective sample,
+    measured on the same polls (M12). `composition` sets the joint noise of the national parties
     (M7): `'auto'` estimates the ratio from the elections before `event_date`; `None` or 1 (default) draws
     them independently. `min_events` is the number of featured elections of the scope before the event from
     which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
@@ -200,8 +202,8 @@ def run_case(
         warnings.simplefilter('ignore')
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
-            house_effects=house_effects, industry_bias=industry_bias, composition=composition, regional_noise=regional_noise,
-            min_events=min_events
+            house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
+            regional_noise=regional_noise, min_events=min_events
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -315,7 +317,7 @@ def run_case(
         'young_parties': '+'.join(sorted(
             n for n in names if sim.v2drift is not None and sim.ages is not None and sim.ages.get(n, np.nan) < sim.v2drift.age_max
         )),
-        'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias),
+        'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias), 'dispersion': bool(dispersion),
         'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
         'regional_noise': bool(regional_noise),
         'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured),
@@ -419,6 +421,7 @@ def run_backtest(
     nowcast_only: bool = False,
     house_effects: bool = True,
     industry_bias: bool = False,
+    dispersion: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
@@ -446,7 +449,7 @@ def run_backtest(
             try:
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
-                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias,
+                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     composition=composition, regional_noise=regional_noise, min_events=min_events
                 )
             except Exception as e:
