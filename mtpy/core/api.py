@@ -1,10 +1,95 @@
+import datetime
 from importlib import import_module
 import json
+import math
 import re
 from urllib.parse import parse_qsl
 
+import numpy as np
+import pandas as pd
+
 from .app import Core
 from .utils.strings import to_camel
+
+
+def _nan_to_none(value):
+    """
+    Replace the ``NaN`` floats of a value by ``None``, descending into nested lists.
+
+    Parameters
+    ----------
+    value : Any
+        A scalar or a (possibly nested) list, such as the output of ``numpy.ndarray.tolist``.
+
+    Returns
+    -------
+    Any
+        The same value with every ``float`` NaN replaced by ``None``.
+    """
+    if isinstance(value, list):
+        return [_nan_to_none(item) for item in value]
+
+    if isinstance(value, float) and math.isnan(value):
+        return None
+
+    return value
+
+
+def json_default(obj):
+    """
+    Convert the objects that ``json`` cannot serialise natively (``default`` of ``json.dumps``).
+
+    Missing values (``pd.NaT``, ``pd.NA`` and the NaN inside numpy arrays and scalars) become
+    ``None``, i.e. JSON ``null``. The order of the checks matters: ``pd.NaT`` is a ``datetime``
+    subclass, so it is tested before the dates. A NaN in a native ``float`` (``np.float64``
+    included) never reaches this function; with ``allow_nan=False`` ``json.dumps`` raises
+    ``ValueError`` for it.
+
+    Parameters
+    ----------
+    obj : Any
+        The object that ``json`` does not know how to serialise.
+
+    Returns
+    -------
+    Any
+        A JSON-compatible value:
+
+        - ``None`` for ``pd.NaT`` and ``pd.NA``.
+        - A list, with the NaN replaced by ``None`` at any depth, for a ``numpy.ndarray``.
+        - The equivalent Python scalar, ``None`` if it is a NaN, for a ``numpy.generic``.
+        - A ``YYYY-MM-DD`` string for a ``datetime`` (``pd.Timestamp`` included) at midnight
+          without timezone, an ISO 8601 string for any other.
+        - An ISO 8601 string for a ``date``.
+        - A list for a ``set``.
+
+    Raises
+    ------
+    TypeError
+        If the type of the object is not supported.
+    """
+    if obj is pd.NaT or obj is pd.NA:
+        return None
+
+    if isinstance(obj, np.ndarray):
+        return _nan_to_none(obj.tolist())
+
+    if isinstance(obj, np.generic):
+        return _nan_to_none(obj.item())
+
+    if isinstance(obj, datetime.datetime):
+        if obj.time() == datetime.time() and obj.tzinfo is None:
+            return obj.strftime('%Y-%m-%d')
+
+        return obj.isoformat()
+
+    if isinstance(obj, datetime.date):
+        return obj.isoformat()
+
+    if isinstance(obj, set):
+        return list(obj)
+
+    raise TypeError(f'Object of type {type(obj).__name__} is not JSON serializable')
 
 
 class Api(Core):
@@ -108,7 +193,9 @@ class Response(Core):
         401: 'Unauthorized',
         403: 'Forbidden',
         404: 'Not Found',
-        500: 'Internal Server Error'
+        422: 'Unprocessable Entity',
+        500: 'Internal Server Error',
+        503: 'Service Unavailable'
     }
 
     def __init__(self, send):
@@ -125,9 +212,44 @@ class Response(Core):
         return [(k.lower().encode('latin-1'), v.encode('latin-1')) for k, v in self.headers.items()]
 
     def get_header(self, key):
-        return self.headers[key]
+        """
+        Get the value of a response header.
+
+        Parameters
+        ----------
+        key : str
+            The name of the header, case insensitive.
+
+        Returns
+        -------
+        str
+            The value of the header.
+
+        Raises
+        ------
+        KeyError
+            If the header has not been set.
+        """
+        return self.headers[key.lower()]
 
     def set_header(self, key, value):
+        """
+        Set a response header, or remove it when the value is ``None``.
+
+        Parameters
+        ----------
+        key : str
+            The name of the header, case insensitive (it is stored in lower case).
+        value : str or None
+            The value of the header. ``None`` removes the header if it was set.
+
+        Returns
+        -------
+        Response
+            The response itself, to allow chaining.
+        """
+        key = key.lower()
+
         if value is not None:
             self.headers[key] = value
         elif key in self.headers:
@@ -143,30 +265,114 @@ class Response(Core):
 
         return self
 
+    def set_cache(self, seconds: int, immutable: bool = False) -> 'Response':
+        """
+        Allow any cache to reuse the response for a time (``cache-control`` header).
+
+        Parameters
+        ----------
+        seconds : int
+            Number of seconds the response stays fresh (``max-age``).
+        immutable : bool, optional
+            Whether to add the ``immutable`` directive, for responses that do not change
+            while they are fresh.
+
+        Returns
+        -------
+        Response
+            The response itself, to allow chaining.
+        """
+        value = f'public, max-age={seconds}'
+
+        if immutable:
+            value += ', immutable'
+
+        return self.set_header('cache-control', value)
+
+    def set_etag(self, value: str) -> 'Response':
+        """
+        Set the entity tag of the response (``etag`` header).
+
+        Parameters
+        ----------
+        value : str
+            The opaque tag without quotes; it is sent as a strong validator (``"<value>"``).
+
+        Returns
+        -------
+        Response
+            The response itself, to allow chaining.
+        """
+        return self.set_header('etag', f'"{value}"')
+
     def set_status_code(self, status_code):
         self.status_code = status_code
 
         return self
 
     def set_content(self, content):
+        """
+        Set the body of the response from the value returned by a controller action.
+
+        The type of ``content`` decides the body and the content type:
+
+        - ``None``: empty ``text/plain`` body.
+        - ``bool``: JSON ``true`` or ``false``.
+        - ``int``: error response whose status code is the integer, with the JSON body
+          ``{"status": "error", "message": "<code> <reason>"}``.
+        - ``dict``, ``list`` or ``tuple``: JSON (see ``json_default`` for the conversions). A
+          content that cannot be serialised, NaN in a native ``float`` included, gives a 500
+          with the JSON body ``{"status": "error", "message": "Invalid content"}``.
+        - ``str`` or ``bytes``: sent as is, ``text/plain`` unless the content type has already
+          been set.
+        - Anything else: 500 with the JSON body
+          ``{"status": "error", "message": "Invalid content-type"}``.
+
+        Parameters
+        ----------
+        content : Any
+            The value to send.
+
+        Returns
+        -------
+        Response
+            The response itself, to allow chaining.
+        """
         if content is None:
             self.set_content_type('text/plain')
             self.content = b''
+        elif isinstance(content, bool):
+            self.set_content_type('application/json')
+            self.content = json.dumps(content).encode('utf-8')
         elif isinstance(content, int):
             self.set_content_type('application/json')
             self.set_status_code(content)
             self.content = json.dumps({
                 'status': 'error',
-                'message': str(content) + ' ' + Response.status_codes[content]
+                'message': str(content) + ' ' + Response.status_codes.get(content, 'Error')
             }).encode('utf-8')
-        elif isinstance(content, dict):
+        elif isinstance(content, (dict, list, tuple)):
             self.set_content_type('application/json')
-            self.content = json.dumps(content).encode('utf-8')
+
+            try:
+                self.content = json.dumps(
+                    content, ensure_ascii=False, allow_nan=False, default=json_default
+                ).encode('utf-8')
+            except (TypeError, ValueError):
+                self.set_status_code(500)
+                self.content = json.dumps({
+                    'status': 'error',
+                    'message': 'Invalid content'
+                }).encode('utf-8')
         elif isinstance(content, str):
-            self.set_content_type('text/plain')
+            if 'content-type' not in self.headers:
+                self.set_content_type('text/plain')
+
             self.content = content.encode('utf-8')
         elif isinstance(content, bytes):
-            self.set_content_type('text/plain')
+            if 'content-type' not in self.headers:
+                self.set_content_type('text/plain')
+
             self.content = content
         else:
             self.set_content_type('application/json')

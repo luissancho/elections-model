@@ -108,3 +108,71 @@ def test_query_returns_first_value_of_each_key_and_keeps_blank_values(fresh_app)
 
 def test_query_is_empty_without_query_string(fresh_app):
     assert json.loads(call(make_api(fresh_app), '/query')[2]) == {}
+
+
+def test_list_is_serialised_as_json(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/list')
+    assert status == 200
+    assert headers['content-type'] == 'application/json; charset=utf-8'
+    assert json.loads(body) == [1, 2, 3]
+
+
+def test_numpy_and_pandas_values_are_converted(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/types')
+    assert status == 200
+    assert json.loads(body) == {
+        'n': 3, 'f': 1.5, 'b': True, 'd': '2026-10-07', 'nat': None, 'arr': [1.0, None], 'none': None,
+    }
+
+
+def test_nan_in_native_float_gives_a_json_500_not_an_invalid_body(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/nan')
+    assert status == 500
+    assert headers['content-type'] == 'application/json; charset=utf-8'
+    assert json.loads(body) == {'status': 'error', 'message': 'Invalid content'}
+
+
+def test_unknown_int_status_and_bool_do_not_raise(fresh_app):
+    api = make_api(fresh_app)
+    status, headers, body = call(api, '/teapot-int')
+    assert status == 418
+    assert json.loads(body) == {'status': 'error', 'message': '418 Error'}
+    status, headers, body = call(api, '/bool')
+    assert status == 200
+    assert json.loads(body) is True
+
+
+def test_str_without_explicit_type_is_text_plain(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/text')
+    assert headers['content-type'] == 'text/plain; charset=utf-8'
+    assert body == b'hola'
+
+
+def test_explicit_content_type_is_kept_for_str(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/csv')
+    assert status == 200
+    assert headers['content-type'] == 'text/csv; charset=utf-8'
+    assert body == b'a,b\n1,2\n'
+
+
+def test_header_keys_are_case_insensitive(fresh_app):
+    from mtpy.core.api import Response
+
+    response = Response(None).set_header('Content-Type', 'text/csv')
+    assert response.headers == {'content-type': 'text/csv'}
+    assert response.get_header('CONTENT-TYPE') == 'text/csv'
+
+
+def test_cache_headers(fresh_app):
+    api = make_api(fresh_app)
+    assert call(api, '/cached')[1]['cache-control'] == 'public, max-age=60'
+    headers = call(api, '/immutable')[1]
+    assert headers['cache-control'] == 'public, max-age=31536000, immutable'
+    assert headers['etag'] == '"abc"'
+
+
+def test_status_codes_include_422_and_503():
+    from mtpy.core.api import Response
+
+    assert Response.status_codes[422] == 'Unprocessable Entity'
+    assert Response.status_codes[503] == 'Service Unavailable'
