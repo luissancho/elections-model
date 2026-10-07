@@ -158,6 +158,14 @@ class Forecaster(Core):
         return self.series.loc[self.series.pollster.notnull()].reset_index(self.series.index.names[1:])
 
     @property
+    def fc_series_raw(self) -> pd.DataFrame:
+        """
+        Polls as they were published, before subtracting the house effects: the ones to show. The average is
+        fitted on `fc_series`, where each poll is net of the effect of its pollster (see `fit_house_effects`).
+        """
+        return self.series_raw.loc[self.series_raw.pollster.notnull()].reset_index(self.series_raw.index.names[1:])
+
+    @property
     def fc_index(self) -> pd.DatetimeIndex:
         return pd.date_range(start=self.date_start, end=self.date_end, freq='D')
 
@@ -670,13 +678,14 @@ class Forecaster(Core):
 
         Backfitting: the average of each series is fitted on the corrected polls of the previous iteration
         (the raw polls the first time); the deviation of each pollster is the weighted mean of the residuals
-        of its raw polls against that average (`house_deviations`, precision weights `weight_over ·
-        weight_sample` decayed with the age of the poll); it is combined with the prior of the pollster on
+        of its raw polls against that average (`house_deviations`, with the weights of the polls in the
+        average, `weight`, decayed with the age of the poll); it is combined with the prior of the pollster on
         that series (`house_prior`: its centred deviations from the results of past elections, or 0) by a
-        normal-normal update (`normal_update`); the effects are re-centred so that their weighted mean is 0
-        (`center_effects`: the level of the average never depends on the correction) and subtracted from the
-        raw polls (`apply_house_effects`). Rows of official results are never touched; `series_raw` keeps
-        the uncorrected series and `house_effects` the table of effects.
+        normal-normal update (`normal_update`); the effects are re-centred so that their mean, weighted by
+        the weight of each pollster in the average, is 0 (`center_effects`: the level of the average over the
+        cycle does not depend on the correction, only on which pollsters publish around each date) and
+        subtracted from the raw polls (`apply_house_effects`). Rows of official results are never touched;
+        `series_raw` keeps the uncorrected series and `house_effects` the table of effects.
 
         Parameters
         ----------
@@ -724,12 +733,13 @@ class Forecaster(Core):
         polls = raw.loc[is_poll].reset_index(raw.index.names[1:])
         pollster_names = polls.groupby('pollster_id', observed=True)['pollster'].first()
 
-        # Precision weights of the polls, decayed with their age (the current methodology of a pollster
-        # matters more than the one of the beginning of the cycle)
+        # Weights of the polls in the average (overlap, sample and rating of their pollster), decayed with their
+        # age (the current methodology of a pollster matters more than the one of the beginning of the cycle).
+        # The rating has to be in: the effects are centred with these weights, and a pollster the average barely
+        # listens to would otherwise drag the consensus every other pollster is measured against
         age = (pd.Timestamp(self.date_last) - polls.index).days / 365.25
         weights = (
-            polls['weight_over'].astype(float) * polls['weight_sample'].astype(float)
-            * np.power(p['year_decay'], np.clip(age, 0, None))
+            polls['weight'].astype(float) * np.power(p['year_decay'], np.clip(age, 0, None))
         ).fillna(0.)
 
         ref_date = pd.Timestamp(self.date_end)
@@ -877,7 +887,7 @@ class Forecaster(Core):
         names : list of str
             Series to evaluate.
         weights : pd.Series or np.ndarray
-            Precision weight of each poll (aligned with `polls` rows).
+            Weight of each poll (aligned with `polls` rows).
         min_polls : int, optional
             Pollsters with fewer residuals get an infinite standard error (no information).
 
@@ -1645,14 +1655,17 @@ class Forecaster(Core):
         else:
             events = None
 
+        # The polls are shown as they were published: the house effects only enter the average
+        fc_series = self.fc_series_raw
+
         if plt_params['show_polls']:
-            polls = self.fc_series[
+            polls = fc_series[
                 (
-                    self.fc_series.pollster.notnull()
+                    fc_series.pollster.notnull()
                 ) & (
-                    self.fc_series.pollster != pollster
+                    fc_series.pollster != pollster
                 ) & (
-                    self.fc_series.pollster_id != pollster
+                    fc_series.pollster_id != pollster
                 )
             ].loc[dt_min:dt_max][names]
             if block_map is not None:
@@ -1669,12 +1682,12 @@ class Forecaster(Core):
 
         if pollster is not None:
             if isinstance(pollster, str):
-                pollster = self.fc_series[
-                    self.fc_series.pollster == pollster
+                pollster = fc_series[
+                    fc_series.pollster == pollster
                 ]
             elif isinstance(pollster, int):
-                pollster = self.fc_series[
-                    self.fc_series.pollster_id == pollster
+                pollster = fc_series[
+                    fc_series.pollster_id == pollster
                 ]
             pollster = pollster.loc[dt_min:dt_max][names]
             if block_map is not None:

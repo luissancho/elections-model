@@ -1,9 +1,13 @@
 """Tests del Forecaster que no necesitan base de datos (M6: efectos de casa)."""
+import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
 
 from mtpy.lib.forecaster import Forecaster
+from mtpy.lib.utils import build_blocks
+
+matplotlib.use('Agg')
 
 
 def _polls(offsets, n=6, start='2026-01-01', truth=None):
@@ -139,7 +143,7 @@ def test_fit_house_effects_recovers_centered_offsets_and_removes_house_step():
     assert list(effects.index.names) == ['pollster_id', 'name']
     assert {'n', 'dev', 'dev_err', 'prior', 'prior_err', 'effect', 'effect_err'} <= set(effects.columns)
 
-    # Los efectos se recentran con los pesos de precisión del algoritmo (`w`, con decaimiento por antigüedad):
+    # Los efectos se recentran con los pesos de las encuestas en el promedio (`w`, con decaimiento por antigüedad):
     # media ponderada 0 por nombre; y recuperan los desplazamientos relativos
     pp = effects.xs('PP', level='name')
     w = pp['w']
@@ -167,6 +171,24 @@ def test_fit_house_effects_recovers_centered_offsets_and_removes_house_step():
     assert rmse_corr < rmse_raw
 
 
+def test_house_effects_are_centred_with_the_weights_of_the_average():
+    # Una casa muy desviada y con mal rating (el CIS con el PP) pesa poco en el promedio: debe pesar igual de
+    # poco en el consenso respecto al que se miden los efectos, o corregirlos desplaza el nivel del promedio
+    fc, _, _ = _synthetic_forecaster()
+    series = fc.series_raw.copy()
+    low = series.index.get_level_values('pollster_id') == 3
+    series.loc[low, 'PP'] -= 5.
+    series.loc[low, ['weight_rating', 'weight']] = 0.2
+    fc.series_raw = None
+    fc._set_series(series)
+    raw_fit = fc.fit('PP')
+
+    pp = fc.fit_house_effects(prior=None).xs('PP', level='name')
+    corr_fit = fc.fit('PP')
+    assert abs(float((corr_fit - raw_fit).mean())) < 0.2            # el nivel medio del ciclo no cambia
+    assert pp.loc[3, 'effect'] - pp.loc[4, 'effect'] == pytest.approx(-5.5, abs=0.5)   # y la casa se corrige entera
+
+
 def test_fit_forecast_applies_house_effects_lazily_and_can_be_disabled():
     fc, _, _ = _synthetic_forecaster()
     fc.fit_forecast(names=['PP'], max_fc=0)
@@ -178,6 +200,31 @@ def test_fit_forecast_applies_house_effects_lazily_and_can_be_disabled():
     off.fit_forecast(names=['PP'], max_fc=0)
     assert off.house_effects is None
     assert off.series['PP'].equals(off.series_raw['PP'])
+
+
+def test_fc_series_raw_keeps_the_published_polls_after_house_effects():
+    fc, _, _ = _synthetic_forecaster()
+    published = fc.fc_series['PP'].copy()
+    fc.fit_forecast(names=['PP'], max_fc=0)
+    assert fc.fc_series_raw['PP'].equals(published)       # lo publicado no cambia
+    assert not fc.fc_series['PP'].equals(published)       # lo que se promedia sí
+
+
+def test_plot_forecast_series_draws_the_published_polls_not_the_corrected_ones():
+    fc, _, _ = _synthetic_forecaster()
+    fc.blocks = build_blocks(['PP', 'PSOE'], {'PP': '#1d84ce', 'PSOE': '#ef1c27'})
+    fc.fit_forecast(max_fc=0)
+    raw = fc.series_raw.reset_index(['pollster_id', 'sponsor_id'])
+
+    # Los puntos de la casa destacada y los del resto son los sondeos tal como se publicaron
+    _, ax = matplotlib.pyplot.subplots()
+    fc.plot_forecast_series(
+        names=['PP'], pollster=1, dt_max='2026-10-27', show_forecast=False, show_events=False, show=False, ax=ax
+    )
+    house, others = (np.sort(c.get_offsets()[:, 1]) for c in ax.collections)
+    assert np.allclose(house, np.sort(raw.loc[raw.pollster_id == 1, 'PP']))
+    assert np.allclose(others, np.sort(raw.loc[raw.pollster_id != 1, 'PP']))
+    matplotlib.pyplot.close('all')
 
 
 def test_industry_bias_from_history_is_relative_decayed_and_uncertain():
