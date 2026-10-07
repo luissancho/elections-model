@@ -59,7 +59,7 @@ nginx, supervisord), gunicorn 23.0.0 + uvicorn 0.18.3, s3fs 0.4.2.
 
 ---
 
-### Tarea 1: Arnés ASGI de tests y `Request.query`
+### Task 1: Arnés ASGI de tests y `Request.query`
 
 **Files:**
 - Modify: `tests/conftest.py` (añadir la fixture `fresh_app`)
@@ -238,7 +238,7 @@ git commit -m "$(printf 'Add ASGI test harness and Request.query\n\nCo-Authored-
 
 ---
 
-### Tarea 2: `Response.set_content` (listas, numpy, NaN, enteros y content-type explícito) y cabeceras de caché
+### Task 2: `Response.set_content` (listas, numpy, NaN, enteros y content-type explícito) y cabeceras de caché
 
 **Files:**
 - Modify: `mtpy/core/api.py:71-151` (`Response`) y cabecera del módulo (imports y `json_default`)
@@ -374,7 +374,7 @@ git commit -m "$(printf 'JSON lists, numpy values and cache headers in core API 
 
 ---
 
-### Tarea 3: `HttpError` y errores controlados en `Controller.dispatch`
+### Task 3: `HttpError` y errores controlados en `Controller.dispatch`
 
 **Files:**
 - Modify: `mtpy/core/api.py` (nueva clase `HttpError` tras `Response`; `Controller.dispatch`, `:300-310`)
@@ -474,7 +474,7 @@ git commit -m "$(printf 'Add HttpError and controlled error responses to the cor
 
 ---
 
-### Tarea 4: `Router.handle` sin parámetros residuales y scopes ASGI no HTTP
+### Task 4: `Router.handle` sin parámetros residuales y scopes ASGI no HTTP
 
 **Files:**
 - Modify: `mtpy/core/api.py:10-22` (`Api.__call__`) y `:251-277` (`Router.handle`)
@@ -544,7 +544,7 @@ git commit -m "$(printf 'Handle ASGI lifespan and reset stale route params in th
 
 ---
 
-### Tarea 5: `mtpy.api(routes=None)`
+### Task 5: `mtpy.api(routes=None)`
 
 **Files:**
 - Modify: `mtpy/mtpy.py:100-111` (`api`)
@@ -605,7 +605,7 @@ git commit -m "$(printf 'Accept extra routes in mtpy.api()\n\nCo-Authored-By: Cl
 
 ---
 
-### Tarea 6: Imagen Docker sin credenciales ni cron, gunicorn 23
+### Task 6: Imagen Docker sin credenciales ni cron, gunicorn 23
 
 Precondición: daemon de Docker en marcha (`docker info` responde).
 
@@ -741,7 +741,7 @@ git commit -m "$(printf 'Docker image with explicit COPY, no credentials and no 
 
 ---
 
-### Tarea 7: Job `check_s3`, ficheros de entorno de ejemplo y rol de solo lectura
+### Task 7: Job `check_s3`, ficheros de entorno de ejemplo y rol de solo lectura
 
 **Files:**
 - Create: `mtpy/jobs/CheckS3.py`, `tests/test_jobs_check_s3.py`, `deploy/web.env.example`,
