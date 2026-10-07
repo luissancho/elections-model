@@ -317,6 +317,72 @@ def test_fan_widths_grow_with_horizon(sim26):
     assert pp['sd'] == pytest.approx(np.sqrt(fc['err'] ** 2 + fc['error'] ** 2), abs=1e-6)
 
 
+# --- Modo nowcast / forecast de los notebooks ---
+
+@pytest.fixture(scope='module')
+def sim26_fc(app):
+    """El simulador de referencia en modo forecast: la elección en `event_date`."""
+    from mtpy.lib.simulator import Simulator
+    sim = Simulator(scope='es', event_date='2026-11-29', mode='forecast', drange=6, seed=42, verbose=0, path='.', house_effects=False, composition=1.0, regional_noise=False)
+    sim.fit_forecast(names=sim.params['names'], max_fc=3, fillna=True)
+    return sim
+
+
+def test_mode_sets_the_default_horizon(sim26, sim26_fc):
+    assert sim26.mode == 'nowcast' and sim26.horizon == 0 and sim26.when == sim26.as_of
+    assert sim26_fc.as_of == sim26.as_of
+    assert sim26_fc.horizon == sim26_fc.horizon_max > 0 and sim26_fc.when == sim26_fc.deadline
+    sim26_fc.run(split=True, random=True, n_sim=20)
+    assert (sim26_fc.horizons == sim26_fc.horizon_max).all()
+    sim26_fc.run(split=True, random=True, n_sim=20, horizon=None)  # `horizon` explícito manda sobre el modo
+    assert (sim26_fc.horizons == 0).all()
+
+
+def test_vote_forecast_is_the_fan_at_the_horizon_of_the_mode(sim26, sim26_fc):
+    now, fc = sim26.vote_forecast(), sim26_fc.vote_forecast()
+    assert list(fc.columns) == ['pct', 'sd', 'lo', 'hi', 'horizon']
+    fan = sim26_fc.fan(horizons=[sim26_fc.horizon]).set_index('party')
+    assert np.allclose(fc[['sd', 'lo', 'hi']].to_numpy(), fan.loc[fc.index, ['sd', 'lo', 'hi']].to_numpy())
+    assert (now['horizon'] == 0).all() and (fc['horizon'] == sim26_fc.horizon_max).all()
+    # Misma estimación puntual; el forecast solo ensancha el intervalo
+    assert np.allclose(now['pct'], fc['pct'])
+    assert np.allclose(now['pct'], sim26.forecast.loc[now.index, 'mean'])
+    assert ((fc['hi'] - fc['lo']) >= (now['hi'] - now['lo']) - 1e-9).all()
+    assert (fc.loc['PP', 'hi'] - fc.loc['PP', 'lo']) > (now.loc['PP', 'hi'] - now.loc['PP', 'lo'])
+
+
+def test_projection_runs_from_as_of_to_the_election(sim26, sim26_fc):
+    import pandas as pd
+    pr = sim26_fc.projection()
+    assert pr.index[0] == sim26_fc.as_of and pr.index[-1] == sim26_fc.deadline
+    assert pr.shape[0] == sim26_fc.horizon + 1
+    assert np.allclose(pr['mean'].iloc[0], pr['mean'].iloc[-1])
+    assert (np.diff((pr['hi'] - pr['lo']).to_numpy(), axis=0) >= -1e-9).all()
+    vf = sim26_fc.vote_forecast()
+    assert np.allclose(pr['lo'].iloc[-1][vf.index], vf['lo']) and np.allclose(pr['hi'].iloc[-1][vf.index], vf['hi'])
+    assert sim26.projection().shape[0] == 1  # nowcast: solo `as_of`
+    vs = sim26_fc.projection('vs')
+    right = sim26_fc.model.bmaps['vs']['Derecha']
+    assert vs[('mean', 'Derecha')].iloc[0] == pytest.approx(pr['mean'].iloc[0][right].sum())
+    lo, hi = vs[('lo', 'Derecha')].iloc[-1], vs[('hi', 'Derecha')].iloc[-1]
+    assert lo < vs[('mean', 'Derecha')].iloc[-1] < hi
+
+
+def test_cached_forecast_keeps_the_anchor(sim26_fc):
+    import os
+    as_of = sim26_fc.as_of
+    sim26_fc.save_forecast('test-anchor')
+    try:
+        sim26_fc.load_forecast('test-anchor')
+        assert sim26_fc.as_of == as_of
+        assert sim26_fc.as_of > sim26_fc.model.date_last  # última encuesta + max_fc, no la última encuesta
+    finally:
+        for suffix in ('', '-stat', '-meta'):
+            name = sim26_fc.model.get_path('fc/test-anchor{}.csv'.format(suffix))
+            if sim26_fc.app.fs.exists(name):
+                os.remove(sim26_fc.app.fs.get_path(name))
+
+
 # --- M6: efectos de casa ---
 
 def test_house_effects_are_fitted_and_centered(sim26, sim26_he):

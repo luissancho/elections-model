@@ -30,6 +30,7 @@ class Simulator(Core):
     OTHERS = '-'  # Residual category: other candidatures and blank votes (same label as the Forecaster)
     TERMINAL_WEEKS = 1  # The polling error is always the terminal one (last week); the drift is added apart
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
+    MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
 
     def __init__(
         self,
@@ -40,6 +41,7 @@ class Simulator(Core):
         alpha: float = 0.05,
         limit_date: Optional[str] = None,
         as_of: Optional[str] = None,
+        mode: Literal['nowcast', 'forecast'] = 'nowcast',
         n_last: int = 1,
         add_errors: bool = True,
         reg_params: Optional[dict[str, Any]] = None,
@@ -49,6 +51,7 @@ class Simulator(Core):
         industry_bias: bool = False,
         he_params: Optional[dict[str, Any]] = None,
         dispersion: bool = True,
+        disp_params: Optional[dict[str, Any]] = None,
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
         min_events: Optional[int] = None,
@@ -81,6 +84,11 @@ class Simulator(Core):
             The day on which the forecast is read: the anchor of the nowcast. By default the last day actually
             fitted (`last poll + max_fc`) or `limit_date`, whichever comes first. The horizons of the simulation
             (see `run`) are counted from this day up to `event_date`, treated as the deadline of the legislature.
+        mode : {'nowcast', 'forecast'}, optional
+            Default horizon of the simulated election (see `run`, `horizon`, `vote_forecast`): `'nowcast'`
+            (default) holds it at `as_of`, with the polling error only; `'forecast'` holds it at `event_date`
+            (`horizon='deadline'`), adding the drift of the opinion over the `horizon_max` days left. The point
+            estimate is the same in both modes (the drift has zero mean): only the intervals widen.
         n_last: int, optional
             The number of last polls to include by each pollster.
             If not provided, only each pollster's last poll will be included.
@@ -111,6 +119,10 @@ class Simulator(Core):
         dispersion : bool, optional
             Weigh the polls of each pollster by its effective sample, the one that would produce the
             dispersion of its figures around the average (M12). See `Forecaster.fit_dispersion`.
+        disp_params : dict, optional
+            Parameters of the effective sample, see `Forecaster.set_disp_params`. By default the weight of the
+            pollsters less dispersed than their samples allow is also reduced (M13); `{'herding': False}` keeps
+            only the penalty of the over-dispersed ones (M12).
         composition : float or 'auto', optional
             Joint noise of the national parties: the ratio between the variance of the sum of their errors and
             the sum of their variances (`Computer.composition_ratio`). `'auto'` estimates it from the past
@@ -136,15 +148,20 @@ class Simulator(Core):
             Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
             (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
         """
+        if mode not in self.MODES:
+            raise ValueError('`mode` must be one of {}'.format(list(self.MODES)))
+
         super().__init__()
 
         self.scope = scope
         self.event_date = event_date
+        self.mode = mode
         self.parent = get_scope_parent(scope)  # Parent scope (`es` for the autonomous communities), if any
         self.house_effects = bool(house_effects)
         self.industry_bias = bool(industry_bias)
         self.he_params = he_params
         self.dispersion = bool(dispersion)
+        self.disp_params = disp_params
         self.composition = composition
         self.regional_noise = bool(regional_noise)
         self.min_events = None if min_events is None else int(min_events)
@@ -206,6 +223,7 @@ class Simulator(Core):
             house_effects=self.house_effects,
             he_params=self.he_params,
             dispersion=self.dispersion,
+            disp_params=self.disp_params,
             verbose=self.verbose,
             path=self.path
         ).build_series()
@@ -311,7 +329,7 @@ class Simulator(Core):
             'random': False,
             'names': None,
             'regions': None,
-            'horizon': None,
+            'horizon': self.MODES[self.mode],
             'date_prior': 'historical'
         }
 
@@ -941,12 +959,30 @@ class Simulator(Core):
         pd.DataFrame
             `party`, `horizon`, `mean`, `sd`, `lo`, `hi` (long) or the wide table.
         """
-        if self.forecast is None or self.horizon_max is None:
-            raise ValueError('No forecast available: call `fit_forecast()` first.')
+        self._require_forecast()
 
-        alpha = self.alpha if alpha is None else alpha
         if horizons is None:
             horizons = sorted(set(self.DEFAULT_FAN) | {self.horizon_max})
+
+        df = self._fan(horizons, alpha=alpha).drop(columns='dof')
+
+        if wide:
+            order = [n for n in self.params['names'] if n in set(df['party'])]
+
+            return df.pivot(index='party', columns='horizon', values=['lo', 'hi']).loc[order]
+
+        return df
+
+    def _fan(
+        self,
+        horizons: list[int] | tuple[int, ...] | range,
+        alpha: Optional[float] = None
+    ) -> pd.DataFrame:
+        """
+        Long fan of `fan` for the given horizons (clipped to `[0, horizon_max]`), with the degrees of freedom
+        of the Student t of each party (`dof`, the same as in `build_frame`).
+        """
+        alpha = self.alpha if alpha is None else alpha
         horizons = [int(h) for h in horizons if 0 <= int(h) <= self.horizon_max]
 
         names = self.params['names']
@@ -971,17 +1007,127 @@ class Simulator(Core):
                 sd = float(np.sqrt(base + drift_var))
                 rows.append({
                     'party': n, 'horizon': h, 'mean': mean, 'sd': sd,
-                    'lo': max(mean - q * sd, 0.), 'hi': mean + q * sd
+                    'lo': max(mean - q * sd, 0.), 'hi': mean + q * sd, 'dof': dof
                 })
 
-        df = pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'sd', 'lo', 'hi'])
+        return pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'sd', 'lo', 'hi', 'dof'])
 
-        if wide:
+    def _require_forecast(self) -> None:
+        if self.forecast is None or self.horizon_max is None:
+            raise ValueError('No forecast available: call `fit_forecast()` first.')
+
+    @property
+    def horizon(self) -> int:
+        """
+        Days from `as_of` to the election simulated by default (see `mode`): 0 in a nowcast, `horizon_max`
+        (the days left to `event_date`) in a forecast.
+        """
+        self._require_forecast()
+
+        return 0 if self.MODES[self.mode] is None else int(self.horizon_max)
+
+    @property
+    def when(self) -> pd.Timestamp:
+        """
+        Day of the election simulated by default (see `mode`): `as_of` in a nowcast, `event_date` in a forecast.
+        """
+        horizon = self.horizon
+
+        return self.as_of + pd.Timedelta(days=horizon)
+
+    def vote_forecast(self, alpha: Optional[float] = None) -> pd.DataFrame:
+        """
+        Forecast of the national vote share of each party for the election of the `mode`: the point estimate
+        (`pct`, the house-corrected poll average read at `as_of`) and its interval at `horizon` days, with the
+        polling error and, in a forecast, the drift of the opinion (the analytic counterpart of the draws of
+        `run`, see `fan`).
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Confidence level of the interval; the one given to the constructor by default.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per party with a positive average (in the order of `names`): `pct`, `sd`, `lo`, `hi`,
+            `horizon`.
+        """
+        self._require_forecast()
+
+        df = self._fan([self.horizon], alpha=alpha).drop(columns='dof')
+
+        return df.rename(columns={'mean': 'pct'}).set_index('party')[['pct', 'sd', 'lo', 'hi', 'horizon']]
+
+    def projection(
+        self,
+        names: Optional[str | dict[str, Any] | list | tuple] = None,
+        alpha: Optional[float] = None
+    ) -> pd.DataFrame:
+        """
+        Daily band of the vote share of each party from `as_of` to the election of the `mode` (a single row,
+        `as_of`, in a nowcast): the point estimate is flat (the drift has zero mean) and the interval widens
+        with the days, as in `fan`.
+
+        Parameters
+        ----------
+        names : str, dict or list, optional
+            Parties (a list) or blocks of parties (a `bmap` name or a dict); every simulated party if `None`.
+            A block takes the sum of the means and the standard deviation of the sum of the errors of its
+            parties (see `block_variance`: independent draws, or the common correlation of the national parties
+            with `composition`), with the Student t of its member with the fewest degrees of freedom.
+        alpha : float, optional
+            Confidence level of the band; the one given to the constructor by default.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by date, with columns `(stat, series)` for `stat` in `mean`, `lo`, `hi`.
+        """
+        self._require_forecast()
+
+        alpha = self.alpha if alpha is None else alpha
+        df = self._fan(range(self.horizon + 1), alpha=alpha)
+
+        if isinstance(names, str):
+            names = self.model.bmaps[names]
+
+        if isinstance(names, dict):
+            groups = {k: [v] if isinstance(v, str) else list(v) for k, v in names.items()}
+            national = df['party'].map(lambda n: int(self.forecast.loc[n, 'regional']) == 0)
+            # Common correlation of the national parties at each horizon, as in the draws of `build_frame` (M7)
+            rho = df[national].groupby('horizon')['sd'].apply(
+                lambda x: self.equicorrelation(x.to_numpy(dtype=float), self.composition_ratio)[0]
+            )
+            parts = []
+            for block, members in groups.items():
+                d = df[df['party'].isin(members)].assign(national=national)
+                if d.empty:
+                    continue
+                g = d.groupby('horizon').apply(lambda x: pd.Series({
+                    'mean': float(x['mean'].sum()),
+                    'var': self.block_variance(
+                        x['sd'].to_numpy(dtype=float), x['national'].to_numpy(dtype=bool), float(rho.get(x.name, 0.))
+                    ),
+                    'dof': float(x['dof'].min())
+                }), include_groups=False)
+                q = student_t.ppf(1 - alpha / 2, g['dof'].to_numpy(dtype=float))
+                sd = np.sqrt(g['var'].to_numpy(dtype=float))
+                parts.append(pd.DataFrame({
+                    'party': block, 'horizon': g.index, 'mean': g['mean'].to_numpy(),
+                    'lo': np.clip(g['mean'].to_numpy() - q * sd, 0., None), 'hi': g['mean'].to_numpy() + q * sd
+                }))
+            df = pd.concat(parts, ignore_index=True) if len(parts) > 0 else df.iloc[0:0]
+            order = [b for b in groups if b in set(df['party'])]
+        else:
+            names = self.params['names'] if names is None else list(names)
+            df = df[df['party'].isin(names)]
             order = [n for n in names if n in set(df['party'])]
 
-            return df.pivot(index='party', columns='horizon', values=['lo', 'hi']).loc[order]
+        df = df.assign(date=self.as_of + pd.to_timedelta(df['horizon'], unit='D'))
+        out = df.pivot(index='date', columns='party', values=['mean', 'lo', 'hi'])
 
-        return df
+        return out.reindex(columns=pd.MultiIndex.from_product([['mean', 'lo', 'hi'], order]))
 
     def _require_dist(self) -> pd.DataFrame:
         if self.results is None:
@@ -1006,6 +1152,37 @@ class Simulator(Core):
             names=names,
             **kwargs
         )
+
+    @staticmethod
+    def block_variance(
+        sd: np.ndarray,
+        national: np.ndarray,
+        rho: float = 0.
+    ) -> float:
+        """
+        Variance of the sum of the errors of the parties of a block: the sum of their variances plus the
+        covariance `rho · sd_i · sd_j` of every pair of national parties (the common correlation of the joint
+        draws, M7; 0 with independent draws). The regional parties are drawn independently.
+        """
+        sd = np.asarray(sd, dtype=float)
+        nat = sd[np.asarray(national, dtype=bool)]
+
+        return float(np.square(sd).sum() + rho * (np.square(nat.sum()) - np.square(nat).sum()))
+
+    def plot_forecast_series(
+        self,
+        names: Optional[list[str] | dict[str, Any] | str] = None,
+        projection: bool = True,
+        **kwargs
+    ) -> None:
+        """
+        Plot the poll average (see `Forecaster.plot_forecast_series`) with the band of `projection` up to the
+        election of the `mode`, for the same parties or blocks.
+        """
+        if projection:
+            kwargs['projection'] = self.projection(names)
+
+        self.model.plot_forecast_series(names=names, **kwargs)
 
     def plot_dist_kde(
         self,
@@ -1887,6 +2064,8 @@ class Simulator(Core):
         an integer (days from `as_of`, adding the drift of the opinion), `'deadline'` (the legislature runs
         to its end) or `'random'` (each simulation draws its horizon from `date_prior`: `'historical'`,
         `'uniform'` or an array of days, see `horizon_candidates`). The horizons are stored in `horizons`.
+        Without `horizon`, the one of the `mode` given to the constructor (`None` in a nowcast,
+        `'deadline'` in a forecast).
         """
         self.set_params(reset=reset, **kwargs)
 

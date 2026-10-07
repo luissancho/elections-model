@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import os
 import warnings
+from scipy.stats import chi2
 from tqdm import tqdm
 
 from typing import Any, Optional
@@ -100,7 +101,8 @@ class Forecaster(Core):
         dispersion : bool, optional
             Weigh the polls of each pollster by its effective sample: the sample size its polls would have if
             their dispersion around the average were pure sampling error. A pollster whose published figures
-            swing more than its samples allow counts less, never more (M12). See `fit_dispersion`.
+            swing more than its samples allow counts less, never more (M12); one whose figures swing less than its
+            samples allow (herding) also counts less (M13, `disp_params['herding']`). See `fit_dispersion`.
         disp_params : dict, optional
             Parameters of the dispersion measure, see `set_disp_params`.
         verbose : int, optional
@@ -273,13 +275,18 @@ class Forecaster(Core):
             - n_prior : shrinkage of the dispersion ratio toward 1, in polls (5): a few noisy polls do not
               condemn a pollster.
             - max_ratio : cap of the ratio, hence of the weight reduction (10).
+            - herding : also reduce the weight of the pollsters less dispersed than their samples allow, by
+              their herding ratio (True, M13). See `measure_herding` and `dispersion_factor`.
+            - herd_series : main series (by mean level) on which the herding is measured (4).
         """
         disp_params = disp_params if disp_params is not None else dict()
 
         return {
             'min_polls': int(disp_params.get('min_polls', 5)),
             'n_prior': float(disp_params.get('n_prior', 5.)),
-            'max_ratio': float(disp_params.get('max_ratio', 10.))
+            'max_ratio': float(disp_params.get('max_ratio', 10.)),
+            'herding': bool(disp_params.get('herding', True)),
+            'herd_series': int(disp_params.get('herd_series', 4))
         }
 
     def load_events(self) -> pd.DataFrame:
@@ -620,6 +627,11 @@ class Forecaster(Core):
             self.fc_stat.reset_index(),
             self.get_path('fc/{}-stat.csv'.format(prefix))
         )
+        # Last day actually fitted: the saved forecast may be forward filled, so it cannot be read back from it
+        self.app.fs.write_csv(
+            pd.DataFrame({'date_fit_last': [self.date_fit_last]}),
+            self.get_path('fc/{}-meta.csv'.format(prefix))
+        )
 
         return self
 
@@ -634,7 +646,13 @@ class Forecaster(Core):
                 self.get_path('fc/{}-stat.csv'.format(prefix))
             ).set_index('date').map(lambda x: literal_eval(x) if isinstance(x, str) else x)
             self.fc_stat.index = pd.DatetimeIndex(self.fc_stat.index)
-            self.date_fit_last = None  # A saved forecast is already forward filled: the anchor falls back to `date_last`
+
+            # Last day actually fitted, saved apart; without it (older files) the anchor falls back to `date_last`
+            self.date_fit_last = None
+            meta = self.get_path('fc/{}-meta.csv'.format(prefix))
+            if self.app.fs.exists(meta):
+                value = self.app.fs.read_csv(meta)['date_fit_last'].iloc[0]
+                self.date_fit_last = pd.Timestamp(value) if pd.notnull(value) else None
         else:
             self.fit_forecast()
 
@@ -653,13 +671,17 @@ class Forecaster(Core):
         its samples allow gets the weight of the sample that would produce that dispersion (its effective
         sample): `weight_sample` is proportional to the square root of the sample, so it is divided by the
         ratio (`apply_dispersion`). A pollster less dispersed than its samples allow (herding) is never
-        given more weight. The weights change in `series` and `series_raw`, so that every later fit, the
-        house effects included, uses them.
+        given more weight; with `disp_params['herding']` (M13, the default) its weight is reduced by its
+        herding ratio, measured against the average fitted without its own polls (`measure_herding`,
+        `dispersion_factor`).
+        The weights change in `series` and `series_raw`, so that every later fit, the house effects
+        included, uses them.
 
         Returns
         -------
         pd.DataFrame
-            Indexed by `pollster_id`: `pollster`, `n`, `ss_obs`, `ss_exp`, `ratio_raw`, `ratio`, `factor`.
+            Indexed by `pollster_id`: `pollster`, `n`, `ss_obs`, `ss_exp`, `ratio_raw`, `ratio`, `factor`; with
+            `herding`, also `herd_ratio` (shrunk toward 1, NaN when not measured).
         """
         p = self.disp_params
         raw = self.series_raw
@@ -681,6 +703,10 @@ class Forecaster(Core):
                 polls, pd.DataFrame(fitted), list(fitted.keys()),
                 min_polls=p['min_polls'], n_prior=p['n_prior'], max_ratio=p['max_ratio']
             )
+            if p['herding']:
+                herd = self.measure_herding(n_series=p['herd_series'], min_polls=p['min_polls'])
+                disp['herd_ratio'] = self.shrink_ratio(herd['ratio'], herd['n'], n_prior=p['n_prior']).reindex(disp.index)
+                disp['factor'] = self.dispersion_factor(disp['ratio'], disp['herd_ratio'], max_ratio=p['max_ratio'])
             self.series_raw = self.apply_dispersion(self.series_raw, disp)
             self.series = self.apply_dispersion(self.series, disp)
 
@@ -759,6 +785,143 @@ class Forecaster(Core):
         out['factor'] = 1. / out['ratio']
 
         return out
+
+    def measure_herding(
+        self,
+        names: Optional[list[str]] = None,
+        n_series: int = 4,
+        min_polls: int = 5
+    ) -> pd.DataFrame:
+        """
+        Herding of each pollster (M13): the dispersion of its published figures around the average fitted
+        WITHOUT its own polls (leave-one-out: its polls would otherwise pull the average toward them), relative
+        to the sampling error of its published samples, pooled over the main series. A ratio below 1 means
+        that its figures move less than its samples allow: it follows the consensus, re-interviews a panel,
+        weighs by recalled vote or smooths its own waves; in every case its polls carry less independent
+        information than their samples suggest.
+
+        Only polls with a published sample enter (imputed or winsorized samples would bias the ratio), and
+        the residuals are net of the mean of the pollster (its house effect).
+
+        Parameters
+        ----------
+        names : list of str, optional
+            Series to pool; the `n_series` with the highest mean level of the polls by default.
+        n_series : int, optional
+            Number of main series when `names` is not given.
+        min_polls : int, optional
+            Polls with a published sample a pollster needs to be measured.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `pollster_id`: `pollster`, `n` (polls), `n_series`, `ss_obs`, `ss_exp`, `dof`, `ratio`
+            (`sqrt(ss_obs / ss_exp)`) and `p_value` (lower tail of the chi-square, see `pool_herding`).
+        """
+        raw = self.series_raw if self.series_raw is not None else self.series
+        polls = raw.loc[raw['pollster'].notnull()].reset_index(raw.index.names[1:])
+        polls = polls.loc[polls['sample_size'].notnull() & (polls['sample_size'] > 0) & (polls['weight'] > 0)]
+
+        if names is None:
+            level = polls[[n for n in self.names if n in polls.columns]].mean().sort_values(ascending=False)
+            names = level.index[:int(n_series)].tolist()
+
+        counts = polls.groupby('pollster_id', observed=True).size()
+        pollster_names = polls.groupby('pollster_id', observed=True)['pollster'].first()
+        weights = self.series['weight'].copy()
+        is_pollster = self.series.index.get_level_values('pollster_id')
+
+        rows = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            for pid in counts.index[counts >= int(min_polls)]:
+                own = polls.loc[polls['pollster_id'] == pid]
+                self.series['weight'] = np.where(is_pollster == pid, 0., weights.to_numpy(dtype=float))
+                try:
+                    for name in names:
+                        reg = self.fit(name, max_fc=0, ret_stat=False)
+                        if reg is None:
+                            continue
+                        avg = (reg['mean'] if isinstance(reg, pd.DataFrame) else reg).reindex(own.index).to_numpy(dtype=float)
+                        resid = own[name].to_numpy(dtype=float) - avg
+                        level = np.clip(avg / 100., 0.005, 0.995)
+                        var = 1e4 * level * (1. - level) / own['sample_size'].to_numpy(dtype=float)
+                        ok = np.isfinite(resid) & np.isfinite(var)
+                        if ok.sum() < 2:
+                            continue
+                        r, k = resid[ok], int(ok.sum())
+                        rows.append({
+                            'pollster_id': pid, 'name': name, 'k': k,
+                            'ss_obs': float(np.square(r - r.mean()).sum()), 'ss_exp': float((1. - 1. / k) * var[ok].sum())
+                        })
+                finally:
+                    self.series['weight'] = weights
+
+        out = self.pool_herding(pd.DataFrame(rows, columns=['pollster_id', 'name', 'k', 'ss_obs', 'ss_exp']))
+        out.insert(0, 'pollster', out.index.map(pollster_names))
+
+        return out
+
+    @staticmethod
+    def pool_herding(rows: pd.DataFrame) -> pd.DataFrame:
+        """
+        Pool the sums of squares of each pollster over the series (M13). `ratio = sqrt(ss_obs / ss_exp)`; under
+        pure sampling error `ss_obs / ss_exp · dof` is a chi-square with `dof` degrees of freedom. The series of a
+        poll are not independent (they share the respondents), so `dof` takes the conservative count `n - 1`, as
+        if they were one series: `p_value` is the probability of a ratio this low or lower without herding.
+
+        Parameters
+        ----------
+        rows : pd.DataFrame
+            One row per pollster and series: `pollster_id`, `name`, `k` (polls), `ss_obs`, `ss_exp`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `pollster_id`: `n`, `n_series`, `ss_obs`, `ss_exp`, `dof`, `ratio`, `p_value`.
+        """
+        columns = ['n', 'n_series', 'ss_obs', 'ss_exp', 'dof', 'ratio', 'p_value']
+        if rows.shape[0] == 0:
+            return pd.DataFrame(columns=columns, index=pd.Index([], name='pollster_id'), dtype=float)
+
+        out = rows.groupby('pollster_id').agg(n=('k', 'max'), n_series=('name', 'nunique'), ss_obs=('ss_obs', 'sum'), ss_exp=('ss_exp', 'sum'))
+        out['dof'] = out['n'] - 1
+        x = out['ss_obs'] / out['ss_exp']
+        out['ratio'] = np.sqrt(x)
+        out['p_value'] = chi2.cdf(x * out['dof'], out['dof'])
+
+        return out[columns]
+
+    @staticmethod
+    def shrink_ratio(
+        ratio: pd.Series,
+        n: pd.Series,
+        n_prior: float = 5.
+    ) -> pd.Series:
+        """
+        Shrink a dispersion ratio toward 1 by the polls it rests on: `1 + (ratio - 1) · n / (n + n_prior)`.
+        """
+        n = n.astype(float)
+
+        return 1. + (ratio.astype(float) - 1.) * n / (n + float(n_prior))
+
+    @staticmethod
+    def dispersion_factor(
+        ratio: pd.Series,
+        herd_ratio: pd.Series,
+        max_ratio: float = 10.
+    ) -> pd.Series:
+        """
+        Multiplier of the sample weight of each pollster, symmetric in the dispersion (M12 + M13): `1 / ratio`
+        for a pollster more dispersed than its samples allow (`ratio > 1`), its `herd_ratio` for one less
+        dispersed (`herd_ratio < 1`, floored at `1 / max_ratio`), 1 otherwise. With `weight_sample ∝ sqrt(n)`,
+        both amount to an effective sample `n · factor²`.
+        """
+        herd = herd_ratio.astype(float).clip(lower=1. / float(max_ratio))
+        factor = pd.Series(1., index=ratio.index)
+        factor = factor.where(~(herd < 1.), herd)
+
+        return factor.where(~(ratio > 1.), 1. / ratio)
 
     @staticmethod
     def apply_dispersion(
@@ -1722,8 +1885,16 @@ class Forecaster(Core):
         ax: Optional[plt.Axes] = None,
         show: bool = True,
         path: Optional[str] = None,
+        projection: Optional[pd.DataFrame] = None,
         **kwargs
     ) -> None:
+        """
+        Plot the poll average of each party or block over time, with the polls and the election results.
+
+        `projection` (see `Simulator.projection`) adds the band of the forecast up to the simulated election:
+        a frame indexed by date with columns `(stat, series)` for `stat` in `mean`, `lo`, `hi`, already
+        grouped by block. A single date (a nowcast) is drawn as an error bar.
+        """
         _col_params = dict(
             ylim=None, ymin=None, ymax=None, yticks=5,
             fmt=None, s=50, lw=3, ls='-'
@@ -1892,6 +2063,20 @@ class Forecaster(Core):
             if ymax_ > ymax:
                 ymax = ymax_
 
+        if projection is not None:
+            projection = projection.loc[:, projection.columns.get_level_values(1).isin(series)]
+            if projection.shape[1] > 0:
+                ymin = min(ymin, projection.min().min())
+                ymax = max(ymax, projection.max().max())
+            else:
+                projection = None
+
+        if projection is not None and projection.shape[0] > 1 and forecast is not None:
+            # The average is drawn up to the anchor; the projection (flat mean, widening band) takes over from it
+            forecast = forecast.loc[:projection.index.min()]
+            if plt_params['show_ci']:
+                cmin, cmax = cmin.loc[forecast.index], cmax.loc[forecast.index]
+
         cm = blocks.color.to_dict()
 
         fig, ax = create_figure(ax=ax, **fig_params)
@@ -1949,6 +2134,25 @@ class Forecaster(Core):
                         color=cm[n],
                         alpha=0.2
                     )
+
+        if projection is not None:
+            for n in series:
+                if ('mean', n) not in projection.columns:
+                    continue
+
+                d = projection.xs(n, axis=1, level=1).dropna()
+                if d.empty:
+                    continue
+
+                if d.shape[0] == 1:
+                    ax.errorbar(
+                        d.index, d['mean'].values,
+                        yerr=[(d['mean'] - d['lo']).values, (d['hi'] - d['mean']).values],
+                        fmt='o', color=cm[n], ms=6, capsize=4, lw=2, label=None
+                    )
+                else:
+                    ax.plot(d.index, d['mean'].values, color=cm[n], lw=col_params[n]['lw'], ls='--', label=None)
+                    ax.fill_between(d.index, d['lo'].values, d['hi'].values, color=cm[n], alpha=0.1)
 
         set_title(plt_params['title'], ax=ax)
         set_note(plt_params['note'], ax=ax)

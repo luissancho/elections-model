@@ -447,3 +447,17 @@ def test_swing_noise_leaves_the_regional_list_alone():
     islands, w = [101, 102], valid.loc[[101, 102]]
     assert not np.allclose(out.loc[islands, 'A'], vpred.loc[islands, 'A'])
     assert (out.loc[islands, 'A'] * w).sum() / w.sum() == pytest.approx((vpred.loc[islands, 'A'] * w).sum() / w.sum(), abs=0.1)
+
+
+# --- Modo nowcast / forecast ---
+
+def test_unknown_mode_raises_before_touching_data():
+    with pytest.raises(ValueError):
+        Simulator(scope='es', event_date='2026-11-29', mode='tomorrow')
+
+
+def test_block_variance_adds_the_covariance_of_the_national_parties():
+    sd, national = np.array([3., 2., 1.]), np.array([True, True, False])
+    assert Simulator.block_variance(sd, national) == pytest.approx(14.)  # independientes: suma de varianzas
+    # rho = -0,25 entre los dos nacionales: 14 + 2 · (-0,25) · 3 · 2
+    assert Simulator.block_variance(sd, national, rho=-0.25) == pytest.approx(11.)

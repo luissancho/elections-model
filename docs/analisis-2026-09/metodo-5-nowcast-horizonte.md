@@ -82,6 +82,18 @@ El prior `'historical'` de `date_prior` (`horizon_candidates`) toma las legislat
 - `run(horizon='random', date_prior='historical')`: un solo número a fecha desconocida, con el prior declarado; `sim.horizons` guarda el horizonte de cada simulación.
 - `fan(horizons=None, alpha=None, wide=False)`: intervalos analíticos de voto por horizonte, `mean ± t · sqrt(err² + pct_err² + k·h·mean²)`, el gemelo de la simulación antes del reparto de escaños.
 
+### Modo de los notebooks (07-10-2026)
+
+`Simulator(..., mode='nowcast' | 'forecast')` fija el horizonte por defecto de `run()`. `'nowcast'` (por defecto) es `horizon=None`: la elección en `as_of`. `'forecast'` es `horizon='deadline'`: la elección en `event_date`, que desde el 06-10-2026 es la fecha real. Un `horizon` explícito en `run()` sigue mandando, así que el backtest no cambia. Asociados al modo:
+
+- `sim.horizon`: días del modo (0 o `horizon_max`). `sim.when`: fecha de la elección simulada (`as_of` o `event_date`).
+- `vote_forecast(alpha=None)`: predicción de voto por partido en esa fecha (`pct`, `sd`, `lo`, `hi`, `horizon`). Es la fila de `fan` en `sim.horizon`.
+- `projection(names=None, alpha=None)`: banda diaria de `as_of` a `sim.when` (una sola fila en nowcast). Con un bmap (`'vs'`, `'blocks'` o un dict), cada bloque suma las medias y las varianzas de sus partidos (sorteos independientes) y usa la t de su miembro con menos grados de libertad.
+- `sim.plot_forecast_series(...)`: el gráfico del promedio de `Forecaster` con esa banda. En nowcast se dibuja como barra de error en `as_of`.
+- `save_forecast`/`load_forecast` guardan `date_fit_last` en `fc/{prefix}-meta.csv`, así que una caché cargada da el mismo `as_of` que el ajuste.
+
+`PollsForecast` (porcentajes) y `PollsSimulations` (escaños) comparten la celda de parámetros (`mode`, `drange`, `max_fc`, `n_sim` y los correctores) y la celda de modelo: el mismo `Simulator` y la misma caché del promedio (`fc_prefix`). `PollsForecast` usa `sim.model` como su `Forecaster`, de modo que los dos notebooks muestran la misma tabla `vote_forecast()`.
+
 ## Efecto en 2027 (MT, n = 200, semilla 42, `max_fc = 3`)
 
 | | nowcast | `deadline` (342 días) | `random` (prior histórico) |

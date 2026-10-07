@@ -248,3 +248,28 @@ def test_centre_house_results_handles_scopes_without_enough_polls():
     assert out['industry'].tolist() == [2., 2.] and out['dev_result_c'].tolist() == [-1., 1.]
     empty = Computer.centre_house_results(result.iloc[:0])
     assert empty.shape[0] == 0 and list(empty.columns) == cols + ['industry', 'dev_result_c']
+
+
+# --- M13: herding ---
+
+def test_herding_summary_pools_cycles_with_year_decay():
+    c = bare_computer()
+    data = pd.DataFrame({
+        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29']),
+        'pollster': ['A', 'A', 'B', 'A'],
+        'n': [10, 20, 8, 15],
+        'ss_obs': [4., 8., 18., 2.],
+        'ss_exp': [10., 10., 9., 10.],
+        'ratio': [np.sqrt(.4), np.sqrt(.8), np.sqrt(2.), np.sqrt(.2)],
+        'p_value': [.1, .3, .99, .01]
+    })
+    out = c.herding_summary(data=data)
+    d = np.power(.9, [7, 3, 0])  # años hasta 2026
+    expected = np.sqrt((d * [4., 8., 2.]).sum() / (d * [10., 10., 10.]).sum())
+    assert out.loc['A', 'herding'] == pytest.approx(expected)
+    assert out.loc['A', 'herding_last'] == pytest.approx(np.sqrt(.2)) and out.loc['A', 'herding_p'] == pytest.approx(.01)
+    assert out.loc['A', 'herding_n'] == 45 and out.loc['A', 'herding_events'] == 3
+    # Hasta 2023 no cuenta el ciclo actual
+    upto = c.herding_summary(event_date='2023-07-23', data=data)
+    assert upto.loc['A', 'herding_events'] == 2 and upto.loc['B', 'herding'] == pytest.approx(np.sqrt(2.))
+    assert c.herding_summary(data=data.iloc[0:0]).shape[0] == 0

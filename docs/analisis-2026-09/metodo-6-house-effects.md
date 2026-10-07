@@ -124,7 +124,7 @@ Con los ratings globales (M11) el promedio del PP con efectos de casa quedaba **
 ### Cambios
 
 1. **Un solo juego de pesos.** El dato (`house_deviations`) y el recentrado (`center_effects`) usan los pesos de las encuestas en el promedio (`weight`, rating incluido) decaídos por antigüedad. La diferencia media en el ciclo entre el promedio corregido y el bruto pasa de −0,64 a 0,00 en el PP (y a cero en todos los partidos); a 13-10-2026 queda −0,44, que oscila entre −0,43 y +0,34 a lo largo del ciclo: la mezcla de casas. El efecto del CIS en el PP pasa de −4,97 a −5,65 y el de GAD3 de +0,80 a +0,12; la cuota del CIS en el consenso, del 17,6 % al 7 %.
-2. **Muestra efectiva** (`fit_dispersion`, antes de los efectos de casa). Para cada casa con 5 o más encuestas se compara la dispersión de sus encuestas alrededor del promedio, neta de su efecto (residuos centrados por partido, sumados sobre las series), con la varianza muestral `p (1 − p) / n` de sus muestras al nivel del promedio. La ratio, encogida hacia 1 con `n / (n + 5)` y acotada a [1, 10], divide `weight_sample` (que es proporcional a la raíz de la muestra): una casa cuyas cifras oscilan más de lo que su muestra permite pesa como la muestra que produciría esa dispersión. Nunca se premia la poca dispersión. Los pesos cambian en `series` y `series_raw`, de modo que los efectos de casa los usan. Medido en el ciclo actual: el CIS tiene una ratio de 2,95 (2,71 encogida; sus barómetros de 4.000 oscilan como una muestra de unas 460) y pesa un 37 %; **todas las demás casas están entre 0,46 y 0,98**, es decir, menos dispersas que su muestra: herding o cocina generalizados, con Hamalgama (0,51), NC Report (0,56), Celeste Tel (0,57) y Simple Lógica (0,59) como las más estables. La cuota del CIS en el promedio desde junio baja del 5 % al 2 %.
+2. **Muestra efectiva** (`fit_dispersion`, antes de los efectos de casa). Para cada casa con 5 o más encuestas se compara la dispersión de sus encuestas alrededor del promedio, neta de su efecto (residuos centrados por partido, sumados sobre las series), con la varianza muestral `p (1 − p) / n` de sus muestras al nivel del promedio. La ratio, encogida hacia 1 con `n / (n + 5)` y acotada a [1, 10], divide `weight_sample` (que es proporcional a la raíz de la muestra): una casa cuyas cifras oscilan más de lo que su muestra permite pesa como la muestra que produciría esa dispersión. Nunca se premia la poca dispersión (desde el método 13 se penaliza: ver `metodo-13-herding.md`). Los pesos cambian en `series` y `series_raw`, de modo que los efectos de casa los usan. Medido en el ciclo actual: el CIS tiene una ratio de 2,95 (2,71 encogida; sus barómetros de 4.000 oscilan como una muestra de unas 460) y pesa un 37 %; **todas las demás casas están entre 0,46 y 0,98**, es decir, menos dispersas que su muestra: herding o cocina generalizados, con Hamalgama (0,51), NC Report (0,56), Celeste Tel (0,57) y Simple Lógica (0,59) como las más estables. La cuota del CIS en el promedio desde junio baja del 5 % al 2 %.
 
 Promedio a 13-10-2026 con efectos de casa: PP 31,95 → 32,52 → 32,75 y PSOE 26,88 → 26,44 → 26,29 (bruto: 32,96 y 26,16).
 
@@ -159,3 +159,24 @@ Lecturas:
 - **Nivel del CIS**: tres experimentos consistentes sugieren que el nivel del CIS aportaba información que el consenso ponderado por rating no tiene, sobre todo en el PSOE. Puede ser el sesgo del sector sobre el PSOE (que `industry_bias` no logra capturar) o casualidad de 2023.
 - **Varianza esperada**: usa muestreo aleatorio simple; el efecto de diseño real (1,2–1,5) y el error del propio promedio harían las ratios algo menores. No cambia el orden de las casas.
 - `dev_cycle` de `pollsters_parties` se recalcula con los nuevos pesos en la próxima ejecución del pipeline (`compute_house_effects`); es diagnóstico, no alimenta el modelo.
+
+## 07-10-2026: revisión del sesgo de la industria (prior global M11, herding M13)
+
+El mismo backtest sobre los valores por defecto actuales, con `industry_bias=True` frente a desactivado:
+
+| Métrica | Desactivado | Activado | Cambio |
+|---|---|---|---|
+| MAE voto | 2,403 | 2,411 | +0,3 % |
+| RMSE voto | 2,938 | 3,026 | +3,0 % |
+| Error de la suma (bias_sum) | +0,14 | −2,00 | |
+| CRPS escaños | 7,10 | 7,26 | +2,3 % |
+| MAE escaños | 10,00 | 9,73 | −2,7 % |
+| Brier de mayorías | 0,071 | 0,086 | +21 % |
+| Log-score de mayorías | 0,242 | 0,313 | +29 % |
+| Cobertura voto 95 % | 0,88 | 0,95 | |
+
+Con el prior global, el sesgo baja casi todos los partidos a la vez: la suma del modelo queda 2 puntos por debajo del resultado, cuando sin él cuadra (+0,14). Acierta algún caso, como el PP de 2023 (+1,29 → −0,03) o Cs en 2016, y falla otros, como VOX en 2019-11 (−1,11 → −2,83) o UP en 2015. La única mejora es la cobertura, y viene de ensanchar los intervalos.
+
+Para el 29-11-2026 los desplazamientos son pequeños (PP −0,64, SUMAR −0,71, PSOE 0), pero la incertidumbre que añade es enorme: un error de ±5,1 puntos en el PP, que se debe a la dispersión entre elecciones nacionales y autonómicas. El intervalo del 95 % del PP pasaría de 27-38 % a 21-43 %, y P(mayoría absoluta de la derecha) de 0,995 a 0,915.
+
+**Se mantiene desactivado.** El sesgo del sector no se repite entre elecciones, y con el prior global, además, añade ruido.

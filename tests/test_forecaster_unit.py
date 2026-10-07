@@ -120,7 +120,7 @@ def _synthetic_forecaster(seed=0, noise=None):
         for d in span[pid::10]:
             sd = noise.get(pid, 0.8)
             rows.append({'date': d, 'pollster_id': pid, 'sponsor_id': 0, 'pollster': 'H{}'.format(pid), 'computed': True,
-                         'proc_sample': 1000, 'weight_over': 1., 'weight_sample': 1., 'weight_rating': 1., 'weight': 1.,
+                         'proc_sample': 1000, 'sample_size': 1000, 'weight_over': 1., 'weight_sample': 1., 'weight_rating': 1., 'weight': 1.,
                          'PP': truth.loc[d, 'PP'] + off_pp + rng.normal(0, sd), 'PSOE': truth.loc[d, 'PSOE'] + off_psoe + rng.normal(0, sd)})
     series = pd.DataFrame(rows).set_index(['date', 'pollster_id', 'sponsor_id']).sort_index()
     series['-'] = 100. - series[['PP', 'PSOE']].sum(axis=1)
@@ -261,6 +261,7 @@ def test_house_dispersion_measures_the_excess_noise_of_a_house():
 def test_fit_dispersion_rescales_the_sample_weight_of_the_noisy_house_only():
     fc, _, _ = _synthetic_forecaster(noise={3: 4.5})
     fc.disp_enabled = True
+    fc.disp_params['herding'] = False  # Solo M12: las demás casas oscilan menos que su muestra (0,8 frente a 1,45)
     before = fc.fc_series.groupby('pollster_id')[['weight_sample', 'weight']].mean()
 
     disp = fc.fit_dispersion()
@@ -378,3 +379,47 @@ def test_usable_history_counts_scope_and_date_pairs():
     })
     assert Forecaster.usable_history(history).shape[0] == 3
     assert Forecaster.usable_history(history.iloc[:2]).shape[0] == 0
+
+
+# --- M13: herding ---
+
+def test_pool_herding_ratio_and_lower_tail():
+    # Dos series de una casa con 10 encuestas: la mitad de la varianza esperada -> razón sqrt(0,5)
+    rows = pd.DataFrame({'pollster_id': [7, 7], 'name': ['PP', 'PSOE'], 'k': [10, 10], 'ss_obs': [4., 5.], 'ss_exp': [9., 9.]})
+    out = Forecaster.pool_herding(rows)
+    assert out.loc[7, 'n'] == 10 and out.loc[7, 'n_series'] == 2 and out.loc[7, 'dof'] == 9
+    assert out.loc[7, 'ratio'] == pytest.approx(np.sqrt(0.5))
+    assert 0 < out.loc[7, 'p_value'] < 0.5  # por debajo de lo esperado: cola inferior
+    # Sin herding la razón es 1 y el p-valor ronda 0,5
+    same = Forecaster.pool_herding(rows.assign(ss_obs=[9., 9.]))
+    assert same.loc[7, 'ratio'] == pytest.approx(1.) and 0.4 < same.loc[7, 'p_value'] < 0.7
+    assert Forecaster.pool_herding(rows.iloc[0:0]).shape[0] == 0
+
+
+def test_shrink_ratio_toward_one():
+    out = Forecaster.shrink_ratio(pd.Series([0.5, 2.]), pd.Series([5, 45]), n_prior=5.)
+    assert out.tolist() == pytest.approx([0.75, 1.9])
+
+
+def test_dispersion_factor_is_symmetric():
+    ratio = pd.Series([2., 1., 1., 1.], index=list('ABCD'))  # M12: razón recortada por debajo en 1
+    herd = pd.Series([0.4, 0.6, 1.3, np.nan], index=list('ABCD'))
+    out = Forecaster.dispersion_factor(ratio, herd, max_ratio=10.)
+    # A: sobredispersa (manda M12); B: rebaño; C: ni una cosa ni otra; D: sin medida
+    assert out.tolist() == pytest.approx([0.5, 0.6, 1., 1.])
+    # El suelo es 1 / max_ratio
+    assert Forecaster.dispersion_factor(pd.Series([1.]), pd.Series([0.01]), max_ratio=10.).iloc[0] == pytest.approx(0.1)
+
+
+def test_fit_dispersion_penalizes_the_herder_by_default():
+    # Ruido de muestreo puro (1,45 puntos con 1.000 entrevistas al 30 %) salvo la casa 4, pegada a la verdad
+    fc, _, _ = _synthetic_forecaster(noise={1: 1.45, 2: 1.45, 3: 1.45, 4: 0.3})
+    fc.disp_enabled = True
+    assert fc.disp_params['herding'] is True
+    disp = fc.fit_dispersion()
+    # El promedio sin la casa también tiene error: el residuo no baja hasta el 0,3 / 1,45 del ruido
+    assert disp.loc[4, 'herd_ratio'] < 0.75 and disp.loc[4, 'factor'] == pytest.approx(disp.loc[4, 'herd_ratio'])
+    others = disp.loc[[1, 2, 3], 'factor']
+    assert (others > 0.9).all() and (others > disp.loc[4, 'factor']).all()
+    herd = fc.measure_herding(names=['PP', 'PSOE'])
+    assert herd.loc[4, 'p_value'] < 0.01 and (herd.loc[[1, 2, 3], 'p_value'] > 0.01).all()

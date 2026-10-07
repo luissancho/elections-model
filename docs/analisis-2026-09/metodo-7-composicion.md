@@ -78,3 +78,25 @@ Lectura: las métricas de voto son idénticas, como exige la construcción. En e
 - **Regionales independientes**: sus errores son de décimas y no afectan a la suma.
 - **Horizonte aleatorio**: `std_err` cambia por simulación con la deriva, así que `ρ` se recalcula en cada sorteo (barato).
 - **El residuo `'-'` sigue siendo el resto**: con `r` ≈ 0,25 el recorte es raro (1 %), pero existe; un modelo composicional exacto (logístico-normal) lo eliminaría a costa de recalibrar las marginales.
+
+## Revisión del 07-10-2026 (sobre efectos de casa, M12 y herding)
+
+La misma comparación, repetida sobre los valores por defecto actuales (efectos de casa, muestra efectiva con herding M12/M13 y oscilaciones M9): cinco elecciones, seis horizontes y 500 simulaciones, `composition='auto'` frente a independiente.
+
+| Horizonte (días) | 6 | 14 | 30 | 60 | 90 | 180 |
+|---|---|---|---|---|---|---|
+| Brier de mayorías, independiente | 0,037 | 0,034 | 0,065 | 0,091 | 0,106 | 0,113 |
+| Brier de mayorías, conjunto | 0,044 | 0,044 | 0,068 | 0,090 | 0,100 | 0,118 |
+| CRPS escaños, independiente | 4,76 | 5,60 | 6,14 | 8,63 | 9,16 | 9,53 |
+| CRPS escaños, conjunto | 4,85 | 5,71 | 6,23 | 8,61 | 9,01 | 9,33 |
+
+El patrón se repite:
+- de 6 a 14 días el sorteo conjunto es peor (Brier +20-30 %);
+- a 30-60 días es neutro;
+- a 90-180 días es algo mejor.
+
+Las métricas de voto son idénticas. El residuo recortado baja del 18-38 % de los sorteos al 3-20 %, y la cobertura del 50 % de escaños mejora en todos los horizontes.
+
+Para el 29-11-2026, en modo forecast (47 días), da `r = 0,225` y `rho = −0,17`. Los sorteos con residuo recortado pasan del 18 % al 3 % y P(mayoría absoluta de la derecha) de 0,995 a 0,984; los escaños centrales no cambian.
+
+**Se mantiene desactivado por defecto.** El titular es el nowcast, el horizonte donde el sorteo conjunto pierde, y el forecast actual cae en la zona neutra.

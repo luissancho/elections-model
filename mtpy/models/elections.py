@@ -183,6 +183,33 @@ class Drift(Model):
     }
 
 
+class PollstersHerding(Model):
+    """
+    Herding of each pollster in each election cycle (M13, see `Computer.get_herding_data`): dispersion of its
+    published figures around the poll average fitted without its own polls, relative to the sampling error of
+    its samples, pooled over the main series. `ratio` below 1: its figures move less than its samples allow.
+    """
+
+    table = 'elections.pollsters_herding'
+
+    key = ['event_date', 'event_scope', 'pollster_id']
+    sort = ['event_date', 'event_scope', 'pollster_id']
+
+    meta = {
+        'event_date': 'dtd',
+        'event_scope': 'cat',
+        'pollster_id': ['int', 3],
+        'pollster': 'cat',
+        'n': ['int', 2],
+        'n_series': ['int', 2],
+        'ss_obs': ['num', [12, 4]],
+        'ss_exp': ['num', [12, 4]],
+        'dof': ['int', 2],
+        'ratio': ['num', [10, 4]],
+        'p_value': ['num', [10, 4]]
+    }
+
+
 class Polls(Model):
 
     table = 'elections.polls'

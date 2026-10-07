@@ -1,6 +1,6 @@
 {
- "run_at": "2026-10-07T03:14:11",
- "commit": "2d1da25",
+ "run_at": "2026-10-07T16:44:32",
+ "commit": "a59059f",
  "scope": "es-cm",
  "n_sim": 500,
  "seed": 42,
@@ -9,6 +9,7 @@
  "house_effects": true,
  "industry_bias": false,
  "dispersion": true,
+ "herding": true,
  "composition": null,
  "regional_noise": true,
  "min_events": null,

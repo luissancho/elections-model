@@ -278,8 +278,8 @@ def load_results(scope: str, event_date: str, save: bool, cache: Optional[str], 
 
 def compute_scope(scope: str, save: bool, verbose: int) -> None:
     """
-    Compute the poll series of a scope: weights, featured events, errors, deviations, drift and house effects
-    (the sequence of `notebooks/data-load/PollsCompute.ipynb` without the ratings). The weights are computed
+    Compute the poll series of a scope: weights, featured events, errors, deviations, drift, house effects and
+    herding (the sequence of `notebooks/data-load/PollsCompute.ipynb` without the ratings). The weights are computed
     twice because `polls.featured` copies the flag of the event, which in turn needs the weights.
     """
     from mtpy.lib.computer import Computer
@@ -302,6 +302,7 @@ def compute_scope(scope: str, save: bool, verbose: int) -> None:
     comp = Computer(scope=scope, verbose=max(verbose - 1, 0)).build_series()
     comp.compute_drift(save=save)
     comp.compute_house_effects(save=save)
+    comp.compute_herding(save=save)
 
 
 def rate_scope(scope: str, save: bool, verbose: int) -> None:

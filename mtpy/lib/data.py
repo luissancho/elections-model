@@ -8,7 +8,7 @@ from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
     Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
-    Pollsters, PollstersParties, PollstersRatings, Parties, Scopes
+    Pollsters, PollstersHerding, PollstersParties, PollstersRatings, Parties, Scopes
 )
 
 
@@ -591,6 +591,69 @@ def save_ratings_data(
     pmodel.upsert(dp)
 
     return nrows
+
+
+def get_herding(
+    scope: Optional[str] = 'es',
+    event_dates: Optional[list[str]] = None
+) -> pd.DataFrame:
+    """
+    Load the herding table (see `Computer.compute_herding`): one row per election cycle and pollster. An
+    empty frame with the model columns is returned when the table has not been created yet.
+
+    Parameters
+    ----------
+    scope : str, optional
+        Election scope; `None` loads every scope.
+    event_dates : list of str, optional
+        Restrict to these elections.
+    """
+    model = PollstersHerding()
+    if not model.table_exists():
+        return pd.DataFrame(columns=model.columns)
+
+    filters = []
+    if scope is not None:
+        filters.append("event_scope = '{}'".format(scope))
+    if event_dates is not None:
+        if len(event_dates) == 0:
+            return pd.DataFrame(columns=model.columns)
+        filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+
+    return model.get_results(query=dict(filters=filters), formatted=True)
+
+
+def save_herding_data(
+    data: pd.DataFrame
+) -> int:
+    """
+    Save the herding data into the database, replacing the rows of the same elections. The table is created
+    when missing (never replaced).
+
+    Returns
+    -------
+    int
+        Number of rows updated.
+    """
+    model = PollstersHerding()
+    if not model.table_exists():
+        model.create(replace=False)
+
+    df = data.copy().reset_index(drop=True)
+    df = df.loc[df['pollster_id'].notnull()]
+    if df.shape[0] == 0:
+        return 0
+
+    df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)
+
+    # Remove previous data for the same election events
+    model.execute("DELETE FROM {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
+        model.table,
+        "', '".join(df.event_scope.unique()),
+        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
+    ))
+
+    return model.upsert(df)
 
 
 def get_drift(

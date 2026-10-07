@@ -23,6 +23,7 @@ from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
     get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
+    get_herding, save_herding_data,
     get_scope_parent, get_event_data
 )
 from .utils import (
@@ -476,6 +477,7 @@ class Computer(Core):
         self.ratings = None
         self.drift = None  # Drift table of the current events (see `get_drift_data`)
         self.house_effects = None  # House effects table of the current events (see `get_house_effects_data`)
+        self.herding = None  # Herding table of the current events (see `get_herding_data`)
 
         self.seats_estimator = None
         self.error_estimator = None
@@ -2489,6 +2491,145 @@ class Computer(Core):
 
         return df
 
+    # --- Herding (M13) ---------------------------------------------------------------------------------------
+
+    def get_herding_data(
+        self,
+        n_series: int = 4,
+        min_polls: int = 5
+    ) -> pd.DataFrame:
+        """
+        Measure the herding of each pollster in every election cycle with polls, the current one included (it
+        does not need the result): the dispersion of its published figures around the average fitted without
+        its own polls, relative to the sampling error of its samples, over the `n_series` main series of the
+        cycle (`Forecaster.measure_herding` on the raw polls, without house effects nor effective sample).
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event and pollster: `event_date`, `event_scope`, `pollster_id`, `pollster`, `n`,
+            `n_series`, `ss_obs`, `ss_exp`, `dof`, `ratio`, `p_value`.
+        """
+        from .forecaster import Forecaster
+
+        columns = ['event_date', 'event_scope', 'pollster_id', 'pollster', 'n', 'n_series', 'ss_obs', 'ss_exp', 'dof', 'ratio', 'p_value']
+        events = sorted(self.polls.index.get_level_values('event_date').unique().strftime('%Y-%m-%d'))
+        frames = []
+
+        events_ = tqdm(events) if self.verbose > 0 else events
+        for event_date in events_:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                try:
+                    fc = Forecaster(
+                        scope=self.scope, event_date=event_date, drop_mtypes=self.drop_mtypes, drange=None,
+                        alpha=self.alpha, bmap=None, house_effects=False, dispersion=False, verbose=0, path=self.path
+                    ).build_series()
+                    herd = fc.measure_herding(n_series=n_series, min_polls=min_polls)
+                except Exception as e:  # A cycle without enough polls to fit an average
+                    if self.verbose > 0:
+                        print('Herding {} skipped: {}'.format(event_date, e))
+                    continue
+
+            if herd.shape[0] == 0:
+                continue
+            herd = herd.reset_index()
+            herd['event_date'] = pd.Timestamp(event_date)
+            herd['event_scope'] = self.scope
+            frames.append(herd)
+
+        if len(frames) == 0:
+            return pd.DataFrame(columns=columns)
+
+        df = pd.concat(frames, ignore_index=True)
+        df['pollster_id'] = df['pollster_id'].astype(int)
+
+        return df[columns].sort_values(['event_date', 'pollster_id'], ignore_index=True)
+
+    def compute_herding(
+        self,
+        save: bool = False,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Compute the herding table of the current events (see `get_herding_data`) and, optionally, save it into
+        the `pollsters_herding` table of the database, replacing the rows of the same events.
+        """
+        if self.verbose > 0:
+            print('Compute herding...')
+
+        df = self.get_herding_data(**kwargs)
+
+        if save:
+            if self.verbose > 0:
+                print('Save herding data...')
+
+            nrows = save_herding_data(df)
+
+            if self.verbose > 0:
+                print('{} rows updated...'.format(nrows))
+
+        self.herding = df
+
+        return df
+
+    def load_herding(self) -> pd.DataFrame:
+        """
+        Load the herding table of the scope from the database (empty if it was never computed).
+        """
+        self.herding = get_herding(scope=self.scope)
+
+        return self.herding
+
+    def herding_summary(
+        self,
+        event_date: Optional[str] = None,
+        data: Optional[pd.DataFrame] = None
+    ) -> pd.DataFrame:
+        """
+        Herding of each pollster up to an election: its sums of squares pooled over the cycles held up to
+        `event_date` (included: the herding of a cycle is known before its result), each cycle weighed by
+        `year_decay` per year of age, as in the ratings. Informative: it does not enter the rating.
+
+        Parameters
+        ----------
+        event_date : str, optional
+            Last cycle counted; every cycle by default.
+        data : pd.DataFrame, optional
+            Herding table (`get_herding_data`); the one of the computer, or the database, by default.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `pollster`: `herding` (pooled ratio), `herding_last` (ratio of its last cycle),
+            `herding_p` (p-value of its last cycle), `herding_n` (polls) and `herding_events` (cycles).
+        """
+        if data is None:
+            data = self.herding if self.herding is not None else self.load_herding()
+
+        columns = ['herding', 'herding_last', 'herding_p', 'herding_n', 'herding_events']
+        df = data.copy()
+        if df.shape[0] == 0:
+            return pd.DataFrame(columns=columns, index=pd.Index([], name='pollster'))
+
+        df['event_date'] = pd.to_datetime(df['event_date'])
+        target = df['event_date'].max() if event_date is None else pd.Timestamp(event_date)
+        df = df.loc[df['event_date'] <= target]
+        df['d'] = np.power(self.year_decay, target.year - df['event_date'].dt.year)
+        df['pollster'] = df['pollster'].astype(str)
+
+        def pool(g):
+            g = g.sort_values('event_date')
+            return pd.Series({
+                'herding': float(np.sqrt((g['d'] * g['ss_obs']).sum() / (g['d'] * g['ss_exp']).sum())),
+                'herding_last': float(g['ratio'].iloc[-1]),
+                'herding_p': float(g['p_value'].iloc[-1]),
+                'herding_n': int(g['n'].sum()),
+                'herding_events': int(g.shape[0])
+            })
+
+        return df.groupby('pollster')[['event_date', 'd', 'ss_obs', 'ss_exp', 'ratio', 'p_value', 'n']].apply(pool)[columns]
+
     # --- House effects and error decomposition (M6): pure helpers -------------------------------------------
 
     @staticmethod
@@ -3282,6 +3423,11 @@ class Computer(Core):
         ]].sort_values('rating', ascending=False)
         df['rating'] = df['rating'].round()
 
+        # Herding of each pollster up to the event (M13): informative, it does not enter the rating
+        herding = self.herding_summary(event_date=event_date)
+        if herding.shape[0] > 0:
+            df['herding'] = herding['herding'].reindex(df.index).round(2)
+
         bars = [
             {
                 'color': 'green-light',
@@ -3309,6 +3455,15 @@ class Computer(Core):
                 'vmin': 0
             }
         ]
+        if 'herding' in df.columns:
+            # Centred at 1: herding (below) in red, over-dispersion (above, already penalized by M12) in grey
+            bars.append({
+                'color': ['red-light', 'grey-alpha'],
+                'subset': ['herding'],
+                'align': 1.,
+                'vmin': 0,
+                'vmax': 2
+            })
 
         dfs = get_df_styler(
             df,

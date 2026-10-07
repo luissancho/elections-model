@@ -5,7 +5,7 @@ Run the model backtest on past elections and write the results to `backtest/resu
 Usage (from the repository root):
     python backtest/run_backtest.py [--scope es | --scopes es-md es-cl ... | --scopes all]
                                     [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 500] [--seed 42] [--nowcast-only]
-                                    [--no-house-effects] [--industry-bias] [--no-dispersion] [--composition auto|0.25|1]
+                                    [--no-house-effects] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
 Without `--events`, a regional scope evaluates its featured elections held since 2019.
@@ -49,7 +49,7 @@ def run_scope(args: argparse.Namespace, scope: str, composition) -> bool:
     results = run_backtest(
         scope=scope, events=events, horizons=args.horizons,
         n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc, nowcast_only=args.nowcast_only,
-        house_effects=args.house_effects, industry_bias=args.industry_bias, dispersion=args.dispersion, composition=composition,
+        house_effects=args.house_effects, industry_bias=args.industry_bias, dispersion=args.dispersion, herding=args.herding, composition=composition,
         regional_noise=args.regional_noise, min_events=args.min_events, verbose=1
     )
     if results['metrics'].shape[0] == 0:
@@ -69,7 +69,7 @@ def run_scope(args: argparse.Namespace, scope: str, composition) -> bool:
     meta = {
         'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': commit, 'scope': scope,
         'n_sim': args.n_sim, 'seed': args.seed, 'max_fc': args.max_fc, 'nowcast_only': args.nowcast_only,
-        'house_effects': args.house_effects, 'industry_bias': args.industry_bias, 'dispersion': args.dispersion, 'composition': composition,
+        'house_effects': args.house_effects, 'industry_bias': args.industry_bias, 'dispersion': args.dispersion, 'herding': args.herding, 'composition': composition,
         'regional_noise': args.regional_noise, 'min_events': args.min_events,
         'events': results['metrics']['event_date'].unique().tolist(), 'horizons': sorted(results['metrics']['horizon'].unique().tolist()),
         'db_polls': int(polls.shape[0]), 'db_last_poll': str(polls['date'].max().date())
@@ -97,6 +97,7 @@ def main():
     parser.add_argument('--no-house-effects', dest='house_effects', action='store_false', help='do not subtract the house effects (M6)')
     parser.add_argument('--industry-bias', action='store_true', help='shift the average by the industry-wide bias of past elections (M6)')
     parser.add_argument('--no-dispersion', dest='dispersion', action='store_false', help='do not weigh each pollster by its effective sample (M12)')
+    parser.add_argument('--no-herding', dest='herding', action='store_false', help='do not reduce the weight of the pollsters less dispersed than their samples allow (M13)')
     parser.add_argument('--composition', default=None, help="joint noise of the national parties (M7): 'auto' or a ratio in (0, 1]; independent draws by default")
     parser.add_argument('--no-regional-noise', dest='regional_noise', action='store_false', help='deterministic proportional swing per province (no M9 shocks)')
     parser.add_argument('--min-events', type=int, default=None, help='featured elections of a regional scope needed to fit the estimators on the scope itself instead of on `es` (M11); by default always `es`, 1 forces the own ones')
