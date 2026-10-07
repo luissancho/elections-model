@@ -35,12 +35,42 @@ class Request(Core):
         self.request = self.get_request()
 
     def get_request(self):
+        """
+        Parse the query string of the request into a list of key-value pairs.
+
+        Blank values are kept (``?c=`` yields ``('c', '')``) and repeated keys are preserved
+        in order of appearance.
+
+        Returns
+        -------
+        list of tuple
+            The decoded ``(key, value)`` pairs of the query string.
+        """
         qs = self.scope['query_string']
 
         if isinstance(qs, bytes):
             qs = qs.decode('latin-1')
 
-        return parse_qsl(qs)
+        return parse_qsl(qs, keep_blank_values=True)
+
+    @property
+    def query(self) -> dict[str, str]:
+        """
+        Query string parameters as a plain dictionary.
+
+        When a key is repeated, the first value wins. Keys with a blank value are kept.
+
+        Returns
+        -------
+        dict
+            The ``{key: value}`` mapping of the query string, empty if there is none.
+        """
+        query = {}
+
+        for key, value in self.request:
+            query.setdefault(key, value)
+
+        return query
 
     async def get_body(self):
         body = b''

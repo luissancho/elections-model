@@ -25,3 +25,15 @@ def app():
         pytest.skip('Base de datos no disponible: {}'.format(e))
 
     return app
+
+
+@pytest.fixture
+def fresh_app():
+    """`App` nuevo para el test; al terminar se restaura el anterior (si `mtpy.run()` ya había arrancado)."""
+    from mtpy.core.app import App
+
+    saved = App._app
+    App._app = None
+    app = App.get_()
+    yield app
+    App._app = saved
