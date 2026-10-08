@@ -36,19 +36,18 @@ class Forecast(Base):
         """
         return self.json_bytes(site().manifest())
 
-    async def scopes_action(self) -> dict:
+    async def scopes_action(self) -> bytes:
         """
         Scopes catalogue crossed with the manifest.
 
         Returns
         -------
-        dict
-            Catalogue rows, see ``Site.scopes``.
+        bytes
+            Catalogue rows (see ``Site.scopes``) serialised as JSON.
         """
-        self.cache()
         self.notice_freeze()
 
-        return site().scopes()
+        return self.json_bytes(bundle.dumps(site().scopes()))
 
     async def meta_action(self, scope: str):
         """

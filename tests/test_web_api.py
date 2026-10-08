@@ -58,6 +58,8 @@ def test_scopes_cross_catalogue_and_manifest(api):
     data = json.loads(body)
     assert status == 200 and data['scopes'][0]['code'] == 'es' and data['scopes'][0]['latest'] == RUN
     assert headers['cache-control'] == 'public, max-age=60'
+    assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
+    assert headers['content-type'] == 'application/json; charset=utf-8'
 
 
 def test_meta_and_parts_resolve_latest_or_an_explicit_run(api, tmp_path):
