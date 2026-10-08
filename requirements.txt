@@ -7,7 +7,7 @@ dask[complete]==2024.4.1
 dnspython==1.16.0
 emoji==2.11.0
 ftfy==6.2.0
-gunicorn==20.1.0
+gunicorn==23.0.0
 husl==4.0.3
 ipython==7.29.0
 jinja2==3.1.2

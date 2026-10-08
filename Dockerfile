@@ -25,20 +25,20 @@ RUN apt-get update \
     && ln -sf /bin/bash /bin/sh
 
 # Python requirements
-COPY ./requirements.txt ./
-RUN pip install -r ./requirements.txt
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
 
 # Configure crontab schedules
-COPY ./deploy/docker/crontab /etc/crontab
+COPY deploy/docker/crontab /etc/crontab
 
 # Configure NGINX
-COPY ./deploy/docker/nginx.conf /etc/nginx/nginx.conf
+COPY deploy/docker/nginx.conf /etc/nginx/nginx.conf
 
 # Configure Supervisord
-COPY ./deploy/docker/supervisord.conf /etc/supervisord.conf
+COPY deploy/docker/supervisord.conf /etc/supervisord.conf
 
 # Init script
-COPY ./deploy/docker/init.sh /usr/local/bin/init.sh
+COPY deploy/docker/init.sh /usr/local/bin/init.sh
 RUN chmod +x /usr/local/bin/init.sh
 
 RUN addgroup --gid 10001 docker \
