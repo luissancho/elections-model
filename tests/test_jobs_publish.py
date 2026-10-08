@@ -60,6 +60,7 @@ def test_dry_run_writes_apart_and_leaves_the_pointers_alone(fresh_app, tmp_path,
     assert result['es']['status'] == 'published'
     assert (tmp_path / 'site-dry' / 'v1' / 'runs' / 'es').exists()
     assert not (tmp_path / 'site').exists()
+    assert not (tmp_path / 'site-dry' / 'v1' / 'runs' / 'es' / 'history.json').exists()
 
 
 def test_loreg_window_refuses_es_unless_forced(fresh_app, tmp_path, patched):
@@ -129,3 +130,14 @@ def test_error_resolving_the_event_date_only_fails_that_scope(fresh_app, tmp_pat
     with pytest.raises(RuntimeError, match='es-md'):
         Publish().run(what=['forecast'], scopes=['es-md', 'es'], fs=FileSystem(str(tmp_path)))
     assert [c[0] for c in patched] == ['es']
+
+
+def test_forecast_rebuilds_the_history_of_each_published_scope(fresh_app, tmp_path, patched):
+    """Tras publicar, `history.json` del ámbito contiene exactamente la ejecución publicada."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    assert (tmp_path / 'site' / 'v1' / 'runs' / 'es' / 'history.json').exists()
+    runs = bundle.BundleReader(fs).read_json(bundle.path_history('es'))['data']['runs']
+    assert [r['run_id'] for r in runs] == [patched[0][1]]

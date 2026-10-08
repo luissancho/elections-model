@@ -116,6 +116,12 @@ class Publish(Job):
                 result = self._forecast_scope(
                     scope, writer, run_id, event_date, today, force, n_sim=n_sim, seed=seed, drange=drange,
                     max_fc=max_fc, alpha=alpha, correctors=correctors, verbose=verbose)
+                if result['status'] == 'published' and not dry_run:
+                    try:
+                        publish.rebuild_history(writer, scope)
+                    except Exception as e:
+                        self._log_error(scope)
+                        result = {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
                 results[scope] = result
                 if result['status'] == 'failed':
                     failures.append('{} ({})'.format(scope, 'forecast'))
