@@ -58,8 +58,10 @@ def round_cols(frame, pct=(), prob=(), seats=()):
 
 
 def _summary_table(sim, names=None):
-    """Return ``sim.summary(names)`` with every statistic rounded for publication."""
-    return round_cols(sim.summary(names), pct=PCT_COLS, prob=PROB_COLS, seats=SEATS_COLS)
+    """Return ``sim.summary(names)`` rounded for publication, with ``seats`` as nullable integer."""
+    table = round_cols(sim.summary(names), pct=PCT_COLS, prob=PROB_COLS, seats=SEATS_COLS)
+    table['seats'] = table['seats'].astype('Int64')  # keeps ints; an empty block becomes NA (null)
+    return table
 
 
 def _p_majority(sim):
@@ -146,13 +148,13 @@ def export_districts(sim):
         Data for the ``districts`` schema and its CSV twin.
     """
     region_ids = [r for r in sim.params['regions'] if r != sim.default_region]
-    regions = [{'id': r, 'name': sim.region_names[r], 'seats': int(sim.reg_totals.loc[r, 'seats'])}
+    regions = [{'id': r, 'name': sim.region_names.get(r, r), 'seats': int(sim.reg_totals.loc[r, 'seats'])}
                for r in region_ids]
     rows = []
     for r in region_ids:
-        table = round_cols(sim.unit_summary(r), pct=PCT_COLS, prob=PROB_COLS, seats=SEATS_COLS)
+        table = round_cols(sim.unit_summary(r), pct=PCT_COLS, prob=PROB_COLS, seats=(*SEATS_COLS, 'seats'))
         for row in records(table[list(SUMMARY_COLS)]):
-            rows.append({'region_id': r, 'region': sim.region_names[r], **row})
+            rows.append({'region_id': r, 'region': sim.region_names.get(r, r), **row})
     columns = ['region_id', 'region', 'name', *SUMMARY_COLS]
     data = {'parties': list(sim.params['names']), 'regions': regions, 'rows': rows}
     return data, pd.DataFrame(rows, columns=columns)

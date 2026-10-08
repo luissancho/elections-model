@@ -39,6 +39,7 @@ def test_export_summary_groups_and_probabilities():
     assert set(data['parties'][0]) == {'name', 'pct', 'pct_mean', 'pct_lo', 'pct_hi', 'seats', 'seats_mean', 'seats_median',
                                        'seats_lo', 'seats_hi', 'seats_min', 'seats_max', 'p_seats', 'p_majority', 'p_first'}
     assert all(round(r['p_first'], 3) == r['p_first'] for r in data['parties'])
+    assert all(isinstance(r['seats'], int) for r in data['parties'])
     assert sorted(frame['group'].unique()) == ['blocks', 'parties', 'vs']
 
 
@@ -49,6 +50,7 @@ def test_export_summary_writes_null_for_a_block_without_parties():
     data = valid('summary', data)
     nobody = [r for r in data['vs'] if r['name'] == 'Nadie'][0]
     assert nobody['p_first'] is None and nobody['seats_mean'] is None
+    assert nobody['seats'] is None
     assert data['p_majority']['Nadie'] is None
 
 
@@ -69,6 +71,7 @@ def test_export_districts_excludes_the_total_region():
     assert set(data['rows'][0]) == {'region_id', 'region', 'name', 'pct', 'pct_lo', 'pct_hi', 'seats', 'seats_mean', 'seats_lo',
                                     'seats_hi', 'p_seats'}
     assert frame.shape[0] == 6
+    assert all(isinstance(r['seats'], float) and r['seats'] == round(r['seats'], 1) for r in data['rows'])
 
 
 def test_export_scenario_is_a_real_simulation():
