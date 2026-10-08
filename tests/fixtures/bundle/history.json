@@ -1,0 +1,55 @@
+{
+  "schema": "history@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "scope": "es",
+    "runs": [
+      {
+        "run_id": "20261008-120000",
+        "run_at": "2026-10-08T12:00:00Z",
+        "event_date": "2026-11-29",
+        "as_of": "2026-10-08",
+        "date_last": "2026-10-05",
+        "n_polls": 120,
+        "nowcast": {
+          "parties": [
+            {
+              "name": "PP",
+              "pct": 33.1,
+              "lo": 31.0,
+              "hi": 35.2,
+              "seats": 135,
+              "seats_lo": 120,
+              "seats_hi": 150,
+              "p_first": 0.62
+            }
+          ],
+          "p_majority": {
+            "Derecha": 0.41
+          }
+        },
+        "forecast": {
+          "parties": [
+            {
+              "name": "PP",
+              "pct": 33.1,
+              "lo": 31.0,
+              "hi": 35.2,
+              "seats": 135,
+              "seats_lo": 120,
+              "seats_hi": 150,
+              "p_first": 0.62
+            }
+          ],
+          "p_majority": {
+            "Derecha": 0.41
+          }
+        }
+      }
+    ]
+  }
+}

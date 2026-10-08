@@ -1,0 +1,32 @@
+{
+  "schema": "polls@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": "20261008-120000",
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "parties": [
+      "PP"
+    ],
+    "columns": [
+      "date",
+      "pollster",
+      "sample"
+    ],
+    "polls": [
+      {
+        "date": "2026-10-05",
+        "pollster": "Sigma Dos",
+        "sample": 1000,
+        "PP": 33.1
+      }
+    ],
+    "results": [
+      {
+        "date": "2023-07-23",
+        "PP": 33.1
+      }
+    ]
+  }
+}

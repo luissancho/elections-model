@@ -1,0 +1,31 @@
+{
+  "schema": "series@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": "20261008-120000",
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "dates": [
+      "2026-10-05"
+    ],
+    "parties": [
+      "PP"
+    ],
+    "mean": {
+      "PP": [
+        33.1
+      ]
+    },
+    "lo": {
+      "PP": [
+        31.0
+      ]
+    },
+    "hi": {
+      "PP": [
+        null
+      ]
+    }
+  }
+}
