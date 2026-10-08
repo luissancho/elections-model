@@ -3,7 +3,6 @@ from importlib import import_module
 import json
 import math
 import re
-import traceback
 from typing import Optional
 from urllib.parse import parse_qsl
 
@@ -398,12 +397,9 @@ class Response(Core):
             self.set_content_type('application/json')
             self.content = json.dumps(content).encode('utf-8')
         elif isinstance(content, int):
-            self.set_content_type('application/json')
-            self.set_status_code(content)
-            self.content = json.dumps({
-                'status': 'error',
-                'message': str(content) + ' ' + Response.status_codes.get(content, 'Error')
-            }).encode('utf-8')
+            self._set_error(content, '{} {}'.format(
+                content, Response.status_codes.get(content, 'Error')
+            ))
         elif isinstance(content, (dict, list, tuple)):
             self.set_content_type('application/json')
 
@@ -411,13 +407,11 @@ class Response(Core):
                 self.content = json.dumps(
                     content, ensure_ascii=False, allow_nan=False, default=json_default
                 ).encode('utf-8')
-            except (TypeError, ValueError):
-                self.set_header('cache-control', 'no-store').set_header('etag', None)
-                self.set_status_code(500)
-                self.content = json.dumps({
-                    'status': 'error',
-                    'message': 'Invalid content'
-                }).encode('utf-8')
+            except (TypeError, ValueError) as error:
+                if self.app.logger is not None:
+                    self.app.logger.error('Invalid response content: {!r}'.format(error))
+
+                self._set_error(500, 'Invalid content')
         elif isinstance(content, str):
             if 'content-type' not in self.headers:
                 self.set_content_type('text/plain')
@@ -429,14 +423,38 @@ class Response(Core):
 
             self.content = content
         else:
-            self.set_header('cache-control', 'no-store').set_header('etag', None)
-            self.set_content_type('application/json')
-            self.set_status_code(500)
-            self.content = json.dumps({
-                'status': 'error',
-                'message': 'Invalid content-type'
-            }).encode('utf-8')
+            self._set_error(500, 'Invalid content-type')
 
+        self.set_header('content-length', str(len(self.content)))
+
+        return self
+
+    def _set_error(self, status, message):
+        """
+        Turn the response into an uncacheable JSON error.
+
+        Clears the ``cache-control`` set by the action (``no-store``), the ``etag`` and the
+        ``content-disposition`` headers, and sets the status code, the JSON content type and
+        the body ``{"status": "error", "message": message}``.
+
+        Parameters
+        ----------
+        status : int
+            HTTP status code.
+        message : str
+            Message sent in the body.
+
+        Returns
+        -------
+        Response
+            The response itself, to allow chaining.
+        """
+        self.set_header('cache-control', 'no-store')
+        self.set_header('etag', None)
+        self.set_header('content-disposition', None)
+        self.set_status_code(status)
+        self.set_content_type('application/json')
+        self.content = json.dumps({'status': 'error', 'message': message}).encode('utf-8')
         self.set_header('content-length', str(len(self.content)))
 
         return self
@@ -632,15 +650,14 @@ class Controller(Core):
 
             self.after_dispatch()
         except HttpError as error:
-            self.response.set_header('cache-control', 'no-store').set_header('etag', None)
-            self.response.set_status_code(error.status)
+            self.response._set_error(error.status, error.message)
             self.result = {'status': 'error', 'message': error.message}
-        except Exception:
-            self.response.set_header('cache-control', 'no-store').set_header('etag', None)
+        except Exception as error:
             if self.app.logger is not None:
-                self.app.logger.error('Unhandled error in {}.{}: {}'.format(
-                    type(self).__name__, action, traceback.format_exc()
+                self.app.logger.error('Unhandled error in {}.{}: {!r}'.format(
+                    type(self).__name__, action, error
                 ))
+            self.response._set_error(500, '500 Internal Server Error')
             self.result = 500
 
         await self.send()

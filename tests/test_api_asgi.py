@@ -64,6 +64,14 @@ class Echo(Controller):
         self.response.set_cache(60).set_etag('x')
         return {'x': float('nan')}
 
+    async def cached_404_action(self):
+        self.response.set_cache(60).set_etag('x')
+        return 404
+
+    async def cached_crash_action(self):
+        self.response.set_cache(60).set_etag('x')
+        raise RuntimeError('crash')
+
     async def http_error_action(self):
         raise HttpError(404, 'no such thing')
 
@@ -89,7 +97,8 @@ ROUTES = [
     ('/cached', 'echo', 'cached'), ('/immutable', 'echo', 'immutable'),
     ('/dt64', 'echo', 'dt64'), ('/td64', 'echo', 'td64'), ('/cached-nan', 'echo', 'cached_nan'),
     ('/http-error', 'echo', 'http_error'), ('/teapot', 'echo', 'teapot'), ('/guarded', 'guarded', 'list'),
-    ('/cached-boom', 'echo', 'cached_boom'),
+    ('/cached-boom', 'echo', 'cached_boom'), ('/cached-404', 'echo', 'cached_404'),
+    ('/cached-crash', 'echo', 'cached_crash'),
 ]
 
 
@@ -309,3 +318,39 @@ def test_mtpy_api_without_app_returns_none():
         assert mtpy.api() is None
     finally:
         App._app = saved
+
+
+def test_int_error_result_is_not_cacheable(fresh_app):
+    """Un error devuelto como entero no hereda la cache ni el etag de la acción."""
+    status, headers, body = call(make_api(fresh_app), '/cached-404')
+    assert status == 404
+    assert json.loads(body) == {'status': 'error', 'message': '404 Not Found'}
+    assert headers['cache-control'] == 'no-store'
+    assert 'etag' not in headers
+
+
+def test_unhandled_exception_response_is_not_cacheable(fresh_app):
+    """Una excepción no controlada responde 500 sin cache ni etag."""
+    status, headers, body = call(make_api(fresh_app), '/cached-crash')
+    assert status == 500
+    assert headers['cache-control'] == 'no-store'
+    assert 'etag' not in headers
+
+
+def test_serialisation_failure_is_logged(fresh_app):
+    """Un contenido no serializable se registra en el log antes de responder 500."""
+    errors = []
+    fresh_app.set('logger', types.SimpleNamespace(error=errors.append))
+    status, headers, body = call(make_api(fresh_app), '/nan')
+    assert status == 500
+    assert len(errors) == 1 and 'not JSON compliant' in errors[0]
+
+
+def test_index_route_returns_api_home(fresh_app):
+    """La ruta raíz de `mtpy.api()` devuelve la portada de la API."""
+    from mtpy import mtpy
+
+    api = mtpy.api()
+    status, headers, body = call(api, '/')
+    assert status == 200
+    assert json.loads(body) == {'status': 'ok', 'message': 'API Home'}
