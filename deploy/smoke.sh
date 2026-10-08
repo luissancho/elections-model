@@ -34,7 +34,7 @@ docker run -d --name "$name" --platform linux/amd64 -p 127.0.0.1:8042:8042 "${en
 echo "esperando a $base/healthz (hasta 90 s)..."
 ready=0
 for _ in $(seq 1 90); do
-    if curl -fsS "$base/healthz" >/dev/null 2>&1; then ready=1; break; fi
+    if curl -fsS --max-time 20 "$base/healthz" >/dev/null 2>&1; then ready=1; break; fi
     sleep 1
 done
 if [ "$ready" -ne 1 ]; then
@@ -54,7 +54,7 @@ bash deploy/check-api.sh "$base"
 
 check_static() {
     local path="$1" want_type="$2" out
-    out="$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$base$path")"
+    out="$(curl -s --max-time 20 -o /dev/null -w '%{http_code} %{content_type}' "$base$path")"
     if [[ "$out" != 200\ $want_type* ]]; then
         echo "FAIL $path: $out (esperado 200 $want_type)" >&2
         exit 1
@@ -67,7 +67,7 @@ check_static /vendor/echarts-5.6.0.min.js application/javascript
 
 check_header() {
     local path="$1" pattern="$2"
-    if ! curl -sI "$base$path" | grep -i '^cache-control:' | grep -qi -- "$pattern"; then
+    if ! curl -sI --max-time 20 "$base$path" | grep -i '^cache-control:' | grep -qi -- "$pattern"; then
         echo "FAIL $path: Cache-Control sin '$pattern'" >&2
         exit 1
     fi

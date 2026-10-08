@@ -34,8 +34,11 @@ Dentro del contenedor, nginx (puerto 8042) sirve:
 
 - `web/` en `/` (`/` y `/promedio` por `try_files`), con cabeceras de seguridad.
 - `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
-  `/var/lib/nginx/api_cache`, cabecera `X-Cache`; la clave solo usa la ruta, `run` y `format`, así que
-  otros parámetros no crean entradas) y `limit_req` de 20 r/s por IP con ráfaga de 40 (exceso: 429).
+  `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
+  (exceso: 429). La clave de caché es la de nginx por defecto (URI completa con la query string). Se
+  probó una clave propia sobre `run`/`format` y se descartó: nginx y la API leen los nombres de los
+  parámetros de forma distinta (codificación y mayúsculas), lo que permitía envenenar la caché. Los
+  parámetros de más crean entradas, acotadas por `max_size=100m`, `inactive=10m` y `limit_req`.
 - `/healthz` → `200 ok`, sin pasar por la API.
 - `/vendor/` (ECharts, con la versión en el nombre) con caché de un año; el HTML, los `.js` y los `.css`
   se revalidan siempre.

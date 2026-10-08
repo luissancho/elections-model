@@ -631,8 +631,11 @@ Revisión final de la rama (2026-10-09), arreglos en un solo commit:
    de 20 r/s vuelve a ser por cliente detrás del proxy TLS / docker-proxy.
 3. Logs de nginx a `/proc/1/fd/1` y `/proc/1/fd/2` (supervisord se demoniza y su `/dev/stdout` es
    `/dev/null`); `nginx-check.sh` los reescribe a ficheros temporales.
-4. `proxy_cache_key` con solo ruta, `run` y `format`; `location ^~ /api/`; `gzip_proxied any` y
-   `gzip_vary on`; CSP con `frame-ancestors`, `base-uri` y `object-src 'none'`; HTML con `expires -1`.
+4. `location ^~ /api/`; `gzip_proxied any` y `gzip_vary on`; CSP con `frame-ancestors`, `base-uri` y
+   `object-src 'none'`; HTML con `expires -1`. La clave de caché es la de nginx por defecto (URI completa
+   con la query string): se probó una clave propia sobre `run`/`format` y se descartó porque nginx y la
+   API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que permitía
+   envenenar la caché; los parámetros de más crean entradas acotadas (`max_size`, `inactive`, `limit_req`).
 5. Verificado con nginx 1.29.5 local en el 8043 y uvicorn (ver el informe de la revisión).
 6. `smoke.sh`: `docker stop` ≥ 10 s pasa a WARN (`init.sh` necesita `exec supervisord`) y nueva
    comprobación (WARN) de líneas de acceso de nginx en `docker logs`.
