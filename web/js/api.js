@@ -13,9 +13,17 @@ export class ApiError extends Error {
 
 /** Origin of the API: '' (same origin) unless `?api=` points to a local server (development only). */
 export function apiBase() {
-  const base = new URLSearchParams(location.search).get('api');
-  if (base && (base.startsWith('http://localhost') || base.startsWith('http://127.0.0.1'))) {
-    return base.replace(/\/+$/, '');
+  const value = new URLSearchParams(location.search).get('api');
+  if (!value) {
+    return '';
+  }
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) {
+      return url.origin;
+    }
+  } catch (error) {
+    return '';
   }
   return '';
 }

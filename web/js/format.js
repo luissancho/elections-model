@@ -6,8 +6,15 @@ function isMissing(x) {
   return x === null || x === undefined || Number.isNaN(x);
 }
 
+const numberFormats = new Map();
+
 function numberFormat(digits) {
-  return new Intl.NumberFormat('es-ES', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+  if (!numberFormats.has(digits)) {
+    numberFormats.set(digits, new Intl.NumberFormat('es-ES', {
+      minimumFractionDigits: digits, maximumFractionDigits: digits,
+    }));
+  }
+  return numberFormats.get(digits);
 }
 
 export function fmtNum(x, digits = 0) {
@@ -30,39 +37,40 @@ export function fmtRange(lo, hi, digits = 1) {
   return `${f.format(lo)}${DASH}${f.format(hi)}`;
 }
 
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+
+/** Parse an ISO date (date-only values as local midnight); null when invalid. */
 function parseDate(iso) {
-  return new Date(`${iso}T00:00:00`);
+  if (!iso) {
+    return null;
+  }
+  const text = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function stripDot(text) {
-  return text.replace(/\./g, '');
+function dayMonth(date) {
+  return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
 
 /** '2026-10-13' → '13 oct 2026' */
 export function fmtDate(iso) {
-  if (!iso) {
-    return DASH;
-  }
-  const f = new Intl.DateTimeFormat('es-ES', {day: 'numeric', month: 'short', year: 'numeric'});
-  return stripDot(f.format(parseDate(iso))).replace(/ de /g, ' ');
+  const date = parseDate(iso);
+  return date ? `${dayMonth(date)} ${date.getFullYear()}` : DASH;
 }
 
 /** '2026-10-13' → '13 oct' */
 export function fmtDateShort(iso) {
-  if (!iso) {
-    return DASH;
-  }
-  const f = new Intl.DateTimeFormat('es-ES', {day: 'numeric', month: 'short'});
-  return stripDot(f.format(parseDate(iso))).replace(/ de /g, ' ');
+  const date = parseDate(iso);
+  return date ? dayMonth(date) : DASH;
 }
 
 /** ISO timestamp (run_at) → '8 oct 2026, 20:11' in the viewer's time zone. */
 export function fmtDateTime(iso) {
-  if (!iso) {
+  const date = parseDate(iso);
+  if (!date) {
     return DASH;
   }
-  const f = new Intl.DateTimeFormat('es-ES', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
-  return stripDot(f.format(new Date(iso))).replace(/ de /g, ' ');
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${dayMonth(date)} ${date.getFullYear()}, ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
