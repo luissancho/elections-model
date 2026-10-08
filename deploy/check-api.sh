@@ -16,6 +16,8 @@ base="${1%/}"
 body="$(mktemp)"
 trap 'rm -f "$body"' EXIT
 failures=0
+PY="$(command -v python3 || command -v python || true)"
+[ -n "$PY" ] || { echo "no se encuentra python" >&2; exit 2; }
 
 # check RUTA STATUS_ESPERADO TIPO   (TIPO: json | csv | text | none)
 check() {
@@ -25,7 +27,7 @@ check() {
     ctype="${out#* }"
     if [ "$code" != "$want" ]; then
         problem="status $code (esperado $want)"
-    elif [ "$kind" = json ] && ! python -c "import json,sys; json.load(open(sys.argv[1]))" "$body" 2>/dev/null; then
+    elif [ "$kind" = json ] && ! "$PY" -c "import json,sys; json.load(open(sys.argv[1]))" "$body" 2>/dev/null; then
         problem="JSON no valido"
     elif [ "$kind" = csv ] && [[ "$ctype" != text/csv* ]]; then
         problem="content-type $ctype (esperado text/csv)"

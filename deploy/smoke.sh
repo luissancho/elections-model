@@ -64,6 +64,17 @@ check_static / text/html
 check_static /promedio text/html
 check_static /vendor/echarts-5.6.0.min.js application/javascript
 
+check_header() {
+    local path="$1" pattern="$2"
+    if ! curl -sI "$base$path" | grep -i '^cache-control:' | grep -qi -- "$pattern"; then
+        echo "FAIL $path: Cache-Control sin '$pattern'" >&2
+        exit 1
+    fi
+    echo "OK   $path Cache-Control contiene '$pattern'"
+}
+check_header /vendor/echarts-5.6.0.min.js 'max-age=31536000'
+check_header /js/api.js 'no-cache'
+
 start="$(date +%s)"
 docker stop "$name" >/dev/null
 elapsed=$(( $(date +%s) - start ))
