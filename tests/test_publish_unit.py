@@ -104,3 +104,88 @@ def test_headline_mode_combines_vote_and_seats():
     assert sum(p['seats'] for p in head['parties']) == 10
     assert head['parties'][0]['hi'] > publish.export_vote(synthetic_simulator())[0]['rows'][0]['hi'] - 1e-9
     assert set(head['p_majority']) == {'Derecha', 'Izquierda'}
+
+
+def test_export_series_stops_at_the_last_fitted_day():
+    sim = synthetic_simulator()
+    data, frame = publish.export_series(sim.model, NAMES)
+    data = valid('series', data, mode=None)
+    assert data['dates'][0] == '2026-09-01' and data['dates'][-1] == '2026-10-05'
+    assert data['parties'] == NAMES and len(data['mean']['PP']) == len(data['dates'])
+    assert data['lo']['PP'][0] == 38.0 and data['hi']['PP'][0] == 42.0
+    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 35 * 3
+
+
+def test_export_series_without_statistics_gives_null_bounds():
+    sim = synthetic_simulator()
+    sim.model.fc_stat['VOX'] = None
+    data, _ = publish.export_series(sim.model, NAMES)
+    assert valid('series', data, mode=None)['lo']['VOX'] == [None] * 35
+
+
+def test_export_polls_keeps_the_published_figures_and_the_previous_result():
+    sim = synthetic_simulator()
+    data, frame = publish.export_polls(sim.model, NAMES)
+    data = valid('polls', data, mode=None)
+    assert data['columns'] == publish.POLL_COLUMNS and len(data['polls']) == 6
+    first = data['polls'][0]
+    assert first['date'] == '2026-09-05' and first['pollster'] == 'CIS' and first['sponsor'] is None and first['PP'] == 41.0
+    assert data['polls'][2]['VOX'] is None
+    assert data['results'] == [{'date': '2023-07-23', 'PP': 33.1, 'PSOE': 31.7, 'VOX': 12.4}]
+    assert list(frame.columns) == publish.POLL_COLUMNS + NAMES
+
+
+def test_export_fan_house_effects_and_dispersion():
+    sim = synthetic_simulator()
+    fan, _ = publish.export_fan(sim)
+    fan = valid('fan', fan, mode=None)
+    assert fan['horizons'] == [0, 7, 14, 30, 55] and len(fan['rows']) == 5 * 3
+    he, frame = publish.export_house_effects(sim.model)
+    he = valid('house-effects', he, mode=None)
+    assert len(he['rows']) == 4 and he['rows'][1]['prior'] is None and he['rows'][0]['name'] == 'PP'
+    assert list(frame.columns) == publish.HE_COLUMNS
+    disp, frame = publish.export_dispersion(sim.model)
+    disp = valid('dispersion', disp, mode=None)
+    assert [r['pollster_id'] for r in disp['rows']] == [1, 2, 3] and disp['rows'][0]['herd_ratio'] is None
+    sim.model.house_effects = sim.model.dispersion = None
+    assert publish.export_house_effects(sim.model)[0] == {'rows': []}
+    assert list(publish.export_dispersion(sim.model)[1].columns) == publish.DISP_COLUMNS
+
+
+def test_provenance_reads_git_or_the_image_env(monkeypatch):
+    outputs = iter([b'abc1234\n', b' M mtpy/lib/publish.py\n'])
+    monkeypatch.setattr(publish.subprocess, 'check_output', lambda *a, **k: next(outputs))
+    prov = publish.provenance()
+    assert prov['commit'] == 'abc1234' and prov['dirty'] is True
+    assert set(prov['versions']) == {'python', 'numpy', 'pandas', 'scipy', 'statsmodels'}
+
+    def boom(*a, **k):
+        raise OSError('no git')
+    monkeypatch.setattr(publish.subprocess, 'check_output', boom)
+    monkeypatch.setenv('GIT_COMMIT', 'deadbee')
+    prov = publish.provenance()
+    assert prov['commit'] == 'deadbee' and prov['dirty'] is False
+
+
+def test_export_meta_and_headline():
+    sim = synthetic_simulator()
+    prov = {'commit': 'abc1234', 'dirty': False, 'versions': {'python': '3.11.9'}}
+    meta = publish.export_meta(sim, '20261008-120000', '2026-10-08T12:00:00Z', n_sim=200, max_fc=10,
+                               correctors=publish.DEFAULT_CORRECTORS, seconds={'init': 1.0, 'fit': 2.0, 'nowcast': 3.0,
+                               'forecast': 3.0, 'export': 1.0, 'total': 10.0}, clip_rate={'nowcast': 0.0, 'forecast': 0.01},
+                               db_polls=7, db_last_poll='2026-10-01', prov=prov, freeze=False)
+    meta = valid('meta', meta, mode=None)
+    assert meta['run_id'] == '20261008-120000' and meta['commit'] == 'abc1234' and meta['dirty'] is False
+    assert meta['as_of'] == '2026-10-05' and meta['date_last'] == '2026-10-01' and meta['horizon_max'] == 55
+    assert meta['drange'] == [6, None] and meta['n_polls'] == 6 and meta['n_pollsters'] == 3
+    assert meta['n_seats'] == 10 and meta['majority'] == 6
+    assert meta['parties'][0] == {'name': 'PP', 'id': 1, 'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha', 'regional': 0}
+    assert meta['regions'][1] == {'id': 28, 'name': 'Madrid', 'seats': 6}
+    assert meta['diagnostics'] == {'drift_k': None, 'multiplier': None, 'ages': {'PP': 40.0, 'PSOE': 40.0, 'VOX': 12.0},
+                                   'composition': 1.0, 'clip_rate': {'nowcast': 0.0, 'forecast': 0.01}}
+    assert meta['smap'] == {'UP': [{'agg': ['UP', 'MP']}]} and 'vs' in meta['bmaps']
+
+    head = publish.export_headline(sim, '20261008-120000', '2026-10-08T12:00:00Z', {'parties': [], 'p_majority': {}},
+                                   {'parties': [], 'p_majority': {}})
+    head = valid('headline', head, mode=None)
+    assert head['as_of'] == '2026-10-05' and head['n_polls'] == 6 and head['event_date'] == '2026-11-29'
