@@ -3,6 +3,8 @@ from importlib import import_module
 import json
 import math
 import re
+import traceback
+from typing import Optional
 from urllib.parse import parse_qsl
 
 import numpy as np
@@ -418,6 +420,38 @@ class Response(Core):
         })
 
 
+class HttpError(Exception):
+    """
+    Error that a controller raises to answer with a given HTTP status.
+
+    `Controller.dispatch` turns it into a JSON error response.
+
+    Parameters
+    ----------
+    status : int
+        HTTP status code of the response.
+    message : str, optional
+        Message of the error body. Defaults to the status code followed by
+        its text, or by `Error` if the code is unknown.
+
+    Attributes
+    ----------
+    status : int
+        HTTP status code of the response.
+    message : str
+        Message of the error body.
+    """
+
+    def __init__(self, status: int, message: Optional[str] = None):
+        if message is None:
+            message = '{} {}'.format(status, Response.status_codes.get(status, 'Error'))
+
+        super().__init__(message)
+
+        self.status = status
+        self.message = message
+
+
 class Router(Core):
 
     def __init__(self):
@@ -555,11 +589,21 @@ class Controller(Core):
         self.action = action
         self.params = dict(kwargs)
 
-        self.before_dispatch()
+        try:
+            self.before_dispatch()
 
-        self.result = await getattr(self, action + '_action')(**self.params)
+            self.result = await getattr(self, action + '_action')(**self.params)
 
-        self.after_dispatch()
+            self.after_dispatch()
+        except HttpError as error:
+            self.response.set_status_code(error.status)
+            self.result = {'status': 'error', 'message': error.message}
+        except Exception:
+            if self.app.logger is not None:
+                self.app.logger.error('Unhandled error in {}.{}: {}'.format(
+                    type(self).__name__, action, traceback.format_exc()
+                ))
+            self.result = 500
 
         await self.send()
 
