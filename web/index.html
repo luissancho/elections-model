@@ -13,6 +13,42 @@
   <header id="site-header"></header>
   <main id="main">
     <p class="status" id="status">Cargando…</p>
+    <div id="content" class="stack" hidden>
+      <section class="card" id="headline">
+        <h2><span class="mode-title">Pronóstico</span></h2>
+        <div class="table-wrap" id="headline-table"></div>
+        <p class="about">
+          Qué es esto: un modelo que agrega los sondeos publicados en un promedio ponderado y simula miles de
+          elecciones para estimar el voto y los escaños de cada partido con su incertidumbre.
+          Los rangos son intervalos del 95 %; el <a id="average-link" href="promedio">promedio de sondeos</a>
+          muestra de dónde salen.
+        </p>
+      </section>
+      <div class="grid">
+        <section class="card">
+          <h2>Voto <span class="mode-subtitle"></span></h2>
+          <div class="chart" id="vote-chart"></div>
+        </section>
+        <section class="card">
+          <h2>Escaños <span class="mode-subtitle"></span></h2>
+          <div class="chart" id="seats-chart"></div>
+        </section>
+      </div>
+      <div class="grid">
+        <section class="card">
+          <h2>Hemiciclo <span class="mode-subtitle"></span></h2>
+          <div class="chart" id="hemicycle"></div>
+        </section>
+        <section class="card">
+          <h2>Mayoría absoluta <span class="mode-subtitle"></span></h2>
+          <div id="majority"></div>
+        </section>
+      </div>
+      <section class="card">
+        <h2>Evolución <span class="evolution-subtitle"></span></h2>
+        <div class="chart" id="evolution"></div>
+      </section>
+    </div>
   </main>
   <footer id="site-footer"></footer>
 </body>

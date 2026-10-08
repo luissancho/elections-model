@@ -61,3 +61,13 @@ th:first-child, td:first-child { text-align: left; }
   .grid { grid-template-columns: 1fr; }
   .chart { height: 240px; }
 }
+
+/* Home page */
+.stack > * + * { margin-top: 16px; }
+.muted { color: var(--color-muted); font-size: 0.85em; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.about { color: var(--color-muted); font-size: 0.9rem; margin: 12px 0 0; }
+.majority-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: 4px 12px; align-items: center; margin: 16px 0; }
+.majority-track { height: 20px; background: var(--color-line); border-radius: 3px; overflow: hidden; }
+.majority-bar { height: 100%; }
+.majority-text { grid-column: 2; font-size: 0.9rem; }

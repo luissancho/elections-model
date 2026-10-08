@@ -1,0 +1,91 @@
+// Evolution of the published vote estimate, one line per party over the run timestamps.
+import {mountChart, THEME} from './base.js';
+import {OTHERS_COLOR} from '../catalog.js';
+import {fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
+
+const DAY_MS = 24 * 3600 * 1000;
+const ZOOM_FROM = 20;
+
+/** Escape text for the HTML tooltips of ECharts. */
+function escapeHtml(text) {
+  return window.echarts.format.encodeHTML(String(text));
+}
+
+/**
+ * Points `[run_at, pct]` of each party in the `mode` headline of every run (runs without the party are
+ * skipped).
+ *
+ * @param {object[]} runs `history.data.runs`
+ * @param {string} mode `nowcast` or `forecast`
+ * @param {string[]} parties party names, in legend order
+ * @returns {{name: string, points: Array}[]} one entry per party
+ */
+export function evolutionSeries(runs, mode, parties) {
+  return parties.map((name) => ({
+    name,
+    points: runs.flatMap((run) => {
+      const block = run[mode] || {};
+      const party = (block.parties || []).find((row) => row.name === name);
+      return party && party.pct !== null && party.pct !== undefined ? [[run.run_at, party.pct]] : [];
+    }),
+  }));
+}
+
+/**
+ * Render the evolution chart of the `mode` headline across `runs`.
+ *
+ * @param {HTMLElement} el chart container
+ * @param {object[]} runs `history.data.runs` (ascending by run)
+ * @param {string} mode `nowcast` or `forecast`
+ * @param {object} opts `colors` ({name: colour}), `parties` (names), `fullnames` ({name: full name})
+ * @returns {object} the ECharts instance
+ */
+export function renderEvolution(el, runs, mode, {colors = {}, parties = [], fullnames = {}} = {}) {
+  const zoom = runs.length > ZOOM_FROM;
+  const series = evolutionSeries(runs, mode, parties).map((entry) => ({
+    type: 'line',
+    name: entry.name,
+    data: entry.points,
+    showSymbol: true,
+    symbolSize: 6,
+    color: colors[entry.name] || OTHERS_COLOR,
+    lineStyle: {width: 2},
+    emphasis: {focus: 'series'},
+  }));
+  const option = {
+    animationDuration: THEME.animationDuration,
+    textStyle: {fontFamily: THEME.fontFamily, color: THEME.textColor},
+    legend: {type: 'scroll', top: 0},
+    grid: {left: 8, right: 24, top: 40, bottom: zoom ? 56 : 8, containLabel: true},
+    xAxis: {
+      type: 'time',
+      minInterval: DAY_MS,
+      axisLabel: {formatter: (value) => fmtDateShort(new Date(value).toISOString())},
+      splitLine: {show: false},
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      splitLine: {lineStyle: {color: THEME.gridColor}},
+      axisLabel: {formatter: (value) => fmtPct(value, 0)},
+    },
+    tooltip: {
+      trigger: 'axis',
+      formatter(params) {
+        if (!params.length) {
+          return '';
+        }
+        const rows = [...params].sort((a, b) => b.value[1] - a.value[1]);
+        const lines = [`<strong>${escapeHtml(fmtDateTime(params[0].value[0]))}</strong>`];
+        for (const item of rows) {
+          const name = fullnames[item.seriesName] || item.seriesName;
+          lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(fmtPct(item.value[1]))}`);
+        }
+        return lines.join('<br>');
+      },
+    },
+    dataZoom: zoom ? [{type: 'inside'}, {type: 'slider', bottom: 8}] : [],
+    series,
+  };
+  return mountChart(el, option);
+}
