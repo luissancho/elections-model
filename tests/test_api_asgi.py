@@ -288,3 +288,24 @@ def test_lifespan_scope_is_acknowledged(fresh_app):
 
 def test_other_scopes_are_ignored(fresh_app):
     assert call(make_api(fresh_app), '', scope_type='websocket', incoming=[]) == []
+
+
+def test_mtpy_api_registers_extra_routes(fresh_app):
+    from mtpy import mtpy
+
+    api = mtpy.api(routes=[('/api/v1/ping', 'index', 'index', ['GET'])])
+    assert isinstance(api, Api)
+    assert [route['pattern'] for route in fresh_app.router.routes] == ['/', '/api/v1/ping']
+    assert fresh_app.router.routes[1]['methods'] == {'GET'}
+
+
+def test_mtpy_api_without_app_returns_none():
+    from mtpy import mtpy
+    from mtpy.core.app import App
+
+    saved = App._app
+    App._app = None
+    try:
+        assert mtpy.api() is None
+    finally:
+        App._app = saved

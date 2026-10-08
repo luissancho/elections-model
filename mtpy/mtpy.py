@@ -97,7 +97,25 @@ def run(fspath=None):
     return app
 
 
-def api():
+def api(routes=None):
+    """
+    Build the HTTP API with its router registered in the booted App.
+
+    The home route ``/`` -> ``index`` is always registered; extra routes are
+    added after it, in the given order.
+
+    Parameters
+    ----------
+    routes : list of tuple, optional
+        Extra routes, each ``(pattern, controller, action)`` or
+        ``(pattern, controller, action, methods)``, passed as is to
+        ``Router.add_route``.
+
+    Returns
+    -------
+    Api or None
+        The ASGI application, or None if no App has been booted.
+    """
     if not App.has_():
         return
 
@@ -105,6 +123,9 @@ def api():
 
     router = Router()
     router.add_route('/', 'index')
+
+    for route in routes or []:
+        router.add_route(*route)
 
     app.set('router', router)
 
