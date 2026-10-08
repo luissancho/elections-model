@@ -20,6 +20,16 @@ docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file ~/.conf
 
 - `deploy/web.env.example` y `deploy/publish.env.example` son plantillas sin secretos (valores vacíos).
 - Los `.env` reales viven en `~/.config/elections-model/` (`web.env` y `publish.env`), con modo 600, y nunca en el repositorio.
+- La primera vez hay que crearlos a partir de las plantillas y rellenar los valores a mano (host y credenciales de la RDS, claves IAM, bucket):
+
+```
+mkdir -p ~/.config/elections-model && chmod 700 ~/.config/elections-model
+cp -n deploy/web.env.example ~/.config/elections-model/web.env
+cp -n deploy/publish.env.example ~/.config/elections-model/publish.env
+chmod 600 ~/.config/elections-model/*.env
+```
+
+  `web.env` lleva el rol `web_reader` de la base y las claves del usuario IAM `elections-web`; `publish.env`, el usuario normal de la base y las claves de `elections-publish`.
 - `GIT_COMMIT` no debe aparecer en los `.env`: lo fija la imagen en el build y un `--env-file` lo pisaría.
 - IAM: `elections-web` solo lee (`s3:GetObject` y `s3:ListBucket` sobre `site/*`); `elections-publish` añade `s3:PutObject` y `s3:DeleteObject` sobre `site/*` (los necesitan `unpublish` y `check_s3`).
 - `deploy/sql/web_reader.sql` crea el rol de solo lectura de la base; se ejecuta con el usuario maestro de la RDS.
