@@ -596,9 +596,11 @@ class Controller(Core):
 
             self.after_dispatch()
         except HttpError as error:
+            self.response.set_header('cache-control', 'no-store').set_header('etag', None)
             self.response.set_status_code(error.status)
             self.result = {'status': 'error', 'message': error.message}
         except Exception:
+            self.response.set_header('cache-control', 'no-store').set_header('etag', None)
             if self.app.logger is not None:
                 self.app.logger.error('Unhandled error in {}.{}: {}'.format(
                     type(self).__name__, action, traceback.format_exc()

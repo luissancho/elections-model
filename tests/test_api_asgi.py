@@ -70,6 +70,10 @@ class Echo(Controller):
     async def teapot_action(self):
         raise HttpError(418)
 
+    async def cached_boom_action(self):
+        self.response.set_cache(60).set_etag('x')
+        raise HttpError(404, 'gone')
+
 
 class Guarded(Echo):
     """Controlador cuyo `before_dispatch` rechaza toda petición."""
@@ -85,6 +89,7 @@ ROUTES = [
     ('/cached', 'echo', 'cached'), ('/immutable', 'echo', 'immutable'),
     ('/dt64', 'echo', 'dt64'), ('/td64', 'echo', 'td64'), ('/cached-nan', 'echo', 'cached_nan'),
     ('/http-error', 'echo', 'http_error'), ('/teapot', 'echo', 'teapot'), ('/guarded', 'guarded', 'list'),
+    ('/cached-boom', 'echo', 'cached_boom'),
 ]
 
 
@@ -251,3 +256,11 @@ def test_unhandled_exception_is_logged_and_returns_500(fresh_app):
 
 def test_unhandled_exception_without_logger_still_returns_500(fresh_app):
     assert call(make_api(fresh_app), '/boom')[0] == 500
+
+
+def test_error_responses_are_not_cacheable(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/cached-boom')
+    assert status == 404
+    assert json.loads(body) == {'status': 'error', 'message': 'gone'}
+    assert headers['cache-control'] == 'no-store'
+    assert 'etag' not in headers
