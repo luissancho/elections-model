@@ -1,23 +1,24 @@
-notebooks/build/
+# Docker anchors patterns at the context root: use **/ for nested paths.
+.git
+.gitignore
+.gitattributes
+.pytest_cache/
+.superpowers/
+backtest/
+docs/
 files/
+load/
 log/
+notebooks/
+tests/
+deploy/*.env
+**/*.env
+**/env.*
+**/__pycache__/
+**/.ipynb_checkpoints/
+**/.DS_Store
+*.code-workspace
 AGENTS.md
-
-__pycache__/
-nbproject/
 venv/
-.ipynb_checkpoints/
 .idea/
 .vscode/
-*.code-workspace
-.DS_Store
-.gitignore
-env.*
-*.env
-
-# To prevent storing dev/temporary container data
-*.csv
-
-# Input data must ship with the image
-!data/**
-/tmp/*

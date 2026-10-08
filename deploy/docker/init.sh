@@ -5,10 +5,6 @@ if [ -n "$RUN_JOB" ] ; then
     python /app/job.py $RUN_JOB
 else
     SERVICES=()
-    APP_CRONTAB=$(echo "$APP_CRONTAB" | xargs)
-    if [ -n "$APP_CRONTAB" ] && [ -s /etc/crontab ] && [ -n "$(grep '[^[:space:]]' /etc/crontab)" ] ; then
-        SERVICES+=("crontab")
-    fi
     APP_API=$(echo "$APP_API" | xargs)
     if [ -n "$APP_API" ] ; then
         SERVICES+=("nginx" "gunicorn")
