@@ -13,6 +13,9 @@ notebooks/
 tests/
 deploy/*.env
 **/*.env
+**/*.key
+**/*.crt
+**/*.pem
 **/env.*
 **/__pycache__/
 **/.ipynb_checkpoints/
