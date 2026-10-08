@@ -874,15 +874,18 @@ git commit -m "$(printf 'Add check_s3 job, env examples and read-only DB role\n\
 
 ### Tareas de Luis (fuera del código; no bloquean las tareas 1-7)
 
-- [ ] Ejecutar `deploy/sql/web_reader.sql` en la RDS con el usuario maestro (contraseña sin `"` ni `\`).
-- [ ] Restringir el grupo de seguridad de la RDS al servidor web y al portátil.
-- [ ] Crear los usuarios IAM `elections-web` (`s3:GetObject` y `s3:ListBucket` sobre `site/*`) y
-  `elections-publish` (lo mismo más `s3:PutObject` y `s3:DeleteObject`); rotar el par de claves actual, compartido por
-  `deploy/docker.env` y `deploy/elections.env`, y la contraseña de la RDS.
-- [ ] Mover los `.env` reales a `~/.config/elections-model/` y ejecutar `python job.py check_s3` con el
-  entorno de publicación; anotar el resultado (decide si la fase 1 debe cambiar `s3fs`).
+Decisión del 2026-10-08: la configuración de producción es el fichero existente `deploy/elections.env`
+(usuario de PostgreSQL y usuario de AWS/S3 actuales) para la web, la publicación y los jobs. Quedan sin
+efecto el rol `web_reader`, los usuarios IAM separados y los `.env` en `~/.config/elections-model/` que
+preveía la Tarea 7 (sus ficheros se retiraron en el commit siguiente a la fase 0).
+
+- [ ] Comprobar que el usuario de AWS de `deploy/elections.env` tiene `s3:GetObject`, `ListBucket`,
+  `PutObject` y `DeleteObject` sobre el bucket (`check_s3` y `unpublish` borran objetos).
+- [ ] Ejecutar `set -a; . deploy/elections.env; set +a; python job.py check_s3`; anotar el resultado
+  (decide si la fase 1 debe cambiar `s3fs`).
 - [ ] Confirmar que el esquema `elections` existe y está al día en la RDS; si no, `pg_dump
   --schema=elections` de la base local y `pg_restore` una sola vez.
+- [ ] Restringir el grupo de seguridad de la RDS al servidor web y al portátil.
 - [ ] TLS hacia la RDS: el adaptador (`mtpy/core/data.py`) no expone `sslmode` y psycopg2 negocia con
   `sslmode=prefer`; activar `rds.force_ssl` solo tras comprobar que la conexión usa TLS (si no, la fase 2
   añade `sslmode` al adaptador).

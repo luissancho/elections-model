@@ -37,6 +37,9 @@ propia); objetivo científico y divulgativo; los cambios de esquema en la base l
 - Páginas de evento tras cargar los resultados oficiales, a mano. Sin feed de resultados provisionales.
 - Base de producción: **la RDS existente** de `deploy/elections.env`; Luis trabajará directamente contra
   ella (notebooks, `run_load`, publicar). La PostgreSQL local pasa a ser copia opcional de desarrollo.
+- (2026-10-08) Configuración única: `deploy/elections.env`, con el usuario de PostgreSQL y el usuario de
+  AWS/S3 existentes, sirve para la web, la publicación y los jobs. Sin rol `web_reader` ni usuarios IAM
+  nuevos por ahora.
 
 ## Hallazgos de la exploración (workflow de 10 agentes, solo lectura)
 
@@ -115,7 +118,7 @@ Consultar: navegador → nginx (`web/`) → `fetch('/api/v1/...')` → proxy con
 | `mtpy/controllers/Base.py` (nuevo) | `Base(Controller)`: query string a dict, `HttpError` → JSON de error, `cache()` (`Cache-Control`/`ETag`), `csv()` (`text/csv` + `Content-Disposition`), aviso `freeze`. |
 | `mtpy/controllers/Forecast.py`, `Analysis.py`, `Data.py` (nuevos) | Un controlador por familia de rutas (paquete de pronósticos; análisis, eventos y backtest; tablas de base). Solo validan, llaman a `webapi` y devuelven dict/list/bytes. |
 | `web/` (nuevo) | Multipágina: `index.html`, `promedio.html`, `escanos.html`, `casas.html`, `elecciones.html`, `modelo.html`, `metodo.html`; `js/{api,state,format,catalog,seats}.js`, `js/charts/*.js`, `js/pages/*.js`; `css/site.css`; `vendor/echarts.min.js` + licencia. |
-| `deploy/web.env.example`, `deploy/publish.env.example`, `deploy/sql/web_reader.sql`, `deploy/smoke.sh`, `deploy/README.md` (nuevos) | Configuración sin secretos, rol de solo lectura, humo Docker y runbook. |
+| `deploy/smoke.sh`, `deploy/README.md` (nuevos) | Humo Docker y runbook. La configuración es el fichero existente `deploy/elections.env` (decisión del 2026-10-08). |
 | `docs/web/contrato.md` (nuevo) | Copia legible de `SCHEMAS` y de la tabla de rutas. |
 | `tests/test_bundle_unit.py`, `test_publish_unit.py`, `test_webapi_unit.py`, `test_api_asgi.py`, `test_web_routes.py`, `tests/integration/test_publish.py` (nuevos) | Ver Pruebas. |
 | `mtpy/core/api.py` (cambia) | Ver "Cambios en el núcleo". |
@@ -234,8 +237,8 @@ public, max-age=60` (punteros y base), `max-age=31536000, immutable` con `?run=`
 - Consultas síncronas dentro de acciones `async` (decenas de ms); `asyncio.to_thread` solo si el p95 lo
   pide (seguro: `Controller.__init__` captura `request`/`response`; nunca leer `self.app.request` tras un
   `await`).
-- Base: rol `web_reader` de solo lectura con `statement_timeout` (`deploy/sql/web_reader.sql`, lo ejecuta
-  Luis); `DB_STAGE_DIR` vacío en el contenedor web.
+- Base: el contenedor usa el usuario de PostgreSQL de `deploy/elections.env` (decisión del 2026-10-08: sin
+  rol de solo lectura por ahora; endurecimiento opcional más adelante).
 
 ### Cambios en el núcleo (`mtpy/core/api.py`, con tests)
 
@@ -301,19 +304,17 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
   --timeout 60`. `init.sh`: calcula `SV_*` desde `APP_API`/`APP_QUEUE`, exporta `GUNICORN_WORKERS` y hace
   `exec supervisord`; con `RUN_JOB`, `exec python /app/job.py $RUN_JOB`. Así `docker logs` muestra nginx y
   gunicorn y `docker stop` para limpio.
-- `deploy/web.env.example`: `APP_ENV=pro APP_API=api DB_ADAPTER=PostgreSQL DB_HOST= DB_PORT=5432
-  DB_USERNAME=web_reader DB_PASSWORD= DB_DATABASE= DB_STAGE_DIR= AWS_KEY= AWS_SECRET= AWS_REGION=eu-west-1
-  S3_BUCKET= WEB_PREFIX=site/v1 WEB_CACHE_TTL=60 WEB_FREEZE= GUNICORN_WORKERS=2` (más las claves vacías que
-  `config.json` espera). `publish.env.example`: usuario de base normal e IAM de escritura. Políticas IAM:
-  web `s3:GetObject`/`ListBucket` sobre `site/*`; publish añade `PutObject` y `DeleteObject`
-  (los necesitan `unpublish` y `check_s3`).
+- Configuración: `deploy/elections.env` (existente, ignorado por git y excluido de la imagen) es el único
+  fichero de entorno, para la web, la publicación y los jobs: usuario de PostgreSQL y usuario de AWS/S3
+  actuales (decisión del 2026-10-08). Plantilla: `.env.example` en la raíz. Sin usuarios IAM separados por
+  ahora; el usuario de AWS necesita Get/List/Put/Delete sobre `site/*` (`unpublish` y `check_s3`).
 - `requirements.txt`: `gunicorn==20.1.0` → `23.0.0` (CVE-2024-1135/6827); `uvicorn==0.18.3` se mantiene
   (conserva `uvicorn.workers.UvicornWorker`). Poda de paquetes no importados: opcional, fase 6.
 - Procedimiento reproducible (`deploy/README.md`): `docker build --build-arg GIT_COMMIT=$(git rev-parse
   HEAD) -t elections-web:$(git rev-parse --short HEAD) .` → `docker run -d --restart unless-stopped -p
-  127.0.0.1:8042:8042 --env-file ~/.config/elections-model/web.env elections-web:<sha>` → `curl /healthz`,
-  `/api/v1/manifest`. Sin S3: `S3_BUCKET=` y `-v $PWD/files:/app/files`. Publicar desde el portátil con
-  `.env` apuntando a la RDS y al bucket, o `docker run --rm --env-file publish.env -e RUN_JOB=...`.
+  127.0.0.1:8042:8042 --env-file deploy/elections.env elections-web:<sha>` → `curl /healthz`,
+  `/api/v1/manifest`. Sin S3: `S3_BUCKET=` y `-v $PWD/files:/app/files`. Publicar desde el portátil
+  exportando `deploy/elections.env`, o `docker run --rm --env-file deploy/elections.env -e RUN_JOB=...`.
 
 ### Seguridad
 
@@ -321,7 +322,8 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
   (`~/.config/elections-model/`, modo 600). Rotar ahora el par de claves AWS compartido por
   `deploy/docker.env` y `deploy/elections.env`, y la contraseña de la RDS (han estado a un `docker build`
   de acabar en una imagen).
-- Rol `web_reader` de solo lectura con `statement_timeout = '5s'`; grupo de seguridad de la RDS limitado al
+- (2026-10-08) Sin rol de solo lectura ni usuarios IAM separados: la web y la publicación usan las
+  credenciales de `deploy/elections.env`. Grupo de seguridad de la RDS limitado al
   servidor y al portátil; `sslmode=require` si el adaptador lo admite (comprobar `mtpy/core/dal/PostgreSQL.py`).
 - Validación en listas cerradas antes de cualquier SQL; `limit_req` en nginx; solo GET.
 - Datos publicados con atribución (Wikipedia CC BY-SA 4.0; "Origen de los datos: Ministerio del
