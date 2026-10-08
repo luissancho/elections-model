@@ -654,3 +654,31 @@ def site() -> Site:
         app.set('site', instance)
 
     return instance
+
+
+ROUTES = [
+    ('/api/v1/health', 'forecast', 'health', ['GET']),
+    ('/api/v1/manifest', 'forecast', 'manifest', ['GET']),
+    ('/api/v1/scopes', 'forecast', 'scopes', ['GET']),
+    ('/api/v1/forecast/{scope}', 'forecast', 'meta', ['GET']),
+    ('/api/v1/forecast/{scope}/runs', 'forecast', 'runs', ['GET']),
+    ('/api/v1/forecast/{scope}/{part}', 'forecast', 'part', ['GET']),
+    ('/api/v1/forecast/{scope}/{mode:str}/{part}', 'forecast', 'mode_part', ['GET']),
+]
+
+
+def add_routes(router) -> None:
+    """
+    Register the web API routes in a router.
+
+    Parameters
+    ----------
+    router : Router
+        Router that receives every route of ``ROUTES``, in order.
+
+    Returns
+    -------
+    None
+    """
+    for route in ROUTES:
+        router.add_route(*route)
