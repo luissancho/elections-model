@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pronóstico electoral · Promedio de sondeos</title>
+  <link rel="stylesheet" href="/css/site.css">
+  <script src="/vendor/echarts-5.6.0.min.js"></script>
+  <script type="module" src="/js/pages/promedio.js"></script>
+</head>
+<body>
+  <div id="freeze-banner" hidden></div>
+  <header id="site-header"></header>
+  <main id="main">
+    <p class="status" id="status">Cargando…</p>
+    <div id="content" class="stack" hidden>
+      <section class="card" id="series">
+        <h2>Promedio de sondeos y proyección <span class="muted" id="series-subtitle"></span></h2>
+        <div class="chart chart-tall" id="series-chart"></div>
+        <p class="about">
+          Cada punto es un sondeo publicado; la línea es el promedio ponderado del modelo y la banda, su
+          intervalo de confianza. En el modo Elección, la línea discontinua proyecta el voto desde la
+          estimación hasta el día de la elección. Los escaños están en la <a id="home-link" href="/">portada</a>.
+        </p>
+      </section>
+      <section class="card" id="polls">
+        <h2>Sondeos del ciclo</h2>
+        <div class="table-wrap" id="polls-table"></div>
+      </section>
+    </div>
+  </main>
+  <footer id="site-footer"></footer>
+</body>
+</html>

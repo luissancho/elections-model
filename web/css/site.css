@@ -71,3 +71,10 @@ th:first-child, td:first-child { text-align: left; }
 .majority-track { height: 20px; background: var(--color-line); border-radius: 3px; overflow: hidden; }
 .majority-bar { height: 100%; }
 .majority-text { grid-column: 2; font-size: 0.9rem; }
+
+/* Average page */
+.chart.chart-tall { height: 480px; }
+caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--color-muted); }
+@media (max-width: 719px) {
+  .chart.chart-tall { height: 360px; }
+}

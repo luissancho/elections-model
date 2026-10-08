@@ -1,12 +1,7 @@
 // Hemicycle: seats per party as a half doughnut, left to right.
-import {mountChart, THEME} from './base.js';
+import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtPct} from '../format.js';
-
-/** Escape text for the HTML tooltips of ECharts. */
-function escapeHtml(text) {
-  return window.echarts.format.encodeHTML(String(text));
-}
 
 /**
  * Pie data of the hemicycle: parties with seats, ordered left to right, labelled when large enough.
@@ -39,8 +34,7 @@ export function renderHemicycle(el, seats, {colors = {}, order = null, nSeats = 
   const data = hemicycleData(seats, {colors, order, nSeats});
   const total = nSeats || data.reduce((sum, item) => sum + item.value, 0);
   const option = {
-    animationDuration: THEME.animationDuration,
-    textStyle: {fontFamily: THEME.fontFamily, color: THEME.textColor},
+    ...baseOption(),
     tooltip: {
       trigger: 'item',
       formatter(params) {

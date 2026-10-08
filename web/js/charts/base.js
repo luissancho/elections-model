@@ -21,3 +21,16 @@ export function mountChart(el, option) {
   el.__chart = chart;
   return chart;
 }
+
+/** Escape text for the HTML tooltips of ECharts. */
+export function escapeHtml(text) {
+  return window.echarts.format.encodeHTML(String(text));
+}
+
+/** Option fragment shared by every chart: animation length and text style. */
+export function baseOption() {
+  return {
+    animationDuration: THEME.animationDuration,
+    textStyle: {fontFamily: THEME.fontFamily, color: THEME.textColor},
+  };
+}

@@ -50,8 +50,14 @@ def test_referenced_assets_exist():
     for path in html_files():
         with open(path, encoding='utf-8') as fh:
             text = fh.read()
-        for ref in re.findall(r'(?:src|href)="(/[^"]+)"', text):
-            if not ref.startswith('/api/') and not os.path.isfile(os.path.join(WEB, ref.lstrip('/'))):
+        for ref in re.findall(r'(?:src|href)="(/[^"]*)"', text):
+            if ref.startswith('/api/'):
+                continue
+            target = os.path.join(WEB, ref.lstrip('/'))
+            page = ref == '/' and os.path.isfile(os.path.join(WEB, 'index.html'))
+            # Página sin extensión (`/promedio` → `web/promedio.html`), como la sirve la ruta del sitio.
+            page = page or ('.' not in ref and os.path.isfile(target + '.html'))
+            if not page and not os.path.isfile(target):
                 missing.append((os.path.basename(path), ref))
         assert 'type="module"' in text and '<script' in text
         assert 'onclick=' not in text and '<script>' not in text  # CSP: sin inline

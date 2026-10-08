@@ -1,15 +1,10 @@
 // Evolution of the published vote estimate, one line per party over the run timestamps.
-import {mountChart, THEME} from './base.js';
+import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const ZOOM_FROM = 20;
-
-/** Escape text for the HTML tooltips of ECharts. */
-function escapeHtml(text) {
-  return window.echarts.format.encodeHTML(String(text));
-}
 
 /**
  * Points `[run_at, pct]` of each party in the `mode` headline of every run (runs without the party are
@@ -53,8 +48,7 @@ export function renderEvolution(el, runs, mode, {colors = {}, parties = [], full
     emphasis: {focus: 'series'},
   }));
   const option = {
-    animationDuration: THEME.animationDuration,
-    textStyle: {fontFamily: THEME.fontFamily, color: THEME.textColor},
+    ...baseOption(),
     legend: {type: 'scroll', top: 0},
     grid: {left: 8, right: 24, top: 40, bottom: zoom ? 56 : 8, containLabel: true},
     xAxis: {

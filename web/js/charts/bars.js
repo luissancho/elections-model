@@ -1,13 +1,8 @@
 // Horizontal bars with an interval line per row (vote shares or seats).
-import {mountChart, THEME} from './base.js';
+import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 
 const INTERVAL_COLOR = '#333';
-
-/** Escape text for the HTML tooltips of ECharts. */
-function escapeHtml(text) {
-  return window.echarts.format.encodeHTML(String(text));
-}
 
 /**
  * Round `x` up to a readable axis limit: a multiple of a fifth of its power of ten.
@@ -116,8 +111,7 @@ export function renderBars(el, rows, {
   };
 
   const option = {
-    animationDuration: THEME.animationDuration,
-    textStyle: {fontFamily: THEME.fontFamily, color: THEME.textColor},
+    ...baseOption(),
     grid: {left: 8, right: 16, top: 24, bottom: 8, containLabel: true},
     xAxis: {
       type: 'value',
