@@ -270,10 +270,13 @@ Cuerpo JSON `{"status":"error","message":"..."}` con `Cache-Control: no-store`.
 | 404 | `no csv for this part` | `format=csv` en una parte sin gemelo CSV (`meta`, `headline`) |
 | 503 | `no bundle published yet` | no existe `manifest.json` |
 | 503 | `no file system configured` | la aplicación no tiene sistema de ficheros |
+| 503 | `no data directory configured` | la aplicación no tiene directorio `data/` (lo lee el catálogo de ámbitos; lo puede dar cualquier ruta con `{scope}`) |
+
+Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON genérico del router (`404 Not Found`).
 
 ### Cabeceras
 
-- `ETag`: md5 de los bytes servidos, en todo contenido servido (también `/scopes`).
+- `ETag`: md5 de los bytes servidos, en todo contenido servido salvo `/health` (también `/scopes`).
 - `Access-Control-Allow-Origin: *` en todas las respuestas, errores incluidos (solo `GET`, sin preflight).
 - `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
   Es solo un aviso: la API sigue sirviendo los datos.

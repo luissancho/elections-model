@@ -550,7 +550,7 @@ Siguiente: plan de la fase 2 (API y sitio mínimo).
 
 ## Estado al cierre de la fase 2 (2026-10-08)
 
-Hecho en `dev` (plan en `d6fb790`, código en `207cd46..8e0a116`, 12 commits, más el commit de
+Hecho en `dev` (plan en `d6fb790`, código en `207cd46..8e0a116` (10 commits) más los commits de
 documentación), con 299 tests unitarios en verde (`python -m pytest -m "not integration" -q`: 262 del cierre
 de la fase 1 y 37 nuevos: `tests/test_webapi_unit.py` 10, `tests/test_web_api.py` 20,
 `tests/test_web_routes.py` 4 y 3 añadidos a los de la fase 1) y los 5 de integración sin cambios:
