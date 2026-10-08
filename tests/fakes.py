@@ -4,6 +4,7 @@ import types
 import numpy as np
 import pandas as pd
 
+from mtpy.core.io import FileSystem
 from mtpy.lib.simulator import Simulator
 
 NAMES = ['PP', 'PSOE', 'VOX']
@@ -102,3 +103,41 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.frames, sim.units, sim.results = frames.round(2), units.round(2), results
     sim.horizons = np.zeros(n_sim, dtype=int)
     return sim
+
+
+class FakeSimulator:
+    """Fábrica con la firma `Simulator(scope, event_date, **kwargs)`: devuelve el simulador sintético con
+    `fit_forecast` y `run` inertes y anota las llamadas; con `fail`, lanza esa excepción al construir."""
+
+    def __init__(self, fail=None):
+        self.calls, self.fail = [], fail
+
+    def __call__(self, scope, event_date, **kwargs):
+        if self.fail is not None:
+            raise self.fail
+        sim = synthetic_simulator(mode=kwargs.get('mode', 'nowcast'))
+        sim.scope, sim.event_date = scope, event_date
+        self.calls.append(('init', scope, event_date, kwargs))
+
+        def fit_forecast(**kw):
+            self.calls.append(('fit_forecast', kw))
+            return sim.forecast
+
+        def run(**kw):
+            self.calls.append(('run', sim.mode, kw))
+            return sim
+
+        sim.fit_forecast, sim.run = fit_forecast, run
+        return sim
+
+
+class RecordingFileSystem(FileSystem):
+    """FileSystem local que anota el orden de las escrituras."""
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.written = []
+
+    def write_bytes(self, content, name):
+        self.written.append(name)
+        return super().write_bytes(content, name)

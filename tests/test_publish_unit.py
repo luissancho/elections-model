@@ -1,12 +1,14 @@
 """Tests de `mtpy/lib/publish.py` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
 import math
+from datetime import date, datetime, timezone
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from tests.fakes import NAMES, REGIONS, synthetic_simulator
+from tests.fakes import NAMES, REGIONS, FakeSimulator, RecordingFileSystem, synthetic_simulator
 
 
 def valid(name, data, mode='nowcast'):
@@ -189,3 +191,135 @@ def test_export_meta_and_headline():
                                    {'parties': [], 'p_majority': {}})
     head = valid('headline', head, mode=None)
     assert head['as_of'] == '2026-10-05' and head['n_polls'] == 6 and head['event_date'] == '2026-11-29'
+
+
+RUN = '20261008-120000'
+
+
+def fixed_clock():
+    return datetime(2026, 10, 8, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def make_writer(tmp_path, fs=None):
+    return bundle.BundleWriter(fs or FileSystem(str(tmp_path)), clock=fixed_clock)
+
+
+def fake_stats(scope, event_date):
+    return 7, '2026-10-01'
+
+
+def fake_prov():
+    return {'commit': 'abc1234', 'dirty': False, 'versions': {'python': '3.11.9'}}
+
+
+def publish_es(tmp_path, run_id=RUN, fs=None, factory=None):
+    writer = make_writer(tmp_path, fs)
+    factory = factory or FakeSimulator()
+    result = publish.publish_forecast('es', writer, run_id, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov)
+    return writer, factory, result
+
+
+def test_publish_forecast_writes_the_whole_layout_in_order(tmp_path):
+    fs = RecordingFileSystem(str(tmp_path))
+    writer, factory, result = publish_es(tmp_path, fs=fs)
+    root = 'site/v1/runs/es/' + RUN + '/'
+    expected = {root + p + '.json' for p in bundle.RUN_PARTS} | {root + 'csv/' + p + '.csv' for p in bundle.RUN_PARTS[2:]}
+    for mode in bundle.MODES:
+        expected |= {root + mode + '/' + p + '.json' for p in bundle.MODE_PARTS}
+        expected |= {root + 'csv/' + mode + '-' + p + '.csv' for p in bundle.MODE_PARTS}
+    assert set(fs.written) == expected
+    assert fs.written[-1] == root + 'headline.json' and fs.written[-2] == root + 'meta.json'
+    assert [c[0] for c in factory.calls] == ['init', 'fit_forecast', 'run', 'run']
+    assert factory.calls[0][3]['mode'] == 'nowcast' and factory.calls[0][3]['house_effects'] is True
+    assert factory.calls[1][1] == {'names': NAMES, 'max_fc': 10, 'fillna': True}
+    assert factory.calls[2][1:] == ('nowcast', {'split': True, 'random': True, 'n_sim': 50})
+    assert factory.calls[3][1:] == ('forecast', {'split': True, 'random': True, 'n_sim': 50, 'horizon': 'deadline'})
+    assert result['entry'] == {'latest': RUN, 'run_at': '2026-10-08T12:00:00Z', 'event_date': '2026-11-29', 'as_of': '2026-10-05',
+                               'date_last': '2026-10-01', 'n_polls': 6}
+    assert set(result['seconds']) == {'init', 'fit', 'nowcast', 'forecast', 'export', 'total'}
+    meta = writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']
+    assert meta['n_sim'] == 50 and meta['db_polls'] == 7 and meta['commit'] == 'abc1234' and meta['freeze'] is False
+    assert set(meta['diagnostics']['clip_rate']) == {'nowcast', 'forecast'}
+    for name in fs.written:
+        if name.endswith('.json'):
+            env = bundle.loads(fs.read_bytes(name))
+            bundle.validate(env['schema'].split('@')[0], env)
+    assert not writer.exists(bundle.path_history('es')) and not writer.exists(bundle.path_manifest())
+
+
+def test_publish_forecast_refuses_to_rewrite_a_run(tmp_path):
+    publish_es(tmp_path)
+    factory = FakeSimulator()
+    with pytest.raises(FileExistsError):
+        publish_es(tmp_path, factory=factory)
+    assert factory.calls == []
+
+
+def test_history_is_rebuilt_from_complete_runs_and_is_idempotent(tmp_path):
+    writer, _, _ = publish_es(tmp_path)
+    publish_es(tmp_path, run_id='20261009-120000')
+    writer.write_json(bundle.path_part('es', '20261010-120000', 'meta'), 'meta',
+                      writer.read_json(bundle.path_part('es', RUN, 'meta'))['data'], 'es', run_id='20261010-120000')
+    history = publish.rebuild_history(writer, 'es')
+    assert [r['run_id'] for r in history['runs']] == [RUN, '20261009-120000']
+    assert set(history['runs'][0]) >= {'nowcast', 'forecast', 'as_of', 'n_polls'}
+    first = (tmp_path / 'site' / 'v1' / 'runs' / 'es' / 'history.json').read_bytes()
+    publish.rebuild_history(writer, 'es')
+    assert (tmp_path / 'site' / 'v1' / 'runs' / 'es' / 'history.json').read_bytes() == first
+
+
+def test_manifest_merges_scopes_and_freeze(tmp_path):
+    writer = make_writer(tmp_path)
+    assert publish.read_manifest(writer)['scopes'] == {} and publish.read_manifest(writer)['freeze'] == {'active': False, 'message': None}
+    publish.update_manifest(writer, {'es': {'latest': RUN}, 'es-md': {'latest': RUN}})
+    data = publish.update_manifest(writer, {'es': {'latest': '20261009-120000'}})
+    assert data['scopes'] == {'es': {'latest': '20261009-120000'}, 'es-md': {'latest': RUN}}
+    assert data['updated_at'] == '2026-10-08T12:00:00Z' and data['attribution'] == publish.ATTRIBUTION
+    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'})
+    assert data['freeze'] == {'active': True, 'message': 'Veda electoral'} and len(data['scopes']) == 2
+    assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None}
+    with pytest.raises(ValueError, match='active'):
+        publish.update_manifest(writer, freeze={'message': 'x'})
+    bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
+
+
+def test_point_and_unpublish(tmp_path):
+    writer, _, first = publish_es(tmp_path)
+    _, _, second = publish_es(tmp_path, run_id='20261009-120000')
+    publish.rebuild_history(writer, 'es')
+    publish.update_manifest(writer, {'es': second['entry']})
+    with pytest.raises(ValueError, match='not found'):
+        publish.point(writer, 'es', '20261010-120000')
+    assert publish.point(writer, 'es', RUN)['scopes']['es'] == first['entry']
+    publish.update_manifest(writer, {'es': second['entry'], 'es-md': {'latest': RUN}})
+    out = publish.unpublish(writer, 'es', '20261009-120000')
+    assert out == {'removed': '20261009-120000', 'latest': RUN}
+    assert not writer.exists(bundle.path_run('es', '20261009-120000'))
+    manifest = publish.read_manifest(writer)
+    assert manifest['scopes']['es'] == first['entry'] and manifest['scopes']['es-md'] == {'latest': RUN}
+    assert [r['run_id'] for r in writer.read_json(bundle.path_history('es'))['data']['runs']] == [RUN]
+    assert publish.unpublish(writer, 'es', RUN) == {'removed': RUN, 'latest': None}
+    assert 'es' not in publish.read_manifest(writer)['scopes']
+    assert writer.read_json(bundle.path_history('es'))['data']['runs'] == []
+    with pytest.raises(ValueError, match='not found'):
+        publish.unpublish(writer, 'es', RUN)
+
+
+def test_loreg_guard_only_blocks_es_in_the_five_days_before_the_election():
+    assert publish.loreg_guard('es', '2026-11-29', today='2026-11-23') is False
+    assert publish.loreg_guard('es-md', '2026-11-29', today='2026-11-27') is False
+    with pytest.raises(publish.PublishRefused, match='LOREG'):
+        publish.loreg_guard('es', '2026-11-29', today=date(2026, 11, 24))
+    with pytest.raises(publish.PublishRefused):
+        publish.loreg_guard('es', '2026-11-29', today='2026-11-29')
+    assert publish.loreg_guard('es', '2026-11-29', today='2026-11-28', force=True) is True
+    assert publish.loreg_guard('es', '2026-11-29', today='2026-11-30') is False
+
+
+def test_resolve_scopes_uses_the_catalogue():
+    catalogue = pd.DataFrame({'parent': [None, 'es', 'es']}, index=pd.Index(['es', 'es-an', 'es-md'], name='scode'))
+    assert publish.resolve_scopes('all', catalogue) == ['es', 'es-an', 'es-md']
+    assert publish.resolve_scopes('es-md', catalogue) == ['es-md']
+    assert publish.resolve_scopes(['es-md', 'es'], catalogue) == ['es-md', 'es']
+    with pytest.raises(ValueError, match='es-xx'):
+        publish.resolve_scopes(['es-xx'], catalogue)

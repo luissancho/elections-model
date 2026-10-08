@@ -7,10 +7,20 @@ Nothing here keeps state or touches storage.
 import os
 import platform
 import subprocess
+import time
+from datetime import date, datetime, timezone
 from importlib import metadata
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 import pandas as pd
+
+from . import bundle
+from .bundle import BundleReader, BundleWriter
+from .data import get_next_event_date, get_scopes
+from .simulator import Simulator
+from ..models.elections import Polls
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 PCT_DECIMALS = 2
 PROB_DECIMALS = 3
@@ -506,3 +516,387 @@ def export_headline(sim, run_id: str, run_at: str, nowcast: dict, forecast: dict
     return {'run_id': run_id, 'run_at': run_at, 'event_date': sim.event_date,
             'as_of': sim.as_of.strftime('%Y-%m-%d'), 'date_last': sim.model.date_last.strftime('%Y-%m-%d'),
             'n_polls': n_polls(sim.model)[0], 'nowcast': nowcast, 'forecast': forecast}
+
+
+ATTRIBUTION = {'polls': 'Sondeos: Wikipedia, CC BY-SA 4.0', 'results': 'Origen de los datos: Ministerio del Interior',
+               'model': 'Modelo y curación: Luis Sancho'}
+
+
+class PublishRefused(Exception):
+    """The publication was refused by a guard (for instance the LOREG window)."""
+
+
+def loreg_guard(scope: str, event_date: str, today=None, force: bool = False) -> bool:
+    """Refuse to publish national forecasts in the five days before the election (LOREG art. 69.7).
+
+    Parameters
+    ----------
+    scope : str
+        Scope code; only ``'es'`` is guarded.
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    today : str or datetime.date, optional
+        Current date; defaults to today in UTC.
+    force : bool
+        Publish even inside the window.
+
+    Returns
+    -------
+    bool
+        Whether the date falls inside the window.
+
+    Raises
+    ------
+    PublishRefused
+        Inside the window and not forced.
+    """
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+    elif isinstance(today, str):
+        today = date.fromisoformat(today)
+    event = date.fromisoformat(event_date)
+    in_window = scope == 'es' and 0 <= (event - today).days <= 5
+    if in_window and not force:
+        raise PublishRefused('{} {}: inside the LOREG window (art. 69.7); pass force=true to publish'.format(
+            scope, event_date))
+    return in_window
+
+
+def resolve_scopes(scopes, catalogue: Optional[pd.DataFrame] = None) -> list:
+    """Expand the requested scopes into a list of scope codes.
+
+    Parameters
+    ----------
+    scopes : str or sequence of str
+        ``'all'`` (``es`` plus every scope with a parent), one scope code or a sequence of them.
+    catalogue : pandas.DataFrame, optional
+        Scope catalogue indexed by ``scode`` with a ``parent`` column; defaults to ``get_scopes()``.
+
+    Returns
+    -------
+    list of str
+        Scope codes to publish.
+
+    Raises
+    ------
+    ValueError
+        Some scope is not in the catalogue.
+    """
+    catalogue = get_scopes() if catalogue is None else catalogue
+    if isinstance(scopes, str):
+        if scopes == 'all':
+            scopes = ['es'] + [s for s in catalogue.index if s != 'es' and pd.notnull(catalogue.loc[s, 'parent'])]
+        else:
+            scopes = [scopes]
+    else:
+        scopes = list(scopes)
+    unknown = [s for s in scopes if s not in catalogue.index]
+    if unknown:
+        raise ValueError('publish: unknown scopes {}'.format(sorted(unknown)))
+    return scopes
+
+
+def next_event_date(scope: str) -> Optional[str]:
+    """Return the date of the next event of the scope, or ``None`` when there is none.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    str or None
+        ``YYYY-MM-DD`` date.
+    """
+    return get_next_event_date(scope)
+
+
+def db_stats(scope: str, event_date: str) -> tuple:
+    """Count the polls of the event in the database and find the date of the latest one.
+
+    Parameters
+    ----------
+    scope, event_date : str
+        Event scope and date.
+
+    Returns
+    -------
+    tuple
+        ``(number of polls, 'YYYY-MM-DD' of the latest)``; ``(0, None)`` when there are none.
+    """
+    polls = Polls().get_results(query=dict(filters=["event_scope = '{}'".format(scope),
+                                                    "event_date = '{}'".format(event_date)]), formatted=True)
+    if polls.shape[0] == 0:
+        return 0, None
+    return int(polls.shape[0]), polls['date'].max().strftime('%Y-%m-%d')
+
+
+MODE_EXPORTERS = (('vote', export_vote), ('summary', export_summary), ('dist', export_dist),
+                  ('districts', export_districts), ('scenario', export_scenario), ('projection', export_projection))
+
+
+def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str) -> dict:
+    """Write the files of the current mode of the simulator (JSON and CSV per part).
+
+    Parameters
+    ----------
+    sim : Simulator
+        Simulator already run in ``sim.mode``.
+    writer : BundleWriter
+        Bundle destination.
+    scope, run_id : str
+        Scope and run being written.
+
+    Returns
+    -------
+    dict
+        ``headline_mode`` of the simulator.
+    """
+    mode = sim.mode
+    for part, exporter in MODE_EXPORTERS:
+        data, frame = exporter(sim)
+        writer.write_json(bundle.path_part(scope, run_id, part, mode), part, data, scope, run_id, mode)
+        writer.write_csv(bundle.path_csv(scope, run_id, part, mode), frame)
+    return headline_mode(sim)
+
+
+def latest_entry(headline: dict) -> dict:
+    """Build the manifest entry of a scope from the headline of its latest run.
+
+    Parameters
+    ----------
+    headline : dict
+        Data of ``headline.json``.
+
+    Returns
+    -------
+    dict
+        Entry with ``latest``, ``run_at``, ``event_date``, ``as_of``, ``date_last`` and ``n_polls``.
+    """
+    return {'latest': headline['run_id'], 'run_at': headline['run_at'], 'event_date': headline['event_date'],
+            'as_of': headline['as_of'], 'date_last': headline['date_last'], 'n_polls': headline['n_polls']}
+
+
+def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: str, n_sim: int = 1000,
+                     seed: int = 42, drange=6, max_fc: int = 10, alpha: float = 0.05,
+                     correctors: Optional[dict] = None, freeze: bool = False, verbose: int = 0,
+                     simulator: Optional[Callable] = None, stats: Optional[Callable] = None,
+                     prov: Optional[Callable] = None) -> dict:
+    """Run the model for one scope and write an immutable run into the bundle.
+
+    Pointers (history and manifest) are not touched. ``headline.json`` is written last, so a run
+    without it is incomplete.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    writer : BundleWriter
+        Bundle destination.
+    run_id : str
+        Run identifier (``YYYYMMDD-HHMMSS``).
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+    n_sim : int
+        Number of simulations per mode.
+    seed, drange, max_fc, alpha
+        Model parameters.
+    correctors : dict, optional
+        Overrides of ``DEFAULT_CORRECTORS``.
+    freeze : bool
+        Whether the site is frozen (recorded in ``meta``).
+    verbose : int
+        Simulator verbosity.
+    simulator, stats, prov : callable, optional
+        Injectable replacements of ``Simulator``, ``db_stats`` and ``provenance``.
+
+    Returns
+    -------
+    dict
+        ``{'scope', 'entry', 'seconds'}``.
+
+    Raises
+    ------
+    FileExistsError
+        The run already exists.
+    """
+    writer.begin_run(scope, run_id)
+    run_at = bundle.iso_utc(writer.now())
+    correctors = {**DEFAULT_CORRECTORS, **(correctors or {})}
+    seconds, heads, clip = {}, {}, {}
+    t0 = t = time.perf_counter()
+    sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
+                                   mode='nowcast', verbose=verbose, path='.', **correctors)
+    seconds['init'], t = time.perf_counter() - t, time.perf_counter()
+    names = sim.params['names']
+    sim.fit_forecast(names=names, max_fc=max_fc, fillna=True)
+    seconds['fit'], t = time.perf_counter() - t, time.perf_counter()
+    sim.run(split=True, random=True, n_sim=n_sim)
+    clip['nowcast'] = float(sim.clip_rate())
+    seconds['nowcast'], t = time.perf_counter() - t, time.perf_counter()
+    heads['nowcast'] = publish_mode(sim, writer, scope, run_id)
+    sim.mode = 'forecast'
+    sim.run(split=True, random=True, n_sim=n_sim, horizon='deadline')
+    clip['forecast'] = float(sim.clip_rate())
+    seconds['forecast'], t = time.perf_counter() - t, time.perf_counter()
+    heads['forecast'] = publish_mode(sim, writer, scope, run_id)
+    fc = sim.model
+    cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names)), ('fan', export_fan(sim)),
+             ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)))
+    for part, (data, frame) in cycle:
+        writer.write_json(bundle.path_part(scope, run_id, part), part, data, scope, run_id)
+        writer.write_csv(bundle.path_csv(scope, run_id, part), frame)
+    db_polls, db_last_poll = (stats or db_stats)(scope, event_date)
+    prov = prov or (lambda: provenance(cwd=REPO_ROOT))
+    seconds['export'] = time.perf_counter() - t
+    seconds['total'] = time.perf_counter() - t0
+    meta = export_meta(sim, run_id, run_at, n_sim, max_fc, correctors, seconds, clip, db_polls, db_last_poll,
+                       prov(), freeze)
+    writer.write_json(bundle.path_part(scope, run_id, 'meta'), 'meta', meta, scope, run_id)
+    headline = export_headline(sim, run_id, run_at, heads['nowcast'], heads['forecast'])
+    writer.write_json(bundle.path_part(scope, run_id, 'headline'), 'headline', headline, scope, run_id)
+    return {'scope': scope, 'entry': latest_entry(headline), 'seconds': seconds}
+
+
+def rebuild_history(writer: BundleWriter, scope: str) -> dict:
+    """Rebuild ``history.json`` of a scope from the headlines of its complete runs.
+
+    Parameters
+    ----------
+    writer : BundleWriter
+        Bundle to read and write.
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        The history data, ``{'scope', 'runs'}``.
+    """
+    runs = [writer.read_json(bundle.path_part(scope, rid, 'headline'))['data'] for rid in writer.list_runs(scope)]
+    data = {'scope': scope, 'runs': runs}
+    writer.write_json(bundle.path_history(scope), 'history', data, scope, run_id=None)
+    return data
+
+
+def read_manifest(reader: BundleReader) -> dict:
+    """Read the manifest data, or the default one when the bundle has none yet.
+
+    Parameters
+    ----------
+    reader : BundleReader
+        Bundle to read.
+
+    Returns
+    -------
+    dict
+        Manifest data.
+    """
+    if reader.exists(bundle.path_manifest()):
+        return reader.read_json(bundle.path_manifest())['data']
+    return {'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {},
+            'freeze': {'active': False, 'message': None}, 'attribution': dict(ATTRIBUTION)}
+
+
+def _write_manifest(writer: BundleWriter, data: dict) -> dict:
+    """Stamp and write the manifest data; return it."""
+    data['updated_at'] = bundle.iso_utc(writer.now())
+    data['contract'] = bundle.CONTRACT
+    writer.write_json(bundle.path_manifest(), 'manifest', data, scope=None)
+    return data
+
+
+def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze: Optional[dict] = None) -> dict:
+    """Merge scope entries and/or the freeze switch into the manifest and write it.
+
+    Parameters
+    ----------
+    writer : BundleWriter
+        Bundle to update.
+    scopes : dict, optional
+        Entries by scope code; each replaces the existing entry of its scope.
+    freeze : dict, optional
+        ``{'active': bool, 'message': str | None}``.
+
+    Returns
+    -------
+    dict
+        The manifest data written.
+
+    Raises
+    ------
+    ValueError
+        ``freeze`` has no boolean ``active``.
+    """
+    if freeze is not None and not (isinstance(freeze, dict) and isinstance(freeze.get('active'), bool)):
+        raise ValueError('publish: freeze needs a boolean "active"')
+    data = read_manifest(writer)
+    data['scopes'].update(scopes or {})
+    if freeze is not None:
+        data['freeze'] = {'active': freeze['active'], 'message': freeze.get('message')}
+    return _write_manifest(writer, data)
+
+
+def point(writer: BundleWriter, scope: str, run_id: str) -> dict:
+    """Point the manifest of a scope to an existing run.
+
+    Parameters
+    ----------
+    writer : BundleWriter
+        Bundle to update.
+    scope, run_id : str
+        Scope and run to publish as the latest.
+
+    Returns
+    -------
+    dict
+        The manifest data written.
+
+    Raises
+    ------
+    ValueError
+        The run does not exist or is incomplete.
+    """
+    name = bundle.path_part(scope, run_id, 'headline')
+    if not writer.exists(name):
+        raise ValueError('{}: run {} not found'.format(scope, run_id))
+    return update_manifest(writer, {scope: latest_entry(writer.read_json(name)['data'])})
+
+
+def unpublish(writer: BundleWriter, scope: str, run_id: str) -> dict:
+    """Delete a run, rebuild the history and repoint the manifest if it pointed to that run.
+
+    Parameters
+    ----------
+    writer : BundleWriter
+        Bundle to update.
+    scope, run_id : str
+        Run to delete.
+
+    Returns
+    -------
+    dict
+        ``{'removed': run_id, 'latest': run now published for the scope or None}``.
+
+    Raises
+    ------
+    ValueError
+        The run does not exist.
+    """
+    if not writer.exists(bundle.path_run(scope, run_id)):
+        raise ValueError('{}: run {} not found'.format(scope, run_id))
+    writer.remove(bundle.path_run(scope, run_id))
+    rebuild_history(writer, scope)
+    manifest = read_manifest(writer)
+    latest = manifest['scopes'].get(scope, {}).get('latest')
+    if latest == run_id:
+        runs = writer.list_runs(scope)
+        if runs:
+            point(writer, scope, runs[-1])
+            latest = runs[-1]
+        else:
+            del manifest['scopes'][scope]
+            _write_manifest(writer, manifest)
+            latest = None
+    return {'removed': run_id, 'latest': latest}
