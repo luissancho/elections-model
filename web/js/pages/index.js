@@ -1,9 +1,9 @@
 // Home page: headline table, vote and seat bars, hemicycle, majorities and evolution.
 import {ApiError, getForecast, getManifest, getScopes} from '../api.js';
 import {readState, writeState, onStateChange} from '../state.js';
-import {fmtDate, fmtInt, fmtPct, fmtRange} from '../format.js';
+import {fmtDate, fmtInt, fmtPct, fmtProb, fmtRange} from '../format.js';
 import {Catalog} from '../catalog.js';
-import {renderHeader, renderFooter, renderFreeze, renderError} from '../layout.js';
+import {renderHeader, updateHeader, renderFooter, renderFreeze, renderError} from '../layout.js';
 import {renderBars} from '../charts/bars.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderEvolution} from '../charts/evolution.js';
@@ -92,7 +92,7 @@ function renderHeadlineTable(root, parties, catalog) {
     vote.append(`${fmtPct(party.pct)} `, el('span', fmtRange(party.lo, party.hi), 'muted'));
     const seats = el('td');
     seats.append(`${fmtInt(party.seats)} `, el('span', fmtRange(party.seats_lo, party.seats_hi, 0), 'muted'));
-    const first = el('td', fmtPct(party.p_first * 100, 0));
+    const first = el('td', fmtProb(party.p_first));
     row.append(name, vote, seats, first);
     body.append(row);
   }
@@ -112,7 +112,7 @@ function renderMajority(root, pMajority, catalog) {
     row.append(
       el('strong', block),
       track,
-      el('span', `${fmtPct(p * 100, 0)} de probabilidad de mayoría absoluta`, 'majority-text'),
+      el('span', `${fmtProb(p)} de probabilidad de mayoría absoluta`, 'majority-text'),
     );
     return row;
   });
@@ -140,11 +140,14 @@ async function load() {
 
 async function paint(id) {
   const state = readState();
-  renderHeader(dom.header, {pages: PAGES, active: '/', scopes, state});
+  updateHeader(dom.header, {state});
   dom.averageLink.href = `/promedio${location.search}`;
   showStatus('Cargando…');
 
-  const {scope, mode, run} = state;
+  // Pin the run for the whole page load, so the parts of one paint never mix runs; the URL keeps `run`
+  // only when the user pinned it. The history stays a pointer.
+  const {scope, mode} = state;
+  const run = state.run || manifest.data.scopes?.[scope]?.latest || null;
   const [meta, headline, vote, summary, history] = await Promise.all([
     getForecast(scope, 'meta', {run}),
     getForecast(scope, 'headline', {run}),
@@ -227,6 +230,7 @@ async function init() {
       // Before the listener exists, so this does not trigger a second load.
       writeState({scope, run: null});
     }
+    updateHeader(dom.header, {scopes, state: readState()});
     onStateChange(load);
     await load();
   } catch (error) {

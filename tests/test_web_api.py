@@ -94,6 +94,8 @@ def test_csv_twins(api):
     ('/api/v1/forecast/es-xx', '', 400, 'invalid scope'),
     ('/api/v1/forecast/es-md', '', 404, 'scope not published'),
     ('/api/v1/forecast/es-md/runs', '', 404, 'no runs published'),
+    ('/api/v1/forecast/es-md/headline', 'format=xml', 400, 'invalid format'),
+    ('/api/v1/forecast/es-md/forecast/vote', 'format=xml', 400, 'invalid format'),
     ('/api/v1/forecast/es', 'run=2026-10-08', 400, 'invalid run'),
     ('/api/v1/forecast/es', 'run=20200101-000000', 404, 'run not found'),
     ('/api/v1/forecast/es/nope', '', 404, 'unknown part'),

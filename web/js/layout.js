@@ -13,7 +13,12 @@ function el(tag, text = null, attrs = {}) {
   return node;
 }
 
-/** Render title, navigation, scope selector and mode switch into `root`. */
+/**
+ * Render title, navigation, scope selector and mode switch into `root`, once per page load.
+ *
+ * Later state changes go through `updateHeader`, which only updates values: rebuilding the header inside
+ * the controls' own `change` handlers would drop the keyboard focus.
+ */
 export function renderHeader(root, {pages, active, scopes, state}) {
   root.replaceChildren();
   const title = el('h1');
@@ -22,7 +27,7 @@ export function renderHeader(root, {pages, active, scopes, state}) {
 
   const nav = el('nav', null, {'aria-label': 'Principal'});
   for (const page of pages) {
-    const link = el('a', page.label, {href: page.href + location.search});
+    const link = el('a', page.label, {href: page.href, 'data-href': page.href});
     if (page.href === active) {
       link.setAttribute('aria-current', 'page');
     }
@@ -33,11 +38,6 @@ export function renderHeader(root, {pages, active, scopes, state}) {
   const controls = el('div', null, {class: 'controls'});
   const label = el('label', 'Ámbito ');
   const select = el('select', null, {id: 'scope'});
-  for (const row of scopes.filter((scope) => scope.simulable)) {
-    const option = el('option', row.name, {value: row.code});
-    option.selected = row.code === state.scope;
-    select.append(option);
-  }
   select.addEventListener('change', () => writeState({scope: select.value}));
   label.append(select);
   controls.append(label);
@@ -47,7 +47,6 @@ export function renderHeader(root, {pages, active, scopes, state}) {
   for (const [value, text] of [['nowcast', 'Hoy'], ['forecast', 'Elección']]) {
     const radioLabel = el('label');
     const radio = el('input', null, {type: 'radio', name: 'mode', value});
-    radio.checked = state.mode === value;
     radio.addEventListener('change', () => {
       if (radio.checked) {
         writeState({mode: value});
@@ -58,6 +57,28 @@ export function renderHeader(root, {pages, active, scopes, state}) {
   }
   controls.append(fieldset);
   root.append(controls);
+  updateHeader(root, {scopes, state});
+}
+
+/**
+ * Sync the header built by `renderHeader` with `state`: selected scope, checked mode and the query string
+ * of the navigation links. With `scopes`, the scope options are (re)built first (the simulable ones).
+ * Nodes are updated in place, so the focused control keeps the focus.
+ */
+export function updateHeader(root, {scopes = null, state}) {
+  const select = root.querySelector('#scope');
+  if (scopes) {
+    select.replaceChildren(...scopes
+      .filter((scope) => scope.simulable)
+      .map((row) => el('option', row.name, {value: row.code})));
+  }
+  select.value = state.scope;
+  for (const radio of root.querySelectorAll('input[name=mode]')) {
+    radio.checked = radio.value === state.mode;
+  }
+  for (const link of root.querySelectorAll('nav a[data-href]')) {
+    link.setAttribute('href', link.getAttribute('data-href') + location.search);
+  }
 }
 
 /** Render the run line, the attribution lines and the manifest link into `root`. */

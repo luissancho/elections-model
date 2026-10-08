@@ -551,9 +551,10 @@ Siguiente: plan de la fase 2 (API y sitio mínimo).
 ## Estado al cierre de la fase 2 (2026-10-08)
 
 Hecho en `dev` (plan en `d6fb790`, código en `207cd46..8e0a116` (10 commits) más los commits de
-documentación), con 299 tests unitarios en verde (`python -m pytest -m "not integration" -q`: 262 del cierre
-de la fase 1 y 37 nuevos: `tests/test_webapi_unit.py` 10, `tests/test_web_api.py` 20,
-`tests/test_web_routes.py` 4 y 3 añadidos a los de la fase 1) y los 5 de integración sin cambios:
+documentación y el de la revisión final), con 301 tests unitarios en verde (`python -m pytest -m "not
+integration" -q`: 262 del cierre de la fase 1 y 39 nuevos: `tests/test_webapi_unit.py` 10,
+`tests/test_web_api.py` 22, `tests/test_web_routes.py` 4 y 3 añadidos a los de la fase 1) y los 5 de
+integración sin cambios:
 
 - `mtpy/lib/webapi.py`: constantes, validadores (`check_scope|run|mode|part|format`), `settings()`,
   `TTLCache`, `LRUCache`, `catalogue()`, `Site` (manifest, historia y ficheros de run como bytes), `site()`
@@ -616,10 +617,43 @@ repintar la cabecera al cambiar de ámbito o modo, el redondeo de `p_majority` a
 las cabeceras de tabla y `caption` en la portada, el pie obsoleto tras una carga fallida, el selector de
 ámbito no limitado a los publicados, las alternativas de texto de los gráficos, el ayudante común de
 `part_action`/`mode_part_action`, la caché de catálogo a nivel de módulo compartida entre `App`s y
-`float(cache_ttl)` ante basura (500).
+`float(cache_ttl)` ante basura (500). El foco y el redondeo de `p_majority` se resolvieron en la revisión
+final (abajo); el resto queda para la fase 3.
 
 Diferido a la fase 6 (flecos de la fase 0): soporte de `HEAD`, `send()` fuera del `try` de
 `Controller.dispatch`, docstring de `Api.__call__`, y los imports perezosos de `helpers.py`/`io.py`.
+
+Revisión final de la rama (2026-10-09), arreglos en un solo commit:
+
+1. Caché de nginx en `/var/lib/nginx/api_cache` (antes `/var/cache/nginx/api`, cuyo padre no existe en la
+   imagen); `nginx-check.sh` solo reescribe el padre y deja que `nginx -t` cree la hoja, como la imagen.
+2. `set_real_ip_from` 127.0.0.1 y 172.16.0.0/12 con `real_ip_header X-Forwarded-For` (realip): el límite
+   de 20 r/s vuelve a ser por cliente detrás del proxy TLS / docker-proxy.
+3. Logs de nginx a `/proc/1/fd/1` y `/proc/1/fd/2` (supervisord se demoniza y su `/dev/stdout` es
+   `/dev/null`); `nginx-check.sh` los reescribe a ficheros temporales.
+4. `proxy_cache_key` con solo ruta, `run` y `format`; `location ^~ /api/`; `gzip_proxied any` y
+   `gzip_vary on`; CSP con `frame-ancestors`, `base-uri` y `object-src 'none'`; HTML con `expires -1`.
+5. Verificado con nginx 1.29.5 local en el 8043 y uvicorn (ver el informe de la revisión).
+6. `smoke.sh`: `docker stop` ≥ 10 s pasa a WARN (`init.sh` necesita `exec supervisord`) y nueva
+   comprobación (WARN) de líneas de acceso de nginx en `docker logs`.
+7. `check-api.sh`: `--max-time 20` en cada `curl`.
+8. Las páginas fijan el run al cargar (`?run=` o `latest` del manifest) y lo envían en todas las partes
+   salvo `runs`; la URL solo lleva `run` si lo fijó el usuario.
+9. `fmtProb` en `format.js`: "> 99 %" y "< 1 %" en vez de redondear a 100 % / 0 % (`p_majority` y
+   `p_first`).
+10. Foco de teclado: la cabecera se construye una vez por carga y `updateHeader` solo actualiza el ámbito,
+    el modo y los enlaces de navegación.
+11. `.grid > * { min-width: 0 }` y `defer` en el `<script>` de ECharts.
+12. `check_format` antes de `resolve_run` (un `?format=` malo en un ámbito sin publicar es 400, no 404),
+    con 2 tests nuevos en `tests/test_web_api.py`.
+13. `contrato.md`: CORS solo en las respuestas de los controladores (no en el 404 genérico del router) y
+    las páginas envían `?run=` en todas las partes.
+14. `deploy/README.md`: retirada visible en hasta ~3 min, `X-Forwarded-For` obligatorio en el proxy, logs
+    de nginx en `docker logs`, logs de gunicorn perdidos hasta `nodaemon`/`exec supervisord`, WARN de
+    `docker stop` y `/promedio` con `http.server`.
+
+Pendiente obligatorio: ocultar las vistas derivadas de sondeos cuando `manifest.freeze.active` (LOREG art.
+69.7, difusión desde el 24-11): fase 3 o 6, decisión de Luis sobre qué se oculta; hoy solo hay banner.
 
 Pendiente de Luis:
 
@@ -627,7 +661,7 @@ Pendiente de Luis:
   marcha.
 - Abrir `/` y `/promedio` en escritorio y móvil sin errores de consola. A mirar: etiquetas y texto central
   del hemiciclo a 240 px de alto, etiquetas de las barras dentro del lienzo, puntos de la evolución con un
-  solo run, `.grid > * { min-width: 0 }` si los anchos de ECharts impiden encoger, tooltip de días con
+  solo run, que `.grid > * { min-width: 0 }` (ya añadido) baste para que los gráficos encojan, tooltip de días con
   varios sondeos, la leyenda ocultando a la vez banda, puntos y proyección, el interruptor "Hoy"/"Elección"
   y el enlace CSV con `?run=`.
 - Primera publicación de `es` a S3 para que producción tenga datos; desplegar la imagen con

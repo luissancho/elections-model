@@ -238,6 +238,11 @@ Inmutable es `public, max-age=31536000, immutable`: solo cuando el run se pide d
 respuesta caduca a los 60 s (`web.cache_ttl`). Las rutas fijas (`health`, `manifest`, `scopes`, `runs`) se
 registran antes que las genéricas.
 
+Las páginas del sitio fijan el run al cargar: toman `?run=` de la URL o, si no está, el `latest` del
+ámbito en el manifest, y lo envían con `?run=` en todas las partes (salvo `runs`, que sigue siendo un
+puntero), de modo que una página nunca mezcla partes de dos runs aunque se publique uno nuevo entre
+peticiones.
+
 ### Parámetros
 
 - `run`: `YYYYMMDD-HHMMSS` (UTC). Vacío o ausente equivale al último run del ámbito.
@@ -277,7 +282,9 @@ Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON gené
 ### Cabeceras
 
 - `ETag`: md5 de los bytes servidos, en todo contenido servido salvo `/health` (también `/scopes`).
-- `Access-Control-Allow-Origin: *` en todas las respuestas, errores incluidos (solo `GET`, sin preflight).
+- `Access-Control-Allow-Origin: *` en todas las respuestas de los controladores de la API, errores incluidos
+  (solo `GET`, sin preflight). La pone el controlador, no el router: el 404 genérico del router (ruta
+  desconocida o método distinto de GET) no la lleva.
 - `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
   Es solo un aviso: la API sigue sirviendo los datos.
 

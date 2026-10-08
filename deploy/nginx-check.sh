@@ -5,8 +5,13 @@
 # Uso: bash deploy/nginx-check.sh
 #
 # Copia la configuracion a un directorio temporal adaptando las rutas de la
-# imagen Docker (mime.types, modulos, pid, cache y raiz web) a las locales, y
-# ejecuta `nginx -t`. Sale con el codigo de `nginx -t`.
+# imagen Docker (mime.types, modulos, pid, logs, cache y raiz web) a las
+# locales, y ejecuta `nginx -t`. Sale con el codigo de `nginx -t`.
+#
+# De la cache solo se reescribe el directorio padre (/var/lib/nginx -> $tmp/lib,
+# que se crea); la hoja api_cache NO se crea, para que `nginx -t` haga el mismo
+# mkdir que hara la imagen. Los logs van a ficheros del directorio temporal
+# (macOS no tiene /proc).
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,13 +31,15 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/logs" "$tmp/cache"
+mkdir -p "$tmp/logs" "$tmp/lib"
 
 sed \
     -e "s#/etc/nginx/mime.types#$conf_dir/mime.types#" \
     -e '/include \/etc\/nginx\/modules-enabled\/\*\.conf;/d' \
     -e "s#pid /run/nginx.pid;#pid $tmp/nginx.pid;#" \
-    -e "s#/var/cache/nginx/api#$tmp/cache#" \
+    -e "s#/var/lib/nginx/#$tmp/lib/#" \
+    -e "s#/proc/1/fd/2#$tmp/logs/error.log#" \
+    -e "s#/proc/1/fd/1#$tmp/logs/access.log#" \
     -e "s#root /app/web;#root $repo/web;#" \
     "$conf" > "$tmp/nginx.conf"
 

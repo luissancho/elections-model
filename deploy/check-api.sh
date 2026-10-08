@@ -22,7 +22,7 @@ PY="$(command -v python3 || command -v python || true)"
 # check RUTA STATUS_ESPERADO TIPO   (TIPO: json | csv | text | none)
 check() {
     local path="$1" want="$2" kind="$3" out code ctype problem=""
-    out="$(curl -s -o "$body" -w '%{http_code} %{content_type}' "$base$path" || true)"
+    out="$(curl -s --max-time 20 -o "$body" -w '%{http_code} %{content_type}' "$base$path" || true)"
     code="${out%% *}"
     ctype="${out#* }"
     if [ "$code" != "$want" ]; then
@@ -41,7 +41,7 @@ check() {
 }
 
 # /healthz: 200 en nginx, 404 en gunicorn/uvicorn.
-out="$(curl -s -o /dev/null -w '%{http_code}' "$base/healthz" || true)"
+out="$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$base/healthz" || true)"
 case "$out" in
     200) echo "OK   /healthz (200)" ;;
     404) echo "n/a  /healthz sin nginx" ;;

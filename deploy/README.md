@@ -33,11 +33,29 @@ docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/
 Dentro del contenedor, nginx (puerto 8042) sirve:
 
 - `web/` en `/` (`/` y `/promedio` por `try_files`), con cabeceras de seguridad.
-- `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache`, cabecera
-  `X-Cache`) y `limit_req` de 20 r/s con ráfaga de 40 (exceso: 429).
+- `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
+  `/var/lib/nginx/api_cache`, cabecera `X-Cache`; la clave solo usa la ruta, `run` y `format`, así que
+  otros parámetros no crean entradas) y `limit_req` de 20 r/s por IP con ráfaga de 40 (exceso: 429).
 - `/healthz` → `200 ok`, sin pasar por la API.
-- `/vendor/` (ECharts, con la versión en el nombre) con caché de un año; los `.js` y `.css` se
-  revalidan siempre.
+- `/vendor/` (ECharts, con la versión en el nombre) con caché de un año; el HTML, los `.js` y los `.css`
+  se revalidan siempre.
+
+Notas de operación:
+
+- IP real: nginx toma la IP del cliente de `X-Forwarded-For` (módulo realip) cuando la petición llega
+  de `127.0.0.1` o de `172.16.0.0/12` (docker-proxy). El proxy TLS de delante debe enviar
+  `X-Forwarded-For`; si no, todas las peticiones parecen venir de la misma IP y el límite de 20 r/s se
+  aplica a todo el sitio a la vez.
+- Retirar un run (`unpublish` o `point`) tarda hasta unos 3 minutos en verse: TTL de los punteros en la
+  API (60 s) + caché de nginx (60 s) + `max-age=60` en el navegador.
+- Logs: `supervisord` se demoniza, así que dentro del contenedor `/dev/stdout` es `/dev/null`. nginx
+  escribe en `/proc/1/fd/1` (acceso) y `/proc/1/fd/2` (errores), la salida de `init.sh` (PID 1), que es la
+  del contenedor: deben verse con `docker logs` (la prueba de humo lo comprueba). Los logs de gunicorn
+  siguen perdiéndose hasta que Luis adopte `nodaemon=true` / `exec supervisord` en `init.sh` (decisión
+  suya).
+- `docker stop` tarda 10 s: `init.sh` deja bash como PID 1 esperando en `tail -f`, que ignora SIGTERM,
+  y Docker acaba con SIGKILL. Por la misma razón (`exec supervisord`), la prueba de humo solo lo avisa
+  (WARN).
 
 La API (`/api/v1`, ver `docs/web/contrato.md`) solo necesita S3 (el paquete `site/v1`): no usa la base
 de datos hasta la fase 4. Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
@@ -65,6 +83,8 @@ python -m http.server 8081 -d web
 y abrir `http://127.0.0.1:8081/?api=http://127.0.0.1:8000` (`?api=` solo se acepta para
 `http://localhost` y `http://127.0.0.1`). Con `S3_BUCKET=` vacío la API lee el paquete local
 `files/site/v1`. El puerto 8080 puede estar ocupado por un nginx local, de ahí el 8081.
+Con `http.server` el enlace de navegación `/promedio` da 404 (no hay `try_files`): abrir
+`/promedio.html?api=...` o probar detrás de nginx.
 
 ### Comprobaciones de la infraestructura
 
@@ -72,12 +92,14 @@ y abrir `http://127.0.0.1:8081/?api=http://127.0.0.1:8000` (`?api=` solo se acep
   las locales (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las páginas estáticas y las cabeceras de caché de `/vendor/` y
-  `/js/`, y que `docker stop` tarda menos de 10 s. Sin argumento usa el
+  `/js/`; avisa (WARN, sin fallar) si `docker logs` no tiene líneas de acceso de nginx o si `docker stop`
+  tarda 10 s o más. Sin argumento usa el
   paquete local (`files/` montado, `S3_BUCKET` vacío); con `deploy/elections.env`, S3 y la base reales.
   Requiere Docker en marcha.
 
 Estado: `nginx.conf` se verificó con un nginx 1.29.5 local en el puerto 8043 (rutas reescritas a locales;
-12 comprobaciones de rutas, caché y cabeceras correctas). La prueba de humo con Docker está sin ejecutar.
+comprobaciones de rutas, caché, clave de caché, realip y cabeceras correctas; última vez el 2026-10-09). La
+prueba de humo con Docker está sin ejecutar.
 
 ## Comprobar S3
 

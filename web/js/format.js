@@ -29,6 +29,29 @@ export function fmtPct(x, digits = 1) {
   return isMissing(x) ? DASH : `${numberFormat(digits).format(x)} %`;
 }
 
+/**
+ * Probability in [0, 1] as a percentage that never rounds a near-certainty to 0 % or 100 %:
+ * '> 99 %' from 0.995, '< 1 %' up to 0.005 (exclusive of 0), '0 %' and '100 %' only when exact.
+ */
+export function fmtProb(p, digits = 0) {
+  if (isMissing(p)) {
+    return DASH;
+  }
+  if (p === 0) {
+    return '0 %';
+  }
+  if (p === 1) {
+    return '100 %';
+  }
+  if (p >= 0.995) {
+    return '> 99 %';
+  }
+  if (p > 0 && p <= 0.005) {
+    return '< 1 %';
+  }
+  return fmtPct(p * 100, digits);
+}
+
 export function fmtRange(lo, hi, digits = 1) {
   if (isMissing(lo) || isMissing(hi)) {
     return DASH;

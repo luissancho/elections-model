@@ -3,7 +3,7 @@ import {ApiError, apiBase, forecastUrl, getForecast, getManifest, getScopes} fro
 import {readState, writeState, onStateChange} from '../state.js';
 import {fmtDate, fmtInt, fmtNum} from '../format.js';
 import {Catalog} from '../catalog.js';
-import {renderHeader, renderFooter, renderFreeze, renderError} from '../layout.js';
+import {renderHeader, updateHeader, renderFooter, renderFreeze, renderError} from '../layout.js';
 import {renderSeries} from '../charts/series.js';
 
 const PAGES = [{href: '/', label: 'Portada'}, {href: '/promedio', label: 'Promedio'}];
@@ -133,11 +133,14 @@ async function load() {
 
 async function paint(id) {
   const state = readState();
-  renderHeader(dom.header, {pages: PAGES, active: ACTIVE, scopes, state});
+  updateHeader(dom.header, {state});
   dom.homeLink.href = `/${location.search}`;
   showStatus('Cargando…');
 
-  const {scope, mode, run} = state;
+  // Pin the run for the whole page load, so the parts of one paint never mix runs; the URL keeps `run`
+  // only when the user pinned it.
+  const {scope, mode} = state;
+  const run = state.run || manifest.data.scopes?.[scope]?.latest || null;
   const [meta, series, polls, projection, vote] = await Promise.all([
     getForecast(scope, 'meta', {run}),
     getForecast(scope, 'series', {run}),
@@ -210,6 +213,7 @@ async function init() {
       // Before the listener exists, so this does not trigger a second load.
       writeState({scope, run: null});
     }
+    updateHeader(dom.header, {scopes, state: readState()});
     onStateChange(load);
     await load();
   } catch (error) {

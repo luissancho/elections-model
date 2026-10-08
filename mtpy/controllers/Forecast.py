@@ -123,8 +123,8 @@ class Forecast(Base):
         """
         check_scope(scope)
         check_part(part, RUN_PARTS)
-        run, explicit = self.resolve_run(scope)
         fmt = check_format(self.query.get('format'))
+        run, explicit = self.resolve_run(scope)
         self.notice_freeze()
 
         if fmt == 'csv':
@@ -156,8 +156,8 @@ class Forecast(Base):
         check_scope(scope)
         check_mode(mode)
         check_part(part, MODE_PARTS)
-        run, explicit = self.resolve_run(scope)
         fmt = check_format(self.query.get('format'))
+        run, explicit = self.resolve_run(scope)
         self.notice_freeze()
 
         if fmt == 'csv':
