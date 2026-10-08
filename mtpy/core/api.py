@@ -57,7 +57,10 @@ def json_default(obj):
 
         - ``None`` for ``pd.NaT`` and ``pd.NA``.
         - A list, with the NaN replaced by ``None`` at any depth, for a ``numpy.ndarray``.
-        - The equivalent Python scalar, ``None`` if it is a NaN, for a ``numpy.generic``.
+          ``datetime64`` arrays are cast to microseconds first, so their elements are dates
+          (``NaT`` is ``None``) instead of nanosecond integers.
+        - The equivalent Python scalar, ``None`` if it is a NaN, for a ``numpy.generic``
+          (``datetime64`` is cast to microseconds first, as in arrays).
         - A ``YYYY-MM-DD`` string for a ``datetime`` (``pd.Timestamp`` included) at midnight
           without timezone, an ISO 8601 string for any other.
         - An ISO 8601 string for a ``date``.
@@ -66,15 +69,28 @@ def json_default(obj):
     Raises
     ------
     TypeError
-        If the type of the object is not supported.
+        If the type of the object is not supported, ``timedelta64`` (scalars and arrays)
+        included.
     """
     if obj is pd.NaT or obj is pd.NA:
         return None
 
     if isinstance(obj, np.ndarray):
+        if obj.dtype.kind == 'm':
+            raise TypeError('timedelta64 values are not JSON serializable')
+
+        if obj.dtype.kind == 'M':
+            obj = obj.astype('datetime64[us]')
+
         return _nan_to_none(obj.tolist())
 
     if isinstance(obj, np.generic):
+        if isinstance(obj, np.timedelta64):
+            raise TypeError('timedelta64 values are not JSON serializable')
+
+        if isinstance(obj, np.datetime64):
+            obj = obj.astype('datetime64[us]')
+
         return _nan_to_none(obj.item())
 
     if isinstance(obj, datetime.datetime):
@@ -359,6 +375,7 @@ class Response(Core):
                     content, ensure_ascii=False, allow_nan=False, default=json_default
                 ).encode('utf-8')
             except (TypeError, ValueError):
+                self.set_header('cache-control', 'no-store').set_header('etag', None)
                 self.set_status_code(500)
                 self.content = json.dumps({
                     'status': 'error',
@@ -375,6 +392,7 @@ class Response(Core):
 
             self.content = content
         else:
+            self.set_header('cache-control', 'no-store').set_header('etag', None)
             self.set_content_type('application/json')
             self.set_status_code(500)
             self.content = json.dumps({

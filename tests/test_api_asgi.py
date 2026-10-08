@@ -54,12 +54,23 @@ class Echo(Controller):
         self.response.set_cache(31536000, immutable=True).set_etag('abc')
         return {}
 
+    async def dt64_action(self):
+        return {'d': np.datetime64('2026-10-07', 'ns'), 'arr': pd.Series(pd.to_datetime(['2026-10-07', None])).values}
+
+    async def td64_action(self):
+        return {'t': np.timedelta64(5, 'D')}
+
+    async def cached_nan_action(self):
+        self.response.set_cache(60).set_etag('x')
+        return {'x': float('nan')}
+
 
 ROUTES = [
     ('/list', 'echo', 'list'), ('/types', 'echo', 'types'), ('/nan', 'echo', 'nan'), ('/text', 'echo', 'text'),
     ('/csv', 'echo', 'csv'), ('/query', 'echo', 'query'), ('/item/{id}', 'echo', 'item'),
     ('/teapot-int', 'echo', 'teapot_int'), ('/bool', 'echo', 'bool'), ('/boom', 'echo', 'boom'),
     ('/cached', 'echo', 'cached'), ('/immutable', 'echo', 'immutable'),
+    ('/dt64', 'echo', 'dt64'), ('/td64', 'echo', 'td64'), ('/cached-nan', 'echo', 'cached_nan'),
 ]
 
 
@@ -176,3 +187,22 @@ def test_status_codes_include_422_and_503():
 
     assert Response.status_codes[422] == 'Unprocessable Entity'
     assert Response.status_codes[503] == 'Service Unavailable'
+
+
+def test_datetime64_values_are_serialised_as_dates(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/dt64')
+    assert status == 200
+    assert json.loads(body) == {'d': '2026-10-07', 'arr': ['2026-10-07', None]}
+
+
+def test_timedelta64_is_rejected_with_a_json_500(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/td64')
+    assert status == 500
+    assert json.loads(body) == {'status': 'error', 'message': 'Invalid content'}
+
+
+def test_serialisation_failure_is_not_cacheable(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/cached-nan')
+    assert status == 500
+    assert headers['cache-control'] == 'no-store'
+    assert 'etag' not in headers
