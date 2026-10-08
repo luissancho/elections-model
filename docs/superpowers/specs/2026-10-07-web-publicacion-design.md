@@ -37,6 +37,9 @@ propia); objetivo científico y divulgativo; los cambios de esquema en la base l
 - Páginas de evento tras cargar los resultados oficiales, a mano. Sin feed de resultados provisionales.
 - Base de producción: **la RDS existente** de `deploy/elections.env`; Luis trabajará directamente contra
   ella (notebooks, `run_load`, publicar). La PostgreSQL local pasa a ser copia opcional de desarrollo.
+- (2026-10-08) Imagen Docker: Luis revierte el `Dockerfile`, `supervisord.conf`, `init.sh`, el `crontab` y
+  `gunicorn==20.1.0` a su versión original (quiere añadir funcionalidades y algún cron); de la fase 0 solo
+  se conserva, en `.dockerignore`, la exclusión de `deploy/*.env`, `.git` y material de claves.
 - (2026-10-08) Configuración única: `deploy/elections.env`, con el usuario de PostgreSQL y el usuario de
   AWS/S3 existentes, sirve para la web, la publicación y los jobs. Sin rol `web_reader` ni usuarios IAM
   nuevos por ahora.

@@ -8,15 +8,19 @@ Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>`
   las claves de AWS/S3 que ya usa el proyecto. Está ignorado por git y excluido de la imagen por
   `.dockerignore`; se inyecta en tiempo de ejecución con `--env-file`.
 - Plantilla con todas las claves (valores vacíos): `.env.example` en la raíz del repositorio.
-- `GIT_COMMIT` no debe aparecer en el fichero: lo fija la imagen en el build y un `--env-file` lo pisaría.
 
 ## Construir la imagen
 
 Desde la raíz del repositorio:
 
 ```
-docker build --platform linux/amd64 --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t elections-web:<tag> .
+docker build --platform linux/amd64 -t elections-web:<tag> .
 ```
+
+La imagen copia el repositorio completo (`COPY . .`) salvo lo excluido en `.dockerignore`; `deploy/elections.env`,
+`.git` y el material de claves nunca entran en ella. Servicios según variables de entorno: `APP_API` arranca
+nginx + gunicorn, `APP_CRONTAB` arranca supercronic con `deploy/docker/crontab`, `APP_QUEUE` el worker;
+`RUN_JOB` ejecuta un job y termina.
 
 ## Arrancar el contenedor
 
