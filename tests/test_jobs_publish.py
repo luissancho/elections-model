@@ -98,3 +98,34 @@ def test_deferred_and_unknown_what_are_rejected(fresh_app, tmp_path):
         Publish().run(what='nope', fs=FileSystem(str(tmp_path)))
     with pytest.raises(RuntimeError, match='file system'):
         Publish().run(what=['manifest'])
+
+
+def test_failed_forecast_is_not_hidden_by_a_later_successful_action(fresh_app, tmp_path, patched, monkeypatch):
+    """Un `forecast` fallido sigue contando aunque el `point` posterior del mismo ámbito funcione."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    run_id = patched[0][1]
+
+    def broken(*args, **kwargs):
+        raise KeyError('x')
+
+    monkeypatch.setattr(publish, 'publish_forecast', broken)
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['forecast', 'point'], scopes=['es'], fs=fs, run=run_id)
+
+
+def test_error_resolving_the_event_date_only_fails_that_scope(fresh_app, tmp_path, patched, monkeypatch):
+    """Un error de base al resolver la fecha de un ámbito no detiene a los demás."""
+    from mtpy.jobs.Publish import Publish
+
+    def next_date(scope):
+        if scope == 'es-md':
+            raise RuntimeError('db down')
+        return '2026-11-29'
+
+    monkeypatch.setattr(publish, 'next_event_date', next_date)
+    with pytest.raises(RuntimeError, match='es-md'):
+        Publish().run(what=['forecast'], scopes=['es-md', 'es'], fs=FileSystem(str(tmp_path)))
+    assert [c[0] for c in patched] == ['es']

@@ -107,6 +107,7 @@ class Publish(Job):
         run_id = bundle.run_id()
 
         results = {}
+        failures = []
         lines = []
 
         if 'forecast' in whats:
@@ -116,6 +117,8 @@ class Publish(Job):
                     scope, writer, run_id, event_date, today, force, n_sim=n_sim, seed=seed, drange=drange,
                     max_fc=max_fc, alpha=alpha, correctors=correctors, verbose=verbose)
                 results[scope] = result
+                if result['status'] == 'failed':
+                    failures.append('{} ({})'.format(scope, 'forecast'))
                 if result['status'] == 'published':
                     entries[scope] = result['entry']
                 lines.append(self._line(scope, result))
@@ -136,6 +139,8 @@ class Publish(Job):
             for scope in publish.resolve_scopes(scopes):
                 result = self._pointer_scope(action, writer, scope, run)
                 results[scope] = result
+                if result['status'] == 'failed':
+                    failures.append('{} ({})'.format(scope, action))
                 lines.append(self._line(scope, result, run))
 
         for line in lines:
@@ -143,9 +148,8 @@ class Publish(Job):
         if self.app.logger is not None:
             self.alert('\n'.join(lines))
 
-        failed = [scope for scope, result in results.items() if result['status'] == 'failed']
-        if failed:
-            raise RuntimeError('publish: failed scopes: ' + ', '.join(failed))
+        if failures:
+            raise RuntimeError('publish: failed scopes: ' + ', '.join(failures))
 
         return results
 
@@ -175,10 +179,10 @@ class Publish(Job):
         dict
             Result with a ``status`` and its details.
         """
-        date = event_date or publish.next_event_date(scope)
-        if date is None:
-            return {'status': 'skipped', 'reason': 'no upcoming event'}
         try:
+            date = event_date or publish.next_event_date(scope)
+            if date is None:
+                return {'status': 'skipped', 'reason': 'no upcoming event'}
             in_window = publish.loreg_guard(scope, date, today, force)
             out = publish.publish_forecast(scope, writer, run_id, date, freeze=in_window, **params)
         except publish.PublishRefused as e:
