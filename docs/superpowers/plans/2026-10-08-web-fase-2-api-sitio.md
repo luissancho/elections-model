@@ -1,5 +1,7 @@
 # Web de resultados, fase 2 (API `/api/v1` y sitio mínimo): plan de implementación
 
+> **Estado:** completado el 2026-10-08 en `dev` (commits 207cd46..8e0a116 más el commit de documentación; humo Docker y recorrido en navegador pendientes de Luis). Ver el estado de cierre en la spec.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Servir el paquete publicado en la fase 1 por HTTP (`/api/v1`, solo GET, JSON y CSV, con caché y

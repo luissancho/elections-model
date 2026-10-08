@@ -547,3 +547,91 @@ y medición de `scopes: "all"` (estimación 10-15 min; ver qué ámbitos quedan 
 `ATTRIBUTION` y licencia de la curación propia; opcionalmente, contraste en el notebook con `n_sim=10000`.
 
 Siguiente: plan de la fase 2 (API y sitio mínimo).
+
+## Estado al cierre de la fase 2 (2026-10-08)
+
+Hecho en `dev` (plan en `d6fb790`, código en `207cd46..8e0a116`, 12 commits, más el commit de
+documentación), con 299 tests unitarios en verde (`python -m pytest -m "not integration" -q`: 262 del cierre
+de la fase 1 y 37 nuevos: `tests/test_webapi_unit.py` 10, `tests/test_web_api.py` 20,
+`tests/test_web_routes.py` 4 y 3 añadidos a los de la fase 1) y los 5 de integración sin cambios:
+
+- `mtpy/lib/webapi.py`: constantes, validadores (`check_scope|run|mode|part|format`), `settings()`,
+  `TTLCache`, `LRUCache`, `catalogue()`, `Site` (manifest, historia y ficheros de run como bytes), `site()`
+  y `ROUTES`.
+- `mtpy/controllers/Base.py` y `mtpy/controllers/Forecast.py`: cabeceras, caché, CSV y `x-freeze`.
+- `api.py` (registro de rutas), `config.json` (sección `web`: `prefix`, `cache_ttl`) y `.env.example`
+  (`WEB_PREFIX`, `WEB_CACHE_TTL`).
+- `web/`: `index.html`, `promedio.html`, `css/site.css`, `js/` (`api`, `catalog`, `format`, `layout`,
+  `state`, `charts/{base,bars,evolution,hemicycle,series}`, `pages/{index,promedio}`) y
+  `vendor/echarts-5.6.0.min.js` con `LICENSE-echarts.txt`.
+- Infraestructura: `deploy/docker/nginx.conf` (única modificación en `deploy/docker`), `deploy/check-api.sh`,
+  `deploy/nginx-check.sh`, `deploy/smoke.sh`.
+- Arreglos de la fase 1 (`mtpy/jobs/Publish.py`, `mtpy/lib/publish.py`): `_check_run` con `fullmatch` y
+  línea `manifest: failed (...)` si falla la escritura del manifest.
+- Documentación: rutas en `docs/web/contrato.md` y sección "La web" de `deploy/README.md`.
+
+Verificado en la sesión:
+
+- Los tests del arnés ASGI (`tests/test_web_api.py`) y el estático `tests/test_web_routes.py`.
+- `S3_BUCKET= python -m uvicorn api:api --port 8000` sirviendo todas las rutas desde el paquete local
+  `files/site/v1` (run `20261008-181100`), y `bash deploy/check-api.sh` contra uvicorn (todas OK).
+- `check-api.sh` y 12 comprobaciones contra un nginx 1.29.5 LOCAL en el puerto 8043 con el `nginx.conf` del
+  repositorio reescrito a rutas locales: `/healthz` 200; `/` y `/promedio` 200 `text/html` por
+  `try_files`; `/nope` 404; `/vendor/echarts-5.6.0.min.js` `max-age=31536000`; `/js/api.js` y
+  `/css/site.css` `no-cache`; `/api/v1/health` `no-store` con `X-Cache: MISS`; `/api/v1/manifest`
+  `max-age=60` y `X-Cache: HIT` en la segunda petición; `?run=` → `immutable`; `/api/v1/forecast/es-xx` 400
+  JSON sin tocar; cabeceras de seguridad en estáticos y API.
+- `bash deploy/nginx-check.sh` (`syntax is ok`) y `node --check` en todos los módulos JS.
+- Renderizado de ECharts en el servidor (SVG en Node) del gráfico de serie en los dos modos sobre el run real.
+
+No verificado: Docker (`deploy/smoke.sh` escrito y con `bash -n` limpio, pero nunca ejecutado: el demonio no
+estaba en marcha); las páginas en un navegador real (escritorio y móvil, errores de consola); el despliegue
+en producción.
+
+Decisiones tomadas durante la ejecución:
+
+1. Modo por defecto `forecast`, con interruptor "Hoy"/"Elección". La portada muestra todos los partidos (el
+   selector de grupos es de la fase 3).
+2. `simulable` en `/scopes` = el ámbito tiene entrada en el manifest.
+3. Sin `WEB_FREEZE`: el único interruptor editorial es `manifest.freeze`; la API añade `x-freeze: active`
+   cuando está activo.
+4. La API sirve los ficheros del paquete tal cual, con `ETag` (md5 de los bytes) en todo contenido servido,
+   `/scopes` incluido.
+5. `BLOCK_ORDER = Izquierda, Separatista, Regionalista, Derecha` para el hemiciclo.
+6. En `deploy/docker` solo cambia `nginx.conf` (`Dockerfile`, `supervisord.conf`, `init.sh` y `crontab`
+   de Luis, intactos). La zona de caché se llama `api_cache` (`api` chocaba con la zona de `limit_req`).
+7. ECharts 5.6.0 vendorizado como `web/vendor/echarts-5.6.0.min.js` (versión en el nombre; `location ^~
+   /vendor/` con un año de caché).
+8. `webapi.py` lee `data/es-scopes.csv` directamente en vez de importar `mtpy.lib.data`, pero los workers
+   de gunicorn siguen cargando scipy/statsmodels vía `mtpy.core.utils.helpers` (importado por
+   `mtpy.core.io`): aligerarlos exige imports perezosos ahí (fase 6).
+9. Los tests de la API viven en `tests/test_web_api.py` (la spec decía `test_api_asgi.py`);
+   `tests/test_web_routes.py` acepta enlaces de página `/nombre` si existe `web/nombre.html`.
+10. El parámetro de desarrollo `?api=` solo se acepta para `http://localhost` y `http://127.0.0.1`; las
+    fechas se formatean con un array fijo de meses en español.
+
+Diferido a la revisión final de la rama o a la fase 3: la plantilla de página duplicada entre
+`pages/index.js` y `pages/promedio.js` (un `pages/common.js`), el foco de teclado que se pierde al
+repintar la cabecera al cambiar de ámbito o modo, el redondeo de `p_majority` a "100 %", `scope="col"` en
+las cabeceras de tabla y `caption` en la portada, el pie obsoleto tras una carga fallida, el selector de
+ámbito no limitado a los publicados, las alternativas de texto de los gráficos, el ayudante común de
+`part_action`/`mode_part_action`, la caché de catálogo a nivel de módulo compartida entre `App`s y
+`float(cache_ttl)` ante basura (500).
+
+Diferido a la fase 6 (flecos de la fase 0): soporte de `HEAD`, `send()` fuera del `try` de
+`Controller.dispatch`, docstring de `Api.__call__`, y los imports perezosos de `helpers.py`/`io.py`.
+
+Pendiente de Luis:
+
+- Ejecutar `bash deploy/smoke.sh` (paquete local) y `bash deploy/smoke.sh deploy/elections.env` con Docker en
+  marcha.
+- Abrir `/` y `/promedio` en escritorio y móvil sin errores de consola. A mirar: etiquetas y texto central
+  del hemiciclo a 240 px de alto, etiquetas de las barras dentro del lienzo, puntos de la evolución con un
+  solo run, `.grid > * { min-width: 0 }` si los anchos de ECharts impiden encoger, tooltip de días con
+  varios sondeos, la leyenda ocultando a la vez banda, puntos y proyección, el interruptor "Hoy"/"Elección"
+  y el enlace CSV con `?run=`.
+- Primera publicación de `es` a S3 para que producción tenga datos; desplegar la imagen con
+  `--env-file deploy/elections.env`; proxy y TLS delante del 8042.
+- Decidir el modo por defecto, la agrupación de partidos (fase 3) y `BLOCK_ORDER`.
+
+Siguiente: plan de la fase 3 (escaños, autonómicos, histórico).

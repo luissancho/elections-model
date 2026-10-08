@@ -216,9 +216,69 @@ Cada JSON de datos tiene un CSV en `csv/`: `csv/{nombre}.csv` para los ficheros 
 `csv/{modo}-{nombre}.csv` para los de modo. `meta`, `headline`, `history` y `manifest` no tienen gemelo.
 Las columnas se describen en la sección de cada fichero.
 
-## Rutas de la API: fase 2
+## Rutas de la API (`/api/v1`, fase 2)
 
-Pendiente de la fase 2 (`/api/v1`, solo GET). La API leerá `manifest.json` para resolver `latest` y servirá
-estos ficheros sin transformarlos; `?format=csv` devolverá el gemelo CSV donde exista. Este documento no
-fija las rutas todavía: se completará con el plan de la fase 2 a partir de la sección "Contrato de API" de
-la spec.
+Solo `GET`. La API lee `manifest.json` para resolver el último run de un ámbito y sirve los ficheros del
+paquete tal cual (los bytes escritos por `publish`, sin volver a serializar). La fuente de verdad en
+código es `ROUTES` en `mtpy/lib/webapi.py` y los controladores `mtpy/controllers/Base.py` y
+`Forecast.py`.
+
+| Ruta | Fichero servido | `Cache-Control` |
+|---|---|---|
+| `/api/v1/health` | `{"status":"ok","contract":1}`, sin tocar el paquete | `no-store` |
+| `/api/v1/manifest` | `manifest.json` | `public, max-age=60` |
+| `/api/v1/scopes` | catálogo `data/es-scopes.csv` cruzado con el manifest (ver abajo) | `public, max-age=60` |
+| `/api/v1/forecast/{scope}` | `meta.json` del run (atajo de `/forecast/{scope}/meta`) | 60 s, o inmutable con `?run=` |
+| `/api/v1/forecast/{scope}/runs` | `runs/{scope}/history.json` | `public, max-age=60` |
+| `/api/v1/forecast/{scope}/{part}` | `part` ∈ `meta`, `headline`, `series`, `polls`, `fan`, `house-effects`, `dispersion` | 60 s, o inmutable con `?run=` |
+| `/api/v1/forecast/{scope}/{mode}/{part}` | `mode` ∈ `nowcast`, `forecast`; `part` ∈ `vote`, `summary`, `dist`, `districts`, `scenario`, `projection` | 60 s, o inmutable con `?run=` |
+
+Inmutable es `public, max-age=31536000, immutable`: solo cuando el run se pide de forma explícita con
+`?run=`, porque un run publicado no se reescribe. Sin `?run=` se sirve el último run del manifest y la
+respuesta caduca a los 60 s (`web.cache_ttl`). Las rutas fijas (`health`, `manifest`, `scopes`, `runs`) se
+registran antes que las genéricas.
+
+### Parámetros
+
+- `run`: `YYYYMMDD-HHMMSS` (UTC). Vacío o ausente equivale al último run del ámbito.
+- `format`: `json` (por defecto) o `csv`. Solo hay gemelo CSV para `series`, `polls`, `fan`,
+  `house-effects` y `dispersion`, y para las seis partes de cada modo; `meta` y `headline` no lo tienen.
+  El CSV se sirve como `text/csv` con `Content-Disposition: attachment; filename="..."`, con nombre
+  `{scope}-{run}-{part}.csv` o `{scope}-{run}-{mode}-{part}.csv`.
+
+### `/scopes`
+
+Un objeto `{"contract": 1, "scopes": [...]}` con una fila por ámbito del catálogo, en su orden:
+`code`, `name`, `parent` (`null` si no tiene), `seats`, `simulable`, `latest` y los datos de la entrada del
+manifest `run_at`, `event_date`, `as_of`, `date_last`, `n_polls`. `simulable` es verdadero si el ámbito
+tiene entrada en el manifest; en caso contrario `latest` y los campos del run son `null`.
+
+### Errores
+
+Cuerpo JSON `{"status":"error","message":"..."}` con `Cache-Control: no-store`.
+
+| Estado | `message` | Causa |
+|---|---|---|
+| 400 | `invalid scope` | ámbito mal formado o fuera del catálogo |
+| 400 | `invalid run` | `run` no cumple `YYYYMMDD-HHMMSS` |
+| 400 | `invalid mode` | `mode` no es `nowcast` ni `forecast` |
+| 400 | `invalid format` | `format` no es `json` ni `csv` |
+| 404 | `unknown part` | `part` fuera de la lista de la ruta |
+| 404 | `scope not published` | el ámbito no tiene entrada en el manifest (sin `?run=`) |
+| 404 | `no runs published` | el ámbito no tiene `history.json` |
+| 404 | `run not found` | el fichero del run no existe |
+| 404 | `no csv for this part` | `format=csv` en una parte sin gemelo CSV (`meta`, `headline`) |
+| 503 | `no bundle published yet` | no existe `manifest.json` |
+| 503 | `no file system configured` | la aplicación no tiene sistema de ficheros |
+
+### Cabeceras
+
+- `ETag`: md5 de los bytes servidos, en todo contenido servido (también `/scopes`).
+- `Access-Control-Allow-Origin: *` en todas las respuestas, errores incluidos (solo `GET`, sin preflight).
+- `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
+  Es solo un aviso: la API sigue sirviendo los datos.
+
+## Rutas de base (`/parties`, `/pollsters`, `/polls`, ...): fase 4
+
+Pendientes de la fase 4 (las que leen la base de datos); su definición está en la sección "Contrato de
+API" de la spec. Hasta entonces la API solo necesita el paquete publicado, no la base.

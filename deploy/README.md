@@ -1,4 +1,4 @@
-# Despliegue de la web (fases 0-1)
+# Despliegue de la web (fases 0-2)
 
 Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>` por la etiqueta que uses.
 
@@ -27,6 +27,57 @@ nginx + gunicorn, `APP_CRONTAB` arranca supercronic con `deploy/docker/crontab`,
 ```
 docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/elections.env elections-web:<tag>
 ```
+
+## La web
+
+Dentro del contenedor, nginx (puerto 8042) sirve:
+
+- `web/` en `/` (`/` y `/promedio` por `try_files`), con cabeceras de seguridad.
+- `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache`, cabecera
+  `X-Cache`) y `limit_req` de 20 r/s con ráfaga de 40 (exceso: 429).
+- `/healthz` → `200 ok`, sin pasar por la API.
+- `/vendor/` (ECharts, con la versión en el nombre) con caché de un año; los `.js` y `.css` se
+  revalidan siempre.
+
+La API (`/api/v1`, ver `docs/web/contrato.md`) solo necesita S3 (el paquete `site/v1`): no usa la base
+de datos hasta la fase 4. Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
+paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
+Sin ningún run publicado, la API responde 503 `no bundle published yet`.
+
+Tras arrancar el contenedor:
+
+```
+curl -s http://127.0.0.1:8042/healthz
+bash deploy/check-api.sh http://127.0.0.1:8042
+```
+
+y abrir `http://127.0.0.1:8042/` y `http://127.0.0.1:8042/promedio`. `check-api.sh` comprueba `/healthz`
+(solo existe en nginx; sin nginx lo marca `n/a`) y 10 rutas de la API (código, tipo y JSON válido); sale
+con error si alguna falla.
+
+### Desarrollo sin Docker
+
+```
+S3_BUCKET= python -m uvicorn api:api --port 8000
+python -m http.server 8081 -d web
+```
+
+y abrir `http://127.0.0.1:8081/?api=http://127.0.0.1:8000` (`?api=` solo se acepta para
+`http://localhost` y `http://127.0.0.1`). Con `S3_BUCKET=` vacío la API lee el paquete local
+`files/site/v1`. El puerto 8080 puede estar ocupado por un nginx local, de ahí el 8081.
+
+### Comprobaciones de la infraestructura
+
+- `bash deploy/nginx-check.sh`: `nginx -t` sobre `deploy/docker/nginx.conf` con las rutas adaptadas a
+  las locales (no arranca nginx). Requiere nginx instalado.
+- `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
+  `*.env` en ella, ejecuta `check-api.sh`, las páginas estáticas y las cabeceras de caché de `/vendor/` y
+  `/js/`, y que `docker stop` tarda menos de 10 s. Sin argumento usa el
+  paquete local (`files/` montado, `S3_BUCKET` vacío); con `deploy/elections.env`, S3 y la base reales.
+  Requiere Docker en marcha.
+
+Estado: `nginx.conf` se verificó con un nginx 1.29.5 local en el puerto 8043 (rutas reescritas a locales;
+12 comprobaciones de rutas, caché y cabeceras correctas). La prueba de humo con Docker está sin ejecutar.
 
 ## Comprobar S3
 
@@ -167,7 +218,8 @@ Cada run guarda en su `meta.json` los `seconds` por paso (`init`, `fit`, `nowcas
 - Volver a un run anterior sin borrar nada: `{"what":["point"],"scopes":["es"],"run":"<run_id>"}`.
 - Quitar un run malo: `{"what":["unpublish"],"scopes":["es"],"run":"<run_id>"}`. Borra su carpeta,
   reconstruye `history.json` y repunta el manifest al run anterior si apuntaba a él.
-- Las cachés de la API de la fase 2 caducan en 2 minutos como máximo, así que la retirada se ve en ese plazo.
+- `point` y `unpublish` se ven en la web en 2 minutos como máximo: 60 s de caché de la API (por proceso) más
+  60 s de la de nginx. Los runs pedidos con `?run=` son inmutables en el navegador (un año).
 
 ### Guarda LOREG
 
