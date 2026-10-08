@@ -460,3 +460,63 @@ el esquema `elections` en la RDS.
 Siguiente: plan de la fase 1 (`mtpy/lib/bundle.py`, `mtpy/lib/publish.py`, `mtpy/jobs/Publish.py`, tests
 unitarios e integración, primer paquete de `es` en `files/site/v1` y en S3, medición de duración contra
 la RDS), a partir de las secciones "Paquete publicado" y "Comando de publicar".
+
+## Estado al cierre de la fase 1 (2026-10-08)
+
+Hecho en `dev` (commits `30a6369..9471dfa` más el commit de documentación), con 249 tests unitarios en
+verde (`python -m pytest -m "not integration" -q`: 192 de antes de la fase y 57 nuevos) y 5 de integración
+en `tests/integration/test_publish.py` (`python -m pytest -m integration -k publish -v`, 247 s contra la RDS):
+
+- `mtpy/core/utils/serialize.py`: `json_default` (reexportado desde `mtpy/core/api.py`).
+- `mtpy/lib/bundle.py`: rutas, sobre, `SCHEMAS`, `validate`, `BundleReader` y `BundleWriter`.
+- `mtpy/lib/publish.py`: exportadores, `publish_forecast`, `rebuild_history`, `update_manifest`, `point`,
+  `unpublish`, `loreg_guard`, `resolve_scopes`, `provenance`, `ATTRIBUTION`, `DEFAULT_CORRECTORS`.
+- `mtpy/jobs/Publish.py`: `python job.py publish` con `what` ∈ `forecast`, `manifest`, `point`, `unpublish`.
+- Tests: `tests/fakes.py`, `tests/__init__.py`, `tests/test_serialize_unit.py`, `tests/test_bundle_unit.py`,
+  `tests/test_publish_unit.py`, `tests/test_jobs_publish.py`, `tests/integration/test_publish.py`.
+- Documentación: `docs/web/contrato.md` (contrato del paquete) y la sección "Publicar" de `deploy/README.md`.
+
+Mediciones del primer paquete LOCAL de `es` (2026-10-08, contra la RDS del `.env` de la raíz, paquete en
+`files/site/v1` con `S3_BUCKET=` vacío): run `20261008-181100`, `n_sim=1000`; `seconds`: init 35,5, ajuste
+42,5, nowcast 21,0, forecast 21,5, exportación 0,8, total 121,2 (la spec estimaba 1,5-2 min para `es`).
+Usó 315 sondeos de 23 casas (613 sondeos del evento en la base, último 2026-10-03), `as_of` 2026-10-13,
+`horizon_max` 47; la carpeta del run pesa 1,4 MB y `nowcast/dist.json` 33,7 KB. Ensayo con `n_sim=20`:
+86 s, 19 JSON y 17 CSV, sin manifest. Las duraciones de `scopes: "all"` contra la RDS no se midieron.
+
+Decisiones tomadas durante la ejecución:
+
+1. `json_default` pasa a `mtpy/core/utils/serialize.py` (reexportado desde `mtpy/core/api.py`) con guarda
+   para `np.longdouble`: los escalares de coma flotante siempre salen como `float` nativo.
+2. `tests/__init__.py`: `tests` es ahora un paquete regular, porque IPython (importado por
+   `mtpy/core/utils/dataviz.py`) pone en `sys.path` un paquete llamado `tests` que tapaba al paquete
+   de espacio de nombres. Los dobles de prueba viven en `tests/fakes.py` (`synthetic_simulator`,
+   `FakeSimulator`, `RecordingFileSystem`).
+3. Detalles del contrato fijados en código: en las filas de `districts`, `seats` es la mediana de los
+   escaños simulados redondeada a 1 decimal (un estadístico, como `seats_mean`); en `summary` y
+   `headline`, `seats` es el titular entero (`totals()`), `null` en un bloque sin partidos. `dist` lleva
+   `n_seats`, `polls` lleva `parties` y `meta` lleva `scope`.
+4. `publish_forecast` no escribe punteros: el job reconstruye `runs/{scope}/history.json` de cada ámbito
+   publicado y después reescribe `manifest.json` (defecto del plan hallado en el primer paquete real:
+   el job solo escribía el manifest).
+5. `what` ∈ `forecast`, `manifest`, `point`, `unpublish`; `analysis`, `event` y `backtest` lanzan
+   `ValueError` indicando las fases 4, 5 y 5.
+6. `meta.freeze` = publicado dentro de la ventana LOREG con `force`; `manifest.freeze` es el interruptor
+   editorial.
+7. `ATTRIBUTION` (`mtpy/lib/publish.py`) es provisional (pregunta abierta de esta spec) y, como el manifest
+   conserva la atribución almacenada, cambiar la constante no alcanza a un manifest existente.
+8. `provenance` ejecuta git en la raíz del repositorio; en Docker (sin `.git`) `commit` cae a la variable
+   `GIT_COMMIT` o a `null`.
+9. Para publicar en local con `S3_BUCKET` definido en el `.env` de la raíz hay que anteponer `S3_BUCKET=`
+   (vacío): `mtpy.run()` construye entonces el sistema de ficheros `files/` (`load_dotenv` no pisa las
+   variables exportadas). La publicación real al bucket es de Luis.
+10. Los trailers de los commits nombran el modelo que escribió cada commit (Sonnet en los de implementación).
+
+Pendientes de la revisión final de la rama: redondeos de tiempos en `seconds`, `attribution` no se refresca
+en un manifest existente, validación de `event_date` antes del SQL de `db_stats`, docstrings y pistas de tipo.
+
+Pendiente de Luis: permisos AWS del bucket y `check_s3`; primera publicación a S3 contra la RDS
+(`set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["forecast"],"scopes":["es"]}'`)
+y medición de `scopes: "all"` (estimación 10-15 min; ver qué ámbitos quedan `skipped`); texto definitivo de
+`ATTRIBUTION` y licencia de la curación propia; opcionalmente, contraste en el notebook con `n_sim=10000`.
+
+Siguiente: plan de la fase 2 (API y sitio mínimo).

@@ -1,5 +1,8 @@
 # Web de resultados, fase 1 (paquete y comando `publish`): plan de implementación
 
+> **Estado:** completado el 2026-10-08 en `dev` (commits 30a6369..9471dfa más el commit de documentación). Ver el
+> estado de cierre en la spec.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Un comando `python job.py publish` que ejecuta el modelo MT para un ámbito, exporta sus salidas a

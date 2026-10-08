@@ -22,7 +22,7 @@ Every JSON file is an envelope::
 
 where ``schema`` is ``{name}@{CONTRACT}``, ``scope`` and ``run_id`` are ``null`` when the file
 does not belong to one (``manifest``, ``history``), ``mode`` is only set for ``MODE_PARTS`` and
-``data`` has the keys listed in ``SCHEMAS``.
+``data`` has the keys listed in ``SCHEMAS``. The contract is described in ``docs/web/contrato.md``.
 
 ``BundleReader`` and ``BundleWriter`` read and write the bundle through a file system (``app.fs``),
 validating every JSON file against its schema before it is written.
