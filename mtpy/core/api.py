@@ -112,7 +112,42 @@ def json_default(obj):
 
 class Api(Core):
 
+    async def lifespan(self, receive, send):
+        """
+        Answer the ASGI lifespan protocol: acknowledge the startup and the shutdown.
+
+        Parameters
+        ----------
+        receive : callable
+            ASGI receive channel, an awaitable that returns the next lifespan message.
+        send : callable
+            ASGI send channel, an awaitable that takes the response message.
+
+        Returns
+        -------
+        None
+            It returns once the shutdown has been acknowledged. Any other message type
+            is ignored.
+        """
+        while True:
+            message = await receive()
+
+            if message['type'] == 'lifespan.startup':
+                await send({'type': 'lifespan.startup.complete'})
+            elif message['type'] == 'lifespan.shutdown':
+                await send({'type': 'lifespan.shutdown.complete'})
+
+                return
+
     async def __call__(self, scope, receive, send):
+        if scope['type'] == 'lifespan':
+            await self.lifespan(receive, send)
+
+            return
+
+        if scope['type'] != 'http':
+            return
+
         request = Request(scope, receive)
         response = Response(send)
 
@@ -557,6 +592,7 @@ class Router(Core):
                 name = to_camel(route['controller'])
                 self.controller = getattr(self.namespace, name)()
                 self.action = route['action']
+                self.params = {}
 
                 return self
 

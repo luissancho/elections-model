@@ -264,3 +264,27 @@ def test_error_responses_are_not_cacheable(fresh_app):
     assert json.loads(body) == {'status': 'error', 'message': 'gone'}
     assert headers['cache-control'] == 'no-store'
     assert 'etag' not in headers
+
+
+def test_prefix_not_found_does_not_reuse_previous_params(fresh_app):
+    api = make_api(fresh_app, not_found=[('/x', 'echo')])
+    assert json.loads(call(api, '/item/42')[2]) == {'id': '42'}
+    status, headers, body = call(api, '/x/anything')
+    assert status == 404
+    assert json.loads(body) == {'status': 'error', 'message': '404 Not Found'}
+
+
+def test_unknown_route_is_a_json_404(fresh_app):
+    status, headers, body = call(make_api(fresh_app), '/nope')
+    assert status == 404
+    assert json.loads(body) == {'status': 'error', 'message': '404 Not Found'}
+
+
+def test_lifespan_scope_is_acknowledged(fresh_app):
+    sent = call(make_api(fresh_app), '', scope_type='lifespan',
+                incoming=[{'type': 'lifespan.startup'}, {'type': 'lifespan.shutdown'}])
+    assert sent == [{'type': 'lifespan.startup.complete'}, {'type': 'lifespan.shutdown.complete'}]
+
+
+def test_other_scopes_are_ignored(fresh_app):
+    assert call(make_api(fresh_app), '', scope_type='websocket', incoming=[]) == []
