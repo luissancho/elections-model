@@ -1,16 +1,25 @@
-"""Pure exporters of a finished simulation into JSON-ready dicts and CSV twin frames.
+"""Publication of the model results into the web bundle.
 
-Every ``export_*`` function takes an already executed ``Simulator`` and returns ``(data, frame)``:
-``data`` follows the bundle schema of the same name and ``frame`` is its tabular twin for the CSV.
-Nothing here keeps state or touches storage.
+Two layers live here:
+
+- Pure exporters. Every ``export_*`` function takes an already executed ``Simulator`` (or its
+  ``Forecaster``) and returns ``(data, frame)``: ``data`` follows the bundle schema of the same name
+  and ``frame`` is its tabular twin for the CSV. They keep no state and touch no storage.
+- Orchestration. ``publish_forecast`` runs the model of a scope and writes an immutable run through a
+  ``BundleWriter``; ``rebuild_history``, ``update_manifest``, ``point`` and ``unpublish`` move the
+  pointers; ``loreg_guard`` and ``resolve_scopes`` decide what may be published. This layer reads and
+  writes the bundle, queries the database (``db_stats``, ``next_event_date``, ``resolve_scopes``) and
+  runs git for the provenance of each run (``provenance``).
 """
 import os
 import platform
 import subprocess
 import time
-from datetime import date, datetime, timezone
+import warnings
+from datetime import date, datetime, timedelta, timezone
 from importlib import metadata
 from typing import Callable, Optional, Sequence
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
@@ -185,7 +194,11 @@ def export_districts(sim):
 
 
 def export_scenario(sim):
-    """Export one randomly chosen simulation as a coherent seat scenario.
+    """Export the deterministic simulation closest to the central seats as a coherent seat scenario.
+
+    The simulation is ``sim.scenario()``: the one with the smallest L1 distance to the median seats
+    of every party (ties broken by L2 and then by the lowest index), so it is not random and the same
+    simulations always give the same scenario.
 
     Parameters
     ----------
@@ -335,9 +348,9 @@ def export_fan(sim):
     Returns
     -------
     tuple of (dict, pandas.DataFrame)
-        Data for the ``fan`` schema and its CSV twin.
+        Data for the ``fan`` schema and its CSV twin; rows are ``name, horizon, mean, sd, lo, hi``.
     """
-    fan = round_cols(sim.fan(), pct=('mean', 'sd', 'lo', 'hi'))
+    fan = round_cols(sim.fan(), pct=('mean', 'sd', 'lo', 'hi')).rename(columns={'party': 'name'})
     horizons = sorted(int(h) for h in fan['horizon'].unique())
     return {'horizons': horizons, 'rows': fan.to_dict(orient='records')}, fan
 
@@ -526,7 +539,29 @@ class PublishRefused(Exception):
     """The publication was refused by a guard (for instance the LOREG window)."""
 
 
-def loreg_guard(scope: str, event_date: str, today=None, force: bool = False) -> bool:
+class NothingToPublish(ValueError):
+    """The scope has no polls or its average cannot be fitted, so there is nothing to publish."""
+
+
+def _madrid_tz():
+    """Return the Europe/Madrid time zone, or a fixed UTC+1 offset (with a warning) without tzdata.
+
+    Returns
+    -------
+    datetime.tzinfo
+        ``ZoneInfo('Europe/Madrid')``, or ``timezone(timedelta(hours=1))`` when the time zone
+        database is missing (slim Docker images may lack ``tzdata``).
+    """
+    try:
+        return ZoneInfo('Europe/Madrid')
+    except ZoneInfoNotFoundError:
+        warnings.warn('Europe/Madrid time zone not found (install tzdata); using a fixed UTC+1 offset',
+                      stacklevel=2)
+        return timezone(timedelta(hours=1))
+
+
+def loreg_guard(scope: str, event_date: str, today: Optional[str | date | datetime] = None,
+                force: bool = False) -> bool:
     """Refuse to publish national forecasts in the five days before the election (LOREG art. 69.7).
 
     Parameters
@@ -535,8 +570,9 @@ def loreg_guard(scope: str, event_date: str, today=None, force: bool = False) ->
         Scope code; only ``'es'`` is guarded.
     event_date : str
         Election date, ``YYYY-MM-DD``.
-    today : str or datetime.date, optional
-        Current date; defaults to today in UTC.
+    today : str, datetime.date or datetime.datetime, optional
+        Current date (``YYYY-MM-DD`` string, date, or datetime reduced with ``.date()``); defaults
+        to today in Europe/Madrid.
     force : bool
         Publish even inside the window.
 
@@ -551,7 +587,9 @@ def loreg_guard(scope: str, event_date: str, today=None, force: bool = False) ->
         Inside the window and not forced.
     """
     if today is None:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(_madrid_tz()).date()
+    elif isinstance(today, datetime):
+        today = today.date()
     elif isinstance(today, str):
         today = date.fromisoformat(today)
     event = date.fromisoformat(event_date)
@@ -720,26 +758,41 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     ------
     FileExistsError
         The run already exists.
+    NothingToPublish
+        Building the simulator or fitting the average raised ``ValueError`` (no polls, or an average
+        that cannot be fitted). Any later error, ``ValueError`` included, propagates as is.
     """
     writer.begin_run(scope, run_id)
     run_at = bundle.iso_utc(writer.now())
     correctors = {**DEFAULT_CORRECTORS, **(correctors or {})}
-    seconds, heads, clip = {}, {}, {}
-    t0 = t = time.perf_counter()
-    sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
-                                   mode='nowcast', verbose=verbose, path='.', **correctors)
-    seconds['init'], t = time.perf_counter() - t, time.perf_counter()
-    names = sim.params['names']
-    sim.fit_forecast(names=names, max_fc=max_fc, fillna=True)
-    seconds['fit'], t = time.perf_counter() - t, time.perf_counter()
+    heads, clip = {}, {}
+    start = mark = time.perf_counter()
+
+    def lap():
+        """Seconds since the previous lap (or the start); restart the lap."""
+        nonlocal mark
+        now = time.perf_counter()
+        elapsed, mark = now - mark, now
+        return elapsed
+
+    try:
+        sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
+                                       mode='nowcast', verbose=verbose, path='.', **correctors)
+        init = lap()
+        names = sim.params['names']
+        sim.fit_forecast(names=names, max_fc=max_fc, fillna=True)
+    except ValueError as e:
+        raise NothingToPublish(str(e)) from e
+    fit = lap()
     sim.run(split=True, random=True, n_sim=n_sim)
     clip['nowcast'] = float(sim.clip_rate())
-    seconds['nowcast'], t = time.perf_counter() - t, time.perf_counter()
+    nowcast = lap()
     heads['nowcast'] = publish_mode(sim, writer, scope, run_id)
+    export = lap()
     sim.mode = 'forecast'
     sim.run(split=True, random=True, n_sim=n_sim, horizon='deadline')
     clip['forecast'] = float(sim.clip_rate())
-    seconds['forecast'], t = time.perf_counter() - t, time.perf_counter()
+    forecast = lap()
     heads['forecast'] = publish_mode(sim, writer, scope, run_id)
     fc = sim.model
     cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names)), ('fan', export_fan(sim)),
@@ -749,8 +802,10 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         writer.write_csv(bundle.path_csv(scope, run_id, part), frame)
     db_polls, db_last_poll = (stats or db_stats)(scope, event_date)
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    seconds['export'] = time.perf_counter() - t
-    seconds['total'] = time.perf_counter() - t0
+    export += lap()
+    seconds = {'init': init, 'fit': fit, 'nowcast': nowcast, 'forecast': forecast, 'export': export,
+               'total': time.perf_counter() - start}
+    seconds = {step: round(value, 1) for step, value in seconds.items()}
     meta = export_meta(sim, run_id, run_at, n_sim, max_fc, correctors, seconds, clip, db_polls, db_last_poll,
                        prov(), freeze)
     writer.write_json(bundle.path_part(scope, run_id, 'meta'), 'meta', meta, scope, run_id)
@@ -783,6 +838,9 @@ def rebuild_history(writer: BundleWriter, scope: str) -> dict:
 def read_manifest(reader: BundleReader) -> dict:
     """Read the manifest data, or the default one when the bundle has none yet.
 
+    The decision rests on ``FileNotFoundError`` from the read, not on ``exists``: fsspec's ``exists``
+    returns ``False`` on any error, so a transient S3 failure would replace the real manifest.
+
     Parameters
     ----------
     reader : BundleReader
@@ -792,17 +850,25 @@ def read_manifest(reader: BundleReader) -> dict:
     -------
     dict
         Manifest data.
+
+    Raises
+    ------
+    Exception
+        Any read error other than a missing manifest (``FileNotFoundError``) propagates.
     """
-    if reader.exists(bundle.path_manifest()):
+    try:
         return reader.read_json(bundle.path_manifest())['data']
+    except FileNotFoundError:  # only a missing manifest; any other read error must not be overwritten
+        pass
     return {'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {},
             'freeze': {'active': False, 'message': None}, 'attribution': dict(ATTRIBUTION)}
 
 
 def _write_manifest(writer: BundleWriter, data: dict) -> dict:
-    """Stamp and write the manifest data; return it."""
+    """Stamp the manifest data (time, contract and current ``ATTRIBUTION``), write it and return it."""
     data['updated_at'] = bundle.iso_utc(writer.now())
     data['contract'] = bundle.CONTRACT
+    data['attribution'] = dict(ATTRIBUTION)
     writer.write_json(bundle.path_manifest(), 'manifest', data, scope=None)
     return data
 
@@ -838,6 +904,25 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
     return _write_manifest(writer, data)
 
 
+def _check_run(scope: str, run_id: str) -> None:
+    """Validate a scope and a run id before any bundle path is built from them.
+
+    Parameters
+    ----------
+    scope, run_id : str
+        Scope code (``ROUTE_ALIAS_RE``) and run id (``RUN_ID_RE``).
+
+    Raises
+    ------
+    ValueError
+        The scope or the run id is malformed (``'/'``, ``'..'``, a date...).
+    """
+    if not (isinstance(scope, str) and bundle.ROUTE_ALIAS_RE.match(scope)):
+        raise ValueError('invalid scope {!r}'.format(scope))
+    if not (isinstance(run_id, str) and bundle.RUN_ID_RE.match(run_id)):
+        raise ValueError('{}: invalid run id {!r}'.format(scope, run_id))
+
+
 def point(writer: BundleWriter, scope: str, run_id: str) -> dict:
     """Point the manifest of a scope to an existing run.
 
@@ -856,8 +941,9 @@ def point(writer: BundleWriter, scope: str, run_id: str) -> dict:
     Raises
     ------
     ValueError
-        The run does not exist or is incomplete.
+        The scope or run id is malformed, or the run does not exist or is incomplete.
     """
+    _check_run(scope, run_id)
     name = bundle.path_part(scope, run_id, 'headline')
     if not writer.exists(name):
         raise ValueError('{}: run {} not found'.format(scope, run_id))
@@ -882,8 +968,9 @@ def unpublish(writer: BundleWriter, scope: str, run_id: str) -> dict:
     Raises
     ------
     ValueError
-        The run does not exist.
+        The scope or run id is malformed, or the run does not exist.
     """
+    _check_run(scope, run_id)
     if not writer.exists(bundle.path_run(scope, run_id)):
         raise ValueError('{}: run {} not found'.format(scope, run_id))
     writer.remove(bundle.path_run(scope, run_id))

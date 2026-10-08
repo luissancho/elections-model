@@ -15,13 +15,15 @@ def entry(scope, run_id):
 @pytest.fixture
 def patched(monkeypatch):
     """`resolve_scopes`, `next_event_date` y `publish_forecast` sin base: `es` publica, `es-md` no tiene
-    evento, `es-cb` no tiene sondeos y `es-ar` rompe."""
+    evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
     calls = []
 
     def fake_forecast(scope, writer, run_id, event_date, **kwargs):
         calls.append((scope, run_id, event_date, kwargs))
         if scope == 'es-cb':
-            raise ValueError('No polls for es-cb 2027-05-23: nothing to forecast')
+            raise publish.NothingToPublish('No polls for es-cb 2027-05-23: nothing to forecast')
+        if scope == 'es-ri':
+            raise ValueError("vote: missing keys ['rows']")
         if scope == 'es-ar':
             raise KeyError('x')
         writer.write_json(bundle.path_part(scope, run_id, 'headline'), 'headline',
@@ -29,7 +31,8 @@ def patched(monkeypatch):
         return {'scope': scope, 'entry': entry(scope, run_id), 'seconds': {'total': 12.3}}
 
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
-    monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08'}.get(scope))
+    monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08',
+                                                              'es-ri': '2027-05-23'}.get(scope))
     monkeypatch.setattr(publish, 'publish_forecast', fake_forecast)
     return calls
 
@@ -141,3 +144,26 @@ def test_forecast_rebuilds_the_history_of_each_published_scope(fresh_app, tmp_pa
     assert (tmp_path / 'site' / 'v1' / 'runs' / 'es' / 'history.json').exists()
     runs = bundle.BundleReader(fs).read_json(bundle.path_history('es'))['data']['runs']
     assert [r['run_id'] for r in runs] == [patched[0][1]]
+
+
+def test_a_value_error_other_than_nothing_to_publish_fails_the_scope(fresh_app, tmp_path, patched, capsys):
+    """Solo `NothingToPublish` omite el ámbito; cualquier otro `ValueError` (validación del paquete) falla."""
+    from mtpy.jobs.Publish import Publish
+
+    with pytest.raises(RuntimeError, match='es-ri'):
+        Publish().run(what=['forecast'], scopes=['es-ri', 'es-cb', 'es'], fs=FileSystem(str(tmp_path)))
+    out = capsys.readouterr().out
+    assert "es-ri: failed (ValueError: vote: missing keys ['rows'])" in out
+    assert 'es-cb: skipped (No polls' in out and 'es: published' in out
+
+
+def test_event_date_is_normalised_or_fails_the_scope(fresh_app, tmp_path, patched, capsys):
+    """`event_date` llega en ISO a `meta`, `headline` y al SQL de `db_stats`; si no es una fecha, el ámbito falla."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs, event_date='29/11/2026')
+    assert 'es: failed (ValueError: Invalid isoformat' in capsys.readouterr().out and patched == []
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, event_date='20261129')
+    assert result['es']['status'] == 'published' and patched[0][2] == '2026-11-29'

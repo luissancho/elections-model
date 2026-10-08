@@ -88,7 +88,7 @@ y `backtest` fallan con `ValueError` hasta las fases 4 y 5.
 | --- | --- | --- |
 | `what` | `["forecast"]` | Acciones a ejecutar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
-| `event_date` | siguiente evento del ámbito | Fecha de la elección (`YYYY-MM-DD`) |
+| `event_date` | siguiente evento del ámbito | Fecha de la elección (`YYYY-MM-DD`; si no es una fecha ISO, el ámbito queda `failed`) |
 | `n_sim` | `1000` | Simulaciones por modo |
 | `seed` | `42` | Semilla |
 | `drange` | `6` | Ventana de sondeos del pronóstico |
@@ -99,12 +99,13 @@ y `backtest` fallan con `ValueError` hasta las fases 4 y 5.
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
 | `force` | `false` | Publicar `es` dentro de la ventana LOREG |
-| `today` | hoy (UTC) | Fecha que usa la guarda LOREG (`YYYY-MM-DD`) |
+| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
 
 ### Estados y resumen
 
-Cada ámbito termina en `published`, `skipped` (sin evento próximo o sin sondeos), `refused` (guarda
-LOREG) o `failed` (cualquier otra excepción; el resto de ámbitos continúa). El job imprime, escribe en
+Cada ámbito termina en `published`, `skipped` (sin evento próximo, sin sondeos o promedio no ajustable),
+`refused` (guarda LOREG) o `failed` (cualquier otro error, incluido un fallo de validación del paquete; el
+resto de ámbitos continúa). El job imprime, escribe en
 `app.logger` y avisa con `alert()` un resumen de una línea por ámbito:
 
 ```
@@ -159,7 +160,7 @@ python -c "from mtpy import mtpy; app = mtpy.run(); print(app.fs.read_bytes('sit
 ```
 
 Cada run guarda en su `meta.json` los `seconds` por paso (`init`, `fit`, `nowcast`, `forecast`, `export`,
-`total`).
+`total`), a 1 decimal; `nowcast` y `forecast` miden solo las simulaciones y `export` todas las escrituras.
 
 ### Retirada de un run
 
@@ -172,7 +173,7 @@ Cada run guarda en su `meta.json` los `seconds` por paso (`init`, `fit`, `nowcas
 
 Con `scope` `es`, el job se niega a publicar (`refused`) si la elección cae en los 5 días previos o en el
 propio día (LOREG art. 69.7). `{"force":true}` publica igualmente y marca el run con `meta.freeze: true`.
-`today` permite simular la fecha. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con
+La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con
 `what: ["manifest"]`.
 
 ### Duraciones medidas

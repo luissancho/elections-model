@@ -67,9 +67,11 @@ Cómo y cuándo se produjo el run. Fuente: `Simulator`, `Forecaster` y `provenan
 usado), `date_fit_last` (o `null`), `horizon_max`, `n_sim`, `seed`, `drange`, `max_fc`, `alpha`,
 `correctors`, `n_polls`, `n_pollsters` (sondeos y casas usados), `db_polls`, `db_last_poll` (sondeos del
 evento en la base y fecha del último), `n_seats`, `majority`, `parties` (lista de `{name, id, fullname,
-color, block, regional}` en el orden de la simulación), `bmaps`, `smap`, `regions` (`{id, name, seats}`),
+color, block, regional}` en el orden de la simulación), `bmaps`, `smap`, `regions` (`{id, name, seats}`;
+incluye el total del ámbito, `id` 0, que es la cámara entera),
 `diagnostics` (`drift_k`, `multiplier`, `ages`, `composition`, `clip_rate` por modo), `seconds` (`init`,
-`fit`, `nowcast`, `forecast`, `export`, `total`) y `freeze`.
+`fit`, `nowcast`, `forecast`, `export`, `total`, a 1 decimal; `nowcast` y `forecast` miden solo las
+simulaciones y `export` suma la escritura de ambos modos y de los ficheros del ciclo) y `freeze`.
 
 `freeze` aquí significa que el run se publicó dentro de la ventana LOREG con `force`; no es el interruptor
 editorial de `manifest.freeze`.
@@ -107,8 +109,9 @@ CSV `csv/polls.csv`: la tabla `polls`.
 
 Abanico de voto por partido y horizonte. Fuente: `sim.fan()`.
 
-`data`: `horizons` (días, enteros ordenados; 0 es el nowcast) y `rows` (formato largo: `party`, `horizon`,
-`mean`, `sd`, `lo`, `hi`). CSV `csv/fan.csv`: las mismas filas.
+`data`: `horizons` (días, enteros ordenados; 0 es el nowcast) y `rows` (formato largo: `name`, `horizon`,
+`mean`, `sd`, `lo`, `hi`; el partido va en `name`, como en el resto de ficheros). CSV `csv/fan.csv`: las
+mismas filas.
 
 ### `house-effects`
 
@@ -162,14 +165,17 @@ columna por partido.
 
 Votos y escaños por circunscripción, sin el total del ámbito. Fuente: `sim.unit_summary(r)` por región.
 
-`data`: `parties`, `regions` (`{id, name, seats}`) y `rows`. Cada fila tiene 11 columnas: `region_id`,
+`data`: `parties`, `regions` (`{id, name, seats}`, solo las circunscripciones: a diferencia de
+`meta.regions`, no incluye el total del ámbito) y `rows`. Cada fila tiene 11 columnas: `region_id`,
 `region`, `name`, `pct`, `pct_lo`, `pct_hi`, `seats`, `seats_mean`, `seats_lo`, `seats_hi`, `p_seats`.
 Aquí `seats` es la mediana de los escaños simulados redondeada a 1 decimal (un estadístico, como
 `seats_mean`), a diferencia del titular entero de `summary` y `headline`. CSV: las mismas filas.
 
 ### `scenario`
 
-Una simulación elegida al azar, coherente en todas las circunscripciones. Fuente:
+La simulación más cercana a los escaños centrales, coherente en todas las circunscripciones. No es
+aleatoria: `sim.scenario()` elige, de forma determinista, la simulación con menor distancia L1 a la
+mediana de escaños de cada partido (empates por L2 y después por el menor índice). Fuente:
 `sim.result(sim.scenario())`.
 
 `data`: `simulation` (índice de la simulación), `parties` y `rows` (`{region_id, region, seats: [escaños
@@ -201,7 +207,8 @@ completos del ámbito tras cada publicación y tras `unpublish`.
 - `scopes`: `{ámbito: entrada}`, con la entrada `{latest, run_at, event_date, as_of, date_last, n_polls}`
   (el `run_id` publicado y los datos de su `headline`). Un ámbito fallido conserva su entrada anterior.
 - `freeze`: `{active, message}`; interruptor editorial que fija el job con `what: ["manifest"]`.
-- `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales.
+- `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales; cada escritura del
+  manifest la refresca desde `ATTRIBUTION`.
 
 ## Gemelos CSV
 

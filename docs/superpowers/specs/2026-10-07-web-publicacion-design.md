@@ -514,6 +514,33 @@ Decisiones tomadas durante la ejecución:
 Pendientes de la revisión final de la rama: redondeos de tiempos en `seconds`, `attribution` no se refresca
 en un manifest existente, validación de `event_date` antes del SQL de `db_stats`, docstrings y pistas de tipo.
 
+Revisión final de la rama (2026-10-08). Una sola tanda de correcciones, con tests:
+
+1. `point` y `unpublish` validan `scope` (`ROUTE_ALIAS_RE`) y `run_id` (`RUN_ID_RE`) antes de formar
+   rutas: `unpublish(writer, 'es', '/')` borraba todos los runs del ámbito.
+2. Semántica de fallo: `publish.NothingToPublish(ValueError)` solo envuelve la construcción del
+   `Simulator` y `fit_forecast` (→ `skipped`); cualquier otro error, `ValueError` incluido (validación del
+   paquete), es `failed` y el job sale con error.
+3. `read_manifest` solo usa el manifest por defecto ante `FileNotFoundError` al leer, no con `exists`
+   (fsspec devuelve `False` ante cualquier error y el manifest real se habría pisado).
+4. La guarda LOREG toma la fecha de hoy en Europe/Madrid (UTC+1 fijo con aviso si falta `tzdata`) y
+   acepta `datetime` además de `str` y `date`.
+5. `seconds`: `nowcast` y `forecast` miden solo las simulaciones, `export` suma todas las escrituras; todo
+   a 1 decimal.
+6. Cada escritura del manifest refresca `attribution` desde `ATTRIBUTION` (deja sin efecto la reserva de
+   la decisión 7).
+7. Contrato: las filas de `fan` llevan `name` (antes `party`); `meta.regions` incluye el total del ámbito
+   (id 0) y `districts.regions` solo las circunscripciones.
+8. `scenario` es la simulación determinista más cercana a los escaños centrales (L1 a la mediana), no una
+   al azar (docstring y contrato).
+9. Docstring del módulo `publish` reescrito: exportadores puros más la orquestación que escribe, consulta
+   la base y ejecuta git.
+10. El job normaliza `event_date` con `date.fromisoformat(...).isoformat()` por ámbito (un valor no ISO es
+    `failed`), así que `meta`, `headline` y el SQL de `db_stats` solo ven `YYYY-MM-DD`.
+11. `deploy/README.md`: `today` es solo para pruebas y ensayos (sin huella en `meta.freeze`).
+
+Tras la tanda: 262 tests unitarios en verde (`python -m pytest -m "not integration" -q`; 13 nuevos).
+
 Pendiente de Luis: permisos AWS del bucket y `check_s3`; primera publicación a S3 contra la RDS
 (`set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["forecast"],"scopes":["es"]}'`)
 y medición de `scopes: "all"` (estimación 10-15 min; ver qué ámbitos quedan `skipped`); texto definitivo de

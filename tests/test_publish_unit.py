@@ -1,6 +1,7 @@
 """Tests de `mtpy/lib/publish.py` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
 import math
-from datetime import date, datetime, timezone
+import zoneinfo
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -142,6 +143,8 @@ def test_export_fan_house_effects_and_dispersion():
     fan, _ = publish.export_fan(sim)
     fan = valid('fan', fan, mode=None)
     assert fan['horizons'] == [0, 7, 14, 30, 55] and len(fan['rows']) == 5 * 3
+    assert set(fan['rows'][0]) == {'name', 'horizon', 'mean', 'sd', 'lo', 'hi'}
+    assert list(publish.export_fan(sim)[1].columns) == ['name', 'horizon', 'mean', 'sd', 'lo', 'hi']
     he, frame = publish.export_house_effects(sim.model)
     he = valid('house-effects', he, mode=None)
     assert len(he['rows']) == 4 and he['rows'][1]['prior'] is None and he['rows'][0]['name'] == 'PP'
@@ -237,6 +240,7 @@ def test_publish_forecast_writes_the_whole_layout_in_order(tmp_path):
     assert result['entry'] == {'latest': RUN, 'run_at': '2026-10-08T12:00:00Z', 'event_date': '2026-11-29', 'as_of': '2026-10-05',
                                'date_last': '2026-10-01', 'n_polls': 6}
     assert set(result['seconds']) == {'init', 'fit', 'nowcast', 'forecast', 'export', 'total'}
+    assert all(v >= 0 and round(v, 1) == v for v in result['seconds'].values())
     meta = writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']
     assert meta['n_sim'] == 50 and meta['db_polls'] == 7 and meta['commit'] == 'abc1234' and meta['freeze'] is False
     assert set(meta['diagnostics']['clip_rate']) == {'nowcast', 'forecast'}
@@ -323,3 +327,84 @@ def test_resolve_scopes_uses_the_catalogue():
     assert publish.resolve_scopes(['es-md', 'es'], catalogue) == ['es-md', 'es']
     with pytest.raises(ValueError, match='es-xx'):
         publish.resolve_scopes(['es-xx'], catalogue)
+
+
+def test_publish_forecast_turns_a_scope_without_polls_into_nothing_to_publish(tmp_path):
+    """Un `ValueError` al construir o ajustar el promedio es `NothingToPublish` (ámbito omitido)."""
+    factory = FakeSimulator(fail=ValueError('No polls for es-cb 2027-05-23: nothing to forecast'))
+    with pytest.raises(publish.NothingToPublish, match='No polls for es-cb 2027-05-23: nothing to forecast'):
+        publish_es(tmp_path, factory=factory)
+
+
+def test_publish_forecast_lets_a_later_value_error_through(tmp_path, monkeypatch):
+    """Un `ValueError` posterior al ajuste (validación del paquete) no se disfraza de `NothingToPublish`."""
+    def broken(sim):
+        raise ValueError('fan: missing keys [\'rows\']')
+
+    monkeypatch.setattr(publish, 'export_fan', broken)
+    with pytest.raises(ValueError, match='fan: missing keys') as info:
+        publish_es(tmp_path)
+    assert not isinstance(info.value, publish.NothingToPublish)
+
+
+@pytest.mark.parametrize('bad', ['/', '..', '.', '2026-10-08'])
+def test_point_and_unpublish_reject_an_invalid_run_id(tmp_path, bad):
+    """Un `run_id` que no es `YYYYMMDD-HHMMSS` no llega a formar una ruta: `unpublish('/')` borraba el ámbito."""
+    writer, _, _ = publish_es(tmp_path)
+    publish_es(tmp_path, run_id='20261009-120000')
+    for action in (publish.unpublish, publish.point):
+        with pytest.raises(ValueError, match='invalid run id'):
+            action(writer, 'es', bad)
+    assert writer.exists(bundle.path_run('es', RUN)) and writer.exists(bundle.path_run('es', '20261009-120000'))
+    assert writer.list_runs('es') == [RUN, '20261009-120000']
+
+
+def test_point_and_unpublish_reject_an_invalid_scope(tmp_path):
+    writer, _, _ = publish_es(tmp_path)
+    for action in (publish.point, publish.unpublish):
+        with pytest.raises(ValueError, match='invalid scope'):
+            action(writer, 'es/..', RUN)
+    assert writer.exists(bundle.path_run('es', RUN))
+
+
+class UnreadableFileSystem(FileSystem):
+    """FileSystem cuyo `exists` se traga el error (como fsspec) y cuya lectura falla con permisos."""
+
+    def exists(self, name):
+        return False
+
+    def read_bytes(self, name):
+        raise PermissionError(name)
+
+
+def test_read_manifest_only_defaults_when_the_manifest_is_missing(tmp_path):
+    """Un error de lectura se propaga: `update_manifest` no debe pisar el manifest real con el de defecto."""
+    assert publish.read_manifest(make_writer(tmp_path))['scopes'] == {}
+    with pytest.raises(PermissionError):
+        publish.read_manifest(bundle.BundleReader(UnreadableFileSystem(str(tmp_path))))
+
+
+def test_manifest_refreshes_the_attribution(tmp_path, monkeypatch):
+    writer = make_writer(tmp_path)
+    publish.update_manifest(writer, {'es': {'latest': RUN}})
+    monkeypatch.setitem(publish.ATTRIBUTION, 'model', 'x')
+    publish.update_manifest(writer, {'es-md': {'latest': RUN}})
+    assert writer.read_json(bundle.path_manifest())['data']['attribution']['model'] == 'x'
+
+
+def test_loreg_guard_normalises_a_datetime():
+    with pytest.raises(publish.PublishRefused):
+        publish.loreg_guard('es', '2026-11-29', today=datetime(2026, 11, 24, 23, 30, tzinfo=timezone.utc))
+
+
+def test_madrid_time_zone_and_its_fallback(monkeypatch):
+    """La guarda usa la fecha de Madrid; sin tzdata cae a UTC+1 fijo con un aviso."""
+    assert publish._madrid_tz().utcoffset(datetime(2026, 11, 24, 12, 0)) == timedelta(hours=1)
+
+    def missing(key):
+        raise zoneinfo.ZoneInfoNotFoundError(key)
+
+    monkeypatch.setattr(publish, 'ZoneInfo', missing)
+    with pytest.warns(UserWarning, match='Europe/Madrid'):
+        tz = publish._madrid_tz()
+    assert tz.utcoffset(datetime(2026, 7, 1, 12, 0)) == timedelta(hours=1)

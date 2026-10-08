@@ -1,4 +1,5 @@
 import traceback
+from datetime import date
 
 from ..core.worker import Job
 from ..lib import bundle, publish
@@ -11,6 +12,11 @@ class Publish(Job):
     Runs the forecast of each scope, writes its run folder and moves the pointers
     (``latest``, ``history`` and the manifest). Scopes are isolated: one that fails
     never stops the others, and the job exits with an error at the end if any failed.
+
+    Each scope ends ``published``, ``skipped`` (no upcoming event, or
+    ``publish.NothingToPublish``: no polls or an average that cannot be fitted),
+    ``refused`` (LOREG guard) or ``failed`` (any other error, ``ValueError`` included,
+    such as a bundle validation failure or a non-ISO ``event_date``).
 
     Examples
     --------
@@ -44,7 +50,8 @@ class Publish(Job):
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``.
         event_date : str, optional
-            Election date (``YYYY-MM-DD``). Defaults to the next event of each scope.
+            Election date (ISO 8601, normalised to ``YYYY-MM-DD``). Defaults to the next
+            event of each scope. A value that is not a date fails each scope.
         n_sim : int, default 1000
             Number of simulations.
         seed : int, default 42
@@ -68,7 +75,8 @@ class Publish(Job):
         fs : FileSystem, optional
             File system to write to. Defaults to ``self.app.fs``.
         today : str, optional
-            Date (``YYYY-MM-DD``) taken as today by the LOREG guard.
+            Date (``YYYY-MM-DD``) taken as today by the LOREG guard; for tests and
+            rehearsals only (unlike ``force``, it leaves no mark in ``meta.freeze``).
         verbose : int, default 0
             Verbosity passed to the forecast.
         **kwargs
@@ -172,7 +180,8 @@ class Publish(Job):
         run_id : str
             Run id of this invocation.
         event_date : str or None
-            Forced election date, or ``None`` for the next event of the scope.
+            Forced election date, or ``None`` for the next event of the scope. It is
+            normalised with ``date.fromisoformat``; an invalid value fails the scope.
         today : str or None
             Date taken as today by the LOREG guard.
         force : bool
@@ -183,17 +192,20 @@ class Publish(Job):
         Returns
         -------
         dict
-            Result with a ``status`` and its details.
+            Result with a ``status`` and its details: ``skipped`` for no upcoming event or
+            ``publish.NothingToPublish``, ``refused`` for the LOREG guard and ``failed`` for
+            any other exception.
         """
         try:
-            date = event_date or publish.next_event_date(scope)
-            if date is None:
+            value = event_date or publish.next_event_date(scope)
+            if value is None:
                 return {'status': 'skipped', 'reason': 'no upcoming event'}
-            in_window = publish.loreg_guard(scope, date, today, force)
-            out = publish.publish_forecast(scope, writer, run_id, date, freeze=in_window, **params)
+            event = date.fromisoformat(value).isoformat()
+            in_window = publish.loreg_guard(scope, event, today, force)
+            out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, **params)
         except publish.PublishRefused as e:
             return {'status': 'refused', 'reason': str(e)}
-        except ValueError as e:
+        except publish.NothingToPublish as e:
             return {'status': 'skipped', 'reason': str(e)}
         except Exception as e:
             self._log_error(scope)
