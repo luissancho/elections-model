@@ -1,5 +1,8 @@
 # Web de resultados, fase 0 (cimientos y seguridad): plan de implementación
 
+> **Estado:** completado el 2026-10-08 en `dev` (commits 752f051..9aad24d; la Tarea 6 se revirtió después en
+> 4d12ce4 por decisión de Luis, salvo las exclusiones de `.dockerignore`). Ver el estado de cierre en la spec.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Dejar el núcleo HTTP de mtpy y la imagen Docker listos para la web: respuestas JSON correctas y

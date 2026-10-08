@@ -423,3 +423,40 @@ Total ≈ 18-23 días de trabajo. Tras la fase 2 hay web pública; las fases 4 y
 Guardar este diseño como especificación en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`,
 guardar en memoria la corrección sobre `mtpy/controllers` y `mtpy/lib`, y generar el plan de
 implementación por tareas con la skill `writing-plans`, empezando por la fase 0.
+
+## Estado al cierre de la fase 0 (2026-10-08)
+
+Hecho en `dev` (commits 752f051 a 4d12ce4), con 192 tests unitarios en verde:
+
+- `mtpy/core/api.py`: `Request.query`; `json_default` (numpy, NaN y NaT → `null`, `datetime64` → ISO,
+  `timedelta64` rechazado); `Response.set_cache`/`set_etag`/`_set_error`; claves de cabecera en minúsculas;
+  422 y 503; `set_content` con bool, int, list, tuple y content-type explícito; `HttpError`;
+  `Controller.dispatch` con try/except y log; toda respuesta de error es `no-store` sin `etag` ni
+  `content-disposition`; `lifespan` ASGI; `Router.handle` sin parámetros residuales.
+- `mtpy/mtpy.py`: `api(routes=None)` (la fase 2 inyecta `webapi.ROUTES` desde `api.py`).
+- Tests: `tests/test_api_asgi.py` (arnés ASGI sin servidor ni base, 30 tests), `tests/conftest.py`
+  (fixture `fresh_app`), `tests/test_jobs_check_s3.py` (4 tests).
+- `mtpy/jobs/CheckS3.py`: `python job.py check_s3` comprueba `app.fs` sobre S3 (rechaza `files/` local
+  salvo `{"allow_local": true}`).
+- `deploy/README.md`: construir, arrancar y comprobar S3 con `deploy/elections.env`.
+- `.dockerignore`: exclusión de `deploy/*.env`, `.git` y material de claves (único cambio de imagen que
+  se conserva; el resto del Dockerfile es el original de Luis, con cron).
+
+Decisiones posteriores a la aprobación: `deploy/elections.env` es la única configuración (sin rol
+`web_reader` ni usuarios IAM nuevos); imagen Docker revertida a la original. Las secciones
+"Infraestructura" y "Seguridad" de arriba se leen con esas dos salvedades.
+
+Diferido a las fases 1-2 (hallazgos menores de las revisiones): guard para `np.longdouble` en
+`json_default`; política de NaN (los arrays limpian a `null`, los `float` nativos dan 500: el bundle debe
+limpiar NaN antes de serializar); mover `json_default` a `mtpy/core/utils/`; `send()` fuera del `try` de
+`dispatch`; docstring de `Api.__call__`; `HEAD`; crontab `job.py rep` inexistente; `APP_CRONTAB=` en
+`.env.example`; HEALTHCHECK y `GIT_COMMIT` quedaron fuera con la reversión.
+
+Pendiente de Luis antes de publicar: permisos Get/List/Put/Delete del usuario AWS de
+`deploy/elections.env` sobre el bucket; ejecutar `set -a; . deploy/elections.env; set +a; python job.py
+check_s3` (si falla, la fase 1 decide entre subir `s3fs` o reimplementar `S3` sobre `boto3`); confirmar
+el esquema `elections` en la RDS.
+
+Siguiente: plan de la fase 1 (`mtpy/lib/bundle.py`, `mtpy/lib/publish.py`, `mtpy/jobs/Publish.py`, tests
+unitarios e integración, primer paquete de `es` en `files/site/v1` y en S3, medición de duración contra
+la RDS), a partir de las secciones "Paquete publicado" y "Comando de publicar".
