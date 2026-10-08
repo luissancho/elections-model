@@ -29,6 +29,10 @@
     "s3": {
         "bucket": "${S3_BUCKET}"
     },
+    "web": {
+        "prefix": "${WEB_PREFIX}",
+        "cache_ttl": "${WEB_CACHE_TTL}"
+    },
     "cwl": {
         "group": "${CWL_GROUP}"
     },
