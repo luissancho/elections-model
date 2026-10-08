@@ -167,3 +167,16 @@ def test_event_date_is_normalised_or_fails_the_scope(fresh_app, tmp_path, patche
     assert 'es: failed (ValueError: Invalid isoformat' in capsys.readouterr().out and patched == []
     result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, event_date='20261129')
     assert result['es']['status'] == 'published' and patched[0][2] == '2026-11-29'
+
+
+def test_manifest_write_failure_keeps_the_summary(fresh_app, tmp_path, patched, capsys, monkeypatch):
+    """Si falla la escritura del manifest, el resumen se imprime y el job termina con error."""
+    from mtpy.jobs.Publish import Publish
+
+    def boom(writer, scopes=None, freeze=None):
+        raise OSError('s3 down')
+    monkeypatch.setattr(publish, 'update_manifest', boom)
+    with pytest.raises(RuntimeError, match='manifest'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
+    out = capsys.readouterr().out
+    assert 'es: published' in out and 'manifest: failed (OSError: s3 down)' in out

@@ -139,13 +139,13 @@ class Publish(Job):
             if dry_run:
                 lines.append('manifest: not written (dry run)')
             elif entries:
-                lines.append(self._manifest_line(publish.update_manifest(writer, scopes=entries)))
+                lines.append(self._write_manifest(writer, failures, scopes=entries))
 
         if 'manifest' in whats:
             if dry_run:
                 lines.append('manifest: not written (dry run)')
             else:
-                lines.append(self._manifest_line(publish.update_manifest(writer, freeze=freeze)))
+                lines.append(self._write_manifest(writer, failures, freeze=freeze))
 
         for action in ('point', 'unpublish'):
             if action not in whats:
@@ -242,6 +242,31 @@ class Publish(Job):
         except Exception as e:
             self._log_error(scope)
             return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
+
+    def _write_manifest(self, writer, failures, **kwargs):
+        """
+        Update the manifest, converting an exception into a failure and a summary line.
+
+        Parameters
+        ----------
+        writer : BundleWriter
+            Bundle writer.
+        failures : list of str
+            Failures of the run; ``manifest`` is appended when the write fails.
+        **kwargs
+            Arguments of ``publish.update_manifest`` (``scopes`` or ``freeze``).
+
+        Returns
+        -------
+        str
+            Summary line of the manifest.
+        """
+        try:
+            return self._manifest_line(publish.update_manifest(writer, **kwargs))
+        except Exception as e:
+            self._log_error('manifest')
+            failures.append('manifest')
+            return 'manifest: failed ({}: {})'.format(type(e).__name__, e)
 
     def _log_error(self, scope):
         """Log the traceback being handled through the app logger, if there is one."""

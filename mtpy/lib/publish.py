@@ -917,9 +917,9 @@ def _check_run(scope: str, run_id: str) -> None:
     ValueError
         The scope or the run id is malformed (``'/'``, ``'..'``, a date...).
     """
-    if not (isinstance(scope, str) and bundle.ROUTE_ALIAS_RE.match(scope)):
+    if not (isinstance(scope, str) and bundle.ROUTE_ALIAS_RE.fullmatch(scope)):
         raise ValueError('invalid scope {!r}'.format(scope))
-    if not (isinstance(run_id, str) and bundle.RUN_ID_RE.match(run_id)):
+    if not (isinstance(run_id, str) and bundle.RUN_ID_RE.fullmatch(run_id)):
         raise ValueError('{}: invalid run id {!r}'.format(scope, run_id))
 
 

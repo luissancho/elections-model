@@ -408,3 +408,30 @@ def test_madrid_time_zone_and_its_fallback(monkeypatch):
     with pytest.warns(UserWarning, match='Europe/Madrid'):
         tz = publish._madrid_tz()
     assert tz.utcoffset(datetime(2026, 7, 1, 12, 0)) == timedelta(hours=1)
+
+
+def test_check_run_rejects_a_trailing_newline(tmp_path):
+    """Un `run_id` o un `scope` con salto de línea o espacio final se rechaza."""
+    writer, _, _ = publish_es(tmp_path)
+    for bad in ('20261008-120000\n', '20261008-120000 '):
+        with pytest.raises(ValueError, match='invalid run id'):
+            publish.point(writer, 'es', bad)
+    with pytest.raises(ValueError, match='invalid scope'):
+        publish.unpublish(writer, 'es\n', RUN)
+    assert writer.exists(bundle.path_run('es', RUN))
+
+
+def test_fit_forecast_value_error_is_nothing_to_publish(tmp_path):
+    """El `ValueError` de `fit_forecast` se convierte en `NothingToPublish`."""
+    factory = FakeSimulator()
+
+    def failing(scope, event_date, **kwargs):
+        sim = factory(scope, event_date, **kwargs)
+
+        def fit_forecast(**kw):
+            raise ValueError('Not enough polls to fit the average of es 2026-11-29')
+        sim.fit_forecast = fit_forecast
+        return sim
+    with pytest.raises(publish.NothingToPublish, match='Not enough polls'):
+        publish.publish_forecast('es', make_writer(tmp_path), RUN, '2026-11-29', n_sim=5, simulator=failing,
+                                 stats=fake_stats, prov=fake_prov)
