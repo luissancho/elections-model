@@ -877,7 +877,7 @@ git commit -m "$(printf 'Add check_s3 job, env examples and read-only DB role\n\
 - [ ] Ejecutar `deploy/sql/web_reader.sql` en la RDS con el usuario maestro (contraseña sin `"` ni `\`).
 - [ ] Restringir el grupo de seguridad de la RDS al servidor web y al portátil.
 - [ ] Crear los usuarios IAM `elections-web` (`s3:GetObject` y `s3:ListBucket` sobre `site/*`) y
-  `elections-publish` (lo mismo más `s3:PutObject`); rotar el par de claves actual, compartido por
+  `elections-publish` (lo mismo más `s3:PutObject` y `s3:DeleteObject`); rotar el par de claves actual, compartido por
   `deploy/docker.env` y `deploy/elections.env`, y la contraseña de la RDS.
 - [ ] Mover los `.env` reales a `~/.config/elections-model/` y ejecutar `python job.py check_s3` con el
   entorno de publicación; anotar el resultado (decide si la fase 1 debe cambiar `s3fs`).

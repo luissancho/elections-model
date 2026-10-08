@@ -305,8 +305,8 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
   DB_USERNAME=web_reader DB_PASSWORD= DB_DATABASE= DB_STAGE_DIR= AWS_KEY= AWS_SECRET= AWS_REGION=eu-west-1
   S3_BUCKET= WEB_PREFIX=site/v1 WEB_CACHE_TTL=60 WEB_FREEZE= GUNICORN_WORKERS=2` (más las claves vacías que
   `config.json` espera). `publish.env.example`: usuario de base normal e IAM de escritura. Políticas IAM:
-  web `s3:GetObject`/`ListBucket` sobre `site/*`; publish añade `PutObject`; ninguna `DeleteObject`
-  (salvo `unpublish`, que puede hacerse desde el portátil).
+  web `s3:GetObject`/`ListBucket` sobre `site/*`; publish añade `PutObject` y `DeleteObject`
+  (los necesitan `unpublish` y `check_s3`).
 - `requirements.txt`: `gunicorn==20.1.0` → `23.0.0` (CVE-2024-1135/6827); `uvicorn==0.18.3` se mantiene
   (conserva `uvicorn.workers.UvicornWorker`). Poda de paquetes no importados: opcional, fase 6.
 - Procedimiento reproducible (`deploy/README.md`): `docker build --build-arg GIT_COMMIT=$(git rev-parse

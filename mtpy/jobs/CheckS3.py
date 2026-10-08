@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 
+from ..core.services.s3 import S3
 from ..core.worker import Job
 
 
@@ -13,7 +14,7 @@ class CheckS3(Job):
     It only diagnoses; it changes nothing else.
     """
 
-    def run(self, prefix='site/v1/_smoke', fs=None, **kwargs):
+    def run(self, prefix='site/v1/_smoke', fs=None, allow_local=False, **kwargs):
         """
         Run the round trip and report each step.
 
@@ -23,6 +24,10 @@ class CheckS3(Job):
             Folder where the temporary file is written.
         fs : FileSystem, optional
             File system to check. Defaults to ``self.app.fs``.
+        allow_local : bool, default False
+            Accept a local file system as ``self.app.fs``. Without it, the job refuses
+            to run against the local disk, which would be a false all-clear for S3.
+            Not needed when ``fs`` is injected.
         **kwargs
             Ignored extra job arguments.
 
@@ -34,14 +39,24 @@ class CheckS3(Job):
         Raises
         ------
         RuntimeError
-            If no file system is configured or any step fails.
+            If no file system is configured, ``self.app.fs`` is local and not allowed,
+            or any step fails.
         """
-        fs = fs or self.app.fs
+        injected = fs is not None
+        fs = fs if injected else self.app.fs
         if fs is None:
             raise RuntimeError(
                 'check_s3: no file system configured '
                 '(set S3_BUCKET or run with a local files/ root)'
             )
+
+        if not injected and not allow_local and not isinstance(fs, S3):
+            raise RuntimeError(
+                'check_s3: app.fs is a local FileSystem; set S3_BUCKET or pass allow_local=true'
+            )
+
+        print('fs: s3://{}'.format(fs.bucket) if isinstance(fs, S3)
+              else 'fs: local {}'.format(fs.path))
 
         name = prefix + '/check.json'
         payload = json.dumps({
