@@ -23,15 +23,19 @@ Every JSON file is an envelope::
 where ``schema`` is ``{name}@{CONTRACT}``, ``scope`` and ``run_id`` are ``null`` when the file
 does not belong to one (``manifest``, ``history``), ``mode`` is only set for ``MODE_PARTS`` and
 ``data`` has the keys listed in ``SCHEMAS``.
+
+``BundleReader`` and ``BundleWriter`` read and write the bundle through a file system (``app.fs``),
+validating every JSON file against its schema before it is written.
 """
 import json
 import math
 import re
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import pandas as pd
 
+from ..core.io import FileSystem
 from ..core.utils.serialize import json_default
 
 PREFIX = 'site/v1'
@@ -417,3 +421,211 @@ def validate(name: str, obj: dict) -> dict:
             raise ValueError(f'{name}: wrong type for {key}')
 
     return obj
+
+
+class BundleReader:
+    """
+    Read-only access to a bundle stored in a file system.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        The file system (local or S3) that holds the bundle.
+    prefix : str, optional
+        Root of the bundle in the file system, without trailing slash. Defaults to ``PREFIX``.
+    """
+
+    def __init__(self, fs: FileSystem, prefix: str = PREFIX):
+        self.fs = fs
+        self.prefix = prefix
+
+    def path(self, name: str) -> str:
+        """
+        Full path of a bundle file in the file system.
+
+        Parameters
+        ----------
+        name : str
+            Path relative to the bundle prefix.
+
+        Returns
+        -------
+        str
+            ``'{prefix}/{name}'``.
+        """
+        return f'{self.prefix}/{name}'
+
+    def exists(self, name: str) -> bool:
+        """
+        Check whether a file or folder of the bundle exists.
+
+        Parameters
+        ----------
+        name : str
+            Path relative to the bundle prefix.
+
+        Returns
+        -------
+        bool
+            ``True`` if it exists.
+        """
+        return self.fs.exists(self.path(name))
+
+    def read_json(self, name: str) -> dict:
+        """
+        Read and parse a JSON file of the bundle.
+
+        Parameters
+        ----------
+        name : str
+            Path relative to the bundle prefix.
+
+        Returns
+        -------
+        dict
+            The parsed envelope.
+        """
+        return loads(self.fs.read_bytes(self.path(name)))
+
+    def list_runs(self, scope: str) -> list:
+        """
+        List the complete runs of a scope, a run being complete when it has its ``headline.json``.
+
+        Parameters
+        ----------
+        scope : str
+            The scope.
+
+        Returns
+        -------
+        list of str
+            The run ids, ascending. Empty if the scope has no runs folder.
+        """
+        try:
+            names = self.fs.listdir(self.path(path_runs(scope)))
+        except FileNotFoundError:
+            return []
+
+        return sorted(
+            name for name in names
+            if RUN_ID_RE.match(name) and self.exists(path_part(scope, name, 'headline'))
+        )
+
+
+class BundleWriter(BundleReader):
+    """
+    Read and write access to a bundle stored in a file system.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        The file system (local or S3) that holds the bundle.
+    prefix : str, optional
+        Root of the bundle in the file system, without trailing slash. Defaults to ``PREFIX``.
+    clock : callable, optional
+        Function returning the current moment as a ``datetime``. Defaults to the current UTC time.
+    """
+
+    def __init__(self, fs: FileSystem, prefix: str = PREFIX, clock: Optional[Callable[[], datetime]] = None):
+        super().__init__(fs, prefix)
+        self.clock = clock
+
+    def now(self) -> datetime:
+        """
+        Current moment according to the clock.
+
+        Returns
+        -------
+        datetime
+            The value of the clock, or the current UTC time if there is none.
+        """
+        if self.clock is not None:
+            return self.clock()
+
+        return datetime.now(timezone.utc)
+
+    def begin_run(self, scope: str, run_id: str) -> None:
+        """
+        Check that a run can be written, as runs are immutable. Nothing is created.
+
+        Parameters
+        ----------
+        scope : str
+            The scope.
+        run_id : str
+            The run identifier.
+
+        Raises
+        ------
+        FileExistsError
+            If the run already exists.
+        """
+        if self.exists(path_run(scope, run_id)):
+            raise FileExistsError(f'run {run_id} of scope {scope} already exists')
+
+    def write_json(self, name: str, schema: str, data: Any, scope: Optional[str], run_id: Optional[str] = None,
+                   mode: Optional[str] = None) -> str:
+        """
+        Wrap data in an envelope, validate it and write it as JSON.
+
+        Parameters
+        ----------
+        name : str
+            Path relative to the bundle prefix.
+        schema : str
+            Name of the schema (a key of ``SCHEMAS``).
+        data : Any
+            The content of the file.
+        scope : str, optional
+            Scope of the run, ``None`` if the file does not belong to one.
+        run_id : str, optional
+            Identifier of the run, ``None`` if the file does not belong to one.
+        mode : str, optional
+            ``'nowcast'`` or ``'forecast'`` for the per-mode files, ``None`` otherwise.
+
+        Returns
+        -------
+        str
+            The ``name`` that was written.
+
+        Raises
+        ------
+        ValueError
+            If the envelope does not validate; nothing is written.
+        """
+        env = jsonable(envelope(schema, data, scope, run_id, mode, iso_utc(self.now())))
+        validate(schema, env)
+        self.fs.write_bytes(dumps(env), self.path(name))
+
+        return name
+
+    def write_csv(self, name: str, frame: pd.DataFrame) -> str:
+        """
+        Write a DataFrame as UTF-8 CSV with ``\\n`` line endings and no index.
+
+        Parameters
+        ----------
+        name : str
+            Path relative to the bundle prefix.
+        frame : pd.DataFrame
+            The table to write.
+
+        Returns
+        -------
+        str
+            The ``name`` that was written.
+        """
+        self.fs.write_bytes(frame.to_csv(index=False, lineterminator='\n').encode('utf-8'), self.path(name))
+
+        return name
+
+    def remove(self, name: str) -> None:
+        """
+        Remove a file or folder (recursively) of the bundle.
+
+        Parameters
+        ----------
+        name : str
+            Path relative to the bundle prefix.
+        """
+        self.fs.remove(self.path(name))

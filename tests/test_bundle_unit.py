@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mtpy.core.io import FileSystem
 from mtpy.lib import bundle
 
 FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures', 'bundle')
@@ -16,6 +17,10 @@ FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures', 'bundle')
 def load_fixture(name):
     with open(os.path.join(FIXTURES, name + '.json'), encoding='utf-8') as fh:
         return json.load(fh)
+
+
+def fixed_clock():
+    return datetime(2026, 10, 8, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def test_run_id_is_utc_and_fits_the_route_alias():
@@ -78,3 +83,45 @@ def test_validate_checks_the_envelope():
         bundle.validate('vote', {**obj, 'data': {**obj['data'], 'horizon': '0'}})
     with pytest.raises(ValueError, match='unknown schema'):
         bundle.validate('nope', obj)
+
+
+def test_writer_round_trip_and_csv(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)), clock=fixed_clock)
+    data = load_fixture('vote')['data']
+    name = writer.write_json(bundle.path_part('es', '20261008-120000', 'vote', 'nowcast'), 'vote', data, 'es',
+                             run_id='20261008-120000', mode='nowcast')
+    assert name == 'runs/es/20261008-120000/nowcast/vote.json'
+    assert (tmp_path / 'site' / 'v1' / name).exists()
+    env = bundle.BundleReader(FileSystem(str(tmp_path))).read_json(name)
+    assert env['generated_at'] == '2026-10-08T12:00:00Z' and env['data'] == data
+    writer.write_csv(bundle.path_csv('es', '20261008-120000', 'vote', 'nowcast'), pd.DataFrame({'a': [1, 2], 'b': ['x', 'y']}))
+    assert (tmp_path / 'site' / 'v1' / 'runs' / 'es' / '20261008-120000' / 'csv' / 'nowcast-vote.csv').read_bytes() == b'a,b\n1,x\n2,y\n'
+
+
+def test_writer_validates_before_writing(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    with pytest.raises(ValueError, match='missing keys'):
+        writer.write_json('runs/es/20261008-120000/nowcast/vote.json', 'vote', {'horizon': 0}, 'es', run_id='20261008-120000', mode='nowcast')
+    assert not (tmp_path / 'site').exists()
+
+
+def test_list_runs_keeps_only_complete_runs(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)), prefix=bundle.DRY_PREFIX)
+    assert writer.list_runs('es') == []
+    headline = load_fixture('headline')['data']
+    for rid in ('20261008-120001', '20261007-090000'):
+        writer.write_json(bundle.path_part('es', rid, 'headline'), 'headline', {**headline, 'run_id': rid}, 'es', run_id=rid)
+    writer.write_json(bundle.path_part('es', '20261008-130000', 'meta'), 'meta', load_fixture('meta')['data'], 'es', run_id='20261008-130000')
+    (tmp_path / 'site-dry' / 'v1' / 'runs' / 'es' / 'history.json').write_text('{}')
+    assert writer.list_runs('es') == ['20261007-090000', '20261008-120001']
+    assert writer.exists('runs/es/20261008-130000/meta.json')
+
+
+def test_begin_run_refuses_an_existing_run(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    writer.begin_run('es', '20261008-120000')
+    writer.write_json(bundle.path_part('es', '20261008-120000', 'meta'), 'meta', load_fixture('meta')['data'], 'es', run_id='20261008-120000')
+    with pytest.raises(FileExistsError):
+        writer.begin_run('es', '20261008-120000')
+    writer.remove(bundle.path_run('es', '20261008-120000'))
+    writer.begin_run('es', '20261008-120000')
