@@ -285,6 +285,10 @@ y volver a lanzar el relleno. Los días completos se informan `skipped (run exis
 - `latest` no retrocede: un relleno solo mueve el `latest` del ámbito si su run más nuevo tiene un `run_id`
   mayor que el actual (o no hay ninguno); si no, el manifest queda intacto, de modo que un run al que se
   volvió con `point` nunca se reactiva. Una publicación normal sigue apuntando al run recién producido.
+  Excepción conocida (2026-10-09): si se vuelve con `point` a un día retrospectivo y después se repite el
+  relleno de un rango que incluye un día retrospectivo posterior ya publicado, el reintento vuelve a dejar
+  `latest` en ese día posterior (los reintentos reparan los punteros y no distinguen esa situación de un
+  manifest a medias); en ese caso, repetir el `point`.
 - `es` tarda unos 2 min por día contra la RDS. `to` tiene que ser como mucho ayer (hoy o después se
   rechaza): el pronóstico de hoy es la publicación normal, y un run a las 12:00 UTC de hoy se ordenaría de
   forma rara respecto a los runs reales de hoy.
