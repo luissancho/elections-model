@@ -8,13 +8,14 @@ import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderStacked} from '../charts/stacked.js';
 import {coalitionHash, coalitionSeats, column, parseCoalition, summarize} from '../seats.js';
-import {mapNames, mountWhenReady, readInitial, wireControls, wireForm} from './common.js';
+import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 
 /**
  * Wire the coalition calculator: restore the selection of the URL fragment, then recompute the summary
- * and the histogram of the marked parties on every change, keeping the fragment in sync.
+ * and the histogram of the marked parties on load and on every change. Only a change rewrites the
+ * fragment, so a link to another section (`#districts`) survives the load.
  *
  * @param {object} dist the dist part
  * @param {number} majority seats of the absolute majority
@@ -55,11 +56,14 @@ function wireCoalition(dist, majority) {
         majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.markColor,
       });
     }
-    const {pathname, search} = window.location;
-    window.history.replaceState(null, '', pathname + search + coalitionHash(names));
+    return names;
   }
 
-  fieldset.addEventListener('change', update);
+  fieldset.addEventListener('change', () => {
+    const names = update();
+    const {pathname, search} = window.location;
+    window.history.replaceState(null, '', pathname + search + coalitionHash(names));
+  });
   update();
 }
 
@@ -71,7 +75,7 @@ function paint() {
   const majority = meta.majority ?? summary.majority;
   const nSeats = meta.n_seats ?? summary.n_seats;
   const partyRows = summary.parties || [];
-  const fanNames = [...new Set((fan.rows || []).map((row) => row.name))];
+  const fanNames = catalog.order([...new Set((fan.rows || []).map((row) => row.name).filter(Boolean))]);
   const names = [...new Set([...dist.parties, ...partyRows.map((row) => row.name), ...fanNames])];
   const colors = mapNames(names, (name) => catalog.color(name));
   const fullnames = mapNames(names, (name) => catalog.fullname(name));
@@ -80,38 +84,39 @@ function paint() {
     const name = el.dataset.party;
     const values = column(dist, name);
     if (!values.length) {
+      el.hidden = true;
       continue;
     }
     const stats = summarize(values, majority);
-    renderHistogram(el, values, {
+    tryDraw(() => renderHistogram(el, values, {
       color: colors[name], majority, median: stats.median, lo: stats.lo, hi: stats.hi,
-    });
+    }), `the histogram of ${name}`);
   }
 
   const blocks = new Map((summary.blocks || []).map((row) => [row.name, row]));
   const blockRows = catalog.orderBlocks([...blocks.keys()])
     .map((name) => ({name, seats: blocks.get(name).seats ?? 0}));
-  renderStacked(document.getElementById('blocks-chart'), blockRows, {
+  tryDraw(() => renderStacked(document.getElementById('blocks-chart'), blockRows, {
     colors: mapNames([...blocks.keys()], (name) => catalog.blockColor(name)),
     majority,
     total: nSeats,
-  });
+  }), 'the blocks');
 
-  wireCoalition(dist, majority);
+  tryDraw(() => wireCoalition(dist, majority), 'the coalition calculator');
 
   const main = (catalog.bmaps.main || []).filter((name) => fanNames.includes(name));
-  renderFan(document.getElementById('fan-chart'), fan, {
+  tryDraw(() => renderFan(document.getElementById('fan-chart'), fan, {
     parties: fanNames,
     selected: main.length ? main : null,
     colors,
     fullnames,
     markAt: state.mode === 'nowcast' ? 0 : meta.horizon_max,
     markLabel: state.mode === 'nowcast' ? 'Hoy' : 'Elección',
-  });
+  }), 'the fan');
 
-  renderEvolution(document.getElementById('seats-evolution'), runs.runs, state.mode, {
+  tryDraw(() => renderEvolution(document.getElementById('seats-evolution'), runs.runs, state.mode, {
     colors, fullnames, field: 'seats', formatter: fmtInt, parties: partyRows.map((row) => row.name),
-  });
+  }), 'the seat evolution');
 }
 
 wireControls();

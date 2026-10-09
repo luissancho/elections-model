@@ -1060,9 +1060,11 @@ def region_rows(districts: dict, region_id: int) -> list:
     -------
     list of dict
         The rows of that district ordered by ``seats`` and then ``pct``, both descending (stable),
-        unformatted.
+        unformatted. Rows without a vote (``pct`` is ``None``: the party does not stand there) are
+        dropped.
     """
-    rows = [item for item in districts.get('rows') or [] if item['region_id'] == region_id]
+    rows = [item for item in districts.get('rows') or []
+            if item['region_id'] == region_id and item['pct'] is not None]
 
     return sorted(rows, key=lambda item: (-(item['seats'] or 0), -(item['pct'] or 0)))
 

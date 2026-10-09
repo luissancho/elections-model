@@ -20,7 +20,8 @@ export function renderFan(el, fan, {
 } = {}) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const horizons = fan.horizons || [];
-  const byKey = new Map((fan.rows || []).map((row) => [`${row.name}|${row.horizon}`, row]));
+  const rows = (fan.rows || []).filter((row) => row.name);
+  const byKey = new Map(rows.map((row) => [`${row.name}|${row.horizon}`, row]));
   const value = (name, horizon, key) => {
     const row = byKey.get(`${name}|${horizon}`);
     return row && row[key] !== undefined ? row[key] : null;

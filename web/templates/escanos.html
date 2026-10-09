@@ -159,7 +159,7 @@
             </tbody>
           </table>
         </div>
-        <form id="district-form" method="get" action="/escanos">
+        <form id="district-form" method="get" action="/escanos#districts">
           <input type="hidden" name="scope" value="{{ state.scope }}">
           <input type="hidden" name="mode" value="{{ state.mode }}">
           {% if state.pinned %}
@@ -192,7 +192,8 @@
               <tr>
                 <td><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
                 <td>{{ row.pct|pct }}</td>
-                <td>{{ row.pct_lo|range(row.pct_hi, 1) }} %</td>
+                {% set vote_range = row.pct_lo|range(row.pct_hi, 1) %}
+                <td>{{ vote_range if vote_range == '–' else vote_range ~ ' %' }}</td>
                 <td>{{ row.seats|int }}</td>
                 <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
                 <td>{{ row.p_seats|prob }}</td>

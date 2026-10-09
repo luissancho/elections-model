@@ -100,6 +100,23 @@ export function showError(message) {
 }
 
 /**
+ * Run one drawing call, so that a failing chart does not stop the ones drawn after it.
+ *
+ * @param {Function} fn draws one part of the page
+ * @param {string} label part name, for the console
+ * @returns {boolean} false if `fn` threw (the error goes to the console)
+ */
+export function tryDraw(fn, label) {
+  try {
+    fn();
+    return true;
+  } catch (error) {
+    console.error(`Could not draw ${label}:`, error);
+    return false;
+  }
+}
+
+/**
  * Run `fn` once ECharts is available: now if it is loaded, otherwise on the window `load` event, which
  * can only report the missing library (`charts/base.js` captures `window.echarts` when it is evaluated). Exceptions go to the console and the status line.
  *

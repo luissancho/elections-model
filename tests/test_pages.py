@@ -245,6 +245,8 @@ def test_promedio_title_mentions_the_projection_only_in_forecast(api):
     assert 'Promedio de sondeos y proyección' in html(call(api, '/promedio', query='mode=forecast')[2])
     page = html(call(api, '/promedio', query='mode=nowcast')[2])
     assert 'Promedio de sondeos' in page and 'y proyección' not in page
+    assert 'y la proyección' not in page  # aria-label del gráfico
+    assert 'banda de incertidumbre y la proyección"' in html(call(api, '/promedio', query='mode=forecast')[2])
 
 
 def test_promedio_caption_counts_the_polls(api, fresh_app):
@@ -335,12 +337,25 @@ def test_escanos_districts_default_to_the_largest_and_link_the_rows(api, fresh_a
     assert '<td>Total</td>' in page and '140' in page
     page = html(call(api, '/escanos', query='scope=es&mode=forecast&region=8')[2])
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
+    assert '<form id="district-form" method="get" action="/escanos#districts">' in page
+
+
+def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
+    absent = {'region_id': 28, 'region': 'Madrid', 'name': 'VOX', 'pct': None, 'pct_lo': None, 'pct_hi': None,
+              'seats': 0.0, 'seats_mean': 0.0, 'seats_lo': 0.0, 'seats_hi': 0.0, 'p_seats': 0.0}
+    write_districts(fresh_app.fs, districts=DISTRICTS | {'rows': DISTRICTS['rows'] + [absent]})
+    page = html(call(api, '/escanos', query='scope=es&mode=forecast&region=28')[2])
+    detail = page[page.index('id="region-table"'):]
+    detail = detail[:detail.index('</table>')]
+    assert '– %' not in detail and detail.count('<tr>') == 3  # cabecera, PP y PSOE
+    assert '34,0–44,0 %' in detail
 
 
 def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
     page = html(call(api, '/escanos', query='scope=es&run=' + RUN)[2])
     assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 2  # cabecera y formulario de circunscripción
+    assert 'href="/escanos?scope=es&amp;mode=forecast&amp;run={}&amp;region=8"'.format(RUN) in page
 
 
 @pytest.mark.parametrize('query, status, text', [
@@ -384,4 +399,6 @@ def test_district_table_and_region_rows():
     assert table['total'] == {'seats': 246, 'cells': [{'seats': 140, 'range': '–'}, {'seats': 106, 'range': '–'}]}
     assert pages.district_table({'parties': [], 'regions': [], 'rows': []}, SCENARIO) is None
     assert [r['name'] for r in pages.region_rows(DISTRICTS, 28)] == ['PP', 'PSOE']
+    absent = DISTRICTS['rows'][2] | {'name': 'VOX', 'pct': None, 'pct_lo': None, 'pct_hi': None, 'seats': 0.0}
+    assert [r['name'] for r in pages.region_rows(DISTRICTS | {'rows': DISTRICTS['rows'] + [absent]}, 28)] == ['PP', 'PSOE']
     assert pages.resolve_region(None, DISTRICTS['regions'])['id'] == 28
