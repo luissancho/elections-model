@@ -3,9 +3,12 @@
 /** Days shown by each choice of the window control; a choice outside this map shows the whole axis. */
 export const WINDOW_DAYS = {'6m': 180};
 
+/** Choice of the window control when nothing says otherwise. */
+export const DEFAULT_WINDOW = '6m';
+
 /**
  * Window of the last `days` days: from `days` before `anchor` (the last date when null), clamped to the
- * first date, up to the last date.
+ * axis, up to the last date.
  *
  * @param {string[]} dates ascending ISO dates of the axis
  * @param {number} days window length before the anchor
@@ -21,7 +24,7 @@ export function lastWindow(dates, days, anchor = null) {
   const from = new Date(`${anchor || last}T00:00:00Z`);
   from.setUTCDate(from.getUTCDate() - days);
   const start = from.toISOString().slice(0, 10);
-  return {startValue: start < first ? first : start, endValue: last};
+  return {startValue: start < first ? first : (start > last ? last : start), endValue: last};
 }
 
 /**
@@ -37,9 +40,8 @@ export function seriesWindow(choice, dates, anchor = null) {
   if (!dates.length) {
     return null;
   }
-  const days = WINDOW_DAYS[choice];
-  if (days) {
-    return lastWindow(dates, days, anchor);
+  if (Object.hasOwn(WINDOW_DAYS, choice)) {
+    return lastWindow(dates, WINDOW_DAYS[choice], anchor);
   }
   return {startValue: dates[0], endValue: dates[dates.length - 1]};
 }

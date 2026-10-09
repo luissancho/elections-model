@@ -92,3 +92,4 @@ caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--co
 /* Window control of the average chart */
 .chart-window { margin: 0 0 8px; font-size: 0.9rem; flex-wrap: wrap; }
 .chart-window legend { color: var(--color-muted); }
+.chart-window[hidden] { display: none; }

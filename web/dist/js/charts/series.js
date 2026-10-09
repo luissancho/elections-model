@@ -2,7 +2,7 @@
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtNum, fmtPct, fmtRange} from '../format.js';
-import {seriesWindow} from '../range.js';
+import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const BAND_OPACITY = 0.15;
@@ -145,7 +145,7 @@ export function setWindow(chart, choice, {series, projection, anchor = null}) {
  */
 export function renderSeries(el, {
   series, polls, projection, parties, selected = null, colors = {}, fullnames = {}, asOf, when,
-  window: windowChoice = 'all', anchor = null,
+  window: windowChoice = DEFAULT_WINDOW, anchor = null,
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
