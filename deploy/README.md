@@ -202,6 +202,7 @@ python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":".
 python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
 python job.py publish '{"what":["unpublish"],"scopes":["es"],"run":"20261007-141503"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
+python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'
 ```
 
 1. Publica el pronóstico de `es` (nowcast y forecast, 1000 simulaciones) y actualiza su entrada del manifest.
@@ -210,6 +211,8 @@ python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run"
 4. Apunta el manifest de `es` a un run anterior (no borra nada).
 5. Borra un run malo, reconstruye `history.json` y, si era el último, apunta al anterior (o quita el ámbito).
 6. Ensayo: escribe en `site-dry/v1` con 20 simulaciones, sin `history.json` ni manifest.
+7. Relleno retroactivo: un run por día del 5 al 8 de octubre de 2026, cada uno con solo los sondeos publicados
+   hasta ese día (ver "Relleno retroactivo").
 
 `what` admite `forecast`, `manifest`, `point` y `unpublish` (se ejecutan en ese orden); `analysis`, `event`
 y `backtest` fallan con `ValueError` hasta las fases 4 y 5.
@@ -231,7 +234,8 @@ y `backtest` fallan con `ValueError` hasta las fases 4 y 5.
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
 | `force` | `false` | Publicar `es` dentro de la ventana LOREG |
-| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
+| `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` no posterior a hoy (Europe/Madrid). Con `backfill`, `forecast` publica un run por día en vez de uno de hoy |
+| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
 
 ### Estados y resumen
 
@@ -245,6 +249,8 @@ es: published 20261008-181100 (as_of 2026-10-13, 315 polls) in 121 s
 es-md: skipped (<motivo>)
 es: refused (es 2026-11-29: inside the LOREG window (art. 69.7); pass force=true to publish)
 es: failed (<Excepción>: <mensaje>)
+es: published 20261005-120000 (as_of 2026-10-05, 290 polls, backfill 2026-10-05) in 118 s    # backfill, un día
+es: skipped 2026-10-05 (run exists)                                                           # backfill, día ya publicado
 es: published 20261007-141503          # point y unpublish
 manifest: 1 scopes, freeze off
 manifest: not written (dry run)
@@ -252,6 +258,32 @@ manifest: not written (dry run)
 
 Si algún ámbito falla, el job termina con error (código de salida 1) después de escribir el manifest y
 el resumen; un ámbito fallido conserva su entrada anterior en el manifest.
+
+Con `backfill`, `results[ámbito]` es una lista con un resultado por día (`day`, `status`, ...) y el
+resumen tiene una línea por día. Si un día falla a medias (queda la carpeta del run sin `headline.json`),
+al repetir se informa `skipped (run exists)`: hay que retirarlo antes con `unpublish`
+(`{"what":["unpublish"],"scopes":["es"],"run":"20261005-120000"}`) y volver a lanzar el relleno.
+
+### Relleno retroactivo
+
+`backfill` rellena la evolución de las publicaciones con runs "a fecha de" un día pasado:
+
+- Un run por día del rango, con `run_id` `YYYYMMDD-120000` y `run_at` `YYYY-MM-DDT12:00:00Z`. El
+  simulador se construye con `limit_date=<día>`: solo entran los sondeos publicados hasta ese día, `as_of`
+  se lee ese día y los efectos de casa se reajustan con esos sondeos. El run lleva `meta.limit_date = <día>` y
+  `headline.backfill = true` (y por tanto la fila de `history.json`).
+- Es una reconstrucción, no lo que se publicó entonces: usa los ratings, la deriva y el catálogo de hoy y el
+  evento de hoy (2026-11-29), incluso para días anteriores a la convocatoria. La web los dibuja como puntos
+  huecos con "estimación retrospectiva".
+- Un día cuyo run ya existe se salta (`skipped`, "run exists"): repetir el relleno es idempotente.
+- `latest` no retrocede: un relleno solo mueve el `latest` del ámbito si su run más nuevo tiene un `run_id`
+  mayor que el actual (o no hay ninguno); si no, el manifest queda intacto, de modo que un run al que se
+  volvió con `point` nunca se reactiva. Una publicación normal sigue apuntando al run recién producido.
+- `es` tarda unos 2 min por día contra la RDS. Conviene que `to` sea como mucho ayer: un run a las 12:00 UTC
+  de hoy puede ordenarse de forma rara respecto a los runs reales de hoy.
+- La guarda LOREG se aplica al momento de la publicación (el hoy real), como en cualquier publicación.
+- `point`, `unpublish`, `manifest` y `dry_run` no cambian (`dry_run` con `backfill` escribe en `site-dry/v1`
+  sin punteros).
 
 ### Publicar en local
 
@@ -262,6 +294,7 @@ comando, porque `load_dotenv` no pisa las variables ya exportadas y, sin ello, s
 ```
 S3_BUCKET= python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
 S3_BUCKET= python job.py publish '{"what":["forecast"],"scopes":["es"]}'
+S3_BUCKET= python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'
 ```
 
 El paquete local lee la base de datos configurada en el `.env` de la raíz.
@@ -272,7 +305,12 @@ Desde el portátil:
 
 ```
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["forecast"],"scopes":["es"]}'
+set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'
 ```
+
+Un run retrospectivo es una reconstrucción (ratings, deriva y catálogo de hoy; solo los sondeos publicados
+hasta ese día), `es` tarda unos 2 min por día, los días ya publicados se saltan y `latest` no retrocede
+(ver "Relleno retroactivo").
 
 Desde la imagen (JSON sin espacios: `init.sh` no entrecomilla):
 

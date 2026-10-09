@@ -49,7 +49,8 @@ Todo JSON es un sobre:
 - `run_id` es `YYYYMMDD-HHMMSS` en UTC, uno por invocación (compartido por todos los ámbitos); ordena
   lexicográficamente y cabe en un alias de ruta (`[0-9a-z_-]+`).
 - Los runs son inmutables: un `run_id` existente no se reescribe. Los punteros (`manifest.json`,
-  `history.json`) sí se reescriben.
+  `history.json`) sí se reescriben. Un relleno retroactivo (`backfill`) salta los `run_id` existentes y solo
+  mueve el `latest` del manifest hacia delante.
 - `headline.json` se escribe el último. Un run sin `headline.json` está incompleto y se ignora (no entra
   en `history` ni se puede apuntar a él).
 - Los partidos se identifican por `name`; el catálogo (`id`, `fullname`, `color`, `block`, `regional`) está
@@ -71,18 +72,28 @@ color, block, regional}` en el orden de la simulación), `bmaps`, `smap`, `regio
 incluye el total del ámbito, `id` 0, que es la cámara entera),
 `diagnostics` (`drift_k`, `multiplier`, `ages`, `composition`, `clip_rate` por modo), `seconds` (`init`,
 `fit`, `nowcast`, `forecast`, `export`, `total`, a 1 decimal; `nowcast` y `forecast` miden solo las
-simulaciones y `export` suma la escritura de ambos modos y de los ficheros del ciclo) y `freeze`.
+simulaciones y `export` suma la escritura de ambos modos y de los ficheros del ciclo), `freeze` y
+`limit_date`.
 
 `freeze` aquí significa que el run se publicó dentro de la ventana LOREG con `force`; no es el interruptor
 editorial de `manifest.freeze`.
+
+`limit_date` (enmienda 2026-10-09; cadena `YYYY-MM-DD` o `null`, clave obligatoria) es el día de corte de un
+run retrospectivo: solo entraron los sondeos publicados hasta ese día y `as_of` se leyó ese día. Es `null` en
+un run normal. Un lector trata la clave ausente (runs publicados antes de 2026-10-09) como `null`.
 
 ### `headline`
 
 Resumen del run, lo primero que muestra el sitio y la fila de `history`.
 
-`data`: `run_id`, `run_at`, `event_date`, `as_of`, `date_last`, `n_polls`, `nowcast` y `forecast`. Cada
+`data`: `run_id`, `run_at`, `event_date`, `as_of`, `date_last`, `n_polls`, `backfill`, `nowcast` y `forecast`. Cada
 modo es `{parties: [...], p_majority: {bloque: p}}` y cada partido `{name, pct, lo, hi, seats, seats_lo,
 seats_hi, p_first}` en el orden de `vote_forecast()`; `seats` es el titular entero (`totals()`).
+
+`backfill` (enmienda 2026-10-09; booleano, clave obligatoria) es `true` en un run retrospectivo: una
+reconstrucción con el modelo de hoy y solo los sondeos publicados hasta `meta.limit_date`, con `run_id`
+`YYYYMMDD-120000` y `run_at` a las 12:00 UTC de ese día. Un lector trata la clave ausente (runs publicados
+antes de 2026-10-09) como `false`. El contrato sigue en 1: son claves adicionales.
 
 ### `series`
 
@@ -192,10 +203,13 @@ hi}` y cada estadística `{nombre: [valor por fecha]}`. CSV largo: `date, group,
 
 ### `history.json`
 
-Evolución del pronóstico publicado (no regenerable). Se reconstruye desde los `headline.json` de los runs
+Evolución del pronóstico publicado. Los runs reales son instantáneas no regenerables; desde 2026-10-09
+también puede haber runs retrospectivos (`backfill: true`, reconstrucciones marcadas). Se reconstruye desde los `headline.json` de los runs
 completos del ámbito tras cada publicación y tras `unpublish`.
 
-`data`: `scope` y `runs` (lista de `headline`, ascendente por `run_id`).
+`data`: `scope` y `runs` (lista de `headline`, ascendente por `run_id`; cada fila lleva `backfill`). Los
+retrospectivos, con `run_id` a las 12:00 UTC de un día pasado, quedan antes de los reales de ese día
+posteriores a esa hora y, por tanto, normalmente al principio de la lista.
 
 ### `manifest.json`
 

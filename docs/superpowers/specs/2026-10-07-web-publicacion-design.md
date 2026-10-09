@@ -73,6 +73,9 @@ propia); objetivo científico y divulgativo; los cambios de esquema en la base l
 - **Historia del pronóstico**: no se puede regenerar fielmente (suavizado bilateral, pesos reescritos,
   ratings "de hoy", cambio de fecha del evento) → cada publicación es una instantánea inmutable con
   procedencia (patrón `backtest/run_backtest.py:59-78`, que omite el flag de árbol sucio).
+  *Nota 2026-10-09:* los runs retrospectivos (`backfill`, fase 3b) son una reconstrucción marcada —modelo,
+  ratings y catálogo de hoy con solo los sondeos publicados hasta el día del run—, no una regeneración fiel;
+  conviven con las instantáneas reales y se distinguen por `headline.backfill` y `meta.limit_date`.
 - **Docker**: `.dockerignore` tiene semántica de raíz, así que `deploy/*.env` (credenciales reales), `.git`
   (127 MB), notebooks y `.superpowers/` entrarían en la imagen con `COPY . .`. Bloqueante de seguridad.
   Imagen única con build tools; supervisord sin `nodaemon`; crontab `job.py rep` inexistente.
@@ -158,9 +161,12 @@ site/v1/backtest/{scope}/{meta,metrics,by-horizon,blocks,shares,seats}.json (+ c
   `event_date`, `as_of`, `date_last`, `date_fit_last`, `horizon_max`, `n_sim`, `seed`, `drange`, `max_fc`,
   `alpha`, `correctors`, `n_polls`, `n_pollsters`, `db_polls`, `db_last_poll`, `n_seats`, `majority`,
   `parties`, `bmaps`, `smap`, `regions`, `diagnostics` (`drift_k`, `multiplier`, `ages`, `composition`,
-  `clip_rate`), `seconds` por paso, `freeze`.
+  `clip_rate`), `seconds` por paso, `freeze`. *Enmienda 2026-10-09:* `limit_date` (cadena `YYYY-MM-DD` o `null`,
+  obligatoria).
 - `headline.json`: por modo, `pct/lo/hi/seats/seats_lo/seats_hi/p_first` por partido y `p_majority` por
-  bloque `vs`; alimenta `history.json` (evolución del pronóstico publicado, no regenerable).
+  bloque `vs`; alimenta `history.json` (evolución del pronóstico publicado, no regenerable). *Enmienda
+  2026-10-09:* `backfill` (booleano, obligatoria; `true` en un run retrospectivo), que viaja en la fila de
+  `history.json`; el lector trata la ausencia como `false`. El contrato sigue en 1.
 - Fuentes: `series` ← `fc.forecast` + `fc.fc_stat` (`cmin`/`cmax`) cortados en `date_fit_last`; `polls` ←
   `fc.fc_series_raw` (sondeos como se publicaron) + `fc.nfc_series` (resultado anterior); `fan` ←
   `sim.fan()`; `house-effects` ← `fc.house_effects`; `dispersion` ← `fc.dispersion`; por modo: `vote` ←
@@ -187,7 +193,13 @@ python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-2
 python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
 python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'   # a site-dry/, sin punteros
+python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'   # enmienda 2026-10-09
 ```
+
+*Enmienda 2026-10-09:* `backfill` `{from, to}` (ISO `YYYY-MM-DD`, `to` opcional, `from <= to`, `to` no posterior
+a hoy en Europe/Madrid) publica un run por día con `run_id` `YYYYMMDD-120000` y `run_at` a las 12:00 UTC, con
+el simulador construido con `limit_date=<día>`; un día ya publicado queda `skipped` ("run exists") y el
+`latest` del manifest solo avanza.
 
 Parámetros: `what`, `scopes`, `event_date` (por defecto `get_next_event_date`), `n_sim=1000`, `seed=42`,
 `drange=6`, `max_fc=10`, `alpha=0.05`, `correctors`, `freeze`, `run`, `dry_run`, `force`. En Docker:
@@ -813,3 +825,61 @@ el error en consola, sin mensaje en la línea de estado; arreglo sugerido: recog
 `tryDraw` en `paint()` y llamar a `showError` si alguno falla. Las celdas de la tabla general para
 partidos que no concurren en una circunscripción (0 escaños, rango "–") se dejan como están: el escenario
 es coherente y ese 0 es real.
+
+## Fase 3b: relleno retroactivo (2026-10-09)
+
+Plan: `docs/superpowers/plans/2026-10-09-web-relleno-retroactivo.md` (`7690b8c`). Objetivo: que la evolución
+de las publicaciones tenga puntos desde la convocatoria (2026-10-05) y que `/promedio` abra con todo el
+ciclo. No cambian la API, nginx ni la imagen Docker; el contrato sigue en 1 (claves adicionales).
+
+Commits:
+
+- `c33883a` y `c102231`: `mtpy/lib/publish.py`, `mtpy/lib/bundle.py`, `mtpy/jobs/Publish.py`, fixtures y
+  tests. `python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'`
+  publica un run por día (`run_id` `YYYYMMDD-120000`, `run_at` a las 12:00 UTC) con el simulador construido con
+  `limit_date=<día>`; `meta.limit_date` y `headline.backfill` son claves obligatorias de `SCHEMAS` y la fila de
+  `history.json` lleva `backfill`. Un día con run existente queda `skipped` ("run exists"). `point`,
+  `unpublish`, `manifest` y `dry_run` no cambian.
+- `3e5658b`: `web/dist/js/charts/evolution.js`, `web/dist/js/charts/series.js`, `web/dist/js/pages/promedio.js`,
+  `web/templates/index.html`, `web/templates/escanos.html` y tests. Las tarjetas "Evolución de las
+  publicaciones" dibujan los puntos retrospectivos huecos (relleno blanco, borde del color del partido), con
+  "estimación retrospectiva" en el tooltip y una nota bajo la tarjeta; `/promedio` abre con todo el ciclo y el
+  deslizador acerca (la ventana inicial de 180 días desaparece).
+- Suite unitaria: 364 tests (349 antes del plan).
+
+Decisiones del plan (D1-D7):
+
+- **D1.** El corte es la fecha de publicación del sondeo (columna `date`), no la de carga en la base. Ratings,
+  deriva y catálogo son los de hoy; los efectos de casa se reajustan con esos sondeos (como en el backtest).
+- **D2.** `run_id` `YYYYMMDD-120000` y `run_at` `YYYY-MM-DDT12:00:00Z`: ordena antes que un run real del mismo
+  día posterior a las 12 UTC y el eje temporal lo sitúa en su día.
+- **D3.** Un día cuyo `run_id` existe se salta; repetir el relleno es idempotente. Un relleno nunca mueve
+  `latest` hacia atrás. *Enmendada tras la revisión:* la regla inicial (la entrada del manifest sale del último
+  run del `history`) reactivaba un run al que `point` había vuelto; la regla final (`Publish._manifest_entry`)
+  es que una publicación normal apunta al run recién producido y un relleno mueve `latest` solo si el run más
+  nuevo de esa invocación tiene un `run_id` mayor que el actual (o no hay ninguno); si no, el manifest queda
+  intacto.
+- **D4.** `headline.backfill` (bool) y `meta.limit_date` (cadena o `null`) son obligatorias en los esquemas; el
+  JS trata la ausencia (runs anteriores a 2026-10-09) como `false`.
+- **D5.** Puntos retrospectivos huecos con "estimación retrospectiva" en el tooltip; tarjetas tituladas
+  "Evolución de las publicaciones" con la nota "Los puntos huecos son estimaciones retrospectivas: el modelo de
+  hoy con los sondeos publicados hasta ese día."
+- **D6.** `/promedio` abre con todo el ciclo (del primer sondeo a la elección); se elimina la ventana de 180 días.
+- **D7.** Fuera de alcance: una tarjeta de serie de sondeos en la portada, rellenar antes de la convocatoria
+  (Luis decide el rango al lanzar el job) y ejecutar el relleno real (lo lanza Luis contra la RDS).
+
+Decisión de ejecución: el evento de un run retrospectivo es el de hoy (2026-11-29), incluso para días anteriores a
+la convocatoria; es deliberado (la reconstrucción usa el catálogo y el calendario de hoy).
+
+Avisos operativos: `es` tarda unos 2 min por día contra la RDS; conviene `to` = ayer como mucho (un run a las
+12:00 UTC de hoy puede ordenarse de forma rara frente a los runs reales de hoy); si un día falla a medias
+(carpeta sin `headline.json`) se informa `skipped (run exists)` al repetir y hay que retirarlo antes con
+`unpublish`; la guarda LOREG se aplica al momento de la publicación (el hoy real). Documentado en
+`deploy/README.md` ("Relleno retroactivo") y `docs/web/contrato.md` (`meta`, `headline`, `history.json`).
+
+Pendiente de Luis:
+
+- Lanzar el relleno real contra la RDS (`backfill` del 5 al 8 de octubre, o desde la fecha que decida) y
+  comprobar en la portada que los puntos huecos aparecen desde la convocatoria.
+- Recorrer `/promedio` con todo el ciclo: si tres años resultan densos, pedir el control "Últimos 6 meses /
+  Todo el ciclo".
