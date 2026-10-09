@@ -23,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from ..core.api import HttpError
 from ..core.app import App
 from . import bundle
-from .webapi import check_mode, check_run, check_scope, site
+from .webapi import check_mode, check_region, check_run, check_scope, site
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
@@ -48,6 +48,8 @@ MESSAGES = {
     'invalid scope': 'Ámbito no válido.',
     'invalid run': 'Run no válido.',
     'invalid mode': 'Modo no válido.',
+    'invalid region': 'Circunscripción no válida.',
+    'region not found': 'Circunscripción no encontrada.',
 }
 TABLE_ROWS = 40
 OTHERS_COLOR = '#9e9e9e'
@@ -938,6 +940,133 @@ def csv_links(scope: str, mode: str, run: str) -> list:
     ]
 
 
+def resolve_region(region: Optional[int], regions: list) -> Optional[dict]:
+    """
+    Pick the district the detail table shows.
+
+    Parameters
+    ----------
+    region : int, optional
+        Requested district id.
+    regions : list of dict
+        ``districts['regions']`` (``id``, ``name``, ``seats``).
+
+    Returns
+    -------
+    dict or None
+        The requested district; the one with most seats (the first on ties) when ``region`` is
+        ``None``; ``None`` when there are no districts and no request.
+
+    Raises
+    ------
+    HttpError
+        404 when ``region`` is not among the districts.
+    """
+    if region is None:
+        return max(regions, key=lambda item: item['seats']) if regions else None
+
+    for item in regions:
+        if item['id'] == region:
+            return item
+
+    raise HttpError(404, 'region not found')
+
+
+def district_table(districts: dict, scenario: dict) -> Optional[dict]:
+    """
+    Overview table of the central scenario by district and party.
+
+    Parameters
+    ----------
+    districts : dict
+        Data of the ``districts`` part.
+    scenario : dict
+        Data of the ``scenario`` part.
+
+    Returns
+    -------
+    dict or None
+        ``None`` without districts. Otherwise ``parties`` (names with any seat in the scenario or
+        ``seats_hi`` above zero, in the order of ``districts['parties']``), ``rows`` (``id``,
+        ``name``, ``seats`` and ``cells`` per district) and ``total`` (the scenario row of the
+        whole scope, or ``None``). Each cell is ``{'seats': int or None, 'range': str}``: the
+        scenario seats (``None`` when the district is not in the scenario) and the 95 % interval.
+    """
+    regions = districts.get('regions') or []
+
+    if not regions:
+        return None
+
+    scenario_parties = list(scenario.get('parties') or [])
+    scenario_rows = {item['region_id']: item['seats'] for item in scenario.get('rows') or []}
+    intervals = {(item['region_id'], item['name']): item for item in districts.get('rows') or []}
+    names = list(districts.get('parties') or [])
+
+    def seats_of(region_id, name):
+        values = scenario_rows.get(region_id)
+
+        if values is None or name not in scenario_parties:
+            return None
+
+        return values[scenario_parties.index(name)]
+
+    def has_seats(name):
+        if any((seats_of(region_id, name) or 0) > 0 for region_id in scenario_rows):
+            return True
+
+        return any((item['seats_hi'] or 0) > 0 for (_, party), item in intervals.items() if party == name)
+
+    shown = [name for name in names if has_seats(name)]
+
+    def cells(region_id):
+        out = []
+
+        for name in shown:
+            item = intervals.get((region_id, name))
+            out.append({
+                'seats': seats_of(region_id, name),
+                'range': fmt_range(item['seats_lo'], item['seats_hi'], 0) if item else DASH,
+            })
+
+        return out
+
+    total = None
+
+    if 0 in scenario_rows:
+        total = {'seats': sum(scenario_rows[0]), 'cells': cells(0)}
+
+    return {
+        'parties': shown,
+        'rows': [
+            {'id': item['id'], 'name': item['name'], 'seats': item['seats'], 'cells': cells(item['id'])}
+            for item in regions
+        ],
+        'total': total,
+    }
+
+
+def region_rows(districts: dict, region_id: int) -> list:
+    """
+    Party rows of one district.
+
+    Parameters
+    ----------
+    districts : dict
+        Data of the ``districts`` part.
+    region_id : int
+        District id.
+
+    Returns
+    -------
+    list of dict
+        The rows of that district ordered by ``seats`` and then ``pct``, both descending (stable),
+        unformatted.
+    """
+    rows = [item for item in districts.get('rows') or [] if item['region_id'] == region_id]
+
+    return sorted(rows, key=lambda item: (-(item['seats'] or 0), -(item['pct'] or 0)))
+
+
 def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
     """
     Template context of the seats page.
@@ -947,7 +1076,8 @@ def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
     state : dict
         Validated page parameters (``parse_state``).
     region : str, optional
-        ``region`` query parameter; not used yet (the districts section comes later).
+        ``region`` query parameter: id of the district the detail table shows (the largest by
+        default).
     active : str, optional
         ``href`` of the page in the navigation.
 
@@ -957,21 +1087,26 @@ def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
         The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows`` and
         ``vs_rows`` (``block_rows``), ``calculator`` (``name``, ``fullname``, ``color`` and
         ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
-        (``district_table``, ``regions``, ``region``, ``region_rows``, empty for now) and
+        (``district_table``, ``regions``, ``region`` and ``region_rows``) and
         ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan`` and ``runs``, the data
         the charts and the calculator are drawn from).
 
     Raises
     ------
     HttpError
-        503 without a bundle; 404 for an unpublished scope, a missing run or a missing part.
+        503 without a bundle; 404 for an unpublished scope, a missing run, a missing part or an
+        unknown district; 400 for an invalid ``region``.
     """
+    region_id = check_region(region)
     context = common_context(state, active)
     full, meta, parties = context['state'], context['meta'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
     summary = part(scope, run, 'summary', mode=mode)
     dist = part(scope, run, 'dist', mode=mode)
     names = list(dist.get('parties') or [])
+    districts = part(scope, run, 'districts', mode=mode)
+    scenario = part(scope, run, 'scenario', mode=mode)
+    current = resolve_region(region_id, districts.get('regions') or [])
     checked = default_coalition(meta, summary, names)
     suffix = context['title_suffix']
 
@@ -986,10 +1121,10 @@ def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
     ]
     context['csv_links'] = csv_links(scope, mode, run)
     context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
-    context['district_table'] = None
-    context['regions'] = []
-    context['region'] = None
-    context['region_rows'] = []
+    context['district_table'] = district_table(districts, scenario)
+    context['regions'] = districts.get('regions') or []
+    context['region'] = current
+    context['region_rows'] = region_rows(districts, current['id']) if current else []
     context['initial'] = {
         'state': full,
         'meta': meta,

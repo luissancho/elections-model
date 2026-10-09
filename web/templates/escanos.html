@@ -125,6 +125,88 @@
       {% if district_table %}
       <section class="card" id="districts">
         <h2>Circunscripciones <span class="mode-subtitle">{{ subtitle }}</span></h2>
+        <div class="table-wrap">
+          <table id="district-table">
+            <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el intervalo del 95 %.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Circunscripción</th>
+                <th scope="col">Escaños</th>
+                {% for name in district_table.parties %}
+                <th scope="col"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ catalog[name].fullname }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in district_table.rows %}
+              <tr>
+                <td><a href="/escanos{{ query }}&amp;region={{ row.id }}">{{ row.name }}</a></td>
+                <td>{{ row.seats|int }}</td>
+                {% for cell in row.cells %}
+                <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+              {% if district_table.total %}
+              <tr>
+                <td>Total</td>
+                <td>{{ district_table.total.seats|int }}</td>
+                {% for cell in district_table.total.cells %}
+                <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
+                {% endfor %}
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        <form id="district-form" method="get" action="/escanos">
+          <input type="hidden" name="scope" value="{{ state.scope }}">
+          <input type="hidden" name="mode" value="{{ state.mode }}">
+          {% if state.pinned %}
+          <input type="hidden" name="run" value="{{ state.run }}">
+          {% endif %}
+          <label for="region">Circunscripción</label>
+          <select name="region" id="region">
+            {% for item in regions %}
+            <option value="{{ item.id }}"{% if region and item.id == region.id %} selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="nojs-only">Ver</button>
+        </form>
+        {% if region %}
+        <div class="table-wrap">
+          <table id="region-table">
+            <caption>{{ region.name }} · {{ region.seats }} escaños</caption>
+            <thead>
+              <tr>
+                <th scope="col">Partido</th>
+                <th scope="col">Voto</th>
+                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">Escaños</th>
+                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">P(escaño)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in region_rows %}
+              <tr>
+                <td><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
+                <td>{{ row.pct|pct }}</td>
+                <td>{{ row.pct_lo|range(row.pct_hi, 1) }} %</td>
+                <td>{{ row.seats|int }}</td>
+                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                <td>{{ row.p_seats|prob }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <p class="about">
+          Qué es esto: el escenario central reparte los escaños de cada circunscripción en una
+          simulación concreta; el detalle muestra voto y escaños previstos por partido en la
+          circunscripción elegida.
+        </p>
       </section>
       {% endif %}
       <section class="card" id="fan">

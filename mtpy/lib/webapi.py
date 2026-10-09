@@ -6,6 +6,7 @@ caches and a reader that returns the bundle files as bytes, untouched. The datab
 arrive in phase 4. This module imports only ``bundle``, so the web workers do not load the
 model nor the scientific stack.
 """
+import re
 import time
 import warnings
 from collections import OrderedDict
@@ -312,6 +313,34 @@ def check_mode(mode: str) -> str:
         raise HttpError(400, 'invalid mode')
 
     return mode
+
+
+def check_region(region: Optional[str]) -> Optional[int]:
+    """
+    Validate a district id.
+
+    Parameters
+    ----------
+    region : str, optional
+        ``region`` query parameter.
+
+    Returns
+    -------
+    int or None
+        The id as an integer, or ``None`` when it is missing or empty.
+
+    Raises
+    ------
+    HttpError
+        400 when it is not a number of one to six digits.
+    """
+    if region is None or region == '':
+        return None
+
+    if not isinstance(region, str) or not re.fullmatch(r'\d{1,6}', region):
+        raise HttpError(400, 'invalid region')
+
+    return int(region)
 
 
 def check_part(part: str, allowed: Sequence[str]) -> str:

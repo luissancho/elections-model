@@ -189,3 +189,12 @@ def test_settings_fall_back_to_the_default_ttl_on_garbage(monkeypatch):
     monkeypatch.setattr(webapi.App, 'get_', staticmethod(lambda: fake))
     with pytest.warns(UserWarning):
         assert webapi.settings() == {'prefix': bundle.PREFIX, 'cache_ttl': 60.0}
+
+
+def test_check_region_accepts_integers_only():
+    assert webapi.check_region(None) is None and webapi.check_region('') is None
+    assert webapi.check_region('28') == 28
+    for bad in ('abc', '-1', '28.0', '1' * 7, '28;'):
+        with pytest.raises(HttpError) as err:
+            webapi.check_region(bad)
+        assert err.value.status == 400 and err.value.message == 'invalid region'

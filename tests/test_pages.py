@@ -268,7 +268,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     assert 'id="fan-chart"' in page and 'id="seats-evolution"' in page
     assert 'href="/api/v1/forecast/es/forecast/summary?run={}&amp;format=csv"'.format(RUN) in page
     assert 'href="/api/v1/forecast/es/fan?run={}&amp;format=csv"'.format(RUN) in page
-    assert page.count('format=csv') == 5 and 'id="districts"' not in page  # sin circunscripciones hasta la tarea 4
+    assert page.count('format=csv') == 5 and 'id="districts"' in page
     assert '/dist/js/pages/escanos.js' in page
     data = initial(body)
     assert list(data) == ['state', 'meta', 'summary', 'dist', 'fan', 'runs']
@@ -299,3 +299,89 @@ def test_csv_links_cover_the_five_parts_in_order():
     assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Escenario central', 'Abanico por horizonte']
     assert links[0]['href'] == '/api/v1/forecast/es/nowcast/summary?run={}&format=csv'.format(RUN)
     assert links[4]['href'] == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)
+
+
+DISTRICTS = {
+    'parties': ['PP', 'PSOE'],
+    'regions': [{'id': 8, 'name': 'Barcelona', 'seats': 32}, {'id': 28, 'name': 'Madrid', 'seats': 37}],
+    'rows': [
+        {'region_id': 8, 'region': 'Barcelona', 'name': 'PP', 'pct': 20.0, 'pct_lo': 17.0, 'pct_hi': 23.0, 'seats': 7.0, 'seats_mean': 7.1, 'seats_lo': 6.0, 'seats_hi': 8.0, 'p_seats': 1.0},
+        {'region_id': 8, 'region': 'Barcelona', 'name': 'PSOE', 'pct': 25.0, 'pct_lo': 22.0, 'pct_hi': 28.0, 'seats': 9.0, 'seats_mean': 9.2, 'seats_lo': 8.0, 'seats_hi': 10.0, 'p_seats': 1.0},
+        {'region_id': 28, 'region': 'Madrid', 'name': 'PP', 'pct': 39.0, 'pct_lo': 34.0, 'pct_hi': 44.0, 'seats': 16.0, 'seats_mean': 15.8, 'seats_lo': 14.0, 'seats_hi': 18.0, 'p_seats': 1.0},
+        {'region_id': 28, 'region': 'Madrid', 'name': 'PSOE', 'pct': 24.0, 'pct_lo': 20.0, 'pct_hi': 28.0, 'seats': 9.0, 'seats_mean': 9.1, 'seats_lo': 8.0, 'seats_hi': 11.0, 'p_seats': 1.0},
+    ],
+}
+SCENARIO = {'simulation': 3, 'parties': ['PP', 'PSOE'], 'rows': [
+    {'region_id': 0, 'region': 'es', 'seats': [140, 106]},
+    {'region_id': 8, 'region': 'Barcelona', 'seats': [7, 9]},
+    {'region_id': 28, 'region': 'Madrid', 'seats': [16, 9]},
+]}
+
+
+def write_districts(fs, districts=DISTRICTS, scenario=SCENARIO, scope='es', run_id=RUN):
+    writer = bundle.BundleWriter(fs)
+    for mode in bundle.MODES:
+        writer.write_json(bundle.path_part(scope, run_id, 'districts', mode), 'districts', districts, scope, run_id=run_id, mode=mode)
+        writer.write_json(bundle.path_part(scope, run_id, 'scenario', mode), 'scenario', scenario, scope, run_id=run_id, mode=mode)
+
+
+def test_escanos_districts_default_to_the_largest_and_link_the_rows(api, fresh_app):
+    write_districts(fresh_app.fs)
+    page = html(call(api, '/escanos', query='scope=es&mode=forecast')[2])
+    assert 'id="districts"' in page and '<option value="28" selected>Madrid</option>' in page
+    assert 'Madrid · 37 escaños' in page  # caption del detalle
+    assert 'href="/escanos?scope=es&amp;mode=forecast&amp;region=8"' in page
+    assert '<td title="6–8">7</td>' in page and '<td title="14–18">16</td>' in page
+    assert '<td>Total</td>' in page and '140' in page
+    page = html(call(api, '/escanos', query='scope=es&mode=forecast&region=8')[2])
+    assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
+
+
+def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
+    write_districts(fresh_app.fs)
+    page = html(call(api, '/escanos', query='scope=es&run=' + RUN)[2])
+    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 2  # cabecera y formulario de circunscripción
+
+
+@pytest.mark.parametrize('query, status, text', [
+    ('region=abc', 400, 'Circunscripción no válida'),
+    ('region=99', 404, 'Circunscripción no encontrada'),
+])
+def test_escanos_region_errors(api, fresh_app, query, status, text):
+    write_districts(fresh_app.fs)
+    got, headers, body = call(api, '/escanos', query=query)
+    assert got == status and headers['cache-control'] == 'no-store' and text in html(body)
+
+
+def test_escanos_without_districts_hides_the_section(api, fresh_app):
+    write_districts(fresh_app.fs, districts={'parties': ['PP'], 'regions': [], 'rows': []},
+                    scenario={'simulation': 0, 'parties': ['PP'], 'rows': [{'region_id': 0, 'region': 'es-md', 'seats': [70]}]})
+    status, headers, body = call(api, '/escanos')
+    assert status == 200 and 'id="districts"' not in html(body)
+    assert call(api, '/escanos', query='region=28')[0] == 404
+
+
+def test_regional_scope_renders_every_page(api, fresh_app):
+    """Ámbito autonómico sintético: `bmaps` sin `max`, sin circunscripciones."""
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    meta = fixture_data('meta') | {'scope': 'es-md', 'n_seats': 135, 'majority': 68}
+    meta['bmaps'] = {k: v for k, v in meta['bmaps'].items() if k != 'max'}
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es-md', '20261009-120000', 'meta'), 'meta', meta, 'es-md', run_id='20261009-120000')
+    write_districts(fresh_app.fs, districts={'parties': ['PP'], 'regions': [], 'rows': []},
+                    scenario={'simulation': 0, 'parties': ['PP'], 'rows': [{'region_id': 0, 'region': 'es-md', 'seats': [70]}]},
+                    scope='es-md', run_id='20261009-120000')
+    webapi.site().manifest_cache_clear()
+    for path in ('/', '/promedio', '/escanos'):
+        status, headers, body = call(api, path, query='scope=es-md')
+        assert status == 200 and '<option value="es-md" selected>Madrid</option>' in html(body), path
+    assert 'name="coalition" value="PP" checked' in html(call(api, '/escanos', query='scope=es-md')[2])
+
+
+def test_district_table_and_region_rows():
+    table = pages.district_table(DISTRICTS, SCENARIO)
+    assert table['parties'] == ['PP', 'PSOE'] and [r['name'] for r in table['rows']] == ['Barcelona', 'Madrid']
+    assert table['rows'][1]['cells'] == [{'seats': 16, 'range': '14–18'}, {'seats': 9, 'range': '8–11'}]
+    assert table['total'] == {'seats': 246, 'cells': [{'seats': 140, 'range': '–'}, {'seats': 106, 'range': '–'}]}
+    assert pages.district_table({'parties': [], 'regions': [], 'rows': []}, SCENARIO) is None
+    assert [r['name'] for r in pages.region_rows(DISTRICTS, 28)] == ['PP', 'PSOE']
+    assert pages.resolve_region(None, DISTRICTS['regions'])['id'] == 28

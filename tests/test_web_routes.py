@@ -82,6 +82,7 @@ def test_referenced_assets_exist():
             text = fh.read()
         for ref in re.findall(r'(?:src|href)="(/[^"]*)"', text):
             ref = re.sub(r'\{\{.*?\}\}', '', ref)  # la query de la plantilla (`{{ query }}`) no es parte de la ruta
+            ref = ref.split('&amp;')[0]  # ni los parámetros que se añaden a la query (`&amp;region=`)
             if ref.startswith('/api/'):
                 continue
             if ref.startswith('/dist/') or '.' in ref:
