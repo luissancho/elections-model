@@ -37,6 +37,15 @@ export class Catalog {
     return OTHERS_COLOR;
   }
 
+  /** Sort block names by BLOCK_ORDER; unknown blocks go last, in input order. */
+  orderBlocks(names) {
+    const rank = (name) => {
+      const index = BLOCK_ORDER.indexOf(name);
+      return index < 0 ? BLOCK_ORDER.length : index;
+    };
+    return [...names].sort((a, b) => rank(a) - rank(b));
+  }
+
   /** Sort party names by block (BLOCK_ORDER, unknown last) and then by catalogue order. */
   order(names) {
     const rank = (name) => {

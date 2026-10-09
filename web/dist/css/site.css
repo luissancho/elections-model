@@ -86,3 +86,5 @@ caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--co
 .chart.chart-small { height: 160px; }
 .coalition-parties { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .coalition-result { font-size: 1.1rem; margin: 8px 0; }
+#blocks-chart { height: 120px; }
+#district-form.js .nojs-only { display: none; }

@@ -1,4 +1,4 @@
-// Evolution of the published vote estimate, one line per party over the run timestamps.
+// Evolution of a published estimate (vote or seats), one line per party over the run timestamps.
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
@@ -7,21 +7,22 @@ const DAY_MS = 24 * 3600 * 1000;
 const ZOOM_FROM = 20;
 
 /**
- * Points `[run_at, pct]` of each party in the `mode` headline of every run (runs without the party are
- * skipped).
+ * Points `[run_at, value]` of each party in the `mode` headline of every run (runs without the party or
+ * the value are skipped).
  *
  * @param {object[]} runs `runs` list of the history part
  * @param {string} mode `nowcast` or `forecast`
  * @param {string[]} parties party names, in legend order
+ * @param {string} field party field drawn (`pct` or `seats`)
  * @returns {{name: string, points: Array}[]} one entry per party
  */
-export function evolutionSeries(runs, mode, parties) {
+export function evolutionSeries(runs, mode, parties, field = 'pct') {
   return parties.map((name) => ({
     name,
     points: runs.flatMap((run) => {
       const block = run[mode] || {};
       const party = (block.parties || []).find((row) => row.name === name);
-      return party && party.pct !== null && party.pct !== undefined ? [[run.run_at, party.pct]] : [];
+      return party && party[field] !== null && party[field] !== undefined ? [[run.run_at, party[field]]] : [];
     }),
   }));
 }
@@ -32,12 +33,15 @@ export function evolutionSeries(runs, mode, parties) {
  * @param {HTMLElement} el chart container
  * @param {object[]} runs `runs` list of the history part (ascending by run)
  * @param {string} mode `nowcast` or `forecast`
- * @param {object} opts `colors` ({name: colour}), `parties` (names), `fullnames` ({name: full name})
+ * @param {object} opts `colors` ({name: colour}), `parties` (names), `fullnames` ({name: full name}),
+ *   `field` (party field drawn), `formatter` (value → text; the axis passes 0 digits as second argument)
  * @returns {object} the ECharts instance
  */
-export function renderEvolution(el, runs, mode, {colors = {}, parties = [], fullnames = {}} = {}) {
+export function renderEvolution(el, runs, mode, {
+  colors = {}, parties = [], fullnames = {}, field = 'pct', formatter = fmtPct,
+} = {}) {
   const zoom = runs.length > ZOOM_FROM;
-  const series = evolutionSeries(runs, mode, parties).map((entry) => ({
+  const series = evolutionSeries(runs, mode, parties, field).map((entry) => ({
     type: 'line',
     name: entry.name,
     data: entry.points,
@@ -61,7 +65,7 @@ export function renderEvolution(el, runs, mode, {colors = {}, parties = [], full
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (value) => fmtPct(value, 0)},
+      axisLabel: {formatter: (value) => formatter(value, 0)},
     },
     tooltip: {
       trigger: 'axis',
@@ -73,7 +77,7 @@ export function renderEvolution(el, runs, mode, {colors = {}, parties = [], full
         const lines = [`<strong>${escapeHtml(fmtDateTime(params[0].value[0]))}</strong>`];
         for (const item of rows) {
           const name = fullnames[item.seriesName] || item.seriesName;
-          lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(fmtPct(item.value[1]))}`);
+          lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}`);
         }
         return lines.join('<br>');
       },

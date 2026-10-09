@@ -1,4 +1,4 @@
-// Helpers shared by the page modules: embedded data, controls form and error display.
+// Helpers shared by the page modules: embedded data, auto-submitted forms and error display.
 
 /**
  * Parse the page data embedded by the server in `<script type="application/json" id="initial-data">`.
@@ -47,6 +47,32 @@ export function wireControls() {
       if (run) {
         run.disabled = false;
       }
+    }
+  });
+}
+
+/**
+ * Submit the form `#id` whenever any of its controls changes. A page restored from the back/forward cache
+ * resets the form to the values of the page it belongs to.
+ *
+ * @param {string} id form id
+ */
+export function wireForm(id) {
+  const form = document.getElementById(id);
+  if (!form) {
+    return;
+  }
+  form.classList.add('js');
+  form.addEventListener('change', () => {
+    if (form.requestSubmit) {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      form.reset();
     }
   });
 }
