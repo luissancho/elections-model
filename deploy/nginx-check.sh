@@ -5,7 +5,7 @@
 # Uso: bash deploy/nginx-check.sh
 #
 # Copia la configuracion a un directorio temporal adaptando las rutas de la
-# imagen Docker (mime.types, modulos, pid, logs, cache y raiz web) a las
+# imagen Docker (mime.types, modulos, pid, logs, cache y alias de /dist/) a las
 # locales, y ejecuta `nginx -t`. Sale con el codigo de `nginx -t`.
 #
 # De la cache solo se reescribe el directorio padre (/var/lib/nginx -> $tmp/lib,
@@ -40,7 +40,8 @@ sed \
     -e "s#/var/lib/nginx/#$tmp/lib/#" \
     -e "s#/proc/1/fd/2#$tmp/logs/error.log#" \
     -e "s#/proc/1/fd/1#$tmp/logs/access.log#" \
-    -e "s#root /app/web;#root $repo/web;#" \
+    -e "s#alias /app/web/dist/vendor/;#alias $repo/web/dist/vendor/;#" \
+    -e "s#alias /app/web/dist/;#alias $repo/web/dist/;#" \
     "$conf" > "$tmp/nginx.conf"
 
 nginx -t -c "$tmp/nginx.conf" -p "$tmp/"

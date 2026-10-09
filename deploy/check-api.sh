@@ -19,7 +19,7 @@ failures=0
 PY="$(command -v python3 || command -v python || true)"
 [ -n "$PY" ] || { echo "no se encuentra python" >&2; exit 2; }
 
-# check RUTA STATUS_ESPERADO TIPO   (TIPO: json | csv | text | none)
+# check RUTA STATUS_ESPERADO TIPO   (TIPO: json | csv | html | none)
 check() {
     local path="$1" want="$2" kind="$3" out code ctype problem=""
     out="$(curl -s --max-time 20 -o "$body" -w '%{http_code} %{content_type}' "$base$path" || true)"
@@ -31,6 +31,8 @@ check() {
         problem="JSON no valido"
     elif [ "$kind" = csv ] && [[ "$ctype" != text/csv* ]]; then
         problem="content-type $ctype (esperado text/csv)"
+    elif [ "$kind" = html ] && [[ "$ctype" != text/html* ]]; then
+        problem="content-type $ctype (esperado text/html)"
     fi
     if [ -n "$problem" ]; then
         echo "FAIL $path: $problem"
@@ -48,6 +50,25 @@ case "$out" in
     *) echo "FAIL /healthz: status $out"; failures=$((failures + 1)) ;;
 esac
 
+# /dist/ solo lo sirve nginx: sin nginx llega el 404 de Python (text/html).
+check_nginx_only() {
+    local path="$1" ctype="$2" out
+    out="$(curl -s --max-time 20 -o /dev/null -w '%{http_code} %{content_type}' "$base$path" || true)"
+    if [[ "$out" == 404\ text/html* ]]; then
+        echo "n/a  $path sin nginx"
+    elif [[ "$out" == 200\ $ctype* ]]; then
+        echo "OK   $path ($out)"
+    else
+        echo "FAIL $path: $out (esperado 200 $ctype)"
+        failures=$((failures + 1))
+    fi
+}
+
+check / 200 html
+check "/promedio?scope=es&mode=nowcast" 200 html
+check /nope 404 html
+check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
+check_nginx_only /dist/css/site.css text/css
 check /api/v1/health 200 json
 check /api/v1/manifest 200 json
 check /api/v1/scopes 200 json

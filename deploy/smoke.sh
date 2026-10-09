@@ -63,7 +63,14 @@ check_static() {
 }
 check_static / text/html
 check_static /promedio text/html
-check_static /vendor/echarts-5.6.0.min.js application/javascript
+check_static /dist/vendor/echarts-5.6.0.min.js application/javascript
+# (A una variable: con pipefail, `grep -q` cortaria la tuberia de curl.)
+home="$(curl -s --max-time 20 "$base/")"
+if ! grep -q initial-data <<<"$home"; then
+    echo "FAIL /: sin initial-data" >&2
+    exit 1
+fi
+echo "OK   / contiene initial-data"
 
 check_header() {
     local path="$1" pattern="$2"
@@ -73,8 +80,9 @@ check_header() {
     fi
     echo "OK   $path Cache-Control contiene '$pattern'"
 }
-check_header /vendor/echarts-5.6.0.min.js 'max-age=31536000'
-check_header /js/api.js 'no-cache'
+check_header /dist/vendor/echarts-5.6.0.min.js 'max-age=31536000'
+check_header /dist/js/pages/index.js 'no-cache'
+check_header / 'max-age=60'
 
 # nginx escribe sus logs en /proc/1/fd/{1,2} (la salida del contenedor), porque
 # supervisord se demoniza y su /dev/stdout es /dev/null.
