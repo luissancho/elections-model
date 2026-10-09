@@ -19,7 +19,7 @@ failures=0
 PY="$(command -v python3 || command -v python || true)"
 [ -n "$PY" ] || { echo "no se encuentra python" >&2; exit 2; }
 
-# check RUTA STATUS_ESPERADO TIPO   (TIPO: json | csv | html | none)
+# check RUTA STATUS_ESPERADO TIPO [PREFIJO_CONTENT_TYPE]   (TIPO: json | csv | html | none)
 check() {
     local path="$1" want="$2" kind="$3" out code ctype problem=""
     out="$(curl -s --max-time 20 -o "$body" -w '%{http_code} %{content_type}' "$base$path" || true)"
@@ -31,6 +31,8 @@ check() {
         problem="JSON no valido"
     elif [ "$kind" = csv ] && [[ "$ctype" != text/csv* ]]; then
         problem="content-type $ctype (esperado text/csv)"
+    elif [ -n "${4:-}" ] && [[ "$ctype" != $4* ]]; then
+        problem="content-type $ctype (esperado $4)"
     elif [ "$kind" = html ] && [[ "$ctype" != text/html* ]]; then
         problem="content-type $ctype (esperado text/html)"
     fi
@@ -42,25 +44,28 @@ check() {
     fi
 }
 
-# /healthz: 200 en nginx, 404 en gunicorn/uvicorn.
-out="$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$base/healthz" || true)"
+# /healthz: 200 con cuerpo "ok" en nginx, 404 (pagina de Python) en gunicorn/uvicorn.
+# Aqui se decide una sola vez si hay nginx delante (has_nginx).
+has_nginx=0
+out="$(curl -s --max-time 20 -o "$body" -w '%{http_code}' "$base/healthz" || true)"
 case "$out" in
-    200) echo "OK   /healthz (200)" ;;
+    200)
+        if [ "$(cat "$body")" = ok ]; then
+            has_nginx=1
+            echo "OK   /healthz (200)"
+        else
+            echo "FAIL /healthz: 200 sin cuerpo 'ok'"; failures=$((failures + 1))
+        fi ;;
     404) echo "n/a  /healthz sin nginx" ;;
     *) echo "FAIL /healthz: status $out"; failures=$((failures + 1)) ;;
 esac
 
-# /dist/ solo lo sirve nginx: sin nginx llega el 404 de Python (text/html).
+# check_nginx_only RUTA TIPO: /dist/ solo lo sirve nginx; sin nginx es n/a, con nginx un 404 es FAIL.
 check_nginx_only() {
-    local path="$1" ctype="$2" out
-    out="$(curl -s --max-time 20 -o /dev/null -w '%{http_code} %{content_type}' "$base$path" || true)"
-    if [[ "$out" == 404\ text/html* ]]; then
-        echo "n/a  $path sin nginx"
-    elif [[ "$out" == 200\ $ctype* ]]; then
-        echo "OK   $path ($out)"
+    if [ "$has_nginx" -eq 1 ]; then
+        check "$1" 200 none "$2"
     else
-        echo "FAIL $path: $out (esperado 200 $ctype)"
-        failures=$((failures + 1))
+        echo "n/a  $1 sin nginx"
     fi
 }
 
