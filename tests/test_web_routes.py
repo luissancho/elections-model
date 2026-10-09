@@ -9,17 +9,40 @@ from mtpy.lib import webapi
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 WEB = os.path.join(ROOT, 'web')
+DIST = os.path.join(WEB, 'dist')
+TEMPLATES = os.path.join(WEB, 'templates')
 
 
 def js_files():
-    for folder, _, files in os.walk(os.path.join(WEB, 'js')):
+    for folder, _, files in os.walk(os.path.join(DIST, 'js')):
         for name in files:
             if name.endswith('.js'):
                 yield os.path.join(folder, name)
 
 
 def html_files():
-    return [os.path.join(WEB, f) for f in os.listdir(WEB) if f.endswith('.html')]
+    """HTML de las plantillas si existe `web/templates` y, si no (transición), los de `web/`."""
+    base = TEMPLATES if os.path.isdir(TEMPLATES) else WEB
+    return [os.path.join(base, f) for f in os.listdir(base) if f.endswith('.html')]
+
+
+def pages_routes():
+    """Rutas de las páginas (`mtpy.lib.pages.ROUTES`); vacío mientras el módulo no exista."""
+    try:
+        from mtpy.lib import pages
+    except ImportError:
+        return []
+    return list(pages.ROUTES)
+
+
+def is_page(ref):
+    """Indica si una referencia sin extensión es una página: `/`, `web/<nombre>.html` o una ruta de `pages`."""
+    if ref == '/' or os.path.isfile(os.path.join(WEB, ref.lstrip('/') + '.html')):
+        return True
+    page_router = Router()
+    for route in pages_routes():
+        page_router.add_route(*route)
+    return any(Router.parse_route(route, ref, 'GET') is not False for route in page_router.routes)
 
 
 def router():
@@ -40,7 +63,7 @@ def test_every_api_literal_in_the_js_matches_a_route():
         for match in re.finditer(r"""['"`](/api/v1/[^'"`?]*)""", text):
             literal = re.sub(r'\$\{[^}]*\}', 'x', match.group(1)).rstrip('/')
             literals.append((os.path.relpath(path, ROOT), literal))
-    assert literals, 'ningún literal /api/v1 en web/js'
+    assert literals, 'ningún literal /api/v1 en web/dist/js'
     bad = [(f, lit) for f, lit in literals if not matches_a_route(lit)]
     assert bad == []
 
@@ -53,11 +76,10 @@ def test_referenced_assets_exist():
         for ref in re.findall(r'(?:src|href)="(/[^"]*)"', text):
             if ref.startswith('/api/'):
                 continue
-            target = os.path.join(WEB, ref.lstrip('/'))
-            page = ref == '/' and os.path.isfile(os.path.join(WEB, 'index.html'))
-            # Página sin extensión (`/promedio` → `web/promedio.html`), como la sirve la ruta del sitio.
-            page = page or ('.' not in ref and os.path.isfile(target + '.html'))
-            if not page and not os.path.isfile(target):
+            if ref.startswith('/dist/') or '.' in ref:
+                if not os.path.isfile(os.path.join(WEB, ref.lstrip('/'))):
+                    missing.append((os.path.basename(path), ref))
+            elif not is_page(ref):
                 missing.append((os.path.basename(path), ref))
         assert 'type="module"' in text and '<script' in text
         assert 'onclick=' not in text and '<script>' not in text  # CSP: sin inline
@@ -76,6 +98,6 @@ def test_js_imports_resolve():
 
 
 def test_vendor_is_pinned_and_licensed():
-    assert os.path.getsize(os.path.join(WEB, 'vendor', 'echarts-5.6.0.min.js')) > 900_000
-    with open(os.path.join(WEB, 'vendor', 'LICENSE-echarts.txt'), encoding='utf-8') as fh:
+    assert os.path.getsize(os.path.join(DIST, 'vendor', 'echarts-5.6.0.min.js')) > 900_000
+    with open(os.path.join(DIST, 'vendor', 'LICENSE-echarts.txt'), encoding='utf-8') as fh:
         assert 'Apache License' in fh.read(400)
