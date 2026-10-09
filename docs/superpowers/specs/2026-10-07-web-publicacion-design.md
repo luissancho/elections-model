@@ -706,9 +706,9 @@ viven en `web/templates/`) y la 10 (`?api=` desaparece con `api.js`: las página
 
 ## Estado al cierre de la fase 3 (2026-10-09)
 
-Hecho en `dev` (plan en `docs/superpowers/plans/2026-10-09-web-fase-3-escanos.md`, código en `4fb2811..a0a2805`,
+Hecho en `dev` (plan en `3935d25`, `docs/superpowers/plans/2026-10-09-web-fase-3-escanos.md`, código en `4fb2811^..a0a2805`,
 6 commits de código y este de documentación), con 348 tests unitarios en verde (`python -m pytest -m "not integration"
--q`: 323 del rediseño y 25 nuevos) y los 5 de integración sin cambios:
+-q`: 323 del rediseño y 25 nuevos) y los 72 de integración sin cambios (no ejecutados, sin base):
 
 - `mtpy/controllers/Escanos.py` (`Page`, `index_action` con `?region=`) y `web/templates/escanos.html`.
 - `mtpy/lib/pages.py`: `chart_polls`, `seat_rows`, `block_rows`, `default_coalition`, `csv_links`,
@@ -751,20 +751,19 @@ Decisiones de diseño (D1-D8 del plan):
 
 Resoluciones tomadas durante la ejecución:
 
-- Los `bmaps` de los fixtures tenían una forma distinta del contrato y se alinearon (tarea 3); las filas de
+- Los `bmaps` de los fixtures tenían una forma distinta del contrato y se alinearon (`477d355`); las filas de
   bloque de `summary.json` pasan a `Derecha`.
 - `tests/test_web_routes.py` quita `&amp;…` de los `href` de plantilla para que los enlaces de fila con
-  `&region=` se resuelvan como páginas (tarea 4).
+  `&region=` se resuelvan como páginas (`2cb1c0f`).
 - `fan.js` sigue la clave del contrato, `name`; el run LOCAL `20261008-181100`, cuyo `fan.json` es anterior al
-  cambio de `party` a `name`, muestra el abanico vacío hasta que se republique en local (tarea 5).
+  cambio de `party` a `name`, muestra el abanico vacío hasta que se republique en local (`ed6ef58`).
 - La línea discontinua de mayoría del histograma se dibuja solo si `starts[0] <= majority < lastStart + width`,
-  porque los intervalos son semiabiertos (tarea 5).
+  porque los intervalos son semiabiertos (`ed6ef58`, `a0a2805`).
 - En el test de paridad del plan, el literal `'min': 193.0` era un error aritmético y se corrigió a `194.0`
-  (tarea 5).
+  (`ed6ef58`).
 
 Verificado en la sesión: suite unitaria, `bash deploy/nginx-check.sh`, y `bash deploy/check-api.sh` contra un
-nginx 1.29.5 local en el 8043 delante de uvicorn (ver el informe de la tarea 6 en
-`.superpowers/sdd/2026-10-09-web-fase-3-escanos/task-6-report.md`).
+nginx 1.29.5 local en el 8043 delante de uvicorn (commit `7002401`).
 
 Menores aplazados: `settings()` acepta `'nan'`/`'inf'`/`cache_ttl` negativo; `chart_polls` omite la clave de un
 partido ausente de un sondeo (el JS lo tolera); el `caption` compara `n_polls` sin protegerse de `None` (el
@@ -773,7 +772,7 @@ del gráfico del promedio menciona la proyección también en `nowcast`; la rege
 sola línea; la regla del `subtitle` está duplicada entre `escanos_context` e `index.html`; el pie de la
 tabla `vs` fija "Derecha frente a izquierda"; ningún test comprueba los colores de bloque en `#vs-table`;
 `pages.py` ronda las 1000 líneas (un módulo por página más adelante); los textos de sección de `/escanos`
-(títulos, `p.about`, pies) los redactó el implementador y Luis puede cambiarlos; ningún test fija la celda "–"
+(títulos, `p.about`, pies) los redactó Claude y Luis puede cambiarlos; ningún test fija la celda "–"
 de una circunscripción ausente de `scenario.rows`; el intervalo de voto de una circunscripción muestra "– %"
 si un extremo es nulo; `update()` al cargar sobrescribe un fragmento entrante como `#districts`; el envío GET
 del formulario de circunscripción descarta el fragmento de coalición y recarga arriba; el bloque de la línea

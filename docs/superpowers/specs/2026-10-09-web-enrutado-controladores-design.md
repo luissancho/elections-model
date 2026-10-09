@@ -224,5 +224,5 @@ Pendiente de Luis:
   Chrome y Firefox (WCAG 3.2.2); la spec lo exige, revisar si molesta.
 
 Menores aplazados: el `<select>` no muestra opción seleccionada si el ámbito por defecto queda fuera del
-catálogo; `table_rows` indexa `poll['date']` directamente; `Page.dispatch` duplica `Controller.dispatch`;
+catálogo; `table_rows` indexa `poll['date']` directamente (enmienda 2026-10-09: resuelto en `4fb2811`); `Page.dispatch` duplica `Controller.dispatch`;
 `common_context` analiza el manifest varias veces por petición.
