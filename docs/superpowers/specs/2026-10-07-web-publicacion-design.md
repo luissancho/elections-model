@@ -789,3 +789,27 @@ Pendiente de Luis:
 - Decidir la política de veda (qué se oculta con `manifest.freeze.active`) antes del 2026-11-24 (fase 6) y si
   se añade el selector de agrupación `group`.
 - Desplegar la imagen (la primera publicación a S3 y el pin de `jinja2` ya están resueltos).
+
+Revisión final de la rama (2026-10-09), arreglos en un solo commit (`8ec0a1c`; 349 tests unitarios):
+
+1. Una fila de `fan` sin `name` (el `fan.json` local es anterior al cambio `party`→`name`) lanzaba dentro de
+   `renderFan` y dejaba sin dibujar la evolución: las filas y nombres sin `name` se filtran y el abanico
+   queda vacío. Antes de desplegar, comprobar que el `fan.json` publicado lleva `name`
+   (`/api/v1/forecast/es/fan`) o republicar; republicar también en local para ver el abanico.
+2. El detalle de circunscripción listaba los partidos que no concurren en ella ("– · – % · 0 · 0–0 ·
+   0 %"): `region_rows` descarta las filas con `pct` nulo y un extremo ausente del intervalo de voto se
+   muestra como "–" sin unidad.
+3. El formulario de circunscripción apunta a `/escanos#districts` (el envío GET conserva el fragmento y
+   aterriza en la sección) y el hash `#coalition=` solo se escribe al cambiar una casilla, no al cargar;
+   los enlaces profundos `#coalition=…` se siguen leyendo al cargar.
+4. La tarjeta de un partido sin columna en `dist` se oculta; la leyenda del abanico sigue el orden del
+   catálogo; el `aria-label` del gráfico del promedio solo menciona la proyección en `forecast`; test de
+   que los enlaces de las filas de circunscripciones conservan el `run` fijado.
+5. `tryDraw` en `common.js`: cada gráfico de `/escanos` se dibuja en su propio `try/catch`, de modo que una
+   parte defectuosa no deja en blanco las que vienen después.
+
+Menor aparcado tras la revisión final: un gráfico que falle dentro de `tryDraw` muestra una caja vacía y
+el error en consola, sin mensaje en la línea de estado; arreglo sugerido: recoger los resultados de
+`tryDraw` en `paint()` y llamar a `showError` si alguno falla. Las celdas de la tabla general para
+partidos que no concurren en una circunscripción (0 escaños, rango "–") se dejan como están: el escenario
+es coherente y ese 0 es real.
