@@ -214,7 +214,9 @@ def get_event_params(
     for dt in event_dates:
         params = event_params[dt]
 
-        df = get_event_dmat(scope, dt, polls, events, parties)
+        # Sorted index: `.loc[(0, ...)]` on the unsorted, non-unique (days, pollster) index
+        # takes pandas' linear path and raises a PerformanceWarning per lookup.
+        df = get_event_dmat(scope, dt, polls, events, parties).sort_index()
 
         all_parties = df.columns.tolist()
         final_parties = df.loc[(0, 'result')].squeeze().dropna().index.tolist()
