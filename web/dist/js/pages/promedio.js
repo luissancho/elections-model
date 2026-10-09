@@ -22,7 +22,6 @@ function paint() {
     fullnames: mapNames(parties, (name) => catalog.fullname(name)),
     asOf,
     when: vote.when,
-    anchor: meta.date_last || asOf,
   });
 }
 

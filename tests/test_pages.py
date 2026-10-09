@@ -402,3 +402,9 @@ def test_district_table_and_region_rows():
     absent = DISTRICTS['rows'][2] | {'name': 'VOX', 'pct': None, 'pct_lo': None, 'pct_hi': None, 'seats': 0.0}
     assert [r['name'] for r in pages.region_rows(DISTRICTS | {'rows': DISTRICTS['rows'] + [absent]}, 28)] == ['PP', 'PSOE']
     assert pages.resolve_region(None, DISTRICTS['regions'])['id'] == 28
+
+
+def test_evolution_cards_explain_the_retrospective_points(api):
+    for path in ('/', '/escanos'):
+        page = html(call(api, path)[2])
+        assert 'Evolución de las publicaciones' in page and 'estimaciones retrospectivas' in page

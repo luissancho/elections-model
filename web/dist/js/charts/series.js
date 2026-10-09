@@ -4,7 +4,6 @@ import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtNum, fmtPct, fmtRange} from '../format.js';
 
 const DAY_MS = 24 * 3600 * 1000;
-const WINDOW_DAYS = 180;
 const BAND_OPACITY = 0.15;
 const PROJECTION_OPACITY = 0.1;
 
@@ -29,26 +28,6 @@ export function isoDay(time) {
   const date = new Date(time + DAY_MS / 2);
   const pad = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-/**
- * Initial zoom window: from `days` before `anchor` (clamped to the first date) to the last date.
- *
- * @param {string[]} dates ascending ISO dates of the axis
- * @param {number} days window length before the anchor
- * @param {string|null} anchor ISO date the window counts back from (the last date when null)
- * @returns {{startValue: string, endValue: string}|null} ISO bounds, or null without dates
- */
-export function lastWindow(dates, days, anchor = null) {
-  if (!dates.length) {
-    return null;
-  }
-  const first = dates[0];
-  const last = dates[dates.length - 1];
-  const from = new Date(`${anchor || last}T00:00:00Z`);
-  from.setUTCDate(from.getUTCDate() - days);
-  const start = from.toISOString().slice(0, 10);
-  return {startValue: start < first ? first : start, endValue: last};
 }
 
 /**
@@ -129,12 +108,11 @@ function markAt(time, label) {
  * @param {HTMLElement} el chart container
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
- *   `fullnames` ({name: full name}, tooltip), `asOf`, `when` (ISO dates), `anchor` (ISO date the initial
- *   180-day window counts back from: the last poll)
+ *   `fullnames` ({name: full name}, tooltip), `asOf`, `when` (ISO dates)
  * @returns {object} the ECharts instance
  */
 export function renderSeries(el, {
-  series, polls, projection, parties, selected = null, colors = {}, fullnames = {}, asOf, when, anchor = null,
+  series, polls, projection, parties, selected = null, colors = {}, fullnames = {}, asOf, when,
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
@@ -204,7 +182,6 @@ export function renderSeries(el, {
   };
 
   const axisDates = withProjection ? [...series.dates, ...projection.dates.slice(1)] : series.dates;
-  const zoom = lastWindow(axisDates, WINDOW_DAYS, anchor);
 
   function tooltip(params) {
     if (!params.length) {
@@ -280,12 +257,10 @@ export function renderSeries(el, {
       axisPointer: {type: 'line'},
       formatter: tooltip,
     },
-    dataZoom: zoom ? [{
+    dataZoom: axisDates.length ? [{
       type: 'slider',
       bottom: 8,
       filterMode: 'none',
-      startValue: dayTime(zoom.startValue),
-      endValue: dayTime(zoom.endValue),
       labelFormatter: (value) => fmtDate(isoDay(value)),
     }] : [],
     series: [...means, ...bands, ...points, ...projected, markSeries],

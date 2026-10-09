@@ -7,7 +7,7 @@ const DAY_MS = 24 * 3600 * 1000;
 const ZOOM_FROM = 20;
 
 /**
- * Points `[run_at, value]` of each party in the `mode` headline of every run (runs without the party or
+ * Points `[run_at, value, backfill]` of each party in the `mode` headline of every run (runs without the party or
  * the value are skipped).
  *
  * @param {object[]} runs `runs` list of the history part
@@ -22,7 +22,7 @@ export function evolutionSeries(runs, mode, parties, field = 'pct') {
     points: runs.flatMap((run) => {
       const block = run[mode] || {};
       const party = (block.parties || []).find((row) => row.name === name);
-      return party && party[field] !== null && party[field] !== undefined ? [[run.run_at, party[field]]] : [];
+      return party && party[field] !== null && party[field] !== undefined ? [[run.run_at, party[field], Boolean(run.backfill)]] : [];
     }),
   }));
 }
@@ -44,7 +44,10 @@ export function renderEvolution(el, runs, mode, {
   const series = evolutionSeries(runs, mode, parties, field).map((entry) => ({
     type: 'line',
     name: entry.name,
-    data: entry.points,
+    data: entry.points.map((point) => (point[2] ? {
+      value: point,
+      itemStyle: {color: '#fff', borderColor: colors[entry.name] || OTHERS_COLOR, borderWidth: 2},
+    } : point)),
     showSymbol: true,
     symbolSize: 6,
     color: colors[entry.name] || OTHERS_COLOR,
@@ -74,7 +77,8 @@ export function renderEvolution(el, runs, mode, {
           return '';
         }
         const rows = [...params].sort((a, b) => b.value[1] - a.value[1]);
-        const lines = [`<strong>${escapeHtml(fmtDateTime(params[0].value[0]))}</strong>`];
+        const suffix = params[0].value[2] ? ' · estimación retrospectiva' : '';
+        const lines = [`<strong>${escapeHtml(fmtDateTime(params[0].value[0]) + suffix)}</strong>`];
         for (const item of rows) {
           const name = fullnames[item.seriesName] || item.seriesName;
           lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}`);

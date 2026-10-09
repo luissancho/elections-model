@@ -219,11 +219,12 @@
         </p>
       </section>
       <section class="card" id="evolution">
-        <h2>Evolución <span class="evolution-subtitle">· escaños {{ 'estimados' if state.mode == 'nowcast' else 'pronosticados' }} en cada publicación</span></h2>
-        <div class="chart" id="seats-evolution" role="img" aria-label="Evolución de los escaños previstos en cada publicación"></div>
+        <h2>Evolución de las publicaciones <span class="evolution-subtitle">· escaños {{ 'estimados' if state.mode == 'nowcast' else 'pronosticados' }} en cada publicación</span></h2>
+        <div class="chart" id="seats-evolution" role="img" aria-label="Evolución de las publicaciones: escaños de cada run"></div>
         <p class="about">
           Qué es esto: cómo han cambiado los escaños de cada partido de una publicación del modelo a la
-          siguiente.
+          siguiente. Un punto por cada publicación. Los puntos huecos son estimaciones retrospectivas: el
+          modelo de hoy con los sondeos publicados hasta ese día.
         </p>
       </section>
       <section class="card" id="downloads">
