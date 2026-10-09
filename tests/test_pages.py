@@ -54,6 +54,7 @@ def test_home_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/')[2])
     assert set(data) == {'state', 'meta', 'headline', 'vote', 'summary', 'runs'}
     assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
+    assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
     assert data['runs']['runs'][0]['run_id'] == RUN
 
@@ -83,6 +84,7 @@ def test_freeze_banner_and_attribution(api, fresh_app):
     ('/', 'run=20200101-000000', 404, 'Ese run no existe'),
     ('/', 'mode=tomorrow', 400, 'Modo no válido'),
     ('/nope', '', 404, 'Página no encontrada'),
+    ('/promedio', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
 ])
 def test_page_errors_are_html_and_not_cached(api, path, query, status, text):
     got, headers, body = call(api, path, query=query)
@@ -115,7 +117,7 @@ def test_default_scope_is_the_first_published(api, fresh_app):
 def test_templates_compile_with_strict_undefined():
     env = pages.environment()
     names = sorted(f for f in os.listdir(pages.TEMPLATES_DIR) if f.endswith('.html'))
-    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html'} <= set(names)
+    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html', 'promedio.html'} <= set(names)
     for name in names:
         env.get_template(name)
 
@@ -131,3 +133,28 @@ def test_filters_follow_the_js_rules():
     assert pages.fmt_datetime('2026-10-08T18:11:02Z') == '8 oct 2026, 20:11'
     assert pages.api_url('es', 'polls', run=RUN, fmt='csv') == '/api/v1/forecast/es/polls?run={}&format=csv'.format(RUN)
     assert pages.api_url('es', 'vote', mode='forecast') == '/api/v1/forecast/es/forecast/vote'
+
+
+def test_promedio_is_rendered_with_the_polls_table_and_csv_link(api):
+    status, headers, body = call(api, '/promedio', query='scope=es&mode=forecast')
+    page = html(body)
+    assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<title>Pronóstico electoral · Promedio de sondeos</title>' in page
+    assert 'href="/promedio?scope=es&amp;mode=forecast" aria-current="page"' in page.replace('\n', ' ')
+    assert 'id="series-chart"' in page and 'Sondeos del ciclo' in page
+    assert 'href="/api/v1/forecast/es/polls?run={}&amp;format=csv"'.format(RUN) in page
+    assert '<th scope="col">Fecha</th>' in page and '/dist/js/pages/promedio.js' in page
+    data = initial(body)
+    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote'}
+    assert data['projection']['dates'] and data['vote']['when']
+
+
+def test_table_rows_are_newest_first_and_formatted():
+    polls = [
+        {'date': '2026-09-05', 'pollster': 'CIS', 'sponsor': None, 'sample_size': 4000, 'PP': 41.0, 'PSOE': 29.0},
+        {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': None, 'PP': None, 'PSOE': 30.5},
+        {'date': '2026-10-01', 'pollster': 'CIS', 'sponsor': None, 'sample_size': 4000, 'PP': 40.5, 'PSOE': 29.5},
+    ]
+    rows = pages.table_rows(polls, ['PP', 'PSOE'], n=2)
+    assert rows == [['1 oct 2026', 'CIS', '–', '4.000', '40,5', '29,5'], ['1 oct 2026', 'GAD3', 'ABC', '–', '–', '30,5']]
+    assert len(pages.table_rows(polls, ['PP'])) == 3
