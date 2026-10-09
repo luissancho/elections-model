@@ -74,6 +74,7 @@ def test_referenced_assets_exist():
         with open(path, encoding='utf-8') as fh:
             text = fh.read()
         for ref in re.findall(r'(?:src|href)="(/[^"]*)"', text):
+            ref = re.sub(r'\{\{.*?\}\}', '', ref)  # la query de la plantilla (`{{ query }}`) no es parte de la ruta
             if ref.startswith('/api/'):
                 continue
             if ref.startswith('/dist/') or '.' in ref:
@@ -81,7 +82,8 @@ def test_referenced_assets_exist():
                     missing.append((os.path.basename(path), ref))
             elif not is_page(ref):
                 missing.append((os.path.basename(path), ref))
-        assert 'type="module"' in text and '<script' in text
+        if "{% extends 'base.html' %}" in text or os.path.dirname(path) == WEB:
+            assert 'type="module"' in text and '<script' in text  # cada página carga su módulo
         assert 'onclick=' not in text and '<script>' not in text  # CSP: sin inline
     assert missing == []
 

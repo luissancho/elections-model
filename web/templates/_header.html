@@ -1,0 +1,24 @@
+<header id="site-header">
+  <h1><a href="/{{ query }}">{{ site_title }}</a></h1>
+  <nav aria-label="Secciones">
+    {% for page in pages %}
+    <a href="{{ page.href }}{{ query }}"{% if page.active %} aria-current="page"{% endif %}>{{ page.label }}</a>
+    {% endfor %}
+  </nav>
+  <form id="controls" class="controls" method="get" action="">
+    <label>Ámbito <select name="scope" id="scope">
+      {% for s in scopes %}
+      <option value="{{ s.code }}"{% if s.code == state.scope %} selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select></label>
+    <fieldset id="mode">
+      <legend>Fecha</legend>
+      <label><input type="radio" name="mode" value="nowcast"{% if state.mode == 'nowcast' %} checked{% endif %}> Hoy</label>
+      <label><input type="radio" name="mode" value="forecast"{% if state.mode == 'forecast' %} checked{% endif %}> Elección</label>
+    </fieldset>
+    {% if state.pinned %}
+    <input type="hidden" name="run" value="{{ state.run }}">
+    {% endif %}
+    <button type="submit" class="nojs-only">Ver</button>
+  </form>
+</header>

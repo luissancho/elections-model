@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Portada{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/index.js"></script>
+{% endblock %}
+{% block content %}
+{% set subtitle = '· ' ~ title_suffix[:1]|lower ~ title_suffix[1:] %}
+    <div id="content" class="stack">
+      <section class="card" id="headline">
+        <h2>{{ title_suffix }}</h2>
+        <div class="table-wrap" id="headline-table">
+          <table>
+            <caption>Voto e intervalo del 95 %, escaños e intervalo del 95 % y probabilidad de quedar primero.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Partido</th>
+                <th scope="col">Voto</th>
+                <th scope="col">Escaños</th>
+                <th scope="col">Primero</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in headline.parties %}
+              <tr>
+                <td title="{{ row.name }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
+                <td>{{ row.pct|pct }} <span class="muted">{{ row.lo|range(row.hi) }}</span></td>
+                <td>{{ row.seats|int }} <span class="muted">{{ row.seats_lo|range(row.seats_hi, 0) }}</span></td>
+                <td>{{ row.p_first|prob }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: un modelo que agrega los sondeos publicados en un promedio ponderado y simula miles de
+          elecciones para estimar el voto y los escaños de cada partido con su incertidumbre.
+          Los rangos son intervalos del 95 %; el <a href="/promedio{{ query }}">promedio de sondeos</a>
+          muestra de dónde salen.
+        </p>
+      </section>
+      <div class="grid">
+        <section class="card">
+          <h2>Voto <span class="mode-subtitle">{{ subtitle }}</span></h2>
+          <div class="chart" id="vote-chart"></div>
+        </section>
+        <section class="card">
+          <h2>Escaños <span class="mode-subtitle">{{ subtitle }}</span></h2>
+          <div class="chart" id="seats-chart"></div>
+        </section>
+      </div>
+      <div class="grid">
+        <section class="card">
+          <h2>Hemiciclo <span class="mode-subtitle">{{ subtitle }}</span></h2>
+          <div class="chart" id="hemicycle"></div>
+        </section>
+        <section class="card">
+          <h2>Mayoría absoluta <span class="mode-subtitle">{{ subtitle }}</span></h2>
+          <div id="majority">
+            {% for m in majority %}
+            <div class="majority-row">
+              <strong>{{ m.block }}</strong>
+              <div class="majority-track"><div class="majority-bar" style="width: {{ m.width }}%; background-color: {{ m.color }}"></div></div>
+              <span class="majority-text">{{ m.p|prob }} de probabilidad de mayoría absoluta</span>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+      <section class="card">
+        <h2>Evolución <span class="evolution-subtitle">· {{ 'estimación' if state.mode == 'nowcast' else 'pronóstico' }} de cada publicación</span></h2>
+        <div class="chart" id="evolution"></div>
+      </section>
+    </div>
+{% endblock %}

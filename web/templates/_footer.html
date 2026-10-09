@@ -1,0 +1,7 @@
+<footer id="site-footer">
+  <p>Run {{ meta.run_id }} · Estimación a {{ meta.as_of|date }} · último sondeo {{ meta.date_last|date }} · commit {{ meta.commit or '–' }}{% if meta.dirty %} (sucio){% endif %}</p>
+  {% for key in ['polls', 'results', 'model'] if manifest.attribution.get(key) %}
+  <p>{{ manifest.attribution[key] }}</p>
+  {% endfor %}
+  <p><a href="/api/v1/manifest">Manifiesto de datos</a></p>
+</footer>

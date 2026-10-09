@@ -1,6 +1,7 @@
 from importlib import import_module
 import json
 import re
+from types import ModuleType
 from typing import Optional
 from urllib.parse import parse_qsl
 
@@ -436,6 +437,32 @@ class Router(Core):
 
         return self
 
+    def controller_class(self, controller):
+        """
+        Resolve a controller name of a route into its class in the namespace.
+
+        A controller module imported with ``from .Name import Name`` (a base class) is bound
+        on the package as the submodule, which hides the lazy class lookup of the package;
+        in that case the class is taken from the submodule.
+
+        Parameters
+        ----------
+        controller : str
+            Controller name of the route, in snake case (``'forecast'``).
+
+        Returns
+        -------
+        type
+            The controller class.
+        """
+        name = to_camel(controller)
+        attribute = getattr(self.namespace, name)
+
+        if isinstance(attribute, ModuleType):
+            attribute = getattr(attribute, name)
+
+        return attribute
+
     def add_route(self, pattern, controller, action='index', methods=None):
         methods = methods or ['GET', 'POST']
 
@@ -498,8 +525,7 @@ class Router(Core):
             params = Router.parse_route(route, uri, method)
 
             if params is not False:
-                name = to_camel(route['controller'])
-                self.controller = getattr(self.namespace, name)()
+                self.controller = self.controller_class(route['controller'])()
                 self.action = route['action']
                 self.params = params
 
@@ -507,8 +533,7 @@ class Router(Core):
 
         for route in self.not_found:
             if Router.check_not_found(route, uri):
-                name = to_camel(route['controller'])
-                self.controller = getattr(self.namespace, name)()
+                self.controller = self.controller_class(route['controller'])()
                 self.action = route['action']
                 self.params = {}
 

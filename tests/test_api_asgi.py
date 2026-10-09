@@ -346,11 +346,27 @@ def test_serialisation_failure_is_logged(fresh_app):
     assert len(errors) == 1 and 'not JSON compliant' in errors[0]
 
 
-def test_index_route_returns_api_home(fresh_app):
-    """La ruta raíz de `mtpy.api()` devuelve la portada de la API."""
+def test_index_route_returns_the_home_page(fresh_app):
+    """La ruta raíz de `mtpy.api()` es la portada HTML; sin paquete publicado responde una página 503."""
     from mtpy import mtpy
 
     api = mtpy.api()
     status, headers, body = call(api, '/')
-    assert status == 200
-    assert json.loads(body) == {'status': 'ok', 'message': 'API Home'}
+    assert status == 503
+    assert headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'pronóstico' in body.decode('utf-8').lower()
+
+
+def test_router_uses_the_class_when_the_package_binds_the_controller_module(fresh_app, monkeypatch):
+    """Si un `from .Base import Base` deja el submódulo como atributo del paquete, el router usa la clase."""
+    import sys
+
+    import mtpy.controllers as controllers
+    import mtpy.controllers.Base  # noqa: F401  (importado como submódulo)
+    from mtpy import mtpy
+
+    monkeypatch.setattr(controllers, 'Base', sys.modules['mtpy.controllers.Base'])
+    api = mtpy.api(not_found=[('/api/', 'base')])
+    status, headers, body = call(api, '/api/v1/nope')
+    assert status == 404 and json.loads(body) == {'status': 'error', 'message': '404 Not Found'}
+    assert headers['access-control-allow-origin'] == '*'
