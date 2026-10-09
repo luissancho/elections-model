@@ -128,6 +128,10 @@ Con `S3_BUCKET=` vacío la API lee el paquete local `files/site/v1`. Después se
 Sin nginx, `http://127.0.0.1:8000/` y `/promedio` se renderizan, pero los recursos de `/dist/` dan 404:
 Python solo sirve las páginas y la API.
 
+Contra uvicorn directamente, `curl -I` (HEAD) sobre `/` o `/promedio` da 404, porque las páginas se enrutan solo
+para GET y HEAD no está mapeado; detrás de nginx el HEAD se convierte en GET (`proxy_cache_convert_head`), así que
+el `curl -sI` de `smoke.sh` funciona.
+
 ### Comprobaciones de la infraestructura
 
 - `bash deploy/nginx-check.sh`: `nginx -t` sobre `deploy/docker/nginx.conf` con los dos `alias` de

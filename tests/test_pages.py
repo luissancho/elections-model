@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -125,6 +126,7 @@ def test_templates_compile_with_strict_undefined():
 def test_filters_follow_the_js_rules():
     assert pages.fmt_pct(32.66) == '32,7 %' and pages.fmt_pct(None) == '–'
     assert pages.fmt_num(1234567) == '1.234.567' and pages.fmt_num(3.14159, 1) == '3,1'
+    assert pages.fmt_num(-1234.5, 1) == '-1.234,5' and pages.fmt_num(-1.25, 1) == '-1,3'
     assert pages.fmt_prob(0.995) == '> 99 %' and pages.fmt_prob(0.003) == '< 1 %' and pages.fmt_prob(0) == '0 %'
     assert pages.fmt_prob(1) == '100 %' and pages.fmt_prob(0.968) == '97 %' and pages.fmt_prob(None) == '–'
     assert pages.fmt_range(27.31, 38.02) == '27,3–38,0' and pages.fmt_range(118.0, 159.5, 0) == '118–160'
@@ -158,3 +160,58 @@ def test_table_rows_are_newest_first_and_formatted():
     rows = pages.table_rows(polls, ['PP', 'PSOE'], n=2)
     assert rows == [['1 oct 2026', 'CIS', '–', '4.000', '40,5', '29,5'], ['1 oct 2026', 'GAD3', 'ABC', '–', '–', '30,5']]
     assert len(pages.table_rows(polls, ['PP'])) == 3
+
+
+def test_unexpected_error_is_a_generic_500_page_and_is_logged(api, fresh_app, monkeypatch):
+    """Una excepción inesperada da un 500 HTML genérico, sin traza ni detalle, y se registra una vez."""
+    def boom(state, active='/'):
+        raise RuntimeError('boom')
+
+    errors = []
+    monkeypatch.setattr(pages, 'index_context', boom)
+    fresh_app.logger = SimpleNamespace(error=errors.append)
+    status, headers, body = call(api, '/')
+    page = html(body)
+    assert status == 500 and headers['content-type'] == 'text/html; charset=utf-8'
+    assert headers['cache-control'] == 'no-store' and 'etag' not in headers
+    assert 'Error interno' in page and 'Traceback' not in page and 'boom' not in page
+    assert len(errors) == 1 and 'boom' in errors[0] and 'Traceback' in errors[0]
+
+
+HOSTILE = '</script><script>alert(1)</script>"\'<b>&'
+
+
+def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_app):
+    """Textos hostiles del paquete se escapan en el HTML y en el bloque JSON; un color no válido cae al gris."""
+    writer = bundle.BundleWriter(fresh_app.fs)
+    meta = fixture_data('meta')
+    meta['parties'][0].update(fullname=HOSTILE, color='red;background:url(http://x)')
+    writer.write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    polls = fixture_data('polls')
+    polls['polls'][0]['pollster'] = '<b>Hostil</b>'
+    writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
+    publish.update_manifest(writer, freeze={'active': True, 'message': HOSTILE})
+    webapi.site().manifest_cache_clear()
+    block = re.compile(r'<script type="application/json" id="initial-data">.*?</script>', re.S)
+    for path in ('/', '/promedio'):
+        body = call(api, path)[2]
+        page = html(body)
+        rest = block.sub('', page)
+        assert '<script>alert' not in page and '&lt;script&gt;alert' in rest
+        assert '<b>Hostil' not in page and 'url(' not in rest
+        data = initial(body)
+        assert data['meta']['parties'][0]['fullname'] == HOSTILE
+    home = html(call(api, '/')[2])
+    assert 'background-color: {}'.format(pages.OTHERS_COLOR) in home
+    assert '&lt;b&gt;Hostil&lt;/b&gt;' in html(call(api, '/promedio')[2])
+
+
+def test_promedio_nowcast_and_pinned_run(api):
+    status, headers, body = call(api, '/promedio', query='scope=es&mode=nowcast')
+    page = html(body)
+    assert status == 200 and 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
+    assert re.search(r'<span class="muted">a ', page)
+    status, headers, body = call(api, '/promedio', query='scope=es&run=' + RUN)
+    page = html(body)
+    assert status == 200 and 'run={}&amp;format=csv'.format(RUN) in page
+    assert '<input type="hidden" name="run" value="{}">'.format(RUN) in page

@@ -243,10 +243,10 @@ controladores de `mtpy/controllers/` (`Index`, `Promedio`) con plantillas Jinja2
 cubre `/api/v1`. Una ruta desconocida fuera de `/api/` devuelve un 404 en HTML; dentro de `/api/`, el 404
 JSON de la API. Los recursos de `/dist/` los sirve nginx.
 
-Las páginas del sitio fijan el run al cargar: toman `?run=` de la URL o, si no está, el `latest` del
-ámbito en el manifest, y lo envían con `?run=` en todas las partes (salvo `runs`, que sigue siendo un
-puntero), de modo que una página nunca mezcla partes de dos runs aunque se publique uno nuevo entre
-peticiones.
+Las páginas del sitio las resuelve el controlador en cada petición: toma `?run=` de la URL o, si no
+está, el `latest` del ámbito en el manifest, y lee todas las partes con ese run (salvo `runs`, que sigue
+siendo un puntero), de modo que una página nunca mezcla partes de dos runs aunque se publique uno nuevo
+entre peticiones.
 
 ### Parámetros
 

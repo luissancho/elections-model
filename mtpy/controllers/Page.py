@@ -5,7 +5,7 @@ import hashlib
 import traceback
 
 from ..core.api import Controller, HttpError
-from ..lib import pages
+from ..lib import pages, webapi
 
 
 class Page(Controller):
@@ -40,7 +40,7 @@ class Page(Controller):
         """
         Render a page template as a cacheable HTML response.
 
-        Sets ``text/html``, an ETag (MD5 of the UTF-8 bytes) and ``public, max-age=60``.
+        Sets ``text/html``, an ETag (MD5 of the UTF-8 bytes) and ``public, max-age=<WEB_CACHE_TTL>`` (60 by default).
 
         Parameters
         ----------
@@ -58,7 +58,7 @@ class Page(Controller):
 
         self.response.set_content_type('text/html')
         self.response.set_etag(hashlib.md5(html.encode('utf-8')).hexdigest())
-        self.response.set_cache(60)
+        self.response.set_cache(int(webapi.settings()['cache_ttl']))
 
         return html
 
