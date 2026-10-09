@@ -265,10 +265,17 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 - Estado en la query string (`?scope=es-md&mode=forecast&group=vs&run=...`); nginx `try_files $uri
   $uri.html $uri/ =404` da URLs limpias (`/escanos?scope=es`). Sin router JS (elegido frente a SPA por
   simplicidad).
+- (enmienda 2026-10-09) Las URLs limpias y el estado ya no los resuelven nginx ni `state.js`: cada página
+  es una ruta de un controlador de Python (`mtpy/controllers/`, `Page`) que lee `scope`/`mode`/`run` de la
+  query string, renderiza una plantilla Jinja2 de `web/templates/` con los datos del paquete y embebe el
+  contexto en `<script type="application/json" id="initial-data">`. Los controles son un formulario GET
+  (ámbito, "Hoy"/"Elección", botón "Ver" sin JS); el JS solo dibuja los gráficos a partir de
+  `initial-data`, sin `fetch`. `state.js`, `layout.js` y `api.js` desaparecen y los recursos pasan de
+  `web/` a `web/dist/`. Ver `docs/superpowers/specs/2026-10-09-web-enrutado-controladores-design.md`.
 - Páginas: `/` portada (V1, V2, hemiciclo, p_mayoría, evolución del `headline`), `/promedio` (V3, V4),
   `/escanos` (V6, V7, V8, calculadora de coaliciones sobre `dist`), `/casas` (V10, V5, herding; `?id=`
   perfil V11), `/elecciones` (lista; `?date=` página V13; V12), `/modelo` (V14), `/metodo` (V15, texto).
-- Módulos: `api.js` (fetch + caché en `Map`, propaga `run`), `state.js` (query string y selectores de
+- Módulos (enmienda 2026-10-09: `api.js` y `state.js` ya no existen, ver arriba): `api.js` (fetch + caché en `Map`, propaga `run`), `state.js` (query string y selectores de
   ámbito/modo rellenados desde `/api/v1/manifest`), `format.js` (`Intl` es-ES), `catalog.js` (colores y
   nombres por partido desde `meta.parties`; bloque = color del primer partido; Otros gris), `seats.js`
   (de `dist` a histogramas, cuantiles y `P(suma ≥ mayoría)` de cualquier coalición), `charts/*.js`
@@ -294,6 +301,10 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
   ca-certificates libpq5` (comprobar en la fase 0 que todos los pins tienen wheel; si no, mantener
   `gcc libpq-dev`), `HEALTHCHECK` sobre `/api/v1/health`, `ARG GIT_COMMIT` → `ENV`, sin supercronic ni
   crontab (job inexistente). Multietapa con venv: opcional, fase 6.
+- (enmienda 2026-10-09) `deploy/docker/nginx.conf` ya no tiene `root`, `index` ni `try_files`: sirve solo
+  `location ^~ /dist/vendor/` (un año) y `location ^~ /dist/` (se revalida) con `alias` a
+  `/app/web/dist/...`, y `location /` (antes `/api/`) hace de proxy de las páginas y de la API a gunicorn
+  con el mismo `limit_req` y `proxy_cache`. Lo que sigue es el diseño original.
 - `deploy/docker/nginx.conf`: `root /app/web; index index.html`; `location = /healthz { return 200 }`;
   `location /api/` con `limit_req` (20 r/s, burst 40), `proxy_cache` (60 s, `use_stale`), cabeceras
   `X-Forwarded-*`, `proxy_pass http://app_server` sin barra final; `gzip_types` para JSON, JS, CSS, CSV y
@@ -336,6 +347,11 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 
 ### Pruebas
 
+- (enmienda 2026-10-09) `tests/test_pages.py` cubre las páginas renderizadas por los controladores
+  (contenido, cabeceras, páginas de error, plantillas con `StrictUndefined`, filtros frente a
+  `format.js`, orden de las claves de `initial-data`); `tests/test_web_routes.py` pasa a comprobar que no
+  hay literales `/api/v1` en el JS, que los recursos referenciados existen sin scripts en línea, que los
+  imports del JS resuelven y que ECharts está fijado por versión; `deploy/smoke.sh` y `check-api.sh` usan las rutas nuevas.
 - `tests/test_bundle_unit.py`: `run_id()` casa con el alias de ruta; `json_default` con `np.int64`, NaN,
   `Timestamp`, `NaT`; `validate` acepta fixtures de `tests/fixtures/bundle/` y rechaza claves ausentes.
 - `tests/test_publish_unit.py` (sin base): exportadores sobre un `Simulator` reconstruido con `__new__` y
@@ -672,3 +688,9 @@ Pendiente de Luis:
 - Decidir el modo por defecto, la agrupación de partidos (fase 3) y `BLOCK_ORDER`.
 
 Siguiente: plan de la fase 3 (escaños, autonómicos, histórico).
+
+Enmienda del 2026-10-09: páginas desde los controladores. `/` y `/promedio` pasan a renderizarse en
+Python con Jinja2 y nginx solo sirve `/dist/` y hace de proxy del resto; las secciones "Frontend",
+"Infraestructura" y "Pruebas" llevan la enmienda fechada. Diseño, ejecución y estado en
+`docs/superpowers/specs/2026-10-09-web-enrutado-controladores-design.md`. La siguiente fase (plan de la
+fase 3) ya se apoya en ese patrón.

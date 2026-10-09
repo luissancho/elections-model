@@ -238,6 +238,11 @@ Inmutable es `public, max-age=31536000, immutable`: solo cuando el run se pide d
 respuesta caduca a los 60 s (`web.cache_ttl`). Las rutas fijas (`health`, `manifest`, `scopes`, `runs`) se
 registran antes que las genéricas.
 
+Las rutas de páginas (`/` y `/promedio`) no forman parte del contrato de la API: las renderizan los
+controladores de `mtpy/controllers/` (`Index`, `Promedio`) con plantillas Jinja2, y el contrato solo
+cubre `/api/v1`. Una ruta desconocida fuera de `/api/` devuelve un 404 en HTML; dentro de `/api/`, el 404
+JSON de la API. Los recursos de `/dist/` los sirve nginx.
+
 Las páginas del sitio fijan el run al cargar: toman `?run=` de la URL o, si no está, el `latest` del
 ámbito en el manifest, y lo envían con `?run=` en todas las partes (salvo `runs`, que sigue siendo un
 puntero), de modo que una página nunca mezcla partes de dos runs aunque se publique uno nuevo entre

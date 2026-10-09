@@ -169,3 +169,59 @@ más nginx local: `/` y `/promedio` devuelven HTML con la tabla del titular y el
 `/dist/vendor/echarts-5.6.0.min.js` sale de nginx con un año de caché, `/api/v1/manifest` sigue
 igual; `curl /nope` → 404 HTML, `curl /api/v1/nope` → 404 JSON; `docker logs` muestra nginx (smoke de
 Luis); recorrido visual de Luis en escritorio y móvil.
+
+## Estado al cierre (2026-10-09)
+
+Implementado en `dev` con el plan `docs/superpowers/plans/2026-10-09-web-enrutado-controladores.md`
+(plan c1db892, spec 307ec38). Commits: 93ed27f (recursos a `web/dist/`), 7aad529 (núcleo de páginas y
+`/`), f27925a (`/promedio`), 2e7ba70 y 0258ef3 (JS que solo dibuja y su endurecimiento), 6ba4430 y
+965f891 (nginx y scripts), más el de esta documentación.
+
+Ficheros:
+
+- `mtpy/lib/pages.py`: `ROUTES`, `PAGES`, `NOT_FOUND`, entorno Jinja2 (`StrictUndefined`, autoescape,
+  filtros `num/int/pct/prob/range/date/datetime` según `format.js`), `parse_state`, `common_context`,
+  `index_context`, `promedio_context`, `table_rows`, `api_url`.
+- `mtpy/controllers/Page.py` (`render`, `error_page`, `dispatch`, `not_found_action`), `Index.py` y
+  `Promedio.py`; `api.py` registra `pages.ROUTES + webapi.ROUTES` con `not_found=pages.NOT_FOUND`;
+  `mtpy.api()` acepta `not_found`; `mtpy/core/api.py` gana `Router.controller_class(name)`.
+- `web/templates/` (`base`, `_header`, `_footer`, `error`, `index`, `promedio`) y `web/dist/{css,js,vendor,img}`
+  (`js/pages/common.js` nuevo; `state.js`, `layout.js` y `api.js` borrados).
+- `deploy/docker/nginx.conf`, `nginx-check.sh`, `check-api.sh`, `smoke.sh`, `deploy/README.md`.
+
+Pruebas: 320 unitarias en verde (`python -m pytest -m "not integration" -q`; 72 de integración sin
+ejecutar): `tests/test_pages.py` 17, `tests/test_api_asgi.py` 31, `tests/test_web_routes.py` 4. Verificado
+el 2026-10-09 con el nginx 1.29.5 local (puerto 8043) delante de uvicorn (8000): `/` primero `MISS` y
+luego `HIT`, cabeceras como las esperadas, `check-api.sh` todo OK. El smoke con Docker no se ha
+ejecutado (Docker apagado).
+
+Decisiones tomadas durante la ejecución:
+
+- `Router.controller_class(name)` en el núcleo: resuelve la clase cuando el módulo de un controlador está
+  enlazado en el paquete por `from .Page import Page`; con test de regresión.
+- `#status` vive en `base.html` y el bloque `initial-data` usa `tojson` con `sort_keys` desactivado
+  (`env.policies['json.dumps_kwargs'] = {'sort_keys': False}`) para conservar el orden de las claves.
+- `fmt_num` agrupa los números de 4 cifras ("4.000"), a diferencia de `Intl` es-ES, porque el plan lo
+  exige para la columna de muestra; se mantiene.
+- `wireControls` (`common.js`) envía el formulario al cambiar un control y descarta el `run` fijado
+  cuando cambia el ámbito; `pageshow` restablece los controles para la caché de ida y vuelta (bfcache) y
+  el formulario lleva `autocomplete="off"`.
+- `check-api.sh` decide una sola vez si hay nginx a partir de `/healthz`, antes de las comprobaciones
+  de `/dist/`.
+- Efectos a tener en cuenta: nginx cachea las páginas 60 s y las limita con la misma zona `limit_req` que
+  la API.
+
+Pendiente de Luis:
+
+- `bash deploy/smoke.sh` con Docker (paquete local y `deploy/elections.env`).
+- Recorrer `/` y `/promedio` en el navegador con y sin JS: el botón "Ver" debe funcionar sin JS; con JS,
+  el cambio de ámbito o de modo recarga la página.
+- Añadir las dos `location` de `/dist/` y el proxy a su nginx local (ver `deploy/README.md`).
+- Primera publicación a S3 y despliegue.
+- Decidir si se sube `jinja2` de 3.1.2 a 3.1.6.
+- Accesibilidad: el envío al cambiar del `<select>` se dispara con cada flecha del teclado en
+  Chrome y Firefox (WCAG 3.2.2); la spec lo exige, revisar si molesta.
+
+Menores aplazados: el `<select>` no muestra opción seleccionada si el ámbito por defecto queda fuera del
+catálogo; `table_rows` indexa `poll['date']` directamente; `Page.dispatch` duplica `Controller.dispatch`;
+`common_context` analiza el manifest varias veces por petición.

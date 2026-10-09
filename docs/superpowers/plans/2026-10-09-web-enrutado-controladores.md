@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Estado:** completado el 2026-10-09 en `dev` (tareas 1-6; código 93ed27f..965f891 más la documentación).
+
 **Goal:** Que `/` y `/promedio` las sirvan controladores de Python que renderizan plantillas Jinja2 con
 los datos del paquete ya embebidos, que nginx solo sirva los recursos de `web/dist/` y haga de proxy de
 todo lo demás, y que el JS se limite a dibujar los gráficos a partir de un bloque JSON embebido.

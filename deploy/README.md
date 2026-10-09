@@ -1,4 +1,4 @@
-# Despliegue de la web (fases 0-2)
+# Despliegue de la web (fases 0-2 y páginas desde los controladores)
 
 Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>` por la etiqueta que uses.
 
@@ -30,18 +30,26 @@ docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/
 
 ## La web
 
-Dentro del contenedor, nginx (puerto 8042) sirve:
+Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de proxy del resto:
 
-- `web/` en `/` (`/` y `/promedio` por `try_files`), con cabeceras de seguridad.
-- `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
+- `/dist/` → ficheros de `web/dist/` (`css`, `js`, `vendor`, `img`), con cabeceras de seguridad.
+  `/dist/vendor/` (ECharts, con la versión en el nombre) lleva caché de un año; el resto de `/dist/`
+  (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
+- `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
   `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
-  (exceso: 429). La clave de caché es la de nginx por defecto (URI completa con la query string). Se
-  probó una clave propia sobre `run`/`format` y se descartó: nginx y la API leen los nombres de los
-  parámetros de forma distinta (codificación y mayúsculas), lo que permitía envenenar la caché. Los
-  parámetros de más crean entradas, acotadas por `max_size=100m`, `inactive=10m` y `limit_req`.
-- `/healthz` → `200 ok`, sin pasar por la API.
-- `/vendor/` (ECharts, con la versión en el nombre) con caché de un año; el HTML, los `.js` y los `.css`
-  se revalidan siempre.
+  (exceso: 429). Las páginas (`/`, `/promedio`) pasan por el mismo bloque que la API: también se
+  cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
+  (URI completa con la query string). Se probó una clave propia sobre `run`/`format` y se descartó: nginx
+  y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
+  permitía envenenar la caché. Los parámetros de más crean entradas, acotadas por `max_size=100m`,
+  `inactive=10m` y `limit_req`.
+- `/healthz` → `200 ok`, sin pasar por Python.
+
+`nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`) y
+`Promedio` (`/promedio`), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
+Jinja2 de `web/templates/`, con los datos del paquete embebidos en la página (`initial-data`); el JS de
+`web/dist/js/pages/` solo dibuja los gráficos. Una ruta desconocida fuera de `/api/` da un 404 HTML de
+Python (dentro de `/api/`, el 404 JSON de la API).
 
 Notas de operación:
 
@@ -63,7 +71,8 @@ Notas de operación:
 La API (`/api/v1`, ver `docs/web/contrato.md`) solo necesita S3 (el paquete `site/v1`): no usa la base
 de datos hasta la fase 4. Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
 paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
-Sin ningún run publicado, la API responde 503 `no bundle published yet`.
+Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
+en HTML.
 
 Tras arrancar el contenedor:
 
@@ -72,37 +81,70 @@ curl -s http://127.0.0.1:8042/healthz
 bash deploy/check-api.sh http://127.0.0.1:8042
 ```
 
-y abrir `http://127.0.0.1:8042/` y `http://127.0.0.1:8042/promedio`. `check-api.sh` comprueba `/healthz`
-(solo existe en nginx; sin nginx lo marca `n/a`) y 10 rutas de la API (código, tipo y JSON válido); sale
-con error si alguna falla.
+y abrir `http://127.0.0.1:8042/` y `http://127.0.0.1:8042/promedio`. `check-api.sh` decide una vez si hay
+nginx a partir de `/healthz` (solo existe en nginx; sin nginx lo marca `n/a`) y comprueba `/` (200 HTML),
+`/promedio?scope=es&mode=nowcast` (200 HTML), `/nope` (404 HTML), con nginx también
+`/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y `/dist/css/site.css` (`text/css`), y 10
+rutas de la API (código, tipo y JSON válido); sale con error si alguna falla.
+
+### Cómo añadir una página
+
+1. Controlador `mtpy/controllers/<Nombre>.py` que herede de `Page`, con `active` (la entrada del menú) y
+   un `index_action` que llame a `render(plantilla, **contexto)`; ver `Promedio.py`.
+2. Plantilla en `web/templates/` que extienda `base.html`.
+3. Entrada en `pages.ROUTES` (ruta, controlador, acción, métodos) y en `pages.PAGES` (menú), en
+   `mtpy/lib/pages.py`.
+4. El constructor del contexto de la página, también en `pages.py` (junto a `index_context` y
+   `promedio_context`).
+5. Un test en `tests/test_pages.py`.
+
+Si la página dibuja gráficos, el módulo `web/dist/js/pages/<nombre>.js` lee `initial-data` con
+`readInitial` y no hace `fetch`.
 
 ### Desarrollo sin Docker
 
+En el Mac, Luis tiene un nginx local en el puerto 8080. Hay que añadir a su `server` las dos `location`
+de `/dist/` y el proxy, con `<repo>` la ruta del repositorio:
+
 ```
-S3_BUCKET= python -m uvicorn api:api --port 8000
-python -m http.server 8081 -d web
+location ^~ /dist/vendor/ { alias <repo>/web/dist/vendor/; expires 1y; }
+location ^~ /dist/ { alias <repo>/web/dist/; expires -1; }
+location / {
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_pass http://127.0.0.1:8000;
+}
 ```
 
-y abrir `http://127.0.0.1:8081/?api=http://127.0.0.1:8000` (`?api=` solo se acepta para
-`http://localhost` y `http://127.0.0.1`). Con `S3_BUCKET=` vacío la API lee el paquete local
-`files/site/v1`. El puerto 8080 puede estar ocupado por un nginx local, de ahí el 8081.
-Con `http.server` el enlace de navegación `/promedio` da 404 (no hay `try_files`): abrir
-`/promedio.html?api=...` o probar detrás de nginx.
+y arrancar la aplicación:
+
+```
+S3_BUCKET= python -m uvicorn api:api --port 8000
+```
+
+Con `S3_BUCKET=` vacío la API lee el paquete local `files/site/v1`. Después se abre `http://localhost:8080/`.
+Sin nginx, `http://127.0.0.1:8000/` y `/promedio` se renderizan, pero los recursos de `/dist/` dan 404:
+Python solo sirve las páginas y la API.
 
 ### Comprobaciones de la infraestructura
 
-- `bash deploy/nginx-check.sh`: `nginx -t` sobre `deploy/docker/nginx.conf` con las rutas adaptadas a
-  las locales (no arranca nginx). Requiere nginx instalado.
+- `bash deploy/nginx-check.sh`: `nginx -t` sobre `deploy/docker/nginx.conf` con los dos `alias` de
+  `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
-  `*.env` en ella, ejecuta `check-api.sh`, las páginas estáticas y las cabeceras de caché de `/vendor/` y
-  `/js/`; avisa (WARN, sin fallar) si `docker logs` no tiene líneas de acceso de nginx o si `docker stop`
-  tarda 10 s o más. Sin argumento usa el
+  `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
+  (`max-age=31536000`), `/dist/js/pages/index.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`
+  devuelve HTML y que `/` contiene `initial-data`; avisa (WARN, sin fallar) si `docker logs` no tiene
+  líneas de acceso de nginx o si `docker stop` tarda 10 s o más. Sin argumento usa el
   paquete local (`files/` montado, `S3_BUCKET` vacío); con `deploy/elections.env`, S3 y la base reales.
   Requiere Docker en marcha.
 
-Estado: `nginx.conf` se verificó con un nginx 1.29.5 local en el puerto 8043 (rutas reescritas a locales;
-comprobaciones de rutas, caché, clave de caché, realip y cabeceras correctas; última vez el 2026-10-09). La
-prueba de humo con Docker está sin ejecutar.
+Estado: `nginx.conf` se verificó el 2026-10-09 con un nginx 1.29.5 local (Homebrew) en el puerto 8043
+delante de uvicorn en el 8000: `/` primero `MISS` y luego `HIT`, cabeceras como las esperadas y
+`check-api.sh` todo OK. La prueba de humo con Docker está sin ejecutar.
+
+Pendiente de Luis: ejecutar `bash deploy/smoke.sh` con Docker (paquete local y `deploy/elections.env`);
+añadir las `location` de `/dist/` y el proxy a su nginx local y recorrer `/` y `/promedio` con y sin JS
+(el botón "Ver" debe funcionar sin JS); primera publicación a S3 y despliegue.
 
 ## Comprobar S3
 
