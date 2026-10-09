@@ -79,3 +79,4 @@ caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--co
 @media (max-width: 719px) {
   .chart.chart-tall { height: 360px; }
 }
+.controls.js .nojs-only { display: none; }

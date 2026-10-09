@@ -55,17 +55,24 @@ def matches_a_route(path):
     return any(Router.parse_route(route, path, 'GET') is not False for route in router().routes)
 
 
-def test_every_api_literal_in_the_js_matches_a_route():
+def test_templates_api_literals_match_a_route_and_the_js_has_none():
     literals = []
-    for path in js_files():
+    for path in html_files():
         with open(path, encoding='utf-8') as fh:
             text = fh.read()
         for match in re.finditer(r"""['"`](/api/v1/[^'"`?]*)""", text):
-            literal = re.sub(r'\$\{[^}]*\}', 'x', match.group(1)).rstrip('/')
+            literal = re.sub(r'\{\{.*?\}\}', 'x', match.group(1)).rstrip('/')
             literals.append((os.path.relpath(path, ROOT), literal))
-    assert literals, 'ningún literal /api/v1 en web/dist/js'
+    assert literals, 'ningún literal /api/v1 en web/templates'
     bad = [(f, lit) for f, lit in literals if not matches_a_route(lit)]
     assert bad == []
+    # el JS dibuja desde `initial-data`: no consulta la API
+    with_api = []
+    for path in js_files():
+        with open(path, encoding='utf-8') as fh:
+            if '/api/v1' in fh.read():
+                with_api.append(os.path.relpath(path, ROOT))
+    assert with_api == []
 
 
 def test_referenced_assets_exist():
