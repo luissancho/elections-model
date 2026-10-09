@@ -1,7 +1,7 @@
 // Evolution of a published estimate (vote or seats), one line per party over the run timestamps.
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
-import {fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
+import {fmtDate, fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const ZOOM_FROM = 20;
@@ -46,6 +46,7 @@ export function renderEvolution(el, runs, mode, {
     name: entry.name,
     data: entry.points.map((point) => (point[2] ? {
       value: point,
+      symbolSize: 8,
       itemStyle: {color: '#fff', borderColor: colors[entry.name] || OTHERS_COLOR, borderWidth: 2},
     } : point)),
     showSymbol: true,
@@ -77,8 +78,11 @@ export function renderEvolution(el, runs, mode, {
           return '';
         }
         const rows = [...params].sort((a, b) => b.value[1] - a.value[1]);
-        const suffix = params[0].value[2] ? ' · estimación retrospectiva' : '';
-        const lines = [`<strong>${escapeHtml(fmtDateTime(params[0].value[0]) + suffix)}</strong>`];
+        // A retrospective run has a conventional noon `run_at`: show its day only
+        const head = params[0].value[2]
+          ? `${fmtDate(params[0].value[0])} · estimación retrospectiva`
+          : fmtDateTime(params[0].value[0]);
+        const lines = [`<strong>${escapeHtml(head)}</strong>`];
         for (const item of rows) {
           const name = fullnames[item.seriesName] || item.seriesName;
           lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}`);

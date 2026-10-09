@@ -196,13 +196,19 @@ python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run"
 python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'   # enmienda 2026-10-09
 ```
 
-*Enmienda 2026-10-09:* `backfill` `{from, to}` (ISO `YYYY-MM-DD`, `to` opcional, `from <= to`, `to` no posterior
-a hoy en Europe/Madrid) publica un run por día con `run_id` `YYYYMMDD-120000` y `run_at` a las 12:00 UTC, con
-el simulador construido con `limit_date=<día>`; un día ya publicado queda `skipped` ("run exists") y el
-`latest` del manifest solo avanza.
+*Enmienda 2026-10-09:* `backfill` `{from, to}` (ISO `YYYY-MM-DD`, `to` opcional, `from <= to`, `to` anterior
+a hoy en Europe/Madrid: como mucho ayer, el pronóstico de hoy es la publicación normal; exige `forecast` en
+`what`) publica un run por día con `run_id` `YYYYMMDD-120000` y `run_at` a las 12:00 UTC. El corte de sondeos
+es `drange`, derivado de `<día>` como hace el backtest (el límite inferior sube a los días entre `<día>` y
+`event_date`: solo entran los sondeos publicados hasta ese día, incluido); el simulador recibe además
+`limit_date=<día>`, que solo ancla `as_of`. Un día ya publicado queda `skipped` ("run exists"), uno a medias
+(sin `headline.json`) `failed` ("incomplete run exists; unpublish it first"); todo relleno reconstruye
+`history.json` y la entrada del manifest, y el `latest` del manifest solo avanza.
 
 Parámetros: `what`, `scopes`, `event_date` (por defecto `get_next_event_date`), `n_sim=1000`, `seed=42`,
-`drange=6`, `max_fc=10`, `alpha=0.05`, `correctors`, `freeze`, `run`, `dry_run`, `force`. En Docker:
+`drange=6`, `max_fc=10`, `alpha=0.05`, `correctors`, `freeze`, `run`, `dry_run`, `force`, `backfill`
+(`{from, to}`, ver arriba), `today` (`YYYY-MM-DD` tomado como hoy por la guarda LOREG y el tope de
+`backfill`; solo para pruebas y ensayos). En Docker:
 `RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'` (JSON sin espacios: `init.sh` no entrecomilla).
 
 Pasos por ámbito: `Simulator(scope, event_date, drange, seed, mode='nowcast', verbose=0)` →
@@ -836,10 +842,12 @@ Commits:
 
 - `c33883a` y `c102231`: `mtpy/lib/publish.py`, `mtpy/lib/bundle.py`, `mtpy/jobs/Publish.py`, fixtures y
   tests. `python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'`
-  publica un run por día (`run_id` `YYYYMMDD-120000`, `run_at` a las 12:00 UTC) con el simulador construido con
-  `limit_date=<día>`; `meta.limit_date` y `headline.backfill` son claves obligatorias de `SCHEMAS` y la fila de
-  `history.json` lleva `backfill`. Un día con run existente queda `skipped` ("run exists"). `point`,
-  `unpublish`, `manifest` y `dry_run` no cambian.
+  publica un run por día (`run_id` `YYYYMMDD-120000`, `run_at` a las 12:00 UTC) con el corte de sondeos en
+  `drange`, derivado de `<día>` como hace el backtest (`limit_date=<día>` solo ancla `as_of`; *corregido en la
+  revisión final:* al principio solo se pasaba `limit_date`, que no filtra sondeos); `meta.limit_date` y
+  `headline.backfill` son claves obligatorias de `SCHEMAS`, `meta.drange` registra la ventana efectiva y la
+  fila de `history.json` lleva `backfill`. Un día con run existente queda `skipped` ("run exists"); uno a
+  medias, `failed`. `point`, `unpublish`, `manifest` y `dry_run` no cambian.
 - `3e5658b`: `web/dist/js/charts/evolution.js`, `web/dist/js/charts/series.js`, `web/dist/js/pages/promedio.js`,
   `web/templates/index.html`, `web/templates/escanos.html` y tests. Las tarjetas "Evolución de las
   publicaciones" dibujan los puntos retrospectivos huecos (relleno blanco, borde del color del partido), con
@@ -871,10 +879,11 @@ Decisiones del plan (D1-D7):
 Decisión de ejecución: el evento de un run retrospectivo es el de hoy (2026-11-29), incluso para días anteriores a
 la convocatoria; es deliberado (la reconstrucción usa el catálogo y el calendario de hoy).
 
-Avisos operativos: `es` tarda unos 2 min por día contra la RDS; conviene `to` = ayer como mucho (un run a las
-12:00 UTC de hoy puede ordenarse de forma rara frente a los runs reales de hoy); si un día falla a medias
-(carpeta sin `headline.json`) se informa `skipped (run exists)` al repetir y hay que retirarlo antes con
-`unpublish`; la guarda LOREG se aplica al momento de la publicación (el hoy real). Documentado en
+Avisos operativos: `es` tarda unos 2 min por día contra la RDS; `to` tiene que ser como mucho ayer (hoy se
+rechaza: el pronóstico de hoy es la publicación normal y un run a las 12:00 UTC de hoy se ordenaría de forma
+rara frente a los runs reales de hoy); si un día falla a medias (carpeta sin `headline.json`) se informa
+`failed (incomplete run exists; unpublish it first)` al repetir y hay que retirarlo antes con `unpublish`;
+repetir un relleno reconstruye `history.json` y la entrada del manifest; la guarda LOREG se aplica al momento de la publicación (el hoy real). Documentado en
 `deploy/README.md` ("Relleno retroactivo") y `docs/web/contrato.md` (`meta`, `headline`, `history.json`).
 
 Pendiente de Luis:

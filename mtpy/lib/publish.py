@@ -28,6 +28,7 @@ from . import bundle
 from .bundle import BundleReader, BundleWriter
 from .data import get_next_event_date, get_scopes
 from .simulator import Simulator
+from .utils import norm_range
 from ..models.elections import Polls
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -642,7 +643,8 @@ def backfill_days(spec: dict, today: Optional[str | date | datetime] = None) -> 
     ------
     ValueError
         ``spec`` is not a dict with ``from``, a bound is not an ISO date, ``from`` is after ``to``
-        or ``to`` is after today. The message starts with ``'publish: backfill'``.
+        or ``to`` is not before today (today's forecast is the normal publish). The message starts
+        with ``'publish: backfill'``.
     """
     if not isinstance(spec, dict) or 'from' not in spec:
         raise ValueError('publish: backfill must be {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}')
@@ -659,8 +661,8 @@ def backfill_days(spec: dict, today: Optional[str | date | datetime] = None) -> 
     today = _today(today)
     if start > end:
         raise ValueError('publish: backfill "from" {} is after "to" {}'.format(start, end))
-    if end > today:
-        raise ValueError('publish: backfill "to" {} is after today {}'.format(end, today))
+    if end >= today:
+        raise ValueError('publish: backfill "to" must be before today ("to" {}, today {})'.format(end, today))
     return [(start + timedelta(days=n)).isoformat() for n in range((end - start).days + 1)]
 
 
@@ -847,8 +849,11 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         Injectable replacements of ``Simulator``, ``db_stats`` and ``provenance``.
     limit_date : str, optional
         Poll cutoff date (``YYYY-MM-DD``) of a retrospective run: only the polls published up to that
-        day enter the average and ``as_of`` is read that day. The run is marked ``backfill`` and
-        ``meta.limit_date`` records it. ``None`` (default) runs with every poll.
+        day, inclusive, enter the average, because the lower bound of ``drange`` (days before the
+        event) is raised to the days from ``limit_date`` to ``event_date``, as the backtest does; the
+        simulator also gets ``limit_date`` to read ``as_of`` that day. The run is marked ``backfill``
+        and ``meta.limit_date`` records it (``meta.drange`` holds the effective window). ``None``
+        (default) runs with ``drange`` as given.
     run_at : str, optional
         ISO UTC timestamp recorded as the run moment; defaults to the writer clock.
 
@@ -867,7 +872,14 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     """
     writer.begin_run(scope, run_id)
     run_at = run_at or bundle.iso_utc(writer.now())
-    cutoff = {} if limit_date is None else {'limit_date': limit_date}
+    cutoff = {}
+    if limit_date is not None:
+        # The polls are cut by `drange` (days before the event), not by `limit_date`, which only anchors
+        # `as_of`: `days >= cut` keeps the polls published up to `limit_date`, inclusive
+        lo, hi = norm_range(drange)
+        cut = (date.fromisoformat(event_date) - date.fromisoformat(limit_date)).days
+        drange = (max(int(lo or 0), cut), hi)
+        cutoff = {'limit_date': limit_date}
     correctors = {**DEFAULT_CORRECTORS, **(correctors or {})}
     heads, clip = {}, {}
     start = mark = time.perf_counter()

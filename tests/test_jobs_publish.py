@@ -244,3 +244,64 @@ def test_backfill_respects_a_pointed_run(fresh_app, tmp_path, patched, monkeypat
     monkeypatch.setattr(bundle, 'run_id', lambda now=None: run_c)
     Publish().run(what=['forecast'], scopes=['es'], fs=fs)
     assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_c
+
+
+def test_backfill_needs_forecast_in_what(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    with pytest.raises(ValueError, match='publish: "backfill" needs "forecast" in what'):
+        Publish().run(what=['manifest'], fs=FileSystem(str(tmp_path)), backfill={'from': '2026-10-05'}, today='2026-10-09')
+    assert patched == [] and not (tmp_path / 'site').exists()
+
+
+def test_backfill_failed_day_is_reported_until_unpublished(fresh_app, tmp_path, patched, monkeypatch, capsys):
+    """Un día que falla a medias deja su carpeta: el job falla, los demás días se escriben y un reintento
+    lo da por fallido (incompleto) en vez de omitirlo, hasta que se borra con `unpublish`."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    real_meta, broken = publish.export_meta, []
+
+    def export_meta(sim, run_id, *args, **kwargs):
+        if run_id == '20261006-120000' and not broken:
+            broken.append(run_id)
+            raise OSError('s3 down')
+        return real_meta(sim, run_id, *args, **kwargs)
+
+    monkeypatch.setattr(publish, 'export_meta', export_meta)
+    span = {'from': '2026-10-05', 'to': '2026-10-07'}
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    assert 'es: failed 2026-10-06 (OSError: s3 down)' in capsys.readouterr().out
+    assert writer.exists(bundle.path_run('es', '20261006-120000'))
+    assert writer.list_runs('es') == ['20261005-120000', '20261007-120000']
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261007-120000'
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    out = capsys.readouterr().out
+    assert 'es: skipped 2026-10-05 (run exists)' in out and 'es: skipped 2026-10-07 (run exists)' in out
+    assert 'es: failed 2026-10-06 (incomplete run exists; unpublish it first)' in out
+    Publish().run(what=['unpublish'], scopes=['es'], fs=fs, run='20261006-120000')
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    assert [r['status'] for r in result['es']] == ['skipped', 'published', 'skipped']
+    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000', '20261007-120000']
+
+
+def test_backfill_retry_repairs_the_history_and_the_manifest(fresh_app, tmp_path, patched):
+    """Si tras un relleno se pierden `history.json` y la entrada del manifest, repetirlo los reconstruye."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    span = {'from': '2026-10-05', 'to': '2026-10-06'}
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    writer.remove(bundle.path_history('es'))
+    writer.remove(bundle.path_manifest())
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    assert [r['status'] for r in result['es']] == ['skipped', 'skipped']
+    history = writer.read_json(bundle.path_history('es'))['data']['runs']
+    assert [r['run_id'] for r in history] == ['20261005-120000', '20261006-120000']
+    assert all(r['backfill'] is True for r in history)
+    entry = publish.read_manifest(writer)['scopes']['es']
+    assert entry['latest'] == '20261006-120000' and entry['run_at'] == '2026-10-06T12:00:00Z'

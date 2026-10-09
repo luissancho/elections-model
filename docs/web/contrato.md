@@ -49,8 +49,8 @@ Todo JSON es un sobre:
 - `run_id` es `YYYYMMDD-HHMMSS` en UTC, uno por invocación (compartido por todos los ámbitos); ordena
   lexicográficamente y cabe en un alias de ruta (`[0-9a-z_-]+`).
 - Los runs son inmutables: un `run_id` existente no se reescribe. Los punteros (`manifest.json`,
-  `history.json`) sí se reescriben. Un relleno retroactivo (`backfill`) salta los `run_id` existentes y solo
-  mueve el `latest` del manifest hacia delante.
+  `history.json`) sí se reescriben. Un relleno retroactivo (`backfill`, solo días anteriores a hoy) salta
+  los `run_id` existentes y solo mueve el `latest` del manifest hacia delante.
 - `headline.json` se escribe el último. Un run sin `headline.json` está incompleto y se ignora (no entra
   en `history` ni se puede apuntar a él).
 - Los partidos se identifican por `name`; el catálogo (`id`, `fullname`, `color`, `block`, `regional`) está
@@ -81,6 +81,15 @@ editorial de `manifest.freeze`.
 `limit_date` (enmienda 2026-10-09; cadena `YYYY-MM-DD` o `null`, clave obligatoria) es el día de corte de un
 run retrospectivo: solo entraron los sondeos publicados hasta ese día y `as_of` se leyó ese día. Es `null` en
 un run normal. Un lector trata la clave ausente (runs publicados antes de 2026-10-09) como `null`.
+
+`drange` es la ventana efectiva de sondeos del run, en días antes de `event_date` (`[desde, hasta]`, `null`
+sin tope). En un run retrospectivo el corte sale de `limit_date`: el límite inferior sube a los días entre
+`limit_date` y `event_date`, así que un run del 2026-10-05 para el evento del 2026-11-29 registra
+`[55, null]`.
+
+`db_polls` y `db_last_poll` cuentan la base en el momento de la publicación: en un run retrospectivo, la base
+de hoy (el día de la reconstrucción), no la de `limit_date`; los sondeos que entraron en el run son
+`n_polls`.
 
 ### `headline`
 

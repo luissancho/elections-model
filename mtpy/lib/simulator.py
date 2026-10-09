@@ -78,7 +78,9 @@ class Simulator(Core):
         alpha : float, optional
             Confidence interval.
         limit_date: str, optional
-            The date to be used as cut-off date for the polls and the forecast.
+            The latest day `as_of` may take (see `as_of`): it anchors the reading of the forecast and does not
+            filter the polls, whose window is `drange` (to freeze the polls known on a day, raise the lower
+            bound of `drange` to the days from that day to `event_date`, as the backtest does).
             If not provided, the date will be set to the last day of the campaign period (defined by `drange`).
         as_of: str, optional
             The day on which the forecast is read: the anchor of the nowcast. By default the last day actually
@@ -620,7 +622,7 @@ class Simulator(Core):
         if self._as_of is not None and as_of < pd.Timestamp(self.model.date_last):
             warnings.warn(
                 '`as_of` {} precedes the last poll: the kernel average is two-sided, so the value read there '
-                'uses later polls and is not a freeze (use `limit_date` for that)'.format(as_of.date())
+                'uses later polls and is not a freeze (cut the polls with `drange` for that)'.format(as_of.date())
             )
 
         self.as_of = as_of

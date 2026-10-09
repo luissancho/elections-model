@@ -21,9 +21,11 @@ class Publish(Job):
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
     its noon, and ``backfill`` set in its headline. A day whose run already exists is
-    ``skipped``. A backfill only moves the manifest ``latest`` forward (to its newest run,
-    when that is newer than the current one), so it never moves ``latest`` back nor undoes a
-    ``point``.
+    ``skipped``, or ``failed`` when that run is incomplete (it has no ``headline.json``; remove
+    it with ``unpublish`` and retry). Every backfill rebuilds the history of the scope, also when
+    all its days already existed, so a retry repairs a history or manifest left behind. A
+    backfill only moves the manifest ``latest`` forward (to its newest run, when that is newer
+    than the current one), so it never moves ``latest`` back nor undoes a ``point``.
 
     Examples
     --------
@@ -43,6 +45,8 @@ class Publish(Job):
 
     WHAT = ('forecast', 'manifest', 'point', 'unpublish')
     DEFERRED = {'analysis': 4, 'event': 5, 'backtest': 5}
+    RUN_EXISTS = 'run exists'
+    RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
 
     def run(self, what=('forecast',), scopes=('es',), event_date=None, n_sim=1000, seed=42, drange=6, max_fc=10,
             alpha=0.05, correctors=None, freeze=None, run=None, dry_run=False, force=False, fs=None, today=None,
@@ -88,8 +92,8 @@ class Publish(Job):
             ``meta.freeze``).
         backfill : dict, optional
             Range ``{'from': 'YYYY-MM-DD', 'to': 'YYYY-MM-DD'}`` (``to`` defaults to ``from``
-            and cannot be after today) of retrospective ``forecast`` runs, one per day; see
-            ``publish.backfill_days``.
+            and must be before today) of retrospective ``forecast`` runs, one per day; see
+            ``publish.backfill_days``. Requires ``forecast`` in ``what``.
         verbose : int, default 0
             Verbosity passed to the forecast.
         **kwargs
@@ -105,8 +109,8 @@ class Publish(Job):
         Raises
         ------
         ValueError
-            If ``what`` is unknown or deferred to a later phase, ``run`` is missing or the
-            ``backfill`` range is invalid.
+            If ``what`` is unknown or deferred to a later phase, ``run`` is missing, or
+            ``backfill`` is given without ``forecast`` in ``what`` or its range is invalid.
         RuntimeError
             If no file system is configured, or any scope failed (raised after the
             manifest, the summary and the alert).
@@ -120,6 +124,8 @@ class Publish(Job):
                 raise ValueError('publish: unknown what "{}" (expected one of {})'.format(item, ', '.join(self.WHAT)))
         if ('point' in whats or 'unpublish' in whats) and not run:
             raise ValueError('publish: "run" is required')
+        if backfill is not None and 'forecast' not in whats:
+            raise ValueError('publish: "backfill" needs "forecast" in what')
         days = None if backfill is None else publish.backfill_days(backfill, today)
 
         fs = fs if fs is not None else self.app.fs
@@ -187,6 +193,10 @@ class Publish(Job):
         """
         Publish the runs of one scope and rebuild its history.
 
+        The history is rebuilt and the manifest entry chosen when some run was published or,
+        with ``backfill``, some day was skipped because its run exists, so a retry repairs the
+        pointers of a backfill whose history or manifest write failed.
+
         Parameters
         ----------
         scope : str
@@ -213,30 +223,37 @@ class Publish(Job):
         tuple
             ``(outcomes, entry)``: the result of each run of ``plan`` (with its ``day`` when
             there is one) and the new manifest entry of the scope (see ``_manifest_entry``),
-            ``None`` when the manifest must not change for the scope, nothing was published or
-            this is a dry run. If rebuilding the history or reading the manifest fails, every
-            ``published`` result turns ``failed``.
+            ``None`` when the manifest must not change for the scope, there is nothing to point
+            to or this is a dry run. If rebuilding the history or reading the manifest fails,
+            every ``published`` result and every day skipped because its run exists turns
+            ``failed``.
         """
         outcomes = [self._forecast_scope(scope, writer, rid, event_date, today, force,
                                          skip_existing=day is not None, **params, **extra)
                     for day, rid, extra in plan]
         entry = None
-        published = [result for result in outcomes if result['status'] == 'published']
-        if published and not dry_run:
+        run_ids = [rid for _, rid, _ in plan]
+        involved = [i for i, result in enumerate(outcomes) if result['status'] == 'published'
+                    or (result['status'] == 'skipped' and result.get('reason') == self.RUN_EXISTS)]
+        if involved and not dry_run:
             try:
-                publish.rebuild_history(writer, scope)
-                entry = self._manifest_entry(writer, scope, published, backfill=plan[0][0] is not None)
+                runs = {head['run_id']: head for head in publish.rebuild_history(writer, scope)['runs']}
+                candidates = [outcomes[i] if outcomes[i]['status'] == 'published' else
+                              {'run_id': run_ids[i], 'entry': publish.latest_entry(runs[run_ids[i]])}
+                              for i in involved if outcomes[i]['status'] == 'published' or run_ids[i] in runs]
+                if candidates:
+                    entry = self._manifest_entry(writer, scope, candidates, backfill=plan[0][0] is not None)
             except Exception as e:
                 self._log_error(scope)
                 failed = {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-                outcomes = [failed if result['status'] == 'published' else result for result in outcomes]
+                outcomes = [failed if i in involved else result for i, result in enumerate(outcomes)]
         days = [day for day, _, _ in plan]
         return [result if day is None else {'day': day, **result} for day, result in zip(days, outcomes)], entry
 
     @staticmethod
     def _manifest_entry(writer, scope, published, backfill):
         """
-        Choose the manifest entry of a scope after publishing some runs.
+        Choose the manifest entry of a scope after publishing (or finding) some runs.
 
         A normal publish always points to the run just produced. A backfill only moves the
         pointer forward: its newest run becomes ``latest`` when the scope has no entry yet
@@ -251,7 +268,8 @@ class Publish(Job):
         scope : str
             Scope published.
         published : list of dict
-            ``published`` results of this invocation, in plan order (ascending days).
+            ``published`` results of this invocation, in plan order (ascending days); with
+            ``backfill``, also ``{'run_id', 'entry'}`` of the days whose run already existed.
         backfill : bool
             Whether the runs are retrospective.
 
@@ -288,7 +306,10 @@ class Publish(Job):
         force : bool
             Publish inside the LOREG window anyway.
         skip_existing : bool, default False
-            Turn an existing run (``FileExistsError``) into ``skipped`` instead of ``failed``.
+            Check the run first: a complete one (with ``headline.json``) is ``skipped``
+            (``run exists``) and an incomplete one is ``failed`` (``incomplete run exists;
+            unpublish it first``), after the event and the LOREG guard are resolved and without
+            running the model. Without it, an existing run (``FileExistsError``) is ``failed``.
         **params
             Forecast parameters.
 
@@ -296,8 +317,9 @@ class Publish(Job):
         -------
         dict
             Result with a ``status`` and its details: ``skipped`` for no upcoming event,
-            ``publish.NothingToPublish`` or (with ``skip_existing``) an existing run, ``refused``
-            for the LOREG guard and ``failed`` for any other exception.
+            ``publish.NothingToPublish`` or (with ``skip_existing``) a complete existing run,
+            ``refused`` for the LOREG guard and ``failed`` for an incomplete existing run (with
+            ``skip_existing``) or any other exception.
         """
         try:
             value = event_date or publish.next_event_date(scope)
@@ -305,16 +327,16 @@ class Publish(Job):
                 return {'status': 'skipped', 'reason': 'no upcoming event'}
             event = date.fromisoformat(value).isoformat()
             in_window = publish.loreg_guard(scope, event, today, force)
+            if skip_existing:
+                if writer.exists(bundle.path_part(scope, run_id, 'headline')):
+                    return {'status': 'skipped', 'reason': self.RUN_EXISTS}
+                if writer.exists(bundle.path_run(scope, run_id)):
+                    return {'status': 'failed', 'reason': self.RUN_INCOMPLETE}
             out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, **params)
         except publish.PublishRefused as e:
             return {'status': 'refused', 'reason': str(e)}
         except publish.NothingToPublish as e:
             return {'status': 'skipped', 'reason': str(e)}
-        except FileExistsError as e:
-            if skip_existing:
-                return {'status': 'skipped', 'reason': 'run exists'}
-            self._log_error(scope)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
         except Exception as e:
             self._log_error(scope)
             return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}

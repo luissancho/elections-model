@@ -234,7 +234,7 @@ y `backtest` fallan con `ValueError` hasta las fases 4 y 5.
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
 | `force` | `false` | Publicar `es` dentro de la ventana LOREG |
-| `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` no posterior a hoy (Europe/Madrid). Con `backfill`, `forecast` publica un run por día en vez de uno de hoy |
+| `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what` |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
 
 ### Estados y resumen
@@ -251,6 +251,7 @@ es: refused (es 2026-11-29: inside the LOREG window (art. 69.7); pass force=true
 es: failed (<Excepción>: <mensaje>)
 es: published 20261005-120000 (as_of 2026-10-05, 290 polls, backfill 2026-10-05) in 118 s    # backfill, un día
 es: skipped 2026-10-05 (run exists)                                                           # backfill, día ya publicado
+es: failed 2026-10-06 (incomplete run exists; unpublish it first)                             # backfill, día a medias
 es: published 20261007-141503          # point y unpublish
 manifest: 1 scopes, freeze off
 manifest: not written (dry run)
@@ -261,26 +262,32 @@ el resumen; un ámbito fallido conserva su entrada anterior en el manifest.
 
 Con `backfill`, `results[ámbito]` es una lista con un resultado por día (`day`, `status`, ...) y el
 resumen tiene una línea por día. Si un día falla a medias (queda la carpeta del run sin `headline.json`),
-al repetir se informa `skipped (run exists)`: hay que retirarlo antes con `unpublish`
-(`{"what":["unpublish"],"scopes":["es"],"run":"20261005-120000"}`) y volver a lanzar el relleno.
+al repetir se informa `failed 2026-10-05 (incomplete run exists; unpublish it first)` y el job termina con
+error: hay que retirarlo antes con `unpublish` (`{"what":["unpublish"],"scopes":["es"],"run":"20261005-120000"}`)
+y volver a lanzar el relleno. Los días completos se informan `skipped (run exists)`.
 
 ### Relleno retroactivo
 
 `backfill` rellena la evolución de las publicaciones con runs "a fecha de" un día pasado:
 
-- Un run por día del rango, con `run_id` `YYYYMMDD-120000` y `run_at` `YYYY-MM-DDT12:00:00Z`. El
-  simulador se construye con `limit_date=<día>`: solo entran los sondeos publicados hasta ese día, `as_of`
-  se lee ese día y los efectos de casa se reajustan con esos sondeos. El run lleva `meta.limit_date = <día>` y
-  `headline.backfill = true` (y por tanto la fila de `history.json`).
+- Un run por día del rango, con `run_id` `YYYYMMDD-120000` y `run_at` `YYYY-MM-DDT12:00:00Z`. El corte de
+  sondeos es `drange`, derivado de `<día>` como hace el backtest: su límite inferior sube a los días entre
+  `<día>` y `event_date`, así que solo entran los sondeos publicados hasta ese día (incluido) y los efectos de
+  casa se reajustan con ellos; el simulador recibe además `limit_date=<día>`, que solo ancla `as_of` en ese
+  día (no filtra sondeos). El run lleva `meta.limit_date = <día>`, la ventana efectiva en `meta.drange`
+  (`[55, null]` para el 2026-10-05) y `headline.backfill = true` (y por tanto la fila de `history.json`).
 - Es una reconstrucción, no lo que se publicó entonces: usa los ratings, la deriva y el catálogo de hoy y el
   evento de hoy (2026-11-29), incluso para días anteriores a la convocatoria. La web los dibuja como puntos
   huecos con "estimación retrospectiva".
-- Un día cuyo run ya existe se salta (`skipped`, "run exists"): repetir el relleno es idempotente.
+- Un día cuyo run ya existe se salta (`skipped`, "run exists"): repetir el relleno es idempotente y además
+  reconstruye `history.json` y la entrada del manifest (con la misma regla de `latest`), así que un reintento
+  repara unos punteros que quedaron a medias. Un run a medias (sin `headline.json`) no se salta: falla.
 - `latest` no retrocede: un relleno solo mueve el `latest` del ámbito si su run más nuevo tiene un `run_id`
   mayor que el actual (o no hay ninguno); si no, el manifest queda intacto, de modo que un run al que se
   volvió con `point` nunca se reactiva. Una publicación normal sigue apuntando al run recién producido.
-- `es` tarda unos 2 min por día contra la RDS. Conviene que `to` sea como mucho ayer: un run a las 12:00 UTC
-  de hoy puede ordenarse de forma rara respecto a los runs reales de hoy.
+- `es` tarda unos 2 min por día contra la RDS. `to` tiene que ser como mucho ayer (hoy o después se
+  rechaza): el pronóstico de hoy es la publicación normal, y un run a las 12:00 UTC de hoy se ordenaría de
+  forma rara respecto a los runs reales de hoy.
 - La guarda LOREG se aplica al momento de la publicación (el hoy real), como en cualquier publicación.
 - `point`, `unpublish`, `manifest` y `dry_run` no cambian (`dry_run` con `backfill` escribe en `site-dry/v1`
   sin punteros).
