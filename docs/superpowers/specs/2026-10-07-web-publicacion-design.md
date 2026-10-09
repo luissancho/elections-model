@@ -852,8 +852,11 @@ Commits:
   `web/templates/index.html`, `web/templates/escanos.html` y tests. Las tarjetas "Evolución de las
   publicaciones" dibujan los puntos retrospectivos huecos (relleno blanco, borde del color del partido), con
   "estimación retrospectiva" en el tooltip y una nota bajo la tarjeta; `/promedio` abre con todo el ciclo y el
-  deslizador acerca (la ventana inicial de 180 días desaparece).
-- Suite unitaria: 364 tests (349 antes del plan).
+  deslizador acerca (la ventana inicial de 180 días desaparece). (Enmienda 2026-10-09, tras la revisión de
+  Luis: `/promedio` gana el control "Últimos 6 meses" / "Todo el ciclo", `fieldset#series-window`, con los
+  últimos 6 meses por defecto; cambiar de opción reencuadra el gráfico sin recargar (`setWindow` en
+  `charts/series.js`, lógica de fechas en `web/dist/js/range.js` con test `tests/test_js_range.py`).)
+- Suite unitaria: 364 tests (349 antes del plan); 373 con el control de ventana.
 
 Decisiones del plan (D1-D7):
 
@@ -873,6 +876,8 @@ Decisiones del plan (D1-D7):
   "Evolución de las publicaciones" con la nota "Los puntos huecos son estimaciones retrospectivas: el modelo de
   hoy con los sondeos publicados hasta ese día."
 - **D6.** `/promedio` abre con todo el ciclo (del primer sondeo a la elección); se elimina la ventana de 180 días.
+  (Enmienda 2026-10-09: Luis vio el ciclo completo demasiado denso; el control "Últimos 6 meses" / "Todo el
+  ciclo" abre por defecto con los últimos 6 meses y deja todo el ciclo a un clic.)
 - **D7.** Fuera de alcance: una tarjeta de serie de sondeos en la portada, rellenar antes de la convocatoria
   (Luis decide el rango al lanzar el job) y ejecutar el relleno real (lo lanza Luis contra la RDS).
 
@@ -890,5 +895,5 @@ Pendiente de Luis:
 
 - Lanzar el relleno real contra la RDS (`backfill` del 5 al 8 de octubre, o desde la fecha que decida) y
   comprobar en la portada que los puntos huecos aparecen desde la convocatoria.
-- Recorrer `/promedio` con todo el ciclo: si tres años resultan densos, pedir el control "Últimos 6 meses /
-  Todo el ciclo".
+- Recorrer `/promedio` con el control "Últimos 6 meses / Todo el ciclo" (añadido el mismo día a petición de
+  Luis) y comprobar que cambiar de opción reencuadra el gráfico sin recargar.

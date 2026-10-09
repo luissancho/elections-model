@@ -408,3 +408,11 @@ def test_evolution_cards_explain_the_retrospective_points(api):
     for path in ('/', '/escanos'):
         page = html(call(api, path)[2])
         assert 'Evolución de las publicaciones' in page and 'estimaciones retrospectivas' in page
+
+
+def test_promedio_has_the_window_control(api):
+    """El promedio ofrece "Últimos 6 meses" (por defecto) y "Todo el ciclo" para encuadrar el gráfico."""
+    page = html(call(api, '/promedio')[2]).replace('\n', ' ')
+    assert 'id="series-window"' in page
+    assert 'name="window" value="6m" checked' in page and 'Últimos 6 meses' in page
+    assert 'name="window" value="all"' in page and 'Todo el ciclo' in page

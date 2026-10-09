@@ -7,6 +7,11 @@
     <div id="content" class="stack">
       <section class="card" id="series">
         <h2>{{ series_title }} <span class="muted">{{ series_subtitle }}</span></h2>
+        <fieldset id="series-window" class="chart-window">
+          <legend>Ventana</legend>
+          <label><input type="radio" name="window" value="6m" checked> Últimos 6 meses</label>
+          <label><input type="radio" name="window" value="all"> Todo el ciclo</label>
+        </fieldset>
         <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ ' y la proyección' if state.mode == 'forecast' else '' }}"></div>
         <p class="about">
           Cada punto es un sondeo publicado; la línea es el promedio ponderado del modelo y la banda, su

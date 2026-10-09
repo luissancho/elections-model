@@ -2,6 +2,7 @@
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtNum, fmtPct, fmtRange} from '../format.js';
+import {seriesWindow} from '../range.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const BAND_OPACITY = 0.15;
@@ -102,17 +103,49 @@ function markAt(time, label) {
 }
 
 /**
+ * ISO dates of the time axis: the fitted series plus, in forecast, the projected days after it.
+ *
+ * @param {object} series `data` of the series part
+ * @param {object|null} projection `data` of the projection part
+ * @returns {string[]} ascending ISO dates
+ */
+export function axisDatesOf(series, projection) {
+  const groups = (projection && projection.groups && projection.groups.parties) || null;
+  const withProjection = Boolean(groups && projection.dates.length > 1);
+  return withProjection ? [...series.dates, ...projection.dates.slice(1)] : series.dates;
+}
+
+/**
+ * Zoom a rendered series chart to a choice of the window control (`6m`, `all`).
+ *
+ * @param {object} chart the ECharts instance returned by `renderSeries`
+ * @param {string} choice value of the control
+ * @param {object} data `series`, `projection` (parts) and `anchor` (ISO date the window counts back from)
+ */
+export function setWindow(chart, choice, {series, projection, anchor = null}) {
+  const zoom = seriesWindow(choice, axisDatesOf(series, projection), anchor);
+  if (zoom) {
+    chart.dispatchAction({
+      type: 'dataZoom', dataZoomIndex: 0, startValue: dayTime(zoom.startValue), endValue: dayTime(zoom.endValue),
+    });
+  }
+}
+
+/**
  * Render the poll average of `parties`: per party the `lo–hi` band, the `mean` line, the published polls
- * and, in forecast, the projected band from `asOf` to `when`, with mark lines at both dates.
+ * and, in forecast, the projected band from `asOf` to `when`, with mark lines at both dates. The initial
+ * zoom is the `window` choice (`6m`: the last 180 days before `anchor`; `all`: the whole axis).
  *
  * @param {HTMLElement} el chart container
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
- *   `fullnames` ({name: full name}, tooltip), `asOf`, `when` (ISO dates)
+ *   `fullnames` ({name: full name}, tooltip), `asOf`, `when` (ISO dates), `window` (choice of the window
+ *   control), `anchor` (ISO date the window counts back from: the last poll)
  * @returns {object} the ECharts instance
  */
 export function renderSeries(el, {
   series, polls, projection, parties, selected = null, colors = {}, fullnames = {}, asOf, when,
+  window: windowChoice = 'all', anchor = null,
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
@@ -181,7 +214,8 @@ export function renderSeries(el, {
     },
   };
 
-  const axisDates = withProjection ? [...series.dates, ...projection.dates.slice(1)] : series.dates;
+  const axisDates = axisDatesOf(series, projection);
+  const zoom = seriesWindow(windowChoice, axisDates, anchor);
 
   function tooltip(params) {
     if (!params.length) {
@@ -257,10 +291,12 @@ export function renderSeries(el, {
       axisPointer: {type: 'line'},
       formatter: tooltip,
     },
-    dataZoom: axisDates.length ? [{
+    dataZoom: zoom ? [{
       type: 'slider',
       bottom: 8,
       filterMode: 'none',
+      startValue: dayTime(zoom.startValue),
+      endValue: dayTime(zoom.endValue),
       labelFormatter: (value) => fmtDate(isoDay(value)),
     }] : [],
     series: [...means, ...bands, ...points, ...projected, markSeries],
