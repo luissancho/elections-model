@@ -126,6 +126,22 @@ export function histogram(values, width) {
 }
 
 /**
+ * Whether `majority` falls inside one of the bins `[start, start + width)`, so its mark line lands on the
+ * bin holding it (a value outside, including the end of the last bin, would be clamped onto a wrong bin).
+ *
+ * @param {number[]} starts bin starts (ascending)
+ * @param {number} width bin width
+ * @param {number|null} majority seats of the absolute majority
+ * @returns {boolean} true when the mark line can be drawn
+ */
+export function majorityInRange(starts, width, majority) {
+  if (majority === null || majority === undefined || !starts.length) {
+    return false;
+  }
+  return starts[0] <= majority && majority < starts[starts.length - 1] + width;
+}
+
+/**
  * Coalition party names of a URL fragment such as `#coalition=PP,VOX`.
  *
  * @param {string} hash the fragment, with or without the leading `#`

@@ -2,7 +2,7 @@
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtInt, fmtPct} from '../format.js';
-import {binWidth, histogram} from '../seats.js';
+import {binWidth, histogram, majorityInRange} from '../seats.js';
 
 /**
  * Index of the bin holding `value`, clamped to the bins.
@@ -19,7 +19,7 @@ function binIndex(starts, width, value) {
 
 /**
  * Render the share of simulations per seat bin as bars, with a solid mark line at the median and a dashed
- * one at the majority (only when the majority is within reach of the last bin).
+ * one at the majority (only when the majority lies within the bins).
  *
  * @param {HTMLElement} el chart container
  * @param {number[]} values seats per simulation
@@ -34,7 +34,6 @@ export function renderHistogram(el, values, {
   const {starts, counts} = histogram(values, step);
   const n = values.length;
   const shares = counts.map((count) => (n ? (100 * count) / n : 0));
-  const last = starts.length ? starts[starts.length - 1] : null;
 
   const marks = [];
   if (median !== null && starts.length) {
@@ -44,7 +43,7 @@ export function renderHistogram(el, values, {
       label: {formatter: formatter(median), position: 'insideEndTop', color: THEME.markColor},
     });
   }
-  if (majority !== null && last !== null && majority <= last + step) {
+  if (majorityInRange(starts, step, majority)) {
     marks.push({
       xAxis: binIndex(starts, step, majority),
       lineStyle: {type: 'dashed', color: THEME.markColor},
