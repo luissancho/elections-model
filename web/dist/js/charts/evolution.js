@@ -10,7 +10,7 @@ const ZOOM_FROM = 20;
  * Points `[run_at, pct]` of each party in the `mode` headline of every run (runs without the party are
  * skipped).
  *
- * @param {object[]} runs `history.data.runs`
+ * @param {object[]} runs `runs` list of the history part
  * @param {string} mode `nowcast` or `forecast`
  * @param {string[]} parties party names, in legend order
  * @returns {{name: string, points: Array}[]} one entry per party
@@ -30,7 +30,7 @@ export function evolutionSeries(runs, mode, parties) {
  * Render the evolution chart of the `mode` headline across `runs`.
  *
  * @param {HTMLElement} el chart container
- * @param {object[]} runs `history.data.runs` (ascending by run)
+ * @param {object[]} runs `runs` list of the history part (ascending by run)
  * @param {string} mode `nowcast` or `forecast`
  * @param {object} opts `colors` ({name: colour}), `parties` (names), `fullnames` ({name: full name})
  * @returns {object} the ECharts instance

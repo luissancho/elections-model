@@ -6,6 +6,7 @@ import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {mapNames, mountWhenReady, readInitial, wireControls} from './common.js';
 
+/** Draw the vote and seat bars, the hemicycle and the evolution from the embedded data. */
 function paint() {
   const initial = readInitial();
   const {meta, headline, vote, summary, runs} = initial;

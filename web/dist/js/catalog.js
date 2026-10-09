@@ -1,4 +1,4 @@
-// Party catalogue built from `meta.data`.
+// Party catalogue built from the data of the meta part.
 
 export const OTHERS_COLOR = '#9e9e9e';
 export const BLOCK_ORDER = ['Izquierda', 'Separatista', 'Regionalista', 'Derecha'];

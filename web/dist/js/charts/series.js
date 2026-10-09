@@ -91,7 +91,7 @@ export function bandSeries(name, times, lo, hi, {color = OTHERS_COLOR, opacity =
 /**
  * Poll points of one party: `[date, value, pollster]` for the polls with a value for it.
  *
- * @param {object[]} polls `polls.data.polls`
+ * @param {object[]} polls `polls` list of the polls part (`polls.polls`)
  * @param {string} name party name (column of the poll records)
  * @returns {Array} the points, with ISO dates
  */
@@ -104,7 +104,7 @@ export function pollPoints(polls, name) {
 /**
  * Polls grouped by ISO date, in input order.
  *
- * @param {object[]} polls `polls.data.polls`
+ * @param {object[]} polls `polls` list of the polls part (`polls.polls`)
  * @returns {Map<string, object[]>} date → poll records
  */
 export function pollsByDate(polls) {

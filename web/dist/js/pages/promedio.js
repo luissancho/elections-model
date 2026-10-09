@@ -3,6 +3,7 @@ import {Catalog} from '../catalog.js';
 import {renderSeries} from '../charts/series.js';
 import {mapNames, mountWhenReady, readInitial, wireControls} from './common.js';
 
+/** Draw the series chart from the embedded data. */
 function paint() {
   const {meta, series, polls, projection, vote} = readInitial();
 

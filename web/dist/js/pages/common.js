@@ -33,11 +33,31 @@ export function wireControls() {
     } else if (!target.matches('input[name=mode]')) {
       return;
     }
-    form.requestSubmit();
+    if (form.requestSubmit) {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  });
+  // A page restored from the back/forward cache must show the controls of the page it belongs to.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      form.reset();
+      const run = form.querySelector('input[name=run]');
+      if (run) {
+        run.disabled = false;
+      }
+    }
   });
 }
 
-/** `{name: value}` for every name, from a catalogue method. */
+/**
+ * `{name: value}` for every name, from a catalogue method.
+ *
+ * @param {string[]} names party names
+ * @param {Function} fn maps a name to its value
+ * @returns {object} values keyed by name
+ */
 export function mapNames(names, fn) {
   return Object.fromEntries(names.map((name) => [name, fn(name)]));
 }
@@ -54,8 +74,8 @@ export function showError(message) {
 }
 
 /**
- * Run `fn` once ECharts is available: now if it is loaded, otherwise on the window `load` event (the
- * vendor script is `defer`red). Exceptions go to the console and the status line.
+ * Run `fn` once ECharts is available: now if it is loaded, otherwise on the window `load` event, which
+ * can only report the missing library (`charts/base.js` captures `window.echarts` when it is evaluated). Exceptions go to the console and the status line.
  *
  * @param {Function} fn draws the page
  * @param {string} message text shown if `fn` throws

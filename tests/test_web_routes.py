@@ -91,7 +91,8 @@ def test_referenced_assets_exist():
                 missing.append((os.path.basename(path), ref))
         if "{% extends 'base.html' %}" in text or os.path.dirname(path) == WEB:
             assert 'type="module"' in text and '<script' in text  # cada página carga su módulo
-        assert 'onclick=' not in text and '<script>' not in text  # CSP: sin inline
+        assert 'onclick=' not in text  # CSP: sin inline
+        assert re.findall(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>', text) == []
     assert missing == []
 
 

@@ -29,6 +29,7 @@ header h1 a { color: inherit; text-decoration: none; }
 nav a { margin-right: 16px; color: var(--color-accent); text-decoration: none; }
 nav a[aria-current="page"] { font-weight: 600; border-bottom: 2px solid var(--color-accent); }
 .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 8px 0; }
+.controls.js .nojs-only { display: none; }
 fieldset { border: 0; margin: 0; padding: 0; display: flex; gap: 12px; align-items: center; }
 legend { float: left; padding: 0; margin-right: 8px; }
 
@@ -79,4 +80,3 @@ caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--co
 @media (max-width: 719px) {
   .chart.chart-tall { height: 360px; }
 }
-.controls.js .nojs-only { display: none; }

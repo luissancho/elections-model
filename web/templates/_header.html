@@ -5,7 +5,7 @@
     <a href="{{ page.href }}{{ query }}"{% if page.active %} aria-current="page"{% endif %}>{{ page.label }}</a>
     {% endfor %}
   </nav>
-  <form id="controls" class="controls" method="get" action="">
+  <form id="controls" class="controls" method="get" action="" autocomplete="off">
     <label>Ámbito <select name="scope" id="scope">
       {% for s in scopes %}
       <option value="{{ s.code }}"{% if s.code == state.scope %} selected{% endif %}>{{ s.name }}</option>
