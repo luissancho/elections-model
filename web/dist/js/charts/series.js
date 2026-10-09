@@ -7,7 +7,6 @@ const DAY_MS = 24 * 3600 * 1000;
 const WINDOW_DAYS = 180;
 const BAND_OPACITY = 0.15;
 const PROJECTION_OPACITY = 0.1;
-const MARK_COLOR = '#555';
 
 /**
  * Timestamp of local midnight of an ISO date (`YYYY-MM-DD` parsed as UTC would shift a day west of UTC).
@@ -120,7 +119,7 @@ export function pollsByDate(polls) {
 
 /** Vertical mark line at `time` with a label at the top. */
 function markAt(time, label) {
-  return {xAxis: time, label: {formatter: label, position: 'end', color: MARK_COLOR}};
+  return {xAxis: time, label: {formatter: label, position: 'end', color: THEME.markColor}};
 }
 
 /**
@@ -199,7 +198,7 @@ export function renderSeries(el, {
     markLine: {
       silent: true,
       symbol: 'none',
-      lineStyle: {type: 'dashed', color: MARK_COLOR},
+      lineStyle: {type: 'dashed', color: THEME.markColor},
       data: marks,
     },
   };

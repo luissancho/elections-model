@@ -41,17 +41,17 @@
       <div class="grid">
         <section class="card">
           <h2>Voto <span class="mode-subtitle">{{ subtitle }}</span></h2>
-          <div class="chart" id="vote-chart"></div>
+          <div class="chart" id="vote-chart" role="img" aria-label="Voto previsto por partido, con el intervalo del 95 %"></div>
         </section>
         <section class="card">
           <h2>Escaños <span class="mode-subtitle">{{ subtitle }}</span></h2>
-          <div class="chart" id="seats-chart"></div>
+          <div class="chart" id="seats-chart" role="img" aria-label="Escaños previstos por partido, con el intervalo del 95 %"></div>
         </section>
       </div>
       <div class="grid">
         <section class="card">
           <h2>Hemiciclo <span class="mode-subtitle">{{ subtitle }}</span></h2>
-          <div class="chart" id="hemicycle"></div>
+          <div class="chart" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
         </section>
         <section class="card">
           <h2>Mayoría absoluta <span class="mode-subtitle">{{ subtitle }}</span></h2>
@@ -68,7 +68,7 @@
       </div>
       <section class="card">
         <h2>Evolución <span class="evolution-subtitle">· {{ 'estimación' if state.mode == 'nowcast' else 'pronóstico' }} de cada publicación</span></h2>
-        <div class="chart" id="evolution"></div>
+        <div class="chart" id="evolution" role="img" aria-label="Evolución de la estimación de cada publicación"></div>
       </section>
     </div>
 {% endblock %}

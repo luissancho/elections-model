@@ -6,8 +6,8 @@
 {% block content %}
     <div id="content" class="stack">
       <section class="card" id="series">
-        <h2>Promedio de sondeos y proyección <span class="muted">{{ series_subtitle }}</span></h2>
-        <div class="chart chart-tall" id="series-chart"></div>
+        <h2>{{ series_title }} <span class="muted">{{ series_subtitle }}</span></h2>
+        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre y la proyección"></div>
         <p class="about">
           Cada punto es un sondeo publicado; la línea es el promedio ponderado del modelo y la banda, su
           intervalo de confianza. En el modo Elección, la línea discontinua proyecta el voto desde la
@@ -18,7 +18,7 @@
         <h2>Sondeos del ciclo</h2>
         <div class="table-wrap" id="polls-table">
           <table>
-            <caption>Últimos {{ table_rows|length }} de {{ n_polls|int }} sondeos · <a href="{{ csv_href }}">Descargar CSV</a></caption>
+            <caption>{% if n_polls > table_rows|length %}Últimos {{ table_rows|length }} de {{ n_polls|int }} sondeos{% else %}Todos los sondeos del ciclo ({{ n_polls|int }}){% endif %} · <a href="{{ csv_href }}">Descargar CSV</a></caption>
             <thead>
               <tr>
                 <th scope="col">Fecha</th>

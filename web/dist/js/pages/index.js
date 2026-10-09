@@ -27,7 +27,7 @@ function paint() {
 
   const voteRows = [...vote.rows].sort((a, b) => b.pct - a.pct);
   renderBars(document.getElementById('vote-chart'), voteRows, {
-    value: 'pct', lo: 'lo', hi: 'hi', colors, fullnames, formatter: (x) => fmtPct(x),
+    value: 'pct', lo: 'lo', hi: 'hi', colors, fullnames, formatter: (x) => fmtPct(x), axisFormatter: (x) => fmtPct(x, 0),
   });
 
   const seatRows = summary.parties

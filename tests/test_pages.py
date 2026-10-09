@@ -238,3 +238,18 @@ def test_table_rows_tolerate_a_poll_without_date():
     polls = [{'date': '2026-10-01', 'pollster': 'CIS', 'PP': 40.0}, {'pollster': 'GAD3', 'PP': 41.0}]
     rows = pages.table_rows(polls, ['PP'])
     assert rows[0][0] == '1 oct 2026' and rows[1][0] == '–' and rows[1][1] == 'GAD3'
+
+
+def test_promedio_title_mentions_the_projection_only_in_forecast(api):
+    assert 'Promedio de sondeos y proyección' in html(call(api, '/promedio', query='mode=forecast')[2])
+    page = html(call(api, '/promedio', query='mode=nowcast')[2])
+    assert 'Promedio de sondeos' in page and 'y proyección' not in page
+
+
+def test_promedio_caption_counts_the_polls(api, fresh_app):
+    """The fixture has 1 poll of 120 used; with n_polls == shown polls the caption changes."""
+    assert 'Últimos 1 de 120 sondeos' in html(call(api, '/promedio')[2])
+    meta = fixture_data('meta') | {'n_polls': 1}
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    webapi.site().files.clear()  # the first request cached the run files
+    assert 'Todos los sondeos del ciclo (1)' in html(call(api, '/promedio')[2])

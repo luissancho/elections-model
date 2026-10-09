@@ -6,6 +6,8 @@ export const THEME = {
   fontFamily: 'system-ui, sans-serif',
   textColor: '#333',
   gridColor: '#e5e5e5',
+  intervalColor: '#333',
+  markColor: '#555',
   animationDuration: 300,
 };
 

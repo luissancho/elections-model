@@ -786,7 +786,7 @@ def promedio_context(state: dict, active: str = '/promedio') -> dict:
     dict
         The common context plus ``table_parties`` (the main-bloc parties present in the
         series, or all of them), ``table_rows`` (``table_rows``), ``n_polls``, ``csv_href``,
-        ``series_subtitle`` and ``initial`` (``state``, ``meta``, ``series``, ``polls``,
+        ``series_subtitle``, ``series_title`` and ``initial`` (``state``, ``meta``, ``series``, ``polls``,
         ``projection`` and ``vote``, the data the chart is drawn from).
 
     Raises
@@ -814,6 +814,7 @@ def promedio_context(state: dict, active: str = '/promedio') -> dict:
     context['n_polls'] = meta.get('n_polls')
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['series_subtitle'] = subtitle
+    context['series_title'] = 'Promedio de sondeos' if mode == 'nowcast' else 'Promedio de sondeos y proyección'
     context['initial'] = {
         'state': full,
         'meta': meta,

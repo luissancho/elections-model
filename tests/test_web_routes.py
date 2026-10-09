@@ -111,3 +111,11 @@ def test_vendor_is_pinned_and_licensed():
     assert os.path.getsize(os.path.join(DIST, 'vendor', 'echarts-5.6.0.min.js')) > 900_000
     with open(os.path.join(DIST, 'vendor', 'LICENSE-echarts.txt'), encoding='utf-8') as fh:
         assert 'Apache License' in fh.read(400)
+
+
+def test_chart_containers_have_aria_labels():
+    for path in html_files():
+        with open(path, encoding='utf-8') as fh:
+            text = fh.read()
+        for tag in re.findall(r'<div[^>]*class="chart[^"]*"[^>]*>', text):
+            assert 'aria-label="' in tag and 'role="img"' in tag, (os.path.basename(path), tag)

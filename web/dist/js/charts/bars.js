@@ -2,8 +2,6 @@
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 
-const INTERVAL_COLOR = '#333';
-
 /**
  * Round `x` up to a readable axis limit: a multiple of a fifth of its power of ten.
  *
@@ -43,11 +41,11 @@ export function barRows(rows, {value, lo, hi}) {
  * @param {HTMLElement} el chart container
  * @param {object[]} rows rows with a `name` and the value/interval fields
  * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}),
- *   `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `majority` (vertical mark)
+ *   `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter` (axis ticks, default `formatter`), `majority` (vertical mark)
  * @returns {object} the ECharts instance
  */
 export function renderBars(el, rows, {
-  value = 'pct', lo = 'lo', hi = 'hi', colors = {}, fullnames = {}, formatter = String, majority = null,
+  value = 'pct', lo = 'lo', hi = 'hi', colors = {}, fullnames = {}, formatter = String, axisFormatter = formatter, majority = null,
 } = {}) {
   const data = barRows(rows, {value, lo, hi});
   const top = Math.max(0, ...data.map((row) => Math.max(row.value ?? 0, row.hi ?? 0)), majority ?? 0);
@@ -79,7 +77,7 @@ export function renderBars(el, rows, {
       const val = api.value(3);
       const children = [];
       let labelAt = Number.isFinite(val) ? val : 0;
-      const style = {stroke: INTERVAL_COLOR, lineWidth: 1.5};
+      const style = {stroke: THEME.intervalColor, lineWidth: 1.5};
       if (Number.isFinite(low) && Number.isFinite(high)) {
         const start = api.coord([low, index]);
         const end = api.coord([high, index]);
@@ -118,7 +116,7 @@ export function renderBars(el, rows, {
       min: 0,
       max: niceMax(top * 1.15),
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (x) => formatter(x)},
+      axisLabel: {formatter: (x) => axisFormatter(x)},
     },
     yAxis: {
       type: 'category',
