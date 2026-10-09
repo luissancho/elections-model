@@ -688,7 +688,8 @@ Pendiente de Luis:
   solo run, que `.grid > * { min-width: 0 }` (ya añadido) baste para que los gráficos encojan, tooltip de días con
   varios sondeos, la leyenda ocultando a la vez banda, puntos y proyección, el interruptor "Hoy"/"Elección"
   y el enlace CSV con `?run=`.
-- Primera publicación de `es` a S3 para que producción tenga datos; desplegar la imagen con
+- Primera publicación de `es` a S3 para que producción tenga datos (enmienda 2026-10-09: hecha por Luis el
+  2026-10-08, run `20261008-202843`); desplegar la imagen con
   `--env-file deploy/elections.env`; proxy y TLS delante del 8042.
 - Decidir el modo por defecto, la agrupación de partidos (fase 3) y `BLOCK_ORDER`.
 
@@ -702,3 +703,90 @@ fase 3) ya se apoya en ese patrón. Quedan superadas decisiones de la lista nume
 la 7 (ECharts está ahora en `web/dist/vendor/echarts-5.6.0.min.js`, con `location ^~ /dist/vendor/`),
 la 9 (`tests/test_web_routes.py` acepta los enlaces de página de `pages.ROUTES` o `/`, y las plantillas
 viven en `web/templates/`) y la 10 (`?api=` desaparece con `api.js`: las páginas ya no hacen `fetch`).
+
+## Estado al cierre de la fase 3 (2026-10-09)
+
+Hecho en `dev` (plan en `docs/superpowers/plans/2026-10-09-web-fase-3-escanos.md`, código en `4fb2811..a0a2805`,
+6 commits de código y este de documentación), con 348 tests unitarios en verde (`python -m pytest -m "not integration"
+-q`: 323 del rediseño y 25 nuevos) y los 5 de integración sin cambios:
+
+- `mtpy/controllers/Escanos.py` (`Page`, `index_action` con `?region=`) y `web/templates/escanos.html`.
+- `mtpy/lib/pages.py`: `chart_polls`, `seat_rows`, `block_rows`, `default_coalition`, `csv_links`,
+  `escanos_context`, `resolve_region`, `district_table`, `region_rows`, entradas en `PAGES`/`ROUTES` y el menú
+  "Escaños"; `table_rows` tolerante a sondeos sin fecha; `resolve_scope` con 503 sin ámbito del catálogo
+  publicado.
+- `mtpy/lib/webapi.py` (`check_region`, `settings()` con aviso si el TTL es basura) y
+  `mtpy/controllers/Forecast.py` (`serve`).
+- `web/dist/js/`: `seats.js` (matemática pura con la regla de `Stat.quantile`), `charts/{histogram,stacked,fan}.js`,
+  `pages/escanos.js`, y cambios en `charts/{base,bars,evolution,series}.js`, `catalog.js` (`orderBlocks`) y
+  `pages/common.js` (`wireForm`); colores en `THEME`; `role="img"` y `aria-label` en todos los gráficos.
+- Pruebas: `tests/test_pages.py`, `tests/test_webapi_unit.py`, `tests/test_web_routes.py` (quita `&amp;…` de los
+  `href` de plantilla) y `tests/test_js_seats.py` (paridad con `node`, se omite sin `node`).
+- Scripts y documentación: `/escanos` en `deploy/check-api.sh` y `deploy/smoke.sh`, `deploy/README.md`,
+  `docs/web/contrato.md`.
+
+Decisiones de diseño (D1-D8 del plan):
+
+1. D1. Una página nueva, `/escanos`, en el menú como "Escaños" (Portada · Promedio · Escaños), con el mismo
+   estado `scope`/`mode`/`run` y los mismos controles de cabecera.
+2. D2. Secciones: escaños por partido (tabla e histogramas de `dist`), bloques (tablas de `summary.blocks` y
+   `summary.vs` y barra apilada), calculadora de coaliciones, circunscripciones (tabla con el escenario
+   central y detalle), abanico de voto por horizonte, evolución de los escaños y descargas CSV.
+3. D3. Calculadora solo en JavaScript; la selección vive en el fragmento `#coalition=PP,VOX`
+   (`history.replaceState`), sin crear entradas en la caché de nginx; por defecto, los partidos del primer
+   bloque de `summary.vs`; sin JS, casillas y una nota en `<noscript>`. Los cuantiles siguen la regla de
+   `Stat.quantile`.
+4. D4. `region` es un parámetro de query propio de `/escanos` (fuera de `parse_state` y de los enlaces del menú):
+   entero de `districts.regions`; mal formado 400, desconocido 404, ausente la circunscripción con más
+   escaños. Un ámbito sin circunscripciones no muestra la sección y `?region=` da 404.
+5. D5. `initial-data` de `/escanos` = `{state, meta, summary, dist, fan, runs}`; `districts` y `scenario` solo
+   se renderizan en HTML.
+6. D6. Evolución de escaños reutilizando `charts/evolution.js` con campo (`pct` en la portada, `seats` aquí).
+7. D7. Fuera de alcance: selector `group`, ocultación de vistas durante la veda (fase 6), `Page.dispatch`
+   duplicado y `HEAD`, publicar `scopes: "all"` contra la RDS (Luis), el formulario sin JS con run fijado y
+   cambio de ámbito que acaba en 404, el `<select>` que envía con las flechas y `X-Forwarded-For` repetido.
+8. D8. Flecos incluidos: recorte del `polls` embebido en `/promedio`, `resolve_scope` sin la vuelta al orden
+   del manifest, `table_rows` sin fecha, `cache_ttl` con basura, `Forecast.serve`, colores en `THEME`,
+   decimales de los ticks, título "y proyección" solo en `forecast`, `caption` y `aria-label`.
+
+Resoluciones tomadas durante la ejecución:
+
+- Los `bmaps` de los fixtures tenían una forma distinta del contrato y se alinearon (tarea 3); las filas de
+  bloque de `summary.json` pasan a `Derecha`.
+- `tests/test_web_routes.py` quita `&amp;…` de los `href` de plantilla para que los enlaces de fila con
+  `&region=` se resuelvan como páginas (tarea 4).
+- `fan.js` sigue la clave del contrato, `name`; el run LOCAL `20261008-181100`, cuyo `fan.json` es anterior al
+  cambio de `party` a `name`, muestra el abanico vacío hasta que se republique en local (tarea 5).
+- La línea discontinua de mayoría del histograma se dibuja solo si `starts[0] <= majority < lastStart + width`,
+  porque los intervalos son semiabiertos (tarea 5).
+- En el test de paridad del plan, el literal `'min': 193.0` era un error aritmético y se corrigió a `194.0`
+  (tarea 5).
+
+Verificado en la sesión: suite unitaria, `bash deploy/nginx-check.sh`, y `bash deploy/check-api.sh` contra un
+nginx 1.29.5 local en el 8043 delante de uvicorn (ver el informe de la tarea 6 en
+`.superpowers/sdd/2026-10-09-web-fase-3-escanos/task-6-report.md`).
+
+Menores aplazados: `settings()` acepta `'nan'`/`'inf'`/`cache_ttl` negativo; `chart_polls` omite la clave de un
+partido ausente de un sondeo (el JS lo tolera); el `caption` compara `n_polls` sin protegerse de `None` (el
+esquema lo hace entero obligatorio); líneas de más de 100 caracteres en `pages.py`/`bars.js`; el `aria-label`
+del gráfico del promedio menciona la proyección también en `nowcast`; la regex del test de `aria` es de una
+sola línea; la regla del `subtitle` está duplicada entre `escanos_context` e `index.html`; el pie de la
+tabla `vs` fija "Derecha frente a izquierda"; ningún test comprueba los colores de bloque en `#vs-table`;
+`pages.py` ronda las 1000 líneas (un módulo por página más adelante); los textos de sección de `/escanos`
+(títulos, `p.about`, pies) los redactó el implementador y Luis puede cambiarlos; ningún test fija la celda "–"
+de una circunscripción ausente de `scenario.rows`; el intervalo de voto de una circunscripción muestra "– %"
+si un extremo es nulo; `update()` al cargar sobrescribe un fragmento entrante como `#districts`; el envío GET
+del formulario de circunscripción descarta el fragmento de coalición y recarga arriba; el bloque de la línea
+de marca sobre una serie vacía se repite en `series.js`/`fan.js`/`stacked.js`; la leyenda del abanico sigue el
+orden de filas de `fan.json`; las etiquetas de mediana y mayoría pueden solaparse en los histogramas de 160 px.
+
+Pendiente de Luis:
+
+- Recorrer `/escanos` en escritorio y móvil: histogramas pequeños legibles, barra apilada con etiquetas,
+  calculadora (marcar y desmarcar, enlace con `#coalition=` compartido), formulario de circunscripción con y
+  sin JS, abanico con la leyenda, evolución con un solo run.
+- Publicar `scopes: "all"` contra la RDS y revisar cada ámbito en las tres páginas (los nombres de bloque
+  distintos de `BLOCK_ORDER` quedan al final del hemiciclo y de la barra apilada).
+- Decidir la política de veda (qué se oculta con `manifest.freeze.active`) antes del 2026-11-24 (fase 6) y si
+  se añade el selector de agrupación `group`.
+- Desplegar la imagen (la primera publicación a S3 y el pin de `jinja2` ya están resueltos).

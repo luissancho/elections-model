@@ -37,7 +37,7 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
   `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
-  (exceso: 429). Las páginas (`/`, `/promedio`) pasan por el mismo bloque que la API: también se
+  (exceso: 429). Las páginas (`/`, `/promedio`, `/escanos`) pasan por el mismo bloque que la API: también se
   cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
   (URI completa con la query string). Se probó una clave propia sobre `run`/`format` y se descartó: nginx
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
@@ -45,8 +45,8 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   `inactive=10m` y `limit_req`.
 - `/healthz` → `200 ok`, sin pasar por Python.
 
-`nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`) y
-`Promedio` (`/promedio`), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
+`nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`),
+`Promedio` (`/promedio`) y `Escanos` (`/escanos`, con `?region=`), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
 Jinja2 de `web/templates/`, con los datos del paquete embebidos en la página (`initial-data`); el JS de
 `web/dist/js/pages/` solo dibuja los gráficos. Una ruta desconocida fuera de `/api/` da un 404 HTML de
 Python (dentro de `/api/`, el 404 JSON de la API).
@@ -81,9 +81,10 @@ curl -s http://127.0.0.1:8042/healthz
 bash deploy/check-api.sh http://127.0.0.1:8042
 ```
 
-y abrir `http://127.0.0.1:8042/` y `http://127.0.0.1:8042/promedio`. `check-api.sh` decide una vez si hay
+y abrir `http://127.0.0.1:8042/`, `/promedio` y `/escanos` (enmienda 2026-10-09, fase 3). `check-api.sh` decide una vez si hay
 nginx a partir de `/healthz` (solo existe en nginx; sin nginx lo marca `n/a`) y comprueba `/` (200 HTML),
-`/promedio?scope=es&mode=nowcast` (200 HTML), `/nope` (404 HTML), con nginx también
+`/promedio?scope=es&mode=nowcast` (200 HTML), `/escanos?scope=es&mode=forecast` (200 HTML),
+`/escanos?region=abc` (400 HTML), `/nope` (404 HTML), con nginx también
 `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y `/dist/css/site.css` (`text/css`), y 10
 rutas de la API (código, tipo y JSON válido); sale con error si alguna falla.
 
@@ -94,10 +95,13 @@ rutas de la API (código, tipo y JSON válido); sale con error si alguna falla.
 2. Plantilla en `web/templates/` que extienda `base.html`.
 3. Entrada en `pages.ROUTES` (ruta, controlador, acción, métodos) y en `pages.PAGES` (menú), en
    `mtpy/lib/pages.py`. `/` es el valor por defecto del router (controlador `index`), por eso solo
-   `/promedio` figura en `ROUTES`; toda página nueva necesita su entrada.
+   `/promedio` y `/escanos` figuran en `ROUTES`; toda página nueva necesita su entrada.
 4. El constructor del contexto de la página, también en `pages.py` (junto a `index_context` y
    `promedio_context`).
 5. Un test en `tests/test_pages.py`.
+6. Un parámetro propio de la página (como `region` en `/escanos`) se valida en `webapi` (`check_region`) y se
+   lee en el `index_action`, fuera de `parse_state`: así no entra en los enlaces del menú ni en el estado
+   común `scope`/`mode`/`run`.
 
 Si la página dibuja gráficos, el módulo `web/dist/js/pages/<nombre>.js` lee `initial-data` con
 `readInitial` y no hace `fetch`.
@@ -149,8 +153,12 @@ delante de uvicorn en el 8000: `/` primero `MISS` y luego `HIT`, cabeceras como 
 `check-api.sh` todo OK. La prueba de humo con Docker está sin ejecutar.
 
 Pendiente de Luis: ejecutar `bash deploy/smoke.sh` con Docker (paquete local y `deploy/elections.env`);
-añadir las `location` de `/dist/` y el proxy a su nginx local y recorrer `/` y `/promedio` con y sin JS
-(el botón "Ver" debe funcionar sin JS); primera publicación a S3 y despliegue.
+añadir las `location` de `/dist/` y el proxy a su nginx local y recorrer `/`, `/promedio` y `/escanos` con y sin JS
+(el botón "Ver" debe funcionar sin JS); desplegar la imagen.
+
+Enmienda 2026-10-09: la primera publicación a S3 ya está hecha (Luis, 2026-10-08, run `20261008-202843`) y
+`jinja2` está en 3.1.6 desde `68522d2`; ya no son pendientes. Fase 3: `check-api.sh` y `smoke.sh` comprueban
+`/escanos`; ver el estado al cierre de la fase 3 en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`.
 
 ## Comprobar S3
 

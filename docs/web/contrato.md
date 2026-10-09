@@ -238,9 +238,11 @@ Inmutable es `public, max-age=31536000, immutable`: solo cuando el run se pide d
 respuesta caduca a los 60 s (`web.cache_ttl`). Las rutas fijas (`health`, `manifest`, `scopes`, `runs`) se
 registran antes que las genéricas.
 
-Las rutas de páginas (`/` y `/promedio`) no forman parte del contrato de la API: las renderizan los
-controladores de `mtpy/controllers/` (`Index`, `Promedio`) con plantillas Jinja2, y el contrato solo
-cubre `/api/v1`. Una ruta desconocida fuera de `/api/` devuelve un 404 en HTML; dentro de `/api/`, el 404
+Las rutas de páginas (`/`, `/promedio` y `/escanos`) no forman parte del contrato de la API: las
+renderizan los controladores de `mtpy/controllers/` (`Index`, `Promedio`, `Escanos`) con plantillas Jinja2,
+y el contrato solo cubre `/api/v1`. `/escanos` acepta además `region` (solo de la página, no de la API): un
+entero de `districts.regions`; mal formado da 400 y desconocido 404 en HTML. El fragmento `#coalition=PP,VOX`
+de la calculadora es solo del navegador: no llega al servidor ni crea entradas en la caché. Una ruta desconocida fuera de `/api/` devuelve un 404 en HTML; dentro de `/api/`, el 404
 JSON de la API. Los recursos de `/dist/` los sirve nginx.
 
 Las páginas del sitio las resuelve el controlador en cada petición: toma `?run=` de la URL o, si no

@@ -71,6 +71,8 @@ check_nginx_only() {
 
 check / 200 html
 check "/promedio?scope=es&mode=nowcast" 200 html
+check "/escanos?scope=es&mode=forecast" 200 html
+check "/escanos?region=abc" 400 html
 check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
 check_nginx_only /dist/css/site.css text/css

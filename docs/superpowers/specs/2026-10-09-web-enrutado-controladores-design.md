@@ -217,8 +217,9 @@ Pendiente de Luis:
 - Recorrer `/` y `/promedio` en el navegador con y sin JS: el botón "Ver" debe funcionar sin JS; con JS,
   el cambio de ámbito o de modo recarga la página.
 - Añadir las dos `location` de `/dist/` y el proxy a su nginx local (ver `deploy/README.md`).
-- Primera publicación a S3 y despliegue.
-- Decidir si se sube `jinja2` de 3.1.2 a 3.1.6.
+- Primera publicación a S3 y despliegue. (Enmienda 2026-10-09, fase 3: la publicación la hizo Luis el
+  2026-10-08, run `20261008-202843`; queda el despliegue.)
+- Decidir si se sube `jinja2` de 3.1.2 a 3.1.6. (Enmienda 2026-10-09: resuelto, 3.1.6 desde `68522d2`.)
 - Accesibilidad: el envío al cambiar del `<select>` se dispara con cada flecha del teclado en
   Chrome y Firefox (WCAG 3.2.2); la spec lo exige, revisar si molesta.
 

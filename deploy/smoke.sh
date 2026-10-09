@@ -63,6 +63,7 @@ check_static() {
 }
 check_static / text/html
 check_static /promedio text/html
+check_static /escanos text/html
 check_static /dist/vendor/echarts-5.6.0.min.js application/javascript
 # (A una variable: con pipefail, `grep -q` cortaria la tuberia de curl.)
 home="$(curl -s --max-time 20 "$base/")"
