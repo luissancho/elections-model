@@ -222,3 +222,25 @@ def test_backfill_range_errors_fail_before_touching_the_bundle(fresh_app, tmp_pa
     with pytest.raises(ValueError, match='publish: backfill'):
         Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-07', 'to': '2026-10-05'})
     assert patched == [] and not (tmp_path / 'site').exists()
+
+
+def test_backfill_respects_a_pointed_run(fresh_app, tmp_path, patched, monkeypatch):
+    """Un relleno no deshace un `point` hacia atrás; una publicación normal posterior sí mueve `latest`."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    run_a, run_b, run_c = '20261008-100000', '20261008-110000', '20261008-120000'
+    for rid in (run_a, run_b):
+        monkeypatch.setattr(bundle, 'run_id', lambda now=None, rid=rid: rid)
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_b
+    Publish().run(what=['point'], scopes=['es'], fs=fs, run=run_a)
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    assert [r['status'] for r in result['es']] == ['published', 'published']
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_a
+    history = writer.read_json(bundle.path_history('es'))['data']['runs']
+    assert [r['run_id'] for r in history] == ['20261005-120000', '20261006-120000', run_a, run_b]
+    monkeypatch.setattr(bundle, 'run_id', lambda now=None: run_c)
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_c

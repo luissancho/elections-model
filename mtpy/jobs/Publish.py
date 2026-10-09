@@ -21,8 +21,9 @@ class Publish(Job):
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
     its noon, and ``backfill`` set in its headline. A day whose run already exists is
-    ``skipped``. The manifest always points to the newest run of the rebuilt history, so a
-    backfill never moves ``latest`` back.
+    ``skipped``. A backfill only moves the manifest ``latest`` forward (to its newest run,
+    when that is newer than the current one), so it never moves ``latest`` back nor undoes a
+    ``point``.
 
     Examples
     --------
@@ -211,24 +212,61 @@ class Publish(Job):
         -------
         tuple
             ``(outcomes, entry)``: the result of each run of ``plan`` (with its ``day`` when
-            there is one) and the manifest entry of the newest run of the rebuilt history,
-            ``None`` when nothing was published or this is a dry run. If rebuilding the history
-            fails, every ``published`` result turns ``failed``.
+            there is one) and the new manifest entry of the scope (see ``_manifest_entry``),
+            ``None`` when the manifest must not change for the scope, nothing was published or
+            this is a dry run. If rebuilding the history or reading the manifest fails, every
+            ``published`` result turns ``failed``.
         """
         outcomes = [self._forecast_scope(scope, writer, rid, event_date, today, force,
                                          skip_existing=day is not None, **params, **extra)
                     for day, rid, extra in plan]
         entry = None
-        if any(result['status'] == 'published' for result in outcomes) and not dry_run:
+        published = [result for result in outcomes if result['status'] == 'published']
+        if published and not dry_run:
             try:
-                history = publish.rebuild_history(writer, scope)
-                entry = publish.latest_entry(history['runs'][-1])
+                publish.rebuild_history(writer, scope)
+                entry = self._manifest_entry(writer, scope, published, backfill=plan[0][0] is not None)
             except Exception as e:
                 self._log_error(scope)
                 failed = {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
                 outcomes = [failed if result['status'] == 'published' else result for result in outcomes]
         days = [day for day, _, _ in plan]
         return [result if day is None else {'day': day, **result} for day, result in zip(days, outcomes)], entry
+
+    @staticmethod
+    def _manifest_entry(writer, scope, published, backfill):
+        """
+        Choose the manifest entry of a scope after publishing some runs.
+
+        A normal publish always points to the run just produced. A backfill only moves the
+        pointer forward: its newest run becomes ``latest`` when the scope has no entry yet
+        or the run id is greater than the current ``latest``; otherwise the manifest keeps
+        its entry, so neither a newer run nor a run that ``point`` stepped back from is
+        promoted by a backfill.
+
+        Parameters
+        ----------
+        writer : BundleWriter
+            Bundle writer, to read the current manifest.
+        scope : str
+            Scope published.
+        published : list of dict
+            ``published`` results of this invocation, in plan order (ascending days).
+        backfill : bool
+            Whether the runs are retrospective.
+
+        Returns
+        -------
+        dict or None
+            The new entry, or ``None`` to leave the scope of the manifest untouched.
+        """
+        newest = max(published, key=lambda result: result['run_id'])
+        if not backfill:
+            return newest['entry']
+        current = (publish.read_manifest(writer)['scopes'].get(scope) or {}).get('latest')
+        if current is None or newest['run_id'] > current:
+            return newest['entry']
+        return None
 
     def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, **params):
         """
