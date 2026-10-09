@@ -190,7 +190,7 @@ Ficheros:
 - `deploy/docker/nginx.conf`, `nginx-check.sh`, `check-api.sh`, `smoke.sh`, `deploy/README.md`.
 
 Pruebas: 320 unitarias en verde (`python -m pytest -m "not integration" -q`; 72 de integración sin
-ejecutar): `tests/test_pages.py` 17, `tests/test_api_asgi.py` 31, `tests/test_web_routes.py` 4. Verificado
+ejecutar): `tests/test_pages.py` 18, `tests/test_api_asgi.py` 31, `tests/test_web_routes.py` 4. Verificado
 el 2026-10-09 con el nginx 1.29.5 local (puerto 8043) delante de uvicorn (8000): `/` primero `MISS` y
 luego `HIT`, cabeceras como las esperadas, `check-api.sh` todo OK. El smoke con Docker no se ha
 ejecutado (Docker apagado).

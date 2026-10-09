@@ -93,7 +93,8 @@ rutas de la API (código, tipo y JSON válido); sale con error si alguna falla.
    un `index_action` que llame a `render(plantilla, **contexto)`; ver `Promedio.py`.
 2. Plantilla en `web/templates/` que extienda `base.html`.
 3. Entrada en `pages.ROUTES` (ruta, controlador, acción, métodos) y en `pages.PAGES` (menú), en
-   `mtpy/lib/pages.py`.
+   `mtpy/lib/pages.py`. `/` es el valor por defecto del router (controlador `index`), por eso solo
+   `/promedio` figura en `ROUTES`; toda página nueva necesita su entrada.
 4. El constructor del contexto de la página, también en `pages.py` (junto a `index_context` y
    `promedio_context`).
 5. Un test en `tests/test_pages.py`.
@@ -116,7 +117,8 @@ location / {
 }
 ```
 
-y arrancar la aplicación:
+El `location /` envía a Python todo lo que llegue a ese `server`: hay que ponerlo en un `server` (o puerto)
+que no sirva nada más, porque sustituye a cualquier `/` existente. Después, arrancar la aplicación:
 
 ```
 S3_BUCKET= python -m uvicorn api:api --port 8000

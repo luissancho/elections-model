@@ -55,6 +55,9 @@ propia); objetivo científico y divulgativo; los cambios de esquema en la base l
   worker importa la pila científica completa.
 - **nginx** (`deploy/docker/nginx.conf`): sin `root`; `try_files $uri @proxy_to_app` → proxy puro a
   gunicorn :8000; gzip solo HTML. Puerto 8042.
+  (enmienda 2026-10-09: nginx sin `root` ni `try_files`; `location ^~ /dist/` y `^~ /dist/vendor/` con
+  `alias` sirven los recursos y `location /` proxya páginas y API a gunicorn; ver
+  `docs/superpowers/specs/2026-10-09-web-enrutado-controladores-design.md`)
 - **Modelo**: un Simulator completo tarda 31-64 s en `es` y 13-27 s en autonómicos
   (`backtest/results/**/meta.csv`); no apto por petición. Salidas en memoria: `summary`, `probabilities`,
   `fan`, `vote_forecast`, `projection`, `dist`, `unit_summary`, `result(scenario())`, `totals`;
@@ -275,7 +278,9 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 - Páginas: `/` portada (V1, V2, hemiciclo, p_mayoría, evolución del `headline`), `/promedio` (V3, V4),
   `/escanos` (V6, V7, V8, calculadora de coaliciones sobre `dist`), `/casas` (V10, V5, herding; `?id=`
   perfil V11), `/elecciones` (lista; `?date=` página V13; V12), `/modelo` (V14), `/metodo` (V15, texto).
-- Módulos (enmienda 2026-10-09: `api.js` y `state.js` ya no existen, ver arriba): `api.js` (fetch + caché en `Map`, propaga `run`), `state.js` (query string y selectores de
+- (enmienda 2026-10-09: `api.js` y `state.js` ya no existen, ver arriba; el resto de módulos pasa a
+  `web/dist/js/`.)
+- Módulos: `api.js` (fetch + caché en `Map`, propaga `run`), `state.js` (query string y selectores de
   ámbito/modo rellenados desde `/api/v1/manifest`), `format.js` (`Intl` es-ES), `catalog.js` (colores y
   nombres por partido desde `meta.parties`; bloque = color del primer partido; Otros gris), `seats.js`
   (de `dist` a histogramas, cuantiles y `P(suma ≥ mayoría)` de cualquier coalición), `charts/*.js`
@@ -693,4 +698,7 @@ Enmienda del 2026-10-09: páginas desde los controladores. `/` y `/promedio` pas
 Python con Jinja2 y nginx solo sirve `/dist/` y hace de proxy del resto; las secciones "Frontend",
 "Infraestructura" y "Pruebas" llevan la enmienda fechada. Diseño, ejecución y estado en
 `docs/superpowers/specs/2026-10-09-web-enrutado-controladores-design.md`. La siguiente fase (plan de la
-fase 3) ya se apoya en ese patrón.
+fase 3) ya se apoya en ese patrón. Quedan superadas decisiones de la lista numerada de ese cierre:
+la 7 (ECharts está ahora en `web/dist/vendor/echarts-5.6.0.min.js`, con `location ^~ /dist/vendor/`),
+la 9 (`tests/test_web_routes.py` acepta los enlaces de página de `pages.ROUTES` o `/`, y las plantillas
+viven en `web/templates/`) y la 10 (`?api=` desaparece con `api.js`: las páginas ya no hacen `fetch`).
