@@ -196,6 +196,17 @@ def test_export_meta_and_headline():
     assert head['as_of'] == '2026-10-05' and head['n_polls'] == 6 and head['event_date'] == '2026-11-29'
 
 
+def test_export_meta_and_headline_carry_the_backfill_keys():
+    sim = synthetic_simulator()
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False, limit_date='2026-10-05')
+    assert meta['limit_date'] == '2026-10-05' and meta['run_at'] == '2026-10-05T12:00:00Z'
+    head = publish.export_headline(sim, RUN, '2026-10-05T12:00:00Z', {}, {}, backfill=True)
+    assert head['backfill'] is True
+    assert publish.export_headline(sim, RUN, '2026-10-05T12:00:00Z', {}, {})['backfill'] is False
+    assert bundle.validate('headline', bundle.envelope('headline', head, 'es', run_id=RUN))  # claves nuevas en el esquema
+
+
 RUN = '20261008-120000'
 
 
@@ -259,6 +270,22 @@ def test_publish_forecast_refuses_to_rewrite_a_run(tmp_path):
     assert factory.calls == []
 
 
+def test_publish_forecast_backfill_freezes_the_polls_and_stamps_the_day(tmp_path):
+    writer, factory = make_writer(tmp_path), FakeSimulator()
+    out = publish.publish_forecast('es', writer, '20261005-120000', '2026-11-29', n_sim=50, simulator=factory,
+                                   stats=fake_stats, prov=fake_prov, limit_date='2026-10-05', run_at='2026-10-05T12:00:00Z')
+    assert factory.calls[0][3]['limit_date'] == '2026-10-05'
+    meta = writer.read_json(bundle.path_part('es', '20261005-120000', 'meta'))['data']
+    head = writer.read_json(bundle.path_part('es', '20261005-120000', 'headline'))['data']
+    assert meta['limit_date'] == '2026-10-05' and meta['run_at'] == '2026-10-05T12:00:00Z'
+    assert head['backfill'] is True and out['entry']['run_at'] == '2026-10-05T12:00:00Z'
+    normal = publish.publish_forecast('es', writer, RUN, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov)
+    assert 'limit_date' not in [c for c in factory.calls if c[0] == 'init'][-1][3]
+    assert writer.read_json(bundle.path_part('es', RUN, 'headline'))['data']['backfill'] is False
+    assert writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']['limit_date'] is None
+    assert normal['entry']['run_at'] == '2026-10-08T12:00:00Z'
+
+
 def test_history_is_rebuilt_from_complete_runs_and_is_idempotent(tmp_path):
     writer, _, _ = publish_es(tmp_path)
     publish_es(tmp_path, run_id='20261009-120000')
@@ -318,6 +345,25 @@ def test_loreg_guard_only_blocks_es_in_the_five_days_before_the_election():
         publish.loreg_guard('es', '2026-11-29', today='2026-11-29')
     assert publish.loreg_guard('es', '2026-11-29', today='2026-11-28', force=True) is True
     assert publish.loreg_guard('es', '2026-11-29', today='2026-11-30') is False
+
+
+@pytest.mark.parametrize('spec, days', [
+    ({'from': '2026-10-05', 'to': '2026-10-07'}, ['2026-10-05', '2026-10-06', '2026-10-07']),
+    ({'from': '2026-10-05'}, ['2026-10-05']),
+])
+def test_backfill_days_expands_the_range(spec, days):
+    assert publish.backfill_days(spec, today='2026-10-09') == days
+    assert publish.backfill_run_id('2026-10-05') == '20261005-120000'
+    assert publish.backfill_run_at('2026-10-05') == '2026-10-05T12:00:00Z'
+
+
+@pytest.mark.parametrize('spec', [
+    {'from': '2026-10-07', 'to': '2026-10-05'}, {'from': '05/10/2026'}, {'to': '2026-10-05'}, 'ayer',
+    {'from': '2026-10-05', 'to': '2026-10-10'},
+])
+def test_backfill_days_rejects_bad_ranges(spec):
+    with pytest.raises(ValueError, match='publish: backfill'):
+        publish.backfill_days(spec, today='2026-10-09')
 
 
 def test_resolve_scopes_uses_the_catalogue():

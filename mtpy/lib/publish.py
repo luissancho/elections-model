@@ -13,6 +13,7 @@ Two layers live here:
 """
 import os
 import platform
+import re
 import subprocess
 import time
 import warnings
@@ -46,6 +47,7 @@ DISP_COLUMNS = ['pollster_id', 'pollster', 'n', 'ss_obs', 'ss_exp', 'ratio_raw',
 DEFAULT_CORRECTORS = {'house_effects': True, 'dispersion': True, 'regional_noise': True, 'industry_bias': False,
                       'composition': None}
 PROVENANCE_PACKAGES = ('numpy', 'pandas', 'scipy', 'statsmodels')
+ISO_DAY_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 SUMMARY_COLS = ('pct', 'pct_lo', 'pct_hi', 'seats', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats')
 
 
@@ -456,7 +458,7 @@ def _meta_parties(sim):
 
 def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correctors: dict, seconds: dict,
                 clip_rate: dict, db_polls: Optional[int], db_last_poll: Optional[str], prov: dict,
-                freeze: bool) -> dict:
+                freeze: bool, limit_date: Optional[str] = None) -> dict:
     """Build the ``meta`` document describing how and when a run was produced.
 
     Parameters
@@ -479,6 +481,8 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
         Result of ``provenance``.
     freeze : bool
         Whether the run is a frozen result.
+    limit_date : str, optional
+        Poll cutoff date (``YYYY-MM-DD``) of a retrospective run, ``None`` for a normal one.
 
     Returns
     -------
@@ -505,11 +509,11 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
                         'multiplier': float(drift.multiplier) if drift is not None else None,
                         'ages': sim.ages.round(PCT_DECIMALS).to_dict(), 'composition': float(sim.composition_ratio),
                         'clip_rate': clip_rate},
-        'seconds': seconds, 'freeze': bool(freeze),
+        'seconds': seconds, 'freeze': bool(freeze), 'limit_date': limit_date,
     }
 
 
-def export_headline(sim, run_id: str, run_at: str, nowcast: dict, forecast: dict) -> dict:
+def export_headline(sim, run_id: str, run_at: str, nowcast: dict, forecast: dict, backfill: bool = False) -> dict:
     """Build the ``headline`` document: the run summary shown first on the site.
 
     Parameters
@@ -520,6 +524,8 @@ def export_headline(sim, run_id: str, run_at: str, nowcast: dict, forecast: dict
         Identifier and ISO timestamp of the run.
     nowcast, forecast : dict
         Results of ``headline_mode`` for each mode.
+    backfill : bool, default False
+        Whether the run is retrospective (produced later with the polls known on its day).
 
     Returns
     -------
@@ -528,7 +534,7 @@ def export_headline(sim, run_id: str, run_at: str, nowcast: dict, forecast: dict
     """
     return {'run_id': run_id, 'run_at': run_at, 'event_date': sim.event_date,
             'as_of': sim.as_of.strftime('%Y-%m-%d'), 'date_last': sim.model.date_last.strftime('%Y-%m-%d'),
-            'n_polls': n_polls(sim.model)[0], 'nowcast': nowcast, 'forecast': forecast}
+            'n_polls': n_polls(sim.model)[0], 'backfill': bool(backfill), 'nowcast': nowcast, 'forecast': forecast}
 
 
 ATTRIBUTION = {'polls': 'Sondeos: Wikipedia, CC BY-SA 4.0', 'results': 'Origen de los datos: Ministerio del Interior',
@@ -560,6 +566,28 @@ def _madrid_tz():
         return timezone(timedelta(hours=1))
 
 
+def _today(today: Optional[str | date | datetime] = None) -> date:
+    """Normalise the date taken as today; ``None`` is today in Europe/Madrid.
+
+    Parameters
+    ----------
+    today : str, datetime.date or datetime.datetime, optional
+        ``YYYY-MM-DD`` string, date, or datetime reduced with ``.date()``.
+
+    Returns
+    -------
+    datetime.date
+        The date.
+    """
+    if today is None:
+        return datetime.now(_madrid_tz()).date()
+    if isinstance(today, datetime):
+        return today.date()
+    if isinstance(today, str):
+        return date.fromisoformat(today)
+    return today
+
+
 def loreg_guard(scope: str, event_date: str, today: Optional[str | date | datetime] = None,
                 force: bool = False) -> bool:
     """Refuse to publish national forecasts in the five days before the election (LOREG art. 69.7).
@@ -586,18 +614,86 @@ def loreg_guard(scope: str, event_date: str, today: Optional[str | date | dateti
     PublishRefused
         Inside the window and not forced.
     """
-    if today is None:
-        today = datetime.now(_madrid_tz()).date()
-    elif isinstance(today, datetime):
-        today = today.date()
-    elif isinstance(today, str):
-        today = date.fromisoformat(today)
+    today = _today(today)
     event = date.fromisoformat(event_date)
     in_window = scope == 'es' and 0 <= (event - today).days <= 5
     if in_window and not force:
         raise PublishRefused('{} {}: inside the LOREG window (art. 69.7); pass force=true to publish'.format(
             scope, event_date))
     return in_window
+
+
+def backfill_days(spec: dict, today: Optional[str | date | datetime] = None) -> list:
+    """Expand a retrospective publication range into its days.
+
+    Parameters
+    ----------
+    spec : dict
+        ``{'from': 'YYYY-MM-DD', 'to': 'YYYY-MM-DD'}``; ``to`` is optional and defaults to ``from``.
+    today : str, datetime.date or datetime.datetime, optional
+        Current date, as in ``loreg_guard``; defaults to today in Europe/Madrid.
+
+    Returns
+    -------
+    list of str
+        ISO days from ``from`` to ``to``, both included, ascending.
+
+    Raises
+    ------
+    ValueError
+        ``spec`` is not a dict with ``from``, a bound is not an ISO date, ``from`` is after ``to``
+        or ``to`` is after today. The message starts with ``'publish: backfill'``.
+    """
+    if not isinstance(spec, dict) or 'from' not in spec:
+        raise ValueError('publish: backfill must be {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}')
+    raw = {'from': spec['from'], 'to': spec['from'] if spec.get('to') is None else spec['to']}
+    bounds = []
+    for key, value in raw.items():
+        try:
+            if not (isinstance(value, str) and ISO_DAY_RE.match(value)):
+                raise ValueError(value)
+            bounds.append(date.fromisoformat(value))
+        except ValueError:
+            raise ValueError('publish: backfill "{}" is not a YYYY-MM-DD date: {!r}'.format(key, value)) from None
+    start, end = bounds
+    today = _today(today)
+    if start > end:
+        raise ValueError('publish: backfill "from" {} is after "to" {}'.format(start, end))
+    if end > today:
+        raise ValueError('publish: backfill "to" {} is after today {}'.format(end, today))
+    return [(start + timedelta(days=n)).isoformat() for n in range((end - start).days + 1)]
+
+
+def backfill_run_id(day: str) -> str:
+    """Return the run id of a retrospective run: noon of its day.
+
+    Parameters
+    ----------
+    day : str
+        ``YYYY-MM-DD`` day.
+
+    Returns
+    -------
+    str
+        ``YYYYMMDD-120000``.
+    """
+    return day.replace('-', '') + '-120000'
+
+
+def backfill_run_at(day: str) -> str:
+    """Return the ``run_at`` of a retrospective run: noon UTC of its day.
+
+    Parameters
+    ----------
+    day : str
+        ``YYYY-MM-DD`` day.
+
+    Returns
+    -------
+    str
+        ``YYYY-MM-DDT12:00:00Z``.
+    """
+    return day + 'T12:00:00Z'
 
 
 def resolve_scopes(scopes, catalogue: Optional[pd.DataFrame] = None) -> list:
@@ -720,7 +816,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
                      seed: int = 42, drange=6, max_fc: int = 10, alpha: float = 0.05,
                      correctors: Optional[dict] = None, freeze: bool = False, verbose: int = 0,
                      simulator: Optional[Callable] = None, stats: Optional[Callable] = None,
-                     prov: Optional[Callable] = None) -> dict:
+                     prov: Optional[Callable] = None, limit_date: Optional[str] = None,
+                     run_at: Optional[str] = None) -> dict:
     """Run the model for one scope and write an immutable run into the bundle.
 
     Pointers (history and manifest) are not touched. ``headline.json`` is written last, so a run
@@ -748,6 +845,12 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         Simulator verbosity.
     simulator, stats, prov : callable, optional
         Injectable replacements of ``Simulator``, ``db_stats`` and ``provenance``.
+    limit_date : str, optional
+        Poll cutoff date (``YYYY-MM-DD``) of a retrospective run: only the polls published up to that
+        day enter the average and ``as_of`` is read that day. The run is marked ``backfill`` and
+        ``meta.limit_date`` records it. ``None`` (default) runs with every poll.
+    run_at : str, optional
+        ISO UTC timestamp recorded as the run moment; defaults to the writer clock.
 
     Returns
     -------
@@ -763,7 +866,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         that cannot be fitted). Any later error, ``ValueError`` included, propagates as is.
     """
     writer.begin_run(scope, run_id)
-    run_at = bundle.iso_utc(writer.now())
+    run_at = run_at or bundle.iso_utc(writer.now())
+    cutoff = {} if limit_date is None else {'limit_date': limit_date}
     correctors = {**DEFAULT_CORRECTORS, **(correctors or {})}
     heads, clip = {}, {}
     start = mark = time.perf_counter()
@@ -777,7 +881,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
 
     try:
         sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
-                                       mode='nowcast', verbose=verbose, path='.', **correctors)
+                                       mode='nowcast', verbose=verbose, path='.', **cutoff, **correctors)
         init = lap()
         names = sim.params['names']
         sim.fit_forecast(names=names, max_fc=max_fc, fillna=True)
@@ -807,9 +911,10 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
                'total': time.perf_counter() - start}
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     meta = export_meta(sim, run_id, run_at, n_sim, max_fc, correctors, seconds, clip, db_polls, db_last_poll,
-                       prov(), freeze)
+                       prov(), freeze, limit_date=limit_date)
     writer.write_json(bundle.path_part(scope, run_id, 'meta'), 'meta', meta, scope, run_id)
-    headline = export_headline(sim, run_id, run_at, heads['nowcast'], heads['forecast'])
+    headline = export_headline(sim, run_id, run_at, heads['nowcast'], heads['forecast'],
+                               backfill=limit_date is not None)
     writer.write_json(bundle.path_part(scope, run_id, 'headline'), 'headline', headline, scope, run_id)
     return {'scope': scope, 'entry': latest_entry(headline), 'seconds': seconds}
 

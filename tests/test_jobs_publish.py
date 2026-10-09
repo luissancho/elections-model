@@ -5,6 +5,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
+from tests.fakes import FakeSimulator
 
 
 def entry(scope, run_id):
@@ -14,9 +15,11 @@ def entry(scope, run_id):
 
 @pytest.fixture
 def patched(monkeypatch):
-    """`resolve_scopes`, `next_event_date` y `publish_forecast` sin base: `es` publica, `es-md` no tiene
-    evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
+    """`resolve_scopes`, `next_event_date` y `publish_forecast` sin base: `es` publica de verdad con
+    `FakeSimulator`, `db_stats` y `provenance` sustituidos, `es-md` no tiene evento, `es-cb` no tiene
+    sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
     calls = []
+    real_forecast = publish.publish_forecast
 
     def fake_forecast(scope, writer, run_id, event_date, **kwargs):
         calls.append((scope, run_id, event_date, kwargs))
@@ -26,9 +29,9 @@ def patched(monkeypatch):
             raise ValueError("vote: missing keys ['rows']")
         if scope == 'es-ar':
             raise KeyError('x')
-        writer.write_json(bundle.path_part(scope, run_id, 'headline'), 'headline',
-                          {**entry(scope, run_id), 'run_id': run_id, 'nowcast': {}, 'forecast': {}}, scope, run_id=run_id)
-        return {'scope': scope, 'entry': entry(scope, run_id), 'seconds': {'total': 12.3}}
+        return real_forecast(scope, writer, run_id, event_date, simulator=FakeSimulator(),
+                             stats=lambda scope, event_date: (7, '2026-10-01'),
+                             prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
     monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08',
@@ -180,3 +183,42 @@ def test_manifest_write_failure_keeps_the_summary(fresh_app, tmp_path, patched, 
         Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
     out = capsys.readouterr().out
     assert 'es: published' in out and 'manifest: failed (OSError: s3 down)' in out
+
+
+def test_backfill_publishes_one_run_per_day_and_never_moves_latest_back(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    today_run = publish.read_manifest(writer)['scopes']['es']['latest']
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    assert [r['status'] for r in result['es']] == ['published', 'published']
+    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000', today_run]
+    history = writer.read_json(bundle.path_history('es'))['data']['runs']
+    assert [r['run_id'] for r in history] == ['20261005-120000', '20261006-120000', today_run]
+    assert [r['backfill'] for r in history] == [True, True, False]
+    assert history[0]['run_at'] == '2026-10-05T12:00:00Z'
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == today_run
+    out = capsys.readouterr().out
+    assert 'es: published 20261005-120000' in out and 'backfill 2026-10-05' in out
+    again = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    assert [r['status'] for r in again['es']] == ['skipped', 'skipped'] and 'run exists' in capsys.readouterr().out
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == today_run
+
+
+def test_backfill_alone_points_latest_to_its_newest_day(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    assert publish.read_manifest(bundle.BundleWriter(fs))['scopes']['es']['latest'] == '20261006-120000'
+
+
+def test_backfill_range_errors_fail_before_touching_the_bundle(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    with pytest.raises(ValueError, match='publish: backfill'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-07', 'to': '2026-10-05'})
+    assert patched == [] and not (tmp_path / 'site').exists()

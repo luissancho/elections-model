@@ -99,6 +99,7 @@
       "export": 2.0,
       "total": 24.0
     },
-    "freeze": false
+    "freeze": false,
+    "limit_date": null
   }
 }

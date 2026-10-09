@@ -71,6 +71,13 @@ def test_validate_accepts_every_fixture_and_rejects_a_missing_key(name):
         bundle.validate(name, broken)
 
 
+def test_headline_requires_the_backfill_flag():
+    obj = load_fixture('headline')
+    del obj['data']['backfill']
+    with pytest.raises(ValueError, match='missing keys'):
+        bundle.validate('headline', obj)
+
+
 def test_validate_checks_the_envelope():
     obj = load_fixture('vote')
     with pytest.raises(ValueError, match='schema'):

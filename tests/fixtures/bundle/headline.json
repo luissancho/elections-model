@@ -12,6 +12,7 @@
     "as_of": "2026-10-08",
     "date_last": "2026-10-05",
     "n_polls": 120,
+    "backfill": false,
     "nowcast": {
       "parties": [
         {
