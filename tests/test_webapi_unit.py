@@ -1,6 +1,7 @@
 """Tests de `mtpy/lib/webapi.py` sin servidor ni base de datos: validadores, cachés y lector del paquete."""
 import json
 import os
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -181,3 +182,10 @@ def test_webapi_import_stays_light():
             "if m in sys.modules))")
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, cwd=ROOT, check=True)
     assert out.stdout.strip() == '[]'
+
+
+def test_settings_fall_back_to_the_default_ttl_on_garbage(monkeypatch):
+    fake = SimpleNamespace(config=SimpleNamespace(web=SimpleNamespace(prefix='', cache_ttl='abc')))
+    monkeypatch.setattr(webapi.App, 'get_', staticmethod(lambda: fake))
+    with pytest.warns(UserWarning):
+        assert webapi.settings() == {'prefix': bundle.PREFIX, 'cache_ttl': 60.0}

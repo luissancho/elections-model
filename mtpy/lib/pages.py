@@ -396,7 +396,7 @@ def resolve_scope(scope: Optional[str]) -> str:
     -------
     str
         ``scope`` when it is published; without it, the first published scope in catalogue
-        order (manifest order for scopes outside the catalogue).
+        order.
 
     Raises
     ------
@@ -406,7 +406,7 @@ def resolve_scope(scope: Optional[str]) -> str:
     manifest = site().manifest_data()
 
     if scope is None:
-        codes = [row['code'] for row in published_scopes()] or list(manifest['scopes'])
+        codes = [row['code'] for row in published_scopes()]
 
         if not codes:
             raise HttpError(503, 'no bundle published yet')
@@ -713,6 +713,30 @@ def index_context(state: dict, active: str = '/') -> dict:
     return context
 
 
+def chart_polls(polls: dict) -> dict:
+    """
+    Polls part reduced to the columns the chart draws.
+
+    Parameters
+    ----------
+    polls : dict
+        Data of the polls part (``parties``, ``columns``, ``polls``, ``results``).
+
+    Returns
+    -------
+    dict
+        ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``,
+        ``pollster`` and one value per party.
+    """
+    parties = list(polls.get('parties') or [])
+    keys = ['date', 'pollster'] + parties
+
+    return {
+        'parties': parties,
+        'polls': [{key: poll.get(key) for key in keys if key in poll} for poll in polls.get('polls') or []],
+    }
+
+
 def table_rows(polls: list, parties: list, n: int = TABLE_ROWS) -> list:
     """
     Formatted rows of the polls table, the most recent first.
@@ -733,11 +757,11 @@ def table_rows(polls: list, parties: list, n: int = TABLE_ROWS) -> list:
         The last ``n`` polls by date (ties keep the later published first) as ``date``,
         pollster, sponsor, sample size and one percentage per party, all formatted.
     """
-    latest = sorted(reversed(polls), key=lambda poll: poll['date'], reverse=True)[:n]
+    latest = sorted(reversed(polls), key=lambda poll: poll.get('date') or '', reverse=True)[:n]
 
     return [
         [
-            fmt_date(poll['date']),
+            fmt_date(poll.get('date')),
             poll.get('pollster') or DASH,
             poll.get('sponsor') or DASH,
             fmt_int(poll.get('sample_size')),
@@ -794,7 +818,7 @@ def promedio_context(state: dict, active: str = '/promedio') -> dict:
         'state': full,
         'meta': meta,
         'series': series,
-        'polls': polls,
+        'polls': chart_polls(polls),
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': vote,
     }

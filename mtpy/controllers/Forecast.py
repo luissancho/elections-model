@@ -1,3 +1,5 @@
+from typing import Optional
+
 from ..core.api import HttpError
 from ..lib import bundle
 from ..lib.webapi import (
@@ -105,6 +107,46 @@ class Forecast(Base):
 
         return site().latest_run(scope), False
 
+    def serve(self, scope: str, part: str, mode: Optional[str] = None) -> bytes:
+        """
+        Serve a part of a run, as JSON or, with ``?format=csv``, as its CSV twin.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        part : str
+            Validated part name.
+        mode : str, optional
+            Validated simulation mode, for the parts of a mode.
+
+        Returns
+        -------
+        bytes
+            The JSON or CSV file.
+
+        Raises
+        ------
+        HttpError
+            404 when a run part has no CSV twin or the file is not published.
+        """
+        fmt = check_format(self.query.get('format'))
+        run, explicit = self.resolve_run(scope)
+        self.notice_freeze()
+
+        if fmt == 'csv':
+            if mode is None and part not in CSV_PARTS:
+                raise HttpError(404, 'no csv for this part')
+
+            if mode is None:
+                return self.csv_bytes(site().run_csv(scope, run, part), f'{scope}-{run}-{part}.csv', explicit)
+
+            return self.csv_bytes(
+                site().run_csv(scope, run, part, mode), f'{scope}-{run}-{mode}-{part}.csv', explicit
+            )
+
+        return self.json_bytes(site().run_file(scope, run, part, mode), explicit)
+
     async def part_action(self, scope: str, part: str) -> bytes:
         """
         A part of a run, as JSON or, with ``?format=csv``, as its CSV twin.
@@ -123,17 +165,8 @@ class Forecast(Base):
         """
         check_scope(scope)
         check_part(part, RUN_PARTS)
-        fmt = check_format(self.query.get('format'))
-        run, explicit = self.resolve_run(scope)
-        self.notice_freeze()
 
-        if fmt == 'csv':
-            if part not in CSV_PARTS:
-                raise HttpError(404, 'no csv for this part')
-
-            return self.csv_bytes(site().run_csv(scope, run, part), f'{scope}-{run}-{part}.csv', explicit)
-
-        return self.json_bytes(site().run_file(scope, run, part), explicit)
+        return self.serve(scope, part)
 
     async def mode_part_action(self, scope: str, mode: str, part: str) -> bytes:
         """
@@ -156,13 +189,5 @@ class Forecast(Base):
         check_scope(scope)
         check_mode(mode)
         check_part(part, MODE_PARTS)
-        fmt = check_format(self.query.get('format'))
-        run, explicit = self.resolve_run(scope)
-        self.notice_freeze()
 
-        if fmt == 'csv':
-            return self.csv_bytes(
-                site().run_csv(scope, run, part, mode), f'{scope}-{run}-{mode}-{part}.csv', explicit
-            )
-
-        return self.json_bytes(site().run_file(scope, run, part, mode), explicit)
+        return self.serve(scope, part, mode)

@@ -215,3 +215,26 @@ def test_promedio_nowcast_and_pinned_run(api):
     page = html(body)
     assert status == 200 and 'run={}&amp;format=csv'.format(RUN) in page
     assert '<input type="hidden" name="run" value="{}">'.format(RUN) in page
+
+
+def test_promedio_initial_polls_carry_only_the_chart_columns(api):
+    data = initial(call(api, '/promedio')[2])
+    parties = set(data['polls']['parties'])
+    assert set(data['polls']) == {'parties', 'polls'}
+    for poll in data['polls']['polls']:
+        assert set(poll) == {'date', 'pollster'} | parties
+
+
+def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, tmp_path):
+    """Un manifest cuyo único ámbito no está en el catálogo no se puede pedir por URL: 503, no un `<select>` vacío."""
+    fresh_app.set('fs', FileSystem(str(tmp_path)))
+    fresh_app.set('data', FileSystem(os.path.join(ROOT, 'data')))
+    write_bundle(fresh_app.fs, scope='zz')
+    status, headers, body = call(site_api(fresh_app), '/')
+    assert status == 503 and 'Todavía no hay ningún pronóstico publicado' in html(body)
+
+
+def test_table_rows_tolerate_a_poll_without_date():
+    polls = [{'date': '2026-10-01', 'pollster': 'CIS', 'PP': 40.0}, {'pollster': 'GAD3', 'PP': 41.0}]
+    rows = pages.table_rows(polls, ['PP'])
+    assert rows[0][0] == '1 oct 2026' and rows[1][0] == '–' and rows[1][1] == 'GAD3'

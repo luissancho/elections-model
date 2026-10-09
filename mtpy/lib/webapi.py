@@ -7,6 +7,7 @@ arrive in phase 4. This module imports only ``bundle``, so the web workers do no
 model nor the scientific stack.
 """
 import time
+import warnings
 from collections import OrderedDict
 from threading import Lock
 from typing import Any, Callable, Optional, Sequence
@@ -36,16 +37,23 @@ def settings() -> dict:
     -------
     dict
         ``{'prefix': str, 'cache_ttl': float}``. Missing or empty values fall back to
-        ``bundle.PREFIX`` and ``DEFAULT_TTL``.
+        ``bundle.PREFIX`` and ``DEFAULT_TTL``; a ``cache_ttl`` that is not a number
+        also falls back, with a warning.
     """
     config = getattr(App.get_(), 'config', None)
     web = getattr(config, 'web', None) if config is not None else None
     prefix = getattr(web, 'prefix', None)
     ttl = getattr(web, 'cache_ttl', None)
 
+    try:
+        cache_ttl = float(ttl) if ttl not in (None, '') else float(DEFAULT_TTL)
+    except (TypeError, ValueError):
+        warnings.warn('invalid web.cache_ttl {!r}; using {}'.format(ttl, DEFAULT_TTL))
+        cache_ttl = float(DEFAULT_TTL)
+
     return {
         'prefix': str(prefix) if prefix not in (None, '') else bundle.PREFIX,
-        'cache_ttl': float(ttl) if ttl not in (None, '') else float(DEFAULT_TTL),
+        'cache_ttl': cache_ttl,
     }
 
 
