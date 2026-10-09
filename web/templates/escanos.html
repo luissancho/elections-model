@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% block title %}Escaños{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/escanos.js"></script>
+{% endblock %}
+{% block content %}
+    <div id="content" class="stack">
+      <section class="card" id="parties">
+        <h2>Escaños por partido <span class="mode-subtitle">{{ subtitle }}</span></h2>
+        <div class="table-wrap">
+          <table id="parties-table">
+            <caption>Escaños previstos de {{ summary.n_seats|int }}; la mayoría absoluta está en {{ summary.majority|int }}.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Partido</th>
+                <th scope="col">Escaños</th>
+                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">Mín–máx</th>
+                <th scope="col">Media</th>
+                <th scope="col">P(escaño)</th>
+                <th scope="col">P(primero)</th>
+                <th scope="col">P(mayoría)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in party_rows %}
+              <tr>
+                <td title="{{ row.name }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
+                <td>{{ row.seats|int }}</td>
+                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                <td>{{ row.seats_min|range(row.seats_max, 0) }}</td>
+                <td>{{ row.seats_mean|num(1) }}</td>
+                <td>{{ row.p_seats|prob }}</td>
+                <td>{{ row.p_first|prob }}</td>
+                <td>{{ row.p_majority|prob }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="grid-small" id="histograms">
+          {% for row in party_rows %}
+          <div class="chart chart-small" data-party="{{ row.name }}" role="img" aria-label="Distribución de escaños de {{ catalog[row.name].fullname }} en las simulaciones"></div>
+          {% endfor %}
+        </div>
+        <p class="about">
+          Qué es esto: los escaños que obtiene cada partido en miles de elecciones simuladas. La cifra es
+          el resultado central, el intervalo deja fuera el 2,5 % de las simulaciones por cada lado y los
+          histogramas muestran la distribución completa. P(escaño) es la probabilidad de obtener al
+          menos uno; P(primero), la de ser el partido con más escaños.
+        </p>
+      </section>
+      <section class="card" id="blocks">
+        <h2>Bloques <span class="mode-subtitle">{{ subtitle }}</span></h2>
+        <div class="chart" id="blocks-chart" role="img" aria-label="Escaños previstos por bloque ideológico"></div>
+        <div class="grid">
+          <div class="table-wrap">
+            <table id="blocks-table">
+              <caption>Bloques ideológicos, con todos los partidos.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Bloque</th>
+                  <th scope="col">Escaños</th>
+                  <th scope="col">Intervalo 95 %</th>
+                  <th scope="col">P(mayoría absoluta)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in block_rows %}
+                <tr>
+                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
+                  <td>{{ row.seats|int }}</td>
+                  <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                  <td>{{ row.p_majority|prob }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table id="vs-table">
+              <caption>Derecha frente a izquierda, con los partidos principales.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Bloque</th>
+                  <th scope="col">Escaños</th>
+                  <th scope="col">Intervalo 95 %</th>
+                  <th scope="col">P(mayoría absoluta)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in vs_rows %}
+                <tr>
+                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
+                  <td>{{ row.seats|int }}</td>
+                  <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                  <td>{{ row.p_majority|prob }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="about">
+          Qué es esto: la suma de escaños de los partidos de cada bloque en cada simulación y la
+          probabilidad de que el bloque alcance la mayoría absoluta ({{ summary.majority|int }} escaños).
+        </p>
+      </section>
+      <section class="card" id="coalition">
+        <h2>Calculadora de coaliciones <span class="mode-subtitle">{{ subtitle }}</span></h2>
+        <fieldset class="coalition-parties" id="coalition-parties">
+          <legend>Partidos de la coalición</legend>
+          {% for entry in calculator %}
+          <label><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> <span class="dot" style="background-color: {{ entry.color }}"></span>{{ entry.fullname }}</label>
+          {% endfor %}
+        </fieldset>
+        <p class="coalition-result" id="coalition-result">Marca partidos para calcular su mayoría.</p>
+        <div class="chart" id="coalition-chart" role="img" aria-label="Distribución de escaños de la coalición marcada en las simulaciones"></div>
+        <noscript><p class="muted">La calculadora necesita JavaScript.</p></noscript>
+        <p class="about">
+          Qué es esto: suma, simulación a simulación, los escaños de los partidos marcados y calcula la
+          probabilidad de que juntos lleguen a la mayoría absoluta.
+        </p>
+      </section>
+      {% if district_table %}
+      <section class="card" id="districts">
+        <h2>Circunscripciones <span class="mode-subtitle">{{ subtitle }}</span></h2>
+      </section>
+      {% endif %}
+      <section class="card" id="fan">
+        <h2>Abanico de voto por horizonte</h2>
+        <div class="chart" id="fan-chart" role="img" aria-label="Voto previsto por partido según los días que faltan, con el intervalo del 95 %"></div>
+        <p class="about">
+          Qué es esto: cómo se abre la incertidumbre del voto de cada partido a medida que aumentan los
+          días hasta la elección; el horizonte 0 es la estimación de hoy.
+        </p>
+      </section>
+      <section class="card" id="evolution">
+        <h2>Evolución <span class="evolution-subtitle">· escaños {{ 'estimados' if state.mode == 'nowcast' else 'pronosticados' }} en cada publicación</span></h2>
+        <div class="chart" id="seats-evolution" role="img" aria-label="Evolución de los escaños previstos en cada publicación"></div>
+        <p class="about">
+          Qué es esto: cómo han cambiado los escaños de cada partido de una publicación del modelo a la
+          siguiente.
+        </p>
+      </section>
+      <section class="card" id="downloads">
+        <h2>Descargas</h2>
+        <ul>
+          {% for link in csv_links %}
+          <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
+          {% endfor %}
+        </ul>
+        <p class="about">
+          Qué es esto: los datos de esta página en CSV, del mismo run que se muestra.
+        </p>
+      </section>
+    </div>
+{% endblock %}

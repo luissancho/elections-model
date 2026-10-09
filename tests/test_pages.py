@@ -86,6 +86,7 @@ def test_freeze_banner_and_attribution(api, fresh_app):
     ('/', 'mode=tomorrow', 400, 'Modo no válido'),
     ('/nope', '', 404, 'Página no encontrada'),
     ('/promedio', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
+    ('/escanos', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
 ])
 def test_page_errors_are_html_and_not_cached(api, path, query, status, text):
     got, headers, body = call(api, path, query=query)
@@ -118,7 +119,7 @@ def test_default_scope_is_the_first_published(api, fresh_app):
 def test_templates_compile_with_strict_undefined():
     env = pages.environment()
     names = sorted(f for f in os.listdir(pages.TEMPLATES_DIR) if f.endswith('.html'))
-    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html', 'promedio.html'} <= set(names)
+    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html', 'promedio.html', 'escanos.html'} <= set(names)
     for name in names:
         env.get_template(name)
 
@@ -193,7 +194,7 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
     publish.update_manifest(writer, freeze={'active': True, 'message': HOSTILE})
     webapi.site().manifest_cache_clear()
     block = re.compile(r'<script type="application/json" id="initial-data">.*?</script>', re.S)
-    for path in ('/', '/promedio'):
+    for path in ('/', '/promedio', '/escanos'):
         body = call(api, path)[2]
         page = html(body)
         rest = block.sub('', page)
@@ -253,3 +254,48 @@ def test_promedio_caption_counts_the_polls(api, fresh_app):
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
     webapi.site().files.clear()  # the first request cached the run files
     assert 'Todos los sondeos del ciclo (1)' in html(call(api, '/promedio')[2])
+
+
+def test_escanos_is_rendered_with_tables_links_and_initial(api):
+    status, headers, body = call(api, '/escanos', query='scope=es&mode=forecast')
+    page = html(body)
+    assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<title>Pronóstico electoral · Escaños</title>' in page
+    assert 'href="/escanos?scope=es&amp;mode=forecast" aria-current="page"' in page.replace('\n', ' ')
+    assert 'id="parties-table"' in page and '<th scope="col">P(mayoría)</th>' in page
+    assert 'id="blocks-table"' in page and 'id="vs-table"' in page and 'id="blocks-chart"' in page
+    assert 'name="coalition" value="PP" checked' in page and 'id="coalition-result"' in page
+    assert 'id="fan-chart"' in page and 'id="seats-evolution"' in page
+    assert 'href="/api/v1/forecast/es/forecast/summary?run={}&amp;format=csv"'.format(RUN) in page
+    assert 'href="/api/v1/forecast/es/fan?run={}&amp;format=csv"'.format(RUN) in page
+    assert page.count('format=csv') == 5 and 'id="districts"' not in page  # sin circunscripciones hasta la tarea 4
+    assert '/dist/js/pages/escanos.js' in page
+    data = initial(body)
+    assert list(data) == ['state', 'meta', 'summary', 'dist', 'fan', 'runs']
+    assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
+    assert data['dist']['parties'] == ['PP'] and data['summary']['majority'] == 176
+
+
+def test_escanos_nowcast_and_pinned_run(api):
+    page = html(call(api, '/escanos', query='mode=nowcast&run=' + RUN)[2])
+    assert 'Estimación a' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
+    assert page.count('run={}&amp;format=csv'.format(RUN)) == 5
+
+
+def test_seat_rows_sort_by_seats_desc_with_nulls_last():
+    rows = [{'name': 'A', 'seats': 5}, {'name': 'B', 'seats': None}, {'name': 'C', 'seats': 9}, {'name': 'D', 'seats': 5}]
+    assert [r['name'] for r in pages.seat_rows(rows)] == ['C', 'A', 'D', 'B']
+
+
+def test_default_coalition_is_the_first_vs_block_present_in_dist():
+    meta = {'bmaps': {'vs': {'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE']}}}
+    summary = {'vs': [{'name': 'Derecha'}, {'name': 'Izquierda'}], 'blocks': []}
+    assert pages.default_coalition(meta, summary, ['PSOE', 'VOX', 'PP']) == ['VOX', 'PP']
+    assert pages.default_coalition({'bmaps': {}}, {'vs': [], 'blocks': []}, ['PP']) == []
+
+
+def test_csv_links_cover_the_five_parts_in_order():
+    links = pages.csv_links('es', 'nowcast', RUN)
+    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Escenario central', 'Abanico por horizonte']
+    assert links[0]['href'] == '/api/v1/forecast/es/nowcast/summary?run={}&format=csv'.format(RUN)
+    assert links[4]['href'] == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)

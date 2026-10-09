@@ -80,3 +80,9 @@ caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--co
 @media (max-width: 719px) {
   .chart.chart-tall { height: 360px; }
 }
+
+/* Seats page */
+.grid-small { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.chart.chart-small { height: 160px; }
+.coalition-parties { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.coalition-result { font-size: 1.1rem; margin: 8px 0; }

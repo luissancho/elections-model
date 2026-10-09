@@ -28,8 +28,15 @@ from .webapi import check_mode, check_run, check_scope, site
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
 SITE_TITLE = 'Pronóstico electoral'
-PAGES = ({'href': '/', 'label': 'Portada'}, {'href': '/promedio', 'label': 'Promedio'})
-ROUTES = [('/promedio', 'promedio', 'index', ['GET'])]
+PAGES = (
+    {'href': '/', 'label': 'Portada'},
+    {'href': '/promedio', 'label': 'Promedio'},
+    {'href': '/escanos', 'label': 'Escaños'},
+)
+ROUTES = [
+    ('/promedio', 'promedio', 'index', ['GET']),
+    ('/escanos', 'escanos', 'index', ['GET']),
+]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MONTHS = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic')
 DASH = '–'
@@ -45,6 +52,13 @@ MESSAGES = {
 TABLE_ROWS = 40
 OTHERS_COLOR = '#9e9e9e'
 MODE_LABELS = {'nowcast': 'Hoy', 'forecast': 'Elección'}
+CSV_PARTS = (
+    ('summary', 'Resumen por partido y bloque', True),
+    ('dist', 'Escaños por simulación', True),
+    ('districts', 'Circunscripciones', True),
+    ('scenario', 'Escenario central', True),
+    ('fan', 'Abanico por horizonte', False),
+)
 
 _DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
@@ -822,6 +836,167 @@ def promedio_context(state: dict, active: str = '/promedio') -> dict:
         'polls': chart_polls(polls),
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': vote,
+    }
+
+    return context
+
+
+def seat_rows(rows: list) -> list:
+    """
+    Party rows of the summary sorted by seats.
+
+    Parameters
+    ----------
+    rows : list of dict
+        Records of ``summary['parties']`` (``seats`` is an integer or ``None``).
+
+    Returns
+    -------
+    list of dict
+        The same records by ``seats`` descending, ``None`` last; ties keep the input order.
+    """
+    return sorted(rows, key=lambda row: -1 if row.get('seats') is None else row['seats'], reverse=True)
+
+
+def block_rows(rows: list, meta: dict, parties: Catalog) -> list:
+    """
+    Block rows of the summary with their colour.
+
+    Parameters
+    ----------
+    rows : list of dict
+        Records of ``summary['vs']`` or ``summary['blocks']``.
+    meta : dict
+        Data of the meta part.
+    parties : Catalog
+        Party catalogue of the run.
+
+    Returns
+    -------
+    list of dict
+        Copies of the records, in the input order, with ``color`` (``block_color``).
+    """
+    return [dict(row, color=block_color(row['name'], meta, parties)) for row in rows]
+
+
+def default_coalition(meta: dict, summary: dict, names: list) -> list:
+    """
+    Parties checked by default in the coalition calculator.
+
+    Parameters
+    ----------
+    meta : dict
+        Data of the meta part (``bmaps``).
+    summary : dict
+        Data of the summary part (``vs`` and ``blocks``).
+    names : list of str
+        Parties the calculator can add up (``dist['parties']``).
+
+    Returns
+    -------
+    list of str
+        The parties of the first block of ``summary['vs']`` (or of ``summary['blocks']`` when
+        ``vs`` is empty) according to ``meta['bmaps']``, in the order of ``names`` and limited to
+        them; empty without blocks.
+    """
+    bmaps = meta.get('bmaps') or {}
+
+    for key in ('vs', 'blocks'):
+        rows = summary.get(key) or []
+
+        if rows:
+            groups = bmaps.get(key)
+            members = (groups.get(rows[0]['name']) if isinstance(groups, dict) else None) or []
+
+            return [name for name in names if name in members]
+
+    return []
+
+
+def csv_links(scope: str, mode: str, run: str) -> list:
+    """
+    Download links of the seats page.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    mode : str
+        Simulation mode of the mode parts.
+    run : str
+        Run id the page shows.
+
+    Returns
+    -------
+    list of dict
+        ``{'label', 'href'}`` for ``summary``, ``dist``, ``districts``, ``scenario`` (with
+        ``mode``) and ``fan`` (without it), all CSV and pinned to ``run``.
+    """
+    return [
+        {'label': label, 'href': api_url(scope, name, mode=mode if by_mode else None, run=run, fmt='csv')}
+        for name, label, by_mode in CSV_PARTS
+    ]
+
+
+def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
+    """
+    Template context of the seats page.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+    region : str, optional
+        ``region`` query parameter; not used yet (the districts section comes later).
+    active : str, optional
+        ``href`` of the page in the navigation.
+
+    Returns
+    -------
+    dict
+        The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows`` and
+        ``vs_rows`` (``block_rows``), ``calculator`` (``name``, ``fullname``, ``color`` and
+        ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
+        (``district_table``, ``regions``, ``region``, ``region_rows``, empty for now) and
+        ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan`` and ``runs``, the data
+        the charts and the calculator are drawn from).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle; 404 for an unpublished scope, a missing run or a missing part.
+    """
+    context = common_context(state, active)
+    full, meta, parties = context['state'], context['meta'], context['catalog']
+    scope, mode, run = full['scope'], full['mode'], full['run']
+    summary = part(scope, run, 'summary', mode=mode)
+    dist = part(scope, run, 'dist', mode=mode)
+    names = list(dist.get('parties') or [])
+    checked = default_coalition(meta, summary, names)
+    suffix = context['title_suffix']
+
+    context['summary'] = summary
+    context['party_rows'] = seat_rows(summary.get('parties') or [])
+    context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
+    context['vs_rows'] = block_rows(summary.get('vs') or [], meta, parties)
+    context['calculator'] = [
+        {'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
+         'checked': name in checked}
+        for name in names
+    ]
+    context['csv_links'] = csv_links(scope, mode, run)
+    context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
+    context['district_table'] = None
+    context['regions'] = []
+    context['region'] = None
+    context['region_rows'] = []
+    context['initial'] = {
+        'state': full,
+        'meta': meta,
+        'summary': summary,
+        'dist': dist,
+        'fan': part(scope, run, 'fan'),
+        'runs': bundle.loads(site().history(scope))['data'],
     }
 
     return context

@@ -52,9 +52,22 @@
       }
     ],
     "bmaps": {
-      "Derecha": [
+      "max": [
         "PP"
-      ]
+      ],
+      "main": [
+        "PP"
+      ],
+      "vs": {
+        "Derecha": [
+          "PP"
+        ]
+      },
+      "blocks": {
+        "Derecha": [
+          "PP"
+        ]
+      }
     },
     "smap": {
       "PP": "PP"

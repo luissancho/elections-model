@@ -29,7 +29,7 @@
     ],
     "vs": [
       {
-        "name": "PP",
+        "name": "Derecha",
         "pct": 33.1,
         "pct_mean": 33.0,
         "pct_lo": 31.0,
@@ -48,7 +48,7 @@
     ],
     "blocks": [
       {
-        "name": "PP",
+        "name": "Derecha",
         "pct": 33.1,
         "pct_mean": 33.0,
         "pct_lo": 31.0,
