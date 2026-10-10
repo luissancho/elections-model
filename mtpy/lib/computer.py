@@ -2737,6 +2737,10 @@ class Computer(Core):
         df = data.copy()
         df['event_date'] = pd.to_datetime(df['event_date'])
         current = pd.Timestamp(current) if current is not None else df['event_date'].max()
+        # Data with the current cycle only (a scope without rows in `pollsters_parties`) has no history columns
+        for column in ('dev_result_c', 'n_result'):
+            if column not in df.columns:
+                df[column] = np.nan
         hist = df.loc[(df['event_date'] < current) & df['dev_result_c'].notnull() & (df['n_result'] > 0)]
         cyc = df.loc[df['event_date'] == current]
 
@@ -2758,7 +2762,7 @@ class Computer(Core):
         # Current cycle rows (pollsters without history included)
         cycle = cyc[['pollster', 'party', 'dev_cycle', 'n_cycle']].rename(columns={'party': 'name', 'dev_cycle': 'cycle'})
         out = out.merge(cycle, on=['pollster', 'name'], how='outer')
-        out['n_events'] = out['n_events'].fillna(0).astype(int)
+        out['n_events'] = out['n_events'].astype(float).fillna(0).astype(int)  # object dtype without history
 
         # Blocks: the sum of the parties of the block
         parts = []

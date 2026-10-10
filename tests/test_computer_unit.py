@@ -55,6 +55,20 @@ def test_house_effects_summary_decays_and_sums_blocks():
     assert cis.loc['Izquierda', 'cycle'] == pytest.approx(4.5)
 
 
+def test_house_effects_summary_accepts_a_cycle_without_history():
+    """Un ámbito sin filas en `pollsters_parties` (autonómicos) llega solo con el ciclo: sin `dev_result_c` ni
+    `n_result`. La tabla debe salir con `hist`/`trend` nulos y el `cycle` de cada casa (`publish analysis`)."""
+    cycle = pd.DataFrame({
+        'event_date': pd.to_datetime(['2027-05-23'] * 2), 'pollster': ['GAD3'] * 2, 'party': ['PP', 'PSOE'],
+        'dev_cycle': [-1.5, 2.], 'n_cycle': [12, 12]
+    })
+    blocks = {'Derecha': ['PP'], 'Izquierda': ['PSOE']}
+    out = Computer.house_effects_summary(cycle, blocks, current='2027-05-23', year_decay=0.9)
+    gad3 = out.loc['GAD3']
+    assert gad3.loc['PP', 'cycle'] == pytest.approx(-1.5) and gad3.loc['Izquierda', 'cycle'] == pytest.approx(2.)
+    assert gad3.loc['PP', 'n_events'] == 0 and np.isnan(gad3.loc['PP', 'hist']) and np.isnan(gad3.loc['PP', 'trend'])
+
+
 def test_within_block_bias_ignores_parties_the_poll_does_not_report():
     """Una encuesta que no publica a un partido del bloque no debe ser penalizada por ello (revisión M6)."""
     polls = pd.DataFrame({'PP': [33.], 'VOX': [12.], 'PSOE': [28.], 'UP': [12.], 'MP': [np.nan]})
