@@ -1,16 +1,17 @@
-"""Tests de las páginas servidas por los controladores (`Page`, `Index`, `Promedio`) con el arnés ASGI."""
+"""Tests de las páginas servidas por los controladores (`Page`, `Index`, `Promedio`, `Escanos`, `Casas`) con el arnés ASGI."""
 import json
 import os
 import re
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from mtpy import mtpy
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
-from tests.test_webapi_unit import ROOT, RUN, fixture_data, write_bundle
+from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, write_analysis, write_bundle  # noqa: F401
 
 
 def site_api(app):
@@ -87,8 +88,11 @@ def test_freeze_banner_and_attribution(api, fresh_app):
     ('/nope', '', 404, 'Página no encontrada'),
     ('/promedio', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
     ('/escanos', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
+    ('/casas', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
 ])
-def test_page_errors_are_html_and_not_cached(api, path, query, status, text):
+def test_page_errors_are_html_and_not_cached(api, fresh_app, monkeypatch, path, query, status, text):
+    fresh_app.db = object()
+    fake_houses(monkeypatch)
     got, headers, body = call(api, path, query=query)
     assert got == status and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'no-store' and 'etag' not in headers
@@ -119,7 +123,8 @@ def test_default_scope_is_the_first_published(api, fresh_app):
 def test_templates_compile_with_strict_undefined():
     env = pages.environment()
     names = sorted(f for f in os.listdir(pages.TEMPLATES_DIR) if f.endswith('.html'))
-    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html', 'promedio.html', 'escanos.html'} <= set(names)
+    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html', 'promedio.html', 'escanos.html',
+            'casas.html', 'casa.html'} <= set(names)
     for name in names:
         env.get_template(name)
 
@@ -182,8 +187,10 @@ def test_unexpected_error_is_a_generic_500_page_and_is_logged(api, fresh_app, mo
 HOSTILE = '</script><script>alert(1)</script>"\'<b>&'
 
 
-def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_app):
-    """Textos hostiles del paquete se escapan en el HTML y en el bloque JSON; un color no válido cae al gris."""
+def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_app, monkeypatch):
+    """Textos hostiles del paquete y de la base se escapan en el HTML y en el bloque JSON; un color no válido cae al gris."""
+    fresh_app.db = object()
+    fake_houses(monkeypatch, name=HOSTILE)
     writer = bundle.BundleWriter(fresh_app.fs)
     meta = fixture_data('meta')
     meta['parties'][0].update(fullname=HOSTILE, color='red;background:url(http://x)')
@@ -194,14 +201,17 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
     publish.update_manifest(writer, freeze={'active': True, 'message': HOSTILE})
     webapi.site().manifest_cache_clear()
     block = re.compile(r'<script type="application/json" id="initial-data">.*?</script>', re.S)
-    for path in ('/', '/promedio', '/escanos'):
-        body = call(api, path)[2]
+    for path in ('/', '/promedio', '/escanos', '/casas', '/casas?id=1'):
+        path, _, query = path.partition('?')
+        body = call(api, path, query=query)[2]
         page = html(body)
         rest = block.sub('', page)
         assert '<script>alert' not in page and '&lt;script&gt;alert' in rest
         assert '<b>Hostil' not in page and 'url(' not in rest
         data = initial(body)
         assert data['meta']['parties'][0]['fullname'] == HOSTILE
+    casas = initial(call(api, '/casas')[2])
+    assert HOSTILE in [row['pollster'] for row in casas['ranking']]
     home = html(call(api, '/')[2])
     assert 'background-color: {}'.format(pages.OTHERS_COLOR) in home
     assert '&lt;b&gt;Hostil&lt;/b&gt;' in html(call(api, '/promedio')[2])
@@ -416,3 +426,184 @@ def test_promedio_has_the_window_control(api):
     assert 'id="series-window" class="chart-window" hidden' in page  # sin JS el control no hace nada y no se muestra
     assert 'name="window" value="6m" checked' in page and 'Últimos 6 meses' in page
     assert 'name="window" value="all"' in page and 'Todo el ciclo' in page
+
+
+# Casas: tres casas con ratings en `es` (CIS id 1, GAD3 id 2 y una tercera con `rating` nulo que no entra
+# en el ranking) en dos elecciones pasadas y la próxima, más una cuarta casa del catálogo sin ratings en el
+# ámbito. GAD3 tiene el rating más alto en la próxima elección (2026-11-29); su primer rating es de 2023.
+HOUSE_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']
+
+
+def fake_houses(monkeypatch, name='CIS'):
+    """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
+    pollsters = pd.DataFrame({
+        'id': [1, 2, 3, 4], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva'],
+        'mtype': ['public', 'private', 'private', 'private'], 'quality': [0.6, 0.8, 0.4, 0.5],
+        'rating': [0.55, 0.82, None, None],
+    })
+    ratings = pd.DataFrame({
+        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29']),
+        'pollster_id': [1, 1, 2, 1, 2, 3], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama'],
+        'quality': [0.6, 0.6, 0.8, 0.6, 0.8, 0.4], 'num_events': [1, 2, 1, 3, 2, 0],
+        'num_polls': [10, 12, 14, 15, 17, 2], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1],
+        'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, 3.0, None],
+        'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None], 'rating_adj': [0.5, 0.52, 0.8, 0.53, 0.83, None],
+        'rating': [0.51, 0.53, 0.8, 0.55, 0.82, float('nan')],
+    })
+    house_effects = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23', '2023-07-23', '2023-07-23', '2026-11-29']),
+        'pollster_id': [2, 2, 1, 2], 'pollster': ['GAD3', 'GAD3', name, 'GAD3'], 'party': ['PP', 'PSOE', 'PP', 'PP'],
+        'dev_result_c': [0.9, -0.4, -2.1, float('nan')], 'dev_cycle': [0.6, -0.2, -2.8, 0.7],
+    })
+    herding = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23', '2026-11-29']), 'pollster_id': [2, 2], 'pollster': ['GAD3', 'GAD3'],
+        'n': [14, 17], 'ratio': [0.781, 0.705], 'p_value': [0.034, 0.012],
+    })
+    monkeypatch.setattr(webapi, 'get_pollsters', lambda: pollsters)
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings)
+    monkeypatch.setattr(webapi, 'get_house_effects', lambda scope: house_effects)
+    monkeypatch.setattr(webapi, 'get_herding', lambda scope: herding)
+    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
+
+
+@pytest.fixture
+def houses_without_analysis(api, fresh_app, monkeypatch):
+    """Páginas con base simulada y los lectores de casas parcheados, sin análisis publicado."""
+    fresh_app.db = object()
+    fake_houses(monkeypatch)
+    return api
+
+
+@pytest.fixture
+def houses(houses_without_analysis, fresh_app):
+    """Como `houses_without_analysis`, con el análisis de casas de `es` publicado (fixtures)."""
+    write_analysis(fresh_app.fs)
+    return houses_without_analysis
+
+
+def test_casas_lists_the_ranking_effects_and_herding(houses):
+    status, headers, body = call(houses, '/casas', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'aria-current="page"' in page and 'id="ranking-table"' in page
+    assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
+    assert 'href="/casas?scope=es&amp;mode=forecast&amp;id=2"' in page
+    assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
+    assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
+    data = initial(body)
+    assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
+
+
+def test_casas_without_analysis_keeps_the_ranking(houses_without_analysis):
+    page = html(call(houses_without_analysis, '/casas')[2])
+    assert 'id="ranking-table"' in page and 'Análisis no publicado todavía' in page
+    assert 'id="effects-heatmap"' not in page and 'id="herding-table"' not in page
+
+
+def test_casas_without_database_is_a_503_page(api):
+    status, headers, body = call(api, '/casas')
+    assert status == 503 and 'La base de datos no está disponible' in html(body) and headers['cache-control'] == 'no-store'
+
+
+def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
+    page = html(call(houses, '/casas', query='scope=es&id=2')[2])
+    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'id="bullseye-chart"' in page
+    assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las casas' in page
+    data = initial(call(houses, '/casas', query='scope=es&id=2')[2])
+    assert list(data) == ['state', 'meta', 'path', 'bullseye', 'blocks'] and data['path'][0]['event_date'] == '2023-07-23'
+
+
+@pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Casa no válida'), ('id=999', 404, 'Casa no encontrada')])
+def test_casa_profile_errors(houses, query, status, text):
+    got, headers, body = call(houses, '/casas', query=query)
+    assert got == status and text in html(body) and headers['cache-control'] == 'no-store'
+
+
+def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
+    page = html(call(houses, '/casas')[2])
+    ranking = page[page.index('id="ranking-table"'):]
+    ranking = ranking[:ranking.index('</table>')]
+    assert 'Hamalgama' not in ranking and ranking.count('<tr>') == 3  # cabecera, GAD3 y CIS
+    assert '0,82' in ranking and '0,74' in ranking  # rating y herding (análisis) de GAD3
+    assert 'id="rating-chart"' in page and 'id="effects-table"' in page
+    assert 'href="/api/v1/analysis/es/herding?format=csv&amp;table=events"' in page
+    assert 'href="/api/v1/analysis/es/house-effects?format=csv"' in page and 'href="/api/v1/analysis/es/poll-errors?format=csv"' in page
+    data = initial(call(houses, '/casas')[2])
+    assert [row['pollster_id'] for row in data['ranking']] == [2, 1]
+    assert data['grid']['columns'] == ['PP', 'PSOE', 'VOX', 'Derecha', 'Izquierda']
+    assert [row['pollster'] for row in data['grid']['rows']] == ['CIS']  # GAD3 no tiene `cycle`
+
+
+def test_casas_without_analysis_has_no_analysis_downloads(houses_without_analysis):
+    page = html(call(houses_without_analysis, '/casas')[2])
+    assert '/api/v1/analysis/' not in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
+    assert initial(call(houses_without_analysis, '/casas')[2])['grid'] is None
+
+
+def test_casa_profile_tables_and_bullseye(houses):
+    status, headers, body = call(houses, '/casas', query='id=2&mode=nowcast')
+    page = html(body)
+    assert status == 200 and 'href="/casas?scope=es&amp;mode=nowcast"' in page  # "Todas las casas"
+    assert 'id="path-table"' in page and '2023-23J' in page
+    effects = page[page.index('id="profile-effects"'):]
+    effects = effects[:effects.index('</table>')]
+    assert effects.count('<tr>') == 2 and '23 jul 2023' in effects  # la próxima elección no tiene resultado
+    data = initial(body)
+    assert [row['event_date'] for row in data['path']] == ['2023-07-23', '2026-11-29']
+    assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
+    assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': 2.81, 'Izquierda': -0.24}]
+    assert data['blocks'] == ['Derecha', 'Izquierda']
+
+
+def test_casa_profile_of_a_house_without_ratings(houses):
+    """Una casa del catálogo sin ratings en el ámbito: perfil con tablas vacías, sin camino ni diana."""
+    status, headers, body = call(houses, '/casas', query='id=4')
+    page = html(body)
+    assert status == 200 and '<h2>Nueva' in page
+    assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page
+    assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
+    data = initial(body)
+    assert data['path'] == [] and data['bullseye'] == []
+
+
+def test_casa_profile_without_analysis_has_no_bullseye(houses_without_analysis):
+    page = html(call(houses_without_analysis, '/casas', query='id=2')[2])
+    assert 'id="rating-path"' in page and 'id="bullseye-chart"' not in page and 'Análisis no publicado todavía' in page
+    assert initial(call(houses_without_analysis, '/casas', query='id=2')[2])['blocks'] == []
+
+
+def test_ranking_rows_and_herding_rows():
+    frame = pd.DataFrame({'pollster_id': [1, 2, 3], 'pollster': ['CIS', 'GAD3', 'X'], 'rating': [0.55, 0.82, float('nan')],
+                          'quality': [0.6, 0.8, 0.4], 'num_polls': [15, 17, 2], 'extra': [1, 2, 3]})
+    rows = pages.ranking_rows(frame, {'rows': [{'pollster': 'GAD3', 'herding': 0.742}]})
+    assert [row['pollster'] for row in rows] == ['GAD3', 'CIS'] and rows[0]['herding'] == 0.742 and rows[1]['herding'] is None
+    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
+                             'error_blocks', 'bias_blocks', 'herding']
+    assert rows[0]['num_events'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
+    part = {'rows': [{'pollster': 'A', 'herding': 0.9}, {'pollster': 'B', 'herding': None}, {'pollster': 'C', 'herding': 0.7}]}
+    assert [row['pollster'] for row in pages.herding_rows(part)] == ['C', 'A', 'B']
+
+
+def test_house_effects_grid_orders_by_the_first_block_with_nulls_last():
+    def row(pollster, name, cycle):
+        return {'pollster': pollster, 'name': name, 'n_events': 1, 'hist': 0.5, 'trend': None, 'cycle': cycle, 'n_cycle': 3}
+    part = {'parties': ['PP'], 'blocks': ['Derecha'], 'rows': [
+        row('A', 'PP', 1.0), row('A', 'Derecha', None), row('B', 'PP', None), row('B', 'Derecha', 2.0),
+        row('C', 'PP', None), row('D', 'Derecha', -1.0),
+    ]}
+    grid = pages.house_effects_grid(part)
+    assert grid['columns'] == ['PP', 'Derecha'] and [r['pollster'] for r in grid['rows']] == ['B', 'D', 'A']
+    assert grid['rows'][1]['cells'] == [{'cycle': None, 'hist': None, 'trend': None}, {'cycle': -1.0, 'hist': 0.5, 'trend': None}]
+
+
+def test_api_url_covers_analysis_and_data_tables():
+    assert pages.api_url('es', 'herding', kind='analysis', fmt='csv') == '/api/v1/analysis/es/herding?format=csv'
+    assert pages.api_url('es', 'herding', kind='analysis', fmt='csv', table='events') == '/api/v1/analysis/es/herding?format=csv&table=events'
+    assert pages.api_url('es', 'ratings', kind='data', fmt='csv') == '/api/v1/ratings?scope=es&format=csv'
+    assert pages.api_url('es', 'fan', run=RUN, fmt='csv') == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)
+
+
+def test_analysis_part_is_none_when_not_published(api, fresh_app):
+    assert pages.analysis_part('es', 'herding') is None
+    write_analysis(fresh_app.fs)
+    webapi.site().manifest_cache_clear()
+    assert pages.analysis_part('es', 'herding')['rows'][0]['pollster'] == 'GAD3'

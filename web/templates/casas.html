@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% block title %}Casas{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/casas.js"></script>
+{% endblock %}
+{% block content %}
+    <div id="content" class="stack">
+      <section class="card" id="ranking">
+        <h2>Ranking de casas <span class="muted">· próxima elección</span></h2>
+        {% if ranking %}
+        <div class="chart" id="rating-chart" role="img" aria-label="Rating de cada casa encuestadora para la próxima elección"></div>
+        {% else %}
+        <p class="notice">Todavía no hay ratings de casas para este ámbito.</p>
+        {% endif %}
+        <div class="table-wrap">
+          <table id="ranking-table">
+            <caption>Casas con rating, de mayor a menor. Pulsa en una casa para ver su perfil.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Casa</th>
+                <th scope="col">Rating</th>
+                <th scope="col">Calidad</th>
+                <th scope="col">Sondeos</th>
+                <th scope="col">Elecciones</th>
+                <th scope="col">Error medio</th>
+                <th scope="col">Error de bloques</th>
+                <th scope="col">Sesgo de bloques</th>
+                <th scope="col">Herding</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in ranking %}
+              <tr>
+                <td><a href="/casas{{ query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
+                <td>{{ row.rating|num(2) }}</td>
+                <td>{{ row.quality|num(2) }}</td>
+                <td>{{ row.num_polls|int }}</td>
+                <td>{{ row.num_events|int }}</td>
+                <td>{{ row.error_avg|num(1) }}</td>
+                <td>{{ row.error_blocks|num(1) }}</td>
+                <td>{{ row.bias_blocks|num(1) }}</td>
+                <td>{{ row.herding|num(2) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: la valoración de cada casa encuestadora de cara a la próxima elección del ámbito.
+          El rating, entre 0 y 1, combina el sesgo de sus sondeos frente al resultado en las elecciones
+          anteriores con una calidad previa que pesa más cuantos menos sondeos tiene la casa; cuanto más
+          alto, más pesan sus sondeos en el promedio. El error medio es la distancia media, en puntos,
+          entre sus sondeos y el resultado de cada partido; el error y el sesgo de bloques miden lo mismo
+          con la suma de cada bloque. El herding compara la dispersión de sus sondeos con la que cabría
+          esperar por el tamaño de la muestra: por debajo de 1, sus sondeos varían menos de lo esperable.
+        </p>
+      </section>
+      <section class="card" id="house-effects">
+        <h2>Efectos de casa <span class="muted">· ciclo actual</span></h2>
+        {% if grid is none %}
+        <p class="notice">Análisis no publicado todavía.</p>
+        {% elif not grid.rows %}
+        <p class="notice">Ninguna casa tiene efectos de casa en el ciclo actual.</p>
+        {% else %}
+        <div class="chart" id="effects-heatmap" role="img" aria-label="Mapa de calor del efecto de casa del ciclo actual por casa y por partido o bloque"></div>
+        <div class="table-wrap">
+          <table id="effects-table">
+            <caption>Desviación del ciclo actual, en puntos. Pasa el ratón por una celda para ver la historia y la tendencia.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Casa</th>
+                {% for name in grid.columns %}
+                <th scope="col">{{ name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in grid.rows %}
+              <tr>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                {% for cell in row.cells %}
+                <td title="Historia: {{ cell.hist|num(1) }} · Tendencia: {{ cell.trend|num(1) }} al año">{{ cell.cycle|num(1) }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <p class="about">
+          Qué es esto: cuánto se separa cada casa, en puntos, del promedio de todas en el ciclo actual,
+          por partido y por bloque. Positivo: la casa da a ese partido o bloque más voto que el promedio;
+          negativo, menos. La historia es su desviación media frente al resultado en elecciones pasadas y
+          la tendencia, cuánto cambia esa desviación cada año. Solo aparecen las casas con sondeos en el
+          ciclo actual.
+        </p>
+      </section>
+      <section class="card" id="herding">
+        <h2>Herding</h2>
+        {% if herding is none %}
+        <p class="notice">Análisis no publicado todavía.</p>
+        {% else %}
+        <div class="table-wrap">
+          <table id="herding-table">
+            <caption>De la casa que más se ciñe al resto a la que menos.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Casa</th>
+                <th scope="col">Herding</th>
+                <th scope="col">Último ciclo</th>
+                <th scope="col">p-valor del último ciclo</th>
+                <th scope="col">Sondeos</th>
+                <th scope="col">Ciclos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in herding %}
+              <tr>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{{ row.herding|num(2) }}</td>
+                <td>{{ row.herding_last|num(2) }}</td>
+                <td>{{ row.herding_p|num(3) }}</td>
+                <td>{{ row.herding_n|int }}</td>
+                <td>{{ row.herding_events|int }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <p class="about">
+          Qué es esto: la dispersión de los sondeos de cada casa alrededor del promedio, dividida entre la
+          que cabría esperar solo por el tamaño de sus muestras. Un valor cercano a 1 es lo esperable; por
+          debajo de 1, sus sondeos se parecen entre sí y al promedio más de lo que permite el azar, una
+          señal de que la casa se ciñe al resto (herding). El p-valor mide cómo de improbable es esa
+          dispersión en su último ciclo si no hubiera herding.
+        </p>
+      </section>
+      <section class="card" id="downloads">
+        <h2>Descargas</h2>
+        <ul>
+          {% for link in csv_links %}
+          <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
+          {% endfor %}
+        </ul>
+        <p class="about">
+          Qué es esto: los datos de esta página en CSV. Los ratings salen de la base de datos; el resto,
+          del último análisis de casas publicado para este ámbito.
+        </p>
+      </section>
+    </div>
+{% endblock %}

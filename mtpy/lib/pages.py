@@ -3,7 +3,9 @@ Server-rendered web pages: routes, the Jinja2 environment, formatting filters an
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
 from the templates of ``web/templates``. Every context is built from the published bundle through
-``webapi.site()``, reading all the parts of a page with the same run, so a page never mixes runs.
+``webapi.site()``, reading all the parts of a page with the same run, so a page never mixes runs;
+the houses page adds the live tables of the database (``webapi.query_*``) and the houses analysis
+of the scope, which is not tied to a run and is read as published.
 The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``webapi``, this module
 does not import the model nor ``publish``, so the web workers stay light.
 """
@@ -22,8 +24,8 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from ..core.api import HttpError
 from ..core.app import App
-from . import bundle
-from .webapi import check_mode, check_region, check_run, check_scope, site
+from . import bundle, webapi
+from .webapi import check_mode, check_region, check_run, check_scope, query_pollster, query_ratings, site
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
@@ -32,10 +34,12 @@ PAGES = (
     {'href': '/', 'label': 'Portada'},
     {'href': '/promedio', 'label': 'Promedio'},
     {'href': '/escanos', 'label': 'Escaños'},
+    {'href': '/casas', 'label': 'Casas'},
 )
 ROUTES = [
     ('/promedio', 'promedio', 'index', ['GET']),
     ('/escanos', 'escanos', 'index', ['GET']),
+    ('/casas', 'casas', 'index', ['GET']),
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MONTHS = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic')
@@ -50,6 +54,10 @@ MESSAGES = {
     'invalid mode': 'Modo no válido.',
     'invalid region': 'Circunscripción no válida.',
     'region not found': 'Circunscripción no encontrada.',
+    'no database configured': 'La base de datos no está disponible.',
+    'database unavailable': 'La base de datos no está disponible.',
+    'pollster not found': 'Casa no encontrada.',
+    'invalid pollster': 'Casa no válida.',
 }
 TABLE_ROWS = 40
 OTHERS_COLOR = '#9e9e9e'
@@ -60,6 +68,16 @@ CSV_PARTS = (
     ('districts', 'Circunscripciones', True),
     ('scenario', 'Escenario central', True),
     ('fan', 'Abanico por horizonte', False),
+)
+RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
+                'error_blocks', 'bias_blocks')
+PATH_KEYS = ('event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls')
+HERDING_KEYS = ('event_date', 'n', 'ratio', 'p_value')
+ANALYSIS_CSV = (
+    ('house-effects', None, 'Efectos de casa por partido y bloque'),
+    ('herding', None, 'Herding por casa'),
+    ('herding', 'events', 'Herding por casa y ciclo'),
+    ('poll-errors', None, 'Error de los sondeos en cada elección'),
 )
 
 _DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
@@ -486,37 +504,54 @@ def query_string(state: dict) -> str:
 
 
 def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str] = None,
-            fmt: Optional[str] = None) -> str:
+            fmt: Optional[str] = None, kind: str = 'forecast', table: Optional[str] = None) -> str:
     """
-    URL of a part in the ``/api/v1`` forecast routes.
+    URL of a part in the ``/api/v1`` routes.
 
     Parameters
     ----------
     scope : str
         Scope code.
     part : str
-        Part name; ``'meta'`` is the scope route itself.
+        Part name; ``'meta'`` is the scope route itself in the forecast routes; the table name
+        (``'ratings'``...) in the database routes.
     mode : str, optional
-        Simulation mode, for the mode parts.
+        Simulation mode, for the mode parts of the forecast.
     run : str, optional
-        Run id.
+        Run id, for the forecast.
     fmt : str, optional
         Output format (``'json'`` or ``'csv'``).
+    kind : str, optional
+        ``'forecast'`` (the default), ``'analysis'`` (the houses analysis) or ``'data'`` (the
+        tables of the database).
+    table : str, optional
+        CSV table of an analysis part (``'events'`` for the herding by cycle).
 
     Returns
     -------
     str
-        ``'/api/v1/forecast/{scope}[/{mode}]/{part}[?run=...&format=...]'``.
+        ``'/api/v1/forecast/{scope}[/{mode}]/{part}[?run=...&format=...]'``,
+        ``'/api/v1/analysis/{scope}/{part}[?format=...&table=...]'`` or
+        ``'/api/v1/{part}?scope={scope}[&format=...]'``.
     """
-    url = '/api/v1/forecast/' + scope
+    if kind == 'analysis':
+        url = '/api/v1/analysis/{}/{}'.format(scope, part)
+        params = (('format', fmt), ('table', table))
+    elif kind == 'data':
+        url = '/api/v1/' + part
+        params = (('scope', scope), ('format', fmt))
+    else:
+        url = '/api/v1/forecast/' + scope
 
-    if mode:
-        url += '/' + mode
+        if mode:
+            url += '/' + mode
 
-    if part != 'meta':
-        url += '/' + part
+        if part != 'meta':
+            url += '/' + part
 
-    params = [(key, value) for key, value in (('run', run), ('format', fmt)) if value]
+        params = (('run', run), ('format', fmt))
+
+    params = [(key, value) for key, value in params if value]
 
     return url + ('?' + urlencode(params) if params else '')
 
@@ -1135,5 +1170,305 @@ def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
         'fan': part(scope, run, 'fan'),
         'runs': bundle.loads(site().history(scope))['data'],
     }
+
+    return context
+
+
+def analysis_part(scope: str, name: str) -> Optional[dict]:
+    """
+    Data of a part of the published houses analysis of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    name : str
+        Part name, one of ``bundle.ANALYSIS_PARTS``.
+
+    Returns
+    -------
+    dict or None
+        The ``data`` member of the part envelope, or ``None`` when the part is not published.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than the 404 of an unpublished analysis.
+    """
+    try:
+        return bundle.loads(site().analysis(scope, name))['data']
+    except HttpError as error:
+        if error.status == 404:
+            return None
+
+        raise
+
+
+def ranking_rows(ratings, herding: Optional[dict]) -> list:
+    """
+    Rows of the pollsters ranking.
+
+    Parameters
+    ----------
+    ratings : pandas.DataFrame
+        Ratings of one event (``webapi.query_ratings``).
+    herding : dict or None
+        Data of the ``herding`` analysis part, or ``None`` when it is not published.
+
+    Returns
+    -------
+    list of dict
+        The pollsters with a rating, by ``rating`` descending (ties keep the input order), with
+        the keys of ``RANKING_KEYS`` (``None`` when a column is missing) plus ``herding``, the
+        pooled herding of the analysis for that pollster name or ``None``. ``pollster_id`` is an
+        integer, for the profile links.
+    """
+    if ratings.empty or 'rating' not in ratings.columns:
+        return []
+
+    pooled = {row['pollster']: row.get('herding') for row in (herding or {}).get('rows') or []}
+    rows = []
+
+    for record in webapi.frame_to_records(ratings):
+        if record.get('rating') is None:
+            continue
+
+        row = {key: record.get(key) for key in RANKING_KEYS}
+        row['pollster_id'] = int(row['pollster_id'])
+        row['herding'] = pooled.get(row['pollster'])
+        rows.append(row)
+
+    return sorted(rows, key=lambda row: row['rating'], reverse=True)
+
+
+def house_effects_grid(part: dict) -> dict:
+    """
+    Grid of the house effects of the current cycle: one row per pollster, one cell per column.
+
+    Parameters
+    ----------
+    part : dict
+        Data of the ``house-effects`` analysis part (``parties``, ``blocks``, ``rows``).
+
+    Returns
+    -------
+    dict
+        ``{'columns': parties + blocks, 'rows': [{'pollster', 'cells'}]}``; each cell is
+        ``{'cycle', 'hist', 'trend'}`` (all ``None`` when the analysis has no row for it). Only
+        pollsters with some ``cycle`` are kept, in the order of the analysis, then sorted by the
+        ``cycle`` of the first block descending (of the first column without blocks), ``None``
+        last.
+    """
+    blocks = list(part.get('blocks') or [])
+    columns = list(part.get('parties') or []) + blocks
+    values = {}
+
+    for row in part.get('rows') or []:
+        values.setdefault(row['pollster'], {})[row['name']] = row
+
+    rows = []
+
+    for pollster, by_name in values.items():
+        cells = [{key: (by_name.get(name) or {}).get(key) for key in ('cycle', 'hist', 'trend')}
+                 for name in columns]
+
+        if any(cell['cycle'] is not None for cell in cells):
+            rows.append({'pollster': pollster, 'cells': cells})
+
+    if columns:
+        index = columns.index(blocks[0]) if blocks else 0
+        rows.sort(key=lambda row: (row['cells'][index]['cycle'] is None, -(row['cells'][index]['cycle'] or 0)))
+
+    return {'columns': columns, 'rows': rows}
+
+
+def herding_rows(part: dict) -> list:
+    """
+    Rows of the herding table.
+
+    Parameters
+    ----------
+    part : dict
+        Data of the ``herding`` analysis part.
+
+    Returns
+    -------
+    list of dict
+        ``part['rows']`` by ``herding`` ascending (the most herded first), ``None`` last.
+    """
+    rows = part.get('rows') or []
+
+    return sorted(rows, key=lambda row: (row.get('herding') is None, row.get('herding') or 0))
+
+
+def profile_rows(records: list, keys: tuple) -> list:
+    """
+    Rows of a profile table, by event date.
+
+    Parameters
+    ----------
+    records : list of dict
+        JSON records of a table of the pollster (``webapi.query_pollster``).
+    keys : tuple of str
+        Keys to keep, in order (``None`` when a record lacks one).
+
+    Returns
+    -------
+    list of dict
+        The records reduced to ``keys``, sorted by ``event_date`` (stable).
+    """
+    rows = [{key: record.get(key) for key in keys} for record in records]
+
+    return sorted(rows, key=lambda row: row.get('event_date') or '')
+
+
+def effects_table(records: list) -> dict:
+    """
+    House effects of a pollster by election and party.
+
+    Parameters
+    ----------
+    records : list of dict
+        Its rows of the house effects table (``event_date``, ``party``, ``dev_result_c``...).
+
+    Returns
+    -------
+    dict
+        ``{'columns': parties, 'rows': [{'event_date', 'cells'}]}``: the parties in order of first
+        appearance, one row per election by date and the ``dev_result_c`` of each party
+        (``None`` when missing). An election without any value (the next one, which has no
+        result yet) has no row.
+    """
+    columns = []
+    values = {}
+
+    for record in records:
+        party = record.get('party')
+
+        if party not in columns:
+            columns.append(party)
+
+        values.setdefault(record.get('event_date'), {})[party] = record.get('dev_result_c')
+
+    rows = [
+        {'event_date': event_date, 'cells': [values[event_date].get(party) for party in columns]}
+        for event_date in sorted(values, key=lambda value: value or '')
+    ]
+
+    return {'columns': columns, 'rows': [row for row in rows if any(cell is not None for cell in row['cells'])]}
+
+
+def casas_context(state: dict, active: str = '/casas') -> dict:
+    """
+    Template context of the houses page.
+
+    The ranking comes from the database; the house effects and the herding from the houses
+    analysis of the scope, whose ``meta`` part marks it as complete.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+    active : str, optional
+        ``href`` of the page in the navigation.
+
+    Returns
+    -------
+    dict
+        The common context plus ``ranking`` (``ranking_rows``), ``grid`` (``house_effects_grid``
+        or ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``,
+        ``pollster_ids`` (``{name: id}`` of the pollsters rated in the event, for the links),
+        ``csv_links`` and ``initial`` (``state``, ``meta``, ``ranking`` and ``grid``).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle or without a database; 404 for an unpublished scope or a missing
+        run.
+    """
+    context = common_context(state, active)
+    full = context['state']
+    scope = full['scope']
+    ratings = query_ratings(scope)
+    missing = analysis_part(scope, 'meta') is None
+    effects = None if missing else analysis_part(scope, 'house-effects')
+    herding = None if missing else analysis_part(scope, 'herding')
+    ranking = ranking_rows(ratings, herding)
+    grid = house_effects_grid(effects) if effects is not None else None
+    links = [{'label': 'Ratings de la próxima elección', 'href': api_url(scope, 'ratings', fmt='csv', kind='data')}]
+
+    if not missing:
+        links += [
+            {'label': label, 'href': api_url(scope, name, fmt='csv', kind='analysis', table=table)}
+            for name, table, label in ANALYSIS_CSV
+        ]
+
+    context['ranking'] = ranking
+    context['grid'] = grid
+    context['herding'] = herding_rows(herding) if herding is not None else None
+    context['analysis_missing'] = missing
+    context['pollster_ids'] = {
+        record['pollster']: int(record['pollster_id'])
+        for record in webapi.frame_to_records(ratings)
+        if record.get('pollster') is not None and record.get('pollster_id') is not None
+    }
+    context['csv_links'] = links
+    context['initial'] = {'state': full, 'meta': context['meta'], 'ranking': ranking, 'grid': grid}
+
+    return context
+
+
+def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
+    """
+    Template context of the profile of a pollster.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+    pollster_id : int
+        Pollster id validated by ``webapi.check_pollster``.
+    active : str, optional
+        ``href`` of the page in the navigation.
+
+    Returns
+    -------
+    dict
+        The common context plus ``profile`` (``webapi.query_pollster``), ``path`` (its ratings
+        by election, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
+        (its herding by cycle, ``HERDING_KEYS``), ``bullseye`` (its rows of the ``poll-errors``
+        analysis part: ``event``, ``event_date``, ``days`` and the error of each block, by date;
+        empty without analysis), ``blocks`` (the blocks of that part), ``analysis_missing`` and
+        ``initial`` (``state``, ``meta``, ``path``, ``bullseye`` and ``blocks``).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle or without a database; 404 for an unpublished scope, a missing run
+        or an unknown pollster.
+    """
+    context = common_context(state, active)
+    full = context['state']
+    scope = full['scope']
+    profile = query_pollster(pollster_id, scope)
+    missing = analysis_part(scope, 'meta') is None
+    errors = (None if missing else analysis_part(scope, 'poll-errors')) or {}
+    blocks = list(errors.get('blocks') or [])
+    name = profile['pollster'].get('name')
+    bullseye = profile_rows(
+        [row for row in errors.get('rows') or [] if row.get('pollster') == name],
+        ('event', 'event_date', 'days') + tuple(blocks),
+    )
+    path = profile_rows(profile['ratings'], PATH_KEYS)
+
+    context['profile'] = profile
+    context['path'] = path
+    context['effects_table'] = effects_table(profile['house_effects'])
+    context['herding_table'] = profile_rows(profile['herding'], HERDING_KEYS)
+    context['bullseye'] = bullseye
+    context['blocks'] = blocks
+    context['analysis_missing'] = missing
+    context['initial'] = {'state': full, 'meta': context['meta'], 'path': path, 'bullseye': bullseye,
+                          'blocks': blocks}
 
     return context
