@@ -27,6 +27,7 @@ from .bundle import BundleReader
 DEFAULT_TTL = 60
 LRU_SIZE = 200
 IMMUTABLE_MAX_AGE = 31536000
+QUERY_CACHE_SIZE = 128
 DEFAULT_LIMIT = 1000
 MAX_LIMIT = 5000
 DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
@@ -69,7 +70,11 @@ def settings() -> dict:
 
 class TTLCache:
     """
-    Cache whose entries expire a fixed time after being stored.
+    Cache whose entries expire a fixed time after being stored, optionally capped in size.
+
+    An expired entry is replaced when its key is asked again; with ``maxsize`` the least
+    recently used entry is evicted on insert, so keys shaped by requests cannot grow the
+    cache without bound.
 
     Parameters
     ----------
@@ -77,13 +82,27 @@ class TTLCache:
         Seconds an entry stays valid.
     clock : callable, optional
         Function returning the current time in seconds. Defaults to ``time.monotonic``.
+    maxsize : int, optional
+        Maximum number of entries; ``None`` (default) for no cap.
     """
 
-    def __init__(self, ttl: float, clock: Callable[[], float] = time.monotonic):
+    def __init__(self, ttl: float, clock: Callable[[], float] = time.monotonic, maxsize: Optional[int] = None):
         self.ttl = ttl
         self.clock = clock
-        self._items = {}
+        self.maxsize = maxsize
+        self._items = OrderedDict()
         self._lock = Lock()
+
+    def __len__(self) -> int:
+        """
+        Number of stored entries, expired ones included.
+
+        Returns
+        -------
+        int
+            Entries currently stored.
+        """
+        return len(self._items)
 
     def get(self, key: Any, loader: Callable[[], Any]) -> Any:
         """
@@ -109,13 +128,19 @@ class TTLCache:
         with self._lock:
             hit = self._items.get(key)
 
-        if hit is not None and self.clock() - hit[0] < self.ttl:
-            return hit[1]
+            if hit is not None and self.clock() - hit[0] < self.ttl:
+                self._items.move_to_end(key)
+
+                return hit[1]
 
         value = loader()
 
         with self._lock:
             self._items[key] = (self.clock(), value)
+            self._items.move_to_end(key)
+
+            while self.maxsize is not None and len(self._items) > self.maxsize:
+                self._items.popitem(last=False)
 
         return value
 
@@ -903,7 +928,7 @@ get_herding = _reader('get_herding')
 get_drift = _reader('get_drift')
 get_next_event_date = _reader('get_next_event_date')
 
-_QUERIES = TTLCache(DEFAULT_TTL)
+_QUERIES = TTLCache(DEFAULT_TTL, maxsize=QUERY_CACHE_SIZE)
 
 
 def database() -> Any:
@@ -928,30 +953,33 @@ def database() -> Any:
     return db
 
 
-def _query(name: str, args: tuple, loader: Callable[[], Any]) -> Any:
+def _query(key: tuple, loader: Callable[[], Any]) -> Any:
     """
-    Run a database query through the TTL cache.
+    Run a database read through the query cache.
+
+    Only bounded reads are cached: whole per-scope tables, the catalogues, the polls of an
+    event that exists in the scope and the results of an election. Row filters chosen by the
+    request (``event`` of the ratings, ``pollster``, ``limit``) are applied on the cached
+    frame, outside the cache. The cache has a TTL and an LRU cap of ``QUERY_CACHE_SIZE``.
 
     Parameters
     ----------
-    name : str
-        Name of the query, part of the cache key.
-    args : tuple
-        Validated arguments of the query, the rest of the cache key.
+    key : tuple
+        Cache key: the read name followed by its validated arguments.
     loader : callable
         Function without arguments that reads the database.
 
     Returns
     -------
     object
-        The cached or freshly loaded result.
+        The cached or freshly read result.
 
     Raises
     ------
     HttpError
         503 ``no database configured`` before reading when the app has no database; 503
-        ``database unavailable`` when the reader fails (the trace goes to the app logger).
-        An ``HttpError`` raised by the loader passes through.
+        ``database unavailable`` when the reader fails (the trace goes to the app logger and
+        nothing is cached).
     """
     database()
     _QUERIES.ttl = settings()['cache_ttl']
@@ -959,17 +987,13 @@ def _query(name: str, args: tuple, loader: Callable[[], Any]) -> Any:
     def load():
         try:
             return loader()
-        except HttpError:
-            raise
         except Exception as error:
             logger = App.get_().logger
             if logger is not None:
-                logger.error('Database query {}{!r} failed: {!r}\n{}'.format(
-                    name, args, error, traceback.format_exc()
-                ))
+                logger.error('Database query {!r} failed: {!r}\n{}'.format(key, error, traceback.format_exc()))
             raise HttpError(503, 'database unavailable')
 
-    return _QUERIES.get((name, args), load)
+    return _QUERIES.get(key, load)
 
 
 def _rows_of(frame: pd.DataFrame, column: str, value: Any) -> pd.DataFrame:
@@ -996,6 +1020,92 @@ def _rows_of(frame: pd.DataFrame, column: str, value: Any) -> pd.DataFrame:
     return frame.loc[frame[column] == value].reset_index(drop=True)
 
 
+def _ratings(scope: str) -> pd.DataFrame:
+    """
+    Whole ratings table of a scope (every event, the next one included), cached.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_ratings(scope)``.
+    """
+    return _query(('ratings', scope), lambda: get_ratings(scope))
+
+
+def _next_event(scope: str) -> Optional[str]:
+    """
+    Date of the next election of a scope, cached.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    str or None
+        ``data.get_next_event_date(scope)``.
+    """
+    return _query(('next_event', scope), lambda: get_next_event_date(scope))
+
+
+def _event_dates(frame: pd.DataFrame) -> pd.Series:
+    """
+    Event dates of a table as timestamps.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        Table with an ``event_date`` column.
+
+    Returns
+    -------
+    pandas.Series
+        The dates, aligned with the rows.
+    """
+    return pd.to_datetime(frame['event_date'])
+
+
+def check_event(scope: str, event: str) -> str:
+    """
+    Check that a validated date is an event of a scope: one in its ratings or its next election.
+
+    The set of events comes from bounded cached reads, so an arbitrary date never creates a
+    cache key nor a database read of its own.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    event : str
+        Date validated by ``check_date``.
+
+    Returns
+    -------
+    str
+        The same date.
+
+    Raises
+    ------
+    HttpError
+        404 ``event not found`` when the scope has no such event.
+    """
+    ratings = _ratings(scope)
+
+    if 'event_date' in ratings.columns and (_event_dates(ratings) == pd.Timestamp(event)).any():
+        return event
+
+    if event == _next_event(scope):
+        return event
+
+    raise HttpError(404, 'event not found')
+
+
 def query_parties() -> pd.DataFrame:
     """
     Parties catalogue.
@@ -1005,7 +1115,7 @@ def query_parties() -> pd.DataFrame:
     pandas.DataFrame
         ``data.get_parties()``.
     """
-    return _query('parties', (), lambda: get_parties())
+    return _query(('parties',), lambda: get_parties())
 
 
 def query_pollsters() -> pd.DataFrame:
@@ -1017,12 +1127,12 @@ def query_pollsters() -> pd.DataFrame:
     pandas.DataFrame
         ``data.get_pollsters()``: ``id``, ``name``, ``mtype``, ``quality``, ``rating``.
     """
-    return _query('pollsters', (), lambda: get_pollsters())
+    return _query(('pollsters',), lambda: get_pollsters())
 
 
 def query_pollster(pollster_id: int, scope: str) -> dict:
     """
-    Profile of a pollster in a scope.
+    Profile of a pollster in a scope, composed from the cached per-scope tables.
 
     Parameters
     ----------
@@ -1035,9 +1145,8 @@ def query_pollster(pollster_id: int, scope: str) -> dict:
     -------
     dict
         ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...]}``:
-        the catalogue row of the pollster and its rows of ``get_ratings(scope)`` (every event,
-        the next one included, by date), ``get_house_effects(scope)`` and ``get_herding(scope)``,
-        as JSON records.
+        the catalogue row of the pollster and its rows of the ratings (every event, the next
+        one included, by date), house effects and herding tables of the scope, as JSON records.
 
     Raises
     ------
@@ -1049,19 +1158,16 @@ def query_pollster(pollster_id: int, scope: str) -> dict:
     if pollster.empty:
         raise HttpError(404, 'pollster not found')
 
-    def load():
-        ratings = _rows_of(get_ratings(scope), 'pollster_id', pollster_id)
-        if 'event_date' in ratings.columns:
-            ratings = ratings.sort_values('event_date', ignore_index=True)
+    ratings = _rows_of(_ratings(scope), 'pollster_id', pollster_id)
+    if 'event_date' in ratings.columns:
+        ratings = ratings.sort_values('event_date', ignore_index=True)
 
-        return {
-            'pollster': frame_to_records(pollster)[0],
-            'ratings': frame_to_records(ratings),
-            'house_effects': frame_to_records(_rows_of(get_house_effects(scope), 'pollster_id', pollster_id)),
-            'herding': frame_to_records(_rows_of(get_herding(scope), 'pollster_id', pollster_id)),
-        }
-
-    return _query('pollster', (pollster_id, scope), load)
+    return {
+        'pollster': frame_to_records(pollster)[0],
+        'ratings': frame_to_records(ratings),
+        'house_effects': frame_to_records(_rows_of(query_house_effects(scope), 'pollster_id', pollster_id)),
+        'herding': frame_to_records(_rows_of(query_herding(scope), 'pollster_id', pollster_id)),
+    }
 
 
 def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
@@ -1073,25 +1179,31 @@ def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
     scope : str
         Validated scope code.
     event : str, optional
-        Validated event date; by default the latest event of ``get_ratings(scope)``, which is
-        the next election.
+        Validated event date; by default the latest event of the ratings, which is the next
+        election.
 
     Returns
     -------
     pandas.DataFrame
         One row per pollster of the event, with a fresh index; empty when there is none.
+
+    Raises
+    ------
+    HttpError
+        404 ``event not found`` when ``event`` is not an event of the scope.
     """
-    def load():
-        ratings = get_ratings(scope)
-        if ratings.empty:
-            return ratings
+    ratings = _ratings(scope)
 
-        dates = pd.to_datetime(ratings['event_date'])
-        target = dates.max() if event is None else pd.Timestamp(event)
+    if event is not None:
+        check_event(scope, event)
 
-        return ratings.loc[dates == target].reset_index(drop=True)
+    if ratings.empty:
+        return ratings
 
-    return _query('ratings', (scope, event), load)
+    dates = _event_dates(ratings)
+    target = dates.max() if event is None else pd.Timestamp(event)
+
+    return ratings.loc[dates == target].reset_index(drop=True)
 
 
 def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int] = None,
@@ -1101,7 +1213,8 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
 
     The reader is ``data.get_poll_series`` (the poll fields, its weights and errors, and the
     ``pct`` of each party as a column); ``get_poll_results`` returns one row per poll and
-    party instead.
+    party instead. The polls of the event are cached once; ``pollster`` and ``limit`` are
+    applied on that frame.
 
     Parameters
     ----------
@@ -1118,21 +1231,25 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     -------
     pandas.DataFrame
         The polls, most recent first; empty when the scope has no next election.
+
+    Raises
+    ------
+    HttpError
+        404 ``event not found`` when ``event`` is not an event of the scope.
     """
-    def load():
-        date = event if event is not None else get_next_event_date(scope)
-        if date is None:
-            return pd.DataFrame()
+    date = _next_event(scope) if event is None else check_event(scope, event)
 
-        polls = get_poll_series(scope, date)
-        if pollster is not None:
-            polls = _rows_of(polls, 'pollster_id', pollster)
-        if 'date' in polls.columns:
-            polls = polls.sort_values('date', ascending=False, kind='stable')
+    if date is None:
+        return pd.DataFrame()
 
-        return polls.head(limit).reset_index(drop=True)
+    polls = _query(('polls', scope, date), lambda: get_poll_series(scope, date))
 
-    return _query('polls', (scope, event, pollster, limit), load)
+    if pollster is not None:
+        polls = _rows_of(polls, 'pollster_id', pollster)
+    if 'date' in polls.columns:
+        polls = polls.sort_values('date', ascending=False, kind='stable')
+
+    return polls.head(limit).reset_index(drop=True)
 
 
 def query_results(scope: str, date: str, region: int = 0) -> pd.DataFrame:
@@ -1153,7 +1270,7 @@ def query_results(scope: str, date: str, region: int = 0) -> pd.DataFrame:
     pandas.DataFrame
         ``data.get_event_results(scope, date, region)``.
     """
-    return _query('results', (scope, date, region), lambda: get_event_results(scope, date, region))
+    return _query(('results', scope, date, region), lambda: get_event_results(scope, date, region))
 
 
 def query_house_effects(scope: str) -> pd.DataFrame:
@@ -1170,7 +1287,7 @@ def query_house_effects(scope: str) -> pd.DataFrame:
     pandas.DataFrame
         ``data.get_house_effects(scope)``: one row per event, pollster and party.
     """
-    return _query('house_effects', (scope,), lambda: get_house_effects(scope))
+    return _query(('house_effects', scope), lambda: get_house_effects(scope))
 
 
 def query_herding(scope: str) -> pd.DataFrame:
@@ -1187,7 +1304,7 @@ def query_herding(scope: str) -> pd.DataFrame:
     pandas.DataFrame
         ``data.get_herding(scope)``: one row per election cycle and pollster.
     """
-    return _query('herding', (scope,), lambda: get_herding(scope))
+    return _query(('herding', scope), lambda: get_herding(scope))
 
 
 def query_drift(scope: str) -> pd.DataFrame:
@@ -1204,7 +1321,7 @@ def query_drift(scope: str) -> pd.DataFrame:
     pandas.DataFrame
         ``data.get_drift(scope)``: one row per past election, party and horizon.
     """
-    return _query('drift', (scope,), lambda: get_drift(scope))
+    return _query(('drift', scope), lambda: get_drift(scope))
 
 
 def frame_to_records(frame: pd.DataFrame) -> list:

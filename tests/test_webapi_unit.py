@@ -288,7 +288,7 @@ def test_query_ratings_returns_the_next_event_and_caches(fresh_app, monkeypatch)
     webapi.query_ratings('es')
     assert calls == ['es']  # segunda llamada desde la caché
     past = webapi.query_ratings('es', '2023-07-23')
-    assert past['rating'].tolist() == [1.4, 0.6] and calls == ['es', 'es']  # otra clave, otra lectura
+    assert past['rating'].tolist() == [1.4, 0.6] and calls == ['es']  # el evento se filtra fuera de la caché
 
 
 def test_query_errors_become_503_and_are_logged(fresh_app, monkeypatch):
@@ -303,6 +303,10 @@ def test_query_errors_become_503_and_are_logged(fresh_app, monkeypatch):
         webapi.query_ratings('es')
     assert err.value.status == 503 and err.value.message == 'database unavailable'
     assert len(errors) == 1 and 'connection refused' in errors[0] and 'Traceback' in errors[0]
+    calls = []
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: calls.append(scope) or ratings_frame())
+    # el fallo no se cacheó: la llamada siguiente vuelve al lector
+    assert webapi.query_ratings('es')['pollster'].tolist() == ['GAD3', 'CIS'] and calls == ['es']
 
 
 def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
@@ -328,6 +332,27 @@ def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
     assert err.value.status == 404 and err.value.message == 'pollster not found'
 
 
+def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
+    fresh_app.db = object()
+    calls = []
+
+    def counted(name, frame):
+        return lambda *args: calls.append(name) or frame
+    pollsters = pd.DataFrame({'id': [2, 3], 'name': ['GAD3', 'CIS']})
+    monkeypatch.setattr(webapi, 'get_pollsters', counted('pollsters', pollsters))
+    monkeypatch.setattr(webapi, 'get_ratings', counted('ratings', ratings_frame()))
+    monkeypatch.setattr(webapi, 'get_house_effects', counted('house_effects', pd.DataFrame({'pollster_id': [3]})))
+    monkeypatch.setattr(webapi, 'get_herding', counted('herding', pd.DataFrame({'pollster_id': [2]})))
+    webapi.query_ratings('es')
+    webapi.query_house_effects('es')
+    webapi.query_herding('es')
+    webapi.query_pollsters()
+    assert sorted(calls) == ['herding', 'house_effects', 'pollsters', 'ratings']
+    assert webapi.query_pollster(3, 'es')['house_effects'] == [{'pollster_id': 3}]
+    assert webapi.query_pollster(2, 'es')['herding'] == [{'pollster_id': 2}]
+    assert len(calls) == 4  # ninguna lectura más
+
+
 def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeypatch):
     fresh_app.db = object()
     seen = []
@@ -340,12 +365,53 @@ def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeyp
             'pollster_id': [2, 3, 2], 'PP': [33.0, 34.0, 35.0],
         })
     monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
     monkeypatch.setattr(webapi, 'get_poll_series', fake_series)
     frame = webapi.query_polls('es', limit=2)
     assert seen == [('es', '2026-11-29')]
     assert frame['date'].dt.strftime('%Y-%m-%d').tolist() == ['2026-10-01', '2026-09-15']
-    frame = webapi.query_polls('es', event='2023-07-23', pollster=2)
-    assert seen[-1] == ('es', '2023-07-23') and frame['pollster_id'].tolist() == [2, 2]
+    frame = webapi.query_polls('es', event='2026-11-29', pollster=2, limit=50)
+    assert seen == [('es', '2026-11-29')] and frame['pollster_id'].tolist() == [2, 2]  # misma entrada de caché
+    webapi.query_polls('es', event='2023-07-23')
+    assert seen[-1] == ('es', '2023-07-23')
+    with pytest.raises(HttpError) as err:
+        webapi.query_polls('es', event='2020-01-01')
+    assert err.value.status == 404 and err.value.message == 'event not found' and len(seen) == 2
+    with pytest.raises(HttpError) as err:
+        webapi.query_ratings('es', '2020-01-01')
+    assert err.value.message == 'event not found'
+
+
+def test_query_cache_keys_are_bounded_per_scope(fresh_app, monkeypatch):
+    fresh_app.db = object()
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi, 'get_poll_series', lambda scope, event: pd.DataFrame({'date': [], 'pollster_id': []}))
+    webapi.query_ratings('es', '2023-07-23')
+    webapi.query_polls('es', pollster=2, limit=5)
+    webapi.query_polls('es', limit=50)
+    with pytest.raises(HttpError):
+        webapi.query_polls('es', event='1999-01-01')
+    assert sorted(webapi._QUERIES._items) == [('next_event', 'es'), ('polls', 'es', '2026-11-29'), ('ratings', 'es')]
+
+
+def test_query_cache_evicts_beyond_its_cap():
+    cache = webapi._QUERIES
+    assert cache.maxsize == webapi.QUERY_CACHE_SIZE == 128
+    for i in range(webapi.QUERY_CACHE_SIZE + 1):
+        cache.get(('k', i), lambda i=i: i)
+    assert len(cache) == webapi.QUERY_CACHE_SIZE
+    assert cache.get(('k', 0), lambda: 'reloaded') == 'reloaded'  # la primera entrada fue expulsada
+    assert cache.get(('k', webapi.QUERY_CACHE_SIZE), lambda: 'miss') == webapi.QUERY_CACHE_SIZE
+
+
+def test_ttl_cache_cap_keeps_the_recently_used():
+    cache = webapi.TTLCache(ttl=60, maxsize=2)
+    cache.get('a', lambda: 1)
+    cache.get('b', lambda: 2)
+    assert cache.get('a', lambda: 99) == 1  # acierto: `a` pasa a ser el más reciente
+    cache.get('c', lambda: 3)               # expulsa `b`
+    assert cache.get('b', lambda: 20) == 20 and cache.get('a', lambda: 99) == 99 and len(cache) == 2
 
 
 def test_frame_to_records_and_csv():

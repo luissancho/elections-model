@@ -156,7 +156,11 @@ def fake_readers(monkeypatch):
     monkeypatch.setattr(webapi, 'get_pollsters', lambda: pollsters)
     monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings)
     monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
-    monkeypatch.setattr(webapi, 'get_poll_series', lambda scope, event: polls)
+
+    def poll_series(scope, event):
+        seen.append(('polls', scope, event))
+        return polls
+    monkeypatch.setattr(webapi, 'get_poll_series', poll_series)
 
     def results(scope, date, region):
         seen.append((scope, date, region))
@@ -230,6 +234,17 @@ def test_polls_default_event_limit_and_pollster(db_api):
     assert headers['content-disposition'] == 'attachment; filename="polls-es-2026-11-29-2.csv"'
 
 
+def test_polls_filters_share_one_cached_read(db_api, fresh_app):
+    call(db_api, '/api/v1/polls', query='limit=5&pollster=2')
+    call(db_api, '/api/v1/polls', query='limit=50')
+    assert fresh_app.seen == [('polls', 'es', '2026-11-29')]
+    status, headers, body = call(db_api, '/api/v1/polls', query='event=2020-01-01')
+    assert status == 404 and json.loads(body) == {'status': 'error', 'message': 'event not found'}
+    assert headers['cache-control'] == 'no-store' and fresh_app.seen == [('polls', 'es', '2026-11-29')]
+    status, headers, body = call(db_api, '/api/v1/ratings', query='event=2020-01-01')
+    assert status == 404 and json.loads(body)['message'] == 'event not found'
+
+
 def test_results_use_region_zero_by_default(db_api, fresh_app):
     data = json.loads(call(db_api, '/api/v1/results/es/2023-07-23')[2])
     assert data['rows'][0]['pct'] == 33.1 and data['rows'][0]['date'] == '2023-07-23'
@@ -271,6 +286,11 @@ def test_database_failure_is_a_503(db_api, fresh_app, monkeypatch):
     monkeypatch.setattr(webapi, 'get_drift', boom)
     status, headers, body = call(db_api, '/api/v1/drift')
     assert status == 503 and json.loads(body)['message'] == 'database unavailable' and len(errors) == 1
+    assert headers['cache-control'] == 'no-store'
+    status, headers, body = call(db_api, '/api/v1/drift')
+    assert status == 503 and len(errors) == 2  # el fallo no se cachea: el lector se vuelve a llamar
+    monkeypatch.setattr(webapi, 'get_drift', lambda scope: pd.DataFrame({'party': ['PP']}))
+    assert call(db_api, '/api/v1/drift')[0] == 200
 
 
 def test_analysis_parts_and_csv(api, fresh_app, tmp_path):
