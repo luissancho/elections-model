@@ -1120,8 +1120,9 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     Raises
     ------
     NothingToPublish
-        Building the computer or its series raised ``ValueError``. Any later error, ``ValueError``
-        included, propagates as is.
+        Building the computer or its series, or ``print_house_effects`` (whose average of the current
+        event needs its polls), raised ``ValueError``; nothing is written then. Any later error,
+        ``ValueError`` included, propagates as is.
     """
     start = mark = time.perf_counter()
 
@@ -1134,12 +1135,13 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
 
     try:
         comp = (computer or Computer)(scope=scope, path='.', verbose=verbose).build_series()
+        seconds = {'build': lap()}
+        event_date = comp.event_dates[-1]
+        bmaps = comp.event_params[event_date]['bmaps']
+        blocks, main = bmaps['vs'], list(bmaps.get('main', []))
+        table = comp.print_house_effects()  # fits an average of the current event: no polls is a ValueError
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
-    seconds = {'build': lap()}
-    event_date = comp.event_dates[-1]
-    bmaps = comp.event_params[event_date]['bmaps']
-    blocks, main = bmaps['vs'], list(bmaps.get('main', []))
 
     def write(part, data, frames):
         """Write the JSON of a part and its CSV twins (``{csv name: frame}``)."""
@@ -1147,7 +1149,7 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
         for name, frame in frames.items():
             writer.write_csv(bundle.path_analysis_csv(scope, name), frame)
 
-    effects, frame = export_analysis_house_effects(comp.print_house_effects(), main, list(blocks))
+    effects, frame = export_analysis_house_effects(table, main, list(blocks))
     write('house-effects', effects, {'house-effects': frame})
     seconds['house_effects'] = lap()
     summary = comp.herding_summary()

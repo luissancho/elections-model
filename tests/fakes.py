@@ -184,10 +184,11 @@ class FakeComputer:
     """Fábrica con la firma `Computer(scope=..., path=...)`: devuelve un Computer sintético con `scope`,
     `event_dates` y `event_params` (bloques `vs` y partidos `main` del ciclo, como los lee el real),
     `build_series` (devuelve el propio objeto) y los cuatro resúmenes de `synthetic_analysis`; anota las
-    llamadas y, con `fail`, lanza esa excepción al construir."""
+    llamadas y, con `fail`, lanza esa excepción al construir; con `fail_effects`, la lanza
+    `print_house_effects` (como el real cuando el evento en curso no tiene sondeos)."""
 
-    def __init__(self, fail=None):
-        self.calls, self.fail = [], fail
+    def __init__(self, fail=None, fail_effects=None):
+        self.calls, self.fail, self.fail_effects = [], fail, fail_effects
 
     def __call__(self, scope, path=None, **kwargs):
         if self.fail is not None:
@@ -213,7 +214,12 @@ class FakeComputer:
 
         comp.build_series = lambda: comp
         comp.load_herding, comp.herding_summary, comp.get_polls_metric = load_herding, herding_summary, get_polls_metric
-        comp.print_house_effects = lambda **kw: frames.house_effects.copy()
+        def print_house_effects(**kw):
+            if self.fail_effects is not None:
+                raise self.fail_effects
+            return frames.house_effects.copy()
+
+        comp.print_house_effects = print_house_effects
         comp.get_error_estimator_data = lambda **kw: frames.error_data.copy()
         return comp
 

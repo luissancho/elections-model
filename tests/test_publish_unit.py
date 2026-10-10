@@ -583,3 +583,12 @@ def test_publish_analysis_turns_a_computer_value_error_into_nothing_to_publish(t
         publish.publish_analysis('es-xx', make_writer(tmp_path), computer=FakeComputer(fail=ValueError('no events')),
                                  stats=fake_stats, prov=fake_prov)
     assert not (tmp_path / 'site').exists()
+
+
+def test_publish_analysis_without_polls_in_the_current_event_is_nothing_to_publish(tmp_path):
+    """El `ValueError` de `print_house_effects` (evento en curso sin sondeos) se convierte en `NothingToPublish`
+    y no se escribe nada."""
+    factory = FakeComputer(fail_effects=ValueError('No polls for es-cb 2027-05-23: nothing to forecast'))
+    with pytest.raises(publish.NothingToPublish, match='No polls for es-cb 2027-05-23'):
+        publish.publish_analysis('es-cb', make_writer(tmp_path), computer=factory, stats=fake_stats, prov=fake_prov)
+    assert not (tmp_path / 'site').exists()
