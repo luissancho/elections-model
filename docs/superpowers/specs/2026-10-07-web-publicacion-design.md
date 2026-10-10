@@ -1034,3 +1034,12 @@ Pendiente de Luis:
   destacadas" quedan cerradas por D3.
 - Cadencia: `publish analysis` tras cada recálculo de ratings (`run_load --what ratings`) y tras cada carga
   de sondeos.
+
+Arreglo tras el primer `publish analysis` real de Luis (2026-10-10, `scopes: "all"`): `house_effects_summary`
+fallaba con `KeyError: 'dev_result_c'` en los ámbitos sin filas en `pollsters_parties` (`es-cn`, `es-cb`,
+`es-ex`, `es-mc`, `es-ri`): `print_house_effects` descarta la historia vacía y pasa solo el ciclo, que no
+tiene las columnas de la historia. Commit `9fbea45`: el resumen trata esas columnas como ausentes (`hist` y
+`trend` nulos, `n_events` 0) y la conversión de `n_events` ya no depende del dtype; test unitario con un ciclo
+sin historia; comprobado contra la RDS con `es-md` (con historia, 70 filas) y `es-cb` (sin historia, tablas
+vacías). `es-cn` no pudo comprobarse: la RDS cerró la conexión a mitad y después no aceptó conexiones desde
+aquí (corte transitorio); si vuelve a fallar al relanzar `all`, mandar la traza.
