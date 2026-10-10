@@ -37,7 +37,7 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
   `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
-  (exceso: 429). Las páginas (`/`, `/promedio`, `/escanos`) pasan por el mismo bloque que la API: también se
+  (exceso: 429). Las páginas (`/`, `/promedio`, `/escanos`, `/casas`) pasan por el mismo bloque que la API: también se
   cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
   (URI completa con la query string). Se probó una clave propia sobre `run`/`format` y se descartó: nginx
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
@@ -46,7 +46,7 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
 - `/healthz` → `200 ok`, sin pasar por Python.
 
 `nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`),
-`Promedio` (`/promedio`) y `Escanos` (`/escanos`, con `?region=`), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
+`Promedio` (`/promedio`), `Escanos` (`/escanos`, con `?region=`) y `Casas` (`/casas`, con `?id=` para el perfil de una casa; enmienda 2026-10-10, fase 4), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
 Jinja2 de `web/templates/`, con los datos del paquete embebidos en la página (`initial-data`); el JS de
 `web/dist/js/pages/` solo dibuja los gráficos. Una ruta desconocida fuera de `/api/` da un 404 HTML de
 Python (dentro de `/api/`, el 404 JSON de la API).
@@ -68,8 +68,13 @@ Notas de operación:
   y Docker acaba con SIGKILL. Por la misma razón (`exec supervisord`), la prueba de humo solo lo avisa
   (WARN).
 
-La API (`/api/v1`, ver `docs/web/contrato.md`) solo necesita S3 (el paquete `site/v1`): no usa la base
-de datos hasta la fase 4. Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
+La API (`/api/v1`, ver `docs/web/contrato.md`) lee el paquete `site/v1` de S3 y, desde la fase 4 (enmienda
+2026-10-10), también la base de datos para las rutas de tablas (`/api/v1/parties`, `/pollsters`, `/ratings`,
+`/polls`, `/results`, `/house-effects`, `/herding`, `/drift`) y para la página `/casas`. La base se configura
+con las variables `DB_*` de `deploy/elections.env` (`DB_ADAPTER`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
+`DB_PASSWORD`, `DB_DATABASE`; ver `.env.example`): sin ellas, esas rutas dan 503 `no database configured` y
+`/casas` un 503 en HTML ("La base de datos no está disponible."); el resto del sitio funciona igual. Con las
+variables pero sin base alcanzable, 503 `database unavailable` (con la traza en el log). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
 paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
@@ -81,12 +86,16 @@ curl -s http://127.0.0.1:8042/healthz
 bash deploy/check-api.sh http://127.0.0.1:8042
 ```
 
-y abrir `http://127.0.0.1:8042/`, `/promedio` y `/escanos` (enmienda 2026-10-09, fase 3). `check-api.sh` decide una vez si hay
-nginx a partir de `/healthz` (solo existe en nginx; sin nginx lo marca `n/a`) y comprueba `/` (200 HTML),
+y abrir `http://127.0.0.1:8042/`, `/promedio`, `/escanos` (enmienda 2026-10-09, fase 3) y `/casas` (enmienda
+2026-10-10, fase 4). `check-api.sh` decide una vez si hay nginx a partir de `/healthz` (solo existe en nginx; sin
+nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un 503 `no database configured` la da por
+ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
 `/promedio?scope=es&mode=nowcast` (200 HTML), `/escanos?scope=es&mode=forecast` (200 HTML),
-`/escanos?region=abc` (400 HTML), `/nope` (404 HTML), con nginx también
-`/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y `/dist/css/site.css` (`text/css`), y 10
-rutas de la API (código, tipo y JSON válido); sale con error si alguna falla.
+`/escanos?region=abc` (400 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
+`/nope` (404 HTML), con nginx también `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y
+`/dist/css/site.css` (`text/css`), y 13 rutas de la API (código, tipo y JSON válido): las 10 del paquete,
+`/api/v1/ratings?scope=es` (200 JSON, necesita base), `/api/v1/analysis/es-xx/herding` (400) y
+`/api/v1/analysis/es/nope` (404); sale con error si alguna falla.
 
 ### Cómo añadir una página
 
@@ -143,7 +152,9 @@ el `curl -sI` de `smoke.sh` funciona.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
   (`max-age=31536000`), `/dist/js/pages/index.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`
-  devuelve HTML y que `/` contiene `initial-data`; avisa (WARN, sin fallar) si `docker logs` no tiene
+  y `/escanos` devuelven HTML y que `/` contiene `initial-data`; con `deploy/elections.env`, también que
+  `/casas?scope=es` devuelve HTML (con el paquete local y sin base, `/casas` es un 503 y `check-api.sh` lo
+  marca `n/a`, así que el humo no lo exige); avisa (WARN, sin fallar) si `docker logs` no tiene
   líneas de acceso de nginx o si `docker stop` tarda 10 s o más. Sin argumento usa el
   paquete local (`files/` montado, `S3_BUCKET` vacío); con `deploy/elections.env`, S3 y la base reales.
   Requiere Docker en marcha.
@@ -151,6 +162,11 @@ el `curl -sI` de `smoke.sh` funciona.
 Estado: `nginx.conf` se verificó el 2026-10-09 con un nginx 1.29.5 local (Homebrew) en el puerto 8043
 delante de uvicorn en el 8000: `/` primero `MISS` y luego `HIT`, cabeceras como las esperadas y
 `check-api.sh` todo OK. La prueba de humo con Docker está sin ejecutar.
+
+Enmienda 2026-10-10 (fase 4): `check-api.sh` ganó `has_db` y comprueba `/casas`, `/api/v1/ratings` y las rutas
+de `analysis`; `bash deploy/check-api.sh http://127.0.0.1:8043` contra uvicorn con la base real y un nginx
+1.29.5 local dio todo OK (sin análisis publicado en local). Los pendientes de la fase 4 están en el estado al
+cierre de la fase 4 de la spec.
 
 Pendiente de Luis: ejecutar `bash deploy/smoke.sh` con Docker (paquete local y `deploy/elections.env`);
 añadir las `location` de `/dist/` y el proxy a su nginx local y recorrer `/`, `/promedio` y `/escanos` con y sin JS
@@ -203,6 +219,7 @@ python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"
 python job.py publish '{"what":["unpublish"],"scopes":["es"],"run":"20261007-141503"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'
+python job.py publish '{"what":["analysis"],"scopes":"all"}'
 ```
 
 1. Publica el pronóstico de `es` (nowcast y forecast, 1000 simulaciones) y actualiza su entrada del manifest.
@@ -213,9 +230,10 @@ python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"
 6. Ensayo: escribe en `site-dry/v1` con 20 simulaciones, sin `history.json` ni manifest.
 7. Relleno retroactivo: un run por día del 5 al 8 de octubre de 2026, cada uno con solo los sondeos publicados
    hasta ese día (ver "Relleno retroactivo").
+8. Análisis de casas de `es` y de todos los ámbitos autonómicos (enmienda 2026-10-10; ver "Análisis de casas").
 
-`what` admite `forecast`, `manifest`, `point` y `unpublish` (se ejecutan en ese orden); `analysis`, `event`
-y `backtest` fallan con `ValueError` hasta las fases 4 y 5.
+`what` admite `forecast`, `analysis`, `manifest`, `point` y `unpublish` (se ejecutan en ese orden); `event`
+y `backtest` fallan con `ValueError` hasta la fase 5.
 
 ### Parámetros
 
@@ -296,6 +314,31 @@ y volver a lanzar el relleno. Los días completos se informan `skipped (run exis
 - `point`, `unpublish`, `manifest` y `dry_run` no cambian (`dry_run` con `backfill` escribe en `site-dry/v1`
   sin punteros).
 
+### Análisis de casas
+
+Enmienda 2026-10-10 (fase 4). `{"what":["analysis"],"scopes":"all"}` calcula, para cada ámbito, el análisis de
+casas que lee la página `/casas` (efectos de casa, herding, errores de los sondeos y datos del estimador de
+error) y lo escribe bajo `analysis/{ámbito}/` del paquete (formato en "Análisis" de `docs/web/contrato.md`):
+
+- Sobrescribe el análisis anterior del ámbito (no hay runs ni histórico) y escribe `meta.json` el último: un
+  análisis sin `meta.json` está incompleto y la API responde 404 `analysis not published`. Si el cálculo falla
+  a medias, quedan partes nuevas junto a las viejas y manda `meta.json`.
+- No toca el manifest ni los punteros, no tiene guarda LOREG y con `dry_run` escribe en `site-dry/v1/analysis/`.
+- Cada ámbito termina `published`, `skipped` (sin sondeos del siguiente evento) o `failed`; el resto continúa y
+  el job termina con error si alguno falla. Resumen de una línea por ámbito, por ejemplo
+  `es: analysis published (event 2026-11-29, <n> pollsters) in <s> s` o `es-md: analysis skipped (<motivo>)`.
+- Duración estimada de ≈ 1,5 min por ámbito (el análisis de `es` tardó 44 s en el test de integración contra la
+  RDS). Va bien a mano o desde la imagen, igual que `forecast`.
+- Cadencia: repetirlo tras cada carga de sondeos y tras cada recálculo de ratings (`run_load --what ratings`);
+  el análisis no se actualiza solo.
+
+Publicar en local o en S3 funciona como para `forecast` (ver abajo; en local, `S3_BUCKET=` delante):
+
+```
+S3_BUCKET= python job.py publish '{"what":["analysis"],"scopes":["es"]}'
+set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["analysis"],"scopes":"all"}'
+```
+
 ### Publicar en local
 
 Con `S3_BUCKET` vacío, `mtpy.run()` construye el sistema de ficheros local y el paquete queda en
@@ -362,4 +405,5 @@ La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y ensa
 
 Primer paquete local de `es` (2026-10-08, contra la RDS, `n_sim=1000`): 121 s en total (init 35,5; ajuste
 42,5; nowcast 21,0; forecast 21,5; exportación 0,8). Ensayo con `n_sim=20`: 86 s. La duración de
-`scopes: "all"` contra la RDS está pendiente de medir.
+`scopes: "all"` contra la RDS está pendiente de medir. El análisis de casas de `es` (`what: ["analysis"]`)
+tardó 44 s en el test de integración contra la RDS (2026-10-10).

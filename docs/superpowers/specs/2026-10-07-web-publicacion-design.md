@@ -245,6 +245,11 @@ la elección se niega a publicar salvo `force`. Duración estimada: `es` 1,5-2 m
 | `/api/v1/results/{scope}/{date}?region=` | base | `get_event_results` (región 0 por defecto) |
 | `/api/v1/house-effects?scope=`, `/herding?scope=`, `/drift?scope=` | base | tablas `pollsters_parties`, `pollsters_herding`, `drift` |
 
+(Enmienda 2026-10-10, fase 4: las diez rutas de `analysis` y de base están implementadas con las firmas de la
+tabla; `/pollsters/{id}` devuelve `{scope, pollster, ratings, house_effects, herding}` compuesto desde las
+tablas del ámbito y `?event=` ha de ser una elección del ámbito. `events` y `backtest` siguen en la fase 5.
+Contrato en `docs/web/contrato.md`, "Rutas de base y de análisis".)
+
 Reglas: las rutas fijas se registran antes que las genéricas (primera coincidencia gana,
 `mtpy/core/api.py:256-265`); toda entrada pasa por listas cerradas antes de llegar a `mtpy/lib/data.py`
 (ámbito en `get_scopes()`, fecha ISO válida, `run` con `^\d{8}-\d{6}$`, `part`/`mode` en listas, ids
@@ -408,7 +413,7 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 | 1 | Paquete y comando | `bundle.py`, `publish.py`, `jobs/Publish.py`, tests unitarios e integración; `es` publicado en `files/site/v1` y en S3; medición de duración contra la RDS | 0 | 3-4 d |
 | 2 | API y sitio mínimo (primer despliegue) | `webapi.py`, `Base`/`Forecast`, nginx, supervisord e `init.sh`, `index.html`, `promedio.html`, `api.js`, `state.js`, ECharts, `smoke.sh`; producción con `es` (≈ 20-22 oct) | 1 | 3-4 d |
 | 3 | Escaños, autonómicos, histórico | `escanos.html` (V6-V8, coaliciones), selector de ámbito con `scopes: all`, evolución del `headline`, CSV | 2 | 3-4 d |
-| 4 | Casas | `Data` y `Analysis`, `publish analysis`, `casas.html` (ranking, perfil y camino al rating, efectos de casa, herding) | 2 | 3-4 d |
+| 4 | Casas | `Data` y `Analysis`, `publish analysis`, `casas.html` (ranking, perfil y camino al rating, efectos de casa, herding) (enmienda 2026-10-10: hecho en `dev`, ver "Estado al cierre de la fase 4") | 2 | 3-4 d |
 | 5 | Elecciones y modelo | `publish event` y `backtest`, `elecciones.html`, `modelo.html`, `metodo.html`; eventos `es` 2015-2023 | 4 | 2-3 d |
 | 6 | Endurecimiento | prueba de carga con `proxy_cache`, ensayo de `point`/`unpublish`, ensayo de `freeze`, backups, `deploy/README.md` final, poda de requirements y multietapa opcionales; cerrar antes del 24-11 | 2-5 | 2 d |
 
@@ -897,3 +902,113 @@ Pendiente de Luis:
   comprobar en la portada que los puntos huecos aparecen desde la convocatoria.
 - Recorrer `/promedio` con el control "Últimos 6 meses / Todo el ciclo" (añadido el mismo día a petición de
   Luis) y comprobar que cambiar de opción reencuadra el gráfico sin recargar.
+
+## Estado al cierre de la fase 4 (2026-10-10)
+
+Hecho en `dev` (plan en `a410c13`, `docs/superpowers/plans/2026-10-10-web-fase-4-casas.md`, código en
+`30b3707^..ff4b9e3`, 7 commits de código y este de documentación), con 447 tests unitarios en verde (`python -m
+pytest -m "not integration" -q`: 373 antes de la fase y 74 nuevos) y un test de integración marcado que
+publica el análisis de `es` contra la RDS (pasó en 44 s; el resto de integración no se ejecutó):
+
+- `30b3707` y `1e90aab`, `publish analysis`: `bundle.ANALYSIS_PARTS`, `ANALYSIS_SCHEMAS` y `ANALYSIS_CSV`,
+  `path_analysis`, `path_analysis_csv` y `BundleReader.analysis_exists`; `publish.export_analysis_*` y
+  `publish_analysis(scope, writer, computer=, stats=, prov=)`, que escribe `meta` el último;
+  `Publish.run(what=['analysis'])` con un estado por ámbito (`published`, `skipped`, `failed`), sin manifest y
+  con `dry_run` en `site-dry`; `get_polls_metric` conserva `event_date`; fixtures `analysis-*.json`,
+  `poll-errors.json` y `error-data.json`.
+- `e4c7ee9` y `921ef65`, API: validadores `check_date`, `check_pollster`, `check_limit` (1000 por defecto,
+  máximo 5000) y `check_event` (404 `event not found`); `database()` (503 `no database configured`);
+  `query_parties`, `query_pollsters`, `query_pollster`, `query_ratings`, `query_polls`, `query_results`,
+  `query_house_effects`, `query_herding` y `query_drift`, con caché acotada (claves por ámbito, filtros fuera,
+  TTL de 60 s y tope LRU `QUERY_CACHE_SIZE = 128`) y errores de base como 503 `database unavailable`;
+  `frame_to_records` y `frame_to_csv`; `Site.analysis` y `Site.analysis_csv`; controladores `Data` y
+  `Analysis`; diez rutas: `/api/v1/parties`, `/pollsters`, `/pollsters/{id}`, `/ratings`, `/polls`,
+  `/results/{scope}/{date}`, `/house-effects`, `/herding`, `/drift` y `/analysis/{scope}/{part}` (CSV con
+  `?format=csv`; `herding` también con `&table=events`).
+- `6e29e33` y `3ca6df7`, página: `/casas` = `Casas(Page)` con `casas.html` y `casa.html`;
+  `pages.casas_context`, `casa_context`, `ranking_rows`, `house_effects_grid`, `herding_rows`, `profile_rows`,
+  `analysis_part` y `api_url(kind=)`; entrada "Casas" en el menú y textos en español en `MESSAGES`.
+- `ff4b9e3`, gráficos: `web/dist/js/charts/heatmap.js`, `bullseye.js` y `line.js`, y
+  `web/dist/js/pages/casas.js`.
+- Scripts y documentación: `/casas`, `/api/v1/ratings` y las rutas de `analysis` en `deploy/check-api.sh`
+  (con `has_db`) y `/casas` en `deploy/smoke.sh` (solo con `deploy/elections.env`), `deploy/README.md` y
+  `docs/web/contrato.md`.
+
+Decisiones de diseño (D1-D7 del plan):
+
+1. D1. Paquete `analysis/{scope}/` con cinco partes y gemelos CSV: `meta` (`analysis-meta@1`), `house-effects`
+   (filas de `print_house_effects()` por casa y partido o bloque: `n_events`, `hist`, `trend`, `cycle`,
+   `n_cycle`), `herding` (`rows` de `herding_summary()` y `events` de `get_herding(scope)` por ciclo),
+   `poll-errors` (`get_polls_metric('error', bmap='vs', drange=(6, 42), n_last=1)`, con `event_date` ISO) y
+   `error-data` (`get_error_estimator_data()`). Se sobrescribe en cada publicación; `meta.json` se escribe el
+   último y marca el análisis como completo; no toca el manifest.
+2. D2. Tablas en vivo: los `webapi.query_*` llaman a los lectores de `data.py` con caché TTL de 60 s; sin
+   `app.db`, 503 `no database configured`; error de base, 503 `database unavailable` (traza en el log). Toda
+   entrada pasa por listas cerradas antes del SQL (`check_scope`, fecha ISO validada, enteros de uno a seis
+   dígitos, `limit` hasta 5000).
+3. D3. `/casas`: ranking del próximo evento del ámbito (filas con `rating`, en orden descendente; casa, rating,
+   calidad, sondeos del ciclo, elecciones, error medio, error de bloques, sesgo de bloques y herding) con
+   barras del rating; efectos de casa (mapa de calor casa x partidos `main` y bloques `vs` del `cycle`, con
+   tabla de `hist`, `trend` y `cycle`); herding (tabla con `herding`, `herding_last`, `herding_p`,
+   `herding_n` y `herding_events`). Cada casa enlaza a su perfil `?id=`. Se listan todas las casas con
+   rating, sin "destacadas" fijas: así queda cerrada la pregunta abierta de la spec (el CIS, GAD3, GESOP y
+   40dB del notebook eran una elección de figura).
+4. D4. Perfil `/casas?id=N` (`casa.html`, mismo controlador): cabecera (nombre, tipo, calidad y rating
+   actual), camino al rating (línea del `rating` por elección), diana de error Derecha frente a Izquierda del
+   último sondeo de cada elección (`analysis/poll-errors`), tabla de ratings por elección, tabla de efectos de
+   casa por elección y partido, y tabla de herding por ciclo. `id` mal formado, 400 "Casa no válida."; `id`
+   desconocido, 404 "Casa no encontrada.".
+5. D5. Degradación: sin base de datos, `/casas` y el perfil dan 503 "La base de datos no está disponible.";
+   sin `analysis/{scope}` publicado, el ranking se sirve y las secciones que dependen del análisis muestran
+   "Análisis no publicado todavía".
+6. D6. `scope` rige el ranking y el análisis (ratings globales M11 guardados por ámbito); `mode` y `run` solo
+   afectan a la cabecera común.
+7. D7. Fuera de alcance: `/api/v1/events/{scope}` (`has_page` es de la fase 5), `publish event` y `backtest`,
+   las páginas `/elecciones`, `/modelo` y `/metodo`, cambios en nginx, Docker o credenciales, y ejecutar
+   `publish analysis` contra la RDS (lo lanza Luis).
+
+Resoluciones tomadas durante la ejecución:
+
+- Un ámbito cuyo siguiente evento no tiene sondeos termina `skipped` en `publish analysis` (`1e90aab`).
+- Las claves de la caché de consultas son por ámbito, con los filtros aplicados fuera y un tope LRU de 128
+  entradas, y `?event=` ha de ser una elección del ámbito (`921ef65`).
+- Ratings y calidad van en escala 0-100 y la cabecera del perfil usa el rating del ámbito, tomado de la
+  última fila de ratings del ámbito (`3ca6df7`).
+
+Verificado en la sesión: suite unitaria, `bash deploy/nginx-check.sh`, y `bash deploy/check-api.sh
+http://127.0.0.1:8043` contra un nginx 1.29.5 local en el 8043 delante de uvicorn (`S3_BUCKET=` vacío y la
+base real de solo lectura): todo OK. Con el análisis sin publicar en local: `/casas?scope=es` da 200 con la
+tabla del ranking, casas reales y el aviso "Análisis no publicado todavía" en las secciones que dependen del
+análisis; `/casas?scope=es&id=1` da 200 con el perfil del CIS; `/api/v1/ratings?scope=es&format=csv` da
+`text/csv` con `Content-Disposition`; `/api/v1/analysis/es/herding` da 404 y `/casas?id=abc`, 400.
+
+Menores aplazados:
+
+- `reindex(columns=...)` oculta una columna que falte aguas arriba en los exportadores del análisis.
+- `house-effects.blocks` lista todos los bloques `vs`, mientras que `poll-errors.blocks` solo los presentes.
+- Un fallo a medias del análisis deja partes nuevas y viejas juntas (manda `meta`).
+- `check_format` se ejecuta dos veces por petición de `Data`.
+- El nombre del CSV de `results` difiere con y sin `region=0`.
+- Las lecturas de base bloquean dentro de acciones `async` (fase 6: `asyncio.to_thread`).
+- Una avalancha de claves distintas de `results` puede expulsar entradas calientes de la caché.
+- Las cabeceras de la tabla de efectos van en bruto en unas partes y con el nombre completo en otras.
+- Las filas de `herding_rows` no están normalizadas.
+- Los ratings se convierten a registros dos veces.
+- El histórico y la tendencia solo se ven en un tooltip `title`.
+- `mtype` se muestra en bruto (Luis confirma los valores guardados).
+- `renderHeatmap` recibe `formatter` posicional.
+- `renderBullseye` no admite `labels`.
+- Los anillos de la diana solo son circulares con un área cuadrada.
+- Los nombres largos de casa se desbordan en móvil.
+
+Pendiente de Luis:
+
+- Lanzar `publish analysis` contra la RDS para `es` (y `all`): `python job.py publish
+  '{"what":["analysis"],"scopes":"all"}'`.
+- Recorrer `/casas` (ranking, mapa de calor, tabla de herding) y dos o tres perfiles (CIS, `?id=1`, GAD3,
+  40dB).
+- Confirmar los valores de `pollsters.mtype` y si necesitan etiquetas en español.
+- Decidir si el ranking debe limitar las casas listadas (hoy, todas las que tienen rating); las "casas
+  destacadas" quedan cerradas por D3.
+- Cadencia: `publish analysis` tras cada recálculo de ratings (`run_load --what ratings`) y tras cada carga
+  de sondeos.

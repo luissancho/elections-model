@@ -6,6 +6,8 @@
 #
 # Imprime una linea por ruta (OK / FAIL / n/a) y sale con error si alguna falla.
 # /healthz solo existe en nginx: un 404 se muestra como "n/a sin nginx".
+# Las rutas que leen la base (/casas, /api/v1/ratings) se marcan "n/a sin base" si /api/v1/parties
+# responde 503 "no database configured".
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -69,10 +71,30 @@ check_nginx_only() {
     fi
 }
 
+# /api/v1/parties lee la base: un 503 "no database configured" decide una sola vez (has_db) que no hay
+# base; cualquier otra respuesta (incluido un 503 "database unavailable") cuenta como base configurada
+# y las comprobaciones de abajo la ejercitan.
+has_db=1
+out="$(curl -s --max-time 20 -o "$body" -w '%{http_code}' "$base/api/v1/parties" || true)"
+if [ "$out" = 503 ] && grep -q 'no database configured' "$body"; then
+    has_db=0
+fi
+
+# check_db_only RUTA STATUS TIPO: igual que check, pero n/a si la aplicacion no tiene base de datos.
+check_db_only() {
+    if [ "$has_db" -eq 1 ]; then
+        check "$@"
+    else
+        echo "n/a  $1 sin base de datos"
+    fi
+}
+
 check / 200 html
 check "/promedio?scope=es&mode=nowcast" 200 html
 check "/escanos?scope=es&mode=forecast" 200 html
 check "/escanos?region=abc" 400 html
+check_db_only "/casas?scope=es" 200 html
+check "/casas?id=abc" 400 html
 check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
 check_nginx_only /dist/css/site.css text/css
@@ -86,6 +108,9 @@ check /api/v1/forecast/es/forecast/vote 200 json
 check "/api/v1/forecast/es/forecast/summary?format=csv" 200 csv
 check /api/v1/forecast/es-xx 400 none
 check /api/v1/forecast/es/nope 404 none
+check_db_only /api/v1/ratings?scope=es 200 json
+check /api/v1/analysis/es-xx/herding 400 none
+check /api/v1/analysis/es/nope 404 none
 
 if [ "$failures" -gt 0 ]; then
     echo "$failures ruta(s) con error" >&2

@@ -1,6 +1,7 @@
 # Contrato de datos del paquete publicado (`site/v1`, contrato 1)
 
-Descripción del paquete que escribe `python job.py publish` y que leerán la API y el sitio (fase 2). La
+Descripción del paquete que escribe `python job.py publish` y que leerán la API y el sitio (fase 2; el análisis
+de casas, fase 4, enmienda 2026-10-10). La
 fuente de verdad en código es `mtpy/lib/bundle.py` (rutas, sobre, `SCHEMAS`, validación) y
 `mtpy/lib/publish.py` (exportadores). Cada JSON se valida contra su esquema antes de escribirse.
 
@@ -13,6 +14,9 @@ producción). Los ensayos (`dry_run`) escriben bajo `site-dry/v1/` con la misma 
 ```
 site/v1/
     manifest.json                               último run de cada ámbito
+    analysis/{scope}/                           análisis de casas (enmienda 2026-10-10; ver "Análisis")
+        meta.json house-effects.json herding.json poll-errors.json error-data.json
+        csv/ house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
     runs/{scope}/history.json                   headline de cada run, ascendente por run_id
     runs/{scope}/{run_id}/
         meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json
@@ -208,6 +212,46 @@ Proyección del voto en el tiempo. Fuente: `sim.projection()` (también con `vs`
 `data`: `dates` y `groups`, con las claves `parties`, `vs` y `blocks`; cada grupo es `{names, mean, lo,
 hi}` y cada estadística `{nombre: [valor por fecha]}`. CSV largo: `date, group, name, mean, lo, hi`.
 
+## Análisis
+
+Enmienda 2026-10-10 (fase 4). El análisis de casas de un ámbito vive en `analysis/{scope}/` (junto a `runs/`, en
+el mismo `site/v1/`, o en `site-dry/v1/` con `dry_run`) y lo escribe `python job.py publish
+'{"what":["analysis"],...}'`. A diferencia de un run, **se sobrescribe** en cada publicación: no hay `run_id`
+ni histórico, no entra en el manifest ni en `history.json`, y la lectura no depende del manifest. Cada
+ámbito tiene su análisis (`es` y los autonómicos); un ámbito sin sondeos del siguiente evento queda `skipped`
+y no lo tiene. La fuente de verdad en código es `bundle.ANALYSIS_PARTS`, `ANALYSIS_SCHEMAS` y `ANALYSIS_CSV`
+(`path_analysis`, `path_analysis_csv`) y `publish.publish_analysis`.
+
+Mismo sobre que el resto de ficheros, con `scope` informado y `run_id`, `mode` a `null`; `schema` es
+`{nombre}@1` y las claves obligatorias de `data` están en `SCHEMAS`. Cinco partes:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `analysis-meta@1` | `scope`, `event_date`, `events` (fechas de las elecciones del ámbito), `n_pollsters`, `params` (parámetros del cálculo: `bmap`, `drange`, `n_last`, `main`, `blocks` y los sondeos del evento en la base, `db_polls`, y la fecha del último, `db_last_poll`), `commit`, `dirty`, `versions`, `seconds` |
+| `house-effects` | `analysis-house-effects@1` | `parties`, `blocks`, `rows` |
+| `herding` | `analysis-herding@1` | `rows`, `events` |
+| `poll-errors` | `poll-errors@1` | `blocks`, `rows` |
+| `error-data` | `error-data@1` | `rows` |
+
+- `house-effects.rows`: una fila por casa y partido o bloque (`pollster`, `name`, `n_events`, `hist`, `trend`,
+  `cycle`, `n_cycle`; fuente `Computer.print_house_effects()`). `parties` son los partidos `main` del evento y
+  `blocks` los bloques `vs`; los efectos van redondeados a 2 decimales.
+- `herding.rows`: una fila por casa (`pollster`, `herding`, `herding_last`, `herding_p`, `herding_n`,
+  `herding_events`; fuente `Computer.herding_summary()`); `herding.events`: una fila por ciclo y casa
+  (`event_date`, `pollster`, `n`, `ratio`, `p_value`; fuente `get_herding(scope)`). Razones y valores p a 3
+  decimales.
+- `poll-errors.rows`: error de cada sondeo (`get_polls_metric('error', bmap='vs', drange=(6, 42), n_last=1)`)
+  con `event_date` ISO, `event`, `pollster`, `days`, `sample_size`, `weight`, `error_avg`, `bias_avg`,
+  `error_blocks`, `bias_blocks` y `bias`; `blocks` son los bloques presentes en las filas.
+- `error-data.rows`: los datos del estimador de error (`get_error_estimator_data()`): `date`, `pollster`,
+  `party`, `regional`, `weeks`, `weight`, `pct`, `error`.
+
+`meta.json` se escribe el último: un análisis sin él está incompleto y la API lo trata como no publicado
+(404 `analysis not published`). Si una publicación falla a medias, quedan partes nuevas junto a partes
+viejas y manda `meta.json`. Los CSV (`csv/{nombre}.csv`) son los gemelos de `house-effects`, `herding`,
+`poll-errors` y `error-data`, más `herding-events.csv` (las filas de `herding.events`); `meta` no tiene
+gemelo.
+
 ## Punteros
 
 ### `history.json`
@@ -256,15 +300,24 @@ código es `ROUTES` en `mtpy/lib/webapi.py` y los controladores `mtpy/controller
 | `/api/v1/forecast/{scope}/{part}` | `part` ∈ `meta`, `headline`, `series`, `polls`, `fan`, `house-effects`, `dispersion` | 60 s, o inmutable con `?run=` |
 | `/api/v1/forecast/{scope}/{mode}/{part}` | `mode` ∈ `nowcast`, `forecast`; `part` ∈ `vote`, `summary`, `dist`, `districts`, `scenario`, `projection` | 60 s, o inmutable con `?run=` |
 
+Enmienda 2026-10-10 (fase 4): diez rutas más, de dos controladores. `Data` lee las tablas de la base de
+datos (`/parties`, `/pollsters`, `/pollsters/{id}`, `/ratings`, `/polls`, `/results/{scope}/{date}`,
+`/house-effects`, `/herding`, `/drift`) y `Analysis` sirve el análisis publicado (`/analysis/{scope}/{part}`);
+ver "Rutas de base y de análisis". Se registran antes que las de `forecast`.
+
 Inmutable es `public, max-age=31536000, immutable`: solo cuando el run se pide de forma explícita con
 `?run=`, porque un run publicado no se reescribe. Sin `?run=` se sirve el último run del manifest y la
 respuesta caduca a los 60 s (`web.cache_ttl`). Las rutas fijas (`health`, `manifest`, `scopes`, `runs`) se
 registran antes que las genéricas.
 
-Las rutas de páginas (`/`, `/promedio` y `/escanos`) no forman parte del contrato de la API: las
-renderizan los controladores de `mtpy/controllers/` (`Index`, `Promedio`, `Escanos`) con plantillas Jinja2,
-y el contrato solo cubre `/api/v1`. `/escanos` acepta además `region` (solo de la página, no de la API): un
-entero de `districts.regions`; mal formado da 400 y desconocido 404 en HTML. El fragmento `#coalition=PP,VOX`
+Las rutas de páginas (`/`, `/promedio`, `/escanos` y `/casas`) no forman parte del contrato de la API: las
+renderizan los controladores de `mtpy/controllers/` (`Index`, `Promedio`, `Escanos`, `Casas`) con plantillas
+Jinja2, y el contrato solo cubre `/api/v1`. `/escanos` acepta además `region` (solo de la página, no de la API): un
+entero de `districts.regions`; mal formado da 400 y desconocido 404 en HTML. `/casas` (enmienda 2026-10-10)
+acepta `id` (solo de la página): sin él, el ranking del ámbito; con él, el perfil de la casa. `id` mal
+formado da 400 ("Casa no válida.") y desconocido 404 ("Casa no encontrada."), ambos en HTML; sin base de
+datos, `/casas` da 503 ("La base de datos no está disponible."); sin análisis publicado, el ranking se
+sirve y las secciones que dependen de él muestran "Análisis no publicado todavía". El fragmento `#coalition=PP,VOX`
 de la calculadora es solo del navegador: no llega al servidor ni crea entradas en la caché. Una ruta desconocida fuera de `/api/` devuelve un 404 en HTML; dentro de `/api/`, el 404
 JSON de la API. Los recursos de `/dist/` los sirve nginx.
 
@@ -318,7 +371,52 @@ Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON gené
 - `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
   Es solo un aviso: la API sigue sirviendo los datos.
 
-## Rutas de base (`/parties`, `/pollsters`, `/polls`, ...): fase 4
+## Rutas de base y de análisis (fase 4)
 
-Pendientes de la fase 4 (las que leen la base de datos); su definición está en la sección "Contrato de
-API" de la spec. Hasta entonces la API solo necesita el paquete publicado, no la base.
+Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en vivo (controlador `Data`); la
+última sirve el análisis publicado (controlador `Analysis`, `site/v1/analysis/`). Respuestas con
+`Cache-Control: public, max-age=60` y `ETag`; nunca inmutables.
+
+| Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
+|---|---|---|---|
+| `/api/v1/parties` | | `{contract, rows}` | `parties.csv` |
+| `/api/v1/pollsters` | | `{contract, rows}` | `pollsters.csv` |
+| `/api/v1/pollsters/{id}` | `scope` (por defecto `es`) | `{contract, scope, pollster, ratings, house_effects, herding}` | no (404 `no csv for this part`) |
+| `/api/v1/ratings` | `scope`, `event` (fecha; por defecto el siguiente evento) | `{contract, scope, event, rows}` | `ratings-{scope}[-{event}].csv` |
+| `/api/v1/polls` | `scope`, `event`, `pollster` (id), `limit` (1000 por defecto, máximo 5000) | `{contract, scope, event, pollster, limit, rows}` (un sondeo por fila, una columna por partido, los más recientes primero) | `polls-{scope}[-{event}][-{pollster}].csv` |
+| `/api/v1/results/{scope}/{date}` | `region` (0, el ámbito entero, por defecto) | `{contract, scope, date, region, rows}` | `results-{scope}-{date}[-{region}].csv` |
+| `/api/v1/house-effects` | `scope` | `{contract, scope, rows}` | `house-effects-{scope}.csv` |
+| `/api/v1/herding` | `scope` | `{contract, scope, rows}` | `herding-{scope}.csv` |
+| `/api/v1/drift` | `scope` | `{contract, scope, rows}` | `drift-{scope}.csv` |
+| `/api/v1/analysis/{scope}/{part}` | `part` ∈ `meta`, `house-effects`, `herding`, `poll-errors`, `error-data`; `table=events` (solo CSV de `herding`) | el fichero del análisis tal cual (sobre completo) | `{scope}-{nombre}.csv`, con `nombre` ∈ `house-effects`, `herding`, `herding-events`, `poll-errors`, `error-data` |
+
+- `rows` son registros JSON de la tabla de la base (`NaN` a `null`, fechas ISO). `scope` se valida contra el
+  catálogo; `event` y `{date}` han de ser una fecha real `YYYY-MM-DD`, y `event` además una elección del ámbito
+  (`event not found`; `results` no comprueba que `{date}` lo sea). Los lectores corren sobre una caché de 60 s por ámbito, con un tope de 128
+  entradas (LRU); los filtros (`event`, `pollster`, `limit`) se aplican fuera de la caché.
+- `ratings` y `pollster` devuelven `rating` y `quality` en escala 0-100.
+- `format=csv` se sirve como `text/csv` con `Content-Disposition: attachment`, igual que en `forecast`.
+  `meta` y `pollsters/{id}` no tienen gemelo CSV (404 `no csv for this part`); `table=events` solo vale con
+  `part=herding` y `format=csv`, y cualquier otro valor de `table` da el mismo 404.
+- `analysis` lee `analysis/{scope}/{part}.json` (o `csv/{nombre}.csv`) del paquete a través de la misma
+  caché de punteros (TTL 60 s), porque se sobrescribe: sin `meta.json` o sin el fichero, 404 `analysis not
+  published`. No usa la base ni `manifest.json`.
+- Sin `app.db`, las nueve rutas de base dan 503 `no database configured` antes de leer nada; un error al
+  consultar la base da 503 `database unavailable` (con la traza en el log, no en la respuesta).
+
+Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Control: no-store`):
+
+| Estado | `message` | Causa |
+|---|---|---|
+| 400 | `invalid date` | `event` o `{date}` no es una fecha real `YYYY-MM-DD` |
+| 400 | `invalid pollster` | `pollster` o `{id}` no son de uno a seis dígitos |
+| 400 | `invalid limit` | `limit` no es un entero entre 1 y 5000 |
+| 400 | `invalid region` | `region` no son de uno a seis dígitos (ya existía para `/escanos`) |
+| 404 | `pollster not found` | `{id}` no está en el catálogo de casas |
+| 404 | `event not found` | `event` no es una elección del ámbito |
+| 404 | `analysis not published` | el ámbito no tiene análisis completo (falta el fichero o `meta.json`) |
+| 404 | `no csv for this part` | `format=csv` en `meta` del análisis, en `pollsters/{id}` o con un `table` no válido |
+| 503 | `no database configured` | la aplicación no tiene base de datos |
+| 503 | `database unavailable` | la consulta a la base falló |
+
+`invalid scope`, `invalid format`, `unknown part` y `no file system configured` valen también aquí.
