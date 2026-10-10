@@ -923,12 +923,34 @@ get_pollsters = _reader('get_pollsters')
 get_ratings = _reader('get_ratings')
 get_poll_series = _reader('get_poll_series')
 get_event_results = _reader('get_event_results')
+get_event_dates = _reader('get_event_dates')
 get_house_effects = _reader('get_house_effects')
 get_herding = _reader('get_herding')
 get_drift = _reader('get_drift')
 get_next_event_date = _reader('get_next_event_date')
 
 _QUERIES = TTLCache(DEFAULT_TTL, maxsize=QUERY_CACHE_SIZE)
+
+
+def database_host() -> Optional[str]:
+    """
+    Host of the configured database adapter (``config.db.params.host``).
+
+    ``mtpy.run()`` always builds the adapter, so an empty ``DB_HOST`` is what tells a process
+    without a database apart from one whose database is down.
+
+    Returns
+    -------
+    str or None
+        The host, or ``None`` when the configuration, its ``db`` section or the host is
+        missing or empty.
+    """
+    config = getattr(App.get_(), 'config', None)
+    section = getattr(config, 'db', None) if config is not None else None
+    params = getattr(section, 'params', None) if section is not None else None
+    host = getattr(params, 'host', None) if params is not None else None
+
+    return str(host) if host not in (None, '') else None
 
 
 def database() -> Any:
@@ -943,11 +965,12 @@ def database() -> Any:
     Raises
     ------
     HttpError
-        503 when the app has no database.
+        503 ``no database configured`` when the app has no database adapter or the adapter has
+        no host (``database_host``).
     """
     db = App.get_().db
 
-    if db is None:
+    if db is None or database_host() is None:
         raise HttpError(503, 'no database configured')
 
     return db
@@ -958,9 +981,10 @@ def _query(key: tuple, loader: Callable[[], Any]) -> Any:
     Run a database read through the query cache.
 
     Only bounded reads are cached: whole per-scope tables, the catalogues, the polls of an
-    event that exists in the scope and the results of an election. Row filters chosen by the
-    request (``event`` of the ratings, ``pollster``, ``limit``) are applied on the cached
-    frame, outside the cache. The cache has a TTL and an LRU cap of ``QUERY_CACHE_SIZE``.
+    event that exists in the scope and the results of an election (every region). Row filters
+    chosen by the request (``event`` of the ratings, ``pollster``, ``limit``, ``region``) are
+    applied on the cached frame, outside the cache. The cache has a TTL and an LRU cap of
+    ``QUERY_CACHE_SIZE``.
 
     Parameters
     ----------
@@ -1170,6 +1194,41 @@ def query_pollster(pollster_id: int, scope: str) -> dict:
     }
 
 
+def ratings_event(scope: str, event: Optional[str] = None) -> Optional[str]:
+    """
+    Event whose ratings are served: the requested one or, by default, the latest event of the
+    ratings, which is the next election.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    event : str, optional
+        Validated event date.
+
+    Returns
+    -------
+    str or None
+        The date, ``YYYY-MM-DD``; ``None`` by default when the scope has no ratings.
+
+    Raises
+    ------
+    HttpError
+        404 ``event not found`` when ``event`` is not an event of the scope.
+    """
+    if event is not None:
+        return check_event(scope, event)
+
+    ratings = _ratings(scope)
+
+    if ratings.empty or 'event_date' not in ratings.columns:
+        return None
+
+    latest = _event_dates(ratings).max()
+
+    return None if pd.isna(latest) else latest.strftime('%Y-%m-%d')
+
+
 def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
     """
     Pollster ratings of an event of a scope.
@@ -1180,7 +1239,7 @@ def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
         Validated scope code.
     event : str, optional
         Validated event date; by default the latest event of the ratings, which is the next
-        election.
+        election (``ratings_event``).
 
     Returns
     -------
@@ -1193,17 +1252,36 @@ def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
         404 ``event not found`` when ``event`` is not an event of the scope.
     """
     ratings = _ratings(scope)
+    target = ratings_event(scope, event)
 
-    if event is not None:
-        check_event(scope, event)
-
-    if ratings.empty:
+    if ratings.empty or target is None:
         return ratings
 
-    dates = _event_dates(ratings)
-    target = dates.max() if event is None else pd.Timestamp(event)
+    return ratings.loc[_event_dates(ratings) == pd.Timestamp(target)].reset_index(drop=True)
 
-    return ratings.loc[dates == target].reset_index(drop=True)
+
+def polls_event(scope: str, event: Optional[str] = None) -> Optional[str]:
+    """
+    Event whose polls are served: the requested one or, by default, the next election.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    event : str, optional
+        Validated event date.
+
+    Returns
+    -------
+    str or None
+        The date; ``None`` by default when the scope has no next election.
+
+    Raises
+    ------
+    HttpError
+        404 ``event not found`` when ``event`` is not an event of the scope.
+    """
+    return _next_event(scope) if event is None else check_event(scope, event)
 
 
 def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int] = None,
@@ -1221,7 +1299,7 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     scope : str
         Validated scope code.
     event : str, optional
-        Validated event date; by default the next election of the scope.
+        Validated event date; by default the next election of the scope (``polls_event``).
     pollster : int, optional
         Validated pollster id; only its polls when given.
     limit : int, optional
@@ -1237,7 +1315,7 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     HttpError
         404 ``event not found`` when ``event`` is not an event of the scope.
     """
-    date = _next_event(scope) if event is None else check_event(scope, event)
+    date = polls_event(scope, event)
 
     if date is None:
         return pd.DataFrame()
@@ -1252,9 +1330,31 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     return polls.head(limit).reset_index(drop=True)
 
 
+def _election_dates(scope: str) -> list:
+    """
+    Dates of the elections of a scope, cached.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    list of str
+        ``data.get_event_dates(scope)``.
+    """
+    return _query(('events', scope), lambda: get_event_dates(scope))
+
+
 def query_results(scope: str, date: str, region: int = 0) -> pd.DataFrame:
     """
     Results of an election, by party, in a region of a scope.
+
+    The results of the election are read once for every region (``get_event_results`` without
+    a region) and cached per election; ``region`` is applied on that frame, outside the cache.
+    The date is checked first against the cached elections of the scope, so an arbitrary date
+    never reads the results.
 
     Parameters
     ----------
@@ -1268,9 +1368,20 @@ def query_results(scope: str, date: str, region: int = 0) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        ``data.get_event_results(scope, date, region)``.
+        The rows of ``data.get_event_results(scope, date)`` of the region, with a fresh index;
+        empty when the region has none.
+
+    Raises
+    ------
+    HttpError
+        404 ``event not found`` when ``date`` is not an election of the scope.
     """
-    return _query(('results', scope, date, region), lambda: get_event_results(scope, date, region))
+    if date not in _election_dates(scope):
+        raise HttpError(404, 'event not found')
+
+    results = _query(('results', scope, date), lambda: get_event_results(scope, date, None))
+
+    return _rows_of(results, 'region_id', region)
 
 
 def query_house_effects(scope: str) -> pd.DataFrame:

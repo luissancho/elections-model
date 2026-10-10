@@ -391,9 +391,13 @@ Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en viv
 | `/api/v1/analysis/{scope}/{part}` | `part` ∈ `meta`, `house-effects`, `herding`, `poll-errors`, `error-data`; `table=events` (solo CSV de `herding`) | el fichero del análisis tal cual (sobre completo) | `{scope}-{nombre}.csv`, con `nombre` ∈ `house-effects`, `herding`, `herding-events`, `poll-errors`, `error-data` |
 
 - `rows` son registros JSON de la tabla de la base (`NaN` a `null`, fechas ISO). `scope` se valida contra el
-  catálogo; `event` y `{date}` han de ser una fecha real `YYYY-MM-DD`, y `event` además una elección del ámbito
-  (`event not found`; `results` no comprueba que `{date}` lo sea). Los lectores corren sobre una caché de 60 s por ámbito, con un tope de 128
-  entradas (LRU); los filtros (`event`, `pollster`, `limit`) se aplican fuera de la caché.
+  catálogo; `event` y `{date}` han de ser una fecha real `YYYY-MM-DD` y además una elección del ámbito
+  (`event not found`): `event`, una de sus ratings o la próxima elección; `{date}`, una de sus elecciones
+  (`events`), comprobada antes de leer los resultados. Los lectores corren sobre una caché de 60 s por ámbito, con un
+  tope de 128 entradas (LRU); los filtros (`event`, `pollster`, `limit`, `region`) se aplican fuera de la caché:
+  `results` se lee una vez por elección, con todas sus regiones.
+- `ratings` y `polls` devuelven en `event` la fecha resuelta: la pedida o, sin `event`, la de la próxima elección
+  (`null` si el ámbito no tiene ninguna).
 - `ratings` y `pollster` devuelven `rating` y `quality` en escala 0-100.
 - `format=csv` se sirve como `text/csv` con `Content-Disposition: attachment`, igual que en `forecast`.
   `meta` y `pollsters/{id}` no tienen gemelo CSV (404 `no csv for this part`); `table=events` solo vale con
@@ -401,7 +405,8 @@ Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en viv
 - `analysis` lee `analysis/{scope}/{part}.json` (o `csv/{nombre}.csv`) del paquete a través de la misma
   caché de punteros (TTL 60 s), porque se sobrescribe: sin `meta.json` o sin el fichero, 404 `analysis not
   published`. No usa la base ni `manifest.json`.
-- Sin `app.db`, las nueve rutas de base dan 503 `no database configured` antes de leer nada; un error al
+- Sin base configurada (sin `app.db` o con `DB_HOST` vacío), las nueve rutas de base dan 503 `no database
+  configured` antes de leer nada; un error al
   consultar la base da 503 `database unavailable` (con la traza en el log, no en la respuesta).
 
 Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Control: no-store`):
@@ -413,10 +418,10 @@ Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Contr
 | 400 | `invalid limit` | `limit` no es un entero entre 1 y 5000 |
 | 400 | `invalid region` | `region` no son de uno a seis dígitos (ya existía para `/escanos`) |
 | 404 | `pollster not found` | `{id}` no está en el catálogo de casas |
-| 404 | `event not found` | `event` no es una elección del ámbito |
+| 404 | `event not found` | `event` o `{date}` no es una elección del ámbito |
 | 404 | `analysis not published` | el ámbito no tiene análisis completo (falta el fichero o `meta.json`) |
 | 404 | `no csv for this part` | `format=csv` en `meta` del análisis, en `pollsters/{id}` o con un `table` no válido |
-| 503 | `no database configured` | la aplicación no tiene base de datos |
+| 503 | `no database configured` | la aplicación no tiene base de datos o su `DB_HOST` está vacío |
 | 503 | `database unavailable` | la consulta a la base falló |
 
 `invalid scope`, `invalid format`, `unknown part` y `no file system configured` valen también aquí.

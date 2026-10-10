@@ -63,6 +63,16 @@ def clear_queries():
     webapi._QUERIES.clear()
 
 
+def use_database(app, host='db.test'):
+    """Base simulada en `app`: un `db` cualquiera y `config.db.params.host`; devuelve el `db`."""
+    from mtpy.core.app import Config
+    app.db = db = object()
+    if app.config is None:
+        app.set('config', Config({}))
+    app.config.offset_set('db', {'params': {'host': host}})
+    return db
+
+
 @pytest.fixture
 def site_app(fresh_app, tmp_path):
     """`App` con `fs` local, el catálogo de `data/` y un paquete mínimo publicado para `es`."""
@@ -256,8 +266,25 @@ def test_database_without_db_is_a_503(fresh_app):
     with pytest.raises(HttpError) as err:
         webapi.database()
     assert err.value.status == 503 and err.value.message == 'no database configured'
-    fresh_app.db = sentinel = object()
+    sentinel = use_database(fresh_app)
     assert webapi.database() is sentinel
+
+
+@pytest.mark.parametrize('host', ['', None])
+def test_database_without_host_is_a_503_before_reading(fresh_app, monkeypatch, host):
+    """`mtpy.run()` siempre crea el adaptador: con `DB_HOST` vacío no hay base, aunque `app.db` exista."""
+    calls = []
+    monkeypatch.setattr(webapi, 'get_drift', lambda scope: calls.append(scope) or pd.DataFrame())
+    use_database(fresh_app, host=host)
+    with pytest.raises(HttpError) as err:
+        webapi.query_drift('es')
+    assert err.value.status == 503 and err.value.message == 'no database configured' and calls == []
+    fresh_app.config.offset_unset('db')  # sin sección `db` tampoco hay base
+    with pytest.raises(HttpError) as err:
+        webapi.database()
+    assert err.value.message == 'no database configured'
+    use_database(fresh_app, host='db.test')
+    assert webapi.query_drift('es').empty and calls == ['es']
 
 
 def ratings_frame():
@@ -281,7 +308,7 @@ def test_query_ratings_returns_the_next_event_and_caches(fresh_app, monkeypatch)
     with pytest.raises(HttpError) as err:
         webapi.query_ratings('es')
     assert err.value.status == 503 and calls == []  # sin base no se llega al lector
-    fresh_app.db = object()
+    use_database(fresh_app)
     frame = webapi.query_ratings('es')
     assert frame['event_date'].dt.strftime('%Y-%m-%d').unique().tolist() == ['2026-11-29']
     assert frame['pollster'].tolist() == ['GAD3', 'CIS'] and calls == ['es']
@@ -293,7 +320,7 @@ def test_query_ratings_returns_the_next_event_and_caches(fresh_app, monkeypatch)
 
 def test_query_errors_become_503_and_are_logged(fresh_app, monkeypatch):
     errors = []
-    fresh_app.db = object()
+    use_database(fresh_app)
     fresh_app.set('logger', SimpleNamespace(error=errors.append))
 
     def boom(scope):
@@ -310,7 +337,7 @@ def test_query_errors_become_503_and_are_logged(fresh_app, monkeypatch):
 
 
 def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
-    fresh_app.db = object()
+    use_database(fresh_app)
     monkeypatch.setattr(webapi, 'get_pollsters', lambda: pd.DataFrame({
         'id': [2, 3], 'name': ['GAD3', 'CIS'], 'mtype': ['private', 'public'], 'quality': [1.0, 0.8],
     }))
@@ -333,7 +360,7 @@ def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
 
 
 def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
-    fresh_app.db = object()
+    use_database(fresh_app)
     calls = []
 
     def counted(name, frame):
@@ -354,7 +381,7 @@ def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
 
 
 def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeypatch):
-    fresh_app.db = object()
+    use_database(fresh_app)
     seen = []
 
     def fake_series(scope, event_dates):
@@ -382,8 +409,45 @@ def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeyp
     assert err.value.message == 'event not found'
 
 
+def test_query_results_reads_each_election_once_for_every_region(fresh_app, monkeypatch):
+    use_database(fresh_app)
+    seen = []
+
+    def fake_results(scope, date, region):
+        seen.append(('results', scope, date, region))
+        return pd.DataFrame({'date': pd.to_datetime([date] * 3), 'region_id': [0, 13, 28],
+                             'party': ['PP'] * 3, 'pct': [33.1, 35.0, 40.2]})
+    monkeypatch.setattr(webapi, 'get_event_results', fake_results)
+    monkeypatch.setattr(webapi, 'get_event_dates', lambda scope: seen.append(('events', scope)) or ['2023-07-23'])
+    assert webapi.query_results('es', '2023-07-23')['pct'].tolist() == [33.1]
+    frame = webapi.query_results('es', '2023-07-23', 28)
+    assert frame['pct'].tolist() == [40.2] and frame.index.tolist() == [0]
+    assert webapi.query_results('es', '2023-07-23', 99).empty
+    assert seen == [('events', 'es'), ('results', 'es', '2023-07-23', None)]
+    with pytest.raises(HttpError) as err:
+        webapi.query_results('es', '2020-01-01')
+    assert err.value.status == 404 and err.value.message == 'event not found'
+    assert len(seen) == 2  # una fecha desconocida no lee resultados
+    assert sorted(webapi._QUERIES._items) == [('events', 'es'), ('results', 'es', '2023-07-23')]
+
+
+def test_resolved_events_of_ratings_and_polls(fresh_app, monkeypatch):
+    use_database(fresh_app)
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
+    assert webapi.ratings_event('es') == '2026-11-29' and webapi.ratings_event('es', '2023-07-23') == '2023-07-23'
+    assert webapi.polls_event('es') == '2026-11-29' and webapi.polls_event('es', '2023-07-23') == '2023-07-23'
+    with pytest.raises(HttpError) as err:
+        webapi.ratings_event('es', '2020-01-01')
+    assert err.value.message == 'event not found'
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame().iloc[0:0])
+    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: None)
+    webapi._QUERIES.clear()
+    assert webapi.ratings_event('es') is None and webapi.polls_event('es') is None
+
+
 def test_query_cache_keys_are_bounded_per_scope(fresh_app, monkeypatch):
-    fresh_app.db = object()
+    use_database(fresh_app)
     monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
     monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
     monkeypatch.setattr(webapi, 'get_poll_series', lambda scope, event: pd.DataFrame({'date': [], 'pollster_id': []}))

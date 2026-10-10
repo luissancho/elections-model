@@ -72,9 +72,16 @@ La API (`/api/v1`, ver `docs/web/contrato.md`) lee el paquete `site/v1` de S3 y,
 2026-10-10), también la base de datos para las rutas de tablas (`/api/v1/parties`, `/pollsters`, `/ratings`,
 `/polls`, `/results`, `/house-effects`, `/herding`, `/drift`) y para la página `/casas`. La base se configura
 con las variables `DB_*` de `deploy/elections.env` (`DB_ADAPTER`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
-`DB_PASSWORD`, `DB_DATABASE`; ver `.env.example`): sin ellas, esas rutas dan 503 `no database configured` y
-`/casas` un 503 en HTML ("La base de datos no está disponible."); el resto del sitio funciona igual. Con las
-variables pero sin base alcanzable, 503 `database unavailable` (con la traza en el log). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
+`DB_PASSWORD`, `DB_DATABASE`; ver `.env.example`): sin ellas (basta con `DB_HOST` vacío), esas rutas dan 503
+`no database configured` y `/casas` un 503 en HTML ("La base de datos no está disponible."); el resto del sitio
+funciona igual. Con las variables pero sin base alcanzable, 503 `database unavailable` (con la traza en el
+log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`); las consultas no tienen límite
+salvo que se fije `DB_STATEMENT_TIMEOUT` (milisegundos). Para el contenedor de la web, pon
+`DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env`: una consulta colgada da 503 `database unavailable` a los
+10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío. Como el mismo fichero configura
+también los jobs, si un contenedor con ese fichero ejecuta publicaciones o cargas (`APP_CRONTAB`, `RUN_JOB`),
+deja la variable vacía en el fichero y pásala solo a la web con `-e DB_STATEMENT_TIMEOUT=10000` en su
+`docker run` (`-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
 paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
@@ -93,8 +100,9 @@ ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `
 `/promedio?scope=es&mode=nowcast` (200 HTML), `/escanos?scope=es&mode=forecast` (200 HTML),
 `/escanos?region=abc` (400 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
 `/nope` (404 HTML), con nginx también `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y
-`/dist/css/site.css` (`text/css`), y 13 rutas de la API (código, tipo y JSON válido): las 10 del paquete,
-`/api/v1/ratings?scope=es` (200 JSON, necesita base), `/api/v1/analysis/es-xx/herding` (400) y
+`/dist/css/site.css` (`text/css`), y 16 rutas de la API (código, tipo y JSON válido): las 10 del paquete,
+`/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23` y
+`/api/v1/drift?scope=es` (200 JSON, necesitan base), `/api/v1/analysis/es-xx/herding` (400) y
 `/api/v1/analysis/es/nope` (404); sale con error si alguna falla.
 
 ### Cómo añadir una página

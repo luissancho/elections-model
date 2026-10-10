@@ -6,8 +6,8 @@
 #
 # Imprime una linea por ruta (OK / FAIL / n/a) y sale con error si alguna falla.
 # /healthz solo existe en nginx: un 404 se muestra como "n/a sin nginx".
-# Las rutas que leen la base (/casas, /api/v1/ratings) se marcan "n/a sin base" si /api/v1/parties
-# responde 503 "no database configured".
+# Las rutas que leen la base (/casas, /api/v1/ratings, polls, results y drift) se marcan "n/a sin base"
+# si /api/v1/parties responde 503 "no database configured" (sin DB_HOST).
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -108,7 +108,10 @@ check /api/v1/forecast/es/forecast/vote 200 json
 check "/api/v1/forecast/es/forecast/summary?format=csv" 200 csv
 check /api/v1/forecast/es-xx 400 none
 check /api/v1/forecast/es/nope 404 none
-check_db_only /api/v1/ratings?scope=es 200 json
+check_db_only "/api/v1/ratings?scope=es" 200 json
+check_db_only "/api/v1/polls?scope=es&limit=5" 200 json
+check_db_only /api/v1/results/es/2023-07-23 200 json
+check_db_only "/api/v1/drift?scope=es" 200 json
 check /api/v1/analysis/es-xx/herding 400 none
 check /api/v1/analysis/es/nope 404 none
 

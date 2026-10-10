@@ -11,7 +11,9 @@ from mtpy import mtpy
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
-from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, write_analysis, write_bundle  # noqa: F401
+from tests.test_webapi_unit import (  # noqa: F401
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_bundle
+)
 
 
 def site_api(app):
@@ -91,7 +93,7 @@ def test_freeze_banner_and_attribution(api, fresh_app):
     ('/casas', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
 ])
 def test_page_errors_are_html_and_not_cached(api, fresh_app, monkeypatch, path, query, status, text):
-    fresh_app.db = object()
+    use_database(fresh_app)
     fake_houses(monkeypatch)
     got, headers, body = call(api, path, query=query)
     assert got == status and headers['content-type'] == 'text/html; charset=utf-8'
@@ -189,7 +191,7 @@ HOSTILE = '</script><script>alert(1)</script>"\'<b>&'
 
 def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_app, monkeypatch):
     """Textos hostiles del paquete y de la base se escapan en el HTML y en el bloque JSON; un color no válido cae al gris."""
-    fresh_app.db = object()
+    use_database(fresh_app)
     fake_houses(monkeypatch, name=HOSTILE)
     writer = bundle.BundleWriter(fresh_app.fs)
     meta = fixture_data('meta')
@@ -469,7 +471,7 @@ def fake_houses(monkeypatch, name='CIS'):
 @pytest.fixture
 def houses_without_analysis(api, fresh_app, monkeypatch):
     """Páginas con base simulada y los lectores de casas parcheados, sin análisis publicado."""
-    fresh_app.db = object()
+    use_database(fresh_app)
     fake_houses(monkeypatch)
     return api
 

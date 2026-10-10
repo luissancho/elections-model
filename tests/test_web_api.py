@@ -13,7 +13,9 @@ from mtpy.core.api import Api, Router
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish, webapi
 from tests.test_api_asgi import call
-from tests.test_webapi_unit import ROOT, RUN, clear_queries, fixture_data, write_analysis, write_bundle  # noqa: F401
+from tests.test_webapi_unit import (  # noqa: F401
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_bundle
+)
 
 
 def make_web_api(app):
@@ -164,8 +166,10 @@ def fake_readers(monkeypatch):
 
     def results(scope, date, region):
         seen.append((scope, date, region))
-        return pd.DataFrame({'date': pd.to_datetime([date]), 'region_id': [region], 'party': ['PP'], 'pct': [33.1]})
+        return pd.DataFrame({'date': pd.to_datetime([date] * 2), 'region_id': [0, 28], 'party': ['PP'] * 2,
+                             'pct': [33.1, 30.2]})
     monkeypatch.setattr(webapi, 'get_event_results', results)
+    monkeypatch.setattr(webapi, 'get_event_dates', lambda scope: ['2019-11-10', '2023-07-23', '2026-11-29'])
     monkeypatch.setattr(webapi, 'get_house_effects', lambda scope: pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [3], 'party': ['PP'], 'dev_result_c': [-1.2]}))
     monkeypatch.setattr(webapi, 'get_herding', lambda scope: pd.DataFrame({
@@ -178,7 +182,7 @@ def fake_readers(monkeypatch):
 @pytest.fixture
 def db_api(api, fresh_app, monkeypatch):
     """API con base simulada (`app.db` cualquiera) y los lectores parcheados."""
-    fresh_app.db = object()
+    use_database(fresh_app)
     fresh_app.seen = fake_readers(monkeypatch)
     return api
 
@@ -187,6 +191,7 @@ def test_ratings_json_and_csv(db_api):
     status, headers, body = call(db_api, '/api/v1/ratings', query='scope=es')
     data = json.loads(body)
     assert status == 200 and data['contract'] == 1 and data['scope'] == 'es'
+    assert data['event'] == '2026-11-29'  # la fecha resuelta, no `null`
     assert [row['event_date'] for row in data['rows']] == ['2026-11-29', '2026-11-29']
     assert headers['cache-control'] == 'public, max-age=60' and headers['access-control-allow-origin'] == '*'
     assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
@@ -198,6 +203,7 @@ def test_ratings_json_and_csv(db_api):
     assert headers['cache-control'] == 'public, max-age=60'
     status, headers, body = call(db_api, '/api/v1/ratings', query='event=2023-07-23')
     assert json.loads(body)['rows'][0]['rating'] == 1.4 and json.loads(body)['scope'] == 'es'
+    assert json.loads(body)['event'] == '2023-07-23'
 
 
 def test_catalogues_and_scope_tables(db_api):
@@ -228,6 +234,7 @@ def test_pollster_profile(db_api):
 def test_polls_default_event_limit_and_pollster(db_api):
     data = json.loads(call(db_api, '/api/v1/polls', query='limit=2')[2])
     assert [row['date'] for row in data['rows']] == ['2026-10-01', '2026-09-15'] and data['rows'][0]['PSOE'] is None
+    assert data['event'] == '2026-11-29'  # la fecha resuelta, no `null`
     data = json.loads(call(db_api, '/api/v1/polls', query='pollster=2&event=2026-11-29')[2])
     assert [row['pollster_id'] for row in data['rows']] == [2, 2]
     status, headers, body = call(db_api, '/api/v1/polls', query='pollster=2&event=2026-11-29&format=csv')
@@ -247,9 +254,18 @@ def test_polls_filters_share_one_cached_read(db_api, fresh_app):
 
 def test_results_use_region_zero_by_default(db_api, fresh_app):
     data = json.loads(call(db_api, '/api/v1/results/es/2023-07-23')[2])
-    assert data['rows'][0]['pct'] == 33.1 and data['rows'][0]['date'] == '2023-07-23'
-    call(db_api, '/api/v1/results/es/2023-07-23', query='region=28')
-    assert fresh_app.seen == [('es', '2023-07-23', 0), ('es', '2023-07-23', 28)]
+    assert data['rows'] == [{'date': '2023-07-23', 'region_id': 0, 'party': 'PP', 'pct': 33.1}]
+    assert data['region'] == 0
+    data = json.loads(call(db_api, '/api/v1/results/es/2023-07-23', query='region=28')[2])
+    assert [row['pct'] for row in data['rows']] == [30.2] and data['region'] == 28
+    # una sola lectura por elección, con todas las regiones; la región se filtra fuera de la caché
+    assert fresh_app.seen == [('es', '2023-07-23', None)]
+
+
+def test_results_of_an_unknown_election_are_a_404_without_reading(db_api, fresh_app):
+    status, headers, body = call(db_api, '/api/v1/results/es/2020-01-01')
+    assert status == 404 and json.loads(body) == {'status': 'error', 'message': 'event not found'}
+    assert headers['cache-control'] == 'no-store' and fresh_app.seen == []
 
 
 @pytest.mark.parametrize('path, query, status, message', [

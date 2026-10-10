@@ -6,8 +6,8 @@ from ..core.api import HttpError
 from ..lib import bundle
 from ..lib.webapi import (
     check_date, check_format, check_limit, check_pollster, check_region, check_scope, frame_to_csv,
-    frame_to_records, query_drift, query_herding, query_house_effects, query_parties, query_pollster,
-    query_pollsters, query_polls, query_ratings, query_results
+    frame_to_records, polls_event, query_drift, query_herding, query_house_effects, query_parties,
+    query_pollster, query_pollsters, query_polls, query_ratings, query_results, ratings_event
 )
 from .Base import Base
 
@@ -164,13 +164,15 @@ class Data(Base):
         Returns
         -------
         bytes
-            ``{'contract', 'scope', 'event', 'rows'}`` or ``ratings-{scope}[-{event}].csv``.
+            ``{'contract', 'scope', 'event', 'rows'}`` (``event`` is the resolved date, see
+            ``webapi.ratings_event``) or ``ratings-{scope}[-{event}].csv``.
         """
         scope = self.scope()
         event = self.optional(check_date, 'event')
         check_format(self.query.get('format'))
+        frame = query_ratings(scope, event)
 
-        return self.serve(query_ratings(scope, event), self.filename('ratings', scope, event), scope=scope, event=event)
+        return self.serve(frame, self.filename('ratings', scope, event), scope=scope, event=ratings_event(scope, event))
 
     async def polls_action(self) -> bytes:
         """
@@ -179,8 +181,8 @@ class Data(Base):
         Returns
         -------
         bytes
-            ``{'contract', 'scope', 'event', 'pollster', 'limit', 'rows'}`` or
-            ``polls-{scope}[-{event}][-{pollster}].csv``.
+            ``{'contract', 'scope', 'event', 'pollster', 'limit', 'rows'}`` (``event`` is the
+            resolved date, see ``webapi.polls_event``) or ``polls-{scope}[-{event}][-{pollster}].csv``.
         """
         scope = self.scope()
         event = self.optional(check_date, 'event')
@@ -188,9 +190,11 @@ class Data(Base):
         limit = check_limit(self.query.get('limit'))
         check_format(self.query.get('format'))
 
+        frame = query_polls(scope, event, pollster, limit)
+
         return self.serve(
-            query_polls(scope, event, pollster, limit), self.filename('polls', scope, event, pollster),
-            scope=scope, event=event, pollster=pollster, limit=limit
+            frame, self.filename('polls', scope, event, pollster),
+            scope=scope, event=polls_event(scope, event), pollster=pollster, limit=limit
         )
 
     async def results_action(self, scope: str, date: str) -> bytes:

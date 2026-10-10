@@ -474,10 +474,22 @@ class SQLAdapter(DBAdapter):
 
         self._client = create_engine(
             '{driver}://{username}:{password}@{host}:{port}/{database}'.format(**db_params),
-            pool_pre_ping=True
+            pool_pre_ping=True,
+            connect_args=self.connect_args()
         )
 
         return self
+
+    def connect_args(self) -> dict:
+        """
+        Arguments passed to the DBAPI driver when opening each connection.
+
+        Returns
+        -------
+        dict
+            ``connect_args`` of ``create_engine``; none by default, adapters override it.
+        """
+        return {}
     
     def _connect_client(self) -> Self:
         """
