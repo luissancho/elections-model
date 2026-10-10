@@ -490,6 +490,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
     assert 'href="/casas?scope=es&amp;mode=forecast&amp;id=2"' in page
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
+    assert 'Sondeos es el número de sondeos de la casa en las elecciones anteriores' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
@@ -614,4 +615,5 @@ def test_analysis_part_is_none_when_not_published(api, fresh_app):
 def test_casa_profile_header_uses_the_scope_rating(houses):
     """La cabecera toma rating y calidad de la última fila del camino del ámbito, no del catálogo (nacional, truncado)."""
     page = html(call(houses, '/casas', query='id=2')[2])
-    assert 'Tipo: private · Calidad: 80,0 · Rating: 82,4' in page and 'Rating: 70' not in page
+    assert 'Tipo: privada · Calidad: 80,0 · Rating: 82,4' in page and 'Rating: 70' not in page
+    assert 'Tipo: pública' in html(call(houses, '/casas', query='id=1')[2])  # `mtype` con su etiqueta en castellano

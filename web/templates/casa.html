@@ -8,7 +8,7 @@
       <section class="card" id="profile">
         <p><a href="/casas{{ query }}">← Todas las casas</a></p>
         <h2>{{ profile.pollster.name }}</h2>
-        <p class="muted">Tipo: {{ profile.pollster.get('mtype') or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
+        <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
       </section>
       <section class="card" id="path">
         <h2>Camino al rating</h2>

@@ -96,5 +96,5 @@ caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--co
 
 /* Houses page */
 .notice { color: var(--color-muted); font-style: italic; margin: 8px 0; }
-#rating-chart { height: 420px; }
+#bullseye-chart { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
 #effects-table td[title] { cursor: help; }

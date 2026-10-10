@@ -7,10 +7,12 @@ const POSITIVE_COLOR = '#2c6fbb';
 const ZERO_COLOR = '#ffffff';
 const ROW_HEIGHT = 24;
 const EXTRA_HEIGHT = 80;
+const MIN_LABEL_WIDTH = 40;
 
 /**
  * Render the house-effects heat map. The scale is diverging and symmetric around 0 (red negative, white
- * zero, blue positive); the container height grows with the number of rows.
+ * zero, blue positive); the container height grows with the number of rows. The values are written in the
+ * cells only when each column gets more than `MIN_LABEL_WIDTH` pixels (not on phones); the tooltip always has them.
  *
  * @param {HTMLElement} el chart container
  * @param {{columns: string[], rows: object[]}} grid `rows` as `{pollster, cells: [{cycle, hist, trend}]}`
@@ -19,6 +21,7 @@ const EXTRA_HEIGHT = 80;
  */
 export function renderHeatmap(el, {columns, rows}, {formatter = (x) => fmtNum(x, 1)} = {}) {
   el.style.height = `${rows.length * ROW_HEIGHT + EXTRA_HEIGHT}px`;
+  const showLabels = el.clientWidth / Math.max(columns.length, 1) > MIN_LABEL_WIDTH;
   const data = [];
   let top = 0;
   rows.forEach((row, y) => {
@@ -57,7 +60,7 @@ export function renderHeatmap(el, {columns, rows}, {formatter = (x) => fmtNum(x,
     series: [{
       type: 'heatmap',
       data,
-      label: {show: true, formatter: (params) => formatter(params.value[2]), color: THEME.textColor},
+      label: {show: showLabels, formatter: (params) => formatter(params.value[2]), color: THEME.textColor},
       emphasis: {itemStyle: {borderColor: THEME.markColor, borderWidth: 1}},
     }],
   };

@@ -62,6 +62,7 @@ MESSAGES = {
 TABLE_ROWS = 40
 OTHERS_COLOR = '#9e9e9e'
 MODE_LABELS = {'nowcast': 'Hoy', 'forecast': 'Elección'}
+MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
     ('dist', 'Escaños por simulación', True),
@@ -1434,8 +1435,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``profile`` (``webapi.query_pollster``), ``current`` (the
-        ``rating`` and ``quality`` of its last ratings row in the scope, the next election; both
+        The common context plus ``profile`` (``webapi.query_pollster``), ``mtype`` (the type of
+        the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing),
+        ``current`` (the ``rating`` and ``quality`` of its last ratings row in the scope, the next
+        election; both
         ``None`` without ratings: the catalogue keeps only the national rating), ``path`` (its
         ratings by election, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS``), ``bullseye`` (its rows of the ``poll-errors``
@@ -1464,7 +1467,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     path = profile_rows(profile['ratings'], PATH_KEYS)
     latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
 
+    mtype = profile['pollster'].get('mtype')
+
     context['profile'] = profile
+    context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
     context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
     context['path'] = path
     context['effects_table'] = effects_table(profile['house_effects'])

@@ -7,12 +7,17 @@ import {renderHeatmap} from '../charts/heatmap.js';
 import {renderLine} from '../charts/line.js';
 import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
+// Height of the rating bars: one row per rated house plus the axes.
+const BAR_ROW_HEIGHT = 22;
+const BAR_EXTRA_HEIGHT = 60;
+
 /** Draw the charts whose container is present and has data. */
 function paint() {
   const {ranking = [], grid = null, path = [], bullseye = [], blocks = []} = readInitial();
 
   const bars = document.getElementById('rating-chart');
   if (bars && ranking.length) {
+    bars.style.height = `${ranking.length * BAR_ROW_HEIGHT + BAR_EXTRA_HEIGHT}px`;
     tryDraw(() => renderBars(bars, ranking.map((row) => ({name: row.pollster, rating: row.rating})), {
       value: 'rating', lo: 'lo', hi: 'hi', formatter: (x) => fmtNum(x, 1),
     }), 'the rating bars');

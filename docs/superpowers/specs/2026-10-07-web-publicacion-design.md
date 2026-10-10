@@ -990,24 +990,46 @@ Menores aplazados:
 - `check_format` se ejecuta dos veces por petición de `Data`.
 - El nombre del CSV de `results` difiere con y sin `region=0`.
 - Las lecturas de base bloquean dentro de acciones `async` (fase 6: `asyncio.to_thread`).
-- Una avalancha de claves distintas de `results` puede expulsar entradas calientes de la caché.
 - Las cabeceras de la tabla de efectos van en bruto en unas partes y con el nombre completo en otras.
 - Las filas de `herding_rows` no están normalizadas.
 - Los ratings se convierten a registros dos veces.
 - El histórico y la tendencia solo se ven en un tooltip `title`.
-- `mtype` se muestra en bruto (Luis confirma los valores guardados).
 - `renderHeatmap` recibe `formatter` posicional.
 - `renderBullseye` no admite `labels`.
-- Los anillos de la diana solo son circulares con un área cuadrada.
 - Los nombres largos de casa se desbordan en móvil.
+
+Correcciones de la revisión final de la rama (2026-10-10):
+
+- Sin base: `webapi.database()` da 503 `no database configured` también cuando `config.db.params.host` está
+  vacío (`mtpy.run()` siempre crea el adaptador, así que `app.db` nunca es `None` en un proceso real); con
+  `DB_HOST=` vacío, `deploy/check-api.sh` marca `n/a sin base de datos` las rutas de base.
+- Tiempos límite de la base (cambio en el núcleo): `SQLAdapter.connect_args()` (vacío por defecto) llega a
+  `create_engine`; `PostgreSQL` pasa siempre `connect_timeout=5` y `-c statement_timeout=<ms>` solo con
+  `DB_STATEMENT_TIMEOUT` (`config.json` `db.params.statement_timeout`, `.env.example`). La web lo fija a
+  10000 en `deploy/elections.env`; cargas y notebooks lo dejan vacío.
+- `results`: una entrada de caché por elección, `('results', scope, date)`, con todas las regiones
+  (`get_event_results(scope, date, None)`); `region` se filtra fuera. `{date}` se valida contra
+  `('events', scope)` (`get_event_dates`): una fecha que no es elección del ámbito da 404 `event not found`
+  sin leer resultados.
+- `ratings` y `polls` devuelven en `event` la fecha resuelta (`webapi.ratings_event`, `polls_event`), no `null`.
+- `/casas`: las barras del rating miden 22 px por casa más 60; la diana es cuadrada (`aspect-ratio: 1 / 1`,
+  hasta 480 px); el mapa de calor solo escribe los valores en las celdas con más de 40 px por columna; el
+  texto del ranking define "Sondeos"; el perfil muestra `mtype` como "pública" o "privada"
+  (`pages.MTYPE_LABELS`, el valor en bruto si es otro).
+- `deploy/check-api.sh` comprueba también `/api/v1/polls`, `/api/v1/results/es/2023-07-23` y `/api/v1/drift`
+  (con base), y un test de integración (`tests/integration/test_web_data.py`) comprueba sus columnas contra
+  la base.
 
 Pendiente de Luis:
 
+- Poner `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env` (no está en el repositorio) o, si el mismo
+  contenedor ejecuta jobs (`APP_CRONTAB`, `RUN_JOB`), solo en el `docker run` de la web con `-e`.
 - Lanzar `publish analysis` contra la RDS para `es` (y `all`): `python job.py publish
   '{"what":["analysis"],"scopes":"all"}'`.
 - Recorrer `/casas` (ranking, mapa de calor, tabla de herding) y dos o tres perfiles (CIS, `?id=1`, GAD3,
   40dB).
-- Confirmar los valores de `pollsters.mtype` y si necesitan etiquetas en español.
+- Confirmar los valores de `pollsters.mtype` (hoy `public` y `private` se muestran como "pública" y
+  "privada"; otro valor sale en bruto).
 - Decidir si el ranking debe limitar las casas listadas (hoy, todas las que tienen rating); las "casas
   destacadas" quedan cerradas por D3.
 - Cadencia: `publish analysis` tras cada recálculo de ratings (`run_load --what ratings`) y tras cada carga
