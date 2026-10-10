@@ -78,10 +78,12 @@ funciona igual. Con las variables pero sin base alcanzable, 503 `database unavai
 log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`); las consultas no tienen límite
 salvo que se fije `DB_STATEMENT_TIMEOUT` (milisegundos). Para el contenedor de la web, pon
 `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env`: una consulta colgada da 503 `database unavailable` a los
-10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío. Como el mismo fichero configura
-también los jobs, si un contenedor con ese fichero ejecuta publicaciones o cargas (`APP_CRONTAB`, `RUN_JOB`),
-deja la variable vacía en el fichero y pásala solo a la web con `-e DB_STATEMENT_TIMEOUT=10000` en su
-`docker run` (`-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
+10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío. La variable afecta a todo lo que
+corra con el entorno del contenedor: si el cron (`APP_CRONTAB`) o el worker de cola comparten contenedor con
+la web, también sus jobs quedan limitados a 10 s. Mientras `deploy/docker/crontab` esté vacío no hay
+conflicto; si un día el contenedor ejecuta publicaciones o cargas, ejecútalas en otro contenedor con la
+variable vacía (un `RUN_JOB` es siempre un `docker run` aparte: `-e DB_STATEMENT_TIMEOUT=` lo anula, porque
+`-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
 paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
