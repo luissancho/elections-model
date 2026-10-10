@@ -1,0 +1,48 @@
+{
+  "schema": "analysis-house-effects@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "parties": [
+      "PP",
+      "PSOE",
+      "VOX"
+    ],
+    "blocks": [
+      "Derecha",
+      "Izquierda"
+    ],
+    "rows": [
+      {
+        "pollster": "CIS",
+        "name": "PP",
+        "n_events": 3,
+        "hist": -2.15,
+        "trend": -0.41,
+        "cycle": -3.02,
+        "n_cycle": 12
+      },
+      {
+        "pollster": "CIS",
+        "name": "Derecha",
+        "n_events": 3,
+        "hist": -3.4,
+        "trend": -0.62,
+        "cycle": -4.8,
+        "n_cycle": 12
+      },
+      {
+        "pollster": "GAD3",
+        "name": "PP",
+        "n_events": 1,
+        "hist": 0.85,
+        "trend": null,
+        "cycle": null,
+        "n_cycle": null
+      }
+    ]
+  }
+}

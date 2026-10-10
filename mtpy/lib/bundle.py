@@ -15,14 +15,20 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
                 vote.json summary.json dist.json districts.json scenario.json projection.json
             csv/
                 series.csv ...                  {mode}-{name}.csv for the per-mode files
+        analysis/{scope}/                       houses analysis of a scope, overwritten on each publication
+            meta.json house-effects.json herding.json poll-errors.json error-data.json
+            csv/
+                house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
 
 Every JSON file is an envelope::
 
     {schema: 'name@1', contract: 1, scope, run_id, mode, generated_at, data: {...}}
 
 where ``schema`` is ``{name}@{CONTRACT}``, ``scope`` and ``run_id`` are ``null`` when the file
-does not belong to one (``manifest``, ``history``), ``mode`` is only set for ``MODE_PARTS`` and
-``data`` has the keys listed in ``SCHEMAS``. The contract is described in ``docs/web/contrato.md``.
+does not belong to one (``manifest``, ``history``; ``run_id`` for the analysis), ``mode`` is only set
+for ``MODE_PARTS`` and ``data`` has the keys listed in ``SCHEMAS``. The analysis parts are validated
+against the schema named in ``ANALYSIS_SCHEMAS``; ``meta.json`` is written last, so an analysis
+without it is incomplete. The contract is described in ``docs/web/contrato.md``.
 
 ``BundleReader`` and ``BundleWriter`` read and write the bundle through a file system (``app.fs``),
 validating every JSON file against its schema before it is written.
@@ -44,6 +50,10 @@ CONTRACT = 1
 MODES = ('nowcast', 'forecast')
 RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion')
 MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'projection')
+ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data')
+ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
+                    'poll-errors': 'poll-errors', 'error-data': 'error-data'}
+ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
 
@@ -74,6 +84,12 @@ SCHEMAS = {
     'districts': {'parties': list, 'regions': list, 'rows': list},
     'scenario': {'simulation': int, 'parties': list, 'rows': list},
     'projection': {'dates': list, 'groups': dict},
+    'analysis-meta': {'scope': str, 'event_date': str, 'events': list, 'n_pollsters': int, 'params': dict,
+                      'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'seconds': dict},
+    'analysis-house-effects': {'parties': list, 'blocks': list, 'rows': list},
+    'analysis-herding': {'rows': list, 'events': list},
+    'poll-errors': {'blocks': list, 'rows': list},
+    'error-data': {'rows': list},
 }
 
 
@@ -359,6 +375,66 @@ def path_csv(scope: str, run_id: str, name: str, mode: Optional[str] = None) -> 
     return f'{base}/{mode}-{name}.csv'
 
 
+def _check_analysis(scope: str, name: str, names: tuple) -> None:
+    """Check the scope and the file name of an analysis path, raising ``ValueError`` if invalid."""
+    if not isinstance(scope, str) or not ROUTE_ALIAS_RE.fullmatch(scope):
+        raise ValueError(f'invalid scope {scope!r}')
+    if name not in names:
+        raise ValueError(f'unknown analysis file {name!r} (expected one of {", ".join(names)})')
+
+
+def path_analysis(scope: str, part: str) -> str:
+    """
+    Path of a JSON file of the analysis of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        The scope; it must match ``ROUTE_ALIAS_RE``.
+    part : str
+        The file name without extension (one of ``ANALYSIS_PARTS``).
+
+    Returns
+    -------
+    str
+        ``'analysis/{scope}/{part}.json'``.
+
+    Raises
+    ------
+    ValueError
+        If the scope or the part is invalid.
+    """
+    _check_analysis(scope, part, ANALYSIS_PARTS)
+
+    return f'analysis/{scope}/{part}.json'
+
+
+def path_analysis_csv(scope: str, name: str) -> str:
+    """
+    Path of a CSV file of the analysis of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        The scope; it must match ``ROUTE_ALIAS_RE``.
+    name : str
+        The file name without extension (one of ``ANALYSIS_CSV``).
+
+    Returns
+    -------
+    str
+        ``'analysis/{scope}/csv/{name}.csv'``.
+
+    Raises
+    ------
+    ValueError
+        If the scope or the name is invalid.
+    """
+    _check_analysis(scope, name, ANALYSIS_CSV)
+
+    return f'analysis/{scope}/csv/{name}.csv'
+
+
 def validate(name: str, obj: dict) -> dict:
     """
     Check that an envelope has the shape of a schema.
@@ -510,6 +586,27 @@ class BundleReader:
             name for name in names
             if RUN_ID_RE.match(name) and self.exists(path_part(scope, name, 'headline'))
         )
+
+    def analysis_exists(self, scope: str) -> bool:
+        """
+        Check whether the analysis of a scope is published, which is when it has its ``meta.json``.
+
+        Parameters
+        ----------
+        scope : str
+            The scope; it must match ``ROUTE_ALIAS_RE``.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``analysis/{scope}/meta.json`` exists.
+
+        Raises
+        ------
+        ValueError
+            If the scope is invalid.
+        """
+        return self.exists(path_analysis(scope, 'meta'))
 
 
 class BundleWriter(BundleReader):

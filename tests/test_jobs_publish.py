@@ -5,7 +5,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from tests.fakes import FakeSimulator
+from tests.fakes import FakeComputer, FakeSimulator
 
 
 def entry(scope, run_id):
@@ -15,11 +15,12 @@ def entry(scope, run_id):
 
 @pytest.fixture
 def patched(monkeypatch):
-    """`resolve_scopes`, `next_event_date` y `publish_forecast` sin base: `es` publica de verdad con
-    `FakeSimulator`, `db_stats` y `provenance` sustituidos, `es-md` no tiene evento, `es-cb` no tiene
-    sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
+    """`resolve_scopes`, `next_event_date`, `publish_forecast` y `publish_analysis` sin base: `es` publica de
+    verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y `provenance` sustituidos, `es-md` no tiene
+    evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
     calls = []
     real_forecast = publish.publish_forecast
+    real_analysis = publish.publish_analysis
 
     def fake_forecast(scope, writer, run_id, event_date, **kwargs):
         calls.append((scope, run_id, event_date, kwargs))
@@ -33,6 +34,16 @@ def patched(monkeypatch):
                              stats=lambda scope, event_date: (7, '2026-10-01'),
                              prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
+    def fake_analysis(scope, writer, **kwargs):
+        calls.append((scope, 'analysis', kwargs))
+        if scope == 'es-cb':
+            raise publish.NothingToPublish('No events for es-cb')
+        if scope == 'es-ar':
+            raise KeyError('x')
+        return real_analysis(scope, writer, computer=FakeComputer(), stats=lambda scope, event_date: (7, '2026-10-01'),
+                             prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
+
+    monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
     monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08',
                                                               'es-ri': '2027-05-23'}.get(scope))
@@ -99,12 +110,38 @@ def test_manifest_point_and_unpublish_actions(fresh_app, tmp_path, patched):
 def test_deferred_and_unknown_what_are_rejected(fresh_app, tmp_path):
     from mtpy.jobs.Publish import Publish
 
-    with pytest.raises(ValueError, match='phase 4'):
-        Publish().run(what=['analysis'], fs=FileSystem(str(tmp_path)))
+    with pytest.raises(ValueError, match='phase 5'):
+        Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))
     with pytest.raises(ValueError, match='unknown'):
         Publish().run(what='nope', fs=FileSystem(str(tmp_path)))
     with pytest.raises(RuntimeError, match='file system'):
         Publish().run(what=['manifest'])
+
+
+def test_analysis_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    result = Publish().run(what=['analysis'], scopes=['es'], fs=fs)
+    assert result['es']['status'] == 'published'
+    assert bundle.BundleReader(fs).analysis_exists('es')
+    assert 'es: analysis published (event 2026-11-29, 3 pollsters)' in capsys.readouterr().out
+
+
+def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, patched, capsys):
+    """Con `dry_run`, el análisis va a `site-dry/v1/analysis/`; un ámbito sin datos se omite, uno que rompe
+    falla sin detener a los demás, y el manifest no se toca."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    with pytest.raises(RuntimeError, match=r'es-ar \(analysis\)'):
+        Publish().run(what=['analysis'], scopes=['es-cb', 'es-ar', 'es'], fs=fs, dry_run=True)
+    out = capsys.readouterr().out
+    assert 'es-cb: analysis skipped (No events for es-cb)' in out and "es-ar: analysis failed (KeyError: 'x')" in out
+    assert 'es: analysis published (event 2026-11-29, 3 pollsters) in ' in out and 'manifest' not in out
+    assert bundle.BundleReader(fs, prefix=bundle.DRY_PREFIX).analysis_exists('es')
+    assert not (tmp_path / 'site').exists()
+    assert [c[2] for c in patched] == [{'verbose': 0}] * 3
 
 
 def test_failed_forecast_is_not_hidden_by_a_later_successful_action(fresh_app, tmp_path, patched, monkeypatch):

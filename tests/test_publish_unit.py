@@ -9,7 +9,8 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from tests.fakes import NAMES, REGIONS, FakeSimulator, RecordingFileSystem, synthetic_simulator
+from tests.fakes import (NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
+                         synthetic_simulator)
 
 
 def valid(name, data, mode='nowcast'):
@@ -484,3 +485,101 @@ def test_fit_forecast_value_error_is_nothing_to_publish(tmp_path):
     with pytest.raises(publish.NothingToPublish, match='Not enough polls'):
         publish.publish_forecast('es', make_writer(tmp_path), RUN, '2026-11-29', n_sim=5, simulator=failing,
                                  stats=fake_stats, prov=fake_prov)
+
+
+def test_analysis_exporters_round_convert_and_keep_the_nulls():
+    """Los exportadores del análisis redondean (2 decimales en puntos, 3 en ratios y probabilidades), pasan
+    fechas a ISO y enteros a int, y dejan null donde el modelo no tiene valor."""
+    frames = synthetic_analysis()
+    data, frame = publish.export_analysis_house_effects(frames.house_effects, NAMES + ['UP'], ['Derecha', 'Izquierda'])
+    data = valid('analysis-house-effects', data, mode=None)
+    assert data['parties'] == NAMES and data['blocks'] == ['Derecha', 'Izquierda'] and len(data['rows']) == 15
+    rows = {(r['pollster'], r['name']): r for r in data['rows']}
+    assert rows[('CIS', 'PP')] == {'pollster': 'CIS', 'name': 'PP', 'n_events': 2, 'hist': 1.23, 'trend': 0.35,
+                                   'cycle': 1.01, 'n_cycle': 6}
+    assert rows[('GAD3', 'PP')]['trend'] is None and rows[('GAD3', 'PP')]['n_cycle'] is None
+    assert rows[('40dB', 'Derecha')]['n_events'] == 0 and rows[('40dB', 'Derecha')]['hist'] is None
+    assert list(frame.columns) == ['pollster', 'name', 'n_events', 'hist', 'trend', 'cycle', 'n_cycle']
+
+    data, summary, events = publish.export_analysis_herding(frames.herding_summary, frames.herding)
+    data = valid('analysis-herding', data, mode=None)
+    assert data['rows'][0] == {'pollster': '40dB', 'herding': 0.812, 'herding_last': 0.812, 'herding_p': 0.046,
+                               'herding_n': 4, 'herding_events': 1}
+    assert [(e['event_date'], e['pollster']) for e in data['events']] == [
+        ('2023-07-23', 'CIS'), ('2023-07-23', 'GAD3'), ('2026-11-29', '40dB'), ('2026-11-29', 'CIS'), ('2026-11-29', 'GAD3')]
+    assert data['events'][0] == {'event_date': '2023-07-23', 'pollster': 'CIS', 'n': 15, 'ratio': 0.999, 'p_value': 0.457}
+    assert summary.shape[0] == 3 and list(events.columns) == ['event_date', 'pollster', 'n', 'ratio', 'p_value']
+
+    data, frame = publish.export_poll_errors(frames.poll_errors, ['Derecha', 'Izquierda', 'Nadie'])
+    data = valid('poll-errors', data, mode=None)
+    assert data['blocks'] == ['Derecha', 'Izquierda']
+    assert data['rows'][1] == {'event_date': '2023-07-23', 'event': '2023-23J', 'pollster': 'CIS', 'days': 13,
+                               'sample_size': None, 'weight': 0.568, 'error_avg': 2.35, 'bias_avg': -0.57,
+                               'error_blocks': 4.57, 'bias_blocks': -1.23, 'bias': -0.68, 'Derecha': -2.35, 'Izquierda': 2.22}
+    assert data['rows'][0]['sample_size'] == 1200 and list(frame.columns) == list(data['rows'][0])
+
+    data, frame = publish.export_error_data(frames.error_data)
+    data = valid('error-data', data, mode=None)
+    assert data['rows'][0] == {'date': '2023-07-15', 'pollster': '40dB', 'party': 'VOX', 'regional': 0, 'weeks': 1,
+                               'weight': 0.81, 'pct': 12.35, 'error': 0.12}
+    assert 'color' not in frame.columns
+
+    meta = publish.export_analysis_meta('es', '2026-11-29', ['2023-07-23'], 3, {'bmap': 'vs'}, fake_prov(), {'total': 1.0})
+    meta = valid('analysis-meta', meta, mode=None)
+    assert meta['commit'] == 'abc1234' and meta['versions'] == {'python': '3.11.9'} and meta['n_pollsters'] == 3
+
+
+def test_publish_analysis_writes_the_parts_and_meta_last(tmp_path):
+    fs = RecordingFileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    out = publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
+    assert out['scope'] == 'es' and out['n_pollsters'] == 3
+    written = [p for p in fs.written if p.startswith('site/v1/analysis/es/')]
+    assert written[-1].endswith('/meta.json') and len([p for p in written if p.endswith('.json')]) == 5
+    assert len([p for p in written if p.endswith('.csv')]) == 5
+    meta = writer.read_json(bundle.path_analysis('es', 'meta'))
+    assert meta['schema'] == 'analysis-meta@1' and meta['run_id'] is None and meta['data']['event_date'] == '2026-11-29'
+    he = writer.read_json(bundle.path_analysis('es', 'house-effects'))['data']
+    assert he['blocks'] == ['Derecha', 'Izquierda'] and {'pollster', 'name', 'hist', 'trend', 'cycle', 'n_events', 'n_cycle'} <= set(he['rows'][0])
+    herding = writer.read_json(bundle.path_analysis('es', 'herding'))['data']
+    assert [r['pollster'] for r in herding['rows']] and herding['events'][0]['event_date'] == '2023-07-23'
+    errors = writer.read_json(bundle.path_analysis('es', 'poll-errors'))['data']
+    assert errors['rows'][0]['event_date'] == '2023-07-23' and 'Derecha' in errors['rows'][0]
+    assert bundle.BundleReader(fs).analysis_exists('es')
+
+
+def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
+    """`meta` guarda los parámetros de los errores, las elecciones del Computer y el estado de la base; los
+    errores se piden con `bmap='vs'`, `drange=(6, 42)` y `n_last=1`."""
+    factory = FakeComputer()
+    writer = make_writer(tmp_path)
+    out = publish.publish_analysis('es', writer, computer=factory, stats=fake_stats, prov=fake_prov)
+    assert factory.calls[0][:3] == ('init', 'es', '.')
+    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, 42), 'n_last': 1})
+    meta = writer.read_json(bundle.path_analysis('es', 'meta'))['data']
+    assert meta['events'] == ['2019-11-10', '2023-07-23', '2026-11-29'] and meta['scope'] == 'es'
+    assert meta['params'] == {'bmap': 'vs', 'drange': [6, 42], 'n_last': 1, 'main': NAMES,
+                              'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}, 'db_polls': 7,
+                              'db_last_poll': '2026-10-01'}
+    assert set(meta['seconds']) == {'build', 'house_effects', 'herding', 'poll_errors', 'error_data', 'total'}
+    assert out['seconds'] == meta['seconds'] and out['event_date'] == '2026-11-29'
+    assert (tmp_path / 'site' / 'v1' / 'analysis' / 'es' / 'csv' / 'herding-events.csv').exists()
+
+
+def test_publish_analysis_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, monkeypatch):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
+    first = writer.read_json(bundle.path_analysis('es', 'meta'))['generated_at']
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)  # una reescritura cambiaría `generated_at`
+    monkeypatch.setattr(publish, 'export_error_data', lambda frame: (_ for _ in ()).throw(RuntimeError('boom')))
+    with pytest.raises(RuntimeError):
+        publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
+    assert writer.read_json(bundle.path_analysis('es', 'meta'))['generated_at'] == first
+    assert writer.read_json(bundle.path_analysis('es', 'house-effects'))['generated_at'] == '2030-01-01T00:00:00Z'
+
+
+def test_publish_analysis_turns_a_computer_value_error_into_nothing_to_publish(tmp_path):
+    with pytest.raises(publish.NothingToPublish, match='no events'):
+        publish.publish_analysis('es-xx', make_writer(tmp_path), computer=FakeComputer(fail=ValueError('no events')),
+                                 stats=fake_stats, prov=fake_prov)
+    assert not (tmp_path / 'site').exists()

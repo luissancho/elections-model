@@ -1928,7 +1928,8 @@ class Computer(Core):
         Returns
         -------
         pd.DataFrame
-            The polls data with the specified metric.
+            The polls data with the specified metric, indexed by `(event, pollster, days)`; `event_date` is the
+            ISO date of the `event` label.
         """
         df = self.filter_polls(featured, **kwargs).dropna(axis=1, how='all')
 
@@ -1960,10 +1961,11 @@ class Computer(Core):
             df = df.loc[df.pollster_id == pollster]
 
         df['event'] = ['{}-{}{}'.format(dt.year, dt.day, dt.strftime('%b')[0]) for dt in df.event_date]
+        df['event_date'] = pd.to_datetime(df['event_date']).dt.strftime('%Y-%m-%d')  # the unambiguous date of `event`
         df[['days', 'sample_size', 'proc_sample']] = df[['days', 'sample_size', 'proc_sample']].fillna(0).astype(int)
         df['weight'] = df.weight_over * df.weight_sample
         df = df.set_index(['event', 'pollster', 'days']).sort_index(ascending=(True, True, False))[[
-            'sample_size', 'proc_sample', 'weight', 'error_avg', 'bias_avg', 'error_blocks', 'bias_blocks', 'error_within', 'bias_within', 'bias'
+            'event_date', 'sample_size', 'proc_sample', 'weight', 'error_avg', 'bias_avg', 'error_blocks', 'bias_blocks', 'error_within', 'bias_within', 'bias'
         ] + names]
 
         return df

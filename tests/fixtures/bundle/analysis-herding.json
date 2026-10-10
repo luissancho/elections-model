@@ -1,0 +1,36 @@
+{
+  "schema": "analysis-herding@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "pollster": "GAD3",
+        "herding": 0.742,
+        "herding_last": 0.705,
+        "herding_p": 0.012,
+        "herding_n": 31,
+        "herding_events": 2
+      }
+    ],
+    "events": [
+      {
+        "event_date": "2023-07-23",
+        "pollster": "GAD3",
+        "n": 14,
+        "ratio": 0.781,
+        "p_value": 0.034
+      },
+      {
+        "event_date": "2026-11-29",
+        "pollster": "GAD3",
+        "n": 17,
+        "ratio": 0.705,
+        "p_value": 0.012
+      }
+    ]
+  }
+}

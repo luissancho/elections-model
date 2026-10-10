@@ -1,4 +1,5 @@
-"""Dobles de prueba de la publicación: un Simulator sintético que ejercita sus métodos reales de salida sin base."""
+"""Dobles de prueba de la publicación: un Simulator sintético que ejercita sus métodos reales de salida sin base
+y un Computer sintético con los resúmenes de casas que publica `publish analysis`."""
 import types
 
 import numpy as np
@@ -129,6 +130,92 @@ class FakeSimulator:
 
         sim.fit_forecast, sim.run = fit_forecast, run
         return sim
+
+
+HOUSES = ['40dB', 'CIS', 'GAD3']
+ANALYSIS_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']  # dos elecciones pasadas y el ciclo en curso
+
+
+def synthetic_analysis():
+    """Resúmenes de casas con la forma de los métodos reales del `Computer`, para 3 casas, 2 elecciones pasadas
+    y el ciclo en curso: `house_effects` (`print_house_effects`), `herding_summary`, `herding` (filas de
+    `get_herding`), `poll_errors` (`get_polls_metric('error', bmap='vs', ...)`, con `event_date` ISO) y
+    `error_data` (`get_error_estimator_data`). Lleva NaN donde el modelo real los deja y decimales de sobra."""
+    names = NAMES + list(BMAPS['vs'])
+    index = pd.MultiIndex.from_product([HOUSES, names], names=['pollster', 'name'])
+    house_effects = pd.DataFrame({
+        # 40dB sin historia (solo ciclo); CIS con dos elecciones; GAD3 con una y sin sondeos en el ciclo
+        'n_events': [0.] * 5 + [2.] * 5 + [1.] * 5,
+        'hist': [np.nan] * 5 + [1.234, -0.567, 0.891, 2.125, -0.567] + [-0.4321, 0.9876, 0.1111, -0.321, 0.9876],
+        'trend': [np.nan] * 5 + [0.3456, -0.1234, 0.0789, 0.4245, -0.1234] + [np.nan] * 5,
+        'cycle': [0.5555, -0.4444, 0.3333, 0.8888, -0.4444] + [1.0101, -0.2020, 0.3030, 1.3131, -0.2020] + [np.nan] * 5,
+        'n_cycle': [4.] * 5 + [6.] * 5 + [np.nan] * 5,
+    }, index=index)
+    herding_summary = pd.DataFrame({
+        'herding': [0.81234, 1.04567, 0.65432], 'herding_last': [0.81234, 1.10101, 0.70707],
+        'herding_p': [0.04567, 0.61234, 0.00123], 'herding_n': [4., 25., 18.], 'herding_events': [1., 2., 2.],
+    }, index=pd.Index(HOUSES, name='pollster'))
+    herding = pd.DataFrame({  # desordenado, como llega de la base
+        'event_date': pd.to_datetime(['2026-11-29'] * 3 + ['2023-07-23'] * 2),
+        'event_scope': 'es', 'pollster_id': [3, 1, 2, 1, 2], 'pollster': ['40dB', 'CIS', 'GAD3', 'CIS', 'GAD3'],
+        'n': [4, 10, 8, 15, 10], 'n_series': 4, 'ss_obs': [1.1, 2.2, 0.9, 3.3, 1.4], 'ss_exp': [1.6, 2.0, 1.9, 3.0, 2.1],
+        'dof': [12, 30, 24, 45, 30], 'ratio': [0.81234, 1.10101, 0.70707, 0.99876, 0.61234],
+        'p_value': [0.04567, 0.61234, 0.00123, 0.45678, 0.00045],
+    })
+    poll_errors = pd.DataFrame({
+        'event_date': '2023-07-23', 'sample_size': [1200, 0, 3000], 'proc_sample': [1200, 1000, 3000],
+        'weight': [0.81234, 0.56789, 1.23456], 'error_avg': [1.2345, 2.3456, 0.9876], 'bias_avg': [0.1234, -0.5678, 0.2468],
+        'error_blocks': [2.3456, 4.5678, 1.3579], 'bias_blocks': [0.2345, -1.2345, 0.5432],
+        'error_within': [0.4321, 0.8765, 0.2222], 'bias_within': [0.1111, -0.2222, 0.3333], 'bias': [0.3456, -0.6789, 0.1234],
+        'Derecha': [1.2345, -2.3456, 0.6789], 'Izquierda': [-1.1111, 2.2222, -0.6789],
+    }, index=pd.MultiIndex.from_tuples([('2023-23J', '40dB', 8), ('2023-23J', 'CIS', 13), ('2023-23J', 'GAD3', 7)],
+                                       names=['event', 'pollster', 'days']))
+    error_data = pd.DataFrame({
+        'date': pd.to_datetime(['2023-07-15', '2023-07-10', '2023-07-16', '2023-07-15']),
+        'pollster': ['40dB', 'CIS', 'GAD3', '40dB'], 'party': ['VOX', 'PSOE', 'PP', 'PP'], 'regional': [0, 0, 0, 0],
+        'weeks': [1, 2, 1, 1], 'weight': [0.81, 0.57, 1.23, 0.81], 'color': [COLORS[n] for n in ('VOX', 'PSOE', 'PP', 'PP')],
+        'pct': [12.3456, 30.9876, 34.5678, 33.3333], 'error': [0.1234, 0.8765, 1.4321, 0.2345],
+    })
+    return types.SimpleNamespace(house_effects=house_effects, herding_summary=herding_summary, herding=herding,
+                                 poll_errors=poll_errors, error_data=error_data)
+
+
+class FakeComputer:
+    """Fábrica con la firma `Computer(scope=..., path=...)`: devuelve un Computer sintético con `scope`,
+    `event_dates` y `event_params` (bloques `vs` y partidos `main` del ciclo, como los lee el real),
+    `build_series` (devuelve el propio objeto) y los cuatro resúmenes de `synthetic_analysis`; anota las
+    llamadas y, con `fail`, lanza esa excepción al construir."""
+
+    def __init__(self, fail=None):
+        self.calls, self.fail = [], fail
+
+    def __call__(self, scope, path=None, **kwargs):
+        if self.fail is not None:
+            raise self.fail
+        self.calls.append(('init', scope, path, kwargs))
+        frames = synthetic_analysis()
+        bmaps = {'main': list(BMAPS['main']), 'blocks': dict(BMAPS['blocks']), 'vs': dict(BMAPS['vs'])}
+        comp = types.SimpleNamespace(scope=scope, path=path, event_dates=list(ANALYSIS_EVENTS), herding=None,
+                                     event_params={dt: {'bmaps': bmaps} for dt in ANALYSIS_EVENTS})
+
+        def load_herding():
+            comp.herding = frames.herding.copy()
+            return comp.herding
+
+        def herding_summary(**kw):
+            if comp.herding is None:
+                load_herding()
+            return frames.herding_summary.copy()
+
+        def get_polls_metric(metric='pct', bmap=None, **kw):
+            self.calls.append(('get_polls_metric', metric, bmap, kw))
+            return frames.poll_errors.copy()
+
+        comp.build_series = lambda: comp
+        comp.load_herding, comp.herding_summary, comp.get_polls_metric = load_herding, herding_summary, get_polls_metric
+        comp.print_house_effects = lambda **kw: frames.house_effects.copy()
+        comp.get_error_estimator_data = lambda **kw: frames.error_data.copy()
+        return comp
 
 
 class RecordingFileSystem(FileSystem):

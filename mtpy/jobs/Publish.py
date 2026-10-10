@@ -18,6 +18,12 @@ class Publish(Job):
     ``refused`` (LOREG guard) or ``failed`` (any other error, ``ValueError`` included,
     such as a bundle validation failure or a non-ISO ``event_date``).
 
+    ``analysis`` computes the houses analysis of each scope (house effects, herding, poll
+    errors and error data of the ``Computer``) and overwrites ``analysis/{scope}/``. It has no
+    LOREG guard, never touches the manifest and, with ``dry_run``, writes under
+    ``site-dry/v1/analysis/``. Each scope ends ``published``, ``skipped``
+    (``publish.NothingToPublish``) or ``failed``.
+
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
     its noon, and ``backfill`` set in its headline. A day whose run already exists is
@@ -33,6 +39,7 @@ class Publish(Job):
 
         python job.py publish '{"what":["forecast"],"scopes":["es"]}'
         python job.py publish '{"what":["forecast"],"scopes":"all"}'
+        python job.py publish '{"what":["analysis"],"scopes":["es"]}'
         python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
@@ -43,8 +50,8 @@ class Publish(Job):
         RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'
     """
 
-    WHAT = ('forecast', 'manifest', 'point', 'unpublish')
-    DEFERRED = {'analysis': 4, 'event': 5, 'backtest': 5}
+    WHAT = ('forecast', 'analysis', 'manifest', 'point', 'unpublish')
+    DEFERRED = {'event': 5, 'backtest': 5}
     RUN_EXISTS = 'run exists'
     RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
 
@@ -57,8 +64,8 @@ class Publish(Job):
         Parameters
         ----------
         what : str or list of str, default ('forecast',)
-            Actions to run, among ``forecast``, ``manifest``, ``point`` and ``unpublish``.
-            They run in that order when several are given.
+            Actions to run, among ``forecast``, ``analysis``, ``manifest``, ``point`` and
+            ``unpublish``. They run in that order when several are given.
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``.
         event_date : str, optional
@@ -81,7 +88,8 @@ class Publish(Job):
         run : str, optional
             Run id to point to or remove. Required by ``point`` and ``unpublish``.
         dry_run : bool, default False
-            Write under ``site-dry/v1`` and leave the pointers and manifest alone.
+            Write under ``site-dry/v1`` (runs and analysis) and leave the pointers and manifest
+            alone.
         force : bool, default False
             Publish inside the LOREG window anyway.
         fs : FileSystem, optional
@@ -95,16 +103,17 @@ class Publish(Job):
             and must be before today) of retrospective ``forecast`` runs, one per day; see
             ``publish.backfill_days``. Requires ``forecast`` in ``what``.
         verbose : int, default 0
-            Verbosity passed to the forecast.
+            Verbosity passed to the forecast and the analysis.
         **kwargs
             Ignored extra job arguments.
 
         Returns
         -------
         dict[str, dict or list of dict]
-            Result of each scope, with a ``status`` of ``published``, ``skipped``,
-            ``refused`` or ``failed``; with ``backfill``, the ``forecast`` result of a scope
-            is the list of the results of its days, each with its ``day``.
+            Result of each scope (of the last action that ran on it), with a ``status`` of
+            ``published``, ``skipped``, ``refused`` or ``failed``; with ``backfill``, the
+            ``forecast`` result of a scope is the list of the results of its days, each with
+            its ``day``.
 
         Raises
         ------
@@ -162,6 +171,14 @@ class Publish(Job):
                 lines.append('manifest: not written (dry run)')
             elif entries:
                 lines.append(self._write_manifest(writer, failures, scopes=entries))
+
+        if 'analysis' in whats:
+            for scope in publish.resolve_scopes(scopes):
+                result = self._analysis_scope(scope, writer, verbose)
+                results[scope] = result
+                if result['status'] == 'failed':
+                    failures.append('{} ({})'.format(scope, 'analysis'))
+                lines.append(self._analysis_line(scope, result))
 
         if 'manifest' in whats:
             if dry_run:
@@ -342,6 +359,36 @@ class Publish(Job):
             return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
         return {'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds']}
 
+    def _analysis_scope(self, scope, writer, verbose):
+        """
+        Publish the houses analysis of one scope, converting every outcome into a result dict.
+
+        Parameters
+        ----------
+        scope : str
+            Scope to publish.
+        writer : BundleWriter
+            Bundle writer.
+        verbose : int
+            Verbosity passed to the analysis.
+
+        Returns
+        -------
+        dict
+            Result with a ``status``: ``published`` with ``event_date``, ``n_pollsters`` and
+            ``seconds``, ``skipped`` for ``publish.NothingToPublish`` and ``failed`` for any
+            other exception, both with a ``reason``.
+        """
+        try:
+            out = publish.publish_analysis(scope, writer, verbose=verbose)
+        except publish.NothingToPublish as e:
+            return {'status': 'skipped', 'reason': str(e)}
+        except Exception as e:
+            self._log_error(scope)
+            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
+        return {'status': 'published', 'event_date': out['event_date'], 'n_pollsters': out['n_pollsters'],
+                'seconds': out['seconds']}
+
     def _pointer_scope(self, action, writer, scope, run):
         """
         Point a scope to a run or remove a run, converting the outcome into a result dict.
@@ -408,6 +455,14 @@ class Publish(Job):
         """Format the summary line of the manifest data."""
         return 'manifest: {} scopes, freeze {}'.format(
             len(data.get('scopes', {})), 'on' if (data.get('freeze') or {}).get('active') else 'off')
+
+    @staticmethod
+    def _analysis_line(scope, result):
+        """Format the summary line of one scope result of ``analysis``."""
+        if result['status'] == 'published':
+            return '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
+                scope, result['event_date'], result['n_pollsters'], result['seconds']['total'])
+        return '{}: analysis {} ({})'.format(scope, result['status'], result['reason'])
 
     @staticmethod
     def _line(scope, result, run=None):

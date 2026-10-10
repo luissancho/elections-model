@@ -53,6 +53,34 @@ def test_paths_follow_the_published_layout():
     assert bundle.path_csv('es', '20261008-141503', 'vote', mode='forecast') == 'runs/es/20261008-141503/csv/forecast-vote.csv'
 
 
+def test_analysis_paths_follow_the_published_layout_and_reject_bad_input():
+    assert bundle.ANALYSIS_PARTS == ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data')
+    assert set(bundle.ANALYSIS_SCHEMAS) == set(bundle.ANALYSIS_PARTS)
+    assert all(name in bundle.SCHEMAS for name in bundle.ANALYSIS_SCHEMAS.values())
+    assert bundle.path_analysis('es', 'meta') == 'analysis/es/meta.json'
+    assert bundle.path_analysis('es-md', 'poll-errors') == 'analysis/es-md/poll-errors.json'
+    assert bundle.path_analysis_csv('es', 'herding-events') == 'analysis/es/csv/herding-events.csv'
+    with pytest.raises(ValueError):
+        bundle.path_analysis('es', 'nope')
+    with pytest.raises(ValueError):
+        bundle.path_analysis('es/..', 'meta')
+    with pytest.raises(ValueError):
+        bundle.path_analysis('es\n', 'meta')
+    with pytest.raises(ValueError):
+        bundle.path_analysis_csv('es', 'meta')
+    with pytest.raises(ValueError):
+        bundle.path_analysis_csv('ES', 'herding')
+
+
+def test_analysis_exists_needs_the_meta(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    assert not writer.analysis_exists('es')
+    writer.write_json(bundle.path_analysis('es', 'herding'), 'analysis-herding', load_fixture('analysis-herding')['data'], 'es')
+    assert not writer.analysis_exists('es')
+    writer.write_json(bundle.path_analysis('es', 'meta'), 'analysis-meta', load_fixture('analysis-meta')['data'], 'es')
+    assert writer.analysis_exists('es') and not writer.analysis_exists('es-md')
+
+
 def test_envelope_has_the_common_keys():
     env = bundle.envelope('vote', {'x': 1}, 'es', run_id='20261008-141503', mode='nowcast', generated_at='2026-10-08T14:15:03Z')
     assert env == {'schema': 'vote@1', 'contract': 1, 'scope': 'es', 'run_id': '20261008-141503', 'mode': 'nowcast',

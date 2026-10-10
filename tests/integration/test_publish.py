@@ -1,4 +1,5 @@
-"""Tests de integración de la publicación: `publish_forecast('es')` con `n_sim=20` contra la base."""
+"""Tests de integración de la publicación contra la base: `publish_forecast('es')` con `n_sim=20` y
+`publish_analysis('es')`."""
 import json
 import os
 
@@ -77,3 +78,21 @@ def test_same_seed_gives_the_same_dist_and_two_history_entries(published):
     assert np.array_equal(first, second)
     history = published.read_json(bundle.path_history('es'))['data']
     assert [r['run_id'] for r in history['runs']] == list(RUNS)
+
+
+def test_publish_analysis_against_the_database(app, tmp_path):
+    """El análisis de casas de `es` se escribe entero, valida y tiene valores plausibles."""
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    out = publish.publish_analysis('es', writer)
+    parts = {}
+    for part in bundle.ANALYSIS_PARTS:
+        env = writer.read_json(bundle.path_analysis('es', part))
+        bundle.validate(bundle.ANALYSIS_SCHEMAS[part], env)
+        parts[part] = env['data']
+    assert writer.analysis_exists('es') and out['n_pollsters'] == parts['meta']['n_pollsters'] > 0
+    he = parts['house-effects']['rows']
+    assert he and any(r['cycle'] is not None for r in he)
+    herding = [r['herding'] for r in parts['herding']['rows'] if r['herding'] is not None]
+    assert herding and all(0 < h < 5 for h in herding)
+    errors = parts['poll-errors']['rows']
+    assert errors and all(6 <= r['days'] <= 42 for r in errors)
