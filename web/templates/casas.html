@@ -32,8 +32,8 @@
               {% for row in ranking %}
               <tr>
                 <td><a href="/casas{{ query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
-                <td>{{ row.rating|num(2) }}</td>
-                <td>{{ row.quality|num(2) }}</td>
+                <td>{{ row.rating|num(1) }}</td>
+                <td>{{ row.quality|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
                 <td>{{ row.num_events|int }}</td>
                 <td>{{ row.error_avg|num(1) }}</td>
@@ -47,7 +47,7 @@
         </div>
         <p class="about">
           Qué es esto: la valoración de cada casa encuestadora de cara a la próxima elección del ámbito.
-          El rating, entre 0 y 1, combina el sesgo de sus sondeos frente al resultado en las elecciones
+          El rating, entre 0 y 100, combina el sesgo de sus sondeos frente al resultado en las elecciones
           anteriores con una calidad previa que pesa más cuantos menos sondeos tiene la casa; cuanto más
           alto, más pesan sus sondeos en el promedio. El error medio es la distancia media, en puntos,
           entre sus sondeos y el resultado de cada partido; el error y el sesgo de bloques miden lo mismo

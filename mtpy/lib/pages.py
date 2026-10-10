@@ -1434,8 +1434,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``profile`` (``webapi.query_pollster``), ``path`` (its ratings
-        by election, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
+        The common context plus ``profile`` (``webapi.query_pollster``), ``current`` (the
+        ``rating`` and ``quality`` of its last ratings row in the scope, the next election; both
+        ``None`` without ratings: the catalogue keeps only the national rating), ``path`` (its
+        ratings by election, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS``), ``bullseye`` (its rows of the ``poll-errors``
         analysis part: ``event``, ``event_date``, ``days`` and the error of each block, by date;
         empty without analysis), ``blocks`` (the blocks of that part), ``analysis_missing`` and
@@ -1460,8 +1462,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
         ('event', 'event_date', 'days') + tuple(blocks),
     )
     path = profile_rows(profile['ratings'], PATH_KEYS)
+    latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
 
     context['profile'] = profile
+    context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
     context['path'] = path
     context['effects_table'] = effects_table(profile['house_effects'])
     context['herding_table'] = profile_rows(profile['herding'], HERDING_KEYS)

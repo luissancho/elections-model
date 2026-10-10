@@ -438,17 +438,17 @@ def fake_houses(monkeypatch, name='CIS'):
     """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
     pollsters = pd.DataFrame({
         'id': [1, 2, 3, 4], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva'],
-        'mtype': ['public', 'private', 'private', 'private'], 'quality': [0.6, 0.8, 0.4, 0.5],
-        'rating': [0.55, 0.82, None, None],
+        'mtype': ['public', 'private', 'private', 'private'], 'quality': [60.0, 80.0, 40.0, 50.0],
+        'rating': [55, 70, None, None],  # rating nacional truncado: distinto del camino del ámbito
     })
     ratings = pd.DataFrame({
         'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29']),
         'pollster_id': [1, 1, 2, 1, 2, 3], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama'],
-        'quality': [0.6, 0.6, 0.8, 0.6, 0.8, 0.4], 'num_events': [1, 2, 1, 3, 2, 0],
+        'quality': [60.0, 60.0, 80.0, 60.0, 80.0, 40.0], 'num_events': [1, 2, 1, 3, 2, 0],
         'num_polls': [10, 12, 14, 15, 17, 2], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1],
         'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, 3.0, None],
-        'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None], 'rating_adj': [0.5, 0.52, 0.8, 0.53, 0.83, None],
-        'rating': [0.51, 0.53, 0.8, 0.55, 0.82, float('nan')],
+        'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None],
+        'rating': [51.0, 53.0, 80.0, 55.0, 82.37, float('nan')],
     })
     house_effects = pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23', '2023-07-23', '2023-07-23', '2026-11-29']),
@@ -523,7 +523,7 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     ranking = page[page.index('id="ranking-table"'):]
     ranking = ranking[:ranking.index('</table>')]
     assert 'Hamalgama' not in ranking and ranking.count('<tr>') == 3  # cabecera, GAD3 y CIS
-    assert '0,82' in ranking and '0,74' in ranking  # rating y herding (análisis) de GAD3
+    assert '82,4' in ranking and '0,74' in ranking  # rating (escala 0-100) y herding (análisis) de GAD3
     assert 'id="rating-chart"' in page and 'id="effects-table"' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv&amp;table=events"' in page
     assert 'href="/api/v1/analysis/es/house-effects?format=csv"' in page and 'href="/api/v1/analysis/es/poll-errors?format=csv"' in page
@@ -558,7 +558,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     """Una casa del catálogo sin ratings en el ámbito: perfil con tablas vacías, sin camino ni diana."""
     status, headers, body = call(houses, '/casas', query='id=4')
     page = html(body)
-    assert status == 200 and '<h2>Nueva' in page
+    assert status == 200 and '<h2>Nueva' in page and 'Calidad: – · Rating: –' in page
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
@@ -572,8 +572,8 @@ def test_casa_profile_without_analysis_has_no_bullseye(houses_without_analysis):
 
 
 def test_ranking_rows_and_herding_rows():
-    frame = pd.DataFrame({'pollster_id': [1, 2, 3], 'pollster': ['CIS', 'GAD3', 'X'], 'rating': [0.55, 0.82, float('nan')],
-                          'quality': [0.6, 0.8, 0.4], 'num_polls': [15, 17, 2], 'extra': [1, 2, 3]})
+    frame = pd.DataFrame({'pollster_id': [1, 2, 3], 'pollster': ['CIS', 'GAD3', 'X'], 'rating': [55.0, 82.37, float('nan')],
+                          'quality': [60.0, 80.0, 40.0], 'num_polls': [15, 17, 2], 'extra': [1, 2, 3]})
     rows = pages.ranking_rows(frame, {'rows': [{'pollster': 'GAD3', 'herding': 0.742}]})
     assert [row['pollster'] for row in rows] == ['GAD3', 'CIS'] and rows[0]['herding'] == 0.742 and rows[1]['herding'] is None
     assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
@@ -607,3 +607,9 @@ def test_analysis_part_is_none_when_not_published(api, fresh_app):
     write_analysis(fresh_app.fs)
     webapi.site().manifest_cache_clear()
     assert pages.analysis_part('es', 'herding')['rows'][0]['pollster'] == 'GAD3'
+
+
+def test_casa_profile_header_uses_the_scope_rating(houses):
+    """La cabecera toma rating y calidad de la última fila del camino del ámbito, no del catálogo (nacional, truncado)."""
+    page = html(call(houses, '/casas', query='id=2')[2])
+    assert 'Tipo: private · Calidad: 80,0 · Rating: 82,4' in page and 'Rating: 70' not in page
