@@ -1,13 +1,17 @@
 """
 Service layer of the web API.
 
-Phase 2 serves the published bundle (``site/v1``): request validators, small in-process
-caches and a reader that returns the bundle files as bytes, untouched. The database routes
-arrive in phase 4. This module imports only ``bundle``, so the web workers do not load the
-model nor the scientific stack.
+It serves the published bundle (``site/v1``: forecast runs and the houses analysis) and the
+live database tables: request validators, small in-process caches, a reader that returns the
+bundle files as bytes, untouched, and the ``query_*`` functions over the readers of
+``mtpy/lib/data.py``. This module imports only ``bundle`` at load time; ``data`` (and with it
+the database models) is imported on the first query, so the web workers that never touch the
+database do not load it.
 """
+import datetime
 import re
 import time
+import traceback
 import warnings
 from collections import OrderedDict
 from threading import Lock
@@ -23,7 +27,12 @@ from .bundle import BundleReader
 DEFAULT_TTL = 60
 LRU_SIZE = 200
 IMMUTABLE_MAX_AGE = 31536000
+DEFAULT_LIMIT = 1000
+MAX_LIMIT = 5000
+DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
+INT_RE = re.compile(r'\d{1,6}')
 FORMATS = ('json', 'csv')
+ANALYSIS_PARTS = bundle.ANALYSIS_PARTS
 CSV_PARTS = bundle.RUN_PARTS[2:]
 MODE_PARTS = bundle.MODE_PARTS
 RUN_PARTS = bundle.RUN_PARTS
@@ -343,6 +352,93 @@ def check_region(region: Optional[str]) -> Optional[int]:
     return int(region)
 
 
+def check_date(value: Optional[str]) -> str:
+    """
+    Validate an ISO calendar date.
+
+    Parameters
+    ----------
+    value : str
+        Date from the request.
+
+    Returns
+    -------
+    str
+        The same date, as ``YYYY-MM-DD``.
+
+    Raises
+    ------
+    HttpError
+        400 when it is not a real date written as ``YYYY-MM-DD``.
+    """
+    if not isinstance(value, str) or not DATE_RE.fullmatch(value):
+        raise HttpError(400, 'invalid date')
+
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        raise HttpError(400, 'invalid date')
+
+    return value
+
+
+def check_pollster(value: Optional[str]) -> int:
+    """
+    Validate a pollster id.
+
+    Parameters
+    ----------
+    value : str
+        Pollster id from the request.
+
+    Returns
+    -------
+    int
+        The id as an integer.
+
+    Raises
+    ------
+    HttpError
+        400 when it is not a number of one to six digits.
+    """
+    if not isinstance(value, str) or not INT_RE.fullmatch(value):
+        raise HttpError(400, 'invalid pollster')
+
+    return int(value)
+
+
+def check_limit(value: Optional[str], default: int = DEFAULT_LIMIT, maximum: int = MAX_LIMIT) -> int:
+    """
+    Validate a maximum number of rows.
+
+    Parameters
+    ----------
+    value : str or None
+        ``limit`` query parameter.
+    default : int, optional
+        Limit used when the parameter is missing or empty.
+    maximum : int, optional
+        Largest limit accepted.
+
+    Returns
+    -------
+    int
+        The limit.
+
+    Raises
+    ------
+    HttpError
+        400 when it is not an integer between 1 and ``maximum``.
+    """
+    if value is None or value == '':
+        return default
+
+    if not isinstance(value, str) or not INT_RE.fullmatch(value) or not 1 <= int(value) <= maximum:
+        raise HttpError(400, 'invalid limit')
+
+    return int(value)
+
+
 def check_part(part: str, allowed: Sequence[str]) -> str:
     """
     Validate a bundle part name.
@@ -631,6 +727,82 @@ class Site:
         """
         return self._run_bytes(bundle.path_csv(scope, run_id, name, mode))
 
+    def _analysis_bytes(self, path: str) -> bytes:
+        """
+        Read a file of a published analysis through the TTL cache.
+
+        The analysis is overwritten on every publication, so it is cached like the pointers,
+        not like the immutable run files.
+
+        Parameters
+        ----------
+        path : str
+            Path relative to the bundle prefix.
+
+        Returns
+        -------
+        bytes
+            The file content.
+
+        Raises
+        ------
+        HttpError
+            404 when the file does not exist.
+        """
+        def load():
+            try:
+                return self._read(path)
+            except FileNotFoundError:
+                raise HttpError(404, 'analysis not published')
+
+        return self.pointers.get(('analysis', path), load)
+
+    def analysis(self, scope: str, part: str) -> bytes:
+        """
+        Bytes of a JSON part of the houses analysis of a scope.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        part : str
+            Part name, one of ``ANALYSIS_PARTS``.
+
+        Returns
+        -------
+        bytes
+            The JSON file.
+
+        Raises
+        ------
+        HttpError
+            404 when the part is not published.
+        """
+        return self._analysis_bytes(bundle.path_analysis(scope, part))
+
+    def analysis_csv(self, scope: str, name: str) -> bytes:
+        """
+        Bytes of a CSV twin of the houses analysis of a scope.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        name : str
+            CSV name, one of ``bundle.ANALYSIS_CSV``.
+
+        Returns
+        -------
+        bytes
+            The CSV file.
+
+        Raises
+        ------
+        HttpError
+            404 when the CSV is not published.
+        """
+        return self._analysis_bytes(bundle.path_analysis_csv(scope, name))
+
     def scopes(self) -> dict:
         """
         Scopes catalogue crossed with the manifest.
@@ -693,10 +865,399 @@ def site() -> Site:
     return instance
 
 
+def _reader(name: str) -> Callable:
+    """
+    Proxy of a reader of ``mtpy/lib/data.py`` that imports the module on its first call.
+
+    The proxies are module attributes of ``webapi`` (``get_ratings``, ...), looked up at call
+    time by the ``query_*`` functions, so tests replace them with ``monkeypatch.setattr``.
+
+    Parameters
+    ----------
+    name : str
+        Name of the reader in ``data``.
+
+    Returns
+    -------
+    callable
+        Function that forwards its arguments to ``data.<name>``.
+    """
+    def proxy(*args, **kwargs):
+        from . import data
+
+        return getattr(data, name)(*args, **kwargs)
+
+    proxy.__name__ = name
+    proxy.__doc__ = 'Lazy proxy of ``mtpy.lib.data.{}``.'.format(name)
+
+    return proxy
+
+
+get_parties = _reader('get_parties')
+get_pollsters = _reader('get_pollsters')
+get_ratings = _reader('get_ratings')
+get_poll_series = _reader('get_poll_series')
+get_event_results = _reader('get_event_results')
+get_house_effects = _reader('get_house_effects')
+get_herding = _reader('get_herding')
+get_drift = _reader('get_drift')
+get_next_event_date = _reader('get_next_event_date')
+
+_QUERIES = TTLCache(DEFAULT_TTL)
+
+
+def database() -> Any:
+    """
+    Database connection of the app.
+
+    Returns
+    -------
+    object
+        ``App.get_().db``.
+
+    Raises
+    ------
+    HttpError
+        503 when the app has no database.
+    """
+    db = App.get_().db
+
+    if db is None:
+        raise HttpError(503, 'no database configured')
+
+    return db
+
+
+def _query(name: str, args: tuple, loader: Callable[[], Any]) -> Any:
+    """
+    Run a database query through the TTL cache.
+
+    Parameters
+    ----------
+    name : str
+        Name of the query, part of the cache key.
+    args : tuple
+        Validated arguments of the query, the rest of the cache key.
+    loader : callable
+        Function without arguments that reads the database.
+
+    Returns
+    -------
+    object
+        The cached or freshly loaded result.
+
+    Raises
+    ------
+    HttpError
+        503 ``no database configured`` before reading when the app has no database; 503
+        ``database unavailable`` when the reader fails (the trace goes to the app logger).
+        An ``HttpError`` raised by the loader passes through.
+    """
+    database()
+    _QUERIES.ttl = settings()['cache_ttl']
+
+    def load():
+        try:
+            return loader()
+        except HttpError:
+            raise
+        except Exception as error:
+            logger = App.get_().logger
+            if logger is not None:
+                logger.error('Database query {}{!r} failed: {!r}\n{}'.format(
+                    name, args, error, traceback.format_exc()
+                ))
+            raise HttpError(503, 'database unavailable')
+
+    return _QUERIES.get((name, args), load)
+
+
+def _rows_of(frame: pd.DataFrame, column: str, value: Any) -> pd.DataFrame:
+    """
+    Rows of a frame whose column equals a value, with a fresh index.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        The table.
+    column : str
+        Column to filter on.
+    value : object
+        Value to keep.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The matching rows; empty when the column is missing.
+    """
+    if column not in frame.columns:
+        return frame.iloc[0:0]
+
+    return frame.loc[frame[column] == value].reset_index(drop=True)
+
+
+def query_parties() -> pd.DataFrame:
+    """
+    Parties catalogue.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_parties()``.
+    """
+    return _query('parties', (), lambda: get_parties())
+
+
+def query_pollsters() -> pd.DataFrame:
+    """
+    Pollsters catalogue.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_pollsters()``: ``id``, ``name``, ``mtype``, ``quality``, ``rating``.
+    """
+    return _query('pollsters', (), lambda: get_pollsters())
+
+
+def query_pollster(pollster_id: int, scope: str) -> dict:
+    """
+    Profile of a pollster in a scope.
+
+    Parameters
+    ----------
+    pollster_id : int
+        Validated pollster id.
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    dict
+        ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...]}``:
+        the catalogue row of the pollster and its rows of ``get_ratings(scope)`` (every event,
+        the next one included, by date), ``get_house_effects(scope)`` and ``get_herding(scope)``,
+        as JSON records.
+
+    Raises
+    ------
+    HttpError
+        404 ``pollster not found`` when the id is not in the catalogue.
+    """
+    pollster = _rows_of(query_pollsters(), 'id', pollster_id)
+
+    if pollster.empty:
+        raise HttpError(404, 'pollster not found')
+
+    def load():
+        ratings = _rows_of(get_ratings(scope), 'pollster_id', pollster_id)
+        if 'event_date' in ratings.columns:
+            ratings = ratings.sort_values('event_date', ignore_index=True)
+
+        return {
+            'pollster': frame_to_records(pollster)[0],
+            'ratings': frame_to_records(ratings),
+            'house_effects': frame_to_records(_rows_of(get_house_effects(scope), 'pollster_id', pollster_id)),
+            'herding': frame_to_records(_rows_of(get_herding(scope), 'pollster_id', pollster_id)),
+        }
+
+    return _query('pollster', (pollster_id, scope), load)
+
+
+def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
+    """
+    Pollster ratings of an event of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    event : str, optional
+        Validated event date; by default the latest event of ``get_ratings(scope)``, which is
+        the next election.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per pollster of the event, with a fresh index; empty when there is none.
+    """
+    def load():
+        ratings = get_ratings(scope)
+        if ratings.empty:
+            return ratings
+
+        dates = pd.to_datetime(ratings['event_date'])
+        target = dates.max() if event is None else pd.Timestamp(event)
+
+        return ratings.loc[dates == target].reset_index(drop=True)
+
+    return _query('ratings', (scope, event), load)
+
+
+def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int] = None,
+                limit: int = DEFAULT_LIMIT) -> pd.DataFrame:
+    """
+    Polls of an event of a scope, one row per poll with a column per party.
+
+    The reader is ``data.get_poll_series`` (the poll fields, its weights and errors, and the
+    ``pct`` of each party as a column); ``get_poll_results`` returns one row per poll and
+    party instead.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    event : str, optional
+        Validated event date; by default the next election of the scope.
+    pollster : int, optional
+        Validated pollster id; only its polls when given.
+    limit : int, optional
+        Validated maximum number of polls; the most recent ones are kept.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The polls, most recent first; empty when the scope has no next election.
+    """
+    def load():
+        date = event if event is not None else get_next_event_date(scope)
+        if date is None:
+            return pd.DataFrame()
+
+        polls = get_poll_series(scope, date)
+        if pollster is not None:
+            polls = _rows_of(polls, 'pollster_id', pollster)
+        if 'date' in polls.columns:
+            polls = polls.sort_values('date', ascending=False, kind='stable')
+
+        return polls.head(limit).reset_index(drop=True)
+
+    return _query('polls', (scope, event, pollster, limit), load)
+
+
+def query_results(scope: str, date: str, region: int = 0) -> pd.DataFrame:
+    """
+    Results of an election, by party, in a region of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    date : str
+        Validated election date.
+    region : int, optional
+        Validated region id; 0 is the whole scope.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_event_results(scope, date, region)``.
+    """
+    return _query('results', (scope, date, region), lambda: get_event_results(scope, date, region))
+
+
+def query_house_effects(scope: str) -> pd.DataFrame:
+    """
+    House effects table (``pollsters_parties``) of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_house_effects(scope)``: one row per event, pollster and party.
+    """
+    return _query('house_effects', (scope,), lambda: get_house_effects(scope))
+
+
+def query_herding(scope: str) -> pd.DataFrame:
+    """
+    Herding table (``pollsters_herding``) of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_herding(scope)``: one row per election cycle and pollster.
+    """
+    return _query('herding', (scope,), lambda: get_herding(scope))
+
+
+def query_drift(scope: str) -> pd.DataFrame:
+    """
+    Drift table of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_drift(scope)``: one row per past election, party and horizon.
+    """
+    return _query('drift', (scope,), lambda: get_drift(scope))
+
+
+def frame_to_records(frame: pd.DataFrame) -> list:
+    """
+    Rows of a frame as JSON records.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        The table. A named index becomes leading columns; a default one is dropped.
+
+    Returns
+    -------
+    list of dict
+        One dict per row, with dates as ISO strings and missing values as ``None``.
+    """
+    unnamed = all(name is None for name in frame.index.names)
+    flat = frame.reset_index(drop=unnamed)
+
+    return bundle.jsonable(flat.to_dict(orient='records'))
+
+
+def frame_to_csv(frame: pd.DataFrame) -> bytes:
+    """
+    A frame as a CSV download.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        The table.
+
+    Returns
+    -------
+    bytes
+        UTF-8 CSV with ``\\n`` line endings and no index.
+    """
+    return frame.to_csv(index=False, lineterminator='\n').encode('utf-8')
+
+
 ROUTES = [
     ('/api/v1/health', 'forecast', 'health', ['GET']),
     ('/api/v1/manifest', 'forecast', 'manifest', ['GET']),
     ('/api/v1/scopes', 'forecast', 'scopes', ['GET']),
+    ('/api/v1/parties', 'data', 'parties', ['GET']),
+    ('/api/v1/pollsters', 'data', 'pollsters', ['GET']),
+    ('/api/v1/pollsters/{id:num}', 'data', 'pollster', ['GET']),
+    ('/api/v1/ratings', 'data', 'ratings', ['GET']),
+    ('/api/v1/polls', 'data', 'polls', ['GET']),
+    ('/api/v1/results/{scope}/{date}', 'data', 'results', ['GET']),
+    ('/api/v1/house-effects', 'data', 'house_effects', ['GET']),
+    ('/api/v1/herding', 'data', 'herding', ['GET']),
+    ('/api/v1/drift', 'data', 'drift', ['GET']),
+    ('/api/v1/analysis/{scope}/{part}', 'analysis', 'part', ['GET']),
     ('/api/v1/forecast/{scope}', 'forecast', 'meta', ['GET']),
     ('/api/v1/forecast/{scope}/runs', 'forecast', 'runs', ['GET']),
     ('/api/v1/forecast/{scope}/{part}', 'forecast', 'part', ['GET']),

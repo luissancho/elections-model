@@ -37,6 +37,32 @@ def write_bundle(fs, scope='es', run_id=RUN, manifest=True):
     return writer
 
 
+def write_analysis(fs, scope='es'):
+    """Análisis publicado de un ámbito a partir de los fixtures: las cinco partes y sus gemelos CSV."""
+    writer = bundle.BundleWriter(fs)
+    tables = {
+        'house-effects': pd.DataFrame({'pollster': ['CIS'], 'name': ['PP'], 'cycle': [-3.02]}),
+        'herding': pd.DataFrame({'pollster': ['GAD3'], 'herding': [0.742]}),
+        'herding-events': pd.DataFrame({'event_date': ['2023-07-23'], 'pollster': ['GAD3'], 'ratio': [0.781]}),
+        'poll-errors': pd.DataFrame({'event_date': ['2023-07-23'], 'pollster': ['GAD3'], 'Derecha': [2.81]}),
+        'error-data': pd.DataFrame({'date': ['2023-07-16'], 'pollster': ['GAD3'], 'error': [1.67]}),
+    }
+    for name, frame in tables.items():
+        writer.write_csv(bundle.path_analysis_csv(scope, name), frame)
+    for part in bundle.ANALYSIS_PARTS[1:] + bundle.ANALYSIS_PARTS[:1]:  # `meta` el último, como `publish`
+        schema = bundle.ANALYSIS_SCHEMAS[part]
+        writer.write_json(bundle.path_analysis(scope, part), schema, fixture_data(schema), scope)
+    return writer
+
+
+@pytest.fixture(autouse=True)
+def clear_queries():
+    """La caché de consultas a base es del módulo: se vacía antes de cada test."""
+    webapi._QUERIES.clear()
+    yield
+    webapi._QUERIES.clear()
+
+
 @pytest.fixture
 def site_app(fresh_app, tmp_path):
     """`App` con `fs` local, el catálogo de `data/` y un paquete mínimo publicado para `es`."""
@@ -198,3 +224,153 @@ def test_check_region_accepts_integers_only():
         with pytest.raises(HttpError) as err:
             webapi.check_region(bad)
         assert err.value.status == 400 and err.value.message == 'invalid region'
+
+
+def test_check_date_accepts_real_iso_dates_only():
+    assert webapi.check_date('2026-11-29') == '2026-11-29'
+    for bad in ('2026-13-01', '29/11/2026', '', None, '20261129', '2026-02-30', "2026-11-29'"):
+        with pytest.raises(HttpError) as err:
+            webapi.check_date(bad)
+        assert err.value.status == 400 and err.value.message == 'invalid date'
+
+
+def test_check_pollster_accepts_positive_integers_only():
+    assert webapi.check_pollster('12') == 12
+    for bad in ('abc', '-1', '', None, '1' * 7, '3;'):
+        with pytest.raises(HttpError) as err:
+            webapi.check_pollster(bad)
+        assert err.value.status == 400 and err.value.message == 'invalid pollster'
+
+
+def test_check_limit_defaults_and_bounds():
+    assert webapi.check_limit(None) == 1000 and webapi.check_limit('') == 1000
+    assert webapi.check_limit('50') == 50 and webapi.check_limit('5000') == 5000
+    assert webapi.check_limit(None, default=10) == 10
+    for bad in ('0', '9999', 'x', '-5', '5.0'):
+        with pytest.raises(HttpError) as err:
+            webapi.check_limit(bad)
+        assert err.value.status == 400 and err.value.message == 'invalid limit'
+
+
+def test_database_without_db_is_a_503(fresh_app):
+    with pytest.raises(HttpError) as err:
+        webapi.database()
+    assert err.value.status == 503 and err.value.message == 'no database configured'
+    fresh_app.db = sentinel = object()
+    assert webapi.database() is sentinel
+
+
+def ratings_frame():
+    """Ratings de dos eventos (el último es el próximo) y dos casas, como los devuelve `get_ratings`."""
+    return pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29']),
+        'pollster_id': [2, 3, 2, 3],
+        'pollster': ['GAD3', 'CIS', 'GAD3', 'CIS'],
+        'event_scope': ['es'] * 4,
+        'rating': [1.4, 0.6, 1.5, float('nan')],
+    })
+
+
+def test_query_ratings_returns_the_next_event_and_caches(fresh_app, monkeypatch):
+    calls = []
+
+    def fake(scope):
+        calls.append(scope)
+        return ratings_frame()
+    monkeypatch.setattr(webapi, 'get_ratings', fake)
+    with pytest.raises(HttpError) as err:
+        webapi.query_ratings('es')
+    assert err.value.status == 503 and calls == []  # sin base no se llega al lector
+    fresh_app.db = object()
+    frame = webapi.query_ratings('es')
+    assert frame['event_date'].dt.strftime('%Y-%m-%d').unique().tolist() == ['2026-11-29']
+    assert frame['pollster'].tolist() == ['GAD3', 'CIS'] and calls == ['es']
+    webapi.query_ratings('es')
+    assert calls == ['es']  # segunda llamada desde la caché
+    past = webapi.query_ratings('es', '2023-07-23')
+    assert past['rating'].tolist() == [1.4, 0.6] and calls == ['es', 'es']  # otra clave, otra lectura
+
+
+def test_query_errors_become_503_and_are_logged(fresh_app, monkeypatch):
+    errors = []
+    fresh_app.db = object()
+    fresh_app.set('logger', SimpleNamespace(error=errors.append))
+
+    def boom(scope):
+        raise RuntimeError('connection refused')
+    monkeypatch.setattr(webapi, 'get_ratings', boom)
+    with pytest.raises(HttpError) as err:
+        webapi.query_ratings('es')
+    assert err.value.status == 503 and err.value.message == 'database unavailable'
+    assert len(errors) == 1 and 'connection refused' in errors[0] and 'Traceback' in errors[0]
+
+
+def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
+    fresh_app.db = object()
+    monkeypatch.setattr(webapi, 'get_pollsters', lambda: pd.DataFrame({
+        'id': [2, 3], 'name': ['GAD3', 'CIS'], 'mtype': ['private', 'public'], 'quality': [1.0, 0.8],
+    }))
+    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi, 'get_house_effects', lambda scope: pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [3], 'party': ['PP'], 'dev_result_c': [-1.2],
+    }))
+    monkeypatch.setattr(webapi, 'get_herding', lambda scope: pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [2], 'ratio': [0.78],
+    }))
+    profile = webapi.query_pollster(3, 'es')
+    assert list(profile) == ['pollster', 'ratings', 'house_effects', 'herding']
+    assert profile['pollster'] == {'id': 3, 'name': 'CIS', 'mtype': 'public', 'quality': 0.8}
+    assert [row['event_date'] for row in profile['ratings']] == ['2023-07-23', '2026-11-29']
+    assert profile['ratings'][1]['rating'] is None
+    assert profile['house_effects'][0]['dev_result_c'] == -1.2 and profile['herding'] == []
+    with pytest.raises(HttpError) as err:
+        webapi.query_pollster(999, 'es')
+    assert err.value.status == 404 and err.value.message == 'pollster not found'
+
+
+def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeypatch):
+    fresh_app.db = object()
+    seen = []
+
+    def fake_series(scope, event_dates):
+        seen.append((scope, event_dates))
+        return pd.DataFrame({
+            'event_date': pd.to_datetime(['2026-11-29'] * 3),
+            'date': pd.to_datetime(['2026-09-01', '2026-10-01', '2026-09-15']),
+            'pollster_id': [2, 3, 2], 'PP': [33.0, 34.0, 35.0],
+        })
+    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi, 'get_poll_series', fake_series)
+    frame = webapi.query_polls('es', limit=2)
+    assert seen == [('es', '2026-11-29')]
+    assert frame['date'].dt.strftime('%Y-%m-%d').tolist() == ['2026-10-01', '2026-09-15']
+    frame = webapi.query_polls('es', event='2023-07-23', pollster=2)
+    assert seen[-1] == ('es', '2023-07-23') and frame['pollster_id'].tolist() == [2, 2]
+
+
+def test_frame_to_records_and_csv():
+    frame = pd.DataFrame({
+        'event_date': pd.to_datetime(['2026-11-29', '2023-07-23']),
+        'name': ['PP', 'PSOE'],
+        'pct': [33.5, float('nan')],
+    }).set_index('name')
+    records = webapi.frame_to_records(frame)
+    assert records == [
+        {'name': 'PP', 'event_date': '2026-11-29', 'pct': 33.5},
+        {'name': 'PSOE', 'event_date': '2023-07-23', 'pct': None},
+    ]
+    assert webapi.frame_to_records(frame.reset_index())[0] == records[0]  # índice por defecto: se descarta
+    assert webapi.frame_to_csv(frame.reset_index()) == b'name,event_date,pct\nPP,2026-11-29,33.5\nPSOE,2023-07-23,\n'
+
+
+def test_site_analysis_reads_the_published_files(site_app):
+    site = webapi.site()
+    with pytest.raises(HttpError) as err:
+        site.analysis('es', 'herding')
+    assert err.value.status == 404 and err.value.message == 'analysis not published'
+    with pytest.raises(HttpError) as err:
+        site.analysis_csv('es', 'herding')
+    assert err.value.status == 404 and err.value.message == 'analysis not published'
+    write_analysis(site_app.fs)
+    assert bundle.loads(site.analysis('es', 'herding'))['schema'] == 'analysis-herding@1'
+    assert site.analysis_csv('es', 'herding-events').startswith(b'event_date,pollster,ratio\n')
