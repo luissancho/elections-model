@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from mtpy.core.api import HttpError
+from mtpy.core.app import App
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish, webapi
 
@@ -58,9 +59,9 @@ def write_analysis(fs, scope='es'):
 @pytest.fixture(autouse=True)
 def clear_queries():
     """La caché de consultas a base es del módulo: se vacía antes de cada test."""
-    webapi._QUERIES.clear()
+    webapi.queries._QUERIES.clear()
     yield
-    webapi._QUERIES.clear()
+    webapi.queries._QUERIES.clear()
 
 
 def use_database(app, host='db.test'):
@@ -222,7 +223,7 @@ def test_webapi_import_stays_light():
 
 def test_settings_fall_back_to_the_default_ttl_on_garbage(monkeypatch):
     fake = SimpleNamespace(config=SimpleNamespace(web=SimpleNamespace(prefix='', cache_ttl='abc')))
-    monkeypatch.setattr(webapi.App, 'get_', staticmethod(lambda: fake))
+    monkeypatch.setattr(App, 'get_', staticmethod(lambda: fake))
     with pytest.warns(UserWarning):
         assert webapi.settings() == {'prefix': bundle.PREFIX, 'cache_ttl': 60.0}
 
@@ -274,7 +275,7 @@ def test_database_without_db_is_a_503(fresh_app):
 def test_database_without_host_is_a_503_before_reading(fresh_app, monkeypatch, host):
     """`mtpy.run()` siempre crea el adaptador: con `DB_HOST` vacío no hay base, aunque `app.db` exista."""
     calls = []
-    monkeypatch.setattr(webapi, 'get_drift', lambda scope: calls.append(scope) or pd.DataFrame())
+    monkeypatch.setattr(webapi.queries, 'get_drift', lambda scope: calls.append(scope) or pd.DataFrame())
     use_database(fresh_app, host=host)
     with pytest.raises(HttpError) as err:
         webapi.query_drift('es')
@@ -304,7 +305,7 @@ def test_query_ratings_returns_the_next_event_and_caches(fresh_app, monkeypatch)
     def fake(scope):
         calls.append(scope)
         return ratings_frame()
-    monkeypatch.setattr(webapi, 'get_ratings', fake)
+    monkeypatch.setattr(webapi.queries, 'get_ratings', fake)
     with pytest.raises(HttpError) as err:
         webapi.query_ratings('es')
     assert err.value.status == 503 and calls == []  # sin base no se llega al lector
@@ -325,27 +326,27 @@ def test_query_errors_become_503_and_are_logged(fresh_app, monkeypatch):
 
     def boom(scope):
         raise RuntimeError('connection refused')
-    monkeypatch.setattr(webapi, 'get_ratings', boom)
+    monkeypatch.setattr(webapi.queries, 'get_ratings', boom)
     with pytest.raises(HttpError) as err:
         webapi.query_ratings('es')
     assert err.value.status == 503 and err.value.message == 'database unavailable'
     assert len(errors) == 1 and 'connection refused' in errors[0] and 'Traceback' in errors[0]
     calls = []
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: calls.append(scope) or ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: calls.append(scope) or ratings_frame())
     # el fallo no se cacheó: la llamada siguiente vuelve al lector
     assert webapi.query_ratings('es')['pollster'].tolist() == ['GAD3', 'CIS'] and calls == ['es']
 
 
 def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
     use_database(fresh_app)
-    monkeypatch.setattr(webapi, 'get_pollsters', lambda: pd.DataFrame({
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pd.DataFrame({
         'id': [2, 3], 'name': ['GAD3', 'CIS'], 'mtype': ['private', 'public'], 'quality': [1.0, 0.8],
     }))
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
-    monkeypatch.setattr(webapi, 'get_house_effects', lambda scope: pd.DataFrame({
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [3], 'party': ['PP'], 'dev_result_c': [-1.2],
     }))
-    monkeypatch.setattr(webapi, 'get_herding', lambda scope: pd.DataFrame({
+    monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [2], 'ratio': [0.78],
     }))
     profile = webapi.query_pollster(3, 'es')
@@ -366,10 +367,10 @@ def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
     def counted(name, frame):
         return lambda *args: calls.append(name) or frame
     pollsters = pd.DataFrame({'id': [2, 3], 'name': ['GAD3', 'CIS']})
-    monkeypatch.setattr(webapi, 'get_pollsters', counted('pollsters', pollsters))
-    monkeypatch.setattr(webapi, 'get_ratings', counted('ratings', ratings_frame()))
-    monkeypatch.setattr(webapi, 'get_house_effects', counted('house_effects', pd.DataFrame({'pollster_id': [3]})))
-    monkeypatch.setattr(webapi, 'get_herding', counted('herding', pd.DataFrame({'pollster_id': [2]})))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', counted('pollsters', pollsters))
+    monkeypatch.setattr(webapi.queries, 'get_ratings', counted('ratings', ratings_frame()))
+    monkeypatch.setattr(webapi.queries, 'get_house_effects', counted('house_effects', pd.DataFrame({'pollster_id': [3]})))
+    monkeypatch.setattr(webapi.queries, 'get_herding', counted('herding', pd.DataFrame({'pollster_id': [2]})))
     webapi.query_ratings('es')
     webapi.query_house_effects('es')
     webapi.query_herding('es')
@@ -391,9 +392,9 @@ def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeyp
             'date': pd.to_datetime(['2026-09-01', '2026-10-01', '2026-09-15']),
             'pollster_id': [2, 3, 2], 'PP': [33.0, 34.0, 35.0],
         })
-    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
-    monkeypatch.setattr(webapi, 'get_poll_series', fake_series)
+    monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_poll_series', fake_series)
     frame = webapi.query_polls('es', limit=2)
     assert seen == [('es', '2026-11-29')]
     assert frame['date'].dt.strftime('%Y-%m-%d').tolist() == ['2026-10-01', '2026-09-15']
@@ -417,8 +418,8 @@ def test_query_results_reads_each_election_once_for_every_region(fresh_app, monk
         seen.append(('results', scope, date, region))
         return pd.DataFrame({'date': pd.to_datetime([date] * 3), 'region_id': [0, 13, 28],
                              'party': ['PP'] * 3, 'pct': [33.1, 35.0, 40.2]})
-    monkeypatch.setattr(webapi, 'get_event_results', fake_results)
-    monkeypatch.setattr(webapi, 'get_event_dates', lambda scope: seen.append(('events', scope)) or ['2023-07-23'])
+    monkeypatch.setattr(webapi.queries, 'get_event_results', fake_results)
+    monkeypatch.setattr(webapi.queries, 'get_event_dates', lambda scope: seen.append(('events', scope)) or ['2023-07-23'])
     assert webapi.query_results('es', '2023-07-23')['pct'].tolist() == [33.1]
     frame = webapi.query_results('es', '2023-07-23', 28)
     assert frame['pct'].tolist() == [40.2] and frame.index.tolist() == [0]
@@ -428,39 +429,39 @@ def test_query_results_reads_each_election_once_for_every_region(fresh_app, monk
         webapi.query_results('es', '2020-01-01')
     assert err.value.status == 404 and err.value.message == 'event not found'
     assert len(seen) == 2  # una fecha desconocida no lee resultados
-    assert sorted(webapi._QUERIES._items) == [('events', 'es'), ('results', 'es', '2023-07-23')]
+    assert sorted(webapi.queries._QUERIES._items) == [('events', 'es'), ('results', 'es', '2023-07-23')]
 
 
 def test_resolved_events_of_ratings_and_polls(fresh_app, monkeypatch):
     use_database(fresh_app)
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
-    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
     assert webapi.ratings_event('es') == '2026-11-29' and webapi.ratings_event('es', '2023-07-23') == '2023-07-23'
     assert webapi.polls_event('es') == '2026-11-29' and webapi.polls_event('es', '2023-07-23') == '2023-07-23'
     with pytest.raises(HttpError) as err:
         webapi.ratings_event('es', '2020-01-01')
     assert err.value.message == 'event not found'
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame().iloc[0:0])
-    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: None)
-    webapi._QUERIES.clear()
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame().iloc[0:0])
+    monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: None)
+    webapi.queries._QUERIES.clear()
     assert webapi.ratings_event('es') is None and webapi.polls_event('es') is None
 
 
 def test_query_cache_keys_are_bounded_per_scope(fresh_app, monkeypatch):
     use_database(fresh_app)
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings_frame())
-    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
-    monkeypatch.setattr(webapi, 'get_poll_series', lambda scope, event: pd.DataFrame({'date': [], 'pollster_id': []}))
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi.queries, 'get_poll_series', lambda scope, event: pd.DataFrame({'date': [], 'pollster_id': []}))
     webapi.query_ratings('es', '2023-07-23')
     webapi.query_polls('es', pollster=2, limit=5)
     webapi.query_polls('es', limit=50)
     with pytest.raises(HttpError):
         webapi.query_polls('es', event='1999-01-01')
-    assert sorted(webapi._QUERIES._items) == [('next_event', 'es'), ('polls', 'es', '2026-11-29'), ('ratings', 'es')]
+    assert sorted(webapi.queries._QUERIES._items) == [('next_event', 'es'), ('polls', 'es', '2026-11-29'), ('ratings', 'es')]
 
 
 def test_query_cache_evicts_beyond_its_cap():
-    cache = webapi._QUERIES
+    cache = webapi.queries._QUERIES
     assert cache.maxsize == webapi.QUERY_CACHE_SIZE == 128
     for i in range(webapi.QUERY_CACHE_SIZE + 1):
         cache.get(('k', i), lambda i=i: i)
@@ -504,3 +505,18 @@ def test_site_analysis_reads_the_published_files(site_app):
     write_analysis(site_app.fs)
     assert bundle.loads(site.analysis('es', 'herding'))['schema'] == 'analysis-herding@1'
     assert site.analysis_csv('es', 'herding-events').startswith(b'event_date,pollster,ratio\n')
+
+
+def test_webapi_package_layout():
+    """Un submódulo por papel y ninguno tapado por un nombre exportado por el paquete (D1)."""
+    import inspect
+    import pkgutil
+    names = sorted(m.name for m in pkgutil.iter_modules(webapi.__path__))
+    assert names == ['caches', 'checks', 'published', 'queries']
+    for name in names:
+        assert inspect.ismodule(getattr(webapi, name)), name
+    assert webapi.TTLCache.__module__ == 'mtpy.lib.webapi.caches'
+    assert webapi.check_scope.__module__ == 'mtpy.lib.webapi.checks'
+    assert webapi.Site.__module__ == 'mtpy.lib.webapi.published'
+    assert webapi.query_ratings.__module__ == 'mtpy.lib.webapi.queries'
+    assert webapi.ROUTES[0][0] == '/api/v1/health'

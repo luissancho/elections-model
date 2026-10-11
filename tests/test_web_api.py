@@ -154,27 +154,27 @@ def fake_readers(monkeypatch):
         'date': pd.to_datetime(['2026-09-01', '2026-10-01', '2026-09-15']),
         'pollster_id': [2, 3, 2], 'PP': [33.0, 34.0, 35.0], 'PSOE': [28.0, float('nan'), 27.5],
     })
-    monkeypatch.setattr(webapi, 'get_parties', lambda: pd.DataFrame({'id': [1, 2], 'name': ['PP', 'PSOE']}))
-    monkeypatch.setattr(webapi, 'get_pollsters', lambda: pollsters)
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings)
-    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: '2026-11-29')
+    monkeypatch.setattr(webapi.queries, 'get_parties', lambda: pd.DataFrame({'id': [1, 2], 'name': ['PP', 'PSOE']}))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
+    monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
 
     def poll_series(scope, event):
         seen.append(('polls', scope, event))
         return polls
-    monkeypatch.setattr(webapi, 'get_poll_series', poll_series)
+    monkeypatch.setattr(webapi.queries, 'get_poll_series', poll_series)
 
     def results(scope, date, region):
         seen.append((scope, date, region))
         return pd.DataFrame({'date': pd.to_datetime([date] * 2), 'region_id': [0, 28], 'party': ['PP'] * 2,
                              'pct': [33.1, 30.2]})
-    monkeypatch.setattr(webapi, 'get_event_results', results)
-    monkeypatch.setattr(webapi, 'get_event_dates', lambda scope: ['2019-11-10', '2023-07-23', '2026-11-29'])
-    monkeypatch.setattr(webapi, 'get_house_effects', lambda scope: pd.DataFrame({
+    monkeypatch.setattr(webapi.queries, 'get_event_results', results)
+    monkeypatch.setattr(webapi.queries, 'get_event_dates', lambda scope: ['2019-11-10', '2023-07-23', '2026-11-29'])
+    monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [3], 'party': ['PP'], 'dev_result_c': [-1.2]}))
-    monkeypatch.setattr(webapi, 'get_herding', lambda scope: pd.DataFrame({
+    monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [2], 'ratio': [0.78]}))
-    monkeypatch.setattr(webapi, 'get_drift', lambda scope: pd.DataFrame({
+    monkeypatch.setattr(webapi.queries, 'get_drift', lambda scope: pd.DataFrame({
         'party': ['PP'], 'horizon': [4], 'rms': [1.1]}))
     return seen
 
@@ -299,13 +299,13 @@ def test_database_failure_is_a_503(db_api, fresh_app, monkeypatch):
 
     def boom(scope):
         raise RuntimeError('connection refused')
-    monkeypatch.setattr(webapi, 'get_drift', boom)
+    monkeypatch.setattr(webapi.queries, 'get_drift', boom)
     status, headers, body = call(db_api, '/api/v1/drift')
     assert status == 503 and json.loads(body)['message'] == 'database unavailable' and len(errors) == 1
     assert headers['cache-control'] == 'no-store'
     status, headers, body = call(db_api, '/api/v1/drift')
     assert status == 503 and len(errors) == 2  # el fallo no se cachea: el lector se vuelve a llamar
-    monkeypatch.setattr(webapi, 'get_drift', lambda scope: pd.DataFrame({'party': ['PP']}))
+    monkeypatch.setattr(webapi.queries, 'get_drift', lambda scope: pd.DataFrame({'party': ['PP']}))
     assert call(db_api, '/api/v1/drift')[0] == 200
 
 

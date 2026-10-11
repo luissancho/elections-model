@@ -461,11 +461,11 @@ def fake_houses(monkeypatch, name='CIS'):
         'event_date': pd.to_datetime(['2023-07-23', '2026-11-29']), 'pollster_id': [2, 2], 'pollster': ['GAD3', 'GAD3'],
         'n': [14, 17], 'ratio': [0.781, 0.705], 'p_value': [0.034, 0.012],
     })
-    monkeypatch.setattr(webapi, 'get_pollsters', lambda: pollsters)
-    monkeypatch.setattr(webapi, 'get_ratings', lambda scope: ratings)
-    monkeypatch.setattr(webapi, 'get_house_effects', lambda scope: house_effects)
-    monkeypatch.setattr(webapi, 'get_herding', lambda scope: herding)
-    monkeypatch.setattr(webapi, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
+    monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
+    monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
+    monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
 
 
 @pytest.fixture

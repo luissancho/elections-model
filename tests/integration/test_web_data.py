@@ -11,9 +11,9 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def queries(app):
     """Caché de consultas vacía antes y después: cada test lee la base."""
-    webapi._QUERIES.clear()
+    webapi.queries._QUERIES.clear()
     yield app
-    webapi._QUERIES.clear()
+    webapi.queries._QUERIES.clear()
 
 
 def test_web_data_readers_return_the_promised_columns(queries):
