@@ -631,6 +631,15 @@ def test_backtest_source_follows_the_backtest_script():
     assert publish.backtest_source('es') == os.path.join(publish.REPO_ROOT, 'backtest', 'results')
 
 
+def test_export_backtest_table_keeps_a_missing_boolean_as_null():
+    frame = pd.DataFrame({'event_date': ['a', 'b', 'c'], 'seats_valid': [True, np.nan, False],
+                          'majority': [False, True, np.nan]})
+    data, table = publish.export_backtest_table(frame)
+    assert [row['seats_valid'] for row in data['rows']] == [True, None, False]
+    assert [row['majority'] for row in data['rows']] == [False, True, None]
+    assert all(type(row['seats_valid']) in (bool, type(None)) for row in data['rows'])
+
+
 def test_export_backtest_table_rounds_types_and_nulls():
     tables = synthetic_backtest()
     data, frame = publish.export_backtest_table(tables.metrics)

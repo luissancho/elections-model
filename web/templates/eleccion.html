@@ -182,6 +182,7 @@
             </tbody>
           </table>
         </div>
+        {% if table.seats_valid %}
         <div class="table-wrap">
           <table id="model-seats-{{ table.horizon|int }}">
             <caption>Escaños estimados por el modelo a {{ table.horizon|int }} días de la elección.</caption>
@@ -228,6 +229,9 @@
             </tbody>
           </table>
         </div>
+        {% else %}
+        <p class="notice">Escaños no proyectables en esta elección: algún partido no tenía resultado anterior ni regla de herencia.</p>
+        {% endif %}
         {% endfor %}
         <p class="about">
           Qué es esto: lo que el modelo habría dicho con los sondeos disponibles a cada distancia de la

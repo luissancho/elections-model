@@ -4,7 +4,9 @@ import {renderLines} from '../charts/line.js';
 import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
 // Series colours: the model stands out, the baselines are lighter.
-const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev_result: '#777777'};
+const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev_result: '#009e73'};
+// One colour per coverage level, distinct from the grey dashed reference lines.
+const COVERAGE_COLORS = {'50': '#e69f00', '80': '#009e73', '95': '#1f4e79'};
 const NAMES = {model: 'Modelo', last_poll: 'Último sondeo', mean_4w: 'Media de 4 semanas', prev_result: 'Elección anterior'};
 const COVERAGE_LEVELS = ['50', '80', '95'];
 
@@ -39,7 +41,7 @@ function paint() {
   const coverageEl = document.getElementById('coverage-chart');
   if (coverageEl && horizons.length) {
     const series = COVERAGE_LEVELS
-      .map((level) => ({name: `Intervalo del ${level} %`, points: pairs(horizons, coverage[level] || [])}))
+      .map((level) => ({name: `Intervalo del ${level} %`, color: COVERAGE_COLORS[level], points: pairs(horizons, coverage[level] || [])}))
       .filter((line) => line.points.length);
     if (series.length) {
       tryDraw(() => renderLines(coverageEl, series, {

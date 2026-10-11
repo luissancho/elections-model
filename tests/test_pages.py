@@ -658,6 +658,8 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     assert [row['date'] for row in data['sector']] == ['2019-11-10', '2023-07-23']
     assert data['blocks'] == ['Derecha', 'Izquierda']
     assert 'id="sector-chart"' in page and 'aria-label=' in page
+    assert 'Desviación hacia Derecha' in page and '0,2</td>' in page and '-0,2</td>' not in page  # solo el primer bloque
+    assert 'positivo, los sondeos dieron de más a ese bloque; negativo, de menos' in page
 
 
 def test_elecciones_without_events_shows_a_notice(api):
@@ -715,6 +717,36 @@ def test_published_events_and_horizon_tables(events_site):
     assert invalid.value.status == 400 and str(invalid.value.message) == 'invalid date'
 
 
+def test_horizon_tables_flag_the_horizons_whose_seats_are_not_valid():
+    model = {'horizons': [6, 30],
+             'shares': [{'horizon': h, 'party': 'PP', 'main': True, 'official': 33.0, 'model': 32.0} for h in (6, 30)],
+             'seats': [{'horizon': h, 'party': 'PP', 'main': True, 'official': 137, 'model': 140, 'seats_valid': h == 6}
+                       for h in (6, 30)],
+             'blocks': [{'horizon': h, 'block': 'Derecha', 'official_seats': 169, 'model_seats': 171,
+                         'p_majority': 0.4, 'majority': False, 'seats_valid': h == 6} for h in (6, 30)]}
+    tables = pages.horizon_tables(model)
+    assert [(table['horizon'], table['seats_valid']) for table in tables] == [(6, True), (30, False)]
+    assert tables[1]['shares'][0]['error'] == -1.0  # el voto sigue ahí aunque los escaños no valgan
+
+
+def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'model':
+            data = {**data, 'seats': [dict(row, seats_valid=row['horizon'] != 30) for row in data['seats']]}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    assert status == 200 and page.count('Escaños no proyectables en esta elección') == 1
+    assert 'id="model-shares-30"' in page and 'id="model-shares-6"' in page
+    assert 'id="model-seats-6"' in page and 'id="model-blocks-6"' in page
+    assert 'id="model-seats-30"' not in page and 'id="model-blocks-30"' not in page
+
+
 def test_eleccion_without_meta_is_a_404(events_site, fresh_app, monkeypatch):
     real = pages.elecciones.event_part
     monkeypatch.setattr(pages.elecciones, 'event_part',
@@ -739,6 +771,20 @@ def test_modelo_renders_the_backtest_tables_and_initial(backtest_site):
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
     assert data['mae']['last_poll'][0] == 1.74 and '5,77' in page
     assert list(data['seats']) == ['mae', 'mae_h', 'cov95']
+    blocks = re.search(r'<table id="blocks-table">(.*?)</table>', page, re.S).group(1)
+    rows = [re.findall(r'<td>(.*?)</td>', row) for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S) if '<td>' in row]
+    invalid = [row for row in rows if row[0].startswith('10 ') and row[1] == '30']  # 2019-11-10 x 30
+    assert len(invalid) == 2 and len(rows) == 8
+    assert all(row[4:7] == ['—', '—', '—'] and row[7] == 'no' for row in invalid)
+    assert all(row[7] == 'sí' for row in rows if row not in invalid)
+
+
+def test_modelo_tolerates_a_backtest_without_run_json(api, fresh_app):
+    write_backtest(fresh_app.fs, meta={'params': {}, 'commit': None, 'run_at': None})
+    status, _, body = call(api, '/modelo', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'id="params"' in page and 'Simulaciones</dt><dd>—</dd>' in page
+    assert 'Versión</dt><dd>—</dd>' in page and 'Ejecutado</dt><dd>—</dd>' in page
 
 
 def test_modelo_without_backtest_shows_a_notice(api):

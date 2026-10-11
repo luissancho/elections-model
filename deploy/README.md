@@ -54,7 +54,9 @@ Jinja2 de `web/templates/`, con los datos del paquete embebidos en la página (`
 `web/dist/js/pages/` solo dibuja los gráficos. `/elecciones` y `/modelo` leen solo el paquete (sin base): sin
 elecciones o sin backtest publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400
 ("Fecha no válida.") y una elección no publicada, 404 ("Elección no publicada."). Una ruta desconocida fuera de `/api/` da un 404 HTML de
-Python (dentro de `/api/`, el 404 JSON de la API).
+Python (dentro de `/api/`, el 404 JSON de la API). Toda página, incluidas `/elecciones`, `/modelo` y `/metodo`,
+necesita un pronóstico publicado del ámbito elegido (la cabecera común lee su `meta`): un ámbito con backtest
+pero sin pronóstico responde 404 "Este ámbito no tiene pronóstico publicado." y, sin ningún paquete, 503.
 
 Notas de operación:
 

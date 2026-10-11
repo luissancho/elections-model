@@ -1051,7 +1051,7 @@ aquí (corte transitorio); si vuelve a fallar al relanzar `all`, mandar la traza
 ## Estado al cierre de la fase 5 (2026-10-11)
 
 Hecho en `dev` (plan en `abed689`, `docs/superpowers/plans/2026-10-11-web-fase-5-elecciones-modelo.md`, código en
-`39cada4..182ba03`, 13 commits, y este de documentación), con 527 tests unitarios en verde (`python -m pytest -m "not
+`abed689..182ba03`, 13 commits, y este de documentación), con 527 tests unitarios en verde (`python -m pytest -m "not
 integration" -q`: 457 antes de la fase y 70 nuevos) y un test de integración nuevo marcado,
 `test_publish_event_against_the_database` (`tests/integration/test_publish.py`), que publica una elección de `es`
 contra la RDS en `tmp_path` (pasó en 15 s; el resto de integración no se ejecutó). Ledger de la ejecución:
@@ -1170,6 +1170,22 @@ Verificado en la sesión (2026-10-11):
   `json.loads`.
 - Durante la fase (controlador, solo lectura contra la RDS): `test_publish_event_against_the_database` pasó (15 s)
   tras el arreglo `c92f7b5`.
+
+Correcciones de la revisión final de la rama (2026-10-11):
+
+- Escaños no proyectables: `horizon_tables` lleva `seats_valid` por horizonte y el detalle de la elección sustituye
+  las tablas de escaños y bloques por un aviso; `/modelo` añade "Escaños válidos" a "Bloques" y pinta un guion en
+  escaños, probabilidad y mayoría de los casos no válidos (todo el 2015-12-20 real).
+- "Sesgo de bloques" es una magnitud sin signo: se reescribe el texto y la lista de elecciones añade la columna con
+  signo "Desviación hacia {primer bloque}" (`summary.bias`). El fake `poll_errors` no cambia: un test de la fase 4
+  fija `bias_blocks: -1.23`.
+- Cobertura y líneas base con colores propios; `renderLines` ya no fuerza el gris sin `color`.
+- `modelo.html` tolera un `run.json` ausente (`params` vacío, `commit`/`run_at` nulos): guion y no `StrictUndefined`.
+- `deploy/README.md`: toda página necesita un pronóstico publicado del ámbito (404 / 503 si no).
+- `export_backtest_table` convierte los booleanos con `astype('boolean')`: un `NaN` queda `null`, no `true`.
+- Las referencias de `renderLines` cuelgan de una serie auxiliar fuera de la leyenda: ocultar una línea no las oculta.
+- El rango de código del cierre pasa de `39cada4..182ba03` a `abed689..182ba03`; este commit es
+  "Fix the final-review findings: invalid seat cases, block bias sign, chart colours and null-safe params".
 
 No verificado: las tres páginas en un navegador (los gráficos de `renderLines` solo pasaron `node --check`), `publish
 event` real a S3, `smoke.sh` con Docker y el despliegue.

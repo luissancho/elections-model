@@ -81,8 +81,9 @@ def write_event(fs, scope='es', date='2023-07-23', model=True):
     return writer
 
 
-def write_backtest(fs, scope='es'):
-    """Backtest publicado de un ámbito a partir de los fixtures: las seis partes y sus cinco CSV."""
+def write_backtest(fs, scope='es', meta=None):
+    """Backtest publicado de un ámbito a partir de los fixtures: las seis partes y sus cinco CSV; `meta` sustituye
+    campos de `meta.data`."""
     writer = bundle.BundleWriter(fs)
     for name in bundle.BACKTEST_CSV:
         writer.write_csv(bundle.path_backtest_csv(scope, name), pd.DataFrame({'event_date': ['2023-07-23'], 'horizon': [6]}))
@@ -90,7 +91,7 @@ def write_backtest(fs, scope='es'):
         schema = bundle.BACKTEST_SCHEMAS[part]
         data = fixture_data(schema)
         if part == 'meta':
-            data = data | {'scope': scope}
+            data = data | {'scope': scope} | (meta or {})
         writer.write_json(bundle.path_backtest(scope, part), schema, data, scope)
     return writer
 

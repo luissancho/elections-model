@@ -15,7 +15,8 @@ HORIZON_COLUMNS = (
 )
 CASE_COLUMNS = ('event_date', 'horizon', 'mae_shares', 'mae_last_poll', 'mae_seats', 'cov_shares95', 'brier_vs',
                 'seats_valid')
-BLOCK_COLUMNS = ('event_date', 'horizon', 'block', 'official_seats', 'model_seats', 'p_majority', 'majority')
+BLOCK_COLUMNS = ('event_date', 'horizon', 'block', 'official_seats', 'model_seats', 'p_majority', 'majority',
+                 'seats_valid')
 CSV_LABELS = (
     ('metrics', 'Métricas por elección y horizonte'),
     ('by-horizon', 'Métricas por horizonte'),

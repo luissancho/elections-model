@@ -169,6 +169,7 @@
                 <th scope="col">Escaños del modelo</th>
                 <th scope="col">Prob. de mayoría</th>
                 <th scope="col">Mayoría real</th>
+                <th scope="col">Escaños válidos</th>
               </tr>
             </thead>
             <tbody>
@@ -178,9 +179,10 @@
                 <td>{{ row.horizon|int }}</td>
                 <td>{{ row.block }}</td>
                 <td>{{ row.official_seats|int }}</td>
-                <td>{{ row.model_seats|int }}</td>
-                <td>{{ row.p_majority|prob }}</td>
-                <td>{{ 'sí' if row.majority else 'no' }}</td>
+                <td>{{ row.model_seats|int if row.seats_valid else '—' }}</td>
+                <td>{{ row.p_majority|prob if row.seats_valid else '—' }}</td>
+                <td>{{ ('sí' if row.majority else 'no') if row.seats_valid else '—' }}</td>
+                <td>{{ 'sí' if row.seats_valid else 'no' }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -189,7 +191,8 @@
         <p class="about">
           Qué es esto: lo que el modelo habría dicho de cada bloque en cada elección pasada, frente a lo
           que ocurrió. Una probabilidad de mayoría alta en un bloque que no la logró es un fallo; el Brier
-          resume todos ellos.
+          resume todos ellos. Donde los escaños no son válidos, el modelo no pudo proyectarlos y se
+          muestra un guion.
         </p>
       </section>
       <section class="card" id="about">
@@ -215,14 +218,15 @@
       <section class="card" id="params">
         <h2>Parámetros</h2>
         <dl>
-          <dt>Simulaciones</dt><dd>{{ backtest.params.n_sim|int }}</dd>
-          <dt>Semilla</dt><dd>{{ backtest.params.seed|int }}</dd>
-          <dt>Máximo de partidos proyectados</dt><dd>{{ backtest.params.max_fc|int }}</dd>
+          {% set params = backtest.params or {} %}
+          <dt>Simulaciones</dt><dd>{{ params.get('n_sim')|int if params.get('n_sim') is not none else '—' }}</dd>
+          <dt>Semilla</dt><dd>{{ params.get('seed')|int if params.get('seed') is not none else '—' }}</dd>
+          <dt>Máximo de partidos proyectados</dt><dd>{{ params.get('max_fc')|int if params.get('max_fc') is not none else '—' }}</dd>
           <dt>Elecciones</dt><dd>{% for event in backtest.events %}{{ event|date }}{{ ', ' if not loop.last }}{% endfor %}</dd>
           <dt>Horizontes (días)</dt><dd>{% for horizon in backtest.horizons %}{{ horizon|int }}{{ ', ' if not loop.last }}{% endfor %}</dd>
-          <dt>Versión</dt><dd>{{ backtest.commit }}</dd>
-          <dt>Ejecutado</dt><dd>{{ backtest.run_at|datetime }}</dd>
-          <dt>Origen</dt><dd>{{ backtest.source }}</dd>
+          <dt>Versión</dt><dd>{{ backtest.get('commit') or '—' }}</dd>
+          <dt>Ejecutado</dt><dd>{{ backtest.get('run_at')|datetime if backtest.get('run_at') else '—' }}</dd>
+          <dt>Origen</dt><dd>{{ backtest.get('source') or '—' }}</dd>
         </dl>
       </section>
       <section class="card" id="downloads">

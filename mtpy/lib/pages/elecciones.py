@@ -171,7 +171,9 @@ def horizon_tables(model: dict) -> list:
     Returns
     -------
     list of dict
-        By horizon ascending: ``{'horizon', 'shares', 'seats', 'blocks'}``. ``shares`` and ``seats``
+        By horizon ascending: ``{'horizon', 'seats_valid', 'shares', 'seats', 'blocks'}``. ``seats_valid``
+        is ``False`` when any seats or blocks row of the horizon has it ``False`` (a case whose seats
+        could not be projected). ``shares`` and ``seats``
         have the ``main`` parties (``name``, ``official``, ``model``; ``shares`` also
         ``error = model - official``, rounded to 2 decimals); ``blocks`` the ``block``,
         ``official_seats``, ``model_seats``, ``p_majority`` and ``majority`` of each block.
@@ -193,7 +195,11 @@ def horizon_tables(model: dict) -> list:
             {key: row.get(key) for key in ('block', 'official_seats', 'model_seats', 'p_majority', 'majority')}
             for row in model.get('blocks') or [] if row['horizon'] == horizon
         ]
-        tables.append({'horizon': horizon, 'shares': shares, 'seats': seats, 'blocks': blocks})
+        seats_valid = all(row.get('seats_valid') is not False
+                          for part in ('seats', 'blocks') for row in model.get(part) or []
+                          if row['horizon'] == horizon)
+        tables.append({'horizon': horizon, 'seats_valid': seats_valid, 'shares': shares, 'seats': seats,
+                       'blocks': blocks})
 
     return tables
 

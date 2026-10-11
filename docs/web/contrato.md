@@ -314,7 +314,8 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 | `model` | `event-model@1` | `horizons`, `shares`, `seats`, `blocks` |
 
 - `meta.summary`: `n_polls`, `n_pollsters`, `error_avg`, `error_blocks`, `bias_blocks` (medias de los sondeos ponderadas
-  por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}`. `has_model` es
+  por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}` (positivo: los
+  sondeos dieron de más a ese bloque). `bias_blocks` no tiene signo: es una magnitud en la escala del error. `has_model` es
   `true` si `horizons` no está vacío; `horizons`, los horizontes del modelo.
 - `pollsters.rows`: una fila por casa, de menor a mayor `error_blocks` (nulos al final): `pollster_id` (o `null`),
   `pollster`, `n_polls`, `sample_size` (mediana de las muestras conocidas, `null` si ninguna), `error_avg`,

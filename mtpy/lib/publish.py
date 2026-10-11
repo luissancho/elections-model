@@ -733,7 +733,7 @@ def export_backtest_table(frame: pd.DataFrame) -> tuple:
     ``PROB_PREFIXES`` becomes nullable integer (``Int64``: ``int`` in the JSON, ``null`` for NaN, no ``.0`` in
     the CSV); the other float columns are rounded to ``PCT_DECIMALS`` (``PROB_DECIMALS`` those starting with
     one of ``PROB_PREFIXES``), integer columns stay ``int`` and ``seats_valid``, ``majority`` and ``main`` are
-    booleans. Missing values are ``None`` in the rows.
+    nullable booleans (a missing value stays missing, never ``True``). Missing values are ``None`` in the rows.
 
     Parameters
     ----------
@@ -756,7 +756,7 @@ def export_backtest_table(frame: pd.DataFrame) -> tuple:
     table = round_cols(table, pct=[col for col in floats if col not in probs], prob=probs)
     for col in BACKTEST_BOOL_COLS:
         if col in table.columns:
-            table[col] = table[col].astype(bool)
+            table[col] = table[col].astype('boolean')
 
     rows = [{key: None if value is pd.NA else value for key, value in row.items()}
             for row in table.to_dict(orient='records')]

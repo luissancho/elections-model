@@ -19,6 +19,9 @@
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
                 <th scope="col">Sesgo de bloques</th>
+                {% if blocks %}
+                <th scope="col">Desviación hacia {{ blocks[0] }}</th>
+                {% endif %}
                 <th scope="col">Modelo</th>
               </tr>
             </thead>
@@ -31,6 +34,9 @@
                 <td>{{ event.error_avg|num(1) }}</td>
                 <td>{{ event.error_blocks|num(1) }}</td>
                 <td>{{ event.bias_blocks|num(1) }}</td>
+                {% if blocks %}
+                <td>{{ (event.bias or {}).get(blocks[0])|num(1) }}</td>
+                {% endif %}
                 <td>{{ 'sí' if event.has_model else '—' }}</td>
               </tr>
               {% endfor %}
@@ -43,8 +49,9 @@
         <div class="chart" id="sector-chart" role="img" aria-label="Error medio de los sondeos del sector en cada elección pasada"></div>
         <p class="about">
           Qué es esto: el error medio de los sondeos frente al resultado en cada elección pasada, en
-          puntos. El sesgo de bloques, con signo, dice hacia qué bloque se equivocaron los sondeos en
-          conjunto: positivo, dieron más voto al primer bloque que el resultado; negativo, menos.
+          puntos. El sesgo de bloques mide cuánto se alejaron los sondeos del resultado sumando cada
+          bloque, en la misma escala que el error, y no tiene signo. La desviación hacia el primer bloque
+          sí lo tiene: positivo, los sondeos dieron de más a ese bloque; negativo, de menos.
         </p>
       </section>
       {% else %}
