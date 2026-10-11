@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+{% block title %}Modelo{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/modelo.js"></script>
+{% endblock %}
+{% block content %}
+    <div id="content" class="stack">
+      {% if published %}
+      <section class="card" id="mae">
+        <h2>Error del promedio por horizonte</h2>
+        <div class="chart" id="mae-chart" role="img" aria-label="Error absoluto medio del voto por horizonte: modelo y tres líneas base"></div>
+        <div class="table-wrap">
+          <table id="mae-table">
+            <caption>Error absoluto medio del voto en puntos, por días de antelación, del modelo y de las tres líneas base.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Horizonte (días)</th>
+                <th scope="col">Casos</th>
+                <th scope="col">Modelo</th>
+                <th scope="col">Último sondeo</th>
+                <th scope="col">Media de 4 semanas</th>
+                <th scope="col">Elección anterior</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in horizon_rows %}
+              <tr>
+                <td>{{ row.horizon|int }}</td>
+                <td>{{ row.n_cases|int }}</td>
+                <td>{{ row.mae_shares|num(2) }}</td>
+                <td>{{ row.mae_last_poll|num(2) }}</td>
+                <td>{{ row.mae_mean_4w|num(2) }}</td>
+                <td>{{ row.mae_prev_result|num(2) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: cuánto se equivoca el modelo al estimar el voto de los partidos principales, en
+          puntos, si solo usara los sondeos publicados hasta ese número de días antes de cada elección
+          pasada. Se compara con tres líneas base: el último sondeo publicado, la media simple de los
+          sondeos de las cuatro semanas anteriores y el resultado de la elección anterior. El modelo
+          aporta algo si su error es menor que el de las tres.
+        </p>
+      </section>
+      <section class="card" id="coverage">
+        <h2>Cobertura de los intervalos</h2>
+        <div class="chart" id="coverage-chart" role="img" aria-label="Cobertura de los intervalos del voto del 50, 80 y 95 por ciento por horizonte"></div>
+        <div class="table-wrap">
+          <table id="coverage-table">
+            <caption>Fracción de resultados oficiales que caen dentro de los intervalos del modelo, por días de antelación.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Horizonte (días)</th>
+                <th scope="col">Intervalo del 50 %</th>
+                <th scope="col">Intervalo del 80 %</th>
+                <th scope="col">Intervalo del 95 %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in horizon_rows %}
+              <tr>
+                <td>{{ row.horizon|int }}</td>
+                <td>{{ row.cov_shares50|num(3) }}</td>
+                <td>{{ row.cov_shares80|num(3) }}</td>
+                <td>{{ row.cov_shares95|num(3) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: un modelo bien calibrado deja dentro de cada intervalo una fracción de resultados
+          cercana a su nivel nominal: 0,50, 0,80 y 0,95 (las líneas discontinuas del gráfico). Si la
+          cobertura es menor, los intervalos son demasiado estrechos; si es mayor, demasiado anchos.
+        </p>
+      </section>
+      <section class="card" id="seats">
+        <h2>Escaños y mayorías</h2>
+        <div class="table-wrap">
+          <table id="seats-table">
+            <caption>Error de escaños y calidad de la probabilidad de mayoría, por días de antelación.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Horizonte (días)</th>
+                <th scope="col">Casos con escaños</th>
+                <th scope="col">Error de escaños</th>
+                <th scope="col">Cobertura del 95 %</th>
+                <th scope="col">CRPS de escaños</th>
+                <th scope="col">Brier de mayoría</th>
+                <th scope="col">Error de escaños (horizonte)</th>
+                <th scope="col">Brier de mayoría (horizonte)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in horizon_rows %}
+              <tr>
+                <td>{{ row.horizon|int }}</td>
+                <td>{{ row.n_seats_cases|int }}</td>
+                <td>{{ row.mae_seats|num(2) }}</td>
+                <td>{{ row.cov_seats95|num(3) }}</td>
+                <td>{{ row.crps_seats|num(2) }}</td>
+                <td>{{ row.brier_vs|num(3) }}</td>
+                <td>{{ row.mae_seats_h|num(2) }}</td>
+                <td>{{ row.brier_vs_h|num(3) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: el error absoluto medio de escaños de los partidos principales, el CRPS (que
+          premia una distribución de escaños ajustada y bien centrada; es el error absoluto cuando la
+          distribución es un punto) y el Brier de la probabilidad de mayoría absoluta de cada bloque:
+          cuanto más cerca de 0, mejor. Las columnas de horizonte son las de la ejecución que añade la
+          deriva de la opinión hasta la elección.
+        </p>
+      </section>
+      <section class="card" id="cases">
+        <h2>Por elección</h2>
+        <div class="table-wrap">
+          <table id="cases-table">
+            <caption>Métricas de cada elección y horizonte, de la más reciente a la más antigua.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Elección</th>
+                <th scope="col">Horizonte (días)</th>
+                <th scope="col">Error del voto</th>
+                <th scope="col">Error del último sondeo</th>
+                <th scope="col">Error de escaños</th>
+                <th scope="col">Cobertura del 95 %</th>
+                <th scope="col">Brier de mayoría</th>
+                <th scope="col">Escaños válidos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in case_rows %}
+              <tr>
+                <td>{{ row.event_date|date }}</td>
+                <td>{{ row.horizon|int }}</td>
+                <td>{{ row.mae_shares|num(2) }}</td>
+                <td>{{ row.mae_last_poll|num(2) }}</td>
+                <td>{{ row.mae_seats|num(2) }}</td>
+                <td>{{ row.cov_shares95|num(3) }}</td>
+                <td>{{ row.brier_vs|num(3) }}</td>
+                <td>{{ 'sí' if row.seats_valid else 'no' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: las mismas métricas para cada elección. Una elección con escaños no válidos solo
+          cuenta para el voto: algún partido no tenía resultado previo con el que proyectar sus escaños.
+        </p>
+      </section>
+      <section class="card" id="blocks">
+        <h2>Bloques</h2>
+        <div class="table-wrap">
+          <table id="blocks-table">
+            <caption>Escaños reales y del modelo de cada bloque, y la probabilidad de mayoría que daba el modelo.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Elección</th>
+                <th scope="col">Horizonte (días)</th>
+                <th scope="col">Bloque</th>
+                <th scope="col">Escaños reales</th>
+                <th scope="col">Escaños del modelo</th>
+                <th scope="col">Prob. de mayoría</th>
+                <th scope="col">Mayoría real</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in block_rows %}
+              <tr>
+                <td>{{ row.event_date|date }}</td>
+                <td>{{ row.horizon|int }}</td>
+                <td>{{ row.block }}</td>
+                <td>{{ row.official_seats|int }}</td>
+                <td>{{ row.model_seats|int }}</td>
+                <td>{{ row.p_majority|prob }}</td>
+                <td>{{ 'sí' if row.majority else 'no' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="about">
+          Qué es esto: lo que el modelo habría dicho de cada bloque en cada elección pasada, frente a lo
+          que ocurrió. Una probabilidad de mayoría alta en un bloque que no la logró es un fallo; el Brier
+          resume todos ellos.
+        </p>
+      </section>
+      <section class="card" id="about">
+        <h2>Qué es esto</h2>
+        <p class="about">
+          El backtest repite el modelo en elecciones ya celebradas con un protocolo fuera de muestra: en
+          cada elección y a cada horizonte, solo ve los sondeos publicados hasta ese día, y los
+          parámetros que se estiman con datos (error de sondeo, deriva de la opinión, efectos de casa) se
+          ajustan únicamente con los ciclos anteriores. Después compara lo que dijo con el resultado oficial.
+        </p>
+        <p class="about">
+          Hay dos ejecuciones. El nowcast responde a «si las elecciones fueran hoy» y solo está calibrado a
+          horizontes cortos. La ejecución a horizonte, las columnas con sufijo «horizonte», añade la deriva
+          de la opinión hasta el día de la elección: es la comparación honesta a muchos días de distancia.
+        </p>
+        <p class="about">
+          Las tres líneas base son: el último sondeo publicado, la media simple de los sondeos de las
+          cuatro semanas anteriores al corte y el resultado de la elección anterior. Las coberturas se leen
+          frente a su nivel nominal (0,50, 0,80 y 0,95): cercanas a él, los intervalos están bien
+          calibrados; por debajo, son demasiado estrechos.
+        </p>
+      </section>
+      <section class="card" id="params">
+        <h2>Parámetros</h2>
+        <dl>
+          <dt>Simulaciones</dt><dd>{{ backtest.params.n_sim|int }}</dd>
+          <dt>Semilla</dt><dd>{{ backtest.params.seed|int }}</dd>
+          <dt>Máximo de partidos proyectados</dt><dd>{{ backtest.params.max_fc|int }}</dd>
+          <dt>Elecciones</dt><dd>{% for event in backtest.events %}{{ event|date }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+          <dt>Horizontes (días)</dt><dd>{% for horizon in backtest.horizons %}{{ horizon|int }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+          <dt>Versión</dt><dd>{{ backtest.commit }}</dd>
+          <dt>Ejecutado</dt><dd>{{ backtest.run_at|datetime }}</dd>
+          <dt>Origen</dt><dd>{{ backtest.source }}</dd>
+        </dl>
+      </section>
+      <section class="card" id="downloads">
+        <h2>Descargas</h2>
+        <ul>
+          {% for link in csv_links %}
+          <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
+          {% endfor %}
+        </ul>
+        <p class="about">Qué es esto: los datos del backtest en CSV.</p>
+      </section>
+      {% else %}
+      <section class="card" id="mae">
+        <h2>Precisión del modelo</h2>
+        <p class="notice">Backtest no publicado todavía para este ámbito.</p>
+      </section>
+      {% endif %}
+    </div>
+{% endblock %}

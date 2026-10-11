@@ -13,7 +13,7 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
-    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_bundle, write_event
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event
 )
 
 
@@ -625,7 +625,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'promedio']
+    assert names == ['casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'modelo', 'promedio']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -721,3 +721,34 @@ def test_eleccion_without_meta_is_a_404(events_site, fresh_app, monkeypatch):
                         lambda scope, date, name: None if name == 'meta' and date == '2023-07-23' else real(scope, date, name))
     st, headers, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
     assert st == 404 and 'Elección no publicada.' in html(body) and headers['cache-control'] == 'no-store'
+
+
+@pytest.fixture
+def backtest_site(api, fresh_app):
+    """Páginas con el backtest de `es` publicado."""
+    write_backtest(fresh_app.fs)
+    return api
+
+
+def test_modelo_renders_the_backtest_tables_and_initial(backtest_site):
+    status, _, body = call(backtest_site, '/modelo', query='scope=es')
+    page = html(body)
+    assert status == 200 and '1,69' in page and page.count('/api/v1/backtest/es/') == 5
+    assert 'id="mae-chart"' in page and 'id="coverage-chart"' in page and 'aria-label=' in page
+    data = initial(body)
+    assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
+    assert list(data['seats']) == ['mae', 'mae_h', 'cov95']
+
+
+def test_modelo_without_backtest_shows_a_notice(api):
+    status, _, body = call(api, '/modelo', query='scope=es')
+    assert status == 200 and 'Backtest no publicado todavía' in html(body) and 'initial-data' not in html(body)
+    assert '/dist/js/pages/modelo.js' in html(body)
+
+
+def test_modelo_rows_are_ordered_and_projected():
+    rows = pages.project(fixture_data('backtest-metrics')['rows'], pages.modelo.CASE_COLUMNS)
+    ordered = pages.modelo.case_rows(rows)
+    assert [(r['event_date'], r['horizon']) for r in ordered] == [
+        ('2023-07-23', 6), ('2023-07-23', 30), ('2019-11-10', 6), ('2019-11-10', 30)]
+    assert set(ordered[0]) == set(pages.modelo.CASE_COLUMNS)
