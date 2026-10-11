@@ -19,6 +19,10 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             meta.json house-effects.json herding.json poll-errors.json error-data.json
             csv/
                 house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
+        backtest/{scope}/                       model backtest of a scope, overwritten on each publication
+            meta.json metrics.json by-horizon.json blocks.json shares.json seats.json
+            csv/
+                metrics.csv by-horizon.csv blocks.csv shares.csv seats.csv
 
 Every JSON file is an envelope::
 
@@ -27,8 +31,8 @@ Every JSON file is an envelope::
 where ``schema`` is ``{name}@{CONTRACT}``, ``scope`` and ``run_id`` are ``null`` when the file
 does not belong to one (``manifest``, ``history``; ``run_id`` for the analysis), ``mode`` is only set
 for ``MODE_PARTS`` and ``data`` has the keys listed in ``SCHEMAS``. The analysis parts are validated
-against the schema named in ``ANALYSIS_SCHEMAS``; ``meta.json`` is written last, so an analysis
-without it is incomplete. The contract is described in ``docs/web/contrato.md``.
+against the schema named in ``ANALYSIS_SCHEMAS`` and the backtest ones against ``BACKTEST_SCHEMAS``;
+``meta.json`` is written last, so an analysis or a backtest without it is incomplete. The contract is described in ``docs/web/contrato.md``.
 
 ``BundleReader`` and ``BundleWriter`` read and write the bundle through a file system (``app.fs``),
 validating every JSON file against its schema before it is written.
@@ -54,6 +58,9 @@ ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
                     'poll-errors': 'poll-errors', 'error-data': 'error-data'}
 ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data')
+BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
+BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
+BACKTEST_CSV = BACKTEST_PARTS[1:]
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
 
@@ -90,6 +97,10 @@ SCHEMAS = {
     'analysis-herding': {'rows': list, 'events': list},
     'poll-errors': {'blocks': list, 'rows': list},
     'error-data': {'rows': list},
+    'backtest-meta': {'scope': str, 'run_at': NULLABLE_STR, 'commit': NULLABLE_STR, 'params': dict, 'events': list,
+                      'horizons': list, 'n_cases': int, 'n_seats_cases': int, 'source': str, 'published': dict,
+                      'seconds': dict},
+    **{schema: {'columns': list, 'rows': list} for part, schema in BACKTEST_SCHEMAS.items() if part != 'meta'},
 }
 
 
@@ -375,12 +386,12 @@ def path_csv(scope: str, run_id: str, name: str, mode: Optional[str] = None) -> 
     return f'{base}/{mode}-{name}.csv'
 
 
-def _check_analysis(scope: str, name: str, names: tuple) -> None:
-    """Check the scope and the file name of an analysis path, raising ``ValueError`` if invalid."""
+def _check_file(scope: str, name: str, names: tuple, kind: str) -> None:
+    """Check the scope and the file name of an analysis or backtest path, raising ``ValueError`` if invalid."""
     if not isinstance(scope, str) or not ROUTE_ALIAS_RE.fullmatch(scope):
         raise ValueError(f'invalid scope {scope!r}')
     if name not in names:
-        raise ValueError(f'unknown analysis file {name!r} (expected one of {", ".join(names)})')
+        raise ValueError(f'unknown {kind} file {name!r} (expected one of {", ".join(names)})')
 
 
 def path_analysis(scope: str, part: str) -> str:
@@ -404,7 +415,7 @@ def path_analysis(scope: str, part: str) -> str:
     ValueError
         If the scope or the part is invalid.
     """
-    _check_analysis(scope, part, ANALYSIS_PARTS)
+    _check_file(scope, part, ANALYSIS_PARTS, 'analysis')
 
     return f'analysis/{scope}/{part}.json'
 
@@ -430,9 +441,61 @@ def path_analysis_csv(scope: str, name: str) -> str:
     ValueError
         If the scope or the name is invalid.
     """
-    _check_analysis(scope, name, ANALYSIS_CSV)
+    _check_file(scope, name, ANALYSIS_CSV, 'analysis')
 
     return f'analysis/{scope}/csv/{name}.csv'
+
+
+def path_backtest(scope: str, part: str) -> str:
+    """
+    Path of a JSON file of the backtest of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        The scope; it must match ``ROUTE_ALIAS_RE``.
+    part : str
+        The file name without extension (one of ``BACKTEST_PARTS``).
+
+    Returns
+    -------
+    str
+        ``'backtest/{scope}/{part}.json'``.
+
+    Raises
+    ------
+    ValueError
+        If the scope or the part is invalid.
+    """
+    _check_file(scope, part, BACKTEST_PARTS, 'backtest')
+
+    return f'backtest/{scope}/{part}.json'
+
+
+def path_backtest_csv(scope: str, name: str) -> str:
+    """
+    Path of a CSV file of the backtest of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        The scope; it must match ``ROUTE_ALIAS_RE``.
+    name : str
+        The file name without extension (one of ``BACKTEST_CSV``).
+
+    Returns
+    -------
+    str
+        ``'backtest/{scope}/csv/{name}.csv'``.
+
+    Raises
+    ------
+    ValueError
+        If the scope or the name is invalid.
+    """
+    _check_file(scope, name, BACKTEST_CSV, 'backtest')
+
+    return f'backtest/{scope}/csv/{name}.csv'
 
 
 def validate(name: str, obj: dict) -> dict:
@@ -607,6 +670,27 @@ class BundleReader:
             If the scope is invalid.
         """
         return self.exists(path_analysis(scope, 'meta'))
+
+    def backtest_exists(self, scope: str) -> bool:
+        """
+        Check whether the backtest of a scope is published, which is when it has its ``meta.json``.
+
+        Parameters
+        ----------
+        scope : str
+            The scope; it must match ``ROUTE_ALIAS_RE``.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``backtest/{scope}/meta.json`` exists.
+
+        Raises
+        ------
+        ValueError
+            If the scope is invalid.
+        """
+        return self.exists(path_backtest(scope, 'meta'))
 
 
 class BundleWriter(BundleReader):

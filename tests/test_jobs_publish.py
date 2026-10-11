@@ -5,7 +5,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from tests.fakes import FakeComputer, FakeSimulator
+from tests.fakes import FakeComputer, FakeSimulator, write_backtest_source
 
 
 def entry(scope, run_id):
@@ -44,6 +44,7 @@ def patched(monkeypatch):
                              prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
     monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
+    monkeypatch.setattr(publish, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
     monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08',
                                                               'es-ri': '2027-05-23'}.get(scope))
@@ -107,11 +108,9 @@ def test_manifest_point_and_unpublish_actions(fresh_app, tmp_path, patched):
     assert 'es' not in publish.read_manifest(bundle.BundleReader(fs))['scopes']
 
 
-def test_deferred_and_unknown_what_are_rejected(fresh_app, tmp_path):
+def test_unknown_what_is_rejected(fresh_app, tmp_path):
     from mtpy.jobs.Publish import Publish
 
-    with pytest.raises(ValueError, match='phase 5'):
-        Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))
     with pytest.raises(ValueError, match='unknown'):
         Publish().run(what='nope', fs=FileSystem(str(tmp_path)))
     with pytest.raises(RuntimeError, match='file system'):
@@ -357,3 +356,35 @@ def test_backfill_retry_repairs_the_history_and_the_manifest(fresh_app, tmp_path
     assert all(r['backfill'] is True for r in history)
     entry = publish.read_manifest(writer)['scopes']['es']
     assert entry['latest'] == '20261006-120000' and entry['run_at'] == '2026-10-06T12:00:00Z'
+
+
+def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = FileSystem(str(tmp_path / 'site'))
+    result = Publish().run(what=['backtest'], scopes=['es', 'es-cb'], fs=fs, source=str(tmp_path / 'bt'))
+    assert result['es']['status'] == 'published' and result['es-cb'] == {'status': 'skipped', 'reason': 'no backtest results for es-cb'}
+    out = capsys.readouterr().out
+    assert 'es: backtest published (4 cases, 2 elections) in ' in out and 'es-cb: backtest skipped (no backtest results for es-cb)' in out
+    assert bundle.BundleReader(fs).backtest_exists('es') and 'manifest' not in out
+
+
+def test_backtest_dry_run_writes_apart_and_a_failure_fails_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
+    from mtpy.jobs.Publish import Publish
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = FileSystem(str(tmp_path / 'site'))
+    monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: list(scopes))
+    Publish().run(what=['backtest'], scopes=['es'], fs=fs, source=str(tmp_path / 'bt'), dry_run=True)
+    assert bundle.BundleReader(fs, prefix=bundle.DRY_PREFIX).backtest_exists('es')
+    assert not bundle.BundleReader(fs).backtest_exists('es')
+    monkeypatch.setattr(publish, 'publish_backtest', lambda *a, **k: (_ for _ in ()).throw(KeyError('x')))
+    with pytest.raises(RuntimeError, match=r'es \(backtest\)'):
+        Publish().run(what=['backtest'], scopes=['es'], fs=fs)
+    assert "es: backtest failed (KeyError: 'x')" in capsys.readouterr().out
+
+
+def test_event_needs_its_date(fresh_app, tmp_path):
+    from mtpy.jobs.Publish import Publish
+
+    with pytest.raises(ValueError, match='"event_date" is required for event'):
+        Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))

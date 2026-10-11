@@ -1,5 +1,6 @@
 """Tests de `mtpy/lib/publish.py` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
 import math
+import os
 import zoneinfo
 from datetime import date, datetime, timedelta, timezone
 
@@ -10,7 +11,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
 from tests.fakes import (NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_simulator)
+                         synthetic_backtest, synthetic_simulator, write_backtest_source)
 
 
 def valid(name, data, mode='nowcast'):
@@ -592,3 +593,99 @@ def test_publish_analysis_without_polls_in_the_current_event_is_nothing_to_publi
     with pytest.raises(publish.NothingToPublish, match='No polls for es-cb 2027-05-23'):
         publish.publish_analysis('es-cb', make_writer(tmp_path), computer=factory, stats=fake_stats, prov=fake_prov)
     assert not (tmp_path / 'site').exists()
+
+
+def test_publish_backtest_writes_the_parts_and_meta_last(tmp_path):
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = RecordingFileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(fs)
+    out = publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
+    assert out['scope'] == 'es' and out['n_cases'] == 4 and out['n_events'] == 2
+    written = [p for p in fs.written if p.startswith('site/v1/backtest/es/')]
+    assert written[-1].endswith('/meta.json')
+    assert sum(p.endswith('.json') for p in written) == 6 and sum(p.endswith('.csv') for p in written) == 5
+    meta = writer.read_json(bundle.path_backtest('es', 'meta'))
+    assert meta['schema'] == 'backtest-meta@1' and meta['run_id'] is None and meta['mode'] is None
+    assert meta['data']['events'] == ['2019-11-10', '2023-07-23'] and meta['data']['horizons'] == [6, 30]
+    assert meta['data']['params']['n_sim'] == 500 and 'note' not in meta['data']['params']
+    assert meta['data']['n_seats_cases'] == 3 and meta['data']['published'] == fake_prov()
+    hz = writer.read_json(bundle.path_backtest('es', 'by-horizon'))['data']
+    assert hz['columns'][:3] == ['horizon', 'n_cases', 'n_seats_cases']
+    assert hz['rows'][0] == {**hz['rows'][0], 'horizon': 6, 'mae_shares': 1.69, 'cov_shares95': 0.957, 'brier_vs': 0.037}
+    seats = writer.read_json(bundle.path_backtest('es', 'seats'))['data']['rows']
+    assert seats[0]['official'] == 120 and seats[0]['mean'] == 118.43 and seats[0]['seats_valid'] is True
+    assert isinstance(seats[0]['official'], int) and isinstance(seats[0]['model'], int)
+    assert '120.0' not in (tmp_path / 'site' / 'site' / 'v1' / 'backtest' / 'es' / 'csv' / 'seats.csv').read_text()
+    assert seats[-1]['lo50'] is None
+    assert bundle.BundleReader(fs).backtest_exists('es')
+
+
+def test_publish_backtest_without_results_is_nothing_to_publish(tmp_path):
+    with pytest.raises(publish.NothingToPublish, match='no backtest results for es-cb'):
+        publish.publish_backtest('es-cb', make_writer(tmp_path), source=str(tmp_path / 'empty'))
+
+
+def test_backtest_source_follows_the_backtest_script():
+    assert publish.backtest_source('es', '/x') == '/x'
+    assert publish.backtest_source('es-cb', '/x') == os.path.join('/x', 'es-cb')
+    assert publish.backtest_source('es') == os.path.join(publish.REPO_ROOT, 'backtest', 'results')
+
+
+def test_export_backtest_table_rounds_types_and_nulls():
+    tables = synthetic_backtest()
+    data, frame = publish.export_backtest_table(tables.metrics)
+    assert data['columns'] == list(tables.metrics.columns) == list(frame.columns)
+    first = data['rows'][0]
+    assert first['mae_shares'] == 1.97 and first['cov_shares95'] == 0.933 and first['brier_vs'] == 0.037
+    assert first['horizon'] == 6 and type(first['horizon']) is int and first['seats_valid'] is True
+    assert pd.isna(first['mae_seats']) and frame['mae_shares'].iloc[0] == 1.97
+    blocks, _ = publish.export_backtest_table(tables.blocks)
+    assert blocks['rows'][0]['majority'] is False and blocks['rows'][0]['p_majority'] == 0.384
+    assert blocks['rows'][0]['official_seats'] == 169
+    valid('backtest-metrics', data, mode=None)
+    assert valid('backtest-metrics', data, mode=None)['rows'][0]['mae_seats'] is None
+
+
+def test_export_backtest_meta_without_run_json_takes_events_from_the_metrics():
+    tables = synthetic_backtest()
+    meta = publish.export_backtest_meta('es-cb', {}, tables, '/tmp/x', fake_prov(), {'total': 1.0})
+    assert meta['events'] == ['2019-11-10', '2023-07-23'] and meta['horizons'] == [6, 30]
+    assert meta['params'] == {} and meta['run_at'] is None and meta['commit'] is None
+    assert meta['n_cases'] == 4 and meta['n_seats_cases'] == 3 and meta['source'] == '/tmp/x'
+    valid('backtest-meta', meta, mode=None)
+
+
+def test_publish_backtest_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, monkeypatch):
+    write_backtest_source(str(tmp_path / 'bt'))
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
+    first = writer.read_json(bundle.path_backtest('es', 'meta'))['generated_at']
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)
+    real, calls = publish.export_backtest_table, []
+
+    def broken(frame):
+        calls.append(1)
+        if len(calls) == 5:
+            raise RuntimeError('boom')
+        return real(frame)
+
+    monkeypatch.setattr(publish, 'export_backtest_table', broken)
+    with pytest.raises(RuntimeError):
+        publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
+    assert writer.read_json(bundle.path_backtest('es', 'meta'))['generated_at'] == first
+    assert writer.read_json(bundle.path_backtest('es', 'metrics'))['generated_at'] == '2030-01-01T00:00:00Z'
+    assert writer.read_json(bundle.path_backtest('es', 'seats'))['generated_at'] == first
+
+
+def test_publish_backtest_converts_the_repository_results(tmp_path):
+    """La conversión real de `backtest/results` (datos del repositorio, sin base): seis JSON válidos."""
+    root = os.path.join(publish.REPO_ROOT, 'backtest', 'results')
+    if not os.path.isfile(os.path.join(root, 'metrics.csv')):
+        pytest.skip('backtest/results no está en el repositorio')
+    writer = make_writer(tmp_path)
+    out = publish.publish_backtest('es', writer, prov=fake_prov)
+    meta = writer.read_json(bundle.path_backtest('es', 'meta'))['data']
+    assert out['n_events'] == len(meta['events']) == 5 and meta['source'] == 'backtest/results'
+    assert sorted(meta['horizons']) == [6, 14, 30, 60, 90, 180]
+    official = [row['official'] for row in writer.read_json(bundle.path_backtest('es', 'seats'))['data']['rows']]
+    assert official and all(value is None or type(value) is int for value in official)

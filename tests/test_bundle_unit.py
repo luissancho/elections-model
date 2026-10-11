@@ -160,3 +160,26 @@ def test_begin_run_refuses_an_existing_run(tmp_path):
         writer.begin_run('es', '20261008-120000')
     writer.remove(bundle.path_run('es', '20261008-120000'))
     writer.begin_run('es', '20261008-120000')
+
+
+def test_backtest_paths_follow_the_published_layout_and_reject_bad_input():
+    assert bundle.BACKTEST_PARTS == ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
+    assert bundle.BACKTEST_CSV == ('metrics', 'by-horizon', 'blocks', 'shares', 'seats')
+    assert bundle.path_backtest('es', 'meta') == 'backtest/es/meta.json'
+    assert bundle.path_backtest('es-md', 'by-horizon') == 'backtest/es-md/by-horizon.json'
+    assert bundle.path_backtest_csv('es', 'seats') == 'backtest/es/csv/seats.csv'
+    with pytest.raises(ValueError, match='unknown backtest file'):
+        bundle.path_backtest('es', 'nope')
+    with pytest.raises(ValueError, match='invalid scope'):
+        bundle.path_backtest('es/..', 'meta')
+    with pytest.raises(ValueError):
+        bundle.path_backtest_csv('es', 'meta')
+
+
+def test_backtest_exists_needs_the_meta(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)), clock=fixed_clock)
+    assert not writer.backtest_exists('es')
+    writer.write_json(bundle.path_backtest('es', 'seats'), 'backtest-seats', load_fixture('backtest-seats')['data'], 'es')
+    assert not writer.backtest_exists('es')
+    writer.write_json(bundle.path_backtest('es', 'meta'), 'backtest-meta', load_fixture('backtest-meta')['data'], 'es')
+    assert writer.backtest_exists('es') and not writer.backtest_exists('es-md')

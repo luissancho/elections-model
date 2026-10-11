@@ -1,0 +1,45 @@
+{
+  "schema": "backtest-by-horizon@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "columns": [
+      "horizon",
+      "n_cases",
+      "n_seats_cases",
+      "mae_shares",
+      "cov_shares95",
+      "cov_seats95",
+      "mae_seats",
+      "brier_vs",
+      "log_score_vs"
+    ],
+    "rows": [
+      {
+        "horizon": 6,
+        "n_cases": 2,
+        "n_seats_cases": 2,
+        "mae_shares": 1.69,
+        "cov_shares95": 0.957,
+        "cov_seats95": 1.0,
+        "mae_seats": 4.88,
+        "brier_vs": 0.037,
+        "log_score_vs": 0.128
+      },
+      {
+        "horizon": 30,
+        "n_cases": 2,
+        "n_seats_cases": 1,
+        "mae_shares": 2.01,
+        "cov_shares95": 1.0,
+        "cov_seats95": 0.933,
+        "mae_seats": 5.25,
+        "brier_vs": 0.046,
+        "log_score_vs": null
+      }
+    ]
+  }
+}

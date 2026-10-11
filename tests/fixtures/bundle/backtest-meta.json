@@ -1,0 +1,50 @@
+{
+  "schema": "backtest-meta@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "scope": "es",
+    "run_at": "2026-10-07T13:35:53",
+    "commit": "a59059f",
+    "params": {
+      "n_sim": 500,
+      "seed": 42,
+      "max_fc": 10,
+      "nowcast_only": false,
+      "house_effects": true,
+      "industry_bias": false,
+      "dispersion": true,
+      "herding": true,
+      "composition": null,
+      "regional_noise": true,
+      "min_events": null,
+      "db_polls": 3836,
+      "db_last_poll": "2026-10-03"
+    },
+    "events": [
+      "2019-11-10",
+      "2023-07-23"
+    ],
+    "horizons": [
+      6,
+      30
+    ],
+    "n_cases": 4,
+    "n_seats_cases": 3,
+    "source": "backtest/results",
+    "published": {
+      "commit": "abc1234",
+      "dirty": false,
+      "versions": {
+        "python": "3.11.9"
+      }
+    },
+    "seconds": {
+      "read": 0.1,
+      "total": 0.3
+    }
+  }
+}

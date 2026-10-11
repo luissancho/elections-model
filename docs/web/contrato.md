@@ -17,6 +17,9 @@ site/v1/
     analysis/{scope}/                           análisis de casas (enmienda 2026-10-10; ver "Análisis")
         meta.json house-effects.json herding.json poll-errors.json error-data.json
         csv/ house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
+    backtest/{scope}/                           backtest del modelo (fase 5; ver "Backtest")
+        meta.json metrics.json by-horizon.json blocks.json shares.json seats.json
+        csv/ metrics.csv by-horizon.csv blocks.csv shares.csv seats.csv
     runs/{scope}/history.json                   headline de cada run, ascendente por run_id
     runs/{scope}/{run_id}/
         meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json
@@ -251,6 +254,40 @@ Mismo sobre que el resto de ficheros, con `scope` informado y `run_id`, `mode` a
 viejas y manda `meta.json`. Los CSV (`csv/{nombre}.csv`) son los gemelos de `house-effects`, `herding`,
 `poll-errors` y `error-data`, más `herding-events.csv` (las filas de `herding.events`); `meta` no tiene
 gemelo.
+
+## Backtest
+
+Enmienda 2026-10-11 (fase 5). El backtest del modelo de un ámbito vive en `backtest/{scope}/` (en `site/v1/`, o en
+`site-dry/v1/` con `dry_run`) y lo escribe `python job.py publish '{"what":["backtest"],...}'`, que **convierte** las
+tablas que deja `backtest/run_backtest.py` en `backtest/results/` (`es`) o `backtest/results/{scope}/` (los demás);
+no calcula nada ni toca la base. Como el análisis, **se sobrescribe** en cada publicación: sin `run_id`, fuera del
+manifest y de `history.json`. Un ámbito sin `metrics.csv` queda `skipped` (`no backtest results for {scope}`). La fuente
+de verdad en código es `bundle.BACKTEST_PARTS`, `BACKTEST_SCHEMAS` y `BACKTEST_CSV` (`path_backtest`,
+`path_backtest_csv`) y `publish.publish_backtest`.
+
+Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Seis partes:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `backtest-meta@1` | `scope`, `run_at`, `commit` (de la ejecución del backtest, `null` sin `run.json`), `params` (el resto de `run.json`: `n_sim`, `seed`, `max_fc`, correctores, `db_polls`, `db_last_poll`...), `events`, `horizons`, `n_cases`, `n_seats_cases`, `source` (carpeta de origen, relativa al repositorio), `published` (`commit`, `dirty`, `versions` de la publicación), `seconds` |
+| `metrics` | `backtest-metrics@1` | `columns`, `rows` |
+| `by-horizon` | `backtest-by-horizon@1` | `columns`, `rows` |
+| `blocks` | `backtest-blocks@1` | `columns`, `rows` |
+| `shares` | `backtest-shares@1` | `columns`, `rows` |
+| `seats` | `backtest-seats@1` | `columns`, `rows` |
+
+- Las cinco tablas son `metrics.csv` (una fila por elección y horizonte), `by_horizon.csv` (agregado por horizonte),
+  `blocks.csv`, `shares.csv` y `seats.csv` de `backtest/results`; `columns` conserva el orden de las columnas del CSV
+  y `rows` son registros `{columna: valor}`. El significado de cada métrica está en `backtest/README.md`.
+- Redondeos: una columna decimal cuyos valores son todos enteros (p. ej. `official`) y cuyo nombre no empieza por
+  `cov_`, `brier`, `log_score` o `p_majority` se publica como entero nullable (`int` en el JSON, sin `.0` en el CSV);
+  el resto de decimales va a 2 decimales, salvo las que empiezan por esos prefijos, a 3. `seats_valid`, `majority` y
+  `main` van como booleano y `NaN` como `null`.
+- `meta.events` y `meta.horizons` salen de `run.json` (sin él, de los valores únicos de `metrics`);
+  `n_cases = len(metrics)` y `n_seats_cases` son los casos con escaños válidos (`seats_valid`).
+
+`meta.json` se escribe el último: un backtest sin él está incompleto. Los CSV (`csv/{nombre}.csv`) son los gemelos
+redondeados de las cinco tablas; `meta` no tiene gemelo.
 
 ## Punteros
 

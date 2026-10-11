@@ -1,11 +1,14 @@
 """Dobles de prueba de la publicación: un Simulator sintético que ejercita sus métodos reales de salida sin base
 y un Computer sintético con los resúmenes de casas que publica `publish analysis`."""
+import json
+import os
 import types
 
 import numpy as np
 import pandas as pd
 
 from mtpy.core.io import FileSystem
+from mtpy.lib import publish
 from mtpy.lib.simulator import Simulator
 
 NAMES = ['PP', 'PSOE', 'VOX']
@@ -178,6 +181,75 @@ def synthetic_analysis():
     })
     return types.SimpleNamespace(house_effects=house_effects, herding_summary=herding_summary, herding=herding,
                                  poll_errors=poll_errors, error_data=error_data)
+
+
+BACKTEST_EVENTS = ['2019-11-10', '2023-07-23']
+BACKTEST_HORIZONS = [6, 30]
+
+
+def synthetic_backtest():
+    """Tablas de `backtest/results` con la forma de las reales: 2 elecciones x 2 horizontes (4 casos; los escaños no
+    son válidos en `2019-11-10 x 30`), los partidos `NAMES`, los bloques `vs`, decimales de sobra y algún NaN.
+    Devuelve `SimpleNamespace(run, metrics, by_horizon, blocks, shares, seats)`; `run` es el `run.json` del
+    repositorio con `events` y `horizons` sintéticos."""
+    run = {'run_at': '2026-10-07T13:35:53', 'commit': 'a59059f', 'scope': 'es', 'n_sim': 500, 'seed': 42, 'max_fc': 10,
+           'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True, 'herding': True,
+           'composition': None, 'regional_noise': True, 'min_events': None, 'events': list(BACKTEST_EVENTS),
+           'horizons': list(BACKTEST_HORIZONS), 'db_polls': 3836, 'db_last_poll': '2026-10-03',
+           'note': 'Run per event in parallel (one process per election, identical parameters) and merged.'}
+    cases = [(e, h) for e in BACKTEST_EVENTS for h in BACKTEST_HORIZONS]
+    valid = [not (e == '2019-11-10' and h == 30) for e, h in cases]
+    metrics = pd.DataFrame({
+        'event_date': [e for e, _ in cases], 'horizon': [h for _, h in cases],
+        'mae_shares': [1.97049, 2.50981, 1.40877, 1.50234], 'rmse_shares': [2.52987, 3.23107, 1.9, 2.1],
+        'cov_shares95': [0.9333, 1., 0.9, 1.], 'cov_seats95': [np.nan, np.nan, 1., 0.9333],
+        'mae_seats': [np.nan, np.nan, 4.5, 5.25], 'brier_vs': [0.03661, 0.04123, 0.03, 0.0501],
+        'log_score_vs': [0.15605, 0.17001, 0.1, np.nan], 'n_prov_cells': [277.5, 276.75, 278., 277.],
+        'seats_valid': valid,
+    })
+    by_horizon = pd.DataFrame({
+        'horizon': BACKTEST_HORIZONS, 'n_cases': [2, 2], 'n_seats_cases': [2, 1],
+        'mae_shares': [1.6896342173571752, 2.0063], 'cov_shares95': [0.9566666666, 1.],
+        'cov_seats95': [1., 0.9333], 'mae_seats': [4.875, 5.25], 'brier_vs': [0.036605, 0.0457], 'log_score_vs': [0.1275, np.nan],
+    })
+    blocks = pd.DataFrame([
+        {'event_date': e, 'horizon': h, 'block': block, 'parties': '+'.join(parties), 'official_seats': official,
+         'model_seats': model, 'p_majority': p, 'majority': official >= 176, 'brier': brier, 'log_score': log,
+         'seats_valid': ok}
+        for (e, h), ok in zip(cases, valid)
+        for block, parties, official, model, p, brier, log in (
+            ('Derecha', ['PP', 'VOX'], 169, 171.0, 0.38412, 0.38412 ** 2, 0.4813),
+            ('Izquierda', ['PSOE'], 121, 118.0, np.nan if h == 30 else 0.00098, 0.0, 0.0010005))
+    ])
+    shares = pd.DataFrame([
+        {'event_date': e, 'horizon': h, 'party': party, 'main': True, 'official': official, 'model': model,
+         'fc_lo': model - 1.12345, 'fc_hi': model + 1.12345, 'last_poll': model + 0.2468, 'lo95': model - 3.14159,
+         'hi95': model + 3.14159}
+        for e, h in cases
+        for party, official, model in (('PP', 33.05, 32.41234), ('PSOE', 31.7, 30.98765), ('VOX', 12.39, 13.00501))
+    ])
+    rows = []
+    for (e, h), ok in zip(cases, valid):
+        for party, official, model, mean in (('PSOE', 120, 118, 118.432), ('PP', 137, 140, 139.5678), ('VOX', 33, 30, 30.0049)):
+            rows.append({'event_date': e, 'horizon': h, 'party': party, 'main': True, 'official': official,
+                         'model': model, 'mean': mean, 'crps': 2.34567, 'seats_valid': ok, 'lo50': mean - 3.1,
+                         'hi50': mean + 3.1, 'lo95': mean - 9.5, 'hi95': mean + 9.5})
+    seats = pd.DataFrame(rows)
+    seats.loc[seats.index[-1], 'lo50'] = np.nan
+    return types.SimpleNamespace(run=run, metrics=metrics, by_horizon=by_horizon, blocks=blocks, shares=shares, seats=seats)
+
+
+def write_backtest_source(root, scope='es'):
+    """Escribe en `publish.backtest_source(scope, root)` los cinco CSV de `synthetic_backtest` (`by_horizon.csv`
+    incluido) y su `run.json`; devuelve esa carpeta."""
+    folder = publish.backtest_source(scope, root)
+    os.makedirs(folder, exist_ok=True)
+    tables = synthetic_backtest()
+    for part, name in publish.BACKTEST_FILES.items():
+        getattr(tables, part.replace('-', '_')).to_csv(os.path.join(folder, name), index=False)
+    with open(os.path.join(folder, 'run.json'), 'w', encoding='utf-8') as fh:
+        json.dump({**tables.run, 'scope': scope}, fh)
+    return folder
 
 
 class FakeComputer:

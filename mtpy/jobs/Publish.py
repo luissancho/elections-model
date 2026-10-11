@@ -24,6 +24,12 @@ class Publish(Job):
     ``site-dry/v1/analysis/``. Each scope ends ``published``, ``skipped``
     (``publish.NothingToPublish``) or ``failed``.
 
+    ``backtest`` converts the model backtest tables (``backtest/results[/{scope}]/``, written by
+    ``backtest/run_backtest.py``) into ``backtest/{scope}/`` and overwrites it. It reads files, not the
+    database, has no LOREG guard, never touches the manifest and, with ``dry_run``, writes under
+    ``site-dry/v1/backtest/``. Each scope ends ``published``, ``skipped`` (no results for the scope)
+    or ``failed``.
+
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
     its noon, and ``backfill`` set in its headline. A day whose run already exists is
@@ -40,6 +46,7 @@ class Publish(Job):
         python job.py publish '{"what":["forecast"],"scopes":["es"]}'
         python job.py publish '{"what":["forecast"],"scopes":"all"}'
         python job.py publish '{"what":["analysis"],"scopes":["es"]}'
+        python job.py publish '{"what":["backtest"],"scopes":["es"]}'
         python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
@@ -50,22 +57,21 @@ class Publish(Job):
         RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'
     """
 
-    WHAT = ('forecast', 'analysis', 'manifest', 'point', 'unpublish')
-    DEFERRED = {'event': 5, 'backtest': 5}
+    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'manifest', 'point', 'unpublish')
     RUN_EXISTS = 'run exists'
     RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
 
     def run(self, what=('forecast',), scopes=('es',), event_date=None, n_sim=1000, seed=42, drange=6, max_fc=10,
             alpha=0.05, correctors=None, freeze=None, run=None, dry_run=False, force=False, fs=None, today=None,
-            backfill=None, verbose=0, **kwargs):
+            backfill=None, source=None, verbose=0, **kwargs):
         """
         Run the requested publication actions.
 
         Parameters
         ----------
         what : str or list of str, default ('forecast',)
-            Actions to run, among ``forecast``, ``analysis``, ``manifest``, ``point`` and
-            ``unpublish``. They run in that order when several are given.
+            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``manifest``,
+            ``point`` and ``unpublish``. They run in that order when several are given.
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``.
         event_date : str, optional
@@ -88,7 +94,7 @@ class Publish(Job):
         run : str, optional
             Run id to point to or remove. Required by ``point`` and ``unpublish``.
         dry_run : bool, default False
-            Write under ``site-dry/v1`` (runs and analysis) and leave the pointers and manifest
+            Write under ``site-dry/v1`` (runs, analysis and backtest) and leave the pointers and manifest
             alone.
         force : bool, default False
             Publish inside the LOREG window anyway.
@@ -102,6 +108,8 @@ class Publish(Job):
             Range ``{'from': 'YYYY-MM-DD', 'to': 'YYYY-MM-DD'}`` (``to`` defaults to ``from``
             and must be before today) of retrospective ``forecast`` runs, one per day; see
             ``publish.backfill_days``. Requires ``forecast`` in ``what``.
+        source : str, optional
+            Results folder of ``backtest`` (default ``backtest/results`` of the repository).
         verbose : int, default 0
             Verbosity passed to the forecast and the analysis.
         **kwargs
@@ -118,7 +126,7 @@ class Publish(Job):
         Raises
         ------
         ValueError
-            If ``what`` is unknown or deferred to a later phase, ``run`` is missing, or
+            If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``), or
             ``backfill`` is given without ``forecast`` in ``what`` or its range is invalid.
         RuntimeError
             If no file system is configured, or any scope failed (raised after the
@@ -126,13 +134,12 @@ class Publish(Job):
         """
         whats = [what] if isinstance(what, str) else list(what)
         for item in whats:
-            if item in self.DEFERRED:
-                raise ValueError('publish: "{}" arrives in phase {}'.format(item, self.DEFERRED[item]))
-        for item in whats:
             if item not in self.WHAT:
                 raise ValueError('publish: unknown what "{}" (expected one of {})'.format(item, ', '.join(self.WHAT)))
         if ('point' in whats or 'unpublish' in whats) and not run:
             raise ValueError('publish: "run" is required')
+        if 'event' in whats and not event_date:
+            raise ValueError('publish: "event_date" is required for event')
         if backfill is not None and 'forecast' not in whats:
             raise ValueError('publish: "backfill" needs "forecast" in what')
         days = None if backfill is None else publish.backfill_days(backfill, today)
@@ -179,6 +186,14 @@ class Publish(Job):
                 if result['status'] == 'failed':
                     failures.append('{} ({})'.format(scope, 'analysis'))
                 lines.append(self._analysis_line(scope, result))
+
+        if 'backtest' in whats:
+            for scope in publish.resolve_scopes(scopes):
+                result = self._backtest_scope(scope, writer, source)
+                results[scope] = result
+                if result['status'] == 'failed':
+                    failures.append('{} ({})'.format(scope, 'backtest'))
+                lines.append(self._backtest_line(scope, result))
 
         if 'manifest' in whats:
             if dry_run:
@@ -389,6 +404,36 @@ class Publish(Job):
         return {'status': 'published', 'event_date': out['event_date'], 'n_pollsters': out['n_pollsters'],
                 'seconds': out['seconds']}
 
+    def _backtest_scope(self, scope, writer, source):
+        """
+        Publish the model backtest of one scope, converting every outcome into a result dict.
+
+        Parameters
+        ----------
+        scope : str
+            Scope to publish.
+        writer : BundleWriter
+            Bundle writer.
+        source : str or None
+            Results folder (see ``publish.backtest_source``).
+
+        Returns
+        -------
+        dict
+            Result with a ``status``: ``published`` with ``n_cases``, ``n_events`` and ``seconds``,
+            ``skipped`` for ``publish.NothingToPublish`` and ``failed`` for any other exception,
+            both with a ``reason``.
+        """
+        try:
+            out = publish.publish_backtest(scope, writer, source=source)
+        except publish.NothingToPublish as e:
+            return {'status': 'skipped', 'reason': str(e)}
+        except Exception as e:
+            self._log_error(scope)
+            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
+        return {'status': 'published', 'n_cases': out['n_cases'], 'n_events': out['n_events'],
+                'seconds': out['seconds']}
+
     def _pointer_scope(self, action, writer, scope, run):
         """
         Point a scope to a run or remove a run, converting the outcome into a result dict.
@@ -463,6 +508,14 @@ class Publish(Job):
             return '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
                 scope, result['event_date'], result['n_pollsters'], result['seconds']['total'])
         return '{}: analysis {} ({})'.format(scope, result['status'], result['reason'])
+
+    @staticmethod
+    def _backtest_line(scope, result):
+        """Format the summary line of one scope result of ``backtest``."""
+        if result['status'] == 'published':
+            return '{}: backtest published ({} cases, {} elections) in {:.0f} s'.format(
+                scope, result['n_cases'], result['n_events'], result['seconds']['total'])
+        return '{}: backtest {} ({})'.format(scope, result['status'], result['reason'])
 
     @staticmethod
     def _line(scope, result, run=None):
