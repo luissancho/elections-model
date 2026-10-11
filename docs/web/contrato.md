@@ -1,8 +1,8 @@
 # Contrato de datos del paquete publicado (`site/v1`, contrato 1)
 
-Descripción del paquete que escribe `python job.py publish` y que leerán la API y el sitio (fase 2; el análisis
-de casas, fase 4, enmienda 2026-10-10). La
-fuente de verdad en código es `mtpy/lib/bundle.py` (rutas, sobre, `SCHEMAS`, validación) y
+Descripción del paquete que escribe `python job.py publish` y que leen la API y el sitio (fase 2; el análisis
+de casas, fase 4, enmienda 2026-10-10; las elecciones pasadas y el backtest del modelo, fase 5, enmienda 2026-10-11).
+La fuente de verdad en código es `mtpy/lib/bundle.py` (rutas, sobre, `SCHEMAS`, validación) y
 `mtpy/lib/publish.py` (exportadores). Cada JSON se valida contra su esquema antes de escribirse.
 
 ## Árbol del paquete
@@ -272,7 +272,7 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
-| `meta` | `backtest-meta@1` | `scope`, `run_at`, `commit` (de la ejecución del backtest, `null` sin `run.json`), `params` (el resto de `run.json`: `n_sim`, `seed`, `max_fc`, correctores, `db_polls`, `db_last_poll`...), `events`, `horizons`, `n_cases`, `n_seats_cases`, `source` (carpeta de origen, relativa al repositorio), `published` (`commit`, `dirty`, `versions` de la publicación), `seconds` |
+| `meta` | `backtest-meta@1` | `scope`, `run_at`, `commit` (de la ejecución del backtest, `null` sin `run.json`), `params` (el resto de `run.json`: `n_sim`, `seed`, `max_fc`, correctores, `db_polls`, `db_last_poll`...), `events`, `horizons`, `n_cases`, `n_seats_cases`, `source` (carpeta de origen: relativa al repositorio si está dentro de él, absoluta si no), `published` (`commit`, `dirty`, `versions` de la publicación), `seconds` |
 | `metrics` | `backtest-metrics@1` | `columns`, `rows` |
 | `by-horizon` | `backtest-by-horizon@1` | `columns`, `rows` |
 | `blocks` | `backtest-blocks@1` | `columns`, `rows` |
@@ -370,7 +370,8 @@ Las columnas se describen en la sección de cada fichero.
 Solo `GET`. La API lee `manifest.json` para resolver el último run de un ámbito y sirve los ficheros del
 paquete tal cual (los bytes escritos por `publish`, sin volver a serializar). La fuente de verdad en
 código es `ROUTES` en `mtpy/lib/webapi.py` y los controladores `mtpy/controllers/Base.py` y
-`Forecast.py`.
+`Forecast.py`. (Enmienda 2026-10-11, fase 5: `webapi` es ahora el paquete `mtpy/lib/webapi/`; `ROUTES` vive en su
+`__init__.py`, y las rutas de las fases 4 y 5 tienen sus controladores `Data`, `Analysis`, `Events` y `Backtest`.)
 
 | Ruta | Fichero servido | `Cache-Control` |
 |---|---|---|
@@ -392,14 +393,18 @@ Inmutable es `public, max-age=31536000, immutable`: solo cuando el run se pide d
 respuesta caduca a los 60 s (`web.cache_ttl`). Las rutas fijas (`health`, `manifest`, `scopes`, `runs`) se
 registran antes que las genéricas.
 
-Las rutas de páginas (`/`, `/promedio`, `/escanos` y `/casas`) no forman parte del contrato de la API: las
-renderizan los controladores de `mtpy/controllers/` (`Index`, `Promedio`, `Escanos`, `Casas`) con plantillas
-Jinja2, y el contrato solo cubre `/api/v1`. `/escanos` acepta además `region` (solo de la página, no de la API): un
+Las rutas de páginas (`/`, `/promedio`, `/escanos`, `/casas` y, desde la fase 5, `/elecciones`, `/modelo` y `/metodo`)
+no forman parte del contrato de la API: las renderizan los controladores de `mtpy/controllers/` (`Index`, `Promedio`,
+`Escanos`, `Casas`, `Elecciones`, `Modelo`, `Metodo`) con plantillas Jinja2, y el contrato solo cubre `/api/v1`. `/escanos` acepta además `region` (solo de la página, no de la API): un
 entero de `districts.regions`; mal formado da 400 y desconocido 404 en HTML. `/casas` (enmienda 2026-10-10)
 acepta `id` (solo de la página): sin él, el ranking del ámbito; con él, el perfil de la casa. `id` mal
 formado da 400 ("Casa no válida.") y desconocido 404 ("Casa no encontrada."), ambos en HTML; sin base de
 datos, `/casas` da 503 ("La base de datos no está disponible."); sin análisis publicado, el ranking se
-sirve y las secciones que dependen de él muestran "Análisis no publicado todavía". El fragmento `#coalition=PP,VOX`
+sirve y las secciones que dependen de él muestran "Análisis no publicado todavía". `/elecciones` (enmienda
+2026-10-11) lee solo el paquete (`events/{scope}/`, sin base) y acepta `date` (solo de la página): sin él, la lista de
+elecciones publicadas; con él, el detalle de una. `date` mal formada da 400 ("Fecha no válida.") y una elección no
+publicada 404 ("Elección no publicada."), ambos en HTML. `/modelo` lee `backtest/{scope}/` y, sin backtest publicado,
+responde 200 con el aviso "Backtest no publicado todavía para este ámbito."; `/metodo` es texto. El fragmento `#coalition=PP,VOX`
 de la calculadora es solo del navegador: no llega al servidor ni crea entradas en la caché. Una ruta desconocida fuera de `/api/` devuelve un 404 en HTML; dentro de `/api/`, el 404
 JSON de la API. Los recursos de `/dist/` los sirve nginx.
 

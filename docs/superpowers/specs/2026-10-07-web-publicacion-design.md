@@ -249,6 +249,8 @@ la elección se niega a publicar salvo `force`. Duración estimada: `es` 1,5-2 m
 tabla; `/pollsters/{id}` devuelve `{scope, pollster, ratings, house_effects, herding}` compuesto desde las
 tablas del ámbito y `?event=` ha de ser una elección del ámbito. `events` y `backtest` siguen en la fase 5.
 Contrato en `docs/web/contrato.md`, "Rutas de base y de análisis".)
+(Enmienda 2026-10-11, fase 5: las tres rutas de `events` y `backtest` están implementadas; contrato en
+`docs/web/contrato.md`, "Rutas de eventos y backtest (fase 5)", y estado en "Estado al cierre de la fase 5".)
 
 Reglas: las rutas fijas se registran antes que las genéricas (primera coincidencia gana,
 `mtpy/core/api.py:256-265`); toda entrada pasa por listas cerradas antes de llegar a `mtpy/lib/data.py`
@@ -414,7 +416,7 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 | 2 | API y sitio mínimo (primer despliegue) | `webapi.py`, `Base`/`Forecast`, nginx, supervisord e `init.sh`, `index.html`, `promedio.html`, `api.js`, `state.js`, ECharts, `smoke.sh`; producción con `es` (≈ 20-22 oct) | 1 | 3-4 d |
 | 3 | Escaños, autonómicos, histórico | `escanos.html` (V6-V8, coaliciones), selector de ámbito con `scopes: all`, evolución del `headline`, CSV | 2 | 3-4 d |
 | 4 | Casas | `Data` y `Analysis`, `publish analysis`, `casas.html` (ranking, perfil y camino al rating, efectos de casa, herding) (enmienda 2026-10-10: hecho en `dev`, ver "Estado al cierre de la fase 4") | 2 | 3-4 d |
-| 5 | Elecciones y modelo | `publish event` y `backtest`, `elecciones.html`, `modelo.html`, `metodo.html`; eventos `es` 2015-2023 | 4 | 2-3 d |
+| 5 | Elecciones y modelo | `publish event` y `backtest`, `elecciones.html`, `modelo.html`, `metodo.html`; eventos `es` 2015-2023 (enmienda 2026-10-11: hecho en `dev`, ver "Estado al cierre de la fase 5") | 4 | 2-3 d |
 | 6 | Endurecimiento | prueba de carga con `proxy_cache`, ensayo de `point`/`unpublish`, ensayo de `freeze`, backups, `deploy/README.md` final, poda de requirements y multietapa opcionales; cerrar antes del 24-11 | 2-5 | 2 d |
 
 Total ≈ 18-23 días de trabajo. Tras la fase 2 hay web pública; las fases 4 y 5 son independientes entre sí.
@@ -499,7 +501,8 @@ limpiar NaN antes de serializar); mover `json_default` a `mtpy/core/utils/`; `se
 Pendiente de Luis antes de publicar: permisos Get/List/Put/Delete del usuario AWS de
 `deploy/elections.env` sobre el bucket; ejecutar `set -a; . deploy/elections.env; set +a; python job.py
 check_s3` (si falla, la fase 1 decide entre subir `s3fs` o reimplementar `S3` sobre `boto3`); confirmar
-el esquema `elections` en la RDS.
+el esquema `elections` en la RDS. (Nota 2026-10-11: `check_s3` lo verificó Luis el 2026-10-08 y publicó `es` a S3 ese
+mismo día, run `20261008-202843`.)
 
 Siguiente: plan de la fase 1 (`mtpy/lib/bundle.py`, `mtpy/lib/publish.py`, `mtpy/jobs/Publish.py`, tests
 unitarios e integración, primer paquete de `es` en `files/site/v1` y en S3, medición de duración contra
@@ -587,7 +590,8 @@ Tras la tanda: 262 tests unitarios en verde (`python -m pytest -m "not integrati
 
 Pendiente de Luis: permisos AWS del bucket y `check_s3`; primera publicación a S3 contra la RDS
 (`set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["forecast"],"scopes":["es"]}'`)
-y medición de `scopes: "all"` (estimación 10-15 min; ver qué ámbitos quedan `skipped`); texto definitivo de
+(nota 2026-10-11: `check_s3` verificado y primera publicación de `es` a S3 hechas por Luis el 2026-10-08, run
+`20261008-202843`) y medición de `scopes: "all"` (estimación 10-15 min; ver qué ámbitos quedan `skipped`); texto definitivo de
 `ATTRIBUTION` y licencia de la curación propia; opcionalmente, contraste en el notebook con `n_sim=10000`.
 
 Siguiente: plan de la fase 2 (API y sitio mínimo).
@@ -1043,3 +1047,184 @@ tiene las columnas de la historia. Commit `9fbea45`: el resumen trata esas colum
 sin historia; comprobado contra la RDS con `es-md` (con historia, 70 filas) y `es-cb` (sin historia, tablas
 vacías). `es-cn` no pudo comprobarse: la RDS cerró la conexión a mitad y después no aceptó conexiones desde
 aquí (corte transitorio); si vuelve a fallar al relanzar `all`, mandar la traza.
+
+## Estado al cierre de la fase 5 (2026-10-11)
+
+Hecho en `dev` (plan en `abed689`, `docs/superpowers/plans/2026-10-11-web-fase-5-elecciones-modelo.md`, código en
+`39cada4..182ba03`, 13 commits, y este de documentación), con 527 tests unitarios en verde (`python -m pytest -m "not
+integration" -q`: 457 antes de la fase y 70 nuevos) y un test de integración nuevo marcado,
+`test_publish_event_against_the_database` (`tests/integration/test_publish.py`), que publica una elección de `es`
+contra la RDS en `tmp_path` (pasó en 15 s; el resto de integración no se ejecutó). Ledger de la ejecución:
+`.superpowers/sdd/2026-10-11-web-fase-5-elecciones-modelo/progress.md`.
+
+- `39cada4`, `webapi` en paquete (Task 1, 458 tests): `mtpy/lib/webapi/` con `caches.py` (`TTLCache`, `LRUCache` y
+  `settings`), `checks.py` (validadores y catálogo), `published.py` (`Site`, `site`: el paquete publicado) y
+  `queries.py` (`database`, lectores perezosos `get_*`, `query_*`, `frame_to_*`: la base), y un `__init__.py` que
+  reexporta los nombres públicos y define `ROUTES`. Los tests parchean los lectores en `webapi.queries`.
+- `a00c364`, `pages` en paquete (Task 2, 459 tests): `mtpy/lib/pages/` con `filters.py`, `common.py` (constantes,
+  entorno Jinja2, estado, `common_context`, `api_url`, `PAGES`, `ROUTES`, `MESSAGES`) y un módulo por página (`index`,
+  `promedio`, `escanos`, `casas`); "Cómo añadir una página" de `deploy/README.md` al día.
+- `c637417`, `publish backtest` (Task 3, 477 tests): `bundle.BACKTEST_PARTS`, `BACKTEST_SCHEMAS`, `BACKTEST_CSV`,
+  `path_backtest`, `path_backtest_csv`; `publish.backtest_source`, `export_backtest_table`, `export_backtest_meta` y
+  `publish_backtest` (`backtest/{scope}/{meta,metrics,by-horizon,blocks,shares,seats}.json` + CSV desde
+  `backtest/results[/{scope}]`, sin base); `Publish.WHAT` = `forecast`, `analysis`, `event`, `backtest`, `manifest`,
+  `point`, `unpublish` (desaparece `DEFERRED`) y parámetro `source`; fixtures `backtest-*.json`.
+- `3f3a352` y `c92f7b5`, `publish event` (Task 4, 498 tests): `bundle.EVENT_PARTS`, `EVENT_SCHEMAS`, `EVENT_CSV`,
+  `path_event`, `path_event_csv`, `BundleReader.list_events`/`event_exists`; `data.get_events`;
+  `publish.event_dates_to_publish`, `export_event_*` y `publish_event`
+  (`events/{scope}/{date}/{meta,pollsters,polls,results,model}.json` + CSV), con un `Computer(event_dates=[fecha])`
+  por elección; `event_date` cadena, lista o `"all"`; motivos de `skipped`; fixtures `event-*.json`; test de
+  integración. El arreglo `c92f7b5` trata el nivel categórico `pollster` (el `FutureWarning` del primer intento
+  contra la RDS), borra los gemelos `model-*` obsoletos y deriva `has_model` de `horizons`.
+- `c7b515f`, API (Task 5, 514 tests): controladores `Events(Data)` y `Backtest(Base)`; rutas
+  `/api/v1/events/{scope}` (base + `has_page` del paquete), `/api/v1/events/{scope}/{date}/{part}` y
+  `/api/v1/backtest/{scope}/{part}` (CSV con `?format=csv`); `Site.events`, `event`, `event_csv`, `backtest`,
+  `backtest_csv` (con `_mutable_bytes`, que sustituye a `_analysis_bytes`); `queries.get_events`/`query_events`;
+  `api_url(kind='event'|'backtest')` y textos nuevos en `MESSAGES`.
+- `4ae417d` y `e499857`, `/elecciones` (Task 6, 522 tests): `Elecciones(Page)`, `pages/elecciones.py`,
+  `elecciones.html` (lista con el error del sector, V12), `eleccion.html` (detalle `?date=`, V13: resultados, casas
+  con su error, diana del último sondeo por casa, sondeos y modelo a cada horizonte) y `web/dist/js/pages/elecciones.js`.
+- `64dacbb` y `7303903`, `/modelo` (Task 7, 525 tests): `Modelo(Page)`, `pages/modelo.py`, `modelo.html` (error del
+  promedio por horizonte frente a las tres líneas base, coberturas, escaños y mayorías, tabla por elección y bloques,
+  V14), `web/dist/js/pages/modelo.js` y `renderLines` (con `yMin`) en `web/dist/js/charts/line.js`.
+- `bfafc1b`, `8b7ad09` y `182ba03`, `/metodo` (Task 8, 527 tests): `Metodo(Page)`, `pages/metodo.py` (`SECTIONS`),
+  `metodo.html` (V15: datos, promedio, casas, simulación, escaños, evaluación, publicación, limitaciones) y
+  `web/dist/js/pages/metodo.js` (solo `wireControls()`); entradas "Elecciones", "Modelo" y "Método" en el menú.
+- Este commit (Task 9): `check_published` y las comprobaciones de las tres páginas y de `events`/`backtest` en
+  `deploy/check-api.sh`, las tres páginas en `deploy/smoke.sh`, `deploy/README.md` ("La web", "Publicar",
+  "Parámetros", "Estados y resumen", "Elecciones pasadas", "Backtest"), repaso de `docs/web/contrato.md` y notas en
+  esta spec y en `2026-10-09-web-enrutado-controladores-design.md`.
+
+Decisiones de diseño (D1-D10 del plan):
+
+1. D1. Paquetes con fachada: `mtpy/lib/webapi/` (`caches`, `checks`, `published`, `queries`) y `mtpy/lib/pages/`
+   (`filters`, `common` y un módulo por página); cada `__init__.py` reexporta los nombres públicos y ningún submódulo
+   se llama como un nombre exportado (por eso `queries.py` y `published.py`). Los tests parchean en `webapi.queries`.
+2. D2. `publish backtest` convierte `backtest/results[/{scope}]/` (fuente `source`) en `backtest/{scope}/` con seis
+   partes y gemelos CSV; `meta` recoge `run.json` y la procedencia; `provinces.csv` queda fuera; sobrescribible,
+   `meta` el último, sin manifest; sin `metrics.csv`, `skipped`.
+3. D3. `publish event` publica una elección pasada por ámbito y fecha (`event_date` cadena, lista o `"all"` = las
+   `featured` anteriores a hoy) con un `Computer(scope, event_dates=[fecha])`; partes `pollsters`, `polls`, `results`,
+   `model` (corte del backtest, vacío sin él) y `meta` (con `summary`, el error del sector); sobrescribible, `meta` el
+   último; una fecha que no es `featured` o sin resultados, `skipped`.
+4. D4. API: `/api/v1/events/{scope}` lee la base y añade `has_page` (503 sin base); las otras dos sirven el paquete
+   tal cual (TTL de punteros, nunca inmutables); `{date}` pasa `check_date` (400) y ha de estar publicada (404
+   `event not published` sin leer la base); `model` exige `table` en CSV.
+5. D5. `/elecciones` lee solo el paquete; lista de la más reciente a la más antigua con el error del sector; `?date=`
+   muestra el detalle; sin elecciones publicadas, aviso y 200; `?date=` mal formada 400, no publicada 404.
+6. D6. `/modelo` lee `backtest/{scope}`; sin backtest publicado, aviso "Backtest no publicado todavía para este
+   ámbito." y 200.
+7. D7. `/metodo` es texto en español con secciones fijas y enlaces a las demás páginas, sin `initial-data` ni cifras
+   de resultados escritas a mano (sí las constantes del método). (Ver la resolución de la Task 8 sobre su JS.)
+8. D8. `scope` rige todo; `mode` y `run` solo afectan a la cabecera común.
+9. D9. Un partido de una elección pasada ausente del catálogo del run se pinta con `Catalog.__missing__` (nombre, gris
+   de "otros"): el detalle nunca da 500.
+10. D10. Fuera de alcance: la veda (`freeze` en las vistas, fase 6), `HEAD`, `asyncio.to_thread`, importaciones
+    perezosas de `helpers.py`/`io.py`, cambios en nginx, Docker o credenciales; ejecutar `publish event` contra la RDS
+    (lo lanza Luis; queda el test de integración); el histograma de errores del notebook en el detalle de la elección.
+
+Resoluciones tomadas durante la ejecución (las líneas `Ruling:` del ledger, en orden):
+
+1. Se trabaja en `dev` en el checkout principal, sin worktree, como en las fases 1-4 (Luis integra `dev`; el entorno
+   local, `.env`, `files/` y `data/`, vive ahí).
+2. Task 1: `settings()` pasa a `caches.py` (lee `web.cache_ttl`/`web.prefix`; el módulo es "cachés y sus ajustes"),
+   de modo que la cadena de imports es `caches` ← `checks` ← `published` ← `queries` sin import perezoso dentro del
+   paquete; supera la ubicación en `published` del plan.
+3. Task 3: en `export_backtest_table`, una columna decimal cuyos valores no nulos son todos enteros (y cuyo nombre no
+   empieza por un prefijo de `PROB_PREFIXES`) se publica como entero nullable (`Int64`: `int` en el JSON, `null`
+   para NaN), como los escaños del contrato de la fase 1.
+4. Task 4: sin fuente de backtest no se escriben los tres gemelos `model-*` (no hay columnas) y `model.json` lleva
+   listas vacías; `/elecciones` oculta los enlaces CSV del modelo si `has_model` es falso, y una petición directa de
+   ese gemelo recibe el 404 genérico `event not published`.
+5. Task 4: `event_date: "all"` sin ninguna elección `featured` pasada da un resultado `skipped` (`no past featured
+   elections`) en vez de una lista vacía.
+6. Task 4: `has_model = bool(model['horizons'])` (unión ordenada de los horizontes de `shares`, `seats` y `blocks`)
+   en vez de `bool(model['shares'])`, para que los dos campos de `meta` no puedan discrepar.
+7. Task 7: el menor "`|int` muestra 0" de la revisión queda sin efecto: `fmt_int(None)` ya pinta "–".
+8. Task 8: `/metodo` carga un módulo mínimo, `web/dist/js/pages/metodo.js`, que solo llama a `wireControls()` (sin
+   `readInitial`, gráficos ni `initial-data`), para que la cabecera se comporte como en las demás páginas; la
+   aserción del plan "sin `<script type="module">`" pasa a "sin `initial-data` y el único módulo es `metodo.js`", y
+   se revierte la exención `STATIC_PAGES` de `tests/test_web_routes.py` (el "sin JS" de D7 significaba sin
+   gráficos ni datos).
+9. Task 8: el trailer `Co-Authored-By: Claude Opus 5.5` de sus commits se queda (la regla desde la fase 4 es el
+   trailer del modelo que escribe el commit).
+
+Verificado en la sesión (2026-10-11):
+
+- Suite unitaria: `python -m pytest -m "not integration" -q` → 527 passed, 75 deselected.
+- `S3_BUCKET= python job.py publish '{"what":["backtest"],"scopes":["es"]}'` → `es: backtest published (28 cases, 5
+  elections) in 0 s`; `files/site/v1/backtest/es/` con los seis JSON y los cinco CSV (fuera de git).
+- `bash deploy/nginx-check.sh` → `syntax is ok` y `test is successful` (nginx local de Homebrew; sin arrancarlo).
+- `S3_BUCKET= DB_HOST= python -m uvicorn api:api --port 8001` (paquete local con el run de `es` y su backtest; sin
+  base) y `bash deploy/check-api.sh http://127.0.0.1:8001` → `todas las rutas OK`: `/elecciones?scope=es`,
+  `/modelo?scope=es` y `/metodo` 200 HTML, `/elecciones?date=abc` 400, `/api/v1/backtest/es/by-horizon` 200 JSON,
+  `/api/v1/events/es/2023-13-01/meta` 400 y `/api/v1/backtest/es/nope` 404; `n/a sin publicar` en
+  `/elecciones?scope=es&date=2023-07-23` y `/api/v1/events/es/2023-07-23/pollsters`; `n/a sin base de datos` en
+  `/casas?scope=es`, `ratings`, `polls`, `results`, `drift` y `/api/v1/events/es`; `n/a sin nginx` en `/healthz` y
+  `/dist/`. A mano: `/modelo?scope=es` lleva `initial-data`; `/elecciones?scope=es` muestra "Todavía no hay
+  elecciones publicadas en este ámbito."; la elección 2023-07-23 da 404 "Elección no publicada." (página) y `event not
+  published` (API). `/modelo?scope=es-cb` da 404 "Este ámbito no tiene pronóstico publicado." porque el manifest local
+  solo tiene `es` (la cabecera común exige el ámbito publicado); el aviso sin backtest lo cubren los tests con el
+  paquete de fixtures.
+- `bash -n` limpio en `deploy/check-api.sh` y `deploy/smoke.sh`; los ejemplos JSON de `deploy/README.md` se leen con
+  `json.loads`.
+- Durante la fase (controlador, solo lectura contra la RDS): `test_publish_event_against_the_database` pasó (15 s)
+  tras el arreglo `c92f7b5`.
+
+No verificado: las tres páginas en un navegador (los gráficos de `renderLines` solo pasaron `node --check`), `publish
+event` real a S3, `smoke.sh` con Docker y el despliegue.
+
+Menores aplazados (las líneas `minor (deferred)` del ledger, agrupadas):
+
+- Docstrings de la Task 1 (`published.py` hablaba de "the web settings", `queries._reader` de atributos de `webapi`,
+  `tests/test_webapi_unit.py` de `mtpy/lib/webapi.py`): resueltos en `c7b515f` (Task 5).
+- Tamaño de `publish.py`: ~1500 líneas tras la Task 3 y ~1900 tras la Task 4 (1351 antes); dividirlo en un paquete
+  en la fase 6, como `webapi` y `pages`.
+- `publish backtest`: el tipo `Int64` depende de los datos (una métrica que sale entera en un run se serializa como
+  `int`; documentado); ningún test fija que una columna `PROB_PREFIXES` toda entera siga decimal; el test de los
+  resultados del repositorio exige exactamente 5 elecciones y 6 horizontes (frágil si se relanza `run_backtest` con
+  otras); un párrafo del docstring de `bundle.py` quedó en una sola línea larga; la fixture `patched` parchea
+  `provenance` de forma global.
+- `publish event`: los tests del job no cubren `event_date='all'` a través del job ni una lista con una fecha no
+  válida; la mediana de `sample_size` redondea al par (sin documentar); lista de columnas redundante en la llamada a
+  `round_cols` de `export_event_pollsters`; `astype(str)` sobre `pollster` escribiría `'nan'` para una casa NaN
+  (nivel de índice, improbable).
+- API: líneas de import de `webapi/__init__.py` de más de 120 columnas y sin orden alfabético (`DATE_RE` tras
+  `EVENT_PARTS`; `get_events` antes de `get_event_results`); sin test de ruta para el gemelo `model-*` de una
+  elección publicada sin backtest (404 `event not published`) ni para el TTL de `Site.events`.
+- `/elecciones`: variables `headers` sin usar en tres tests; sin test de la fila de casa sin `pollster_id` (rama de
+  texto plano); `eleccion.html` lee `event.summary.error_avg` directamente mientras `published_events` tolera un
+  `summary` ausente.
+- `/modelo`: el envoltorio "`None` ante 404" está duplicado en `backtest_part`/`event_part` (llevarlo a `common`
+  cuando aparezca una tercera copia); cuatro lecturas del paquete por página (como `/elecciones`); `initial.seats` no
+  lo usa `modelo.js` (carga exigida por el plan); `readInitial` no se protege de un JSON mal formado (como las demás
+  páginas).
+- `/metodo`: las "1.000" simulaciones están escritas a mano (el plan lo permite; `meta.n_sim` está en el contexto); la
+  frase de calibración "a una semana / más de dos semanas" es una lectura del backtest escrita a mano (revisarla tras
+  cada `run_backtest`); los sondeos encargados por partidos a casas reales se cargan (D7 de los autonómicos) y la
+  redacción puede confundir; los matices de las barreras autonómicas (Extremadura, Valencia, Canarias) se simplifican;
+  el test del menú solo comprueba `/`; `casas.html:51` usa la misma simplificación del rating como sesgo bruto que se
+  corrigió en `/metodo` (alinearla en la fase 6).
+
+Pendiente de Luis:
+
+- Si los resultados del backtest no están al día con el modelo (todos los `run.json` de `backtest/results` son del
+  2026-10-07, commit `a59059f`), relanzar antes `python backtest/run_backtest.py --scope es` y `--scopes all`.
+- Publicar el backtest de todos los ámbitos (no necesita base): `python job.py publish
+  '{"what":["backtest"],"scopes":"all"}'` (con `deploy/elections.env` para S3).
+- Publicar las elecciones pasadas contra la RDS: `es` con `{"what":["event"],"scopes":["es"],"event_date":"all"}` y
+  los autonómicos con resultados (`"scopes":"all"`, o la lista de ámbitos); revisar las líneas `skipped`.
+- Recorrer `/elecciones` (lista y `?date=` de cada elección general), `/modelo` y `/metodo`, y las páginas de
+  detalle, en escritorio y móvil; confirmar en el navegador los gráficos de `renderLines` (error por horizonte y
+  coberturas), la diana y los partidos antiguos (`Cs`, `UP`) en gris.
+- Revisar tres pasajes de `/metodo`: la frase del herding, "las autonómicas con menos peso" y el punto de la veda.
+- Decidir si el histograma de errores del notebook entra en el detalle de la elección (D10).
+- Política de veda y el interruptor `freeze` en las vistas, en la fase 6 (antes del 2026-11-24).
+- Poner `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env` (o con `-e` solo en el `docker run` de la web).
+- Pendientes de la fase 4 que siguen en pie (si no están hechos ya): relanzar `publish analysis` con `scopes: "all"`
+  tras `9fbea45` y comprobar `es-cn`; recorrer `/casas` y dos o tres perfiles; confirmar los valores de
+  `pollsters.mtype`; decidir si el ranking limita las casas listadas; y, de fases anteriores, `bash deploy/smoke.sh`
+  con Docker, el relleno retroactivo real y el despliegue de la imagen.
+
+Siguiente: fase 6 (endurecimiento): veda y `freeze` en las vistas, prueba de carga, ensayos de `point`/`unpublish` y
+`freeze`, división de `publish.py`, `HEAD`, `asyncio.to_thread` e imports perezosos, y `deploy/README.md` final.

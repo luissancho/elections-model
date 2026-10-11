@@ -6,8 +6,10 @@
 #
 # Imprime una linea por ruta (OK / FAIL / n/a) y sale con error si alguna falla.
 # /healthz solo existe en nginx: un 404 se muestra como "n/a sin nginx".
-# Las rutas que leen la base (/casas, /api/v1/ratings, polls, results y drift) se marcan "n/a sin base"
-# si /api/v1/parties responde 503 "no database configured" (sin DB_HOST).
+# Las rutas que leen la base (/casas, /api/v1/ratings, polls, results, drift y events/{scope}) se marcan
+# "n/a sin base" si /api/v1/parties responde 503 "no database configured" (sin DB_HOST).
+# Las que sirven lo que escribe `publish event` o `publish backtest` se marcan "n/a sin publicar" si
+# responden 404 "not published" (API) o "no publicada/o" (paginas): el paquete puede no tenerlas.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -89,12 +91,30 @@ check_db_only() {
     fi
 }
 
+# check_published RUTA TIPO: lo publicado con `publish event`/`backtest` puede faltar en el paquete. Un 404
+# cuyo cuerpo dice "not published" (JSON de la API) o "no publicada"/"no publicado" (pagina HTML) es
+# "n/a sin publicar"; cualquier otra respuesta se comprueba como check RUTA 200 TIPO.
+check_published() {
+    local path="$1" kind="$2" code
+    code="$(curl -s --max-time 20 -o "$body" -w '%{http_code}' "$base$path" || true)"
+    if [ "$code" = 404 ] && grep -qE 'not published|no publicad[ao]' "$body"; then
+        echo "n/a  $path sin publicar"
+    else
+        check "$path" 200 "$kind"
+    fi
+}
+
 check / 200 html
 check "/promedio?scope=es&mode=nowcast" 200 html
 check "/escanos?scope=es&mode=forecast" 200 html
 check "/escanos?region=abc" 400 html
 check_db_only "/casas?scope=es" 200 html
 check "/casas?id=abc" 400 html
+check "/elecciones?scope=es" 200 html
+check "/elecciones?date=abc" 400 html
+check_published "/elecciones?scope=es&date=2023-07-23" html
+check "/modelo?scope=es" 200 html
+check /metodo 200 html
 check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
 check_nginx_only /dist/css/site.css text/css
@@ -114,6 +134,11 @@ check_db_only /api/v1/results/es/2023-07-23 200 json
 check_db_only "/api/v1/drift?scope=es" 200 json
 check /api/v1/analysis/es-xx/herding 400 none
 check /api/v1/analysis/es/nope 404 none
+check_db_only /api/v1/events/es 200 json
+check_published /api/v1/events/es/2023-07-23/pollsters json
+check /api/v1/events/es/2023-13-01/meta 400 none
+check_published /api/v1/backtest/es/by-horizon json
+check /api/v1/backtest/es/nope 404 none
 
 if [ "$failures" -gt 0 ]; then
     echo "$failures ruta(s) con error" >&2

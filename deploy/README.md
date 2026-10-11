@@ -37,8 +37,8 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
   `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
-  (exceso: 429). Las páginas (`/`, `/promedio`, `/escanos`, `/casas`) pasan por el mismo bloque que la API: también se
-  cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
+  (exceso: 429). Las páginas (`/`, `/promedio`, `/escanos`, `/casas`, `/elecciones`, `/modelo`, `/metodo`) pasan por
+  el mismo bloque que la API: también se cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
   (URI completa con la query string). Se probó una clave propia sobre `run`/`format` y se descartó: nginx
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
   permitía envenenar la caché. Los parámetros de más crean entradas, acotadas por `max_size=100m`,
@@ -46,9 +46,14 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
 - `/healthz` → `200 ok`, sin pasar por Python.
 
 `nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`),
-`Promedio` (`/promedio`), `Escanos` (`/escanos`, con `?region=`) y `Casas` (`/casas`, con `?id=` para el perfil de una casa; enmienda 2026-10-10, fase 4), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
+`Promedio` (`/promedio`), `Escanos` (`/escanos`, con `?region=`), `Casas` (`/casas`, con `?id=` para el perfil de una casa; enmienda 2026-10-10, fase 4) y, desde la fase 5 (enmienda 2026-10-11), `Elecciones`
+(`/elecciones`: las elecciones pasadas publicadas con el error del sector; con `?date=YYYY-MM-DD`, el detalle de una),
+`Modelo` (`/modelo`: la precisión del modelo por horizonte, del backtest publicado) y `Metodo` (`/metodo`: el texto de
+la metodología, sin gráficos), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
 Jinja2 de `web/templates/`, con los datos del paquete embebidos en la página (`initial-data`); el JS de
-`web/dist/js/pages/` solo dibuja los gráficos. Una ruta desconocida fuera de `/api/` da un 404 HTML de
+`web/dist/js/pages/` solo dibuja los gráficos. `/elecciones` y `/modelo` leen solo el paquete (sin base): sin
+elecciones o sin backtest publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400
+("Fecha no válida.") y una elección no publicada, 404 ("Elección no publicada."). Una ruta desconocida fuera de `/api/` da un 404 HTML de
 Python (dentro de `/api/`, el 404 JSON de la API).
 
 Notas de operación:
@@ -70,7 +75,10 @@ Notas de operación:
 
 La API (`/api/v1`, ver `docs/web/contrato.md`) lee el paquete `site/v1` de S3 y, desde la fase 4 (enmienda
 2026-10-10), también la base de datos para las rutas de tablas (`/api/v1/parties`, `/pollsters`, `/ratings`,
-`/polls`, `/results`, `/house-effects`, `/herding`, `/drift`) y para la página `/casas`. La base se configura
+`/polls`, `/results`, `/house-effects`, `/herding`, `/drift` y, desde la fase 5, `/api/v1/events/{scope}`, que cruza las
+elecciones de la base con las publicadas) y para la página `/casas`. Las elecciones pasadas
+(`/api/v1/events/{scope}/{date}/{part}`) y el backtest (`/api/v1/backtest/{scope}/{part}`) se sirven del paquete, como
+el análisis. La base se configura
 con las variables `DB_*` de `deploy/elections.env` (`DB_ADAPTER`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`,
 `DB_PASSWORD`, `DB_DATABASE`; ver `.env.example`): sin ellas (basta con `DB_HOST` vacío), esas rutas dan 503
 `no database configured` y `/casas` un 503 en HTML ("La base de datos no está disponible."); el resto del sitio
@@ -95,17 +103,22 @@ curl -s http://127.0.0.1:8042/healthz
 bash deploy/check-api.sh http://127.0.0.1:8042
 ```
 
-y abrir `http://127.0.0.1:8042/`, `/promedio`, `/escanos` (enmienda 2026-10-09, fase 3) y `/casas` (enmienda
-2026-10-10, fase 4). `check-api.sh` decide una vez si hay nginx a partir de `/healthz` (solo existe en nginx; sin
+y abrir `http://127.0.0.1:8042/`, `/promedio`, `/escanos` (enmienda 2026-10-09, fase 3), `/casas` (enmienda
+2026-10-10, fase 4), `/elecciones`, `/modelo` y `/metodo` (enmienda 2026-10-11, fase 5). `check-api.sh` decide una vez si hay nginx a partir de `/healthz` (solo existe en nginx; sin
 nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un 503 `no database configured` la da por
 ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
 `/promedio?scope=es&mode=nowcast` (200 HTML), `/escanos?scope=es&mode=forecast` (200 HTML),
 `/escanos?region=abc` (400 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
-`/nope` (404 HTML), con nginx también `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y
-`/dist/css/site.css` (`text/css`), y 16 rutas de la API (código, tipo y JSON válido): las 10 del paquete,
-`/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23` y
-`/api/v1/drift?scope=es` (200 JSON, necesitan base), `/api/v1/analysis/es-xx/herding` (400) y
-`/api/v1/analysis/es/nope` (404); sale con error si alguna falla.
+`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200
+HTML si la elección está publicada), `/modelo?scope=es` y `/metodo` (200 HTML), `/nope` (404 HTML), con nginx también `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y
+`/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del paquete,
+`/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23`,
+`/api/v1/drift?scope=es` y `/api/v1/events/es` (200 JSON, necesitan base), `/api/v1/analysis/es-xx/herding` (400),
+`/api/v1/analysis/es/nope` (404), `/api/v1/events/es/2023-07-23/pollsters` y `/api/v1/backtest/es/by-horizon` (200 JSON
+si están publicados), `/api/v1/events/es/2023-13-01/meta` (400) y `/api/v1/backtest/es/nope` (404); sale con error si
+alguna falla. Lo que escriben `publish event` y `publish backtest` puede faltar en el paquete (en local, casi
+siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
+publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquier otra respuesta.
 
 ### Cómo añadir una página
 
@@ -113,8 +126,8 @@ ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `
    un `index_action` que llame a `render(plantilla, **contexto)`; ver `Promedio.py`.
 2. Plantilla en `web/templates/` que extienda `base.html`.
 3. Entrada en `pages.ROUTES` (ruta, controlador, acción, métodos) y en `pages.PAGES` (menú), en
-   `mtpy/lib/pages/common.py`. `/` es el valor por defecto del router (controlador `index`), por eso solo
-   `/promedio` y `/escanos` figuran en `ROUTES`; toda página nueva necesita su entrada.
+   `mtpy/lib/pages/common.py`. `/` es el valor por defecto del router (controlador `index`), por eso es la
+   única página que no figura en `ROUTES`; toda página nueva necesita su entrada.
 4. El constructor del contexto de la página, en su propio módulo `mtpy/lib/pages/<página>.py` (como
    `index.py` o `promedio.py`), reexportado en `mtpy/lib/pages/__init__.py` para que el controlador lo
    llame como `pages.<página>_context`.
@@ -162,8 +175,8 @@ el `curl -sI` de `smoke.sh` funciona.
   `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
-  (`max-age=31536000`), `/dist/js/pages/index.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`
-  y `/escanos` devuelven HTML y que `/` contiene `initial-data`; con `deploy/elections.env`, también que
+  (`max-age=31536000`), `/dist/js/pages/index.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`,
+  `/escanos`, `/elecciones?scope=es`, `/modelo?scope=es` y `/metodo` devuelven HTML y que `/` contiene `initial-data`; con `deploy/elections.env`, también que
   `/casas?scope=es` devuelve HTML (con el paquete local y sin base, `/casas` es un 503 y `check-api.sh` lo
   marca `n/a`, así que el humo no lo exige); avisa (WARN, sin fallar) si `docker logs` no tiene
   líneas de acceso de nginx o si `docker stop` tarda 10 s o más. Sin argumento usa el
@@ -186,6 +199,12 @@ añadir las `location` de `/dist/` y el proxy a su nginx local y recorrer `/`, `
 Enmienda 2026-10-09: la primera publicación a S3 ya está hecha (Luis, 2026-10-08, run `20261008-202843`) y
 `jinja2` está en 3.1.6 desde `68522d2`; ya no son pendientes. Fase 3: `check-api.sh` y `smoke.sh` comprueban
 `/escanos`; ver el estado al cierre de la fase 3 en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`.
+
+Enmienda 2026-10-11 (fase 5): `check-api.sh` ganó `check_published` y comprueba `/elecciones`, `/modelo`, `/metodo` y
+las rutas de `events` y `backtest`; `smoke.sh`, las tres páginas. Contra uvicorn sin nginx, con el paquete local
+(`S3_BUCKET=` y `DB_HOST=` vacíos, solo el backtest de `es` publicado en local) dio todas las rutas OK: las de base
+`n/a sin base de datos` y las de la elección 2023-07-23 `n/a sin publicar`. Los pendientes de la fase 5 están en
+el estado al cierre de la fase 5 de la spec.
 
 ## Comprobar S3
 
@@ -219,8 +238,9 @@ El primer `FAIL` es la causa raíz (los pasos posteriores fallan en cascada). Un
 ## Publicar
 
 `python job.py publish` ejecuta el modelo, escribe un run inmutable en el paquete `site/v1` de `app.fs` y
-mueve los punteros (`history.json` por ámbito y `manifest.json`). Contrato de los ficheros:
-`docs/web/contrato.md`.
+mueve los punteros (`history.json` por ámbito y `manifest.json`). El análisis de casas, las elecciones pasadas y el
+backtest (`analysis`, `event`, `backtest`) no son runs: sobrescriben su carpeta y no tocan los punteros. Contrato de
+los ficheros: `docs/web/contrato.md`.
 
 ```
 python job.py publish '{"what":["forecast"],"scopes":["es"]}'
@@ -231,6 +251,10 @@ python job.py publish '{"what":["unpublish"],"scopes":["es"],"run":"20261007-141
 python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08"}}'
 python job.py publish '{"what":["analysis"],"scopes":"all"}'
+python job.py publish '{"what":["backtest"],"scopes":["es"]}'
+python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'
+python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
+python job.py publish '{"what":["backtest"],"scopes":"all"}'
 ```
 
 1. Publica el pronóstico de `es` (nowcast y forecast, 1000 simulaciones) y actualiza su entrada del manifest.
@@ -242,9 +266,14 @@ python job.py publish '{"what":["analysis"],"scopes":"all"}'
 7. Relleno retroactivo: un run por día del 5 al 8 de octubre de 2026, cada uno con solo los sondeos publicados
    hasta ese día (ver "Relleno retroactivo").
 8. Análisis de casas de `es` y de todos los ámbitos autonómicos (enmienda 2026-10-10; ver "Análisis de casas").
+9. Backtest del modelo de `es`, convertido desde `backtest/results` (enmienda 2026-10-11; ver "Backtest").
+10. La elección general del 23 de julio de 2023 de `es` (enmienda 2026-10-11; ver "Elecciones pasadas").
+11. Todas las elecciones `featured` de `es` anteriores a hoy.
+12. El backtest de `es` y de todos los ámbitos autonómicos; los que no tienen resultados quedan `skipped`.
 
-`what` admite `forecast`, `analysis`, `manifest`, `point` y `unpublish` (se ejecutan en ese orden); `event`
-y `backtest` fallan con `ValueError` hasta la fase 5.
+`what` admite `forecast`, `analysis`, `event`, `backtest`, `manifest`, `point` y `unpublish` (se ejecutan en ese
+orden; enmienda 2026-10-11, fase 5). `event` exige `event_date` y no se combina con `forecast` (las dos cosas fallan
+con `ValueError` antes de empezar).
 
 ### Parámetros
 
@@ -252,7 +281,7 @@ y `backtest` fallan con `ValueError` hasta la fase 5.
 | --- | --- | --- |
 | `what` | `["forecast"]` | Acciones a ejecutar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
-| `event_date` | siguiente evento del ámbito | Fecha de la elección (`YYYY-MM-DD`; si no es una fecha ISO, el ámbito queda `failed`) |
+| `event_date` | siguiente evento del ámbito | Fecha de la elección (`YYYY-MM-DD`; si no es una fecha ISO, el ámbito queda `failed`). Para `event` es obligatorio y admite una cadena, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy); una fecha no ISO deja el ámbito `failed` (enmienda 2026-10-11) |
 | `n_sim` | `1000` | Simulaciones por modo |
 | `seed` | `42` | Semilla |
 | `drange` | `6` | Ventana de sondeos del pronóstico |
@@ -264,6 +293,7 @@ y `backtest` fallan con `ValueError` hasta la fase 5.
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
 | `force` | `false` | Publicar `es` dentro de la ventana LOREG |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what` |
+| `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
 
 ### Estados y resumen
@@ -284,7 +314,14 @@ es: failed 2026-10-06 (incomplete run exists; unpublish it first)               
 es: published 20261007-141503          # point y unpublish
 manifest: 1 scopes, freeze off
 manifest: not written (dry run)
+es: backtest published (28 cases, 5 elections) in 0 s                                         # backtest
+<ámbito>: backtest skipped (no backtest results for <ámbito>)
+es: event 2023-07-23 published (<n> polls, <n> pollsters) in <s> s                            # event, una línea por fecha
+es: event 2020-01-01 skipped (2020-01-01 is not a featured election of es)
+es: event all skipped (no past featured elections)
 ```
+
+Con `event`, `results[ámbito]` es una lista con un resultado por fecha (`event_date`, `status`, ...).
 
 Si algún ámbito falla, el job termina con error (código de salida 1) después de escribir el manifest y
 el resumen; un ámbito fallido conserva su entrada anterior en el manifest.
@@ -348,6 +385,50 @@ Publicar en local o en S3 funciona como para `forecast` (ver abajo; en local, `S
 ```
 S3_BUCKET= python job.py publish '{"what":["analysis"],"scopes":["es"]}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["analysis"],"scopes":"all"}'
+```
+
+### Elecciones pasadas
+
+Enmienda 2026-10-11 (fase 5). `{"what":["event"],"scopes":["es"],"event_date":...}` publica, para cada fecha, la
+elección pasada que lee `/elecciones?date=` bajo `events/{ámbito}/{fecha}/` del paquete (formato en "Eventos" de
+`docs/web/contrato.md`): el error de cada casa y de cada sondeo frente al resultado (un `Computer` de esa elección
+sola, como `notebooks/PollstersEvent.ipynb`), el resultado oficial (región 0) y el corte del backtest del modelo de esa
+elección (de `source`; vacío si el backtest no la tiene), con el error del sector en `meta.summary`:
+
+- `event_date` es una fecha, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy).
+  Lee la base (elecciones, resultados y sondeos): en local, la del `.env` de la raíz.
+- Sobrescribe la publicación anterior de la fecha y escribe `meta.json` el último: una elección sin `meta.json` está
+  incompleta y la API responde 404 `event not published`. Al republicar se borran los gemelos `model-*` cuyas tablas
+  ya no están. No toca el manifest ni los punteros, no tiene guarda LOREG y con `dry_run` escribe en
+  `site-dry/v1/events/`.
+- Cada fecha termina `published`, `skipped` (no es una elección `featured` del ámbito, no tiene resultados oficiales
+  o no tiene sondeos) o `failed`; el resto continúa y el job termina con error si alguna falla.
+- Una elección de `es` tardó 15 s en el test de integración contra la RDS (2026-10-11).
+- Cuándo relanzar: tras cargar los resultados oficiales de una elección (y tras corregir sus sondeos) y tras un
+  nuevo `run_backtest`, porque el corte del modelo sale de los resultados del backtest.
+
+### Backtest
+
+Enmienda 2026-10-11 (fase 5). `{"what":["backtest"],"scopes":["es"]}` convierte las tablas que deja
+`backtest/run_backtest.py` (`backtest/results/` para `es`, `backtest/results/{ámbito}/` para los autonómicos, o la
+carpeta `source`) en `backtest/{ámbito}/` del paquete (`meta`, `metrics`, `by-horizon`, `blocks`, `shares` y `seats`,
+con sus gemelos CSV; formato en "Backtest" de `docs/web/contrato.md`), que lee `/modelo`:
+
+- **No necesita base de datos** ni ejecuta el modelo: solo lee ficheros del repositorio y tarda menos de un segundo
+  por ámbito.
+- Sobrescribe el backtest anterior del ámbito y escribe `meta.json` el último. No toca el manifest ni los punteros y
+  con `dry_run` escribe en `site-dry/v1/backtest/`.
+- Cada ámbito termina `published`, `skipped` (sin `metrics.csv` en su carpeta: `no backtest results for {ámbito}`) o
+  `failed`.
+- Cuándo relanzar: tras cada nueva ejecución de `backtest/run_backtest.py` (`--scope es` o `--scopes all`), y
+  después `publish event` de las elecciones afectadas para refrescar su corte del modelo.
+
+Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
+
+```
+S3_BUCKET= python job.py publish '{"what":["backtest"],"scopes":["es"]}'
+set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["backtest"],"scopes":"all"}'
+set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
 ```
 
 ### Publicar en local
