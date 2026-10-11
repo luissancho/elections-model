@@ -22,11 +22,13 @@ PAGES = (
     {'href': '/promedio', 'label': 'Promedio'},
     {'href': '/escanos', 'label': 'Escaños'},
     {'href': '/casas', 'label': 'Casas'},
+    {'href': '/elecciones', 'label': 'Elecciones'},
 )
 ROUTES = [
     ('/promedio', 'promedio', 'index', ['GET']),
     ('/escanos', 'escanos', 'index', ['GET']),
     ('/casas', 'casas', 'index', ['GET']),
+    ('/elecciones', 'elecciones', 'index', ['GET']),
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MESSAGES = {

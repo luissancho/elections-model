@@ -1,7 +1,7 @@
 """
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
-The package has one module per page (``index``, ``promedio``, ``escanos``, ``casas``), plus ``common``
+The package has one module per page (``index``, ``promedio``, ``escanos``, ``casas``, ``elecciones``), plus ``common``
 (routes, messages, environment and shared context) and ``filters`` (formatting filters). This facade
 re-exports every public name, so callers use ``pages.<name>``.
 
@@ -18,6 +18,8 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING
 from .common import (MESSAGES, MODE_LABELS, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TITLE,
                      TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, environment, parse_state,
                      part, published_scopes, query_string, resolve_scope)
+from .elecciones import (EVENT_CSV, SUMMARY_KEYS, eleccion_context, elecciones_context, event_part, horizon_tables,
+                         published_events, resolve_event)
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, escanos_context,
                       region_rows, resolve_region, seat_rows)
 from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range

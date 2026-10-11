@@ -12,7 +12,7 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
-    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_bundle
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_bundle, write_event
 )
 
 
@@ -624,7 +624,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['casas', 'common', 'escanos', 'filters', 'index', 'promedio']
+    assert names == ['casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'promedio']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -638,3 +638,72 @@ def test_api_url_covers_events_and_backtest():
     assert pages.api_url('es', 'model', kind='event', date='2023-07-23', fmt='csv', table='seats') == '/api/v1/events/es/2023-07-23/model?format=csv&table=seats'
     assert pages.api_url('es', 'metrics', kind='backtest', fmt='csv') == '/api/v1/backtest/es/metrics?format=csv'
     assert pages.api_url('es', 'events', kind='events') == '/api/v1/events/es'
+
+
+@pytest.fixture
+def events_site(api, fresh_app):
+    """Páginas con dos elecciones publicadas: 2023 con backtest y 2019 sin él."""
+    write_event(fresh_app.fs)
+    write_event(fresh_app.fs, date='2019-11-10', model=False)
+    return api
+
+
+def test_elecciones_lists_the_published_events_newest_first(events_site):
+    status, headers, body = call(events_site, '/elecciones', query='scope=es')
+    page = html(body)
+    assert status == 200 and page.index('date=2023-07-23') < page.index('date=2019-11-10')
+    assert '/elecciones?scope=es&amp;mode=forecast&amp;date=2023-07-23' in page
+    data = initial(body)
+    assert [row['date'] for row in data['sector']] == ['2019-11-10', '2023-07-23']
+    assert data['blocks'] == ['Derecha', 'Izquierda']
+    assert 'id="sector-chart"' in page and 'aria-label=' in page
+
+
+def test_elecciones_without_events_shows_a_notice(api):
+    status, _, body = call(api, '/elecciones', query='scope=es')
+    assert status == 200 and 'Todavía no hay elecciones publicadas' in html(body) and 'initial-data' not in html(body)
+
+
+def test_eleccion_detail_renders_results_pollsters_bullseye_and_model(events_site):
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    assert status == 200 and 'Generales 2023' in page
+    assert page.count('/api/v1/events/es/2023-07-23/') == 6
+    assert page.index('GAD3') < page.index('40dB') < page.index('CIS')
+    assert '/casas?scope=es&amp;mode=forecast&amp;id=2' in page
+    assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
+    data = initial(body)
+    assert set(data) == {'state', 'meta', 'pollsters', 'bullseye', 'blocks'}
+    assert data['bullseye'][0]['Derecha'] == 0.68 and data['pollsters'][0]['pollster'] == 'GAD3'
+    assert 'id="error-chart"' in page and 'id="bullseye-chart"' in page
+
+
+def test_eleccion_without_model_shows_a_notice(events_site):
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2019-11-10')
+    page = html(body)
+    assert status == 200 and 'Sin backtest para esta elección' in page
+    assert page.count('/api/v1/events/es/2019-11-10/') == 3
+
+
+@pytest.mark.parametrize('query, status, text', [('scope=es&date=2023-13-01', 400, 'Fecha no válida.'),
+                                                 ('scope=es&date=2020-01-01', 404, 'Elección no publicada.')])
+def test_eleccion_errors(events_site, query, status, text):
+    st, headers, body = call(events_site, '/elecciones', query=query)
+    assert st == status and text in html(body) and headers['cache-control'] == 'no-store'
+
+
+def test_published_events_and_horizon_tables(events_site):
+    events = pages.published_events('es')
+    assert [event['date'] for event in events] == ['2023-07-23', '2019-11-10']
+    assert events[0]['name'] == 'Generales 2023' and events[0]['has_model'] and not events[1]['has_model']
+    assert set(events[0]) == {'date', 'name', 'n_polls', 'n_pollsters', 'error_avg', 'error_blocks',
+                              'bias_blocks', 'bias', 'has_model'}
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    tables = context['horizon_tables']
+    assert [table['horizon'] for table in tables] == [6, 30]
+    pp = tables[0]['shares'][0]
+    assert pp['name'] == 'PP' and pp['error'] == round(32.41 - 33.05, 2)
+    assert set(tables[0]['blocks'][0]) == {'block', 'official_seats', 'model_seats', 'p_majority', 'majority'}
+    assert pages.event_part('es', '2020-01-01', 'meta') is None
+    with pytest.raises(Exception):
+        pages.resolve_event('es', '2020-01-01')

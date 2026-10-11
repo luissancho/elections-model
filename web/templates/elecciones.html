@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Elecciones{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/elecciones.js"></script>
+{% endblock %}
+{% block content %}
+    <div id="content" class="stack">
+      {% if events %}
+      <section class="card" id="events">
+        <h2>Elecciones publicadas</h2>
+        <div class="table-wrap">
+          <table id="events-table">
+            <caption>Elecciones pasadas, de la más reciente a la más antigua. Pulsa en una para ver su detalle.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Elección</th>
+                <th scope="col">Sondeos</th>
+                <th scope="col">Casas</th>
+                <th scope="col">Error medio</th>
+                <th scope="col">Error de bloques</th>
+                <th scope="col">Sesgo de bloques</th>
+                <th scope="col">Modelo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for event in events %}
+              <tr>
+                <td><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a></td>
+                <td>{{ event.n_polls|int }}</td>
+                <td>{{ event.n_pollsters|int }}</td>
+                <td>{{ event.error_avg|num(1) }}</td>
+                <td>{{ event.error_blocks|num(1) }}</td>
+                <td>{{ event.bias_blocks|num(1) }}</td>
+                <td>{{ 'sí' if event.has_model else '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" id="sector">
+        <h2>Error del sector</h2>
+        <div class="chart" id="sector-chart" role="img" aria-label="Error medio de los sondeos del sector en cada elección pasada"></div>
+        <p class="about">
+          Qué es esto: el error medio de los sondeos frente al resultado en cada elección pasada, en
+          puntos. El sesgo de bloques, con signo, dice hacia qué bloque se equivocaron los sondeos en
+          conjunto: positivo, dieron más voto al primer bloque que el resultado; negativo, menos.
+        </p>
+      </section>
+      {% else %}
+      <section class="card" id="events">
+        <h2>Elecciones publicadas</h2>
+        <p class="notice">Todavía no hay elecciones publicadas en este ámbito.</p>
+      </section>
+      {% endif %}
+    </div>
+{% endblock %}
