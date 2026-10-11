@@ -1,4 +1,4 @@
-"""Tests de `mtpy/lib/webapi.py` sin servidor ni base de datos: validadores, cachés y lector del paquete."""
+"""Tests del paquete `mtpy/lib/webapi/` sin servidor ni base de datos: validadores, cachés y lector del paquete."""
 import json
 import os
 from types import SimpleNamespace
@@ -53,6 +53,45 @@ def write_analysis(fs, scope='es'):
     for part in bundle.ANALYSIS_PARTS[1:] + bundle.ANALYSIS_PARTS[:1]:  # `meta` el último, como `publish`
         schema = bundle.ANALYSIS_SCHEMAS[part]
         writer.write_json(bundle.path_analysis(scope, part), schema, fixture_data(schema), scope)
+    return writer
+
+
+def write_event(fs, scope='es', date='2023-07-23', model=True):
+    """Elección pasada publicada a partir de los fixtures: las cinco partes (con `scope` y `event_date`
+    sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`."""
+    writer = bundle.BundleWriter(fs)
+    tables = {
+        'pollsters': pd.DataFrame({'pollster': ['GAD3'], 'error_avg': [0.99]}),
+        'polls': pd.DataFrame({'event_date': [date], 'pollster': ['GAD3']}),
+        'results': pd.DataFrame({'party': ['PP'], 'pct': [33.06]}),
+    }
+    if model:
+        tables |= {f'model-{name}': pd.DataFrame({'event_date': [date], 'horizon': [6]})
+                   for name in ('shares', 'seats', 'blocks')}
+    for name, frame in tables.items():
+        writer.write_csv(bundle.path_event_csv(scope, date, name), frame)
+    for part in bundle.EVENT_PARTS[1:] + bundle.EVENT_PARTS[:1]:  # `meta` el último, como `publish`
+        schema = bundle.EVENT_SCHEMAS[part]
+        data = fixture_data(schema)
+        if part == 'meta':
+            data = data | {'scope': scope, 'event_date': date, 'has_model': model}
+        elif part == 'model' and not model:
+            data = {key: [] for key in data}
+        writer.write_json(bundle.path_event(scope, date, part), schema, data, scope)
+    return writer
+
+
+def write_backtest(fs, scope='es'):
+    """Backtest publicado de un ámbito a partir de los fixtures: las seis partes y sus cinco CSV."""
+    writer = bundle.BundleWriter(fs)
+    for name in bundle.BACKTEST_CSV:
+        writer.write_csv(bundle.path_backtest_csv(scope, name), pd.DataFrame({'event_date': ['2023-07-23'], 'horizon': [6]}))
+    for part in bundle.BACKTEST_PARTS[1:] + bundle.BACKTEST_PARTS[:1]:  # `meta` el último, como `publish`
+        schema = bundle.BACKTEST_SCHEMAS[part]
+        data = fixture_data(schema)
+        if part == 'meta':
+            data = data | {'scope': scope}
+        writer.write_json(bundle.path_backtest(scope, part), schema, data, scope)
     return writer
 
 
@@ -520,3 +559,20 @@ def test_webapi_package_layout():
     assert webapi.Site.__module__ == 'mtpy.lib.webapi.published'
     assert webapi.query_ratings.__module__ == 'mtpy.lib.webapi.queries'
     assert webapi.ROUTES[0][0] == '/api/v1/health'
+
+
+def test_site_events_and_backtest_read_the_published_files(site_app):
+    fs = site_app.fs
+    write_event(fs)
+    write_event(fs, date='2019-11-10', model=False)
+    write_backtest(fs)
+    s = webapi.site()
+    assert s.events('es') == ['2019-11-10', '2023-07-23'] and s.events('es-cb') == []
+    assert json.loads(s.event('es', '2023-07-23', 'pollsters'))['schema'] == 'event-pollsters@1'
+    assert s.event_csv('es', '2023-07-23', 'model-seats').startswith(b'event_date')
+    assert json.loads(s.backtest('es', 'by-horizon'))['data']['rows'][0]['horizon'] == 6
+    for call, message in ((lambda: s.event('es', '2020-01-01', 'meta'), 'event not published'),
+                          (lambda: s.backtest('es-cb', 'metrics'), 'backtest not published')):
+        with pytest.raises(HttpError) as err:
+            call()
+        assert err.value.status == 404 and err.value.message == message

@@ -507,3 +507,37 @@ Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Contr
 | 503 | `database unavailable` | la consulta a la base falló |
 
 `invalid scope`, `invalid format`, `unknown part` y `no file system configured` valen también aquí.
+
+## Rutas de eventos y backtest (fase 5)
+
+Solo `GET`. `events/{scope}` cruza la base de datos con el paquete; las otras dos sirven ficheros publicados
+(controladores `Events` y `Backtest`, `site/v1/events/` y `site/v1/backtest/`). Respuestas con
+`Cache-Control: public, max-age=60` y `ETag`; nunca inmutables, porque se sobrescriben en cada publicación.
+
+| Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
+|---|---|---|---|
+| `/api/v1/events/{scope}` | | `{contract, scope, rows}`; cada fila `{date, name, featured, has_page}`, por fecha ascendente | `events-{scope}.csv` |
+| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `results`, `model`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `results`, `model-shares`, `model-seats`, `model-blocks` |
+| `/api/v1/backtest/{scope}/{part}` | `part` ∈ `meta`, `metrics`, `by-horizon`, `blocks`, `shares`, `seats` | el fichero del backtest tal cual (sobre completo) | `{scope}-backtest-{nombre}.csv`, con `nombre` ∈ `metrics`, `by-horizon`, `blocks`, `shares`, `seats` |
+
+- `events/{scope}` lee la tabla de elecciones de la base (caché de consultas de 60 s) y marca `has_page` con las
+  fechas que tienen `meta.json` en el paquete (`events/{scope}/{date}/`, caché de punteros de 60 s). Sin base
+  configurada da 503 `no database configured`.
+- `events/{scope}/{date}/{part}` valida en este orden `scope`, `date`, `part` y `format`; si la elección no está
+  en el paquete da 404 `event not published` antes de leer ningún fichero. Los ficheros y sus gemelos CSV pasan
+  por la misma caché de punteros que el análisis. Una elección publicada sin backtest no tiene gemelos
+  `model-*`: pedirlos da el mismo 404 `event not published`.
+- `meta` no tiene gemelo CSV en ninguna de las dos rutas. En `events`, `model` exige `table` y las demás partes no
+  admiten `table`: cualquier otra combinación con `format=csv` da 404 `no csv for this part`.
+- `backtest` no usa la base ni `manifest.json`: sin el fichero (o sin `meta.json`) da 404 `backtest not published`.
+
+Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Control: no-store`):
+
+| Estado | `message` | Causa |
+|---|---|---|
+| 404 | `event not published` | la elección no tiene página publicada en el paquete (o falta el fichero pedido) |
+| 404 | `backtest not published` | el ámbito no tiene backtest publicado (o falta el fichero pedido) |
+| 404 | `no csv for this part` | `format=csv` en `meta`, o un `table` que no corresponde a la parte |
+
+`invalid scope`, `invalid date`, `invalid format`, `unknown part`, `no database configured` y `no file system
+configured` valen también aquí.

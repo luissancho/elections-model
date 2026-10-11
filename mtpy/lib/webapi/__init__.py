@@ -13,7 +13,7 @@ from .caches import (
     DEFAULT_TTL, LRU_SIZE, LRUCache, TTLCache, settings,
 )
 from .checks import (
-    ANALYSIS_PARTS, CSV_PARTS, DATE_RE, DEFAULT_LIMIT, FORMATS, INT_RE, MAX_LIMIT, MODES,
+    ANALYSIS_PARTS, BACKTEST_PARTS, CSV_PARTS, EVENT_PARTS, DATE_RE, DEFAULT_LIMIT, FORMATS, INT_RE, MAX_LIMIT, MODES,
     MODE_PARTS, RUN_PARTS, catalogue, check_date, check_format, check_limit, check_mode, check_part,
     check_pollster, check_region, check_run, check_scope, scope_codes,
 )
@@ -22,9 +22,9 @@ from .published import (
 )
 from .queries import (
     QUERY_CACHE_SIZE, check_event, database, database_host, frame_to_csv, frame_to_records,
-    get_drift, get_event_dates, get_event_results, get_herding, get_house_effects,
+    get_drift, get_event_dates, get_events, get_event_results, get_herding, get_house_effects,
     get_next_event_date, get_parties, get_poll_series, get_pollsters, get_ratings, polls_event,
-    query_drift, query_herding, query_house_effects, query_parties, query_polls, query_pollster,
+    query_drift, query_events, query_herding, query_house_effects, query_parties, query_polls, query_pollster,
     query_pollsters, query_ratings, query_results, ratings_event,
 )
 
@@ -43,6 +43,9 @@ ROUTES = [
     ('/api/v1/herding', 'data', 'herding', ['GET']),
     ('/api/v1/drift', 'data', 'drift', ['GET']),
     ('/api/v1/analysis/{scope}/{part}', 'analysis', 'part', ['GET']),
+    ('/api/v1/events/{scope}', 'events', 'index', ['GET']),
+    ('/api/v1/events/{scope}/{date}/{part}', 'events', 'part', ['GET']),
+    ('/api/v1/backtest/{scope}/{part}', 'backtest', 'part', ['GET']),
     ('/api/v1/forecast/{scope}', 'forecast', 'meta', ['GET']),
     ('/api/v1/forecast/{scope}/runs', 'forecast', 'runs', ['GET']),
     ('/api/v1/forecast/{scope}/{part}', 'forecast', 'part', ['GET']),

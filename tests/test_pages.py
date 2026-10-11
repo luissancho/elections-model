@@ -631,3 +631,10 @@ def test_pages_package_layout():
     assert pages.common_context.__module__ == 'mtpy.lib.pages.common'
     assert pages.casas_context.__module__ == 'mtpy.lib.pages.casas'
     assert pages.TEMPLATES_DIR.endswith(os.path.join('web', 'templates')) and os.path.isdir(pages.TEMPLATES_DIR)
+
+
+def test_api_url_covers_events_and_backtest():
+    assert pages.api_url('es', 'pollsters', kind='event', date='2023-07-23', fmt='csv') == '/api/v1/events/es/2023-07-23/pollsters?format=csv'
+    assert pages.api_url('es', 'model', kind='event', date='2023-07-23', fmt='csv', table='seats') == '/api/v1/events/es/2023-07-23/model?format=csv&table=seats'
+    assert pages.api_url('es', 'metrics', kind='backtest', fmt='csv') == '/api/v1/backtest/es/metrics?format=csv'
+    assert pages.api_url('es', 'events', kind='events') == '/api/v1/events/es'

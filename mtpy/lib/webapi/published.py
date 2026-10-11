@@ -1,4 +1,4 @@
-"""Reader of the published bundle: the ``web`` settings and the ``Site`` service."""
+"""Reader of the published bundle: the ``Site`` service and the ``site()`` accessor."""
 import time
 from typing import Callable, Optional
 
@@ -247,17 +247,21 @@ class Site:
         """
         return self._run_bytes(bundle.path_csv(scope, run_id, name, mode))
 
-    def _analysis_bytes(self, path: str) -> bytes:
+    def _mutable_bytes(self, kind: str, path: str, message: str) -> bytes:
         """
-        Read a file of a published analysis through the TTL cache.
+        Read an overwritable file of the bundle (analysis, events, backtest) through the TTL cache.
 
-        The analysis is overwritten on every publication, so it is cached like the pointers,
+        These files are overwritten on every publication, so they are cached like the pointers,
         not like the immutable run files.
 
         Parameters
         ----------
+        kind : str
+            Kind of file, the first member of the cache key.
         path : str
             Path relative to the bundle prefix.
+        message : str
+            Message of the 404 raised when the file does not exist.
 
         Returns
         -------
@@ -267,15 +271,15 @@ class Site:
         Raises
         ------
         HttpError
-            404 when the file does not exist.
+            404 with ``message`` when the file does not exist.
         """
         def load():
             try:
                 return self._read(path)
             except FileNotFoundError:
-                raise HttpError(404, 'analysis not published')
+                raise HttpError(404, message)
 
-        return self.pointers.get(('analysis', path), load)
+        return self.pointers.get((kind, path), load)
 
     def analysis(self, scope: str, part: str) -> bytes:
         """
@@ -298,7 +302,7 @@ class Site:
         HttpError
             404 when the part is not published.
         """
-        return self._analysis_bytes(bundle.path_analysis(scope, part))
+        return self._mutable_bytes('analysis', bundle.path_analysis(scope, part), 'analysis not published')
 
     def analysis_csv(self, scope: str, name: str) -> bytes:
         """
@@ -321,7 +325,119 @@ class Site:
         HttpError
             404 when the CSV is not published.
         """
-        return self._analysis_bytes(bundle.path_analysis_csv(scope, name))
+        return self._mutable_bytes('analysis', bundle.path_analysis_csv(scope, name), 'analysis not published')
+
+    def events(self, scope: str) -> list:
+        """
+        Dates of the past elections published for a scope.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+
+        Returns
+        -------
+        list of str
+            The dates, ascending, cached under the TTL. Empty when the scope has none.
+        """
+        return self.pointers.get(('events', scope), lambda: self.reader.list_events(scope))
+
+    def event(self, scope: str, date: str, part: str) -> bytes:
+        """
+        Bytes of a JSON part of a past election.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        date : str
+            Validated election date.
+        part : str
+            Part name, one of ``EVENT_PARTS``.
+
+        Returns
+        -------
+        bytes
+            The JSON file.
+
+        Raises
+        ------
+        HttpError
+            404 ``event not published`` when the file does not exist.
+        """
+        return self._mutable_bytes('event', bundle.path_event(scope, date, part), 'event not published')
+
+    def event_csv(self, scope: str, date: str, name: str) -> bytes:
+        """
+        Bytes of a CSV twin of a past election.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        date : str
+            Validated election date.
+        name : str
+            CSV name, one of ``bundle.EVENT_CSV``.
+
+        Returns
+        -------
+        bytes
+            The CSV file.
+
+        Raises
+        ------
+        HttpError
+            404 ``event not published`` when the file does not exist.
+        """
+        return self._mutable_bytes('event', bundle.path_event_csv(scope, date, name), 'event not published')
+
+    def backtest(self, scope: str, part: str) -> bytes:
+        """
+        Bytes of a JSON part of the model backtest of a scope.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        part : str
+            Part name, one of ``BACKTEST_PARTS``.
+
+        Returns
+        -------
+        bytes
+            The JSON file.
+
+        Raises
+        ------
+        HttpError
+            404 ``backtest not published`` when the file does not exist.
+        """
+        return self._mutable_bytes('backtest', bundle.path_backtest(scope, part), 'backtest not published')
+
+    def backtest_csv(self, scope: str, name: str) -> bytes:
+        """
+        Bytes of a CSV twin of the model backtest of a scope.
+
+        Parameters
+        ----------
+        scope : str
+            Validated scope code.
+        name : str
+            CSV name, one of ``bundle.BACKTEST_CSV``.
+
+        Returns
+        -------
+        bytes
+            The CSV file.
+
+        Raises
+        ------
+        HttpError
+            404 ``backtest not published`` when the file does not exist.
+        """
+        return self._mutable_bytes('backtest', bundle.path_backtest_csv(scope, name), 'backtest not published')
 
     def scopes(self) -> dict:
         """

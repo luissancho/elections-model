@@ -12,9 +12,10 @@ import pytest
 from mtpy.core.api import Api, Router
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish, webapi
+from tests.fakes import synthetic_event
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
-    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_bundle
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event
 )
 
 
@@ -176,6 +177,7 @@ def fake_readers(monkeypatch):
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [2], 'ratio': [0.78]}))
     monkeypatch.setattr(webapi.queries, 'get_drift', lambda scope: pd.DataFrame({
         'party': ['PP'], 'horizon': [4], 'rms': [1.1]}))
+    monkeypatch.setattr(webapi.queries, 'get_events', lambda scope: synthetic_event().events)
     return seen
 
 
@@ -342,4 +344,58 @@ def test_analysis_errors(api, fresh_app, path, query, status, message):
     write_analysis(fresh_app.fs)
     got, headers, body = call(api, path, query=query)
     assert got == status and json.loads(body) == {'status': 'error', 'message': message}
+    assert headers['cache-control'] == 'no-store'
+
+
+def test_events_list_crosses_the_database_with_the_bundle(db_api, fresh_app):
+    write_event(fresh_app.fs)
+    status, headers, body = call(db_api, '/api/v1/events/es')
+    body = json.loads(body)
+    assert status == 200 and [r['date'] for r in body['rows']] == ['2019-11-10', '2023-07-23', '2026-11-29']
+    assert [r['has_page'] for r in body['rows']] == [False, True, False] and body['rows'][2]['featured'] is False
+    status, headers, _ = call(db_api, '/api/v1/events/es', query='format=csv')
+    assert headers['content-disposition'] == 'attachment; filename="events-es.csv"'
+
+
+def test_events_list_without_database_is_a_503(api):
+    status, _, body = call(api, '/api/v1/events/es')
+    assert status == 503 and json.loads(body)['message'] == 'no database configured'
+
+
+def test_event_parts_and_csv(api, fresh_app):
+    write_event(fresh_app.fs)
+    status, headers, body = call(api, '/api/v1/events/es/2023-07-23/pollsters')
+    assert status == 200 and json.loads(body)['schema'] == 'event-pollsters@1' and 'immutable' not in headers['cache-control']
+    status, headers, _ = call(api, '/api/v1/events/es/2023-07-23/model', query='format=csv&table=seats')
+    assert headers['content-type'].startswith('text/csv') and 'es-2023-07-23-model-seats.csv' in headers['content-disposition']
+    status, headers, _ = call(api, '/api/v1/events/es/2023-07-23/polls', query='format=csv')
+    assert 'es-2023-07-23-polls.csv' in headers['content-disposition']
+
+
+def test_backtest_parts_and_csv(api, fresh_app):
+    write_backtest(fresh_app.fs)
+    status, headers, body = call(api, '/api/v1/backtest/es/metrics')
+    assert status == 200 and json.loads(body)['schema'] == 'backtest-metrics@1' and 'immutable' not in headers['cache-control']
+    status, headers, body = call(api, '/api/v1/backtest/es/metrics', query='format=csv')
+    assert status == 200 and 'es-backtest-metrics.csv' in headers['content-disposition']
+    assert headers['content-type'].startswith('text/csv')
+
+
+@pytest.mark.parametrize('path, query, status, message', [
+    ('/api/v1/events/es/2023-13-01/meta', '', 400, 'invalid date'),
+    ('/api/v1/events/es/2019-11-10/meta', '', 404, 'event not published'),
+    ('/api/v1/events/es/2023-07-23/nope', '', 404, 'unknown part'),
+    ('/api/v1/events/es/2023-07-23/meta', 'format=csv', 404, 'no csv for this part'),
+    ('/api/v1/events/es/2023-07-23/model', 'format=csv', 404, 'no csv for this part'),
+    ('/api/v1/events/es/2023-07-23/polls', 'format=csv&table=seats', 404, 'no csv for this part'),
+    ('/api/v1/events/es-xx', '', 400, 'invalid scope'),
+    ('/api/v1/backtest/es-cb/metrics', '', 404, 'backtest not published'),
+    ('/api/v1/backtest/es/meta', 'format=csv', 404, 'no csv for this part'),
+    ('/api/v1/backtest/es/nope', '', 404, 'unknown part'),
+])
+def test_events_and_backtest_errors_are_json_and_not_cached(api, fresh_app, path, query, status, message):
+    write_event(fresh_app.fs)
+    write_backtest(fresh_app.fs)
+    st, headers, body = call(api, path, query=query)
+    assert st == status and json.loads(body) == {'status': 'error', 'message': message}
     assert headers['cache-control'] == 'no-store'

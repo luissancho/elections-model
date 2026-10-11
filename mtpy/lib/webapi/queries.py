@@ -17,7 +17,7 @@ def _reader(name: str) -> Callable:
     """
     Proxy of a reader of ``mtpy/lib/data.py`` that imports the module on its first call.
 
-    The proxies are module attributes of ``webapi`` (``get_ratings``, ...), looked up at call
+    The proxies are module attributes of ``webapi.queries`` (``get_ratings``, ...), looked up at call
     time by the ``query_*`` functions, so tests replace them with ``monkeypatch.setattr``.
 
     Parameters
@@ -51,6 +51,7 @@ get_house_effects = _reader('get_house_effects')
 get_herding = _reader('get_herding')
 get_drift = _reader('get_drift')
 get_next_event_date = _reader('get_next_event_date')
+get_events = _reader('get_events')
 
 _QUERIES = TTLCache(DEFAULT_TTL, maxsize=QUERY_CACHE_SIZE)
 
@@ -556,6 +557,23 @@ def query_drift(scope: str) -> pd.DataFrame:
         ``data.get_drift(scope)``: one row per past election, party and horizon.
     """
     return _query(('drift', scope), lambda: get_drift(scope))
+
+
+def query_events(scope: str) -> pd.DataFrame:
+    """
+    Elections table of a scope (``date``, ``scope``, ``name``, ``featured``), cached.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_events(scope)``.
+    """
+    return _query(('events_table', scope), lambda: get_events(scope))
 
 
 def frame_to_records(frame: pd.DataFrame) -> list:

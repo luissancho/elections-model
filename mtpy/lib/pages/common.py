@@ -43,6 +43,9 @@ MESSAGES = {
     'database unavailable': 'La base de datos no está disponible.',
     'pollster not found': 'Casa no encontrada.',
     'invalid pollster': 'Casa no válida.',
+    'invalid date': 'Fecha no válida.',
+    'event not published': 'Elección no publicada.',
+    'backtest not published': 'Backtest no publicado.',
 }
 OTHERS_COLOR = '#9e9e9e'
 MODE_LABELS = {'nowcast': 'Hoy', 'forecast': 'Elección'}
@@ -221,7 +224,8 @@ def query_string(state: dict) -> str:
 
 
 def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str] = None,
-            fmt: Optional[str] = None, kind: str = 'forecast', table: Optional[str] = None) -> str:
+            fmt: Optional[str] = None, kind: str = 'forecast', table: Optional[str] = None,
+            date: Optional[str] = None) -> str:
     """
     URL of a part in the ``/api/v1`` routes.
 
@@ -239,21 +243,36 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     fmt : str, optional
         Output format (``'json'`` or ``'csv'``).
     kind : str, optional
-        ``'forecast'`` (the default), ``'analysis'`` (the houses analysis) or ``'data'`` (the
-        tables of the database).
+        ``'forecast'`` (the default), ``'analysis'`` (the houses analysis), ``'data'`` (the
+        tables of the database), ``'events'`` (the list of elections of a scope), ``'event'``
+        (a part of a past election, needs ``date``) or ``'backtest'``.
     table : str, optional
-        CSV table of an analysis part (``'events'`` for the herding by cycle).
+        CSV table of an analysis part (``'events'`` for the herding by cycle) or of the model of
+        an event (``'shares'``, ``'seats'`` or ``'blocks'``).
+    date : str, optional
+        Election date, for ``kind='event'``.
 
     Returns
     -------
     str
         ``'/api/v1/forecast/{scope}[/{mode}]/{part}[?run=...&format=...]'``,
-        ``'/api/v1/analysis/{scope}/{part}[?format=...&table=...]'`` or
-        ``'/api/v1/{part}?scope={scope}[&format=...]'``.
+        ``'/api/v1/analysis/{scope}/{part}[?format=...&table=...]'``,
+        ``'/api/v1/{part}?scope={scope}[&format=...]'``, ``'/api/v1/events/{scope}[?format=...]'``,
+        ``'/api/v1/events/{scope}/{date}/{part}[?format=...&table=...]'`` or
+        ``'/api/v1/backtest/{scope}/{part}[?format=...]'``.
     """
     if kind == 'analysis':
         url = '/api/v1/analysis/{}/{}'.format(scope, part)
         params = (('format', fmt), ('table', table))
+    elif kind == 'events':
+        url = '/api/v1/events/' + scope
+        params = (('format', fmt),)
+    elif kind == 'event':
+        url = '/api/v1/events/{}/{}/{}'.format(scope, date, part)
+        params = (('format', fmt), ('table', table))
+    elif kind == 'backtest':
+        url = '/api/v1/backtest/{}/{}'.format(scope, part)
+        params = (('format', fmt),)
     elif kind == 'data':
         url = '/api/v1/' + part
         params = (('scope', scope), ('format', fmt))
