@@ -315,7 +315,7 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 
 - `meta.summary`: `n_polls`, `n_pollsters`, `error_avg`, `error_blocks`, `bias_blocks` (medias de los sondeos ponderadas
   por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}`. `has_model` es
-  `true` si el backtest tiene filas de `shares` para la elección; `horizons`, los horizontes del modelo.
+  `true` si `horizons` no está vacío; `horizons`, los horizontes del modelo.
 - `pollsters.rows`: una fila por casa, de menor a mayor `error_blocks` (nulos al final): `pollster_id` (o `null`),
   `pollster`, `n_polls`, `sample_size` (mediana de las muestras conocidas, `null` si ninguna), `error_avg`,
   `error_blocks`, `bias_blocks` (medias, 2 decimales) y los `last_*` de su sondeo más cercano a la elección
@@ -331,7 +331,8 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
 `pollsters`, `polls` y `results` y los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
-que tienen tabla en el backtest); `meta` no tiene gemelo.
+que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están);
+`meta` no tiene gemelo.
 
 ## Punteros
 

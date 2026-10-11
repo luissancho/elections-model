@@ -725,6 +725,10 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
 def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
     ev = synthetic_event()
     writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    write_backtest_source(str(tmp_path / 'bt'))
+    publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=str(tmp_path / 'bt'),
+                          prov=fake_prov, **event_readers(ev))
+    assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'model-shares'))
     out = publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=str(tmp_path / 'none'),
                                 prov=fake_prov, **event_readers(ev))
     assert out['has_model'] is False
@@ -732,6 +736,8 @@ def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
         'horizons': [], 'shares': [], 'seats': [], 'blocks': []}
     meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']
     assert meta['has_model'] is False and meta['horizons'] == []
+    for name in ('model-shares', 'model-seats', 'model-blocks'):
+        assert not writer.exists(bundle.path_event_csv('es', '2023-07-23', name))
 
 
 @pytest.mark.parametrize('date, reason', [('2019-11-10', 'no official results for es 2019-11-10'),

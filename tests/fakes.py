@@ -299,7 +299,11 @@ class FakeComputer:
 
         def get_polls_metric(metric='pct', bmap=None, **kw):
             self.calls.append(('get_polls_metric', metric, bmap, kw))
-            return frames.poll_errors.copy()
+            errors = frames.poll_errors.copy()  # `event` and `pollster` are categorical in the real frame
+            errors.index = errors.index.set_levels(
+                [pd.CategoricalIndex(lvl, categories=list(lvl) + (['Sin sondeos'] if lvl.name == 'pollster' else []), name=lvl.name)
+                 if lvl.name in ('event', 'pollster') else lvl for lvl in errors.index.levels])
+            return errors
 
         comp.build_series = lambda: comp
         comp.load_herding, comp.herding_summary, comp.get_polls_metric = load_herding, herding_summary, get_polls_metric

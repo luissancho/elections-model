@@ -1383,6 +1383,7 @@ def export_event_polls(frame: pd.DataFrame, blocks: Sequence[str], ids: dict) ->
     """
     data, table = export_poll_errors(frame, blocks)
     table = table.copy()
+    table['pollster'] = table['pollster'].astype(str)
     table.insert(table.columns.get_loc('pollster') + 1, 'pollster_id', table['pollster'].map(ids).astype('Int64'))
     table = table.sort_values('days', kind='stable', ignore_index=True)
 
@@ -1411,8 +1412,9 @@ def export_event_pollsters(frame: pd.DataFrame, blocks: Sequence[str], ids: dict
     """
     present = _present_blocks(frame, blocks)
     table = frame.reset_index()
+    table['pollster'] = table['pollster'].astype(str)  # the index level is categorical in the real frame
     table['sample_size'] = table['sample_size'].where(table['sample_size'] > 0)
-    summary = table.groupby('pollster', sort=False).agg(
+    summary = table.groupby('pollster', sort=False, observed=True).agg(
         n_polls=('days', 'size'), sample_size=('sample_size', 'median'), error_avg=('error_avg', 'mean'),
         error_blocks=('error_blocks', 'mean'), bias_blocks=('bias_blocks', 'mean'))
     cols = ['days', 'error_avg', 'error_blocks', 'bias_blocks'] + present
@@ -1515,6 +1517,7 @@ def event_summary(frame: pd.DataFrame, blocks: Sequence[str]) -> dict:
         ``bias_blocks`` (``PCT_DECIMALS``), plus ``bias``: ``{block: weighted mean of its signed deviation}``.
     """
     table = frame.reset_index()
+    table['pollster'] = table['pollster'].astype(str)
     weights = table['weight']
     summary = {'n_polls': int(len(table)), 'n_pollsters': int(table['pollster'].nunique())}
     for col in ('error_avg', 'error_blocks', 'bias_blocks'):
@@ -1543,7 +1546,7 @@ def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: 
     summary : dict
         Result of ``event_summary``.
     model : dict
-        Data of ``export_event_model``.
+        Data of ``export_event_model``; ``has_model`` is whether it has ``horizons`` (so it agrees with them).
     prov : dict
         Result of ``provenance``.
     seconds : dict
@@ -1556,7 +1559,7 @@ def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: 
     """
     return {'scope': scope, 'event_date': event_date, 'name': name, 'n_polls': summary['n_polls'],
             'n_pollsters': summary['n_pollsters'], 'blocks': {k: list(v) for k, v in blocks.items()},
-            'main': list(main), 'summary': summary, 'has_model': bool(model['shares']),
+            'main': list(main), 'summary': summary, 'has_model': bool(model['horizons']),
             'horizons': list(model['horizons']), 'commit': prov['commit'], 'dirty': bool(prov['dirty']),
             'versions': prov['versions'], 'seconds': seconds}
 
@@ -1699,6 +1702,10 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     seconds['results'] = lap()
     model, frames = export_event_model(backtest_source(scope, source), event_date)
     write('model', model, frames)
+    for csv_name in bundle.EVENT_CSV:  # twins of tables this publication lacks would describe an older one
+        stale = bundle.path_event_csv(scope, event_date, csv_name)
+        if csv_name.startswith('model-') and csv_name not in frames and writer.exists(stale):
+            writer.remove(stale)
     seconds['model'] = lap()
 
     summary = event_summary(errors, list(blocks))
