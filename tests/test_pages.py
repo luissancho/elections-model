@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from mtpy import mtpy
+from mtpy.core.api import HttpError
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
@@ -662,6 +663,7 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
 def test_elecciones_without_events_shows_a_notice(api):
     status, _, body = call(api, '/elecciones', query='scope=es')
     assert status == 200 and 'Todavía no hay elecciones publicadas' in html(body) and 'initial-data' not in html(body)
+    assert '/dist/js/pages/elecciones.js' in html(body)  # el módulo se carga y debe tolerar la falta del bloque
 
 
 def test_eleccion_detail_renders_results_pollsters_bullseye_and_model(events_site):
@@ -705,5 +707,17 @@ def test_published_events_and_horizon_tables(events_site):
     assert pp['name'] == 'PP' and pp['error'] == round(32.41 - 33.05, 2)
     assert set(tables[0]['blocks'][0]) == {'block', 'official_seats', 'model_seats', 'p_majority', 'majority'}
     assert pages.event_part('es', '2020-01-01', 'meta') is None
-    with pytest.raises(Exception):
+    with pytest.raises(HttpError) as missing:
         pages.resolve_event('es', '2020-01-01')
+    assert missing.value.status == 404 and str(missing.value.message) == 'event not published'
+    with pytest.raises(HttpError) as invalid:
+        pages.resolve_event('es', '2023-13-01')
+    assert invalid.value.status == 400 and str(invalid.value.message) == 'invalid date'
+
+
+def test_eleccion_without_meta_is_a_404(events_site, fresh_app, monkeypatch):
+    real = pages.elecciones.event_part
+    monkeypatch.setattr(pages.elecciones, 'event_part',
+                        lambda scope, date, name: None if name == 'meta' and date == '2023-07-23' else real(scope, date, name))
+    st, headers, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    assert st == 404 and 'Elección no publicada.' in html(body) and headers['cache-control'] == 'no-store'

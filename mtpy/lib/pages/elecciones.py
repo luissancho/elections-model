@@ -229,7 +229,11 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     full = context['state']
     scope = full['scope']
     date = resolve_event(scope, date)
-    meta = event_part(scope, date, 'meta') or {}
+    meta = event_part(scope, date, 'meta')
+
+    if meta is None:
+        raise HttpError(404, 'event not published')
+
     pollsters = event_part(scope, date, 'pollsters') or {}
     polls = event_part(scope, date, 'polls') or {}
     results = event_part(scope, date, 'results') or {}

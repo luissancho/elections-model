@@ -156,7 +156,7 @@
       </section>
       <section class="card" id="model">
         <h2>El modelo a cada horizonte</h2>
-        {% if has_model %}
+        {% if horizon_tables %}
         {% for table in horizon_tables %}
         <h3>A {{ table.horizon|int }} días</h3>
         <div class="table-wrap">

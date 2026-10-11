@@ -10,8 +10,15 @@ import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 const BAR_ROW_HEIGHT = 22;
 const BAR_EXTRA_HEIGHT = 60;
 
-/** Draw the charts whose container is present and has data. */
+/**
+ * Draw the charts whose container is present and has data. A scope without published elections renders no
+ * `#initial-data` island (and no charts), so there is nothing to draw and `readInitial` must not be called.
+ */
 function paint() {
+  if (!document.getElementById('initial-data')) {
+    return;
+  }
+
   const {meta = {}, sector = [], pollsters = [], bullseye = [], blocks = []} = readInitial();
 
   const sectorEl = document.getElementById('sector-chart');
