@@ -737,6 +737,7 @@ def test_modelo_renders_the_backtest_tables_and_initial(backtest_site):
     assert 'id="mae-chart"' in page and 'id="coverage-chart"' in page and 'aria-label=' in page
     data = initial(body)
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
+    assert data['mae']['last_poll'][0] == 1.74 and '5,77' in page
     assert list(data['seats']) == ['mae', 'mae_h', 'cov95']
 
 

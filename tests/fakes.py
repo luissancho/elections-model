@@ -202,6 +202,8 @@ def synthetic_backtest():
     metrics = pd.DataFrame({
         'event_date': [e for e, _ in cases], 'horizon': [h for _, h in cases],
         'mae_shares': [1.97049, 2.50981, 1.40877, 1.50234], 'rmse_shares': [2.52987, 3.23107, 1.9, 2.1],
+        'mae_last_poll': [1.7368, 2.3012, 1.6125, 2.0143], 'mae_mean_4w': [1.8576, 2.2754, 1.5871, 2.1096],
+        'mae_prev_result': [5.7712, 5.9031, 5.1204, 5.6388],
         'cov_shares95': [0.9333, 1., 0.9, 1.], 'cov_seats95': [np.nan, np.nan, 1., 0.9333],
         'mae_seats': [np.nan, np.nan, 4.5, 5.25], 'brier_vs': [0.03661, 0.04123, 0.03, 0.0501],
         'log_score_vs': [0.15605, 0.17001, 0.1, np.nan], 'n_prov_cells': [277.5, 276.75, 278., 277.],
@@ -209,7 +211,8 @@ def synthetic_backtest():
     })
     by_horizon = pd.DataFrame({
         'horizon': BACKTEST_HORIZONS, 'n_cases': [2, 2], 'n_seats_cases': [2, 1],
-        'mae_shares': [1.6896342173571752, 2.0063], 'cov_shares95': [0.9566666666, 1.],
+        'mae_shares': [1.6896342173571752, 2.0063], 'mae_last_poll': [1.7368, 2.2471],
+        'mae_mean_4w': [1.8576, 2.2322], 'mae_prev_result': [5.7712, 5.7712], 'cov_shares95': [0.9566666666, 1.],
         'cov_seats95': [1., 0.9333], 'mae_seats': [4.875, 5.25], 'brier_vs': [0.036605, 0.0457], 'log_score_vs': [0.1275, np.nan],
     })
     blocks = pd.DataFrame([

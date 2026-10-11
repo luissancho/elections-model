@@ -49,11 +49,11 @@ export function renderLine(el, points, {formatter = (x) => fmtNum(x, 1), name = 
  *
  * @param {HTMLElement} el chart container
  * @param {Array} series `{name, points: [[x, y], ...], color?, dashed?}` per line
- * @param {object} opts `formatter` (value → text), `yMax` (top of the value axis) and `references` (values
+ * @param {object} opts `formatter` (value → text), `yMin` and `yMax` (bounds of the value axis; `null` lets ECharts choose) and `references` (values
  *   drawn as labelled dashed horizontal lines)
  * @returns {object} the ECharts instance
  */
-export function renderLines(el, series, {formatter = (x) => fmtNum(x, 1), yMax = undefined, references = []} = {}) {
+export function renderLines(el, series, {formatter = (x) => fmtNum(x, 1), yMin = null, yMax = null, references = []} = {}) {
   const categories = [...new Set(series.flatMap((line) => line.points.map(([x]) => x)))].sort((a, b) => a - b);
   const lines = series.map((line, index) => {
     const values = new Map(line.points);
@@ -85,6 +85,7 @@ export function renderLines(el, series, {formatter = (x) => fmtNum(x, 1), yMax =
     yAxis: {
       type: 'value',
       scale: true,
+      min: yMin,
       max: yMax,
       splitLine: {lineStyle: {color: THEME.gridColor}},
       axisLabel: {formatter: (x) => formatter(x)},

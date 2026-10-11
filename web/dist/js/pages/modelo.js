@@ -43,7 +43,7 @@ function paint() {
       .filter((line) => line.points.length);
     if (series.length) {
       tryDraw(() => renderLines(coverageEl, series, {
-        formatter: (x) => fmtNum(x, 2), yMax: 1, references: [0.5, 0.8, 0.95],
+        formatter: (x) => fmtNum(x, 2), yMin: 0, yMax: 1, references: [0.5, 0.8, 0.95],
       }), 'the coverage by horizon');
     }
   }
