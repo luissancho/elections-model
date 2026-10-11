@@ -763,6 +763,9 @@ def test_metodo_renders_the_sections_without_data(api):
     assert re.findall(r'/dist/js/pages/[a-z]+\.js', page) == ['/dist/js/pages/metodo.js']
     for section_id, title in pages.SECTIONS:
         assert 'id="{}"'.format(section_id) in page and title in page
+    sections = re.findall(r'<section id="([a-z]+)" class="card">(.*?)</section>', page, re.S)
+    assert [section_id for section_id, _ in sections] == [section_id for section_id, _ in pages.SECTIONS]
+    assert all('<p>' in body for _, body in sections)  # ninguna sección sin texto en la plantilla
     for href in ('/modelo?scope=es&amp;mode=forecast', '/casas?scope=es&amp;mode=forecast',
                  '/elecciones?scope=es&amp;mode=forecast', '/escanos?scope=es&amp;mode=forecast'):
         assert href in page

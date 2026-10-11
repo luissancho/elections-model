@@ -44,7 +44,7 @@
         <ul>
           <li>el tamaño de su muestra: más entrevistas, más peso, aunque cada entrevista añadida cuenta
             menos;</li>
-          <li>la sobre-representación de su casa: si una casa publica muchos sondeos en pocos días, el peso
+          <li>la sobrerrepresentación de su casa: si una casa publica muchos sondeos en pocos días, el peso
             se reparte entre ellos, y de las series que se actualizan a diario solo cuenta la última entrega;</li>
           <li>el rating de su casa (ver <a href="#casas">Las casas</a>);</li>
           <li>la dispersión de su casa: si sus cifras oscilan más de lo que permite el tamaño de sus
@@ -65,8 +65,10 @@
         <p>
           Cada casa encuestadora tiene un rating entre 0 y 100 de cara a la próxima elección de cada ámbito.
           Se calcula con el sesgo de sus sondeos frente al resultado en las elecciones anteriores, tanto en
-          el tamaño de cada bloque como en el reparto entre los partidos de un mismo bloque, combinado con
-          una calidad previa que pesa más cuantos menos sondeos tiene la casa. Cuanto más alto es el
+          el tamaño de cada bloque como en el reparto entre los partidos de un mismo bloque, comparado con
+          el de los sondeos de la misma elección publicados a una distancia parecida de la votación: un
+          fallo compartido por todo el sector no penaliza a una casa. Ese sesgo se combina con una calidad
+          previa que pesa más cuantos menos sondeos tiene la casa. Cuanto más alto es el
           rating, más pesan sus sondeos en el promedio.
         </p>
         <p>
@@ -81,19 +83,21 @@
           Con el promedio, el modelo simula 1.000 elecciones. En cada una, el voto de cada partido se sortea
           alrededor del promedio con un margen que suma el error estadístico del promedio y el que han
           tenido históricamente los sondeos de la última semana frente al resultado. El modo Hoy responde
-          a «si las elecciones fueran hoy»; el modo Elección añade la deriva de la opinión hasta el día de
-          la votación, medida con lo que se movieron los promedios en ciclos pasados. La deriva crece con
-          los días que faltan, es proporcional al tamaño de cada partido y es mayor en los partidos
-          jóvenes, los que las encuestas listan desde hace menos de cuatro años.
+          a «si las elecciones fueran hoy», con hoy como la fecha de la estimación que figura al pie de la
+          página (puede ser unos días posterior al último sondeo); el modo Elección añade la deriva de la
+          opinión hasta el día de la votación, medida con lo que se movieron los promedios en ciclos
+          pasados. La deriva crece con los días que faltan, es proporcional al tamaño de cada partido y es
+          mayor en los partidos jóvenes, los que las encuestas listan desde hace menos de cuatro años.
         </p>
         <p>
           Los partidos se sortean de forma independiente: un sorteo conjunto, en el que cuando uno sube los
-          demás tienden a bajar, está probado pero no mejora el backtest a corto plazo y queda desactivado.
-          El voto de cada simulación se lleva después a las circunscripciones con oscilaciones aleatorias
-          por comunidad autónoma y por provincia (dentro de una comunidad, solo por circunscripción),
-          estimadas con las elecciones anteriores, porque no todas se mueven igual que el conjunto. Las
-          probabilidades publicadas son la fracción de simulaciones en que algo ocurre: que un partido
-          quede primero u obtenga escaño, o que un bloque o una coalición alcance la mayoría absoluta.
+          demás tienden a bajar, está probado pero no mejora la evaluación con elecciones pasadas a corto
+          plazo y queda desactivado. El voto de cada simulación se lleva después a las circunscripciones con
+          oscilaciones aleatorias por comunidad autónoma y por provincia (dentro de una comunidad, solo por
+          circunscripción), estimadas con las elecciones anteriores, porque no todas se mueven igual que el
+          conjunto. Las probabilidades publicadas son la fracción de simulaciones en que algo ocurre: que un
+          partido quede primero u obtenga escaño, o que un bloque o una coalición alcance la mayoría
+          absoluta.
         </p>
         {% elif section.id == 'escanos' %}
         <p>
@@ -109,7 +113,8 @@
           En cada circunscripción los escaños se reparten con la regla D'Hondt, como en el recuento oficial,
           y solo entre las candidaturas que superan la barrera legal: en las generales, el 3 % de los votos
           válidos de la circunscripción; en las autonómicas, la que fije la ley de cada comunidad. Con los
-          votos oficiales, ese reparto reproduce escaño a escaño el de las últimas elecciones generales.
+          votos oficiales, ese reparto reproduce escaño a escaño el de las cinco elecciones generales de 2015
+          a 2023.
           El resultado central, los intervalos y el detalle por circunscripción están en
           <a href="/escanos{{ query }}">Escaños</a>.
         </p>
@@ -121,8 +126,9 @@
           anteriores. Lo que habría dicho se compara con el resultado oficial y con tres referencias
           sencillas: el último sondeo publicado, la media de los sondeos de las cuatro semanas anteriores y
           el resultado de la elección anterior. También se comprueba si los intervalos contienen el
-          resultado tantas veces como anuncian. Los resultados por horizonte están en
-          <a href="/modelo{{ query }}">Modelo</a>.
+          resultado tantas veces como anuncian. La curación de los datos (la asignación de partidos y la
+          calidad previa de las casas) es la de hoy, así que no es una reconstrucción completa de lo que se
+          sabía en cada fecha. Los resultados por horizonte están en <a href="/modelo{{ query }}">Modelo</a>.
         </p>
         <p>
           <a href="/elecciones{{ query }}">Elecciones</a> muestra, elección a elección, cuánto se
@@ -146,6 +152,7 @@
           {% endfor %}
         </p>
         {% elif section.id == 'limitaciones' %}
+        <p>Lo que el modelo no puede hacer, o hace solo en parte:</p>
         <ul>
           <li>Pocas elecciones para calibrar: el error histórico, la deriva y el backtest se apoyan en un
             puñado de elecciones generales con sondeos abundantes, y en las autonómicas hay aún menos por
@@ -156,11 +163,12 @@
             todas las casas, que ninguna corrección por casa elimina.</li>
           <li>Sucesión de partidos: cuando los partidos se fusionan, se separan o nacen, el modelo suma o
             hereda sus sondeos y sus resultados según reglas fijadas a mano. Sumar los sondeos de las partes
-            suele sobreestimar a la coalición, la desaparición de un partido no se modela y un partido sin
-            resultado previo ni partido del que heredarlo no obtiene escaños en la proyección.</li>
-          <li>Veda: la ley electoral prohíbe publicar sondeos en los cinco días anteriores a la votación
-            (artículo 69.7 de la LOREG). En ese periodo no se publican pronósticos nuevos de las generales,
-            así que el último no recoge los movimientos de los últimos días.</li>
+            suele sobreestimar a la coalición, la deriva adicional de un partido que se está disolviendo no
+            se modela y un partido sin resultado previo ni partido del que heredarlo no obtiene escaños en
+            la proyección.</li>
+          <li>Veda: la ley electoral prohíbe publicar sondeos nuevos en los cinco días anteriores a la
+            votación (artículo 69.7 de la LOREG), así que el promedio no puede recoger los movimientos de
+            la opinión en esos últimos días.</li>
         </ul>
         {% endif %}
       </section>

@@ -20,7 +20,8 @@ def metodo_context(state: dict, active: str = '/metodo') -> dict:
     Template context of the method page.
 
     The text lives in ``metodo.html``; the context only adds the ordered sections, which the template
-    uses for the navigation and for the anchors. The page has no ``initial`` data and no script.
+    uses for the navigation and for the anchors. The page has no ``initial`` data; its module
+    (``metodo.js``) only wires the header controls.
 
     Parameters
     ----------
