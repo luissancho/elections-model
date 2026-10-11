@@ -1931,7 +1931,10 @@ class Computer(Core):
             The polls data with the specified metric, indexed by `(event, pollster, days)`; `event_date` is the
             ISO date of the `event` label.
         """
-        df = self.filter_polls(featured, **kwargs).dropna(axis=1, how='all')
+        df = self.filter_polls(featured, **kwargs)
+        # Drop only the parties no poll reports: a metric that is null for every poll of the selection (as
+        # `bias_within` when every `vs` block has a single party) must stay, null, in the output
+        df = df.drop(columns=[n for n in self.names if n in df.columns and df[n].isna().all()])
 
         names = [n for n in self.names if n in df.columns]
         if metric == 'error':

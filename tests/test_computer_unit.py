@@ -287,3 +287,39 @@ def test_herding_summary_pools_cycles_with_year_decay():
     upto = c.herding_summary(event_date='2023-07-23', data=data)
     assert upto.loc['A', 'herding_events'] == 2 and upto.loc['B', 'herding'] == pytest.approx(np.sqrt(2.))
     assert c.herding_summary(data=data.iloc[0:0]).shape[0] == 0
+
+
+# --- get_polls_metric: una métrica nula en todos los sondeos del evento no puede desaparecer ---
+
+def single_event_computer():
+    """Computer sin base de datos con un solo evento de bloques `vs` de un partido (`bias_within` nulo)."""
+    c = Computer.__new__(Computer)
+    c.scope, c.verbose = 'es-cb', 0
+    c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
+    c.names = ['PP', 'PSOE']
+    c.event_params = {'2011-05-22': {'bmaps': {'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
+    c.drange, c.n_last, c.drop_mtypes, c.drop_ctypes = (0, 60), None, None, None
+    event = pd.Timestamp('2011-05-22')
+    index = pd.MultiIndex.from_tuples(
+        [(event, pd.Timestamp('2011-05-12'), 1, 0), (event, pd.Timestamp('2011-05-15'), 2, 0)], names=c.keys
+    )
+    c.series = pd.DataFrame({
+        'pollster': ['A', 'B'], 'mtype': ['public', 'private'], 'ctype': ['phone', 'phone'],
+        'featured': [True, True], 'computed': [True, True], 'days': [10, 7], 'sample_size': [800, 1000],
+        'proc_sample': [800, 1000], 'weight_over': [1., 1.], 'weight_sample': [.8, 1.],
+        'error_avg': [1.5, 2.], 'bias_avg': [1., 1.2], 'error_blocks': [2., 3.], 'bias_blocks': [1.1, 1.4],
+        'error_within': [0., 0.], 'bias_within': [np.nan, np.nan], 'bias': [1.1, 1.4],
+        'PP': [45., 44.], 'PSOE': [40., 42.],
+    }, index=index)
+    c.errors = pd.DataFrame({'PP': [1.5, 0.5], 'PSOE': [-1.5, 0.5]}, index=index)
+    return c
+
+
+def test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll():
+    """Con bloques `vs` de un solo partido `bias_within` es nulo en todos los sondeos: la columna debe seguir ahí
+    (nula), no desaparecer con los partidos sin datos y romper la selección final (fallo real de `publish event`
+    en es-cb 2011-05-22)."""
+    df = single_event_computer().get_polls_metric('error', bmap='vs')
+    assert list(df.index.names) == ['event', 'pollster', 'days'] and len(df) == 2
+    assert 'bias_within' in df.columns and df['bias_within'].isna().all()
+    assert df['error_within'].tolist() == [0., 0.] and {'Derecha', 'Izquierda'} <= set(df.columns)

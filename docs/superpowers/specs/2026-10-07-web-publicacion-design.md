@@ -1244,3 +1244,16 @@ Pendiente de Luis:
 
 Siguiente: fase 6 (endurecimiento): veda y `freeze` en las vistas, prueba de carga, ensayos de `point`/`unpublish` y
 `freeze`, división de `publish.py`, `HEAD`, `asyncio.to_thread` e imports perezosos, y `deploy/README.md` final.
+
+Arreglo tras el primer `publish event` real de Luis (2026-10-11, `scopes: "all"`, `event_date: "all"`):
+`Computer.get_polls_metric` fallaba con `KeyError: "['bias_within'] not in index"` en cinco elecciones autonómicas
+antiguas (`es-cb` 2011-05-22, `es-cm` 2011-05-22, `es-cn` 2011-05-22, `es-ga` 2009-03-01 y 2012-10-21): con bloques
+`vs` de un solo partido, `bias_within` es nulo en todos sus sondeos y el `dropna(axis=1, how='all')` del método,
+pensado para quitar los partidos sin datos, eliminaba también esa métrica; con el `Computer` de un solo evento de
+`publish_event` no quedaban otros sondeos que la conservasen (por eso `publish analysis`, con todos los eventos, no
+fallaba). Corregido en el núcleo: solo se descartan las columnas de partido sin datos (test
+`test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll`); comprobado contra la RDS con `es-cb`
+2011-05-22 (10 sondeos, 7 casas) y `es-ga` 2009-03-01 (20 sondeos, 11 casas). Basta relanzar `publish event` para
+esos cuatro ámbitos. Observación pendiente de Luis: `error_blocks` es el error del margen entre bloques CON signo
+(`errors_gap_vs`), así que en el detalle de la elección las casas se ordenan por ese valor con signo y las barras
+pueden ser negativas; el notebook PollstersEvent dibuja su valor absoluto. Decidir si la página muestra la magnitud.
