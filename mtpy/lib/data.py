@@ -501,6 +501,25 @@ def get_parties() -> pd.DataFrame:
     return parties
 
 
+def get_events(scope: str) -> pd.DataFrame:
+    """
+    Elections of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per election, with `date`, `scope`, `name` and `featured`.
+    """
+    return Events().get_results(query={
+        'filters': ["scope = '{}'".format(scope)]
+    }, formatted=True)
+
+
 def get_pollsters() -> pd.DataFrame:
     pollsters = Pollsters().get_results(formatted=True)
 

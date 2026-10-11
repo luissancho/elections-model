@@ -30,6 +30,13 @@ class Publish(Job):
     ``site-dry/v1/backtest/``. Each scope ends ``published``, ``skipped`` (no results for the scope)
     or ``failed``.
 
+    ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
+    results and the slice of the model backtest of the election), overwriting them. It needs ``event_date`` (a date,
+    a list of dates or ``'all'``: the featured elections of the scope before today), cannot be combined with
+    ``forecast``, has no LOREG guard, never touches the manifest and, with ``dry_run``, writes under
+    ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not a featured election of
+    the scope, no official results or no polls: ``publish.NothingToPublish``) or ``failed``.
+
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
     its noon, and ``backfill`` set in its headline. A day whose run already exists is
@@ -47,6 +54,8 @@ class Publish(Job):
         python job.py publish '{"what":["forecast"],"scopes":"all"}'
         python job.py publish '{"what":["analysis"],"scopes":["es"]}'
         python job.py publish '{"what":["backtest"],"scopes":["es"]}'
+        python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'
+        python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
         python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
@@ -74,9 +83,10 @@ class Publish(Job):
             ``point`` and ``unpublish``. They run in that order when several are given.
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``.
-        event_date : str, optional
+        event_date : str or list of str, optional
             Election date (ISO 8601, normalised to ``YYYY-MM-DD``). Defaults to the next
-            event of each scope. A value that is not a date fails each scope.
+            event of each scope. A value that is not a date fails each scope. For ``event``, it is required and
+            can also be a list of dates or ``'all'`` (see ``publish.event_dates_to_publish``).
         n_sim : int, default 1000
             Number of simulations.
         seed : int, default 42
@@ -109,7 +119,8 @@ class Publish(Job):
             and must be before today) of retrospective ``forecast`` runs, one per day; see
             ``publish.backfill_days``. Requires ``forecast`` in ``what``.
         source : str, optional
-            Results folder of ``backtest`` (default ``backtest/results`` of the repository).
+            Results folder of ``backtest`` and of the model slice of ``event`` (default ``backtest/results`` of
+            the repository).
         verbose : int, default 0
             Verbosity passed to the forecast and the analysis.
         **kwargs
@@ -121,13 +132,14 @@ class Publish(Job):
             Result of each scope (of the last action that ran on it), with a ``status`` of
             ``published``, ``skipped``, ``refused`` or ``failed``; with ``backfill``, the
             ``forecast`` result of a scope is the list of the results of its days, each with
-            its ``day``.
+            its ``day``, and the ``event`` result is the list of the results of its dates, each with its
+            ``event_date``.
 
         Raises
         ------
         ValueError
-            If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``), or
-            ``backfill`` is given without ``forecast`` in ``what`` or its range is invalid.
+            If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``), ``event`` is
+            combined with ``forecast``, or ``backfill`` is given without ``forecast`` in ``what`` or its range is invalid.
         RuntimeError
             If no file system is configured, or any scope failed (raised after the
             manifest, the summary and the alert).
@@ -140,6 +152,8 @@ class Publish(Job):
             raise ValueError('publish: "run" is required')
         if 'event' in whats and not event_date:
             raise ValueError('publish: "event_date" is required for event')
+        if 'event' in whats and 'forecast' in whats:
+            raise ValueError('publish: "event" cannot be combined with "forecast"')
         if backfill is not None and 'forecast' not in whats:
             raise ValueError('publish: "backfill" needs "forecast" in what')
         days = None if backfill is None else publish.backfill_days(backfill, today)
@@ -186,6 +200,14 @@ class Publish(Job):
                 if result['status'] == 'failed':
                     failures.append('{} ({})'.format(scope, 'analysis'))
                 lines.append(self._analysis_line(scope, result))
+
+        if 'event' in whats:
+            for scope in publish.resolve_scopes(scopes):
+                outcomes = self._event_scope(scope, writer, event_date, today, source, verbose)
+                results[scope] = outcomes
+                if any(result['status'] == 'failed' for result in outcomes):
+                    failures.append('{} ({})'.format(scope, 'event'))
+                lines.extend(self._event_line(scope, result) for result in outcomes)
 
         if 'backtest' in whats:
             for scope in publish.resolve_scopes(scopes):
@@ -404,6 +426,56 @@ class Publish(Job):
         return {'status': 'published', 'event_date': out['event_date'], 'n_pollsters': out['n_pollsters'],
                 'seconds': out['seconds']}
 
+    def _event_scope(self, scope, writer, event_date, today, source, verbose):
+        """
+        Publish the past elections of one scope, converting every outcome into a result dict.
+
+        Parameters
+        ----------
+        scope : str
+            Scope to publish.
+        writer : BundleWriter
+            Bundle writer.
+        event_date : str or list of str
+            Date, list of dates or ``'all'`` (see ``publish.event_dates_to_publish``).
+        today : str or None
+            Date taken as today to resolve ``'all'``.
+        source : str or None
+            Results folder of the backtest (see ``publish.backtest_source``).
+        verbose : int
+            Verbosity passed to the computer.
+
+        Returns
+        -------
+        list of dict
+            One result per date, each with its ``event_date`` and a ``status``: ``published`` with ``n_polls``,
+            ``n_pollsters``, ``has_model`` and ``seconds``, ``skipped`` for ``publish.NothingToPublish`` and
+            ``failed`` for any other exception (an invalid date or a failure resolving ``'all'`` included),
+            both with a ``reason``. ``'all'`` with no past featured election gives one ``skipped`` result.
+        """
+        try:
+            days = publish.event_dates_to_publish(scope, event_date, today=today)
+        except Exception as e:
+            self._log_error(scope)
+            return [{'status': 'failed', 'event_date': str(event_date), 'reason': '{}: {}'.format(type(e).__name__, e)}]
+        if not days:
+            return [{'status': 'skipped', 'event_date': str(event_date), 'reason': 'no past featured elections'}]
+
+        outcomes = []
+        for day in days:
+            try:
+                out = publish.publish_event(scope, day, writer, source=source, verbose=verbose)
+            except publish.NothingToPublish as e:
+                outcomes.append({'status': 'skipped', 'event_date': day, 'reason': str(e)})
+            except Exception as e:
+                self._log_error(scope)
+                outcomes.append({'status': 'failed', 'event_date': day, 'reason': '{}: {}'.format(type(e).__name__, e)})
+            else:
+                outcomes.append({'status': 'published', 'event_date': day, 'n_polls': out['n_polls'],
+                                 'n_pollsters': out['n_pollsters'], 'has_model': out['has_model'],
+                                 'seconds': out['seconds']})
+        return outcomes
+
     def _backtest_scope(self, scope, writer, source):
         """
         Publish the model backtest of one scope, converting every outcome into a result dict.
@@ -508,6 +580,14 @@ class Publish(Job):
             return '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
                 scope, result['event_date'], result['n_pollsters'], result['seconds']['total'])
         return '{}: analysis {} ({})'.format(scope, result['status'], result['reason'])
+
+    @staticmethod
+    def _event_line(scope, result):
+        """Format the summary line of one date result of ``event``."""
+        if result['status'] == 'published':
+            return '{}: event {} published ({} polls, {} pollsters) in {:.0f} s'.format(
+                scope, result['event_date'], result['n_polls'], result['n_pollsters'], result['seconds']['total'])
+        return '{}: event {} {} ({})'.format(scope, result['event_date'], result['status'], result['reason'])
 
     @staticmethod
     def _backtest_line(scope, result):

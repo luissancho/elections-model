@@ -20,6 +20,9 @@ site/v1/
     backtest/{scope}/                           backtest del modelo (fase 5; ver "Backtest")
         meta.json metrics.json by-horizon.json blocks.json shares.json seats.json
         csv/ metrics.csv by-horizon.csv blocks.csv shares.csv seats.csv
+    events/{scope}/{date}/                      una elección pasada (fase 5; ver "Eventos")
+        meta.json pollsters.json polls.json results.json model.json
+        csv/ pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
     runs/{scope}/history.json                   headline de cada run, ascendente por run_id
     runs/{scope}/{run_id}/
         meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json
@@ -288,6 +291,47 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 
 `meta.json` se escribe el último: un backtest sin él está incompleto. Los CSV (`csv/{nombre}.csv`) son los gemelos
 redondeados de las cinco tablas; `meta` no tiene gemelo.
+
+## Eventos
+
+Enmienda 2026-10-11 (fase 5). Una elección pasada de un ámbito vive en `events/{scope}/{date}/` (`date` = `YYYY-MM-DD`;
+en `site/v1/`, o en `site-dry/v1/` con `dry_run`) y la escribe `python job.py publish '{"what":["event"],"scopes":["es"],"event_date":...}'`,
+donde `event_date` es una fecha, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy).
+Como el análisis y el backtest, **se sobrescribe** en cada publicación: sin `run_id`, fuera del manifest y de
+`history.json`, sin cortafuegos LOREG; `event` no se combina con `forecast`. Cada fecha queda `published`, `skipped`
+(`{date} is not a featured election of {scope}`, `no official results for {scope} {date}` o sin sondeos) o `failed`.
+La fuente de verdad en código es `bundle.EVENT_PARTS`, `EVENT_SCHEMAS`, `EVENT_CSV` (`path_event`, `path_event_csv`,
+`BundleReader.list_events`, `event_exists`) y `publish.publish_event`.
+
+Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Cinco partes:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `event-meta@1` | `scope`, `event_date`, `name` (o `null`), `n_polls`, `n_pollsters`, `blocks` (partidos de cada bloque `vs`), `main`, `summary`, `has_model`, `horizons`, `commit`, `dirty`, `versions`, `seconds` |
+| `pollsters` | `event-pollsters@1` | `blocks`, `rows` |
+| `polls` | `event-polls@1` | `blocks`, `rows` |
+| `results` | `event-results@1` | `n_seats`, `rows` |
+| `model` | `event-model@1` | `horizons`, `shares`, `seats`, `blocks` |
+
+- `meta.summary`: `n_polls`, `n_pollsters`, `error_avg`, `error_blocks`, `bias_blocks` (medias de los sondeos ponderadas
+  por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}`. `has_model` es
+  `true` si el backtest tiene filas de `shares` para la elección; `horizons`, los horizontes del modelo.
+- `pollsters.rows`: una fila por casa, de menor a mayor `error_blocks` (nulos al final): `pollster_id` (o `null`),
+  `pollster`, `n_polls`, `sample_size` (mediana de las muestras conocidas, `null` si ninguna), `error_avg`,
+  `error_blocks`, `bias_blocks` (medias, 2 decimales) y los `last_*` de su sondeo más cercano a la elección
+  (`last_days`, `last_error_avg`, `last_error_blocks`, `last_bias_blocks` y `last_{bloque}`, la desviación con signo
+  de cada bloque; `blocks` los lista).
+- `polls.rows`: las filas de `poll-errors` (ver "Análisis") de todos los sondeos de la elección más `pollster_id`
+  (tras `pollster`), por `days` ascendente (el más reciente primero); `blocks` lista las columnas de bloque.
+- `results.rows`: `party_id`, `party`, `votes` (entero), `pct` (2 decimales) y `seats` (entero) del resultado oficial
+  nacional (región 0), por votos descendente; `n_seats` es la suma de `seats`.
+- `model` es el **corte del backtest** (ver "Backtest") a esta elección: `shares`, `seats` y `blocks` son las filas
+  (`{columna: valor}`, mismos redondeos) de `shares.csv`, `seats.csv` y `blocks.csv` con ese `event_date`, y
+  `horizons` los horizontes que aparecen, ascendentes. Sin backtest, las tres listas y `horizons` van vacías.
+
+`meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
+`pollsters`, `polls` y `results` y los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
+que tienen tabla en el backtest); `meta` no tiene gemelo.
 
 ## Punteros
 

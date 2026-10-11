@@ -81,6 +81,30 @@ def test_analysis_exists_needs_the_meta(tmp_path):
     assert writer.analysis_exists('es') and not writer.analysis_exists('es-md')
 
 
+def test_event_paths_follow_the_published_layout_and_reject_bad_input():
+    assert bundle.EVENT_PARTS == ('meta', 'pollsters', 'polls', 'results', 'model')
+    assert all(schema in bundle.SCHEMAS for schema in bundle.EVENT_SCHEMAS.values())
+    assert bundle.path_event('es', '2023-07-23', 'meta') == 'events/es/2023-07-23/meta.json'
+    assert bundle.path_event_csv('es-md', '2023-07-23', 'model-shares') == 'events/es-md/2023-07-23/csv/model-shares.csv'
+    for call in (lambda: bundle.path_event('es', '2023-7-23', 'meta'), lambda: bundle.path_event('es', '2023-07-23', 'nope'),
+                 lambda: bundle.path_event_csv('es', '2023-07-23', 'meta'), lambda: bundle.path_event('ES', '2023-07-23', 'meta')):
+        with pytest.raises(ValueError):
+            call()
+
+
+def test_list_events_and_event_exists_need_the_meta(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    assert writer.list_events('es') == [] and not writer.event_exists('es', '2023-07-23')
+    data = load_fixture('event-results')['data']
+    for date in ('2023-07-23', '2019-11-10'):
+        writer.write_json(bundle.path_event('es', date, 'results'), 'event-results', data, 'es')
+    assert writer.list_events('es') == [] and not writer.event_exists('es', '2023-07-23')
+    for date in ('2023-07-23', '2019-11-10'):
+        writer.write_json(bundle.path_event('es', date, 'meta'), 'event-meta', load_fixture('event-meta')['data'], 'es')
+    assert writer.list_events('es') == ['2019-11-10', '2023-07-23'] and writer.event_exists('es', '2023-07-23')
+    assert writer.list_events('es-md') == []
+
+
 def test_envelope_has_the_common_keys():
     env = bundle.envelope('vote', {'x': 1}, 'es', run_id='20261008-141503', mode='nowcast', generated_at='2026-10-08T14:15:03Z')
     assert env == {'schema': 'vote@1', 'contract': 1, 'scope': 'es', 'run_id': '20261008-141503', 'mode': 'nowcast',

@@ -252,6 +252,23 @@ def write_backtest_source(root, scope='es'):
     return folder
 
 
+def synthetic_event():
+    """Tablas que lee `publish_event` de la base: `events` (dos elecciones destacadas pasadas y el ciclo en curso,
+    no destacado), `results` (solo `2023-07-23`, región 0: una fila por `NAMES` y `Cs` sin escaños, con `pct` de
+    más decimales y 350 escaños) y `pollsters` (`id`/`name` de `HOUSES`: `CIS` 1, `GAD3` 2, `40dB` 3)."""
+    events = pd.DataFrame({
+        'date': ['2019-11-10', '2023-07-23', '2026-11-29'], 'scope': 'es',
+        'name': ['Generales 2019 (noviembre)', 'Generales 2023', None], 'featured': [True, True, False],
+    })
+    results = pd.DataFrame({
+        'date': '2023-07-23', 'scope': 'es', 'region_id': 0, 'region': 'España',
+        'party_id': [1, 2, 3, 4], 'party': ['PP', 'PSOE', 'VOX', 'Cs'],
+        'votes': [8160837, 7760970, 3033744, 18054], 'pct': [33.05612, 31.43912, 12.28781, 0.13], 'seats': [160, 150, 40, 0],
+    })
+    pollsters = pd.DataFrame({'id': [1, 2, 3], 'name': ['CIS', 'GAD3', '40dB']})
+    return types.SimpleNamespace(events=events, results=results, pollsters=pollsters)
+
+
 class FakeComputer:
     """Fábrica con la firma `Computer(scope=..., path=...)`: devuelve un Computer sintético con `scope`,
     `event_dates` y `event_params` (bloques `vs` y partidos `main` del ciclo, como los lee el real),

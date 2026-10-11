@@ -23,6 +23,10 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             meta.json metrics.json by-horizon.json blocks.json shares.json seats.json
             csv/
                 metrics.csv by-horizon.csv blocks.csv shares.csv seats.csv
+        events/{scope}/{date}/                  one past election of a scope, overwritten on each publication
+            meta.json pollsters.json polls.json results.json model.json
+            csv/
+                pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
 
 Every JSON file is an envelope::
 
@@ -31,8 +35,9 @@ Every JSON file is an envelope::
 where ``schema`` is ``{name}@{CONTRACT}``, ``scope`` and ``run_id`` are ``null`` when the file
 does not belong to one (``manifest``, ``history``; ``run_id`` for the analysis), ``mode`` is only set
 for ``MODE_PARTS`` and ``data`` has the keys listed in ``SCHEMAS``. The analysis parts are validated
-against the schema named in ``ANALYSIS_SCHEMAS`` and the backtest ones against ``BACKTEST_SCHEMAS``;
-``meta.json`` is written last, so an analysis or a backtest without it is incomplete. The contract is described in ``docs/web/contrato.md``.
+against the schema named in ``ANALYSIS_SCHEMAS``, the backtest ones against ``BACKTEST_SCHEMAS`` and the event
+ones against ``EVENT_SCHEMAS``; ``meta.json`` is written last, so an analysis, a backtest or an event without it is
+incomplete. The contract is described in ``docs/web/contrato.md``.
 
 ``BundleReader`` and ``BundleWriter`` read and write the bundle through a file system (``app.fs``),
 validating every JSON file against its schema before it is written.
@@ -61,6 +66,10 @@ ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'er
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
+EVENT_PARTS = ('meta', 'pollsters', 'polls', 'results', 'model')
+EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
+EVENT_CSV = ('pollsters', 'polls', 'results', 'model-shares', 'model-seats', 'model-blocks')
+DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
 
@@ -101,6 +110,13 @@ SCHEMAS = {
                       'horizons': list, 'n_cases': int, 'n_seats_cases': int, 'source': str, 'published': dict,
                       'seconds': dict},
     **{schema: {'columns': list, 'rows': list} for part, schema in BACKTEST_SCHEMAS.items() if part != 'meta'},
+    'event-meta': {'scope': str, 'event_date': str, 'name': NULLABLE_STR, 'n_polls': int, 'n_pollsters': int,
+                   'blocks': dict, 'main': list, 'summary': dict, 'has_model': bool, 'horizons': list,
+                   'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'seconds': dict},
+    'event-pollsters': {'blocks': list, 'rows': list},
+    'event-polls': {'blocks': list, 'rows': list},
+    'event-results': {'n_seats': int, 'rows': list},
+    'event-model': {'horizons': list, 'shares': list, 'seats': list, 'blocks': list},
 }
 
 
@@ -498,6 +514,69 @@ def path_backtest_csv(scope: str, name: str) -> str:
     return f'backtest/{scope}/csv/{name}.csv'
 
 
+def _check_event(scope: str, date: str, name: str, names: tuple) -> None:
+    """Check the scope, the date and the file name of an event path, raising ``ValueError`` if invalid."""
+    _check_file(scope, name, names, 'event')
+    if not isinstance(date, str) or not DATE_RE.fullmatch(date):
+        raise ValueError(f'invalid event date {date!r}')
+
+
+def path_event(scope: str, date: str, part: str) -> str:
+    """
+    Path of a JSON file of a past election of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        The scope; it must match ``ROUTE_ALIAS_RE``.
+    date : str
+        Election date, ``YYYY-MM-DD`` (``DATE_RE``).
+    part : str
+        The file name without extension (one of ``EVENT_PARTS``).
+
+    Returns
+    -------
+    str
+        ``'events/{scope}/{date}/{part}.json'``.
+
+    Raises
+    ------
+    ValueError
+        If the scope, the date or the part is invalid.
+    """
+    _check_event(scope, date, part, EVENT_PARTS)
+
+    return f'events/{scope}/{date}/{part}.json'
+
+
+def path_event_csv(scope: str, date: str, name: str) -> str:
+    """
+    Path of a CSV file of a past election of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        The scope; it must match ``ROUTE_ALIAS_RE``.
+    date : str
+        Election date, ``YYYY-MM-DD`` (``DATE_RE``).
+    name : str
+        The file name without extension (one of ``EVENT_CSV``).
+
+    Returns
+    -------
+    str
+        ``'events/{scope}/{date}/csv/{name}.csv'``.
+
+    Raises
+    ------
+    ValueError
+        If the scope, the date or the name is invalid.
+    """
+    _check_event(scope, date, name, EVENT_CSV)
+
+    return f'events/{scope}/{date}/csv/{name}.csv'
+
+
 def validate(name: str, obj: dict) -> dict:
     """
     Check that an envelope has the shape of a schema.
@@ -691,6 +770,56 @@ class BundleReader:
             If the scope is invalid.
         """
         return self.exists(path_backtest(scope, 'meta'))
+
+    def list_events(self, scope: str) -> list:
+        """
+        List the published past elections of a scope, an election being published when it has its ``meta.json``.
+
+        Parameters
+        ----------
+        scope : str
+            The scope; it must match ``ROUTE_ALIAS_RE``.
+
+        Returns
+        -------
+        list of str
+            The election dates, ascending. Empty if the scope has no events folder.
+
+        Raises
+        ------
+        ValueError
+            If the scope is invalid.
+        """
+        _check_file(scope, 'meta', EVENT_PARTS, 'event')
+        try:
+            names = self.fs.listdir(self.path(f'events/{scope}'))
+        except FileNotFoundError:
+            return []
+
+        return sorted(name for name in names if DATE_RE.fullmatch(name) and self.event_exists(scope, name))
+
+    def event_exists(self, scope: str, date: str) -> bool:
+        """
+        Check whether a past election of a scope is published, which is when it has its ``meta.json``.
+
+        Parameters
+        ----------
+        scope : str
+            The scope; it must match ``ROUTE_ALIAS_RE``.
+        date : str
+            Election date, ``YYYY-MM-DD``.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``events/{scope}/{date}/meta.json`` exists.
+
+        Raises
+        ------
+        ValueError
+            If the scope or the date is invalid.
+        """
+        return self.exists(path_event(scope, date, 'meta'))
 
 
 class BundleWriter(BundleReader):

@@ -5,7 +5,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from tests.fakes import FakeComputer, FakeSimulator, write_backtest_source
+from tests.fakes import FakeComputer, FakeSimulator, synthetic_event, write_backtest_source
 
 
 def entry(scope, run_id):
@@ -21,6 +21,7 @@ def patched(monkeypatch):
     calls = []
     real_forecast = publish.publish_forecast
     real_analysis = publish.publish_analysis
+    real_event = publish.publish_event
 
     def fake_forecast(scope, writer, run_id, event_date, **kwargs):
         calls.append((scope, run_id, event_date, kwargs))
@@ -43,6 +44,13 @@ def patched(monkeypatch):
                              stats=lambda scope, event_date: (7, '2026-10-01'),
                              prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
+    def fake_event(scope, event_date, writer, **kwargs):
+        ev = synthetic_event()
+        return real_event(scope, event_date, writer, computer=FakeComputer(), events=lambda s: ev.events,
+                          results=lambda s, d, r: ev.results.loc[ev.results.date == d], pollsters=lambda: ev.pollsters,
+                          prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
+
+    monkeypatch.setattr(publish, 'publish_event', fake_event)
     monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
     monkeypatch.setattr(publish, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
@@ -388,3 +396,41 @@ def test_event_needs_its_date(fresh_app, tmp_path):
 
     with pytest.raises(ValueError, match='"event_date" is required for event'):
         Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))
+
+
+def test_event_action_publishes_each_date(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path / 'site'))
+    result = Publish().run(what=['event'], scopes=['es'], event_date=['2023-07-23', '2019-11-10'], fs=fs)
+    assert [r['status'] for r in result['es']] == ['published', 'skipped']
+    out = capsys.readouterr().out
+    assert 'es: event 2023-07-23 published (3 polls, 3 pollsters) in ' in out
+    assert 'es: event 2019-11-10 skipped (no official results for es 2019-11-10)' in out
+    assert bundle.BundleReader(fs).event_exists('es', '2023-07-23') and 'manifest' not in out
+    assert result['es'][0]['event_date'] == '2023-07-23'
+
+
+def test_event_action_fails_a_date_without_stopping_the_others(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['event'], scopes=['es'], event_date='2023-13-01', fs=FileSystem(str(tmp_path / 'site')))
+    assert 'es: event 2023-13-01 failed (ValueError' in capsys.readouterr().out
+
+
+def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    Publish().run(what=['event'], scopes=['es'], event_date='2023-07-23', fs=FileSystem(str(tmp_path)), dry_run=True)
+    assert (tmp_path / 'site-dry' / 'v1' / 'events' / 'es' / '2023-07-23' / 'meta.json').exists()
+    assert not (tmp_path / 'site').exists()
+
+
+def test_event_requires_a_date_and_excludes_forecast(fresh_app, tmp_path):
+    from mtpy.jobs.Publish import Publish
+
+    with pytest.raises(ValueError, match='event_date'):
+        Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))
+    with pytest.raises(ValueError, match='cannot be combined'):
+        Publish().run(what=['event', 'forecast'], event_date='2023-07-23', fs=FileSystem(str(tmp_path)))

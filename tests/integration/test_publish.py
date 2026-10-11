@@ -96,3 +96,21 @@ def test_publish_analysis_against_the_database(app, tmp_path):
     assert herding and all(0 < h < 5 for h in herding)
     errors = parts['poll-errors']['rows']
     assert errors and all(6 <= r['days'] <= 42 for r in errors)
+
+
+def test_publish_event_against_the_database(app, tmp_path):
+    """Las cinco partes de una elección pasada de `es` se escriben, validan y son coherentes entre sí."""
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    out = publish.publish_event('es', '2023-07-23', writer)
+    parts = {}
+    for part in bundle.EVENT_PARTS:
+        env = writer.read_json(bundle.path_event('es', '2023-07-23', part))
+        bundle.validate(bundle.EVENT_SCHEMAS[part], env)
+        parts[part] = env['data']
+    assert writer.event_exists('es', '2023-07-23') and out['n_polls'] == parts['meta']['n_polls'] > 0
+    assert parts['results']['n_seats'] == 350
+    assert parts['polls']['rows'] and all(r['days'] >= 0 for r in parts['polls']['rows'])
+    houses = {r['pollster'] for r in parts['pollsters']['rows']}
+    assert {r['pollster'] for r in parts['polls']['rows']} <= houses
+    has_backtest = os.path.isfile(os.path.join(publish.REPO_ROOT, 'backtest', 'results', 'shares.csv'))
+    assert parts['meta']['has_model'] is has_backtest

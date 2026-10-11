@@ -10,8 +10,8 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from tests.fakes import (NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_backtest, synthetic_simulator, write_backtest_source)
+from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
+                         synthetic_backtest, synthetic_event, synthetic_simulator, write_backtest_source)
 
 
 def valid(name, data, mode='nowcast'):
@@ -689,3 +689,109 @@ def test_publish_backtest_converts_the_repository_results(tmp_path):
     assert sorted(meta['horizons']) == [6, 14, 30, 60, 90, 180]
     official = [row['official'] for row in writer.read_json(bundle.path_backtest('es', 'seats'))['data']['rows']]
     assert official and all(value is None or type(value) is int for value in official)
+
+
+def event_readers(ev):
+    return dict(events=lambda scope: ev.events, results=lambda scope, date, region: ev.results.loc[ev.results.date == date],
+                pollsters=lambda: ev.pollsters)
+
+
+def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
+    ev = synthetic_event()
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = RecordingFileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(fs)
+    out = publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=str(tmp_path / 'bt'),
+                                prov=fake_prov, **event_readers(ev))
+    assert out['n_polls'] == 3 and out['n_pollsters'] == 3 and out['has_model'] is True
+    written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
+    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 5 and sum(p.endswith('.csv') for p in written) == 6
+    meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))
+    assert meta['schema'] == 'event-meta@1' and meta['data']['name'] == 'Generales 2023' and meta['data']['horizons'] == [6, 30]
+    assert set(meta['data']['summary']) == {'n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias'}
+    assert list(meta['data']['blocks']) == ['Derecha', 'Izquierda'] and meta['data']['main'] == list(BMAPS['main'])
+    houses = writer.read_json(bundle.path_event('es', '2023-07-23', 'pollsters'))['data']['rows']
+    assert [r['pollster'] for r in houses] == ['GAD3', '40dB', 'CIS']
+    assert houses[0] == {**houses[0], 'pollster_id': 2, 'n_polls': 1, 'last_days': 7, 'last_Derecha': 0.68}
+    polls = writer.read_json(bundle.path_event('es', '2023-07-23', 'polls'))['data']['rows']
+    assert [r['days'] for r in polls] == [7, 8, 13] and polls[1]['pollster_id'] == 3
+    results = writer.read_json(bundle.path_event('es', '2023-07-23', 'results'))['data']
+    assert results['n_seats'] == 350 and results['rows'][-1]['party'] == 'Cs' and results['rows'][0]['votes'] >= results['rows'][1]['votes']
+    model = writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data']
+    assert {r['event_date'] for r in model['shares']} == {'2023-07-23'} and model['horizons'] == [6, 30]
+    assert bundle.BundleReader(fs).list_events('es') == ['2023-07-23']
+
+
+def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
+    ev = synthetic_event()
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    out = publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=str(tmp_path / 'none'),
+                                prov=fake_prov, **event_readers(ev))
+    assert out['has_model'] is False
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data'] == {
+        'horizons': [], 'shares': [], 'seats': [], 'blocks': []}
+    meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']
+    assert meta['has_model'] is False and meta['horizons'] == []
+
+
+@pytest.mark.parametrize('date, reason', [('2019-11-10', 'no official results for es 2019-11-10'),
+                                          ('2026-11-29', '2026-11-29 is not a featured election of es'),
+                                          ('2020-01-01', '2020-01-01 is not a featured election of es')])
+def test_publish_event_skips_what_cannot_be_published(tmp_path, date, reason):
+    with pytest.raises(publish.NothingToPublish, match=reason):
+        publish.publish_event('es', date, make_writer(tmp_path), computer=FakeComputer(), prov=fake_prov,
+                              **event_readers(synthetic_event()))
+    assert not (tmp_path / 'site').exists()
+
+
+def test_publish_event_turns_a_computer_value_error_into_nothing_to_publish(tmp_path):
+    with pytest.raises(publish.NothingToPublish, match='no events'):
+        publish.publish_event('es', '2023-07-23', make_writer(tmp_path), computer=FakeComputer(fail=ValueError('no events')),
+                              prov=fake_prov, **event_readers(synthetic_event()))
+    assert not (tmp_path / 'site').exists()
+
+
+def test_publish_event_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, monkeypatch):
+    ev = synthetic_event()
+    write_backtest_source(str(tmp_path / 'bt'))
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    args = dict(computer=FakeComputer(), source=str(tmp_path / 'bt'), prov=fake_prov, **event_readers(ev))
+    publish.publish_event('es', '2023-07-23', writer, **args)
+    first = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at']
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(publish, 'export_event_model', lambda source, event_date: (_ for _ in ()).throw(RuntimeError('boom')))
+    with pytest.raises(RuntimeError):
+        publish.publish_event('es', '2023-07-23', writer, **args)
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at'] == first
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'results'))['generated_at'] == '2030-01-01T00:00:00Z'
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['generated_at'] == first
+
+
+def test_event_dates_to_publish():
+    ev = synthetic_event()
+    assert publish.event_dates_to_publish('es', 'all', events=lambda scope: ev.events, today='2026-10-11') == ['2019-11-10', '2023-07-23']
+    assert publish.event_dates_to_publish('es', '2023-07-23') == ['2023-07-23']
+    assert publish.event_dates_to_publish('es', ['2023-07-23', '2019-11-10']) == ['2023-07-23', '2019-11-10']
+    with pytest.raises(ValueError):
+        publish.event_dates_to_publish('es', '2023-13-01')
+
+
+def test_event_summary_weights_by_poll_weight():
+    frame = synthetic_analysis().poll_errors
+    summary = publish.event_summary(frame, ['Derecha', 'Izquierda'])
+    weights = frame['weight'].to_numpy()
+    assert summary['n_polls'] == 3 and summary['n_pollsters'] == 3
+    assert summary['error_blocks'] == round(float(np.average(frame['error_blocks'], weights=weights)), 2)
+    assert summary['bias']['Derecha'] == round(float(np.average(frame['Derecha'], weights=weights)), 2)
+    assert set(summary['bias']) == {'Derecha', 'Izquierda'}
+
+
+def test_export_event_pollsters_orders_by_error_with_nulls_last():
+    frame = synthetic_analysis().poll_errors.copy()
+    extra = frame.iloc[[0]].rename(index={'40dB': 'IPSOS'}, level='pollster')
+    extra['error_blocks'] = np.nan
+    both = pd.concat([frame, extra])
+    data, table = publish.export_event_pollsters(both, ['Derecha', 'Izquierda'], {'GAD3': 2})
+    assert [r['pollster'] for r in data['rows']] == ['GAD3', '40dB', 'CIS', 'IPSOS']
+    assert data['rows'][0]['pollster_id'] == 2 and data['rows'][1]['pollster_id'] is None
+    assert list(table.columns) == publish.EVENT_POLLSTER_COLUMNS + ['last_Derecha', 'last_Izquierda']

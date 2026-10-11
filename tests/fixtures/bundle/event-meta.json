@@ -1,0 +1,57 @@
+{
+  "schema": "event-meta@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-11T12:00:00Z",
+  "data": {
+    "scope": "es",
+    "event_date": "2023-07-23",
+    "name": "Generales 2023",
+    "n_polls": 3,
+    "n_pollsters": 3,
+    "blocks": {
+      "Derecha": [
+        "PP",
+        "VOX"
+      ],
+      "Izquierda": [
+        "PSOE"
+      ]
+    },
+    "main": [
+      "PP",
+      "PSOE",
+      "VOX"
+    ],
+    "summary": {
+      "n_polls": 3,
+      "n_pollsters": 3,
+      "error_avg": 1.36,
+      "error_blocks": 2.36,
+      "bias_blocks": 0.06,
+      "bias": {
+        "Derecha": 0.19,
+        "Izquierda": -0.18
+      }
+    },
+    "has_model": true,
+    "horizons": [
+      6,
+      30
+    ],
+    "commit": "abc1234",
+    "dirty": false,
+    "versions": {
+      "python": "3.11.9"
+    },
+    "seconds": {
+      "build": 0.0,
+      "polls": 0.0,
+      "results": 0.0,
+      "model": 0.0,
+      "total": 0.0
+    }
+  }
+}
