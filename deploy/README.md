@@ -113,10 +113,11 @@ ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `
    un `index_action` que llame a `render(plantilla, **contexto)`; ver `Promedio.py`.
 2. Plantilla en `web/templates/` que extienda `base.html`.
 3. Entrada en `pages.ROUTES` (ruta, controlador, acción, métodos) y en `pages.PAGES` (menú), en
-   `mtpy/lib/pages.py`. `/` es el valor por defecto del router (controlador `index`), por eso solo
+   `mtpy/lib/pages/common.py`. `/` es el valor por defecto del router (controlador `index`), por eso solo
    `/promedio` y `/escanos` figuran en `ROUTES`; toda página nueva necesita su entrada.
-4. El constructor del contexto de la página, también en `pages.py` (junto a `index_context` y
-   `promedio_context`).
+4. El constructor del contexto de la página, en su propio módulo `mtpy/lib/pages/<página>.py` (como
+   `index.py` o `promedio.py`), reexportado en `mtpy/lib/pages/__init__.py` para que el controlador lo
+   llame como `pages.<página>_context`.
 5. Un test en `tests/test_pages.py`.
 6. Un parámetro propio de la página (como `region` en `/escanos`) se valida en `webapi` (`check_region`) y se
    lee en el `index_action`, fuera de `parse_state`: así no entra en los enlaces del menú ni en el estado

@@ -617,3 +617,17 @@ def test_casa_profile_header_uses_the_scope_rating(houses):
     page = html(call(houses, '/casas', query='id=2')[2])
     assert 'Tipo: privada · Calidad: 80,0 · Rating: 82,4' in page and 'Rating: 70' not in page
     assert 'Tipo: pública' in html(call(houses, '/casas', query='id=1')[2])  # `mtype` con su etiqueta en castellano
+
+
+def test_pages_package_layout():
+    """Un módulo por página, `common` y `filters`; ninguno tapado por un nombre exportado (D1)."""
+    import inspect
+    import pkgutil
+    names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
+    assert names == ['casas', 'common', 'escanos', 'filters', 'index', 'promedio']
+    for name in names:
+        assert inspect.ismodule(getattr(pages, name)), name
+    assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
+    assert pages.common_context.__module__ == 'mtpy.lib.pages.common'
+    assert pages.casas_context.__module__ == 'mtpy.lib.pages.casas'
+    assert pages.TEMPLATES_DIR.endswith(os.path.join('web', 'templates')) and os.path.isdir(pages.TEMPLATES_DIR)
