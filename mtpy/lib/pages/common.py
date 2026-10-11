@@ -24,6 +24,7 @@ PAGES = (
     {'href': '/casas', 'label': 'Casas'},
     {'href': '/elecciones', 'label': 'Elecciones'},
     {'href': '/modelo', 'label': 'Modelo'},
+    {'href': '/metodo', 'label': 'Método'},
 )
 ROUTES = [
     ('/promedio', 'promedio', 'index', ['GET']),
@@ -31,6 +32,7 @@ ROUTES = [
     ('/casas', 'casas', 'index', ['GET']),
     ('/elecciones', 'elecciones', 'index', ['GET']),
     ('/modelo', 'modelo', 'index', ['GET']),
+    ('/metodo', 'metodo', 'index', ['GET']),
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MESSAGES = {

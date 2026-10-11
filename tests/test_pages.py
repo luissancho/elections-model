@@ -625,7 +625,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'modelo', 'promedio']
+    assert names == ['casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'metodo', 'modelo', 'promedio']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -753,3 +753,19 @@ def test_modelo_rows_are_ordered_and_projected():
     assert [(r['event_date'], r['horizon']) for r in ordered] == [
         ('2023-07-23', 6), ('2023-07-23', 30), ('2019-11-10', 6), ('2019-11-10', 30)]
     assert set(ordered[0]) == set(pages.modelo.CASE_COLUMNS)
+
+
+def test_metodo_renders_the_sections_without_js(api):
+    status, _, body = call(api, '/metodo', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'initial-data' not in page and '<script type="module"' not in page
+    for section_id, title in pages.SECTIONS:
+        assert 'id="{}"'.format(section_id) in page and title in page
+    for href in ('/modelo?scope=es&amp;mode=forecast', '/casas?scope=es&amp;mode=forecast',
+                 '/elecciones?scope=es&amp;mode=forecast', '/escanos?scope=es&amp;mode=forecast'):
+        assert href in page
+
+
+def test_metodo_is_in_the_menu_of_every_page(api):
+    page = html(call(api, '/')[2])
+    assert '>Método</a>' in page and '>Modelo</a>' in page and '>Elecciones</a>' in page
