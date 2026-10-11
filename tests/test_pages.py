@@ -755,10 +755,12 @@ def test_modelo_rows_are_ordered_and_projected():
     assert set(ordered[0]) == set(pages.modelo.CASE_COLUMNS)
 
 
-def test_metodo_renders_the_sections_without_js(api):
+def test_metodo_renders_the_sections_without_data(api):
     status, _, body = call(api, '/metodo', query='scope=es')
     page = html(body)
-    assert status == 200 and 'initial-data' not in page and '<script type="module"' not in page
+    assert status == 200 and 'initial-data' not in page
+    assert re.findall(r'<script type="module" src="([^"]+)"', page) == ['/dist/js/pages/metodo.js']
+    assert re.findall(r'/dist/js/pages/[a-z]+\.js', page) == ['/dist/js/pages/metodo.js']
     for section_id, title in pages.SECTIONS:
         assert 'id="{}"'.format(section_id) in page and title in page
     for href in ('/modelo?scope=es&amp;mode=forecast', '/casas?scope=es&amp;mode=forecast',

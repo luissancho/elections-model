@@ -11,7 +11,6 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 WEB = os.path.join(ROOT, 'web')
 DIST = os.path.join(WEB, 'dist')
 TEMPLATES = os.path.join(WEB, 'templates')
-STATIC_PAGES = ('metodo.html',)  # páginas de solo texto: sin módulo JS propio
 
 
 def js_files():
@@ -91,9 +90,7 @@ def test_referenced_assets_exist():
                     missing.append((os.path.basename(path), ref))
             elif not is_page(ref):
                 missing.append((os.path.basename(path), ref))
-        if os.path.basename(path) in STATIC_PAGES:
-            assert '<script' not in text  # página estática: ningún script propio
-        elif "{% extends 'base.html' %}" in text or os.path.dirname(path) == WEB:
+        if "{% extends 'base.html' %}" in text or os.path.dirname(path) == WEB:
             assert 'type="module"' in text and '<script' in text  # cada página carga su módulo
         assert 'onclick=' not in text  # CSP: sin inline
         assert re.findall(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>', text) == []
