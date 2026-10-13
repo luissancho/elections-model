@@ -631,9 +631,11 @@ Cuatro ensayos antes de la semana de la elección. Los tres primeros se repiten 
 `bash deploy/load-test.sh BASE_URL [CONCURRENCIA=50] [SEGUNDOS=20]` mide `/api/v1/forecast/es/nowcast/summary` y
 `/` con `hey` (`-z ${SEGUNDOS}s -c $CONCURRENCIA -q 5`) o, si no está instalado, con `ab`. Imprime p95 y
 códigos de respuesta, y luego hace 50 `curl -sI` a la ruta de la API contando `X-Cache: HIT`. Sale con 1 si hay
-alguna 5xx o si la primera petición responde 429, y con 2 si falta la herramienta. `-q 5` limita cada cliente a
-5 peticiones por segundo para que quede por debajo del límite de 20 r/s por IP de nginx; con `ab` no hay límite
-por cliente y bajo carga puede aparecer 429 (el script solo falla por las 5xx que ve `curl`).
+alguna 5xx o si la primera petición responde 429, y con 2 si falta la herramienta. `-q 5` limita cada cliente a 5 peticiones por segundo, pero nginx admite 20 r/s por IP y todos los clientes
+salen de la misma: detrás de nginx o del ALB hay que mantener `CONCURRENCIA × 5 ≤ 20` (por ejemplo `-c 4`) o
+esperar 429. Con `hey`, las líneas `[429]` y `[5xx]` fallan la prueba; con `ab` (sin límite por cliente) cualquier
+respuesta no 2xx (`Non-2xx responses`) la falla, así que la carga debe quedar por debajo del límite por IP. Una
+primera petición que no sea 2xx/3xx (host caído, 000) también sale con 1.
 
 - Contra ECS: `bash deploy/load-test.sh https://<host>`. Todos los clientes salen de una IP, así que el límite
   por IP se aplica al conjunto.
