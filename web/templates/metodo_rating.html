@@ -77,7 +77,7 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         </p>
         <p>
           Si todo el sector subestimó a un partido, el error medio de esos días sube con él y la desviación de
-          cada casa no cambia: <strong>un fallo compartido no penaliza a nadie</strong>. La línea incluye a
+          cada casa apenas cambia: <strong>un fallo compartido no penaliza a nadie</strong>. La línea incluye a
           todas las casas de la elección, también a la propia. Y cuando la fecha tenía pocos sondeos con los que
           comparar, la línea es menos segura: la desviación del sondeo se encoge hacia cero, como si se pareciera
           más a la media, en proporción a esa incertidumbre.
@@ -159,8 +159,9 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
           elecciones anteriores, y con él se pesan los sondeos de esa elección. Su factor en el peso de un sondeo
           es ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100), con <var>R̄</var> el rating medio de las casas:
           una casa de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no
-          pesa nada. Una casa sin rating calculado entra con su calidad previa en lugar del rating. Cómo se
-          combina con los demás factores del peso se cuenta en
+          pesa nada. Una casa sin rating calculado entra con su calidad previa en lugar del rating, y entonces
+          el denominador es la calidad previa media de las casas, no el rating medio. Cómo se combina con los
+          demás factores del peso se cuenta en
           <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
         </p>
       {{ m.card_end() }}
@@ -203,8 +204,9 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         <p>
           <strong>La medida.</strong> Una casa con cinco o más sondeos con muestra publicada en un ciclo se
           compara con el promedio calculado sin sus sondeos, para que no lo arrastre hacia ella. En las cuatro
-          series principales, las de más voto medio en los sondeos, se mide cuánto oscilan sus cifras alrededor de ese promedio, descontada su
-          inclinación propia, y se compara con lo que permitiría el azar del muestreo con sus muestras,
+          series principales, las de más voto medio en los sondeos, se mide cuánto oscilan sus cifras alrededor
+          de ese promedio, descontada su inclinación propia, y se compara con lo que permitiría el azar del
+          muestreo con sus muestras,
           <var>p</var>(1 − <var>p</var>)/<var>n</var>:
           <var>h</var> = √(Σ residuo<sup>2</sup> / Σ varianza esperada). Un valor cerca de 1 es lo esperable;
           por debajo de 1, sus cifras se mueven menos de lo que permite el azar.
@@ -227,15 +229,15 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         </p>
         <p>
           <strong>Qué hace en el peso.</strong> En el ciclo que se promedia, una casa por debajo de 1 pesa como
-          una muestra más pequeña: su peso por muestra se multiplica por su valor de herding, acercado a 1
-          cuantos menos sondeos tiene. Es como si cada sondeo tuviera su muestra multiplicada por
-          <var>h</var><sup>2</sup>. Con la casa que oscila de más pasa lo mismo al revés: pesa como la muestra que produciría
-          esa oscilación. Los detalles están en <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada
-          sondeo</a>.
+          una muestra más pequeña: su peso por muestra se multiplica por su herding ya acercado a 1, más cuanto
+          menos sondeos tiene; llamando <var>h</var>′ a ese valor acercado, es como si cada sondeo tuviera su
+          muestra multiplicada por <var>h</var>′<sup>2</sup>. Con la casa que oscila de más pasa lo mismo al
+          revés: pesa como la muestra que produciría esa oscilación. Los detalles están en
+          <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
         </p>
       {{ m.card_end() }}
       {{ m.closing('¿Cuánto acierta el modelo?', method_href('backtest'),
-                   'El modelo repetido en elecciones ya celebradas, viendo solo lo que se sabía en cada fecha, frente al resultado oficial.',
+                   'El modelo repetido en elecciones ya celebradas, viendo solo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
                    [{'href': '/casas' ~ scope_query, 'label': 'Rating de encuestadoras'},
                     {'href': '/elecciones' ~ scope_query, 'label': 'Error de los sondeos en cada elección'}]) }}
     </div>

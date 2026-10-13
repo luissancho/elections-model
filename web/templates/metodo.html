@@ -11,7 +11,7 @@
   'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada casa antes de promediar.',
   'escanos': 'Cómo se pasa del promedio a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
   'rating': 'Cómo se mide el acierto de cada casa en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
-  'backtest': 'El modelo repetido en elecciones ya celebradas, viendo solo lo que se sabía en cada fecha, frente al resultado oficial.',
+  'backtest': 'El modelo repetido en elecciones ya celebradas, viendo solo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
 } %}
     <div id="content" class="stack">
       {{ m.headline('El modelo tiene dos partes: un promedio de encuestas y una simulación de escaños; estas páginas cuentan cómo funcionan y cuánto aciertan.') }}
@@ -33,14 +33,14 @@
           cuentan cómo funciona cada parte, cómo se califica a las encuestadoras y cuánto acierta el modelo.
         </p>
         <nav class="section-nav" aria-label="Secciones de esta página">
-          <a href="#preguntas">Las cuatro preguntas</a>
+          <a href="#preguntas">Las preguntas del método</a>
           {% for section in sections %}
           <a href="#{{ section.id }}">{{ section.title }}</a>
           {% endfor %}
         </nav>
       </section>
       <section id="preguntas" class="stack" aria-labelledby="preguntas-title">
-        <h2 id="preguntas-title">Las cuatro preguntas</h2>
+        <h2 id="preguntas-title">Las preguntas del método</h2>
         <div class="grid">
           {% for page in subpages %}
           <article class="card" id="indice-{{ page.id }}">
@@ -106,8 +106,10 @@
             el backtest de las generales, que comprueba si los intervalos contienen el resultado tantas veces como
             anuncian, no está publicado todavía.
             {% endif %}
+            {% if figures.coverage and figures.coverage[-1].cov95 < 0.95 %}
             Por debajo del 95 %, los intervalos son demasiado estrechos; parte del error que les falta son
-            desviaciones comunes a todas las casas, que ninguna corrección por casa elimina.</li>
+            desviaciones comunes a todas las casas, que ninguna corrección por casa elimina.
+            {% endif %}</li>
           <li>Sucesión de partidos: cuando los partidos se fusionan, se separan o nacen, el modelo suma o
             hereda sus sondeos y sus resultados según reglas fijadas a mano. Sumar los sondeos de las partes
             suele sobreestimar a la coalición, la deriva adicional de un partido que se está disolviendo no
@@ -115,7 +117,11 @@
             la proyección.</li>
           <li>Veda: la ley electoral prohíbe publicar sondeos nuevos en los cinco días anteriores a la
             votación (artículo 69.7 de la LOREG), así que el promedio no puede recoger los movimientos de
-            la opinión en esos últimos días. La publicación se congela al empezar la veda, cinco días antes de la votación, con el pronóstico definitivo{% if frozen and freeze.since %}: desde el {{ freeze.since|date }}{% endif %}. Los sondeos que se publican fuera de España durante la veda se cargan en la base, pero no entran en el promedio porque su trabajo de campo acaba dentro de esos cinco días, y la API en vivo no los sirve.</li>
+            la opinión en esos últimos días. La publicación se congela al empezar la veda, cinco días antes de
+            la votación, con el pronóstico
+            definitivo{% if frozen and freeze.since %}: desde el {{ freeze.since|date }}{% endif %}. Los sondeos
+            que se publican fuera de España durante la veda se cargan en la base, pero no entran en el promedio
+            porque su trabajo de campo acaba dentro de esos cinco días, y la API en vivo no los sirve.</li>
         </ul>
         {% endif %}
       </section>

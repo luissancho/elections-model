@@ -940,7 +940,6 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
         'Elección', 'Sondeos', 'Casas', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
 
 
-
 @pytest.fixture
 def history_site(events_site, fresh_app):
     write_analysis(fresh_app.fs)
@@ -992,6 +991,7 @@ def test_elecciones_history_context_filters_and_headline(history_site):
     assert 'positivo, el sondeo daba más margen a Derecha del que hubo' in page
     assert 'Herding' not in page and 'La tabla necesita JavaScript' in page
     assert page.count('Análisis no publicado todavía') == 0
+
 
 def test_elecciones_without_events_shows_a_notice(api):
     status, _, body = call(api, '/elecciones', query='scope=es')
@@ -1213,6 +1213,19 @@ def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_a
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
     assert 'contiene el resultado el 96 % de las veces a 6 días de la votación y el 100 % a 30 días' in page
     assert 'En las generales: 2 elecciones, a 6 y 30 días de la votación.' in page
+    # a 30 días el fixture cubre el 100 %: sin la coletilla de los intervalos demasiado estrechos
+    assert 'demasiado estrechos' not in page
+
+
+def test_metodo_landing_says_the_intervals_fall_short_only_below_95(api, fresh_app, monkeypatch):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'demasiado estrechos' not in page  # sin backtest, nada que leer en la cobertura
+    figures = {'n_sim': 10000, 'events': [], 'horizons': [6, 90],
+               'coverage': [{'horizon': 6, 'cov95': 0.97}, {'horizon': 90, 'cov95': 0.88}]}
+    monkeypatch.setattr(pages.metodo, 'national_figures', lambda: figures)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'el 97 % de las veces a 6 días de la votación y el 88 % a 90 días' in page
+    assert 'Por debajo del 95 %, los intervalos son demasiado estrechos' in page
 
 
 def test_metodo_landing_names_a_single_backtest_election_in_singular(api, fresh_app):
@@ -1222,14 +1235,15 @@ def test_metodo_landing_names_a_single_backtest_election_in_singular(api, fresh_
 
 
 def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
-    page = html(call(api, '/metodo')[2])
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
     assert 'con el pronóstico definitivo. Los sondeos' in page and 'desde el' not in page
     assert 'no entran en el promedio porque su trabajo de campo acaba dentro de esos cinco días' in page
     assert 'el modelo no los usa' not in page
     publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'},
                             today='2026-11-23')
     webapi.site().manifest_cache_clear()
-    assert 'con el pronóstico definitivo: desde el 23 nov 2026. Los sondeos' in html(call(api, '/metodo')[2])
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'con el pronóstico definitivo: desde el 23 nov 2026. Los sondeos' in page
 
 
 def test_metodo_subpage_404_and_section_context(api, fresh_app):
@@ -1247,6 +1261,9 @@ def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     assert '¿Cómo promediamos las encuestas?' in page and 'href="/metodo/backtest"' in page
     assert 'href="/metodo/promedio"' in page and 'href="/metodo/escanos"' in page and 'href="/metodo/rating"' in page
     assert 'próximamente' not in page  # las cuatro preguntas tienen ya su texto
+    assert 'Las preguntas del método' in page and 'Las cuatro preguntas' not in page
+    text = re.sub(r'\s+', ' ', page)
+    assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
     assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
@@ -1275,7 +1292,6 @@ def test_metodo_escanos_text(api):
     assert 'suben y bajan a la vez' not in text and 'lo que gana un partido lo pierde otro' in text
 
 
-
 def test_metodo_rating_text(api):
     page = html(call(api, '/metodo/rating')[2])
     for anchor in ('que-se-mide', 'calidad-previa', 'rating-final', 'ranking-global', 'herding'):
@@ -1284,6 +1300,11 @@ def test_metodo_rating_text(api):
     assert '<math' in page
     landing = html(call(api, '/metodo')[2])
     assert 'Cómo funciona el modelo' not in landing and 'href="/metodo/rating"' in landing
+    text = re.sub(r'\s+', ' ', page)
+    assert 'la desviación de cada casa apenas cambia' in text and 'no cambia:' not in text
+    assert 'el denominador es la calidad previa media de las casas, no el rating medio' in text
+    assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
+    assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
 
 
 def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypatch):
@@ -1301,6 +1322,7 @@ def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypat
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
     assert 'pesa menos que uno de unas generales' in page and 'la mitad' not in page
+
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
