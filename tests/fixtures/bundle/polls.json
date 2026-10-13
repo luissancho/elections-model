@@ -11,12 +11,14 @@
     ],
     "columns": [
       "date",
+      "pollster_id",
       "pollster",
       "sample"
     ],
     "polls": [
       {
         "date": "2026-10-05",
+        "pollster_id": 7,
         "pollster": "Sigma Dos",
         "sample": 1000,
         "PP": 33.1

@@ -204,7 +204,7 @@ inexistente da 404.)
   `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
-  (`max-age=31536000`), `/dist/js/pages/index.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`,
+  (`max-age=31536000`), `/dist/js/pages/promedios.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`,
   `/escanos`, `/elecciones?scope=es`, `/modelo?scope=es` y `/metodo` devuelven HTML y que `/` contiene `initial-data`; con `deploy/elections.env`, también que
   `/casas?scope=es` devuelve HTML (con el paquete local y sin base, `/casas` es un 503 y `check-api.sh` lo
   marca `n/a`, así que el humo no lo exige); avisa (WARN, sin fallar) si `docker logs` no tiene

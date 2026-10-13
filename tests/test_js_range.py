@@ -42,4 +42,11 @@ def test_series_window_maps_the_control_choices():
     assert run_js('r.seriesWindow("6m", [], null)') is None
     # una clave heredada de Object no es una opción
     assert run_js('r.seriesWindow("toString", dates, "2026-10-03")') == {'startValue': '2026-01-01', 'endValue': '2026-10-13'}
-    assert run_js('r.DEFAULT_WINDOW') == '6m'
+    assert run_js('r.DEFAULT_WINDOW') == 'all'
+
+
+def test_window_days_cover_three_months_six_months_and_a_year():
+    assert run_js('r.WINDOW_DAYS') == {'3m': 90, '6m': 180, '1a': 365}
+    long = '["2025-01-01", ...dates]'
+    assert run_js(f'r.seriesWindow("1a", {long}, "2026-10-03")') == {'startValue': days_before('2026-10-03', 365), 'endValue': '2026-10-13'}
+    assert run_js('r.seriesWindow("3m", dates, "2026-10-03")') == {'startValue': days_before('2026-10-03', 90), 'endValue': '2026-10-13'}

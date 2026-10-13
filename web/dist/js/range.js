@@ -1,10 +1,10 @@
 // Initial zoom windows of the time-axis charts: pure date arithmetic over ISO dates (no DOM, no ECharts).
 
 /** Days shown by each choice of the window control; a choice outside this map shows the whole axis. */
-export const WINDOW_DAYS = {'6m': 180};
+export const WINDOW_DAYS = {'3m': 90, '6m': 180, '1a': 365};
 
 /** Choice of the window control when nothing says otherwise. */
-export const DEFAULT_WINDOW = '6m';
+export const DEFAULT_WINDOW = 'all';
 
 /**
  * Window of the last `days` days: from `days` before `anchor` (the last date when null), clamped to the
@@ -31,7 +31,7 @@ export function lastWindow(dates, days, anchor = null) {
  * Window of a choice of the window control: a key of `WINDOW_DAYS` gives the last days before `anchor`;
  * any other choice (`all`) gives the whole axis.
  *
- * @param {string} choice value of the control (`6m`, `all`)
+ * @param {string} choice value of the control (`3m`, `6m`, `1a`, `all`)
  * @param {string[]} dates ascending ISO dates of the axis
  * @param {string|null} anchor ISO date the window counts back from
  * @returns {{startValue: string, endValue: string}|null} ISO bounds, or null without dates

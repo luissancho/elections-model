@@ -1,11 +1,56 @@
 {% extends 'base.html' %}
 {% block title %}Promedios{% endblock %}
 {% block scripts %}
-  <script type="module" src="/dist/js/pages/index.js"></script>
+  <script type="module" src="/dist/js/pages/promedios.js"></script>
 {% endblock %}
 {% block content %}
 {% set subtitle = '· ' ~ title_suffix[:1]|lower ~ title_suffix[1:] %}
+{% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
     <div id="content" class="stack">
+      {% if headline_text %}
+      <p class="intro" id="headline-text">{{ headline_text }}</p>
+      {% endif %}
+      <section class="card" id="series">
+        <h2>{{ 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección' }} <span class="mode-subtitle">{{ subtitle }}</span></h2>
+        <div class="series-controls">
+          <fieldset id="series-window" class="chart-window" hidden>
+            <legend>Ventana</legend>
+            <label><input type="radio" name="window" value="3m"> 3 meses</label>
+            <label><input type="radio" name="window" value="6m"> 6 meses</label>
+            <label><input type="radio" name="window" value="1a"> 1 año</label>
+            <label><input type="radio" name="window" value="all" checked> Todo el ciclo</label>
+          </fieldset>
+          {% if blocks %}
+          <fieldset id="series-view" class="chart-window" hidden>
+            <legend>Vista</legend>
+            <label><input type="radio" name="view" value="partidos" checked> Partidos</label>
+            <label><input type="radio" name="view" value="bloques"> Bloques</label>
+          </fieldset>
+          {% endif %}
+          <fieldset id="series-parties" class="chart-parties" hidden>
+            <legend>Partidos</legend>
+            {% for name in initial.series.parties %}
+            <label title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}"{% if name in main or not main %} checked{% endif %}> <span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</label>
+            {% endfor %}
+            <button type="button" data-all>Todos</button>
+            <button type="button" data-none>Ninguno</button>
+          </fieldset>
+          {% if blocks %}
+          <fieldset id="series-blocks" class="chart-parties" hidden>
+            <legend>Bloques</legend>
+            {% for block in blocks %}
+            <label><input type="checkbox" name="block" value="{{ block }}" checked> <span class="dot" style="background-color: {{ block_colors[block] }}"></span>{{ block }}</label>
+            {% endfor %}
+          </fieldset>
+          {% endif %}
+        </div>
+        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
+        <p class="about">
+          Cada punto es un sondeo publicado; la línea es el promedio ponderado del modelo y la banda, su
+          intervalo de confianza. En el modo Elección, la línea discontinua proyecta el voto desde la
+          estimación hasta el día de la elección. En la vista Bloques, cada bloque suma sus partidos.
+        </p>
+      </section>
       <section class="card" id="headline">
         <h2>{{ title_suffix }}</h2>
         <div class="table-wrap" id="headline-table">
@@ -34,11 +79,10 @@
         <p class="about">
           Qué es esto: un modelo que agrega los sondeos publicados en un promedio ponderado y simula miles de
           elecciones para estimar el voto y los escaños de cada partido con su incertidumbre.
-          Los rangos son intervalos del 95 %; el <a href="/{{ state.scope }}{{ query }}">promedio de sondeos</a>
-          muestra de dónde salen.
+          Los rangos son intervalos del 95 %; el promedio de sondeos de arriba muestra de dónde salen.
         </p>
       </section>
-      <div class="grid">
+      <div class="grid" id="charts">
         <section class="card">
           <h2>Voto <span class="mode-subtitle">{{ subtitle }}</span></h2>
           <div class="chart" id="vote-chart" role="img" aria-label="Voto previsto por partido, con el intervalo del 95 %"></div>
@@ -73,6 +117,58 @@
           Un punto por cada publicación. Los puntos huecos son estimaciones retrospectivas: el modelo de hoy
           con los sondeos publicados hasta ese día.
         </p>
+      </section>
+      <section class="card" id="pollster">
+        <h2>Una casa frente al promedio</h2>
+        <div class="series-controls">
+          <label>Casa
+            <select id="pollster-select">
+              {% for option in pollsters %}
+              <option value="{{ option.name }}"{% if loop.first %} selected{% endif %}>{{ option.name }} ({{ option.n|int }})</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la casa elegida frente al promedio de sondeos{{ projection_label }}"></div>
+        <p class="about">
+          Los puntos son solo los sondeos de la casa elegida; la línea y la banda son el promedio de todas.
+          Sigue la ventana, la vista y los partidos del gráfico del promedio.
+        </p>
+      </section>
+      <section class="card" id="polls">
+        <h2>Sondeos del ciclo</h2>
+        <div class="table-wrap" id="polls-table">
+          <table>
+            <caption>{% if n_polls > table_rows|length %}Últimos {{ table_rows|length }} de {{ n_polls|int }} sondeos{% else %}Todos los sondeos del ciclo ({{ n_polls|int }}){% endif %} · <a href="{{ csv_href }}">Descargar CSV</a></caption>
+            <thead>
+              <tr>
+                <th scope="col">Fecha</th>
+                <th scope="col">Casa</th>
+                <th scope="col">Patrocinador</th>
+                <th scope="col">Muestra</th>
+                {% for name in table_parties %}
+                <th scope="col" title="{{ catalog[name].fullname }}">{{ name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in table_rows %}
+              <tr>
+                {% for cell in row %}
+                <td>{{ cell }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card" id="closing">
+        <h2><a href="{{ method_href('promedio') }}">¿Cómo promediamos las encuestas?</a></h2>
+        <ul>
+          <li><a href="/elecciones{{ scope_query }}">Cómo acertaron las encuestas en las elecciones anteriores</a></li>
+          <li><a href="/casas{{ scope_query }}">Las casas que sondean este ámbito</a></li>
+        </ul>
       </section>
     </div>
 {% endblock %}

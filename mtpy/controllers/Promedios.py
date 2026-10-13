@@ -7,7 +7,8 @@ from .Page import Page
 
 class Promedios(Page):
     """
-    Promedios tab of the event of a scope: headline, vote, seats, majorities and evolution.
+    Promedios tab of the event of a scope: the poll average, headline, vote, seats, majorities, evolution, one
+    house against the average and the polls of the cycle.
     """
 
     active = None
@@ -27,6 +28,6 @@ class Promedios(Page):
             The HTML of ``promedios.html``.
         """
         scope = pages.resolve_event_scope(scope)
-        context = pages.index_context(self.state(scope), active=self.active, event=True)
+        context = pages.promedios_context(self.state(scope))
 
         return self.render('promedios.html', **context)

@@ -4,7 +4,6 @@ import json
 import os
 import re
 from types import SimpleNamespace
-from urllib.parse import parse_qsl
 
 import pandas as pd
 import pytest
@@ -42,15 +41,6 @@ def initial(body):
     return json.loads(match.group(1))
 
 
-def promedio_page(query=''):
-    """Cuerpo de `promedio.html` del ámbito `es`: entre las tareas 1 y 3 de la fase 7 la página no tiene ruta
-    (`/promedio` redirige a `/es`, que todavía pinta la Portada), así que se pinta con su contexto, como lo haría su
-    controlador."""
-    state = pages.parse_state(dict(parse_qsl(query)), 'es')
-    context = pages.promedio_context(state, active=None, event=True)
-    return pages.environment().get_template('promedio.html').render(**context).encode('utf-8')
-
-
 def test_promedios_is_rendered_html_with_cache_headers(api):
     status, headers, body = call(api, '/es', query='mode=forecast')
     page = html(body)
@@ -61,14 +51,14 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
     assert 'name="mode" value="forecast" checked' in page.replace('\n', ' ')
     assert 'id="headline-table"' in page and '<th scope="col">Partido</th>' in page
     assert fixture_data('headline')['forecast']['parties'][0]['name'] in page
-    assert '/dist/css/site.css' in page and '/dist/vendor/echarts-5.6.0.min.js' in page and '/dist/js/pages/index.js' in page
+    assert '/dist/css/site.css' in page and '/dist/vendor/echarts-5.6.0.min.js' in page and '/dist/js/pages/promedios.js' in page
     assert 'onclick=' not in page and '<script>' not in page
     assert page.count('<script') == 3  # ECharts (defer), el módulo de la página y el bloque JSON
 
 
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'vote', 'summary', 'runs'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
     assert data['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
@@ -291,7 +281,7 @@ def test_templates_compile_with_strict_undefined():
     env = pages.environment()
     names = sorted(f for f in os.listdir(pages.TEMPLATES_DIR) if f.endswith('.html'))
     assert {'base.html', '_header.html', '_footer.html', '_event_bar.html', '_scope_filter.html', 'error.html',
-            'promedios.html', 'promedio.html', 'escanos.html', 'casas.html', 'casa.html',
+            'promedios.html', 'escanos.html', 'casas.html', 'casa.html',
             'metodo_backtest.html'} <= set(names)
     for name in names:
         env.get_template(name)
@@ -311,16 +301,13 @@ def test_filters_follow_the_js_rules():
     assert pages.api_url('es', 'vote', mode='forecast') == '/api/v1/forecast/es/forecast/vote'
 
 
-def test_promedio_is_rendered_with_the_polls_table_and_csv_link(api):
-    body = promedio_page('mode=forecast')
+def test_promedios_has_the_series_chart_the_polls_table_and_csv_link(api):
+    body = call(api, '/es', query='mode=forecast')[2]
     page = html(body)
-    assert '<title>Pronóstico electoral · Promedio de sondeos</title>' in page
-    assert 'href="/es?mode=forecast" aria-current="page"' in page.replace('\n', ' ')
     assert 'id="series-chart"' in page and 'Sondeos del ciclo' in page
     assert 'href="/api/v1/forecast/es/polls?run={}&amp;format=csv"'.format(RUN) in page
-    assert '<th scope="col">Fecha</th>' in page and '/dist/js/pages/promedio.js' in page
+    assert '<th scope="col">Fecha</th>' in page
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'series', 'polls', 'projection', 'vote'}
     assert data['projection']['dates'] and data['vote']['when']
 
 
@@ -341,7 +328,7 @@ def test_unexpected_error_is_a_generic_500_page_and_is_logged(api, fresh_app, mo
         raise RuntimeError('boom')
 
     errors = []
-    monkeypatch.setattr(pages, 'index_context', boom)
+    monkeypatch.setattr(pages, 'promedios_context', boom)
     fresh_app.logger = SimpleNamespace(error=errors.append)
     status, headers, body = call(api, '/es')
     page = html(body)
@@ -368,9 +355,9 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
     publish.update_manifest(writer, freeze={'active': True, 'message': HOSTILE})
     webapi.site().manifest_cache_clear()
     block = re.compile(r'<script type="application/json" id="initial-data">.*?</script>', re.S)
-    for path in ('/es', '/promedio', '/es/escanos', '/casas', '/casas?id=1'):
+    for path in ('/es', '/es/escanos', '/casas', '/casas?id=1'):
         path, _, query = path.partition('?')
-        body = promedio_page() if path == '/promedio' else call(api, path, query=query)[2]
+        body = call(api, path, query=query)[2]
         page = html(body)
         rest = block.sub('', page)
         assert '<script>alert' not in page and '&lt;script&gt;alert' in rest
@@ -381,24 +368,21 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
     assert HOSTILE in [row['pollster'] for row in casas['ranking']]
     home = html(call(api, '/es')[2])
     assert 'background-color: {}'.format(pages.OTHERS_COLOR) in home
-    assert '&lt;b&gt;Hostil&lt;/b&gt;' in html(promedio_page())
+    assert '&lt;b&gt;Hostil&lt;/b&gt;' in home
 
 
-def test_promedio_nowcast_and_pinned_run(api):
-    page = html(promedio_page('mode=nowcast'))
-    assert 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
-    assert re.search(r'<span class="muted">a ', page)
-    page = html(promedio_page('run=' + RUN))
+def test_promedios_pinned_run_keeps_the_run_in_the_csv_link(api):
+    page = html(call(api, '/es', query='run=' + RUN)[2])
     assert 'run={}&amp;format=csv'.format(RUN) in page
     assert '<input type="hidden" name="run" value="{}">'.format(RUN) in page
 
 
-def test_promedio_initial_polls_carry_only_the_chart_columns(api):
-    data = initial(promedio_page())
+def test_promedios_initial_polls_carry_only_the_chart_columns(api):
+    data = initial(call(api, '/es')[2])
     parties = set(data['polls']['parties'])
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
-        assert set(poll) == {'date', 'pollster'} | parties
+        assert set(poll) == {'date', 'pollster_id', 'pollster'} | parties
 
 
 def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, tmp_path):
@@ -416,21 +400,21 @@ def test_table_rows_tolerate_a_poll_without_date():
     assert rows[0][0] == '1 oct 2026' and rows[1][0] == '–' and rows[1][1] == 'GAD3'
 
 
-def test_promedio_title_mentions_the_projection_only_in_forecast(api):
-    assert 'Promedio de sondeos y proyección' in html(promedio_page('mode=forecast'))
-    page = html(promedio_page('mode=nowcast'))
+def test_promedios_title_mentions_the_projection_only_in_forecast(api):
+    assert 'Promedio de sondeos y proyección' in html(call(api, '/es', query='mode=forecast')[2])
+    page = html(call(api, '/es', query='mode=nowcast')[2])
     assert 'Promedio de sondeos' in page and 'y proyección' not in page
-    assert 'y la proyección' not in page  # aria-label del gráfico
-    assert 'banda de incertidumbre y la proyección"' in html(promedio_page('mode=forecast'))
+    assert 'y la proyección' not in page  # aria-label de los gráficos
+    assert 'banda de incertidumbre y la proyección"' in html(call(api, '/es', query='mode=forecast')[2])
 
 
 def test_promedio_caption_counts_the_polls(api, fresh_app):
     """The fixture has 1 poll of 120 used; with n_polls == shown polls the caption changes."""
-    assert 'Últimos 1 de 120 sondeos' in html(promedio_page())
+    assert 'Últimos 1 de 120 sondeos' in html(call(api, '/es')[2])
     meta = fixture_data('meta') | {'n_polls': 1}
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
     webapi.site().files.clear()  # the first request cached the run files
-    assert 'Todos los sondeos del ciclo (1)' in html(promedio_page())
+    assert 'Todos los sondeos del ciclo (1)' in html(call(api, '/es')[2])
 
 
 def test_escanos_is_rendered_with_tables_links_and_initial(api):
@@ -586,12 +570,85 @@ def test_evolution_cards_explain_the_retrospective_points(api):
         assert 'Evolución de las publicaciones' in page and 'estimaciones retrospectivas' in page
 
 
-def test_promedio_has_the_window_control(api):
-    """El promedio ofrece "Últimos 6 meses" (por defecto) y "Todo el ciclo" para encuadrar el gráfico."""
-    page = html(promedio_page()).replace('\n', ' ')
-    assert 'id="series-window" class="chart-window" hidden' in page  # sin JS el control no hace nada y no se muestra
-    assert 'name="window" value="6m" checked' in page and 'Últimos 6 meses' in page
-    assert 'name="window" value="all"' in page and 'Todo el ciclo' in page
+def test_promedios_orders_the_story_and_carries_the_controls(api):
+    page = html(call(api, '/es')[2])
+    order = [page.index(marker) for marker in ('id="series"', 'id="headline"', 'id="vote-chart"', 'id="hemicycle"',
+                                              'id="evolution"', 'id="pollster"', 'id="polls"', 'id="closing"')]
+    assert order == sorted(order)
+    assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
+    assert 'name="view" value="partidos"' in page and 'name="view" value="bloques"' in page
+    assert 'id="pollster-select"' in page and 'href="/metodo' in page
+    data = initial(call(api, '/es')[2])
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
+    assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
+    assert 'pollster_id' in data['polls']['polls'][0]
+
+
+def test_promedios_controls_are_hidden_without_js_and_check_the_main_parties(api):
+    """Sin JS los controles no hacen nada y no se muestran; las casillas marcan los partidos `main` del run."""
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    for control in ('series-window', 'series-view', 'series-parties', 'series-blocks'):
+        assert re.search(r'<fieldset id="{}" class="[^"]*" hidden>'.format(control), page), control
+    assert 'name="party" value="PP" checked' in page and 'name="block" value="Derecha" checked' in page
+    assert 'data-all' in page and 'data-none' in page
+    assert '<option value="Sigma Dos" selected>Sigma Dos (1)</option>' in page
+    assert 'href="/elecciones?scope=es"' in page and 'href="/casas?scope=es"' in page
+    assert '¿Cómo promediamos las encuestas?' in page and '/dist/js/pages/promedios.js' in page
+
+
+def test_promedios_hides_the_blocks_view_without_blocks(api, fresh_app):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    meta = fixture_data('meta') | {'scope': 'es-md'}
+    meta['bmaps'] = {k: v for k, v in meta['bmaps'].items() if k not in ('max', 'blocks')}
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es-md', '20261009-120000', 'meta'), 'meta', meta,
+                                                 'es-md', run_id='20261009-120000')
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/es-md')[2])
+    assert 'name="view"' not in page and 'id="series-parties"' in page
+
+
+def test_promedios_headline_sentence_uses_the_mode(api):
+    assert 'Si hoy hubiera elecciones' in html(call(api, '/es')[2])
+    assert 'El 29 nov 2026' in html(call(api, '/es', query='mode=forecast')[2])
+
+
+def test_headline_text_names_the_leader_and_the_likeliest_majority():
+    current = {'parties': [{'name': 'PSOE', 'pct': 28.04, 'seats': 110}, {'name': 'PP', 'pct': 33.06, 'seats': 135}],
+               'p_majority': {'Izquierda': 0.08, 'Derecha': 0.41}}
+    meta = {'event_date': '2026-11-29'}
+    names = pages.Catalog({'PP': {'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha'}})
+    assert pages.headline_text(current, 'nowcast', meta, names, definitive=False) == (
+        'Si hoy hubiera elecciones, Partido Popular ganaría con el 33,1 % del voto y 135 escaños; Derecha tiene un '
+        '41 % de probabilidad de mayoría absoluta.')
+    assert pages.headline_text(current, 'forecast', meta, names, definitive=False).startswith(
+        'El 29 nov 2026, Partido Popular ganaría con el 33,1 %')
+    assert pages.headline_text(current, 'forecast', meta, names, definitive=True).startswith(
+        'Pronóstico definitivo: el 29 nov 2026, Partido Popular ganaría')
+    # sin probabilidades de mayoría la frase acaba en los escaños; sin partidos no hay titular
+    assert pages.headline_text(current | {'p_majority': {}}, 'nowcast', meta, names, definitive=False).endswith(
+        'y 135 escaños.')
+    assert pages.headline_text({'parties': []}, 'nowcast', meta, names, definitive=False) is None
+
+
+def test_promedios_frozen_latest_forecast_is_definitive(api, fresh_app):
+    publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'})
+    webapi.site().manifest_cache_clear()
+    assert 'Pronóstico definitivo: el 29 nov 2026' in html(call(api, '/es')[2])
+    assert 'Pronóstico definitivo:' not in html(call(api, '/es', query='mode=nowcast')[2])
+
+
+def test_pollster_options_and_round_series():
+    polls = [{'pollster': 'GAD3'}, {'pollster': 'CIS'}, {'pollster': 'GAD3'}, {'pollster': 'Sigma Dos'},
+             {'pollster': 'CIS'}, {'pollster': 'Arce'}, {'pollster': None}]
+    assert pages.pollster_options(polls) == [{'name': 'CIS', 'n': 2}, {'name': 'GAD3', 'n': 2},
+                                             {'name': 'Arce', 'n': 1}, {'name': 'Sigma Dos', 'n': 1}]
+    assert pages.pollster_options([]) == []
+    series = {'dates': ['2026-01-01', '2026-01-02'], 'parties': ['PP'], 'mean': {'PP': [33.149, None]},
+              'lo': {'PP': [31.04, None]}, 'hi': {'PP': [35.26, 36.0]}}
+    out = pages.round_series(series)
+    assert out == {'dates': series['dates'], 'parties': ['PP'], 'mean': {'PP': [33.1, None]},
+                   'lo': {'PP': [31.0, None]}, 'hi': {'PP': [35.3, 36.0]}}
+    assert series['mean']['PP'][0] == 33.149  # no muta la parte
 
 
 # Casas: tres casas con ratings en `es` (CIS id 1, GAD3 id 2 y una tercera con `rating` nulo que no entra
@@ -795,7 +852,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'inicio', 'metodo', 'promedio']
+    assert names == ['backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'inicio', 'metodo', 'promedios']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'

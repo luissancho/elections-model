@@ -116,7 +116,7 @@ export function axisDatesOf(series, projection) {
 }
 
 /**
- * Zoom a rendered series chart to a choice of the window control (`6m`, `all`).
+ * Zoom a rendered series chart to a choice of the window control (`3m`, `6m`, `1a`, `all`).
  *
  * @param {object} chart the ECharts instance returned by `renderSeries`
  * @param {string} choice value of the control
@@ -134,7 +134,8 @@ export function setWindow(chart, choice, {series, projection, anchor = null}) {
 /**
  * Render the poll average of `parties`: per party the `lo–hi` band, the `mean` line, the published polls
  * and, in forecast, the projected band from `asOf` to `when`, with mark lines at both dates. The initial
- * zoom is the `window` choice (`6m`: the last 180 days before `anchor`; `all`: the whole axis).
+ * zoom is the `window` choice (a key of `WINDOW_DAYS`: the last days before `anchor`; `all`: the whole axis).
+ * The Promedios page also draws the blocks with it, passing the block series, polls and projection as parties.
  *
  * @param {HTMLElement} el chart container
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
