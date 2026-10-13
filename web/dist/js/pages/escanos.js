@@ -8,7 +8,7 @@ import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderStacked} from '../charts/stacked.js';
 import {coalitionHash, coalitionSeats, column, parseCoalition, summarize} from '../seats.js';
-import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
+import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 
@@ -36,6 +36,7 @@ function wireCoalition(dist, majority) {
   }
 
   function update() {
+    markPills(fieldset);
     const names = boxes.filter((box) => box.checked).map((box) => box.value);
     const values = coalitionSeats(dist, names);
     const stats = summarize(values, majority);
@@ -53,7 +54,8 @@ function wireCoalition(dist, majority) {
         `mayoría absoluta (${fmtInt(majority)}): ${fmtProb(stats.pMajority)}`,
       ].join(' · ');
       renderHistogram(chart, values, {
-        majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.barColor,
+        majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.barColor, bounds: true,
+        markLabels: false,
       });
     }
     return names;
@@ -88,7 +90,8 @@ function paint() {
     }
     const stats = summarize(values, majority);
     tryDraw(() => renderHistogram(el, values, {
-      color: colors[name], majority, median: stats.median, lo: stats.lo, hi: stats.hi,
+      color: colors[name], majority, median: stats.median, lo: stats.lo, hi: stats.hi, bounds: true,
+      markLabels: false,
     }), `the histogram of ${name}`);
   }
 

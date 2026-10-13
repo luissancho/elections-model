@@ -301,7 +301,7 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     -------
     dict
         The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows`` and
-        ``vs_rows`` (``block_rows``), ``headline_text`` (``escanos_headline_text``), ``calculator`` (``name``,
+        ``headline_text`` (``escanos_headline_text``), ``calculator`` (``name``,
         ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``) and
         ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan`` and ``runs``, the data
@@ -330,7 +330,6 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     context['headline_text'] = escanos_headline_text(summary, meta)
     context['party_rows'] = seat_rows(summary.get('parties') or [])
     context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
-    context['vs_rows'] = block_rows(summary.get('vs') or [], meta, parties)
     context['calculator'] = [
         {'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
          'checked': name in checked}

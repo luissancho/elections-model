@@ -18,9 +18,7 @@
               <tr>
                 <th scope="col">Partido</th>
                 <th scope="col">Escaños</th>
-                <th scope="col">Intervalo 95 %</th>
-                <th scope="col">Mín–máx</th>
-                <th scope="col">Media</th>
+                <th scope="col">Rango 95 %</th>
                 <th scope="col">P(escaño)</th>
                 <th scope="col">P(primero)</th>
                 <th scope="col">P(mayoría)</th>
@@ -32,8 +30,6 @@
                 <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
                 <td>{{ row.seats|int }}</td>
                 <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
-                <td>{{ row.seats_min|range(row.seats_max, 0) }}</td>
-                <td>{{ row.seats_mean|num(1) }}</td>
                 <td>{{ row.p_seats|prob }}</td>
                 <td>{{ row.p_first|prob }}</td>
                 <td>{{ row.p_majority|prob }}</td>
@@ -49,69 +45,44 @@
         </div>
         {% call m.how() %}
         <p>
-          Cada fila es un partido: la cifra de escaños es su resultado central, el intervalo deja fuera las
+          Cada fila es un partido: la cifra de escaños es su resultado central, el rango deja fuera las
           simulaciones más extremas de cada lado y los histogramas cuentan cuántas simulaciones dan cada número
-          de escaños. P(escaño) es la probabilidad de obtener al menos uno; P(primero), la de ser el partido con
-          más escaños; P(mayoría), la de llegar a la mayoría absoluta sin ayuda.
+          de escaños, con una línea gruesa en la mediana y dos finas en los extremos del rango. P(escaño) es la
+          probabilidad de obtener al menos uno; P(primero), la de ser el partido con más escaños; P(mayoría), la
+          de llegar a la mayoría absoluta sin ayuda.
         </p>
-        <p>Si los intervalos de dos partidos se solapan, pueden acabar en cualquier orden.</p>
+        <p>Si los rangos de dos partidos se solapan, pueden acabar en cualquier orden.</p>
         <p>Una probabilidad no es una predicción segura, y esto no dice quién gobernará ni con quién.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('blocks', 'Bloques', 'La suma de escaños de los partidos de cada bloque en cada simulación y la probabilidad de que el bloque alcance la mayoría absoluta.', subtitle) }}
         <div class="chart" id="blocks-chart" role="img" aria-label="Escaños previstos por bloque ideológico"></div>
-        <div class="grid">
-          <div class="table-wrap">
-            <table id="blocks-table">
-              <caption>Bloques ideológicos, con todos los partidos.</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Bloque</th>
-                  <th scope="col">Escaños</th>
-                  <th scope="col">Intervalo 95 %</th>
-                  <th scope="col">P(mayoría absoluta)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in block_rows %}
-                <tr>
-                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
-                  <td>{{ row.seats|int }}</td>
-                  <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
-                  <td>{{ row.p_majority|prob }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div class="table-wrap">
-            <table id="vs-table">
-              <caption>Derecha frente a izquierda, con los partidos principales.</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Bloque</th>
-                  <th scope="col">Escaños</th>
-                  <th scope="col">Intervalo 95 %</th>
-                  <th scope="col">P(mayoría absoluta)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in vs_rows %}
-                <tr>
-                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
-                  <td>{{ row.seats|int }}</td>
-                  <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
-                  <td>{{ row.p_majority|prob }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+        <div class="table-wrap">
+          <table id="blocks-table">
+            <caption>Bloques ideológicos, con todos los partidos.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Bloque</th>
+                <th scope="col">Escaños</th>
+                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">P(mayoría absoluta)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in block_rows %}
+              <tr>
+                <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
+                <td>{{ row.seats|int }}</td>
+                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                <td>{{ row.p_majority|prob }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
         {% call m.how() %}
         <p>
-          El gráfico y la primera tabla reparten todos los partidos entre los bloques; la segunda enfrenta
-          derecha e izquierda con sus partidos principales. La mayoría absoluta está en
+          El gráfico y la tabla reparten todos los partidos entre los bloques. La mayoría absoluta está en
           {{ summary.majority|int }} escaños.
         </p>
         <p>
@@ -122,10 +93,10 @@
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('coalition', 'Calculadora de coaliciones', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle) }}
-        <fieldset class="coalition-parties" id="coalition-parties">
-          <legend>Partidos de la coalición</legend>
+        <fieldset class="pills" id="coalition-parties">
+          <legend class="sr-only">Partidos de la coalición</legend>
           {% for entry in calculator %}
-          <label title="{{ entry.fullname }}"><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> <span class="dot" style="background-color: {{ entry.color }}"></span>{{ entry.name }}</label>
+          <label class="pill" style="--pill-color: {{ entry.color }}; --pill-ink: {{ entry.color|ink }}" title="{{ entry.fullname }}"><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> {{ entry.name }}</label>
           {% endfor %}
         </fieldset>
         <p class="coalition-result" id="coalition-result">Marca partidos para calcular su mayoría.</p>
@@ -133,7 +104,7 @@
         <noscript><p class="muted">La calculadora necesita JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
-          Cada casilla es un partido. El gráfico cuenta cuántas simulaciones dan cada número de escaños a los
+          Cada píldora es un partido. El gráfico cuenta cuántas simulaciones dan cada número de escaños a los
           marcados juntos y el texto dice en cuántas llegan a la mayoría absoluta.
         </p>
         <p>

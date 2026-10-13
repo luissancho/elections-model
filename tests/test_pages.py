@@ -437,6 +437,14 @@ def test_promedios_loads_more_polls_when_the_cycle_has_more_than_forty(api, fres
     assert table['rows'][0][0] == '28 ago 2026' and table['rows'][0][1].startswith('Sigma Dos / M')
 
 
+def test_escanos_table_histograms_blocks_and_pills(api):
+    page = html(call(api, '/es/escanos')[2])
+    assert '<th scope="col">Rango 95 %</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
+    assert 'id="vs-table"' not in page and 'id="blocks-table"' in page
+    assert 'id="coalition-parties" class="pills"' in page.replace('class="pills" id="coalition-parties"', 'id="coalition-parties" class="pills"')
+    assert 'class="pill"' in page and 'name="coalition"' in page
+
+
 def test_escanos_is_rendered_with_tables_links_and_initial(api):
     status, headers, body = call(api, '/es/escanos', query='mode=forecast')
     page = html(body)
@@ -444,7 +452,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     assert '<title>Pronóstico electoral · Escaños</title>' in page
     assert 'href="/es/escanos?mode=forecast" aria-current="page"' in page.replace('\n', ' ')
     assert 'id="parties-table"' in page and '<th scope="col">P(mayoría)</th>' in page
-    assert 'id="blocks-table"' in page and 'id="vs-table"' in page and 'id="blocks-chart"' in page
+    assert 'id="blocks-table"' in page and 'id="vs-table"' not in page and 'id="blocks-chart"' in page
     assert 'name="coalition" value="PP" checked' in page and 'id="coalition-result"' in page
     assert 'id="fan-chart"' in page and 'id="seats-evolution"' in page
     assert 'href="/api/v1/forecast/es/forecast/summary?run={}&amp;format=csv"'.format(RUN) in page

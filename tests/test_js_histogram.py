@@ -23,7 +23,8 @@ def run_js(call):
               'const y = last.yAxis; const tip = last.tooltip.formatter([{{dataIndex: 0}}]);'
               'console.log(JSON.stringify({{data: last.series[0].data, ticks: [0, 1, 2].map(y.axisLabel.formatter),'
               'minInterval: y.minInterval ?? null, tip, color: last.series[0].color,'
-              'marks: last.series[0].markLine.data.map((d) => d.label.formatter)}}));').format(HISTOGRAM_JS, call)
+              'marks: last.series[0].markLine.data.map((d) => d.label.formatter),'
+              'lines: last.series[0].markLine.data.map((d) => [d.lineStyle.width ?? null, d.lineStyle.type, d.label.show ?? null])}}));').format(HISTOGRAM_JS, call)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
 
@@ -42,3 +43,15 @@ def test_counts_in_points_with_the_mean_marked():
     assert out['data'] == [1, 0, 2, 0, 0, 1] and out['ticks'] == ['0', '1', '2'] and out['minInterval'] == 1
     assert out['tip'] == '<strong>0 a 1 puntos: 1 sondeo</strong><br>Media: 2,7'
     assert out['marks'] == ['Media: 2,7']
+
+
+def test_bounds_draw_thin_lines_at_the_interval_and_a_thick_one_at_the_median_without_labels():
+    out = run_js('h.renderHistogram({}, [120, 130, 135, 135, 140, 150], {width: 1, bounds: true, lo: 120, hi: 150,'
+                 'median: 135, markLabels: false})')
+    assert out['lines'] == [[1, 'solid', False], [3, 'solid', False], [1, 'solid', False]]
+    assert out['marks'] == [None, None, None]
+
+
+def test_default_marks_keep_their_labels_and_have_no_bounds():
+    out = run_js('h.renderHistogram({}, [170, 171, 171, 175], {median: 171, lo: 170, hi: 175, width: 1})')
+    assert out['marks'] == ['171'] and out['lines'] == [[None, 'solid', None]]

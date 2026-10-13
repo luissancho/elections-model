@@ -28,12 +28,14 @@ function binIndex(starts, width, value) {
  *   labels), `label` (`(start, step) => text` of a bin, replacing the default one) and `markLabel` (text of the
  *   median mark and of the tooltip subtitle, replacing `Mediana: …`), `share` (bars as the % of the values,
  *   the default; `false` draws the raw counts, with integer ticks) and `countLabel` (count → tooltip text, used
- *   when `share` is false)
+ *   when `share` is false), `bounds` (thin solid lines at the bins of `lo` and `hi`, and a thicker median
+ *   line) and `markLabels` (`false` draws every mark line without a label)
  * @returns {object} the ECharts instance
  */
 export function renderHistogram(el, values, {
   color = THEME.barColor, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
-  unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt,
+  unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt, bounds = false,
+  markLabels = true,
 } = {}) {
   const step = width ?? binWidth(values);
   const {starts, counts} = histogram(values, step);
@@ -43,18 +45,33 @@ export function renderHistogram(el, values, {
   const heightText = (index) => (share ? fmtPct(shares[index]) : countLabel(counts[index]));
 
   const marks = [];
+  const markLabelOf = (text, position) => (markLabels
+    ? {formatter: text, position, color: THEME.markColor}
+    : {show: false});
+  const bound = (value) => ({
+    xAxis: binIndex(starts, step, value),
+    lineStyle: {type: 'solid', width: 1, color: THEME.markColor},
+    label: {show: false},
+  });
+  const showBounds = bounds && starts.length && lo !== null && hi !== null;
+  if (showBounds) {
+    marks.push(bound(lo));
+  }
   if (median !== null && starts.length) {
     marks.push({
       xAxis: binIndex(starts, step, median),
-      lineStyle: {type: 'solid', color: THEME.markColor},
-      label: {formatter: markLabel ?? formatter(median), position: 'insideEndTop', color: THEME.markColor},
+      lineStyle: {type: 'solid', color: THEME.markColor, ...(bounds ? {width: 3} : {})},
+      label: markLabelOf(markLabel ?? formatter(median), 'insideEndTop'),
     });
+  }
+  if (showBounds) {
+    marks.push(bound(hi));
   }
   if (majorityInRange(starts, step, majority)) {
     marks.push({
       xAxis: binIndex(starts, step, majority),
       lineStyle: {type: 'dashed', color: THEME.markColor},
-      label: {formatter: `Mayoría: ${formatter(majority)}`, position: 'end', color: THEME.markColor},
+      label: markLabelOf(`Mayoría: ${formatter(majority)}`, 'end'),
     });
   }
 
