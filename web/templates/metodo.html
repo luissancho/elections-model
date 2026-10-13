@@ -7,8 +7,6 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {#- One sentence per question of the method, for its card in the index. -#}
-{#- The catalogue row of the general election, for the barrier the old text quotes (none if it is missing). -#}
-{% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
 {% set teasers = {
   'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada casa antes de promediar.',
   'escanos': 'Cómo se pasa del promedio a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
@@ -86,51 +84,6 @@
             que se pronostica. Así, lo que una casa demuestra en una comunidad informa de cómo trabaja en las
             demás y en las generales. El rating, los efectos de casa y el herding de cada una están en
             <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>.
-          </p>
-          {% elif old.id == 'simulacion' %}
-          <p>
-            Con el promedio, el modelo simula {% if figures.n_sim %}{{ figures.n_sim|int }} elecciones (en las
-            generales){% else %}muchas elecciones{% endif %}. En cada una, el voto de cada partido se sortea
-            alrededor del promedio con un margen que suma el error estadístico del promedio y el que han
-            tenido históricamente los sondeos de la última semana frente al resultado. El modo Hoy responde
-            a «si las elecciones fueran hoy», con hoy como la fecha de la estimación que figura al pie de la
-            página (puede ser unos días posterior al último sondeo); el modo Elección añade la deriva de la
-            opinión hasta el día de la votación, medida con lo que se movieron los promedios en ciclos
-            pasados. La deriva crece con los días que faltan, es proporcional al tamaño de cada partido y es
-            mayor en los partidos jóvenes, los que las encuestas listan desde hace menos de cuatro años.
-          </p>
-          <p>
-            Los partidos se sortean de forma independiente: un sorteo conjunto, en el que cuando uno sube los
-            demás tienden a bajar, está probado pero no mejora la evaluación con elecciones pasadas a corto
-            plazo y queda desactivado. El voto de cada simulación se lleva después a las circunscripciones con
-            oscilaciones aleatorias por comunidad autónoma y por provincia (dentro de una comunidad, solo por
-            circunscripción), estimadas con las elecciones anteriores, porque no todas se mueven igual que el
-            conjunto. Las probabilidades publicadas son la fracción de simulaciones en que algo ocurre: que un
-            partido quede primero u obtenga escaño, o que un bloque o una coalición alcance la mayoría
-            absoluta.
-          </p>
-          {% elif old.id == 'escanos' %}
-          <p>
-            Para pasar del voto del conjunto a los escaños, el modelo parte del resultado de la elección
-            anterior en cada circunscripción y aplica un swing proporcional: si un partido tiene en el
-            conjunto un 10 % más de voto que entonces (por ejemplo, del 20 % al 22 %), su voto crece en la
-            misma proporción en cada circunscripción, antes de las oscilaciones. Un partido nuevo o refundado
-            hereda el resultado previo de los partidos de los que procede. El voto a las candidaturas que el
-            modelo no sigue por separado («otros») y el voto en blanco forman un bloque explícito, que cuenta
-            en los porcentajes pero no recibe escaños.
-          </p>
-          <p>
-            En cada circunscripción los escaños se reparten con la regla D'Hondt, como en el recuento oficial,
-            y solo entre las candidaturas que superan la barrera legal: en las generales,
-            {% if national and national.threshold is not none -%}
-            el {{ national.threshold|pct(0 if national.threshold == national.threshold|round else 1) }}
-            {%- else -%}
-            la que fija la ley electoral,
-            {%- endif %} de los votos válidos de la circunscripción; en las autonómicas, la que fije la ley de cada comunidad. Con los
-            votos oficiales, ese reparto reproduce escaño a escaño el de las cinco elecciones generales de 2015
-            a 2023.
-            El resultado central, los intervalos y el detalle por circunscripción están en
-            <a href="/{{ state.scope }}/escanos">Escaños</a>.
           </p>
           {% elif old.id == 'evaluacion' %}
           <p>

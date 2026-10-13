@@ -273,9 +273,10 @@ def test_method_subpages_and_links():
     assert [page['id'] for page in subpages] == ['promedio', 'escanos', 'rating', 'backtest']
     assert subpages[3] == {'id': 'backtest', 'title': '¿Cuánto acierta el modelo?', 'href': '/metodo/backtest',
                            'active': True, 'available': True}
-    assert not subpages[0]['active'] and subpages[0]['available'] and not subpages[1]['available']
-    assert pages.method_href('backtest') == '/metodo/backtest' and pages.method_href('escanos') == '/metodo'
-    assert pages.method_href('promedio') == '/metodo/promedio'
+    assert not subpages[0]['active'] and subpages[0]['available'] and subpages[1]['available']
+    assert not subpages[2]['available']  # rating, sin texto todavía
+    assert pages.method_href('backtest') == '/metodo/backtest' and pages.method_href('rating') == '/metodo'
+    assert pages.method_href('promedio') == '/metodo/promedio' and pages.method_href('escanos') == '/metodo/escanos'
 
 
 def test_templates_compile_with_strict_undefined():
@@ -1201,8 +1202,9 @@ def test_metodo_renders_the_sections_without_data(api):
     assert re.findall(r'<h3 id="([a-z]+)">', legacy) == [section_id for section_id, _ in pages.LEGACY_SECTIONS]
     assert all(len(text.strip()) > 100 for text in re.split(r'<h3 id="[a-z]+">', legacy)[1:])
     assert '10.000 elecciones' in page and 'contiene el' not in page  # sin backtest, sin frase de cobertura
-    for href in ('/metodo/backtest?scope=es', '/casas?scope=es', '/elecciones?scope=es', '/es/escanos'):
+    for href in ('/metodo/backtest?scope=es', '/casas?scope=es', '/elecciones?scope=es'):
         assert 'href="{}'.format(href) in page
+    assert 'id="simulacion"' not in page and 'id="escanos"' not in page  # retiradas por /metodo/escanos
 
 
 def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_app):
@@ -1210,19 +1212,6 @@ def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_a
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
     assert 'contiene el resultado el 96 % de las veces a 6 días de la votación y el 100 % a 30 días' in page
     assert 'En las generales: 2 elecciones, a 6 y 30 días de la votación.' in page
-
-
-def test_metodo_landing_reads_the_general_barrier_from_the_catalogue(api, monkeypatch):
-    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
-    assert 'en las generales, el 3 % de los votos válidos' in page
-    changed = webapi.catalogue().copy()
-    changed.loc['es', 'threshold'] = 4.5
-    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
-    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
-    assert 'en las generales, el 4,5 % de los votos válidos' in page and 'el 3 % de los votos' not in page
-    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed.drop(index='es'))
-    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
-    assert 'en las generales, la que fija la ley electoral, de los votos válidos' in page
 
 
 def test_metodo_landing_names_a_single_backtest_election_in_singular(api, fresh_app):
@@ -1243,7 +1232,7 @@ def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
 
 
 def test_metodo_subpage_404_and_section_context(api, fresh_app):
-    for section in ('nope', 'escanos'):
+    for section in ('nope', 'rating'):
         with pytest.raises(HttpError) as error:
             pages.metodo_section_context({'scope': None, 'mode': None, 'run': None}, section)
         assert error.value.status == 404 and error.value.message == 'section not found', section
@@ -1256,7 +1245,8 @@ def test_metodo_subpage_404_and_section_context(api, fresh_app):
 def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     page = html(call(api, '/metodo')[2])
     assert '¿Cómo promediamos las encuestas?' in page and 'href="/metodo/backtest"' in page
-    assert 'href="/metodo/promedio"' in page and 'href="/metodo/escanos"' not in page  # escanos, sin texto todavía
+    assert 'href="/metodo/promedio"' in page and 'href="/metodo/escanos"' in page
+    assert 'href="/metodo/rating"' not in page  # rating, sin texto todavía
     assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
@@ -1271,6 +1261,41 @@ def test_metodo_promedio_text(api):
     assert 'id="metodo-nav"' in page and '<math' in page and 'En resumen' in page
     assert 'ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100)' in page  # el rating del sitio va de 0 a 100
     assert 'href="/metodo/promedio"' in html(call(api, '/metodo')[2])
+
+
+def test_metodo_escanos_text(api):
+    page = html(call(api, '/metodo/escanos')[2])
+    for anchor in ('sorteo', 'hoy-y-eleccion', 'circunscripciones', 'dhondt', 'barreras', 'cifras'):
+        assert 'id="' + anchor + '"' in page, anchor
+    assert 'id="thresholds-table"' in page and 'Canarias' in page and 'Comunidad Valenciana' in page
+    assert str(fixture_data('meta')['n_sim']) in page.replace('.', '') and '1.000 simulaciones' not in page
+    assert '<math' in page and 'Ejemplo' in page
+
+
+def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert 'en las generales, el 3 % de los votos válidos' in page
+    table = page[page.index('id="thresholds-table"'):]
+    table = table[:table.index('</table>')]
+    assert '<th scope="row">Canarias</th> <td>15 %</td> <td>4 %</td>' in table
+    assert '<th scope="row">Comunidad Valenciana</th> <td>–</td> <td>5 %</td>' in table
+    assert 'href="/es/escanos"' in page and 'id="metodo-nav"' in page and 'aria-current="page"' in page
+    changed = webapi.catalogue().copy()
+    changed.loc['es', 'threshold'] = 4.5
+    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert 'en las generales, el 4,5 % de los votos válidos' in page and 'el 3 % de los votos' not in page
+    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed.drop(index='es'))
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert 'en las generales, la que fija la ley electoral, de los votos válidos' in page
+
+
+def test_metodo_escanos_quotes_the_coverage_only_with_a_backtest(api, fresh_app):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert 'contiene el resultado' not in page and 'se comprueba en <a href="/metodo/backtest">' in page
+    write_backtest(fresh_app.fs)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert 'el intervalo del 95 % del voto contiene el resultado el 96 % de las veces a 6 días' in page
 
 
 def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fresh_app):

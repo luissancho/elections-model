@@ -22,15 +22,13 @@ SECTIONS = (
 # them (plan decision E10); each text task removes its sections and the landing drops the block when it is empty.
 LEGACY_SECTIONS = (
     ('casas', 'Las casas'),
-    ('simulacion', 'La simulación'),
-    ('escanos', 'Los escaños'),
     ('evaluacion', 'La evaluación'),
 )
 # Subpages of the method (``/metodo/{id}``), in menu order. A subpage without ``template`` has no text yet: it
 # is not linked and its route is a 404.
 METODO_SECTIONS = {
     'promedio': {'title': '¿Cómo promediamos las encuestas?', 'template': 'metodo_promedio.html'},
-    'escanos': {'title': '¿Cómo simulamos los escaños?', 'template': None},
+    'escanos': {'title': '¿Cómo simulamos los escaños?', 'template': 'metodo_escanos.html'},
     'rating': {'title': '¿Cómo calculamos el rating de las encuestadoras?', 'template': None},
     'backtest': {'title': '¿Cuánto acierta el modelo?', 'template': 'metodo_backtest.html'},
 }

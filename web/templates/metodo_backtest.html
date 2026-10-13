@@ -246,7 +246,7 @@
           {% set params = backtest.params or {} %}
           <dt>Simulaciones</dt><dd>{{ params.get('n_sim')|int if params.get('n_sim') is not none else '—' }}</dd>
           <dt>Semilla</dt><dd>{{ params.get('seed')|int if params.get('seed') is not none else '—' }}</dd>
-          <dt>Máximo de partidos proyectados</dt><dd>{{ params.get('max_fc')|int if params.get('max_fc') is not none else '—' }}</dd>
+          <dt>Días de prolongación del promedio</dt><dd>{{ params.get('max_fc')|int if params.get('max_fc') is not none else '—' }}</dd>
           <dt>Elecciones</dt><dd>{% for event in backtest.events %}{{ event|date }}{{ ', ' if not loop.last }}{% endfor %}</dd>
           <dt>Horizontes (días)</dt><dd>{% for horizon in backtest.horizons %}{{ horizon|int }}{{ ', ' if not loop.last }}{% endfor %}</dd>
           <dt>Versión</dt><dd>{{ backtest.get('commit') or '—' }}</dd>
