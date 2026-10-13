@@ -7,6 +7,7 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {% set with_herding = true %}
+{% set with_block_error = false %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
@@ -28,7 +29,6 @@
                 <th scope="col">Elección</th>
                 <th scope="col">Rating</th>
                 <th scope="col">Rating ajustado</th>
-                <th scope="col">Error de bloques</th>
                 <th scope="col">Sesgo del margen</th>
                 <th scope="col">Sondeos</th>
               </tr>
@@ -39,7 +39,7 @@
                 <td>{{ row.event_date|date }}</td>
                 <td>{{ row.rating|num(1) }}</td>
                 <td>{{ row.rating_adj|num(1) }}</td>
-                <td>{{ row.error_blocks_abs|num(1) }}</td>
+</td>
                 <td>{{ row.error_blocks|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
               </tr>
@@ -49,7 +49,7 @@
         </div>
         {% call m.how(open=True) %}
         <p>Cada fila es una elección del ámbito; el rating ajustado es el que sale solo del error de sus sondeos, antes de mezclarlo con la calidad previa. La última fila es la próxima elección.</p>
-        <p>El último rating es el que entra en el promedio. El error de bloques no lleva signo; el sesgo del margen sí, y se explica en «Qué mide cada columna».</p>
+        <p>El último rating es el que entra en el promedio. El sesgo del margen lleva signo y se explica en «Qué mide cada columna».</p>
         <p>Un rating bajo en una elección no condena a la casa en la siguiente.</p>
         {% endcall %}
         {% include '_glosario.html' %}

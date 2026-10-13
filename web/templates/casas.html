@@ -7,6 +7,7 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {% set with_herding = true %}
+{% set with_block_error = false %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
@@ -27,7 +28,7 @@
                 <th scope="col">Sondeos</th>
                 <th scope="col">Elecciones</th>
                 <th scope="col">Error medio</th>
-                <th scope="col">Error de bloques</th>
+                <th scope="col">Sesgo del margen</th>
                 <th scope="col">Herding</th>
               </tr>
             </thead>
@@ -40,7 +41,7 @@
                 <td>{{ row.num_polls|int }}</td>
                 <td>{{ row.num_events|int }}</td>
                 <td>{{ row.error_avg|num(1) }}</td>
-                <td>{{ row.error_blocks_abs|num(1) }}</td>
+                <td>{{ row.error_blocks|num(1) }}</td>
                 <td>{{ row.herding|num(2) }}</td>
               </tr>
               {% endfor %}
@@ -49,7 +50,7 @@
         </div>
         {% call m.how(open=True) %}
         <p>Cada fila es una casa con rating para la próxima elección. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás casas en las mismas semanas (un fallo de todo el sector no penaliza a una casa), con una calidad previa que pesa más cuantos menos sondeos tiene.</p>
-        <p>Cuanto más alto, más pesan sus sondeos en el promedio. Los errores y el herding se explican en «Qué mide cada columna». Pulsa en una casa para ver su perfil.</p>
+        <p>Cuanto más alto, más pesan sus sondeos en el promedio. El error medio, el sesgo del margen y el herding se explican en «Qué mide cada columna». Pulsa en una casa para ver su perfil.</p>
         <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
         {% endcall %}
         {% include '_glosario.html' %}

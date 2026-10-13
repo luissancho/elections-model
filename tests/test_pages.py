@@ -822,8 +822,7 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert effects.count('<tr>') == 2 and '23 jul 2023' in effects  # la próxima elección no tiene resultado
     data = initial(body)
     assert [row['event_date'] for row in data['path']] == ['2023-07-23', '2026-11-29']
-    assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls',
-                                  'error_blocks_abs']
+    assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': 2.81, 'Izquierda': -0.24}]
     assert data['blocks'] == ['Derecha', 'Izquierda']
 
@@ -1294,9 +1293,12 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     page = html(call(houses, '/casas')[2])
     assert 'casas con rating' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
     assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
+    ranking = page[page.index('id="ranking-table"'):]
+    heads = re.findall(r'<th scope="col">([^<]*)</th>', ranking[:ranking.index('</thead>')])
+    assert heads == ['Casa', 'Rating', 'Calidad', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo del margen', 'Herding']
 
 
 def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):
     page = html(call(houses, '/casas', query='id=1')[2])
-    assert '<th scope="col">Error de bloques</th>' in page and '<th scope="col">Sesgo del margen</th>' in page
+    assert '<th scope="col">Sesgo del margen</th>' in page and 'Error de bloques' not in page
     assert 'Sesgo de bloques' not in page and 'miden lo mismo' not in page and 'id="glosario"' in page

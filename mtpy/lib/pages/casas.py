@@ -271,8 +271,6 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         503 without a bundle or without a database; 404 for an unpublished scope or a missing
         run.
     """
-    from .elecciones import with_abs  # lazy: elecciones imports this module
-
     context = common_context(state, active)
     full = context['state']
     scope = full['scope']
@@ -280,7 +278,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     missing = analysis_part(scope, 'meta') is None
     effects = None if missing else analysis_part(scope, 'house-effects')
     herding = None if missing else analysis_part(scope, 'herding')
-    ranking = with_abs(ranking_rows(ratings, herding))
+    ranking = ranking_rows(ratings, herding)
     grid = house_effects_grid(effects) if effects is not None else None
     links = [{'label': 'Ratings de la próxima elección', 'href': api_url(scope, 'ratings', fmt='csv', kind='data')}]
 
@@ -339,8 +337,6 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
         503 without a bundle or without a database; 404 for an unpublished scope, a missing run
         or an unknown pollster.
     """
-    from .elecciones import with_abs  # lazy: elecciones imports this module
-
     context = common_context(state, active)
     full = context['state']
     scope = full['scope']
@@ -353,7 +349,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
         [row for row in errors.get('rows') or [] if row.get('pollster') == name],
         ('event', 'event_date', 'days') + tuple(blocks),
     )
-    path = with_abs(profile_rows(profile['ratings'], PATH_KEYS))
+    path = profile_rows(profile['ratings'], PATH_KEYS)
     latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
 
     mtype = profile['pollster'].get('mtype')
