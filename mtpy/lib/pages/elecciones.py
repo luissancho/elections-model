@@ -11,7 +11,7 @@ from .filters import fmt_num
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 EVENT_CSV = (
-    ('pollsters', None, 'Casas en esta elección', False),
+    ('pollsters', None, 'Encuestadoras en esta elección', False),
     ('polls', None, 'Sondeos de esta elección', False),
     ('results', None, 'Resultados oficiales', False),
     ('model', 'shares', 'Modelo: voto a cada horizonte', True),
@@ -162,8 +162,8 @@ def history_headline(n_events: int, errors: Optional[list]) -> str:
 
     mean = fmt_num(sum(values) / len(values), 1)
 
-    return (f'En las {n_events} elecciones analizadas, el último sondeo de cada casa se desvió de media {mean} '
-            'puntos en el margen entre bloques.')
+    return (f'En las {n_events} elecciones analizadas, el último sondeo de cada encuestadora se desvió de media '
+            f'{mean} puntos en el margen entre bloques.')
 
 
 def elecciones_context(state: dict, active: str = '/elecciones') -> dict:

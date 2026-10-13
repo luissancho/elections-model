@@ -14,9 +14,9 @@ RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'nu
 PATH_KEYS = ('event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls')
 HERDING_KEYS = ('event_date', 'n', 'ratio', 'p_value')
 ANALYSIS_CSV = (
-    ('house-effects', None, 'Efectos de casa por partido y bloque'),
-    ('herding', None, 'Herding por casa'),
-    ('herding', 'events', 'Herding por casa y ciclo'),
+    ('house-effects', None, 'Efectos de encuestadora por partido y bloque'),
+    ('herding', None, 'Herding por encuestadora'),
+    ('herding', 'events', 'Herding por encuestadora y ciclo'),
     ('poll-errors', None, 'Error de los sondeos en cada elección'),
 )
 
@@ -102,7 +102,7 @@ def ranking_headline(ranking: list) -> Optional[str]:
 
     best = ranking[0]
 
-    return '{} casas con rating para la próxima elección; la mejor valorada es {} ({}).'.format(
+    return '{} encuestadoras con rating para la próxima elección; la mejor valorada es {} ({}).'.format(
         len(ranking), best['pollster'], fmt_num(best['rating'], 1))
 
 

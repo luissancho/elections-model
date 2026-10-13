@@ -22,7 +22,7 @@ def run_js(call):
     script = STUB + ('const h = await import("{}"); {};'
               'const y = last.yAxis; const tip = last.tooltip.formatter([{{dataIndex: 0}}]);'
               'console.log(JSON.stringify({{data: last.series[0].data, ticks: [0, 1, 2].map(y.axisLabel.formatter),'
-              'minInterval: y.minInterval ?? null, tip,'
+              'minInterval: y.minInterval ?? null, tip, color: last.series[0].color,'
               'marks: last.series[0].markLine.data.map((d) => d.label.formatter)}}));').format(HISTOGRAM_JS, call)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
@@ -32,7 +32,7 @@ def test_default_draws_the_share_of_simulations_in_seats():
     out = run_js('h.renderHistogram({}, [170, 171, 171, 175], {median: 171, lo: 170, hi: 175, width: 1})')
     assert out['data'][:2] == [25.0, 50.0] and out['ticks'] == ['0 %', '1 %', '2 %'] and out['minInterval'] is None
     assert out['tip'] == '<strong>170 escaños: 25,0 %</strong><br>Mediana: 171 · intervalo 95 %: 170–175'
-    assert out['marks'] == ['171']
+    assert out['marks'] == ['171'] and out['color'] == '#3a6ea5'  # THEME.barColor, the neutral blue
 
 
 def test_counts_in_points_with_the_mean_marked():

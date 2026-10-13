@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo promediamos las encuestas?{% endblock %}
-{% block description %}Cómo funciona el promedio de encuestas del modelo: qué sondeos entran, cuánto pesa cada uno, cómo se descuenta la inclinación de cada casa, qué es la regresión local y qué mide su banda.{% endblock %}
+{% block description %}Cómo funciona el promedio de encuestas del modelo: qué sondeos entran, cuánto pesa cada uno, cómo se descuenta la inclinación de cada encuestadora, qué es la regresión local y qué mide su banda.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -8,11 +8,11 @@
 {% import '_macros.html' as m %}
     {% include '_metodo_nav.html' +%}
     <div id="content" class="stack">
-      {{ m.headline('El promedio es una línea que sigue a las encuestas día a día: cada sondeo pesa según su muestra y su casa, y a cada casa se le descuenta su inclinación antes de promediar.') }}
+      {{ m.headline('El promedio es una línea que sigue a las encuestas día a día: cada sondeo pesa según su muestra y su encuestadora, y a cada encuestadora se le descuenta su inclinación antes de promediar.') }}
       <nav class="section-nav toc" aria-label="Secciones">
         <a href="#que-entra">Qué sondeos entran</a>
         <a href="#peso">Cuánto pesa cada sondeo</a>
-        <a href="#efectos-de-casa">Los efectos de casa</a>
+        <a href="#efectos-de-casa">Los efectos de encuestadora</a>
         <a href="#regresion">La regresión local</a>
         <a href="#banda">La banda del promedio</a>
         <a href="#voto-estimado">De las encuestas al voto estimado</a>
@@ -20,8 +20,8 @@
       {{ m.card_start('resumen', 'En resumen', 'El promedio de encuestas en cuatro ideas.') }}
         <ul>
           <li>Entran los sondeos del ciclo, salvo los de los cinco últimos días, agregadores, paneles y partidos.</li>
-          <li>Cada sondeo pesa según su muestra, lo que publica su casa, su rating y cuánto oscilan sus cifras.</li>
-          <li>A cada casa se le resta su inclinación hacia cada partido, sin mover el nivel del promedio.</li>
+          <li>Cada sondeo pesa según su muestra, lo que publica su encuestadora, su rating y cuánto oscilan sus cifras.</li>
+          <li>A cada encuestadora se le resta su inclinación hacia cada partido, sin mover el nivel del promedio.</li>
           <li>Cada día, una recta ajustada a los sondeos cercanos; su banda mide el consenso, no el voto.</li>
         </ul>
       {{ m.card_end() }}
@@ -35,10 +35,10 @@
           <li>Los sondeos de los últimos días: solo cuentan los que terminaron su trabajo de campo al menos seis
             días antes de la votación. No entran, así, los hechos durante la veda (los cinco días anteriores, en
             los que la ley prohíbe publicarlos en España) ni los de boca de urna.</li>
-          <li>Los agregadores, que publican sus propias medias de otras encuestas, y las casas que el catálogo
+          <li>Los agregadores, que publican sus propias medias de otras encuestas, y las encuestadoras que el catálogo
             marca como paneles en línea.</li>
           <li>Los sondeos internos de los partidos: si quien firma es un partido, no se carga. Un sondeo que un
-            partido encarga a una casa encuestadora («Sigma Dos / PP») sí se carga, como cualquier otro.</li>
+            partido encarga a una encuestadora («Sigma Dos / PP») sí se carga, como cualquier otro.</li>
         </ul>
         <p>
           Los partidos se fusionan, se refundan o concurren en coalición. Cuando el catálogo dice que un partido
@@ -47,7 +47,7 @@
           suman, aunque la suma de las partes suele sobreestimar a la coalición.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('peso', 'Cuánto pesa cada sondeo', 'El peso de un sondeo es el producto de cuatro factores: su muestra, la sobrerrepresentación de su casa, la dispersión de su casa y su rating.') }}
+      {{ m.card_start('peso', 'Cuánto pesa cada sondeo', 'El peso de un sondeo es el producto de cuatro factores: su muestra, la sobrerrepresentación de su encuestadora, la dispersión de su encuestadora y su rating.') }}
         <math display="block" aria-label="w sub i igual a o sub i por la raíz de n sub i entre n mediana, por f sub c, por r sub c">
           <mrow>
             <msub><mi>w</mi><mi>i</mi></msub><mo>=</mo>
@@ -61,78 +61,78 @@
           <strong>La muestra.</strong> <var>n</var><sub><var>i</var></sub> son las entrevistas del sondeo
           <var>i</var> y <var>ñ</var>, la mediana de las de los sondeos de esa elección. Más entrevistas dan más
           peso, pero cada vez menos (es una raíz cuadrada, como el error de muestreo): con cuatro veces más
-          entrevistas, un sondeo pesa el doble. Si no publica su muestra, recibe la mediana de las de su casa, y
+          entrevistas, un sondeo pesa el doble. Si no publica su muestra, recibe la mediana de las de su encuestadora, y
           las muestras desmesuradas se recortan.
         </p>
         <p>
-          <strong>La sobrerrepresentación.</strong> <var>o</var><sub><var>i</var></sub> evita que una casa pese
+          <strong>La sobrerrepresentación.</strong> <var>o</var><sub><var>i</var></sub> evita que una encuestadora pese
           más solo por publicar más. Si el campo de un sondeo se solapa con el de una entrega posterior de la
-          misma casa, como en las series diarias, solo cuenta la última. Y si una casa publica <var>N</var>
+          misma encuestadora, como en las series diarias, solo cuenta la última. Y si una encuestadora publica <var>N</var>
           sondeos en pocos días (cuatro días a cada lado), cada uno pesa 1/<var>N</var>.
         </p>
         <p>
-          <strong>El rating.</strong> <var>r</var><sub><var>c</var></sub> sale del rating <var>R</var> de la casa
+          <strong>El rating.</strong> <var>r</var><sub><var>c</var></sub> sale del rating <var>R</var> de la encuestadora
           <var>c</var>, que mide cuánto se equivocaron sus sondeos en las elecciones anteriores frente a los
           demás sondeos de la misma elección (ver
           <a href="{{ method_href('rating') }}">¿Cómo calculamos el rating de las encuestadoras?</a>). Es
           ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100), con <var>R</var> en la escala de 0 a 100 en que se
-          publica y <var>R̄</var> el rating medio de las casas: una casa de rating medio pesa 1, el peso crece con
+          publica y <var>R̄</var> el rating medio de las encuestadoras: una encuestadora de rating medio pesa 1, el peso crece con
           el rating cada vez más despacio y un rating 0 no pesa nada.
         </p>
         <p>
           <strong>La dispersión.</strong> <var>f</var><sub><var>c</var></sub> compara cuánto oscilan las cifras
-          de una casa alrededor del promedio, descontada su inclinación propia, con lo que permitiría el azar del
-          muestreo con sus muestras. Se mide en las casas con cinco o más sondeos en el ciclo y se acerca a 1
+          de una encuestadora alrededor del promedio, descontada su inclinación propia, con lo que permitiría el azar del
+          muestreo con sus muestras. Se mide en las encuestadoras con cinco o más sondeos en el ciclo y se acerca a 1
           cuantos menos tienen. Penaliza los dos extremos:
         </p>
         <ul>
-          <li>Si las cifras oscilan más de lo que permite la muestra, la casa pesa como la muestra que produciría
+          <li>Si las cifras oscilan más de lo que permite la muestra, la encuestadora pesa como la muestra que produciría
             esa oscilación (su muestra efectiva, <var>n</var> · <var>f</var><sup>2</sup>).</li>
           <li>Si oscilan menos, también pesa menos: es el herding, las cifras pegadas al consenso. Para medirlo,
-            cada casa se compara con el promedio calculado sin sus propios sondeos, en los partidos principales y
+            cada encuestadora se compara con el promedio calculado sin sus propios sondeos, en los partidos principales y
             solo con los sondeos que publican su muestra. Sea por seguir al consenso, por entrevistar siempre al
             mismo panel o por ponderar por recuerdo de voto, sus sondeos aportan menos información independiente
             de la que sugiere su muestra.</li>
         </ul>
         <p>
-          El herding se publica en <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>, pero no entra en
+          El herding se publica en <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>, pero no entra en
           el rating: solo resta peso en el promedio.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('efectos-de-casa', 'Los efectos de casa', 'Cada casa tiende a dar a cada partido algo más o algo menos que las demás; antes de promediar, esa inclinación se resta de sus sondeos.') }}
+      {{ m.card_start('efectos-de-casa', 'Los efectos de encuestadora', 'Cada encuestadora tiende a dar a cada partido algo más o algo menos que las demás; antes de promediar, esa inclinación se resta de sus sondeos.') }}
         <p>
-          El efecto de casa es la desviación sistemática de una casa en un partido: si le da, de forma estable,
+          El efecto de encuestadora es la desviación sistemática de una encuestadora en un partido: si le da, de forma estable,
           dos puntos más que el consenso, se le restan unos dos puntos a cada sondeo. Se estima con dos fuentes:
         </p>
         <ul>
           <li><strong>El ciclo:</strong> la desviación media de sus sondeos frente al promedio, con los pesos del
-            promedio y más peso para los recientes, porque el método actual de una casa importa más que el de hace
+            promedio y más peso para los recientes, porque el método actual de una encuestadora importa más que el de hace
             años.</li>
           <li><strong>Su historia:</strong> lo que se apartó del resultado en los 90 días previos a cada elección
-            anterior, descontado el error que compartieron todas las casas; cuentan las generales y las
+            anterior, descontado el error que compartieron todas las encuestadoras; cuentan las generales y las
             autonómicas (estas con menos peso), más cuanto más recientes. Es un punto de partida, porque las
             inclinaciones solo persisten en parte de una elección a otra.</li>
         </ul>
         <p>
           Las dos se combinan pesando cada una por su precisión: con muchos sondeos en el ciclo manda el ciclo; con
-          pocos, la historia. Una casa con menos de cinco sondeos en el ciclo se queda en lo que dice su historia, y una casa
+          pocos, la historia. Una encuestadora con menos de cinco sondeos en el ciclo se queda en lo que dice su historia, y una encuestadora
           sin historia empieza en cero.
         </p>
         <p>
           Al final, los efectos se recentran para que su media, ponderada con el peso
-          <var>W</var><sub><var>c</var></sub> de cada casa en el promedio, sea cero:
+          <var>W</var><sub><var>c</var></sub> de cada encuestadora en el promedio, sea cero:
         </p>
-        <math display="block" aria-label="suma sobre las casas c de W sub c por e sub c igual a cero">
+        <math display="block" aria-label="suma sobre las encuestadoras c de W sub c por e sub c igual a cero">
           <mrow>
             <munder><mo>∑</mo><mi>c</mi></munder>
             <msub><mi>W</mi><mi>c</mi></msub><mo>·</mo><msub><mi>e</mi><mi>c</mi></msub><mo>=</mo><mn>0</mn>
           </mrow>
         </math>
         <p>
-          Así la corrección no mueve el nivel medio del promedio a lo largo del ciclo: corrige qué casas publican
-          alrededor de cada fecha. Si durante unas semanas solo publican casas que dan más voto a un partido, el
+          Así la corrección no mueve el nivel medio del promedio a lo largo del ciclo: corrige qué encuestadoras publican
+          alrededor de cada fecha. Si durante unas semanas solo publican encuestadoras que dan más voto a un partido, el
           promedio sin corregir lo subiría; el corregido, no. Lo que no corrige es el error que comparten todas las
-          casas a la vez: estimarlo con su historia se ha probado, pero no se repite de una elección a otra y queda
+          encuestadoras a la vez: estimarlo con su historia se ha probado, pero no se repite de una elección a otra y queda
           desactivado.
         </p>
         <p>
@@ -160,7 +160,7 @@
           </mrow>
         </math>
         <p>
-          <var>y</var><sub><var>i</var></sub> es el voto del partido en el sondeo, ya sin su efecto de casa, y
+          <var>y</var><sub><var>i</var></sub> es el voto del partido en el sondeo, ya sin su efecto de encuestadora, y
           <var>t</var><sub><var>i</var></sub>, su fecha de fin de campo. Una recta, y no una media, es lo que
           permite seguir la tendencia hasta el último día, donde no hay sondeos posteriores.
         </p>
@@ -178,22 +178,22 @@
       {{ m.card_end() }}
       {{ m.card_start('banda', 'La banda del promedio', 'La banda que acompaña a la línea es su intervalo de confianza del 95 %: la incertidumbre de la propia estimación del promedio.') }}
         <p>
-          La banda sale del error estándar de la recta en cada día. Los sondeos de una misma casa se parecen entre sí, porque comparten método y lo que les quede de
-          inclinación: no son informaciones independientes. El error se calcula agrupándolos por casa (en la
-          jerga, un error estándar robusto con cluster por casa): las desviaciones de cada casa se suman antes de
-          combinarse, y así no se dan por independientes diez sondeos de una casa que se parecen. La banda usa
-          además una t de Student con, como mucho, tantos grados de libertad como casas hay en la ventana menos
-          una: con pocas casas, se ensancha.
+          La banda sale del error estándar de la recta en cada día. Los sondeos de una misma encuestadora se parecen entre sí, porque comparten método y lo que les quede de
+          inclinación: no son informaciones independientes. El error se calcula agrupándolos por encuestadora (en la
+          jerga, un error estándar robusto agrupando por encuestadora): las desviaciones de cada encuestadora se suman antes de
+          combinarse, y así no se dan por independientes diez sondeos de una encuestadora que se parecen. La banda usa
+          además una t de Student con, como mucho, tantos grados de libertad como encuestadoras hay en la ventana menos
+          una: con pocas encuestadoras, se ensancha.
         </p>
         <p>
-          Mide dónde está el consenso de las casas que publican. No mide:
+          Mide dónde está el consenso de las encuestadoras que publican. No mide:
         </p>
         <ul>
-          <li>Dónde estará el voto: el error que comparten todas las casas frente al resultado no está en la
+          <li>Dónde estará el voto: el error que comparten todas las encuestadoras frente al resultado no está en la
             banda, sino en la simulación, como error histórico de los sondeos.</li>
-          <li>La incertidumbre de la anchura de la ventana ni la de los efectos de casa, que el recentrado hace
+          <li>La incertidumbre de la anchura de la ventana ni la de los efectos de encuestadora, que el recentrado hace
             pequeña.</li>
-          <li>Toda la incertidumbre cuando pocas casas pesan de verdad en la ventana: ahí el error agrupado se
+          <li>Toda la incertidumbre cuando pocas encuestadoras pesan de verdad en la ventana: ahí el error agrupado se
             queda corto.</li>
         </ul>
         <p>
@@ -224,6 +224,6 @@
       {{ m.closing('¿Cómo simulamos los escaños?', method_href('escanos'),
                    'Cómo se pasa del voto estimado a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
                    [{'href': '/es', 'label': 'Promedios de las elecciones generales'},
-                    {'href': '/casas' ~ scope_query, 'label': 'Rating de encuestadoras'}]) }}
+                    {'href': '/casas' ~ scope_query, 'label': 'Ranking Encuestadoras'}]) }}
     </div>
 {% endblock %}

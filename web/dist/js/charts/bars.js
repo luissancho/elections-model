@@ -1,6 +1,5 @@
 // Horizontal bars with an interval line per row (vote shares or seats).
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
-import {OTHERS_COLOR} from '../catalog.js';
 
 /**
  * Round `x` up to a readable axis limit: a multiple of a fifth of its power of ten.
@@ -40,7 +39,8 @@ export function barRows(rows, {value, lo, hi}) {
  *
  * @param {HTMLElement} el chart container
  * @param {object[]} rows rows with a `name` and the value/interval fields
- * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}),
+ * @param {object} opts `value`, `lo`, `hi` (field names), `colors` ({name: colour}; a name without one gets
+ *   `THEME.barColor`),
  *   `fullnames` ({name: full name}, tooltip), `formatter` (number → text), `axisFormatter` (axis ticks, default `formatter`), `majority` (vertical mark)
  * @returns {object} the ECharts instance
  */
@@ -53,7 +53,7 @@ export function renderBars(el, rows, {
   const bar = {
     type: 'bar',
     barWidth: '60%',
-    data: data.map((row) => ({value: row.value, itemStyle: {color: colors[row.name] || OTHERS_COLOR}})),
+    data: data.map((row) => ({value: row.value, itemStyle: {color: colors[row.name] || THEME.barColor}})),
   };
   if (majority !== null && majority !== undefined) {
     bar.markLine = {

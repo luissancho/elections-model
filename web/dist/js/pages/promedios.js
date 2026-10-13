@@ -31,13 +31,12 @@ function paintResults(initial, catalog) {
     ...summary.parties.map((row) => row.name),
   ])];
   const colors = mapNames(names, (name) => catalog.color(name));
-  const fullnames = mapNames(names, (name) => catalog.fullname(name));
   const nSeats = meta.n_seats ?? summary.n_seats;
   const majority = meta.majority ?? summary.majority;
 
   const voteRows = [...vote.rows].sort((a, b) => b.pct - a.pct);
   tryDraw(() => renderBars(document.getElementById('vote-chart'), voteRows, {
-    value: 'pct', lo: 'lo', hi: 'hi', colors, fullnames,
+    value: 'pct', lo: 'lo', hi: 'hi', colors,
     formatter: (x) => fmtPct(x), axisFormatter: (x) => fmtPct(x, 0),
   }), 'the vote bars');
 
@@ -45,17 +44,17 @@ function paintResults(initial, catalog) {
     .filter((row) => row.seats > 0 || row.seats_hi > 0)
     .sort((a, b) => b.seats - a.seats);
   tryDraw(() => renderBars(document.getElementById('seats-chart'), seatRows, {
-    value: 'seats', lo: 'seats_lo', hi: 'seats_hi', colors, fullnames, formatter: fmtInt, majority,
+    value: 'seats', lo: 'seats_lo', hi: 'seats_hi', colors, formatter: fmtInt, majority,
   }), 'the seat bars');
 
   const seats = summary.totals
     ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats]));
   tryDraw(() => renderHemicycle(document.getElementById('hemicycle'), seats, {
-    colors, fullnames, order: (list) => catalog.order(list), nSeats, majority,
+    colors, order: (list) => catalog.order(list), nSeats, majority,
   }), 'the hemicycle');
 
   tryDraw(() => renderEvolution(document.getElementById('evolution'), runs.runs, mode, {
-    colors, fullnames, parties: current.parties.map((party) => party.name),
+    colors, parties: current.parties.map((party) => party.name),
   }), 'the evolution');
 }
 
@@ -66,7 +65,7 @@ function paintResults(initial, catalog) {
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `parties`,
- *   `colors`, `fullnames`, `defaults` (names shown by default, null for all) and `toPolls` (polls of the view
+ *   `colors`, `defaults` (names shown by default, null for all) and `toPolls` (polls of the view
  *   from polls by party)
  */
 function seriesViews(initial, catalog) {
@@ -82,7 +81,6 @@ function seriesViews(initial, catalog) {
       projection,
       parties,
       colors: mapNames(parties, (name) => catalog.color(name)),
-      fullnames: mapNames(parties, (name) => catalog.fullname(name)),
       defaults: main.length ? main : null,
       toPolls: (chosen) => chosen,
     },
@@ -92,7 +90,6 @@ function seriesViews(initial, catalog) {
       projection: blockProjection(projection),
       parties: names,
       colors: mapNames(names, (name) => catalog.blockColor(name)),
-      fullnames: mapNames(names, (name) => name),
       defaults: null,
       toPolls: (chosen) => blockPolls(chosen, blocks),
     } : null,
@@ -176,7 +173,6 @@ function wireSeries(initial, catalog) {
       parties: current.parties,
       selected: selected(),
       colors: current.colors,
-      fullnames: current.fullnames,
       asOf: meta.as_of,
       when: vote.when,
       window: state.window,

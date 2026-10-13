@@ -29,7 +29,7 @@
             <tbody>
               {% for row in party_rows %}
               <tr>
-                <td title="{{ row.name }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
+                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
                 <td>{{ row.seats|int }}</td>
                 <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
                 <td>{{ row.seats_min|range(row.seats_max, 0) }}</td>
@@ -44,10 +44,10 @@
         </div>
         <div class="grid-small" id="histograms">
           {% for row in party_rows %}
-          <div class="chart chart-small" data-party="{{ row.name }}" role="img" aria-label="Distribución de escaños de {{ catalog[row.name].fullname }} en las simulaciones"></div>
+          <div class="chart chart-small" data-party="{{ row.name }}" role="img" aria-label="Distribución de escaños de {{ row.name }} en las simulaciones"></div>
           {% endfor %}
         </div>
-        {% call m.how(open=True) %}
+        {% call m.how() %}
         <p>
           Cada fila es un partido: la cifra de escaños es su resultado central, el intervalo deja fuera las
           simulaciones más extremas de cada lado y los histogramas cuentan cuántas simulaciones dan cada número
@@ -125,7 +125,7 @@
         <fieldset class="coalition-parties" id="coalition-parties">
           <legend>Partidos de la coalición</legend>
           {% for entry in calculator %}
-          <label><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> <span class="dot" style="background-color: {{ entry.color }}"></span>{{ entry.fullname }}</label>
+          <label title="{{ entry.fullname }}"><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> <span class="dot" style="background-color: {{ entry.color }}"></span>{{ entry.name }}</label>
           {% endfor %}
         </fieldset>
         <p class="coalition-result" id="coalition-result">Marca partidos para calcular su mayoría.</p>
@@ -154,7 +154,7 @@
                 <th scope="col">Circunscripción</th>
                 <th scope="col">Escaños</th>
                 {% for name in district_table.parties %}
-                <th scope="col"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ catalog[name].fullname }}</th>
+                <th scope="col" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
                 {% endfor %}
               </tr>
             </thead>
@@ -210,7 +210,7 @@
             <tbody>
               {% for row in region_rows %}
               <tr>
-                <td><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
+                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
                 <td>{{ row.pct|pct }}</td>
                 {% set vote_range = row.pct_lo|range(row.pct_hi, 1) %}
                 <td>{{ vote_range if vote_range == '–' else vote_range ~ ' %' }}</td>
@@ -288,6 +288,6 @@
       {{ m.closing('¿Cómo simulamos los escaños?', method_href('escanos'),
                    'Cómo se reparte el voto simulado entre circunscripciones, qué papel juega el mínimo de voto para entrar en el reparto y cómo salen los intervalos y las probabilidades.',
                    [{'href': '/elecciones' ~ scope_query, 'label': 'Cómo acertó el modelo en las elecciones anteriores'},
-                    {'href': '/casas' ~ scope_query, 'label': 'Las casas que sondean este ámbito'}]) }}
+                    {'href': '/casas' ~ scope_query, 'label': 'Las encuestadoras que sondean este ámbito'}]) }}
     </div>
 {% endblock %}

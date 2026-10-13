@@ -39,7 +39,7 @@
             </tbody>
           </table>
         </div>
-        {% call m.how(open=True) %}
+        {% call m.how() %}
         <p>
           El modelo solo usa los sondeos publicados hasta ese número de días antes de cada elección. Se compara con
           tres líneas base: el último sondeo publicado, la media simple de los sondeos de las cuatro semanas
@@ -176,7 +176,7 @@
         </p>
         <p>
           No dice por qué falló una elección concreta: para eso está el detalle de cada una en el
-          <a href="/elecciones{{ scope_query }}">Histórico de errores</a>.
+          <a href="/elecciones{{ scope_query }}">Histórico Errores</a>.
         </p>
         {% endcall %}
       {{ m.card_end() }}
@@ -227,7 +227,7 @@
         <p>
           El backtest sigue un protocolo fuera de muestra: en cada elección y a cada horizonte, solo ve los sondeos
           publicados hasta ese día, y los parámetros que se estiman con datos (error de sondeo, deriva de la
-          opinión, efectos de casa) se ajustan únicamente con los ciclos anteriores.
+          opinión, efectos de encuestadora) se ajustan únicamente con los ciclos anteriores.
         </p>
         <p>
           Hay dos ejecuciones, las de los dos modos del sitio. El modo Hoy responde a «si las elecciones fueran

@@ -14,11 +14,10 @@ export function readInitial() {
 }
 
 /**
- * Submit the page controls on change: the mode form of the event bar (`#event-controls`, which keeps a pinned
- * `run`) and the scope filter of the global pages (`#scope-filter`). A page has at most one of them.
+ * Submit the page controls on change: the scope filter of the global pages (`#scope-filter`). The event pages
+ * have no control of their own in the event bar (the mode comes from the server).
  */
 export function wireControls() {
-  wireForm('event-controls');
   wireForm('scope-filter');
 }
 

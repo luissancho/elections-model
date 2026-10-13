@@ -119,14 +119,14 @@ main {
 }
 #freeze-banner[hidden] { display: none; }
 
-/* Event bar (Promedios and Escaños): name and date, the tabs, and the mode control on the right */
+/* Event bar (Promedios and Escaños): name and date, the tabs, and the pinned run and the reading of the mode on
+   the right */
 #event-bar {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-areas:
-    "title controls"
-    "tabs  mode"
-    "help  help";
+    "title run"
+    "tabs  mode";
   gap: var(--space-1) var(--space-5);
   align-items: end;
   padding: var(--space-4) var(--band-pad) 0;
@@ -138,30 +138,8 @@ main {
 .event-title h2 { margin: 0; font-size: 1.6rem; }
 .event-title p { margin: var(--space-1) 0 0; }
 .event-tabs { grid-area: tabs; display: flex; gap: var(--space-1); margin-top: var(--space-2); }
-#event-controls { grid-area: controls; justify-content: flex-end; padding: 0; }
+.event-run { grid-area: run; justify-self: end; }
 .mode-text { grid-area: mode; margin: 0; max-width: 34rem; color: var(--color-muted); font-size: 0.9rem; text-align: right; align-self: center; }
-.mode-help { grid-area: help; margin: 0 0 var(--space-2); }
-
-/* Segmented control: the radios stay in the form (and in the tab order) but only their labels show */
-.segmented { gap: 0; }
-.segmented legend { color: var(--color-muted); font-size: 0.9rem; margin-right: var(--space-2); line-height: var(--tap); }
-.segmented input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-
-.segmented label {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap);
-  padding: 0 var(--space-4);
-  background: var(--color-card);
-  border: 1px solid var(--color-line-strong);
-  cursor: pointer;
-}
-
-.segmented label + input + label { border-left: 0; }
-.segmented input:first-of-type + label { border-radius: var(--radius) 0 0 var(--radius); }
-.segmented label:last-of-type { border-radius: 0 var(--radius) var(--radius) 0; }
-.segmented input:checked + label { background: var(--color-accent); border-color: var(--color-accent); color: #fff; font-weight: 600; }
-.segmented input:focus-visible + label { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 .chip {
   display: inline-flex;
@@ -338,12 +316,12 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
   #event-bar {
     grid-template-columns: 1fr;
-    grid-template-areas: "title" "tabs" "controls" "mode" "help";
+    grid-template-areas: "title" "tabs" "run" "mode";
     gap: var(--space-2);
   }
   .event-title h2 { font-size: 1.35rem; }
   .event-tabs { overflow-x: auto; margin-top: 0; }
-  #event-controls { justify-content: flex-start; }
+  .event-run { justify-self: start; }
   .mode-text { text-align: left; }
 
   /* Larger tap targets for the chart and coalition checkboxes */

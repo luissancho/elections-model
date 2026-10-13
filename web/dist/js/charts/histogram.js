@@ -1,7 +1,6 @@
 // Histogram of seats over the simulations, with mark lines at the median and at the majority. The unit, the bin
 // labels and the median mark are options, so the error history reuses it for the poll errors (in points).
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
-import {OTHERS_COLOR} from '../catalog.js';
 import {fmtInt, fmtPct} from '../format.js';
 import {binWidth, histogram, majorityInRange} from '../seats.js';
 
@@ -24,7 +23,7 @@ function binIndex(starts, width, value) {
  *
  * @param {HTMLElement} el chart container
  * @param {number[]} values seats per simulation
- * @param {object} opts `color` (bars), `majority`, `median`, `lo`, `hi` (seats, tooltip subtitle),
+ * @param {object} opts `color` (bars, `THEME.barColor` by default), `majority`, `median`, `lo`, `hi` (seats, tooltip subtitle),
  *   `width` (bin width, from `binWidth` when null), `formatter` (seats → text), `unit` (of the default bin
  *   labels), `label` (`(start, step) => text` of a bin, replacing the default one) and `markLabel` (text of the
  *   median mark and of the tooltip subtitle, replacing `Mediana: …`), `share` (bars as the % of the values,
@@ -33,7 +32,7 @@ function binIndex(starts, width, value) {
  * @returns {object} the ECharts instance
  */
 export function renderHistogram(el, values, {
-  color = OTHERS_COLOR, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
+  color = THEME.barColor, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
   unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt,
 } = {}) {
   const step = width ?? binWidth(values);

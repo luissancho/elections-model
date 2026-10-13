@@ -152,7 +152,7 @@ def round_series(series: dict, digits: int = 1) -> dict:
     return out
 
 
-def headline_text(current: dict, mode: str, meta: dict, parties: Catalog, definitive: bool) -> Optional[str]:
+def headline_text(current: dict, mode: str, meta: dict, definitive: bool) -> Optional[str]:
     """
     One-line headline of the page in plain words.
 
@@ -164,19 +164,17 @@ def headline_text(current: dict, mode: str, meta: dict, parties: Catalog, defini
         ``'nowcast'`` or ``'forecast'``.
     meta : dict
         Data of the meta part (``event_date``).
-    parties : Catalog
-        Party catalogue of the run.
     definitive : bool
         Whether the forecast shown is the final one (frozen publication, latest run).
 
     Returns
     -------
     str or None
-        ``'Si hoy hubiera elecciones, {fullname} ganaría con el {pct} % del voto y {seats} escaños; probabilidad
+        ``'Si hoy hubiera elecciones, {name} ganaría con el {pct} % del voto y {seats} escaños; probabilidad
         de mayoría absoluta de {block}: {p}.'`` in nowcast; in forecast it opens with ``'El {event_date}'``,
         after ``'Pronóstico definitivo: '`` (and in lower case) when ``definitive``. The leader is the party with
         the highest ``pct`` and the block that with the highest ``p_majority``; without probabilities the sentence
-        ends after the seats. ``None`` when the headline has no parties.
+        ends after the seats. The party is named by its short name. ``None`` when the headline has no parties.
     """
     rows = current.get('parties') or []
 
@@ -185,7 +183,7 @@ def headline_text(current: dict, mode: str, meta: dict, parties: Catalog, defini
 
     leader = max(rows, key=lambda row: row.get('pct') or 0)
     sentence = '{} ganaría con el {} del voto y {} escaños'.format(
-        parties[leader['name']]['fullname'], fmt_pct(leader.get('pct')), fmt_int(leader.get('seats')))
+        leader['name'], fmt_pct(leader.get('pct')), fmt_int(leader.get('seats')))
     probs = {block: p for block, p in (current.get('p_majority') or {}).items() if not _is_missing(p)}
 
     if probs:
@@ -242,7 +240,7 @@ def promedios_context(state: dict) -> dict:
 
     context['headline'] = current
     context['majority'] = majority_rows(current.get('p_majority'), meta, parties)
-    context['headline_text'] = headline_text(current, mode, meta, parties, definitive)
+    context['headline_text'] = headline_text(current, mode, meta, definitive)
     context['table_parties'] = main or list(names)
     context['table_rows'] = table_rows(poll_rows, context['table_parties'])
     context['n_polls'] = meta.get('n_polls')

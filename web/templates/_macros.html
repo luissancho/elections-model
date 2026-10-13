@@ -13,9 +13,9 @@
 {%- endmacro %}
 
 {#- "Cómo leerlo": what each element is, how to read it and what it does not say. Native `<details>`, so it works
-    without JS; open only in the first card of a page. The body is the `{% call %}` content. -#}
-{% macro how(open=False) -%}
-<details class="how"{% if open %} open{% endif %}><summary>Cómo leerlo</summary><div class="how-body">{{ caller() }}</div></details>
+    without JS; folded in every card. The body is the `{% call %}` content. -#}
+{% macro how() -%}
+<details class="how"><summary>Cómo leerlo</summary><div class="how-body">{{ caller() }}</div></details>
 {%- endmacro %}
 
 {#- The page headline: one line, outside any card, with the situation in plain words and live figures. -#}

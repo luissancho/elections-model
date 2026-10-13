@@ -53,7 +53,7 @@ function wireCoalition(dist, majority) {
         `mayoría absoluta (${fmtInt(majority)}): ${fmtProb(stats.pMajority)}`,
       ].join(' · ');
       renderHistogram(chart, values, {
-        majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.markColor,
+        majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.barColor,
       });
     }
     return names;
@@ -78,7 +78,6 @@ function paint() {
   const fanNames = catalog.order([...new Set((fan.rows || []).map((row) => row.name).filter(Boolean))]);
   const names = [...new Set([...dist.parties, ...partyRows.map((row) => row.name), ...fanNames])];
   const colors = mapNames(names, (name) => catalog.color(name));
-  const fullnames = mapNames(names, (name) => catalog.fullname(name));
 
   for (const el of document.querySelectorAll('#histograms div[data-party]')) {
     const name = el.dataset.party;
@@ -109,13 +108,12 @@ function paint() {
     parties: fanNames,
     selected: main.length ? main : null,
     colors,
-    fullnames,
     markAt: state.mode === 'nowcast' ? 0 : meta.horizon_max,
     markLabel: state.mode === 'nowcast' ? 'Hoy' : 'Elección',
   }), 'the fan');
 
   tryDraw(() => renderEvolution(document.getElementById('seats-evolution'), runs.runs, state.mode, {
-    colors, fullnames, field: 'seats', formatter: fmtInt, parties: partyRows.map((row) => row.name),
+    colors, field: 'seats', formatter: fmtInt, parties: partyRows.map((row) => row.name),
   }), 'the seat evolution');
 }
 

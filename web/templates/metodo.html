@@ -8,9 +8,9 @@
 {% import '_macros.html' as m %}
 {#- One sentence per question of the method, for its card in the index. -#}
 {% set teasers = {
-  'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada casa antes de promediar.',
+  'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada encuestadora antes de promediar.',
   'escanos': 'Cómo se pasa del promedio a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
-  'rating': 'Cómo se mide el acierto de cada casa en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
+  'rating': 'Cómo se mide el acierto de cada encuestadora en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
   'backtest': 'El modelo repetido en elecciones ya celebradas, viendo solo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
 } %}
     <div id="content" class="stack">
@@ -26,7 +26,7 @@
         </p>
         <p>
           Tiene dos partes. La primera es un promedio de encuestas: cada sondeo pesa más o menos según su muestra y
-          el historial de su casa, y a cada casa se le descuenta su sesgo propio. La segunda es una simulación: a
+          el historial de su encuestadora, y a cada encuestadora se le descuenta su sesgo propio. La segunda es una simulación: a
           partir del promedio, el modelo sortea {% if figures.n_sim %}{{ figures.n_sim|int }} elecciones posibles
           (en las generales){% else %}muchas elecciones posibles{% endif %}, reparte los escaños de cada una con
           las reglas de cada circunscripción y cuenta en cuántas ocurre cada cosa. Las páginas de abajo
@@ -69,7 +69,7 @@
         </p>
         <p>
           Los datos se curan a mano: cada partido que aparece en un sondeo se asigna a uno del catálogo,
-          se anotan las herencias entre partidos que se fusionan o se refundan y cada casa encuestadora
+          se anotan las herencias entre partidos que se fusionan o se refundan y cada encuestadora
           recibe una calidad previa. No se cargan los sondeos firmados por un propio partido.
         </p>
         {% elif section.id == 'publicacion' %}
@@ -108,7 +108,7 @@
             {% endif %}
             {% if figures.coverage and figures.coverage[-1].cov95 < 0.95 %}
             Por debajo del 95 %, los intervalos son demasiado estrechos; parte del error que les falta son
-            desviaciones comunes a todas las casas, que ninguna corrección por casa elimina.
+            desviaciones comunes a todas las encuestadoras, que ninguna corrección por encuestadora elimina.
             {% endif %}</li>
           <li>Sucesión de partidos: cuando los partidos se fusionan, se separan o nacen, el modelo suma o
             hereda sus sondeos y sus resultados según reglas fijadas a mano. Sumar los sondeos de las partes

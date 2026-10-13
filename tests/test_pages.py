@@ -48,7 +48,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
     assert headers['cache-control'] == 'public, max-age=60' and headers['etag'].startswith('"')
     assert '<title>Pronóstico electoral · Promedios</title>' in page
     assert 'Pronóstico para el' in page and 'href="/es?mode=forecast" aria-current="page"' in page
-    assert 'name="mode" value="forecast" checked' in page.replace('\n', ' ')
+    assert 'name="mode"' not in page  # `?mode=` switches the page, but no control is rendered
     assert 'id="headline-table"' in page and '<th scope="col">Partido</th>' in page
     assert fixture_data('headline')['forecast']['parties'][0]['name'] in page
     assert '/dist/css/site.css' in page and '/dist/vendor/echarts-5.6.0.min.js' in page and '/dist/js/pages/promedios.js' in page
@@ -69,8 +69,7 @@ def test_nowcast_and_pinned_run_are_reflected(api):
     status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     page = html(body)
     assert status == 200 and 'Estimación a' in page
-    assert 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
-    assert 'type="hidden" name="run" value="{}"'.format(RUN) in page
+    assert 'name="mode"' not in page and '<span class="chip event-run">Run del 8 oct 2026</span>' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
     assert 'href="/es/escanos?mode=nowcast&amp;run={}"'.format(RUN) in page
 
@@ -147,11 +146,11 @@ def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
     assert '<title>Pronóstico electoral · Promedios</title>' in page
     assert 'Estimación a' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
-    assert 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
+    assert 'name="mode"' not in page
     assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     status, _, body = call(api, '/es/escanos', query='mode=forecast&run=' + RUN)
-    assert status == 200 and '· pronóstico para el' in html(body) and 'name="run" value="' + RUN + '"' in html(body)
+    assert status == 200 and '· pronóstico para el' in html(body) and 'Run del 8 oct 2026' in html(body)
 
 
 def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_definitive(api, fresh_app):
@@ -201,7 +200,7 @@ def test_global_pages_carry_the_scope_filter_and_no_event_bar(api):
 
 def test_menu_has_the_four_global_entries(api):
     page = html(call(api, '/es')[2])
-    for label in ('Inicio', 'Histórico de errores', 'Rating de encuestadoras', 'Método'):
+    for label in ('Inicio', 'Histórico Errores', 'Ranking Encuestadoras', 'Método'):
         assert '>' + label + '</a>' in page
     # ninguna entrada del menú es la actual: la pestaña activa de la barra de evento sí lleva `aria-current`
     menu = page[page.index('<nav aria-label="Secciones">'):]
@@ -224,13 +223,13 @@ def test_event_bar_days_text():
     assert pages.event_title('es-md', scopes) == 'Elecciones autonómicas · Madrid'
 
 
-def test_event_info_counts_one_day_and_unknown_dates_and_points_the_form_at_the_tab():
+def test_event_info_counts_one_day_and_unknown_dates_and_marks_the_tab():
     from datetime import date
     state = {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': True}
     scopes = [{'code': 'es', 'name': 'España'}]
     info = pages.event_info('es', {'event_date': '2026-11-29'}, '/escanos', state, today=date(2026, 11, 28),
                             scopes=scopes)
-    assert info['days_text'] == 'Falta 1 día' and info['form_action'] == '/es/escanos' and info['href'] == '/es'
+    assert info['days_text'] == 'Falta 1 día' and 'form_action' not in info and info['href'] == '/es'
     assert [tab['active'] for tab in info['tabs']] == [False, True]
     assert info['tabs'][1]['href'] == '/es/escanos?mode=forecast&run=' + RUN
     unknown = pages.event_info('es', {}, '', state, today=date(2026, 11, 28), scopes=scopes)
@@ -251,21 +250,21 @@ def test_parse_state_takes_the_scope_of_the_route_and_leaves_the_mode_unresolved
 
 def test_title_of_rules():
     meta = {'as_of': '2026-10-13', 'event_date': '2026-11-29', 'run_at': '2026-10-13T12:00:00Z'}
-    assert pages.title_of('nowcast', meta, True, True, True) == 'Estimación a 13 oct 2026'
+    from datetime import date
+    assert pages.title_of('nowcast', meta, True, True, True, today=date(2026, 10, 20)) == 'Estimación a 20 oct 2026'
     assert pages.title_of('forecast', meta, True, False, True) == 'Pronóstico definitivo para el 29 nov 2026'
     assert pages.title_of('forecast', meta, True, True, False) == 'Pronóstico publicado el 13 oct 2026'
     assert pages.title_of('forecast', meta, False, True, False) == 'Pronóstico publicado el 13 oct 2026'
     assert pages.title_of('forecast', meta, False, False, True) == 'Pronóstico para el 29 nov 2026'
 
 
-def test_mode_text_explains_the_active_option(api):
+def test_mode_text_explains_how_to_read_the_mode_shown(api):
     page = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
     assert ('Si las elecciones fueran hoy: el promedio de sondeos leído el 8 oct 2026, con los sondeos publicados hasta '
             'el 5 oct 2026.') in page
     page = re.sub(r'\s+', ' ', html(call(api, '/es', query='mode=forecast')[2]))
     assert 'Lo que puede pasar el 29 nov 2026: añade la deriva de la opinión' in page
-    assert '¿Qué cambia entre Hoy y Elección?' in page
-    assert 'href="/metodo/escanos#hoy-y-eleccion">Más en el método</a>' in page
+    assert '¿Qué cambia entre Hoy y Elección?' not in page  # the control it explained is gone
 
 
 def test_method_subpages_and_links():
@@ -377,7 +376,7 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
 def test_promedios_pinned_run_keeps_the_run_in_the_csv_link(api):
     page = html(call(api, '/es', query='run=' + RUN)[2])
     assert 'run={}&amp;format=csv'.format(RUN) in page
-    assert '<input type="hidden" name="run" value="{}">'.format(RUN) in page
+    assert 'name="run"' not in page and 'Run del 8 oct 2026' in page  # the bar shows the run, without a form
 
 
 def test_promedios_initial_polls_carry_only_the_chart_columns(api):
@@ -469,20 +468,16 @@ def test_escanos_headline_text_names_the_likeliest_block():
         'La mayoría absoluta está en 130 escaños de 250.')
 
 
-def test_event_bar_form_keeps_the_selected_region(api, fresh_app):
+def test_escanos_region_lives_in_the_district_form_not_in_the_event_bar(api, fresh_app):
     write_districts(fresh_app.fs)
-
-    def bar_form(query):
-        page = html(call(api, '/es/escanos', query=query)[2])
-        start = page.index('id="event-controls"')
-        return page[start:page.index('</form>', start)]
-
-    assert '<input type="hidden" name="region" value="8">' in bar_form('mode=forecast&region=8')
+    page = html(call(api, '/es/escanos', query='mode=forecast&region=8')[2])
+    bar = page[page.index('id="event-bar"'):page.index('<main')]
+    assert 'name="region"' not in bar and '<option value="8" selected>' in page
+    form = page[page.index('id="district-form"'):]
+    form = form[:form.index('</form>')]
+    assert '<input type="hidden" name="mode" value="forecast">' in form
     # the largest district is the default selection
-    assert '<input type="hidden" name="region" value="28">' in bar_form('mode=forecast')
-    # pages without a region keep the form as it was
-    page = html(call(api, '/es')[2])
-    assert 'name="region"' not in page[page.index('id="event-controls"'):page.index('</form>')]
+    assert '<option value="28" selected>' in html(call(api, '/es/escanos', query='mode=forecast')[2])
 
 
 def test_escanos_nowcast_and_pinned_run(api):
@@ -562,7 +557,7 @@ def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
 def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
     page = html(call(api, '/es/escanos', query='mode=forecast&run=' + RUN)[2])
-    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 2  # barra de evento y formulario de circunscripción
+    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 1  # solo el formulario de circunscripción
     assert 'href="/es/escanos?mode=forecast&amp;run={}&amp;region=8"'.format(RUN) in page
 
 
@@ -626,7 +621,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
     assert 'name="view" value="partidos"' in page and 'name="view" value="bloques"' in page
     assert 'id="pollster-select"' in page and 'href="/metodo' in page
-    assert re.search(r'<div class="series-controls"[^>]*\bhidden[^>]*>\s*<label>Casa', page)
+    assert re.search(r'<div class="series-controls"[^>]*\bhidden[^>]*>\s*<label>Encuestadora', page)
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
@@ -661,22 +656,21 @@ def test_promedios_headline_sentence_uses_the_mode(api):
     assert 'El 29 nov 2026' in html(call(api, '/es', query='mode=forecast')[2])
 
 
-def test_headline_text_names_the_leader_and_the_likeliest_majority():
+def test_headline_text_names_the_leader_by_its_short_name_and_the_likeliest_majority():
     current = {'parties': [{'name': 'PSOE', 'pct': 28.04, 'seats': 110}, {'name': 'PP', 'pct': 33.06, 'seats': 135}],
                'p_majority': {'Izquierda': 0.08, 'Derecha': 0.41}}
     meta = {'event_date': '2026-11-29'}
-    names = pages.Catalog({'PP': {'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha'}})
-    assert pages.headline_text(current, 'nowcast', meta, names, definitive=False) == (
-        'Si hoy hubiera elecciones, Partido Popular ganaría con el 33,1 % del voto y 135 escaños; probabilidad de '
+    assert pages.headline_text(current, 'nowcast', meta, definitive=False) == (
+        'Si hoy hubiera elecciones, PP ganaría con el 33,1 % del voto y 135 escaños; probabilidad de '
         'mayoría absoluta de Derecha: 41 %.')
-    assert pages.headline_text(current, 'forecast', meta, names, definitive=False).startswith(
-        'El 29 nov 2026, Partido Popular ganaría con el 33,1 %')
-    assert pages.headline_text(current, 'forecast', meta, names, definitive=True).startswith(
-        'Pronóstico definitivo: el 29 nov 2026, Partido Popular ganaría')
+    assert pages.headline_text(current, 'forecast', meta, definitive=False).startswith(
+        'El 29 nov 2026, PP ganaría con el 33,1 %')
+    assert pages.headline_text(current, 'forecast', meta, definitive=True).startswith(
+        'Pronóstico definitivo: el 29 nov 2026, PP ganaría')
     # sin probabilidades de mayoría la frase acaba en los escaños; sin partidos no hay titular
-    assert pages.headline_text(current | {'p_majority': {}}, 'nowcast', meta, names, definitive=False).endswith(
+    assert pages.headline_text(current | {'p_majority': {}}, 'nowcast', meta, definitive=False).endswith(
         'y 135 escaños.')
-    assert pages.headline_text({'parties': []}, 'nowcast', meta, names, definitive=False) is None
+    assert pages.headline_text({'parties': []}, 'nowcast', meta, definitive=False) is None
 
 
 def test_promedios_frozen_latest_forecast_is_definitive(api, fresh_app):
@@ -760,7 +754,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
     assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
-    assert 'Cada fila es una casa con rating para la próxima elección' in page
+    assert 'Cada fila es una encuestadora con rating para la próxima elección' in page
     assert not re.search(r'\ba el\b', page) and 'al primer bloque' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
@@ -770,7 +764,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
 def test_casas_explains_the_relative_bias(houses):
     page = html(call(houses, '/casas', query='scope=es')[2]).replace('\n', ' ')
     page = re.sub(r'\s+', ' ', page)
-    assert 'comparado con el de las demás casas' in page and 'no penaliza a una casa' in page
+    assert 'comparado con el de las demás encuestadoras' in page and 'no penaliza a una encuestadora' in page
 
 
 def test_casas_without_analysis_keeps_the_ranking(houses_without_analysis):
@@ -787,12 +781,13 @@ def test_casas_without_database_is_a_503_page(api):
 def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     page = html(call(houses, '/casas', query='scope=es&id=2')[2])
     assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'id="bullseye-chart"' in page
-    assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las casas' in page
+    assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas', query='scope=es&id=2')[2])
     assert list(data) == ['state', 'meta', 'path', 'bullseye', 'blocks'] and data['path'][0]['event_date'] == '2023-07-23'
 
 
-@pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Casa no válida'), ('id=999', 404, 'Casa no encontrada')])
+@pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Encuestadora no válida'),
+                                                  ('id=999', 404, 'Encuestadora no encontrada')])
 def test_casa_profile_errors(houses, query, status, text):
     got, headers, body = call(houses, '/casas', query=query)
     assert got == status and text in html(body) and headers['cache-control'] == 'no-store'
@@ -938,7 +933,7 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     assert 'id="sector-chart"' in page and 'aria-label=' in page
     table = re.search(r'<table id="events-table">(.*?)</table>', page, re.S).group(1)
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
-        'Elección', 'Sondeos', 'Casas', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
+        'Elección', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
 
 
 @pytest.fixture
@@ -979,8 +974,8 @@ def test_elecciones_history_context_filters_and_headline(history_site):
     assert context['filter_events'] == [{'date': '2023-07-23', 'name': 'Generales 2023'},
                                         {'date': '2019-11-10', 'name': 'Generales 2023'}]
     assert context['filter_pollsters'] == ['GAD3', 'Sigma Dos']
-    assert context['headline_text'] == ('En las 2 elecciones analizadas, el último sondeo de cada casa se desvió de '
-                                        'media 3,6 puntos en el margen entre bloques.')
+    assert context['headline_text'] == ('En las 2 elecciones analizadas, el último sondeo de cada encuestadora se '
+                                        'desvió de media 3,6 puntos en el margen entre bloques.')
     assert all(row['error_blocks_abs'] == abs(row['error_blocks']) for row in context['errors'])
     assert set(context['initial']) >= {'state', 'sector', 'blocks', 'errors', 'error_blocks', 'events'}
     assert pages.error_rows('es', ['2019-11-10']) == [] and pages.error_rows('es-md', ['2023-07-23']) is None
@@ -1302,8 +1297,8 @@ def test_metodo_rating_text(api):
     landing = html(call(api, '/metodo')[2])
     assert 'Cómo funciona el modelo' not in landing and 'href="/metodo/rating"' in landing
     text = re.sub(r'\s+', ' ', page)
-    assert 'la desviación de cada casa apenas cambia' in text and 'no cambia:' not in text
-    assert 'el denominador es la calidad previa media de las casas, no el rating medio' in text
+    assert 'la desviación de cada encuestadora apenas cambia' in text and 'no cambia:' not in text
+    assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
     assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
     assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
 
@@ -1369,7 +1364,7 @@ def test_backtest_subpage_has_the_seats_chart_and_the_subnav(api, fresh_app):
 
 def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
     page = html(call(api, '/es')[2])
-    assert page.count('>Método</a>') == 2 and '>Histórico de errores</a>' in page and '>Modelo</a>' not in page
+    assert page.count('>Método</a>') == 2 and '>Histórico Errores</a>' in page and '>Modelo</a>' not in page
 
 
 def test_frozen_manifest_marks_every_page(api, fresh_app):
@@ -1438,11 +1433,12 @@ def test_backtest_page_uses_the_card_pattern(api, fresh_app):
     assert 'class="how"' in page and 'class="lead"' in page
 
 
-def test_first_card_opens_its_how_to_read_and_the_rest_stay_folded(api):
-    page = html(call(api, '/es/escanos')[2])
-    main = page[page.index('<main'):]
-    hows = re.findall(r'<details class="how"( open)?>', main)
-    assert len(hows) > 1 and hows[0] == ' open' and set(hows[1:]) == {''}
+def test_every_how_to_read_is_folded(api):
+    for path in ('/es', '/es/escanos'):
+        page = html(call(api, path)[2])
+        main = page[page.index('<main'):]
+        hows = re.findall(r'<details class="how"( open)?>', main)
+        assert len(hows) > 1 and set(hows) == {''}, path
 
 
 def test_home_cards_follow_the_default_mode_while_frozen(api, fresh_app):
@@ -1476,11 +1472,12 @@ def test_fonts_are_vendored_and_declared():
 
 def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     page = html(call(houses, '/casas')[2])
-    assert 'casas con rating' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
+    assert 'encuestadoras con rating' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
     assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
     ranking = page[page.index('id="ranking-table"'):]
     heads = re.findall(r'<th scope="col">([^<]*)</th>', ranking[:ranking.index('</thead>')])
-    assert heads == ['Casa', 'Rating', 'Calidad', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo del margen', 'Herding']
+    assert heads == ['Encuestadora', 'Rating', 'Calidad', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo del margen',
+                     'Herding']
 
 
 def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):
@@ -1491,3 +1488,108 @@ def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):
     row = page[page.index('id="path-table"'):]
     row = row[row.index('<tbody>'):]
     assert row[:row.index('</tr>')].count('<td') == 5
+
+
+# Fase 7b, tarea 1: terminología pública, siglas, sin control de modo, fecha de hoy en el título, "Cómo leerlo"
+# plegados y etiquetas del menú.
+OLDER_RUN = '20261001-120000'
+
+
+def visible_text(page):
+    """Texto visible de una página: sin el bloque JSON, los scripts ni las etiquetas (los atributos fuera)."""
+    page = re.sub(r'<script\b.*?</script>', ' ', page, flags=re.S)
+    return re.sub(r'<[^>]+>', ' ', page)
+
+
+def assert_public_wording(page, label):
+    """Ni "casa/s" ni "patrocinador/es" en el texto visible, y ningún "Cómo leerlo" abierto."""
+    text = visible_text(page)
+    assert not re.search(r'\b[Cc]asas?\b', text), (label, re.findall(r'.{40}\b[Cc]asas?\b.{20}', text)[:3])
+    assert not re.search(r'\b[Pp]atrocinador(es)?\b', text), label
+    assert 'open>' not in page and '<details class="how" open' not in page, label
+
+
+def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site):
+    for path, query in (('/', ''), ('/es', ''), ('/es/escanos', ''), ('/elecciones', ''),
+                        ('/elecciones', 'scope=es&date=2023-07-23'), ('/metodo', ''), ('/metodo/promedio', ''),
+                        ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', '')):
+        assert_public_wording(html(call(events_site, path, query=query)[2]), path + '?' + query)
+    for path in ('/es', '/es/escanos', '/'):
+        page = html(call(events_site, path)[2])
+        assert 'Partido Popular' not in visible_text(page) and 'title="Partido Popular"' in page, path
+    # routes, ids and file names keep their names
+    page = html(call(events_site, '/elecciones', query='scope=es&date=2023-07-23')[2])
+    assert '/casas?scope=es&amp;id=2' in page
+    source = open(os.path.join(pages.TEMPLATES_DIR, 'elecciones.html'), encoding='utf-8').read()
+    assert '<select name="casa">' in source and "'/casas' ~ scope_query" in source
+
+
+def test_houses_pages_use_encuestadora(houses):
+    for query in ('scope=es', 'scope=es&id=2', 'scope=es&id=4'):
+        page = html(call(houses, '/casas', query=query)[2])
+        assert_public_wording(page, query)
+        assert '/dist/js/pages/casas.js' in page
+    page = html(call(houses, '/casas')[2])
+    assert '<title>Pronóstico electoral · Ranking Encuestadoras</title>' in page
+    assert 'aria-current="page">Ranking Encuestadoras</a>' in page
+    status, _, body = call(houses, '/casas', query='id=999')
+    assert status == 404 and 'Encuestadora no encontrada' in html(body)
+
+
+def test_menu_labels_and_titles(api):
+    page = html(call(api, '/elecciones')[2])
+    assert '>Histórico Errores</a>' in page and '>Ranking Encuestadoras</a>' in page
+    assert '<title>Pronóstico electoral · Histórico Errores</title>' in page
+    assert [entry['label'] for entry in pages.PAGES] == ['Inicio', 'Histórico Errores', 'Ranking Encuestadoras',
+                                                          'Método']
+
+
+def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app):
+    from datetime import datetime
+    from mtpy.lib.pages.filters import _madrid_tz
+    today = pages.fmt_date(datetime.now(_madrid_tz()).date().isoformat())
+    for path in ('/es', '/es/escanos'):
+        page = html(call(api, path)[2])
+        bar = page[page.index('id="event-bar"'):page.index('<main')]
+        # the district form of Escaños keeps `mode` hidden: no radio and nothing in the bar
+        assert 'type="radio" id="mode-' not in page and 'name="mode"' not in bar, path
+        assert 'mode-help' not in page and 'id="event-controls"' not in page, path
+        assert '¿Qué cambia entre Hoy y Elección?' not in page and 'class="segmented"' not in page, path
+        assert 'stimación a ' + today in page, path
+        # without JS the bar still has the title, the date, the tabs and the reading sentence
+        assert 'Elecciones generales' in bar and '29 nov 2026' in bar and 'href="/es/escanos?mode=nowcast"' in bar
+        assert 'Si las elecciones fueran hoy' in bar
+    write_bundle(fresh_app.fs, run_id=OLDER_RUN, manifest=False)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
+    assert 'Estimación del 8 oct 2026' in page and 'Estimación a ' + today not in page  # run_at of the fixture
+    bar = page[page.index('id="event-bar"'):page.index('<main')]
+    assert '<span class="chip event-run">Run del 8 oct 2026</span>' in bar and '<form' not in bar
+    # `?mode=` is still accepted in the query and kept in the tabs
+    page = html(call(api, '/es', query='mode=forecast')[2])
+    assert 'Pronóstico para el 29 nov 2026' in page and 'href="/es/escanos?mode=forecast"' in page
+    assert 'name="mode"' not in page
+
+
+def test_frozen_site_has_no_control_and_shows_the_forecast(api, fresh_app):
+    writer = bundle.BundleWriter(fresh_app.fs)
+    publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
+                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    for path in ('/es', '/es/escanos'):
+        page = html(call(api, path)[2])
+        bar = page[page.index('id="event-bar"'):page.index('<main')]
+        assert 'ronóstico definitivo para el 29 nov 2026' in page, path
+        assert 'type="radio" id="mode-' not in page and 'name="mode"' not in bar, path
+        assert 'id="event-controls"' not in page, path
+        assert 'Lo que puede pasar el 29 nov 2026' in page, path
+
+
+def test_title_of_shows_today_in_the_nowcast():
+    from datetime import date
+    meta = {'as_of': '2026-10-08', 'event_date': '2026-11-29', 'run_at': '2026-10-08T12:00:00Z'}
+    today = date(2026, 10, 13)
+    assert pages.title_of('nowcast', meta, False, False, True, today=today) == 'Estimación a 13 oct 2026'
+    assert pages.title_of('nowcast', meta, False, True, True, today=today) == 'Estimación a 13 oct 2026'
+    assert pages.title_of('nowcast', meta, False, True, False, today=today) == 'Estimación del 8 oct 2026'
+    assert pages.title_of('forecast', meta, False, False, True, today=today) == 'Pronóstico para el 29 nov 2026'

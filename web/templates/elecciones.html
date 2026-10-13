@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Elecciones{% endblock %}
-{% block description %}Histórico de errores: cuánto se equivocaron las encuestas frente al resultado en cada elección pasada.{% endblock %}
+{% block title %}Histórico Errores{% endblock %}
+{% block description %}Histórico Errores: cuánto se equivocaron las encuestas frente al resultado en cada elección pasada.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/elecciones.js"></script>
 {% endblock %}
@@ -11,7 +11,7 @@
     <div id="content" class="stack">
       {% if events %}
       {{ m.headline(headline_text) }}
-      {{ m.card_start('filters', 'Filtros', 'Elige una elección o una casa para ver solo sus sondeos en el histograma, la diana y la tabla por semanas.') }}
+      {{ m.card_start('filters', 'Filtros', 'Elige una elección o una encuestadora para ver solo sus sondeos en el histograma, la diana y la tabla por semanas.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
@@ -24,7 +24,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>Casa
+          <label>Encuestadora
             <select name="casa">
               <option value="">Todas</option>
               {% for pollster in filter_pollsters %}
@@ -35,13 +35,13 @@
           <span class="muted" id="errors-count" aria-live="polite"></span>
         </form>
         <noscript><p class="muted">Los filtros necesitan JavaScript.</p></noscript>
-        {% call m.how(open=True) %}
+        {% call m.how() %}
         <p>
           Los dos desplegables eligen qué sondeos entran en las tres tarjetas siguientes: los de una elección, los
-          de una casa o los dos a la vez. El contador dice cuántos quedan del total.
+          de una encuestadora o los dos a la vez. El contador dice cuántos quedan del total.
         </p>
         <p>
-          Cada sondeo es el último que publicó una casa en las semanas previas a una elección, frente al resultado
+          Cada sondeo es el último que publicó una encuestadora en las semanas previas a una elección, frente al resultado
           oficial. Solo cuentan las elecciones publicadas en esta página.
         </p>
         <p>Con un filtro estrecho quedan pocos sondeos, y la media de unos pocos dice poco.</p>
@@ -65,7 +65,7 @@
         </p>
         <p>
           Barras altas a la izquierda son sondeos que acertaron; una cola a la derecha, unos pocos que fallaron
-          mucho. Todos cuentan igual, sin ponderar por muestra ni por casa.
+          mucho. Todos cuentan igual, sin ponderar por muestra ni por encuestadora.
         </p>
         <p>Las dos medidas van sin signo: no dicen hacia qué lado se equivocó cada sondeo. Eso lo enseña la diana.</p>
         {% endcall %}
@@ -83,8 +83,8 @@
           sondeo menos resultado. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
         </p>
         <p>
-          Una nube de un color desplazada hacia un lado es un error que compartieron todas las casas en esa
-          elección; puntos repartidos alrededor del centro, errores propios de cada casa. El aviso de cada
+          Una nube de un color desplazada hacia un lado es un error que compartieron todas las encuestadoras en esa
+          elección; puntos repartidos alrededor del centro, errores propios de cada encuestadora. El aviso de cada
           punto enlaza a su elección.
         </p>
         <p>Que los sondeos fallaran hacia un lado en una elección no anticipa hacia dónde fallarán en la siguiente.</p>
@@ -113,7 +113,7 @@
           últimas.
         </p>
         <p>
-          Una celda con pocos sondeos varía mucho por azar, y la tabla no dice si el error baja porque las casas
+          Una celda con pocos sondeos varía mucho por azar, y la tabla no dice si el error baja porque las encuestadoras
           afinan o porque el voto se asienta.
         </p>
         {% endcall %}
@@ -130,7 +130,7 @@
           Una línea que baja con los años diría que el sector acierta más; un pico señala una elección en la que
           fallaron casi todos.
         </p>
-        <p>Es una media de todas las casas: no dice cuáles fallaron. Eso está en el detalle de cada elección.</p>
+        <p>Es una media de todas las encuestadoras: no dice cuáles fallaron. Eso está en el detalle de cada elección.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito y si el modelo tiene backtest en ella.') }}
@@ -141,7 +141,7 @@
               <tr>
                 <th scope="col">Elección</th>
                 <th scope="col">Sondeos</th>
-                <th scope="col">Casas</th>
+                <th scope="col">Encuestadoras</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
                 <th scope="col">Sesgo del margen</th>
@@ -165,10 +165,10 @@
         </div>
         {% call m.how() %}
         <p>
-          Cada fila es una elección: cuántos sondeos y casas hubo, sus errores frente al resultado y si el modelo
+          Cada fila es una elección: cuántos sondeos y encuestadoras hubo, sus errores frente al resultado y si el modelo
           tiene backtest en ella. Las medidas se definen justo debajo.
         </p>
-        <p>Pulsa una elección para ver su resultado, el error de cada casa y lo que habría dicho el modelo.</p>
+        <p>Pulsa una elección para ver su resultado, el error de cada encuestadora y lo que habría dicho el modelo.</p>
         <p>Que los sondeos acertaran en una elección no garantiza que acierten en la siguiente.</p>
         {% endcall %}
         {% include '_glosario.html' %}
@@ -179,7 +179,7 @@
       {{ m.card_end() }}
       {% endif %}
       {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
-                   'Los errores de esta página son la materia prima del rating de cada casa. El texto del método cuenta cómo se convierten en una sola nota.',
-                   [{'href': '/casas' ~ scope_query, 'label': 'Rating de encuestadoras de este ámbito'}]) }}
+                   'Los errores de esta página son la materia prima del rating de cada encuestadora. El texto del método cuenta cómo se convierten en una sola nota.',
+                   [{'href': '/casas' ~ scope_query, 'label': 'Ranking Encuestadoras de este ámbito'}]) }}
     </div>
 {% endblock %}

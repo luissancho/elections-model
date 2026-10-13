@@ -46,14 +46,14 @@
           {% endif %}
         </div>
         <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
-        {% call m.how(open=True) %}
+        {% call m.how() %}
         <p>
           Cada punto es un sondeo publicado; la línea es el promedio ponderado del modelo y la banda, su
           intervalo de confianza. En el modo Elección, la línea discontinua proyecta el voto desde la
           estimación hasta el día de la elección. En la vista Bloques, cada bloque suma sus partidos.
         </p>
         <p>
-          La banda dice dónde está el consenso de las casas, no dónde estará el voto el día de la elección.
+          La banda dice dónde está el consenso de las encuestadoras, no dónde estará el voto el día de la elección.
         </p>
         {% endcall %}
       {{ m.card_end() }}
@@ -72,7 +72,7 @@
             <tbody>
               {% for row in headline.parties %}
               <tr>
-                <td title="{{ row.name }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ catalog[row.name].fullname }}</td>
+                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
                 <td>{{ row.pct|pct }} <span class="muted">{{ row.lo|range(row.hi) }}</span></td>
                 <td>{{ row.seats|int }} <span class="muted">{{ row.seats_lo|range(row.seats_hi, 0) }}</span></td>
                 <td>{{ row.p_first|prob }}</td>
@@ -154,9 +154,9 @@
         {% endcall %}
       {{ m.card_end() }}
       {% if pollsters %}
-      {{ m.card_start('pollster', 'Una casa frente al promedio', 'Los sondeos de una sola casa frente al promedio de todas, para ver si suele quedar por encima o por debajo.') }}
+      {{ m.card_start('pollster', 'Una encuestadora frente al promedio', 'Los sondeos de una sola encuestadora frente al promedio de todas, para ver si suele quedar por encima o por debajo.') }}
         <div class="series-controls" id="pollster-controls" hidden>
-          <label>Casa
+          <label>Encuestadora
             <select id="pollster-select">
               {% for option in pollsters %}
               <option value="{{ option.name }}"{% if loop.first %} selected{% endif %}>{{ option.name }} ({{ option.n|int }})</option>
@@ -164,14 +164,14 @@
             </select>
           </label>
         </div>
-        <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la casa elegida frente al promedio de sondeos{{ projection_label }}"></div>
+        <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la encuestadora elegida frente al promedio de sondeos{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
-          Los puntos son solo los sondeos de la casa elegida; la línea y la banda son el promedio de todas.
+          Los puntos son solo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
           Sigue la ventana, la vista y los partidos del gráfico del promedio.
         </p>
         <p>
-          Separarse del promedio no es equivocarse: el acierto de cada casa se mide con los resultados, en el
+          Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en el
           rating de encuestadoras.
         </p>
         {% endcall %}
@@ -184,8 +184,8 @@
             <thead>
               <tr>
                 <th scope="col">Fecha</th>
-                <th scope="col">Casa</th>
-                <th scope="col">Patrocinador</th>
+                <th scope="col">Encuestadora</th>
+                <th scope="col">Medio</th>
                 <th scope="col">Muestra</th>
                 {% for name in table_parties %}
                 <th scope="col" title="{{ catalog[name].fullname }}">{{ name }}</th>
@@ -205,14 +205,14 @@
         </div>
         {% call m.how() %}
         <p>
-          Cada fila es un sondeo: la casa, quién lo encargó, el tamaño de la muestra y el voto de cada partido.
+          Cada fila es un sondeo: la encuestadora, el medio que lo publicó, el tamaño de la muestra y el voto de cada partido.
           Las cifras no llevan ninguna corrección del modelo. El CSV tiene todos los sondeos del ciclo.
         </p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.closing('¿Cómo promediamos las encuestas?', method_href('promedio'),
-                   'Qué sondeos entran en el promedio, cuánto pesa cada uno y cómo se corrige la tendencia de cada casa. También, qué mide la banda y qué no.',
+                   'Qué sondeos entran en el promedio, cuánto pesa cada uno y cómo se corrige la tendencia de cada encuestadora. También, qué mide la banda y qué no.',
                    [{'href': '/elecciones' ~ scope_query, 'label': 'Cómo acertaron las encuestas en las elecciones anteriores'},
-                    {'href': '/casas' ~ scope_query, 'label': 'Las casas que sondean este ámbito'}]) }}
+                    {'href': '/casas' ~ scope_query, 'label': 'Las encuestadoras que sondean este ámbito'}]) }}
     </div>
 {% endblock %}

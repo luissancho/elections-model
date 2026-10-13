@@ -6,8 +6,8 @@ const echarts = window.echarts;
 const REDUCED_MOTION = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 /**
- * Shared chart style: the body font of `site.css` (`--font-body`), text and line colours, and the animation
- * length (zero under `prefers-reduced-motion`).
+ * Shared chart style: the body font of `site.css` (`--font-body`), text and line colours, the neutral blue of
+ * the bars without a party colour, and the animation length (zero under `prefers-reduced-motion`).
  */
 export const THEME = {
   fontFamily: "'Source Sans 3', system-ui, sans-serif",
@@ -15,6 +15,7 @@ export const THEME = {
   gridColor: '#e5e5e5',
   intervalColor: '#333',
   markColor: '#555',
+  barColor: '#3a6ea5',
   animationDuration: REDUCED_MOTION ? 0 : 300,
 };
 

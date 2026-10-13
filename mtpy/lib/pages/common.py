@@ -22,8 +22,8 @@ SITE_TITLE = 'Pronóstico electoral'
 # Main menu: the global pages. Promedios and Escaños are the tabs of the event bar (``EVENT_TABS``).
 PAGES = (
     {'href': '/', 'label': 'Inicio'},
-    {'href': '/elecciones', 'label': 'Histórico de errores'},
-    {'href': '/casas', 'label': 'Rating de encuestadoras'},
+    {'href': '/elecciones', 'label': 'Histórico Errores'},
+    {'href': '/casas', 'label': 'Ranking Encuestadoras'},
     {'href': '/metodo', 'label': 'Método'},
 )
 EVENT_TABS = (
@@ -55,8 +55,8 @@ MESSAGES = {
     'region not found': 'Circunscripción no encontrada.',
     'no database configured': 'La base de datos no está disponible.',
     'database unavailable': 'La base de datos no está disponible.',
-    'pollster not found': 'Casa no encontrada.',
-    'invalid pollster': 'Casa no válida.',
+    'pollster not found': 'Encuestadora no encontrada.',
+    'invalid pollster': 'Encuestadora no válida.',
     'invalid date': 'Fecha no válida.',
     'event not published': 'Elección no publicada.',
     'backtest not published': 'Backtest no publicado.',
@@ -419,9 +419,8 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
     -------
     dict
         ``title`` (``event_title``), ``date`` (``event_date``), ``days_left``, ``days_text``
-        (``days_text``), ``href`` (``'/{scope}'``), ``form_action`` (the path of the current tab,
-        target of the mode form) and ``tabs``: ``{'href', 'label', 'active'}`` per entry of
-        ``EVENT_TABS``, the links keeping the state (``event_query``).
+        (``days_text``), ``href`` (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per
+        entry of ``EVENT_TABS``, the links keeping the state (``event_query``).
     """
     if scopes is None:
         scopes = published_scopes()
@@ -436,13 +435,13 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
         'days_left': days,
         'days_text': days_text(days),
         'href': '/' + scope,
-        'form_action': '/' + scope + active_suffix,
         'tabs': [{'href': '/' + scope + tab['suffix'] + query, 'label': tab['label'],
                   'active': tab['suffix'] == active_suffix} for tab in EVENT_TABS],
     }
 
 
-def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool) -> str:
+def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool,
+             today: Optional[date] = None) -> str:
     """
     Title of the estimate a page shows.
 
@@ -451,23 +450,32 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool)
     mode : str
         ``'nowcast'`` or ``'forecast'``.
     meta : dict
-        Data of the meta part of the run shown (``as_of``, ``event_date``, ``run_at``).
+        Data of the meta part of the run shown (``event_date``, ``run_at``).
     frozen : bool
         Whether the publication is frozen.
     pinned : bool
         Whether the run was chosen with ``?run=``.
     is_latest : bool
         Whether the run shown is the latest of the scope in the manifest.
+    today : datetime.date, optional
+        Date of the nowcast title of the latest run; today in Europe/Madrid by default.
 
     Returns
     -------
     str
-        ``'Estimación a {as_of}'`` in nowcast mode; in forecast mode ``'Pronóstico definitivo para
-        el {event_date}'`` only while frozen and showing the latest run, ``'Pronóstico publicado el
-        {run_at}'`` for an older pinned run and ``'Pronóstico para el {event_date}'`` otherwise.
+        In nowcast mode ``'Estimación a {today}'`` for the latest run and ``'Estimación del {run_at}'`` for
+        an older pinned run; in forecast mode ``'Pronóstico definitivo para el {event_date}'`` only while
+        frozen and showing the latest run, ``'Pronóstico publicado el {run_at}'`` for an older pinned run and
+        ``'Pronóstico para el {event_date}'`` otherwise.
     """
     if mode == 'nowcast':
-        return 'Estimación a {}'.format(fmt_date(meta.get('as_of')))
+        if not is_latest:
+            return 'Estimación del {}'.format(fmt_date(meta.get('run_at')))
+
+        if today is None:
+            today = datetime.now(_madrid_tz()).date()
+
+        return 'Estimación a {}'.format(fmt_date(today.isoformat()))
 
     if frozen and is_latest:
         return 'Pronóstico definitivo para el {}'.format(fmt_date(meta.get('event_date')))
@@ -480,7 +488,7 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool)
 
 def mode_text(mode: str, meta: dict, days: Optional[int]) -> str:
     """
-    Sentence that explains the mode shown, under the mode control of the event bar.
+    Sentence that explains how to read the mode shown, in the event bar.
 
     Parameters
     ----------

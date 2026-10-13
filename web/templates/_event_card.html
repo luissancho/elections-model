@@ -2,7 +2,7 @@
 <p class="muted">{{ card.event_date|date }}{% if card.days_text %} · {{ card.days_text }}{% endif %}</p>
 {% if card.leader %}
 <p class="muted">{{ 'Pronóstico definitivo' if card.mode == 'forecast' and card.frozen else ('Pronóstico' if card.mode == 'forecast' else 'Si hoy hubiera elecciones') }}</p>
-<p>{{ card.leader.fullname }}{% if card.leader.fullname != card.leader.name %} ({{ card.leader.name }}){% endif %} va primero con el {{ card.leader.pct|pct }} y {{ card.leader.seats|int }} escaños</p>
+<p><span title="{{ card.leader.fullname }}">{{ card.leader.name }}</span> va primero con el {{ card.leader.pct|pct }} y {{ card.leader.seats|int }} escaños</p>
 {% else %}
 <p>—</p>
 {% endif %}
