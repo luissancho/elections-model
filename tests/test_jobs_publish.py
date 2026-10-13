@@ -616,3 +616,123 @@ def test_backfill_progress_names_the_day(fresh_app, tmp_path, patched, capsys):
     out = capsys.readouterr().out
     assert 'publish forecast: 1 ámbito · backfill 2026-10-05..2026-10-06 (2 días)' in out
     assert out.index('[1/1] es 2026-10-05: empezando') < out.index('[1/1] es 2026-10-06: promedio ajustado (')
+
+
+class ListHandler:
+    """Recoge los mensajes que recibe un `logging.Logger` (sin escribir en consola)."""
+
+    def __new__(cls):
+        import logging
+
+        class _Handler(logging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.messages = []
+
+            def emit(self, record):
+                self.messages.append(record.getMessage())
+
+        return _Handler()
+
+
+def app_log(name, *handlers):
+    """Logger con la forma del `Log` de la app (`loggers['info']`, `info`, `error`) y estos manejadores."""
+    import logging
+
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    for handler in handlers:
+        logger.addHandler(handler)
+    return types.SimpleNamespace(loggers={'info': logger, 'error': logger}, info=logger.info, error=logger.error)
+
+
+def drop_handlers(log):
+    for handler in list(log.loggers['info'].handlers):
+        log.loggers['info'].removeHandler(handler)
+        handler.close()
+
+
+PROGRESS = ['[1/1] es: empezando', '[1/1] es: promedio ajustado (', '[1/1] es: meta y titular (']
+
+
+def test_progress_is_not_echoed_twice_by_a_console_logger(fresh_app, tmp_path, patched, capsys):
+    """Con un logger que ya escribe en consola (`App` con `verbose`), cada línea de progreso sale una vez, con la
+    marca de tiempo del logger y no la propia."""
+    import logging
+    import sys
+
+    from mtpy.jobs.Publish import Publish
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(logging.Formatter('[%(asctime)s] %(message)s'))
+    log = app_log('test-publish-console', console)
+    fresh_app.set('logger', log)
+    try:
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
+    finally:
+        drop_handlers(log)
+    lines = capsys.readouterr().out.splitlines()
+    for text in PROGRESS:
+        found = [line for line in lines if text in line]
+        assert len(found) == 1, text
+        assert found[0].index(text) == len('[2026-10-14 01:19:24,279] ')  # solo el prefijo del logger
+
+
+def test_progress_without_logger_prints_once_with_the_time(fresh_app, tmp_path, patched, capsys):
+    import re
+
+    from mtpy.jobs.Publish import Publish
+
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
+    lines = capsys.readouterr().out.splitlines()
+    for text in PROGRESS:
+        found = [line for line in lines if text in line]
+        assert len(found) == 1 and re.fullmatch(r'\[\d\d:\d\d:\d\d\] ' + re.escape(text) + r'.*', found[0]), text
+
+
+def test_progress_with_a_file_logger_prints_and_logs_the_bare_text(fresh_app, tmp_path, patched, capsys):
+    import logging
+
+    from mtpy.jobs.Publish import Publish
+
+    listed = ListHandler()
+    log = app_log('test-publish-file', logging.NullHandler(), logging.FileHandler(str(tmp_path / 'info.log')), listed)
+    fresh_app.set('logger', log)
+    try:
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'site')))
+    finally:
+        drop_handlers(log)
+    out = capsys.readouterr().out
+    assert all(out.count(text) == 1 for text in PROGRESS)
+    assert '[1/1] es: empezando' in listed.messages  # el texto desnudo, sin `[hh:mm:ss]`
+    assert '[1/1] es: empezando' in (tmp_path / 'info.log').read_text()
+
+
+def test_logger_echoes_console_only_with_a_console_stream_handler(tmp_path):
+    import logging
+    import sys
+
+    from mtpy.jobs.Publish import Publish
+
+    echoes = Publish._logger_echoes_console
+    assert echoes(types.SimpleNamespace(info=lambda m: None)) is False
+    for stream in (sys.stdout, sys.stderr):
+        log = app_log('test-echo-stream', logging.StreamHandler(stream))
+        try:
+            assert echoes(log) is True and echoes(log.loggers['info']) is True
+        finally:
+            drop_handlers(log)
+    log = app_log('test-echo-file', logging.FileHandler(str(tmp_path / 'x.log')), logging.NullHandler())
+    try:
+        assert echoes(log) is False
+    finally:
+        drop_handlers(log)
+    parent = app_log('test-echo-parent', logging.StreamHandler(sys.stdout))
+    child = logging.getLogger('test-echo-parent.child')
+    try:
+        assert echoes(child) is True  # hereda la consola del padre por propagación
+        parent.loggers['info'].setLevel(logging.WARNING)
+        assert echoes(parent) is False  # un `info` que no se emite no se repite
+    finally:
+        drop_handlers(parent)

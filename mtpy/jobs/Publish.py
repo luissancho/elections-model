@@ -1,4 +1,6 @@
 import contextlib
+import logging
+import sys
 import traceback
 import warnings
 from datetime import date, datetime, timedelta
@@ -549,11 +551,56 @@ class Publish(Job):
         return ScopeProgress(self._say, scope, index, total, day)
 
     def _say(self, text):
-        """Print one progress line now, with the time, and log it through the app logger, if there is one."""
-        line = '[{}] {}'.format(datetime.now().strftime('%H:%M:%S'), text)
-        print(line, flush=True)
-        if self.app.logger is not None:
-            self.app.logger.info(line)
+        """
+        Report one progress line now, once on the console.
+
+        The app logger, if there is one, gets the bare ``text`` (it adds its own timestamp). The line
+        is also printed to stdout with ``[hh:mm:ss]`` and flushed, unless the logger already writes
+        its ``info`` to the console (``_logger_echoes_console``), so the line never shows twice.
+
+        Parameters
+        ----------
+        text : str
+            Progress line, without time.
+        """
+        logger = self.app.logger
+        if logger is None or not self._logger_echoes_console(logger):
+            print('[{}] {}'.format(datetime.now().strftime('%H:%M:%S'), text), flush=True)
+        if logger is not None:
+            logger.info(text)
+
+    @staticmethod
+    def _logger_echoes_console(logger):
+        """
+        Tell whether ``logger.info`` already writes to the console.
+
+        Parameters
+        ----------
+        logger : logging.Logger or object
+            A ``logging.Logger`` or the app ``Log`` (its ``loggers['info']`` is checked); anything
+            else never echoes.
+
+        Returns
+        -------
+        bool
+            Whether ``info`` is enabled and some handler of the logger, or of an ancestor reached by
+            propagation, is a ``logging.StreamHandler`` (not a ``FileHandler``) writing to
+            ``sys.stdout`` or ``sys.stderr``.
+        """
+        if not isinstance(logger, logging.Logger):
+            loggers = getattr(logger, 'loggers', None)
+            logger = loggers.get('info') if isinstance(loggers, dict) else None
+        if not isinstance(logger, logging.Logger) or not logger.isEnabledFor(logging.INFO):
+            return False
+        consoles = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+        current = logger
+        while current is not None:
+            for handler in current.handlers:
+                if (isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)
+                        and handler.stream in consoles):
+                    return True
+            current = current.parent if current.propagate else None
+        return False
 
     def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
         """
