@@ -60,40 +60,44 @@ def card_headline(row: dict, mode: str = 'nowcast') -> tuple:
 
 def event_cards(scopes: list, today: Optional[date] = None) -> list:
     """
-    One card per published event.
+    One card per catalogue scope: the published events with their headline, the rest as "not published".
 
     Parameters
     ----------
     scopes : list of dict
-        Rows of ``published_scopes()``.
+        Every row of ``site().scopes()['scopes']`` (published or not).
     today : datetime.date, optional
         Reference day for the days left.
 
     Returns
     -------
     list of dict
-        ``es`` first, the rest by ascending ``event_date``; each with ``code``, ``title``, ``event_date``,
-        ``days_text``, ``run_at``, ``frozen``, ``mode``, ``href``, ``href_seats``, ``leader`` and ``majority``
-        (``card_headline``).
+        ``es`` first, then the published scopes by ascending ``event_date``, then the unpublished ones by
+        name; each with ``code``, ``title``, ``published``, ``event_date``, ``days_text``, ``run_at``,
+        ``frozen``, ``mode``, ``href``, ``href_seats``, ``leader`` and ``majority`` (``card_headline``).
+        The unpublished ones have no date, link or figures.
     """
     frozen = bool((site().manifest_data().get('freeze') or {}).get('active'))
     mode = default_mode(frozen)
-    ordered = sorted(scopes, key=lambda row: (row['code'] != 'es', row.get('event_date') or ''))
+    ordered = sorted(scopes, key=lambda row: (row['code'] != 'es', not row['simulable'],
+                                              (row.get('event_date') or '') if row['simulable'] else row['name']))
     cards = []
 
     for row in ordered:
         code = row['code']
-        leader, majority = card_headline(row, mode)
+        published = bool(row['simulable'])
+        leader, majority = card_headline(row, mode) if published else (None, None)
         cards.append({
             'code': code,
             'title': event_title(code, scopes),
-            'event_date': row.get('event_date'),
-            'days_text': days_text(days_left(row.get('event_date'), today)),
-            'run_at': row.get('run_at'),
+            'published': published,
+            'event_date': row.get('event_date') if published else None,
+            'days_text': days_text(days_left(row.get('event_date'), today)) if published else '',
+            'run_at': row.get('run_at') if published else None,
             'frozen': frozen,
             'mode': mode,
-            'href': '/' + code,
-            'href_seats': '/' + code + '/escanos',
+            'href': '/' + code if published else None,
+            'href_seats': '/' + code + '/escanos' if published else None,
             'leader': leader,
             'majority': majority,
         })
@@ -151,6 +155,6 @@ def inicio_context(state: dict) -> dict:
         503 without a bundle.
     """
     context = common_context(state, active='/')
-    context.update(cards=event_cards(context['scopes']), past=past_events(context['scopes']), intro=INTRO)
+    context.update(cards=event_cards(site().scopes()['scopes']), past=past_events(context['scopes']), intro=INTRO)
 
     return context

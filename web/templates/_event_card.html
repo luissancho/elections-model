@@ -1,3 +1,4 @@
+{% if card.published %}
 <a class="card card-link" href="{{ card.href }}">
 <h3>{{ card.title }}</h3>
 <p class="muted">{{ card.event_date|date }}{% if card.days_text %} · {{ card.days_text }}{% endif %}</p>
@@ -14,4 +15,9 @@
 {% endif %}
 <p class="muted">Última publicación: {{ card.run_at|date }}{% if card.frozen %} · congelado{% endif %}</p>
 </a>
-<p class="card-actions"><a href="{{ card.href_seats }}">Ver escaños</a></p>
+{% else %}
+<div class="card card-muted">
+<h3>{{ card.title }}</h3>
+<p>Pronóstico no publicado todavía.</p>
+</div>
+{% endif %}

@@ -7,14 +7,16 @@
       {{ m.headline(intro) }}
       <section class="stack" id="events">
         <h2>Próximas elecciones</h2>
-        {% for card in cards[:1] %}
+        {% set hero = cards[:1]|selectattr('published')|list %}
+        {% set rest = cards[hero|length:] %}
+        {% for card in hero %}
         <div class="tile tile-hero">
           {% include '_event_card.html' +%}
         </div>
         {% endfor %}
-        {% if cards|length > 1 %}
+        {% if rest %}
         <div class="grid">
-          {% for card in cards[1:] %}
+          {% for card in rest %}
           <div class="tile">
             {% include '_event_card.html' +%}
           </div>

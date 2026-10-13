@@ -1412,6 +1412,31 @@ def test_frozen_manifest_marks_every_page(api, fresh_app):
     assert 'freeze-banner' not in html(body) and 'Pronóstico para el' in html(body) and 'congelado desde' not in html(body)
 
 
+def test_window_options_run_from_the_whole_cycle_to_three_months(api):
+    page = html(call(api, '/es')[2])
+    assert page.index('value="all"') < page.index('value="1a"') < page.index('value="6m"') < page.index('value="3m"')
+    assert 'value="all" checked' in page.replace('\n', ' ')
+
+
+def test_home_lists_every_catalogue_scope_and_marks_the_unpublished_ones(api):
+    page = html(call(api, '/')[2])
+    assert page.count('card-link') == 1 + 3  # es + las tres secciones globales
+    assert page.count('card-muted') == 17 and 'Pronóstico no publicado todavía' in page
+    assert 'Elecciones autonómicas · Madrid' in page and 'href="/es-md"' not in page
+    assert 'Ver escaños' not in page and 'card-actions' not in page
+    assert page.index('href="/es"') < page.index('Elecciones autonómicas · Andalucía')
+
+
+def test_home_puts_the_published_regional_scope_before_the_unpublished_ones(api, fresh_app):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    assert page.count('card-link') == 2 + 3 and page.count('card-muted') == 16
+    assert 'href="/es-md"' in page
+    assert page.index('Elecciones autonómicas · Madrid') < page.index('Elecciones autonómicas · Andalucía')
+    assert page.count('class="tile tile-hero"') == 1
+
+
 def test_home_lists_the_published_events_with_their_headline(api, fresh_app):
     write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
     webapi.site().manifest_cache_clear()
@@ -1419,7 +1444,7 @@ def test_home_lists_the_published_events_with_their_headline(api, fresh_app):
     page = html(body)
     assert status == 200 and '<title>Pronóstico electoral · Inicio</title>' in page
     assert page.index('Elecciones generales') < page.index('Elecciones autonómicas · Madrid')
-    assert 'href="/es"' in page and 'href="/es/escanos"' in page and 'href="/es-md"' in page
+    assert 'href="/es"' in page and 'href="/es-md"' in page and 'href="/es/escanos"' not in page
     leader = max(fixture_data('headline')['nowcast']['parties'], key=lambda row: row['pct'])
     assert leader['name'] in page and 'de probabilidad de mayoría absoluta' in page
     assert 'id="event-bar"' not in page and 'id="scope-filter"' not in page and 'initial-data' not in page
@@ -1436,7 +1461,7 @@ def test_home_tolerates_a_scope_whose_run_has_no_headline(api, fresh_app, tmp_pa
 def test_home_cards_are_links(api):
     page = html(call(api, '/')[2])
     assert 'class="card card-link" href="/es"' in page.replace("'", '"')
-    assert page.count('card-link') >= 4  # el ámbito + las tres secciones
+    assert page.count('card-link') == 4  # el ámbito + las tres secciones
     more = page[page.index('id="more"'):page.index('</section>', page.index('id="more"'))]
     for href in ('/elecciones', '/casas', '/metodo'):
         assert re.search(r'<a class="card card-link" href="%s"><h3>[^<]+</h3>' % href, more), href

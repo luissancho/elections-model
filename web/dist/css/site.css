@@ -235,8 +235,8 @@ article.card p, .card-link p { margin: 6px 0; }
 .card-link:hover, .card-link:focus-visible { border-color: var(--color-accent); background: var(--color-soft); }
 .card-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .card-link h3 { margin-top: 0; }
-.card-actions { margin: var(--space-2) 0 0; font-size: 0.95rem; }
-.card-actions a { display: inline-block; padding: var(--space-2) 0; }
+.card-muted { background: var(--color-soft); border-style: dashed; color: var(--color-muted); cursor: default; }
+.card-muted h3 { margin-top: 0; color: inherit; }
 .grid-three { grid-template-columns: repeat(3, 1fr); }
 .card h3 a { color: var(--color-text); text-decoration: none; }
 .card h3 a:hover { color: var(--color-accent); text-decoration: underline; }
