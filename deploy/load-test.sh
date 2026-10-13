@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # Prueba de carga corta sobre la API y la portada.
 #
-# Uso: bash deploy/load-test.sh BASE_URL [CONCURRENCIA=50] [SEGUNDOS=20]
+# Uso: bash deploy/load-test.sh BASE_URL [CONCURRENCIA=4] [SEGUNDOS=20]
 #   BASE_URL  nginx/ALB (https://<host>, http://127.0.0.1:8043) o uvicorn (http://127.0.0.1:8001)
 #
-# Usa `hey` si esta instalado (-q 5: 5 peticiones/s por cliente, para que cada cliente quede por debajo del
-# limite de 20 r/s por IP de nginx) y, si no, `ab` (ApacheBench, sin limite por cliente). Mide
-# /api/v1/forecast/es/nowcast/summary y /, imprime p95 y codigos de respuesta, y despues hace 50 `curl -sI` a
-# la ruta de la API contando las cabeceras `X-Cache: HIT` (solo hay con nginx delante).
+# Usa `hey` si esta instalado (-q 5: 5 peticiones/s por cliente; con la concurrencia por defecto, 4, son 20 r/s,
+# el limite por IP de nginx, porque todos los clientes salen de la misma IP) y, si no, `ab` (ApacheBench, sin
+# limite por cliente). Mide /api/v1/forecast/es/nowcast/summary y /, imprime p95 y codigos de respuesta, y
+# despues hace 50 `curl -sI` a la ruta de la API contando las cabeceras `X-Cache: HIT` (solo hay con nginx delante).
 # Sale con 1 si alguna respuesta es 5xx o si la primera peticion responde 429; con 2 si falta herramienta.
 set -euo pipefail
 
 if [ $# -lt 1 ] || [ $# -gt 3 ]; then
-    echo "uso: $0 BASE_URL [CONCURRENCIA=50] [SEGUNDOS=20]" >&2
+    echo "uso: $0 BASE_URL [CONCURRENCIA=4] [SEGUNDOS=20]" >&2
     exit 2
 fi
 base="${1%/}"
-conc="${2:-50}"
+conc="${2:-4}"
 secs="${3:-20}"
 api="/api/v1/forecast/es/nowcast/summary"
 out="$(mktemp)"

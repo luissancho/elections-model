@@ -260,8 +260,13 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
   `s3:ListBucket` sobre `arn:aws:s3:::<bucket>` (condición de prefijo `site/*`). Es el que lee la web.
 - Rol de tarea de escritura (`<task-role-write>`): lo anterior más `s3:PutObject` y `s3:DeleteObject` sobre
   `site/*` y `site-dry/*`. Solo para la definición `elections-job`.
-- Rol de ejecución (`<execution-role>`): `AmazonECSTaskExecutionRolePolicy` más `secretsmanager:GetSecretValue`
-  sobre el secreto de `DB_PASSWORD`.
+- Los dos roles de tarea, además, `logs:CreateLogStream` y `logs:PutLogEvents` sobre el grupo de logs
+  (`arn:aws:logs:<region>:<account>:log-group:<log-group>:*`): el logger de la aplicación (`CWL_GROUP`) escribe con
+  el rol de la tarea, mientras que el driver `awslogs` usa el rol de ejecución. (Enmienda 2026-10-13, revisión
+  final: sin estos permisos el logger no escribe, pero un fallo de CloudWatch ya no interrumpe el job ni la web;
+  va a la salida de errores del contenedor.)
+- Rol de ejecución (`<execution-role>`): `AmazonECSTaskExecutionRolePolicy` (incluye `logs:CreateLogStream` y
+  `logs:PutLogEvents` para `awslogs`) más `secretsmanager:GetSecretValue` sobre el secreto de `DB_PASSWORD`.
 - Un grupo de logs de CloudWatch (`<log-group>`), usado por `awslogs` y por `CWL_GROUP` (logger de la aplicación).
 - Un secreto con la contraseña de la base (`<secret-arn>`), que ECS inyecta como `DB_PASSWORD`.
 
@@ -278,10 +283,12 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 | `<execution-role>` | Rol de ejecución (descarga la imagen, escribe logs, lee el secreto) |
 | `<cluster>` | Clúster en el que se lanzan los jobs |
 | `<subnet-id>`, `<security-group-id>` | Subred y grupo de seguridad de la tarea de job (necesita acceso a la RDS) |
+| `<git-sha>` | Commit de la imagen registrada (`GIT_COMMIT` de la tarea de jobs; ver "Publicar desde ECS") |
 
 La web usa 1 vCPU y 2 GB con `GUNICORN_WORKERS=2` y `DB_STATEMENT_TIMEOUT=10000`; el job usa 2 vCPU y 4 GB y deja
 `DB_STATEMENT_TIMEOUT` vacío (sin límite). Ninguna plantilla lleva `AWS_KEY` ni `AWS_SECRET`: las credenciales
-salen del rol de la tarea.
+salen del rol de la tarea. `DB_ADAPTER` es `PostgreSQL`, el nombre exacto del módulo `mtpy/core/dal/PostgreSQL.py`
+(enmienda 2026-10-13, revisión final: las plantillas decían `postgres` y la web no arrancaba).
 
 ### Procedimiento
 
@@ -554,7 +561,8 @@ Un run retrospectivo es una reconstrucción (ratings, deriva y catálogo de hoy;
 hasta ese día), `es` tarda unos 2 min por día, los días ya publicados se saltan y `latest` no retrocede
 (ver "Relleno retroactivo").
 
-Desde la imagen (JSON sin espacios: `init.sh` no entrecomilla):
+Desde la imagen (`RUN_JOB` es el nombre del job, la primera palabra, y después el JSON, que puede llevar espacios:
+`init.sh` lo pasa como un solo argumento; enmienda 2026-10-13, revisión final):
 
 ```
 docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}' elections-web:<tag>
@@ -572,12 +580,23 @@ aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-job.exa
 aws ecs run-task --cli-input-json file://deploy/ecs/run-task.example.json
 ```
 
-El override de `RUN_JOB` lleva el JSON sin espacios (`init.sh` no entrecomilla): cambia `what`, `scopes` y el
-resto de parámetros en ese valor. La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
+El override de `RUN_JOB` lleva el nombre del job (la primera palabra) y después el JSON, que puede llevar espacios
+(por ejemplo el mensaje de la congelación): `init.sh` pasa todo lo que sigue al primer espacio como un solo
+argumento (enmienda 2026-10-13, revisión final; antes había que escribirlo sin espacios). Cambia `what`, `scopes` y
+el resto de parámetros en ese valor. La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
 prefijo `job`). El rol de jobs (`<task-role-write>`) escribe en `site/*` y `site-dry/*`; la web, con el rol de
 lectura, no puede escribir. Mide la memoria de `publish forecast all` antes de fiarte de los 4 GB de la plantilla
 (la tarea 4 de la fase 6 lo mide en local). (Enmienda 2026-10-13: en local solo se midió `publish backtest`, que no
 necesita la base; la memoria de `forecast` queda para la primera tarea de jobs en ECS, ver "Duraciones medidas".)
+
+`GIT_COMMIT` de `task-job` es el sha de la imagen que registraste (`git rev-parse --short HEAD` del commit con el
+que hiciste el `docker build`): la imagen no lleva `.git`, así que la procedencia de los runs publicados desde ECS
+(`meta.commit`, el commit del pie de la web) sale de esa variable, con `dirty: false`. Sin ella el run queda con
+`commit: null`. Actualízala cada vez que registres una imagen nueva.
+
+**Aviso**: un `run-task` de `elections-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
+definición no lleva `APP_API`, `APP_CRONTAB` ni `APP_QUEUE`) y se queda esperando en `tail -f /dev/null`, con 2 vCPU
+y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster <cluster> --task <task-id>`).
 
 ### Veda
 
@@ -587,7 +606,10 @@ Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 
 
 1. `python job.py publish '{"what":["forecast"],"scopes":"all"}'` publica el pronóstico definitivo de todos los
    ámbitos (con `S3_BUCKET` y la RDS, como en "Publicar en S3 contra la RDS", o como tarea de ECS con ese
-   `RUN_JOB`, ver "Publicar desde ECS"; lo mismo para los pasos 3 y el descongelado).
+   `RUN_JOB`, ver "Publicar desde ECS"; lo mismo para los pasos 3 y el descongelado). Lanzarlo con margen, mucho
+   antes de medianoche: la guarda lee la fecha de hoy (Europe/Madrid) al llegar a cada ámbito, así que los ámbitos
+   que se publiquen pasadas las 00:00 del 24 quedan `refused` y el manifest queda mezclado (unos ámbitos con el
+   run del 23 y otros con el anterior).
 2. Comprobar el manifest (ver "Leer el manifest publicado").
 3. `python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}'` congela la web;
    `manifest.freeze.since` queda con la fecha del día. Texto sugerido: "Pronóstico definitivo, publicado el 23
@@ -601,7 +623,7 @@ Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 
 
 **Sondeos durante la veda**: cargarlos es seguro. El cargador marca los de prohibición (`wban`) y los de
 boca de urna (`exit`) y el modelo y la API los excluyen. No recalcular ratings ni publicar (`forecast`,
-`analysis`, relleno) hasta el 29: la guarda lo rechaza en cualquier ámbito.
+`analysis`, relleno) hasta el 30: la guarda lo rechaza en cualquier ámbito hasta el 29 incluido.
 
 #### Ensayo
 
@@ -643,11 +665,14 @@ Cada run guarda en su `meta.json` los `seconds` por paso (`init`, `fit`, `nowcas
 
 Enmienda 2026-10-13 (fase 6). La guarda cubre todos los ámbitos: el job se niega a publicar (`refused`) un
 `forecast` (incluido el relleno retroactivo) o un `analysis` si hoy cae en los 5 días previos a la elección
-del ámbito o en el propio día, **o** en la misma ventana de la elección general (la próxima de `es`), porque
+del ámbito o en el propio día, **o** en la misma ventana de la elección general (la de `es` de hoy o la próxima:
+la ventana nacional también cubre el propio día de la elección; enmienda 2026-10-13, revisión final), porque
 la prohibición de publicar sondeos (LOREG art. 69.7) es general. El motivo nombra la elección que cierra la
 ventana (la propia tiene prioridad), por ejemplo `es-md 2027-05-23: inside the LOREG window (art. 69.7) of es
-2026-11-29; pass force=true to publish`. Un ámbito sin elección próxima se salta (`skipped`, `no upcoming
-event`). `event`, `backtest`, `manifest`, `point` y `unpublish` no pasan por la guarda.
+2026-11-29; pass force=true to publish`. En `forecast`, un ámbito sin elección próxima se salta (`skipped`, `no
+upcoming event`); en `analysis` no: el análisis se calcula desde su última elección y solo lo guarda la ventana
+nacional (enmienda 2026-10-13, revisión final). `event`, `backtest`, `manifest`, `point` y `unpublish` no pasan
+por la guarda.
 
 `{"force":true}` publica igualmente: el `forecast` queda marcado con `meta.freeze: true` y el `analysis` no
 deja marca (su `meta` no la tiene). La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y
@@ -660,19 +685,19 @@ Cuatro ensayos antes de la semana de la elección. Los tres primeros se repiten 
 
 ### Carga
 
-`bash deploy/load-test.sh BASE_URL [CONCURRENCIA=50] [SEGUNDOS=20]` mide `/api/v1/forecast/es/nowcast/summary` y
+`bash deploy/load-test.sh BASE_URL [CONCURRENCIA=4] [SEGUNDOS=20]` mide `/api/v1/forecast/es/nowcast/summary` y
 `/` con `hey` (`-z ${SEGUNDOS}s -c $CONCURRENCIA -q 5`) o, si no está instalado, con `ab`. Imprime p95 y
 códigos de respuesta, y luego hace 50 `curl -sI` a la ruta de la API contando `X-Cache: HIT`. Sale con 1 si hay
 alguna 5xx o si la primera petición responde 429, y con 2 si falta la herramienta. `-q 5` limita cada cliente a 5 peticiones por segundo, pero nginx admite 20 r/s por IP y todos los clientes
-salen de la misma: detrás de nginx o del ALB hay que mantener `CONCURRENCIA × 5 ≤ 20` (por ejemplo `-c 4`) o
-esperar 429. Con `hey`, las líneas `[429]` y `[5xx]` fallan la prueba; con `ab` (sin límite por cliente) cualquier
+salen de la misma: detrás de nginx o del ALB hay que mantener `CONCURRENCIA × 5 ≤ 20` (la concurrencia por defecto,
+4, da justo 20 r/s) o esperar 429. Con `hey`, las líneas `[429]` y `[5xx]` fallan la prueba; con `ab` (sin límite por cliente) cualquier
 respuesta no 2xx (`Non-2xx responses`) la falla, así que la carga debe quedar por debajo del límite por IP. Una
 primera petición que no sea 2xx/3xx (host caído, 000) también sale con 1.
 
-- Contra ECS: `bash deploy/load-test.sh https://<host>`. Todos los clientes salen de una IP, así que el límite
-  por IP se aplica al conjunto. (Enmienda 2026-10-13: con la concurrencia por defecto, 50, se superan los 20 r/s
-  por IP y la prueba falla con 429; contra ECS, `bash deploy/load-test.sh https://<host> 4 20` con `hey`
-  instalado. `ab` no limita el ritmo por cliente: detrás de nginx o del ALB, usar `hey`.)
+- Contra ECS: `bash deploy/load-test.sh https://<host>` con `hey` instalado. Todos los clientes salen de una IP,
+  así que el límite por IP se aplica al conjunto. (Enmienda 2026-10-13: la concurrencia por defecto era 50, que
+  supera los 20 r/s por IP y falla con 429; desde la revisión final es 4. `ab` no limita el ritmo por cliente:
+  detrás de nginx o del ALB, usar `hey`.)
 - Contra local: `bash deploy/load-test.sh http://127.0.0.1:8043` (nginx) o, sin caché, contra
   `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` (`http://127.0.0.1:8001`).
 - Criterios de la spec: p95 de la API < 200 ms, p95 de las páginas < 500 ms, mayoría de `HIT` y sin 5xx.

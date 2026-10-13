@@ -28,7 +28,7 @@
         },
         {
           "name": "DB_ADAPTER",
-          "value": "postgres"
+          "value": "PostgreSQL"
         },
         {
           "name": "DB_HOST",
@@ -61,6 +61,10 @@
         {
           "name": "CWL_GROUP",
           "value": "<log-group>"
+        },
+        {
+          "name": "GIT_COMMIT",
+          "value": "<git-sha>"
         },
         {
           "name": "RUN_JOB",

@@ -174,6 +174,28 @@ def test_provenance_reads_git_or_the_image_env(monkeypatch):
     assert prov['commit'] == 'deadbee' and prov['dirty'] is False
 
 
+def test_provenance_from_ecs_takes_the_commit_of_the_task_env(monkeypatch):
+    """En la imagen de ECS no hay `.git`: el commit sale de `GIT_COMMIT` de la tarea y `dirty` queda `False`."""
+    def no_git(*a, **k):
+        raise FileNotFoundError('git')
+    monkeypatch.setattr(publish.common.subprocess, 'check_output', no_git)
+    monkeypatch.setenv('GIT_COMMIT', 'abc1234')
+    prov = publish.provenance()
+    assert prov['commit'] == 'abc1234' and prov['dirty'] is False
+    monkeypatch.delenv('GIT_COMMIT')
+    assert publish.provenance()['commit'] is None
+
+
+def test_next_event_date_forwards_date_from(monkeypatch):
+    """`next_event_date` pasa `date_from` a `get_next_event_date` (por defecto `None`: desde ahora)."""
+    seen = []
+    monkeypatch.setattr(publish.common, 'get_next_event_date',
+                        lambda scope, date_from=None: seen.append((scope, date_from)))
+    publish.next_event_date('es')
+    publish.next_event_date('es', date_from='2026-11-28')
+    assert seen == [('es', None), ('es', '2026-11-28')]
+
+
 def test_export_meta_and_headline():
     sim = synthetic_simulator()
     prov = {'commit': 'abc1234', 'dirty': False, 'versions': {'python': '3.11.9'}}

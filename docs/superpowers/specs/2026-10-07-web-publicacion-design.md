@@ -1395,10 +1395,49 @@ Verificado en la sesión (2026-10-13):
 - Arranque de un worker (Task 6, tres ejecuciones): `import api` de 1,55 s a 0,82 s y RSS de 325 MB a 232 MB.
 - `S3_BUCKET= /usr/bin/time -l python job.py publish '{"what":["backtest"],"scopes":["es"]}'` (Task 4): 2,3 s y 360
   MB de RSS máximo; reescribió `files/site/v1/backtest/es` en local.
+- Revisión final: el `Forecaster` y el `Simulator` excluyen los sondeos `wban` y `exit` a través del `drop_ctypes` por
+  defecto del `Computer` (`['wban', 'exit']`), verificado por el revisor final.
 - División de `publish` (Task 8): un guion de referencia (reloj fijo, dobles; dos runs de `forecast`, `analysis`,
   `backtest`, `event`, dos `update_manifest`, `point` y `unpublish`) sobre el módulo original y sobre el paquete →
   `diff -r` vacío en 70 ficheros (el original, ejecutado dos veces, también); `S3_BUCKET= python job.py publish
   '{"what":["backtest"],"scopes":["es"],"dry_run":true}'` → `es: backtest published (28 cases, 5 elections)`.
+
+Correcciones de la revisión final de la rama (2026-10-13), en un commit ("Fix the final-review findings: ECS adapter
+and logger, national window on election day, legacy freeze, RUN_JOB quoting"; 568 tests unitarios, 12 nuevos):
+
+- `DB_ADAPTER` (crítico): las plantillas `task-web` y `task-job` llevan `PostgreSQL` (decían `postgres`; `mtpy.run()`
+  resuelve el adaptador con `getattr(dal, DB_ADAPTER)` y no hay módulo `postgres`, así que la web no arrancaba);
+  `test_ecs_templates_are_valid_and_consistent` comprueba que el valor nombra un `mtpy/core/dal/<valor>.py`.
+- Logger de CloudWatch (crítico): todos los clientes de boto3 de `mtpy/core/services/aws.py` (`CloudWatchLogHandler`,
+  `Firehose` y los demás, que se construían igual) pasan `key or None`/`secret or None` (cadena de botocore, rol de
+  la tarea, como `S3.connection`); `CloudWatchLogHandler.emit` envuelve todo su cuerpo en `try`/`except Exception:
+  self.handleError(record)`, así que un fallo de CloudWatch ya no llega al `alert()`/`_log_error` del job ni al log de
+  la web. `tests/test_aws_unit.py`. README "Qué debe existir en AWS": `logs:CreateLogStream` y `logs:PutLogEvents`
+  sobre el grupo en los dos roles de tarea (`awslogs` usa el rol de ejecución; `CWL_GROUP`, el de la tarea).
+- Ventana nacional el día de la elección: `Publish.run` pide `publish.next_event_date('es', date_from=<víspera de
+  hoy>)` (nuevo parámetro opcional que llega a `data.get_next_event_date`; por defecto, como antes), porque
+  `get_next_event_date` es estricta (`date > desde`) y el 29 no habría elección general próxima; test del job con
+  `today='2026-11-29'` (autonómico `refused`) y el 30 (ya no). README "Guarda LOREG": la ventana nacional cubre el
+  propio día; "Veda": no publicar hasta el 30.
+- Manifest congelado sin `since` (escrito por un job anterior a la fase 6): `common_context` completa `freeze` con
+  `active`, `message` y `since` nulos antes de usarlo; test de página (200, banner, sin "congelado desde").
+- `RUN_JOB` con espacios: `init.sh` hace `read -r job_name job_params <<< "$RUN_JOB"` y llama a `job.py "$job_name"
+  ${job_params:+"$job_params"}` (todo lo que sigue al primer espacio es un argumento); test en
+  `tests/test_deploy_files.py`; el README ya no pide el JSON sin espacios.
+- `_analysis_scope`: vuelve el comportamiento anterior a la fase (la Task 1 lo había roto siguiendo el plan): sin
+  elección próxima del ámbito el análisis se publica desde su última elección y solo lo guarda la ventana nacional;
+  nunca `skipped (no upcoming event)`. Test del job con `es-md` (publicado fuera de la ventana, `refused` dentro).
+- Procedencia desde ECS: `provenance` ya caía a `GIT_COMMIT` sin git (con `dirty: false`); se documenta en su
+  docstring, `task-job` lleva `GIT_COMMIT=<git-sha>` (marcador nuevo del README) y "Publicar desde ECS" pide el sha
+  de la imagen registrada; test con git fallando y `GIT_COMMIT=abc1234`.
+- `task-job` ociosa: aviso en "Publicar desde ECS" de que un `run-task` sin `RUN_JOB` se queda en `tail -f
+  /dev/null` con 2 vCPU y 4 GB hasta pararla.
+- `check-api.sh`: `check_header` usa `curl -sI` (la API responde a `HEAD`) y su comentario lo dice.
+- `load-test.sh`: concurrencia por defecto 4 (con `-q 5`, 20 r/s, el límite por IP); comentario de uso y README
+  "Carga" al día.
+- Runbook del 23 (README "Veda"): lanzar `publish forecast all` mucho antes de medianoche (la guarda lee la fecha de
+  hoy en cada ámbito; los que pasen de las 00:00 del 24 quedan `refused` y el manifest queda mezclado).
+- Docstring de `HttpError`: pasa por `Controller.error_result` (JSON en la API, HTML en `Page`).
 
 No verificado:
 
@@ -1469,6 +1508,11 @@ Pendiente de Luis:
   con menos peso", el punto de la veda y los sondeos encargados por partidos); los matices de las barreras
   autonómicas; las etiquetas de `casa.html` y de "Sesgo del margen"; y lo que Luis vio al recorrer las páginas
   (maquetación y contenido).
+- Dos decisiones de la revisión final: el número de tareas del servicio web en ECS (el revisor recomienda 2: cada
+  una con su caché y sin quedarse sin tareas al retirar una) y si un run anterior fijado con `?run=` debe llevar
+  también el título "Pronóstico definitivo" mientras la web está congelada (hoy lo lleva; cosmético, para el chat de
+  diseño).
+- Al registrar cada imagen de jobs, poner su sha en `GIT_COMMIT` de `task-job`.
 - Pendientes de fases anteriores que sigan en pie (estado al cierre de la fase 5, "Pendiente de Luis").
 
 Siguiente: el despliegue en ECS y la operación de la campaña (ensayo de la veda la semana del 17, congelación el 23,

@@ -24,6 +24,12 @@ def test_ecs_templates_are_valid_and_consistent():
     assert web['containerDefinitions'][0]['portMappings'][0]['containerPort'] == 8042
     assert job['memory'] == '4096' and all(e['name'] != 'APP_API' for e in job['containerDefinitions'][0]['environment'])
     assert run['overrides']['containerOverrides'][0]['environment'][0]['name'] == 'RUN_JOB'
+    for template in (web, job):
+        adapter = {e['name']: e['value'] for e in template['containerDefinitions'][0]['environment']}['DB_ADAPTER']
+        # `mtpy.run()` resuelve el adaptador con `getattr(dal, DB_ADAPTER)`: debe nombrar un módulo de `mtpy/core/dal/`
+        assert (ROOT / 'mtpy' / 'core' / 'dal' / '{}.py'.format(adapter)).is_file(), adapter
+    job_env = {e['name']: e['value'] for e in job['containerDefinitions'][0]['environment']}
+    assert job_env['GIT_COMMIT'] == '<git-sha>' and 'GIT_COMMIT' not in env
 
 
 def test_supervisord_and_init_take_the_workers_from_the_environment():
@@ -31,6 +37,16 @@ def test_supervisord_and_init_take_the_workers_from_the_environment():
     conf = read('deploy/docker/supervisord.conf'); init = read('deploy/docker/init.sh')
     assert '-w %(ENV_GUNICORN_WORKERS)s' in conf and '/proc/1/fd/1' in conf
     assert 'GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"' in init
+    assert subprocess.run(['bash', '-n', 'deploy/docker/init.sh'], cwd=ROOT).returncode == 0
+
+
+def test_init_passes_the_run_job_parameters_as_one_argument():
+    """`init.sh` separa el nombre del job (primera palabra) y pasa el resto como un solo argumento (JSON con
+    espacios)."""
+    init = read('deploy/docker/init.sh')
+    assert 'read -r job_name job_params <<< "$RUN_JOB"' in init
+    assert 'python /app/job.py "$job_name" ${job_params:+"$job_params"}' in init
+    assert 'python /app/job.py $RUN_JOB' not in init
     assert subprocess.run(['bash', '-n', 'deploy/docker/init.sh'], cwd=ROOT).returncode == 0
 
 

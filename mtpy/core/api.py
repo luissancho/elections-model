@@ -417,7 +417,9 @@ class HttpError(Exception):
     """
     Error that a controller raises to answer with a given HTTP status.
 
-    `Controller.dispatch` turns it into a JSON error response.
+    `Controller.dispatch` turns it into an error response through
+    `Controller.error_result`: a JSON error on the API controllers and an
+    HTML error page on `Page` (which overrides `error_result`).
 
     Parameters
     ----------

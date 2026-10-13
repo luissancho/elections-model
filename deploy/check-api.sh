@@ -113,10 +113,10 @@ check_published() {
     fi
 }
 
-# check_header RUTA CABECERA VALOR: (GET con -D, porque la API aun no responde a HEAD) la cabecera (sin distinguir mayusculas) debe existir y valer VALOR.
+# check_header RUTA CABECERA VALOR: (HEAD con -sI; la API responde a HEAD con las cabeceras del GET) la cabecera (sin distinguir mayusculas) debe existir y valer VALOR.
 check_header() {
     local path="$1" name="$2" want="$3" got
-    got="$(curl -s -D - -o /dev/null --max-time 20 "$base$path" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z')" \
+    got="$(curl -sI --max-time 20 "$base$path" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z')" \
         'tolower($1) == n ":" {print $2; exit}' || true)"
     if [ "$got" = "$want" ]; then
         echo "OK   $path ($name: $got)"

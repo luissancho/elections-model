@@ -58,8 +58,8 @@ def patched(monkeypatch):
     monkeypatch.setattr(publish, 'publish_event', fake_event)
     monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
-    monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08',
-                                                              'es-ri': '2027-05-23'}.get(scope))
+    next_dates = {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08', 'es-ri': '2027-05-23'}
+    monkeypatch.setattr(publish, 'next_event_date', lambda scope, date_from=None: next_dates.get(scope))
     monkeypatch.setattr(publish, 'publish_forecast', fake_forecast)
     return calls
 
@@ -117,6 +117,49 @@ def test_national_window_refuses_regional_forecast_and_analysis_but_not_events(f
     assert result['es-cb']['status'] == 'skipped' and patched[-1][3]['freeze'] is True
     write_backtest_source(str(tmp_path / 'bt'))
     assert Publish().run(what=['backtest'], scopes=['es'], fs=fs, today='2026-11-25', source=str(tmp_path / 'bt'))['es']['status'] == 'published'
+
+
+def test_national_window_covers_the_election_day(fresh_app, tmp_path, patched, monkeypatch):
+    """El día de la elección general la ventana nacional sigue abierta: el job pide la próxima de `es` desde la
+    víspera (desde hoy, estricto, no habría elección próxima) y un autonómico queda `refused`; al día siguiente,
+    no."""
+    from mtpy.jobs.Publish import Publish
+
+    def next_date(scope, date_from=None):
+        if scope == 'es':
+            return '2026-11-29' if date_from is not None and date_from <= '2026-11-28' else None
+        return {'es-cb': '2027-05-23'}.get(scope)
+
+    monkeypatch.setattr(publish, 'next_event_date', next_date)
+    fs = FileSystem(str(tmp_path))
+    result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-29')
+    assert result['es-cb']['status'] == 'refused' and 'of es 2026-11-29' in result['es-cb']['reason'] and patched == []
+    result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-30')
+    # fuera de la ventana el doble de `es-cb` llega a publicar y queda `skipped` (no tiene sondeos)
+    assert result['es-cb']['status'] == 'skipped' and [c[0] for c in patched] == ['es-cb']
+
+
+def test_analysis_of_a_scope_without_upcoming_event_is_published_unless_in_the_national_window(fresh_app, tmp_path,
+                                                                                                patched, monkeypatch):
+    """Un ámbito sin elección próxima (`es-md`) publica su análisis desde su última elección: solo lo guarda la
+    ventana nacional, nunca queda `skipped` por no tener evento."""
+    from mtpy.jobs.Publish import Publish
+
+    calls = []
+
+    def fake_analysis(scope, writer, **kwargs):
+        calls.append(scope)
+        return {'event_date': '2023-05-28', 'n_pollsters': 4, 'seconds': {'total': 0.1}}
+
+    monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
+    fs = FileSystem(str(tmp_path))
+    result = Publish().run(what=['analysis'], scopes=['es-md'], fs=fs, today='2026-10-13')
+    assert result['es-md'] == {'status': 'published', 'event_date': '2023-05-28', 'n_pollsters': 4,
+                               'seconds': {'total': 0.1}}
+    assert calls == ['es-md']
+    result = Publish().run(what=['analysis'], scopes=['es-md'], fs=fs, today='2026-11-25')
+    assert result['es-md']['status'] == 'refused' and 'of es 2026-11-29' in result['es-md']['reason']
+    assert calls == ['es-md']
 
 
 def test_manifest_point_and_unpublish_actions(fresh_app, tmp_path, patched):
@@ -206,7 +249,7 @@ def test_error_resolving_the_event_date_only_fails_that_scope(fresh_app, tmp_pat
     """Un error de base al resolver la fecha de un ámbito no detiene a los demás."""
     from mtpy.jobs.Publish import Publish
 
-    def next_date(scope):
+    def next_date(scope, date_from=None):
         if scope == 'es-md':
             raise RuntimeError('db down')
         return '2026-11-29'

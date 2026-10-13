@@ -32,7 +32,7 @@
         },
         {
           "name": "DB_ADAPTER",
-          "value": "postgres"
+          "value": "PostgreSQL"
         },
         {
           "name": "DB_HOST",

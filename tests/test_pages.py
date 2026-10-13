@@ -82,6 +82,21 @@ def test_freeze_banner_and_attribution(api, fresh_app):
     assert 'Sondeos: Wikipedia' in page and 'href="/api/v1/manifest"' in page
 
 
+def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tmp_path):
+    """Un manifest congelado por un job anterior a la fase 6 (`freeze` sin `since`) no rompe las páginas: 200, banner
+    y sin "congelado desde"."""
+    publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'})
+    path = tmp_path / bundle.PREFIX / bundle.path_manifest()
+    envelope = json.loads(path.read_text())
+    envelope['data']['freeze'] = {'active': True, 'message': 'Veda'}
+    path.write_text(json.dumps(envelope))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/')
+    page = html(body)
+    assert status == 200 and 'id="freeze-banner"' in page and 'Veda' in page
+    assert 'congelado desde' not in page
+
+
 @pytest.mark.parametrize('path, query, status, text', [
     ('/', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
     ('/', 'scope=es-xx', 400, 'Ámbito no válido'),

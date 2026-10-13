@@ -1,5 +1,5 @@
 import traceback
-from datetime import date
+from datetime import date, timedelta
 
 from ..core.worker import Job
 from ..lib import bundle, publish
@@ -170,7 +170,11 @@ class Publish(Job):
         failures = []
         lines = []
 
-        national = publish.next_event_date('es') if ('forecast' in whats or 'analysis' in whats) else None
+        national = None
+        if 'forecast' in whats or 'analysis' in whats:
+            # the day before today: the national window also covers the election day itself
+            eve = (publish.common._today(today) - timedelta(days=1)).isoformat()
+            national = publish.next_event_date('es', date_from=eve)
 
         if 'forecast' in whats:
             entries = {}
@@ -426,15 +430,13 @@ class Publish(Job):
         -------
         dict
             Result with a ``status``: ``published`` with ``event_date``, ``n_pollsters`` and
-            ``seconds``, ``skipped`` for ``publish.NothingToPublish`` or no upcoming event,
-            ``refused`` for the LOREG guard and ``failed`` for any other exception, all but
-            ``published`` with a ``reason``.
+            ``seconds``, ``skipped`` for ``publish.NothingToPublish``, ``refused`` for the LOREG
+            guard and ``failed`` for any other exception, all but ``published`` with a ``reason``.
+            A scope without an upcoming event is still published (the analysis then works from
+            its last election) and only the national window guards it.
         """
         try:
-            value = publish.next_event_date(scope)
-            if value is None:
-                return {'status': 'skipped', 'reason': 'no upcoming event'}
-            publish.loreg_guard(scope, value, today, force, national)
+            publish.loreg_guard(scope, publish.next_event_date(scope), today, force, national)
             out = publish.publish_analysis(scope, writer, verbose=verbose)
         except publish.PublishRefused as e:
             return {'status': 'refused', 'reason': str(e)}

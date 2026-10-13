@@ -26,8 +26,8 @@ class SQS(object):
 
         self.client = boto3.client(
             'sqs',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -115,8 +115,8 @@ class CloudWatchLogHandler(logging.Handler):
 
         self.client = boto3.client(
             'logs',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -144,39 +144,52 @@ class CloudWatchLogHandler(logging.Handler):
         return self
 
     def emit(self, record):
-        self.connect()
+        """Send the record to its CloudWatch Logs stream, creating the stream on first use.
 
-        name = record.name
-        timestamp = int(record.created * 1000)
-        message = self.format(record)
+        Any failure (credentials, permissions, network, a missing log group) goes to
+        ``logging.Handler.handleError`` and never reaches the caller of the logger.
 
-        if name not in self.log_streams:
-            self.add_stream(name)
-
-        stream = self.log_streams[name]
-        token = self.sequence_tokens[name]
-
-        kwargs = dict(
-            logGroupName=self.log_group,
-            logStreamName=stream,
-            logEvents=[{
-                'timestamp': timestamp,
-                'message': message
-            }]
-        )
-
-        if token is not None:
-            kwargs['sequenceToken'] = token
-
-        response = None
-
+        Parameters
+        ----------
+        record : logging.LogRecord
+            Record to send.
+        """
         try:
-            response = self.client.put_log_events(**kwargs)
+            self.connect()
+
+            name = record.name
+            timestamp = int(record.created * 1000)
+            message = self.format(record)
+
+            if name not in self.log_streams:
+                self.add_stream(name)
+
+            stream = self.log_streams[name]
+            token = self.sequence_tokens[name]
+
+            kwargs = dict(
+                logGroupName=self.log_group,
+                logStreamName=stream,
+                logEvents=[{
+                    'timestamp': timestamp,
+                    'message': message
+                }]
+            )
+
+            if token is not None:
+                kwargs['sequenceToken'] = token
+
+            response = None
+
+            try:
+                response = self.client.put_log_events(**kwargs)
+            except Exception:
+                pass
+            else:
+                if response is not None and 'nextSequenceToken' in response:
+                    self.sequence_tokens[name] = response['nextSequenceToken']
         except Exception:
-            pass
-        else:
-            if response is not None and 'nextSequenceToken' in response:
-                self.sequence_tokens[name] = response['nextSequenceToken']
+            self.handleError(record)
 
 
 class Firehose(object):
@@ -199,8 +212,8 @@ class Firehose(object):
 
         self.client = boto3.client(
             'firehose',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -248,8 +261,8 @@ class Rekognition(object):
 
         self.client = boto3.client(
             'rekognition',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -485,8 +498,8 @@ class SNS(object):
 
         self.client = boto3.client(
             'sns',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -544,8 +557,8 @@ class Translate(object):
 
         self.client = boto3.client(
             'translate',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -595,8 +608,8 @@ class Comprehend(object):
 
         self.client = boto3.client(
             'comprehend',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 
@@ -730,8 +743,8 @@ class Lex(object):
 
         self.client = boto3.client(
             'lexv2-runtime',
-            aws_access_key_id=self.aws_params['key'],
-            aws_secret_access_key=self.aws_params['secret'],
+            aws_access_key_id=self.aws_params.get('key') or None,
+            aws_secret_access_key=self.aws_params.get('secret') or None,
             region_name=self.aws_params['region']
         )
 

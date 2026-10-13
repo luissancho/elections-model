@@ -96,6 +96,12 @@ def provenance(cwd: Optional[str] = None) -> dict:
     dict
         ``commit`` (short SHA, ``GIT_COMMIT`` env var or ``None``), ``dirty`` (uncommitted changes;
         ``False`` if git is unavailable) and ``versions`` (Python and main libraries).
+
+    Notes
+    -----
+    The Docker image carries no ``.git``: a run published from ECS takes ``commit`` from the
+    ``GIT_COMMIT`` environment variable of the task (the sha of the registered image) and reports
+    ``dirty`` as ``False``, since there is no working tree to inspect.
     """
     sha, porcelain = _git(['rev-parse', '--short', 'HEAD'], cwd), _git(['status', '--porcelain'], cwd)
     versions = {'python': platform.python_version()}
@@ -242,20 +248,23 @@ def resolve_scopes(scopes, catalogue: Optional[pd.DataFrame] = None) -> list:
     return scopes
 
 
-def next_event_date(scope: str) -> Optional[str]:
+def next_event_date(scope: str, date_from: Optional[str] = None) -> Optional[str]:
     """Return the date of the next event of the scope, or ``None`` when there is none.
 
     Parameters
     ----------
     scope : str
         Scope code.
+    date_from : str, optional
+        ``YYYY-MM-DD`` date; the event must fall strictly after it. Defaults to now, so an event
+        held today is not returned (pass the day before to include it).
 
     Returns
     -------
     str or None
         ``YYYY-MM-DD`` date.
     """
-    return get_next_event_date(scope)
+    return get_next_event_date(scope, date_from=date_from)
 
 
 def db_stats(scope: str, event_date: str) -> tuple:

@@ -413,7 +413,8 @@ def common_context(state: dict, active: str) -> dict:
     full = {'scope': scope, 'mode': mode, 'run': run, 'pinned': pinned}
 
     manifest = site().manifest_data()
-    freeze = manifest.get('freeze') or {}
+    # a manifest written before phase 6 has no ``since``: complete the switch for StrictUndefined
+    freeze = {'active': False, 'message': None, 'since': None, **(manifest.get('freeze') or {})}
     frozen = bool(freeze.get('active'))
 
     if mode == 'nowcast':
