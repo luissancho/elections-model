@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+    <div class="stack">
+      <p class="intro">{{ intro }}</p>
+      <section class="stack" id="events">
+        <h2>Próximas elecciones</h2>
+        {% for card in cards[:1] %}
+        <article class="card card-hero">
+          {% include '_event_card.html' +%}
+        </article>
+        {% endfor %}
+        {% if cards|length > 1 %}
+        <div class="grid">
+          {% for card in cards[1:] %}
+          <article class="card">
+            {% include '_event_card.html' +%}
+          </article>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </section>
+      {% if past %}
+      <section class="card" id="past-events">
+        <h2>Elecciones pasadas</h2>
+        <ul>
+          {% for event in past %}
+          <li><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a> <span class="muted">· {{ event.scope_name }}</span></li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+      <section class="card" id="more">
+        <h2>Para entender el modelo</h2>
+        <ul>
+          <li><a href="/elecciones">Histórico de errores</a>: cuánto se equivocaron los sondeos en cada elección pasada.</li>
+          <li><a href="/casas">Rating de encuestadoras</a>: qué casas aciertan más y cuáles se desvían.</li>
+          <li><a href="/metodo">Método</a>: cómo se promedian los sondeos y se simulan los escaños.</li>
+        </ul>
+      </section>
+    </div>
+{% endblock %}

@@ -796,7 +796,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'metodo', 'promedio']
+    assert names == ['backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'inicio', 'metodo', 'promedio']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -1067,3 +1067,29 @@ def test_frozen_manifest_marks_every_page(api, fresh_app):
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es', query='mode=forecast')
     assert 'freeze-banner' not in html(body) and 'Pronóstico para el' in html(body) and 'congelado desde' not in html(body)
+
+
+def test_home_lists_the_published_events_with_their_headline(api, fresh_app):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    webapi.site().manifest_cache_clear()
+    status, headers, body = call(api, '/')
+    page = html(body)
+    assert status == 200 and '<title>Pronóstico electoral · Inicio</title>' in page
+    assert page.index('Elecciones generales') < page.index('Elecciones autonómicas · Madrid')
+    assert 'href="/es"' in page and 'href="/es/escanos"' in page and 'href="/es-md"' in page
+    leader = max(fixture_data('headline')['nowcast']['parties'], key=lambda row: row['pct'])
+    assert leader['name'] in page and 'de probabilidad de mayoría absoluta' in page
+    assert 'id="event-bar"' not in page and 'id="scope-filter"' not in page and 'initial-data' not in page
+
+
+def test_home_tolerates_a_scope_whose_run_has_no_headline(api, fresh_app, tmp_path):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es-md', '20261009-120000', 'headline')))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/')
+    assert status == 200 and 'Elecciones autonómicas · Madrid' in html(body)
+
+
+def test_home_lists_the_past_elections_with_a_detail_link(events_site):
+    page = html(call(events_site, '/')[2])
+    assert page.index('2023') < page.index('2019') and 'href="/elecciones?scope=es&amp;date=2023-07-23"' in page

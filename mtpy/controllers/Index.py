@@ -19,8 +19,7 @@ class Index(Page):
         Returns
         -------
         str
-            The HTML of ``promedios.html`` for the first published scope (until the index of events
-            replaces it), or the empty body of the 301.
+            The HTML of ``index.html`` (the index of events), or the empty body of the 301.
         """
         scope = self.request.query.get('scope')
 
@@ -29,4 +28,4 @@ class Index(Page):
 
             return self.redirect('/' + scope + self.query_without('scope'))
 
-        return self.render('promedios.html', **pages.index_context(self.state(), active=self.active))
+        return self.render('index.html', **pages.inicio_context(self.state()))
