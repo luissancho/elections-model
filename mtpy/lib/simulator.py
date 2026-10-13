@@ -1103,9 +1103,12 @@ class Simulator(Core):
             )
             parts = []
             for block, members in groups.items():
-                d = df[df['party'].isin(members)].assign(national=national)
-                if d.empty:
+                # A block without simulated members is left out: assigning `national` to an empty frame would
+                # reindex it to rows of NaN that group to nothing
+                mask = df['party'].isin(members)
+                if not mask.any():
                     continue
+                d = df[mask].assign(national=national[mask])
                 g = d.groupby('horizon').apply(lambda x: pd.Series({
                     'mean': float(x['mean'].sum()),
                     'var': self.block_variance(

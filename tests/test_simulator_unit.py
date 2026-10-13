@@ -461,3 +461,20 @@ def test_block_variance_adds_the_covariance_of_the_national_parties():
     assert Simulator.block_variance(sd, national) == pytest.approx(14.)  # independientes: suma de varianzas
     # rho = -0,25 entre los dos nacionales: 14 + 2 · (-0,25) · 3 · 2
     assert Simulator.block_variance(sd, national, rho=-0.25) == pytest.approx(11.)
+
+
+@pytest.mark.parametrize('mode', ['nowcast', 'forecast'])
+def test_projection_skips_a_block_without_members_present(mode):
+    """Un bloque vacío (`Regionalista: []`) o sin partidos simulados no aparece y no rompe a los demás: antes la
+    asignación de `national` reindexaba el marco vacío a filas de NaN y `export_projection` caía en `KeyError: 'var'`."""
+    from tests.fakes import NAMES, synthetic_simulator
+
+    sim = synthetic_simulator(mode=mode)
+    first = NAMES[0]
+    out = sim.projection({'A': [first], 'B': []})
+    assert list(out.columns) == [('mean', 'A'), ('lo', 'A'), ('hi', 'A')]
+    assert out[('mean', 'A')].notna().all()
+    assert out.equals(sim.projection({'A': [first]}))
+    assert sim.projection({'A': [first], 'C': ['NOEXISTE']}).equals(out)
+    empty = sim.projection({'B': []})
+    assert empty.empty and len(empty.columns) == 0
