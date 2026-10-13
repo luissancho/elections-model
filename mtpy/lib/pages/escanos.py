@@ -7,7 +7,7 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import check_region, site
 from .common import Catalog, api_url, block_color, common_context, part
-from .filters import DASH, fmt_range
+from .filters import DASH, _is_missing, fmt_int, fmt_prob, fmt_range
 
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
@@ -147,6 +147,40 @@ def resolve_region(region: Optional[int], regions: list) -> Optional[dict]:
     raise HttpError(404, 'region not found')
 
 
+def escanos_headline_text(summary: dict, meta: dict) -> str:
+    """
+    One-line headline of the seats page in plain words.
+
+    Parameters
+    ----------
+    summary : dict
+        Data of the summary part (``blocks`` with ``name`` and ``p_majority``; ``majority`` and
+        ``n_seats``).
+    meta : dict
+        Data of the meta part (``majority`` and ``n_seats``, which take precedence).
+
+    Returns
+    -------
+    str
+        ``'{block} es el bloque con más probabilidad de mayoría absoluta ({p}); la mayoría está en
+        {majority} escaños de {n_seats}.'``, the block being that with the highest ``p_majority`` (the
+        first one on ties); without blocks with a probability, ``'La mayoría absoluta está en
+        {majority} escaños de {n_seats}.'``.
+    """
+    majority = fmt_int(meta.get('majority') if meta.get('majority') is not None else summary.get('majority'))
+    n_seats = fmt_int(meta.get('n_seats') if meta.get('n_seats') is not None else summary.get('n_seats'))
+    rows = [row for row in summary.get('blocks') or [] if not _is_missing(row.get('p_majority'))]
+
+    if not rows:
+        return 'La mayoría absoluta está en {} escaños de {}.'.format(majority, n_seats)
+
+    top = max(rows, key=lambda row: row['p_majority'])
+
+    return ('{} es el bloque con más probabilidad de mayoría absoluta ({}); '
+            'la mayoría está en {} escaños de {}.').format(
+        top['name'], fmt_prob(top['p_majority']), majority, n_seats)
+
+
 def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     """
     Overview table of the central scenario by district and party.
@@ -267,8 +301,8 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     -------
     dict
         The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows`` and
-        ``vs_rows`` (``block_rows``), ``calculator`` (``name``, ``fullname``, ``color`` and
-        ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
+        ``vs_rows`` (``block_rows``), ``headline_text`` (``escanos_headline_text``), ``calculator`` (``name``,
+        ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``) and
         ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan`` and ``runs``, the data
         the charts and the calculator are drawn from).
@@ -293,6 +327,7 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     suffix = context['title_suffix']
 
     context['summary'] = summary
+    context['headline_text'] = escanos_headline_text(summary, meta)
     context['party_rows'] = seat_rows(summary.get('parties') or [])
     context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
     context['vs_rows'] = block_rows(summary.get('vs') or [], meta, parties)

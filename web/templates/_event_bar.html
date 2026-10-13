@@ -14,6 +14,9 @@
       <input type="radio" id="mode-nowcast" name="mode" value="nowcast"{% if state.mode == 'nowcast' %} checked{% endif %}><label for="mode-nowcast">Hoy</label>
       <input type="radio" id="mode-forecast" name="mode" value="forecast"{% if state.mode == 'forecast' %} checked{% endif %}><label for="mode-forecast">Elección</label>
     </fieldset>
+    {% if region is defined and region %}
+    <input type="hidden" name="region" value="{{ region.id }}">
+    {% endif %}
     {% if state.pinned %}
     <input type="hidden" name="run" value="{{ state.run }}"><span class="chip">Run del {{ meta.run_at|date }}</span>
     {% endif %}

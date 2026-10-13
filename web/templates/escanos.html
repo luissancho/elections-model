@@ -7,6 +7,9 @@
 {% block content %}
 {% import '_macros.html' as m %}
     <div id="content" class="stack">
+      {% if headline_text %}
+      {{ m.headline(headline_text) }}
+      {% endif %}
       {{ m.card_start('parties', 'Escaños por partido', 'Los escaños que obtiene cada partido en miles de elecciones simuladas: el resultado central, su intervalo y la distribución completa.', subtitle) }}
         <div class="table-wrap">
           <table id="parties-table">
@@ -46,11 +49,13 @@
         </div>
         {% call m.how(open=True) %}
         <p>
-          La cifra es el resultado central, el intervalo deja fuera el 2,5 % de las simulaciones por cada lado
-          y los histogramas muestran la distribución completa. P(escaño) es la probabilidad de obtener al
-          menos uno; P(primero), la de ser el partido con más escaños.
+          Cada fila es un partido: la cifra de escaños es su resultado central, el intervalo deja fuera las
+          simulaciones más extremas de cada lado y los histogramas cuentan cuántas simulaciones dan cada número
+          de escaños. P(escaño) es la probabilidad de obtener al menos uno; P(primero), la de ser el partido con
+          más escaños; P(mayoría), la de llegar a la mayoría absoluta sin ayuda.
         </p>
-        <p>Una probabilidad no es una predicción segura: lo improbable también ocurre alguna vez.</p>
+        <p>Si los intervalos de dos partidos se solapan, pueden acabar en cualquier orden.</p>
+        <p>Una probabilidad no es una predicción segura, y esto no dice quién gobernará ni con quién.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('blocks', 'Bloques', 'La suma de escaños de los partidos de cada bloque en cada simulación y la probabilidad de que el bloque alcance la mayoría absoluta.', subtitle) }}
@@ -105,8 +110,13 @@
         </div>
         {% call m.how() %}
         <p>
-          La mayoría absoluta está en {{ summary.majority|int }} escaños. La primera tabla reparte todos los
-          partidos entre los bloques; la segunda enfrenta derecha e izquierda con sus partidos principales.
+          El gráfico y la primera tabla reparten todos los partidos entre los bloques; la segunda enfrenta
+          derecha e izquierda con sus partidos principales. La mayoría absoluta está en
+          {{ summary.majority|int }} escaños.
+        </p>
+        <p>
+          P(mayoría absoluta) es la fracción de simulaciones en que el bloque llega a esa cifra por sí solo:
+          cuanto más disputada, más abierto está el resultado.
         </p>
         <p>Que un bloque sume la mayoría no quiere decir que sus partidos vayan a gobernar juntos.</p>
         {% endcall %}
@@ -123,8 +133,12 @@
         <noscript><p class="muted">La calculadora necesita JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
-          El gráfico muestra cuántas simulaciones dan cada número de escaños a la coalición marcada. La suma se
-          hace en cada simulación, así que tiene en cuenta que los partidos suben y bajan a la vez.
+          Cada casilla es un partido. El gráfico cuenta cuántas simulaciones dan cada número de escaños a los
+          marcados juntos y el texto dice en cuántas llegan a la mayoría absoluta.
+        </p>
+        <p>
+          La suma se hace en cada simulación, así que respeta que los partidos suben y bajan a la vez; compárala
+          con los {{ summary.majority|int }} escaños de la mayoría absoluta.
         </p>
         <p>No dice si esos partidos querrían pactar: solo si les darían los números.</p>
         {% endcall %}
@@ -210,27 +224,49 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          El escenario central reparte los escaños de cada circunscripción en una simulación concreta, la más
-          parecida a la mediana; el detalle muestra voto y escaños previstos por partido en la circunscripción
-          elegida.
+          La tabla reparte los escaños de cada circunscripción en el escenario central, la simulación más
+          parecida a la mediana. Al elegir una circunscripción, el detalle muestra el voto y los escaños
+          previstos de cada partido en ella.
         </p>
-        <p>Es un escenario entre muchos posibles: los intervalos del detalle dicen cuánto puede variar.</p>
+        <p>
+          Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto; en las
+          circunscripciones pequeñas, pocos votos cambian un escaño.
+        </p>
+        <p>Es un escenario entre muchos posibles, no la predicción de ninguna circunscripción.</p>
         {% endcall %}
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('fan', 'Abanico de voto por horizonte', 'Cómo se abre la incertidumbre del voto de cada partido a medida que aumentan los días hasta la elección.') }}
         <div class="chart" id="fan-chart" role="img" aria-label="Voto previsto por partido según los días que faltan, con el intervalo del 95 %"></div>
         {% call m.how() %}
-        <p>El horizonte 0 es la estimación de hoy; cada columna a su derecha, unos días más lejos.</p>
+        <p>
+          Cada columna es un horizonte: a cuántos días de la elección se estima el voto. En el horizonte 0 está
+          la estimación de hoy y la columna de la derecha es el pronóstico del modo Elección; la banda de cada
+          partido es su intervalo en ese horizonte.
+        </p>
+        <p>
+          El abanico se abre porque la deriva de la opinión, lo que el voto puede moverse en esos días, crece con
+          la distancia: cuanto más lejos, más ancho. Fíjate en la anchura de la banda, no en su posición.
+        </p>
+        <p>
+          El gráfico no es una predicción de trayectoria: no dice por dónde pasará el voto, solo cuánto puede
+          alejarse de la estimación.
+        </p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('evolution', 'Evolución de las publicaciones', 'Cómo han cambiado los escaños de cada partido de una publicación del modelo a la siguiente.', '· escaños ' ~ ('estimados' if state.mode == 'nowcast' else 'pronosticados') ~ ' en cada publicación') }}
         <div class="chart" id="seats-evolution" role="img" aria-label="Evolución de las publicaciones: escaños de cada publicación"></div>
         {% call m.how() %}
         <p>
-          Un punto por cada publicación. Los puntos huecos son estimaciones retrospectivas: el modelo de hoy
-          con los sondeos publicados hasta ese día.
+          Cada publicación del modelo es un run: una ejecución completa con los sondeos conocidos ese día. Cada
+          punto es lo que ese run publicó para el partido; los puntos huecos son estimaciones retrospectivas,
+          hechas hoy con los sondeos publicados hasta esa fecha.
         </p>
+        <p>
+          Los puntos cambian de un run a otro porque entran sondeos nuevos, no porque el modelo cambie: mira la
+          tendencia, no cada salto.
+        </p>
+        <p>Esto no es una serie de sondeos: cada punto es lo que el modelo publicó ese día, no lo que midió una encuesta.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV, del mismo run que se muestra.') }}
@@ -239,6 +275,18 @@
           <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
           {% endfor %}
         </ul>
+        {% call m.how() %}
+        <p>
+          Cada enlace descarga una tabla en CSV, el formato de las hojas de cálculo: el resumen por partido y
+          bloque, los escaños de cada simulación, las circunscripciones, el escenario central y el abanico.
+        </p>
+        <p>Los datos son los del run que ves, así que cambian si cambias el modo o fijas otro run.</p>
+        <p>No incluyen los sondeos: están en la pestaña Promedios.</p>
+        {% endcall %}
       {{ m.card_end() }}
+      {{ m.closing('¿Cómo simulamos los escaños?', method_href('escanos'),
+                   'Cómo se reparte el voto simulado entre circunscripciones, qué papel juega el mínimo de voto para entrar en el reparto y cómo salen los intervalos y las probabilidades.',
+                   [{'href': '/elecciones' ~ scope_query, 'label': 'Cómo acertó el modelo en las elecciones anteriores'},
+                    {'href': '/casas' ~ scope_query, 'label': 'Las casas que sondean este ámbito'}]) }}
     </div>
 {% endblock %}
