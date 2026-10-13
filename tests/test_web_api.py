@@ -137,7 +137,7 @@ def test_mtpy_api_registers_the_web_routes(fresh_app):
     api = mtpy.api(routes=webapi.ROUTES)
     patterns = [route['pattern'] for route in fresh_app.router.routes]
     assert patterns[0] == '/' and len(patterns) == 1 + len(webapi.ROUTES)
-    assert all(route['methods'] == {'GET'} for route in fresh_app.router.routes[1:])
+    assert all(route['methods'] == {'GET', 'HEAD'} for route in fresh_app.router.routes[1:])
 
 
 def fake_readers(monkeypatch):

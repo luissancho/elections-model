@@ -37,6 +37,10 @@ class Echo(Controller):
     async def item_action(self, id):
         return {'id': id}
 
+    async def echo_action(self, id):
+        await asyncio.sleep(0)  # cede el control para que otra petición se intercale
+        return {'id': id}
+
     async def teapot_int_action(self):
         return 418
 
@@ -98,7 +102,7 @@ ROUTES = [
     ('/dt64', 'echo', 'dt64'), ('/td64', 'echo', 'td64'), ('/cached-nan', 'echo', 'cached_nan'),
     ('/http-error', 'echo', 'http_error'), ('/teapot', 'echo', 'teapot'), ('/guarded', 'guarded', 'list'),
     ('/cached-boom', 'echo', 'cached_boom'), ('/cached-404', 'echo', 'cached_404'),
-    ('/cached-crash', 'echo', 'cached_crash'),
+    ('/cached-crash', 'echo', 'cached_crash'), ('/echo/{id:num}', 'echo', 'echo'),
 ]
 
 
@@ -113,8 +117,8 @@ def make_api(app, routes=ROUTES, not_found=()):
     return Api()
 
 
-def call(api, path, query='', method='GET', scope_type='http', incoming=None):
-    """Una petición ASGI; devuelve (status, cabeceras, cuerpo) en `http` y los mensajes enviados en otros scopes.
+def exchange(path, query='', method='GET', scope_type='http', incoming=None):
+    """`scope`, `receive` y `send` de una petición ASGI, y la lista donde `send` acumula los mensajes enviados.
 
     Los scopes distintos de `http` solo llevan `type` y `headers`, como los que envía uvicorn.
     """
@@ -130,13 +134,34 @@ def call(api, path, query='', method='GET', scope_type='http', incoming=None):
     async def send(message):
         sent.append(message)
 
-    asyncio.run(api(scope, receive, send))
-    if scope_type != 'http':
-        return sent
+    return scope, receive, send, sent
+
+
+def response_of(sent):
+    """(status, cabeceras, cuerpo) a partir de los mensajes `http.response.*` enviados."""
     start = [m for m in sent if m['type'] == 'http.response.start'][0]
     body = b''.join(m.get('body', b'') for m in sent if m['type'] == 'http.response.body')
     headers = {k.decode('latin-1'): v.decode('latin-1') for k, v in start['headers']}
     return start['status'], headers, body
+
+
+def call(api, path, query='', method='GET', scope_type='http', incoming=None):
+    """Una petición ASGI; devuelve (status, cabeceras, cuerpo) en `http` y los mensajes enviados en otros scopes.
+
+    Los scopes distintos de `http` solo llevan `type` y `headers`, como los que envía uvicorn.
+    """
+    scope, receive, send, sent = exchange(path, query, method, scope_type, incoming)
+    asyncio.run(api(scope, receive, send))
+    if scope_type != 'http':
+        return sent
+    return response_of(sent)
+
+
+async def gather_calls(api, paths):
+    """Peticiones GET concurrentes (`asyncio.gather`) a `paths`; devuelve (status, cabeceras, cuerpo) de cada una."""
+    exchanges = [exchange(path) for path in paths]
+    await asyncio.gather(*(api(scope, receive, send) for scope, receive, send, _ in exchanges))
+    return [response_of(sent) for *_, sent in exchanges]
 
 
 def test_query_returns_first_value_of_each_key_and_keeps_blank_values(fresh_app):
@@ -305,7 +330,7 @@ def test_mtpy_api_registers_extra_routes(fresh_app):
     api = mtpy.api(routes=[('/api/v1/ping', 'index', 'index', ['GET'])])
     assert isinstance(api, Api)
     assert [route['pattern'] for route in fresh_app.router.routes] == ['/', '/api/v1/ping']
-    assert fresh_app.router.routes[1]['methods'] == {'GET'}
+    assert fresh_app.router.routes[1]['methods'] == {'GET', 'HEAD'}
 
 
 def test_mtpy_api_without_app_returns_none():
@@ -370,3 +395,23 @@ def test_router_uses_the_class_when_the_package_binds_the_controller_module(fres
     status, headers, body = call(api, '/api/v1/nope')
     assert status == 404 and json.loads(body) == {'status': 'error', 'message': '404 Not Found'}
     assert headers['access-control-allow-origin'] == '*'
+
+
+def test_head_returns_the_get_headers_without_a_body(fresh_app):
+    """`HEAD` en una ruta GET da las mismas cabeceras sin cuerpo; en una ruta desconocida, el 404 sin cuerpo."""
+    api = make_api(fresh_app)
+    get_status, get_headers, get_body = call(api, '/echo/7')
+    status, headers, body = call(api, '/echo/7', method='HEAD')
+    assert status == get_status == 200 and body == b'' and headers['content-type'] == get_headers['content-type']
+    assert headers['content-length'] == str(len(get_body))
+    status, _, body = call(api, '/nope', method='HEAD')
+    assert status == 404 and body == b''
+    status, _, _ = call(api, '/echo/7', method='POST')
+    assert status == 404
+
+
+def test_concurrent_requests_keep_their_own_params(fresh_app):
+    """Dos peticiones entrelazadas con `asyncio.gather` (la acción cede el control) conservan cada una sus parámetros."""
+    api = make_api(fresh_app)
+    results = asyncio.run(gather_calls(api, ['/echo/1', '/echo/2']))
+    assert [json.loads(body)['id'] for _, _, body in results] == ['1', '2']

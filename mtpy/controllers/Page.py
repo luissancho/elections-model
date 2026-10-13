@@ -2,9 +2,8 @@
 Base controller of the server-rendered web pages (Jinja2 templates of ``web/templates``).
 """
 import hashlib
-import traceback
 
-from ..core.api import Controller, HttpError
+from ..core.api import Controller
 from ..lib import pages, webapi
 
 
@@ -99,43 +98,26 @@ class Page(Controller):
             site_title=pages.SITE_TITLE, status=status, message=text
         )
 
-    async def dispatch(self, action, **kwargs):
+    def error_result(self, status: int, message: str) -> str:
         """
-        Run an action and send its HTML; errors become HTML error pages.
+        Render an error of an action (``HttpError`` or unexpected exception) as an HTML page.
 
-        An ``HttpError`` gives the error page with its status and message; any other
-        exception is logged with its traceback and gives a 500 error page.
+        ``Controller.dispatch`` calls it; an unexpected exception arrives as a 500 with a
+        generic message, which the error page shows as ``Error interno.``.
 
         Parameters
         ----------
-        action : str
-            Action name, without the ``_action`` suffix.
-        **kwargs
-            Route parameters passed to the action.
+        status : int
+            HTTP status code.
+        message : str
+            Error message (see ``error_page``).
 
         Returns
         -------
-        None
+        str
+            The rendered error page.
         """
-        self.action = action
-        self.params = dict(kwargs)
-
-        try:
-            self.before_dispatch()
-
-            self.result = await getattr(self, action + '_action')(**self.params)
-
-            self.after_dispatch()
-        except HttpError as error:
-            self.result = self.error_page(error.status, error.message)
-        except Exception as error:
-            if self.app.logger is not None:
-                self.app.logger.error('Unhandled error in {}.{}: {!r}\n{}'.format(
-                    type(self).__name__, action, error, traceback.format_exc()
-                ))
-            self.result = self.error_page(500, 'Error interno')
-
-        await self.send()
+        return self.error_page(status, message)
 
     async def not_found_action(self) -> str:
         """

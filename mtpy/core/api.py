@@ -1,6 +1,7 @@
 from importlib import import_module
 import json
 import re
+import traceback
 from types import ModuleType
 from typing import Optional
 from urllib.parse import parse_qsl
@@ -40,6 +41,27 @@ class Api(Core):
                 return
 
     async def __call__(self, scope, receive, send):
+        """
+        Serve one ASGI connection: the lifespan protocol or an HTTP request.
+
+        For an HTTP request it builds the `Request` and the `Response` (marked as ``head`` for
+        a ``HEAD`` request), stores them on the app, resolves the route and dispatches it. The
+        resolved route is kept in local state, so concurrent requests do not share it. Other
+        scope types are ignored.
+
+        Parameters
+        ----------
+        scope : dict
+            ASGI connection scope.
+        receive : callable
+            ASGI receive channel.
+        send : callable
+            ASGI send channel.
+
+        Returns
+        -------
+        None
+        """
         if scope['type'] == 'lifespan':
             await self.lifespan(receive, send)
 
@@ -50,14 +72,14 @@ class Api(Core):
 
         request = Request(scope, receive)
         response = Response(send)
+        response.head = request.method == 'HEAD'
 
         self.app.set('request', request)
         self.app.set('response', response)
 
         router = self.app.router
 
-        await router.handle()
-        await router.dispatch()
+        await router.dispatch(await router.handle())
 
 
 class Request(Core):
@@ -159,6 +181,7 @@ class Response(Core):
         self.status_code = 200
         self.headers = {}
         self.content = b''
+        self.head = False
 
     @property
     def raw_headers(self):
@@ -361,6 +384,22 @@ class Response(Core):
         return self
 
     async def send_content(self, content):
+        """
+        Serialise the value returned by an action and send the response.
+
+        For a ``HEAD`` request (``head`` is ``True``) the headers are the same as for ``GET``,
+        ``content-length`` included (the length of the body that would have been sent), and
+        the body is empty.
+
+        Parameters
+        ----------
+        content : Any
+            The value to send (see ``set_content``).
+
+        Returns
+        -------
+        None
+        """
         self.set_content(content)
 
         await self.send({
@@ -370,7 +409,7 @@ class Response(Core):
         })
         await self.send({
             'type': 'http.response.body',
-            'body': self.content
+            'body': b'' if self.head else self.content
         })
 
 
@@ -410,10 +449,6 @@ class Router(Core):
 
     def __init__(self):
         super().__init__()
-
-        self.controller = None
-        self.action = None
-        self.params = {}
 
         self.routes = []
         self.not_found = []
@@ -464,6 +499,29 @@ class Router(Core):
         return attribute
 
     def add_route(self, pattern, controller, action='index', methods=None):
+        """
+        Register a route.
+
+        A route that accepts ``GET`` also accepts ``HEAD``, answered with the headers of the
+        ``GET`` response and no body.
+
+        Parameters
+        ----------
+        pattern : str
+            Path pattern; ``{name}`` or ``{name:alias}`` captures a parameter (aliases in
+            ``alias_map``).
+        controller : str
+            Controller name, in snake case.
+        action : str, optional
+            Action name, without the ``_action`` suffix.
+        methods : list of str, optional
+            Accepted HTTP methods, ``['GET', 'POST']`` by default.
+
+        Returns
+        -------
+        Router
+            The router itself, to allow chaining.
+        """
         methods = methods or ['GET', 'POST']
 
         params = []
@@ -477,6 +535,9 @@ class Router(Core):
             params.append(name)
 
         methods = set(method.upper() for method in methods)
+
+        if 'GET' in methods:
+            methods.add('HEAD')
 
         self.routes.append({
             'pattern': pattern,
@@ -516,7 +577,25 @@ class Router(Core):
     def check_not_found(route, uri):
         return uri.startswith(route['pattern'])
 
-    async def handle(self, uri=None):
+    async def handle(self, uri=None) -> tuple['Controller', str, dict]:
+        """
+        Resolve the current request into a controller, an action and its parameters.
+
+        The routes are tried in order (path and method); then the prefixes of ``not_found``
+        (any method); otherwise the base ``Controller`` answers ``not_found``. Nothing is
+        stored on the router, so concurrent requests do not share the resolved route.
+
+        Parameters
+        ----------
+        uri : str, optional
+            Path to resolve; the path of the current request by default.
+
+        Returns
+        -------
+        tuple
+            ``(controller, action, params)``: a new controller instance, the action name and
+            the route parameters.
+        """
         method = self.app.request.method
         if uri is None:
             uri = '/' + self.app.request.uri
@@ -525,30 +604,30 @@ class Router(Core):
             params = Router.parse_route(route, uri, method)
 
             if params is not False:
-                self.controller = self.controller_class(route['controller'])()
-                self.action = route['action']
-                self.params = params
-
-                return self
+                return self.controller_class(route['controller'])(), route['action'], params
 
         for route in self.not_found:
             if Router.check_not_found(route, uri):
-                self.controller = self.controller_class(route['controller'])()
-                self.action = route['action']
-                self.params = {}
+                return self.controller_class(route['controller'])(), route['action'], {}
 
-                return self
+        return Controller(), 'not_found', {}
 
-        self.controller = Controller()
-        self.action = 'not_found'
-        self.params = {}
+    async def dispatch(self, target: tuple['Controller', str, dict]) -> None:
+        """
+        Run the action of a resolved route.
 
-    async def dispatch(self):
-        if self.loaded():
-            await self.controller.dispatch(self.action, **self.params)
+        Parameters
+        ----------
+        target : tuple
+            ``(controller, action, params)`` as returned by ``handle``.
 
-    def loaded(self):
-        return True if self.controller is not None else False
+        Returns
+        -------
+        None
+        """
+        controller, action, params = target
+
+        await controller.dispatch(action, **params)
 
 
 class Controller(Core):
@@ -565,6 +644,24 @@ class Controller(Core):
         self.result = None
 
     async def dispatch(self, action, **kwargs):
+        """
+        Run an action and send its result; errors go through ``error_result``.
+
+        An ``HttpError`` gives the error result with its status and message; any other
+        exception is logged with its traceback and gives a 500 error result with the generic
+        message ``'500 Internal Server Error'``.
+
+        Parameters
+        ----------
+        action : str
+            Action name, without the ``_action`` suffix.
+        **kwargs
+            Route parameters passed to the action.
+
+        Returns
+        -------
+        None
+        """
         self.action = action
         self.params = dict(kwargs)
 
@@ -575,17 +672,38 @@ class Controller(Core):
 
             self.after_dispatch()
         except HttpError as error:
-            self.response._set_error(error.status, error.message)
-            self.result = {'status': 'error', 'message': error.message}
+            self.result = self.error_result(error.status, error.message)
         except Exception as error:
             if self.app.logger is not None:
-                self.app.logger.error('Unhandled error in {}.{}: {!r}'.format(
-                    type(self).__name__, action, error
+                self.app.logger.error('Unhandled error in {}.{}: {!r}\n{}'.format(
+                    type(self).__name__, action, error, traceback.format_exc()
                 ))
-            self.response._set_error(500, '500 Internal Server Error')
-            self.result = 500
+            self.result = self.error_result(500, '500 Internal Server Error')
 
         await self.send()
+
+    def error_result(self, status: int, message: str):
+        """
+        Turn the response into an error and return the content to send.
+
+        The base controller answers an uncacheable JSON error; subclasses override it to
+        render errors in another format.
+
+        Parameters
+        ----------
+        status : int
+            HTTP status code.
+        message : str
+            Error message.
+
+        Returns
+        -------
+        dict
+            ``{'status': 'error', 'message': message}``.
+        """
+        self.response._set_error(status, message)
+
+        return {'status': 'error', 'message': message}
 
     def before_dispatch(self):
         pass
