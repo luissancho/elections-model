@@ -93,7 +93,7 @@ check_header() {
     echo "OK   $path Cache-Control contiene '$pattern'"
 }
 check_header /dist/vendor/echarts-5.6.0.min.js 'max-age=31536000'
-check_header /dist/vendor/fonts/SourceSans3-Regular.woff2 'max-age=31536000'
+check_header /dist/vendor/fonts/SourceSans3-3.052-Regular.woff2 'max-age=31536000'
 check_header /dist/js/pages/promedios.js 'no-cache'
 check_header / 'max-age=60'
 

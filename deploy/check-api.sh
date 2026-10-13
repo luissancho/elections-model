@@ -146,7 +146,7 @@ check /metodo/nope 404 html
 check /modelo 301 none
 check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
-check_nginx_only /dist/vendor/fonts/SourceSerif4-Semibold.woff2 font/woff2
+check_nginx_only /dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2 font/woff2
 check_nginx_only /dist/css/site.css text/css
 check /api/v1/health 200 json
 check /api/v1/manifest 200 json

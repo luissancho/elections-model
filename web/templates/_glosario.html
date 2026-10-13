@@ -10,7 +10,7 @@
   <dd>Cuánto se equivocó el sondeo en el margen entre los dos bloques principales, en puntos. Sin signo.</dd>
   {% endif %}
   <dt>Sesgo del margen</dt>
-  <dd>El mismo error con signo: positivo, el sondeo daba más margen a {{ glossary_blocks[0] if glossary_blocks else 'el primer bloque' }} del que hubo; negativo, menos.</dd>
+  <dd>El mismo error con signo: positivo, el sondeo daba más margen {{ 'a ' ~ glossary_blocks[0] if glossary_blocks else 'al primer bloque' }} del que hubo; negativo, menos.</dd>
   {% if with_herding %}
   <dt>Herding</dt>
   <dd>Por debajo de 1, sus sondeos varían menos de lo que permite el azar.</dd>

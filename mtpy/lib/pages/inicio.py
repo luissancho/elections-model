@@ -5,15 +5,15 @@ from datetime import date
 from typing import Optional
 
 from ..webapi import site
-from .common import (block_color, bundle_part, catalog, common_context, days_left, days_text, event_title,
-                     published_scopes)
+from .common import (block_color, bundle_part, catalog, common_context, days_left, days_text, default_mode,
+                     event_title, published_scopes)
 from .elecciones import published_events
 
 INTRO = ('Un modelo que promedia las encuestas y simula los escaños de cada elección: elige una para ver en qué '
          'situación está.')
 
 
-def card_headline(row: dict) -> tuple:
+def card_headline(row: dict, mode: str = 'nowcast') -> tuple:
     """
     Leading party and leading majority of the latest run of a scope.
 
@@ -21,13 +21,15 @@ def card_headline(row: dict) -> tuple:
     ----------
     row : dict
         Row of ``published_scopes()`` (``code``, ``latest``).
+    mode : str, optional
+        ``'nowcast'`` (default) or ``'forecast'``: the estimate of the headline the card reads.
 
     Returns
     -------
     tuple
         ``(leader, majority)``: ``leader`` is ``{'name', 'fullname', 'color', 'pct', 'seats'}`` for the party
-        with the highest ``pct`` of the nowcast, ``majority`` is ``{'block', 'p', 'color'}`` for the block with the
-        highest ``p_majority``; each one is ``None`` when the run has no headline (or no data for it).
+        with the highest ``pct`` of the estimate of ``mode``, ``majority`` is ``{'block', 'p', 'color'}`` for the
+        block with the highest ``p_majority``; each one is ``None`` when the run has no headline (or no data for it).
     """
     code, run = row['code'], row['latest']
     headline = bundle_part(site().run_file, code, run, 'headline')
@@ -35,11 +37,11 @@ def card_headline(row: dict) -> tuple:
     if not headline:
         return None, None
 
-    nowcast = headline.get('nowcast') or {}
+    estimate = headline.get(mode) or {}
     meta = bundle_part(site().run_file, code, run, 'meta') or {}
     parties = catalog(meta)
     leader = majority = None
-    rows = nowcast.get('parties') or []
+    rows = estimate.get('parties') or []
 
     if rows:
         top = max(rows, key=lambda party: party.get('pct') or 0)
@@ -47,7 +49,7 @@ def card_headline(row: dict) -> tuple:
         leader = {'name': top['name'], 'fullname': entry['fullname'], 'color': entry['color'],
                   'pct': top.get('pct'), 'seats': top.get('seats')}
 
-    probs = nowcast.get('p_majority') or {}
+    probs = estimate.get('p_majority') or {}
 
     if probs:
         block = max(probs, key=probs.get)
@@ -71,16 +73,17 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
     -------
     list of dict
         ``es`` first, the rest by ascending ``event_date``; each with ``code``, ``title``, ``event_date``,
-        ``days_text``, ``run_at``, ``frozen``, ``href``, ``href_seats``, ``leader`` and ``majority``
+        ``days_text``, ``run_at``, ``frozen``, ``mode``, ``href``, ``href_seats``, ``leader`` and ``majority``
         (``card_headline``).
     """
     frozen = bool((site().manifest_data().get('freeze') or {}).get('active'))
+    mode = default_mode(frozen)
     ordered = sorted(scopes, key=lambda row: (row['code'] != 'es', row.get('event_date') or ''))
     cards = []
 
     for row in ordered:
         code = row['code']
-        leader, majority = card_headline(row)
+        leader, majority = card_headline(row, mode)
         cards.append({
             'code': code,
             'title': event_title(code, scopes),
@@ -88,6 +91,7 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
             'days_text': days_text(days_left(row.get('event_date'), today)),
             'run_at': row.get('run_at'),
             'frozen': frozen,
+            'mode': mode,
             'href': '/' + code,
             'href_seats': '/' + code + '/escanos',
             'leader': leader,

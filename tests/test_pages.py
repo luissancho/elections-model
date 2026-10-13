@@ -761,6 +761,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
     assert 'Cada fila es una casa con rating para la próxima elección' in page
+    assert not re.search(r'\ba el\b', page) and 'al primer bloque' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
@@ -1444,6 +1445,21 @@ def test_first_card_opens_its_how_to_read_and_the_rest_stay_folded(api):
     assert len(hows) > 1 and hows[0] == ' open' and set(hows[1:]) == {''}
 
 
+def test_home_cards_follow_the_default_mode_while_frozen(api, fresh_app):
+    headline = fixture_data('headline')
+    headline['forecast']['parties'] = [dict(party, name='PP', pct=41.5, seats=161) for party in headline['forecast']['parties']]
+    writer = write_bundle(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'headline'), 'headline', headline, 'es', run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    assert 'Si hoy hubiera elecciones' in page and '33,1' in page and '41,5' not in page
+    publish.update_manifest(writer, {'es': publish.latest_entry(headline | {'run_id': RUN})},
+                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    assert 'Pronóstico definitivo' in page and '41,5' in page and '161 escaños' in page and 'Si hoy hubiera' not in page
+
+
 def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
     page = html(call(api, '/')[2])
     events = page[page.index('id="events"'):page.index('</section>', page.index('id="events"'))]
@@ -1453,6 +1469,7 @@ def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
 
 def test_fonts_are_vendored_and_declared():
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert 'SourceSerif4-4.005-Semibold.woff2' in css and 'SourceSans3-3.052-Regular.woff2' in css
     assert "url('/dist/vendor/fonts/" in css and 'font-display: swap' in css
     assert os.path.isfile(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'vendor', 'fonts', 'LICENSE'))
 

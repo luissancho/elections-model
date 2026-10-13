@@ -642,7 +642,8 @@ Resoluciones tomadas durante la ejecución (las líneas `Ruling:` del ledger, en
 3. R2: el Inicio saca el bloque líder de `headline[mode].p_majority`; `majority_rows` se queda en Promedios.
 4. R3: los literales de fecha de los tests se adaptan a `fmt_date` ("29 nov 2026").
 5. Task 4: las fuentes pesan 188 KB (80 + 108) frente a los "≤ 150 KB" orientativos; se aceptan (originales OFL,
-   caché de un año, la serif es parte del diseño): unos 40 KB más en la primera visita.
+   caché de un año, la serif es parte del diseño): unos 40 KB más en la primera visita. Los ficheros llevan la
+   versión en el nombre (`SourceSerif4-4.005-Semibold.woff2`, `SourceSans3-3.052-Regular.woff2`) para la caché de un año.
 6. Task 6: el plan pedía una escala neutra fija de 8 tonos y la spec "color por elección"; manda la spec: tantos
    tonos distinguibles como elecciones publicadas (paleta de 16; `es` tiene 11).
 7. Task 7: donde el valor de la base es una media con signo (fila del ranking, camino al rating) se muestra una vez

@@ -187,7 +187,7 @@ por ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprue
 `/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200 HTML
 si la elección está publicada), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
 `/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404 HTML), con nginx también
-`/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`), `/dist/vendor/fonts/SourceSerif4-Semibold.woff2`
+`/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`), `/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2`
 (`font/woff2`) y `/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del
 paquete, `/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23`,
 `/api/v1/drift?scope=es` y `/api/v1/events/es` (200 JSON, necesitan base), `/api/v1/analysis/es-xx/herding` (400),
@@ -271,7 +271,7 @@ inexistente da 404.)
   `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
-  (`max-age=31536000`, también de `/dist/vendor/fonts/SourceSans3-Regular.woff2`), `/dist/js/pages/promedios.js`
+  (`max-age=31536000`, también de `/dist/vendor/fonts/SourceSans3-3.052-Regular.woff2`), `/dist/js/pages/promedios.js`
   (`no-cache`) y `/` (`max-age=60`), que `/`, `/es`, `/es/escanos`, `/elecciones?scope=es`,
   `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y `/metodo/rating` devuelven HTML y
   que `/` contiene `initial-data`; con `deploy/elections.env`, también que
