@@ -120,8 +120,11 @@ def profile_headline(name: str, current: dict) -> str:
     Returns
     -------
     str
-        The rating and prior quality of the house in plain words.
+        The rating and prior quality of the house in plain words, or that it has no rating in the scope.
     """
+    if current.get('rating') is None:
+        return '{}: sin rating en este ámbito.'.format(name)
+
     return '{}: rating {} de 100, calidad previa {}.'.format(
         name, fmt_num(current.get('rating'), 1), fmt_num(current.get('quality'), 1))
 

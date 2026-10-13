@@ -832,6 +832,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     status, _, body = call(houses, '/casas', query='id=4')
     page = html(body)
     assert status == 200 and '<h2>Nueva' in page and 'Calidad: – · Rating: –' in page
+    assert 'Nueva: sin rating en este ámbito.' in page
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
@@ -1302,3 +1303,7 @@ def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):
     page = html(call(houses, '/casas', query='id=1')[2])
     assert '<th scope="col">Sesgo del margen</th>' in page and 'Error de bloques' not in page
     assert 'Sesgo de bloques' not in page and 'miden lo mismo' not in page and 'id="glosario"' in page
+    assert page.count('<td') == page.count('</td>')
+    row = page[page.index('id="path-table"'):]
+    row = row[row.index('<tbody>'):]
+    assert row[:row.index('</tr>')].count('<td') == 5
