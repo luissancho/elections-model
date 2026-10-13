@@ -14,12 +14,18 @@ import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 const BAR_ROW_HEIGHT = 22;
 const BAR_EXTRA_HEIGHT = 60;
 
-// Colours of the elections in the bullseye of the error history, by position from the newest one (cycling after
-// eight): neutral tones, unrelated to the party colours, distinguishable from each other and readable on white.
-const EVENT_COLORS = ['#3b6e8f', '#c0672e', '#5a8a4f', '#8a5a8c', '#9a8a1f', '#a8505a', '#2f8f8f', '#6b6b6b'];
+// Colours of the elections in the bullseye of the error history, by position in the published list (newest
+// first): sixteen fixed neutral tones, unrelated to the party colours, distinguishable from each other and
+// readable on white, so every published election of a scope (`es` has 11) gets its own; only a scope with more
+// than sixteen would cycle.
+const EVENT_COLORS = [
+  '#3b6e8f', '#c0672e', '#5a8a4f', '#8a5a8c', '#9a8a1f', '#a8505a', '#2f8f8f', '#6b6b6b',
+  '#7a4e2d', '#5468b0', '#b0487f', '#4f7a2a', '#d08a1c', '#2c5d5d', '#8c7aa8', '#1f3f5c',
+];
 
 /**
- * Draw the histogram of a measure of some poll-errors rows: one-point bins, with the mean marked.
+ * Draw the histogram of a measure of some poll-errors rows: polls counted (unweighted) in one-point bins, with
+ * the mean marked.
  *
  * @param {HTMLElement} el chart container
  * @param {object[]} rows rows with the measure
@@ -34,6 +40,8 @@ function drawErrorHistogram(el, rows, measure) {
     label: (start) => `${start} a ${start + 1} puntos`,
     median: mean,
     markLabel: mean === null ? null : `Media: ${fmtNum(mean, 1)}`,
+    share: false,
+    countLabel: (count) => `${count} ${count === 1 ? 'sondeo' : 'sondeos'}`,
   }), 'the error histogram');
 }
 

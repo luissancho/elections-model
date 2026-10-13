@@ -19,7 +19,7 @@ function binIndex(starts, width, value) {
 }
 
 /**
- * Render the share of simulations per seat bin as bars, with a solid mark line at the median and a dashed
+ * Render the share of simulations per seat bin (or the raw count of values, with `share: false`) as bars, with a solid mark line at the median and a dashed
  * one at the majority (only when the majority lies within the bins).
  *
  * @param {HTMLElement} el chart container
@@ -27,17 +27,21 @@ function binIndex(starts, width, value) {
  * @param {object} opts `color` (bars), `majority`, `median`, `lo`, `hi` (seats, tooltip subtitle),
  *   `width` (bin width, from `binWidth` when null), `formatter` (seats → text), `unit` (of the default bin
  *   labels), `label` (`(start, step) => text` of a bin, replacing the default one) and `markLabel` (text of the
- *   median mark and of the tooltip subtitle, replacing `Mediana: …`)
+ *   median mark and of the tooltip subtitle, replacing `Mediana: …`), `share` (bars as the % of the values,
+ *   the default; `false` draws the raw counts, with integer ticks) and `countLabel` (count → tooltip text, used
+ *   when `share` is false)
  * @returns {object} the ECharts instance
  */
 export function renderHistogram(el, values, {
   color = OTHERS_COLOR, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
-  unit = 'escaños', label = null, markLabel = null,
+  unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt,
 } = {}) {
   const step = width ?? binWidth(values);
   const {starts, counts} = histogram(values, step);
   const n = values.length;
   const shares = counts.map((count) => (n ? (100 * count) / n : 0));
+  const heights = share ? shares : counts;
+  const heightText = (index) => (share ? fmtPct(shares[index]) : countLabel(counts[index]));
 
   const marks = [];
   if (median !== null && starts.length) {
@@ -81,7 +85,8 @@ export function renderHistogram(el, values, {
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (value) => fmtPct(value, 0)},
+      axisLabel: {formatter: share ? (value) => fmtPct(value, 0) : (value) => fmtInt(value)},
+      ...(share ? {} : {minInterval: 1}),
     },
     tooltip: {
       trigger: 'axis',
@@ -92,7 +97,7 @@ export function renderHistogram(el, values, {
           return '';
         }
         const index = params[0].dataIndex;
-        const lines = [`<strong>${escapeHtml(`${binLabel(starts[index])}: ${fmtPct(shares[index])}`)}</strong>`];
+        const lines = [`<strong>${escapeHtml(`${binLabel(starts[index])}: ${heightText(index)}`)}</strong>`];
         if (subtitle) {
           lines.push(escapeHtml(subtitle));
         }
@@ -104,7 +109,7 @@ export function renderHistogram(el, values, {
       name: 'Simulaciones',
       barCategoryGap: '10%',
       color,
-      data: shares,
+      data: heights,
       markLine: {silent: true, symbol: 'none', data: marks},
     }],
   };
