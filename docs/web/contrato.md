@@ -402,11 +402,13 @@ registran antes que las genéricas.
 Las rutas de páginas no forman parte del contrato de la API: las renderizan los controladores de
 `mtpy/controllers/` con plantillas Jinja2, y el contrato solo cubre `/api/v1` (enmienda 2026-10-13, fase 7: mapa por
 eventos). Hay dos familias. Las **de evento** viven bajo el código del ámbito: `/{scope}` (Promedios, controlador
-`Promedios`) y `/{scope}/escanos` (Escaños, `Escanos`), con `mode` y `run`; un código que no es del catálogo da 404
-("Ámbito desconocido.") y uno del catálogo sin pronóstico, el 404 "Este ámbito no tiene pronóstico publicado.".
+`Promedios`) y `/{scope}/escanos` (Escaños, `Escanos`), con `mode` y `run` (sin selector de modo desde la fase 7b:
+Hoy por defecto, Elección en veda; `mode` sigue aceptado en la query para enlaces y pruebas); un código que no es
+del catálogo da 404 ("Ámbito desconocido.") y uno del catálogo sin pronóstico, el 404 "Este ámbito no tiene
+pronóstico publicado.".
 `/{scope}/escanos` acepta además `region` (solo de la página, no de la API): un entero de `districts.regions`; mal
 formado da 400 y desconocido 404 en HTML. Las **globales** son `/` (Inicio, `Index`: el índice de eventos), `/elecciones`
-(Histórico de errores, `Elecciones`), `/casas` (Rating de encuestadoras, `Casas`) y `/metodo` (`Metodo`) con sus
+(Histórico Errores, `Elecciones`), `/casas` (Ranking Encuestadoras, `Casas`) y `/metodo` (`Metodo`) con sus
 cuatro subpáginas `/metodo/promedio`, `/metodo/escanos`, `/metodo/rating` y `/metodo/backtest`; una subpágina
 desconocida da 404 ("Página del método no encontrada."). `/elecciones`, `/casas` y `/metodo/backtest` aceptan `scope`
 (`es` por defecto). `/casas` acepta `id` (solo de la página): sin él, el

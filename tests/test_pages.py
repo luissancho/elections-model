@@ -1436,7 +1436,9 @@ def test_home_cards_are_links(api):
     page = html(call(api, '/')[2])
     assert 'class="card card-link" href="/es"' in page.replace("'", '"')
     assert page.count('card-link') >= 4  # el ámbito + las tres secciones
-    assert 'href="/elecciones"' in page and 'href="/casas"' in page and 'href="/metodo"' in page
+    more = page[page.index('id="more"'):page.index('</section>', page.index('id="more"'))]
+    for href in ('/elecciones', '/casas', '/metodo'):
+        assert re.search(r'<a class="card card-link" href="%s"><h3>[^<]+</h3>' % href, more), href
     assert '<a' not in re.search(r'<a class="card card-link"[^>]*>(.*?)</a>', page, re.S).group(1)
 
 
@@ -1493,7 +1495,9 @@ def test_home_cards_follow_the_default_mode_while_frozen(api, fresh_app):
 def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
     page = html(call(api, '/')[2])
     events = page[page.index('id="events"'):page.index('</section>', page.index('id="events"'))]
-    assert '<h2>Próximas elecciones</h2>' in events and '<h3>' in events and 'class="card card-link" href="/es"' in events
+    assert '<h2>Próximas elecciones</h2>' in events
+    hero = events[events.index('class="tile tile-hero"'):]
+    assert re.search(r'<a class="card card-link" href="/es">\s*<h3>[^<]+</h3>', hero)
     assert events.count('<h2') == 1 and page.count('<h1') == 1
 
 

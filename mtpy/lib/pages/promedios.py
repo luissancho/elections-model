@@ -238,7 +238,7 @@ def promedios_context(state: dict) -> dict:
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``majority``
         (``majority_rows``), ``headline_text`` (``headline_text``), ``table_parties`` (the ``main`` parties
         present in the series, or all of them), ``table_rows`` (``table_rows``, the first ``TABLE_ROWS``),
-        ``table_total`` (the polls of the polls part), ``n_polls``, ``csv_href``,
+        ``table_total`` (the polls of the polls part), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them), ``block_colors`` (``block_color`` of each block, for its checkbox), ``main`` (the parties of
         ``meta.bmaps.main`` present in the series) and ``initial`` (``state``, ``meta``, ``headline``,
@@ -271,7 +271,6 @@ def promedios_context(state: dict) -> dict:
     context['table_parties'] = main or list(names)
     context['table_rows'] = table_rows(poll_rows, context['table_parties'])
     context['table_total'] = len(poll_rows)
-    context['n_polls'] = meta.get('n_polls')
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
     context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
