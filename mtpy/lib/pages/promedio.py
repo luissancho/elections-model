@@ -1,6 +1,8 @@
 """
 Average page context.
 """
+from typing import Optional
+
 from .common import api_url, common_context, part
 from .filters import DASH, fmt_date, fmt_int, fmt_num
 
@@ -64,7 +66,7 @@ def table_rows(polls: list, parties: list, n: int = TABLE_ROWS) -> list:
     ]
 
 
-def promedio_context(state: dict, active: str = '/promedio') -> dict:
+def promedio_context(state: dict, active: Optional[str] = None, event: bool = False, active_suffix: str = '') -> dict:
     """
     Template context of the poll average page.
 
@@ -72,8 +74,12 @@ def promedio_context(state: dict, active: str = '/promedio') -> dict:
     ----------
     state : dict
         Validated page parameters (``parse_state``).
-    active : str, optional
-        ``href`` of the page in the navigation.
+    active : str or None, optional
+        ``href`` of the page in the navigation (``None``: the average is an event page).
+    event : bool, optional
+        Whether it is rendered as an event page (see ``common_context``).
+    active_suffix : str, optional
+        Suffix of the current tab of the event bar.
 
     Returns
     -------
@@ -88,7 +94,7 @@ def promedio_context(state: dict, active: str = '/promedio') -> dict:
     HttpError
         503 without a bundle; 404 for an unpublished scope, a missing run or a missing part.
     """
-    context = common_context(state, active)
+    context = common_context(state, active, event=event, active_suffix=active_suffix)
     full, meta = context['state'], context['meta']
     scope, mode, run = full['scope'], full['mode'], full['run']
     series = part(scope, run, 'series')

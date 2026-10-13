@@ -4,6 +4,7 @@
   <script type="module" src="/dist/js/pages/casas.js"></script>
 {% endblock %}
 {% block content %}
+    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       <section class="card" id="ranking">
         <h2>Ranking de casas <span class="muted">· próxima elección</span></h2>
@@ -31,7 +32,7 @@
             <tbody>
               {% for row in ranking %}
               <tr>
-                <td><a href="/casas{{ query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
+                <td><a href="/casas{{ scope_query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
                 <td>{{ row.rating|num(1) }}</td>
                 <td>{{ row.quality|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
@@ -79,7 +80,7 @@
             <tbody>
               {% for row in grid.rows %}
               <tr>
-                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ scope_query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 {% for cell in row.cells %}
                 <td title="Historia: {{ cell.hist|num(1) }} · Tendencia: {{ cell.trend|num(1) }} al año">{{ cell.cycle|num(1) }}</td>
                 {% endfor %}
@@ -118,7 +119,7 @@
             <tbody>
               {% for row in herding %}
               <tr>
-                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ scope_query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 <td>{{ row.herding|num(2) }}</td>
                 <td>{{ row.herding_last|num(2) }}</td>
                 <td>{{ row.herding_p|num(3) }}</td>

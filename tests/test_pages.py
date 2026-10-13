@@ -1,8 +1,10 @@
-"""Tests de las páginas servidas por los controladores (`Page`, `Index`, `Promedio`, `Escanos`, `Casas`) con el arnés ASGI."""
+"""Tests de las páginas servidas por los controladores (`Page`, `Index`, `Promedios`, `Escanos`, `Casas`...) con el
+arnés ASGI."""
 import json
 import os
 import re
 from types import SimpleNamespace
+from urllib.parse import parse_qsl
 
 import pandas as pd
 import pytest
@@ -40,14 +42,23 @@ def initial(body):
     return json.loads(match.group(1))
 
 
-def test_home_is_rendered_html_with_cache_headers(api):
-    status, headers, body = call(api, '/')
+def promedio_page(query=''):
+    """Cuerpo de `promedio.html` del ámbito `es`: entre las tareas 1 y 3 de la fase 7 la página no tiene ruta
+    (`/promedio` redirige a `/es`, que todavía pinta la Portada), así que se pinta con su contexto, como lo haría su
+    controlador."""
+    state = pages.parse_state(dict(parse_qsl(query)), 'es')
+    context = pages.promedio_context(state, active=None, event=True)
+    return pages.environment().get_template('promedio.html').render(**context).encode('utf-8')
+
+
+def test_promedios_is_rendered_html_with_cache_headers(api):
+    status, headers, body = call(api, '/es', query='mode=forecast')
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'public, max-age=60' and headers['etag'].startswith('"')
-    assert '<title>Pronóstico electoral · Portada</title>' in page
-    assert 'Pronóstico para el' in page and 'aria-current="page"' in page
-    assert '<option value="es" selected>' in page and 'name="mode" value="forecast" checked' in page.replace('\n', ' ')
+    assert '<title>Pronóstico electoral · Promedios</title>' in page
+    assert 'Pronóstico para el' in page and 'href="/es?mode=forecast" aria-current="page"' in page
+    assert 'name="mode" value="forecast" checked' in page.replace('\n', ' ')
     assert 'id="headline-table"' in page and '<th scope="col">Partido</th>' in page
     assert fixture_data('headline')['forecast']['parties'][0]['name'] in page
     assert '/dist/css/site.css' in page and '/dist/vendor/echarts-5.6.0.min.js' in page and '/dist/js/pages/index.js' in page
@@ -55,29 +66,29 @@ def test_home_is_rendered_html_with_cache_headers(api):
     assert page.count('<script') == 3  # ECharts (defer), el módulo de la página y el bloque JSON
 
 
-def test_home_initial_data_has_the_page_parts_with_one_run(api):
-    data = initial(call(api, '/')[2])
+def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
+    data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'vote', 'summary', 'runs'}
-    assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
+    assert data['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
     assert data['runs']['runs'][0]['run_id'] == RUN
 
 
 def test_nowcast_and_pinned_run_are_reflected(api):
-    status, headers, body = call(api, '/', query='mode=nowcast&run=' + RUN)
+    status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     page = html(body)
     assert status == 200 and 'Estimación a' in page
     assert 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
     assert 'type="hidden" name="run" value="{}"'.format(RUN) in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
-    assert 'href="/promedio?scope=es&amp;mode=nowcast&amp;run={}"'.format(RUN) in page
+    assert 'href="/es/escanos?mode=nowcast&amp;run={}"'.format(RUN) in page
 
 
 def test_freeze_banner_and_attribution(api, fresh_app):
     publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda electoral'})
     webapi.site().manifest_cache_clear()
-    page = html(call(api, '/')[2])
+    page = html(call(api, '/es')[2])
     assert 'id="freeze-banner"' in page and 'Veda electoral' in page
     assert 'Sondeos: Wikipedia' in page and 'href="/api/v1/manifest"' in page
 
@@ -91,7 +102,7 @@ def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tm
     envelope['data']['freeze'] = {'active': True, 'message': 'Veda'}
     path.write_text(json.dumps(envelope))
     webapi.site().manifest_cache_clear()
-    status, _, body = call(api, '/')
+    status, _, body = call(api, '/es')
     page = html(body)
     assert status == 200 and 'id="freeze-banner"' in page and 'Veda' in page
     assert 'congelado desde' not in page
@@ -100,10 +111,12 @@ def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tm
 @pytest.mark.parametrize('path, query, status, text', [
     ('/', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
     ('/', 'scope=es-xx', 400, 'Ámbito no válido'),
-    ('/', 'run=2026-10-08', 400, 'Run no válido'),
-    ('/', 'run=20200101-000000', 404, 'Ese run no existe'),
-    ('/', 'mode=tomorrow', 400, 'Modo no válido'),
-    ('/nope', '', 404, 'Página no encontrada'),
+    ('/es', 'run=2026-10-08', 400, 'Run no válido'),
+    ('/es', 'run=20200101-000000', 404, 'Ese run no existe'),
+    ('/es', 'mode=tomorrow', 400, 'Modo no válido'),
+    ('/elecciones', 'scope=es-xx', 400, 'Ámbito no válido'),
+    ('/nope', '', 404, 'Ámbito desconocido'),  # un segmento suelto casa con `/{scope}`
+    ('/nope/deeper', '', 404, 'Página no encontrada'),
     ('/promedio', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
     ('/escanos', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
     ('/casas', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
@@ -131,18 +144,156 @@ def test_without_bundle_the_home_is_a_503_page(fresh_app, tmp_path):
 
 
 def test_default_scope_is_the_first_published(api, fresh_app):
-    """Con `es` publicado, `?scope=` ausente lleva a `es`; un ámbito publicado adicional se lista en el selector."""
+    """Con `es` publicado, `?scope=` ausente lleva a `es`; un ámbito publicado adicional se lista en el filtro."""
     write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
     webapi.site().manifest_cache_clear()
-    page = html(call(api, '/')[2])
+    page = html(call(api, '/elecciones')[2])
     assert '<option value="es" selected>' in page and '<option value="es-md">Madrid</option>' in page
+
+
+def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
+    status, headers, body = call(api, '/es')
+    page = html(body)
+    assert status == 200 and headers['cache-control'] == 'public, max-age=60'
+    assert '<title>Pronóstico electoral · Promedios</title>' in page
+    assert 'Estimación a' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
+    assert 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
+    assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
+    assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
+    status, _, body = call(api, '/es/escanos', query='mode=forecast&run=' + RUN)
+    # Escaños no tiene titular: el título va en minúscula en los subtítulos de sus tarjetas
+    assert status == 200 and 'pronóstico para el' in html(body).lower() and 'name="run" value="' + RUN + '"' in html(body)
+
+
+def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_definitive(api, fresh_app):
+    writer = bundle.BundleWriter(fresh_app.fs)
+    write_bundle(fresh_app.fs, run_id='20261001-120000', manifest=False)
+    publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
+                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    assert 'Pronóstico definitivo para el' in html(call(api, '/es')[2])
+    page = html(call(api, '/es', query='run=20261001-120000&mode=forecast')[2])
+    assert 'Pronóstico publicado el' in page and 'definitivo' not in page
+
+
+@pytest.mark.parametrize('path, query, location', [
+    ('/', 'scope=es&mode=nowcast', '/es?mode=nowcast'),
+    ('/promedio', 'scope=es&mode=forecast&run=' + RUN, '/es?mode=forecast&run=' + RUN),
+    ('/promedio', '', '/es'),
+    ('/escanos', 'scope=es&region=28', '/es/escanos?region=28'),
+    ('/modelo', 'scope=es', '/metodo/backtest?scope=es'),
+    ('/modelo', '', '/metodo/backtest'),
+])
+def test_old_urls_redirect_permanently(api, path, query, location):
+    status, headers, body = call(api, path, query=query)
+    assert status == 301 and headers['location'] == location and headers['cache-control'] == 'no-store'
+    assert body == b''
+
+
+@pytest.mark.parametrize('path', ['/es-zz', '/ES', '/es/', '/es//escanos', '/healthz', '/metodo/nope'])
+def test_unknown_scopes_and_sections_are_html_404s(api, path):
+    status, headers, body = call(api, path)
+    assert status == 404 and headers['content-type'].startswith('text/html')
+
+
+def test_unpublished_catalogue_scope_is_a_404(api):
+    status, _, body = call(api, '/es-md')
+    assert status == 404 and 'no tiene pronóstico publicado' in html(body)
+
+
+def test_global_pages_carry_the_scope_filter_and_no_event_bar(api):
+    for path in ('/elecciones', '/metodo/backtest'):
+        page = html(call(api, path)[2])
+        assert 'id="scope-filter"' in page and 'id="event-bar"' not in page and 'name="mode"' not in page, path
+    landing = html(call(api, '/metodo')[2])
+    assert 'id="scope-filter"' not in landing and 'id="event-bar"' not in landing
+    assert '<option value="es" selected>' in html(call(api, '/elecciones', query='scope=es')[2])
+
+
+def test_menu_has_the_four_global_entries(api):
+    page = html(call(api, '/es')[2])
+    for label in ('Inicio', 'Histórico de errores', 'Rating de encuestadoras', 'Método'):
+        assert '>' + label + '</a>' in page
+    # ninguna entrada del menú es la actual: la pestaña activa de la barra de evento sí lleva `aria-current`
+    menu = page[page.index('<nav aria-label="Secciones">'):]
+    menu = menu[:menu.index('</nav>')]
+    assert 'Portada' not in page and 'aria-current="page"' not in menu
+
+
+def test_event_bar_days_text():
+    from datetime import date
+    assert pages.days_left('2026-11-29', today=date(2026, 10, 13)) == 47
+    meta = {'event_date': '2026-11-29', 'as_of': '2026-10-13', 'run_id': RUN, 'run_at': '2026-10-13T12:00:00Z'}
+    state = {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
+    scopes = [{'code': 'es', 'name': 'España'}, {'code': 'es-md', 'name': 'Madrid'}]
+    info = pages.event_info('es', meta, '', state, today=date(2026, 10, 13), scopes=scopes)
+    assert info['title'] == 'Elecciones generales' and info['days_text'] == 'Faltan 47 días'
+    assert info['tabs'] == [{'href': '/es?mode=nowcast', 'label': 'Promedios', 'active': True},
+                            {'href': '/es/escanos?mode=nowcast', 'label': 'Escaños', 'active': False}]
+    assert pages.event_info('es', meta, '', state, today=date(2026, 11, 29), scopes=scopes)['days_text'] == 'Jornada electoral'
+    assert pages.event_info('es', meta, '', state, today=date(2026, 12, 2), scopes=scopes)['days_text'] == 'Celebradas hace 3 días'
+    assert pages.event_title('es-md', scopes) == 'Elecciones autonómicas · Madrid'
+
+
+def test_event_info_counts_one_day_and_unknown_dates_and_points_the_form_at_the_tab():
+    from datetime import date
+    state = {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': True}
+    scopes = [{'code': 'es', 'name': 'España'}]
+    info = pages.event_info('es', {'event_date': '2026-11-29'}, '/escanos', state, today=date(2026, 11, 28),
+                            scopes=scopes)
+    assert info['days_text'] == 'Falta 1 día' and info['form_action'] == '/es/escanos' and info['href'] == '/es'
+    assert [tab['active'] for tab in info['tabs']] == [False, True]
+    assert info['tabs'][1]['href'] == '/es/escanos?mode=forecast&run=' + RUN
+    unknown = pages.event_info('es', {}, '', state, today=date(2026, 11, 28), scopes=scopes)
+    assert unknown['days_left'] is None and unknown['days_text'] is None
+    assert pages.event_query({'mode': 'nowcast', 'run': RUN, 'pinned': False}) == '?mode=nowcast'
+    assert pages.scope_query('es-md') == '?scope=es-md'
+    assert pages.default_mode(True) == 'forecast' and pages.default_mode(False) == 'nowcast'
+
+
+def test_parse_state_takes_the_scope_of_the_route_and_leaves_the_mode_unresolved(api):
+    assert pages.parse_state({}) == {'scope': None, 'mode': None, 'run': None}
+    route = pages.parse_state({'scope': 'es-xx', 'mode': 'forecast'}, 'es')
+    assert route == {'scope': 'es', 'mode': 'forecast', 'run': None}
+    with pytest.raises(HttpError) as invalid:
+        pages.parse_state({'scope': 'es-xx'})
+    assert invalid.value.status == 400
+
+
+def test_title_of_rules():
+    meta = {'as_of': '2026-10-13', 'event_date': '2026-11-29', 'run_id': 'B', 'run_at': '2026-10-13T12:00:00Z'}
+    assert pages.title_of('nowcast', meta, True, True, 'B') == 'Estimación a 13 oct 2026'
+    assert pages.title_of('forecast', meta, True, False, 'B') == 'Pronóstico definitivo para el 29 nov 2026'
+    assert pages.title_of('forecast', meta, True, True, 'C') == 'Pronóstico publicado el 13 oct 2026'
+    assert pages.title_of('forecast', meta, False, True, 'C') == 'Pronóstico publicado el 13 oct 2026'
+    assert pages.title_of('forecast', meta, False, False, 'B') == 'Pronóstico para el 29 nov 2026'
+
+
+def test_mode_text_explains_the_active_option(api):
+    page = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
+    assert ('Si las elecciones fueran hoy: el promedio de sondeos leído el 8 oct 2026, con los sondeos publicados hasta '
+            'el 5 oct 2026.') in page
+    page = re.sub(r'\s+', ' ', html(call(api, '/es', query='mode=forecast')[2]))
+    assert 'Lo que puede pasar el 29 nov 2026: añade la deriva de la opinión' in page
+    assert '¿Qué cambia entre Hoy y Elección?' in page
+
+
+def test_method_subpages_and_links():
+    assert list(pages.METODO_SECTIONS) == ['promedio', 'escanos', 'rating', 'backtest']
+    subpages = pages.subpages('backtest')
+    assert [page['id'] for page in subpages] == ['promedio', 'escanos', 'rating', 'backtest']
+    assert subpages[3] == {'id': 'backtest', 'title': '¿Cuánto acierta el modelo?', 'href': '/metodo/backtest',
+                           'active': True, 'available': True}
+    assert not subpages[0]['active'] and not subpages[0]['available']
+    assert pages.method_href('backtest') == '/metodo/backtest' and pages.method_href('escanos') == '/metodo'
 
 
 def test_templates_compile_with_strict_undefined():
     env = pages.environment()
     names = sorted(f for f in os.listdir(pages.TEMPLATES_DIR) if f.endswith('.html'))
-    assert {'base.html', '_header.html', '_footer.html', 'error.html', 'index.html', 'promedio.html', 'escanos.html',
-            'casas.html', 'casa.html'} <= set(names)
+    assert {'base.html', '_header.html', '_footer.html', '_event_bar.html', '_scope_filter.html', 'error.html',
+            'promedios.html', 'promedio.html', 'escanos.html', 'casas.html', 'casa.html',
+            'metodo_backtest.html'} <= set(names)
     for name in names:
         env.get_template(name)
 
@@ -162,11 +313,10 @@ def test_filters_follow_the_js_rules():
 
 
 def test_promedio_is_rendered_with_the_polls_table_and_csv_link(api):
-    status, headers, body = call(api, '/promedio', query='scope=es&mode=forecast')
+    body = promedio_page('mode=forecast')
     page = html(body)
-    assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert '<title>Pronóstico electoral · Promedio de sondeos</title>' in page
-    assert 'href="/promedio?scope=es&amp;mode=forecast" aria-current="page"' in page.replace('\n', ' ')
+    assert 'href="/es?mode=forecast" aria-current="page"' in page.replace('\n', ' ')
     assert 'id="series-chart"' in page and 'Sondeos del ciclo' in page
     assert 'href="/api/v1/forecast/es/polls?run={}&amp;format=csv"'.format(RUN) in page
     assert '<th scope="col">Fecha</th>' in page and '/dist/js/pages/promedio.js' in page
@@ -188,13 +338,13 @@ def test_table_rows_are_newest_first_and_formatted():
 
 def test_unexpected_error_is_a_generic_500_page_and_is_logged(api, fresh_app, monkeypatch):
     """Una excepción inesperada da un 500 HTML genérico, sin traza ni detalle, y se registra una vez."""
-    def boom(state, active='/'):
+    def boom(state, **kwargs):
         raise RuntimeError('boom')
 
     errors = []
     monkeypatch.setattr(pages, 'index_context', boom)
     fresh_app.logger = SimpleNamespace(error=errors.append)
-    status, headers, body = call(api, '/')
+    status, headers, body = call(api, '/es')
     page = html(body)
     assert status == 500 and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'no-store' and 'etag' not in headers
@@ -219,9 +369,9 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
     publish.update_manifest(writer, freeze={'active': True, 'message': HOSTILE})
     webapi.site().manifest_cache_clear()
     block = re.compile(r'<script type="application/json" id="initial-data">.*?</script>', re.S)
-    for path in ('/', '/promedio', '/escanos', '/casas', '/casas?id=1'):
+    for path in ('/es', '/promedio', '/es/escanos', '/casas', '/casas?id=1'):
         path, _, query = path.partition('?')
-        body = call(api, path, query=query)[2]
+        body = promedio_page() if path == '/promedio' else call(api, path, query=query)[2]
         page = html(body)
         rest = block.sub('', page)
         assert '<script>alert' not in page and '&lt;script&gt;alert' in rest
@@ -230,24 +380,22 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
         assert data['meta']['parties'][0]['fullname'] == HOSTILE
     casas = initial(call(api, '/casas')[2])
     assert HOSTILE in [row['pollster'] for row in casas['ranking']]
-    home = html(call(api, '/')[2])
+    home = html(call(api, '/es')[2])
     assert 'background-color: {}'.format(pages.OTHERS_COLOR) in home
-    assert '&lt;b&gt;Hostil&lt;/b&gt;' in html(call(api, '/promedio')[2])
+    assert '&lt;b&gt;Hostil&lt;/b&gt;' in html(promedio_page())
 
 
 def test_promedio_nowcast_and_pinned_run(api):
-    status, headers, body = call(api, '/promedio', query='scope=es&mode=nowcast')
-    page = html(body)
-    assert status == 200 and 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
+    page = html(promedio_page('mode=nowcast'))
+    assert 'name="mode" value="nowcast" checked' in page.replace('\n', ' ')
     assert re.search(r'<span class="muted">a ', page)
-    status, headers, body = call(api, '/promedio', query='scope=es&run=' + RUN)
-    page = html(body)
-    assert status == 200 and 'run={}&amp;format=csv'.format(RUN) in page
+    page = html(promedio_page('run=' + RUN))
+    assert 'run={}&amp;format=csv'.format(RUN) in page
     assert '<input type="hidden" name="run" value="{}">'.format(RUN) in page
 
 
 def test_promedio_initial_polls_carry_only_the_chart_columns(api):
-    data = initial(call(api, '/promedio')[2])
+    data = initial(promedio_page())
     parties = set(data['polls']['parties'])
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
@@ -270,28 +418,28 @@ def test_table_rows_tolerate_a_poll_without_date():
 
 
 def test_promedio_title_mentions_the_projection_only_in_forecast(api):
-    assert 'Promedio de sondeos y proyección' in html(call(api, '/promedio', query='mode=forecast')[2])
-    page = html(call(api, '/promedio', query='mode=nowcast')[2])
+    assert 'Promedio de sondeos y proyección' in html(promedio_page('mode=forecast'))
+    page = html(promedio_page('mode=nowcast'))
     assert 'Promedio de sondeos' in page and 'y proyección' not in page
     assert 'y la proyección' not in page  # aria-label del gráfico
-    assert 'banda de incertidumbre y la proyección"' in html(call(api, '/promedio', query='mode=forecast')[2])
+    assert 'banda de incertidumbre y la proyección"' in html(promedio_page('mode=forecast'))
 
 
 def test_promedio_caption_counts_the_polls(api, fresh_app):
     """The fixture has 1 poll of 120 used; with n_polls == shown polls the caption changes."""
-    assert 'Últimos 1 de 120 sondeos' in html(call(api, '/promedio')[2])
+    assert 'Últimos 1 de 120 sondeos' in html(promedio_page())
     meta = fixture_data('meta') | {'n_polls': 1}
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
     webapi.site().files.clear()  # the first request cached the run files
-    assert 'Todos los sondeos del ciclo (1)' in html(call(api, '/promedio')[2])
+    assert 'Todos los sondeos del ciclo (1)' in html(promedio_page())
 
 
 def test_escanos_is_rendered_with_tables_links_and_initial(api):
-    status, headers, body = call(api, '/escanos', query='scope=es&mode=forecast')
+    status, headers, body = call(api, '/es/escanos', query='mode=forecast')
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert '<title>Pronóstico electoral · Escaños</title>' in page
-    assert 'href="/escanos?scope=es&amp;mode=forecast" aria-current="page"' in page.replace('\n', ' ')
+    assert 'href="/es/escanos?mode=forecast" aria-current="page"' in page.replace('\n', ' ')
     assert 'id="parties-table"' in page and '<th scope="col">P(mayoría)</th>' in page
     assert 'id="blocks-table"' in page and 'id="vs-table"' in page and 'id="blocks-chart"' in page
     assert 'name="coalition" value="PP" checked' in page and 'id="coalition-result"' in page
@@ -307,7 +455,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
 
 
 def test_escanos_nowcast_and_pinned_run(api):
-    page = html(call(api, '/escanos', query='mode=nowcast&run=' + RUN)[2])
+    page = html(call(api, '/es/escanos', query='mode=nowcast&run=' + RUN)[2])
     assert 'Estimación a' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
     assert page.count('run={}&amp;format=csv'.format(RUN)) == 5
 
@@ -357,22 +505,23 @@ def write_districts(fs, districts=DISTRICTS, scenario=SCENARIO, scope='es', run_
 
 def test_escanos_districts_default_to_the_largest_and_link_the_rows(api, fresh_app):
     write_districts(fresh_app.fs)
-    page = html(call(api, '/escanos', query='scope=es&mode=forecast')[2])
+    page = html(call(api, '/es/escanos', query='mode=forecast')[2])
     assert 'id="districts"' in page and '<option value="28" selected>Madrid</option>' in page
     assert 'Madrid · 37 escaños' in page  # caption del detalle
-    assert 'href="/escanos?scope=es&amp;mode=forecast&amp;region=8"' in page
+    assert 'href="/es/escanos?mode=forecast&amp;region=8"' in page
     assert '<td title="6–8">7</td>' in page and '<td title="14–18">16</td>' in page
     assert '<td>Total</td>' in page and '140' in page
-    page = html(call(api, '/escanos', query='scope=es&mode=forecast&region=8')[2])
+    page = html(call(api, '/es/escanos', query='mode=forecast&region=8')[2])
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
-    assert '<form id="district-form" method="get" action="/escanos#districts">' in page
+    assert '<form id="district-form" method="get" action="/es/escanos#districts">' in page
+    assert 'name="scope"' not in page  # el ámbito va en la ruta
 
 
 def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
     absent = {'region_id': 28, 'region': 'Madrid', 'name': 'VOX', 'pct': None, 'pct_lo': None, 'pct_hi': None,
               'seats': 0.0, 'seats_mean': 0.0, 'seats_lo': 0.0, 'seats_hi': 0.0, 'p_seats': 0.0}
     write_districts(fresh_app.fs, districts=DISTRICTS | {'rows': DISTRICTS['rows'] + [absent]})
-    page = html(call(api, '/escanos', query='scope=es&mode=forecast&region=28')[2])
+    page = html(call(api, '/es/escanos', query='mode=forecast&region=28')[2])
     detail = page[page.index('id="region-table"'):]
     detail = detail[:detail.index('</table>')]
     assert '– %' not in detail and detail.count('<tr>') == 3  # cabecera, PP y PSOE
@@ -381,9 +530,9 @@ def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
 
 def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
-    page = html(call(api, '/escanos', query='scope=es&run=' + RUN)[2])
-    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 2  # cabecera y formulario de circunscripción
-    assert 'href="/escanos?scope=es&amp;mode=forecast&amp;run={}&amp;region=8"'.format(RUN) in page
+    page = html(call(api, '/es/escanos', query='mode=forecast&run=' + RUN)[2])
+    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 2  # barra de evento y formulario de circunscripción
+    assert 'href="/es/escanos?mode=forecast&amp;run={}&amp;region=8"'.format(RUN) in page
 
 
 @pytest.mark.parametrize('query, status, text', [
@@ -392,16 +541,16 @@ def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
 ])
 def test_escanos_region_errors(api, fresh_app, query, status, text):
     write_districts(fresh_app.fs)
-    got, headers, body = call(api, '/escanos', query=query)
+    got, headers, body = call(api, '/es/escanos', query=query)
     assert got == status and headers['cache-control'] == 'no-store' and text in html(body)
 
 
 def test_escanos_without_districts_hides_the_section(api, fresh_app):
     write_districts(fresh_app.fs, districts={'parties': ['PP'], 'regions': [], 'rows': []},
                     scenario={'simulation': 0, 'parties': ['PP'], 'rows': [{'region_id': 0, 'region': 'es-md', 'seats': [70]}]})
-    status, headers, body = call(api, '/escanos')
+    status, headers, body = call(api, '/es/escanos')
     assert status == 200 and 'id="districts"' not in html(body)
-    assert call(api, '/escanos', query='region=28')[0] == 404
+    assert call(api, '/es/escanos', query='region=28')[0] == 404
 
 
 def test_regional_scope_renders_every_page(api, fresh_app):
@@ -414,10 +563,10 @@ def test_regional_scope_renders_every_page(api, fresh_app):
                     scenario={'simulation': 0, 'parties': ['PP'], 'rows': [{'region_id': 0, 'region': 'es-md', 'seats': [70]}]},
                     scope='es-md', run_id='20261009-120000')
     webapi.site().manifest_cache_clear()
-    for path in ('/', '/promedio', '/escanos'):
-        status, headers, body = call(api, path, query='scope=es-md')
-        assert status == 200 and '<option value="es-md" selected>Madrid</option>' in html(body), path
-    assert 'name="coalition" value="PP" checked' in html(call(api, '/escanos', query='scope=es-md')[2])
+    for path in ('/es-md', '/es-md/escanos'):
+        status, headers, body = call(api, path)
+        assert status == 200 and 'Elecciones autonómicas · Madrid' in html(body), path
+    assert 'name="coalition" value="PP" checked' in html(call(api, '/es-md/escanos')[2])
 
 
 def test_district_table_and_region_rows():
@@ -433,14 +582,14 @@ def test_district_table_and_region_rows():
 
 
 def test_evolution_cards_explain_the_retrospective_points(api):
-    for path in ('/', '/escanos'):
+    for path in ('/es', '/es/escanos'):
         page = html(call(api, path)[2])
         assert 'Evolución de las publicaciones' in page and 'estimaciones retrospectivas' in page
 
 
 def test_promedio_has_the_window_control(api):
     """El promedio ofrece "Últimos 6 meses" (por defecto) y "Todo el ciclo" para encuadrar el gráfico."""
-    page = html(call(api, '/promedio')[2]).replace('\n', ' ')
+    page = html(promedio_page()).replace('\n', ' ')
     assert 'id="series-window" class="chart-window" hidden' in page  # sin JS el control no hace nada y no se muestra
     assert 'name="window" value="6m" checked' in page and 'Últimos 6 meses' in page
     assert 'name="window" value="all"' in page and 'Todo el ciclo' in page
@@ -504,7 +653,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     page = html(body)
     assert status == 200 and 'aria-current="page"' in page and 'id="ranking-table"' in page
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
-    assert 'href="/casas?scope=es&amp;mode=forecast&amp;id=2"' in page
+    assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
     assert 'Sondeos es el número de sondeos de la casa en las elecciones anteriores' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
@@ -567,7 +716,8 @@ def test_casas_without_analysis_has_no_analysis_downloads(houses_without_analysi
 def test_casa_profile_tables_and_bullseye(houses):
     status, _, body = call(houses, '/casas', query='id=2&mode=nowcast')
     page = html(body)
-    assert status == 200 and 'href="/casas?scope=es&amp;mode=nowcast"' in page  # "Todas las casas"
+    assert status == 200 and 'href="/casas?scope=es"' in page  # "Todas las casas"
+    assert 'id="scope-filter"' in page and 'action="/casas"' in page
     assert 'id="path-table"' in page and '2023-23J' in page
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
@@ -646,7 +796,7 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'metodo', 'modelo', 'promedio']
+    assert names == ['backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'index', 'metodo', 'promedio']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -674,7 +824,7 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     status, _, body = call(events_site, '/elecciones', query='scope=es')
     page = html(body)
     assert status == 200 and page.index('date=2023-07-23') < page.index('date=2019-11-10')
-    assert '/elecciones?scope=es&amp;mode=forecast&amp;date=2023-07-23' in page
+    assert '/elecciones?scope=es&amp;date=2023-07-23' in page and 'action="/elecciones"' in page
     data = initial(body)
     assert [row['date'] for row in data['sector']] == ['2019-11-10', '2023-07-23']
     assert data['blocks'] == ['Derecha', 'Izquierda']
@@ -695,7 +845,7 @@ def test_eleccion_detail_renders_results_pollsters_bullseye_and_model(events_sit
     assert status == 200 and 'Generales 2023' in page
     assert page.count('/api/v1/events/es/2023-07-23/') == 6
     assert page.index('GAD3') < page.index('40dB') < page.index('CIS')
-    assert '/casas?scope=es&amp;mode=forecast&amp;id=2' in page
+    assert '/casas?scope=es&amp;id=2' in page and 'href="/elecciones?scope=es"' in page
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
     data = initial(body)
     assert set(data) == {'state', 'meta', 'pollsters', 'bullseye', 'blocks'}
@@ -840,8 +990,8 @@ def backtest_site(api, fresh_app):
     return api
 
 
-def test_modelo_renders_the_backtest_tables_and_initial(backtest_site):
-    status, _, body = call(backtest_site, '/modelo', query='scope=es')
+def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
+    status, _, body = call(backtest_site, '/metodo/backtest', query='scope=es')
     page = html(body)
     assert status == 200 and '1,69' in page and page.count('/api/v1/backtest/es/') == 5
     assert 'id="mae-chart"' in page and 'id="coverage-chart"' in page and 'aria-label=' in page
@@ -857,26 +1007,28 @@ def test_modelo_renders_the_backtest_tables_and_initial(backtest_site):
     assert all(row[7] == 'sí' for row in rows if row not in invalid)
 
 
-def test_modelo_tolerates_a_backtest_without_run_json(api, fresh_app):
+def test_backtest_tolerates_a_backtest_without_run_json(api, fresh_app):
     write_backtest(fresh_app.fs, meta={'params': {}, 'commit': None, 'run_at': None})
-    status, _, body = call(api, '/modelo', query='scope=es')
+    status, _, body = call(api, '/metodo/backtest', query='scope=es')
     page = html(body)
     assert status == 200 and 'id="params"' in page and 'Simulaciones</dt><dd>—</dd>' in page
     assert 'Versión</dt><dd>—</dd>' in page and 'Ejecutado</dt><dd>—</dd>' in page
 
 
-def test_modelo_without_backtest_shows_a_notice(api):
-    status, _, body = call(api, '/modelo', query='scope=es')
-    assert status == 200 and 'Backtest no publicado todavía' in html(body) and 'initial-data' not in html(body)
-    assert '/dist/js/pages/modelo.js' in html(body)
+def test_backtest_without_backtest_shows_a_notice(api):
+    status, _, body = call(api, '/metodo/backtest', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'Backtest no publicado todavía' in page and 'initial-data' not in page
+    assert '/dist/js/pages/metodo.js' in page and '<title>Pronóstico electoral · Cuánto acierta el modelo</title>' in page
+    assert 'action="/metodo/backtest"' in page and 'aria-current="page">Método</a>' in page
 
 
-def test_modelo_rows_are_ordered_and_projected():
-    rows = pages.project(fixture_data('backtest-metrics')['rows'], pages.modelo.CASE_COLUMNS)
-    ordered = pages.modelo.case_rows(rows)
+def test_backtest_rows_are_ordered_and_projected():
+    rows = pages.project(fixture_data('backtest-metrics')['rows'], pages.backtest.CASE_COLUMNS)
+    ordered = pages.backtest.case_rows(rows)
     assert [(r['event_date'], r['horizon']) for r in ordered] == [
         ('2023-07-23', 6), ('2023-07-23', 30), ('2019-11-10', 6), ('2019-11-10', 30)]
-    assert set(ordered[0]) == set(pages.modelo.CASE_COLUMNS)
+    assert set(ordered[0]) == set(pages.backtest.CASE_COLUMNS)
 
 
 def test_metodo_renders_the_sections_without_data(api):
@@ -890,29 +1042,28 @@ def test_metodo_renders_the_sections_without_data(api):
     sections = re.findall(r'<section id="([a-z]+)" class="card">(.*?)</section>', page, re.S)
     assert [section_id for section_id, _ in sections] == [section_id for section_id, _ in pages.SECTIONS]
     assert all('<p>' in body for _, body in sections)  # ninguna sección sin texto en la plantilla
-    for href in ('/modelo?scope=es&amp;mode=forecast', '/casas?scope=es&amp;mode=forecast',
-                 '/elecciones?scope=es&amp;mode=forecast', '/escanos?scope=es&amp;mode=forecast'):
-        assert href in page
+    for href in ('/metodo/backtest?scope=es', '/casas?scope=es', '/elecciones?scope=es', '/es/escanos'):
+        assert 'href="{}'.format(href) in page
 
 
-def test_metodo_is_in_the_menu_of_every_page(api):
-    page = html(call(api, '/')[2])
-    assert '>Método</a>' in page and '>Modelo</a>' in page and '>Elecciones</a>' in page
+def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
+    page = html(call(api, '/es')[2])
+    assert page.count('>Método</a>') == 2 and '>Histórico de errores</a>' in page and '>Modelo</a>' not in page
 
 
 def test_frozen_manifest_marks_every_page(api, fresh_app):
     writer = bundle.BundleWriter(fresh_app.fs)
     publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'}, today='2026-11-23')
     webapi.site().manifest_cache_clear()
-    status, _, body = call(api, '/', query='scope=es')
+    status, _, body = call(api, '/es')
     page = html(body)
     assert status == 200 and 'Pronóstico definitivo para el' in page and 'congelado desde 23 nov 2026' in page
-    assert 'freeze-banner' in page and '/metodo?scope=es&amp;mode=forecast#limitaciones' in page
-    status, _, body = call(api, '/', query='scope=es&mode=nowcast')
+    assert 'freeze-banner' in page and 'href="/metodo#limitaciones"' in page
+    status, _, body = call(api, '/es', query='mode=nowcast')
     assert 'Estimación a' in html(body) and 'Pronóstico definitivo' not in html(body)
     status, _, body = call(api, '/metodo', query='scope=es')
     assert 'freeze-banner' in html(body)
     publish.update_manifest(writer, freeze={'active': False})
     webapi.site().manifest_cache_clear()
-    status, _, body = call(api, '/', query='scope=es')
+    status, _, body = call(api, '/es', query='mode=forecast')
     assert 'freeze-banner' not in html(body) and 'Pronóstico para el' in html(body) and 'congelado desde' not in html(body)

@@ -2,6 +2,8 @@
 Base controller of the server-rendered web pages (Jinja2 templates of ``web/templates``).
 """
 import hashlib
+from typing import Optional
+from urllib.parse import urlencode
 
 from ..core.api import Controller
 from ..lib import pages, webapi
@@ -13,15 +15,20 @@ class Page(Controller):
 
     Attributes
     ----------
-    active : str
-        ``href`` of the page in the navigation; subclasses set it.
+    active : str or None
+        ``href`` of the page in the navigation; subclasses set it (``None`` for the event pages).
     """
 
     active = '/'
 
-    def state(self) -> dict:
+    def state(self, scope: Optional[str] = None) -> dict:
         """
         Validated page parameters of the request.
+
+        Parameters
+        ----------
+        scope : str, optional
+            Scope of the route of an event page, which wins over the ``scope`` of the query.
 
         Returns
         -------
@@ -33,7 +40,48 @@ class Page(Controller):
         HttpError
             400 when a given parameter is invalid.
         """
-        return pages.parse_state(self.request.query)
+        return pages.parse_state(self.request.query, scope)
+
+    def query_without(self, *names: str) -> str:
+        """
+        Query string of the request without some parameters, for a redirection.
+
+        Parameters
+        ----------
+        *names : str
+            Parameters to drop.
+
+        Returns
+        -------
+        str
+            ``'?key=value&...'`` with the other parameters in their order, or ``''`` when none is left.
+        """
+        params = [(key, value) for key, value in self.request.query.items() if key not in names]
+
+        return '?' + urlencode(params) if params else ''
+
+    def redirect(self, location: str) -> str:
+        """
+        Answer a permanent redirection.
+
+        Sets the status 301, the ``location`` header and ``no-store`` (the target of an old URL
+        may change with the published scopes); the body is empty.
+
+        Parameters
+        ----------
+        location : str
+            Target path, with its query string.
+
+        Returns
+        -------
+        str
+            The empty body.
+        """
+        self.response.set_status_code(301)
+        self.response.set_header('location', location)
+        self.response.set_header('cache-control', 'no-store')
+
+        return ''
 
     def render(self, template: str, **context) -> str:
         """

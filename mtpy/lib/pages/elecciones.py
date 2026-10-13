@@ -140,7 +140,7 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
         blocks = list(meta.get('blocks') or [])
 
     for event in events:
-        event['href'] = '/elecciones' + context['query'] + '&date=' + event['date']
+        event['href'] = '/elecciones' + context['scope_query'] + '&date=' + event['date']
 
     context['events'] = events
     context['blocks'] = blocks

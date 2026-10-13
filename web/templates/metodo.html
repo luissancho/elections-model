@@ -50,7 +50,7 @@
           <li>la dispersión de su casa: si sus cifras oscilan más de lo que permite el tamaño de sus
             muestras, pesa como una muestra menor; si oscilan menos, señal de que se ciñe al resto
             (herding), también pesa menos. La medida del herding se publica en
-            <a href="/casas{{ query }}">Casas</a> como información y no entra en el rating.</li>
+            <a href="/casas{{ scope_query }}">Rating de encuestadoras</a> como información y no entra en el rating.</li>
         </ul>
         <p>
           Antes de promediar, a cada sondeo se le resta el efecto de su casa en el ciclo: cuánto se separa
@@ -76,7 +76,7 @@
           rating de cada casa, las autonómicas con menos peso, y solo cuentan las celebradas antes de la
           que se pronostica. Así, lo que una casa demuestra en una comunidad informa de cómo trabaja en las
           demás y en las generales. El rating, los efectos de casa y el herding de cada una están en
-          <a href="/casas{{ query }}">Casas</a>.
+          <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>.
         </p>
         {% elif section.id == 'simulacion' %}
         <p>
@@ -116,7 +116,7 @@
           votos oficiales, ese reparto reproduce escaño a escaño el de las cinco elecciones generales de 2015
           a 2023.
           El resultado central, los intervalos y el detalle por circunscripción están en
-          <a href="/escanos{{ query }}">Escaños</a>.
+          <a href="/{{ state.scope }}/escanos">Escaños</a>.
         </p>
         {% elif section.id == 'evaluacion' %}
         <p>
@@ -128,10 +128,10 @@
           el resultado de la elección anterior. También se comprueba si los intervalos contienen el
           resultado tantas veces como anuncian. La curación de los datos (la asignación de partidos y la
           calidad previa de las casas) es la de hoy, así que no es una reconstrucción completa de lo que se
-          sabía en cada fecha. Los resultados por horizonte están en <a href="/modelo{{ query }}">Modelo</a>.
+          sabía en cada fecha. Los resultados por horizonte están en <a href="/metodo/backtest{{ scope_query }}">¿Cuánto acierta el modelo?</a>.
         </p>
         <p>
-          <a href="/elecciones{{ query }}">Elecciones</a> muestra, elección a elección, cuánto se
+          <a href="/elecciones{{ scope_query }}">Histórico de errores</a> muestra, elección a elección, cuánto se
           equivocaron los sondeos y cada casa frente al resultado y, cuando hay backtest, lo que el modelo
           habría dicho a cada horizonte.
         </p>

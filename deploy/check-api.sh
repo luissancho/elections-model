@@ -127,15 +127,17 @@ check_header() {
 }
 
 check / 200 html
-check "/promedio?scope=es&mode=nowcast" 200 html
-check "/escanos?scope=es&mode=forecast" 200 html
-check "/escanos?region=abc" 400 html
+check "/es?mode=nowcast" 200 html
+check "/es/escanos?mode=forecast" 200 html
+check "/es/escanos?region=abc" 400 html
+check /promedio 301 none
+check /es-zz 404 html
 check_db_only "/casas?scope=es" 200 html
 check "/casas?id=abc" 400 html
 check "/elecciones?scope=es" 200 html
 check "/elecciones?date=abc" 400 html
 check_published "/elecciones?scope=es&date=2023-07-23" html
-check "/modelo?scope=es" 200 html
+check "/metodo/backtest?scope=es" 200 html
 check /metodo 200 html
 check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript

@@ -4,6 +4,7 @@
   <script type="module" src="/dist/js/pages/elecciones.js"></script>
 {% endblock %}
 {% block content %}
+    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if events %}
       <section class="card" id="events">

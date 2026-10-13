@@ -1,9 +1,10 @@
 {% extends 'base.html' %}
-{% block title %}Modelo{% endblock %}
+{% block title %}Cuánto acierta el modelo{% endblock %}
 {% block scripts %}
-  <script type="module" src="/dist/js/pages/modelo.js"></script>
+  <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
 {% block content %}
+    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if published %}
       <section class="card" id="mae">

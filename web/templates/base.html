@@ -10,9 +10,12 @@
 </head>
 <body>
   {% if manifest.freeze.active %}
-  <div id="freeze-banner">{{ manifest.freeze.message or 'Publicación congelada.' }} <a href="/metodo{{ query }}#limitaciones">Más información</a></div>
+  <div id="freeze-banner">{{ manifest.freeze.message or 'Publicación congelada.' }} <a href="/metodo#limitaciones">Más información</a></div>
   {% endif %}
   {% include '_header.html' +%}
+  {% if is_event %}
+  {% include '_event_bar.html' +%}
+  {% endif %}
   <main id="main">
     <p class="status" id="status" hidden></p>
     {% block content %}{% endblock %}

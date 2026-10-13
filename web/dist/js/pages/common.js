@@ -14,41 +14,12 @@ export function readInitial() {
 }
 
 /**
- * Submit the controls form whenever the scope or the mode changes. A run id belongs to one scope, so a
- * scope change drops the pinned `run`; a mode change keeps it.
+ * Submit the page controls on change: the mode form of the event bar (`#event-controls`, which keeps a pinned
+ * `run`) and the scope filter of the global pages (`#scope-filter`). A page has at most one of them.
  */
 export function wireControls() {
-  const form = document.getElementById('controls');
-  if (!form) {
-    return;
-  }
-  form.classList.add('js');
-  form.addEventListener('change', (event) => {
-    const target = event.target;
-    if (target.matches('select[name=scope]')) {
-      const run = form.querySelector('input[name=run]');
-      if (run) {
-        run.disabled = true;
-      }
-    } else if (!target.matches('input[name=mode]')) {
-      return;
-    }
-    if (form.requestSubmit) {
-      form.requestSubmit();
-    } else {
-      form.submit();
-    }
-  });
-  // A page restored from the back/forward cache must show the controls of the page it belongs to.
-  window.addEventListener('pageshow', (event) => {
-    if (event.persisted) {
-      form.reset();
-      const run = form.querySelector('input[name=run]');
-      if (run) {
-        run.disabled = false;
-      }
-    }
-  });
+  wireForm('event-controls');
+  wireForm('scope-filter');
 }
 
 /**

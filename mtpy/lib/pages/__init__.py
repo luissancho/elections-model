@@ -1,8 +1,8 @@
 """
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
-The package has one module per page (``index``, ``promedio``, ``escanos``, ``casas``, ``elecciones``, ``modelo``,
-``metodo``), plus ``common`` (routes, messages, environment and shared context) and ``filters`` (formatting
+The package has one module per page (``index``, ``promedio``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
+``backtest``), plus ``common`` (routes, messages, environment and shared context) and ``filters`` (formatting
 filters). This facade re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
@@ -13,17 +13,18 @@ of the scope, which is not tied to a run and is read as published.
 The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``webapi``, this module
 does not import the model nor ``publish``, so the web workers stay light.
 """
+from .backtest import backtest_context, backtest_part, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING_KEYS, analysis_part, casa_context,
                     casas_context, effects_table, herding_rows, house_effects_grid, profile_rows, ranking_rows)
-from .common import (MESSAGES, MODE_LABELS, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TITLE,
-                     TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, environment, parse_state,
-                     part, published_scopes, query_string, resolve_scope)
+from .common import (EVENT_TABS, MESSAGES, MODE_LABELS, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TITLE,
+                     TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
+                     default_mode, environment, event_info, event_query, event_title, mode_text, parse_state, part,
+                     published_scopes, resolve_event_scope, resolve_scope, scope_query, title_of)
 from .elecciones import (EVENT_CSV, SUMMARY_KEYS, eleccion_context, elecciones_context, event_part, horizon_tables,
                          published_events, resolve_event)
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, escanos_context,
                       region_rows, resolve_region, seat_rows)
 from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range
 from .index import index_context, majority_rows
-from .metodo import SECTIONS, metodo_context
-from .modelo import backtest_part, modelo_context, project
+from .metodo import METODO_SECTIONS, SECTIONS, method_href, metodo_context, subpages
 from .promedio import TABLE_ROWS, chart_polls, promedio_context, table_rows

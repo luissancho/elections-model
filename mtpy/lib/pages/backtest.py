@@ -1,5 +1,6 @@
 """
-Model accuracy page context: the published backtest by horizon, by election and by block.
+Context of the backtest subpage of the method (``/metodo/backtest``): the published backtest by horizon, by election
+and by block.
 """
 from typing import Optional
 
@@ -86,9 +87,9 @@ def case_rows(rows: list) -> list:
     return sorted(by_horizon, key=lambda row: row['event_date'], reverse=True)
 
 
-def modelo_context(state: dict, active: str = '/modelo') -> dict:
+def backtest_context(state: dict, active: str = '/metodo') -> dict:
     """
-    Template context of the model accuracy page.
+    Template context of the backtest subpage of the method.
 
     Parameters
     ----------
@@ -100,7 +101,8 @@ def modelo_context(state: dict, active: str = '/modelo') -> dict:
     Returns
     -------
     dict
-        The common context plus ``published``. With a published backtest: ``backtest`` (its ``meta``),
+        The common context, with ``filter_action`` set to ``/metodo/backtest``, plus ``published``.
+        With a published backtest: ``backtest`` (its ``meta``),
         ``horizon_rows``, ``case_rows``, ``block_rows``, ``csv_links`` and ``initial`` (``state``,
         ``horizons`` and, aligned with them, ``mae``, ``coverage`` and ``seats`` series).
 
@@ -110,6 +112,7 @@ def modelo_context(state: dict, active: str = '/modelo') -> dict:
         503 without a bundle; 404 for an unpublished scope or a missing run.
     """
     context = common_context(state, active)
+    context['filter_action'] = '/metodo/backtest'
     scope = context['state']['scope']
     meta = backtest_part(scope, 'meta')
     context['published'] = meta is not None

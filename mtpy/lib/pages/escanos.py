@@ -244,7 +244,8 @@ def region_rows(districts: dict, region_id: int) -> list:
     return sorted(rows, key=lambda item: (-(item['seats'] or 0), -(item['pct'] or 0)))
 
 
-def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
+def escanos_context(state: dict, region=None, active: Optional[str] = None, event: bool = False,
+                    active_suffix: str = '') -> dict:
     """
     Template context of the seats page.
 
@@ -255,8 +256,12 @@ def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
     region : str, optional
         ``region`` query parameter: id of the district the detail table shows (the largest by
         default).
-    active : str, optional
-        ``href`` of the page in the navigation.
+    active : str or None, optional
+        ``href`` of the page in the navigation (``None``: the seats are an event page).
+    event : bool, optional
+        Whether it is rendered as an event page (see ``common_context``).
+    active_suffix : str, optional
+        Suffix of the current tab of the event bar (``'/escanos'`` on the event page).
 
     Returns
     -------
@@ -275,7 +280,7 @@ def escanos_context(state: dict, region=None, active: str = '/escanos') -> dict:
         unknown district; 400 for an invalid ``region``.
     """
     region_id = check_region(region)
-    context = common_context(state, active)
+    context = common_context(state, active, event=event, active_suffix=active_suffix)
     full, meta, parties = context['state'], context['meta'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
     summary = part(scope, run, 'summary', mode=mode)

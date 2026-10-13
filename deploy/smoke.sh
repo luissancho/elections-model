@@ -7,7 +7,7 @@
 #             files/ montado en /app/files).
 #
 # Comprueba: imagen sin *.env, /healthz, rutas de la API (deploy/check-api.sh),
-# paginas (/, /promedio, /escanos, /elecciones, /modelo, /metodo; /casas con ENV_FILE)
+# paginas (/, /es, /es/escanos, /elecciones, /metodo/backtest, /metodo; /casas con ENV_FILE)
 # y cabeceras de cache. Avisa (WARN, sin fallar) si `docker
 # logs` no tiene lineas de acceso de nginx o si `docker stop` tarda 10 s o mas.
 # El contenedor se elimina siempre al terminar.
@@ -63,10 +63,10 @@ check_static() {
     echo "OK   $path ($out)"
 }
 check_static / text/html
-check_static /promedio text/html
-check_static /escanos text/html
+check_static /es text/html
+check_static /es/escanos text/html
 check_static "/elecciones?scope=es" text/html
-check_static "/modelo?scope=es" text/html
+check_static "/metodo/backtest?scope=es" text/html
 check_static /metodo text/html
 # /casas lee la base: con el paquete local (sin DB_*) da 503, asi que solo se comprueba con ENV_FILE.
 if [ -n "$env_file" ]; then

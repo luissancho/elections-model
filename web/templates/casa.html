@@ -4,9 +4,10 @@
   <script type="module" src="/dist/js/pages/casas.js"></script>
 {% endblock %}
 {% block content %}
+    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       <section class="card" id="profile">
-        <p><a href="/casas{{ query }}">← Todas las casas</a></p>
+        <p><a href="/casas{{ scope_query }}">← Todas las casas</a></p>
         <h2>{{ profile.pollster.name }}</h2>
         <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
       </section>

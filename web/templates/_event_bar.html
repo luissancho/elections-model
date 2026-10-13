@@ -1,0 +1,33 @@
+<div id="event-bar">
+  <div class="event-title">
+    <h2>{{ event.title }}</h2>
+    <p class="muted">{{ event.date|date }}{% if event.days_text %} · {{ event.days_text }}{% endif %}</p>
+  </div>
+  <nav class="event-tabs" aria-label="Secciones del evento">
+    {% for tab in event.tabs %}
+    <a href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
+    {% endfor %}
+  </nav>
+  <form id="event-controls" class="controls" method="get" action="{{ event.form_action }}" autocomplete="off">
+    <fieldset id="mode">
+      <legend>Ver</legend>
+      <label><input type="radio" name="mode" value="nowcast"{% if state.mode == 'nowcast' %} checked{% endif %}> Hoy</label>
+      <label><input type="radio" name="mode" value="forecast"{% if state.mode == 'forecast' %} checked{% endif %}> Elección</label>
+    </fieldset>
+    {% if state.pinned %}
+    <input type="hidden" name="run" value="{{ state.run }}"><span class="chip">Run del {{ meta.run_at|date }}</span>
+    {% endif %}
+    <button type="submit" class="nojs-only">Ver</button>
+  </form>
+  <p class="mode-text">{{ mode_text }}</p>
+  <details class="how">
+    <summary>¿Qué cambia entre Hoy y Elección?</summary>
+    <p>
+      Las dos opciones parten del mismo promedio de sondeos. Hoy responde a qué pasaría si se votara ahora:
+      el voto y los escaños que salen del promedio leído hoy, con su incertidumbre. Elección añade lo que la
+      opinión puede moverse hasta el día de la votación, medido en los ciclos electorales pasados, así que sus
+      intervalos son más anchos. Mira Hoy para saber cómo están las cosas y Elección para saber qué puede pasar
+      el día de la votación. <a href="{{ method_href('escanos') }}">Más en el método</a>.
+    </p>
+  </details>
+</div>

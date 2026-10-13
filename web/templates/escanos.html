@@ -140,7 +140,7 @@
             <tbody>
               {% for row in district_table.rows %}
               <tr>
-                <td><a href="/escanos{{ query }}&amp;region={{ row.id }}">{{ row.name }}</a></td>
+                <td><a href="/{{ state.scope }}/escanos{{ query }}&amp;region={{ row.id }}">{{ row.name }}</a></td>
                 <td>{{ row.seats|int }}</td>
                 {% for cell in row.cells %}
                 <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
@@ -159,8 +159,7 @@
             </tbody>
           </table>
         </div>
-        <form id="district-form" method="get" action="/escanos#districts">
-          <input type="hidden" name="scope" value="{{ state.scope }}">
+        <form id="district-form" method="get" action="/{{ state.scope }}/escanos#districts">
           <input type="hidden" name="mode" value="{{ state.mode }}">
           {% if state.pinned %}
           <input type="hidden" name="run" value="{{ state.run }}">

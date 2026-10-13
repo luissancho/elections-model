@@ -1,6 +1,9 @@
 """
-Home page context.
+Context of the headline page: until phase 7 merges it with the average page, the Promedios tab of an event and the
+home page.
 """
+from typing import Optional
+
 from .. import bundle
 from ..webapi import site
 from .common import Catalog, block_color, common_context, part
@@ -40,16 +43,20 @@ def majority_rows(p_majority: dict, meta: dict, parties: Catalog) -> list:
     return rows
 
 
-def index_context(state: dict, active: str = '/') -> dict:
+def index_context(state: dict, active: Optional[str] = '/', event: bool = False, active_suffix: str = '') -> dict:
     """
-    Template context of the home page.
+    Template context of the headline page.
 
     Parameters
     ----------
     state : dict
         Validated page parameters (``parse_state``).
-    active : str, optional
-        ``href`` of the page in the navigation.
+    active : str or None, optional
+        ``href`` of the page in the navigation (``None`` on an event page).
+    event : bool, optional
+        Whether it is rendered as an event page (see ``common_context``).
+    active_suffix : str, optional
+        Suffix of the current tab of the event bar.
 
     Returns
     -------
@@ -63,7 +70,7 @@ def index_context(state: dict, active: str = '/') -> dict:
     HttpError
         503 without a bundle; 404 for an unpublished scope, a missing run or a missing part.
     """
-    context = common_context(state, active)
+    context = common_context(state, active, event=event, active_suffix=active_suffix)
     full = context['state']
     scope, mode, run = full['scope'], full['mode'], full['run']
     headline = part(scope, run, 'headline')

@@ -80,7 +80,8 @@ def test_referenced_assets_exist():
     for path in html_files():
         with open(path, encoding='utf-8') as fh:
             text = fh.read()
-        for ref in re.findall(r'(?:src|href)="(/[^"]*)"', text):
+        for ref in re.findall(r'(?:src|href|action)="(/[^"]*)"', text):
+            ref = re.sub(r'(?<=/)\{\{.*?\}\}', 'x', ref)  # un segmento de la ruta (`/{{ state.scope }}/escanos`)
             ref = re.sub(r'\{\{.*?\}\}', '', ref)  # la query de la plantilla (`{{ query }}`) no es parte de la ruta
             ref = ref.split('#')[0]  # ni el ancla (`#limitaciones`)
             ref = ref.split('&amp;')[0]  # ni los parámetros que se añaden a la query (`&amp;region=`)
@@ -96,6 +97,31 @@ def test_referenced_assets_exist():
         assert 'onclick=' not in text  # CSP: sin inline
         assert re.findall(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>', text) == []
     assert missing == []
+
+
+def page_target(path):
+    """`(controlador, acción)` de la primera ruta de `pages.ROUTES` que casa con `path`, como `Router.handle`."""
+    page_router = Router()
+    for route in pages_routes():
+        page_router.add_route(*route)
+    for route in page_router.routes:
+        if Router.parse_route(route, path, 'GET') is not False:
+            return route['controller'], route['action']
+    return None
+
+
+def test_fixed_page_routes_win_over_the_scope_route():
+    """Las rutas fijas van antes que `/{scope}`: `/casas` no es un ámbito ni `/metodo/backtest` un evento."""
+    assert page_target('/promedio') == ('redirect', 'promedio')
+    assert page_target('/escanos') == ('redirect', 'escanos')
+    assert page_target('/modelo') == ('redirect', 'modelo')
+    assert page_target('/casas') == ('casas', 'index')
+    assert page_target('/elecciones') == ('elecciones', 'index')
+    assert page_target('/metodo') == ('metodo', 'index')
+    assert page_target('/metodo/backtest') == ('metodo', 'section')
+    assert page_target('/es') == ('promedios', 'index')
+    assert page_target('/es-md/escanos') == ('escanos', 'index')
+    assert page_target('/ES') is None and page_target('/es/') is None and page_target('/es//escanos') is None
 
 
 def test_js_imports_resolve():
