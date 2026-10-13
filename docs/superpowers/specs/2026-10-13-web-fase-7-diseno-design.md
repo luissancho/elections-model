@@ -1,0 +1,556 @@
+# Fase 7 de la web: diseño, narración y método (2026-10-13)
+
+Diseño acordado con Luis el 2026-10-13 en el chat de la fase 7. Las fases 0-6 están integradas en `master`
+(spec general: `2026-10-07-web-publicacion-design.md`, con el estado al cierre de la fase 6 al final). Esta
+fase no toca el paquete publicado, el contrato de datos, nginx ni la imagen Docker: cambia las páginas.
+
+## Intención
+
+Que cualquiera entre en la web y vea en qué situación estamos, con el modelo partido en dos: el promedio de
+encuestas y la simulación de escaños. Hoy la web está completa pero es "muy simple, sin detalles" (Luis): siete
+páginas con tarjetas sin más explicación que un párrafo "Qué es esto", una cabecera que da el mismo peso a
+los selectores que a la navegación y un método en una sola página sin fórmulas. Luis quiere un diseño
+profesional al estilo de Objetivo 176 (bloques en tarjetas con título y descripción, fondo pastel de periódico
+económico), una historia por partes que siga la estructura de sus notebooks (PollsForecast, PollsSimulations,
+PollsErrors + PollstersEvent, PollstersRatings) y un método con el detalle de las páginas de 538, en prosa con
+alguna fórmula suelta.
+
+## Objetivos
+
+1. Un Inicio que elige el evento; dos páginas por evento (Promedios y Escaños) y tres globales (histórico,
+   rating y método) que cuentan la historia en orden, cada una cerrada con un enlace a su texto del método.
+2. Cada gráfico y cada tabla con un título, una descripción de qué muestra y un "Cómo leerlo" con su contexto.
+3. Un método en cuatro subpáginas: tres textos (promedio, escaños, rating) y el backtest, al final.
+4. Una sola convención para las medidas de error en toda la web, escrita una vez.
+5. Los puntos de diseño que quedaron abiertos en las fases 5 y 6, resueltos (sección "Decisiones").
+6. Desplegado antes de la semana del 2026-11-17 (ensayo de la veda); la veda congela el 2026-11-23.
+
+## No objetivos
+
+- nginx, Docker, ECS, credenciales, el paquete publicado, `publish`, el contrato (`docs/web/contrato.md`) y
+  la API `/api/v1`: no cambian. Si una página necesita un dato que el paquete no tiene, se para y se pregunta.
+- Modo oscuro, selector de idioma, nombre nuevo, logo y dominio: más adelante.
+- Simuladores o calculadoras nuevas (la calculadora de coaliciones existente se queda).
+- El histograma de error por partido del detalle de una elección (el paquete no lleva el error por partido de
+  cada sondeo) y el gráfico de error frente a tamaño del partido de PollsErrors.
+- Un build step de JS o CSS, frameworks o librerías nuevas (KaTeX incluido: las fórmulas van en HTML y MathML).
+
+## Anti-objetivos
+
+- Paredes de texto que escondan los gráficos: la descripción es una frase o dos; el detalle va en "Cómo
+  leerlo", plegado.
+- Jerga en las páginas públicas: los términos técnicos viven en Método; las páginas hablan en castellano llano.
+- Cifras escritas a mano que el paquete puede dar (simulaciones, coberturas, elecciones del backtest).
+- Una página que hoy funciona sin JavaScript y mañana no (formularios GET con "Ver", tablas servidas).
+- URLs antiguas que den 404: `/promedio` y `/modelo` redirigen.
+- Un texto del método que afirme algo que el código no hace.
+
+## Restricciones
+
+- Patrón de página intacto: controlador `Page` + plantilla Jinja2 + isla JSON `#initial-data` + JS que solo
+  dibuja (ECharts 5.6 vendorizado); nginx sirve solo `/dist/`; sin `fetch` ni literal `/api/v1` en el JS (test).
+- `StrictUndefined` en las plantillas; filtros de `pages/filters.py`; textos en español; `fmt_num` agrupa
+  miles.
+- CSP actual (`default-src 'self'`, `style-src 'self' 'unsafe-inline'`): las fuentes se sirven desde
+  `/dist/fonts/` (permitido por `default-src`), sin Google Fonts ni CDN.
+- Las páginas de evento exigen un pronóstico publicado del ámbito y son las únicas que entienden `mode` y
+  `run`; las globales llevan el ámbito como filtro propio (`?scope=`, `es` por defecto) y, como hoy, exigen un
+  pronóstico publicado del ámbito filtrado (catálogo del run para nombres y colores).
+- Presupuesto orientativo, no duro: `/` para `es` en torno a 500 KB de HTML sin comprimir (hoy `/promedio`
+  ≈ 460 KB, de los que `series` son 249 KB: 1.164 fechas × 13 partidos × media, lo y hi con dos decimales;
+  nginx comprime). Recortes autorizados en la isla de datos, por este orden: las series con un decimal (el
+  gráfico no distingue más; el CSV conserva la precisión), `history.runs` y `summary` reducidos a los campos
+  que la página dibuja, y las filas de la tabla de sondeos. No se recortan partidos ni bandas de `series`: la
+  vista Bloques necesita la banda de todos los partidos del bloque. Fuentes ≤ 2 ficheros woff2 y ≤ 150 KB en
+  total.
+- Pruebas: `python -m pytest -m "not integration" -q` en verde (568 hoy), `node --check` y los tests de
+  paridad con node donde haya lógica pura nueva; `deploy/check-api.sh` y `deploy/smoke.sh` al día.
+
+## Decisiones de Luis (2026-10-13)
+
+1. Mapa: Promedios (página de llegada, mezcla de Portada y Promedio), Escaños, Histórico de errores, Rating de
+   encuestadoras y Método con cuatro subpáginas: "¿Cómo promediamos las encuestas?", "¿Cómo simulamos los
+   escaños?", "¿Cómo calculamos el rating de las encuestadoras?" y, al final, el backtest (hoy `/modelo`).
+2. Promedios: primero el gráfico del promedio de sondeos, por defecto todo el ciclo, con selector de rango, de
+   partidos y vista por bloques; después los gráficos de la Portada actual; al final el listado de encuestas y el
+   enlace al primer texto. Además, el último gráfico de PollsForecast: los sondeos de una casa frente al promedio.
+3. Escaños: lo que tiene, con mejor explicación de cada bloque, sobre todo el abanico por horizonte y la
+   evolución de las publicaciones; cierra con el enlace al segundo texto.
+4. Histórico de errores y Rating de encuestadoras cierran con el enlace al tercer texto. El histórico añade la
+   diana (bullseye) de errores.
+5. Los bloques conservan sus nombres del catálogo (Izquierda, Derecha, Regionalista, Separatista).
+6. Los selectores de ámbito y de Hoy / Elección se mantienen, a la derecha y menos prominentes (superada por
+   12-14: el ámbito se elige en Inicio o en el filtro de cada página global; el modo, en la barra de evento).
+7. Las páginas de detalle (una elección, una casa) siguen bajo su pestaña.
+8. Diseño: el de Objetivo 176 con fondo pastel de periódico económico; bloques profesionales en tarjetas con
+   título y descripción. Nombre y logo, más adelante.
+9. Método: prosa con alguna fórmula suelta, al estilo 538.
+10. Prioridad si no da tiempo a todo: reordenar la historia, luego las explicaciones, luego el Método.
+11. Puntos abiertos de las fases 5 y 6, todos aceptados como se proponen en "Decisiones de los puntos abiertos".
+12. (Más tarde el mismo día.) Promedios y Escaños son relativas a un evento, la próxima elección de un ámbito;
+    las demás son globales. Hay una página principal de inicio donde se elige el evento. Las globales viven
+    solo en la navegación principal, con enlaces desde las páginas del evento (mi recomendación, aceptada).
+13. Rutas naturales por evento con el código del ámbito (`/es`, `/es/escanos`, `/es-md`, …) y redirecciones
+    desde las URL actuales.
+14. El selector Hoy / Elección queda con **Hoy** por defecto y con una explicación clara de qué implica cada
+    opción.
+
+## Diseño
+
+### Mapa del sitio y rutas
+
+Dos clases de página. Las **de evento** hablan de la próxima elección de un ámbito (Promedios y Escaños) y
+viven bajo la ruta del ámbito. Las **globales** (Inicio, Histórico de errores, Rating de encuestadoras y
+Método) viven en la navegación principal y, donde su contenido depende del ámbito, llevan un filtro propio.
+
+| Página | Ruta | Contenido | Cierre |
+|---|---|---|---|
+| Inicio | `/` | índice de eventos: los pronósticos publicados (uno por ámbito) y las elecciones pasadas con detalle | — |
+| Promedios (evento) | `/{scope}` | promedio de sondeos, titular, voto, escaños, hemiciclo, mayoría, evolución, una casa frente al promedio, sondeos del ciclo | "¿Cómo promediamos las encuestas?" + enlaces al histórico y al rating del ámbito |
+| Escaños (evento) | `/{scope}/escanos` (+ `?region=`) | lo actual, reexplicado | "¿Cómo simulamos los escaños?" + los mismos enlaces |
+| Histórico de errores | `/elecciones` (+ `?scope=`, `?date=`) | filtros, histograma, diana, error por semanas, error del sector, lista; detalle por elección | "¿Cómo calculamos el rating de las encuestadoras?" |
+| Rating de encuestadoras | `/casas` (+ `?scope=`, `?id=`) | lo actual, reexplicado; perfil por casa | el mismo tercer texto |
+| Método | `/metodo` | portada del método: intro, datos, publicación, limitaciones e índice de las cuatro subpáginas | — |
+| | `/metodo/promedio` | "¿Cómo promediamos las encuestas?" | |
+| | `/metodo/escanos` | "¿Cómo simulamos los escaños?" | |
+| | `/metodo/rating` | "¿Cómo calculamos el rating de las encuestadoras?" | |
+| | `/metodo/backtest` (+ `?scope=`) | "¿Cuánto acierta el modelo?": el contenido de `/modelo` más un gráfico de error de escaños | |
+
+`{scope}` es el código del ámbito del catálogo (`es`, `es-md`, …), validado con `webapi.check_scope`
+(`fullmatch`); un ámbito desconocido o sin pronóstico publicado da la página 404 de hoy. Las rutas con
+parámetro se registran después de las fijas para que `/escanos`, `/casas`, `/elecciones` y `/metodo` no las
+capture el parámetro; el constructor fija el orden de resolución del `Router` con un test. Las páginas de
+evento aceptan `?mode=` y `?run=`; las globales, `?scope=` (`es` por defecto); ninguna mezcla las dos familias.
+
+Redirecciones 301, conservando el resto de la query:
+
+| Antes | Después |
+|---|---|
+| `/?scope=X` (con `scope`) | `/X` |
+| `/promedio` (con `?scope=X` o sin él) | `/X` (`/es` sin `scope`) |
+| `/escanos` (con `?scope=X` o sin él) | `/X/escanos` |
+| `/modelo` | `/metodo/backtest` (con `?scope=` si venía) |
+
+`/` sin `scope` es el Inicio y no redirige. `/elecciones` y `/casas` no cambian. El núcleo no tiene ayuda de
+redirección: el controlador pone `set_status_code(301)` y la cabecera `Location`, sin cuerpo útil; nginx no
+cachea los 301 (`proxy_cache_valid 200 60s`).
+
+Etiquetas del menú principal (mi decisión, con "de"; Luis escribió "Histórico Errores" y "Rating
+Encuestadoras"): Inicio, Histórico de errores, Rating de encuestadoras, Método. `PAGES` pasa a esas cuatro
+entradas; Promedios y Escaños son las dos pestañas de la barra de evento y las subpáginas del método tienen
+su subnavegación propia. Los tests de rutas existentes (`tests/test_web_routes.py`: todo enlace de una
+plantilla resuelve) cubren los enlaces nuevos.
+
+### Cabecera, barra de evento y pie
+
+- **Cabecera general** (todas las páginas): el nombre del sitio (h1, enlace a `/`) a la izquierda y el menú
+  de cuatro entradas a la derecha. Sin selectores: el ámbito se elige en Inicio (eligiendo un evento) o en el
+  filtro de cada página global; el modo, en la barra de evento. El banner de veda se mantiene encima.
+- **Barra de evento** (solo Promedios y Escaños), debajo de la cabecera: el nombre del evento ("Elecciones
+  generales · 29 de noviembre de 2026": nombre del ámbito del catálogo y `event_date` del `meta`), los días
+  que faltan, las dos pestañas Promedios | Escaños y, a la derecha, discreto, el control Hoy / Elección como
+  dos botones segmentados (formulario GET con "Ver" sin JS, como hoy) y, con un run fijado, el chip "Run del
+  {fecha}" (mi decisión). Debajo del control, una línea que dice qué significa la opción activa (ver "Hoy y
+  Elección, títulos y veda").
+- **Filtro de ámbito** (Histórico, Rating y la subpágina del backtest), en la cabecera de la propia página: un
+  desplegable "Ámbito" con los ámbitos publicados (GET + "Ver" sin JS; envío al cambiar con JS), `es` por
+  defecto. La portada y los textos del método no lo llevan: sus cifras vivas son las de las generales y lo
+  dicen.
+- Móvil (< 720 px): nombre en la primera fila y menú en una fila con desplazamiento horizontal; la barra de
+  evento se apila (nombre y fecha; pestañas; control a la derecha). Nada de menú hamburguesa (sin JS para
+  navegar).
+- **Pie**: como hoy (run, estimación, último sondeo, commit, "congelado desde", atribución, manifiesto) más el
+  enlace a `/metodo`; en las páginas globales, el run del pie es el del ámbito filtrado.
+
+### Lenguaje visual
+
+- Fondo de página pastel cálido, de periódico económico; tarjetas blancas con borde de 1 px, radio pequeño,
+  sin sombras o con una sombra mínima; líneas y texto apagado con contraste AA sobre el fondo (WCAG 1.4.3).
+- Tipografía propia servida desde `/dist/vendor/fonts/` (nginx ya sirve `/dist/vendor/` con caché de un
+  año; el resto de `/dist/` se revalida en cada vista) con el nombre de fichero versionado, en woff2 con
+  `font-display: swap` y su licencia junto a los ficheros (`/dist/vendor/fonts/LICENSE`): una serif para los
+  títulos y una sans para el texto y las tablas, ambas de licencia libre (SIL OFL). Mi decisión es el
+  emparejamiento serif + sans; la elección concreta es del constructor dentro del presupuesto. Fallback a la
+  pila del sistema.
+- Tokens en `:root` (`--color-bg`, `--color-card`, `--color-text`, `--color-muted`, `--color-line`,
+  `--color-accent`, `--font-head`, `--font-body`, espaciados); los colores de partido salen del catálogo del run
+  y los de bloque de `THEME` (`charts/base.js`), como hoy. Sin modo oscuro.
+- Anchura máxima 1.100 px (como hoy) con márgenes de 16 px en móvil; rejilla de dos columnas en escritorio
+  que se apila en móvil; gráficos de 360 px de alto en escritorio y 240 px en móvil, como hoy.
+- Las tablas conservan `table-wrap` con desplazamiento horizontal; en móvil, la primera columna fija (mi
+  decisión; `position: sticky`).
+- Sin animaciones de entrada; ECharts con animación desactivada bajo `prefers-reduced-motion`.
+
+### El patrón de tarjeta
+
+Toda sección es una tarjeta con la misma anatomía:
+
+1. **Título** (h2) con, cuando aplica, el subtítulo del modo ("· estimación a …" / "· pronóstico para el …").
+2. **Descripción**: una o dos frases, siempre visibles, que dicen qué muestra el bloque y de dónde sale.
+3. **Cuerpo**: el gráfico o la tabla, con sus controles.
+4. **Cómo leerlo**: un `<details class="how">` plegado por defecto (abierto en la primera tarjeta de cada
+   página) con tres partes cortas: qué es cada elemento (línea, banda, punto, color), cómo interpretarlo y qué
+   no dice. Como mucho 120 palabras. Sin JS funciona (`<details>` es nativo).
+
+Los párrafos "Qué es esto:" actuales desaparecen: su contenido se reparte entre la descripción y el "Cómo
+leerlo". El constructor redacta ambos para cada tarjeta a partir del texto actual, de los notebooks y de los
+documentos de método, en castellano llano, sin cifras a mano y sin jerga (ver "Glosario" para los términos
+permitidos).
+
+Cada página abre con un **titular**: una línea, fuera de tarjeta, con la situación en palabras llanas y las
+cifras vivas del paquete. Promedios: "Si hoy hubiera elecciones, {primero} ganaría con el {pct} % del voto y
+{escaños} escaños; {bloque} tiene un {p} % de probabilidad de mayoría absoluta" en modo Hoy, y "El {fecha}, …"
+en modo Elección (con la regla de "definitivo" de abajo). Escaños: la mayoría y el bloque más probable.
+Histórico: las elecciones analizadas y el error medio del último sondeo de cada casa. Rating: las casas con
+rating y la mejor valorada. Método: una frase. (Mi decisión: el titular; los textos exactos, del constructor.)
+
+Cada pestaña cierra con una **tarjeta de enlace** al texto del método que le corresponde: la pregunta como
+título, dos frases de adelanto y el enlace.
+
+### Glosario de medidas de error
+
+Una sola definición, en una plantilla parcial `web/templates/_glosario.html` incluida (como `<details>` al pie
+de la tarjeta que las usa) en el histórico, el detalle de una elección, el ranking y el perfil de casa:
+
+- **Error medio**: distancia media, en puntos, entre el sondeo y el resultado de cada partido principal. Sin
+  signo. (`error_avg`.)
+- **Error de bloques**: cuánto se equivocó el sondeo en el margen entre los dos bloques principales, en
+  puntos. Sin signo. (`|error_blocks|`, calculado en las páginas como hoy, `error_blocks_abs`.)
+- **Sesgo del margen**: el mismo error con signo: positivo, el sondeo daba más margen a {primer bloque} del que
+  hubo; negativo, menos. (`error_blocks`.)
+- **Herding**: solo donde aparece, con la frase de hoy ("por debajo de 1, sus sondeos varían menos de lo que
+  permite el azar").
+
+"Sesgo de bloques" (`bias_blocks`, magnitud sin signo) y "Desviación hacia {bloque}" (`summary.bias`) salen de
+todas las tablas públicas y quedan en los CSV y en la API (decisión de Luis sobre lo primero; lo segundo es mi
+decisión por la misma razón: para el lector son duplicados del error de bloques y del sesgo del margen).
+Toda columna que muestre una de estas medidas usa su nombre del glosario y nada más; las frases "en puntos" y
+"miden lo mismo" desaparecen. Antes de etiquetar una columna, el constructor comprueba en la fuente el signo
+de cada campo (`error_blocks` del camino al rating de `casa.html` y del ranking vienen de la base, no del
+paquete; la convención es la misma: magnitud bajo "Error de bloques", valor con signo bajo "Sesgo del margen").
+
+### Inicio (`/`)
+
+El índice de eventos. Orden:
+
+1. Una línea de presentación del sitio (qué es: un modelo que promedia las encuestas y simula los escaños de
+   cada elección) y nada más de texto.
+2. **Próximas elecciones**: una tarjeta por ámbito con pronóstico publicado en el manifest, las generales
+   primero y en grande, las autonómicas después ordenadas por fecha de elección. Cada tarjeta: nombre y fecha
+   del evento, días que faltan, el partido que va primero con su voto y sus escaños (modo Hoy), el bloque con
+   más probabilidad de mayoría absoluta y esa probabilidad, el estado de la publicación (fecha del último run;
+   "congelado" en veda) y el enlace a su Promedios, con un segundo enlace pequeño a Escaños. Datos: `meta` y
+   `headline` del último run de cada ámbito y la probabilidad de mayoría de la misma parte que hoy usa la
+   Portada; lecturas con la caché de 60 s de `Site` (dos por ámbito; con ~18 ámbitos, el primer render tras
+   caducar la caché puede tardar un par de segundos contra S3, aceptable).
+3. **Elecciones pasadas**: una lista discreta de las elecciones publicadas con detalle (`events` de cada
+   ámbito del manifest), de la más reciente a la más antigua, con nombre, fecha y enlace a
+   `/elecciones?scope=…&date=…`, y un enlace al histórico completo.
+4. Tres enlaces de cierre a Histórico, Rating y Método con una frase cada uno (mi decisión: el Inicio es
+   también la puerta a lo global).
+
+Sin gráficos (mi decisión: cifras, no miniaturas), así que funciona entero sin JS.
+
+### Promedios (`/{scope}`)
+
+Primera pestaña del evento. Sustituye a `index.html` y `promedio.html` (un módulo `pages/promedios.py` que
+reúne `index_context` y `promedio_context`; `index.py` y `promedio.py` desaparecen o quedan como helpers, a
+criterio del constructor). Orden de las tarjetas, bajo la barra de evento:
+
+1. **Promedio de sondeos** (gráfico alto, `renderSeries`). Controles encima del gráfico, en una fila:
+   - *Ventana*: 3 meses, 6 meses, 1 año, Todo el ciclo; por defecto **Todo el ciclo** (cambia el valor por
+     defecto de la fase 3b). `range.js` gana las ventanas nuevas (`WINDOW_DAYS`) y su test de node.
+   - *Vista*: Partidos / Bloques.
+   - *Partidos*: casillas con el punto de color de cada partido de `series.parties`, en el orden del
+     catálogo; por defecto marcados los partidos `main` del run (`meta.bmaps.main`), el resto sin marcar; un
+     enlace "Todos" / "Ninguno". En la vista Bloques, las casillas son los cuatro bloques de
+     `meta.bmaps.blocks`, todos marcados.
+   - Las series de bloque se calculan en el navegador, en un módulo puro `web/dist/js/blocks.js` con test de
+     paridad en node: media = suma de las medias de sus partidos; banda = media ∓ raíz de la suma de los
+     cuadrados de las semianchuras de cada partido (sorteos independientes, como el notebook: "los bloques
+     suman las varianzas de sus partidos"); sondeos = suma de los partidos del bloque presentes en cada
+     sondeo (un sondeo sin ninguno de ellos no se dibuja). La proyección del modo Elección **no se
+     recalcula**: se dibuja la publicada en `projection.groups.blocks` (la del simulador, la misma verdad que
+     `/escanos`), igual que la de partidos usa `projection.groups.parties`. El salto entre la banda del
+     promedio y la de la proyección en `as_of` es el mismo que ya existe para los partidos (consenso de las
+     casas frente a voto previsto) y lo explica el "Cómo leerlo". Colores de bloque de `THEME`.
+   - El estado de los controles vive en el hash (`#ventana=…&vista=…&partidos=…`) y se escribe solo al
+     cambiar, como `#coalition=` en Escaños; sin JS, el gráfico no se dibuja (como hoy) y el resto se lee.
+2. **Titular**: la tabla de hoy (Partido, Voto e intervalo, Escaños e intervalo, Primero), con el título del modo.
+3. **Voto** y **Escaños** (rejilla de dos; barras con intervalo, como hoy).
+4. **Hemiciclo** y **Mayoría absoluta** (rejilla de dos, como hoy).
+5. **Evolución de las publicaciones** (como hoy, con los puntos huecos de las retrospectivas).
+6. **Una casa frente al promedio**: un desplegable de casa (las casas con sondeos en el ciclo, por número de
+   sondeos; por defecto la que más tiene) y el gráfico `renderSeries` con la línea y la banda del promedio y
+   solo los sondeos de esa casa; sigue la ventana, la vista y los partidos del gráfico 1. Datos: `polls` y
+   `series` del run, ya en la página; sin publicación nueva. Réplica del último gráfico de PollsForecast.
+7. **Sondeos del ciclo**: la tabla de hoy (últimas 40 filas + "Descargar CSV").
+8. Tarjeta de cierre: **¿Cómo promediamos las encuestas?** y los dos enlaces globales filtrados al ámbito:
+   "Cómo acertaron las encuestas en las elecciones anteriores" (histórico) y "Las casas que sondean este
+   ámbito" (rating).
+
+### Escaños (`/{scope}/escanos`)
+
+Segunda pestaña del evento. Mismas tarjetas y mismo orden que hoy (partido con histogramas, bloques, calculadora de coaliciones,
+circunscripciones, abanico por horizonte, evolución de las publicaciones, descargas) con el patrón de tarjeta
+aplicado. Cuidado especial con:
+
+- **Abanico por horizonte**: la descripción dice que cada columna es "a cuántos días de la elección" y que el
+  horizonte 0 es hoy; el "Cómo leerlo" explica por qué el abanico se abre (la deriva de la opinión crece con
+  los días), que la columna de la derecha es el pronóstico del modo Elección y que no es una predicción de
+  trayectoria sino de incertidumbre.
+- **Evolución de las publicaciones**: qué es un run, qué es un punto hueco, por qué los puntos cambian (nuevos
+  sondeos y no cambios del modelo) y que no es una serie de sondeos.
+- Cierra con "¿Cómo simulamos los escaños?" y los mismos dos enlaces globales filtrados al ámbito.
+
+### Histórico de errores (`/elecciones`) y detalle (`?date=`)
+
+Página global con filtro de ámbito propio (`?scope=`, `es` por defecto). La lista pasa a contar la historia de PollsErrors y la diana de PollstersRatings; el detalle sigue contando
+PollstersEvent. Datos nuevos para la lista: `analysis/{scope}/poll-errors` (una fila por sondeo: el último de
+cada casa en cada elección, entre 6 y 42 días antes, con `event_date`, `event`, `pollster`, `days`,
+`sample_size`, `weight`, `error_avg`, `error_blocks`, `bias_blocks` y una columna con signo por bloque `vs`;
+`blocks` dice cuáles). **Solo cuentan las elecciones publicadas** (decisión de Luis): el contexto filtra las
+filas de `poll-errors` por las fechas de `events/{scope}` antes de embeberlas, de modo que el filtro de
+elección, el histograma, la diana y la tabla por semanas hablan de las mismas elecciones que la lista; el
+titular cuenta las publicadas y el tooltip de cada punto de la diana enlaza a su detalle. Las elecciones con
+sondeos y resultado pero sin página (en `es`, las de 1977 a 1989, con menos de 10 sondeos útiles y por tanto
+no `featured`; en las autonómicas, casos como Cantabria 2019) quedan fuera. Sin análisis publicado, las tarjetas que dependen de él muestran "Análisis no publicado
+todavía", como en `/casas`, y el resto de la página se sirve. Orden:
+
+1. Titular.
+2. **Filtros**: Elección (Todas / una, de la más reciente a la más antigua) y Casa (Todas / una). Solo
+   JavaScript: gobiernan el histograma, la diana y la tabla por semanas; estado en el hash
+   (`#eleccion=…&casa=…`); sin JS, los gráficos no se dibujan y la tabla sale sin filtrar. Un contador "N
+   sondeos de M" junto a los filtros.
+3. **Histograma del error por sondeo** (`renderHistogram`): medida elegible con dos botones, Error de bloques
+   (por defecto) y Error medio; barras de recuento sin ponderar (mi decisión: el peso del notebook no se
+   explica al lector), con la media marcada; bins de un punto.
+4. **Diana** (`renderBullseye`): un punto por sondeo filtrado, en los ejes de los dos bloques `vs` (las
+   columnas con signo de `poll-errors`), color por elección (una escala de colores neutra, no la de los
+   partidos; leyenda por elección), tooltip con casa, elección y días antes; anillos de 2, 5 y 10 puntos como
+   en el detalle.
+5. **Error por semanas antes de la elección**: tabla (elección × semana: sondeos y error de bloques medio) a
+   partir de las filas filtradas, semana = `(days + 1) // 7`, como PollsErrors; filas por elección y una
+   fila "Todas". Se recalcula con el filtro (lógica pura en `web/dist/js/errors.js` con test de node).
+6. **Error del sector por elección** (el gráfico de hoy).
+7. **Elecciones publicadas** (la lista de hoy) con columnas Elección, Sondeos, Casas, Error medio, Error de
+   bloques, Sesgo del margen y Modelo.
+8. Glosario y "¿Cómo calculamos el rating de las encuestadoras?".
+
+Detalle (`eleccion.html`): mismas tarjetas que hoy más un **Histograma del error por sondeo** de la elección
+(sus `polls.rows`, misma medida elegible, misma componente) después de "Casas"; columnas con la convención
+del glosario y sin "Sesgo de bloques"; la diana del último sondeo de cada casa se queda.
+
+### Rating de encuestadoras (`/casas`) y perfil (`?id=`)
+
+Página global con filtro de ámbito propio (`?scope=`, `es` por defecto). Mismas tarjetas que hoy (ranking con gráfico y tabla, efectos de casa, herding, descargas) con el patrón de
+tarjeta y el glosario; la tabla del ranking queda con Casa, Rating, Calidad, Sondeos, Elecciones, Error medio,
+Error de bloques y Herding. Perfil: cabecera, camino al rating (tabla con Rating, Rating ajustado, Error de
+bloques (magnitud), Sesgo del margen (con signo), Sondeos), diana, efectos de casa por elección, herding por
+ciclo; sin "Sesgo de bloques". Cierra con "¿Cómo calculamos el rating de las encuestadoras?".
+
+### Método (`/metodo` y subpáginas)
+
+`/metodo` es la portada del método: una introducción de dos párrafos (qué es el modelo y sus dos partes), un
+índice en cuatro tarjetas con las tres preguntas y "¿Cuánto acierta el modelo?", y las secciones transversales
+que hoy existen y no pertenecen a ninguna pregunta: **Datos** (fuentes y curación), **Publicación** (runs,
+retrospectivos, API) y **Limitaciones** (con el punto de la veda reescrito: la publicación se congela el 23 de
+noviembre con el pronóstico definitivo; los sondeos publicados fuera de España durante la veda se cargan en la
+base pero el modelo no los usa ni la web los muestra). `metodo.html` se reparte entre esta portada y los textos.
+
+La portada y los tres textos no llevan filtro de ámbito: sus cifras vivas (simulaciones, coberturas) son las de
+`es` y el texto lo dice ("en las generales"); la subpágina del backtest sí lo lleva, como las demás páginas
+globales (mi decisión).
+
+Las cuatro subpáginas comparten plantilla: subnavegación de las cuatro entradas arriba, índice de secciones
+(anclas) al principio, prosa en secciones h2/h3, un "En resumen" de tres o cuatro líneas al inicio, y alguna
+fórmula suelta donde aclare más que las palabras, al estilo 538: inline con HTML (`<var>`, `<sub>`, `<sup>`) y
+en bloque con MathML (soportado por los navegadores actuales; sin librerías), nunca más de un puñado por
+texto. Entre 1.200 y 2.000 palabras por texto. Las cifras que el paquete o el backtest publican se leen de ahí
+en la plantilla (`meta.n_sim`, horizontes y elecciones del backtest, coberturas por horizonte, barreras del
+catálogo donde estén parametrizadas); las que no, se escriben con su fuente al lado.
+
+Regla de contraste: toda afirmación sobre lo que el modelo hace se comprueba en el código o en los
+documentos de método antes de escribirla; el informe de la tarea lista las afirmaciones comprobadas y dónde.
+Fuentes por texto (todas en `docs/analisis-2026-09/`):
+
+- **¿Cómo promediamos las encuestas?** (`/metodo/promedio`): `forecaster.md`, `computer-weights.md`,
+  `metodo-6-house-effects.md`, `metodo-10-error-estandar-cluster.md`, `metodo-13-herding.md` (incluida la
+  muestra efectiva M12 y su variante simétrica, activa por defecto: una casa menos dispersa de lo que permite
+  su muestra también pesa menos), `metodo-4-sucesion-encuestas.md`. Secciones orientativas: qué sondeos
+  entran; el peso de cada sondeo (muestra, sobrerrepresentación, rating, dispersión); los efectos de casa;
+  la regresión local; la banda y por qué se agrupa por casa; de las encuestas al voto estimado.
+- **¿Cómo simulamos los escaños?** (`/metodo/escanos`): `simulator.md`, `stat.md`, `metodo-1-otros-barrera.md`,
+  `metodo-2-resumenes.md`, `metodo-5-nowcast-horizonte.md`, `metodo-7-composicion.md` (desactivado, y por
+  qué), `metodo-8-edad-partido.md`, `metodo-9-oscilaciones-autonomicas.md`. Secciones orientativas: del
+  promedio al sorteo del voto (error del promedio, error histórico, deriva); Hoy frente a Elección; de España
+  a las circunscripciones (swing proporcional, herencias, oscilaciones); el reparto D'Hondt con un ejemplo
+  resuelto; la **tabla de barreras por ámbito** con una nota de las simplificaciones (Canarias y su doble
+  barrera, Comunidad Valenciana, Extremadura); qué es cada cifra publicada (mediana, intervalo, probabilidades).
+  La tabla de barreras es la **vigente** por ámbito y sale del catálogo `data/es-scopes.csv` (columnas
+  `threshold` y `threshold_scope`), que el proceso web ya lee con `webapi.checks.catalogue()`:
+  `metodo_context` expone esas columnas (y `rating_weight`, para el texto del rating) con un test; no es un
+  dato del paquete y no cambia el contrato. Las excepciones por elección pasada de `data/params.json` (por
+  ejemplo Murcia hasta 2015) no entran en la tabla: una nota dice que el modelo aplica a cada elección pasada
+  la barrera de su momento.
+- **¿Cómo calculamos el rating de las encuestadoras?** (`/metodo/rating`): `computer-ratings.md`,
+  `computer-estimators.md`, `metodo-6-house-effects.md` (M6b: el rating con el error descompuesto),
+  `metodo-11-ambitos-autonomicos.md` (ratings transversales: las autonómicas entran con el `rating_weight` de
+  su ámbito, menor que el de las generales; el valor se lee del catálogo, no se escribe a mano),
+  `metodo-13-herding.md`. Secciones orientativas: qué se mide
+  (sesgo entre bloques y dentro del bloque, frente al sector de la misma semana); la calidad previa y cómo
+  pesa; el rating adjustado y el rating final; el ranking global; el herding como información.
+- **¿Cuánto acierta el modelo?** (`/metodo/backtest`): el contenido de `modelo.html` (error del promedio por
+  horizonte frente a las líneas base, coberturas, escaños y mayorías, por elección, bloques, "Qué es esto",
+  parámetros, descargas) con el patrón de tarjeta, más un **gráfico de error de escaños por horizonte**
+  (`renderLines`: error absoluto medio de escaños de la ejecución nowcast y de la ejecución a horizonte) junto
+  a la tabla "Escaños y mayorías". `metodo-3-backtest.md` como fuente del texto.
+
+Los tres pasajes revisados de la fase 5 quedan así: el herding sí resta peso por defecto (comprobado en
+`Simulator`/`Forecaster`, M13); las autonómicas sí pesan menos (comprobado en `metodo-11`, ratings
+transversales); la veda, como arriba. Las "1.000 simulaciones" y la frase de calibración salen del paquete.
+
+### Hoy y Elección, títulos y veda
+
+- El modo por defecto de las páginas de evento es **Hoy** (`nowcast`; hoy el valor por defecto es `forecast`):
+  la primera pregunta del lector es qué pasaría hoy. Excepción (mi decisión): con la web congelada, el modo por
+  defecto es Elección, porque el pronóstico definitivo es lo que hay que ver y "Hoy" ya no recibe sondeos.
+- La línea bajo el control explica la opción activa con las fechas vivas. Hoy: "Si las elecciones fueran hoy:
+  el promedio de sondeos leído el {as_of}, con los sondeos publicados hasta el {date_last}". Elección: "Lo que
+  puede pasar el {event_date}: añade la deriva de la opinión en los {n} días que faltan, así que los
+  intervalos son más anchos". Un `<details>` "¿Qué cambia entre Hoy y Elección?" junto al control da el
+  párrafo completo (qué comparten, qué añade cada uno, cuál mirar para qué) y enlaza a "¿Cómo simulamos los
+  escaños?". Los subtítulos de las tarjetas ("· estimación a …" / "· pronóstico para el …") se mantienen.
+- "Pronóstico definitivo para el {fecha}" solo cuando la web está congelada (`manifest.freeze.active`) **y** el
+  run mostrado es el último del ámbito en el manifest. Un run anterior fijado con `?run=` se titula "Pronóstico
+  publicado el {run_at}" en modo Elección y "Estimación a {as_of}" en modo Hoy; el banner de veda sigue.
+- El titular de cada página respeta la misma regla.
+
+### Datos que lee cada página (sin cambios de contrato)
+
+| Página | Partes |
+|---|---|
+| Inicio | manifest; `meta` y `headline` del último run de cada ámbito publicado (y la parte de la que hoy sale la probabilidad de mayoría de la Portada); `events` de cada ámbito |
+| Promedios | run: `meta`, `headline`, `series`, `polls` (recortado para el gráfico, completo para la tabla hasta 40 filas), `projection`, `summary`; `history` |
+| Escaños | como hoy |
+| Histórico | eventos del paquete (`events`, `meta` de cada una) + `analysis/{scope}/poll-errors` y `meta` |
+| Detalle de elección | como hoy (`polls.rows` alimenta además el histograma) |
+| Rating y perfil | como hoy (base + análisis) |
+| Método | `meta` del run (cabecera, `n_sim`, `bmaps`), `backtest/{scope}` (coberturas, parámetros) y el catálogo de ámbitos (`webapi.checks.catalogue()`: barreras y `rating_weight`) |
+
+Todo existe en el paquete o en el catálogo que la web ya lee; si una tarea descubre que no, se detiene y se
+consulta.
+
+### JavaScript y gráficos
+
+- Módulos puros nuevos con test de paridad en node (`tests/test_js_*.py`, saltados sin node):
+  `web/dist/js/blocks.js` (series de bloque), `web/dist/js/errors.js` (filtros y tabla por semanas),
+  `range.js` ampliado (ventanas nuevas).
+- `charts/series.js`: `renderSeries` ya acepta `parties` y `selected`; la vista Bloques le pasa las series de
+  bloque como si fueran partidos, con sus colores y nombres completos; la casa frente al promedio le pasa los
+  sondeos filtrados. Sin cambios de firma salvo lo imprescindible.
+- `charts/histogram.js` y `charts/bullseye.js` se reutilizan; `bullseye` gana color por grupo (elección) y
+  leyenda; `line.js` sirve para el gráfico de error de escaños.
+- Páginas: `pages/promedios.js` (sustituye a `index.js` y `promedio.js`), `elecciones.js` (filtros,
+  histograma, diana, tabla), `modelo.js` pasa a `metodo.js` (backtest) o se renombra; `casas.js` y
+  `escanos.js` apenas cambian; `pages/index.js` pasa a no existir (el Inicio no dibuja). `common.js`:
+  `wireControls()` pasa a cablear la barra de evento y el filtro de ámbito (dos formularios GET distintos) y
+  gana el cableado de controles con estado en el hash si no está ya factorizado (`#coalition` lo hace en
+  `escanos.js`). El `query` que las plantillas propagan en los enlaces se parte en dos: `?mode=&run=` dentro
+  del evento y `?scope=` hacia las globales.
+
+### Accesibilidad, móvil y rendimiento
+
+- Como hoy: `role="img"` con `aria-label` en cada gráfico; formularios GET con "Ver" sin JS; sin `fetch`.
+- A 360 px de ancho ninguna página desplaza horizontalmente salvo dentro de `table-wrap`; los objetivos
+  táctiles miden al menos 40 px; los controles del promedio caben en dos filas.
+- Presupuesto de la sección "Restricciones", medido por el constructor con `curl -s | wc -c` sobre `es`.
+- Cada página lleva `<meta name="description">` con una frase (mi decisión).
+
+### Pruebas
+
+- `tests/test_pages.py`: rutas nuevas (`/` índice, `/{scope}`, `/{scope}/escanos`, `/metodo/*`), 404 de
+  ámbito desconocido y sin pronóstico, orden de resolución del router (las rutas fijas antes que `/{scope}`),
+  la tabla de redirecciones 301 con `Location` y query, modo por defecto Hoy (y Elección con la web
+  congelada), barra de evento solo en las páginas de evento y filtro de ámbito solo en las globales, etiquetas
+  del menú, `_glosario.html` presente en las cuatro plantillas que lo usan, regla de "definitivo" con run
+  fijado, isla de datos del histórico (`poll-errors` presente / aviso sin análisis), histograma del detalle,
+  ausencia de "Sesgo de bloques" en el HTML público, Inicio con un ámbito publicado y con varios.
+- `tests/test_web_routes.py` (enlaces de plantilla resuelven) y el test de "sin `fetch` ni `/api/v1` en el JS"
+  siguen en pie.
+- Tests de node de `blocks.js`, `errors.js` y `range.js`.
+- `deploy/check-api.sh` y `deploy/smoke.sh`: rutas nuevas y redirecciones; `bash -n` limpio.
+
+### Documentación
+
+- `deploy/README.md` "La web" y "Cómo añadir una página": el mapa nuevo, las subpáginas del método, las
+  redirecciones, el patrón de tarjeta y el glosario.
+- `docs/web/contrato.md`: solo si lista las rutas de páginas (las de la API no cambian).
+- Esta spec: "Estado al cierre de la fase 7" al terminar, como en las fases anteriores.
+
+## Lo que queda al constructor
+
+- Los tokens exactos de color y tipografía, el emparejamiento concreto de fuentes dentro del presupuesto y la
+  licencia, el radio y la sombra de las tarjetas.
+- Los textos: descripciones y "Cómo leerlo" de cada tarjeta, los titulares, las tarjetas de enlace, los tres
+  textos del método y la portada del método, con la regla de contraste.
+- La estructura interna de `pages/promedios.py`, de la plantilla compartida de las subpáginas del método y del
+  cableado de los filtros; si `index.py`/`promedio.py` se funden o se mantienen como helpers.
+- Cómo se implementan las rutas con parámetro (`/{scope}`, `/{scope}/escanos`, `/metodo/{seccion}`: una ruta
+  con parámetro validado, o rutas explícitas), el orden de registro frente a las fijas y el 404 de un valor
+  desconocido con la página de error de hoy.
+- El nombre de cada evento en Inicio y en la barra de evento a partir del catálogo ("Elecciones generales",
+  "Elecciones a la Asamblea de Madrid" o el nombre del ámbito), y el cálculo de los días que faltan en
+  Europe/Madrid.
+- La escala de colores por elección de la diana y la leyenda.
+- El orden de las tareas dentro de la prioridad de Luis (historia, explicaciones, método) y el reparto en
+  commits.
+
+## Orden de ejecución y plazo
+
+Prioridad de Luis: primero la historia (mapa, cabecera, Promedios, redirecciones, Método con sus rutas y el
+backtest movido), luego las explicaciones (patrón de tarjeta en todas las páginas, glosario, convención,
+histórico con filtros, diana e histogramas), por último los tres textos del método. Si el plazo aprieta, los
+textos pueden entrar uno a uno: una subpágina sin texto no se enlaza (ni en el índice ni en la tarjeta de
+cierre de su pestaña) y la portada del método conserva mientras tanto el texto actual de `metodo.html` en una
+sección "Cómo funciona el modelo". Nada de enlaces a páginas vacías.
+
+Hito: desplegado por Luis antes de la semana del 2026-11-17. Ejecución como en las fases anteriores (plan con
+`superpowers:writing-plans`; Luis elige el método de ejecución; trabajo en `dev`; Luis integra).
+
+## Decisiones de los puntos abiertos (fases 5 y 6)
+
+Propuestas el 2026-10-13 y aceptadas por Luis:
+
+1. Histograma del detalle de una elección: sí, el mismo histograma del histórico fijado a esa elección, con la
+   media del sector; sin la rejilla por partido.
+2. "Pronóstico definitivo" con `?run=`: solo si el run fijado es el último y la web está congelada; un run
+   anterior se titula "Pronóstico publicado el {fecha}".
+3. Valores con signo y "miden lo mismo": una convención y un glosario compartido (arriba); el perfil de casa
+   pasa a ella; "Sesgo de bloques" sale de las tablas públicas y queda en CSV y API.
+4. Los tres pasajes de `/metodo` y las cifras a mano: se resuelven al escribir los textos con la regla de
+   contraste; herding y autonómicas comprobados y correctos en el fondo; la veda reescrita; las cifras del
+   paquete.
+5. Barreras autonómicas: tabla por ámbito en el texto de escaños, con nota de simplificaciones; lo
+   parametrizado en el catálogo sale de él, el resto con fuente.
+6. Backtest: un gráfico de error de escaños por horizonte junto a su tabla, con `renderLines`.
+
+## Revisión del constructor (2026-10-13)
+
+Un revisor independiente leyó el documento como constructor y levantó cinco preguntas. Cuatro se resuelven
+aquí como decisiones mías (ya incorporadas arriba); la quinta es de Luis.
+
+1. Presupuesto de `/`: no era alcanzable como estaba escrito; pasa a orientativo con los recortes autorizados
+   de "Restricciones".
+2. Tabla de barreras y `rating_weight`: del catálogo de ámbitos que la web ya lee, solo la barrera vigente.
+3. Vista Bloques en modo Elección: proyección publicada (`projection.groups.blocks`), no recalculada.
+4. Fuentes: en `/dist/vendor/fonts/` con nombre versionado para la caché de un año sin tocar nginx.
+5. Qué elecciones gobiernan el histórico (filtros, histograma, diana y tabla por semanas): las del análisis
+   (`analysis/{scope}/poll-errors`: todas las elecciones del ámbito con resultado y sondeos; en `es`, 16 desde
+   1977) o solo las publicadas con página (`events/{scope}`: las `featured`, con al menos 10 sondeos útiles,
+   que Luis publica; en `es`, 11 desde 1993). **Decisión de Luis: solo las publicadas**; el contexto filtra las
+   filas del análisis por las fechas publicadas (ver "Histórico de errores").
+
+## Preguntas abiertas
+
+Ninguna.
