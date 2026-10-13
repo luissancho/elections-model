@@ -442,7 +442,7 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
     }
 
 
-def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, latest: str) -> str:
+def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool) -> str:
     """
     Title of the estimate a page shows.
 
@@ -451,13 +451,13 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, latest: str) -> 
     mode : str
         ``'nowcast'`` or ``'forecast'``.
     meta : dict
-        Data of the meta part of the run shown (``as_of``, ``event_date``, ``run_id``, ``run_at``).
+        Data of the meta part of the run shown (``as_of``, ``event_date``, ``run_at``).
     frozen : bool
         Whether the publication is frozen.
     pinned : bool
         Whether the run was chosen with ``?run=``.
-    latest : str
-        Latest run of the scope in the manifest.
+    is_latest : bool
+        Whether the run shown is the latest of the scope in the manifest.
 
     Returns
     -------
@@ -468,8 +468,6 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, latest: str) -> 
     """
     if mode == 'nowcast':
         return 'Estimación a {}'.format(fmt_date(meta.get('as_of')))
-
-    is_latest = meta.get('run_id') == latest
 
     if frozen and is_latest:
         return 'Pronóstico definitivo para el {}'.format(fmt_date(meta.get('event_date')))
@@ -692,7 +690,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
         on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
-        ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event``
+        ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
         (``event_info``, or ``None`` on a global page), ``manifest``, ``meta``, ``catalog``,
         ``mode_label``, ``mode_text`` (``mode_text``), ``freeze`` (the manifest switch),
         ``frozen`` (whether it is active) and ``title_suffix`` (``title_of``).
@@ -727,7 +725,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'scope_filter': scopes,
         'filter_action': active,
         'is_event': event,
-        'event': info,
+        'event_bar': info,
         'manifest': manifest,
         'freeze': freeze,
         'frozen': frozen,
@@ -735,8 +733,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'catalog': catalog(meta),
         'mode_label': MODE_LABELS[mode],
         'mode_text': mode_text(mode, meta, info['days_left'] if info else days_left(meta.get('event_date'))),
-        # the run shown is the one requested: compare it, not the ``run_id`` its meta carries, with the latest
-        'title_suffix': title_of(mode, dict(meta, run_id=run), frozen, pinned, latest),
+        'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
     }
 
 

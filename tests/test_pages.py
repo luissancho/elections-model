@@ -161,8 +161,7 @@ def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
     assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     status, _, body = call(api, '/es/escanos', query='mode=forecast&run=' + RUN)
-    # Escaños no tiene titular: el título va en minúscula en los subtítulos de sus tarjetas
-    assert status == 200 and 'pronóstico para el' in html(body).lower() and 'name="run" value="' + RUN + '"' in html(body)
+    assert status == 200 and '· pronóstico para el' in html(body) and 'name="run" value="' + RUN + '"' in html(body)
 
 
 def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_definitive(api, fresh_app):
@@ -261,12 +260,12 @@ def test_parse_state_takes_the_scope_of_the_route_and_leaves_the_mode_unresolved
 
 
 def test_title_of_rules():
-    meta = {'as_of': '2026-10-13', 'event_date': '2026-11-29', 'run_id': 'B', 'run_at': '2026-10-13T12:00:00Z'}
-    assert pages.title_of('nowcast', meta, True, True, 'B') == 'Estimación a 13 oct 2026'
-    assert pages.title_of('forecast', meta, True, False, 'B') == 'Pronóstico definitivo para el 29 nov 2026'
-    assert pages.title_of('forecast', meta, True, True, 'C') == 'Pronóstico publicado el 13 oct 2026'
-    assert pages.title_of('forecast', meta, False, True, 'C') == 'Pronóstico publicado el 13 oct 2026'
-    assert pages.title_of('forecast', meta, False, False, 'B') == 'Pronóstico para el 29 nov 2026'
+    meta = {'as_of': '2026-10-13', 'event_date': '2026-11-29', 'run_at': '2026-10-13T12:00:00Z'}
+    assert pages.title_of('nowcast', meta, True, True, True) == 'Estimación a 13 oct 2026'
+    assert pages.title_of('forecast', meta, True, False, True) == 'Pronóstico definitivo para el 29 nov 2026'
+    assert pages.title_of('forecast', meta, True, True, False) == 'Pronóstico publicado el 13 oct 2026'
+    assert pages.title_of('forecast', meta, False, True, False) == 'Pronóstico publicado el 13 oct 2026'
+    assert pages.title_of('forecast', meta, False, False, True) == 'Pronóstico para el 29 nov 2026'
 
 
 def test_mode_text_explains_the_active_option(api):

@@ -1,14 +1,14 @@
 <div id="event-bar">
   <div class="event-title">
-    <h2>{{ event.title }}</h2>
-    <p class="muted">{{ event.date|date }}{% if event.days_text %} · {{ event.days_text }}{% endif %}</p>
+    <h2>{{ event_bar.title }}</h2>
+    <p class="muted">{{ event_bar.date|date }}{% if event_bar.days_text %} · {{ event_bar.days_text }}{% endif %}</p>
   </div>
   <nav class="event-tabs" aria-label="Secciones del evento">
-    {% for tab in event.tabs %}
+    {% for tab in event_bar.tabs %}
     <a href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
     {% endfor %}
   </nav>
-  <form id="event-controls" class="controls" method="get" action="{{ event.form_action }}" autocomplete="off">
+  <form id="event-controls" class="controls" method="get" action="{{ event_bar.form_action }}" autocomplete="off">
     <fieldset id="mode">
       <legend>Ver</legend>
       <label><input type="radio" name="mode" value="nowcast"{% if state.mode == 'nowcast' %} checked{% endif %}> Hoy</label>

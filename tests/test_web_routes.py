@@ -2,6 +2,7 @@
 import os
 import re
 
+import pandas as pd
 import pytest
 
 from mtpy.core.api import Router
@@ -35,14 +36,26 @@ def pages_routes():
     return list(pages.ROUTES)
 
 
+SCOPE_CODES = set(pd.read_csv(os.path.join(ROOT, 'data', 'es-scopes.csv'))['scode'])
+
+
 def is_page(ref):
     """Indica si una referencia sin extensión es una página: `/`, `web/<nombre>.html` o una ruta de `pages`."""
     if ref == '/' or os.path.isfile(os.path.join(WEB, ref.lstrip('/') + '.html')):
         return True
     page_router = Router()
     for route in pages_routes():
-        page_router.add_route(*route)
-    return any(Router.parse_route(route, ref, 'GET') is not False for route in page_router.routes)
+        if route[1] != 'redirect':  # /promedio, /escanos and /modelo only redirect: they are not pages
+            page_router.add_route(*route)
+    for route in page_router.routes:
+        match = Router.parse_route(route, ref, 'GET')
+        if match is False:
+            continue
+        # `/{scope}` takes any segment: only `x` (the template-variable placeholder) or a scope of the catalogue
+        if 'scope' in match and match['scope'] not in SCOPE_CODES | {'x'}:
+            continue
+        return True
+    return False
 
 
 def router():
@@ -92,8 +105,9 @@ def test_referenced_assets_exist():
                     missing.append((os.path.basename(path), ref))
             elif not is_page(ref):
                 missing.append((os.path.basename(path), ref))
-        if "{% extends 'base.html' %}" in text or os.path.dirname(path) == WEB:
-            assert 'type="module"' in text and '<script' in text  # cada página carga su módulo
+        if ("{% extends 'base.html' %}" in text or os.path.dirname(path) == WEB) and os.path.basename(path) != 'index.html':
+            # cada página carga su módulo, salvo el Inicio, que es solo HTML
+            assert 'type="module"' in text and '<script' in text
         assert 'onclick=' not in text  # CSP: sin inline
         assert re.findall(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/json")[^>]*>', text) == []
     assert missing == []
