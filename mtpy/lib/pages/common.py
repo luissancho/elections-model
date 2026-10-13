@@ -65,6 +65,40 @@ MESSAGES = {
 }
 OTHERS_COLOR = '#9e9e9e'
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
+DARK_INK = '#111'
+LIGHT_INK = '#fff'
+
+
+def ink_color(color: Optional[str]) -> str:
+    """
+    Text colour readable on a background of ``color``: dark on light colours, white on dark ones.
+
+    Parameters
+    ----------
+    color : str or None
+        Hex colour ``#rgb``, ``#rrggbb`` or ``#rrggbbaa`` (the alpha is ignored).
+
+    Returns
+    -------
+    str
+        ``'#111'`` when the relative luminance (WCAG, linear sRGB) of the colour is above 0.5, ``'#fff'``
+        otherwise or when the colour is not a valid hex colour (``OTHERS_COLOR`` gives white).
+    """
+    if not isinstance(color, str) or not re.fullmatch(r'#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})', color):
+        return LIGHT_INK
+
+    digits = color[1:]
+    if len(digits) == 3:
+        digits = ''.join(char * 2 for char in digits)
+
+    def linear(channel):
+        value = int(channel, 16) / 255
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (linear(digits[i:i + 2]) for i in (0, 2, 4))
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    return DARK_INK if luminance > 0.5 else LIGHT_INK
 
 
 def environment() -> Environment:
@@ -72,8 +106,8 @@ def environment() -> Environment:
     Jinja2 environment of the pages, created on first use and cached in the App.
 
     It loads ``TEMPLATES_DIR`` with autoescape on for ``.html``, ``StrictUndefined``, the
-    filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date`` and ``datetime`` and the
-    global ``method_href`` (``metodo.method_href``: link to a subpage of the method, or to the
+    filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime`` and ``ink``
+    (``ink_color``) and the global ``method_href`` (``metodo.method_href``: link to a subpage of the method, or to the
     method itself while the subpage has no text). Without a booted App the environment is built
     but not cached.
 
@@ -102,6 +136,7 @@ def environment() -> Environment:
             'range': fmt_range,
             'date': fmt_date,
             'datetime': fmt_datetime,
+            'ink': ink_color,
         })
         # imported here: ``metodo`` imports this module
         from .metodo import method_href

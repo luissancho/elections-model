@@ -280,12 +280,14 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Promedios: controls of the average chart, one per row (view, window, party or block pills), and the majority bars */
 .series-controls { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin: 0 0 var(--space-2); }
-.chart-window, .chart-parties { font-size: 0.9rem; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
-.chart-window legend, .chart-parties legend { color: var(--color-muted); }
-.chart-window[hidden], .chart-parties[hidden], .series-controls[hidden], .pills[hidden] { display: none; }
+.chart-window { font-size: 0.9rem; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.chart-window legend { color: var(--color-muted); }
+.chart-window[hidden], .series-controls[hidden], .pills[hidden] { display: none; }
 
 /* Pills: a group of checkboxes drawn like a chart legend, bordered in the colour of each name and filled with it
-   when checked (`is-on` is the fallback set by JS for browsers without `:has()`). The checkbox stays focusable. */
+   when checked, with the ink the server picks for that colour (`--pill-ink`). `is-on` is the fallback set by JS for
+   browsers without `:has()`, in a rule of its own: a selector list with `:has()` is dropped whole by them. The
+   checkbox stays focusable. */
 .pills { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); font-size: 0.9rem; }
 .pill {
   position: relative;
@@ -301,7 +303,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
   user-select: none;
 }
 .pill input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
-.pill:has(input:checked), .pill.is-on { background: var(--pill-color, var(--color-accent)); color: #fff; }
+.pill.is-on { background: var(--pill-color, var(--color-accent)); color: var(--pill-ink, #fff); }
+.pill:has(input:checked) { background: var(--pill-color, var(--color-accent)); color: var(--pill-ink, #fff); }
 .pill:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 @supports not selector(:has(*)) {
   .pill:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
@@ -369,8 +372,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .event-run { justify-self: start; }
   .mode-text { text-align: left; }
 
-  /* Larger tap targets for the chart and coalition checkboxes */
-  .chart-window label, .chart-parties label, .coalition-parties label { min-height: var(--tap); }
+  /* Larger tap targets for the chart controls, the pills and the coalition checkboxes */
+  .chart-window label, .pill, .coalition-parties label { min-height: var(--tap); }
 
   .table-wrap th:first-child,
   .table-wrap td:first-child {

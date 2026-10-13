@@ -31,14 +31,14 @@
           <fieldset id="series-parties" class="pills" hidden>
             <legend class="sr-only">Partidos</legend>
             {% for name in initial.series.parties %}
-            <label class="pill" style="--pill-color: {{ catalog[name].color }}" title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}"{% if name in main or not main %} checked{% endif %}> {{ name }}</label>
+            <label class="pill" style="--pill-color: {{ catalog[name].color }}; --pill-ink: {{ catalog[name].color|ink }}" title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}"{% if name in main or not main %} checked{% endif %}> {{ name }}</label>
             {% endfor %}
           </fieldset>
           {% if blocks %}
           <fieldset id="series-blocks" class="pills" hidden>
             <legend class="sr-only">Bloques</legend>
             {% for block in blocks %}
-            <label class="pill" style="--pill-color: {{ block_colors[block] }}"><input type="checkbox" name="block" value="{{ block }}" checked> {{ block }}</label>
+            <label class="pill" style="--pill-color: {{ block_colors[block] }}; --pill-ink: {{ block_colors[block]|ink }}"><input type="checkbox" name="block" value="{{ block }}" checked> {{ block }}</label>
             {% endfor %}
           </fieldset>
           {% endif %}

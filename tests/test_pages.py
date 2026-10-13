@@ -1651,3 +1651,22 @@ def test_poll_name_follows_the_loader_rule():
     assert pages.poll_name({'pollster': 'GAD3', 'sponsor': None}) == 'GAD3'
     assert pages.poll_name({'pollster': 'GAD3', 'sponsor': ''}) == 'GAD3'
     assert pages.poll_name({'pollster': 'GAD3'}) == 'GAD3'
+
+
+def test_ink_color_is_dark_on_light_colours_and_white_on_dark_ones():
+    assert pages.ink_color('#adcfef') == '#111' and pages.ink_color('#baf73e') == '#111'
+    assert pages.ink_color('#ffffff') == '#111' and pages.ink_color('#fff') == '#111'
+    assert pages.ink_color('#1d84ce') == '#fff' and pages.ink_color('#ef1c27') == '#fff'
+    assert pages.ink_color(pages.OTHERS_COLOR) == '#fff' and pages.ink_color('#000') == '#fff'
+    assert pages.ink_color('#adcfef80') == '#111'  # the alpha is ignored
+    assert pages.ink_color('garbage') == '#fff' and pages.ink_color(None) == '#fff'
+    assert pages.environment().filters['ink'] is pages.ink_color
+
+
+def test_promedios_pills_carry_the_ink_of_their_colour(api):
+    page = html(call(api, '/es')[2])
+    for match in re.finditer(r'<label class="pill" style="--pill-color: (#[0-9a-fA-F]+); --pill-ink: (#[0-9a-f]+)"',
+                             page):
+        assert match.group(2) == pages.ink_color(match.group(1))
+    assert re.search(r'value="PP" checked> PP</label>', page)
+    assert len(re.findall(r'--pill-ink: ', page)) == page.count('class="pill"') > 0

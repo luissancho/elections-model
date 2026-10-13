@@ -285,7 +285,12 @@ function wirePollsTable(initial) {
       count.textContent = captionText(shown, all.length);
     }
     if (shown >= all.length) {
+      // The button goes away: keep the keyboard focus on the caption that says every poll is shown.
       button.hidden = true;
+      if (count) {
+        count.tabIndex = -1;
+        count.focus();
+      }
     }
   });
 }
