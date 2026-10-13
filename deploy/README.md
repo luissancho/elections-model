@@ -622,9 +622,73 @@ deja marca (su `meta` no la tiene). La fecha de hoy es la de Europe/Madrid; `tod
 ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con `what: ["manifest"]` (ver
 "Veda").
 
+### Ensayos de operación
+
+Cuatro ensayos antes de la semana de la elección. Los tres primeros se repiten con cada cambio de despliegue.
+
+#### Carga
+
+`bash deploy/load-test.sh BASE_URL [CONCURRENCIA=50] [SEGUNDOS=20]` mide `/api/v1/forecast/es/nowcast/summary` y
+`/` con `hey` (`-z ${SEGUNDOS}s -c $CONCURRENCIA -q 5`) o, si no está instalado, con `ab`. Imprime p95 y
+códigos de respuesta, y luego hace 50 `curl -sI` a la ruta de la API contando `X-Cache: HIT`. Sale con 1 si hay
+alguna 5xx o si la primera petición responde 429, y con 2 si falta la herramienta. `-q 5` limita cada cliente a
+5 peticiones por segundo para que quede por debajo del límite de 20 r/s por IP de nginx; con `ab` no hay límite
+por cliente y bajo carga puede aparecer 429 (el script solo falla por las 5xx que ve `curl`).
+
+- Contra ECS: `bash deploy/load-test.sh https://<host>`. Todos los clientes salen de una IP, así que el límite
+  por IP se aplica al conjunto.
+- Contra local: `bash deploy/load-test.sh http://127.0.0.1:8043` (nginx) o, sin caché, contra
+  `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` (`http://127.0.0.1:8001`).
+- Criterios de la spec: p95 de la API < 200 ms, p95 de las páginas < 500 ms, mayoría de `HIT` y sin 5xx.
+- Si no se cumplen: mover a `asyncio.to_thread` las rutas que leen la base o el bundle (decisión E3), subir
+  `GUNICORN_WORKERS` o la CPU de la tarea, y repetir.
+
+#### Retirada de un run (`point` y `unpublish`)
+
+Siempre sobre una copia del paquete local, con `S3_BUCKET=` vacío (el `.env` de la raíz apunta al bucket real):
+
+1. `cp -R files/site files/site.bak`
+2. Hacen falta al menos dos runs en `files/site/v1/runs/es`. Si solo hay uno, copiar su carpeta con otro id
+   y sustituir el id dentro de sus `.json` (`point` lee el `run_id` de `headline.json`).
+3. `S3_BUCKET= python job.py publish '{"what":["point"],"scopes":["es"],"run":"<run antiguo>"}'`: el
+   `latest` de `files/site/v1/manifest.json` pasa a ese run.
+4. `S3_BUCKET= python job.py publish '{"what":["unpublish"],"scopes":["es"],"run":"<run más reciente>"}'`: se
+   borra su carpeta y `runs/es/history.json` queda solo con los runs restantes.
+5. Restaurar: `rm -rf files/site && mv files/site.bak files/site`, y comprobar que `latest` y las carpetas de
+   `runs/es` son las de antes.
+
+#### Congelación
+
+Ver "Veda" → "Ensayo" (guarda `refused`, `force`, `manifest.freeze` y `check-api.sh` en local). Repetirlo la
+semana del 17 de noviembre.
+
+#### Copia y restauración de la base
+
+La RDS tiene copias automáticas; esta es la copia lógica del esquema `elections` y comprueba que se restaura:
+
+```
+pg_dump -Fc -n elections -h <rds> -U <usuario> elections > elections-$(date +%F).dump
+aws s3 cp elections-$(date +%F).dump s3://<bucket>/backups/
+pg_restore -d <base local> --clean --if-exists elections-<fecha>.dump
+python -m pytest -m integration -q
+```
+
+El criterio es que `python -m pytest -m integration -q` pase contra la base restaurada. Las credenciales de la
+RDS no están en el repositorio: el ensayo lo ejecuta Luis (no se ha ejecutado en la fase 6).
+
 ### Duraciones medidas
 
 Primer paquete local de `es` (2026-10-08, contra la RDS, `n_sim=1000`): 121 s en total (init 35,5; ajuste
 42,5; nowcast 21,0; forecast 21,5; exportación 0,8). Ensayo con `n_sim=20`: 86 s. La duración de
 `scopes: "all"` contra la RDS está pendiente de medir. El análisis de casas de `es` (`what: ["analysis"]`)
 tardó 44 s en el test de integración contra la RDS (2026-10-10).
+
+Ensayo de carga local (2026-10-13), `bash deploy/load-test.sh http://127.0.0.1:8001 10 5` contra
+`S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` (un proceso, sin nginx ni caché), con `ab`: API 30 622
+peticiones, 6 111 r/s, p95 2 ms, 0 fallos; portada `/` 4 392 peticiones, 878 r/s, p95 12 ms, 0 fallos; sin 5xx.
+`X-Cache: HIT` en 0 de 50 (no hay nginx delante). Sin nginx local en el puerto 8043: sin cifras de caché.
+Es una referencia de la máquina de desarrollo, no de ECS; las de ECS las mide Luis con `https://<host>`.
+
+`S3_BUCKET= /usr/bin/time -l python job.py publish '{"what":["backtest"],"scopes":["es"]}'` (único job sin base):
+2,3 s y 360 MB de RSS máximo (343 MiB). La memoria de `publish forecast all` la mide Luis desde ECS con
+`/usr/bin/time -v` (o la métrica de memoria de la tarea) para ajustar `memory` de `task-job`.

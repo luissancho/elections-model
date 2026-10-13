@@ -40,3 +40,10 @@ def test_nginx_trusts_the_private_ranges_and_reports_the_client():
     for cidr in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'):
         assert 'set_real_ip_from {};'.format(cidr) in conf
     assert 'X-Client-IP $remote_addr always' in conf
+
+
+def test_load_test_script_is_valid_bash():
+    """El script de carga existe, es ejecutable y es bash válido."""
+    path = ROOT / 'deploy' / 'load-test.sh'
+    assert path.is_file()
+    assert subprocess.run(['bash', '-n', 'deploy/load-test.sh'], cwd=ROOT).returncode == 0
