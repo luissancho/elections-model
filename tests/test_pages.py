@@ -753,7 +753,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
     assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
-    assert 'Sondeos es el número de sondeos de la casa en las elecciones anteriores' in page
+    assert 'Cada fila es una casa con rating para la próxima elección' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
@@ -822,7 +822,8 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert effects.count('<tr>') == 2 and '23 jul 2023' in effects  # la próxima elección no tiene resultado
     data = initial(body)
     assert [row['event_date'] for row in data['path']] == ['2023-07-23', '2026-11-29']
-    assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
+    assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls',
+                                  'error_blocks_abs']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': 2.81, 'Izquierda': -0.24}]
     assert data['blocks'] == ['Derecha', 'Izquierda']
 
@@ -1287,3 +1288,15 @@ def test_fonts_are_vendored_and_declared():
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert "url('/dist/vendor/fonts/" in css and 'font-display: swap' in css
     assert os.path.isfile(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'vendor', 'fonts', 'LICENSE'))
+
+
+def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
+    page = html(call(houses, '/casas')[2])
+    assert 'casas con rating' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
+    assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
+
+
+def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):
+    page = html(call(houses, '/casas', query='id=1')[2])
+    assert '<th scope="col">Error de bloques</th>' in page and '<th scope="col">Sesgo del margen</th>' in page
+    assert 'Sesgo de bloques' not in page and 'miden lo mismo' not in page and 'id="glosario"' in page

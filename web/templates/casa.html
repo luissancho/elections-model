@@ -6,8 +6,10 @@
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
+{% set with_herding = true %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
+      {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
       <p class="back"><a href="/casas{{ scope_query }}">← Todas las casas</a></p>
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la casa en este ámbito: su tipo, su calidad previa y el rating con el que entra en el promedio.') }}
         <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
@@ -27,7 +29,7 @@
                 <th scope="col">Rating</th>
                 <th scope="col">Rating ajustado</th>
                 <th scope="col">Error de bloques</th>
-                <th scope="col">Sesgo de bloques</th>
+                <th scope="col">Sesgo del margen</th>
                 <th scope="col">Sondeos</th>
               </tr>
             </thead>
@@ -37,8 +39,8 @@
                 <td>{{ row.event_date|date }}</td>
                 <td>{{ row.rating|num(1) }}</td>
                 <td>{{ row.rating_adj|num(1) }}</td>
+                <td>{{ row.error_blocks_abs|num(1) }}</td>
                 <td>{{ row.error_blocks|num(1) }}</td>
-                <td>{{ row.bias_blocks|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
               </tr>
               {% endfor %}
@@ -46,18 +48,18 @@
           </table>
         </div>
         {% call m.how(open=True) %}
-        <p>
-          El rating ajustado es la parte que sale de su sesgo frente a los resultados, antes de mezclarlo con la
-          calidad previa; el último punto es el rating con el que entra en el promedio de la próxima elección.
-        </p>
+        <p>Cada fila es una elección del ámbito; el rating ajustado es el que sale solo del error de sus sondeos, antes de mezclarlo con la calidad previa. La última fila es la próxima elección.</p>
+        <p>El último rating es el que entra en el promedio. El error de bloques no lleva signo; el sesgo del margen sí, y se explica en «Qué mide cada columna».</p>
+        <p>Un rating bajo en una elección no condena a la casa en la siguiente.</p>
         {% endcall %}
+        {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección en cada bloque, en puntos.') }}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección en cada bloque.') }}
         {% if bullseye %}
         <div class="chart" id="bullseye-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en cada elección por bloque"></div>
         <div class="table-wrap">
           <table id="bullseye-table">
-            <caption>Error de su último sondeo antes de cada elección, en puntos (sondeo menos resultado).</caption>
+            <caption>Error de su último sondeo antes de cada elección (sondeo menos resultado).</caption>
             <thead>
               <tr>
                 <th scope="col">Elección</th>
@@ -88,16 +90,15 @@
         <p class="notice">Esta casa no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>
-          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. En la diana, el centro es el
-          acierto exacto y los anillos marcan 2, 5 y 10 puntos.
-        </p>
+        <p>Cada punto de la diana es el último sondeo de la casa antes de una elección; la tabla da su error en cada bloque.</p>
+        <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
+        <p>Un solo sondeo por elección no basta para hablar de la tendencia de una casa.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('effects', 'Efectos de casa por elección', 'En cada elección, cuánto se separaron los sondeos de la casa del resultado de cada partido, descontado el error que compartieron todas las casas.') }}
         <div class="table-wrap">
           <table id="profile-effects">
-            <caption>Desviación frente al resultado por partido, en puntos, descontado el error común de todas las casas.</caption>
+            <caption>Desviación frente al resultado por partido, descontado el error común de todas las casas.</caption>
             <thead>
               <tr>
                 <th scope="col">Elección</th>
@@ -119,6 +120,7 @@
           </table>
         </div>
         {% call m.how() %}
+        <p>Cada celda es cuánto se separaron los sondeos de la casa del resultado de un partido en una elección, una vez descontado el error que compartieron todas las casas.</p>
         <p>Positivo: la casa le daba más voto; negativo, menos.</p>
         <p>Una desviación en una elección no quiere decir que la casa se equivoque siempre hacia el mismo lado.</p>
         {% endcall %}
@@ -148,11 +150,13 @@
           </table>
         </div>
         {% call m.how() %}
-        <p>
-          Por debajo de 1, sus sondeos variaron menos de lo que permite el azar; el p-valor mide cómo de improbable
-          es esa dispersión sin herding.
-        </p>
+        <p>Cada fila compara la dispersión de los sondeos de la casa en un ciclo con la que cabría esperar por el tamaño de sus muestras. El p-valor mide cómo de improbable es esa dispersión sin herding.</p>
+        <p>Por debajo de 1, sus sondeos variaron menos de lo que permite el azar.</p>
+        <p>Con pocos sondeos en un ciclo, el valor es poco fiable.</p>
         {% endcall %}
       {{ m.card_end() }}
+      {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
+                   'El rating de cada casa sale de los errores de sus sondeos pasados. El texto del método cuenta cómo se convierten en una sola nota.',
+                   [{'href': '/casas' ~ scope_query, 'label': 'Todas las casas del ámbito'}]) }}
     </div>
 {% endblock %}
