@@ -1,4 +1,5 @@
-// Histogram of seats over the simulations, with mark lines at the median and at the majority.
+// Histogram of seats over the simulations, with mark lines at the median and at the majority. The unit, the bin
+// labels and the median mark are options, so the error history reuses it for the poll errors (in points).
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtInt, fmtPct} from '../format.js';
@@ -24,11 +25,14 @@ function binIndex(starts, width, value) {
  * @param {HTMLElement} el chart container
  * @param {number[]} values seats per simulation
  * @param {object} opts `color` (bars), `majority`, `median`, `lo`, `hi` (seats, tooltip subtitle),
- *   `width` (bin width, from `binWidth` when null), `formatter` (seats → text)
+ *   `width` (bin width, from `binWidth` when null), `formatter` (seats → text), `unit` (of the default bin
+ *   labels), `label` (`(start, step) => text` of a bin, replacing the default one) and `markLabel` (text of the
+ *   median mark and of the tooltip subtitle, replacing `Mediana: …`)
  * @returns {object} the ECharts instance
  */
 export function renderHistogram(el, values, {
   color = OTHERS_COLOR, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
+  unit = 'escaños', label = null, markLabel = null,
 } = {}) {
   const step = width ?? binWidth(values);
   const {starts, counts} = histogram(values, step);
@@ -40,7 +44,7 @@ export function renderHistogram(el, values, {
     marks.push({
       xAxis: binIndex(starts, step, median),
       lineStyle: {type: 'solid', color: THEME.markColor},
-      label: {formatter: formatter(median), position: 'insideEndTop', color: THEME.markColor},
+      label: {formatter: markLabel ?? formatter(median), position: 'insideEndTop', color: THEME.markColor},
     });
   }
   if (majorityInRange(starts, step, majority)) {
@@ -51,11 +55,13 @@ export function renderHistogram(el, values, {
     });
   }
 
-  const label = (start) => (step === 1
-    ? `${formatter(start)} escaños`
-    : `${formatter(start)}–${formatter(start + step - 1)} escaños`);
+  const binLabel = label ? (start) => label(start, step) : (start) => (step === 1
+    ? `${formatter(start)} ${unit}`
+    : `${formatter(start)}–${formatter(start + step - 1)} ${unit}`);
   let subtitle = '';
-  if (median !== null) {
+  if (median !== null && markLabel !== null) {
+    subtitle = markLabel;
+  } else if (median !== null) {
     subtitle = `Mediana: ${formatter(median)}`;
     if (lo !== null && hi !== null) {
       subtitle += ` · intervalo 95 %: ${formatter(lo)}–${formatter(hi)}`;
@@ -86,7 +92,7 @@ export function renderHistogram(el, values, {
           return '';
         }
         const index = params[0].dataIndex;
-        const lines = [`<strong>${escapeHtml(`${label(starts[index])}: ${fmtPct(shares[index])}`)}</strong>`];
+        const lines = [`<strong>${escapeHtml(`${binLabel(starts[index])}: ${fmtPct(shares[index])}`)}</strong>`];
         if (subtitle) {
           lines.push(escapeHtml(subtitle));
         }
