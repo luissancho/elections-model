@@ -1,17 +1,17 @@
 {% extends 'base.html' %}
 {% block title %}{{ event.event_date|date }}{% endblock %}
+{% block description %}Resultado de la elección del {{ event.event_date|date }} y cuánto se equivocaron frente a él los sondeos, cada casa y el modelo.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/elecciones.js"></script>
 {% endblock %}
 {% block content %}
+{% import '_macros.html' as m %}
     <div id="content" class="stack">
-      <section class="card" id="event">
-        <p><a href="/elecciones{{ scope_query }}">← Todas las elecciones</a></p>
-        <h2>{{ event.event_date|date }}{% if event.name %} · {{ event.name }}{% endif %}</h2>
+      <p class="back"><a href="/elecciones{{ scope_query }}">← Todas las elecciones</a></p>
+      {{ m.card_start('event', event.event_date|date ~ (' · ' ~ event.name if event.name else ''), 'Los sondeos de esta elección frente al resultado oficial: cuántos hubo, cuántas casas y cuánto se equivocaron de media.') }}
         <p class="muted">Sondeos: {{ event.n_polls|int }} · Casas: {{ event.n_pollsters|int }} · Error medio: {{ event.summary.error_avg|num(1) }} · Error de bloques: {{ event.summary.error_blocks_abs|num(1) }} · Sesgo del margen: {{ event.summary.error_blocks|num(1) }}</p>
-      </section>
-      <section class="card" id="results">
-        <h2>Resultados</h2>
+      {{ m.card_end() }}
+      {{ m.card_start('results', 'Resultados', 'El resultado oficial de la elección, con el voto en porcentaje y los escaños de cada partido.') }}
         <div class="table-wrap">
           <table id="results-table">
             <caption>Resultado oficial por partido; {{ n_seats|int }} escaños.</caption>
@@ -33,10 +33,11 @@
             </tbody>
           </table>
         </div>
-        <p class="about">Qué es esto: el resultado oficial de la elección, con el voto en porcentaje y los escaños de cada partido.</p>
-      </section>
-      <section class="card" id="pollsters">
-        <h2>Casas</h2>
+        {% call m.how(open=True) %}
+        <p>Es la referencia con la que se miden todos los errores de esta página.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('pollsters', 'Casas', 'Cuánto se equivocó cada casa en esta elección, en puntos.') }}
         {% if pollster_rows %}
         <div class="chart" id="error-chart" role="img" aria-label="Error de bloques de cada casa en esta elección"></div>
         {% endif %}
@@ -69,15 +70,15 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: cuánto se equivocó cada casa en esta elección, en puntos. El error medio es la
-          distancia media entre sus sondeos y el resultado de cada partido; el error y el sesgo de bloques
-          miden lo mismo con la suma de cada bloque. El sesgo del margen es la diferencia con signo entre el
-          margen de bloques del sondeo y el del resultado: positivo, el sondeo daba más margen al primer bloque.
+        {% call m.how() %}
+        <p>
+          El error medio es la distancia media entre sus sondeos y el resultado de cada partido; el error y el sesgo
+          de bloques miden lo mismo con la suma de cada bloque. El sesgo del margen es la diferencia con signo entre
+          el margen de bloques del sondeo y el del resultado: positivo, el sondeo daba más margen al primer bloque.
         </p>
-      </section>
-      <section class="card" id="bullseye">
-        <h2>Último sondeo de cada casa</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('bullseye', 'Último sondeo de cada casa', 'El error del último sondeo de cada casa antes de la elección, en cada bloque.') }}
         {% if pollster_rows and blocks|length >= 2 %}
         <div class="chart" id="bullseye-chart" role="img" aria-label="Error del último sondeo de cada casa por bloque"></div>
         {% endif %}
@@ -110,14 +111,14 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: el error del último sondeo de cada casa antes de la elección, en cada bloque.
-          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. En la diana, el
-          centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
+        {% call m.how() %}
+        <p>
+          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. En la diana, el centro es el
+          acierto exacto y los anillos marcan 2, 5 y 10 puntos.
         </p>
-      </section>
-      <section class="card" id="polls">
-        <h2>Sondeos</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('polls', 'Sondeos', 'Todos los sondeos publicados de la elección, con su error frente al resultado.') }}
         <div class="table-wrap">
           <table id="polls-table">
             <caption>Sondeos de la elección, del más cercano al más lejano.</caption>
@@ -153,15 +154,15 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: todos los sondeos publicados de la elección, con su error frente al resultado. Las
-          columnas de bloque son el error de cada bloque en puntos: positivo, el sondeo le daba más voto que
-          el resultado; negativo, menos. El sesgo del margen es la diferencia con signo entre el margen de
-          bloques del sondeo y el del resultado: positivo, el sondeo daba más margen al primer bloque.
+        {% call m.how() %}
+        <p>
+          Las columnas de bloque son el error de cada bloque en puntos: positivo, el sondeo le daba más voto que el
+          resultado; negativo, menos. El sesgo del margen es la diferencia con signo entre el margen de bloques del
+          sondeo y el del resultado: positivo, el sondeo daba más margen al primer bloque.
         </p>
-      </section>
-      <section class="card" id="model">
-        <h2>El modelo a cada horizonte</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('model', 'El modelo a cada horizonte', 'Lo que el modelo habría dicho con los sondeos disponibles a cada distancia de la elección, frente al resultado.') }}
         {% if horizon_tables %}
         {% for table in horizon_tables %}
         <h3>A {{ table.horizon|int }} días</h3>
@@ -239,23 +240,22 @@
         <p class="notice">Escaños no proyectables en esta elección: algún partido no tenía resultado anterior ni regla de herencia.</p>
         {% endif %}
         {% endfor %}
-        <p class="about">
-          Qué es esto: lo que el modelo habría dicho con los sondeos disponibles a cada distancia de la
-          elección, frente al resultado. El error es el del modelo menos el resultado, en puntos de voto;
-          en los bloques, la probabilidad de mayoría que daba el modelo.
+        {% call m.how() %}
+        <p>
+          El error es el del modelo menos el resultado, en puntos de voto; en los bloques, la probabilidad de mayoría
+          que daba el modelo.
         </p>
+        {% endcall %}
         {% else %}
         <p class="notice">Sin backtest para esta elección.</p>
         {% endif %}
-      </section>
-      <section class="card" id="downloads">
-        <h2>Descargas</h2>
-        <ul>
+      {{ m.card_end() }}
+      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV.') }}
+        <ul class="link-list">
           {% for link in csv_links %}
           <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
           {% endfor %}
         </ul>
-        <p class="about">Qué es esto: los datos de esta página en CSV.</p>
-      </section>
+      {{ m.card_end() }}
     </div>
 {% endblock %}

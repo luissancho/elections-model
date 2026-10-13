@@ -1,18 +1,18 @@
 {% extends 'base.html' %}
 {% block title %}{{ profile.pollster.name }}{% endblock %}
+{% block description %}Perfil de la casa encuestadora {{ profile.pollster.name }}: su rating, sus errores en cada elección y su herding.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/casas.js"></script>
 {% endblock %}
 {% block content %}
+{% import '_macros.html' as m %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
-      <section class="card" id="profile">
-        <p><a href="/casas{{ scope_query }}">← Todas las casas</a></p>
-        <h2>{{ profile.pollster.name }}</h2>
+      <p class="back"><a href="/casas{{ scope_query }}">← Todas las casas</a></p>
+      {{ m.card_start('profile', profile.pollster.name, 'El perfil de la casa en este ámbito: su tipo, su calidad previa y el rating con el que entra en el promedio.') }}
         <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
-      </section>
-      <section class="card" id="path">
-        <h2>Camino al rating</h2>
+      {{ m.card_end() }}
+      {{ m.card_start('path', 'Camino al rating', 'El rating de la casa en cada elección del ámbito, calculado con lo que se sabía antes de ella.') }}
         {% if path %}
         <div class="chart" id="rating-path" role="img" aria-label="Rating de {{ profile.pollster.name }} en cada elección del ámbito"></div>
         {% else %}
@@ -45,15 +45,14 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: el rating de la casa en cada elección del ámbito, calculado con lo que se sabía antes
-          de ella. El rating ajustado es la parte que sale de su sesgo frente a los resultados, antes de
-          mezclarlo con la calidad previa; el último punto es el rating con el que entra en el promedio de
-          la próxima elección.
+        {% call m.how(open=True) %}
+        <p>
+          El rating ajustado es la parte que sale de su sesgo frente a los resultados, antes de mezclarlo con la
+          calidad previa; el último punto es el rating con el que entra en el promedio de la próxima elección.
         </p>
-      </section>
-      <section class="card" id="bullseye">
-        <h2>Diana de errores</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección en cada bloque, en puntos.') }}
         {% if bullseye %}
         <div class="chart" id="bullseye-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en cada elección por bloque"></div>
         <div class="table-wrap">
@@ -88,14 +87,14 @@
         {% else %}
         <p class="notice">Esta casa no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
-        <p class="about">
-          Qué es esto: cuánto falló su último sondeo antes de cada elección en cada bloque, en puntos.
-          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. En la diana, el
-          centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
+        {% call m.how() %}
+        <p>
+          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. En la diana, el centro es el
+          acierto exacto y los anillos marcan 2, 5 y 10 puntos.
         </p>
-      </section>
-      <section class="card" id="effects">
-        <h2>Efectos de casa por elección</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('effects', 'Efectos de casa por elección', 'En cada elección, cuánto se separaron los sondeos de la casa del resultado de cada partido, descontado el error que compartieron todas las casas.') }}
         <div class="table-wrap">
           <table id="profile-effects">
             <caption>Desviación frente al resultado por partido, en puntos, descontado el error común de todas las casas.</caption>
@@ -119,14 +118,12 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: en cada elección, cuánto se separaron los sondeos de la casa del resultado de cada
-          partido una vez descontado el error que compartieron todas las casas. Positivo: la casa le daba
-          más voto; negativo, menos.
-        </p>
-      </section>
-      <section class="card" id="herding">
-        <h2>Herding por ciclo</h2>
+        {% call m.how() %}
+        <p>Positivo: la casa le daba más voto; negativo, menos.</p>
+        <p>Una desviación en una elección no quiere decir que la casa se equivoque siempre hacia el mismo lado.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('herding', 'Herding por ciclo', 'La dispersión de los sondeos de la casa en cada ciclo electoral, frente a la que cabría esperar por el tamaño de sus muestras.') }}
         <div class="table-wrap">
           <table id="profile-herding">
             <caption>Dispersión de sus sondeos frente a la esperable por el tamaño de la muestra, en cada ciclo.</caption>
@@ -150,10 +147,12 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: el herding de la casa en cada ciclo electoral. Por debajo de 1, sus sondeos variaron
-          menos de lo que permite el azar; el p-valor mide cómo de improbable es esa dispersión sin herding.
+        {% call m.how() %}
+        <p>
+          Por debajo de 1, sus sondeos variaron menos de lo que permite el azar; el p-valor mide cómo de improbable
+          es esa dispersión sin herding.
         </p>
-      </section>
+        {% endcall %}
+      {{ m.card_end() }}
     </div>
 {% endblock %}

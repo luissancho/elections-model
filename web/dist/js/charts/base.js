@@ -2,13 +2,20 @@
 
 const echarts = window.echarts;
 
+/** Whether the reader asked the system for less motion: charts then draw without animation. */
+const REDUCED_MOTION = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+/**
+ * Shared chart style: the body font of `site.css` (`--font-body`), text and line colours, and the animation
+ * length (zero under `prefers-reduced-motion`).
+ */
 export const THEME = {
-  fontFamily: 'system-ui, sans-serif',
+  fontFamily: "'Source Sans 3', system-ui, sans-serif",
   textColor: '#333',
   gridColor: '#e5e5e5',
   intervalColor: '#333',
   markColor: '#555',
-  animationDuration: 300,
+  animationDuration: REDUCED_MOTION ? 0 : 300,
 };
 
 /** Create (or reuse) the chart of `el`, apply `option` and keep it resized. */
@@ -32,6 +39,7 @@ export function escapeHtml(text) {
 /** Option fragment shared by every chart: animation length and text style. */
 export function baseOption() {
   return {
+    animation: !REDUCED_MOTION,
     animationDuration: THEME.animationDuration,
     textStyle: {fontFamily: THEME.fontFamily, color: THEME.textColor},
   };

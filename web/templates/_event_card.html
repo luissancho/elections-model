@@ -1,4 +1,4 @@
-<h2><a href="{{ card.href }}">{{ card.title }}</a></h2>
+<h3><a href="{{ card.href }}">{{ card.title }}</a></h3>
 <p class="muted">{{ card.event_date|date }}{% if card.days_text %} · {{ card.days_text }}{% endif %}</p>
 {% if card.leader %}
 <p>{{ card.leader.fullname }}{% if card.leader.fullname != card.leader.name %} ({{ card.leader.name }}){% endif %} va primero con el {{ card.leader.pct|pct }} y {{ card.leader.seats|int }} escaños</p>

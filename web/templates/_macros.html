@@ -1,0 +1,40 @@
+{#- Card pattern of every page (spec "El patrón de tarjeta"): title, lead, body and a folded "Cómo leerlo".
+    Import with `{% import '_macros.html' as m %}` inside the block that uses the macros. -#}
+
+{#- Open a card: `<section class="card">` with its header (title, optional mode subtitle and the lead, the one or
+    two sentences that say what the card shows and where it comes from). `level` is the heading level: 2 for a card
+    of the page, 3 for a card inside a section that already has its own h2. Close it with `card_end()`. -#}
+{% macro card_start(id, title, lead, subtitle=None, classes='', level=2) -%}
+<section class="card{% if classes %} {{ classes }}{% endif %}" id="{{ id }}"><header class="card-head"><h{{ level }}>{{ title }}{% if subtitle %} <span class="mode-subtitle">{{ subtitle }}</span>{% endif %}</h{{ level }}><p class="lead">{{ lead }}</p></header>
+{%- endmacro %}
+
+{% macro card_end() -%}
+</section>
+{%- endmacro %}
+
+{#- "Cómo leerlo": what each element is, how to read it and what it does not say. Native `<details>`, so it works
+    without JS; open only in the first card of a page. The body is the `{% call %}` content. -#}
+{% macro how(open=False) -%}
+<details class="how"{% if open %} open{% endif %}><summary>Cómo leerlo</summary><div class="how-body">{{ caller() }}</div></details>
+{%- endmacro %}
+
+{#- The page headline: one line, outside any card, with the situation in plain words and live figures. -#}
+{% macro headline(text) -%}
+<p class="headline">{{ text }}</p>
+{%- endmacro %}
+
+{#- The closing card of a page: the method question as a linked title, a short teaser and the related links
+    (`[{'href': ..., 'label': ...}]`). -#}
+{% macro closing(title, href, teaser, links=[]) -%}
+<section class="card card-closing" id="closing">
+  <h2><a href="{{ href }}">{{ title }}</a></h2>
+  <p class="lead">{{ teaser }}</p>
+  {% if links %}
+  <ul class="link-list">
+    {% for link in links %}
+    <li><a href="{{ link.href }}">{{ link.label }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{%- endmacro %}

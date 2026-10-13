@@ -1149,3 +1149,45 @@ def test_home_tolerates_a_scope_whose_run_has_no_headline(api, fresh_app, tmp_pa
 def test_home_lists_the_past_elections_with_a_detail_link(events_site):
     page = html(call(events_site, '/')[2])
     assert page.index('2023') < page.index('2019') and 'href="/elecciones?scope=es&amp;date=2023-07-23"' in page
+
+
+def test_every_page_uses_the_card_pattern_and_the_fonts(events_site):
+    for path in ('/', '/es', '/es/escanos', '/elecciones', '/elecciones?scope=es&date=2023-07-23', '/metodo'):
+        page = html(call(events_site, path.split('?')[0], query=path.partition('?')[2])[2])
+        assert 'Qué es esto' not in page and '<meta name="description"' in page, path
+        if path not in ('/', '/metodo'):
+            assert 'class="how"' in page and 'class="lead"' in page, path
+
+
+def test_houses_pages_use_the_card_pattern(houses):
+    for query in ('scope=es', 'scope=es&id=2'):
+        page = html(call(houses, '/casas', query=query)[2])
+        assert 'Qué es esto' not in page and '<meta name="description"' in page, query
+        assert 'class="how"' in page and 'class="lead"' in page, query
+
+
+def test_backtest_page_uses_the_card_pattern(api, fresh_app):
+    write_backtest(fresh_app.fs)
+    page = html(call(api, '/metodo/backtest', query='scope=es')[2])
+    assert 'Qué es esto' not in page and '<meta name="description"' in page
+    assert 'class="how"' in page and 'class="lead"' in page
+
+
+def test_first_card_opens_its_how_to_read_and_the_rest_stay_folded(api):
+    page = html(call(api, '/es/escanos')[2])
+    main = page[page.index('<main'):]
+    hows = re.findall(r'<details class="how"( open)?>', main)
+    assert len(hows) > 1 and hows[0] == ' open' and set(hows[1:]) == {''}
+
+
+def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
+    page = html(call(api, '/')[2])
+    events = page[page.index('id="events"'):page.index('</section>', page.index('id="events"'))]
+    assert '<h2>Próximas elecciones</h2>' in events and '<h3><a href="/es">' in events
+    assert events.count('<h2') == 1 and page.count('<h1') == 1
+
+
+def test_fonts_are_vendored_and_declared():
+    css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert "url('/dist/vendor/fonts/" in css and 'font-display: swap' in css
+    assert os.path.isfile(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'vendor', 'fonts', 'LICENSE'))

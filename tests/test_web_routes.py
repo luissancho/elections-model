@@ -113,6 +113,15 @@ def test_referenced_assets_exist():
     assert missing == []
 
 
+def test_css_urls_are_local_and_exist():
+    """Las fuentes y demás `url()` de `site.css` se sirven desde `/dist/` (CSP `default-src 'self'`) y existen."""
+    with open(os.path.join(DIST, 'css', 'site.css'), encoding='utf-8') as fh:
+        css = fh.read()
+    urls = re.findall(r"url\(['\"]?([^'\")]+)", css)
+    assert urls and all(url.startswith('/dist/') for url in urls), urls
+    assert [url for url in urls if not os.path.isfile(os.path.join(WEB, url.lstrip('/')))] == []
+
+
 def page_target(path):
     """`(controlador, acción)` de la primera ruta de `pages.ROUTES` que casa con `path`, como `Router.handle`."""
     page_router = Router()

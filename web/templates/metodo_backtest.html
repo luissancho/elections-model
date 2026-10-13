@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}Cuánto acierta el modelo{% endblock %}
+{% block description %}Cuánto acierta el modelo: su error y la cobertura de sus intervalos al repetirlo en las elecciones pasadas.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
 {% block content %}
+{% import '_macros.html' as m %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if published %}
-      <section class="card" id="mae">
-        <h2>Error del promedio por horizonte</h2>
+      {{ m.card_start('mae', 'Error del promedio por horizonte', 'Cuánto se equivoca el modelo al estimar el voto de los partidos principales, en puntos, según los días que faltan para cada elección pasada.') }}
         <div class="chart" id="mae-chart" role="img" aria-label="Error absoluto medio del voto por horizonte: modelo y tres líneas base"></div>
         <div class="table-wrap">
           <table id="mae-table">
@@ -37,16 +38,16 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: cuánto se equivoca el modelo al estimar el voto de los partidos principales, en
-          puntos, si solo usara los sondeos publicados hasta ese número de días antes de cada elección
-          pasada. Se compara con tres líneas base: el último sondeo publicado, la media simple de los
-          sondeos de las cuatro semanas anteriores y el resultado de la elección anterior. El modelo
-          aporta algo si su error es menor que el de las tres.
+        {% call m.how(open=True) %}
+        <p>
+          El modelo solo usa los sondeos publicados hasta ese número de días antes de cada elección. Se compara con
+          tres líneas base: el último sondeo publicado, la media simple de los sondeos de las cuatro semanas
+          anteriores y el resultado de la elección anterior. El modelo aporta algo si su error es menor que el de
+          las tres.
         </p>
-      </section>
-      <section class="card" id="coverage">
-        <h2>Cobertura de los intervalos</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('coverage', 'Cobertura de los intervalos', 'La fracción de resultados oficiales que caen dentro de los intervalos del modelo, según los días que faltan para la elección.') }}
         <div class="chart" id="coverage-chart" role="img" aria-label="Cobertura de los intervalos del voto del 50, 80 y 95 por ciento por horizonte"></div>
         <div class="table-wrap">
           <table id="coverage-table">
@@ -71,14 +72,15 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: un modelo bien calibrado deja dentro de cada intervalo una fracción de resultados
-          cercana a su nivel nominal: 0,50, 0,80 y 0,95 (las líneas discontinuas del gráfico). Si la
-          cobertura es menor, los intervalos son demasiado estrechos; si es mayor, demasiado anchos.
+        {% call m.how() %}
+        <p>
+          Un modelo bien calibrado deja dentro de cada intervalo una fracción de resultados cercana a su nivel
+          nominal: 0,50, 0,80 y 0,95 (las líneas discontinuas del gráfico). Si la cobertura es menor, los intervalos
+          son demasiado estrechos; si es mayor, demasiado anchos.
         </p>
-      </section>
-      <section class="card" id="seats">
-        <h2>Escaños y mayorías</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('seats', 'Escaños y mayorías', 'El error de escaños de los partidos principales y la calidad de la probabilidad de mayoría absoluta de cada bloque.') }}
         <div class="table-wrap">
           <table id="seats-table">
             <caption>Error de escaños y calidad de la probabilidad de mayoría, por días de antelación.</caption>
@@ -110,16 +112,16 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: el error absoluto medio de escaños de los partidos principales, el CRPS (que
-          premia una distribución de escaños ajustada y bien centrada; es el error absoluto cuando la
-          distribución es un punto) y el Brier de la probabilidad de mayoría absoluta de cada bloque:
-          cuanto más cerca de 0, mejor. Las columnas de horizonte son las de la ejecución que añade la
-          deriva de la opinión hasta la elección.
+        {% call m.how() %}
+        <p>
+          El error absoluto medio de escaños de los partidos principales, el CRPS (que premia una distribución de
+          escaños ajustada y bien centrada; es el error absoluto cuando la distribución es un punto) y el Brier de
+          la probabilidad de mayoría absoluta de cada bloque: cuanto más cerca de 0, mejor. Las columnas de
+          horizonte son las de la ejecución que añade la deriva de la opinión hasta la elección.
         </p>
-      </section>
-      <section class="card" id="cases">
-        <h2>Por elección</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('cases', 'Por elección', 'Las mismas métricas para cada elección pasada y cada horizonte.') }}
         <div class="table-wrap">
           <table id="cases-table">
             <caption>Métricas de cada elección y horizonte, de la más reciente a la más antigua.</caption>
@@ -151,13 +153,14 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: las mismas métricas para cada elección. Una elección con escaños no válidos solo
-          cuenta para el voto: algún partido no tenía resultado previo con el que proyectar sus escaños.
+        {% call m.how() %}
+        <p>
+          Una elección con escaños no válidos solo cuenta para el voto: algún partido no tenía resultado previo con
+          el que proyectar sus escaños.
         </p>
-      </section>
-      <section class="card" id="blocks">
-        <h2>Bloques</h2>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('blocks', 'Bloques', 'Lo que el modelo habría dicho de cada bloque en cada elección pasada, frente a lo que ocurrió.') }}
         <div class="table-wrap">
           <table id="blocks-table">
             <caption>Escaños reales y del modelo de cada bloque, y la probabilidad de mayoría que daba el modelo.</caption>
@@ -189,35 +192,32 @@
             </tbody>
           </table>
         </div>
-        <p class="about">
-          Qué es esto: lo que el modelo habría dicho de cada bloque en cada elección pasada, frente a lo
-          que ocurrió. Una probabilidad de mayoría alta en un bloque que no la logró es un fallo; el Brier
-          resume todos ellos. Donde los escaños no son válidos, el modelo no pudo proyectarlos y se
-          muestra un guion.
+        {% call m.how() %}
+        <p>
+          Una probabilidad de mayoría alta en un bloque que no la logró es un fallo; el Brier resume todos ellos.
+          Donde los escaños no son válidos, el modelo no pudo proyectarlos y se muestra un guion.
         </p>
-      </section>
-      <section class="card" id="about">
-        <h2>Qué es esto</h2>
-        <p class="about">
-          El backtest repite el modelo en elecciones ya celebradas con un protocolo fuera de muestra: en
-          cada elección y a cada horizonte, solo ve los sondeos publicados hasta ese día, y los
-          parámetros que se estiman con datos (error de sondeo, deriva de la opinión, efectos de casa) se
-          ajustan únicamente con los ciclos anteriores. Después compara lo que dijo con el resultado oficial.
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('about', 'Cómo se hace el backtest', 'El modelo se repite en elecciones ya celebradas viendo solo lo que se sabía en cada fecha, y lo que dijo se compara con el resultado oficial.') }}
+        <p>
+          El backtest sigue un protocolo fuera de muestra: en cada elección y a cada horizonte, solo ve los sondeos
+          publicados hasta ese día, y los parámetros que se estiman con datos (error de sondeo, deriva de la
+          opinión, efectos de casa) se ajustan únicamente con los ciclos anteriores.
         </p>
-        <p class="about">
+        <p>
           Hay dos ejecuciones. El nowcast responde a «si las elecciones fueran hoy» y solo está calibrado a
-          horizontes cortos. La ejecución a horizonte, las columnas con sufijo «horizonte», añade la deriva
-          de la opinión hasta el día de la elección: es la comparación honesta a muchos días de distancia.
+          horizontes cortos. La ejecución a horizonte, las columnas con sufijo «horizonte», añade la deriva de la
+          opinión hasta el día de la elección: es la comparación honesta a muchos días de distancia.
         </p>
-        <p class="about">
-          Las tres líneas base son: el último sondeo publicado, la media simple de los sondeos de las
-          cuatro semanas anteriores al corte y el resultado de la elección anterior. Las coberturas se leen
-          frente a su nivel nominal (0,50, 0,80 y 0,95): cercanas a él, los intervalos están bien
-          calibrados; por debajo, son demasiado estrechos.
+        <p>
+          Las tres líneas base son: el último sondeo publicado, la media simple de los sondeos de las cuatro semanas
+          anteriores al corte y el resultado de la elección anterior. Las coberturas se leen frente a su nivel
+          nominal (0,50, 0,80 y 0,95): cercanas a él, los intervalos están bien calibrados; por debajo, son
+          demasiado estrechos.
         </p>
-      </section>
-      <section class="card" id="params">
-        <h2>Parámetros</h2>
+      {{ m.card_end() }}
+      {{ m.card_start('params', 'Parámetros', 'Los ajustes con que se ejecutó el backtest publicado.') }}
         <dl>
           {% set params = backtest.params or {} %}
           <dt>Simulaciones</dt><dd>{{ params.get('n_sim')|int if params.get('n_sim') is not none else '—' }}</dd>
@@ -229,21 +229,18 @@
           <dt>Ejecutado</dt><dd>{{ backtest.get('run_at')|datetime if backtest.get('run_at') else '—' }}</dd>
           <dt>Origen</dt><dd>{{ backtest.get('source') or '—' }}</dd>
         </dl>
-      </section>
-      <section class="card" id="downloads">
-        <h2>Descargas</h2>
-        <ul>
+      {{ m.card_end() }}
+      {{ m.card_start('downloads', 'Descargas', 'Los datos del backtest en CSV.') }}
+        <ul class="link-list">
           {% for link in csv_links %}
           <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
           {% endfor %}
         </ul>
-        <p class="about">Qué es esto: los datos del backtest en CSV.</p>
-      </section>
+      {{ m.card_end() }}
       {% else %}
-      <section class="card" id="mae">
-        <h2>Precisión del modelo</h2>
+      {{ m.card_start('mae', 'Precisión del modelo', 'El acierto del modelo al repetirlo en las elecciones pasadas de este ámbito.') }}
         <p class="notice">Backtest no publicado todavía para este ámbito.</p>
-      </section>
+      {{ m.card_end() }}
       {% endif %}
     </div>
 {% endblock %}

@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}Elecciones{% endblock %}
+{% block description %}Histórico de errores: cuánto se equivocaron las encuestas frente al resultado en cada elección pasada.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/elecciones.js"></script>
 {% endblock %}
 {% block content %}
+{% import '_macros.html' as m %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if events %}
-      <section class="card" id="events">
-        <h2>Elecciones publicadas</h2>
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito y si el modelo tiene backtest en ella.') }}
         <div class="table-wrap">
           <table id="events-table">
             <caption>Elecciones pasadas, de la más reciente a la más antigua. Pulsa en una para ver su detalle.</caption>
@@ -46,24 +47,30 @@
             </tbody>
           </table>
         </div>
-      </section>
-      <section class="card" id="sector">
-        <h2>Error del sector</h2>
-        <div class="chart" id="sector-chart" role="img" aria-label="Error medio de los sondeos del sector en cada elección pasada"></div>
-        <p class="about">
-          Qué es esto: el error medio de los sondeos frente al resultado en cada elección pasada, en
-          puntos. El sesgo de bloques mide cuánto se alejaron los sondeos del resultado sumando cada
-          bloque, en la misma escala que el error, y no tiene signo. La desviación hacia el primer bloque
-          sí lo tiene: positivo, los sondeos dieron de más a ese bloque; negativo, de menos. El sesgo del margen
-          es la diferencia con signo entre el margen de bloques del sondeo y el del resultado: positivo, el
-          sondeo daba más margen al primer bloque.
+        {% call m.how(open=True) %}
+        <p>
+          Cada fila es una elección: cuántos sondeos y casas hubo, sus errores frente al resultado y si el modelo
+          tiene backtest. Las medidas de error se explican en la tarjeta del error del sector.
         </p>
-      </section>
+        <p>Que los sondeos acertaran en una elección no garantiza que acierten en la siguiente.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('sector', 'Error del sector', 'El error medio de los sondeos frente al resultado en cada elección pasada, en puntos.') }}
+        <div class="chart" id="sector-chart" role="img" aria-label="Error medio de los sondeos del sector en cada elección pasada"></div>
+        {% call m.how() %}
+        <p>
+          El sesgo de bloques mide cuánto se alejaron los sondeos del resultado sumando cada bloque, en la misma
+          escala que el error, y no tiene signo. La desviación hacia el primer bloque sí lo tiene:
+          positivo, los sondeos dieron de más a ese bloque; negativo, de menos. El sesgo del margen es la
+          diferencia con signo entre el margen de bloques del sondeo y el del resultado: positivo, el sondeo
+          daba más margen al primer bloque.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
       {% else %}
-      <section class="card" id="events">
-        <h2>Elecciones publicadas</h2>
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito.') }}
         <p class="notice">Todavía no hay elecciones publicadas en este ámbito.</p>
-      </section>
+      {{ m.card_end() }}
       {% endif %}
     </div>
 {% endblock %}

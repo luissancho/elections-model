@@ -1,8 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}Inicio{% endblock %}
+{% block description %}Promedio de encuestas y simulación de escaños de las próximas elecciones generales y autonómicas de España.{% endblock %}
 {% block content %}
+{% import '_macros.html' as m %}
     <div class="stack">
-      <p class="intro">{{ intro }}</p>
+      {{ m.headline(intro) }}
       <section class="stack" id="events">
         <h2>Próximas elecciones</h2>
         {% for card in cards[:1] %}
@@ -21,22 +23,20 @@
         {% endif %}
       </section>
       {% if past %}
-      <section class="card" id="past-events">
-        <h2>Elecciones pasadas</h2>
-        <ul>
+      {{ m.card_start('past-events', 'Elecciones pasadas', 'Las elecciones ya celebradas con su análisis publicado, de la más reciente a la más antigua; cada una enlaza a su detalle.') }}
+        <ul class="link-list">
           {% for event in past %}
           <li><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a> <span class="muted">· {{ event.scope_name }}</span></li>
           {% endfor %}
         </ul>
-      </section>
+      {{ m.card_end() }}
       {% endif %}
-      <section class="card" id="more">
-        <h2>Para entender el modelo</h2>
-        <ul>
+      {{ m.card_start('more', 'Para entender el modelo', 'Tres páginas comunes a todas las elecciones: cómo acertaron las encuestas, qué casas aciertan más y cómo funciona el modelo.') }}
+        <ul class="link-list">
           <li><a href="/elecciones">Histórico de errores</a>: cuánto se equivocaron los sondeos en cada elección pasada.</li>
           <li><a href="/casas">Rating de encuestadoras</a>: qué casas aciertan más y cuáles se desvían.</li>
           <li><a href="/metodo">Método</a>: cómo se promedian los sondeos y se simulan los escaños.</li>
         </ul>
-      </section>
+      {{ m.card_end() }}
     </div>
 {% endblock %}

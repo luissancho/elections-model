@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Método{% endblock %}
+{% block description %}Cómo funciona el modelo: de dónde salen el promedio, los escaños y las probabilidades, y dónde están sus límites.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -12,7 +13,7 @@
           que se publican en el resto del sitio, y dónde están sus límites. Es la misma para todos los
           ámbitos; las cifras de cada uno están en sus páginas.
         </p>
-        <nav aria-label="Secciones del método">
+        <nav class="section-nav" aria-label="Secciones del método">
           {% for section in sections %}
           <a href="#{{ section.id }}">{{ section.title }}</a>
           {% endfor %}
