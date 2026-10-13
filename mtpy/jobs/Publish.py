@@ -244,11 +244,12 @@ class Publish(Job):
             params = dict(n_sim=n_sim, seed=seed, drange=drange, max_fc=max_fc, alpha=alpha,
                           correctors=correctors, verbose=verbose)
             targets = publish.resolve_scopes(scopes)
+            n_scopes = counted(len(targets), 'ámbito', 'ámbitos')
             if days is None:
-                self._say('publish forecast: {} · run {}'.format(counted(len(targets), 'ámbito', 'ámbitos'), run_id))
+                self._say('publish forecast: {} · run {}'.format(n_scopes, run_id))
             else:
                 self._say('publish forecast: {} · backfill {}..{} ({})'.format(
-                    counted(len(targets), 'ámbito', 'ámbitos'), days[0], days[-1], counted(len(days), 'día', 'días')))
+                    n_scopes, days[0], days[-1], counted(len(days), 'día', 'días')))
             for index, scope in enumerate(targets, 1):
                 outcomes, entry = self._forecast_runs(scope, writer, plan, event_date, today, force, dry_run,
                                                       national=national, index=index, total=len(targets), **params)
