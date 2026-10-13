@@ -15,7 +15,7 @@ def entry(scope, run_id):
 
 def fixed_prov(monkeypatch):
     """Fija `publish.provenance` (sin `git` real) para los jobs de `backtest`."""
-    monkeypatch.setattr(publish, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    monkeypatch.setattr(publish.backtest, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
 
 
 @pytest.fixture
@@ -348,7 +348,7 @@ def test_backfill_failed_day_is_reported_until_unpublished(fresh_app, tmp_path, 
             raise OSError('s3 down')
         return real_meta(sim, run_id, *args, **kwargs)
 
-    monkeypatch.setattr(publish, 'export_meta', export_meta)
+    monkeypatch.setattr(publish.forecast, 'export_meta', export_meta)
     span = {'from': '2026-10-05', 'to': '2026-10-07'}
     with pytest.raises(RuntimeError, match='es'):
         Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
@@ -444,7 +444,7 @@ def test_event_action_fails_a_date_without_stopping_the_others(fresh_app, tmp_pa
 def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
 
-    monkeypatch.setattr(publish, 'get_events', lambda scope: synthetic_event().events)
+    monkeypatch.setattr(publish.events, 'get_events', lambda scope: synthetic_event().events)
     fs = FileSystem(str(tmp_path / 'site'))
     result = Publish().run(what=['event'], scopes=['es'], event_date='all', today='2026-10-13', fs=fs)
     assert [(r['event_date'], r['status']) for r in result['es']] == [('2019-11-10', 'skipped'),

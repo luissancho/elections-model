@@ -308,7 +308,8 @@ El primer `FAIL` es la causa raíz (los pasos posteriores fallan en cascada). Un
 `python job.py publish` ejecuta el modelo, escribe un run inmutable en el paquete `site/v1` de `app.fs` y
 mueve los punteros (`history.json` por ámbito y `manifest.json`). El análisis de casas, las elecciones pasadas y el
 backtest (`analysis`, `event`, `backtest`) no son runs: sobrescriben su carpeta y no tocan los punteros. Contrato de
-los ficheros: `docs/web/contrato.md`.
+los ficheros: `docs/web/contrato.md`. El código está en el paquete `mtpy/lib/publish/` (`common`, `forecast`,
+`analysis`, `backtest`, `events` y `pointers`); el job lo usa como `publish`.
 
 ```
 python job.py publish '{"what":["forecast"],"scopes":["es"]}'

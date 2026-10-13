@@ -3,7 +3,7 @@
 Descripción del paquete que escribe `python job.py publish` y que leen la API y el sitio (fase 2; el análisis
 de casas, fase 4, enmienda 2026-10-10; las elecciones pasadas y el backtest del modelo, fase 5, enmienda 2026-10-11).
 La fuente de verdad en código es `mtpy/lib/bundle.py` (rutas, sobre, `SCHEMAS`, validación) y
-`mtpy/lib/publish.py` (exportadores). Cada JSON se valida contra su esquema antes de escribirse.
+`mtpy/lib/publish/` (paquete de exportadores). Cada JSON se valida contra su esquema antes de escribirse.
 
 ## Árbol del paquete
 

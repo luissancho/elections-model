@@ -1,4 +1,4 @@
-"""Tests de `mtpy/lib/publish.py` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
+"""Tests de `mtpy/lib/publish/` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
 import math
 import os
 import zoneinfo
@@ -161,14 +161,14 @@ def test_export_fan_house_effects_and_dispersion():
 
 def test_provenance_reads_git_or_the_image_env(monkeypatch):
     outputs = iter([b'abc1234\n', b' M mtpy/lib/publish.py\n'])
-    monkeypatch.setattr(publish.subprocess, 'check_output', lambda *a, **k: next(outputs))
+    monkeypatch.setattr(publish.common.subprocess, 'check_output', lambda *a, **k: next(outputs))
     prov = publish.provenance()
     assert prov['commit'] == 'abc1234' and prov['dirty'] is True
     assert set(prov['versions']) == {'python', 'numpy', 'pandas', 'scipy', 'statsmodels'}
 
     def boom(*a, **k):
         raise OSError('no git')
-    monkeypatch.setattr(publish.subprocess, 'check_output', boom)
+    monkeypatch.setattr(publish.common.subprocess, 'check_output', boom)
     monkeypatch.setenv('GIT_COMMIT', 'deadbee')
     prov = publish.provenance()
     assert prov['commit'] == 'deadbee' and prov['dirty'] is False
@@ -421,7 +421,7 @@ def test_publish_forecast_lets_a_later_value_error_through(tmp_path, monkeypatch
     def broken(sim):
         raise ValueError('fan: missing keys [\'rows\']')
 
-    monkeypatch.setattr(publish, 'export_fan', broken)
+    monkeypatch.setattr(publish.forecast, 'export_fan', broken)
     with pytest.raises(ValueError, match='fan: missing keys') as info:
         publish_es(tmp_path)
     assert not isinstance(info.value, publish.NothingToPublish)
@@ -479,14 +479,14 @@ def test_loreg_guard_normalises_a_datetime():
 
 def test_madrid_time_zone_and_its_fallback(monkeypatch):
     """La guarda usa la fecha de Madrid; sin tzdata cae a UTC+1 fijo con un aviso."""
-    assert publish._madrid_tz().utcoffset(datetime(2026, 11, 24, 12, 0)) == timedelta(hours=1)
+    assert publish.common._madrid_tz().utcoffset(datetime(2026, 11, 24, 12, 0)) == timedelta(hours=1)
 
     def missing(key):
         raise zoneinfo.ZoneInfoNotFoundError(key)
 
-    monkeypatch.setattr(publish, 'ZoneInfo', missing)
+    monkeypatch.setattr(publish.common, 'ZoneInfo', missing)
     with pytest.warns(UserWarning, match='Europe/Madrid'):
-        tz = publish._madrid_tz()
+        tz = publish.common._madrid_tz()
     assert tz.utcoffset(datetime(2026, 7, 1, 12, 0)) == timedelta(hours=1)
 
 
@@ -601,7 +601,7 @@ def test_publish_analysis_overwrites_and_keeps_the_old_meta_on_failure(tmp_path,
     publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
     first = writer.read_json(bundle.path_analysis('es', 'meta'))['generated_at']
     writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)  # una reescritura cambiaría `generated_at`
-    monkeypatch.setattr(publish, 'export_error_data', lambda frame: (_ for _ in ()).throw(RuntimeError('boom')))
+    monkeypatch.setattr(publish.analysis, 'export_error_data', lambda frame: (_ for _ in ()).throw(RuntimeError('boom')))
     with pytest.raises(RuntimeError):
         publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
     assert writer.read_json(bundle.path_analysis('es', 'meta'))['generated_at'] == first
@@ -716,7 +716,7 @@ def test_publish_backtest_overwrites_and_keeps_the_old_meta_on_failure(tmp_path,
             raise RuntimeError('boom')
         return real(frame)
 
-    monkeypatch.setattr(publish, 'export_backtest_table', broken)
+    monkeypatch.setattr(publish.backtest, 'export_backtest_table', broken)
     with pytest.raises(RuntimeError):
         publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
     assert writer.read_json(bundle.path_backtest('es', 'meta'))['generated_at'] == first
@@ -812,7 +812,7 @@ def test_publish_event_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, mo
     publish.publish_event('es', '2023-07-23', writer, **args)
     first = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at']
     writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)
-    monkeypatch.setattr(publish, 'export_event_model', lambda source, event_date: (_ for _ in ()).throw(RuntimeError('boom')))
+    monkeypatch.setattr(publish.events, 'export_event_model', lambda source, event_date: (_ for _ in ()).throw(RuntimeError('boom')))
     with pytest.raises(RuntimeError):
         publish.publish_event('es', '2023-07-23', writer, **args)
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at'] == first
@@ -848,3 +848,19 @@ def test_export_event_pollsters_orders_by_error_with_nulls_last():
     assert [r['pollster'] for r in data['rows']] == ['GAD3', '40dB', 'CIS', 'IPSOS']
     assert data['rows'][0]['pollster_id'] == 2 and data['rows'][1]['pollster_id'] is None
     assert list(table.columns) == publish.EVENT_POLLSTER_COLUMNS + ['last_Derecha', 'last_Izquierda']
+
+
+def test_publish_package_layout():
+    """Un submódulo por papel y ninguno tapado por un nombre exportado por el paquete."""
+    import inspect
+    import pkgutil
+    names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
+    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'pointers']
+    for name in names:
+        assert inspect.ismodule(getattr(publish, name)), name
+    assert publish.loreg_guard.__module__ == 'mtpy.lib.publish.common'
+    assert publish.publish_forecast.__module__ == 'mtpy.lib.publish.forecast'
+    assert publish.publish_analysis.__module__ == 'mtpy.lib.publish.analysis'
+    assert publish.publish_backtest.__module__ == 'mtpy.lib.publish.backtest'
+    assert publish.publish_event.__module__ == 'mtpy.lib.publish.events'
+    assert publish.update_manifest.__module__ == 'mtpy.lib.publish.pointers'
