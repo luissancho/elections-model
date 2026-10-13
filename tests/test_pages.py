@@ -265,6 +265,7 @@ def test_mode_text_explains_the_active_option(api):
     page = re.sub(r'\s+', ' ', html(call(api, '/es', query='mode=forecast')[2]))
     assert 'Lo que puede pasar el 29 nov 2026: añade la deriva de la opinión' in page
     assert '¿Qué cambia entre Hoy y Elección?' in page
+    assert 'href="/metodo/escanos#hoy-y-eleccion">Más en el método</a>' in page
 
 
 def test_method_subpages_and_links():
@@ -1270,6 +1271,9 @@ def test_metodo_escanos_text(api):
     assert 'id="thresholds-table"' in page and 'Canarias' in page and 'Comunidad Valenciana' in page
     assert str(fixture_data('meta')['n_sim']) in page.replace('.', '') and '1.000 simulaciones' not in page
     assert '<math' in page and 'Ejemplo' in page
+    text = re.sub(r'\s+', ' ', page)
+    assert 'en un mes, uno al 30 % puede moverse alrededor de un punto' in text and 'en unos meses' not in text
+    assert 'suben y bajan a la vez' not in text and 'lo que gana un partido lo pierde otro' in text
 
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):

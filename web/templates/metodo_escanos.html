@@ -35,7 +35,8 @@
         <p>
           El punto de partida es el voto estimado de cada partido, el promedio corregido leído en la fecha de la
           estimación (ver <a href="{{ method_href('promedio') }}">¿Cómo promediamos las encuestas?</a>). No es el
-          resultado: el promedio tiene su incertidumbre y las encuestas se han equivocado antes. Por eso el modelo no reparte escaños una sola vez, sino
+          resultado: el promedio tiene su incertidumbre y las encuestas se han equivocado antes. Por eso el modelo
+          no reparte escaños una sola vez, sino
           {% if figures.n_sim %}{{ figures.n_sim|int }} veces en cada modo (en las generales){% else %}muchas veces en cada modo{% endif %},
           cada una con un voto sorteado distinto.
         </p>
@@ -99,10 +100,11 @@
         <ul>
           <li><strong>Crece con los días.</strong> <var>h</var> son los días que faltan; la deriva crece con su
             raíz cuadrada, como un paseo al azar: a cuatro veces más días, el doble de deriva.</li>
-          <li><strong>Es proporcional al tamaño.</strong> Se multiplica por el voto <var>p</var> del partido: en unos
-            meses, uno al 30 % puede moverse un par de puntos; uno al 1 %, unas centésimas. La constante <var>k</var> sale de cuánto
-            se movieron los promedios de los partidos en los ciclos anteriores, con más peso para los recientes,
-            porque el sistema de muchos partidos se mueve más que el bipartidismo.</li>
+          <li><strong>Es proporcional al tamaño.</strong> Se multiplica por el voto <var>p</var> del partido: en un
+            mes, uno al 30 % puede moverse alrededor de un punto; uno al 1 %, unas centésimas (y en cuatro meses,
+            el doble). La constante <var>k</var> sale de cuánto se movieron los promedios de los partidos en los
+            ciclos anteriores, con más peso para los recientes, porque el sistema de muchos partidos se mueve más
+            que el bipartidismo.</li>
           <li><strong>Es mayor en los partidos jóvenes.</strong> <var>m</var> vale 1, salvo en los partidos que las
             encuestas listan desde hace menos de cuatro años: para ellos es un factor de 1 o más, estimado con
             los partidos jóvenes del pasado, que derivaron bastante más que los asentados.</li>
@@ -124,7 +126,7 @@
           anterior y la escala en la misma proporción que su voto en el conjunto. Si pasa del 20 % al 22 %, un
           10 % más, su voto crece un 10 % en cada circunscripción: del 30 % al 33 % donde era fuerte, del 10 % al
           11 % donde era débil. «Otros» se escala igual; el voto en blanco mantiene el porcentaje que tuvo en cada
-          circunscripción. Después, cada circunscripción se reajusta para sumar 100.
+          circunscripción. Al final, cada circunscripción se reajusta para sumar 100.
         </p>
         <p>
           <strong>Las herencias.</strong> Un partido que no existía en la elección anterior no tiene geografía
@@ -189,7 +191,7 @@
         <p>
           La barrera depende del ámbito: en las generales,
           {% if national and national.threshold is not none -%}
-          el {{ national.threshold|pct(0 if national.threshold == national.threshold|round else 1) }}
+          el {{ barrier(national.threshold) }}
           {%- else -%}
           la que fija la ley electoral,
           {%- endif %} de los votos válidos (los de las candidaturas más el voto en blanco) de cada circunscripción.
@@ -249,8 +251,8 @@
             con los errores del sorteo, sin pasar por el reparto.</li>
           <li><strong>Las probabilidades</strong> son la fracción de simulaciones en que algo ocurre: que un
             partido obtenga al menos un escaño, que sea el que más tiene o que un bloque o una coalición sume la
-            mayoría absoluta. Se cuentan simulación a simulación, así que respetan que los partidos suben y bajan
-            a la vez.</li>
+            mayoría absoluta. Se cuentan simulación a simulación: en cada una, los escaños suman el total de la
+            cámara, así que lo que gana un partido lo pierde otro.</li>
           <li><strong>El escenario central</strong> es la simulación real más parecida a las medianas de todos
             los partidos. Es el reparto por circunscripción que se publica: coherente, pero solo uno entre
             muchos posibles.</li>

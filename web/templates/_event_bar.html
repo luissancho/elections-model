@@ -31,7 +31,7 @@
         el voto y los escaños que salen del promedio leído hoy, con su incertidumbre. Elección añade lo que la
         opinión puede moverse hasta el día de la votación, medido en los ciclos electorales pasados, así que sus
         intervalos son más anchos. Mira Hoy para saber cómo están las cosas y Elección para saber qué puede pasar
-        el día de la votación. <a href="{{ method_href('escanos') }}">Más en el método</a>.
+        el día de la votación. <a href="{{ method_href('escanos') }}{{ '#hoy-y-eleccion' if method_href('escanos') != '/metodo' else '' }}">Más en el método</a>.
       </p>
     </div>
   </details>
