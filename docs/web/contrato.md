@@ -1,7 +1,8 @@
 # Contrato de datos del paquete publicado (`site/v1`, contrato 1)
 
 Descripción del paquete que escribe `python job.py publish` y que leen la API y el sitio (fase 2; el análisis
-de casas, fase 4, enmienda 2026-10-10; las elecciones pasadas y el backtest del modelo, fase 5, enmienda 2026-10-11).
+de casas, fase 4, enmienda 2026-10-10; las elecciones pasadas y el backtest del modelo, fase 5, enmienda 2026-10-11;
+la veda, `freeze.since`, `HEAD` y el paquete `mtpy/lib/publish/`, fase 6, enmienda 2026-10-13).
 La fuente de verdad en código es `mtpy/lib/bundle.py` (rutas, sobre, `SCHEMAS`, validación) y
 `mtpy/lib/publish/` (paquete de exportadores). Cada JSON se valida contra su esquema antes de escribirse.
 
@@ -375,6 +376,8 @@ paquete tal cual (los bytes escritos por `publish`, sin volver a serializar). La
 código es `ROUTES` en `mtpy/lib/webapi.py` y los controladores `mtpy/controllers/Base.py` y
 `Forecast.py`. (Enmienda 2026-10-11, fase 5: `webapi` es ahora el paquete `mtpy/lib/webapi/`; `ROUTES` vive en su
 `__init__.py`, y las rutas de las fases 4 y 5 tienen sus controladores `Data`, `Analysis`, `Events` y `Backtest`.)
+(Enmienda 2026-10-13, fase 6: toda ruta `GET` acepta también `HEAD`, que responde con las mismas cabeceras,
+`content-length` incluido, y sin cuerpo; "Solo `GET`" en este documento quiere decir `GET` y `HEAD`.)
 
 | Ruta | Fichero servido | `Cache-Control` |
 |---|---|---|
@@ -451,6 +454,7 @@ Cuerpo JSON `{"status":"error","message":"..."}` con `Cache-Control: no-store`.
 | 503 | `no data directory configured` | la aplicación no tiene directorio `data/` (lo lee el catálogo de ámbitos; lo puede dar cualquier ruta con `{scope}`) |
 
 Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON genérico del router (`404 Not Found`).
+(Enmienda 2026-10-13: `HEAD` se trata como `GET` sin cuerpo; `POST` y el resto siguen dando ese 404.)
 
 ### Cabeceras
 

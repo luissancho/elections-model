@@ -359,6 +359,13 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
   127.0.0.1:8042:8042 --env-file deploy/elections.env elections-web:<sha>` → `curl /healthz`,
   `/api/v1/manifest`. Sin S3: `S3_BUCKET=` y `-v $PWD/files:/app/files`. Publicar desde el portátil
   exportando `deploy/elections.env`, o `docker run --rm --env-file deploy/elections.env -e RUN_JOB=...`.
+- (enmienda 2026-10-13, fase 6) La web se despliega en AWS ECS Fargate detrás de un ALB con la misma imagen; las
+  publicaciones pueden lanzarse como tareas puntuales de ECS. Ver "Despliegue en ECS" y "Publicar desde ECS" de
+  `deploy/README.md` y las plantillas de `deploy/ecs/`. nginx confía en `127.0.0.1` y en los tres rangos privados;
+  gunicorn arranca con `-w $GUNICORN_WORKERS` (4 por defecto en `init.sh`, 2 en la plantilla de ECS, no el 2 del
+  diseño original) y escribe sus logs en `/proc/1/fd/1` y `/proc/1/fd/2`; supervisord sigue demonizado; con
+  `AWS_KEY`/`AWS_SECRET` vacíos, s3fs usa el rol de la tarea. `deploy/elections.env` queda como entorno del
+  portátil y de Docker en local.
 
 ### Seguridad
 
@@ -417,7 +424,7 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 | 3 | Escaños, autonómicos, histórico | `escanos.html` (V6-V8, coaliciones), selector de ámbito con `scopes: all`, evolución del `headline`, CSV | 2 | 3-4 d |
 | 4 | Casas | `Data` y `Analysis`, `publish analysis`, `casas.html` (ranking, perfil y camino al rating, efectos de casa, herding) (enmienda 2026-10-10: hecho en `dev`, ver "Estado al cierre de la fase 4") | 2 | 3-4 d |
 | 5 | Elecciones y modelo | `publish event` y `backtest`, `elecciones.html`, `modelo.html`, `metodo.html`; eventos `es` 2015-2023 (enmienda 2026-10-11: hecho en `dev`, ver "Estado al cierre de la fase 5") | 4 | 2-3 d |
-| 6 | Endurecimiento | prueba de carga con `proxy_cache`, ensayo de `point`/`unpublish`, ensayo de `freeze`, backups, `deploy/README.md` final, poda de requirements y multietapa opcionales; cerrar antes del 24-11 | 2-5 | 2 d |
+| 6 | Endurecimiento | prueba de carga con `proxy_cache`, ensayo de `point`/`unpublish`, ensayo de `freeze`, backups, `deploy/README.md` final, poda de requirements y multietapa opcionales; cerrar antes del 24-11 (enmienda 2026-10-13: hecho en `dev`, ver "Estado al cierre de la fase 6") | 2-5 | 2 d |
 
 Total ≈ 18-23 días de trabajo. Tras la fase 2 hay web pública; las fases 4 y 5 son independientes entre sí.
 
@@ -1257,3 +1264,212 @@ fallaba). Corregido en el núcleo: solo se descartan las columnas de partido sin
 esos cuatro ámbitos. Observación pendiente de Luis: `error_blocks` es el error del margen entre bloques CON signo
 (`errors_gap_vs`), así que en el detalle de la elección las casas se ordenan por ese valor con signo y las barras
 pueden ser negativas; el notebook PollstersEvent dibuja su valor absoluto. Decidir si la página muestra la magnitud.
+
+## Estado al cierre de la fase 6 (2026-10-13)
+
+Hecho en `dev` (spec de la fase en `docs/superpowers/specs/2026-10-13-web-fase-6-endurecimiento-design.md`, plan en
+`ddee43a`, `docs/superpowers/plans/2026-10-13-web-fase-6-endurecimiento.md`; código en `ddee43a..149a3ff`, 10
+commits, y este de documentación), con 556 tests unitarios en verde (`python -m pytest -m "not integration" -q`: 532
+antes de la fase y 24 nuevos). Sin tests de integración nuevos; ninguno se ejecutó en la fase. Ledger de la
+ejecución: `.superpowers/sdd/2026-10-13-web-fase-6-endurecimiento/progress.md` (informes por tarea en la misma
+carpeta).
+
+- `e17cfa8`, guarda LOREG para todos los ámbitos (Task 1, 536 tests): `publish.loreg_guard(..., national=)` rechaza
+  `forecast` (incluido el relleno) y `analysis` de cualquier ámbito dentro de la ventana de su propia elección o de la
+  general (`next_event_date('es')`, calculada una vez por ejecución del job); el motivo nombra la elección que cierra
+  la ventana (la propia primero); un ámbito sin elección próxima queda `skipped`; `force` publica y marca
+  `meta.freeze` (solo `forecast`). `update_manifest(..., today=)` pone `freeze.since` al activar, lo conserva al
+  reactivar y lo borra al desactivar; `read_manifest` da `since: null` a un manifest antiguo. `deploy/README.md`:
+  "Guarda LOREG" reescrita y sección "Veda" (runbook del 23, noche del 29, sondeos durante la veda, "Ensayo");
+  `docs/web/contrato.md`: `freeze: {active, message, since}`.
+- `b9c110d`, web congelada y sondeos vetados (Task 2, 538 tests): `common_context` añade `freeze` y `frozen`; en modo
+  `forecast` congelado el título dice "Pronóstico definitivo para el …" (el modo "Hoy" sigue con "Estimación a");
+  `base.html` enlaza el banner a `/metodo#limitaciones` y `_footer.html` añade "congelado desde {fecha}";
+  `webapi.queries.WEB_DROP_CTYPES = ('wban', 'exit')` y `/api/v1/polls` ya no sirve esos sondeos (misma clave de
+  caché); `check-api.sh` gana `check_header` y, con el manifest congelado, comprueba `x-freeze: active` en
+  `/api/v1/scopes` y el banner en `/`.
+- `72a21f8`, imagen para ECS (Task 3, 542 tests): `nginx.conf` confía en `127.0.0.1` y en los tres rangos privados y
+  `/healthz` devuelve `X-Client-IP`; `S3.connection()` pasa `None` a `s3fs` con `AWS_KEY`/`AWS_SECRET` vacíos (cadena
+  de botocore, rol de tarea); `supervisord.conf` arranca gunicorn con `-w %(ENV_GUNICORN_WORKERS)s` y logs en
+  `/proc/1/fd/1` y `/proc/1/fd/2`; `init.sh` exporta `GUNICORN_WORKERS` (4 por defecto); `.env.example`;
+  `deploy/ecs/task-web.example.json`, `task-job.example.json` y `run-task.example.json`; `check-api.sh` imprime la IP
+  del cliente según nginx y avisa (WARN) si es privada contra un host no local; README "Fichero de configuración",
+  "Despliegue en ECS" y "Publicar desde ECS"; `tests/test_s3_unit.py` y `tests/test_deploy_files.py`.
+- `1e3073b` y `dcd4fe9`, ensayos de operación (Task 4; 542 tests según el ledger, 543 medidos por la Task 5 en
+  `dcd4fe9`): `deploy/load-test.sh` (`hey` o `ab`, p95, códigos, 50 `curl -sI` contando `X-Cache: HIT`; falla con
+  5xx, con 429 o con un host inalcanzable en la primera petición y, con `ab`, con `Non-2xx responses`); README
+  "Ensayos de operación" (carga, `point`/`unpublish`, congelación, copia y restauración) y "Duraciones medidas".
+- `08a6ea1`, núcleo: `HEAD` y despacho local (Task 5, 545 tests): `Router.add_route` añade `HEAD` a toda ruta `GET`
+  y `Response.send_content` no envía cuerpo en un `HEAD` (mismas cabeceras, `content-length` incluido);
+  `Router.handle` devuelve `(controller, action, params)` sin guardar nada en el router (desaparecen sus atributos y
+  `loaded()`); `Controller.dispatch` único con el gancho `error_result(status, message)`, que `Page` sobrescribe
+  (desaparece `Page.dispatch`); test de concurrencia como guarda de diseño.
+- `a7ecf3f`, workers más ligeros (Task 6, 547 tests): imports perezosos de sklearn, scipy y statsmodels en
+  `mtpy/core/utils/helpers.py` y de statsmodels/`find_peaks` en `dates.py`; `Site._manifest_entry` guarda bytes y
+  dict parseado bajo la misma clave y TTL; `Worker.job_class` (enlace de módulo seguro, como
+  `Router.controller_class`); `tests/test_worker_unit.py`.
+- `18b80d1` y `34e0f8f`, flecos de la fase 5 (Task 7, 555 tests): `error_blocks_abs` (magnitud, calculada en las
+  páginas) en la lista, la cabecera del detalle y las tablas de `/elecciones`, con la columna con signo "Sesgo del
+  margen"; casas ordenadas por la magnitud (nulos al final) y barras de `elecciones.js` por `error_blocks_abs`;
+  `pages.common.bundle_part`; texto del rating de `casas.html` alineado con `/metodo`; `initial.seats` fuera de
+  `/modelo`; imports de `webapi/__init__.py` ordenados y de ≤ 120 columnas; los tests que faltaban de la fase 5;
+  `patched` ya no parchea `provenance` (los tests del job de backtest lo hacen localmente).
+- `149a3ff`, `publish` en paquete (Task 8, 556 tests): `mtpy/lib/publish/` con `common`, `forecast` (el fichero
+  original, renombrado con similitud 32 %: `git log -M30% --follow -- mtpy/lib/publish/forecast.py` sigue la
+  historia), `analysis`, `backtest`, `events` y `pointers`, y un `__init__.py` que reexporta los nombres públicos;
+  los tests parchean el submódulo que define cada función interna.
+- Este commit (Task 9): este estado de cierre, la fila 6 de "Fases" y la nota de "Infraestructura" de esta spec, el
+  estado al cierre de la spec de la fase 6, el repaso de `deploy/README.md` (índice, "Ensayos de operación" y
+  "Duraciones medidas" como secciones de primer nivel, afirmaciones superadas anotadas con su enmienda) y de
+  `docs/web/contrato.md` (`HEAD`).
+
+Decisiones de ejecución (E1-E9 del plan):
+
+1. E1. La ventana nacional la calcula el job una vez por ejecución (`publish.next_event_date('es')`) y la pasa a la
+   guarda como `national`.
+2. E2. `freeze.since` lo pone `update_manifest` al activar (hoy en Europe/Madrid, `today` para tests), lo conserva al
+   reactivar con otro mensaje y lo borra al desactivar. Contrato 1 sin cambio de versión.
+3. E3. `asyncio.to_thread` no entra en la fase; sí el despacho local del router. Cómo activarlo si la carga en ECS lo
+   pide: envolver con `await asyncio.to_thread(...)` las llamadas bloqueantes de las acciones `async` (los `query_*`
+   de `webapi.queries`, las lecturas de `site` y los constructores de contexto de las páginas). El router ya no guarda
+   estado; `request` y `response` siguen guardados en el `App` compartido, lo que hoy es seguro porque cada
+   controlador los copia en su `__init__`, dentro de `handle` y antes de cualquier `await`; con `to_thread`, ningún
+   código debe volver a leer `app.request`/`app.response` después de un `await`. Las cachés de `webapi.caches` ya
+   tienen `Lock`; queda comprobar que la conexión de la base no se comparte entre hilos.
+4. E4. `HEAD` se resuelve en `Router.add_route` y en `Response.send_content`, no en cada controlador.
+5. E5. El ensayo de `point`/`unpublish` se hace sobre una copia (`files/site.bak`) que se restaura al terminar.
+6. E6. La IP real detrás del ALB se comprueba sin servicios externos: `/healthz` devuelve `X-Client-IP` y
+   `check-api.sh` avisa (WARN, no FAIL) si es privada y la URL base no es local.
+7. E7. "Error de bloques" muestra `|error_blocks|` (`error_blocks_abs`, calculado en la página) y "Sesgo del margen"
+   el valor con signo; el paquete publicado no cambia.
+8. E8. `publish.py` se divide en `common`, `forecast`, `analysis`, `backtest`, `events` y `pointers`; el original pasa
+   a `forecast.py`; los tests de atomicidad parchean el submódulo que define la función.
+9. E9. Orden de ejecución = orden de las tareas (las tareas 7 y 8 podían quedar para después de la elección; no hizo
+   falta).
+
+Resoluciones tomadas durante la ejecución (las líneas `Ruling:` del ledger, en orden):
+
+1. Se trabaja en `dev` en el checkout principal, sin worktree, como en las fases 1-5 (Luis integra `dev`; el entorno
+   local vive ahí).
+2. Task 8: `latest_entry` vive en `publish/common.py` y no en `forecast.py`, porque `pointers.point` lo necesita y
+   `pointers` no debe importar `forecast` (regla de dirección de los imports); los nombres privados no se reexportan
+   (el único test que usa `_madrid_tz` llama a `publish.common._madrid_tz`).
+
+Desviaciones de los implementadores aceptadas en la revisión (no son `Ruling:`; constan en los informes):
+
+- Task 1: en el test del job, el `forecast` forzado de `es-cb` queda `skipped` (su doble lanza `NothingToPublish`) y
+  se comprueba la marca `freeze` de la llamada; se actualizaron dos tests antiguos (la guarda solo de `es` y el
+  `freeze` por defecto, que ahora lleva `since`).
+- Task 2: `check_header` usa `GET` con `-D` en vez de `curl -sI` (el `HEAD` llegó en la Task 5);
+  `tests/test_web_routes.py` quita el `#ancla` antes de resolver un enlace.
+- Task 3: la plantilla del job deja `DB_STATEMENT_TIMEOUT` vacío (sin límite, como pide el README para los jobs).
+- Task 5: dos tests que fijaban `methods == {'GET'}` pasan a `{'GET', 'HEAD'}` (consecuencia de E4); el log de un
+  error inesperado de la API lleva ahora la traza.
+- Task 6: `dates.py` también se hizo perezoso (cargaba statsmodels en el camino de `api` a través de
+  `PostgreSQL.py`); scipy sigue cargándose por `dask` desde `mtpy/core/data.py`.
+
+Verificado en la sesión (2026-10-13):
+
+- Suite unitaria: `python -m pytest -m "not integration" -q` → 556 passed, 75 deselected (al cerrar, en `149a3ff`).
+- `bash deploy/nginx-check.sh` → `syntax is ok` y `test is successful` (Task 3 y de nuevo al cerrar).
+- `S3_BUCKET= DB_HOST= python -m uvicorn api:api --port 8001` y `bash deploy/check-api.sh http://127.0.0.1:8001` al
+  cerrar → salida 0, 25 OK, 12 `n/a` (sin nginx, sin base, sin publicar y `congelación: inactiva`), `todas las rutas
+  OK`; `curl -sI /api/v1/manifest` → `200 OK`. Uvicorn parado después; el puerto 8080 no se tocó.
+- `bash -n` limpio en `deploy/check-api.sh`, `deploy/smoke.sh`, `deploy/load-test.sh` y `deploy/docker/init.sh` (uno a
+  uno).
+- Ensayo local de la veda (Task 2, `S3_BUCKET=`): `publish forecast` de `es` con `"today":"2026-11-25"` y `dry_run` →
+  `es: refused (... inside the LOREG window ...)`; `freeze` activo ("Ensayo") → `manifest: 1 scopes, freeze on`;
+  `check-api.sh` con el manifest congelado → `OK /api/v1/scopes (x-freeze: active)`, `OK / (freeze-banner)`, todas
+  las rutas OK; desactivado y pasada la caché (62 s) → `n/a congelación: inactiva`, todas OK. El manifest local quedó
+  con `freeze: {active: false, message: null, since: null}`. La guarda de un autonómico se probó solo en los tests.
+- `check-api.sh` contra un servidor de prueba en la IP de la red local (Task 3) → `info cliente según nginx:
+  10.0.1.5` y el WARN.
+- `HEAD` a mano contra uvicorn (Task 5): `/api/v1/manifest` 200 con las cabeceras del `GET` (`content-length: 546`)
+  y 0 bytes de cuerpo; `/api/v1/nope` 404; `/` 200; `POST /api/v1/manifest` 404.
+- Ensayo de `point`/`unpublish` (Task 4) sobre `files/site` con copia en `files/site.bak`: se fabricó un segundo run
+  (`20261001-120000`); `point` movió `latest` a él; `unpublish 20261008-181100` dejó `history.json` con el run
+  restante; restaurado y comprobado: listado y sha de cada fichero idénticos a los de antes.
+- Carga local (Task 4, `ab`, 10 clientes, 5 s, uvicorn sin nginx): API 30.622 peticiones, 6.111 r/s, p95 2 ms, 0
+  fallos; `/` 4.392 peticiones, 878 r/s, p95 12 ms, 0 fallos; `X-Cache: HIT` 0/50 (sin nginx). Contra
+  `http://127.0.0.1:9` → `FAIL primera peticion: 000`, salida 1.
+- Arranque de un worker (Task 6, tres ejecuciones): `import api` de 1,55 s a 0,82 s y RSS de 325 MB a 232 MB.
+- `S3_BUCKET= /usr/bin/time -l python job.py publish '{"what":["backtest"],"scopes":["es"]}'` (Task 4): 2,3 s y 360
+  MB de RSS máximo; reescribió `files/site/v1/backtest/es` en local.
+- División de `publish` (Task 8): un guion de referencia (reloj fijo, dobles; dos runs de `forecast`, `analysis`,
+  `backtest`, `event`, dos `update_manifest`, `point` y `unpublish`) sobre el módulo original y sobre el paquete →
+  `diff -r` vacío en 70 ficheros (el original, ejecutado dos veces, también); `S3_BUCKET= python job.py publish
+  '{"what":["backtest"],"scopes":["es"],"dry_run":true}'` → `es: backtest published (28 cases, 5 elections)`.
+
+No verificado:
+
+- `docker build` y `bash deploy/smoke.sh` (el demonio de Docker estaba parado en toda la fase).
+- Nada en AWS: ECS, el ALB, el target group, los roles de tarea (que s3fs tome el rol con `key=None`), que ECS acepte
+  variables vacías en la definición de tarea, `awslogs`/`CWL_GROUP`; tampoco la carga contra el ALB.
+- `pg_dump`/`pg_restore` y los tests de integración contra una base restaurada.
+- La rama `hey` de `load-test.sh` (`hey` no está instalado) y un nginx local en el 8043 (sin cifras de caché).
+- Los pasos con `force` y `site-dry` del ensayo de la veda (necesitan el modelo y la base).
+- Las páginas en un navegador (los gráficos de `renderLines`, las barras por magnitud de `/elecciones`, el banner con
+  enlace y el pie congelado).
+- La memoria de `publish forecast` (de `es` o de todos los ámbitos).
+
+Menores aplazados (las líneas `minor (deferred)` del ledger, agrupadas por tarea):
+
+- Task 1: sin test a nivel de job del relleno dentro de la ventana nacional; reactivar `freeze` sobre un manifest
+  antiguo ya activo y sin `since` pone la fecha de hoy; dos líneas largas (`update_manifest`, ~125 columnas, y un
+  `assert` de 150 columnas en el test del job).
+- Task 2: con el manifest inalcanzable, la detección de la congelación de `check-api.sh` imprime `n/a congelación:
+  inactiva` (la comprobación anterior del manifest ya falla); estilo de una función anidada en `test_web_api.py`.
+- Task 3: el `register-task-definition` del README usa la ruta de la plantilla (el paso de copiarla se menciona
+  después); E702 en `tests/test_deploy_files.py`; sin test de lo añadido a `check-api.sh` ni de la clave de
+  `.env.example`; `/healthz` pierde las cabeceras de seguridad heredadas (inofensivo; `nosniff` opcional). No
+  verificado: Docker y que ECS acepte valores vacíos.
+- Task 4: el README no describe el `https://<host>` de ECS; el criterio "mayoría de HIT" se imprime pero no se exige;
+  `printf | grep -q` con SIGPIPE (teórico).
+- Task 5: el docstring de `HttpError` sigue diciendo que el despacho lo convierte en un error JSON (ahora pasa por
+  `error_result`, HTML en `Page`); el test de concurrencia es una guarda de diseño (decirlo en su docstring); el test
+  de `HEAD` podría comparar las cabeceras con las del `GET` en una ruta cacheada. Nota: `request`/`response` siguen en
+  el `App` compartido (ver E3).
+- Task 6: imports locales colocados antes de comentarios previos del cuerpo (cosmético); la anotación
+  `_manifest_entry -> tuple` podría ser `tuple[bytes, dict]`.
+- Task 7: `casa.html:39` muestra valores de error con signo (perfil de la fase 4; revisar las etiquetas en el chat de
+  diseño); ningún test comprueba directamente la celda de magnitud del último sondeo.
+- Task 8: el docstring de `fixed_prov` dice `publish.provenance` (parchea `publish.backtest.provenance`); el
+  docstring de `__init__` podría mencionar que `latest_entry` está en `common`.
+- Vistos al cerrar (Task 9): el comentario de `check_header` en `check-api.sh` dice que la API aún no responde a
+  `HEAD` (ya lo hace; podría usar `curl -sI`); con la concurrencia por defecto (50) `load-test.sh` supera el límite
+  por IP detrás de nginx o del ALB (anotado en el README: `4 20` con `hey`); el README pide 2 tareas como mínimo en el
+  servicio y la spec de la fase decía que una basta (anotado; decide Luis).
+- De la fase 5 siguen abiertos los menores que la fase 6 no recogió (tipo `Int64` según los datos, mediana de
+  `sample_size`, `round_cols` redundante, `astype(str)` de `pollster`, cuatro lecturas del paquete por página,
+  `readInitial` sin protección ante un JSON mal formado, test del menú solo de `/`).
+
+Pendiente de Luis:
+
+- Crear la infraestructura de ECS (clúster, ECR, servicio, target group con `/api/v1/health`, ALB, grupos de
+  seguridad, roles de lectura, escritura y ejecución, grupo de logs, secreto de `DB_PASSWORD`) y desplegar con las
+  plantillas de `deploy/ecs/` (copias locales con los marcadores sustituidos), según "Despliegue en ECS" del README;
+  decidir una o dos tareas en el servicio. Comprobar con `bash deploy/check-api.sh https://<host>` que la IP del
+  cliente es la pública.
+- Antes, si hay Docker: `docker build` y `bash deploy/smoke.sh` (con el paquete local y con `deploy/elections.env`).
+- Primer job en ECS: `run-task` de `publish backtest` (no necesita base) para probar el rol de escritura, los logs y
+  `RUN_JOB`; después medir la memoria de `publish forecast all` en la tarea de jobs y ajustar `memory` de
+  `task-job` (o publicar por ámbitos) antes del 23.
+- Prueba de carga contra el ALB (`bash deploy/load-test.sh https://<host> 4 20` con `hey`) y decidir
+  `asyncio.to_thread` (E3) con su p95; si entra, revisar que nada lea `app.request`/`app.response` tras un `await`.
+- `pg_dump -Fc -n elections` semanal durante la campaña (a fichero y a `s3://<bucket>/backups/`) y una restauración
+  en la base local con los tests de integración.
+- Veda: ensayar en local la semana del 17 de noviembre (README "Veda" → "Ensayo", incluidos los pasos con `force`
+  y `site-dry`); el 23, el runbook (publicar todos los ámbitos, comprobar el manifest, congelar con el texto
+  elegido, `check-api.sh` contra el host); la noche del 29, descongelar; después, con los resultados oficiales,
+  `publish event` de la elección.
+- Revisar la redacción de "Sesgo del margen" (lista, cabecera y tablas de `/elecciones`) y los valores con signo de
+  `casa.html`.
+- Para el chat de diseño (fase 7): el histograma de errores en el detalle de la elección (D10 de la fase 5); los
+  pasajes de `/metodo` (las 1.000 simulaciones escritas a mano, la frase de calibración, el herding, "las autonómicas
+  con menos peso", el punto de la veda y los sondeos encargados por partidos); los matices de las barreras
+  autonómicas; las etiquetas de `casa.html` y de "Sesgo del margen"; y lo que Luis vio al recorrer las páginas
+  (maquetación y contenido).
+- Pendientes de fases anteriores que sigan en pie (estado al cierre de la fase 5, "Pendiente de Luis").
+
+Siguiente: el despliegue en ECS y la operación de la campaña (ensayo de la veda la semana del 17, congelación el 23,
+descongelación el 29) y la fase 7 (diseño de las páginas), en el chat aparte.

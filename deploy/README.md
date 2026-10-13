@@ -1,6 +1,21 @@
 # Despliegue de la web (fases 0-2 y páginas desde los controladores)
 
 Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>` por la etiqueta que uses.
+(Enmienda 2026-10-13, fase 6: la guía cubre ya las fases 0 a 6, incluido el despliegue en AWS ECS; el título se
+conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`.)
+
+Índice:
+
+1. "Fichero de configuración", "Construir la imagen" y "Arrancar el contenedor" (Docker en local).
+2. "La web": nginx, páginas, API y base de datos; "Cómo añadir una página", "Desarrollo sin Docker" y
+   "Comprobaciones de la infraestructura" (`nginx-check.sh`, `smoke.sh`, `check-api.sh`).
+3. "Despliegue en ECS": qué debe existir en AWS, marcadores de las plantillas de `deploy/ecs/` y procedimiento.
+4. "Comprobar S3" y "Si `check_s3` falla".
+5. "Publicar": parámetros, estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest,
+   publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el manifest,
+   retirada de un run y "Guarda LOREG".
+6. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
+7. "Duraciones medidas": publicación, carga local, arranque de un worker y memoria del job.
 
 ## Fichero de configuración
 
@@ -47,7 +62,8 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
   permitía envenenar la caché. Los parámetros de más crean entradas, acotadas por `max_size=100m`,
   `inactive=10m` y `limit_req`.
-- `/healthz` → `200 ok`, sin pasar por Python.
+- `/healthz` → `200 ok`, sin pasar por Python. (Enmienda 2026-10-13, fase 6: también devuelve la cabecera
+  `X-Client-IP` con la IP que nginx atribuye al cliente; `check-api.sh` la imprime y avisa si es privada.)
 
 `nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`),
 `Promedio` (`/promedio`), `Escanos` (`/escanos`, con `?region=`), `Casas` (`/casas`, con `?id=` para el perfil de una casa; enmienda 2026-10-10, fase 4) y, desde la fase 5 (enmienda 2026-10-11), `Elecciones`
@@ -67,14 +83,18 @@ Notas de operación:
 - IP real: nginx toma la IP del cliente de `X-Forwarded-For` (módulo realip) cuando la petición llega
   de `127.0.0.1` o de `172.16.0.0/12` (docker-proxy). El proxy TLS de delante debe enviar
   `X-Forwarded-For`; si no, todas las peticiones parecen venir de la misma IP y el límite de 20 r/s se
-  aplica a todo el sitio a la vez.
+  aplica a todo el sitio a la vez. (Enmienda 2026-10-13, fase 6: nginx confía ahora en `127.0.0.1` y en los
+  tres rangos privados, `10.0.0.0/8`, `172.16.0.0/12` y `192.168.0.0/16`, con `real_ip_recursive on`, para
+  el ALB de ECS; ver "Despliegue en ECS".)
 - Retirar un run (`unpublish` o `point`) tarda hasta unos 3 minutos en verse: TTL de los punteros en la
   API (60 s) + caché de nginx (60 s) + `max-age=60` en el navegador.
 - Logs: `supervisord` se demoniza, así que dentro del contenedor `/dev/stdout` es `/dev/null`. nginx
   escribe en `/proc/1/fd/1` (acceso) y `/proc/1/fd/2` (errores), la salida de `init.sh` (PID 1), que es la
   del contenedor: deben verse con `docker logs` (la prueba de humo lo comprueba). Los logs de gunicorn
   siguen perdiéndose hasta que Luis adopte `nodaemon=true` / `exec supervisord` en `init.sh` (decisión
-  suya).
+  suya). (Enmienda 2026-10-13, fase 6: ya no se pierden: gunicorn escribe el acceso en `/proc/1/fd/1` y los
+  errores en `/proc/1/fd/2`, como nginx, y arranca con `-w $GUNICORN_WORKERS`; supervisord sigue
+  demonizado.)
 - `docker stop` tarda 10 s: `init.sh` deja bash como PID 1 esperando en `tail -f`, que ignora SIGTERM,
   y Docker acaba con SIGKILL. Por la misma razón (`exec supervisord`), la prueba de humo solo lo avisa
   (WARN).
@@ -92,7 +112,8 @@ funciona igual. Con las variables pero sin base alcanzable, 503 `database unavai
 log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`); las consultas no tienen límite
 salvo que se fije `DB_STATEMENT_TIMEOUT` (milisegundos). Para el contenedor de la web, pon
 `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env`: una consulta colgada da 503 `database unavailable` a los
-10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío. La variable afecta a todo lo que
+10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío (enmienda 2026-10-13: en ECS va en
+la definición de tarea de la web, `task-web.example.json`, y la de jobs lo deja vacío). La variable afecta a todo lo que
 corra con el entorno del contenedor: si el cron (`APP_CRONTAB`) o el worker de cola comparten contenedor con
 la web, también sus jobs quedan limitados a 10 s. Mientras `deploy/docker/crontab` esté vacío no hay
 conflicto; si un día el contenedor ejecuta publicaciones o cargas, ejecútalas en otro contenedor con la
@@ -173,7 +194,9 @@ Python solo sirve las páginas y la API.
 
 Contra uvicorn directamente, `curl -I` (HEAD) sobre `/` o `/promedio` da 404, porque las páginas se enrutan solo
 para GET y HEAD no está mapeado; detrás de nginx el HEAD se convierte en GET (`proxy_cache_convert_head`), así que
-el `curl -sI` de `smoke.sh` funciona.
+el `curl -sI` de `smoke.sh` funciona. (Enmienda 2026-10-13, fase 6: ya no es así: el router acepta `HEAD` en
+toda ruta `GET` y responde con las mismas cabeceras y sin cuerpo, también contra uvicorn; una ruta
+inexistente da 404.)
 
 ### Comprobaciones de la infraestructura
 
@@ -191,7 +214,8 @@ el `curl -sI` de `smoke.sh` funciona.
 
 Estado: `nginx.conf` se verificó el 2026-10-09 con un nginx 1.29.5 local (Homebrew) en el puerto 8043
 delante de uvicorn en el 8000: `/` primero `MISS` y luego `HIT`, cabeceras como las esperadas y
-`check-api.sh` todo OK. La prueba de humo con Docker está sin ejecutar.
+`check-api.sh` todo OK. La prueba de humo con Docker está sin ejecutar (sigue así al cierre de la fase 6,
+2026-10-13: el demonio de Docker estaba parado).
 
 Enmienda 2026-10-10 (fase 4): `check-api.sh` ganó `has_db` y comprueba `/casas`, `/api/v1/ratings` y las rutas
 de `analysis`; `bash deploy/check-api.sh http://127.0.0.1:8043` contra uvicorn con la base real y un nginx
@@ -200,7 +224,8 @@ cierre de la fase 4 de la spec.
 
 Pendiente de Luis: ejecutar `bash deploy/smoke.sh` con Docker (paquete local y `deploy/elections.env`);
 añadir las `location` de `/dist/` y el proxy a su nginx local y recorrer `/`, `/promedio` y `/escanos` con y sin JS
-(el botón "Ver" debe funcionar sin JS); desplegar la imagen.
+(el botón "Ver" debe funcionar sin JS); desplegar la imagen (enmienda 2026-10-13: el despliegue pasa a ECS, ver
+"Despliegue en ECS").
 
 Enmienda 2026-10-09: la primera publicación a S3 ya está hecha (Luis, 2026-10-08, run `20261008-202843`) y
 `jinja2` está en 3.1.6 desde `68522d2`; ya no son pendientes. Fase 3: `check-api.sh` y `smoke.sh` comprueban
@@ -225,7 +250,9 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 - Un clúster de ECS (`<cluster>`) y un repositorio de ECR `elections-web`.
 - Un servicio de ECS Fargate con la definición `elections-web`, con 2 tareas como mínimo, registrado en un target
   group (puerto 8042, protocolo HTTP) con health check en `/api/v1/health`, cada 30 s y 2 fallos para marcarlo
-  no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group.
+  no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group. (La spec de la
+  fase 6 decía que una tarea basta; con dos, cada tarea tiene su caché de nginx y de la API y el despliegue no
+  deja el servicio sin tareas. Lo decide Luis; el p95 de la prueba de carga es el criterio para escalar.)
 - Grupos de seguridad: el del ALB (entrada 443 desde internet), el de las tareas (entrada 8042 solo desde el
   ALB) y acceso desde el de las tareas al puerto 5432 de la RDS. Las tareas necesitan salida a internet
   o endpoints de VPC para ECR, S3, CloudWatch Logs y Secrets Manager.
@@ -549,7 +576,8 @@ El override de `RUN_JOB` lleva el JSON sin espacios (`init.sh` no entrecomilla):
 resto de parámetros en ese valor. La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
 prefijo `job`). El rol de jobs (`<task-role-write>`) escribe en `site/*` y `site-dry/*`; la web, con el rol de
 lectura, no puede escribir. Mide la memoria de `publish forecast all` antes de fiarte de los 4 GB de la plantilla
-(la tarea 4 de la fase 6 lo mide en local).
+(la tarea 4 de la fase 6 lo mide en local). (Enmienda 2026-10-13: en local solo se midió `publish backtest`, que no
+necesita la base; la memoria de `forecast` queda para la primera tarea de jobs en ECS, ver "Duraciones medidas".)
 
 ### Veda
 
@@ -558,7 +586,8 @@ Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 
 **23 de noviembre** (con los sondeos del día cargados como siempre):
 
 1. `python job.py publish '{"what":["forecast"],"scopes":"all"}'` publica el pronóstico definitivo de todos los
-   ámbitos (con `S3_BUCKET` y la RDS, como en "Publicar en S3 contra la RDS").
+   ámbitos (con `S3_BUCKET` y la RDS, como en "Publicar en S3 contra la RDS", o como tarea de ECS con ese
+   `RUN_JOB`, ver "Publicar desde ECS"; lo mismo para los pasos 3 y el descongelado).
 2. Comprobar el manifest (ver "Leer el manifest publicado").
 3. `python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}'` congela la web;
    `manifest.freeze.since` queda con la fecha del día. Texto sugerido: "Pronóstico definitivo, publicado el 23
@@ -606,7 +635,9 @@ Cada run guarda en su `meta.json` los `seconds` por paso (`init`, `fit`, `nowcas
 - Quitar un run malo: `{"what":["unpublish"],"scopes":["es"],"run":"<run_id>"}`. Borra su carpeta,
   reconstruye `history.json` y repunta el manifest al run anterior si apuntaba a él.
 - `point` y `unpublish` se ven en la web en 2 minutos como máximo: 60 s de caché de la API (por proceso) más
-  60 s de la de nginx. Los runs pedidos con `?run=` son inmutables en el navegador (un año).
+  60 s de la de nginx. Los runs pedidos con `?run=` son inmutables en el navegador (un año). (Más hasta 60 s
+  del `max-age` del navegador: unos 3 minutos para un visitante que ya tenía la página, como dicen las notas
+  de operación de "La web".)
 
 ### Guarda LOREG
 
@@ -623,11 +654,11 @@ deja marca (su `meta` no la tiene). La fecha de hoy es la de Europe/Madrid; `tod
 ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con `what: ["manifest"]` (ver
 "Veda").
 
-### Ensayos de operación
+## Ensayos de operación
 
 Cuatro ensayos antes de la semana de la elección. Los tres primeros se repiten con cada cambio de despliegue.
 
-#### Carga
+### Carga
 
 `bash deploy/load-test.sh BASE_URL [CONCURRENCIA=50] [SEGUNDOS=20]` mide `/api/v1/forecast/es/nowcast/summary` y
 `/` con `hey` (`-z ${SEGUNDOS}s -c $CONCURRENCIA -q 5`) o, si no está instalado, con `ab`. Imprime p95 y
@@ -639,14 +670,16 @@ respuesta no 2xx (`Non-2xx responses`) la falla, así que la carga debe quedar p
 primera petición que no sea 2xx/3xx (host caído, 000) también sale con 1.
 
 - Contra ECS: `bash deploy/load-test.sh https://<host>`. Todos los clientes salen de una IP, así que el límite
-  por IP se aplica al conjunto.
+  por IP se aplica al conjunto. (Enmienda 2026-10-13: con la concurrencia por defecto, 50, se superan los 20 r/s
+  por IP y la prueba falla con 429; contra ECS, `bash deploy/load-test.sh https://<host> 4 20` con `hey`
+  instalado. `ab` no limita el ritmo por cliente: detrás de nginx o del ALB, usar `hey`.)
 - Contra local: `bash deploy/load-test.sh http://127.0.0.1:8043` (nginx) o, sin caché, contra
   `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` (`http://127.0.0.1:8001`).
 - Criterios de la spec: p95 de la API < 200 ms, p95 de las páginas < 500 ms, mayoría de `HIT` y sin 5xx.
 - Si no se cumplen: mover a `asyncio.to_thread` las rutas que leen la base o el bundle (decisión E3), subir
   `GUNICORN_WORKERS` o la CPU de la tarea, y repetir.
 
-#### Retirada de un run (`point` y `unpublish`)
+### Retirada de un run (`point` y `unpublish`)
 
 Siempre sobre una copia del paquete local, con `S3_BUCKET=` vacío (el `.env` de la raíz apunta al bucket real):
 
@@ -660,12 +693,12 @@ Siempre sobre una copia del paquete local, con `S3_BUCKET=` vacío (el `.env` de
 5. Restaurar: `rm -rf files/site && mv files/site.bak files/site`, y comprobar que `latest` y las carpetas de
    `runs/es` son las de antes.
 
-#### Congelación
+### Congelación
 
 Ver "Veda" → "Ensayo" (guarda `refused`, `force`, `manifest.freeze` y `check-api.sh` en local). Repetirlo la
 semana del 17 de noviembre.
 
-#### Copia y restauración de la base
+### Copia y restauración de la base
 
 La RDS tiene copias automáticas; esta es la copia lógica del esquema `elections` y comprueba que se restaura:
 
@@ -679,7 +712,7 @@ python -m pytest -m integration -q
 El criterio es que `python -m pytest -m integration -q` pase contra la base restaurada. Las credenciales de la
 RDS no están en el repositorio: el ensayo lo ejecuta Luis (no se ha ejecutado en la fase 6).
 
-### Duraciones medidas
+## Duraciones medidas
 
 Primer paquete local de `es` (2026-10-08, contra la RDS, `n_sim=1000`): 121 s en total (init 35,5; ajuste
 42,5; nowcast 21,0; forecast 21,5; exportación 0,8). Ensayo con `n_sim=20`: 86 s. La duración de

@@ -261,3 +261,16 @@ El texto exacto del banner y del pie en la congelación (en español, siguiendo 
 plantillas de `deploy/ecs/`, el orden de los submódulos del paquete `publish`, las medidas de la prueba de carga
 (herramienta y cifras), la medida del RSS de `publish forecast es` y los detalles de los tests. El plan de tareas se escribe con `writing-plans` tras
 la aprobación de esta spec, con la veda y ECS como primeras tareas.
+
+## Estado al cierre (2026-10-13)
+
+Hecho en `dev`: plan en `ddee43a` (`docs/superpowers/plans/2026-10-13-web-fase-6-endurecimiento.md`), código en
+`ddee43a..149a3ff` (10 commits: `e17cfa8` guarda LOREG y `freeze.since`; `b9c110d` web congelada y sondeos vetados;
+`72a21f8` imagen para ECS y plantillas; `1e3073b` y `dcd4fe9` ensayos de operación; `08a6ea1` `HEAD` y despacho
+local; `a7ecf3f` workers más ligeros; `18b80d1` y `34e0f8f` flecos de la fase 5; `149a3ff` paquete `publish`) y el
+commit de documentación del cierre. 556 tests unitarios en verde (532 al empezar). Todos los objetivos de la spec
+tienen código y tests salvo lo que depende de AWS, de Docker o de la base (despliegue, carga contra el ALB, memoria
+de `publish forecast`, `pg_restore`), que queda a Luis. El detalle (resoluciones, menores aplazados, lo verificado y
+lo no verificado, pendientes de Luis y lo que va al chat de diseño) está en "Estado al cierre de la fase 6" de
+`docs/superpowers/specs/2026-10-07-web-publicacion-design.md`; los runbooks, en `deploy/README.md` ("Despliegue en
+ECS", "Publicar desde ECS", "Veda", "Ensayos de operación" y "Duraciones medidas").
