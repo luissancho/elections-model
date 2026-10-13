@@ -1,5 +1,5 @@
-// Method pages: the controls and, on the backtest subpage, the error and coverage of the backtest by horizon, drawn
-// from the data embedded by the server. The landing page has no data and draws nothing.
+// Method pages: the controls and, on the backtest subpage, the vote error, the coverage and the seat error of the
+// backtest by horizon, drawn from the data embedded by the server. The landing page has no data and draws nothing.
 import {fmtNum} from '../format.js';
 import {renderLines} from '../charts/line.js';
 import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
@@ -10,6 +10,8 @@ const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev
 const COVERAGE_COLORS = {'50': '#e69f00', '80': '#009e73', '95': '#1f4e79'};
 const NAMES = {model: 'Modelo', last_poll: 'Último sondeo', mean_4w: 'Media de 4 semanas', prev_result: 'Elección anterior'};
 const COVERAGE_LEVELS = ['50', '80', '95'];
+// The horizon run (mode Elección) of the seat error: its own colour, dashed.
+const ELECTION_COLOR = '#7f3c8d';
 
 /** `[horizon, value]` pairs of an aligned list, without the missing values. */
 function pairs(horizons, values) {
@@ -26,7 +28,7 @@ function paint() {
     return;
   }
 
-  const {horizons = [], mae = {}, coverage = {}} = readInitial();
+  const {horizons = [], mae = {}, coverage = {}, seats = {}} = readInitial();
 
   const maeEl = document.getElementById('mae-chart');
   if (maeEl && horizons.length) {
@@ -48,6 +50,17 @@ function paint() {
       tryDraw(() => renderLines(coverageEl, series, {
         formatter: (x) => fmtNum(x, 2), yMin: 0, yMax: 1, references: [0.5, 0.8, 0.95],
       }), 'the coverage by horizon');
+    }
+  }
+
+  const seatsEl = document.getElementById('seats-chart');
+  if (seatsEl && horizons.length) {
+    const series = [
+      {name: 'Modo Hoy', color: COLORS.model, points: pairs(horizons, seats.mae || [])},
+      {name: 'Modo Elección', color: ELECTION_COLOR, dashed: true, points: pairs(horizons, seats.mae_h || [])},
+    ].filter((line) => line.points.length);
+    if (series.length) {
+      tryDraw(() => renderLines(seatsEl, series, {formatter: (x) => fmtNum(x, 1)}), 'the seat error by horizon');
     }
   }
 }

@@ -6,6 +6,7 @@
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
+    {% include '_metodo_nav.html' +%}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if published %}
@@ -45,6 +46,10 @@
           anteriores y el resultado de la elección anterior. El modelo aporta algo si su error es menor que el de
           las tres.
         </p>
+        <p>
+          No dice cuánto se equivocará en la próxima elección: es una media de pocas elecciones pasadas, y una sola
+          elección rara puede moverla.
+        </p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('coverage', 'Cobertura de los intervalos', 'La fracción de resultados oficiales que caen dentro de los intervalos del modelo, según los días que faltan para la elección.') }}
@@ -78,9 +83,14 @@
           nominal: 0,50, 0,80 y 0,95 (las líneas discontinuas del gráfico). Si la cobertura es menor, los intervalos
           son demasiado estrechos; si es mayor, demasiado anchos.
         </p>
+        <p>
+          No dice si el modelo acierta al partido ganador: cuenta resultados dentro o fuera del intervalo, no cuánto
+          se aleja el centro.
+        </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('seats', 'Escaños y mayorías', 'El error de escaños de los partidos principales y la calidad de la probabilidad de mayoría absoluta de cada bloque.') }}
+      {{ m.card_start('seats', 'Escaños y mayorías', 'El error de escaños de los partidos principales según los días que faltan para la elección, en los modos Hoy y Elección, y la calidad de la probabilidad de mayoría absoluta de cada bloque.') }}
+        <div class="chart" id="seats-chart" role="img" aria-label="Error absoluto medio de escaños por horizonte en los modos Hoy y Elección"></div>
         <div class="table-wrap">
           <table id="seats-table">
             <caption>Error de escaños y calidad de la probabilidad de mayoría, por días de antelación.</caption>
@@ -92,8 +102,8 @@
                 <th scope="col">Cobertura del 95 %</th>
                 <th scope="col">CRPS de escaños</th>
                 <th scope="col">Brier de mayoría</th>
-                <th scope="col">Error de escaños (horizonte)</th>
-                <th scope="col">Brier de mayoría (horizonte)</th>
+                <th scope="col">Error de escaños (modo Elección)</th>
+                <th scope="col">Brier de mayoría (modo Elección)</th>
               </tr>
             </thead>
             <tbody>
@@ -114,10 +124,14 @@
         </div>
         {% call m.how() %}
         <p>
-          El error absoluto medio de escaños de los partidos principales, el CRPS (que premia una distribución de
-          escaños ajustada y bien centrada; es el error absoluto cuando la distribución es un punto) y el Brier de
-          la probabilidad de mayoría absoluta de cada bloque: cuanto más cerca de 0, mejor. Las columnas de
-          horizonte son las de la ejecución que añade la deriva de la opinión hasta la elección.
+          Cada línea es el error absoluto medio de escaños por partido: la continua, el modo Hoy; la discontinua, el
+          modo Elección, que añade la deriva de la opinión hasta la votación. La tabla suma el CRPS (premia una
+          distribución de escaños ajustada y bien centrada) y el Brier de la probabilidad de mayoría de cada
+          bloque: cuanto más cerca de 0, mejor.
+        </p>
+        <p>
+          No dice qué partido falla más: es una media de los principales, y solo cuenta las elecciones con escaños
+          válidos.
         </p>
         {% endcall %}
       {{ m.card_end() }}
@@ -155,8 +169,14 @@
         </div>
         {% call m.how() %}
         <p>
-          Una elección con escaños no válidos solo cuenta para el voto: algún partido no tenía resultado previo con
-          el que proyectar sus escaños.
+          Cada fila es una elección pasada a un horizonte, de la más reciente a la más antigua, con el error del voto
+          frente al del último sondeo, el error de escaños, la cobertura y el Brier. Una elección con escaños no
+          válidos solo cuenta para el voto: algún partido no tenía resultado previo con el que proyectar sus
+          escaños.
+        </p>
+        <p>
+          No dice por qué falló una elección concreta: para eso está el detalle de cada una en el
+          <a href="/elecciones{{ scope_query }}">Histórico de errores</a>.
         </p>
         {% endcall %}
       {{ m.card_end() }}
@@ -194,8 +214,12 @@
         </div>
         {% call m.how() %}
         <p>
-          Una probabilidad de mayoría alta en un bloque que no la logró es un fallo; el Brier resume todos ellos.
-          Donde los escaños no son válidos, el modelo no pudo proyectarlos y se muestra un guion.
+          Cada fila compara los escaños reales de un bloque con los del modelo y con la probabilidad de mayoría que
+          daba. Una probabilidad alta en un bloque que no la logró es un fallo; el Brier resume todos ellos. Donde
+          los escaños no son válidos, el modelo no pudo proyectarlos y se muestra un guion.
+        </p>
+        <p>
+          No dice si el bloque gobernó: la mayoría absoluta es una cifra de escaños, no un pacto.
         </p>
         {% endcall %}
       {{ m.card_end() }}
@@ -206,9 +230,9 @@
           opinión, efectos de casa) se ajustan únicamente con los ciclos anteriores.
         </p>
         <p>
-          Hay dos ejecuciones. El nowcast responde a «si las elecciones fueran hoy» y solo está calibrado a
-          horizontes cortos. La ejecución a horizonte, las columnas con sufijo «horizonte», añade la deriva de la
-          opinión hasta el día de la elección: es la comparación honesta a muchos días de distancia.
+          Hay dos ejecuciones, las de los dos modos del sitio. El modo Hoy responde a «si las elecciones fueran
+          hoy» y solo está calibrado a horizontes cortos. El modo Elección, las columnas «modo Elección», añade la
+          deriva de la opinión hasta el día de la votación: es la comparación honesta a muchos días de distancia.
         </p>
         <p>
           Las tres líneas base son: el último sondeo publicado, la media simple de los sondeos de las cuatro semanas

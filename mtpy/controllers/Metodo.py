@@ -1,7 +1,6 @@
 """
 Controller of the method page (``/metodo``) and of its subpages (``/metodo/{section}``).
 """
-from ..core.api import HttpError
 from ..lib import pages
 from .Page import Page
 
@@ -22,7 +21,7 @@ class Metodo(Page):
         str
             The HTML of ``metodo.html``.
         """
-        return self.render('metodo.html', **pages.metodo_context(self.state(), active=self.active))
+        return self.render('metodo.html', **pages.metodo_context(self.state()))
 
     async def section_action(self, section: str) -> str:
         """
@@ -43,10 +42,6 @@ class Metodo(Page):
         HttpError
             404 ``section not found`` for an unknown subpage or one without text yet.
         """
-        entry = pages.METODO_SECTIONS.get(section)
+        context = pages.metodo_section_context(self.state(), section)
 
-        if entry is None or entry['template'] is None:
-            raise HttpError(404, 'section not found')
-
-        # only the backtest has a text so far: the other subpages bring their context with their texts
-        return self.render(entry['template'], **pages.backtest_context(self.state(), active=self.active))
+        return self.render(pages.METODO_SECTIONS[section]['template'], **context)

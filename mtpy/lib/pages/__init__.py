@@ -26,6 +26,7 @@ from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, distr
                       escanos_headline_text, region_rows, resolve_region, seat_rows)
 from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
-from .metodo import METODO_SECTIONS, SECTIONS, method_href, metodo_context, subpages
+from .metodo import (LEGACY_SECTIONS, METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context,
+                     metodo_section_context, national_figures, subpages, thresholds_rows)
 from .promedios import (DEFINITIVE_PREFIX, TABLE_ROWS, chart_polls, headline_text, majority_rows, pollster_options,
                         promedios_context, round_series, table_rows)

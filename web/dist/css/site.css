@@ -263,6 +263,9 @@ article.card p { margin: 6px 0; }
 .link-list li + li { margin-top: var(--space-1); }
 .section-nav { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
 .section-nav a { display: inline-flex; align-items: center; min-height: var(--tap); }
+/* Subnavigation of the method pages, above the scope filter */
+.metodo-nav { margin: 0 0 var(--space-4); }
+.metodo-nav a[aria-current="page"] { font-weight: 600; }
 
 /* Text helpers */
 .muted { color: var(--color-muted); font-size: 0.9em; }

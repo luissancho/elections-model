@@ -104,7 +104,8 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         The common context, with ``filter_action`` set to ``/metodo/backtest``, plus ``published``.
         With a published backtest: ``backtest`` (its ``meta``),
         ``horizon_rows``, ``case_rows``, ``block_rows``, ``csv_links`` and ``initial`` (``state``,
-        ``horizons`` and, aligned with them, ``mae``, ``coverage`` and ``seats`` series).
+        ``horizons`` and, aligned with them, the ``mae``, ``coverage`` and ``seats`` series; ``seats`` holds
+        ``mae`` and ``mae_h``, the mean absolute seat error of the nowcast and of the horizon runs).
 
     Raises
     ------
@@ -140,6 +141,7 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         'mae': {'model': series('mae_shares'), 'last_poll': series('mae_last_poll'),
                 'mean_4w': series('mae_mean_4w'), 'prev_result': series('mae_prev_result')},
         'coverage': {'50': series('cov_shares50'), '80': series('cov_shares80'), '95': series('cov_shares95')},
+        'seats': {'mae': series('mae_seats'), 'mae_h': series('mae_seats_h')},
     }
 
     return context

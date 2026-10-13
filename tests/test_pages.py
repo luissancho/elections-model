@@ -1151,7 +1151,7 @@ def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     data = initial(body)
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
     assert data['mae']['last_poll'][0] == 1.74 and '5,77' in page
-    assert 'seats' not in data
+    assert data['seats'] == {'mae': [4.88, 5.25], 'mae_h': [None, None]}  # sin ejecución a horizonte en el fixture
     blocks = re.search(r'<table id="blocks-table">(.*?)</table>', page, re.S).group(1)
     rows = [re.findall(r'<td>(.*?)</td>', row) for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S) if '<td>' in row]
     invalid = [row for row in rows if row[0].startswith('10 ') and row[1] == '30']  # 2019-11-10 x 30
@@ -1190,13 +1190,70 @@ def test_metodo_renders_the_sections_without_data(api):
     assert status == 200 and 'initial-data' not in page
     assert re.findall(r'<script type="module" src="([^"]+)"', page) == ['/dist/js/pages/metodo.js']
     assert re.findall(r'/dist/js/pages/[a-z]+\.js', page) == ['/dist/js/pages/metodo.js']
-    for section_id, title in pages.SECTIONS:
-        assert 'id="{}"'.format(section_id) in page and title in page
-    sections = re.findall(r'<section id="([a-z]+)" class="card">(.*?)</section>', page, re.S)
-    assert [section_id for section_id, _ in sections] == [section_id for section_id, _ in pages.SECTIONS]
+    sections = re.findall(r'<section id="([a-z-]+)" class="card">(.*?)</section>', page, re.S)
+    assert [section_id for section_id, _ in sections] == ['intro', 'datos', 'como-funciona', 'publicacion',
+                                                           'limitaciones']
     assert all('<p>' in body for _, body in sections)  # ninguna sección sin texto en la plantilla
+    for section_id, title in pages.SECTIONS + pages.LEGACY_SECTIONS:
+        assert 'id="{}"'.format(section_id) in page and title in page
+    legacy = dict(sections)['como-funciona']
+    assert re.findall(r'<h3 id="([a-z]+)">', legacy) == [section_id for section_id, _ in pages.LEGACY_SECTIONS]
+    assert all(len(text.strip()) > 100 for text in re.split(r'<h3 id="[a-z]+">', legacy)[1:])
+    assert '10.000 elecciones' in page and 'contiene el' not in page  # sin backtest, sin frase de cobertura
     for href in ('/metodo/backtest?scope=es', '/casas?scope=es', '/elecciones?scope=es', '/es/escanos'):
         assert 'href="{}'.format(href) in page
+
+
+def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_app):
+    write_backtest(fresh_app.fs)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'contiene el resultado el 96 % de las veces a 6 días de la votación y el 100 % a 30 días' in page
+    assert 'En las generales: 2 elecciones, a 6 y 30 días de la votación.' in page
+
+
+def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
+    page = html(call(api, '/metodo')[2])
+    assert 'con el pronóstico definitivo;' in page and 'desde el' not in page
+    publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'},
+                            today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    assert 'con el pronóstico definitivo: desde el 23 nov 2026;' in html(call(api, '/metodo')[2])
+
+
+def test_metodo_subpage_404_and_section_context(api, fresh_app):
+    for section in ('nope', 'promedio'):
+        with pytest.raises(HttpError) as error:
+            pages.metodo_section_context({'scope': None, 'mode': None, 'run': None}, section)
+        assert error.value.status == 404 and error.value.message == 'section not found', section
+    write_backtest(fresh_app.fs)
+    context = pages.metodo_section_context({'scope': 'es', 'mode': None, 'run': None}, 'backtest')
+    assert context['section'] == 'backtest' and context['published'] and context['subpages'][3]['active']
+    assert context['figures']['n_sim'] == 10000 and len(context['thresholds']) == 18
+
+
+def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
+    page = html(call(api, '/metodo')[2])
+    assert '¿Cómo promediamos las encuestas?' in page and 'href="/metodo/backtest"' in page
+    assert 'href="/metodo/promedio"' not in page  # sin texto todavía (tarea 9 lo activa)
+    assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
+    assert 'se congela' in page and 'fuera de España' in page
+    assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
+
+
+def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fresh_app):
+    write_backtest(fresh_app.fs)
+    rows = {row['code']: row for row in pages.thresholds_rows()}
+    assert rows['es']['threshold'] == 3 and rows['es-cn']['threshold_scope'] == 4 and rows['es-md']['rating_weight'] == 0.5
+    figures = pages.national_figures()
+    assert figures['n_sim'] == fixture_data('meta')['n_sim'] and figures['coverage'][0]['horizon'] == min(fixture_data('backtest-meta')['horizons'])
+
+
+def test_backtest_subpage_has_the_seats_chart_and_the_subnav(api, fresh_app):
+    write_backtest(fresh_app.fs)
+    status, _, body = call(api, '/metodo/backtest', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'id="seats-chart"' in page and 'id="metodo-nav"' in page and 'id="scope-filter"' in page
+    assert initial(body)['seats'].keys() == {'mae', 'mae_h'}
 
 
 def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
