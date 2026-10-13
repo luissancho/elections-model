@@ -52,12 +52,12 @@ docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/
 Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de proxy del resto:
 
 - `/dist/` → ficheros de `web/dist/` (`css`, `js`, `vendor`, `img`), con cabeceras de seguridad.
-  `/dist/vendor/` (ECharts, con la versión en el nombre) lleva caché de un año; el resto de `/dist/`
-  (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
+  `/dist/vendor/` (ECharts, con la versión en el nombre, y desde la fase 7 las fuentes de `/dist/vendor/fonts/`)
+  lleva caché de un año; el resto de `/dist/` (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
   `/var/lib/nginx/api_cache`, cabecera `X-Cache`) y `limit_req` de 20 r/s por IP con ráfaga de 40
-  (exceso: 429). Las páginas (`/`, `/promedio`, `/escanos`, `/casas`, `/elecciones`, `/modelo`, `/metodo`) pasan por
-  el mismo bloque que la API: también se cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
+  (exceso: 429). Las páginas (`/`, `/{scope}`, `/{scope}/escanos`, `/elecciones`, `/casas`, `/metodo` y
+  `/metodo/*`, más las redirecciones de las URL antiguas) pasan por el mismo bloque que la API: también se cachean 60 s en nginx y cuentan para el mismo límite. La clave de caché es la de nginx por defecto
   (URI completa con la query string). Se probó una clave propia sobre `run`/`format` y se descartó: nginx
   y la API leen los nombres de los parámetros de forma distinta (codificación y mayúsculas), lo que
   permitía envenenar la caché. Los parámetros de más crean entradas, acotadas por `max_size=100m`,
@@ -65,18 +65,66 @@ Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de pro
 - `/healthz` → `200 ok`, sin pasar por Python. (Enmienda 2026-10-13, fase 6: también devuelve la cabecera
   `X-Client-IP` con la IP que nginx atribuye al cliente; `check-api.sh` la imprime y avisa si es privada.)
 
-`nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: `Index` (`/`),
-`Promedio` (`/promedio`), `Escanos` (`/escanos`, con `?region=`), `Casas` (`/casas`, con `?id=` para el perfil de una casa; enmienda 2026-10-10, fase 4) y, desde la fase 5 (enmienda 2026-10-11), `Elecciones`
-(`/elecciones`: las elecciones pasadas publicadas con el error del sector; con `?date=YYYY-MM-DD`, el detalle de una),
-`Modelo` (`/modelo`: la precisión del modelo por horizonte, del backtest publicado) y `Metodo` (`/metodo`: el texto de
-la metodología, sin gráficos), controladores de `mtpy/controllers/` que heredan de `Page` y usan plantillas
-Jinja2 de `web/templates/`, con los datos del paquete embebidos en la página (`initial-data`); el JS de
-`web/dist/js/pages/` solo dibuja los gráficos. `/elecciones` y `/modelo` leen solo el paquete (sin base): sin
-elecciones o sin backtest publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400
-("Fecha no válida.") y una elección no publicada, 404 ("Elección no publicada."). Una ruta desconocida fuera de `/api/` da un 404 HTML de
-Python (dentro de `/api/`, el 404 JSON de la API). Toda página, incluidas `/elecciones`, `/modelo` y `/metodo`,
-necesita un pronóstico publicado del ámbito elegido (la cabecera común lee su `meta`): un ámbito con backtest
-pero sin pronóstico responde 404 "Este ámbito no tiene pronóstico publicado." y, sin ningún paquete, 503.
+`nginx.conf` ya no tiene `root`, `index` ni `try_files`. Las páginas las renderiza Python: controladores de
+`mtpy/controllers/` que heredan de `Page` y usan plantillas Jinja2 de `web/templates/`, con los datos del paquete
+embebidos en la página (`initial-data`); el JS de `web/dist/js/pages/` solo dibuja los gráficos y no hace `fetch`.
+Las rutas están en `pages.ROUTES` (`mtpy/lib/pages/common.py`), salvo `/`, que es el valor por defecto del router
+(controlador `index`): `Router.handle` devuelve la primera que casa, así que las fijas van antes que `/{scope}`.
+
+Mapa del sitio (enmienda 2026-10-13, fase 7; spec `docs/superpowers/specs/2026-10-13-web-fase-7-diseno-design.md`). Dos
+familias de páginas:
+
+- **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` (Promedios,
+  controlador `Promedios`, `promedios.html`) y `/{scope}/escanos` (Escaños, `Escanos`, `escanos.html`, con
+  `?region=`). Aceptan `?mode=` (Hoy, `nowcast`, por defecto; Elección, `forecast`) y `?run=`. Un código que no es del
+  catálogo da 404 "Ámbito desconocido."; uno del catálogo sin pronóstico, 404 "Este ámbito no tiene pronóstico
+  publicado.".
+- **Globales**, en el menú principal (`pages.PAGES`: Inicio, Histórico de errores, Rating de encuestadoras, Método):
+  `/` (Inicio, `Index`, `index.html`: los pronósticos publicados, uno por ámbito, y las elecciones pasadas con
+  detalle), `/elecciones` (Histórico de errores, `Elecciones`; con `?date=YYYY-MM-DD`, el detalle de una elección),
+  `/casas` (Rating de encuestadoras, `Casas`; con `?id=`, el perfil de una casa) y `/metodo` (`Metodo`, `metodo.html`:
+  introducción, índice de las cuatro preguntas, datos, publicación y limitaciones) con sus subpáginas
+  `/metodo/promedio`, `/metodo/escanos`, `/metodo/rating` y `/metodo/backtest` (la precisión del modelo, antes
+  `/modelo`). Donde el contenido depende del ámbito llevan `?scope=` (`es` por defecto).
+
+Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desde `Index`; `cache-control: no-store`, sin cuerpo, conservando el resto de la query):
+`/?scope=X` → `/X` (`/` sin `scope` es el Inicio); `/promedio` → `/X` (`/es` sin `scope`); `/escanos` → `/X/escanos`
+(con `region`); `/modelo` → `/metodo/backtest` (con `scope`, sin `mode` ni `run`). nginx no cachea los 301
+(`proxy_cache_valid 200 60s`).
+
+Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
+el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
+`event_bar` de `common_context`): nombre del evento ("Elecciones generales" o "Elecciones autonómicas · {nombre}"),
+fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), el control Hoy /
+Elección (formulario GET con "Ver" sin JS; en Escaños conserva `region`) con la línea que explica la opción activa y,
+con un run fijado, el chip del run. `/elecciones`, `/casas` y `/metodo/backtest` llevan el filtro de ámbito
+(`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS); el resto
+de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
+`_metodo_nav.html`.
+
+Patrón de tarjeta (`web/templates/_macros.html`, `{% import '_macros.html' as m %}`): toda sección es
+`m.card_start(id, título, descripción, subtitle=None, classes='', level=2)` … `m.card_end()`, con la descripción
+siempre visible; dentro, `{% call m.how(open=...) %}…{% endcall %}` es el "Cómo leerlo" plegado (`<details>`, abierto
+solo en la primera tarjeta de la página; tres partes: qué es cada elemento, cómo leerlo y qué no dice, ≤ 120
+palabras). Cada página abre con `m.headline(texto)` (una línea con cifras vivas) y las pestañas cierran con
+`m.closing(pregunta, method_href(...), adelanto, enlaces)`, la tarjeta de enlace a su texto del método.
+
+Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
+margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
+elección, el ranking y el perfil de casa, con `with_herding` (y `with_block_error`, por defecto verdadero) fijados
+antes del `include`. Toda columna de error usa su nombre del glosario.
+
+Fuentes: Source Serif 4 Semibold (títulos) y Source Sans 3 Regular (texto) en woff2, en `/dist/vendor/fonts/` con su
+licencia (`LICENSE`, SIL OFL); 188 KB entre las dos, servidas con la caché de un año de `/dist/vendor/` y
+`font-display: swap`, con la pila del sistema como respaldo. Para cambiar una fuente, cambia también el nombre del
+fichero (la caché es de un año). Los tokens de color y tipografía están en `:root` de `web/dist/css/site.css`.
+
+Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
+publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400 ("Fecha no válida.") y una
+elección no publicada, 404 ("Elección no publicada."); una subpágina del método desconocida, 404 ("Página del método
+no encontrada."). Una ruta desconocida fuera de `/api/` da un 404 HTML de Python (dentro de `/api/`, el 404 JSON de la
+API). Toda página necesita un pronóstico publicado del ámbito elegido (la cabecera común lee su `meta`): sin ningún
+paquete, 503.
 
 Notas de operación:
 
@@ -130,38 +178,57 @@ curl -s http://127.0.0.1:8042/healthz
 bash deploy/check-api.sh http://127.0.0.1:8042
 ```
 
-y abrir `http://127.0.0.1:8042/`, `/promedio`, `/escanos` (enmienda 2026-10-09, fase 3), `/casas` (enmienda
-2026-10-10, fase 4), `/elecciones`, `/modelo` y `/metodo` (enmienda 2026-10-11, fase 5). `check-api.sh` decide una vez si hay nginx a partir de `/healthz` (solo existe en nginx; sin
-nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un 503 `no database configured` la da por
-ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
-`/promedio?scope=es&mode=nowcast` (200 HTML), `/escanos?scope=es&mode=forecast` (200 HTML),
-`/escanos?region=abc` (400 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
-`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200
-HTML si la elección está publicada), `/modelo?scope=es` y `/metodo` (200 HTML), `/nope` (404 HTML), con nginx también `/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`) y
-`/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del paquete,
-`/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23`,
+y abrir `http://127.0.0.1:8042/`, `/es`, `/es/escanos`, `/elecciones`, `/casas`, `/metodo` y sus cuatro subpáginas
+(enmienda 2026-10-13, fase 7). `check-api.sh` decide una vez si hay nginx a partir de `/healthz` (solo existe en
+nginx; sin nginx lo marca `n/a`) y si hay base a partir de `/api/v1/parties` (un 503 `no database configured` la da
+por ausente y marca `n/a sin base de datos` las rutas que la necesitan). Comprueba `/` (200 HTML),
+`/es?mode=nowcast` y `/es/escanos?mode=forecast` (200 HTML), `/es/escanos?region=abc` (400 HTML), `/promedio` y
+`/modelo` (301), `/es-zz` (404 HTML), `/casas?scope=es` (200 HTML, necesita base), `/casas?id=abc` (400 HTML),
+`/elecciones?scope=es` (200 HTML), `/elecciones?date=abc` (400 HTML), `/elecciones?scope=es&date=2023-07-23` (200 HTML
+si la elección está publicada), `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y
+`/metodo/rating` (200 HTML), `/metodo/nope` y `/nope` (404 HTML), con nginx también
+`/dist/vendor/echarts-5.6.0.min.js` (`application/javascript`), `/dist/vendor/fonts/SourceSerif4-Semibold.woff2`
+(`font/woff2`) y `/dist/css/site.css` (`text/css`), y 21 rutas de la API (código, tipo y JSON válido): las 10 del
+paquete, `/api/v1/ratings?scope=es`, `/api/v1/polls?scope=es&limit=5`, `/api/v1/results/es/2023-07-23`,
 `/api/v1/drift?scope=es` y `/api/v1/events/es` (200 JSON, necesitan base), `/api/v1/analysis/es-xx/herding` (400),
-`/api/v1/analysis/es/nope` (404), `/api/v1/events/es/2023-07-23/pollsters` y `/api/v1/backtest/es/by-horizon` (200 JSON
-si están publicados), `/api/v1/events/es/2023-13-01/meta` (400) y `/api/v1/backtest/es/nope` (404); sale con error si
-alguna falla. Lo que escriben `publish event` y `publish backtest` puede faltar en el paquete (en local, casi
-siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
+`/api/v1/analysis/es/nope` (404), `/api/v1/events/es/2023-07-23/pollsters` y `/api/v1/backtest/es/by-horizon` (200
+JSON si están publicados), `/api/v1/events/es/2023-13-01/meta` (400) y `/api/v1/backtest/es/nope` (404); sale con
+error si alguna falla. Lo que escriben `publish event` y `publish backtest` puede faltar en el paquete (en local,
+casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
 publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquier otra respuesta.
 
 ### Cómo añadir una página
 
-1. Controlador `mtpy/controllers/<Nombre>.py` que herede de `Page`, con `active` (la entrada del menú) y
-   un `index_action` que llame a `render(plantilla, **contexto)`; ver `Promedio.py`.
-2. Plantilla en `web/templates/` que extienda `base.html`.
-3. Entrada en `pages.ROUTES` (ruta, controlador, acción, métodos) y en `pages.PAGES` (menú), en
-   `mtpy/lib/pages/common.py`. `/` es el valor por defecto del router (controlador `index`), por eso es la
-   única página que no figura en `ROUTES`; toda página nueva necesita su entrada.
-4. El constructor del contexto de la página, en su propio módulo `mtpy/lib/pages/<página>.py` (como
-   `index.py` o `promedio.py`), reexportado en `mtpy/lib/pages/__init__.py` para que el controlador lo
-   llame como `pages.<página>_context`.
-5. Un test en `tests/test_pages.py`.
-6. Un parámetro propio de la página (como `region` en `/escanos`) se valida en `webapi` (`check_region`) y se
-   lee en el `index_action`, fuera de `parse_state`: así no entra en los enlaces del menú ni en el estado
-   común `scope`/`mode`/`run`.
+(Enmienda 2026-10-13, fase 7.) Primero, la familia:
+
+- **De evento** (habla de la próxima elección de un ámbito, como Promedios y Escaños): ruta `/{scope}/<nombre>` en
+  `pages.ROUTES`, después de las fijas; el controlador valida el ámbito con `pages.resolve_event_scope(scope)`, pasa
+  `self.state(scope)` al constructor del contexto y este llama a `common_context(state, None, event=True,
+  active_suffix='/<nombre>')`. El enlace va como pestaña de la barra de evento: una entrada en `pages.EVENT_TABS`.
+- **Global** (vale para todos los ámbitos, como el histórico o el rating): ruta fija en `pages.ROUTES`, antes de
+  `/{scope}`, y entrada en el menú `pages.PAGES`; el contexto llama a `common_context(state, '/<nombre>')` y, si el
+  contenido depende del ámbito, la plantilla incluye `_scope_filter.html` (`?scope=`, `es` por defecto).
+
+Después, en las dos:
+
+1. Controlador `mtpy/controllers/<Nombre>.py` que herede de `Page`, con `active` y una acción que llame a
+   `render(plantilla, **contexto)`; ver `Promedios.py` (evento) o `Elecciones.py` (global).
+2. Plantilla en `web/templates/` que extienda `base.html` y monte cada sección con las macros de `_macros.html`
+   (`headline`, `card_start`/`card_end`, `how` y, al final, `closing` con `method_href('<sección>')`); si muestra
+   medidas de error, incluye `_glosario.html` y usa sus nombres de columna.
+3. El constructor del contexto, en su propio módulo `mtpy/lib/pages/<página>.py` (como `promedios.py` o
+   `elecciones.py`), reexportado en `mtpy/lib/pages/__init__.py` para que el controlador lo llame como
+   `pages.<página>_context`.
+4. Tests en `tests/test_pages.py`; `tests/test_web_routes.py` comprueba que todo enlace de una plantilla resuelve.
+5. Un parámetro propio de la página (como `region` en Escaños) se valida en `webapi` (`check_region`) y se lee en la
+   acción, fuera de `parse_state`: así no entra en los enlaces del menú ni en el estado común `scope`/`mode`/`run`.
+6. Las rutas nuevas, en `deploy/check-api.sh` y `deploy/smoke.sh`.
+
+Una subpágina del método no necesita ruta ni controlador: basta su plantilla `web/templates/metodo_<id>.html` (que
+incluye `_metodo_nav.html`) y su entrada en `METODO_SECTIONS` (`mtpy/lib/pages/metodo.py`: `title` y `template`). Una
+entrada con `template` a `None` no se enlaza y su ruta da 404; `method_href('<id>')` devuelve `/metodo/<id>` cuando
+hay texto y `/metodo` mientras no lo hay, así que las tarjetas de cierre pueden enlazarla desde el principio. Si la
+subpágina necesita datos propios, `metodo_section_context` ramifica por sección (como el backtest).
 
 Si la página dibuja gráficos, el módulo `web/dist/js/pages/<nombre>.js` lee `initial-data` con
 `readInitial` y no hace `fetch`.
@@ -189,7 +256,7 @@ S3_BUCKET= python -m uvicorn api:api --port 8000
 ```
 
 Con `S3_BUCKET=` vacío la API lee el paquete local `files/site/v1`. Después se abre `http://localhost:8080/`.
-Sin nginx, `http://127.0.0.1:8000/` y `/promedio` se renderizan, pero los recursos de `/dist/` dan 404:
+Sin nginx, `http://127.0.0.1:8000/` y `/es` se renderizan, pero los recursos de `/dist/` (CSS, JS y fuentes) dan 404:
 Python solo sirve las páginas y la API.
 
 Contra uvicorn directamente, `curl -I` (HEAD) sobre `/` o `/promedio` da 404, porque las páginas se enrutan solo
@@ -204,8 +271,10 @@ inexistente da 404.)
   `/dist/` reescritos a `<repo>/web/dist/...` (no arranca nginx). Requiere nginx instalado.
 - `bash deploy/smoke.sh [deploy/elections.env]`: construye la imagen, la arranca, comprueba que no hay
   `*.env` en ella, ejecuta `check-api.sh`, las cabeceras de caché de `/dist/vendor/`
-  (`max-age=31536000`), `/dist/js/pages/promedios.js` (`no-cache`) y `/` (`max-age=60`), que `/promedio`,
-  `/escanos`, `/elecciones?scope=es`, `/modelo?scope=es` y `/metodo` devuelven HTML y que `/` contiene `initial-data`; con `deploy/elections.env`, también que
+  (`max-age=31536000`, también de `/dist/vendor/fonts/SourceSans3-Regular.woff2`), `/dist/js/pages/promedios.js`
+  (`no-cache`) y `/` (`max-age=60`), que `/`, `/es`, `/es/escanos`, `/elecciones?scope=es`,
+  `/metodo/backtest?scope=es`, `/metodo`, `/metodo/promedio`, `/metodo/escanos` y `/metodo/rating` devuelven HTML y
+  que `/` contiene `initial-data`; con `deploy/elections.env`, también que
   `/casas?scope=es` devuelve HTML (con el paquete local y sin base, `/casas` es un 503 y `check-api.sh` lo
   marca `n/a`, así que el humo no lo exige); avisa (WARN, sin fallar) si `docker logs` no tiene
   líneas de acceso de nginx o si `docker stop` tarda 10 s o más. Sin argumento usa el
@@ -236,6 +305,13 @@ las rutas de `events` y `backtest`; `smoke.sh`, las tres páginas. Contra uvicor
 (`S3_BUCKET=` y `DB_HOST=` vacíos, solo el backtest de `es` publicado en local) dio todas las rutas OK: las de base
 `n/a sin base de datos` y las de la elección 2023-07-23 `n/a sin publicar`. Los pendientes de la fase 5 están en
 el estado al cierre de la fase 5 de la spec.
+
+Enmienda 2026-10-13 (fase 7): `check-api.sh` comprueba las rutas de evento (`/es`, `/es/escanos`), las
+redirecciones (`/promedio`, `/modelo`), `/es-zz` (404), el método y sus subpáginas (`/metodo/nope` 404) y una fuente
+de `/dist/vendor/fonts/` (solo con nginx); `smoke.sh`, las páginas nuevas y la caché de un año de las fuentes.
+Contra uvicorn sin nginx, con el paquete local (`S3_BUCKET=` y `DB_HOST=` vacíos), dio 32 OK y 13 `n/a` (sin nginx,
+sin base, sin publicar y `congelación: inactiva`), `todas las rutas OK`. Los pendientes de la fase 7 están en el
+estado al cierre de su spec.
 
 ## Despliegue en ECS
 

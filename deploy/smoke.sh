@@ -7,8 +7,8 @@
 #             files/ montado en /app/files).
 #
 # Comprueba: imagen sin *.env, /healthz, rutas de la API (deploy/check-api.sh),
-# paginas (/, /es, /es/escanos, /elecciones, /metodo/backtest, /metodo; /casas con ENV_FILE)
-# y cabeceras de cache. Avisa (WARN, sin fallar) si `docker
+# paginas (/, /es, /es/escanos, /elecciones, /metodo y sus cuatro subpaginas; /casas con ENV_FILE)
+# y cabeceras de cache (tambien de las fuentes de /dist/vendor/fonts/). Avisa (WARN, sin fallar) si `docker
 # logs` no tiene lineas de acceso de nginx o si `docker stop` tarda 10 s o mas.
 # El contenedor se elimina siempre al terminar.
 set -euo pipefail
@@ -68,6 +68,9 @@ check_static /es/escanos text/html
 check_static "/elecciones?scope=es" text/html
 check_static "/metodo/backtest?scope=es" text/html
 check_static /metodo text/html
+check_static /metodo/promedio text/html
+check_static /metodo/escanos text/html
+check_static /metodo/rating text/html
 # /casas lee la base: con el paquete local (sin DB_*) da 503, asi que solo se comprueba con ENV_FILE.
 if [ -n "$env_file" ]; then
     check_static "/casas?scope=es" text/html
@@ -90,6 +93,7 @@ check_header() {
     echo "OK   $path Cache-Control contiene '$pattern'"
 }
 check_header /dist/vendor/echarts-5.6.0.min.js 'max-age=31536000'
+check_header /dist/vendor/fonts/SourceSans3-Regular.woff2 'max-age=31536000'
 check_header /dist/js/pages/promedios.js 'no-cache'
 check_header / 'max-age=60'
 

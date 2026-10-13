@@ -139,8 +139,14 @@ check "/elecciones?date=abc" 400 html
 check_published "/elecciones?scope=es&date=2023-07-23" html
 check "/metodo/backtest?scope=es" 200 html
 check /metodo 200 html
+check /metodo/promedio 200 html
+check /metodo/escanos 200 html
+check /metodo/rating 200 html
+check /metodo/nope 404 html
+check /modelo 301 none
 check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
+check_nginx_only /dist/vendor/fonts/SourceSerif4-Semibold.woff2 font/woff2
 check_nginx_only /dist/css/site.css text/css
 check /api/v1/health 200 json
 check /api/v1/manifest 200 json
