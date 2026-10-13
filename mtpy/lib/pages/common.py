@@ -64,7 +64,6 @@ MESSAGES = {
     'section not found': 'Página del método no encontrada.',
 }
 OTHERS_COLOR = '#9e9e9e'
-MODE_LABELS = {'nowcast': 'Hoy', 'forecast': 'Elección'}
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
 
 
@@ -700,7 +699,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
         ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
         (``event_info``, or ``None`` on a global page), ``manifest``, ``meta``, ``catalog``,
-        ``mode_label``, ``mode_text`` (``mode_text``), ``freeze`` (the manifest switch),
+        ``mode_text`` (``mode_text``), ``freeze`` (the manifest switch),
         ``frozen`` (whether it is active) and ``title_suffix`` (``title_of``).
 
     Raises
@@ -739,7 +738,6 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'frozen': frozen,
         'meta': meta,
         'catalog': catalog(meta),
-        'mode_label': MODE_LABELS[mode],
         'mode_text': mode_text(mode, meta, info['days_left'] if info else days_left(meta.get('event_date'))),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
     }

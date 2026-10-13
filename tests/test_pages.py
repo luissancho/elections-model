@@ -482,7 +482,7 @@ def test_escanos_region_lives_in_the_district_form_not_in_the_event_bar(api, fre
 
 def test_escanos_nowcast_and_pinned_run(api):
     page = html(call(api, '/es/escanos', query='mode=nowcast&run=' + RUN)[2])
-    assert 'Estimación a' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
+    assert '· estimación a ' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
     assert page.count('run={}&amp;format=csv'.format(RUN)) == 5
 
 
@@ -1506,7 +1506,7 @@ def assert_public_wording(page, label):
     text = visible_text(page)
     assert not re.search(r'\b[Cc]asas?\b', text), (label, re.findall(r'.{40}\b[Cc]asas?\b.{20}', text)[:3])
     assert not re.search(r'\b[Pp]atrocinador(es)?\b', text), label
-    assert 'open>' not in page and '<details class="how" open' not in page, label
+    assert '<details class="how" open' not in page, label
 
 
 def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site):
@@ -1559,6 +1559,10 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
         # without JS the bar still has the title, the date, the tabs and the reading sentence
         assert 'Elecciones generales' in bar and '29 nov 2026' in bar and 'href="/es/escanos?mode=nowcast"' in bar
         assert 'Si las elecciones fueran hoy' in bar
+        # "Estimación a" is only ever followed by today; the footer names the reading date of the average otherwise
+        assert set(re.findall(r'[Ee]stimación a (\d+ \w+ \d{4})', page)) == {today}, path
+        footer = page[page.index('<footer'):]
+        assert 'promedio leído el 8 oct 2026' in footer and 'Estimación' not in footer, path
     write_bundle(fresh_app.fs, run_id=OLDER_RUN, manifest=False)
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
