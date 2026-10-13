@@ -7,6 +7,58 @@ from ..core.worker import Job
 from ..lib import bundle, publish
 
 
+STEPS = {'init': 'simulador listo', 'fit': 'promedio ajustado', 'nowcast': 'simulación de hoy',
+         'export-nowcast': 'exportación de hoy', 'forecast': 'simulación de la elección', 'export': 'exportación',
+         'meta': 'meta y titular'}
+
+
+def counted(n, one, many):
+    """Return ``n`` with the singular or plural noun (``'1 ámbito'``, ``'2 ámbitos'``)."""
+    return '{} {}'.format(n, one if n == 1 else many)
+
+
+class ScopeProgress:
+    """
+    Live progress lines of one scope (and day, with ``backfill``) of ``publish forecast``.
+
+    Calling the object reports a phase of ``publish.publish_forecast`` (its ``progress``
+    argument); ``start``, ``note`` and ``done`` print the start of the scope, a model warning
+    and its result line. Every line goes through ``say`` with the prefix ``[i/n] scope[ day]``.
+
+    Parameters
+    ----------
+    say : callable
+        Printer of one progress line (``Publish._say``).
+    scope : str
+        Scope being published.
+    index, total : int
+        Position of the scope (from 1) and number of scopes of the run.
+    day : str, optional
+        Day of a retrospective run.
+    """
+
+    def __init__(self, say, scope, index, total, day=None):
+        self.say = say
+        self.position = '[{}/{}]'.format(index, total)
+        self.prefix = '{} {}{}'.format(self.position, scope, '' if day is None else ' ' + day)
+
+    def __call__(self, step, seconds):
+        """Report the end of the phase ``step`` (a key of ``STEPS``) after ``seconds``."""
+        self.say('{}: {} ({:.1f} s)'.format(self.prefix, STEPS.get(step, step), seconds))
+
+    def start(self):
+        """Report that the scope (or day) starts."""
+        self.say('{}: empezando'.format(self.prefix))
+
+    def note(self, text):
+        """Report a model warning of the scope."""
+        self.say('{} · aviso: {}'.format(self.prefix, text))
+
+    def done(self, line):
+        """Report the summary line of the result of the scope (``Publish._line``)."""
+        self.say('{} {}'.format(self.position, line))
+
+
 class Publish(Job):
     """
     Publish the model results to the web bundle (``site/v1``) of the file system.
@@ -18,7 +70,11 @@ class Publish(Job):
     Each scope ends ``published``, ``skipped`` (no upcoming event, or
     ``publish.NothingToPublish``: no polls or an average that cannot be fitted),
     ``refused`` (LOREG guard) or ``failed`` (any other error, ``ValueError`` included,
-    such as a bundle validation failure or a non-ISO ``event_date``).
+    such as a bundle validation failure or a non-ISO ``event_date``). ``forecast`` prints its
+    progress live (``[i/n] scope: phase (seconds)`` and the result line of each scope, also to the
+    logger) and collects the model warnings of each scope into its result (``warnings``) and the
+    count of its summary line instead of letting them reach stderr; with ``verbose``, it prints
+    them live too.
 
     ``analysis`` computes the houses analysis of each scope (house effects, herding, poll
     errors and error data of the ``Computer``) and overwrites ``analysis/{scope}/``. It has no
@@ -187,9 +243,15 @@ class Publish(Job):
                          {'limit_date': day, 'run_at': publish.backfill_run_at(day)}) for day in days]
             params = dict(n_sim=n_sim, seed=seed, drange=drange, max_fc=max_fc, alpha=alpha,
                           correctors=correctors, verbose=verbose)
-            for scope in publish.resolve_scopes(scopes):
+            targets = publish.resolve_scopes(scopes)
+            if days is None:
+                self._say('publish forecast: {} · run {}'.format(counted(len(targets), 'ámbito', 'ámbitos'), run_id))
+            else:
+                self._say('publish forecast: {} · backfill {}..{} ({})'.format(
+                    counted(len(targets), 'ámbito', 'ámbitos'), days[0], days[-1], counted(len(days), 'día', 'días')))
+            for index, scope in enumerate(targets, 1):
                 outcomes, entry = self._forecast_runs(scope, writer, plan, event_date, today, force, dry_run,
-                                                      national=national, **params)
+                                                      national=national, index=index, total=len(targets), **params)
                 results[scope] = outcomes if days is not None else outcomes[0]
                 if any(result['status'] == 'failed' for result in outcomes):
                     failures.append('{} ({})'.format(scope, 'forecast'))
@@ -251,7 +313,8 @@ class Publish(Job):
 
         return results
 
-    def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, national=None, **params):
+    def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, national=None, index=1, total=1,
+                       **params):
         """
         Publish the runs of one scope and rebuild its history.
 
@@ -279,6 +342,9 @@ class Publish(Job):
             Leave the history alone.
         national : str or None
             Date of the next election of ``es``, for the LOREG guard of every scope.
+        index, total : int, default 1
+            Position of the scope (from 1) and number of scopes, for the live progress lines
+            (``_progress``): the start, the phases and the result of each run print as they happen.
         **params
             Forecast parameters.
 
@@ -292,9 +358,14 @@ class Publish(Job):
             every ``published`` result and every day skipped because its run exists turns
             ``failed``.
         """
-        outcomes = [self._forecast_scope(scope, writer, rid, event_date, today, force,
-                                         skip_existing=day is not None, national=national, **params, **extra)
-                    for day, rid, extra in plan]
+        outcomes = []
+        for day, rid, extra in plan:
+            progress = self._progress(scope, index, total, day)
+            progress.start()
+            result = self._forecast_scope(scope, writer, rid, event_date, today, force, skip_existing=day is not None,
+                                          national=national, progress=progress, **params, **extra)
+            progress.done(self._line(scope, result if day is None else {'day': day, **result}))
+            outcomes.append(result)
         entry = None
         run_ids = [rid for _, rid, _ in plan]
         involved = [i for i, result in enumerate(outcomes) if result['status'] == 'published'
@@ -352,7 +423,7 @@ class Publish(Job):
         return None
 
     def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, national=None,
-                        **params):
+                        progress=None, **params):
         """
         Publish the forecast of one scope, converting every outcome into a result dict.
 
@@ -378,6 +449,9 @@ class Publish(Job):
             running the model. Without it, an existing run (``FileExistsError``) is ``failed``.
         national : str or None
             Date of the next election of ``es``, for the LOREG guard of every scope.
+        progress : ScopeProgress, optional
+            Live progress of the scope: passed to ``publish.publish_forecast`` for its phases and,
+            with ``verbose``, used to print each model warning. ``None`` prints nothing.
         **params
             Forecast parameters.
 
@@ -392,10 +466,7 @@ class Publish(Job):
             reach stderr; with ``verbose``, each one is also printed live as a progress line.
         """
         notes = []
-        note = None
-        if params.get('verbose'):
-            def note(text):
-                self._say('{} · aviso: {}'.format(scope, text))
+        note = progress.note if params.get('verbose') and progress is not None else None
         try:
             value = event_date or publish.next_event_date(scope)
             if value is None:
@@ -408,7 +479,8 @@ class Publish(Job):
                 if writer.exists(bundle.path_run(scope, run_id)):
                     return {'status': 'failed', 'reason': self.RUN_INCOMPLETE, 'warnings': notes}
             with self._collect_warnings(notes, note):
-                out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, **params)
+                out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, progress=progress,
+                                               **params)
         except publish.PublishRefused as e:
             return {'status': 'refused', 'reason': str(e), 'warnings': notes}
         except publish.NothingToPublish as e:
@@ -453,6 +525,27 @@ class Publish(Job):
             warnings.simplefilter('always')
             warnings.showwarning = show
             yield notes
+
+    def _progress(self, scope, index, total, day=None):
+        """
+        Build the live progress printer of one scope (and day) of ``forecast``.
+
+        Parameters
+        ----------
+        scope : str
+            Scope being published.
+        index, total : int
+            Position of the scope (from 1) and number of scopes of the run.
+        day : str, optional
+            Day of a retrospective run (``backfill``), added to the prefix.
+
+        Returns
+        -------
+        ScopeProgress
+            Callable ``progress(step, seconds)`` of ``publish.publish_forecast``, with ``start``,
+            ``note`` and ``done`` for the other lines of the scope.
+        """
+        return ScopeProgress(self._say, scope, index, total, day)
 
     def _say(self, text):
         """Print one progress line now, with the time, and log it through the app logger, if there is one."""

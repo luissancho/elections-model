@@ -586,3 +586,33 @@ def test_forecast_without_model_warnings_has_none(fresh_app, tmp_path, patched):
 
     result = Publish().run(what=['forecast'], scopes=['es', 'es-md'], fs=FileSystem(str(tmp_path)))
     assert result['es']['warnings'] == [] and result['es-md']['warnings'] == []
+
+
+def test_forecast_prints_its_progress_live_before_the_summary(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    infos = []
+    fresh_app.set('logger', types.SimpleNamespace(error=lambda m: None, info=infos.append))
+    Publish().run(what=['forecast'], scopes=['es', 'es-cb'], fs=FileSystem(str(tmp_path)))
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    summary = next(i for i, line in enumerate(lines) if line.startswith('es: published'))
+    expected = ['publish forecast: 2 ámbitos · run ' + patched[0][1], '[1/2] es: empezando', '[1/2] es: simulador listo (',
+                '[1/2] es: promedio ajustado (', '[1/2] es: simulación de hoy (', '[1/2] es: exportación de hoy (',
+                '[1/2] es: simulación de la elección (', '[1/2] es: exportación (', '[1/2] es: meta y titular (',
+                '[1/2] es: published ', '[2/2] es-cb: empezando', '[2/2] es-cb: skipped (No polls']
+    found = [next(i for i, line in enumerate(lines) if text in line) for text in expected]
+    assert found == sorted(found) and found[-1] < summary
+    assert all(lines[i].startswith('[') and lines[i][9:11] == '] ' for i in found)  # [hh:mm:ss] delante
+    assert any('[1/2] es: promedio ajustado (' in m for m in infos)
+    assert any(m.startswith('es: published') for m in infos)  # el alert final con el resumen sigue llegando
+
+
+def test_backfill_progress_names_the_day(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)),
+                  backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    out = capsys.readouterr().out
+    assert 'publish forecast: 1 ámbito · backfill 2026-10-05..2026-10-06 (2 días)' in out
+    assert out.index('[1/1] es 2026-10-05: empezando') < out.index('[1/1] es 2026-10-06: promedio ajustado (')

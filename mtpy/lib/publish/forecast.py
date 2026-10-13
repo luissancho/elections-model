@@ -562,7 +562,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
                      correctors: Optional[dict] = None, freeze: bool = False, verbose: int = 0,
                      simulator: Optional[Callable] = None, stats: Optional[Callable] = None,
                      prov: Optional[Callable] = None, limit_date: Optional[str] = None,
-                     run_at: Optional[str] = None) -> dict:
+                     run_at: Optional[str] = None,
+                     progress: Optional[Callable[[str, float], None]] = None) -> dict:
     """Run the model for one scope and write an immutable run into the bundle.
 
     Pointers (history and manifest) are not touched. ``headline.json`` is written last, so a run
@@ -599,6 +600,13 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         (default) runs with ``drange`` as given.
     run_at : str, optional
         ISO UTC timestamp recorded as the run moment; defaults to the writer clock.
+    progress : callable, optional
+        Called as ``progress(step, seconds)`` when each phase ends, with ``step`` in order ``init``
+        (simulator built), ``fit`` (average fitted), ``nowcast`` (simulation of today),
+        ``export-nowcast`` (its parts written), ``forecast`` (simulation of the election), ``export``
+        (its parts and the run parts written) and ``meta`` (``meta`` and ``headline`` written), and the
+        seconds of the phase. ``None`` (default) reports nothing. The ``export`` of ``seconds`` is still
+        the sum of both exports.
 
     Returns
     -------
@@ -634,24 +642,33 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         elapsed, mark = now - mark, now
         return elapsed
 
+    def report(step, seconds):
+        """Report the end of a phase through ``progress``, if any; return its seconds."""
+        if progress is not None:
+            progress(step, seconds)
+        return seconds
+
     try:
         sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
                                        mode='nowcast', verbose=verbose, path='.', **cutoff, **correctors)
-        init = lap()
+    except ValueError as e:
+        raise NothingToPublish(str(e)) from e
+    init = report('init', lap())
+    try:
         names = sim.params['names']
         sim.fit_forecast(names=names, max_fc=max_fc, fillna=True)
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
-    fit = lap()
+    fit = report('fit', lap())
     sim.run(split=True, random=True, n_sim=n_sim)
     clip['nowcast'] = float(sim.clip_rate())
-    nowcast = lap()
+    nowcast = report('nowcast', lap())
     heads['nowcast'] = publish_mode(sim, writer, scope, run_id)
-    export = lap()
+    export = report('export-nowcast', lap())
     sim.mode = 'forecast'
     sim.run(split=True, random=True, n_sim=n_sim, horizon='deadline')
     clip['forecast'] = float(sim.clip_rate())
-    forecast = lap()
+    forecast = report('forecast', lap())
     heads['forecast'] = publish_mode(sim, writer, scope, run_id)
     fc = sim.model
     cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names)), ('fan', export_fan(sim)),
@@ -661,7 +678,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         writer.write_csv(bundle.path_csv(scope, run_id, part), frame)
     db_polls, db_last_poll = (stats or db_stats)(scope, event_date)
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    export += lap()
+    export += report('export', lap())
     seconds = {'init': init, 'fit': fit, 'nowcast': nowcast, 'forecast': forecast, 'export': export,
                'total': time.perf_counter() - start}
     seconds = {step: round(value, 1) for step, value in seconds.items()}
@@ -671,4 +688,5 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     headline = export_headline(sim, run_id, run_at, heads['nowcast'], heads['forecast'],
                                backfill=limit_date is not None)
     writer.write_json(bundle.path_part(scope, run_id, 'headline'), 'headline', headline, scope, run_id)
+    report('meta', lap())
     return {'scope': scope, 'entry': latest_entry(headline), 'seconds': seconds}

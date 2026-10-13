@@ -886,3 +886,19 @@ def test_publish_package_layout():
     assert publish.publish_backtest.__module__ == 'mtpy.lib.publish.backtest'
     assert publish.publish_event.__module__ == 'mtpy.lib.publish.events'
     assert publish.update_manifest.__module__ == 'mtpy.lib.publish.pointers'
+
+
+def test_publish_forecast_reports_each_phase_as_it_ends(tmp_path):
+    """`progress(step, seconds)` tras cada fase, en orden; `meta` llega con el titular ya escrito."""
+    writer, steps = make_writer(tmp_path), []
+
+    def progress(step, seconds):
+        steps.append((step, seconds, writer.exists(bundle.path_part('es', RUN, 'headline'))))
+
+    result = publish.publish_forecast('es', writer, RUN, '2026-11-29', n_sim=50, simulator=FakeSimulator(),
+                                      stats=fake_stats, prov=fake_prov, progress=progress)
+    assert [s[0] for s in steps] == ['init', 'fit', 'nowcast', 'export-nowcast', 'forecast', 'export', 'meta']
+    assert all(s[1] >= 0 for s in steps) and [s[2] for s in steps] == [False] * 6 + [True]
+    assert set(result['seconds']) == {'init', 'fit', 'nowcast', 'forecast', 'export', 'total'}
+    exports = dict((s[0], s[1]) for s in steps)
+    assert result['seconds']['export'] == round(exports['export-nowcast'] + exports['export'], 1)
