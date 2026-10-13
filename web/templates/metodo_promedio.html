@@ -19,14 +19,10 @@
       </nav>
       {{ m.card_start('resumen', 'En resumen', 'El promedio de encuestas en cuatro ideas.') }}
         <ul>
-          <li>Entran los sondeos publicados desde las elecciones anteriores, salvo los de los últimos días antes
-            de votar, los de agregadores y paneles en línea y los internos de los partidos.</li>
-          <li>Cada sondeo pesa según su muestra, cuántos ha publicado su casa en esos días, el rating de la casa y
-            lo que sus cifras oscilan frente a lo que permite su muestra.</li>
-          <li>A cada casa se le resta su inclinación propia hacia cada partido, medida en el ciclo y en su
-            historia, sin mover el nivel medio del promedio.</li>
-          <li>Cada día, el promedio es una recta ajustada a los sondeos cercanos; su banda dice dónde está el
-            consenso de las casas, no dónde estará el voto.</li>
+          <li>Entran los sondeos del ciclo, salvo los de los cinco últimos días, agregadores, paneles y partidos.</li>
+          <li>Cada sondeo pesa según su muestra, lo que publica su casa, su rating y cuánto oscilan sus cifras.</li>
+          <li>A cada casa se le resta su inclinación hacia cada partido, sin mover el nivel del promedio.</li>
+          <li>Cada día, una recta ajustada a los sondeos cercanos; su banda mide el consenso, no el voto.</li>
         </ul>
       {{ m.card_end() }}
       {{ m.card_start('que-entra', 'Qué sondeos entran', 'Los sondeos de cada elección publicados desde la anterior, con unas pocas exclusiones.') }}
@@ -79,8 +75,9 @@
           <var>c</var>, que mide cuánto se equivocaron sus sondeos en las elecciones anteriores frente a los
           demás sondeos de la misma elección (ver
           <a href="{{ method_href('rating') }}">¿Cómo calculamos el rating de las encuestadoras?</a>). Es
-          ln(1 + <var>R</var>) / ln(1 + <var>R̄</var>), con <var>R̄</var> el rating medio de las casas: una casa
-          de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no pesa nada.
+          ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100), con <var>R</var> en la escala de 0 a 100 en que se
+          publica y <var>R̄</var> el rating medio de las casas: una casa de rating medio pesa 1, el peso crece con
+          el rating cada vez más despacio y un rating 0 no pesa nada.
         </p>
         <p>
           <strong>La dispersión.</strong> <var>f</var><sub><var>c</var></sub> compara cuánto oscilan las cifras
@@ -105,7 +102,7 @@
       {{ m.card_start('efectos-de-casa', 'Los efectos de casa', 'Cada casa tiende a dar a cada partido algo más o algo menos que las demás; antes de promediar, esa inclinación se resta de sus sondeos.') }}
         <p>
           El efecto de casa es la desviación sistemática de una casa en un partido: si le da, de forma estable,
-          dos puntos más que el consenso, se le restan dos puntos a cada sondeo. Se estima con dos fuentes:
+          dos puntos más que el consenso, se le restan unos dos puntos a cada sondeo. Se estima con dos fuentes:
         </p>
         <ul>
           <li><strong>El ciclo:</strong> la desviación media de sus sondeos frente al promedio, con los pesos del
@@ -135,7 +132,7 @@
           Así la corrección no mueve el nivel medio del promedio a lo largo del ciclo: corrige qué casas publican
           alrededor de cada fecha. Si durante unas semanas solo publican casas que dan más voto a un partido, el
           promedio sin corregir lo subiría; el corregido, no. Lo que no corrige es el error que comparten todas las
-          casas a la vez: estimarlo con su historia está probado, pero no se repite de una elección a otra y queda
+          casas a la vez: estimarlo con su historia se ha probado, pero no se repite de una elección a otra y queda
           desactivado.
         </p>
         <p>

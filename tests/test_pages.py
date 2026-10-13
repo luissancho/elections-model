@@ -1233,11 +1233,13 @@ def test_metodo_landing_names_a_single_backtest_election_in_singular(api, fresh_
 
 def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
     page = html(call(api, '/metodo')[2])
-    assert 'con el pronóstico definitivo;' in page and 'desde el' not in page
+    assert 'con el pronóstico definitivo. Los sondeos' in page and 'desde el' not in page
+    assert 'no entran en el promedio porque su trabajo de campo acaba dentro de esos cinco días' in page
+    assert 'el modelo no los usa' not in page
     publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'},
                             today='2026-11-23')
     webapi.site().manifest_cache_clear()
-    assert 'con el pronóstico definitivo: desde el 23 nov 2026;' in html(call(api, '/metodo')[2])
+    assert 'con el pronóstico definitivo: desde el 23 nov 2026. Los sondeos' in html(call(api, '/metodo')[2])
 
 
 def test_metodo_subpage_404_and_section_context(api, fresh_app):
@@ -1267,6 +1269,7 @@ def test_metodo_promedio_text(api):
     for anchor in ('que-entra', 'peso', 'efectos-de-casa', 'regresion', 'banda', 'voto-estimado'):
         assert 'id="' + anchor + '"' in page, anchor
     assert 'id="metodo-nav"' in page and '<math' in page and 'En resumen' in page
+    assert 'ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100)' in page  # el rating del sitio va de 0 a 100
     assert 'href="/metodo/promedio"' in html(call(api, '/metodo')[2])
 
 
