@@ -56,13 +56,20 @@ def with_abs(rows: list) -> list:
     Returns
     -------
     list of dict
-        New dicts with ``error_blocks_abs`` (``abs(error_blocks)``, ``None`` when there is no error).
+        New dicts with ``error_blocks_abs`` and ``last_error_blocks_abs`` (absolute values of ``error_blocks`` and
+        ``last_error_blocks`` (this one only on rows that have it), ``None`` when missing).
     """
     result = []
 
     for row in rows:
         error = row.get('error_blocks')
-        result.append(dict(row, error_blocks_abs=None if error is None else abs(error)))
+        new = dict(row, error_blocks_abs=None if error is None else abs(error))
+
+        if 'last_error_blocks' in row:
+            last = row['last_error_blocks']
+            new['last_error_blocks_abs'] = None if last is None else abs(last)
+
+        result.append(new)
 
     return result
 
@@ -275,7 +282,10 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         for name, table, label, needs_model in EVENT_CSV if has_model or not needs_model
     ]
 
-    context['event'] = meta
+    summary = dict(meta.get('summary') or {})
+    error = summary.get('error_blocks')
+    summary['error_blocks_abs'] = None if error is None else abs(error)
+    context['event'] = dict(meta, summary=summary)
     context['results_rows'] = results_rows
     context['n_seats'] = results.get('n_seats')
     context['pollster_rows'] = pollster_rows

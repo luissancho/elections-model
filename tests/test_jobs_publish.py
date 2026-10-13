@@ -13,6 +13,11 @@ def entry(scope, run_id):
             'date_last': '2026-10-01', 'n_polls': 6}
 
 
+def fixed_prov(monkeypatch):
+    """Fija `publish.provenance` (sin `git` real) para los jobs de `backtest`."""
+    monkeypatch.setattr(publish, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+
+
 @pytest.fixture
 def patched(monkeypatch):
     """`resolve_scopes`, `next_event_date`, `publish_forecast` y `publish_analysis` sin base: `es` publica de
@@ -98,8 +103,10 @@ def test_loreg_window_refuses_es_unless_forced(fresh_app, tmp_path, patched):
     assert result['es']['status'] == 'published' and patched[0][3]['freeze'] is True
 
 
-def test_national_window_refuses_regional_forecast_and_analysis_but_not_events(fresh_app, tmp_path, patched, capsys):
+def test_national_window_refuses_regional_forecast_and_analysis_but_not_events(fresh_app, tmp_path, patched, capsys,
+                                                                               monkeypatch):
     from mtpy.jobs.Publish import Publish
+    fixed_prov(monkeypatch)
     fs = FileSystem(str(tmp_path))
     result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-25')
     assert result['es-cb']['status'] == 'refused' and 'of es 2026-11-29' in result['es-cb']['reason'] and patched == []
@@ -379,8 +386,9 @@ def test_backfill_retry_repairs_the_history_and_the_manifest(fresh_app, tmp_path
     assert entry['latest'] == '20261006-120000' and entry['run_at'] == '2026-10-06T12:00:00Z'
 
 
-def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys):
+def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
+    fixed_prov(monkeypatch)
     write_backtest_source(str(tmp_path / 'bt'))
     fs = FileSystem(str(tmp_path / 'site'))
     result = Publish().run(what=['backtest'], scopes=['es', 'es-cb'], fs=fs, source=str(tmp_path / 'bt'))
@@ -392,6 +400,7 @@ def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, caps
 
 def test_backtest_dry_run_writes_apart_and_a_failure_fails_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
+    fixed_prov(monkeypatch)
     write_backtest_source(str(tmp_path / 'bt'))
     fs = FileSystem(str(tmp_path / 'site'))
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: list(scopes))

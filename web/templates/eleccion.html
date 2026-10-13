@@ -8,7 +8,7 @@
       <section class="card" id="event">
         <p><a href="/elecciones{{ query }}">← Todas las elecciones</a></p>
         <h2>{{ event.event_date|date }}{% if event.name %} · {{ event.name }}{% endif %}</h2>
-        <p class="muted">Sondeos: {{ event.n_polls|int }} · Casas: {{ event.n_pollsters|int }} · Error medio: {{ event.summary.error_avg|num(1) }} · Error de bloques: {{ event.summary.error_blocks|num(1) }}</p>
+        <p class="muted">Sondeos: {{ event.n_polls|int }} · Casas: {{ event.n_pollsters|int }} · Error medio: {{ event.summary.error_avg|num(1) }} · Error de bloques: {{ event.summary.error_blocks_abs|num(1) }} · Sesgo del margen: {{ event.summary.error_blocks|num(1) }}</p>
       </section>
       <section class="card" id="results">
         <h2>Resultados</h2>
@@ -101,7 +101,7 @@
                 <td>{{ row.pollster }}</td>
                 <td>{{ row.last_days|int }}</td>
                 <td>{{ row.last_error_avg|num(1) }}</td>
-                <td>{{ row.last_error_blocks|num(1) }}</td>
+                <td>{{ row.last_error_blocks_abs|num(1) }}</td>
                 {% for block in blocks %}
                 <td>{{ row['last_' ~ block]|num(1) }}</td>
                 {% endfor %}

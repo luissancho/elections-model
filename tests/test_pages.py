@@ -761,6 +761,8 @@ def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, 
         if name == 'pollsters':
             rows = [dict(row, error_blocks=error) for row, error in zip(data['rows'], (-3.0, 1.0, 2.0))]
             data = {**data, 'rows': rows}
+        if name == 'meta':
+            data = {**data, 'summary': {**data['summary'], 'error_blocks': -2.5}}
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
@@ -769,6 +771,7 @@ def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, 
     page = html(body)
     table = re.search(r'<table id="pollsters-table">(.*?)</table>', page, re.S).group(1)
     assert status == 200 and 'Sesgo del margen' in table and '-3,0' in table
+    assert 'Error de bloques: 2,5 · Sesgo del margen: -2,5' in page
     shown = [re.sub(r'<.*?>', '', cell) for cell in re.findall(r'<tr>\s*<td>(.*?)</td>', table, re.S)]
     assert shown == [names[1], names[2], names[0]]
     data = initial(body)
