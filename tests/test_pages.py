@@ -1211,6 +1211,25 @@ def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_a
     assert 'En las generales: 2 elecciones, a 6 y 30 días de la votación.' in page
 
 
+def test_metodo_landing_reads_the_general_barrier_from_the_catalogue(api, monkeypatch):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'en las generales, el 3 % de los votos válidos' in page
+    changed = webapi.catalogue().copy()
+    changed.loc['es', 'threshold'] = 4.5
+    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'en las generales, el 4,5 % de los votos válidos' in page and 'el 3 % de los votos' not in page
+    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed.drop(index='es'))
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'en las generales, la que fija la ley electoral, de los votos válidos' in page
+
+
+def test_metodo_landing_names_a_single_backtest_election_in_singular(api, fresh_app):
+    write_backtest(fresh_app.fs, meta={'events': ['2023-07-23'], 'horizons': [6]})
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    assert 'En las generales: 1 elección, a 6 días de la votación.' in page
+
+
 def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
     page = html(call(api, '/metodo')[2])
     assert 'con el pronóstico definitivo;' in page and 'desde el' not in page
@@ -1228,7 +1247,7 @@ def test_metodo_subpage_404_and_section_context(api, fresh_app):
     write_backtest(fresh_app.fs)
     context = pages.metodo_section_context({'scope': 'es', 'mode': None, 'run': None}, 'backtest')
     assert context['section'] == 'backtest' and context['published'] and context['subpages'][3]['active']
-    assert context['figures']['n_sim'] == 10000 and len(context['thresholds']) == 18
+    assert context['figures']['n_sim'] == 10000 and len(context['thresholds']) == len(webapi.catalogue())
 
 
 def test_metodo_landing_has_the_index_and_only_links_available_sections(api):

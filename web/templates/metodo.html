@@ -7,6 +7,8 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {#- One sentence per question of the method, for its card in the index. -#}
+{#- The catalogue row of the general election, for the barrier the old text quotes (none if it is missing). -#}
+{% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
 {% set teasers = {
   'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada casa antes de promediar.',
   'escanos': 'Cómo se pasa del promedio a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
@@ -51,7 +53,7 @@
             <p class="lead">
               {{ teasers[page.id] }}
               {% if page.id == 'backtest' and figures.events %}
-              En las generales: {{ figures.events|length }} elecciones, a {% for horizon in figures.horizons %}{{ horizon|int }}{{ ' y ' if loop.revindex == 2 else (', ' if not loop.last) }}{% endfor %} días de la votación.
+              En las generales: {{ figures.events|length }} {{ 'elección' if figures.events|length == 1 else 'elecciones' }}, a {% for horizon in figures.horizons %}{{ horizon|int }}{{ ' y ' if loop.revindex == 2 else (', ' if not loop.last) }}{% endfor %} días de la votación.
               {% endif %}
             </p>
           </article>
@@ -145,8 +147,12 @@
           </p>
           <p>
             En cada circunscripción los escaños se reparten con la regla D'Hondt, como en el recuento oficial,
-            y solo entre las candidaturas que superan la barrera legal: en las generales, el 3 % de los votos
-            válidos de la circunscripción; en las autonómicas, la que fije la ley de cada comunidad. Con los
+            y solo entre las candidaturas que superan la barrera legal: en las generales,
+            {% if national and national.threshold is not none -%}
+            el {{ national.threshold|pct(0 if national.threshold == national.threshold|round else 1) }}
+            {%- else -%}
+            la que fija la ley electoral,
+            {%- endif %} de los votos válidos de la circunscripción; en las autonómicas, la que fije la ley de cada comunidad. Con los
             votos oficiales, ese reparto reproduce escaño a escaño el de las cinco elecciones generales de 2015
             a 2023.
             El resultado central, los intervalos y el detalle por circunscripción están en
