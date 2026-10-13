@@ -324,21 +324,26 @@ class Kernel(object):
         i_sq = np.array(i_sq, dtype=np.float64)
         a_sq = np.array(a_sq, dtype=np.float64)
 
-        ell = 7
-        f = 0.5 * np.pi ** (2 * ell) * np.sum(np.power(i_sq, ell) * a_sq * np.exp(-i_sq * np.power(np.pi, 2) * x))
-
-        for s in np.arange(2, ell)[::-1]:
-            # Step 1: estimate t_s from |f^(s+1)|^2
-            k0 = np.prod(np.arange(1, 2 * s, 2)) / np.sqrt(0.5 * np.pi)
-            k1 = (1 + 0.5 ** (s + 0.5)) / 3
-            time = np.power(k1 * k0 / (n * f), 2 / (3 + 2 * s))
-
-            # Step 2: estimate |f^s| from t_s
-            f = 0.5 * np.power(np.pi, 2 * s) * np.sum(
-                np.power(i_sq, s) * a_sq * np.exp(-i_sq * np.power(np.pi, 2) * time)
+        # Far from the root `exp(-i_sq·pi²·x)` underflows to 0 and the result is -inf, the value `isj_root`
+        # expects to keep growing its bracket: the divisions by zero on the way are not errors
+        with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+            ell = 7
+            f = 0.5 * np.pi ** (2 * ell) * np.sum(
+                np.power(i_sq, ell) * a_sq * np.exp(-i_sq * np.power(np.pi, 2) * x)
             )
 
-        return x - np.power(2 * n * np.sqrt(np.pi) * f, -0.4)
+            for s in np.arange(2, ell)[::-1]:
+                # Step 1: estimate t_s from |f^(s+1)|^2
+                k0 = np.prod(np.arange(1, 2 * s, 2)) / np.sqrt(0.5 * np.pi)
+                k1 = (1 + 0.5 ** (s + 0.5)) / 3
+                time = np.power(k1 * k0 / (n * f), 2 / (3 + 2 * s))
+
+                # Step 2: estimate |f^s| from t_s
+                f = 0.5 * np.power(np.pi, 2 * s) * np.sum(
+                    np.power(i_sq, s) * a_sq * np.exp(-i_sq * np.power(np.pi, 2) * time)
+                )
+
+            return x - np.power(2 * n * np.sqrt(np.pi) * f, -0.4)
 
     @staticmethod
     def isj_root(fn, n, args, maxiter=100):
