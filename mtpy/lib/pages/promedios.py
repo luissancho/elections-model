@@ -172,8 +172,8 @@ def headline_text(current: dict, mode: str, meta: dict, parties: Catalog, defini
     Returns
     -------
     str or None
-        ``'Si hoy hubiera elecciones, {fullname} ganaría con el {pct} % del voto y {seats} escaños; {block} tiene
-        un {p} de probabilidad de mayoría absoluta.'`` in nowcast; in forecast it opens with ``'El {event_date}'``,
+        ``'Si hoy hubiera elecciones, {fullname} ganaría con el {pct} % del voto y {seats} escaños; probabilidad
+        de mayoría absoluta de {block}: {p}.'`` in nowcast; in forecast it opens with ``'El {event_date}'``,
         after ``'Pronóstico definitivo: '`` (and in lower case) when ``definitive``. The leader is the party with
         the highest ``pct`` and the block that with the highest ``p_majority``; without probabilities the sentence
         ends after the seats. ``None`` when the headline has no parties.
@@ -190,7 +190,7 @@ def headline_text(current: dict, mode: str, meta: dict, parties: Catalog, defini
 
     if probs:
         block = max(probs, key=probs.get)
-        sentence += '; {} tiene un {} de probabilidad de mayoría absoluta'.format(block, fmt_prob(probs[block]))
+        sentence += '; probabilidad de mayoría absoluta de {}: {}'.format(block, fmt_prob(probs[block]))
 
     if mode == 'nowcast':
         return 'Si hoy hubiera elecciones, {}.'.format(sentence)
@@ -217,8 +217,9 @@ def promedios_context(state: dict) -> dict:
         present in the series, or all of them), ``table_rows`` (``table_rows``), ``n_polls``, ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them), ``block_colors`` (``block_color`` of each block, for its checkbox), ``main`` (the parties of
-        ``meta.bmaps.main`` present in the series) and ``initial`` (``state``, ``meta``, ``headline``, ``series`` (``round_series``), ``polls`` (``chart_polls``), ``projection``,
-        ``vote``, ``summary`` and ``runs``, the data the charts are drawn from).
+        ``meta.bmaps.main`` present in the series) and ``initial`` (``state``, ``meta``, ``headline``,
+        ``series`` (``round_series``), ``polls`` (``chart_polls``), ``projection``, ``vote``, ``summary`` and
+        ``runs``, the data the charts are drawn from).
 
     Raises
     ------

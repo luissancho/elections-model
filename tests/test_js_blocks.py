@@ -73,5 +73,9 @@ def test_series_hash_round_trip_and_fallbacks():
                   f'{{parties: {names}, blocks: [], windows: ["3m"]}})')
     assert back == {'window': '3m', 'view': 'partidos', 'selected': ['A,B', 'C D']}
     assert run_js(f'b.parseSeriesHash("#sel=%E0%A4%A,PP", {ctx})')['selected'] == ['PP']
+    # una selección vacía explícita vuelve vacía; una clave ausente o con nombres desconocidos, `null`
+    assert run_js('b.seriesHash({window: "all", view: "partidos", selected: []})') == '#ventana=all&vista=partidos&sel='
+    assert run_js(f'b.parseSeriesHash("#ventana=all&vista=partidos&sel=", {ctx})')['selected'] == []
+    assert run_js(f'b.parseSeriesHash("#sel=Nadie", {ctx})')['selected'] is None
     # sin selección explícita el hash no lleva `sel`
     assert run_js('b.seriesHash({window: "all", view: "bloques", selected: null})') == '#ventana=all&vista=bloques'

@@ -101,7 +101,8 @@ export function blockProjection(projection) {
  *   the blocks view (empty when the scope has no blocks) and the valid windows
  * @returns {{window: string, view: string, selected: string[]|null}} `window` in `windows` (otherwise
  *   `DEFAULT_WINDOW`, `all`), `view` `partidos` or `bloques` (only with blocks), `selected` the names of the
- *   hash in the list of the view, in its order (null when none is valid: the default selection)
+ *   hash in the list of the view, in its order (`[]` for an explicit empty `sel=`; null, the default selection,
+ *   when the key is absent or no name is valid)
  */
 export function parseSeriesHash(hash, {parties, blocks, windows}) {
   const params = new Map();
@@ -113,7 +114,8 @@ export function parseSeriesHash(hash, {parties, blocks, windows}) {
   }
   const choice = params.get(WINDOW_KEY);
   const view = params.get(VIEW_KEY) === BLOCKS_VIEW && blocks.length ? BLOCKS_VIEW : PARTIES_VIEW;
-  const names = new Set((params.get(SELECTED_KEY) || '').split(',').map((name) => {
+  const raw = params.get(SELECTED_KEY);
+  const names = new Set((raw || '').split(',').map((name) => {
     try {
       return decodeURIComponent(name);
     } catch {
@@ -124,7 +126,7 @@ export function parseSeriesHash(hash, {parties, blocks, windows}) {
   return {
     window: windows.includes(choice) ? choice : DEFAULT_WINDOW,
     view,
-    selected: selected.length ? selected : null,
+    selected: selected.length || raw === '' ? selected : null,
   };
 }
 
@@ -133,6 +135,7 @@ export function parseSeriesHash(hash, {parties, blocks, windows}) {
  *
  * @param {{window: string, view: string, selected: string[]|null}} state the controls state
  * @returns {string} `#ventana=…&vista=…`, plus `&sel=A,B` (each name URI-encoded) when `selected` is a list
+ *   (`&sel=` for an empty one)
  */
 export function seriesHash({window, view, selected}) {
   let hash = `#${WINDOW_KEY}=${encodeURIComponent(window)}&${VIEW_KEY}=${encodeURIComponent(view)}`;

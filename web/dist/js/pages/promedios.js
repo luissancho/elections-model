@@ -37,7 +37,8 @@ function paintResults(initial, catalog) {
 
   const voteRows = [...vote.rows].sort((a, b) => b.pct - a.pct);
   tryDraw(() => renderBars(document.getElementById('vote-chart'), voteRows, {
-    value: 'pct', lo: 'lo', hi: 'hi', colors, fullnames, formatter: (x) => fmtPct(x), axisFormatter: (x) => fmtPct(x, 0),
+    value: 'pct', lo: 'lo', hi: 'hi', colors, fullnames,
+    formatter: (x) => fmtPct(x), axisFormatter: (x) => fmtPct(x, 0),
   }), 'the vote bars');
 
   const seatRows = summary.parties
@@ -117,6 +118,7 @@ function wireSeries(initial, catalog) {
   const mainEl = document.getElementById('series-chart');
   const houseEl = document.getElementById('pollster-chart');
   const select = document.getElementById('pollster-select');
+  const houseControls = document.getElementById('pollster-controls');
   const fieldsets = {
     window: document.getElementById('series-window'),
     view: document.getElementById('series-view'),
@@ -129,6 +131,7 @@ function wireSeries(initial, catalog) {
   const selected = () => state.selected ?? view().defaults;
   const boxes = (name) => (fieldsets[name] ? [...fieldsets[name].querySelectorAll('input[type=checkbox]')] : []);
 
+  /** Write the state of the controls to the URL hash without adding a history entry. */
   function writeHash() {
     const {pathname, search} = window.location;
     window.history.replaceState(null, '', pathname + search + seriesHash(state));
@@ -163,6 +166,7 @@ function wireSeries(initial, catalog) {
     }
   }
 
+  /** Draw the chart `el` with the current view, window and selection and the given polls; returns the chart. */
   function render(el, pollsOfChart) {
     const current = view();
     const chart = renderSeries(el, {
@@ -191,6 +195,7 @@ function wireSeries(initial, catalog) {
     return chart;
   }
 
+  /** Draw the average chart and, when there is one, the house chart. */
   function drawAll() {
     charts.length = 0;
     tryDraw(() => charts.push(render(mainEl, view().polls)), 'the poll average');
@@ -209,6 +214,9 @@ function wireSeries(initial, catalog) {
   drawAll();
 
   // The controls only work with JavaScript, so the server renders them hidden.
+  if (houseControls) {
+    houseControls.hidden = false;
+  }
   if (fieldsets.window) {
     fieldsets.window.hidden = false;
     // `click` rather than `change`: clicking the option already checked after dragging the slider must restore

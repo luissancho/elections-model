@@ -84,8 +84,8 @@
         {% call m.how() %}
         <p>
           El modelo agrega los sondeos publicados en un promedio ponderado y simula miles de elecciones para
-          estimar el voto y los escaños de cada partido con su incertidumbre. Los rangos son intervalos del
-          95 %; el promedio de sondeos de arriba muestra de dónde salen.
+          estimar el voto y los escaños de cada partido con su incertidumbre. Los rangos son el intervalo
+          de las simulaciones; el promedio de sondeos de arriba muestra de dónde salen.
         </p>
         <p>
           Primero es la probabilidad de sacar más escaños que nadie, no la de gobernar.
@@ -97,7 +97,7 @@
           <div class="chart" id="vote-chart" role="img" aria-label="Voto previsto por partido, con el intervalo del 95 %"></div>
           {% call m.how() %}
           <p>
-            Cada barra es el voto central del partido y la línea que la cruza, el intervalo que contiene el 95 %
+            Cada barra es el voto central del partido y la línea que la cruza, el intervalo
             de las simulaciones. Dos partidos cuyos intervalos se solapan pueden acabar en cualquier orden.
           </p>
           <p>Es una foto del momento elegido, no una tendencia: la evolución está más abajo.</p>
@@ -107,7 +107,7 @@
           <div class="chart" id="seats-chart" role="img" aria-label="Escaños previstos por partido, con el intervalo del 95 %"></div>
           {% call m.how() %}
           <p>
-            La barra es el resultado central y la línea, el intervalo del 95 % de las simulaciones. Un partido
+            La barra es el resultado central y la línea, el intervalo de las simulaciones. Un partido
             con el voto muy repartido puede sacar menos escaños de los que su voto haría pensar.
           </p>
           <p>El detalle por circunscripción está en la pestaña Escaños.</p>
@@ -126,11 +126,11 @@
         {{ m.card_end() }}
         {{ m.card_start('majority-card', 'Mayoría absoluta', 'La probabilidad de que cada bloque alcance por sí solo la mayoría absoluta en las elecciones simuladas.', subtitle) }}
           <div id="majority">
-            {% for m in majority %}
+            {% for row in majority %}
             <div class="majority-row">
-              <strong>{{ m.block }}</strong>
-              <div class="majority-track"><div class="majority-bar" style="width: {{ m.width }}%; background-color: {{ m.color }}"></div></div>
-              <span class="majority-text">{{ m.p|prob }} de probabilidad de mayoría absoluta</span>
+              <strong>{{ row.block }}</strong>
+              <div class="majority-track"><div class="majority-bar" style="width: {{ row.width }}%; background-color: {{ row.color }}"></div></div>
+              <span class="majority-text">{{ row.p|prob }} de probabilidad de mayoría absoluta</span>
             </div>
             {% endfor %}
           </div>
@@ -153,8 +153,9 @@
         <p>No es una serie de sondeos: cada punto es lo que el modelo publicó ese día.</p>
         {% endcall %}
       {{ m.card_end() }}
+      {% if pollsters %}
       {{ m.card_start('pollster', 'Una casa frente al promedio', 'Los sondeos de una sola casa frente al promedio de todas, para ver si suele quedar por encima o por debajo.') }}
-        <div class="series-controls">
+        <div class="series-controls" id="pollster-controls" hidden>
           <label>Casa
             <select id="pollster-select">
               {% for option in pollsters %}
@@ -175,6 +176,7 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
+      {% endif %}
       {{ m.card_start('polls', 'Sondeos del ciclo', 'Los sondeos publicados en este ciclo electoral, del más reciente al más antiguo, tal como se publicaron.') }}
         <div class="table-wrap" id="polls-table">
           <table>

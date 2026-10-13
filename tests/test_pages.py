@@ -437,6 +437,47 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     assert data['dist']['parties'] == ['PP'] and data['summary']['majority'] == 176
 
 
+def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(api):
+    page = html(call(api, '/es/escanos')[2])
+    assert 'bloque con más probabilidad de mayoría absoluta' in page
+    fan = page[page.index('id="fan"'):page.index('id="evolution"')]
+    assert 'deriva' in fan and 'horizonte 0' in fan and 'no es una predicción de trayectoria' in fan
+    evolution = page[page.index('id="evolution"'):page.index('id="downloads"')]
+    assert 'run' in evolution and 'huecos' in evolution and 'no es una serie de sondeos' in evolution
+    assert '¿Cómo simulamos los escaños?' in page and 'href="/elecciones?scope=es"' in page
+    assert 'href="/casas?scope=es"' in page
+
+
+def test_escanos_headline_text_names_the_likeliest_block():
+    summary = {'majority': 176, 'n_seats': 350,
+               'blocks': [{'name': 'Izquierda', 'p_majority': 0.08}, {'name': 'Derecha', 'p_majority': 0.999}]}
+    assert pages.escanos_headline_text(summary, {}) == (
+        'Derecha es el bloque con más probabilidad de mayoría absoluta (> 99 %); la mayoría está en 176 escaños '
+        'de 350.')
+    tie = {'majority': 176, 'n_seats': 350, 'blocks': [{'name': 'A', 'p_majority': 0.5}, {'name': 'B', 'p_majority': 0.5}]}
+    assert pages.escanos_headline_text(tie, {}).startswith('A es el bloque')
+    assert pages.escanos_headline_text({'majority': 176, 'n_seats': 350, 'blocks': []}, {}) == (
+        'La mayoría absoluta está en 176 escaños de 350.')
+    assert pages.escanos_headline_text({'blocks': []}, {'majority': 130, 'n_seats': 250}) == (
+        'La mayoría absoluta está en 130 escaños de 250.')
+
+
+def test_event_bar_form_keeps_the_selected_region(api, fresh_app):
+    write_districts(fresh_app.fs)
+
+    def bar_form(query):
+        page = html(call(api, '/es/escanos', query=query)[2])
+        start = page.index('id="event-controls"')
+        return page[start:page.index('</form>', start)]
+
+    assert '<input type="hidden" name="region" value="8">' in bar_form('mode=forecast&region=8')
+    # the largest district is the default selection
+    assert '<input type="hidden" name="region" value="28">' in bar_form('mode=forecast')
+    # pages without a region keep the form as it was
+    page = html(call(api, '/es')[2])
+    assert 'name="region"' not in page[page.index('id="event-controls"'):page.index('</form>')]
+
+
 def test_escanos_nowcast_and_pinned_run(api):
     page = html(call(api, '/es/escanos', query='mode=nowcast&run=' + RUN)[2])
     assert 'Estimación a' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
@@ -578,6 +619,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
     assert 'name="view" value="partidos"' in page and 'name="view" value="bloques"' in page
     assert 'id="pollster-select"' in page and 'href="/metodo' in page
+    assert re.search(r'<div class="series-controls"[^>]*\bhidden[^>]*>\s*<label>Casa', page)
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
@@ -604,7 +646,7 @@ def test_promedios_hides_the_blocks_view_without_blocks(api, fresh_app):
                                                  'es-md', run_id='20261009-120000')
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es-md')[2])
-    assert 'name="view"' not in page and 'id="series-parties"' in page
+    assert 'name="view"' not in page and 'id="series-parties"' in page and 'id="series-blocks"' not in page
 
 
 def test_promedios_headline_sentence_uses_the_mode(api):
@@ -618,8 +660,8 @@ def test_headline_text_names_the_leader_and_the_likeliest_majority():
     meta = {'event_date': '2026-11-29'}
     names = pages.Catalog({'PP': {'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha'}})
     assert pages.headline_text(current, 'nowcast', meta, names, definitive=False) == (
-        'Si hoy hubiera elecciones, Partido Popular ganaría con el 33,1 % del voto y 135 escaños; Derecha tiene un '
-        '41 % de probabilidad de mayoría absoluta.')
+        'Si hoy hubiera elecciones, Partido Popular ganaría con el 33,1 % del voto y 135 escaños; probabilidad de '
+        'mayoría absoluta de Derecha: 41 %.')
     assert pages.headline_text(current, 'forecast', meta, names, definitive=False).startswith(
         'El 29 nov 2026, Partido Popular ganaría con el 33,1 %')
     assert pages.headline_text(current, 'forecast', meta, names, definitive=True).startswith(

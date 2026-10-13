@@ -291,7 +291,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .series-controls { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); align-items: center; margin: 0 0 var(--space-2); }
 .chart-window, .chart-parties { font-size: 0.9rem; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .chart-window legend, .chart-parties legend { color: var(--color-muted); }
-.chart-window[hidden], .chart-parties[hidden] { display: none; }
+.chart-window[hidden], .chart-parties[hidden], .series-controls[hidden] { display: none; }
 .majority-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-1) var(--space-3); align-items: center; margin: var(--space-4) 0; }
 .majority-track { height: 20px; background: var(--color-soft); border-radius: 3px; overflow: hidden; }
 .majority-bar { height: 100%; }
