@@ -449,6 +449,10 @@ def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(a
     assert 'run' in evolution and 'huecos' in evolution and 'no es una serie de sondeos' in evolution
     assert '¿Cómo simulamos los escaños?' in page and 'href="/elecciones?scope=es"' in page
     assert 'href="/casas?scope=es"' in page
+    coalition = re.sub(r'\s+', ' ', page[page.index('id="coalition-result"'):page.index('id="districts"')])
+    assert 'suben y bajan a la vez' not in coalition  # los partidos se sortean por separado
+    assert ('La suma se hace en cada simulación: en cada una los escaños suman el total de la cámara, así que lo '
+            'que gana un partido lo pierde otro') in coalition
 
 
 def test_escanos_headline_text_names_the_likeliest_block():

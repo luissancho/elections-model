@@ -137,8 +137,9 @@
           marcados juntos y el texto dice en cuántas llegan a la mayoría absoluta.
         </p>
         <p>
-          La suma se hace en cada simulación, así que respeta que los partidos suben y bajan a la vez; compárala
-          con los {{ summary.majority|int }} escaños de la mayoría absoluta.
+          La suma se hace en cada simulación: en cada una los escaños suman el total de la cámara, así que lo
+          que gana un partido lo pierde otro. Compárala con los {{ summary.majority|int }} escaños de la mayoría
+          absoluta.
         </p>
         <p>No dice si esos partidos querrían pactar: solo si les darían los números.</p>
         {% endcall %}
