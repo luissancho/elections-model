@@ -18,18 +18,12 @@ SECTIONS = (
     ('publicacion', 'La publicación'),
     ('limitaciones', 'Limitaciones'),
 )
-# Old sections kept on the landing page under "Cómo funciona el modelo" until the text of their question replaces
-# them (plan decision E10); each text task removes its sections and the landing drops the block when it is empty.
-LEGACY_SECTIONS = (
-    ('casas', 'Las casas'),
-    ('evaluacion', 'La evaluación'),
-)
 # Subpages of the method (``/metodo/{id}``), in menu order. A subpage without ``template`` has no text yet: it
 # is not linked and its route is a 404.
 METODO_SECTIONS = {
     'promedio': {'title': '¿Cómo promediamos las encuestas?', 'template': 'metodo_promedio.html'},
     'escanos': {'title': '¿Cómo simulamos los escaños?', 'template': 'metodo_escanos.html'},
-    'rating': {'title': '¿Cómo calculamos el rating de las encuestadoras?', 'template': None},
+    'rating': {'title': '¿Cómo calculamos el rating de las encuestadoras?', 'template': 'metodo_rating.html'},
     'backtest': {'title': '¿Cuánto acierta el modelo?', 'template': 'metodo_backtest.html'},
 }
 
@@ -153,9 +147,8 @@ def metodo_context(state: dict) -> dict:
     -------
     dict
         The common context plus ``subpages`` (``subpages(None)``, the index of the four questions), ``figures``
-        (``national_figures``), ``thresholds`` (``thresholds_rows``), ``sections`` (the cross-cutting sections,
-        ``{'id', 'title'}`` in ``SECTIONS`` order), ``legacy`` (whether the old text is still shown under "Cómo
-        funciona el modelo") and ``legacy_sections`` (its sections, ``{'id', 'title'}`` in order).
+        (``national_figures``), ``thresholds`` (``thresholds_rows``) and ``sections`` (the cross-cutting
+        sections, ``{'id', 'title'}`` in ``SECTIONS`` order).
 
     Raises
     ------
@@ -167,8 +160,6 @@ def metodo_context(state: dict) -> dict:
     context['figures'] = national_figures()
     context['thresholds'] = thresholds_rows()
     context['sections'] = [{'id': section_id, 'title': title} for section_id, title in SECTIONS]
-    context['legacy_sections'] = [{'id': section_id, 'title': title} for section_id, title in LEGACY_SECTIONS]
-    context['legacy'] = bool(LEGACY_SECTIONS)
 
     return context
 

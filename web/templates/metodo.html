@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Método{% endblock %}
-{% block description %}Cómo funciona el modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, de dónde salen sus datos y dónde están sus límites.{% endblock %}
+{% block description %}El método del modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, cómo se califica a las encuestadoras, cuánto acierta, de dónde salen sus datos y dónde están sus límites.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -35,9 +35,6 @@
         <nav class="section-nav" aria-label="Secciones de esta página">
           <a href="#preguntas">Las cuatro preguntas</a>
           {% for section in sections %}
-          {% if section.id == 'publicacion' and legacy %}
-          <a href="#como-funciona">Cómo funciona el modelo</a>
-          {% endif %}
           <a href="#{{ section.id }}">{{ section.title }}</a>
           {% endfor %}
         </nav>
@@ -59,53 +56,6 @@
         </div>
       </section>
       {% for section in sections %}
-      {% if section.id == 'publicacion' and legacy %}
-      <section id="como-funciona" class="card">
-        <h2>Cómo funciona el modelo</h2>
-        <p class="lead">
-          El resumen del método mientras se escriben los textos de las cuatro preguntas; cada uno sustituye a su
-          parte de este resumen.
-        </p>
-        {% for old in legacy_sections %}
-        <h3 id="{{ old.id }}">{{ old.title }}</h3>
-          {% if old.id == 'casas' %}
-          <p>
-            Cada casa encuestadora tiene un rating entre 0 y 100 de cara a la próxima elección de cada ámbito.
-            Se calcula con el sesgo de sus sondeos frente al resultado en las elecciones anteriores, tanto en
-            el tamaño de cada bloque como en el reparto entre los partidos de un mismo bloque, comparado con
-            el de los sondeos de la misma elección publicados a una distancia parecida de la votación: un
-            fallo compartido por todo el sector no penaliza a una casa. Ese sesgo se combina con una calidad
-            previa que pesa más cuantos menos sondeos tiene la casa. Cuánto pesa el rating en el promedio se
-            cuenta en <a href="{{ method_href('promedio') }}">¿Cómo promediamos las encuestas?</a>.
-          </p>
-          <p>
-            El ranking es global: todas las elecciones con resultado, generales y autonómicas, alimentan el
-            rating de cada casa, las autonómicas con menos peso, y solo cuentan las celebradas antes de la
-            que se pronostica. Así, lo que una casa demuestra en una comunidad informa de cómo trabaja en las
-            demás y en las generales. El rating, los efectos de casa y el herding de cada una están en
-            <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>.
-          </p>
-          {% elif old.id == 'evaluacion' %}
-          <p>
-            El modelo se evalúa con un backtest fuera de muestra: se repite en elecciones ya celebradas a
-            distintos horizontes, desde unos días hasta varios meses antes de la votación, viendo solo los
-            sondeos publicados hasta ese día y con los parámetros ajustados solo con las elecciones
-            anteriores. Lo que habría dicho se compara con el resultado oficial y con tres referencias
-            sencillas: el último sondeo publicado, la media de los sondeos de las cuatro semanas anteriores y
-            el resultado de la elección anterior. También se comprueba si los intervalos contienen el
-            resultado tantas veces como anuncian. La curación de los datos (la asignación de partidos y la
-            calidad previa de las casas) es la de hoy, así que no es una reconstrucción completa de lo que se
-            sabía en cada fecha. Los resultados por horizonte están en <a href="/metodo/backtest{{ scope_query }}">¿Cuánto acierta el modelo?</a>.
-          </p>
-          <p>
-            <a href="/elecciones{{ scope_query }}">Histórico de errores</a> muestra, elección a elección, cuánto se
-            equivocaron los sondeos y cada casa frente al resultado y, cuando hay backtest, lo que el modelo
-            habría dicho a cada horizonte.
-          </p>
-          {% endif %}
-        {% endfor %}
-      </section>
-      {% endif %}
       <section id="{{ section.id }}" class="card">
         <h2>{{ section.title }}</h2>
         {% if section.id == 'datos' %}

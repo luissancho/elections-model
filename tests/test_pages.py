@@ -274,9 +274,9 @@ def test_method_subpages_and_links():
     assert [page['id'] for page in subpages] == ['promedio', 'escanos', 'rating', 'backtest']
     assert subpages[3] == {'id': 'backtest', 'title': '¿Cuánto acierta el modelo?', 'href': '/metodo/backtest',
                            'active': True, 'available': True}
-    assert not subpages[0]['active'] and subpages[0]['available'] and subpages[1]['available']
-    assert not subpages[2]['available']  # rating, sin texto todavía
-    assert pages.method_href('backtest') == '/metodo/backtest' and pages.method_href('rating') == '/metodo'
+    assert not subpages[0]['active'] and all(page['available'] for page in subpages)
+    assert pages.method_href('backtest') == '/metodo/backtest' and pages.method_href('rating') == '/metodo/rating'
+    assert pages.method_href('nope') == '/metodo'
     assert pages.method_href('promedio') == '/metodo/promedio' and pages.method_href('escanos') == '/metodo/escanos'
 
 
@@ -1194,18 +1194,14 @@ def test_metodo_renders_the_sections_without_data(api):
     assert re.findall(r'<script type="module" src="([^"]+)"', page) == ['/dist/js/pages/metodo.js']
     assert re.findall(r'/dist/js/pages/[a-z]+\.js', page) == ['/dist/js/pages/metodo.js']
     sections = re.findall(r'<section id="([a-z-]+)" class="card">(.*?)</section>', page, re.S)
-    assert [section_id for section_id, _ in sections] == ['intro', 'datos', 'como-funciona', 'publicacion',
-                                                           'limitaciones']
+    assert [section_id for section_id, _ in sections] == ['intro', 'datos', 'publicacion', 'limitaciones']
     assert all('<p>' in body for _, body in sections)  # ninguna sección sin texto en la plantilla
-    for section_id, title in pages.SECTIONS + pages.LEGACY_SECTIONS:
+    for section_id, title in pages.SECTIONS:
         assert 'id="{}"'.format(section_id) in page and title in page
-    legacy = dict(sections)['como-funciona']
-    assert re.findall(r'<h3 id="([a-z]+)">', legacy) == [section_id for section_id, _ in pages.LEGACY_SECTIONS]
-    assert all(len(text.strip()) > 100 for text in re.split(r'<h3 id="[a-z]+">', legacy)[1:])
     assert '10.000 elecciones' in page and 'contiene el' not in page  # sin backtest, sin frase de cobertura
-    for href in ('/metodo/backtest?scope=es', '/casas?scope=es', '/elecciones?scope=es'):
-        assert 'href="{}'.format(href) in page
-    assert 'id="simulacion"' not in page and 'id="escanos"' not in page  # retiradas por /metodo/escanos
+    # el resumen antiguo se retiró al escribirse los textos de las cuatro preguntas
+    assert 'id="como-funciona"' not in page and 'id="casas"' not in page and 'id="evaluacion"' not in page
+    assert 'id="simulacion"' not in page and 'id="escanos"' not in page
 
 
 def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_app):
@@ -1233,10 +1229,9 @@ def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
 
 
 def test_metodo_subpage_404_and_section_context(api, fresh_app):
-    for section in ('nope', 'rating'):
-        with pytest.raises(HttpError) as error:
-            pages.metodo_section_context({'scope': None, 'mode': None, 'run': None}, section)
-        assert error.value.status == 404 and error.value.message == 'section not found', section
+    with pytest.raises(HttpError) as error:
+        pages.metodo_section_context({'scope': None, 'mode': None, 'run': None}, 'nope')
+    assert error.value.status == 404 and error.value.message == 'section not found'
     write_backtest(fresh_app.fs)
     context = pages.metodo_section_context({'scope': 'es', 'mode': None, 'run': None}, 'backtest')
     assert context['section'] == 'backtest' and context['published'] and context['subpages'][3]['active']
@@ -1246,8 +1241,8 @@ def test_metodo_subpage_404_and_section_context(api, fresh_app):
 def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     page = html(call(api, '/metodo')[2])
     assert '¿Cómo promediamos las encuestas?' in page and 'href="/metodo/backtest"' in page
-    assert 'href="/metodo/promedio"' in page and 'href="/metodo/escanos"' in page
-    assert 'href="/metodo/rating"' not in page  # rating, sin texto todavía
+    assert 'href="/metodo/promedio"' in page and 'href="/metodo/escanos"' in page and 'href="/metodo/rating"' in page
+    assert 'próximamente' not in page  # las cuatro preguntas tienen ya su texto
     assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
@@ -1275,6 +1270,33 @@ def test_metodo_escanos_text(api):
     assert 'en un mes, uno al 30 % puede moverse alrededor de un punto' in text and 'en unos meses' not in text
     assert 'suben y bajan a la vez' not in text and 'lo que gana un partido lo pierde otro' in text
 
+
+
+def test_metodo_rating_text(api):
+    page = html(call(api, '/metodo/rating')[2])
+    for anchor in ('que-se-mide', 'calidad-previa', 'rating-final', 'ranking-global', 'herding'):
+        assert 'id="' + anchor + '"' in page, anchor
+    assert 'la mitad' in page or '50 %' in page  # rating_weight 0,5 leído del catálogo
+    assert '<math' in page
+    landing = html(call(api, '/metodo')[2])
+    assert 'Cómo funciona el modelo' not in landing and 'href="/metodo/rating"' in landing
+
+
+def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypatch):
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
+    assert 'cada sondeo de unas autonómicas pesa la mitad que uno de unas generales' in page
+    assert 'href="/metodo/promedio#peso"' in page and 'href="/casas?scope=es"' in page and 'href="/metodo/backtest"' in page
+    assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'En resumen' in page
+    changed = webapi.catalogue().copy()
+    changed.loc[changed.index != 'es', 'rating_weight'] = 0.25
+    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
+    assert 'pesa el 25 % de uno de unas generales' in page and 'la mitad' not in page
+    mixed = changed.copy()
+    mixed.loc['es-md', 'rating_weight'] = 0.5
+    monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
+    page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
+    assert 'pesa menos que uno de unas generales' in page and 'la mitad' not in page
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))

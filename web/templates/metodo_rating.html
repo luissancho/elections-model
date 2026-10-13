@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% block title %}¿Cómo calculamos el rating de las encuestadoras?{% endblock %}
+{% block description %}Cómo se calcula el rating de cada casa encuestadora: qué error se mide y frente a qué, la calidad previa, del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el herding se publica aparte.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/metodo.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- How much a poll of a regional election weighs in the ratings against one of a general election: the ratio of the
+    `rating_weight` of the regional scopes of the catalogue to the national one, in words. -#}
+{% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
+{% set regional_weights = thresholds|rejectattr('code', 'equalto', 'es')|map(attribute='rating_weight')|reject('none')|unique|list %}
+{% macro regional_weight() -%}
+{% if national and national.rating_weight and regional_weights|length == 1 -%}
+{% set ratio = regional_weights[0] / national.rating_weight -%}
+{% if ratio == 0.5 %}pesa la mitad que uno de unas generales{% else %}pesa el {{ (ratio * 100)|pct(0) }} de uno de unas generales{% endif %}
+{%- else -%}
+pesa menos que uno de unas generales, según el peso que el catálogo da a su comunidad
+{%- endif %}
+{%- endmacro %}
+    {% include '_metodo_nav.html' +%}
+    <div id="content" class="stack">
+      {{ m.headline('El rating de una casa mide si sus sondeos se equivocaron más o menos que los demás de la misma elección en las mismas fechas; mientras tiene pocos sondeos, manda una calidad previa.') }}
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#que-se-mide">Qué se mide</a>
+        <a href="#calidad-previa">La calidad previa</a>
+        <a href="#rating-final">Del rating ajustado al rating final</a>
+        <a href="#ranking-global">Un ranking global</a>
+        <a href="#herding">El herding, aparte</a>
+      </nav>
+      {{ m.card_start('resumen', 'En resumen', 'El rating de las encuestadoras en cuatro ideas.') }}
+        <ul>
+          <li>Cada sondeo pasado se compara con el resultado: en el tamaño de los bloques y en el reparto dentro de cada bloque.</li>
+          <li>Ese error se compara con el de los sondeos de la misma elección y las mismas fechas: un fallo de todo el sector no penaliza.</li>
+          <li>Con pocos sondeos manda una calidad previa puesta a mano; con muchos, lo medido. El rating va de 0 a 100.</li>
+          <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el herding se publica aparte y solo resta peso.</li>
+        </ul>
+      {{ m.card_end() }}
+      {{ m.card_start('que-se-mide', 'Qué se mide', 'El rating no premia acertar, sino acertar más que los demás: el error de cada sondeo se compara con el de los sondeos de la misma elección publicados en fechas cercanas.') }}
+        <p>
+          El punto de partida son las elecciones ya celebradas, con su resultado oficial. Cada sondeo publicado
+          antes de ellas se compara con ese resultado; quedan fuera los agregadores, los paneles en línea, los
+          sondeos de la veda y los de boca de urna. El error de un sondeo tiene dos partes:
+        </p>
+        <ul>
+          <li><strong>Entre bloques:</strong> cuánto se equivocó en el tamaño de los dos bloques principales,
+            derecha e izquierda.</li>
+          <li><strong>Dentro del bloque:</strong> cuánto se equivocó en cómo se reparte cada bloque entre sus
+            partidos, sea cual sea el tamaño del bloque. Así se distingue un sondeo que reparte mal los votos
+            entre PSOE y SUMAR pero clava la suma de la izquierda de uno que se equivoca de bloque.</li>
+        </ul>
+        <p>Las dos partes se combinan así:</p>
+        <math display="block" aria-label="E igual a 0,7 por E sub bloques más 0,3 por E sub dentro">
+          <mrow>
+            <mi>E</mi><mo>=</mo>
+            <mn>0,7</mn><mo>·</mo><msub><mi>E</mi><mtext>bloques</mtext></msub><mo>+</mo>
+            <mn>0,3</mn><mo>·</mo><msub><mi>E</mi><mtext>dentro</mtext></msub>
+          </mrow>
+        </math>
+        <p>
+          Los errores se miden en una escala relativa, la de los <em>log-odds</em> (el logaritmo de la razón
+          de probabilidades): en ella, dos puntos de error con un partido del 20 % son más error que con uno del
+          45 %. Cada bloque y cada partido cuenta en proporción a su voto real. En esa escala, el error dentro
+          del bloque suele ser unas tres veces mayor que el de los bloques, porque la cuota del socio menor
+          dentro de su bloque se mueve mucho en términos relativos; con los pesos de arriba, las dos partes
+          acaban contando de hecho parecido.
+        </p>
+        <p>
+          <strong>Frente a qué.</strong> Un error grande no dice nada por sí solo: hay elecciones en las que
+          fallan todas las casas, y un sondeo de tres meses antes de la votación suele fallar más que uno de
+          la última semana sin que eso sea culpa de la casa. Por eso, para cada elección, el modelo traza día a
+          día el error medio de todos sus sondeos, con una regresión local como la del promedio (ponderada por
+          la muestra y la sobrerrepresentación, no por el rating, que es lo que se está calculando). La
+          desviación de un sondeo es su error menos el error medio de su fecha:
+          <var>d</var> = <var>E</var> − <var>Ē</var>(<var>t</var>). Si es negativa, la casa se equivocó menos
+          que el sector en ese momento.
+        </p>
+        <p>
+          Si todo el sector subestimó a un partido, el error medio de esos días sube con él y la desviación de
+          cada casa no cambia: <strong>un fallo compartido no penaliza a nadie</strong>. La línea incluye a
+          todas las casas de la elección, también a la propia. Y cuando la fecha tenía pocos sondeos con los que
+          comparar, la línea es menos segura: la desviación del sondeo se encoge hacia cero, como si se pareciera
+          más a la media, en proporción a esa incertidumbre.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('calidad-previa', 'La calidad previa', 'Antes de ver sus sondeos, cada casa tiene una calidad previa de 0 a 100: lo que se supone de ella mientras no hay datos suficientes.') }}
+        <p>
+          La calidad previa se asigna a mano al curar los datos (ver <a href="/metodo#datos">Los datos</a>): es
+          una valoración, no un cálculo. Las casas que se añaden sin historial reciben una calidad baja. En
+          <a href="/casas{{ scope_query }}">Rating de encuestadoras</a> es la columna «Calidad».
+        </p>
+        <p>
+          El rating final <var>R</var> mezcla esa calidad <var>Q</var> con el rating ajustado
+          <var>R</var><sub>aj</sub>, la nota que sale de los sondeos de la casa (abajo), en proporción a cuántos
+          sondeos la respaldan:
+        </p>
+        <math display="block" aria-label="R igual a n por R ajustado más k por Q, entre n más k">
+          <mrow>
+            <mi>R</mi><mo>=</mo>
+            <mfrac>
+              <mrow><mi>n</mi><mo>·</mo><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mo>·</mo><mi>Q</mi></mrow>
+              <mrow><mi>n</mi><mo>+</mo><mi>k</mi></mrow>
+            </mfrac>
+          </mrow>
+        </math>
+        <p>
+          <var>k</var> vale 3: la calidad previa pesa como tres sondeos. Con <var>n</var> = 3, mitad y mitad;
+          con menos, manda la calidad previa; con muchos más, lo medido. Una casa sin sondeos evaluables tiene
+          como rating su calidad previa.
+        </p>
+        <p>
+          <var>n</var> no es el número bruto de sondeos, sino su suma ponderada. Cada sondeo pesa por su
+          muestra y su sobrerrepresentación, los dos primeros factores del peso en el promedio, y además:
+        </p>
+        <ul>
+          <li><strong>Por su posición:</strong> en cada elección, el último sondeo de la casa pesa 1, el
+            anterior 0,5, el anterior 0,25 y así sucesivamente.</li>
+          <li><strong>Por su cercanía a la votación:</strong> cada semana más lejos multiplica el peso por 0,7.
+            Por este factor, un sondeo de tres meses antes pesa menos de la centésima parte que uno de la última
+            semana, y los sondeos con un peso total por debajo de una centésima se descartan.</li>
+          <li><strong>Por su antigüedad:</strong> cada año de distancia con la elección más reciente multiplica
+            el peso por 0,9.</li>
+          <li><strong>Por su ámbito:</strong> cada sondeo de unas autonómicas {{ regional_weight() }} (ver
+            <a href="#ranking-global">Un ranking global</a>).</li>
+        </ul>
+        <p>
+          Con estos pesos, cada elección aporta pocos sondeos efectivos por casa, así que la calidad previa
+          cuenta mucho hasta que la casa acumula varias elecciones.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('rating-final', 'Del rating ajustado al rating final', 'Las desviaciones de los sondeos de una casa se resumen en una sola, se convierten en una nota de 0 a 100 y se mezclan con la calidad previa.') }}
+        <p>
+          <strong>La desviación de la casa.</strong> Es la media de las desviaciones de sus sondeos, con los
+          pesos de arriba. Se encoge otra vez hacia cero según su incertidumbre: con pocos sondeos ponderados, la
+          casa se acerca a la media del sector, porque pocos aciertos pueden ser suerte.
+        </p>
+        <p>
+          <strong>El rating ajustado.</strong> Esa desviación <var>d</var> se convierte en una nota de 0 a 100:
+        </p>
+        <math display="block" aria-label="R ajustado igual a 100 por Phi de menos d entre tau">
+          <mrow>
+            <msub><mi>R</mi><mtext>aj</mtext></msub><mo>=</mo><mn>100</mn><mo>·</mo>
+            <mi>Φ</mi><mo>(</mo><mo>−</mo><mfrac><mi>d</mi><mi>τ</mi></mfrac><mo>)</mo>
+          </mrow>
+        </math>
+        <p>
+          Φ es la función de distribución normal: la parte de una campana de Gauss que queda por debajo de un
+          valor. τ es la escala, 0,01 en la escala de los log-odds. Una casa que se equivoca como la media del
+          sector (<var>d</var> = 0) saca 50; una cuya desviación es −τ, 84; con −2τ, 98. Una que falla más que el
+          sector queda por debajo de 50 de forma simétrica: +τ da 16.
+        </p>
+        <p>
+          <strong>El rating final.</strong> Es la mezcla del rating ajustado con la calidad previa, con la fórmula
+          de la sección anterior. También va de 0 a 100, y es el que se publica. En el perfil de cada casa, el
+          «Camino al rating» muestra elección a elección los dos, el ajustado y el final.
+        </p>
+        <p>
+          <strong>Cómo entra en el promedio.</strong> El rating de cada elección se calcula solo con las
+          elecciones anteriores, y con él se pesan los sondeos de esa elección. Su factor en el peso de un sondeo
+          es ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100), con <var>R̄</var> el rating medio de las casas:
+          una casa de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no
+          pesa nada. Una casa sin rating calculado entra con su calidad previa en lugar del rating. Cómo se
+          combina con los demás factores del peso se cuenta en
+          <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('ranking-global', 'Un ranking global', 'Lo que una casa demuestra en una comunidad informa de cómo trabaja en las demás y en las generales: el rating de cada ámbito se alimenta de todas las elecciones.') }}
+        <p>
+          Para calificar a las casas de cara a una elección cuentan los sondeos de todas las elecciones,
+          generales y autonómicas, que cumplan dos condiciones:
+        </p>
+        <ul>
+          <li>Tienen resultado oficial y al menos diez sondeos útiles.</li>
+          <li>Se celebraron <strong>estrictamente antes</strong>. Las elecciones de un mismo día no se ven entre
+            sí; las generales de julio de 2023 sí ven las autonómicas de mayo.</li>
+        </ul>
+        <p>
+          Las autonómicas cuentan menos: cada sondeo de unas autonómicas {{ regional_weight() }}. Es el peso que
+          el catálogo de ámbitos da a cada comunidad, y es el mismo en todos los rankings, también en el de la
+          propia comunidad.
+        </p>
+        <p>
+          Hay un ranking por ámbito, el de su próxima elección. Como todos se alimentan de la misma historia, una
+          casa puede tener rating en una comunidad en la que aún no ha publicado: lo que sabemos de ella viene
+          de las demás.
+        </p>
+        <p>Las columnas de <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>:</p>
+        <ul>
+          <li><strong>Rating</strong> y <strong>Calidad</strong>: el rating final y la calidad previa, de 0 a
+            100.</li>
+          <li><strong>Sondeos</strong>: los que entran en el cálculo, tras descartar los de peso ínfimo.
+            <strong>Elecciones</strong>: en cuántas publicó, contando cada ámbito y fecha por separado (dos
+            autonómicas del mismo día cuentan dos).</li>
+          <li><strong>Error medio</strong>: la distancia media, en puntos, entre sus sondeos y el resultado de
+            cada partido principal. <strong>Sesgo del margen</strong>: la media, con signo, de cuánto se
+            equivocaron sus sondeos en la diferencia entre los dos bloques principales. Las dos son medias
+            ponderadas con los pesos del rating y describen a la casa, pero no entran en la nota: la nota sale
+            solo de la desviación.</li>
+          <li><strong>Herding</strong>: la medida de la sección siguiente.</li>
+        </ul>
+      {{ m.card_end() }}
+      {{ m.card_start('herding', 'El herding, aparte', 'El herding mide si las cifras de una casa se mueven menos de lo que permitiría el azar de sus muestras; se publica junto al rating, pero no entra en él.') }}
+        <p>
+          <strong>La medida.</strong> Una casa con cinco o más sondeos con muestra publicada en un ciclo se
+          compara con el promedio calculado sin sus sondeos, para que no lo arrastre hacia ella. En las cuatro
+          series principales, las de más voto medio en los sondeos, se mide cuánto oscilan sus cifras alrededor de ese promedio, descontada su
+          inclinación propia, y se compara con lo que permitiría el azar del muestreo con sus muestras,
+          <var>p</var>(1 − <var>p</var>)/<var>n</var>:
+          <var>h</var> = √(Σ residuo<sup>2</sup> / Σ varianza esperada). Un valor cerca de 1 es lo esperable;
+          por debajo de 1, sus cifras se mueven menos de lo que permite el azar.
+        </p>
+        <p>
+          Puede deberse a seguir al consenso, a entrevistar siempre al mismo panel, a ponderar por recuerdo de
+          voto o a suavizar sus propias oleadas. La medida no distingue entre ellas, pero para el promedio dan
+          igual: sus sondeos aportan menos información independiente de lo que sugiere su muestra.
+        </p>
+        <p>
+          En <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>, «Herding» reúne los ciclos del ámbito
+          hasta hoy, el actual incluido, porque no necesita el resultado; cada ciclo pesa 0,9 por año de
+          antigüedad, como en el rating. La tabla da también el del último ciclo y su p-valor: la probabilidad de
+          un valor tan bajo si no hubiera herding.
+        </p>
+        <p>
+          <strong>Por qué no entra en el rating.</strong> El rating mide el error frente al sector, y una casa
+          pegada al consenso tiende a fallar como el sector: la desviación no la distingue. Contarlo también en
+          el rating penalizaría dos veces. La penalización va por el peso.
+        </p>
+        <p>
+          <strong>Qué hace en el peso.</strong> En el ciclo que se promedia, una casa por debajo de 1 pesa como
+          una muestra más pequeña: su peso por muestra se multiplica por su valor de herding, acercado a 1
+          cuantos menos sondeos tiene. Es como si cada sondeo tuviera su muestra multiplicada por
+          <var>h</var><sup>2</sup>. Con la casa que oscila de más pasa lo mismo al revés: pesa como la muestra que produciría
+          esa oscilación. Los detalles están en <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada
+          sondeo</a>.
+        </p>
+      {{ m.card_end() }}
+      {{ m.closing('¿Cuánto acierta el modelo?', method_href('backtest'),
+                   'El modelo repetido en elecciones ya celebradas, viendo solo lo que se sabía en cada fecha, frente al resultado oficial.',
+                   [{'href': '/casas' ~ scope_query, 'label': 'Rating de encuestadoras'},
+                    {'href': '/elecciones' ~ scope_query, 'label': 'Error de los sondeos en cada elección'}]) }}
+    </div>
+{% endblock %}
