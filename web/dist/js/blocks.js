@@ -57,8 +57,9 @@ export function blockSeries(series, blocks) {
 }
 
 /**
- * Polls by block: each poll keeps `date`, `pollster` and `pollster_id` and gets, per block, the sum of the
- * values of its parties present in the poll; a poll with none of the parties of a block has no key for it.
+ * Polls by block: each poll keeps `date`, `pollster`, `pollster_id`, `name` and `sample_size` (the box of the
+ * poll) and gets, per block, the sum of the values of its parties present in the poll; a poll with none of the
+ * parties of a block has no key for it.
  *
  * @param {{polls: object[]}} polls the polls of the page (`chart_polls`)
  * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)
@@ -69,7 +70,10 @@ export function blockPolls(polls, blocks) {
   return {
     parties: names,
     polls: (polls.polls || []).map((poll) => {
-      const row = {date: poll.date, pollster: poll.pollster, pollster_id: poll.pollster_id};
+      const row = {
+        date: poll.date, pollster: poll.pollster, pollster_id: poll.pollster_id, name: poll.name,
+        sample_size: poll.sample_size,
+      };
       for (const block of names) {
         const values = blocks[block].map((name) => poll[name]).filter(present);
         if (values.length) {

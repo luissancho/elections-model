@@ -58,6 +58,21 @@ export function mapNames(names, fn) {
   return Object.fromEntries(names.map((name) => [name, fn(name)]));
 }
 
+/**
+ * Mirror the state of the checkboxes of a group of pills (`.pill`) on the class `is-on` of their labels, for the
+ * browsers without `:has()` (the CSS colours a pill with either).
+ *
+ * @param {Element|null} root element holding the pills (a `fieldset.pills`)
+ */
+export function markPills(root) {
+  if (!root) {
+    return;
+  }
+  for (const box of root.querySelectorAll('.pill input')) {
+    box.closest('.pill').classList.toggle('is-on', box.checked);
+  }
+}
+
 /** Show `message` as an error in the status line. */
 export function showError(message) {
   const status = document.getElementById('status');

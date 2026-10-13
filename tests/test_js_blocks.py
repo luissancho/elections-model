@@ -52,6 +52,10 @@ def test_block_polls_and_projection():
     assert out['polls'][1]['date'] == '2026-01-02' and out['polls'][1]['pollster'] == 'B'
     assert run_js('b.blockPolls({parties: [], polls: [{date: "d", pollster: "A", pollster_id: 7, PP: 1}]}, blocks)'
                   )['polls'] == [{'date': 'd', 'pollster': 'A', 'pollster_id': 7, 'Derecha': 1}]
+    # the poll box of the blocks view needs the poll name and its sample
+    assert run_js('b.blockPolls({parties: [], polls: [{date: "d", pollster: "A", name: "A / M", sample_size: null, '
+                  'PSOE: 2}]}, blocks)')['polls'] == [{'date': 'd', 'pollster': 'A', 'name': 'A / M',
+                                                         'sample_size': None, 'Izquierda': 2}]
     projection = '{dates: ["d"], groups: {parties: {}, blocks: {names: ["Derecha"], mean: {}, lo: {}, hi: {}}}}'
     assert run_js('b.blockProjection({})'.format(projection))['groups']['parties']['names'] == ['Derecha']
     assert run_js('b.blockProjection({})'.format(projection))['dates'] == ['d']

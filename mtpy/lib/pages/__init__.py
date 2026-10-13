@@ -28,5 +28,5 @@ from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, subpages, thresholds_rows)
-from .promedios import (DEFINITIVE_PREFIX, TABLE_ROWS, chart_polls, headline_text, majority_rows, pollster_options,
-                        promedios_context, round_series, table_rows)
+from .promedios import (DEFINITIVE_PREFIX, TABLE_ROWS, chart_polls, headline_text, majority_rows, poll_name,
+                        pollster_options, promedios_context, round_series, table_rows)

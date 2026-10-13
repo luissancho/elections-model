@@ -1,12 +1,23 @@
 // Poll average over time: fitted series with its band, published polls and the projection to the event.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {baseOption, mountChart, THEME} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
-import {fmtDate, fmtDateShort, fmtNum, fmtPct, fmtRange} from '../format.js';
+import {fmtDate, fmtDateShort, fmtPct} from '../format.js';
+import {meanTooltipLine, pollTooltipLines} from '../polls-tooltip.js';
 import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
+
+export {meanTooltipLine, pollTooltipLines};
 
 const DAY_MS = 24 * 3600 * 1000;
 const BAND_OPACITY = 0.15;
 const PROJECTION_OPACITY = 0.1;
+// Symbols of the average lines: invisible until hovered, so that each day of a line has its own tooltip.
+const HOVER_SYMBOLS = {
+  showSymbol: true,
+  symbol: 'circle',
+  symbolSize: 8,
+  itemStyle: {opacity: 0},
+  emphasis: {itemStyle: {opacity: 1}},
+};
 
 /**
  * Timestamp of local midnight of an ISO date (`YYYY-MM-DD` parsed as UTC would shift a day west of UTC).
@@ -68,7 +79,8 @@ export function bandSeries(name, times, lo, hi, {color = OTHERS_COLOR, opacity =
 }
 
 /**
- * Poll points of one party: `[date, value, pollster]` for the polls with a value for it.
+ * Poll points of one party: `[date, value, index]` for the polls with a value for it, `index` being the position
+ * of the poll in `polls` (the tooltip reads the whole poll from it).
  *
  * @param {object[]} polls `polls` list of the polls part (`polls.polls`)
  * @param {string} name party name (column of the poll records)
@@ -76,25 +88,8 @@ export function bandSeries(name, times, lo, hi, {color = OTHERS_COLOR, opacity =
  */
 export function pollPoints(polls, name) {
   return polls
-    .filter((poll) => poll[name] !== null && poll[name] !== undefined)
-    .map((poll) => [poll.date, poll[name], poll.pollster]);
-}
-
-/**
- * Polls grouped by ISO date, in input order.
- *
- * @param {object[]} polls `polls` list of the polls part (`polls.polls`)
- * @returns {Map<string, object[]>} date → poll records
- */
-export function pollsByDate(polls) {
-  const byDate = new Map();
-  for (const poll of polls) {
-    if (!byDate.has(poll.date)) {
-      byDate.set(poll.date, []);
-    }
-    byDate.get(poll.date).push(poll);
-  }
-  return byDate;
+    .map((poll, index) => [poll.date, poll[name], index])
+    .filter(([, value]) => value !== null && value !== undefined);
 }
 
 /** Vertical mark line at `time` with a label at the top. */
@@ -136,36 +131,43 @@ export function setWindow(chart, choice, {series, projection, anchor = null}) {
  * and, in forecast, the projected band from `asOf` to `when`, with mark lines at both dates. The initial
  * zoom is the `window` choice (a key of `WINDOW_DAYS`: the last days before `anchor`; `all`: the whole axis).
  * The Promedios page also draws the blocks with it, passing the block series, polls and projection as parties.
+ * The tooltip follows the item under the pointer: a poll shows its box (`pollTooltipLines`), a day of the
+ * average or of the projection its value and band (`meanTooltipLine`); the bands have none.
  *
  * @param {HTMLElement} el chart container
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
- *   `fullnames` ({name: full name}, tooltip), `asOf`, `when` (ISO dates), `window` (choice of the window
- *   control), `anchor` (ISO date the window counts back from: the last poll)
+ *   `asOf`, `when` (ISO dates), `window` (choice of the window control), `anchor` (ISO date the window counts
+ *   back from: the last poll) and `legend` (show the ECharts legend; when false the legend is hidden but its
+ *   `selected` still decides the names shown, for pages with their own selector)
  * @returns {object} the ECharts instance
  */
 export function renderSeries(el, {
-  series, polls, projection, parties, selected = null, colors = {}, fullnames = {}, asOf, when,
-  window: windowChoice = DEFAULT_WINDOW, anchor = null,
+  series, polls, projection, parties, selected = null, colors = {}, asOf, when,
+  window: windowChoice = DEFAULT_WINDOW, anchor = null, legend = true,
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
-  const seriesIndex = new Map(series.dates.map((date, i) => [date, i]));
   const groups = (projection && projection.groups && projection.groups.parties) || null;
   // In nowcast the projection is the single day `asOf`: only the mark line is drawn.
   const withProjection = Boolean(groups && projection.dates.length > 1);
   const projectionTimes = withProjection ? projection.dates.map(dayTime) : [];
-  const projectionIndex = new Map(withProjection ? projection.dates.map((date, i) => [date, i]) : []);
   const pollRecords = polls.polls || [];
-  const byDate = pollsByDate(pollRecords);
+  const colorOf = Object.fromEntries(parties.map((name) => [name, color(name)]));
+  // Role of each series for the tooltip: `mean`, `projection` or `poll` (bands and marks have none).
+  const roles = new Map();
+  const withRole = (role, entry) => {
+    roles.set(entry, role);
+    return entry;
+  };
 
   // Mean lines first: the legend takes its icon from the first series of each name.
-  const means = parties.map((name) => ({
+  const means = parties.map((name) => withRole('mean', {
     type: 'line',
     name,
     color: color(name),
     z: 3,
-    showSymbol: false,
+    ...HOVER_SYMBOLS,
     connectNulls: false,
     lineStyle: {width: 2},
     data: seriesTimes.map((t, i) => [t, (series.mean[name] || [])[i] ?? null]),
@@ -173,26 +175,26 @@ export function renderSeries(el, {
   const bands = parties.flatMap((name) => bandSeries(
     name, seriesTimes, series.lo[name] || [], series.hi[name] || [], {color: color(name)},
   ));
-  const points = parties.map((name) => ({
+  const points = parties.map((name) => withRole('poll', {
     type: 'scatter',
     name,
     color: color(name),
     z: 4,
     symbolSize: 6,
     itemStyle: {opacity: 0.6},
-    data: pollPoints(pollRecords, name).map(([date, value, pollster]) => [dayTime(date), value, pollster]),
+    data: pollPoints(pollRecords, name).map(([date, value, index]) => [dayTime(date), value, index]),
   }));
   const projected = !withProjection ? [] : parties.flatMap((name) => [
-    {
+    withRole('projection', {
       type: 'line',
       name,
       color: color(name),
       z: 3,
-      showSymbol: false,
+      ...HOVER_SYMBOLS,
       connectNulls: false,
       lineStyle: {width: 2, type: 'dashed'},
       data: projectionTimes.map((t, i) => [t, (groups.mean[name] || [])[i] ?? null]),
-    },
+    }),
     ...bandSeries(name, projectionTimes, groups.lo[name] || [], groups.hi[name] || [], {
       color: color(name), opacity: PROJECTION_OPACITY, stack: `projection:${name}`,
     }),
@@ -218,62 +220,39 @@ export function renderSeries(el, {
   const axisDates = axisDatesOf(series, projection);
   const zoom = seriesWindow(windowChoice, axisDates, anchor);
 
+  const allSeries = [...means, ...bands, ...points, ...projected, markSeries];
+
+  /** Box of the item under the pointer: a poll, a day of the average or a day of the projection. */
   function tooltip(params) {
-    if (!params.length) {
-      return '';
+    const role = roles.get(allSeries[params.seriesIndex]);
+    const name = params.seriesName;
+    const i = params.dataIndex;
+    if (role === 'poll') {
+      const poll = pollRecords[params.data[2]];
+      return poll ? pollTooltipLines(poll, parties, colorOf).join('<br>') : '';
     }
-    const date = isoDay(params[0].axisValue);
-    // Parties of the shown series: the legend-hidden ones are not in `params`.
-    const shown = new Set(params.map((item) => item.seriesName));
-    const visible = parties.filter((name) => shown.has(name));
-    const lines = [`<strong>${escapeHtml(fmtDate(date))}</strong>`];
-    let source = null;
-    let index = null;
-    if (seriesIndex.has(date)) {
-      source = series;
-      index = seriesIndex.get(date);
-    } else if (projectionIndex.has(date)) {
-      source = groups;
-      index = projectionIndex.get(date);
-      lines.push('Proyección');
+    if (role === 'mean' || role === 'projection') {
+      const source = role === 'mean' ? series : groups;
+      const dates = role === 'mean' ? series.dates : projection.dates;
+      const at = (values) => (values || [])[i] ?? null;
+      return meanTooltipLine(name, at(source.mean[name]), at(source.lo[name]), at(source.hi[name]), dates[i],
+        color(name), role === 'projection');
     }
-    if (source) {
-      const rows = visible
-        .map((name) => ({
-          name,
-          mean: (source.mean[name] || [])[index] ?? null,
-          lo: (source.lo[name] || [])[index] ?? null,
-          hi: (source.hi[name] || [])[index] ?? null,
-        }))
-        .filter((row) => row.mean !== null)
-        .sort((a, b) => b.mean - a.mean);
-      for (const row of rows) {
-        const marker = window.echarts.format.getTooltipMarker(escapeHtml(color(row.name)));
-        const label = fullnames[row.name] || row.name;
-        lines.push(`${marker}${escapeHtml(`${label}: ${fmtPct(row.mean)} (${fmtRange(row.lo, row.hi)})`)}`);
-      }
-    }
-    for (const poll of byDate.get(date) || []) {
-      const values = visible
-        .filter((name) => poll[name] !== null && poll[name] !== undefined)
-        .map((name) => `${name} ${fmtNum(poll[name], 1)}`);
-      if (values.length) {
-        lines.push(escapeHtml(`${poll.pollster} · ${fmtDateShort(poll.date)} · ${values.join(' · ')}`));
-      }
-    }
-    return lines.join('<br>');
+    return '';
   }
 
   const option = {
     ...baseOption(),
     legend: {
+      show: legend,
       type: 'scroll',
       top: 0,
       data: parties,
       selected: Object.fromEntries(parties.map((name) => [name, !selected || selected.includes(name)])),
     },
     // Right margin wide enough for the centred mark-line labels at the end of the axis.
-    grid: {left: 8, right: 48, top: 40, bottom: 56, containLabel: true},
+    // Without the legend the top margin only keeps room for the mark-line labels.
+    grid: {left: 8, right: 48, top: legend ? 40 : 24, bottom: 56, containLabel: true},
     xAxis: {
       type: 'time',
       minInterval: DAY_MS,
@@ -287,9 +266,8 @@ export function renderSeries(el, {
       axisLabel: {formatter: (value) => fmtPct(value, 0)},
     },
     tooltip: {
-      trigger: 'axis',
+      trigger: 'item',
       confine: true,
-      axisPointer: {type: 'line'},
       formatter: tooltip,
     },
     dataZoom: zoom ? [{
@@ -300,7 +278,7 @@ export function renderSeries(el, {
       endValue: dayTime(zoom.endValue),
       labelFormatter: (value) => fmtDate(isoDay(value)),
     }] : [],
-    series: [...means, ...bands, ...points, ...projected, markSeries],
+    series: allSeries,
   };
   return mountChart(el, option);
 }

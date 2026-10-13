@@ -278,11 +278,46 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .chart.chart-tall { height: 480px; }
 .chart.chart-small { height: 160px; }
 
-/* Promedios: controls of the average chart (window, view, parties, blocks) and the majority bars */
-.series-controls { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); align-items: center; margin: 0 0 var(--space-2); }
+/* Promedios: controls of the average chart, one per row (view, window, party or block pills), and the majority bars */
+.series-controls { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin: 0 0 var(--space-2); }
 .chart-window, .chart-parties { font-size: 0.9rem; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .chart-window legend, .chart-parties legend { color: var(--color-muted); }
-.chart-window[hidden], .chart-parties[hidden], .series-controls[hidden] { display: none; }
+.chart-window[hidden], .chart-parties[hidden], .series-controls[hidden], .pills[hidden] { display: none; }
+
+/* Pills: a group of checkboxes drawn like a chart legend, bordered in the colour of each name and filled with it
+   when checked (`is-on` is the fallback set by JS for browsers without `:has()`). The checkbox stays focusable. */
+.pills { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); font-size: 0.9rem; }
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 12px;
+  border: 1px solid var(--pill-color, var(--color-line-strong));
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.pill input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.pill:has(input:checked), .pill.is-on { background: var(--pill-color, var(--color-accent)); color: #fff; }
+.pill:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@supports not selector(:has(*)) {
+  .pill:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+}
+#polls-more { margin-top: var(--space-2); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .majority-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-1) var(--space-3); align-items: center; margin: var(--space-4) 0; }
 .majority-track { height: 20px; background: var(--color-soft); border-radius: 3px; overflow: hidden; }
 .majority-bar { height: 100%; }

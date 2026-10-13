@@ -14,13 +14,6 @@
       {% endif %}
       {{ m.card_start('series', 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección', 'La intención de voto de cada partido a lo largo del ciclo, según el promedio ponderado de los sondeos publicados.', subtitle) }}
         <div class="series-controls">
-          <fieldset id="series-window" class="chart-window" hidden>
-            <legend>Ventana</legend>
-            <label><input type="radio" name="window" value="3m"> 3 meses</label>
-            <label><input type="radio" name="window" value="6m"> 6 meses</label>
-            <label><input type="radio" name="window" value="1a"> 1 año</label>
-            <label><input type="radio" name="window" value="all" checked> Todo el ciclo</label>
-          </fieldset>
           {% if blocks %}
           <fieldset id="series-view" class="chart-window" hidden>
             <legend>Vista</legend>
@@ -28,19 +21,24 @@
             <label><input type="radio" name="view" value="bloques"> Bloques</label>
           </fieldset>
           {% endif %}
-          <fieldset id="series-parties" class="chart-parties" hidden>
-            <legend>Partidos</legend>
+          <fieldset id="series-window" class="chart-window" hidden>
+            <legend>Ventana</legend>
+            <label><input type="radio" name="window" value="3m"> 3 meses</label>
+            <label><input type="radio" name="window" value="6m"> 6 meses</label>
+            <label><input type="radio" name="window" value="1a"> 1 año</label>
+            <label><input type="radio" name="window" value="all" checked> Todo el ciclo</label>
+          </fieldset>
+          <fieldset id="series-parties" class="pills" hidden>
+            <legend class="sr-only">Partidos</legend>
             {% for name in initial.series.parties %}
-            <label title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}"{% if name in main or not main %} checked{% endif %}> <span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</label>
+            <label class="pill" style="--pill-color: {{ catalog[name].color }}" title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}"{% if name in main or not main %} checked{% endif %}> {{ name }}</label>
             {% endfor %}
-            <button type="button" data-all>Todos</button>
-            <button type="button" data-none>Ninguno</button>
           </fieldset>
           {% if blocks %}
-          <fieldset id="series-blocks" class="chart-parties" hidden>
-            <legend>Bloques</legend>
+          <fieldset id="series-blocks" class="pills" hidden>
+            <legend class="sr-only">Bloques</legend>
             {% for block in blocks %}
-            <label><input type="checkbox" name="block" value="{{ block }}" checked> <span class="dot" style="background-color: {{ block_colors[block] }}"></span>{{ block }}</label>
+            <label class="pill" style="--pill-color: {{ block_colors[block] }}"><input type="checkbox" name="block" value="{{ block }}" checked> {{ block }}</label>
             {% endfor %}
           </fieldset>
           {% endif %}
@@ -48,9 +46,10 @@
         <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
-          Cada punto es un sondeo publicado; la línea es el promedio ponderado del modelo y la banda, su
-          intervalo de confianza. En el modo Elección, la línea discontinua proyecta el voto desde la
-          estimación hasta el día de la elección. En la vista Bloques, cada bloque suma sus partidos.
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
+          promedio ponderado del modelo y la banda, su intervalo de confianza. En el modo Elección, la línea
+          discontinua proyecta el voto desde la estimación hasta el día de la elección. En la vista Bloques, cada
+          bloque suma sus partidos.
         </p>
         <p>
           La banda dice dónde está el consenso de las encuestadoras, no dónde estará el voto el día de la elección.
@@ -180,12 +179,11 @@
       {{ m.card_start('polls', 'Sondeos del ciclo', 'Los sondeos publicados en este ciclo electoral, del más reciente al más antiguo, tal como se publicaron.') }}
         <div class="table-wrap" id="polls-table">
           <table>
-            <caption>{% if n_polls > table_rows|length %}Últimos {{ table_rows|length }} de {{ n_polls|int }} sondeos{% else %}Todos los sondeos del ciclo ({{ n_polls|int }}){% endif %} · <a href="{{ csv_href }}">Descargar CSV</a></caption>
+            <caption><span id="polls-count">{% if table_total > table_rows|length %}Últimos {{ table_rows|length }} de {{ table_total|int }} sondeos{% else %}Todos los sondeos del ciclo ({{ table_total|int }}){% endif %}</span> · <a href="{{ csv_href }}">Descargar CSV</a></caption>
             <thead>
               <tr>
                 <th scope="col">Fecha</th>
-                <th scope="col">Encuestadora</th>
-                <th scope="col">Medio</th>
+                <th scope="col">Sondeo</th>
                 <th scope="col">Muestra</th>
                 {% for name in table_parties %}
                 <th scope="col" title="{{ catalog[name].fullname }}">{{ name }}</th>
@@ -203,9 +201,10 @@
             </tbody>
           </table>
         </div>
+        <button type="button" id="polls-more" hidden>Cargar más</button>
         {% call m.how() %}
         <p>
-          Cada fila es un sondeo: la encuestadora, el medio o quien lo encargó, el tamaño de la muestra y el voto de cada partido.
+          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, el tamaño de la muestra y el voto de cada partido.
           Las cifras no llevan ninguna corrección del modelo. El CSV tiene todos los sondeos del ciclo.
         </p>
         {% endcall %}

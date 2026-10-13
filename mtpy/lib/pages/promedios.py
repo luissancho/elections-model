@@ -48,6 +48,27 @@ def majority_rows(p_majority: dict, meta: dict, parties: Catalog) -> list:
     return rows
 
 
+def poll_name(poll: dict) -> str:
+    """
+    Name of a poll as the loader builds it: the pollster, plus ``' / '`` and the sponsor when there is one.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``pollster``, ``sponsor``).
+
+    Returns
+    -------
+    str
+        ``'{pollster} / {sponsor}'``, or the pollster alone when the sponsor is missing or empty; an empty
+        string without a pollster.
+    """
+    pollster = poll.get('pollster') or ''
+    sponsor = poll.get('sponsor')
+
+    return pollster + ' / ' + sponsor if sponsor else pollster
+
+
 def chart_polls(polls: dict) -> dict:
     """
     Polls part reduced to the columns the charts draw.
@@ -60,19 +81,24 @@ def chart_polls(polls: dict) -> dict:
     Returns
     -------
     dict
-        ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``,
-        ``pollster_id``, ``pollster`` and one value per party (the keys it has).
+        ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``,
+        ``pollster`` and one value per party (the keys it has), plus ``name`` (``poll_name``) and
+        ``sample_size`` (``None`` when missing), shown in the box of each poll.
     """
     parties = list(polls.get('parties') or [])
     keys = ['date', 'pollster_id', 'pollster'] + parties
 
     return {
         'parties': parties,
-        'polls': [{key: poll.get(key) for key in keys if key in poll} for poll in polls.get('polls') or []],
+        'polls': [
+            {key: poll.get(key) for key in keys if key in poll}
+            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size')}
+            for poll in polls.get('polls') or []
+        ],
     }
 
 
-def table_rows(polls: list, parties: list, n: int = TABLE_ROWS) -> list:
+def table_rows(polls: list, parties: list, n: Optional[int] = TABLE_ROWS) -> list:
     """
     Formatted rows of the polls table, the most recent first.
 
@@ -84,21 +110,20 @@ def table_rows(polls: list, parties: list, n: int = TABLE_ROWS) -> list:
     parties : list of str
         Parties to show, in column order.
     n : int, optional
-        Maximum number of rows.
+        Maximum number of rows; ``None`` for all of them.
 
     Returns
     -------
     list of list of str
-        The last ``n`` polls by date (ties keep the later published first) as ``date``,
-        pollster, sponsor, sample size and one percentage per party, all formatted.
+        The last ``n`` polls by date (ties keep the later published first) as ``date``, poll name
+        (``poll_name``), sample size and one percentage per party, all formatted.
     """
     latest = sorted(reversed(polls), key=lambda poll: poll.get('date') or '', reverse=True)[:n]
 
     return [
         [
             fmt_date(poll.get('date')),
-            poll.get('pollster') or DASH,
-            poll.get('sponsor') or DASH,
+            poll_name(poll) or DASH,
             fmt_int(poll.get('sample_size')),
         ] + [fmt_num(poll.get(name), 1) for name in parties]
         for poll in latest
@@ -212,12 +237,14 @@ def promedios_context(state: dict) -> dict:
     dict
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``majority``
         (``majority_rows``), ``headline_text`` (``headline_text``), ``table_parties`` (the ``main`` parties
-        present in the series, or all of them), ``table_rows`` (``table_rows``), ``n_polls``, ``csv_href``,
+        present in the series, or all of them), ``table_rows`` (``table_rows``, the first ``TABLE_ROWS``),
+        ``table_total`` (the polls of the polls part), ``n_polls``, ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them), ``block_colors`` (``block_color`` of each block, for its checkbox), ``main`` (the parties of
         ``meta.bmaps.main`` present in the series) and ``initial`` (``state``, ``meta``, ``headline``,
         ``series`` (``round_series``), ``polls`` (``chart_polls``), ``projection``, ``vote``, ``summary`` and
-        ``runs``, the data the charts are drawn from).
+        ``runs``, the data the charts are drawn from; plus ``table``, ``{'parties', 'rows'}`` with every row of
+        the polls table, only when ``table_total > TABLE_ROWS``, for the "Cargar más" button).
 
     Raises
     ------
@@ -243,6 +270,7 @@ def promedios_context(state: dict) -> dict:
     context['headline_text'] = headline_text(current, mode, meta, definitive)
     context['table_parties'] = main or list(names)
     context['table_rows'] = table_rows(poll_rows, context['table_parties'])
+    context['table_total'] = len(poll_rows)
     context['n_polls'] = meta.get('n_polls')
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
@@ -260,5 +288,11 @@ def promedios_context(state: dict) -> dict:
         'summary': part(scope, run, 'summary', mode=mode),
         'runs': bundle.loads(site().history(scope))['data'],
     }
+
+    if context['table_total'] > TABLE_ROWS:
+        context['initial']['table'] = {
+            'parties': context['table_parties'],
+            'rows': table_rows(poll_rows, context['table_parties'], n=None),
+        }
 
     return context

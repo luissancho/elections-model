@@ -1,6 +1,7 @@
 // Promedios tab of an event: the poll average with its window, party and block views, one house against the
-// average, the vote and seat bars, the hemicycle and the evolution, drawn from the data embedded by the server.
-// The state of the average controls lives in the URL hash (`blocks.js`), written only when a control changes.
+// average, the vote and seat bars, the hemicycle, the evolution and the "Cargar más" rows of the polls table,
+// drawn from the data embedded by the server. The state of the average controls lives in the URL hash
+// (`blocks.js`), written only when a control changes.
 import {fmtInt, fmtPct} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} from '../blocks.js';
@@ -8,8 +9,9 @@ import {renderBars} from '../charts/bars.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
+import {captionText, nextRows} from '../polls-table.js';
 import {WINDOW_DAYS} from '../range.js';
-import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
@@ -97,8 +99,9 @@ function seriesViews(initial, catalog) {
 }
 
 /**
- * Draw the average and the house chart and wire their controls: window, view, party and block checkboxes and
- * the house selector. Every change of a control rewrites the URL hash.
+ * Draw the average and the house chart and wire their controls: view, window, party and block pills and the
+ * house selector. The pills replace the ECharts legends, which are hidden. Every change of a control rewrites
+ * the URL hash.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
@@ -141,7 +144,7 @@ function wireSeries(initial, catalog) {
     return view().toPolls({parties: polls.parties, polls: chosen});
   }
 
-  /** Check the boxes of the current view that are shown and show only its fieldset. */
+  /** Check the pills of the current view that are shown and show only its fieldset. */
   function syncBoxes() {
     const shown = selected();
     for (const name of ['partidos', 'bloques']) {
@@ -152,6 +155,7 @@ function wireSeries(initial, catalog) {
     for (const box of boxes(state.view)) {
       box.checked = !shown || shown.includes(box.value);
     }
+    markPills(fieldsets[state.view]);
   }
 
   /** Show or hide the names of the current view in both charts; a merged option keeps their zoom. */
@@ -166,7 +170,7 @@ function wireSeries(initial, catalog) {
   /** Draw the chart `el` with the current view, window and selection and the given polls; returns the chart. */
   function render(el, pollsOfChart) {
     const current = view();
-    const chart = renderSeries(el, {
+    return renderSeries(el, {
       series: current.series,
       polls: pollsOfChart,
       projection: current.projection,
@@ -177,18 +181,8 @@ function wireSeries(initial, catalog) {
       when: vote.when,
       window: state.window,
       anchor,
+      legend: false,
     });
-    if (!chart.__promediosLegend) {
-      // A click on the legend of either chart moves the checkboxes and the other chart with it.
-      chart.__promediosLegend = true;
-      chart.on('legendselectchanged', (event) => {
-        state.selected = view().parties.filter((name) => event.selected[name] !== false);
-        syncBoxes();
-        applySelection();
-        writeHash();
-      });
-    }
-    return chart;
   }
 
   /** Draw the average chart and, when there is one, the house chart. */
@@ -246,19 +240,9 @@ function wireSeries(initial, catalog) {
     }
     fieldset.addEventListener('change', () => {
       state.selected = boxes(name).filter((box) => box.checked).map((box) => box.value);
+      markPills(fieldset);
       applySelection();
       writeHash();
-    });
-    fieldset.addEventListener('click', (event) => {
-      const all = event.target.matches('[data-all]');
-      if (all || event.target.matches('[data-none]')) {
-        for (const box of boxes(name)) {
-          box.checked = all;
-        }
-        state.selected = all ? [...view().parties] : [];
-        applySelection();
-        writeHash();
-      }
     });
   }
   if (select && houseEl) {
@@ -269,12 +253,50 @@ function wireSeries(initial, catalog) {
   }
 }
 
+/**
+ * Wire the "Cargar más" button of the polls table: when the page embeds every row (`initial.table`, only with
+ * more polls than the server rendered), each click appends the next rows and updates the caption; the button
+ * goes away once the table holds them all.
+ *
+ * @param {object} initial the page's initial data
+ */
+function wirePollsTable(initial) {
+  const all = initial.table ? initial.table.rows : null;
+  const button = document.getElementById('polls-more');
+  const body = document.querySelector('#polls-table tbody');
+  const count = document.getElementById('polls-count');
+  if (!all || !button || !body) {
+    return;
+  }
+  let shown = body.rows.length;
+  button.hidden = shown >= all.length;
+  button.addEventListener('click', () => {
+    for (const row of nextRows(all, shown)) {
+      const tr = document.createElement('tr');
+      for (const cell of row) {
+        const td = document.createElement('td');
+        td.textContent = cell;
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+      shown += 1;
+    }
+    if (count) {
+      count.textContent = captionText(shown, all.length);
+    }
+    if (shown >= all.length) {
+      button.hidden = true;
+    }
+  });
+}
+
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
   const catalog = new Catalog(initial.meta);
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
+  tryDraw(() => wirePollsTable(initial), 'the polls table');
 }
 
 wireControls();
