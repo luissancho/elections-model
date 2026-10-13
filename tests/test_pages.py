@@ -251,7 +251,8 @@ def test_parse_state_takes_the_scope_of_the_route_and_leaves_the_mode_unresolved
 def test_title_of_rules():
     meta = {'as_of': '2026-10-13', 'event_date': '2026-11-29', 'run_at': '2026-10-13T12:00:00Z'}
     from datetime import date
-    assert pages.title_of('nowcast', meta, True, True, True, today=date(2026, 10, 20)) == 'Estimación a 20 oct 2026'
+    assert pages.title_of('nowcast', meta, True, True, True, today=date(2026, 10, 20)) == 'Estimación del 13 oct 2026'
+    assert pages.title_of('nowcast', meta, False, False, True, today=date(2026, 10, 20)) == 'Estimación a 20 oct 2026'
     assert pages.title_of('forecast', meta, True, False, True) == 'Pronóstico definitivo para el 29 nov 2026'
     assert pages.title_of('forecast', meta, True, True, False) == 'Pronóstico publicado el 13 oct 2026'
     assert pages.title_of('forecast', meta, False, True, False) == 'Pronóstico publicado el 13 oct 2026'
@@ -1402,7 +1403,7 @@ def test_frozen_manifest_marks_every_page(api, fresh_app):
     assert status == 200 and 'Pronóstico definitivo para el' in page and 'congelado desde 23 nov 2026' in page
     assert 'freeze-banner' in page and 'href="/metodo#limitaciones"' in page
     status, _, body = call(api, '/es', query='mode=nowcast')
-    assert 'Estimación a' in html(body) and 'Pronóstico definitivo' not in html(body)
+    assert 'Estimación del' in html(body) and 'Pronóstico definitivo' not in html(body)
     status, _, body = call(api, '/metodo', query='scope=es')
     assert 'freeze-banner' in html(body)
     publish.update_manifest(writer, freeze={'active': False})
@@ -1625,6 +1626,17 @@ def test_frozen_site_has_no_control_and_shows_the_forecast(api, fresh_app):
         assert 'type="radio" id="mode-' not in page and 'name="mode"' not in bar, path
         assert 'id="event-controls"' not in page, path
         assert 'Lo que puede pasar el 29 nov 2026' in page, path
+
+
+def test_frozen_nowcast_link_keeps_the_run_date_in_the_title(api, fresh_app):
+    from datetime import date
+    writer = bundle.BundleWriter(fresh_app.fs)
+    publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
+                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/es', query='mode=nowcast')[2])
+    assert 'Estimación del' in page
+    assert 'Estimación a {}'.format(pages.fmt_date(date.today().isoformat())) not in page
 
 
 def test_title_of_shows_today_in_the_nowcast():

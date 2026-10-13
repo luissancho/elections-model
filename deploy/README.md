@@ -76,7 +76,7 @@ familias de páginas:
 
 - **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` (Promedios,
   controlador `Promedios`, `promedios.html`) y `/{scope}/escanos` (Escaños, `Escanos`, `escanos.html`, con
-  `?region=`). Aceptan `?mode=` (`nowcast` u `forecast`) y `?run=`, pero desde la fase 7b ninguna página pinta un
+  `?region=`). Aceptan `?mode=` (`nowcast` o `forecast`) y `?run=`, pero desde la fase 7b ninguna página pinta un
   selector de modo: sin `?mode=`, `pages.default_mode(frozen)` muestra Hoy (`nowcast`) y, mientras la publicación
   está congelada (veda), Elección (`forecast`); `?mode=` queda para enlaces y pruebas. Un código que no es del
   catálogo da 404 "Ámbito desconocido."; uno del catálogo sin pronóstico, 404 "Este ámbito no tiene pronóstico

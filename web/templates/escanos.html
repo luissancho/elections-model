@@ -64,7 +64,7 @@
               <tr>
                 <th scope="col">Bloque</th>
                 <th scope="col">Escaños</th>
-                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">Rango 95 %</th>
                 <th scope="col">P(mayoría absoluta)</th>
               </tr>
             </thead>
@@ -119,7 +119,7 @@
       {{ m.card_start('districts', 'Circunscripciones', 'El reparto de escaños de cada circunscripción en el escenario central y, para la que elijas, el voto y los escaños previstos de cada partido.', subtitle) }}
         <div class="table-wrap">
           <table id="district-table">
-            <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el intervalo del 95 %.</caption>
+            <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el rango del 95 %.</caption>
             <thead>
               <tr>
                 <th scope="col">Circunscripción</th>
@@ -172,9 +172,9 @@
               <tr>
                 <th scope="col">Partido</th>
                 <th scope="col">Voto</th>
-                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">Rango 95 %</th>
                 <th scope="col">Escaños</th>
-                <th scope="col">Intervalo 95 %</th>
+                <th scope="col">Rango 95 %</th>
                 <th scope="col">P(escaño)</th>
               </tr>
             </thead>
@@ -209,7 +209,7 @@
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('fan', 'Abanico de voto por horizonte', 'Cómo se abre la incertidumbre del voto de cada partido a medida que aumentan los días hasta la elección.') }}
-        <div class="chart" id="fan-chart" role="img" aria-label="Voto previsto por partido según los días que faltan, con el intervalo del 95 %"></div>
+        <div class="chart" id="fan-chart" role="img" aria-label="Voto previsto por partido según los días que faltan, con el rango del 95 %"></div>
         {% call m.how() %}
         <p>
           Cada columna es un horizonte: a cuántos días de la elección se estima el voto. En el horizonte 0 está

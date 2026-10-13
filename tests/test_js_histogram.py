@@ -32,7 +32,7 @@ def run_js(call):
 def test_default_draws_the_share_of_simulations_in_seats():
     out = run_js('h.renderHistogram({}, [170, 171, 171, 175], {median: 171, lo: 170, hi: 175, width: 1})')
     assert out['data'][:2] == [25.0, 50.0] and out['ticks'] == ['0 %', '1 %', '2 %'] and out['minInterval'] is None
-    assert out['tip'] == '<strong>170 escaños: 25,0 %</strong><br>Mediana: 171 · intervalo 95 %: 170–175'
+    assert out['tip'] == '<strong>170 escaños: 25,0 %</strong><br>Mediana: 171 · rango 95 %: 170–175'
     assert out['marks'] == ['171'] and out['color'] == '#3a6ea5'  # THEME.barColor, the neutral blue
 
 
@@ -55,3 +55,16 @@ def test_bounds_draw_thin_lines_at_the_interval_and_a_thick_one_at_the_median_wi
 def test_default_marks_keep_their_labels_and_have_no_bounds():
     out = run_js('h.renderHistogram({}, [170, 171, 171, 175], {median: 171, lo: 170, hi: 175, width: 1})')
     assert out['marks'] == ['171'] and out['lines'] == [[None, 'solid', None]]
+
+
+SERIES_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'charts', 'series.js').as_uri()
+
+
+@pytest.mark.parametrize('legend, show, selected_mode', [(False, False, None), (True, True, None), ('readonly', True, False)])
+def test_series_legend_is_hidden_selectable_or_read_only(legend, show, selected_mode):
+    script = STUB + ('const s = await import("{}"); s.renderSeries({{}}, {{series: {{dates: ["2026-10-01"], mean: {{A: [30]}}, lo: {{A: [28]}}, hi: {{A: [32]}}}},'
+                     'polls: {{polls: []}}, projection: null, parties: ["A"], asOf: "2026-10-01", when: "2026-10-01",'
+                     'legend: {}}}); console.log(JSON.stringify(last.legend));').format(SERIES_JS, json.dumps(legend))
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    option = json.loads(out.stdout)
+    assert option['show'] is show and option.get('selectedMode') == selected_mode and option['selected'] == {'A': True}

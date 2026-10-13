@@ -138,8 +138,9 @@ export function setWindow(chart, choice, {series, projection, anchor = null}) {
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
  *   `asOf`, `when` (ISO dates), `window` (choice of the window control), `anchor` (ISO date the window counts
- *   back from: the last poll) and `legend` (show the ECharts legend; when false the legend is hidden but its
- *   `selected` still decides the names shown, for pages with their own selector)
+ *   back from: the last poll) and `legend` (`true`: selectable legend; `'readonly'`: a legend that only shows the
+ *   key and follows `selected`; `false`: hidden, but its `selected` still decides the names shown, for pages
+ *   with their own selector)
  * @returns {object} the ECharts instance
  */
 export function renderSeries(el, {
@@ -244,7 +245,8 @@ export function renderSeries(el, {
   const option = {
     ...baseOption(),
     legend: {
-      show: legend,
+      show: Boolean(legend),
+      ...(legend === 'readonly' ? {selectedMode: false} : {}),
       type: 'scroll',
       top: 0,
       data: parties,

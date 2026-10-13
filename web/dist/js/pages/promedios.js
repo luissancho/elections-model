@@ -100,7 +100,7 @@ function seriesViews(initial, catalog) {
 
 /**
  * Draw the average and the house chart and wire their controls: view, window, party and block pills and the
- * house selector. The pills replace the ECharts legends, which are hidden. Every change of a control rewrites
+ * house selector. The pills replace the ECharts legend of the average chart; the house chart keeps a read-only one. Every change of a control rewrites
  * the URL hash.
  *
  * @param {object} initial the page's initial data
@@ -168,7 +168,7 @@ function wireSeries(initial, catalog) {
   }
 
   /** Draw the chart `el` with the current view, window and selection and the given polls; returns the chart. */
-  function render(el, pollsOfChart) {
+  function render(el, pollsOfChart, legend = false) {
     const current = view();
     return renderSeries(el, {
       series: current.series,
@@ -181,7 +181,7 @@ function wireSeries(initial, catalog) {
       when: vote.when,
       window: state.window,
       anchor,
-      legend: false,
+      legend,
     });
   }
 
@@ -190,7 +190,7 @@ function wireSeries(initial, catalog) {
     charts.length = 0;
     tryDraw(() => charts.push(render(mainEl, view().polls)), 'the poll average');
     if (houseEl) {
-      tryDraw(() => charts.push(render(houseEl, housePolls())), 'the house against the average');
+      tryDraw(() => charts.push(render(houseEl, housePolls(), 'readonly')), 'the house against the average');
     }
   }
 

@@ -84,7 +84,7 @@ export function renderHistogram(el, values, {
   } else if (median !== null) {
     subtitle = `Mediana: ${formatter(median)}`;
     if (lo !== null && hi !== null) {
-      subtitle += ` · intervalo 95 %: ${formatter(lo)}–${formatter(hi)}`;
+      subtitle += ` · rango 95 %: ${formatter(lo)}–${formatter(hi)}`;
     }
   }
 

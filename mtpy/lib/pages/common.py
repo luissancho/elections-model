@@ -498,12 +498,12 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool,
     -------
     str
         In nowcast mode ``'Estimación a {today}'`` for the latest run and ``'Estimación del {run_at}'`` for
-        an older pinned run; in forecast mode ``'Pronóstico definitivo para el {event_date}'`` only while
+        an older pinned run or while frozen (never today's date over a run read before the veda); in forecast mode ``'Pronóstico definitivo para el {event_date}'`` only while
         frozen and showing the latest run, ``'Pronóstico publicado el {run_at}'`` for an older pinned run and
         ``'Pronóstico para el {event_date}'`` otherwise.
     """
     if mode == 'nowcast':
-        if not is_latest:
+        if not is_latest or frozen:
             return 'Estimación del {}'.format(fmt_date(meta.get('run_at')))
 
         if today is None:

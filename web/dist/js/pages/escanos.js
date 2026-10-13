@@ -50,7 +50,7 @@ function wireCoalition(dist, majority) {
       result.textContent = [
         count,
         `mediana ${fmtInt(stats.median)} escaños`,
-        `intervalo 95 % ${fmtRange(stats.lo, stats.hi, 0)}`,
+        `rango 95 % ${fmtRange(stats.lo, stats.hi, 0)}`,
         `mayoría absoluta (${fmtInt(majority)}): ${fmtProb(stats.pMajority)}`,
       ].join(' · ');
       renderHistogram(chart, values, {

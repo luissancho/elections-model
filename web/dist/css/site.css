@@ -390,3 +390,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* The poll name column reads left-aligned, unlike the numeric ones. */
+#polls-table th:nth-child(2), #polls-table td:nth-child(2) { text-align: left; }
