@@ -1406,6 +1406,14 @@ def test_home_tolerates_a_scope_whose_run_has_no_headline(api, fresh_app, tmp_pa
     assert status == 200 and 'Elecciones autonómicas · Madrid' in html(body)
 
 
+def test_home_cards_are_links(api):
+    page = html(call(api, '/')[2])
+    assert 'class="card card-link" href="/es"' in page.replace("'", '"')
+    assert page.count('card-link') >= 4  # el ámbito + las tres secciones
+    assert 'href="/elecciones"' in page and 'href="/casas"' in page and 'href="/metodo"' in page
+    assert '<a' not in re.search(r'<a class="card card-link"[^>]*>(.*?)</a>', page, re.S).group(1)
+
+
 def test_home_lists_the_past_elections_with_a_detail_link(events_site):
     page = html(call(events_site, '/')[2])
     assert page.index('2023') < page.index('2019') and 'href="/elecciones?scope=es&amp;date=2023-07-23"' in page
@@ -1459,7 +1467,7 @@ def test_home_cards_follow_the_default_mode_while_frozen(api, fresh_app):
 def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
     page = html(call(api, '/')[2])
     events = page[page.index('id="events"'):page.index('</section>', page.index('id="events"'))]
-    assert '<h2>Próximas elecciones</h2>' in events and '<h3><a href="/es">' in events
+    assert '<h2>Próximas elecciones</h2>' in events and '<h3>' in events and 'class="card card-link" href="/es"' in events
     assert events.count('<h2') == 1 and page.count('<h1') == 1
 
 

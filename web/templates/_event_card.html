@@ -1,4 +1,5 @@
-<h3><a href="{{ card.href }}">{{ card.title }}</a></h3>
+<a class="card card-link" href="{{ card.href }}">
+<h3>{{ card.title }}</h3>
 <p class="muted">{{ card.event_date|date }}{% if card.days_text %} · {{ card.days_text }}{% endif %}</p>
 {% if card.leader %}
 <p class="muted">{{ 'Pronóstico definitivo' if card.mode == 'forecast' and card.frozen else ('Pronóstico' if card.mode == 'forecast' else 'Si hoy hubiera elecciones') }}</p>
@@ -12,4 +13,5 @@
 <p>—</p>
 {% endif %}
 <p class="muted">Última publicación: {{ card.run_at|date }}{% if card.frozen %} · congelado{% endif %}</p>
-<p><a href="{{ card.href }}">Ver promedios</a> · <a href="{{ card.href_seats }}">Escaños</a></p>
+</a>
+<p class="card-actions"><a href="{{ card.href_seats }}">Ver escaños</a></p>

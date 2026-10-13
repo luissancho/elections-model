@@ -8,16 +8,16 @@
       <section class="stack" id="events">
         <h2>Próximas elecciones</h2>
         {% for card in cards[:1] %}
-        <article class="card card-hero">
+        <div class="tile tile-hero">
           {% include '_event_card.html' +%}
-        </article>
+        </div>
         {% endfor %}
         {% if cards|length > 1 %}
         <div class="grid">
           {% for card in cards[1:] %}
-          <article class="card">
+          <div class="tile">
             {% include '_event_card.html' +%}
-          </article>
+          </div>
           {% endfor %}
         </div>
         {% endif %}
@@ -31,12 +31,14 @@
         </ul>
       {{ m.card_end() }}
       {% endif %}
-      {{ m.card_start('more', 'Para entender el modelo', 'Tres páginas comunes a todas las elecciones: cómo acertaron las encuestas, qué encuestadoras aciertan más y cómo funciona el modelo.') }}
-        <ul class="link-list">
-          <li><a href="/elecciones">Histórico Errores</a>: cuánto se equivocaron los sondeos en cada elección pasada.</li>
-          <li><a href="/casas">Ranking Encuestadoras</a>: qué encuestadoras aciertan más y cuáles se desvían.</li>
-          <li><a href="/metodo">Método</a>: cómo se promedian los sondeos y se simulan los escaños.</li>
-        </ul>
-      {{ m.card_end() }}
+      <section class="stack" id="more" aria-labelledby="more-title">
+        <h2 id="more-title">Para entender el modelo</h2>
+        <p class="lead">Tres páginas comunes a todas las elecciones: cómo acertaron las encuestas, qué encuestadoras aciertan más y cómo funciona el modelo.</p>
+        <div class="grid grid-three">
+          <a class="card card-link" href="/elecciones"><h3>Histórico Errores</h3><p>Cuánto se equivocaron los sondeos en cada elección pasada.</p></a>
+          <a class="card card-link" href="/casas"><h3>Ranking Encuestadoras</h3><p>Qué encuestadoras aciertan más y cuáles se desvían.</p></a>
+          <a class="card card-link" href="/metodo"><h3>Método</h3><p>Cómo se promedian los sondeos y se simulan los escaños.</p></a>
+        </div>
+      </section>
     </div>
 {% endblock %}
