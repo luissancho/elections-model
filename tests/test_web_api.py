@@ -372,6 +372,13 @@ def test_event_parts_and_csv(api, fresh_app):
     assert 'es-2023-07-23-polls.csv' in headers['content-disposition']
 
 
+def test_model_csv_of_an_event_without_backtest_is_404(api, fresh_app):
+    write_event(fresh_app.fs, model=False)
+    status, headers, body = call(api, '/api/v1/events/es/2023-07-23/model', query='format=csv&table=seats')
+    assert status == 404 and json.loads(body) == {'status': 'error', 'message': 'event not published'}
+    assert headers['cache-control'] == 'no-store'
+
+
 def test_backtest_parts_and_csv(api, fresh_app):
     write_backtest(fresh_app.fs)
     status, headers, body = call(api, '/api/v1/backtest/es/metrics')

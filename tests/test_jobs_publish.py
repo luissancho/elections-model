@@ -16,7 +16,7 @@ def entry(scope, run_id):
 @pytest.fixture
 def patched(monkeypatch):
     """`resolve_scopes`, `next_event_date`, `publish_forecast` y `publish_analysis` sin base: `es` publica de
-    verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y `provenance` sustituidos, `es-md` no tiene
+    verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y la procedencia sustituidos, `es-md` no tiene
     evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
     calls = []
     real_forecast = publish.publish_forecast
@@ -52,7 +52,6 @@ def patched(monkeypatch):
 
     monkeypatch.setattr(publish, 'publish_event', fake_event)
     monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
-    monkeypatch.setattr(publish, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
     monkeypatch.setattr(publish, 'next_event_date', lambda scope: {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08',
                                                               'es-ri': '2027-05-23'}.get(scope))
@@ -431,6 +430,21 @@ def test_event_action_fails_a_date_without_stopping_the_others(fresh_app, tmp_pa
     with pytest.raises(RuntimeError, match='es'):
         Publish().run(what=['event'], scopes=['es'], event_date='2023-13-01', fs=FileSystem(str(tmp_path / 'site')))
     assert 'es: event 2023-13-01 failed (ValueError' in capsys.readouterr().out
+
+
+def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
+    from mtpy.jobs.Publish import Publish
+
+    monkeypatch.setattr(publish, 'get_events', lambda scope: synthetic_event().events)
+    fs = FileSystem(str(tmp_path / 'site'))
+    result = Publish().run(what=['event'], scopes=['es'], event_date='all', today='2026-10-13', fs=fs)
+    assert [(r['event_date'], r['status']) for r in result['es']] == [('2019-11-10', 'skipped'),
+                                                                      ('2023-07-23', 'published')]
+    capsys.readouterr()
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['event'], scopes=['es'], event_date=['2023-07-23', '2023-13-01'], fs=fs)
+    out = capsys.readouterr().out
+    assert out.count('failed (') == 1 and 'ValueError: month must be in 1..12' in out and 'published' not in out
 
 
 def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):

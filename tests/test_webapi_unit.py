@@ -240,6 +240,18 @@ def test_site_pointers_expire_with_the_ttl(fresh_app, tmp_path):
     assert site.latest_run('es') == '20261009-120000'
 
 
+def test_site_events_expire_with_the_ttl(fresh_app, tmp_path):
+    fresh_app.set('fs', FileSystem(str(tmp_path)))
+    write_event(fresh_app.fs)
+    now = [0.0]
+    site = webapi.Site(bundle.BundleReader(fresh_app.fs), ttl=60, clock=lambda: now[0])
+    assert site.events('es') == ['2023-07-23']
+    write_event(fresh_app.fs, date='2019-11-10', model=False)
+    assert site.events('es') == ['2023-07-23']
+    now[0] = 61.0
+    assert site.events('es') == ['2019-11-10', '2023-07-23']
+
+
 def test_site_requires_a_file_system(fresh_app):
     with pytest.raises(HttpError) as err:
         webapi.site()

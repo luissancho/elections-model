@@ -30,11 +30,11 @@ function paint() {
   }
 
   const bars = document.getElementById('error-chart');
-  const rows = pollsters.filter((row) => row.error_blocks !== null && row.error_blocks !== undefined)
-    .map((row) => ({name: row.pollster, error_blocks: row.error_blocks}));
+  const rows = pollsters.filter((row) => row.error_blocks_abs !== null && row.error_blocks_abs !== undefined)
+    .map((row) => ({name: row.pollster, error_blocks_abs: row.error_blocks_abs}));
   if (bars && rows.length) {
     bars.style.height = `${rows.length * BAR_ROW_HEIGHT + BAR_EXTRA_HEIGHT}px`;
-    tryDraw(() => renderBars(bars, rows, {value: 'error_blocks', formatter: (x) => fmtNum(x, 1)}),
+    tryDraw(() => renderBars(bars, rows, {value: 'error_blocks_abs', formatter: (x) => fmtNum(x, 1)}),
       'the house errors');
   }
 

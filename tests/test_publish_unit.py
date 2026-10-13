@@ -669,6 +669,15 @@ def test_export_backtest_table_keeps_a_missing_boolean_as_null():
     assert all(type(row['seats_valid']) in (bool, type(None)) for row in data['rows'])
 
 
+def test_prob_columns_stay_float_when_integral():
+    frame = pd.DataFrame({'event_date': ['a', 'b'], 'cov_seats95': [1.0, 1.0], 'n_cases': [2.0, 3.0]})
+    data, table = publish.export_backtest_table(frame)
+    assert [row['cov_seats95'] for row in data['rows']] == [1.0, 1.0]
+    assert all(type(row['cov_seats95']) is float for row in data['rows'])
+    assert [row['n_cases'] for row in data['rows']] == [2, 3] and table['cov_seats95'].tolist() == [1.0, 1.0]
+    assert table.to_csv(index=False).splitlines()[1] == 'a,1.0,2'
+
+
 def test_export_backtest_table_rounds_types_and_nulls():
     tables = synthetic_backtest()
     data, frame = publish.export_backtest_table(tables.metrics)

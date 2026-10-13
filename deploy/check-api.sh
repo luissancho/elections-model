@@ -101,7 +101,8 @@ check_db_only() {
 
 # check_published RUTA TIPO: lo publicado con `publish event`/`backtest` puede faltar en el paquete. Un 404
 # cuyo cuerpo dice "not published" (JSON de la API) o "no publicada"/"no publicado" (pagina HTML) es
-# "n/a sin publicar"; cualquier otra respuesta se comprueba como check RUTA 200 TIPO.
+# "n/a sin publicar"; cualquier otra respuesta se comprueba como check RUTA 200 TIPO. El patron tambien
+# casa con el JSON `scope not published`: es inofensivo.
 check_published() {
     local path="$1" kind="$2" code
     code="$(curl -s --max-time 20 -o "$body" -w '%{http_code}' "$base$path" || true)"

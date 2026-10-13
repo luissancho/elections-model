@@ -437,3 +437,34 @@ def common_context(state: dict, active: str) -> dict:
         'mode_label': MODE_LABELS[mode],
         'title_suffix': title_suffix,
     }
+
+
+def bundle_part(read, *args) -> Optional[dict]:
+    """
+    Data of a published part, or ``None`` when it is not published.
+
+    Parameters
+    ----------
+    read : callable
+        Reader of the site that returns the bytes of the part envelope (``site().analysis``,
+        ``site().event`` or ``site().backtest``).
+    *args
+        Arguments of the reader.
+
+    Returns
+    -------
+    dict or None
+        The ``data`` member of the part envelope, or ``None`` when the reader answers 404.
+
+    Raises
+    ------
+    HttpError
+        Any error of the reader other than the 404 of an unpublished part.
+    """
+    try:
+        return bundle.loads(read(*args))['data']
+    except HttpError as error:
+        if error.status == 404:
+            return None
+
+        raise

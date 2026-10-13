@@ -3,10 +3,8 @@ Model accuracy page context: the published backtest by horizon, by election and 
 """
 from typing import Optional
 
-from ...core.api import HttpError
-from .. import bundle
 from ..webapi import site
-from .common import api_url, common_context
+from .common import api_url, bundle_part, common_context
 
 HORIZON_COLUMNS = (
     'horizon', 'n_cases', 'n_seats_cases', 'mae_shares', 'mae_last_poll', 'mae_mean_4w', 'mae_prev_result',
@@ -47,13 +45,7 @@ def backtest_part(scope: str, name: str) -> Optional[dict]:
     HttpError
         Any error of the bundle other than the 404 of an unpublished part.
     """
-    try:
-        return bundle.loads(site().backtest(scope, name))['data']
-    except HttpError as error:
-        if error.status == 404:
-            return None
-
-        raise
+    return bundle_part(site().backtest, scope, name)
 
 
 def project(rows: list, columns: tuple) -> list:
@@ -145,7 +137,6 @@ def modelo_context(state: dict, active: str = '/modelo') -> dict:
         'mae': {'model': series('mae_shares'), 'last_poll': series('mae_last_poll'),
                 'mean_4w': series('mae_mean_4w'), 'prev_result': series('mae_prev_result')},
         'coverage': {'50': series('cov_shares50'), '80': series('cov_shares80'), '95': series('cov_shares95')},
-        'seats': {'mae': series('mae_seats'), 'mae_h': series('mae_seats_h'), 'cov95': series('cov_seats95')},
     }
 
     return context

@@ -3,10 +3,9 @@ Houses page context.
 """
 from typing import Optional
 
-from ...core.api import HttpError
-from .. import bundle, webapi
+from .. import webapi
 from ..webapi import query_pollster, query_ratings, site
-from .common import api_url, common_context
+from .common import api_url, bundle_part, common_context
 
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
@@ -43,13 +42,7 @@ def analysis_part(scope: str, name: str) -> Optional[dict]:
     HttpError
         Any error of the bundle other than the 404 of an unpublished analysis.
     """
-    try:
-        return bundle.loads(site().analysis(scope, name))['data']
-    except HttpError as error:
-        if error.status == 404:
-            return None
-
-        raise
+    return bundle_part(site().analysis, scope, name)
 
 
 def ranking_rows(ratings, herding: Optional[dict]) -> list:

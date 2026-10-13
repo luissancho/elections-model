@@ -4,9 +4,8 @@ Past elections page context: the list of published elections and the detail of o
 from typing import Optional
 
 from ...core.api import HttpError
-from .. import bundle
 from ..webapi import check_date, site
-from .common import api_url, common_context
+from .common import api_url, bundle_part, common_context
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 EVENT_CSV = (
@@ -42,13 +41,30 @@ def event_part(scope: str, date: str, name: str) -> Optional[dict]:
     HttpError
         Any error of the bundle other than the 404 of an unpublished part.
     """
-    try:
-        return bundle.loads(site().event(scope, date, name))['data']
-    except HttpError as error:
-        if error.status == 404:
-            return None
+    return bundle_part(site().event, scope, date, name)
 
-        raise
+
+def with_abs(rows: list) -> list:
+    """
+    Copy rows adding the absolute value of their signed block error.
+
+    Parameters
+    ----------
+    rows : list of dict
+        Rows with the signed ``error_blocks`` of the published bundle.
+
+    Returns
+    -------
+    list of dict
+        New dicts with ``error_blocks_abs`` (``abs(error_blocks)``, ``None`` when there is no error).
+    """
+    result = []
+
+    for row in rows:
+        error = row.get('error_blocks')
+        result.append(dict(row, error_blocks_abs=None if error is None else abs(error)))
+
+    return result
 
 
 def published_events(scope: str) -> list:
@@ -64,8 +80,8 @@ def published_events(scope: str) -> list:
     -------
     list of dict
         One dict per published date, newest first, with ``date``, ``name``, ``n_polls``,
-        ``n_pollsters``, ``error_avg``, ``error_blocks``, ``bias_blocks``, ``bias`` (by block)
-        and ``has_model``, all from its ``meta`` part. A date without ``meta`` is skipped.
+        ``n_pollsters``, ``error_avg``, ``error_blocks`` (signed), ``error_blocks_abs``, ``bias_blocks``,
+        ``bias`` (by block) and ``has_model``, all from its ``meta`` part. A date without ``meta`` is skipped.
     """
     events = []
 
@@ -81,7 +97,7 @@ def published_events(scope: str) -> list:
         event['has_model'] = bool(meta.get('has_model'))
         events.append(event)
 
-    return events
+    return with_abs(events)
 
 
 def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
@@ -123,7 +139,7 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     context['blocks'] = blocks
 
     if events:
-        sector = [{key: event[key] for key in ('date', 'error_avg', 'error_blocks', 'bias_blocks')}
+        sector = [{key: event[key] for key in ('date', 'error_avg', 'error_blocks', 'error_blocks_abs', 'bias_blocks')}
                   for event in reversed(events)]
         context['initial'] = {'state': context['state'], 'sector': sector, 'blocks': blocks}
 
@@ -246,7 +262,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     model = event_part(scope, date, 'model') or {}
     has_model = bool(meta.get('has_model'))
     blocks = list(pollsters.get('blocks') or meta.get('blocks') or [])
-    pollster_rows = pollsters.get('rows') or []
+    pollster_rows = sorted(with_abs(pollsters.get('rows') or []),
+                           key=lambda row: (row['error_blocks_abs'] is None, row['error_blocks_abs'] or 0.0))
     catalog = context['catalog']
     results_rows = [
         {'party': row['party'], 'fullname': catalog[row['party']]['fullname'],
@@ -262,7 +279,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['results_rows'] = results_rows
     context['n_seats'] = results.get('n_seats')
     context['pollster_rows'] = pollster_rows
-    context['poll_rows'] = polls.get('rows') or []
+    context['poll_rows'] = with_abs(polls.get('rows') or [])
     context['blocks'] = blocks
     context['horizon_tables'] = horizon_tables(model) if has_model else []
     context['has_model'] = has_model
@@ -270,7 +287,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['initial'] = {
         'state': full,
         'meta': meta,
-        'pollsters': [{key: row.get(key) for key in ('pollster', 'error_blocks', 'last_error_blocks')}
+        'pollsters': [{key: row.get(key)
+                       for key in ('pollster', 'error_blocks', 'error_blocks_abs', 'last_error_blocks')}
                       for row in pollster_rows],
         'bullseye': [dict({'pollster': row['pollster'], 'days': row.get('last_days')},
                           **{block: row.get('last_' + block) for block in blocks})

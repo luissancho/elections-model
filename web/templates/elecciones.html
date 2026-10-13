@@ -18,6 +18,7 @@
                 <th scope="col">Casas</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
+                <th scope="col">Sesgo del margen</th>
                 <th scope="col">Sesgo de bloques</th>
                 {% if blocks %}
                 <th scope="col">Desviación hacia {{ blocks[0] }}</th>
@@ -32,6 +33,7 @@
                 <td>{{ event.n_polls|int }}</td>
                 <td>{{ event.n_pollsters|int }}</td>
                 <td>{{ event.error_avg|num(1) }}</td>
+                <td>{{ event.error_blocks_abs|num(1) }}</td>
                 <td>{{ event.error_blocks|num(1) }}</td>
                 <td>{{ event.bias_blocks|num(1) }}</td>
                 {% if blocks %}
@@ -51,7 +53,9 @@
           Qué es esto: el error medio de los sondeos frente al resultado en cada elección pasada, en
           puntos. El sesgo de bloques mide cuánto se alejaron los sondeos del resultado sumando cada
           bloque, en la misma escala que el error, y no tiene signo. La desviación hacia el primer bloque
-          sí lo tiene: positivo, los sondeos dieron de más a ese bloque; negativo, de menos.
+          sí lo tiene: positivo, los sondeos dieron de más a ese bloque; negativo, de menos. El sesgo del margen
+          es la diferencia con signo entre el margen de bloques del sondeo y el del resultado: positivo, el
+          sondeo daba más margen al primer bloque.
         </p>
       </section>
       {% else %}

@@ -485,7 +485,7 @@ def houses(houses_without_analysis, fresh_app):
 
 
 def test_casas_lists_the_ranking_effects_and_herding(houses):
-    status, headers, body = call(houses, '/casas', query='scope=es')
+    status, _, body = call(houses, '/casas', query='scope=es')
     page = html(body)
     assert status == 200 and 'aria-current="page"' in page and 'id="ranking-table"' in page
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
@@ -495,6 +495,12 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
+
+
+def test_casas_explains_the_relative_bias(houses):
+    page = html(call(houses, '/casas', query='scope=es')[2]).replace('\n', ' ')
+    page = re.sub(r'\s+', ' ', page)
+    assert 'comparado con el de las demás casas' in page and 'no penaliza a una casa' in page
 
 
 def test_casas_without_analysis_keeps_the_ranking(houses_without_analysis):
@@ -544,7 +550,7 @@ def test_casas_without_analysis_has_no_analysis_downloads(houses_without_analysi
 
 
 def test_casa_profile_tables_and_bullseye(houses):
-    status, headers, body = call(houses, '/casas', query='id=2&mode=nowcast')
+    status, _, body = call(houses, '/casas', query='id=2&mode=nowcast')
     page = html(body)
     assert status == 200 and 'href="/casas?scope=es&amp;mode=nowcast"' in page  # "Todas las casas"
     assert 'id="path-table"' in page and '2023-23J' in page
@@ -560,7 +566,7 @@ def test_casa_profile_tables_and_bullseye(houses):
 
 def test_casa_profile_of_a_house_without_ratings(houses):
     """Una casa del catálogo sin ratings en el ámbito: perfil con tablas vacías, sin camino ni diana."""
-    status, headers, body = call(houses, '/casas', query='id=4')
+    status, _, body = call(houses, '/casas', query='id=4')
     page = html(body)
     assert status == 200 and '<h2>Nueva' in page and 'Calidad: – · Rating: –' in page
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page
@@ -650,7 +656,7 @@ def events_site(api, fresh_app):
 
 
 def test_elecciones_lists_the_published_events_newest_first(events_site):
-    status, headers, body = call(events_site, '/elecciones', query='scope=es')
+    status, _, body = call(events_site, '/elecciones', query='scope=es')
     page = html(body)
     assert status == 200 and page.index('date=2023-07-23') < page.index('date=2019-11-10')
     assert '/elecciones?scope=es&amp;mode=forecast&amp;date=2023-07-23' in page
@@ -700,7 +706,7 @@ def test_published_events_and_horizon_tables(events_site):
     events = pages.published_events('es')
     assert [event['date'] for event in events] == ['2023-07-23', '2019-11-10']
     assert events[0]['name'] == 'Generales 2023' and events[0]['has_model'] and not events[1]['has_model']
-    assert set(events[0]) == {'date', 'name', 'n_polls', 'n_pollsters', 'error_avg', 'error_blocks',
+    assert set(events[0]) == {'date', 'name', 'n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'error_blocks_abs',
                               'bias_blocks', 'bias', 'has_model'}
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
     tables = context['horizon_tables']
@@ -747,6 +753,60 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     assert 'id="model-seats-30"' not in page and 'id="model-blocks-30"' not in page
 
 
+def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'pollsters':
+            rows = [dict(row, error_blocks=error) for row, error in zip(data['rows'], (-3.0, 1.0, 2.0))]
+            data = {**data, 'rows': rows}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    names = [row['pollster'] for row in real('es', '2023-07-23', 'pollsters')['rows']]
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    table = re.search(r'<table id="pollsters-table">(.*?)</table>', page, re.S).group(1)
+    assert status == 200 and 'Sesgo del margen' in table and '-3,0' in table
+    shown = [re.sub(r'<.*?>', '', cell) for cell in re.findall(r'<tr>\s*<td>(.*?)</td>', table, re.S)]
+    assert shown == [names[1], names[2], names[0]]
+    data = initial(body)
+    assert [row['error_blocks_abs'] for row in data['pollsters']] == [1.0, 2.0, 3.0]
+    assert [row['error_blocks'] for row in data['pollsters']] == [1.0, 2.0, -3.0]
+
+
+def test_pollster_rows_without_error_go_last_and_have_no_absolute_value(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'pollsters':
+            errors = (None, -2.0, 1.0)
+            data = {**data, 'rows': [dict(row, error_blocks=error) for row, error in zip(data['rows'], errors)]}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    assert [row['error_blocks_abs'] for row in context['pollster_rows']] == [1.0, 2.0, None]
+    assert all('error_blocks_abs' in row for row in context['poll_rows'])
+
+
+def test_pollster_row_without_id_is_plain_text(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'pollsters':
+            data = {**data, 'rows': [dict(row, pollster_id=None) for row in data['rows']]}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    table = re.search(r'<table id="pollsters-table">(.*?)</table>', html(body), re.S).group(1)
+    assert status == 200 and 'GAD3' in table and '<a ' not in table
+
+
 def test_eleccion_without_meta_is_a_404(events_site, fresh_app, monkeypatch):
     real = pages.elecciones.event_part
     monkeypatch.setattr(pages.elecciones, 'event_part',
@@ -770,7 +830,7 @@ def test_modelo_renders_the_backtest_tables_and_initial(backtest_site):
     data = initial(body)
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
     assert data['mae']['last_poll'][0] == 1.74 and '5,77' in page
-    assert list(data['seats']) == ['mae', 'mae_h', 'cov95']
+    assert 'seats' not in data
     blocks = re.search(r'<table id="blocks-table">(.*?)</table>', page, re.S).group(1)
     rows = [re.findall(r'<td>(.*?)</td>', row) for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S) if '<td>' in row]
     invalid = [row for row in rows if row[0].startswith('10 ') and row[1] == '30']  # 2019-11-10 x 30

@@ -50,6 +50,7 @@
                 <th scope="col">Muestra</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
+                <th scope="col">Sesgo del margen</th>
                 <th scope="col">Sesgo de bloques</th>
               </tr>
             </thead>
@@ -60,6 +61,7 @@
                 <td>{{ row.n_polls|int }}</td>
                 <td>{{ row.sample_size|int }}</td>
                 <td>{{ row.error_avg|num(1) }}</td>
+                <td>{{ row.error_blocks_abs|num(1) }}</td>
                 <td>{{ row.error_blocks|num(1) }}</td>
                 <td>{{ row.bias_blocks|num(1) }}</td>
               </tr>
@@ -70,7 +72,8 @@
         <p class="about">
           Qué es esto: cuánto se equivocó cada casa en esta elección, en puntos. El error medio es la
           distancia media entre sus sondeos y el resultado de cada partido; el error y el sesgo de bloques
-          miden lo mismo con la suma de cada bloque.
+          miden lo mismo con la suma de cada bloque. El sesgo del margen es la diferencia con signo entre el
+          margen de bloques del sondeo y el del resultado: positivo, el sondeo daba más margen al primer bloque.
         </p>
       </section>
       <section class="card" id="bullseye">
@@ -125,6 +128,7 @@
                 <th scope="col">Muestra</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
+                <th scope="col">Sesgo del margen</th>
                 <th scope="col">Sesgo de bloques</th>
                 {% for block in blocks %}
                 <th scope="col">{{ block }}</th>
@@ -138,6 +142,7 @@
                 <td>{{ row.days|int }}</td>
                 <td>{{ row.sample_size|int }}</td>
                 <td>{{ row.error_avg|num(1) }}</td>
+                <td>{{ row.error_blocks_abs|num(1) }}</td>
                 <td>{{ row.error_blocks|num(1) }}</td>
                 <td>{{ row.bias_blocks|num(1) }}</td>
                 {% for block in blocks %}
@@ -151,7 +156,8 @@
         <p class="about">
           Qué es esto: todos los sondeos publicados de la elección, con su error frente al resultado. Las
           columnas de bloque son el error de cada bloque en puntos: positivo, el sondeo le daba más voto que
-          el resultado; negativo, menos.
+          el resultado; negativo, menos. El sesgo del margen es la diferencia con signo entre el margen de
+          bloques del sondeo y el del resultado: positivo, el sondeo daba más margen al primer bloque.
         </p>
       </section>
       <section class="card" id="model">
