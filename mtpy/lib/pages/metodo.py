@@ -21,7 +21,6 @@ SECTIONS = (
 # Old sections kept on the landing page under "Cómo funciona el modelo" until the text of their question replaces
 # them (plan decision E10); each text task removes its sections and the landing drops the block when it is empty.
 LEGACY_SECTIONS = (
-    ('promedio', 'El promedio'),
     ('casas', 'Las casas'),
     ('simulacion', 'La simulación'),
     ('escanos', 'Los escaños'),
@@ -30,7 +29,7 @@ LEGACY_SECTIONS = (
 # Subpages of the method (``/metodo/{id}``), in menu order. A subpage without ``template`` has no text yet: it
 # is not linked and its route is a 404.
 METODO_SECTIONS = {
-    'promedio': {'title': '¿Cómo promediamos las encuestas?', 'template': None},
+    'promedio': {'title': '¿Cómo promediamos las encuestas?', 'template': 'metodo_promedio.html'},
     'escanos': {'title': '¿Cómo simulamos los escaños?', 'template': None},
     'rating': {'title': '¿Cómo calculamos el rating de las encuestadoras?', 'template': None},
     'backtest': {'title': '¿Cuánto acierta el modelo?', 'template': 'metodo_backtest.html'},

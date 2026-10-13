@@ -70,41 +70,15 @@
         </p>
         {% for old in legacy_sections %}
         <h3 id="{{ old.id }}">{{ old.title }}</h3>
-          {% if old.id == 'promedio' %}
-          <p>
-            El promedio es una regresión local ponderada: para cada día, una media de los sondeos cercanos
-            en el tiempo en la que los más próximos a ese día pesan más, de modo que la línea sigue los
-            cambios de la opinión sin saltar con cada sondeo. Cada sondeo pesa además según:
-          </p>
-          <ul>
-            <li>el tamaño de su muestra: más entrevistas, más peso, aunque cada entrevista añadida cuenta
-              menos;</li>
-            <li>la sobrerrepresentación de su casa: si una casa publica muchos sondeos en pocos días, el peso
-              se reparte entre ellos, y de las series que se actualizan a diario solo cuenta la última entrega;</li>
-            <li>el rating de su casa (ver <a href="#casas">Las casas</a>);</li>
-            <li>la dispersión de su casa: si sus cifras oscilan más de lo que permite el tamaño de sus
-              muestras, pesa como una muestra menor; si oscilan menos, señal de que se ciñe al resto
-              (herding), también pesa menos. La medida del herding se publica en
-              <a href="/casas{{ scope_query }}">Rating de encuestadoras</a> como información y no entra en el rating.</li>
-          </ul>
-          <p>
-            Antes de promediar, a cada sondeo se le resta el efecto de su casa en el ciclo: cuánto se separa
-            esa casa, partido a partido, del consenso de todas, estimado con sus sondeos del ciclo y con su
-            historia. Los efectos se equilibran entre casas, así que corrigen qué casas publican en cada
-            momento sin mover el nivel medio del promedio en el ciclo; los gráficos muestran siempre los
-            sondeos tal como se publicaron. La banda del promedio mide dónde está el consenso de las casas,
-            no dónde estará el voto, y se calcula agrupando los sondeos por casa (cluster por casa), porque
-            los de una misma casa se parecen entre sí y no cuentan como informaciones independientes.
-          </p>
-          {% elif old.id == 'casas' %}
+          {% if old.id == 'casas' %}
           <p>
             Cada casa encuestadora tiene un rating entre 0 y 100 de cara a la próxima elección de cada ámbito.
             Se calcula con el sesgo de sus sondeos frente al resultado en las elecciones anteriores, tanto en
             el tamaño de cada bloque como en el reparto entre los partidos de un mismo bloque, comparado con
             el de los sondeos de la misma elección publicados a una distancia parecida de la votación: un
             fallo compartido por todo el sector no penaliza a una casa. Ese sesgo se combina con una calidad
-            previa que pesa más cuantos menos sondeos tiene la casa. Cuanto más alto es el
-            rating, más pesan sus sondeos en el promedio.
+            previa que pesa más cuantos menos sondeos tiene la casa. Cuánto pesa el rating en el promedio se
+            cuenta en <a href="{{ method_href('promedio') }}">¿Cómo promediamos las encuestas?</a>.
           </p>
           <p>
             El ranking es global: todas las elecciones con resultado, generales y autonómicas, alimentan el

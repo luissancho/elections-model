@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block title %}¿Cómo promediamos las encuestas?{% endblock %}
+{% block description %}Cómo funciona el promedio de encuestas del modelo: qué sondeos entran, cuánto pesa cada uno, cómo se descuenta la inclinación de cada casa, qué es la regresión local y qué mide su banda.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/metodo.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+    {% include '_metodo_nav.html' +%}
+    <div id="content" class="stack">
+      {{ m.headline('El promedio es una línea que sigue a las encuestas día a día: cada sondeo pesa según su muestra y su casa, y a cada casa se le descuenta su inclinación antes de promediar.') }}
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#que-entra">Qué sondeos entran</a>
+        <a href="#peso">Cuánto pesa cada sondeo</a>
+        <a href="#efectos-de-casa">Los efectos de casa</a>
+        <a href="#regresion">La regresión local</a>
+        <a href="#banda">La banda del promedio</a>
+        <a href="#voto-estimado">De las encuestas al voto estimado</a>
+      </nav>
+      {{ m.card_start('resumen', 'En resumen', 'El promedio de encuestas en cuatro ideas.') }}
+        <ul>
+          <li>Entran los sondeos publicados desde las elecciones anteriores, salvo los de los últimos días antes
+            de votar, los de agregadores y paneles en línea y los internos de los partidos.</li>
+          <li>Cada sondeo pesa según su muestra, cuántos ha publicado su casa en esos días, el rating de la casa y
+            lo que sus cifras oscilan frente a lo que permite su muestra.</li>
+          <li>A cada casa se le resta su inclinación propia hacia cada partido, medida en el ciclo y en su
+            historia, sin mover el nivel medio del promedio.</li>
+          <li>Cada día, el promedio es una recta ajustada a los sondeos cercanos; su banda dice dónde está el
+            consenso de las casas, no dónde estará el voto.</li>
+        </ul>
+      {{ m.card_end() }}
+      {{ m.card_start('que-entra', 'Qué sondeos entran', 'Los sondeos de cada elección publicados desde la anterior, con unas pocas exclusiones.') }}
+        <p>
+          Los sondeos son los de las tablas de intención de voto que recoge Wikipedia (ver
+          <a href="/metodo#datos">Los datos</a>). El promedio de una elección usa los sondeos publicados desde la
+          anterior; el resultado de aquella no entra en el promedio. Quedan fuera:
+        </p>
+        <ul>
+          <li>Los sondeos de los últimos días: solo cuentan los que terminaron su trabajo de campo al menos seis
+            días antes de la votación. No entran, así, los hechos durante la veda (los cinco días anteriores, en
+            los que la ley prohíbe publicarlos en España) ni los de boca de urna.</li>
+          <li>Los agregadores, que publican sus propias medias de otras encuestas, y las casas que el catálogo
+            marca como paneles en línea.</li>
+          <li>Los sondeos internos de los partidos: si quien firma es un partido, no se carga. Un sondeo que un
+            partido encarga a una casa encuestadora («Sigma Dos / PP») sí se carga, como cualquier otro.</li>
+        </ul>
+        <p>
+          Los partidos se fusionan, se refundan o concurren en coalición. Cuando el catálogo dice que un partido
+          hereda a otros (SUMAR a Unidas Podemos y Más País en 2023), los sondeos que aún listan a los
+          predecesores cuentan para el sucesor en lugar de perderse en «otros»; si un sondeo lista a ambos, se
+          suman, aunque la suma de las partes suele sobreestimar a la coalición.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('peso', 'Cuánto pesa cada sondeo', 'El peso de un sondeo es el producto de cuatro factores: su muestra, la sobrerrepresentación de su casa, la dispersión de su casa y su rating.') }}
+        <math display="block" aria-label="w sub i igual a o sub i por la raíz de n sub i entre n mediana, por f sub c, por r sub c">
+          <mrow>
+            <msub><mi>w</mi><mi>i</mi></msub><mo>=</mo>
+            <msub><mi>o</mi><mi>i</mi></msub><mo>·</mo>
+            <msqrt><mfrac><msub><mi>n</mi><mi>i</mi></msub><mover><mi>n</mi><mo>~</mo></mover></mfrac></msqrt><mo>·</mo>
+            <msub><mi>f</mi><mi>c</mi></msub><mo>·</mo>
+            <msub><mi>r</mi><mi>c</mi></msub>
+          </mrow>
+        </math>
+        <p>
+          <strong>La muestra.</strong> <var>n</var><sub><var>i</var></sub> son las entrevistas del sondeo
+          <var>i</var> y <var>ñ</var>, la mediana de las de los sondeos de esa elección. Más entrevistas dan más
+          peso, pero cada vez menos (es una raíz cuadrada, como el error de muestreo): con cuatro veces más
+          entrevistas, un sondeo pesa el doble. Si no publica su muestra, recibe la mediana de las de su casa, y
+          las muestras desmesuradas se recortan.
+        </p>
+        <p>
+          <strong>La sobrerrepresentación.</strong> <var>o</var><sub><var>i</var></sub> evita que una casa pese
+          más solo por publicar más. Si el campo de un sondeo se solapa con el de una entrega posterior de la
+          misma casa, como en las series diarias, solo cuenta la última. Y si una casa publica <var>N</var>
+          sondeos en pocos días (cuatro días a cada lado), cada uno pesa 1/<var>N</var>.
+        </p>
+        <p>
+          <strong>El rating.</strong> <var>r</var><sub><var>c</var></sub> sale del rating <var>R</var> de la casa
+          <var>c</var>, que mide cuánto se equivocaron sus sondeos en las elecciones anteriores frente a los
+          demás sondeos de la misma elección (ver
+          <a href="{{ method_href('rating') }}">¿Cómo calculamos el rating de las encuestadoras?</a>). Es
+          ln(1 + <var>R</var>) / ln(1 + <var>R̄</var>), con <var>R̄</var> el rating medio de las casas: una casa
+          de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no pesa nada.
+        </p>
+        <p>
+          <strong>La dispersión.</strong> <var>f</var><sub><var>c</var></sub> compara cuánto oscilan las cifras
+          de una casa alrededor del promedio, descontada su inclinación propia, con lo que permitiría el azar del
+          muestreo con sus muestras. Se mide en las casas con cinco o más sondeos en el ciclo y se acerca a 1
+          cuantos menos tienen. Penaliza los dos extremos:
+        </p>
+        <ul>
+          <li>Si las cifras oscilan más de lo que permite la muestra, la casa pesa como la muestra que produciría
+            esa oscilación (su muestra efectiva, <var>n</var> · <var>f</var><sup>2</sup>).</li>
+          <li>Si oscilan menos, también pesa menos: es el herding, las cifras pegadas al consenso. Para medirlo,
+            cada casa se compara con el promedio calculado sin sus propios sondeos, en los partidos principales y
+            solo con los sondeos que publican su muestra. Sea por seguir al consenso, por entrevistar siempre al
+            mismo panel o por ponderar por recuerdo de voto, sus sondeos aportan menos información independiente
+            de la que sugiere su muestra.</li>
+        </ul>
+        <p>
+          El herding se publica en <a href="/casas{{ scope_query }}">Rating de encuestadoras</a>, pero no entra en
+          el rating: solo resta peso en el promedio.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('efectos-de-casa', 'Los efectos de casa', 'Cada casa tiende a dar a cada partido algo más o algo menos que las demás; antes de promediar, esa inclinación se resta de sus sondeos.') }}
+        <p>
+          El efecto de casa es la desviación sistemática de una casa en un partido: si le da, de forma estable,
+          dos puntos más que el consenso, se le restan dos puntos a cada sondeo. Se estima con dos fuentes:
+        </p>
+        <ul>
+          <li><strong>El ciclo:</strong> la desviación media de sus sondeos frente al promedio, con los pesos del
+            promedio y más peso para los recientes, porque el método actual de una casa importa más que el de hace
+            años.</li>
+          <li><strong>Su historia:</strong> lo que se apartó del resultado en los 90 días previos a cada elección
+            anterior, descontado el error que compartieron todas las casas; cuentan las generales y las
+            autonómicas (estas con menos peso), más cuanto más recientes. Es un punto de partida, porque las
+            inclinaciones solo persisten en parte de una elección a otra.</li>
+        </ul>
+        <p>
+          Las dos se combinan pesando cada una por su precisión: con muchos sondeos en el ciclo manda el ciclo; con
+          pocos, la historia. Una casa con menos de cinco sondeos en el ciclo se queda en lo que dice su historia, y una casa
+          sin historia empieza en cero.
+        </p>
+        <p>
+          Al final, los efectos se recentran para que su media, ponderada con el peso
+          <var>W</var><sub><var>c</var></sub> de cada casa en el promedio, sea cero:
+        </p>
+        <math display="block" aria-label="suma sobre las casas c de W sub c por e sub c igual a cero">
+          <mrow>
+            <munder><mo>∑</mo><mi>c</mi></munder>
+            <msub><mi>W</mi><mi>c</mi></msub><mo>·</mo><msub><mi>e</mi><mi>c</mi></msub><mo>=</mo><mn>0</mn>
+          </mrow>
+        </math>
+        <p>
+          Así la corrección no mueve el nivel medio del promedio a lo largo del ciclo: corrige qué casas publican
+          alrededor de cada fecha. Si durante unas semanas solo publican casas que dan más voto a un partido, el
+          promedio sin corregir lo subiría; el corregido, no. Lo que no corrige es el error que comparten todas las
+          casas a la vez: estimarlo con su historia está probado, pero no se repite de una elección a otra y queda
+          desactivado.
+        </p>
+        <p>
+          Los gráficos muestran siempre los sondeos tal como se publicaron: la corrección solo entra en la línea.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('regresion', 'La regresión local', 'Para cada día, el promedio ajusta una recta a los sondeos cercanos en el tiempo y toma el valor de esa recta en ese día.') }}
+        <p>
+          Una media de las últimas semanas llega tarde a los cambios. El modelo usa una regresión local
+          ponderada: para cada día
+          <var>t</var>, cada sondeo <var>i</var> recibe un peso ω<sub><var>i</var></sub> que combina su peso
+          <var>w</var><sub><var>i</var></sub> con su cercanía a ese día, a través de una campana de Gauss de
+          anchura <var>h</var><sub><var>t</var></sub>; se busca la recta que mejor pasa por los sondeos con esos
+          pesos, y el promedio del día es su valor en <var>t</var>, el término <var>a</var>:
+        </p>
+        <math display="block" aria-label="minimizar en a y b la suma de omega sub i por y sub i menos a menos b por t sub i menos t, al cuadrado">
+          <mrow>
+            <munder><mo movablelimits="false">min</mo><mrow><mi>a</mi><mo>,</mo><mi>b</mi></mrow></munder>
+            <munder><mo>∑</mo><mi>i</mi></munder>
+            <msub><mi>ω</mi><mi>i</mi></msub>
+            <msup>
+              <mrow><mo>(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><mi>a</mi><mo>−</mo><mi>b</mi><mo>·</mo><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>−</mo><mi>t</mi><mo>)</mo><mo>)</mo></mrow>
+              <mn>2</mn>
+            </msup>
+          </mrow>
+        </math>
+        <p>
+          <var>y</var><sub><var>i</var></sub> es el voto del partido en el sondeo, ya sin su efecto de casa, y
+          <var>t</var><sub><var>i</var></sub>, su fecha de fin de campo. Una recta, y no una media, es lo que
+          permite seguir la tendencia hasta el último día, donde no hay sondeos posteriores.
+        </p>
+        <p>
+          La anchura de la ventana no es fija: una anchura de partida se elige con los propios datos, con un
+          método automático (el de Sheather y Jones en la versión de Botev), y se adapta a la densidad de
+          sondeos: más estrecha donde hay muchos y más ancha donde escasean, como en el último día, que solo los
+          tiene a un lado.
+        </p>
+        <p>
+          La campana mira a los dos lados, así que la línea de días pasados puede moverse cuando llegan sondeos
+          nuevos. Cada partido se promedia por separado, con los sondeos que lo listan, si son al menos tres.
+          Tras el último sondeo, la recta se prolonga unos días y luego el valor se mantiene.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('banda', 'La banda del promedio', 'La banda que acompaña a la línea es su intervalo de confianza del 95 %: la incertidumbre de la propia estimación del promedio.') }}
+        <p>
+          La banda sale del error estándar de la recta en cada día. Los sondeos de una misma casa se parecen entre sí, porque comparten método y lo que les quede de
+          inclinación: no son informaciones independientes. El error se calcula agrupándolos por casa (en la
+          jerga, un error estándar robusto con cluster por casa): las desviaciones de cada casa se suman antes de
+          combinarse, y así no se dan por independientes diez sondeos de una casa que se parecen. La banda usa
+          además una t de Student con, como mucho, tantos grados de libertad como casas hay en la ventana menos
+          una: con pocas casas, se ensancha.
+        </p>
+        <p>
+          Mide dónde está el consenso de las casas que publican. No mide:
+        </p>
+        <ul>
+          <li>Dónde estará el voto: el error que comparten todas las casas frente al resultado no está en la
+            banda, sino en la simulación, como error histórico de los sondeos.</li>
+          <li>La incertidumbre de la anchura de la ventana ni la de los efectos de casa, que el recentrado hace
+            pequeña.</li>
+          <li>Toda la incertidumbre cuando pocas casas pesan de verdad en la ventana: ahí el error agrupado se
+            queda corto.</li>
+        </ul>
+        <p>
+          Por eso el resultado cae a menudo fuera de la banda sin que sea un fallo.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('voto-estimado', 'De las encuestas al voto estimado', 'El voto estimado de cada partido es el promedio corregido leído en la fecha de la estimación; su intervalo suma más errores que la banda.') }}
+        <p>
+          El promedio se lee en un día, la fecha de la estimación: normalmente el último que alcanza la línea, unos
+          días después del último sondeo. Es la fecha que dan las páginas de cada elección («el promedio de
+          sondeos leído el…»). Lo que falta hasta 100 queda como «otros» (otras candidaturas y voto en blanco).
+        </p>
+        <p>
+          Los modos Hoy y Elección comparten ese voto estimado; solo cambian los intervalos. El del voto de un
+          partido es más ancho que la banda porque suma hasta tres errores:
+          √(<var>s</var><sup>2</sup> + <var>e</var><sup>2</sup> + <var>d</var><sup>2</sup>), con <var>s</var> el
+          del promedio (el de la banda), <var>e</var> el error histórico de los sondeos de la última semana frente
+          al resultado en partidos de ese tamaño y <var>d</var> la deriva de la opinión en los días que faltan,
+          que solo se suma en el modo Elección.
+        </p>
+        <p>
+          Con ese voto y esos errores, el modelo sortea
+          {% if figures.n_sim %}{{ figures.n_sim|int }} elecciones posibles (en las generales){% else %}muchas elecciones posibles{% endif %}
+          y reparte los escaños de cada una. Cómo, y de dónde salen el error histórico y la deriva, se cuenta en
+          <a href="{{ method_href('escanos') }}">¿Cómo simulamos los escaños?</a>.
+        </p>
+      {{ m.card_end() }}
+      {{ m.closing('¿Cómo simulamos los escaños?', method_href('escanos'),
+                   'Cómo se pasa del voto estimado a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
+                   [{'href': '/es', 'label': 'Promedios de las elecciones generales'},
+                    {'href': '/casas' ~ scope_query, 'label': 'Rating de encuestadoras'}]) }}
+    </div>
+{% endblock %}

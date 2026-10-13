@@ -273,8 +273,9 @@ def test_method_subpages_and_links():
     assert [page['id'] for page in subpages] == ['promedio', 'escanos', 'rating', 'backtest']
     assert subpages[3] == {'id': 'backtest', 'title': '¿Cuánto acierta el modelo?', 'href': '/metodo/backtest',
                            'active': True, 'available': True}
-    assert not subpages[0]['active'] and not subpages[0]['available']
+    assert not subpages[0]['active'] and subpages[0]['available'] and not subpages[1]['available']
     assert pages.method_href('backtest') == '/metodo/backtest' and pages.method_href('escanos') == '/metodo'
+    assert pages.method_href('promedio') == '/metodo/promedio'
 
 
 def test_templates_compile_with_strict_undefined():
@@ -1240,7 +1241,7 @@ def test_metodo_landing_dates_the_freeze_only_while_frozen(api, fresh_app):
 
 
 def test_metodo_subpage_404_and_section_context(api, fresh_app):
-    for section in ('nope', 'promedio'):
+    for section in ('nope', 'escanos'):
         with pytest.raises(HttpError) as error:
             pages.metodo_section_context({'scope': None, 'mode': None, 'run': None}, section)
         assert error.value.status == 404 and error.value.message == 'section not found', section
@@ -1253,10 +1254,20 @@ def test_metodo_subpage_404_and_section_context(api, fresh_app):
 def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     page = html(call(api, '/metodo')[2])
     assert '¿Cómo promediamos las encuestas?' in page and 'href="/metodo/backtest"' in page
-    assert 'href="/metodo/promedio"' not in page  # sin texto todavía (tarea 9 lo activa)
+    assert 'href="/metodo/promedio"' in page and 'href="/metodo/escanos"' not in page  # escanos, sin texto todavía
     assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
+
+
+def test_metodo_promedio_text(api):
+    status, _, body = call(api, '/metodo/promedio')
+    page = html(body)
+    assert status == 200 and '<title>Pronóstico electoral · ¿Cómo promediamos las encuestas?</title>' in page
+    for anchor in ('que-entra', 'peso', 'efectos-de-casa', 'regresion', 'banda', 'voto-estimado'):
+        assert 'id="' + anchor + '"' in page, anchor
+    assert 'id="metodo-nav"' in page and '<math' in page and 'En resumen' in page
+    assert 'href="/metodo/promedio"' in html(call(api, '/metodo')[2])
 
 
 def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fresh_app):
