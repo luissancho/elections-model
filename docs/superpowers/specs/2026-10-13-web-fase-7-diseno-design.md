@@ -554,3 +554,204 @@ aquí como decisiones mías (ya incorporadas arriba); la quinta es de Luis.
 ## Preguntas abiertas
 
 Ninguna.
+
+## Estado al cierre de la fase 7 (2026-10-13)
+
+Hecho en `dev` (plan en `c57aab0`, `docs/superpowers/plans/2026-10-13-web-fase-7-diseno.md`; código en
+`c57aab0..b2a31c6`, 21 commits, y los tres de la Task 12), con 644 tests unitarios en verde (`python -m pytest -m "not
+integration" -q`: 568 antes de la fase y 76 nuevos). Sin tests de integración nuevos; ninguno se ejecutó en la fase.
+Ledger de la ejecución: `.superpowers/sdd/2026-10-13-web-fase-7-diseno/progress.md` (informes por tarea en la misma
+carpeta).
+
+- `a41de49`, rutas de evento (Task 1, 594 tests): `/{scope}` y `/{scope}/escanos` al final de `pages.ROUTES`,
+  validadas con `resolve_event_scope` (404 "Ámbito desconocido." fuera del catálogo); modo Hoy por defecto
+  (`parse_state` deja `mode` en `None` y `common_context` lo resuelve con `default_mode`); controlador `Redirect` y
+  `Page.redirect` (301 de `/promedio`, `/escanos` y `/modelo`; `Index` redirige `/?scope=`); `PAGES` con las cuatro
+  entradas globales, `EVENT_TABS`, la barra de evento (`_event_bar.html`), el filtro de ámbito
+  (`_scope_filter.html`), `METODO_SECTIONS`, `subpages` y `method_href`; `check-api.sh` y `smoke.sh` con las rutas
+  de evento.
+- `0719066` y `93a778b`, Inicio (Task 2, 597 tests): `pages/inicio.py`, `index.html` reescrita y
+  `_event_card.html` (pronósticos publicados, uno por ámbito, y elecciones pasadas); los cuatro flecos de la Task 1
+  (comprobación de enlaces más estricta en `test_web_routes.py`, `title_of` con el run mostrado explícito, clave
+  `event_bar` en vez de `event`, aserción exacta del subtítulo de Escaños).
+- `54c7872`, Promedios (Task 3, 608 tests): `pages/promedios.py` funde `index.py` y `promedio.py`; gráfico del
+  promedio con ventana (todo el ciclo por defecto), selección de partidos y vista Bloques (`blocks.js`, proyección
+  publicada en modo Elección, E8), estado en el hash (E7), gráfico de una casa frente al promedio y series a un
+  decimal en la isla de datos.
+- `4ad1e78`, lenguaje visual (Task 4, 615 tests): tokens en `:root`, Source Serif 4 y Source Sans 3 en
+  `/dist/vendor/fonts/` (E5), `_macros.html` (`card_start`, `card_end`, `how`, `headline`, `closing`), barra de evento
+  restilizada; contraste AA calculado (texto apagado 6,05:1 sobre el fondo).
+- `16fc4fd` y `1e48483`, Escaños (Task 5, 618 tests): descripción y "Cómo leerlo" de cada tarjeta y cierre con el
+  enlace al método; los once flecos de Promedios y de la barra de evento (controles de casa ocultos sin JS, selección
+  vacía en el hash, `region` en el formulario del modo, redacción).
+- `8ea69a1`, `bd75301` y `df0af16`, Histórico de errores (Task 6, 628 tests): `errors.js`, opciones nuevas de
+  `renderHistogram` y `renderBullseye` (E6), filtros, histograma, diana, tabla por semanas y glosario
+  (`_glosario.html`); en la ronda de corrección, el histograma cuenta sondeos y la diana da un tono a cada elección
+  publicada (paleta de 16).
+- `a6ad106`, `1e52e99` y `1a7d40c`, Rating de encuestadoras (Task 7, 630 tests): ranking y perfil con el glosario y
+  textos por tarjeta; el valor de la base, una media con signo, se muestra una sola vez como "Sesgo del margen"; un
+  `</td>` sobrante del camino al rating, quitado.
+- `aa87c57` y `6dbe705`, portada del método y backtest (Task 8, 638 tests): introducción, índice de las cuatro
+  preguntas, datos, publicación y limitaciones con cifras vivas de las generales (`national_figures`), subnavegación
+  `_metodo_nav.html`, `/metodo/backtest` con el gráfico de error de escaños por horizonte; la barrera de las generales
+  sale del catálogo.
+- `c478a21` y `7f73d4d`, "¿Cómo promediamos las encuestas?" (Task 9, 639 tests; 1.882 palabras): fórmula del rating
+  en la escala publicada de 0 a 100 y la frase de la veda como se comporta el código.
+- `ea8659b` y `35b5b64`, "¿Cómo simulamos los escaños?" (Task 10, 641 tests; 1.986 palabras): tabla de barreras por
+  ámbito del catálogo, deriva con su escala mensual y sin afirmar sorteos correlacionados.
+- `5e6add6` y `b2a31c6`, "¿Cómo calculamos el rating de las encuestadoras?" (Task 11, 643 tests; 1.980 palabras): las
+  cuatro subpáginas con texto, sin la sección provisional "Cómo funciona el modelo"; la frase de la calculadora de
+  coaliciones de Escaños corregida.
+- `940c3a8` (Task 12, 644 tests): los menores de redacción aplazados de las tareas 8-11 (abajo); `830cd4b`:
+  `check-api.sh` y `smoke.sh` con las rutas del método y las fuentes, `deploy/README.md` ("La web", "Cómo añadir una
+  página") y el párrafo de rutas de páginas de `docs/web/contrato.md`; este commit: este estado de cierre y la fila 7
+  de la spec general.
+
+Decisiones de ejecución (E1-E12 del plan), tal como quedaron:
+
+1. E1. El Inicio es `Index` con `index.html` reescrita; Promedios es el controlador `Promedios`; `pages/index.py` y
+   `pages/promedio.py` se fundieron en `pages/promedios.py`; `pages/modelo.py` pasó a `pages/backtest.py`; `Promedio.py`
+   y `Modelo.py` desaparecieron y `Redirect.py` atiende las URL antiguas.
+2. E2. `/{scope}` y `/{scope}/escanos` van al final de `ROUTES`; desconocido, 404 `unknown scope`; del catálogo sin
+   pronóstico, 404 `scope not published`; `/metodo/{section}` valida contra `METODO_SECTIONS` (404 `section not
+   found`).
+3. E3. `parse_state` deja `mode` en `None` y `common_context` lo resuelve; las plantillas reciben siempre el modo
+   resuelto.
+4. E4. `Page.redirect`: 301, `location`, `cache-control: no-store`, cuerpo vacío; la query pierde solo `scope` (y
+   `mode`/`run` hacia `/metodo/backtest`).
+5. E5. Source Serif 4 Semibold y Source Sans 3 Regular, originales OFL sin modificar, con `LICENSE`; la negrita del
+   texto se sintetiza.
+6. E6. `renderHistogram` (`unit`, `label`, `markLabel`) y `renderBullseye` (`groupOf`, `colors`, `legend`, `labels`)
+   con los valores por defecto de antes.
+7. E7. Filtros del histórico y controles del promedio en el hash con `history.replaceState`; lógica pura en
+   `errors.js` y `blocks.js`, con tests de paridad en node.
+8. E8. La vista Bloques dibuja `projection.groups.blocks` y calcula solo la banda histórica.
+9. E9. Textos del método en HTML con `<section>`, `<nav>` de anclas y fórmulas con `<var>`/`<sub>`/`<sup>` y `<math>`;
+   cada texto activó su entrada de `METODO_SECTIONS` al entrar.
+10. E10. `/metodo` conserva datos, publicación y limitaciones; "Cómo funciona el modelo" vivió en la portada hasta la
+    Task 11, que lo retiró.
+11. E11. Orden de ejecución = orden de las tareas; entraron las doce, también los tres textos.
+12. E12. "Elecciones generales" para `es` y "Elecciones autonómicas · {name}" para los demás; los días que faltan, en
+    Europe/Madrid.
+
+Resoluciones tomadas durante la ejecución (las líneas `Ruling:` del ledger, en orden):
+
+1. Se trabaja en `dev` en el checkout principal, sin worktree, como en las fases 1-6.
+2. R1: `_event_bar.html` toma el destino del formulario de `event.form_action` (hoy `event_bar.form_action`) en vez de
+   la cadena de filtros Jinja del plan.
+3. R2: el Inicio saca el bloque líder de `headline[mode].p_majority`; `majority_rows` se queda en Promedios.
+4. R3: los literales de fecha de los tests se adaptan a `fmt_date` ("29 nov 2026").
+5. Task 4: las fuentes pesan 188 KB (80 + 108) frente a los "≤ 150 KB" orientativos; se aceptan (originales OFL,
+   caché de un año, la serif es parte del diseño): unos 40 KB más en la primera visita.
+6. Task 6: el plan pedía una escala neutra fija de 8 tonos y la spec "color por elección"; manda la spec: tantos
+   tonos distinguibles como elecciones publicadas (paleta de 16; `es` tiene 11).
+7. Task 7: donde el valor de la base es una media con signo (fila del ranking, camino al rating) se muestra una vez
+   como "Sesgo del margen" y no hay columna "Error de bloques" (no se toma el valor absoluto de una media);
+   "Error de bloques" queda donde hay datos por sondeo (histórico, detalle); `_glosario.html` gana
+   `with_block_error`.
+8. Task 9: la frase de la veda de «Limitaciones» dice lo que hace el código (esos sondeos no entran porque su trabajo
+   de campo acaba dentro de la veda; la API no los sirve), no un filtro por etiqueta que el modelo no tiene (ver
+   "Pendiente de Luis").
+
+Desviaciones de los implementadores aceptadas en la revisión (no son `Ruling:`; constan en el ledger y los
+informes):
+
+- Task 1: test del menú limitado a la navegación principal; `title_of` compara el run mostrado con el último; `/nope`
+  da 404 "Ámbito desconocido." (E2).
+- Task 2: `bundle.PREFIX` en la ruta de un test del brief; "Partido Popular (PP) va primero" (nombre corto entre
+  paréntesis); `index.html` exenta de la comprobación de módulo; parcial `_event_card.html`.
+- Task 3: `pollster_id` en el fixture de sondeos; regla CSS de los `fieldset` ocultos; clave del hash `sel`; el
+  selector de casa filtra por nombre; "Pronóstico definitivo: el …".
+- Task 4: `metodo.html` quedó con el marcado viejo hasta la Task 8; descripciones nuevas cortas donde no había
+  texto; Hoy/Elección como pares `input` + `label`; parámetro `level` de `card_start`.
+- Task 5: titular sin bloques "La mayoría absoluta está en {mayoría} escaños de {n}."; `region` oculto siempre en
+  Escaños.
+- Task 8: la frase de calibración vive en «Limitaciones»; el índice enlaza `/metodo/backtest` sin `?scope=`; la
+  portada no lleva subnavegación (las tarjetas del índice hacen ese papel); sufijo "(modo Elección)" en la tabla de
+  escaños.
+- Task 10: cabeceras "Barrera de circunscripción" (`threshold`) y "Barrera de todo el ámbito" (`threshold_scope`),
+  comprobadas en `resolve_thresholds` y `alloc_seats`; constantes reestimadas y `max_fc` descritos sin cifra.
+- Task 11: descripción de la portada del método reescrita; la tarjeta de cierre del rating enlaza `/casas` y
+  `/elecciones`.
+- Task 12: la tercera aparición de "viendo solo lo que se sabía en cada fecha" (la descripción de "Cómo se hace el
+  backtest" en `metodo_backtest.html`) también se corrigió; el título del índice de la portada pasa a "Las preguntas
+  del método"; la línea larga de la veda de `metodo.html` se partió y su test compara con los espacios normalizados;
+  `check-api.sh` comprueba además una fuente detrás de nginx (`font/woff2`) y `smoke.sh` su caché de un año.
+
+Verificado en la sesión (2026-10-13, Task 12):
+
+- Suite unitaria: `python -m pytest -m "not integration" -q` → 644 passed, 75 deselected, 54 warnings (los mismos 54
+  de antes de la fase).
+- `node --check` de los 23 ficheros de `web/dist/js/` versionados → sin errores. `bash -n` de `deploy/check-api.sh` y
+  `deploy/smoke.sh` → limpio. `pycodestyle --select=E30 tests/test_pages.py` → limpio.
+- `S3_BUCKET= DB_HOST= python -m uvicorn api:api --port 8001` y `bash deploy/check-api.sh http://127.0.0.1:8001` →
+  salida 0, 32 OK, 13 `n/a` (sin nginx, sin base, sin publicar y `congelación: inactiva`), `todas las rutas OK`.
+- Tamaño de las páginas (paquete local, run `20261008-181100`): `/es` 387.883 bytes en modo Hoy y 405.436 con
+  `?mode=forecast` (presupuesto orientativo ≈ 500 KB); `/es/escanos` 134.802; `/metodo/backtest` 41.967; las demás
+  por debajo de 22 KB.
+- Recorrido con `curl`: `/`, `/es`, `/es/escanos`, `/elecciones`, `/metodo` y sus cuatro subpáginas → 200; `/casas` →
+  503 ("La base de datos no está disponible.", esperado sin base); `/promedio?scope=es&mode=forecast` → 301 a
+  `/es?mode=forecast`; `/modelo?scope=es&mode=nowcast` → 301 a `/metodo/backtest?scope=es`; `/escanos?region=28` → 301
+  a `/es/escanos?region=28`; `/?scope=es` → 301 a `/es`; `/es-zz` y `/metodo/nope` → 404. El paquete local no tiene
+  `analysis` ni `events`: `/elecciones` muestra el aviso de elecciones no publicadas.
+- Chrome sin cabeza (proxy desechable en el 8002 que sirve `/dist/` e inyecta una sonda; 360 px dentro de un iframe,
+  porque la ventana sin cabeza no baja de 500 px), las once vistas (`/`, `/es`, `/es?mode=forecast`, `/es/escanos`,
+  `/elecciones`, `/casas`, `/metodo` y sus cuatro subpáginas) a 1280 y a 360 px: `scrollWidth` igual al ancho, ningún
+  elemento fuera fuera de tablas y menú, las dos fuentes `loaded`, sin errores de JS ni de consola, gráficos montados
+  (6 en `/es`, 17 en Escaños, 3 en el backtest). Capturas de `/metodo/rating` a 1280 (fórmulas `<math>` bien
+  compuestas) y de `/es` a 360 (barra de evento apilada). Uvicorn y el proxy, parados; el nginx del 8080 no se tocó.
+- `bash deploy/nginx-check.sh` → `syntax is ok` y `test is successful` (nginx sin cambios en la fase).
+
+No verificado:
+
+- `docker build` y `bash deploy/smoke.sh` (sin Docker en la sesión): la caché de un año y el tipo `font/woff2` de las
+  fuentes detrás del nginx de la imagen.
+- Producción y S3: nada se publicó ni desplegó; las páginas con `analysis` y `events` publicados (histórico con
+  datos, diana, detalle de una elección, ranking y perfil de casa con base) solo se han visto en los tests y, en la
+  Task 6, en navegador con datos de prueba.
+- Un navegador real en un móvil (solo Chrome sin cabeza a 360 px) y la navegación sin JS fuera de los tests.
+- Que las cifras de los textos del método sigan siendo ciertas tras cambios del modelo: las que no salen del paquete
+  o del catálogo están escritas a mano con su fuente (informes de las tareas 9-11).
+
+Menores aplazados (las líneas `minor (deferred)` del ledger que siguen abiertas, agrupadas):
+
+- Ya resueltos en la Task 12: la coletilla de cobertura de «Limitaciones» (ahora solo si la cobertura al 95 % del
+  horizonte más largo baja de 0,95), "Las cuatro preguntas" escrito a mano, la línea de la veda de ~330 columnas, los
+  teasers del backtest ("viendo solo los sondeos publicados hasta cada fecha"), "apenas cambia", el denominador de la
+  calidad previa media, el `h` del herding acercado (`h′`), las líneas en blanco PEP8 de `tests/test_pages.py` y las
+  dos líneas sin partir de `metodo_rating.html`.
+- Código: `common.py` creció de 471 a 771 líneas (los ayudantes de la barra de evento podrían mudarse a
+  `pages/event.py`); `_is_missing` importado como privado por `promedios.py`, `escanos.py` y `metodo.py` (exponerlo);
+  `poll-errors` se lee dos veces en `elecciones_context`; sin regla CSS `.toc` (el índice usa `section-nav toc`);
+  comentario de cabecera torpe en `_glosario.html`; cinco reglas CSS de la barra de evento donde bastaba una.
+- Textos y marcado: "95 %" sigue en cabeceras, leyendas y `aria-label` (el nivel del intervalo es una constante del
+  método); el "Cómo leerlo" de la diana dice que el punto lleva a su elección y el enlace está en el tooltip; sin aviso
+  cuando el análisis existe pero no tiene filas de las elecciones publicadas ("0 sondeos de 0") ni en el histograma
+  del detalle vacío; tres tonos azules y verdes cercanos en la paleta de 16; una línea de JSDoc larga en
+  `histogram.js`.
+- Tests: ninguno comprueba "congelado" en el Inicio ni los guiones de una tarjeta sin titular; el orden de las
+  elecciones pasadas se comprueba de forma débil; no hay test de `national_figures` sin un run de `es`; líneas de
+  test de más de 120 columnas (algunas del brief).
+- De fases anteriores siguen abiertos los menores que esta fase no recogió (estado al cierre de la fase 6, "Menores
+  aplazados").
+
+Pendiente de Luis:
+
+- Desplegar antes de la semana del 17 de noviembre (con Docker antes, si puede: `docker build` y `bash
+  deploy/smoke.sh`, con el paquete local y con `deploy/elections.env`), y comprobar en producción que las fuentes
+  cargan (`/dist/vendor/fonts/`, tipo `font/woff2` y caché de un año: `check-api.sh` y `smoke.sh` lo miran) y que las
+  URL antiguas redirigen.
+- Publicar `analysis` y `event` de los ámbitos que falten para que el histórico, la diana y el rating tengan datos
+  (en local no hay ninguno).
+- Nombre y logo del sitio (decisión 8: "más adelante").
+- Modelo (hallazgo de la Task 9, fuera de la fase): `Forecaster.load_polls` no pasa `drop_contexts`, así que el
+  promedio en vivo excluye los sondeos `wban`/`exit` solo por la ventana de fechas (`drange=6`), no por etiqueta; el
+  `Computer` sí los quita por etiqueta. Una línea (`drop_contexts=['wban', 'exit']`) lo haría explícito; si cambia,
+  la frase de la veda de «Limitaciones» puede volver a decir que el modelo no los usa. La nota del cierre de la fase 6
+  que decía lo contrario queda enmendada en la spec general.
+- Histórico sin JS: el brief de la Task 6 sustituyó el "sin JS la tabla sale sin filtrar" de la spec por una tabla
+  vacía con `<noscript>`; decidir si basta.
+- Recorrer las páginas en un móvil real y releer los tres textos del método (1.882, 1.986 y 1.980 palabras) con la
+  lista de afirmaciones de cada informe.
+- Los pendientes de la fase 6 (ECS, ensayo de la veda la semana del 17, congelación el 23, descongelación el 29) siguen
+  en pie.

@@ -425,6 +425,7 @@ Pospuesto: despachar sobre variables locales en vez del estado del router (neces
 | 4 | Casas | `Data` y `Analysis`, `publish analysis`, `casas.html` (ranking, perfil y camino al rating, efectos de casa, herding) (enmienda 2026-10-10: hecho en `dev`, ver "Estado al cierre de la fase 4") | 2 | 3-4 d |
 | 5 | Elecciones y modelo | `publish event` y `backtest`, `elecciones.html`, `modelo.html`, `metodo.html`; eventos `es` 2015-2023 (enmienda 2026-10-11: hecho en `dev`, ver "Estado al cierre de la fase 5") | 4 | 2-3 d |
 | 6 | Endurecimiento | prueba de carga con `proxy_cache`, ensayo de `point`/`unpublish`, ensayo de `freeze`, backups, `deploy/README.md` final, poda de requirements y multietapa opcionales; cerrar antes del 24-11 (enmienda 2026-10-13: hecho en `dev`, ver "Estado al cierre de la fase 6") | 2-5 | 2 d |
+| 7 | Diseño, narración y método | (enmienda 2026-10-13) modelo por eventos (`/`, `/{scope}`, `/{scope}/escanos`, globales con `?scope=`, redirecciones), lenguaje visual con fuentes propias, patrón de tarjeta y glosario, histórico de errores con filtros y diana, páginas de casas, `/metodo` con cuatro subpáginas de texto; spec `docs/superpowers/specs/2026-10-13-web-fase-7-diseno-design.md`; hecho en `dev`, ver "Estado al cierre de la fase 7" | 2-6 | 1 d |
 
 Total ≈ 18-23 días de trabajo. Tras la fase 2 hay web pública; las fases 4 y 5 son independientes entre sí.
 
@@ -1396,7 +1397,10 @@ Verificado en la sesión (2026-10-13):
 - `S3_BUCKET= /usr/bin/time -l python job.py publish '{"what":["backtest"],"scopes":["es"]}'` (Task 4): 2,3 s y 360
   MB de RSS máximo; reescribió `files/site/v1/backtest/es` en local.
 - Revisión final: el `Forecaster` y el `Simulator` excluyen los sondeos `wban` y `exit` a través del `drop_ctypes` por
-  defecto del `Computer` (`['wban', 'exit']`), verificado por el revisor final.
+  defecto del `Computer` (`['wban', 'exit']`), verificado por el revisor final. (Enmienda 2026-10-13, fase 7: no es
+  así para el promedio en vivo: `Forecaster.load_polls` no pasa `drop_contexts` y excluye esos sondeos solo por la
+  ventana de fechas, `drange=6`; el `Computer` sí los quita por etiqueta. Ver "Pendiente de Luis" en el estado al
+  cierre de la fase 7.)
 - División de `publish` (Task 8): un guion de referencia (reloj fijo, dobles; dos runs de `forecast`, `analysis`,
   `backtest`, `event`, dos `update_manifest`, `point` y `unpublish`) sobre el módulo original y sobre el paquete →
   `diff -r` vacío en 70 ficheros (el original, ejecutado dos veces, también); `S3_BUCKET= python job.py publish
@@ -1517,3 +1521,17 @@ Pendiente de Luis:
 
 Siguiente: el despliegue en ECS y la operación de la campaña (ensayo de la veda la semana del 17, congelación el 23,
 descongelación el 29) y la fase 7 (diseño de las páginas), en el chat aparte.
+
+## Estado al cierre de la fase 7 (2026-10-13)
+
+Hecho en `dev` (`c57aab0..` y los commits de cierre; 644 tests unitarios, 76 nuevos). El detalle (commits por tarea,
+decisiones E1-E12 y resoluciones, desviaciones aceptadas, lo verificado y lo no verificado, menores aplazados y
+pendientes de Luis) está en "Estado al cierre de la fase 7" de la spec de la fase,
+`docs/superpowers/specs/2026-10-13-web-fase-7-diseno-design.md`. En resumen: Promedios y Escaños son páginas de evento
+bajo el código del ámbito (`/es`, `/es/escanos`); Inicio, Histórico de errores, Rating de encuestadoras y Método son
+globales (con `?scope=` donde hace falta); `/?scope=`, `/promedio`, `/escanos` y `/modelo` redirigen con un 301; todas las
+páginas usan el patrón de tarjeta con "Cómo leerlo" y las de errores el glosario común; el método tiene una portada y
+cuatro subpáginas (`/metodo/promedio`, `/metodo/escanos`, `/metodo/rating`, `/metodo/backtest`). La API y el paquete
+no cambian. Lo más urgente para Luis: desplegar antes de la semana del 17 de noviembre (Docker y `smoke.sh` antes, si
+puede), comprobar las fuentes en producción, publicar `analysis` y `event` de los ámbitos que falten y decidir el
+filtro por etiqueta de `wban`/`exit` en `Forecaster.load_polls`.
