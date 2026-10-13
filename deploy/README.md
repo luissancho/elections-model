@@ -76,13 +76,15 @@ familias de páginas:
 
 - **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` (Promedios,
   controlador `Promedios`, `promedios.html`) y `/{scope}/escanos` (Escaños, `Escanos`, `escanos.html`, con
-  `?region=`). Aceptan `?mode=` (Hoy, `nowcast`, por defecto; Elección, `forecast`) y `?run=`. Un código que no es del
+  `?region=`). Aceptan `?mode=` (`nowcast` u `forecast`) y `?run=`, pero desde la fase 7b ninguna página pinta un
+  selector de modo: sin `?mode=`, `pages.default_mode(frozen)` muestra Hoy (`nowcast`) y, mientras la publicación
+  está congelada (veda), Elección (`forecast`); `?mode=` queda para enlaces y pruebas. Un código que no es del
   catálogo da 404 "Ámbito desconocido."; uno del catálogo sin pronóstico, 404 "Este ámbito no tiene pronóstico
-  publicado.".
-- **Globales**, en el menú principal (`pages.PAGES`: Inicio, Histórico de errores, Rating de encuestadoras, Método):
+  publicado".
+- **Globales**, en el menú principal (`pages.PAGES`: Inicio, Histórico Errores, Ranking Encuestadoras, Método):
   `/` (Inicio, `Index`, `index.html`: los pronósticos publicados, uno por ámbito, y las elecciones pasadas con
-  detalle), `/elecciones` (Histórico de errores, `Elecciones`; con `?date=YYYY-MM-DD`, el detalle de una elección),
-  `/casas` (Rating de encuestadoras, `Casas`; con `?id=`, el perfil de una casa) y `/metodo` (`Metodo`, `metodo.html`:
+  detalle), `/elecciones` (Histórico Errores, `Elecciones`; con `?date=YYYY-MM-DD`, el detalle de una elección),
+  `/casas` (Ranking Encuestadoras, `Casas`; con `?id=`, el perfil de una encuestadora) y `/metodo` (`Metodo`, `metodo.html`:
   introducción, índice de las cuatro preguntas, datos, publicación y limitaciones) con sus subpáginas
   `/metodo/promedio`, `/metodo/escanos`, `/metodo/rating` y `/metodo/backtest` (la precisión del modelo, antes
   `/modelo`). Donde el contenido depende del ámbito llevan `?scope=` (`es` por defecto).
@@ -95,23 +97,51 @@ Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desd
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
 el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
 `event_bar` de `common_context`): nombre del evento ("Elecciones generales" o "Elecciones autonómicas · {nombre}"),
-fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), el control Hoy /
-Elección (formulario GET con "Ver" sin JS; en Escaños conserva `region`) con la línea que explica la opción activa y,
-con un run fijado, el chip del run. `/elecciones`, `/casas` y `/metodo/backtest` llevan el filtro de ámbito
+fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), la línea que
+explica el modo mostrado (`pages.mode_text`) y, con un run fijado, el chip del run. Desde la fase 7b la barra no
+lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
+(Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
+Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
+publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/elecciones`, `/casas` y `/metodo/backtest` llevan el filtro de ámbito
 (`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS); el resto
 de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
 `_metodo_nav.html`.
 
 Patrón de tarjeta (`web/templates/_macros.html`, `{% import '_macros.html' as m %}`): toda sección es
 `m.card_start(id, título, descripción, subtitle=None, classes='', level=2)` … `m.card_end()`, con la descripción
-siempre visible; dentro, `{% call m.how(open=...) %}…{% endcall %}` es el "Cómo leerlo" plegado (`<details>`, abierto
-solo en la primera tarjeta de la página; tres partes: qué es cada elemento, cómo leerlo y qué no dice, ≤ 120
-palabras). Cada página abre con `m.headline(texto)` (una línea con cifras vivas) y las pestañas cierran con
+siempre visible; dentro, `{% call m.how() %}…{% endcall %}` es el "Cómo leerlo" (`<details>`, siempre plegado
+desde la fase 7b; tres partes: qué es cada elemento, cómo leerlo y qué no dice, ≤ 120 palabras). Cada página abre con `m.headline(texto)` (una línea con cifras vivas) y las pestañas cierran con
 `m.closing(pregunta, method_href(...), adelanto, enlaces)`, la tarjeta de enlace a su texto del método.
+
+Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
+
+- Terminología pública: "encuestadora/s" (nunca "casa/s"; "efectos de encuestadora") y "medio/s" (nunca
+  "patrocinador/es"); siempre las siglas (`name`), con el nombre completo solo en `title=`. Las barras sin color de
+  partido usan el azul neutro de `THEME.barColor`.
+- Inicio: cada tarjeta es entera un enlace (`<a class="card card-link">`, con su `<h3>` dentro); la del primer
+  ámbito (`.tile-hero`) es la grande y "Ver escaños" queda fuera del enlace, debajo. "Para entender el modelo" son
+  tres tarjetas clicables: Histórico Errores, Ranking Encuestadoras y Método.
+- Píldoras (`fieldset.pills` > `label.pill` con su casilla oculta pero enfocable): el selector de partidos o
+  bloques, coloreado al estilo de la leyenda de ECharts, sin título ni botones Todos/Ninguno. La píldora marcada
+  toma el color del partido (`--pill-color`) y una tinta legible calculada en el servidor (filtro `ink`,
+  `pages.ink_color`: texto oscuro sobre colores claros, blanco sobre oscuros); sin `:has()` el JS pone la clase
+  `is-on`. Se usan en Promedios y en la calculadora de coaliciones de Escaños; las leyendas de ECharts de Promedios
+  se ocultan.
+- Promedios: los controles en tres líneas, en este orden: Vista (Partidos/Bloques), Ventana y las píldoras. El
+  tooltip es por sondeo (`trigger: 'item'`): nombre, fecha, muestra y las siglas en su color con su valor, de mayor a
+  menor. La tabla "Sondeos del ciclo" tiene la columna "Sondeo" (`pages.poll_name`: `encuestadora / medio`, o la
+  encuestadora sola, como el cargador) en lugar de Casa y Patrocinador; se pintan las primeras `TABLE_ROWS` (40)
+  filas, la isla lleva todas y "Cargar más" añade las siguientes hasta que no quedan (entonces desaparece; con 40
+  sondeos o menos nunca aparece). Sin JS se ven las 40 primeras y el CSV tiene todas.
+- Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); los histogramas llevan la línea
+  de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
+  ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
+- Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 640 px y centrada en su tarjeta; la del
+  detalle de una elección y la del perfil (`#bullseye-chart`) siguen en 480 px.
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
-elección, el ranking y el perfil de casa, con `with_herding` (y `with_block_error`, por defecto verdadero) fijados
+elección, el ranking y el perfil de encuestadora, con `with_herding` (y `with_block_error`, por defecto verdadero) fijados
 antes del `include`. Toda columna de error usa su nombre del glosario.
 
 Fuentes: Source Serif 4 Semibold (títulos) y Source Sans 3 Regular (texto) en woff2, en `/dist/vendor/fonts/` con su
@@ -205,7 +235,7 @@ publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquie
   `pages.ROUTES`, después de las fijas; el controlador valida el ámbito con `pages.resolve_event_scope(scope)`, pasa
   `self.state(scope)` al constructor del contexto y este llama a `common_context(state, None, event=True,
   active_suffix='/<nombre>')`. El enlace va como pestaña de la barra de evento: una entrada en `pages.EVENT_TABS`.
-- **Global** (vale para todos los ámbitos, como el histórico o el rating): ruta fija en `pages.ROUTES`, antes de
+- **Global** (vale para todos los ámbitos, como el histórico o el ranking): ruta fija en `pages.ROUTES`, antes de
   `/{scope}`, y entrada en el menú `pages.PAGES`; el contexto llama a `common_context(state, '/<nombre>')` y, si el
   contenido depende del ámbito, la plantilla incluye `_scope_filter.html` (`?scope=`, `es` por defecto).
 

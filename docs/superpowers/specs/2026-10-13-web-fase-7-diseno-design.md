@@ -756,3 +756,120 @@ Pendiente de Luis:
   lista de afirmaciones de cada informe.
 - Los pendientes de la fase 6 (ECS, ensayo de la veda la semana del 17, congelación el 23, descongelación el 29) siguen
   en pie.
+
+## Ajustes tras el recorrido de Luis (fase 7b, 2026-10-13)
+
+Plan `docs/superpowers/plans/2026-10-13-web-fase-7b-ajustes.md` (notas de Luis reproducidas allí), commits
+`33fd90f..` sobre `dev` (`75f2e30`, `e2bdaf1`, `6c55df8`, `5b681fb`, `f91c783`, `be60bd8`, `0921698` y el de este
+cierre); 666 tests unitarios (645 al empezar). El README (`deploy/README.md`, "La web", "Componentes de la fase 7b")
+describe el estado resultante.
+
+### Qué se hizo con cada nota
+
+- **Portada con tarjetas**: cada ámbito es una tarjeta entera enlazada (`<a class="card card-link">`, la de las
+  generales grande, `.tile-hero`), con "Ver escaños" debajo y fuera del enlace; "Para entender el modelo" son tres
+  tarjetas clicables: Histórico Errores, Ranking Encuestadoras y Método.
+- **Selector de partidos como el de "Una encuestadora frente al promedio"**: píldoras con el color de cada partido
+  (o bloque) al estilo de la leyenda de ECharts, sin título ni Todos/Ninguno; la leyenda de ECharts de Promedios se
+  oculta. La píldora marcada toma el color del partido y una tinta legible calculada en el servidor.
+- **Tres selectores en tres líneas (Vista, Ventana, Partidos)**: hecho, en ese orden; Partidos sin título visible
+  (la `legend` queda solo para lectores de pantalla).
+- **Recuadro por sondeo en lugar del día**: el tooltip del promedio es por elemento; en un sondeo enseña su nombre,
+  fecha, muestra y las siglas en su color con su valor, de mayor a menor.
+- **Quitar el selector Hoy / Elección**: fuera el formulario y el `<details>` que lo explicaba; Hoy por defecto y
+  Elección mientras la publicación está congelada (`default_mode`); `?mode=` sigue aceptado en la query.
+- **"Sondeos del ciclo": cargar más y columna "Sondeo"**: el servidor pinta 40 filas; la isla lleva todas y "Cargar
+  más" añade 40 cada vez hasta que no quedan, y entonces desaparece y el foco pasa al pie de la tabla. La columna
+  "Sondeo" (`encuestadora / medio`, o la encuestadora sola) sustituye a Casa y Patrocinador.
+- **Escaños: sin "Mín–máx" ni "Media", "Rango 95 %"**: tabla de partidos Partido, Escaños, Rango 95 %, P(escaño),
+  P(primero), P(mayoría).
+- **Histogramas con líneas de mediana (gruesa) y 95 % (finas), sin el valor**: hecho en los de partido y en el de la
+  calculadora.
+- **Solo "Bloques ideológicos, con todos los partidos"**: queda una sola tabla de bloques (fuera `#vs-table`).
+- **Calculadora con el mismo selector de partidos**: píldoras; el cálculo se rehace al marcar.
+- **"Histórico Errores"** y **"Ranking Encuestadoras"**: etiquetas del menú, de las tarjetas del Inicio y de los
+  enlaces internos.
+- **La diana más grande y centrada**: `#errors-bullseye` cuadrada, hasta 640 px y centrada en su tarjeta; la del
+  detalle de una elección y la del perfil (`#bullseye-chart`) siguen en 480 px.
+- **"Estimación a …" con la fecha de hoy en modo Hoy y la del evento en Elección**: "Estimación a {hoy}"
+  (Europe/Madrid) con el último run, "Estimación del {run_at}" con un run fijado anterior; "Pronóstico para el
+  {fecha}" / "Pronóstico definitivo para el {fecha}" / "Pronóstico publicado el {run_at}" en Elección. El pie dice
+  "promedio leído el {as_of}" para no repetir otra fecha junto al título.
+- **Todos los "Cómo leerlo" plegados**: la macro `how()` ya no tiene `open`.
+- **Siempre siglas**: en tablas, leyendas, tooltips y tarjetas; el nombre completo solo en `title=`.
+- **Barras por defecto en azul neutro**: `THEME.barColor`.
+- **"casa/s" → "encuestadora/s", "patrocinador/es" → "medio/s"**: en todo el texto visible, incluido el método
+  ("efectos de encuestadora"); rutas, ids, clases y claves de datos (`/casas`, `casa.html`) intactos.
+
+### Decisiones (rulings del registro de ejecución)
+
+- "Igual que el selector de Una casa frente al promedio" se interpretó como píldoras coloreadas al estilo de la
+  leyenda de ECharts (sin título ni botones), en Promedios y en la calculadora; las leyendas de ECharts de Promedios se
+  ocultan. Si estaba mal: rehacer un control.
+- El "recuadro por punto del promedio" es el tooltip por sondeo (`trigger: 'item'`) con nombre, fecha, muestra y
+  siglas en color con su valor en orden descendente. Si estaba mal: volver al tooltip por eje.
+- El nombre del sondeo se compone en la página como en el cargador (`pollster / sponsor`), sin republicar. Si estaba
+  mal: añadir `name` a `POLL_COLUMNS` y republicar.
+- "casa" → "encuestadora" se aplica también a "efectos de casa" (→ "efectos de encuestadora") y a los textos del
+  método, como pide "todos los sitios". Si estaba mal: deshacer el término en el método.
+- Sin control de modo, el `<details>` "¿Qué cambia entre Hoy y Elección?" desaparece de la barra; queda la línea
+  `mode_text`. Si estaba mal: reponer el `<details>`.
+- Las píldoras marcadas llevan una tinta calculada en el servidor (texto oscuro sobre colores claros, blanco sobre
+  oscuros): el "texto blanco" del brief no se leía sobre BNG o CC. Si estaba mal: una variable CSS.
+
+### Menores aplicados en el cierre (`0921698`)
+
+Etiquetas nuevas y la nota "sin selector de modo" en `docs/web/contrato.md`; fuera las reglas CSS muertas
+`.card-hero` y `.coalition-parties` (`.card h3 a` se queda: la usan las tarjetas de `/metodo`); los tests del Inicio
+comprueban que el `<h3>` está dentro del enlace de la tarjeta grande y que los tres enlaces de sección son tarjetas;
+fuera la clave `n_polls` del contexto de Promedios (ninguna plantilla la leía); importación de `pages/__init__.py`
+ordenada.
+
+### Menores que quedan
+
+- Veda: con la publicación congelada, `?mode=nowcast` (sin camino en la interfaz) titula "Estimación a {hoy}" sobre
+  datos congelados; comprobarlo en el ensayo de la semana del 17-11.
+- Inicio: el color del borde de las tarjetas al pasar el ratón es una decisión visual de Luis.
+- Promedios: unos ~15.000 símbolos invisibles de "día" por gráfico para el tooltip del promedio (fluidez en un móvil;
+  alternativa: un scatter invisible por línea); la isla repite las 40 primeras filas de la tabla; el tooltip escribe
+  "muestra 1000" (`fmtInt` de JS) y la tabla "1.000" (`fmt_int` de Python), anterior a la fase.
+- Escaños: aserción de píldoras laxa en los tests; objeto de etiquetas duplicado en `escanos.js`; cuando un extremo
+  del rango cae en el bin de la mediana, las dos líneas se solapan (se ve en SALF).
+- Vistos en la verificación de este cierre (no pedidos en las notas, para que Luis decida): la tabla de bloques, la de
+  la región y la frase de la calculadora siguen diciendo "Intervalo 95 %" (la nota solo cambiaba la tabla de
+  partidos); la línea discontinua de la mayoría del histograma de la calculadora perdió su etiqueta "Mayoría: 176"
+  con las demás; a 360 px la fila de Ventana ocupa dos líneas; la columna "Sondeo" va alineada a la derecha como las
+  numéricas; el sitio no tiene favicon (`/favicon.ico` da 404, anterior a la fase).
+
+### Verificación (2026-10-13, en local)
+
+- `python -m pytest -m "not integration" -q`: 666 passed, 75 deselected. `node --check` de los 25 ficheros de
+  `web/dist/js`: sin errores. `bash -n` de `deploy/check-api.sh` y `deploy/smoke.sh`: sin errores (ninguno nombra las
+  etiquetas cambiadas; `?mode=` de `check-api.sh` sigue siendo válido).
+- `S3_BUCKET= DB_HOST= python -m uvicorn api:api --port 8001` sobre el paquete local (run 20261008-181100) y `bash
+  deploy/check-api.sh http://127.0.0.1:8001`: "todas las rutas OK" (lo de nginx, base y eventos, `n/a`). `/es` pesa
+  433.659 bytes (34.057 en gzip), `/es?mode=forecast` 451.212 (35.902), `/es/escanos` 131.715. Títulos: "Estimación a
+  13 oct 2026" y "Pronóstico para el 29 nov 2026".
+- Chrome sin cabeza (155) por el protocolo DevTools, detrás de un proxy desechable que sirve `/dist/`, a 1280 y
+  360 px (con emulación de móvil) en `/`, `/es`, `/es/escanos`, `/elecciones`, `/metodo` y `/metodo/backtest`: sin
+  desbordamiento horizontal (`scrollWidth` = ancho) y sin errores de consola (salvo el 404 de `/favicon.ico`); fuentes
+  cargadas; la barra de evento sin formulario. Inicio: cuatro tarjetas enlazadas con su `<h3>`; un clic en el texto de
+  la tarjeta grande lleva a `/es`. Promedios: Vista, Ventana y Partidos en tres filas, 13 píldoras, leyenda de ECharts
+  oculta; con el foco en la píldora de PP (llegando con Tab, anillo de foco visible), Espacio la desmarca, quita PP
+  del gráfico y del de la encuestadora y del hash, y otro Espacio la repone; el tooltip del último sondeo dice
+  "SocioMétrica / El Español · 3 oct 2026 · muestra 1000" y las 13 siglas en color de mayor a menor; "Cargar más"
+  pasa de 40 a 315 filas en siete clics, el pie dice "Todos los sondeos del ciclo (315)" y el botón desaparece; sin
+  "None" ni "undefined". Escaños: 17 gráficos; los histogramas llevan tres líneas sólidas (1, 3 y 1 px) sin
+  etiqueta; Espacio sobre la píldora del PSOE en la calculadora la marca y el resultado pasa de "3 partidos · mediana
+  202" a "4 partidos · mediana 309". Diana: en una página de prueba con `site.css`, `#errors-bullseye` mide 640 × 640
+  y queda centrada (214 px a cada lado) a 1280 y 294 × 294 a 360, y `#bullseye-chart` sigue en 480 × 480.
+- `bash deploy/nginx-check.sh`: "syntax is ok" / "test is successful" (nginx sin cambios).
+
+### Lo que no se verificó
+
+- La diana con datos: el paquete local no tiene elecciones ni análisis publicados (`/elecciones` enseña "Todavía no
+  hay elecciones publicadas en este ámbito."); la regla CSS se midió en una página de prueba. Un ámbito congelado en
+  el navegador (lo cubren los tests). `/casas` (sin base). Docker, un móvil real y producción.
+
+Pendiente de Luis: recorrer las páginas con estos cambios (en el navegador y en un móvil real), decidir los menores
+de arriba y, con la diana publicada (`publish analysis` y `publish event`), mirar que el tamaño le encaja.

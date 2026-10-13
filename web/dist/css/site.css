@@ -332,6 +332,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Casas and elections: bullseye and the house-effects table */
 #bullseye-chart, #errors-bullseye { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
+/* The history bullseye is the page's main chart: larger and centred in its card */
+#errors-bullseye { max-width: 640px; margin: 0 auto; }
 #effects-table td[title] { cursor: help; }
 
 /* Footer */
