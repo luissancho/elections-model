@@ -13,16 +13,6 @@ import re
 import string
 from tqdm import tqdm
 
-from sklearn.feature_extraction import DictVectorizer
-from sklearn.preprocessing import StandardScaler
-from scipy.signal import savgol_filter
-from scipy.stats import gaussian_kde
-from statsmodels.stats.weightstats import DescrStatsW
-import statsmodels.tsa.api as smt
-
-from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer
-
 from typing import Any, Literal, Optional
 
 
@@ -981,6 +971,7 @@ def get_histogram(
     outliers: Literal['keep', 'group', 'remove'] = 'keep',
     ol_std=3
 ):
+    from statsmodels.stats.weightstats import DescrStatsW
     ds = to_pandas(d, pdtype='Series').dropna()
 
     if weights is not None:
@@ -1030,6 +1021,8 @@ def get_histogram(
 
 
 def get_kde(x, p=100, weights=None, bw=None, outliers='keep', ol_std=3):
+    from scipy.stats import gaussian_kde
+    from statsmodels.stats.weightstats import DescrStatsW
     # bw -> N, scott (default), silverman
     # outliers -> keep (default), group or remove
 
@@ -1124,6 +1117,8 @@ def filter_agg(d, agg='mean', window=7, min_periods=1, center=False, drop_na=Tru
 
 
 def filter_smooth(d, k=21, method='hp', sg_order=2):
+    from scipy.signal import savgol_filter
+    import statsmodels.tsa.api as smt
     ds = to_pandas(d)
 
     if len(ds.shape) == 1:
@@ -1565,6 +1560,7 @@ def numerize_data(d, columns=None, na_value=None):
 
 
 def encode_data(d, columns=None, na_value=None, encoder=None):
+    from sklearn.feature_extraction import DictVectorizer
     columns = columns or []
 
     pdtype = infer_pdtype(d)
@@ -1599,6 +1595,7 @@ def encode_data(d, columns=None, na_value=None, encoder=None):
 
 
 def scale_data(d, columns=None, log=False, na_value=0, scaler=None):
+    from sklearn.preprocessing import StandardScaler
     columns = columns or []
 
     pdtype = infer_pdtype(d)
@@ -1676,6 +1673,8 @@ def inverse_scale_data(d, columns=None, log=None, scaler=None):
 
 
 def impute_data(d, columns=None, imputer=None, estimator=None, verbose=0, seed=None):
+    from sklearn.experimental import enable_iterative_imputer  # noqa
+    from sklearn.impute import IterativeImputer
     columns = columns or []
 
     pdtype = infer_pdtype(d)

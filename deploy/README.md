@@ -691,6 +691,11 @@ peticiones, 6 111 r/s, p95 2 ms, 0 fallos; portada `/` 4 392 peticiones, 878 r/s
 `X-Cache: HIT` en 0 de 50 (no hay nginx delante). Sin nginx local en el puerto 8043: sin cifras de caché.
 Es una referencia de la máquina de desarrollo, no de ECS; las de ECS las mide Luis con `https://<host>`.
 
+Arranque de un worker (2026-10-13, `S3_BUCKET= DB_HOST= python -X importtime -c "import api"` y
+`ru_maxrss` tras `import api`, macOS, tres ejecuciones): antes de los imports perezosos de `helpers.py` y
+`dates.py` 1,55 s y 325 MB de RSS; después 0,82 s y 232 MB (`sklearn` y `statsmodels` ya no se cargan al
+arrancar; `scipy` sí, a través de `dask`, que importa `mtpy.core.data` desde `PostgreSQL.py`).
+
 `S3_BUCKET= /usr/bin/time -l python job.py publish '{"what":["backtest"],"scopes":["es"]}'` (único job sin base):
 2,3 s y 360 MB de RSS máximo (343 MiB). La memoria de `publish forecast all` la mide Luis desde ECS con
 `/usr/bin/time -v` (o la métrica de memoria de la tarea) para ajustar `memory` de `task-job`.

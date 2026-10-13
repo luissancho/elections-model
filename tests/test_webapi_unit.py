@@ -247,16 +247,16 @@ def test_site_requires_a_file_system(fresh_app):
 
 
 def test_webapi_import_stays_light():
-    """Los workers de la web no deben cargar el modelo: `webapi` solo importa `bundle`.
+    """Los workers de la web no deben cargar el modelo ni las librerías de ajuste.
 
-    scipy y statsmodels quedan fuera de la comprobación: `mtpy.core.io` (y con él `bundle`) ya los
-    arrastra a través de `mtpy.core.utils.helpers`, ajeno a `webapi`.
+    `webapi` y `pages` solo importan `bundle`; `helpers` carga sklearn y statsmodels dentro de sus funciones.
+    scipy queda fuera de la comprobación si otro módulo de `mtpy.core` lo arrastra al importar.
     """
     import subprocess
     import sys
-    code = ("import sys, mtpy.lib.webapi; "
-            "print(sorted(m for m in ('mtpy.lib.data', 'mtpy.lib.publish', 'mtpy.lib.simulator') "
-            "if m in sys.modules))")
+    code = ("import sys, mtpy.lib.webapi, mtpy.lib.pages; "
+            "print(sorted(m for m in ('mtpy.lib.data', 'mtpy.lib.publish', 'mtpy.lib.simulator', "
+            "'sklearn', 'statsmodels') if m in sys.modules))")
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, cwd=ROOT, check=True)
     assert out.stdout.strip() == '[]'
 
@@ -577,3 +577,16 @@ def test_site_events_and_backtest_read_the_published_files(site_app):
         with pytest.raises(HttpError) as err:
             call()
         assert err.value.status == 404 and err.value.message == message
+
+
+def test_manifest_is_parsed_once_per_ttl(site_app, monkeypatch):
+    """Dos `manifest_data()` y un `manifest()` seguidos parsean el manifiesto una sola vez."""
+    calls = []
+    real = bundle.loads
+    monkeypatch.setattr(webapi.published.bundle, 'loads', lambda raw: calls.append(1) or real(raw))
+    s = webapi.site()
+    s.manifest_cache_clear()
+    s.manifest_data()
+    s.manifest_data()
+    s.manifest()
+    assert len(calls) == 1 and s.manifest_data()['scopes'] and isinstance(s.manifest(), bytes)

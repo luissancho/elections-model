@@ -69,6 +69,30 @@ class Site:
         """
         self.pointers.clear()
 
+    def _manifest_entry(self) -> tuple:
+        """
+        Raw bytes and parsed payload of ``manifest.json``, cached together under the TTL.
+
+        Returns
+        -------
+        tuple
+            ``(bytes, data)``: the file content and the ``data`` member of its envelope.
+
+        Raises
+        ------
+        HttpError
+            503 when no bundle has been published yet.
+        """
+        def load():
+            try:
+                raw = self._read(bundle.path_manifest())
+            except FileNotFoundError:
+                raise HttpError(503, 'no bundle published yet')
+
+            return raw, bundle.loads(raw)['data']
+
+        return self.pointers.get('manifest', load)
+
     def manifest(self) -> bytes:
         """
         Bytes of ``manifest.json``.
@@ -83,24 +107,23 @@ class Site:
         HttpError
             503 when no bundle has been published yet.
         """
-        def load():
-            try:
-                return self._read(bundle.path_manifest())
-            except FileNotFoundError:
-                raise HttpError(503, 'no bundle published yet')
-
-        return self.pointers.get('manifest', load)
+        return self._manifest_entry()[0]
 
     def manifest_data(self) -> dict:
         """
-        Payload of the manifest.
+        Payload of the manifest, parsed once per TTL.
 
         Returns
         -------
         dict
             The ``data`` member of the manifest envelope.
+
+        Raises
+        ------
+        HttpError
+            503 when no bundle has been published yet.
         """
-        return bundle.loads(self.manifest())['data']
+        return self._manifest_entry()[1]
 
     def freeze(self) -> dict:
         """

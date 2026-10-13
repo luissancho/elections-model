@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 from pandas.core.generic import NDFrame
 import re
-from scipy.signal import find_peaks
-import statsmodels.tsa.api as smt
 
 from typing import Any, Literal, Optional
 from typing_extensions import Self
@@ -1122,6 +1120,7 @@ def ts_trend(
     Series
         Trend component of the time series data.
     """
+    import statsmodels.tsa.api as smt
     ds = to_pandas(d)
 
     if impute_method is not None:
@@ -1227,6 +1226,7 @@ def ts_peaks(
         Minimum distance between peaks. See `find_peaks` function for more details.
         If provided, must be greater or equal to 1.
     """
+    from scipy.signal import find_peaks
     ds = ts_range(d, dt_min=dt_min, dt_max=dt_max)
 
     peaks, _ = find_peaks(ds, distance=distance)

@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import signal
 import time
+from types import ModuleType
 
 from typing import Optional
 from typing_extensions import Self
@@ -84,6 +85,32 @@ class Worker(Core):
             else:
                 time.sleep(self.handler.interval)
 
+    def job_class(self, job: str) -> type:
+        """
+        Resolve a job name into its class in the namespace.
+
+        A job module imported with ``from .Name import Name`` is bound on the package as the
+        submodule, which hides the lazy class lookup of the package; in that case the class
+        is taken from the submodule (same rule as ``Router.controller_class``).
+
+        Parameters
+        ----------
+        job : str
+            Job name of the message, in snake case (``'publish'``).
+
+        Returns
+        -------
+        type
+            The job class.
+        """
+        name = to_camel(job)
+        attribute = getattr(self.namespace, name)
+
+        if isinstance(attribute, ModuleType):
+            attribute = getattr(attribute, name)
+
+        return attribute
+
     def handle_message(self, msg: str):
         """
         Handle a message received from the queue.
@@ -95,8 +122,7 @@ class Worker(Core):
         """
         data = json.loads(msg)
 
-        name = to_camel(data['job'])
-        job = getattr(self.namespace, name)()
+        job = self.job_class(data['job'])()
         params = data['params'] if 'params' in data and isinstance(data['params'], dict) else {}
 
         job.dispatch(**params)
