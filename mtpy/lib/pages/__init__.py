@@ -20,8 +20,8 @@ from .common import (EVENT_TABS, MESSAGES, MODE_LABELS, NOT_FOUND, OTHERS_COLOR,
                      TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
                      default_mode, environment, event_info, event_query, event_title, mode_text, parse_state, part,
                      published_scopes, resolve_event_scope, resolve_scope, scope_query, title_of)
-from .elecciones import (EVENT_CSV, SUMMARY_KEYS, eleccion_context, elecciones_context, event_part, horizon_tables,
-                         published_events, resolve_event)
+from .elecciones import (EVENT_CSV, SUMMARY_KEYS, eleccion_context, elecciones_context, error_rows, event_part,
+                         history_headline, horizon_tables, published_events, resolve_event, with_abs)
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, escanos_context,
                       escanos_headline_text, region_rows, resolve_region, seat_rows)
 from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range

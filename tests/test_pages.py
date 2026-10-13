@@ -927,9 +927,63 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     assert [row['date'] for row in data['sector']] == ['2019-11-10', '2023-07-23']
     assert data['blocks'] == ['Derecha', 'Izquierda']
     assert 'id="sector-chart"' in page and 'aria-label=' in page
-    assert 'Desviación hacia Derecha' in page and '0,2</td>' in page and '-0,2</td>' not in page  # solo el primer bloque
-    assert 'positivo, los sondeos dieron de más a ese bloque; negativo, de menos' in page
+    table = re.search(r'<table id="events-table">(.*?)</table>', page, re.S).group(1)
+    assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
+        'Elección', 'Sondeos', 'Casas', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
 
+
+
+@pytest.fixture
+def history_site(events_site, fresh_app):
+    write_analysis(fresh_app.fs)
+    return events_site
+
+
+def test_elecciones_only_counts_the_published_elections(history_site, fresh_app):
+    errors = fixture_data('poll-errors')
+    errors['rows'].append(dict(errors['rows'][0], event_date='2011-11-20', event='2011-20N'))
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es')
+    data = initial(call(history_site, '/elecciones')[2])
+    assert {row['event_date'] for row in data['errors']} <= {'2023-07-23', '2019-11-10'}
+    assert [e['date'] for e in data['events']] == ['2023-07-23', '2019-11-10'] and data['error_blocks'] == ['Derecha', 'Izquierda']
+    page = html(call(history_site, '/elecciones')[2])
+    assert 'En las 2 elecciones analizadas' in page and 'id="errors-filter"' in page and 'id="errors-histogram"' in page
+    assert 'id="errors-bullseye"' in page and 'id="weeks-table"' in page and 'Sesgo de bloques' not in page and 'Desviación hacia' not in page
+    assert 'id="glosario"' in page and '¿Cómo calculamos el rating de las encuestadoras?' in page
+
+
+def test_elecciones_without_analysis_keeps_the_list(events_site):
+    page = html(call(events_site, '/elecciones')[2])
+    assert 'Análisis no publicado todavía' in page and 'id="events-table"' in page and '2 elecciones analizadas' in page
+
+
+def test_eleccion_detail_has_the_error_histogram_and_the_glossary(events_site):
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    assert 'id="poll-histogram"' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
+    assert initial(body)['poll_errors'][0].keys() >= {'error_avg', 'error_blocks_abs'}
+
+
+def test_elecciones_history_context_filters_and_headline(history_site):
+    context = pages.elecciones_context(pages.parse_state({'scope': 'es'}))
+    assert not context['analysis_missing'] and len(context['errors']) == 2
+    assert context['filter_events'] == [{'date': '2023-07-23', 'name': 'Generales 2023'},
+                                        {'date': '2019-11-10', 'name': 'Generales 2023'}]
+    assert context['filter_pollsters'] == ['GAD3', 'Sigma Dos']
+    assert context['headline_text'] == ('En las 2 elecciones analizadas, el último sondeo de cada casa se desvió de '
+                                        'media 3,6 puntos en el margen entre bloques.')
+    assert all(row['error_blocks_abs'] == abs(row['error_blocks']) for row in context['errors'])
+    assert set(context['initial']) >= {'state', 'sector', 'blocks', 'errors', 'error_blocks', 'events'}
+    assert pages.error_rows('es', ['2019-11-10']) == [] and pages.error_rows('es-md', ['2023-07-23']) is None
+    page = html(call(history_site, '/elecciones')[2])
+    assert page.index('id="filters"') < page.index('id="histogram"') < page.index('id="bullseye"') \
+        < page.index('id="weeks"') < page.index('id="sector"') < page.index('id="events"') < page.index('id="glosario"') \
+        < page.index('id="closing"')
+    assert '<option value="2019-11-10">' in page and '<option value="Sigma Dos">' in page
+    assert 'positivo, el sondeo daba más margen a Derecha del que hubo' in page
+    assert 'Herding' not in page and 'La tabla necesita JavaScript' in page
+    assert page.count('Análisis no publicado todavía') == 0
 
 def test_elecciones_without_events_shows_a_notice(api):
     status, _, body = call(api, '/elecciones', query='scope=es')
@@ -946,7 +1000,7 @@ def test_eleccion_detail_renders_results_pollsters_bullseye_and_model(events_sit
     assert '/casas?scope=es&amp;id=2' in page and 'href="/elecciones?scope=es"' in page
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'pollsters', 'bullseye', 'blocks'}
+    assert set(data) == {'state', 'meta', 'pollsters', 'bullseye', 'blocks', 'poll_errors'}
     assert data['bullseye'][0]['Derecha'] == 0.68 and data['pollsters'][0]['pollster'] == 'GAD3'
     assert 'id="error-chart"' in page and 'id="bullseye-chart"' in page
 

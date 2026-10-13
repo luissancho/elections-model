@@ -5,7 +5,9 @@ from typing import Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, site
+from .casas import analysis_part
 from .common import api_url, bundle_part, common_context
+from .filters import fmt_num
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 EVENT_CSV = (
@@ -107,6 +109,63 @@ def published_events(scope: str) -> list:
     return with_abs(events)
 
 
+def error_rows(scope: str, dates: list) -> Optional[list]:
+    """
+    Rows of the published ``poll-errors`` analysis of the given elections.
+
+    Only the published elections count (the analysis has every election of the scope with results and polls), so
+    the filters, the histogram, the bullseye and the weeks table speak of the same elections as the list.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    dates : list of str
+        Dates of the published elections.
+
+    Returns
+    -------
+    list of dict or None
+        The rows whose ``event_date`` is in ``dates``, in their order, with ``error_blocks_abs`` (``with_abs``);
+        ``None`` when the analysis of the scope is not published (no ``meta`` part).
+    """
+    if analysis_part(scope, 'meta') is None:
+        return None
+
+    errors = analysis_part(scope, 'poll-errors') or {}
+    wanted = set(dates)
+
+    return with_abs([row for row in errors.get('rows') or [] if row.get('event_date') in wanted])
+
+
+def history_headline(n_events: int, errors: Optional[list]) -> str:
+    """
+    Headline of the error history: the published elections and the mean block error of the last poll of each house.
+
+    Parameters
+    ----------
+    n_events : int
+        Number of published elections.
+    errors : list of dict or None
+        ``error_rows`` of those elections (``None`` without analysis).
+
+    Returns
+    -------
+    str
+        The sentence with the mean of ``error_blocks_abs``, or only the count when there is no analysis or no
+        finite value to average.
+    """
+    values = [row['error_blocks_abs'] for row in errors or [] if row.get('error_blocks_abs') is not None]
+
+    if not values:
+        return f'{n_events} elecciones analizadas.'
+
+    mean = fmt_num(sum(values) / len(values), 1)
+
+    return (f'En las {n_events} elecciones analizadas, el último sondeo de cada casa se desvió de media {mean} '
+            'puntos en el margen entre bloques.')
+
+
 def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     """
     Template context of the list of past elections.
@@ -122,8 +181,13 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     -------
     dict
         The common context plus ``events`` (``published_events``, each with its ``href``),
-        ``blocks`` (those of the newest election; empty without events) and, only with events,
-        ``initial`` (``state``, ``sector``: the average error by date ascending, and ``blocks``).
+        ``blocks`` (those of the newest election; empty without events), ``analysis_missing``, ``errors``
+        (``error_rows`` of the published elections, empty without analysis), ``error_blocks`` (the ``blocks`` of
+        the ``poll-errors`` part), ``filter_events`` (``date`` and ``name`` of each election, newest first),
+        ``filter_pollsters`` (the house names of ``errors``, alphabetical), ``headline_text``
+        (``history_headline``) and, only with events, ``initial``
+        (``state``, ``sector``: the average error by date ascending, ``blocks``, ``errors``, ``error_blocks`` and
+        ``events``: ``filter_events``).
 
     Raises
     ------
@@ -142,13 +206,26 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     for event in events:
         event['href'] = '/elecciones' + context['scope_query'] + '&date=' + event['date']
 
+    errors = error_rows(scope, [event['date'] for event in events])
+    analysis = analysis_part(scope, 'poll-errors') if errors is not None else None
+    error_blocks = list((analysis or {}).get('blocks') or [])
+    filter_events = [{'date': event['date'], 'name': event['name']} for event in events]
+
     context['events'] = events
     context['blocks'] = blocks
+    context['analysis_missing'] = errors is None
+    context['errors'] = errors or []
+    context['error_blocks'] = error_blocks
+    context['filter_events'] = filter_events
+    context['filter_pollsters'] = sorted({row['pollster'] for row in errors or [] if row.get('pollster')},
+                                         key=str.casefold)
+    context['headline_text'] = history_headline(len(events), errors)
 
     if events:
         sector = [{key: event[key] for key in ('date', 'error_avg', 'error_blocks', 'error_blocks_abs', 'bias_blocks')}
                   for event in reversed(events)]
-        context['initial'] = {'state': context['state'], 'sector': sector, 'blocks': blocks}
+        context['initial'] = {'state': context['state'], 'sector': sector, 'blocks': blocks,
+                              'errors': context['errors'], 'error_blocks': error_blocks, 'events': filter_events}
 
     return context
 
@@ -247,7 +324,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party),
         ``n_seats``, ``pollster_rows``, ``poll_rows``, ``blocks``, ``horizon_tables``, ``has_model``,
         ``csv_links`` (the model ones only with a backtest) and ``initial`` (``state``, ``meta``,
-        ``pollsters``, ``bullseye`` and ``blocks``).
+        ``pollsters``, ``bullseye``, ``blocks`` and ``poll_errors``: ``error_avg`` and ``error_blocks_abs`` of
+        each poll, for the error histogram).
 
     Raises
     ------
@@ -304,6 +382,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
                           **{block: row.get('last_' + block) for block in blocks})
                      for row in pollster_rows],
         'blocks': blocks,
+        'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')}
+                        for row in context['poll_rows']],
     }
 
     return context

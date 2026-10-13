@@ -1,0 +1,16 @@
+{#- Glossary of the error measures (spec "Glosario de medidas de error"): one definition for every page that shows
+    them. Needs `error_blocks` or `blocks` (the first block names the sign of the margin) and `with_herding` (set it
+    before the include: `{% set with_herding = false %}`). -#}
+{%- set glossary_blocks = error_blocks if error_blocks is defined and error_blocks else (blocks if blocks is defined else []) %}
+<details class="how" id="glosario"><summary>Qué mide cada columna</summary><dl>
+  <dt>Error medio</dt>
+  <dd>Distancia media, en puntos, entre el sondeo y el resultado de cada partido principal. Sin signo.</dd>
+  <dt>Error de bloques</dt>
+  <dd>Cuánto se equivocó el sondeo en el margen entre los dos bloques principales, en puntos. Sin signo.</dd>
+  <dt>Sesgo del margen</dt>
+  <dd>El mismo error con signo: positivo, el sondeo daba más margen a {{ glossary_blocks[0] if glossary_blocks else 'el primer bloque' }} del que hubo; negativo, menos.</dd>
+  {% if with_herding %}
+  <dt>Herding</dt>
+  <dd>Por debajo de 1, sus sondeos varían menos de lo que permite el azar.</dd>
+  {% endif %}
+</dl></details>
