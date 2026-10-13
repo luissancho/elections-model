@@ -514,3 +514,75 @@ def test_event_requires_a_date_and_excludes_forecast(fresh_app, tmp_path):
         Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))
     with pytest.raises(ValueError, match='cannot be combined'):
         Publish().run(what=['event', 'forecast'], event_date='2023-07-23', fs=FileSystem(str(tmp_path)))
+
+
+NO_POLLS = 'No polls available for `X`: skipped'
+
+
+def warned_forecast(monkeypatch, messages):
+    """`publish_forecast` real con un `FakeSimulator` que avisa `messages` al ajustar el promedio."""
+    real = publish.forecast.publish_forecast
+
+    def fake(scope, writer, run_id, event_date, **kwargs):
+        return real(scope, writer, run_id, event_date, simulator=FakeSimulator(warn=messages),
+                    stats=lambda scope, event_date: (7, '2026-10-01'),
+                    prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
+
+    monkeypatch.setattr(publish, 'publish_forecast', fake)
+
+
+def test_forecast_collects_the_model_warnings_into_the_result(fresh_app, tmp_path, patched, monkeypatch, capsys,
+                                                              recwarn):
+    """Los avisos del modelo no salen sueltos: van al resultado (únicos, en orden) y al recuento de la línea."""
+    from mtpy.jobs.Publish import Publish
+
+    warned_forecast(monkeypatch, [NO_POLLS, NO_POLLS])
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
+    assert result['es']['status'] == 'published' and result['es']['warnings'] == [NO_POLLS]
+    summary = [line for line in capsys.readouterr().out.splitlines() if line.startswith('es: published')]
+    assert len(summary) == 1 and summary[0].endswith(' · 1 aviso')
+    assert NO_POLLS not in summary[0] and len(recwarn) == 0
+
+
+def test_forecast_prints_the_model_warnings_live_only_when_verbose(fresh_app, tmp_path, patched, monkeypatch, capsys,
+                                                                   recwarn):
+    from mtpy.jobs.Publish import Publish
+
+    warned_forecast(monkeypatch, [NO_POLLS])
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'quiet')))
+    assert NO_POLLS not in capsys.readouterr().out
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'verbose')), verbose=1)
+    out = capsys.readouterr().out
+    live = out.index('es · aviso: ' + NO_POLLS)
+    assert out.count(NO_POLLS) == 1 and live < out.index('\nes: published') and len(recwarn) == 0
+
+
+def test_forecast_keeps_the_warnings_of_a_skipped_or_failed_scope(fresh_app, tmp_path, patched, monkeypatch, capsys,
+                                                                  recwarn):
+    """Un ámbito que avisa y luego se salta o rompe lleva sus avisos (sin repetir) y nada escapa del job."""
+    import warnings
+
+    from mtpy.jobs.Publish import Publish
+
+    def fake(scope, writer, run_id, event_date, **kwargs):
+        warnings.warn('Fewer than three usable polls for `A`: not fitted')
+        warnings.warn('Fewer than three usable polls for `B`: not fitted')
+        warnings.warn('Fewer than three usable polls for `A`: not fitted')
+        if scope == 'es-cb':
+            raise publish.NothingToPublish('Not enough polls to fit the average')
+        raise KeyError('x')
+
+    monkeypatch.setattr(publish, 'publish_forecast', fake)
+    with pytest.raises(RuntimeError, match='es-ar'):
+        Publish().run(what=['forecast'], scopes=['es-cb', 'es-ar'], fs=FileSystem(str(tmp_path)))
+    out = capsys.readouterr().out
+    assert 'es-cb: skipped (Not enough polls to fit the average) · 2 avisos' in out
+    assert "es-ar: failed (KeyError: 'x') · 2 avisos" in out
+    assert 'not fitted' not in out and len(recwarn) == 0
+
+
+def test_forecast_without_model_warnings_has_none(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    result = Publish().run(what=['forecast'], scopes=['es', 'es-md'], fs=FileSystem(str(tmp_path)))
+    assert result['es']['warnings'] == [] and result['es-md']['warnings'] == []

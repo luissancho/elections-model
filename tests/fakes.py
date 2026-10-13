@@ -3,6 +3,7 @@ y un Computer sintético con los resúmenes de casas que publica `publish analys
 import json
 import os
 import types
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -111,10 +112,11 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
 
 class FakeSimulator:
     """Fábrica con la firma `Simulator(scope, event_date, **kwargs)`: devuelve el simulador sintético con
-    `fit_forecast` y `run` inertes y anota las llamadas; con `fail`, lanza esa excepción al construir."""
+    `fit_forecast` y `run` inertes y anota las llamadas; con `fail`, lanza esa excepción al construir; con `warn`,
+    `fit_forecast` emite esos `UserWarning` (como los avisos por partido del `Forecaster`)."""
 
-    def __init__(self, fail=None):
-        self.calls, self.fail = [], fail
+    def __init__(self, fail=None, warn=()):
+        self.calls, self.fail, self.warn = [], fail, list(warn)
 
     def __call__(self, scope, event_date, **kwargs):
         if self.fail is not None:
@@ -125,6 +127,8 @@ class FakeSimulator:
 
         def fit_forecast(**kw):
             self.calls.append(('fit_forecast', kw))
+            for message in self.warn:
+                warnings.warn(message)
             return sim.forecast
 
         def run(**kw):

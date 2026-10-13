@@ -1,5 +1,7 @@
+import contextlib
 import traceback
-from datetime import date, timedelta
+import warnings
+from datetime import date, datetime, timedelta
 
 from ..core.worker import Job
 from ..lib import bundle, publish
@@ -308,7 +310,8 @@ class Publish(Job):
             except Exception as e:
                 self._log_error(scope)
                 failed = {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-                outcomes = [failed if i in involved else result for i, result in enumerate(outcomes)]
+                outcomes = [{**failed, 'warnings': result.get('warnings', [])} if i in involved else result
+                            for i, result in enumerate(outcomes)]
         days = [day for day, _, _ in plan]
         return [result if day is None else {'day': day, **result} for day, result in zip(days, outcomes)], entry
 
@@ -384,28 +387,79 @@ class Publish(Job):
             Result with a ``status`` and its details: ``skipped`` for no upcoming event,
             ``publish.NothingToPublish`` or (with ``skip_existing``) a complete existing run,
             ``refused`` for the LOREG guard and ``failed`` for an incomplete existing run (with
-            ``skip_existing``) or any other exception.
+            ``skip_existing``) or any other exception. Every result carries the ``warnings``
+            emitted while the model ran (unique messages, in order of appearance), which never
+            reach stderr; with ``verbose``, each one is also printed live as a progress line.
         """
+        notes = []
+        note = None
+        if params.get('verbose'):
+            def note(text):
+                self._say('{} · aviso: {}'.format(scope, text))
         try:
             value = event_date or publish.next_event_date(scope)
             if value is None:
-                return {'status': 'skipped', 'reason': 'no upcoming event'}
+                return {'status': 'skipped', 'reason': 'no upcoming event', 'warnings': notes}
             event = date.fromisoformat(value).isoformat()
             in_window = publish.loreg_guard(scope, event, today, force, national)
             if skip_existing:
                 if writer.exists(bundle.path_part(scope, run_id, 'headline')):
-                    return {'status': 'skipped', 'reason': self.RUN_EXISTS}
+                    return {'status': 'skipped', 'reason': self.RUN_EXISTS, 'warnings': notes}
                 if writer.exists(bundle.path_run(scope, run_id)):
-                    return {'status': 'failed', 'reason': self.RUN_INCOMPLETE}
-            out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, **params)
+                    return {'status': 'failed', 'reason': self.RUN_INCOMPLETE, 'warnings': notes}
+            with self._collect_warnings(notes, note):
+                out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, **params)
         except publish.PublishRefused as e:
-            return {'status': 'refused', 'reason': str(e)}
+            return {'status': 'refused', 'reason': str(e), 'warnings': notes}
         except publish.NothingToPublish as e:
-            return {'status': 'skipped', 'reason': str(e)}
+            return {'status': 'skipped', 'reason': str(e), 'warnings': notes}
         except Exception as e:
             self._log_error(scope)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-        return {'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds']}
+            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e), 'warnings': notes}
+        return {'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds'],
+                'warnings': notes}
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _collect_warnings(notes, note=None):
+        """
+        Collect every warning raised inside the block instead of letting it reach stderr.
+
+        All categories are recorded (``DeprecationWarning`` included, the filters are set to
+        ``always`` inside the block) and the previous filters and ``showwarning`` are restored
+        on exit, also when the block raises.
+
+        Parameters
+        ----------
+        notes : list of str
+            Destination of the messages: each new message text is appended once, in order of
+            appearance.
+        note : callable, optional
+            Called with the text of each new message as it is raised (live output).
+
+        Yields
+        ------
+        list of str
+            ``notes``.
+        """
+        def show(message, category, filename, lineno, file=None, line=None):
+            text = str(message)
+            if text not in notes:
+                notes.append(text)
+                if note is not None:
+                    note(text)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('always')
+            warnings.showwarning = show
+            yield notes
+
+    def _say(self, text):
+        """Print one progress line now, with the time, and log it through the app logger, if there is one."""
+        line = '[{}] {}'.format(datetime.now().strftime('%H:%M:%S'), text)
+        print(line, flush=True)
+        if self.app.logger is not None:
+            self.app.logger.info(line)
 
     def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
         """
@@ -626,11 +680,22 @@ class Publish(Job):
         day = result.get('day')
         if status == 'published' and 'entry' in result:
             entry = result['entry']
-            return '{}: published {} (as_of {}, {} polls{}) in {:.0f} s'.format(
+            return '{}: published {} (as_of {}, {} polls{}) in {:.0f} s{}'.format(
                 scope, result['run_id'], entry.get('as_of'), entry.get('n_polls'),
-                '' if day is None else ', backfill {}'.format(day), result['seconds']['total'])
+                '' if day is None else ', backfill {}'.format(day), result['seconds']['total'],
+                Publish._notes_suffix(result))
         if status == 'published':
             return '{}: published {}'.format(scope, result.get('latest') or result.get('removed') or run)
         if day is not None:
-            return '{}: {} {} ({})'.format(scope, status, day, result['reason'])
-        return '{}: {} ({})'.format(scope, status, result['reason'])
+            line = '{}: {} {} ({})'.format(scope, status, day, result['reason'])
+        else:
+            line = '{}: {} ({})'.format(scope, status, result['reason'])
+        return line + Publish._notes_suffix(result)
+
+    @staticmethod
+    def _notes_suffix(result):
+        """Return the `` · n avisos`` suffix of a result with model warnings, or an empty string."""
+        n = len(result.get('warnings') or ())
+        if n == 0:
+            return ''
+        return ' · {} {}'.format(n, 'aviso' if n == 1 else 'avisos')
