@@ -10,7 +10,7 @@
 </head>
 <body>
   {% if manifest.freeze.active %}
-  <div id="freeze-banner">{{ manifest.freeze.message or 'Publicación congelada.' }}</div>
+  <div id="freeze-banner">{{ manifest.freeze.message or 'Publicación congelada.' }} <a href="/metodo{{ query }}#limitaciones">Más información</a></div>
   {% endif %}
   {% include '_header.html' +%}
   <main id="main">

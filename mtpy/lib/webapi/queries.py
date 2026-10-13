@@ -11,6 +11,7 @@ from .caches import DEFAULT_TTL, TTLCache, settings
 from .checks import DEFAULT_LIMIT
 
 QUERY_CACHE_SIZE = 128
+WEB_DROP_CTYPES = ('wban', 'exit')  # polls published during the ban and exit polls never reach the web
 
 
 def _reader(name: str) -> Callable:
@@ -416,7 +417,8 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     The reader is ``data.get_poll_series`` (the poll fields, its weights and errors, and the
     ``pct`` of each party as a column); ``get_poll_results`` returns one row per poll and
     party instead. The polls of the event are cached once; ``pollster`` and ``limit`` are
-    applied on that frame.
+    applied on that frame. Polls tagged with a ``WEB_DROP_CTYPES`` context (published during
+    the ban, exit polls) are dropped at the source.
 
     Parameters
     ----------
@@ -444,7 +446,7 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     if date is None:
         return pd.DataFrame()
 
-    polls = _query(('polls', scope, date), lambda: get_poll_series(scope, date))
+    polls = _query(('polls', scope, date), lambda: get_poll_series(scope, date, drop_contexts=list(WEB_DROP_CTYPES)))
 
     if pollster is not None:
         polls = _rows_of(polls, 'pollster_id', pollster)

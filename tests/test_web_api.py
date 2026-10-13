@@ -160,7 +160,7 @@ def fake_readers(monkeypatch):
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
 
-    def poll_series(scope, event):
+    def poll_series(scope, event, drop_contexts=None):
         seen.append(('polls', scope, event))
         return polls
     monkeypatch.setattr(webapi.queries, 'get_poll_series', poll_series)
@@ -399,3 +399,14 @@ def test_events_and_backtest_errors_are_json_and_not_cached(api, fresh_app, path
     st, headers, body = call(api, path, query=query)
     assert st == status and json.loads(body) == {'status': 'error', 'message': message}
     assert headers['cache-control'] == 'no-store'
+
+
+def test_polls_route_never_serves_banned_contexts(db_api, fresh_app, monkeypatch):
+    seen = []
+    def poll_series(scope, event, drop_contexts=None):
+        seen.append(drop_contexts)
+        return pd.DataFrame({'date': ['2026-10-01'], 'pollster_id': [1], 'ctype': [None], 'PP': [30.0]})
+    monkeypatch.setattr(webapi.queries, 'get_poll_series', poll_series)
+    webapi.queries._QUERIES.clear()
+    status, _, body = call(db_api, '/api/v1/polls', query='scope=es&limit=5')
+    assert status == 200 and seen == [['wban', 'exit']]

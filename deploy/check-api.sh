@@ -104,6 +104,19 @@ check_published() {
     fi
 }
 
+# check_header RUTA CABECERA VALOR: (GET con -D, porque la API aun no responde a HEAD) la cabecera (sin distinguir mayusculas) debe existir y valer VALOR.
+check_header() {
+    local path="$1" name="$2" want="$3" got
+    got="$(curl -s -D - -o /dev/null --max-time 20 "$base$path" | tr -d '\r' | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z')" \
+        'tolower($1) == n ":" {print $2; exit}' || true)"
+    if [ "$got" = "$want" ]; then
+        echo "OK   $path ($name: $got)"
+    else
+        echo "FAIL $path: cabecera $name '${got:-ausente}' (esperado $want)"
+        failures=$((failures + 1))
+    fi
+}
+
 check / 200 html
 check "/promedio?scope=es&mode=nowcast" 200 html
 check "/escanos?scope=es&mode=forecast" 200 html
@@ -120,6 +133,20 @@ check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
 check_nginx_only /dist/css/site.css text/css
 check /api/v1/health 200 json
 check /api/v1/manifest 200 json
+# Congelacion editorial: si el manifest la declara activa, la cabecera y el banner deben verse.
+frozen="$(curl -s --max-time 20 "$base/api/v1/manifest" | "$PY" -c \
+    "import json,sys; print(str(bool(json.load(sys.stdin)['data'].get('freeze', {}).get('active'))).lower())" 2>/dev/null || true)"
+if [ "$frozen" = true ]; then
+    check_header /api/v1/scopes x-freeze active
+    if curl -s --max-time 20 "$base/" | grep -q freeze-banner; then
+        echo "OK   / (freeze-banner)"
+    else
+        echo "FAIL /: sin freeze-banner con la publicacion congelada"
+        failures=$((failures + 1))
+    fi
+else
+    echo "n/a  congelación: inactiva"
+fi
 check /api/v1/scopes 200 json
 check /api/v1/forecast/es 200 json
 check /api/v1/forecast/es/runs 200 json

@@ -820,3 +820,21 @@ def test_metodo_renders_the_sections_without_data(api):
 def test_metodo_is_in_the_menu_of_every_page(api):
     page = html(call(api, '/')[2])
     assert '>Método</a>' in page and '>Modelo</a>' in page and '>Elecciones</a>' in page
+
+
+def test_frozen_manifest_marks_every_page(api, fresh_app):
+    writer = bundle.BundleWriter(fresh_app.fs)
+    publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'Pronóstico definitivo para el' in page and 'congelado desde 23 nov 2026' in page
+    assert 'freeze-banner' in page and '/metodo?scope=es&amp;mode=forecast#limitaciones' in page
+    status, _, body = call(api, '/', query='scope=es&mode=nowcast')
+    assert 'Estimación a' in html(body) and 'Pronóstico definitivo' not in html(body)
+    status, _, body = call(api, '/metodo', query='scope=es')
+    assert 'freeze-banner' in html(body)
+    publish.update_manifest(writer, freeze={'active': False})
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/', query='scope=es')
+    assert 'freeze-banner' not in html(body) and 'Pronóstico para el' in html(body) and 'congelado desde' not in html(body)

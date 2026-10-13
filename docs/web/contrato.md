@@ -459,7 +459,9 @@ Las rutas desconocidas y los métodos distintos de GET reciben el 404 JSON gené
   (solo `GET`, sin preflight). La pone el controlador, no el router: el 404 genérico del router (ruta
   desconocida o método distinto de GET) no la lleva.
 - `x-freeze: active` cuando `manifest.freeze.active` está activo (en `scopes`, `runs`, `forecast/...`).
-  Es solo un aviso: la API sigue sirviendo los datos.
+  Es solo un aviso: la API sigue sirviendo los datos. Las páginas lo muestran con un banner (`#freeze-banner`,
+  enlazado a `/metodo#limitaciones`), el título «Pronóstico definitivo» en modo `forecast` y «congelado desde»
+  en el pie.
 
 ## Rutas de base y de análisis (fase 4)
 
@@ -473,7 +475,7 @@ Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en viv
 | `/api/v1/pollsters` | | `{contract, rows}` | `pollsters.csv` |
 | `/api/v1/pollsters/{id}` | `scope` (por defecto `es`) | `{contract, scope, pollster, ratings, house_effects, herding}` | no (404 `no csv for this part`) |
 | `/api/v1/ratings` | `scope`, `event` (fecha; por defecto el siguiente evento) | `{contract, scope, event, rows}` | `ratings-{scope}[-{event}].csv` |
-| `/api/v1/polls` | `scope`, `event`, `pollster` (id), `limit` (1000 por defecto, máximo 5000) | `{contract, scope, event, pollster, limit, rows}` (un sondeo por fila, una columna por partido, los más recientes primero) | `polls-{scope}[-{event}][-{pollster}].csv` |
+| `/api/v1/polls` | `scope`, `event`, `pollster` (id), `limit` (1000 por defecto, máximo 5000) | `{contract, scope, event, pollster, limit, rows}` (un sondeo por fila, una columna por partido, los más recientes primero; sin los sondeos de contexto `wban` —publicados durante la veda— ni `exit`) | `polls-{scope}[-{event}][-{pollster}].csv` |
 | `/api/v1/results/{scope}/{date}` | `region` (0, el ámbito entero, por defecto) | `{contract, scope, date, region, rows}` | `results-{scope}-{date}[-{region}].csv` |
 | `/api/v1/house-effects` | `scope` | `{contract, scope, rows}` | `house-effects-{scope}.csv` |
 | `/api/v1/herding` | `scope` | `{contract, scope, rows}` | `herding-{scope}.csv` |

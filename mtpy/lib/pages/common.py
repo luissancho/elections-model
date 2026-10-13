@@ -397,7 +397,8 @@ def common_context(state: dict, active: str) -> dict:
     dict
         ``site_title``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
         ``mode``, ``run``, ``pinned``), ``query``, ``scopes``, ``manifest``, ``meta``,
-        ``catalog``, ``mode_label`` and ``title_suffix``.
+        ``catalog``, ``mode_label``, ``freeze`` (the manifest switch), ``frozen`` (whether it is active)
+        and ``title_suffix`` (``Pronóstico definitivo`` in forecast mode while frozen).
 
     Raises
     ------
@@ -411,8 +412,14 @@ def common_context(state: dict, active: str) -> dict:
     meta = part(scope, run, 'meta')
     full = {'scope': scope, 'mode': mode, 'run': run, 'pinned': pinned}
 
+    manifest = site().manifest_data()
+    freeze = manifest.get('freeze') or {}
+    frozen = bool(freeze.get('active'))
+
     if mode == 'nowcast':
         title_suffix = 'Estimación a {}'.format(fmt_date(meta.get('as_of')))
+    elif frozen:
+        title_suffix = 'Pronóstico definitivo para el {}'.format(fmt_date(meta.get('event_date')))
     else:
         title_suffix = 'Pronóstico para el {}'.format(fmt_date(meta.get('event_date')))
 
@@ -422,7 +429,9 @@ def common_context(state: dict, active: str) -> dict:
         'state': full,
         'query': query_string(full),
         'scopes': published_scopes(),
-        'manifest': site().manifest_data(),
+        'manifest': manifest,
+        'freeze': freeze,
+        'frozen': frozen,
         'meta': meta,
         'catalog': catalog(meta),
         'mode_label': MODE_LABELS[mode],
