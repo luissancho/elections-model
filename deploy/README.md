@@ -293,7 +293,7 @@ con `ValueError` antes de empezar).
 | `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` |
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
-| `force` | `false` | Publicar `es` dentro de la ventana LOREG |
+| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what` |
 | `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
@@ -373,8 +373,8 @@ error) y lo escribe bajo `analysis/{ámbito}/` del paquete (formato en "Análisi
 - Sobrescribe el análisis anterior del ámbito (no hay runs ni histórico) y escribe `meta.json` el último: un
   análisis sin `meta.json` está incompleto y la API responde 404 `analysis not published`. Si el cálculo falla
   a medias, quedan partes nuevas junto a las viejas y manda `meta.json`.
-- No toca el manifest ni los punteros, no tiene guarda LOREG y con `dry_run` escribe en `site-dry/v1/analysis/`.
-- Cada ámbito termina `published`, `skipped` (sin sondeos del siguiente evento) o `failed`; el resto continúa y
+- No toca el manifest ni los punteros, pasa por la guarda LOREG (ver "Guarda LOREG") y con `dry_run` escribe en `site-dry/v1/analysis/`.
+- Cada ámbito termina `published`, `skipped` (sin sondeos del siguiente evento), `refused` (guarda LOREG) o `failed`; el resto continúa y
   el job termina con error si alguno falla. Resumen de una línea por ámbito, por ejemplo
   `es: analysis published (event 2026-11-29, <n> pollsters) in <s> s` o `es-md: analysis skipped (<motivo>)`.
 - Duración estimada de ≈ 1,5 min por ámbito (el análisis de `es` tardó 44 s en el test de integración contra la
@@ -468,6 +468,43 @@ docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["fo
 
 Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pasos.
 
+### Veda
+
+Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 (LOREG art. 69.7).
+
+**23 de noviembre** (con los sondeos del día cargados como siempre):
+
+1. `python job.py publish '{"what":["forecast"],"scopes":"all"}'` publica el pronóstico definitivo de todos los
+   ámbitos (con `S3_BUCKET` y la RDS, como en "Publicar en S3 contra la RDS").
+2. Comprobar el manifest (ver "Leer el manifest publicado").
+3. `python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}'` congela la web;
+   `manifest.freeze.since` queda con la fecha del día. Texto sugerido: "Pronóstico definitivo, publicado el 23
+   de noviembre. Durante la veda electoral no se publican sondeos nuevos ni se actualiza el pronóstico."
+4. `bash deploy/check-api.sh https://<host>` comprueba el manifest y, congelado, la cabecera `x-freeze: active` y
+   el banner.
+
+**Noche del 29**: `python job.py publish '{"what":["manifest"],"freeze":{"active":false}}'` (`since` vuelve a
+`null`). **Después**, con los resultados oficiales cargados, `python job.py publish
+'{"what":["event"],"scopes":["es"],"event_date":"2026-11-29"}'` (`event` no pasa por la guarda).
+
+**Sondeos durante la veda**: cargarlos es seguro. El cargador marca los de prohibición (`wban`) y los de
+boca de urna (`exit`) y el modelo y la API los excluyen. No recalcular ratings ni publicar (`forecast`,
+`analysis`, relleno) hasta el 29: la guarda lo rechaza en cualquier ámbito.
+
+#### Ensayo
+
+Todo en local (`S3_BUCKET=` vacío, paquete en `files/site/v1`); nada toca S3 ni la RDS pública. Repetirlo la
+semana del 17 de noviembre.
+
+1. `S3_BUCKET= python job.py publish '{"what":["forecast"],"scopes":["es"],"today":"2026-11-25","dry_run":true}'`
+   termina `refused`; lo mismo con un autonómico (`"scopes":["es-md"]`).
+2. Con `"force":true` se publica en `site-dry` con `meta.freeze: true`.
+3. `S3_BUCKET= python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"Ensayo"}}'` sobre
+   el paquete local.
+4. `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` y `bash deploy/check-api.sh http://127.0.0.1:8001`
+   comprueba cabecera y banner.
+5. Desactivar: `S3_BUCKET= python job.py publish '{"what":["manifest"],"freeze":{"active":false}}'`.
+
 ### Leer el manifest publicado
 
 Sin la CLI de AWS:
@@ -490,10 +527,18 @@ Cada run guarda en su `meta.json` los `seconds` por paso (`init`, `fit`, `nowcas
 
 ### Guarda LOREG
 
-Con `scope` `es`, el job se niega a publicar (`refused`) si la elección cae en los 5 días previos o en el
-propio día (LOREG art. 69.7). `{"force":true}` publica igualmente y marca el run con `meta.freeze: true`.
-La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con
-`what: ["manifest"]`.
+Enmienda 2026-10-13 (fase 6). La guarda cubre todos los ámbitos: el job se niega a publicar (`refused`) un
+`forecast` (incluido el relleno retroactivo) o un `analysis` si hoy cae en los 5 días previos a la elección
+del ámbito o en el propio día, **o** en la misma ventana de la elección general (la próxima de `es`), porque
+la prohibición de publicar sondeos (LOREG art. 69.7) es general. El motivo nombra la elección que cierra la
+ventana (la propia tiene prioridad), por ejemplo `es-md 2027-05-23: inside the LOREG window (art. 69.7) of es
+2026-11-29; pass force=true to publish`. Un ámbito sin elección próxima se salta (`skipped`, `no upcoming
+event`). `event`, `backtest`, `manifest`, `point` y `unpublish` no pasan por la guarda.
+
+`{"force":true}` publica igualmente: el `forecast` queda marcado con `meta.freeze: true` y el `analysis` no
+deja marca (su `meta` no la tiene). La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y
+ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con `what: ["manifest"]` (ver
+"Veda").
 
 ### Duraciones medidas
 

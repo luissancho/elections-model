@@ -305,17 +305,46 @@ def test_history_is_rebuilt_from_complete_runs_and_is_idempotent(tmp_path):
 
 def test_manifest_merges_scopes_and_freeze(tmp_path):
     writer = make_writer(tmp_path)
-    assert publish.read_manifest(writer)['scopes'] == {} and publish.read_manifest(writer)['freeze'] == {'active': False, 'message': None}
+    assert publish.read_manifest(writer)['scopes'] == {} and publish.read_manifest(writer)['freeze'] == {'active': False, 'message': None, 'since': None}
     publish.update_manifest(writer, {'es': {'latest': RUN}, 'es-md': {'latest': RUN}})
     data = publish.update_manifest(writer, {'es': {'latest': '20261009-120000'}})
     assert data['scopes'] == {'es': {'latest': '20261009-120000'}, 'es-md': {'latest': RUN}}
     assert data['updated_at'] == '2026-10-08T12:00:00Z' and data['attribution'] == publish.ATTRIBUTION
-    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'})
-    assert data['freeze'] == {'active': True, 'message': 'Veda electoral'} and len(data['scopes']) == 2
-    assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None}
+    data = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda electoral'}, today='2026-11-23')
+    assert data['freeze'] == {'active': True, 'message': 'Veda electoral', 'since': '2026-11-23'} and len(data['scopes']) == 2
+    assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None, 'since': None}
     with pytest.raises(ValueError, match='active'):
         publish.update_manifest(writer, freeze={'message': 'x'})
     bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
+
+
+def test_loreg_guard_covers_the_national_window_for_every_scope():
+    with pytest.raises(publish.PublishRefused, match=r'es-md 2027-05-23: inside the LOREG window \(art\. 69\.7\) of es 2026-11-29'):
+        publish.loreg_guard('es-md', '2027-05-23', today='2026-11-25', national='2026-11-29')
+    assert publish.loreg_guard('es-md', '2027-05-23', today='2026-11-25', national='2026-11-29', force=True) is True
+    assert publish.loreg_guard('es-md', '2027-05-23', today='2026-11-20', national='2026-11-29') is False
+    with pytest.raises(publish.PublishRefused, match='of es-md 2026-11-27'):
+        publish.loreg_guard('es-md', '2026-11-27', today='2026-11-25')
+    with pytest.raises(publish.PublishRefused):
+        publish.loreg_guard('es', '2026-11-29', today='2026-11-29')
+
+
+def test_update_manifest_stamps_since_on_activation(tmp_path):
+    writer = make_writer(tmp_path)
+    assert publish.read_manifest(writer)['freeze'] == {'active': False, 'message': None, 'since': None}
+    on = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')['freeze']
+    assert on == {'active': True, 'message': 'Veda', 'since': '2026-11-23'}
+    again = publish.update_manifest(writer, freeze={'active': True, 'message': 'Veda (2)'}, today='2026-11-24')['freeze']
+    assert again['since'] == '2026-11-23' and again['message'] == 'Veda (2)'
+    assert publish.update_manifest(writer, freeze={'active': False})['freeze'] == {'active': False, 'message': None, 'since': None}
+
+
+def test_read_manifest_adds_since_to_an_old_manifest(tmp_path):
+    writer = make_writer(tmp_path)
+    writer.write_json(bundle.path_manifest(), 'manifest', {
+        'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {}, 'freeze': {'active': True, 'message': 'x'},
+        'attribution': dict(publish.ATTRIBUTION)}, scope=None)
+    assert publish.read_manifest(writer)['freeze'] == {'active': True, 'message': 'x', 'since': None}
 
 
 def test_point_and_unpublish(tmp_path):
@@ -340,9 +369,9 @@ def test_point_and_unpublish(tmp_path):
         publish.unpublish(writer, 'es', RUN)
 
 
-def test_loreg_guard_only_blocks_es_in_the_five_days_before_the_election():
+def test_loreg_guard_blocks_an_election_in_the_five_days_before_it():
     assert publish.loreg_guard('es', '2026-11-29', today='2026-11-23') is False
-    assert publish.loreg_guard('es-md', '2026-11-29', today='2026-11-27') is False
+    assert publish.loreg_guard('es-md', '2026-11-29', today='2026-11-18') is False
     with pytest.raises(publish.PublishRefused, match='LOREG'):
         publish.loreg_guard('es', '2026-11-29', today=date(2026, 11, 24))
     with pytest.raises(publish.PublishRefused):

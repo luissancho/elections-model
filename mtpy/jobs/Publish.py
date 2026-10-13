@@ -170,6 +170,8 @@ class Publish(Job):
         failures = []
         lines = []
 
+        national = publish.next_event_date('es') if ('forecast' in whats or 'analysis' in whats) else None
+
         if 'forecast' in whats:
             entries = {}
             if days is None:
@@ -181,7 +183,7 @@ class Publish(Job):
                           correctors=correctors, verbose=verbose)
             for scope in publish.resolve_scopes(scopes):
                 outcomes, entry = self._forecast_runs(scope, writer, plan, event_date, today, force, dry_run,
-                                                      **params)
+                                                      national=national, **params)
                 results[scope] = outcomes if days is not None else outcomes[0]
                 if any(result['status'] == 'failed' for result in outcomes):
                     failures.append('{} ({})'.format(scope, 'forecast'))
@@ -195,7 +197,7 @@ class Publish(Job):
 
         if 'analysis' in whats:
             for scope in publish.resolve_scopes(scopes):
-                result = self._analysis_scope(scope, writer, verbose)
+                result = self._analysis_scope(scope, writer, verbose, today, force, national)
                 results[scope] = result
                 if result['status'] == 'failed':
                     failures.append('{} ({})'.format(scope, 'analysis'))
@@ -243,7 +245,7 @@ class Publish(Job):
 
         return results
 
-    def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, **params):
+    def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, national=None, **params):
         """
         Publish the runs of one scope and rebuild its history.
 
@@ -269,6 +271,8 @@ class Publish(Job):
             Publish inside the LOREG window anyway.
         dry_run : bool
             Leave the history alone.
+        national : str or None
+            Date of the next election of ``es``, for the LOREG guard of every scope.
         **params
             Forecast parameters.
 
@@ -283,7 +287,7 @@ class Publish(Job):
             ``failed``.
         """
         outcomes = [self._forecast_scope(scope, writer, rid, event_date, today, force,
-                                         skip_existing=day is not None, **params, **extra)
+                                         skip_existing=day is not None, national=national, **params, **extra)
                     for day, rid, extra in plan]
         entry = None
         run_ids = [rid for _, rid, _ in plan]
@@ -340,7 +344,8 @@ class Publish(Job):
             return newest['entry']
         return None
 
-    def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, **params):
+    def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, national=None,
+                        **params):
         """
         Publish the forecast of one scope, converting every outcome into a result dict.
 
@@ -364,6 +369,8 @@ class Publish(Job):
             (``run exists``) and an incomplete one is ``failed`` (``incomplete run exists;
             unpublish it first``), after the event and the LOREG guard are resolved and without
             running the model. Without it, an existing run (``FileExistsError``) is ``failed``.
+        national : str or None
+            Date of the next election of ``es``, for the LOREG guard of every scope.
         **params
             Forecast parameters.
 
@@ -380,7 +387,7 @@ class Publish(Job):
             if value is None:
                 return {'status': 'skipped', 'reason': 'no upcoming event'}
             event = date.fromisoformat(value).isoformat()
-            in_window = publish.loreg_guard(scope, event, today, force)
+            in_window = publish.loreg_guard(scope, event, today, force, national)
             if skip_existing:
                 if writer.exists(bundle.path_part(scope, run_id, 'headline')):
                     return {'status': 'skipped', 'reason': self.RUN_EXISTS}
@@ -396,7 +403,7 @@ class Publish(Job):
             return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
         return {'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds']}
 
-    def _analysis_scope(self, scope, writer, verbose):
+    def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
         """
         Publish the houses analysis of one scope, converting every outcome into a result dict.
 
@@ -408,16 +415,29 @@ class Publish(Job):
             Bundle writer.
         verbose : int
             Verbosity passed to the analysis.
+        today : str or None
+            Date taken as today by the LOREG guard.
+        force : bool
+            Publish inside the LOREG window anyway; the analysis carries no mark of it.
+        national : str or None
+            Date of the next election of ``es``, for the LOREG guard of every scope.
 
         Returns
         -------
         dict
             Result with a ``status``: ``published`` with ``event_date``, ``n_pollsters`` and
-            ``seconds``, ``skipped`` for ``publish.NothingToPublish`` and ``failed`` for any
-            other exception, both with a ``reason``.
+            ``seconds``, ``skipped`` for ``publish.NothingToPublish`` or no upcoming event,
+            ``refused`` for the LOREG guard and ``failed`` for any other exception, all but
+            ``published`` with a ``reason``.
         """
         try:
+            value = publish.next_event_date(scope)
+            if value is None:
+                return {'status': 'skipped', 'reason': 'no upcoming event'}
+            publish.loreg_guard(scope, value, today, force, national)
             out = publish.publish_analysis(scope, writer, verbose=verbose)
+        except publish.PublishRefused as e:
+            return {'status': 'refused', 'reason': str(e)}
         except publish.NothingToPublish as e:
             return {'status': 'skipped', 'reason': str(e)}
         except Exception as e:

@@ -356,7 +356,9 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
 - `contract` (1) y `updated_at` (instante de la última escritura).
 - `scopes`: `{ámbito: entrada}`, con la entrada `{latest, run_at, event_date, as_of, date_last, n_polls}`
   (el `run_id` publicado y los datos de su `headline`). Un ámbito fallido conserva su entrada anterior.
-- `freeze`: `{active, message}`; interruptor editorial que fija el job con `what: ["manifest"]`.
+- `freeze`: `{active, message, since}`; interruptor editorial que fija el job con `what: ["manifest"]`. `since`
+  es la fecha ISO (Europe/Madrid) en que pasó de inactivo a activo, se conserva mientras siga activo y es `null`
+  al desactivarlo; un manifest anterior sin la clave se lee con `since: null`.
 - `attribution`: textos de atribución (`polls`, `results`, `model`). Provisionales; cada escritura del
   manifest la refresca desde `ATTRIBUTION`.
 

@@ -197,7 +197,7 @@ def test_site_reads_the_bundle_and_resolves_latest(site_app):
     assert bundle.loads(site.run_file('es', RUN, 'vote', 'forecast'))['mode'] == 'forecast'
     assert site.run_csv('es', RUN, 'series') == b'date,name\n2026-10-05,PP\n'
     assert site.run_csv('es', RUN, 'vote', 'forecast').startswith(b'name,pct\n')
-    assert site.freeze() == {'active': False, 'message': None}
+    assert site.freeze() == {'active': False, 'message': None, 'since': None}
     for call, status in (
         (lambda: site.latest_run('es-md'), 404), (lambda: site.history('es-md'), 404),
         (lambda: site.run_file('es', '20200101-000000', 'meta'), 404), (lambda: site.run_csv('es', RUN, 'meta'), 404),

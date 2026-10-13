@@ -99,6 +99,20 @@ def test_loreg_window_refuses_es_unless_forced(fresh_app, tmp_path, patched):
     assert result['es']['status'] == 'published' and patched[0][3]['freeze'] is True
 
 
+def test_national_window_refuses_regional_forecast_and_analysis_but_not_events(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+    fs = FileSystem(str(tmp_path))
+    result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-25')
+    assert result['es-cb']['status'] == 'refused' and 'of es 2026-11-29' in result['es-cb']['reason'] and patched == []
+    result = Publish().run(what=['analysis'], scopes=['es-cb'], fs=fs, today='2026-11-25')
+    assert result['es-cb']['status'] == 'refused' and 'es-cb: analysis refused (' in capsys.readouterr().out
+    result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-25', force=True)
+    # el simulador falso de `es-cb` no tiene sondeos: llega a publicar (no `refused`) y la ejecución queda marcada
+    assert result['es-cb']['status'] == 'skipped' and patched[-1][3]['freeze'] is True
+    write_backtest_source(str(tmp_path / 'bt'))
+    assert Publish().run(what=['backtest'], scopes=['es'], fs=fs, today='2026-11-25', source=str(tmp_path / 'bt'))['es']['status'] == 'published'
+
+
 def test_manifest_point_and_unpublish_actions(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 

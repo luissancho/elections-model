@@ -854,38 +854,47 @@ def _today(today: Optional[str | date | datetime] = None) -> date:
 
 
 def loreg_guard(scope: str, event_date: str, today: Optional[str | date | datetime] = None,
-                force: bool = False) -> bool:
-    """Refuse to publish national forecasts in the five days before the election (LOREG art. 69.7).
+                force: bool = False, national: Optional[str] = None) -> bool:
+    """Refuse to publish polls in the five days before an election (LOREG art. 69.7).
+
+    The window covers the day of the election and the five days before it, for the own election of
+    the scope and for the national one, since the ban on polls is general in a national election.
 
     Parameters
     ----------
     scope : str
-        Scope code; only ``'es'`` is guarded.
+        Scope code.
     event_date : str
-        Election date, ``YYYY-MM-DD``.
+        Election date of the scope, ``YYYY-MM-DD``.
     today : str, datetime.date or datetime.datetime, optional
         Current date (``YYYY-MM-DD`` string, date, or datetime reduced with ``.date()``); defaults
         to today in Europe/Madrid.
     force : bool
         Publish even inside the window.
+    national : str, optional
+        Date (``YYYY-MM-DD``) of the next election of ``es``, or ``None`` when there is none.
 
     Returns
     -------
     bool
-        Whether the date falls inside the window.
+        Whether the date falls inside the window of the own election or of the national one.
 
     Raises
     ------
     PublishRefused
-        Inside the window and not forced.
+        Inside the window and not forced; the message names the election that closes the window
+        (the own one first).
     """
     today = _today(today)
-    event = date.fromisoformat(event_date)
-    in_window = scope == 'es' and 0 <= (event - today).days <= 5
-    if in_window and not force:
-        raise PublishRefused('{} {}: inside the LOREG window (art. 69.7); pass force=true to publish'.format(
-            scope, event_date))
-    return in_window
+    guard = None
+    for guard_scope, guard_date in ((scope, event_date), ('es', national)):
+        if guard_date is not None and 0 <= (date.fromisoformat(guard_date) - today).days <= 5:
+            guard = (guard_scope, guard_date)
+            break
+    if guard is not None and not force:
+        raise PublishRefused('{} {}: inside the LOREG window (art. 69.7) of {} {}; pass force=true to publish'.format(
+            scope, event_date, *guard))
+    return guard is not None
 
 
 def backfill_days(spec: dict, today: Optional[str | date | datetime] = None) -> list:
@@ -1762,11 +1771,14 @@ def read_manifest(reader: BundleReader) -> dict:
         Any read error other than a missing manifest (``FileNotFoundError``) propagates.
     """
     try:
-        return reader.read_json(bundle.path_manifest())['data']
+        data = reader.read_json(bundle.path_manifest())['data']
     except FileNotFoundError:  # only a missing manifest; any other read error must not be overwritten
-        pass
+        data = None
+    if data is not None:
+        data['freeze'] = {'since': None, **(data.get('freeze') or {})}
+        return data
     return {'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {},
-            'freeze': {'active': False, 'message': None}, 'attribution': dict(ATTRIBUTION)}
+            'freeze': {'active': False, 'message': None, 'since': None}, 'attribution': dict(ATTRIBUTION)}
 
 
 def _write_manifest(writer: BundleWriter, data: dict) -> dict:
@@ -1778,7 +1790,8 @@ def _write_manifest(writer: BundleWriter, data: dict) -> dict:
     return data
 
 
-def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze: Optional[dict] = None) -> dict:
+def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze: Optional[dict] = None,
+                    today: Optional[str | date | datetime] = None) -> dict:
     """Merge scope entries and/or the freeze switch into the manifest and write it.
 
     Parameters
@@ -1788,7 +1801,11 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
     scopes : dict, optional
         Entries by scope code; each replaces the existing entry of its scope.
     freeze : dict, optional
-        ``{'active': bool, 'message': str | None}``.
+        ``{'active': bool, 'message': str | None}``. The manifest stores it with ``since``: the date
+        (Europe/Madrid) it went from inactive to active, kept while it stays active and ``None`` when
+        it is switched off.
+    today : str, datetime.date or datetime.datetime, optional
+        Date taken as today for ``since``, as in ``loreg_guard``.
 
     Returns
     -------
@@ -1805,7 +1822,11 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
     data = read_manifest(writer)
     data['scopes'].update(scopes or {})
     if freeze is not None:
-        data['freeze'] = {'active': freeze['active'], 'message': freeze.get('message')}
+        previous = data['freeze']
+        since = None
+        if freeze['active']:
+            since = previous['since'] if previous.get('active') and previous.get('since') else _today(today).isoformat()
+        data['freeze'] = {'active': freeze['active'], 'message': freeze.get('message'), 'since': since}
     return _write_manifest(writer, data)
 
 
