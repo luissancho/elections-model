@@ -1,0 +1,96 @@
+{
+  "family": "elections-web",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "taskRoleArn": "<task-role-read>",
+  "executionRoleArn": "<execution-role>",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "<account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>",
+      "essential": true,
+      "environment": [
+        {
+          "name": "APP_ENV",
+          "value": "production"
+        },
+        {
+          "name": "APP_API",
+          "value": "1"
+        },
+        {
+          "name": "APP_VERBOSE",
+          "value": ""
+        },
+        {
+          "name": "DB_ADAPTER",
+          "value": "postgres"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "<rds-host>"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "DB_USERNAME",
+          "value": "<db-user>"
+        },
+        {
+          "name": "DB_DATABASE",
+          "value": "<db-name>"
+        },
+        {
+          "name": "DB_STATEMENT_TIMEOUT",
+          "value": "10000"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<region>"
+        },
+        {
+          "name": "S3_BUCKET",
+          "value": "<bucket>"
+        },
+        {
+          "name": "CWL_GROUP",
+          "value": "<log-group>"
+        },
+        {
+          "name": "GUNICORN_WORKERS",
+          "value": "2"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "<secret-arn>"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "<log-group>",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "web"
+        }
+      },
+      "portMappings": [
+        {
+          "containerPort": 8042,
+          "protocol": "tcp"
+        }
+      ]
+    }
+  ]
+}

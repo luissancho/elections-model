@@ -46,8 +46,8 @@ class S3(FileSystem):
 
     def connection(self) -> Self:
         self._client = S3FileSystem(
-            key=self.aws_params['key'],
-            secret=self.aws_params['secret']
+            key=self.aws_params.get('key') or None,
+            secret=self.aws_params.get('secret') or None
         )
 
     def get_path(self, name: str, force: bool = False) -> str:

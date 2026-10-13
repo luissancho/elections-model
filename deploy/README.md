@@ -8,6 +8,10 @@ Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>`
   las claves de AWS/S3 que ya usa el proyecto. Está ignorado por git y excluido de la imagen por
   `.dockerignore`; se inyecta en tiempo de ejecución con `--env-file`.
 - Plantilla con todas las claves (valores vacíos): `.env.example` en la raíz del repositorio.
+- `GUNICORN_WORKERS` fija los workers de gunicorn (4 si se deja vacío; `init.sh` lo exporta antes de arrancar
+  supervisord). En ECS, `AWS_KEY` y `AWS_SECRET` se dejan vacíos: `S3` pasa entonces `None` a `s3fs` y se usa la
+  cadena de credenciales de botocore (el rol de la tarea). `deploy/elections.env` sigue siendo el entorno del
+  portátil (y de `docker run` en local), no el de la web en ECS.
 
 ## Construir la imagen
 
@@ -207,6 +211,68 @@ las rutas de `events` y `backtest`; `smoke.sh`, las tres páginas. Contra uvicor
 (`S3_BUCKET=` y `DB_HOST=` vacíos, solo el backtest de `es` publicado en local) dio todas las rutas OK: las de base
 `n/a sin base de datos` y las de la elección 2023-07-23 `n/a sin publicar`. Los pendientes de la fase 5 están en
 el estado al cierre de la fase 5 de la spec.
+
+## Despliegue en ECS
+
+La web corre como un servicio de ECS Fargate detrás de un ALB (host raíz, sin prefijo de ruta); las publicaciones
+se lanzan como tareas puntuales (ver "Publicar desde ECS"). Las plantillas están en `deploy/ecs/` (JSON puro, sin
+comentarios; los valores entre `<>` son marcadores que hay que sustituir):
+`task-web.example.json` (servicio web), `task-job.example.json` (jobs) y `run-task.example.json` (argumentos de
+`aws ecs run-task`).
+
+### Qué debe existir en AWS
+
+- Un clúster de ECS (`<cluster>`) y un repositorio de ECR `elections-web`.
+- Un servicio de ECS Fargate con la definición `elections-web`, con 2 tareas como mínimo, registrado en un target
+  group (puerto 8042, protocolo HTTP) con health check en `/api/v1/health`, cada 30 s y 2 fallos para marcarlo
+  no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group.
+- Grupos de seguridad: el del ALB (entrada 443 desde internet), el de las tareas (entrada 8042 solo desde el
+  ALB) y acceso desde el de las tareas al puerto 5432 de la RDS. Las tareas necesitan salida a internet
+  o endpoints de VPC para ECR, S3, CloudWatch Logs y Secrets Manager.
+- Rol de tarea de lectura (`<task-role-read>`): `s3:GetObject` sobre `arn:aws:s3:::<bucket>/site/*` y
+  `s3:ListBucket` sobre `arn:aws:s3:::<bucket>` (condición de prefijo `site/*`). Es el que lee la web.
+- Rol de tarea de escritura (`<task-role-write>`): lo anterior más `s3:PutObject` y `s3:DeleteObject` sobre
+  `site/*` y `site-dry/*`. Solo para la definición `elections-job`.
+- Rol de ejecución (`<execution-role>`): `AmazonECSTaskExecutionRolePolicy` más `secretsmanager:GetSecretValue`
+  sobre el secreto de `DB_PASSWORD`.
+- Un grupo de logs de CloudWatch (`<log-group>`), usado por `awslogs` y por `CWL_GROUP` (logger de la aplicación).
+- Un secreto con la contraseña de la base (`<secret-arn>`), que ECS inyecta como `DB_PASSWORD`.
+
+### Marcadores de las plantillas
+
+| Marcador | Significado |
+| --- | --- |
+| `<account>`, `<region>`, `<tag>` | Cuenta de AWS, región y etiqueta de la imagen en ECR |
+| `<rds-host>`, `<db-user>`, `<db-name>` | Host, usuario y base de datos de la RDS (`DB_HOST`, `DB_USERNAME`, `DB_DATABASE`) |
+| `<bucket>` | Bucket de S3 (`S3_BUCKET`) |
+| `<log-group>` | Grupo de logs de CloudWatch (`awslogs-group` y `CWL_GROUP`) |
+| `<secret-arn>` | ARN del secreto con la contraseña (`DB_PASSWORD`) |
+| `<task-role-read>`, `<task-role-write>` | Roles de tarea de la web (lectura) y de los jobs (escritura) |
+| `<execution-role>` | Rol de ejecución (descarga la imagen, escribe logs, lee el secreto) |
+| `<cluster>` | Clúster en el que se lanzan los jobs |
+| `<subnet-id>`, `<security-group-id>` | Subred y grupo de seguridad de la tarea de job (necesita acceso a la RDS) |
+
+La web usa 1 vCPU y 2 GB con `GUNICORN_WORKERS=2` y `DB_STATEMENT_TIMEOUT=10000`; el job usa 2 vCPU y 4 GB y deja
+`DB_STATEMENT_TIMEOUT` vacío (sin límite). Ninguna plantilla lleva `AWS_KEY` ni `AWS_SECRET`: las credenciales
+salen del rol de la tarea.
+
+### Procedimiento
+
+```
+aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
+docker build --platform linux/amd64 -t elections-web:<tag> .
+docker tag elections-web:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
+docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
+aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-web.example.json
+aws ecs update-service --cluster <cluster> --service elections-web --task-definition elections-web --force-new-deployment
+bash deploy/check-api.sh https://<host>
+```
+
+Copia la plantilla a un fichero local con los marcadores ya sustituidos antes de registrarla (los
+`*.example.json` del repositorio no se editan con datos reales). `check-api.sh` imprime
+`info cliente según nginx: <ip>`: detrás del ALB debe ser tu IP pública; si es una IP privada avisa con `WARN`.
+nginx confía en `127.0.0.1` y en los rangos privados (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) para
+leer `X-Forwarded-For` del ALB; así `limit_req` y los logs ven al cliente real.
 
 ## Comprobar S3
 
@@ -467,6 +533,22 @@ docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["fo
 ```
 
 Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pasos.
+
+### Publicar desde ECS
+
+Registra la definición `elections-job` desde `deploy/ecs/task-job.example.json` (marcadores sustituidos) y lanza
+la tarea con `deploy/ecs/run-task.example.json` (también con los marcadores sustituidos):
+
+```
+aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-job.example.json
+aws ecs run-task --cli-input-json file://deploy/ecs/run-task.example.json
+```
+
+El override de `RUN_JOB` lleva el JSON sin espacios (`init.sh` no entrecomilla): cambia `what`, `scopes` y el
+resto de parámetros en ese valor. La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
+prefijo `job`). El rol de jobs (`<task-role-write>`) escribe en `site/*` y `site-dry/*`; la web, con el rol de
+lectura, no puede escribir. Mide la memoria de `publish forecast all` antes de fiarte de los 4 GB de la plantilla
+(la tarea 4 de la fase 6 lo mide en local).
 
 ### Veda
 

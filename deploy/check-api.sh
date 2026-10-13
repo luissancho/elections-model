@@ -57,6 +57,14 @@ case "$out" in
         if [ "$(cat "$body")" = ok ]; then
             has_nginx=1
             echo "OK   /healthz (200)"
+            # IP del cliente tal como la ve nginx (X-Client-IP): detras de un ALB debe ser la publica.
+            client_ip="$(curl -s -D - -o /dev/null --max-time 20 "$base/healthz" | tr -d '\r' | awk 'tolower($1) == "x-client-ip:" {print $2; exit}' || true)"
+            echo "info cliente según nginx: ${client_ip:-ausente}"
+            host="${base#*://}"; host="${host%%/*}"; host="${host%%:*}"
+            if [[ "$host" != 127.0.0.1 && "$host" != localhost ]] \
+                && [[ "$client_ip" =~ ^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]]; then
+                echo "WARN cliente según nginx es privado ($client_ip): revisa set_real_ip_from y X-Forwarded-For del ALB"
+            fi
         else
             echo "FAIL /healthz: 200 sin cuerpo 'ok'"; failures=$((failures + 1))
         fi ;;

@@ -1,0 +1,30 @@
+{
+  "cluster": "<cluster>",
+  "taskDefinition": "elections-job",
+  "launchType": "FARGATE",
+  "count": 1,
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": [
+        "<subnet-id>"
+      ],
+      "securityGroups": [
+        "<security-group-id>"
+      ],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "overrides": {
+    "containerOverrides": [
+      {
+        "name": "job",
+        "environment": [
+          {
+            "name": "RUN_JOB",
+            "value": "publish {\"what\":[\"forecast\"],\"scopes\":\"all\"}"
+          }
+        ]
+      }
+    ]
+  }
+}

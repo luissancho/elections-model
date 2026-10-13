@@ -19,6 +19,7 @@ else
     fi
 
     if [ ${#SERVICES[@]} -gt 0 ] ; then
+        export GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"
         echo "Run supervisord..."
         supervisord -c /etc/supervisord.conf
 

@@ -1,0 +1,86 @@
+{
+  "family": "elections-job",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "2048",
+  "memory": "4096",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "taskRoleArn": "<task-role-write>",
+  "executionRoleArn": "<execution-role>",
+  "containerDefinitions": [
+    {
+      "name": "job",
+      "image": "<account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>",
+      "essential": true,
+      "environment": [
+        {
+          "name": "APP_ENV",
+          "value": "production"
+        },
+        {
+          "name": "APP_VERBOSE",
+          "value": ""
+        },
+        {
+          "name": "DB_ADAPTER",
+          "value": "postgres"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "<rds-host>"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "DB_USERNAME",
+          "value": "<db-user>"
+        },
+        {
+          "name": "DB_DATABASE",
+          "value": "<db-name>"
+        },
+        {
+          "name": "DB_STATEMENT_TIMEOUT",
+          "value": ""
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<region>"
+        },
+        {
+          "name": "S3_BUCKET",
+          "value": "<bucket>"
+        },
+        {
+          "name": "CWL_GROUP",
+          "value": "<log-group>"
+        },
+        {
+          "name": "RUN_JOB",
+          "value": ""
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "<secret-arn>"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "<log-group>",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "job"
+        }
+      }
+    }
+  ]
+}
