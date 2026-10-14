@@ -9,7 +9,6 @@
 {% set with_herding = false %}
     <div id="content" class="stack">
       {% if events %}
-      {{ m.headline(headline_text) }}
       {{ m.card_start('filters', 'Filtros', 'Elige un ámbito, una elección, una encuestadora o unos años para ver solo sus sondeos en las cifras, la evolución, el histograma, la diana y la tabla por semanas.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>

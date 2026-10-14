@@ -6,7 +6,6 @@ from typing import Optional
 from .. import webapi
 from ..webapi import query_pollster, query_ratings, site
 from .common import api_url, bundle_part, common_context, scope_query
-from .filters import fmt_num
 
 RATING_SCOPE = 'es'
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
@@ -82,52 +81,6 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
         rows.append(row)
 
     return sorted(rows, key=lambda row: row['rating'], reverse=True)
-
-
-def ranking_headline(ranking: list) -> Optional[str]:
-    """
-    Headline of the houses page.
-
-    Parameters
-    ----------
-    ranking : list of dict
-        Rows of ``ranking_rows``, best rated first.
-
-    Returns
-    -------
-    str or None
-        The number of rated houses and the best rated one with its rating; ``None`` without ranking.
-    """
-    if not ranking:
-        return None
-
-    best = ranking[0]
-
-    return '{} encuestadoras con rating para la próxima elección; la mejor valorada es {} ({}).'.format(
-        len(ranking), best['pollster'], fmt_num(best['rating'], 1))
-
-
-def profile_headline(name: str, current: dict) -> str:
-    """
-    Headline of a pollster profile.
-
-    Parameters
-    ----------
-    name : str
-        Pollster name.
-    current : dict
-        ``rating`` and ``quality`` of its next-election row (``None`` when missing).
-
-    Returns
-    -------
-    str
-        The rating and prior quality of the house in plain words, or that it has no rating in the scope.
-    """
-    if current.get('rating') is None:
-        return '{}: sin rating en este ámbito.'.format(name)
-
-    return '{}: rating {} de 100, calidad previa {}.'.format(
-        name, fmt_num(current.get('rating'), 1), fmt_num(current.get('quality'), 1))
 
 
 def house_effects_grid(part: dict) -> dict:
@@ -296,7 +249,6 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         ]
 
     context['ranking'] = ranking
-    context['headline_text'] = ranking_headline(ranking)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
     context['analysis_missing'] = missing
@@ -368,7 +320,6 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
     context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
     context['path'] = path
-    context['headline_text'] = profile_headline(name, context['current'])
     context['effects_table'] = effects_table(profile['house_effects'])
     context['herding_table'] = profile_rows(profile['herding'], HERDING_KEYS)
     context['bullseye'] = bullseye

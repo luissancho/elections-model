@@ -929,6 +929,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
     assert 'Cada fila es una encuestadora con rating para la próxima elección' in page
+    assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert not re.search(r'\ba el\b', page) and 'al primer bloque' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
@@ -972,7 +973,8 @@ def test_casas_without_database_is_a_503_page(api):
 
 def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     page = html(call(houses, '/casas', query='scope=es&id=2')[2])
-    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'id="bullseye-chart"' in page
+    assert '<h2>GAD3' in page and 'id="rating-path"' in page and 'class="chart big" id="bullseye-chart"' in page
+    assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas', query='scope=es&id=2')[2])
     assert list(data) == ['state', 'meta', 'path', 'bullseye', 'blocks'] and data['path'][0]['event_date'] == '2023-07-23'
@@ -1027,7 +1029,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     status, _, body = call(houses, '/casas', query='id=4')
     page = html(body)
     assert status == 200 and '<h2>Nueva' in page and 'Calidad: – · Rating: –' in page
-    assert 'Nueva: sin rating en este ámbito.' in page
+    assert 'class="headline"' not in page  # el perfil no lleva titular (2026-10-15)
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
@@ -1143,14 +1145,14 @@ def test_elecciones_only_counts_the_published_elections(history_site, fresh_app)
     assert {row['event_date'] for row in data['errors']} <= {'2023-07-23', '2019-11-10'}
     assert [e['date'] for e in data['events']] == ['2023-07-23', '2019-11-10'] and data['error_blocks'] == ['Derecha', 'Izquierda']
     page = html(call(history_site, '/elecciones')[2])
-    assert 'En las 2 elecciones analizadas (todas generales)' in page and 'id="errors-filter"' in page and 'id="errors-histogram"' in page
+    assert 'elecciones analizadas' not in page and 'id="errors-filter"' in page and 'id="errors-histogram"' in page
     assert 'id="errors-bullseye"' in page and 'id="weeks-table"' in page and 'Sesgo de bloques' not in page and 'Desviación hacia' not in page
     assert 'id="glosario"' in page and '¿Cómo calculamos el rating de las encuestadoras?' in page
 
 
 def test_elecciones_without_analysis_keeps_the_list(events_site):
     page = html(call(events_site, '/elecciones')[2])
-    assert 'Análisis no publicado todavía' in page and 'id="events-table"' in page and '2 elecciones analizadas' in page
+    assert 'Análisis no publicado todavía' in page and 'id="events-table"' in page and 'class="headline"' not in page
 
 
 def test_eleccion_detail_has_the_error_histogram_and_the_glossary(events_site):
@@ -1160,7 +1162,7 @@ def test_eleccion_detail_has_the_error_histogram_and_the_glossary(events_site):
     assert initial(body)['poll_errors'][0].keys() >= {'error_avg', 'error_blocks_abs'}
 
 
-def test_elecciones_history_context_filters_and_headline(history_site):
+def test_elecciones_history_context_filters(history_site):
     context = pages.elecciones_context(pages.parse_state({'scope': 'es'}))
     assert not context['analysis_missing'] and len(context['errors']) == 2
     assert context['filter_events'] == [
@@ -1168,8 +1170,7 @@ def test_elecciones_history_context_filters_and_headline(history_site):
         {'key': 'es:2019-11-10', 'date': '2019-11-10', 'name': 'Generales 2023', 'scope': 'es', 'scope_name': 'España'}]
     assert context['years'] == [2023] and context['selected_scope'] == 'es'
     assert context['filter_pollsters'] == ['GAD3', 'Sigma Dos']
-    assert context['headline_text'] == ('En las 2 elecciones analizadas (todas generales), el último sondeo de cada encuestadora se '
-                                        'desvió de media 3,6 puntos en el margen entre bloques.')
+    assert 'headline_text' not in context  # sin titular desde 2026-10-15
     assert all(row['error_blocks_abs'] == abs(row['error_blocks']) for row in context['errors'])
     assert set(context['initial']) == {'state', 'scopes', 'events', 'errors', 'error_blocks', 'years', 'selected_scope'}
     assert pages.error_rows('es', ['2019-11-10']) == [] and pages.error_rows('es-md', ['2023-07-23']) is None
@@ -1178,6 +1179,7 @@ def test_elecciones_history_context_filters_and_headline(history_site):
         < page.index('id="bullseye"') < page.index('id="weeks"') < page.index('id="events"') < page.index('id="glosario"') \
         < page.index('id="closing"')
     assert 'id="complements"' in page and 'id="trend-chart"' in page and 'id="sector-chart"' not in page
+    assert 'class="headline"' not in page
     assert 'id="weeks-note"' in page and 'Elige un ámbito o unos años para ver las elecciones una a una.' in page
     assert '<option value="es:2019-11-10" data-scope="es">' in page and '<option value="Sigma Dos">' in page
     assert 'positivo, el sondeo daba más margen a Derecha del que hubo' in page
@@ -1209,7 +1211,6 @@ def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     for name in ('eleccion', 'casa', 'desde', 'hasta'):
         assert 'name="{}"'.format(name) in page
     assert 'id="errors-measure"' in page and page.index('id="errors-measure"') < page.index('id="histogram"')
-    assert '3 elecciones analizadas (2 generales y 1 autonómica)' in page
     assert re.search(r'<tr data-scope="es-md" data-date="2021-05-04" data-year="2021">', page)
     assert '<p class="muted" id="events-count">3 elecciones</p>' in page and 'href="/casas"' in page
     data = initial(body)
@@ -1252,14 +1253,6 @@ def test_error_blocks_come_from_the_first_scope_with_two_and_parts_are_read_once
     assert pages.error_blocks(scopes, {}) == []
 
 
-def test_history_headline_singular():
-    es = {'scope': 'es'}
-    md = {'scope': 'es-md'}
-    rows = [{'error_blocks_abs': 1.0}]
-    assert '(1 general y 1 autonómica)' in pages.history_headline([es, md], rows)
-    assert '(2 generales y 1 autonómica)' in pages.history_headline([es, es, md], rows)
-
-
 def test_elecciones_scope_query_preselects_the_scope_or_falls_back(history_two_scopes, fresh_app):
     page = html(call(history_two_scopes, '/elecciones', query='scope=es-md')[2]).replace('\n', ' ')
     assert re.search(r'<option value="es-md" selected>Madrid</option>', page)
@@ -1285,8 +1278,6 @@ def test_history_helpers_skip_scopes_without_events_or_analysis(history_two_scop
     assert [e['scope'] for e in events] == ['es', 'es-md', 'es', 'es-ar']
     rows = pages.history_rows(scopes, events)
     assert {row['scope'] for row in rows} == {'es', 'es-md'}
-    assert pages.history_headline(events, rows).startswith('En las 4 elecciones analizadas (2 generales y 2 autonómicas)')
-    assert pages.history_headline(events, None) == '4 elecciones analizadas.'
 
 
 def test_elecciones_without_events_shows_a_notice(api):
@@ -1881,7 +1872,7 @@ def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
     for token in ('--color-bg: #f4f5f8;', '--color-card: #fff;', '--color-soft: #eceef2;', '--radius: 12px;', '--shadow: 0 2px 8px rgba(0,0,0,.06);', '--color-faint:'):
         assert token in css, token
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
-    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
+    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 100ch' in css and '.pill {' in css
     assert '.geo th:first-child' in css and '.geo tr.total td:first-child { background: var(--color-soft); }' in css
     hemi = css[css.index('.hemi-grid'):css.index('/* Escaños')]
     assert 'align-items: stretch' in css and '.hemi-card { display: flex; flex-direction: column; }' in css
@@ -1897,7 +1888,7 @@ def test_controls_are_segments_on_every_page(api):
 
 def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     page = html(call(houses, '/casas')[2])
-    assert 'encuestadoras con rating' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
+    assert 'class="headline"' not in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
     assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
     ranking = page[page.index('id="ranking-table"'):]
     heads = re.findall(r'<th scope="col">([^<]*)</th>', ranking[:ranking.index('</thead>')])

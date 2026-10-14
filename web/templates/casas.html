@@ -10,7 +10,6 @@
 {% set with_block_error = false %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
-      {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
       {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos; no depende del ámbito elegido arriba: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
         {% if ranking %}
         <div class="chart" id="rating-chart" role="img" aria-label="Rating de cada encuestadora para la próxima elección"></div>

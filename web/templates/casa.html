@@ -10,7 +10,6 @@
 {% set with_block_error = false %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
-      {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
       <p class="back"><a href="/casas{{ scope_query }}">← Todas las encuestadoras</a></p>
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora en este ámbito: su tipo, su calidad previa y el rating con el que entra en el promedio.') }}
         <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
@@ -55,7 +54,7 @@
       {{ m.card_end() }}
       {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección en cada bloque.') }}
         {% if bullseye %}
-        <div class="chart" id="bullseye-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en cada elección por bloque"></div>
+        <div class="chart big" id="bullseye-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en cada elección por bloque"></div>
         <div class="table-wrap">
           <table id="bullseye-table">
             <caption>Error de su último sondeo antes de cada elección (sondeo menos resultado).</caption>

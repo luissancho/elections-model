@@ -198,3 +198,10 @@ del tooltip de la evolución y de la columna "Ámbito" de la tabla de elecciones
 tooltip de la diana, donde las filas solo traían el código corto (`2023-23J`), ahora va el nombre completo de la
 elección (`name`, que `wireHistory` añade a cada fila desde `events`); sin nombre se conserva "{código} · {ámbito}",
 porque el código solo es ambiguo entre ámbitos que votaron el mismo día.
+
+## Ajuste 2026-10-15: sin titular
+
+Luis: "Elimina el texto de cabecera en 'Histórico Errores' y 'Ranking Encuestadoras'". Quitados el titular del
+histórico (`history_headline`, `headline_text`), el del ranking y el del perfil de una encuestadora (los tres
+constructores y sus pruebas); `m.headline` queda para Inicio y las páginas del método. En la misma tanda: los textos
+de tarjeta pasan de 72 a 100 ch y la diana del perfil toma la clase `big` (720 px, centrada).
