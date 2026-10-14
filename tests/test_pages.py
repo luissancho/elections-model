@@ -1673,6 +1673,7 @@ def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
 def test_fonts_are_vendored_and_declared():
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert 'SourceSerif4-4.005-Semibold.woff2' in css and 'SourceSans3-3.052-Regular.woff2' in css
+    assert 'SourceSans3-3.052-Semibold.woff2' in css and 'font-weight: 600' in css  # negritas reales, también en los lienzos
     assert "url('/dist/vendor/fonts/" in css and 'font-display: swap' in css
     assert os.path.isfile(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'vendor', 'fonts', 'LICENSE'))
 

@@ -4,7 +4,8 @@
  * catalogue and block colours from THEME (charts/base.js); nothing here overrides them. No dark mode.
  */
 
-/* Fonts: vendored woff2 (SIL OFL, see /dist/vendor/fonts/LICENSE); bold body text is synthesised */
+/* Fonts: vendored woff2 (SIL OFL, see /dist/vendor/fonts/LICENSE): the serif in semibold for the headings, the sans
+   in regular and semibold (bold body text and the bold labels drawn on the chart canvases use the semibold) */
 @font-face {
   font-family: 'Source Serif 4';
   src: url('/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2') format('woff2');
@@ -17,6 +18,14 @@
   font-family: 'Source Sans 3';
   src: url('/dist/vendor/fonts/SourceSans3-3.052-Regular.woff2') format('woff2');
   font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/dist/vendor/fonts/SourceSans3-3.052-Semibold.woff2') format('woff2');
+  font-weight: 600;
   font-style: normal;
   font-display: swap;
 }

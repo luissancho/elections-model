@@ -31,7 +31,8 @@ export function ridgeHeight(n, rowHeight) {
  * @param {object} opts `colors` ({name: colour}), `majority` (seats of the absolute majority; the dashed line is
  *   drawn in the rows whose range holds it, labelled on the first), `rowHeight` (px per row, 144 by default),
  *   `fullnames` ({name: full name}, tooltip) and `guideEvery` (seats between the faint dashed vertical guides;
- *   10 by default, 20 on narrow containers). The row label reads the name, `Mediana: …` and `Rango 95 %: …`.
+ *   10 by default, 20 on narrow containers; the labelled axis shows a number at each). The row label reads the
+ *   name, `Mediana: …` and `Rango 95 %: …`, with the name and the figures in bold.
  *   When every row shares the same range, only the last row shows the axis labels; otherwise each row shows its own.
  * @returns {object} the ECharts instance
  */
@@ -56,7 +57,8 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     gridIndex: index,
     min: row.x0,
     max: row.x1,
-    minInterval: 1,
+    // A tick (and, on the labelled row, a number) at every guide
+    interval: every,
     axisLine: {show: true, lineStyle: {color: THEME.gridColor}},
     axisTick: {show: !shared || index === last, lineStyle: {color: THEME.gridColor}},
     axisLabel: {show: !shared || index === last, fontSize: 10, color: THEME.markColor, formatter: (value) => fmtInt(value)},
@@ -111,10 +113,13 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     left: 8,
     top: TOP + index * rowHeight + curveHeight / 2 - 24,
     style: {
-      text: `${row.name}\nMediana: ${fmtInt(row.median)}\nRango 95 %: ${fmtRange(row.lo, row.hi, 0)}`,
+      // Rich text: the name, the median and the range in bold, the captions in regular weight
+      text: `{b|${row.name}}\nMediana: {b|${fmtInt(row.median)}}\nRango 95 %: {b|${fmtRange(row.lo, row.hi, 0)}}`,
       fill: THEME.textColor,
-      font: `${narrow ? 10.5 : 12}px ${THEME.fontFamily}`,
+      fontSize: narrow ? 10.5 : 12,
+      fontFamily: THEME.fontFamily,
       lineHeight: 16,
+      rich: {b: {fontWeight: 600, fontSize: narrow ? 10.5 : 12, fontFamily: THEME.fontFamily, fill: THEME.textColor}},
     },
   }));
 
