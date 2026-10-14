@@ -207,6 +207,30 @@ def default_mode(frozen: bool) -> str:
     return 'forecast' if frozen else 'nowcast'
 
 
+def analysis_part(scope: str, name: str) -> Optional[dict]:
+    """
+    Data of a part of the published houses analysis of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    name : str
+        Part name, one of ``bundle.ANALYSIS_PARTS``.
+
+    Returns
+    -------
+    dict or None
+        The ``data`` member of the part envelope, or ``None`` when the part is not published.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than the 404 of an unpublished analysis.
+    """
+    return bundle_part(site().analysis, scope, name)
+
+
 def published_scopes() -> list:
     """
     Scopes with a published forecast, in catalogue order.

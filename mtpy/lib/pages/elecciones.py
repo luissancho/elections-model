@@ -5,8 +5,7 @@ from typing import Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, site
-from .casas import analysis_part
-from .common import api_url, bundle_part, common_context, published_scopes
+from .common import analysis_part, api_url, bundle_part, common_context, published_scopes
 from .filters import fmt_num
 from .promedios import chart_polls, poll_months, polls_table, pollster_options
 

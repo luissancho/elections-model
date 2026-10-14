@@ -9,16 +9,15 @@
 {% set with_herding = true %}
 {% set with_block_error = false %}
     <div id="content" class="stack">
-      <p class="back"><a href="/casas{{ scope_query }}">← Todas las encuestadoras</a></p>
-      {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su calidad previa y el rating con el que entra en el promedio, el mismo en todos los ámbitos. El ámbito elegido aquí manda en el resto de la página.') }}
+      <p class="back"><a href="/casas">← Todas las encuestadoras</a></p>
+      {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su calidad previa y el rating con el que entra en el promedio, el mismo en todos los ámbitos. Debajo, su historial en las elecciones de todos los ámbitos.') }}
         <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
-        {% include '_scope_filter.html' +%}
       {{ m.card_end() }}
-      {{ m.card_start('path', 'Camino al rating', 'El rating de la encuestadora en cada elección del ámbito, calculado con lo que se sabía antes de ella.') }}
+      {{ m.card_start('path', 'Camino al rating', 'El rating de la encuestadora en cada elección general, calculado con lo que se sabía antes de ella.') }}
         {% if path %}
-        <div class="chart" id="rating-path" role="img" aria-label="Rating de {{ profile.pollster.name }} en cada elección del ámbito"></div>
+        <div class="chart" id="rating-path" role="img" aria-label="Rating de {{ profile.pollster.name }} en cada elección general"></div>
         {% else %}
-        <p class="notice">Esta encuestadora no tiene ratings en este ámbito.</p>
+        <p class="notice">Esta encuestadora no tiene ratings todavía.</p>
         {% endif %}
         <div class="table-wrap">
           <table id="path-table">
@@ -46,13 +45,13 @@
           </table>
         </div>
         {% call m.how() %}
-        <p>Cada fila es una elección del ámbito; el rating ajustado es el que sale solo del error de sus sondeos, antes de mezclarlo con la calidad previa. La última fila es la próxima elección.</p>
+        <p>Cada fila es una elección general; el rating ajustado es el que sale solo del error de sus sondeos, antes de mezclarlo con la calidad previa. La última fila es la próxima elección.</p>
         <p>El último rating es el que entra en el promedio. El sesgo del margen lleva signo y se explica en «Qué mide cada columna».</p>
         <p>Un rating bajo en una elección no condena a la encuestadora en la siguiente.</p>
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección en cada bloque.') }}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque.') }}
         {% if bullseye %}
         <div class="chart big" id="bullseye-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en cada elección por bloque"></div>
         <div class="table-wrap">
@@ -71,7 +70,7 @@
             <tbody>
               {% for row in bullseye %}
               <tr>
-                <td>{{ row.event }}</td>
+                <td>{{ row.name }}</td>
                 <td>{{ row.event_date|date }}</td>
                 <td>{{ row.days|int }}</td>
                 {% for block in blocks %}
@@ -88,12 +87,12 @@
         <p class="notice">Esta encuestadora no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección; la tabla da su error en cada bloque.</p>
+        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección, general o autonómica; la tabla da su error en cada bloque.</p>
         <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
         <p>Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('effects', 'Efectos de encuestadora por elección', 'En cada elección, cuánto se separaron los sondeos de la encuestadora del resultado de cada partido, descontado el error que compartieron todas las encuestadoras.') }}
+      {{ m.card_start('effects', 'Efectos de encuestadora por elección', 'En cada elección de cualquier ámbito, cuánto se separaron los sondeos de la encuestadora del resultado de cada partido, descontado el error que compartieron todas las encuestadoras.') }}
         <div class="table-wrap">
           <table id="profile-effects">
             <caption>Desviación frente al resultado por partido, descontado el error común de todas las encuestadoras.</caption>
@@ -108,7 +107,7 @@
             <tbody>
               {% for row in effects_table.rows %}
               <tr>
-                <td>{{ row.event_date|date }}</td>
+                <td>{{ row.label }}</td>
                 {% for value in row.cells %}
                 <td>{{ value|num(1) }}</td>
                 {% endfor %}
@@ -119,11 +118,11 @@
         </div>
         {% call m.how() %}
         <p>Cada celda es cuánto se separaron los sondeos de la encuestadora del resultado de un partido en una elección, una vez descontado el error que compartieron todas las encuestadoras.</p>
-        <p>Positivo: la encuestadora le daba más voto; negativo, menos.</p>
+        <p>Positivo: la encuestadora le daba más voto; negativo, menos. Un guion es un partido que no concurría en esa elección.</p>
         <p>Una desviación en una elección no quiere decir que la encuestadora se equivoque siempre hacia el mismo lado.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('herding', 'Herding por ciclo', 'La dispersión de los sondeos de la encuestadora en cada ciclo electoral, frente a la que cabría esperar por el tamaño de sus muestras.') }}
+      {{ m.card_start('herding', 'Herding por ciclo', 'La dispersión de los sondeos de la encuestadora en cada ciclo electoral, de cualquier ámbito, frente a la que cabría esperar por el tamaño de sus muestras.') }}
         <div class="table-wrap">
           <table id="profile-herding">
             <caption>Dispersión de sus sondeos frente a la esperable por el tamaño de la muestra, en cada ciclo.</caption>
@@ -138,7 +137,7 @@
             <tbody>
               {% for row in herding_table %}
               <tr>
-                <td>{{ row.event_date|date }}</td>
+                <td>{{ row.label }}</td>
                 <td>{{ row.n|int }}</td>
                 <td>{{ row.ratio|num(2) }}</td>
                 <td>{{ row.p_value|num(3) }}</td>
@@ -155,6 +154,6 @@
       {{ m.card_end() }}
       {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
                    'El rating de cada encuestadora sale de los errores de sus sondeos pasados. El texto del método cuenta cómo se convierten en una sola nota.',
-                   [{'href': '/casas' ~ scope_query, 'label': 'Todas las encuestadoras del ámbito'}]) }}
+                   [{'href': '/casas', 'label': 'Todas las encuestadoras'}]) }}
     </div>
 {% endblock %}

@@ -98,6 +98,7 @@ def test_referenced_assets_exist():
             ref = re.sub(r'\{\{.*?\}\}', '', ref)  # la query de la plantilla (`{{ query }}`) no es parte de la ruta
             ref = ref.split('#')[0]  # ni el ancla (`#limitaciones`)
             ref = ref.split('&amp;')[0]  # ni los parámetros que se añaden a la query (`&amp;region=`)
+            ref = ref.split('?')[0]  # ni una query literal (`/casas?id=`)
             if ref.startswith('/api/'):
                 continue
             if ref.startswith('/dist/') or '.' in ref:

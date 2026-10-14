@@ -105,9 +105,11 @@ Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha
 publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/metodo/backtest` lleva el filtro de ámbito
 (`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS) sobre las
 tarjetas; en `/casas` el ranking es global y el filtro vive dentro de la tarjeta "Efectos de encuestadora" (manda también
-en Herding y en las descargas del análisis) y, en el perfil, dentro de su cabecera (el rating de la cabecera es el
-nacional; el resto del perfil, del ámbito elegido) (2026-10-15); el resto de `/metodo` cita las cifras de las
-generales y no lo lleva. Las subpáginas del método comparten la subnavegación
+en Herding y en las descargas del análisis); el perfil de una encuestadora (`/casas?id=`) es global y no lo lleva:
+rating y camino nacionales, diana con su último sondeo en las elecciones publicadas de todos los ámbitos (como el
+histórico) y efectos y herding de las elecciones y ciclos de todos los ámbitos (`query_pollster(..., every_scope=True)`:
+`get_house_effects(None)` y `get_herding(None)`), con cada elección por su nombre publicado o, sin página, por su fecha
+y ámbito (2026-10-15); el resto de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
 `_metodo_nav.html`.
 
 Patrón de tarjeta (`web/templates/_macros.html`, `{% import '_macros.html' as m %}`): toda sección es

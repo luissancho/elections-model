@@ -890,14 +890,18 @@ def fake_houses(monkeypatch, name='CIS'):
         'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None],
         'rating': [51.0, 53.0, 80.0, 55.0, 82.37, float('nan')],
     })
+    # los lectores de efectos y herding devuelven las filas de todos los ámbitos (`scope=None`, perfil global):
+    # GAD3 tiene además una elección de Madrid, con un partido fuera del catálogo del run (MM)
     house_effects = pd.DataFrame({
-        'event_date': pd.to_datetime(['2023-07-23', '2023-07-23', '2023-07-23', '2026-11-29']),
-        'pollster_id': [2, 2, 1, 2], 'pollster': ['GAD3', 'GAD3', name, 'GAD3'], 'party': ['PP', 'PSOE', 'PP', 'PP'],
-        'dev_result_c': [0.9, -0.4, -2.1, float('nan')], 'dev_cycle': [0.6, -0.2, -2.8, 0.7],
+        'event_date': pd.to_datetime(['2023-07-23', '2023-07-23', '2023-07-23', '2026-11-29', '2021-05-04']),
+        'event_scope': ['es', 'es', 'es', 'es', 'es-md'],
+        'pollster_id': [2, 2, 1, 2, 2], 'pollster': ['GAD3', 'GAD3', name, 'GAD3', 'GAD3'], 'party': ['PP', 'PSOE', 'PP', 'PP', 'MM'],
+        'dev_result_c': [0.9, -0.4, -2.1, float('nan'), -0.9], 'dev_cycle': [0.6, -0.2, -2.8, 0.7, -0.5],
     })
     herding = pd.DataFrame({
-        'event_date': pd.to_datetime(['2023-07-23', '2026-11-29']), 'pollster_id': [2, 2], 'pollster': ['GAD3', 'GAD3'],
-        'n': [14, 17], 'ratio': [0.781, 0.705], 'p_value': [0.034, 0.012],
+        'event_date': pd.to_datetime(['2023-07-23', '2026-11-29', '2021-05-04']), 'event_scope': ['es', 'es', 'es-md'],
+        'pollster_id': [2, 2, 2], 'pollster': ['GAD3', 'GAD3', 'GAD3'],
+        'n': [14, 17, 9], 'ratio': [0.781, 0.705, 0.912], 'p_value': [0.034, 0.012, 0.21],
     })
     monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
@@ -916,8 +920,10 @@ def houses_without_analysis(api, fresh_app, monkeypatch):
 
 @pytest.fixture
 def houses(houses_without_analysis, fresh_app):
-    """Como `houses_without_analysis`, con el análisis de casas de `es` publicado (fixtures)."""
+    """Como `houses_without_analysis`, con el análisis de casas de `es` y su elección de 2023 publicados
+    (fixtures): la diana del perfil solo cuenta las elecciones publicadas, como el histórico."""
     write_analysis(fresh_app.fs)
+    write_event(fresh_app.fs)
     return houses_without_analysis
 
 
@@ -926,7 +932,7 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     page = html(body)
     assert status == 200 and 'aria-current="page"' in page and 'id="ranking-table"' in page
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
-    assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
+    assert 'href="/casas?id=2"' in page and 'id="scope-filter"' in page
     # el selector de ámbito vive en la tarjeta de efectos (el ranking es global), no sobre las tarjetas
     assert page.index('id="ranking"') < page.index('id="house-effects"') < page.index('id="scope-filter"') < page.index('id="herding"')
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
@@ -949,10 +955,9 @@ def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app)
     assert 'no depende de ningún ámbito' in madrid and 'elección general del' in madrid
     assert 'href="/api/v1/ratings?scope=es&amp;format=csv"' in madrid and 'Ratings de la próxima elección general' in madrid
     ranking = table(madrid)
-    assert 'href="/casas?scope=es&amp;id=' in ranking and 'href="/casas?scope=es-md&amp;id=' not in ranking
+    assert 'href="/casas?id=' in ranking and 'scope=es-md&amp;id=' not in madrid  # el perfil es global: sin ámbito
     effects = madrid[madrid.index('id="house-effects"'):madrid.index('id="herding"')]
-    assert 'href="/casas?scope=es-md&amp;id=' in effects  # los efectos siguen con el ámbito elegido
-    assert 'href="/casas?scope=es-md&amp;id=' in madrid[madrid.index('id="herding"'):]  # y el herding también
+    assert 'href="/casas?id=' in effects and '<option value="es-md" selected>' in effects  # los efectos, del ámbito elegido
 
 
 def test_casas_explains_the_relative_bias(houses):
@@ -1012,17 +1017,23 @@ def test_casas_without_analysis_has_no_analysis_downloads(houses_without_analysi
 def test_casa_profile_tables_and_bullseye(houses):
     status, _, body = call(houses, '/casas', query='id=2&mode=nowcast')
     page = html(body)
-    assert status == 200 and 'href="/casas?scope=es"' in page  # "Todas las casas"
-    assert 'id="scope-filter"' in page and 'action="/casas"' in page
-    assert page.index('id="profile"') < page.index('id="scope-filter"') < page.index('id="path"')  # dentro de la cabecera
-    assert 'id="path-table"' in page and '2023-23J' in page
+    assert status == 200 and 'href="/casas">← Todas las encuestadoras' in page
+    assert 'id="scope-filter"' not in page  # el perfil es global
+    assert 'id="path-table"' in page
+    bullseye = re.search(r'<table id="bullseye-table">(.*?)</table>', page, re.S).group(1)
+    assert 'Generales 2023' in bullseye and '2023-23J' not in bullseye  # la elección, por su nombre
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
-    assert effects.count('<tr>') == 2 and '23 jul 2023' in effects  # la próxima elección no tiene resultado
+    # la próxima elección no tiene resultado; Madrid 2021 no está publicada y va con fecha y ámbito
+    assert effects.count('<tr>') == 3 and effects.index('4 may 2021 · Madrid') < effects.index('Generales 2023')
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', effects) == ['Elección', 'PP', 'PSOE', 'MM']  # el catálogo primero
+    herding = page[page.index('id="profile-herding"'):]
+    assert herding[:herding.index('</table>')].count('<tr>') == 4 and '29 nov 2026 · España' in herding
     data = initial(body)
     assert [row['event_date'] for row in data['path']] == ['2023-07-23', '2026-11-29']
     assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
-    assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': 2.81, 'Izquierda': -0.24}]
+    assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'scope': 'es', 'name': 'Generales 2023',
+                                 'Derecha': 2.81, 'Izquierda': -0.24}]
     assert data['blocks'] == ['Derecha', 'Izquierda']
 
 
@@ -1041,23 +1052,15 @@ def test_casas_ranking_and_profile_header_are_national_whatever_the_panel_scope(
             data = {**data, 'rows': [dict(row, herding=0.5) for row in data['rows']]}
         return data
 
-    real_query = pages.casas.query_pollster
-
-    def query(pollster_id, scope):
-        profile = real_query(pollster_id, scope)
-        return {**profile, 'ratings': []} if scope == 'es-md' else profile  # sin ratings en Madrid
-
     monkeypatch.setattr(pages.casas, 'analysis_part', part)
-    monkeypatch.setattr(pages.casas, 'query_pollster', query)
     page = html(call(houses, '/casas', query='scope=es-md')[2])
     ranking = re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
     herding = re.search(r'<table id="herding-table">(.*?)</table>', page, re.S).group(1)
     national = real_part('es', 'herding')['rows'][0]['herding']
     assert '0,50' not in ranking and pages.fmt_num(national, 2) in ranking and '0,50' in herding
-    assert '<option value="es-md" selected>' in page and 'href="/casas?scope=es&amp;id=2"' in page
+    assert '<option value="es-md" selected>' in page and 'href="/casas?id=2"' in page
     page = html(call(houses, '/casas', query='scope=es-md&id=2')[2])
-    assert 'Rating: 82,4' in page and 'Esta encuestadora no tiene ratings en este ámbito.' in page
-    assert '<option value="es-md" selected>' in page and 'href="/casas?scope=es-md"' in page
+    assert 'Rating: 82,4' in page and 'id="scope-filter"' not in page and 'Generales 2023' in page  # perfil global
 
 
 def test_casa_profile_of_a_house_without_ratings(houses):
@@ -1331,7 +1334,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert table.index('GAD3') < table.index('40dB') < table.index('CIS')  # de menor a mayor error de bloques
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
         'Encuestadora', 'Muestra', 'Días antes', 'Error medio', 'Error de bloques', 'Derecha', 'Izquierda']
-    assert '/casas?scope=es&amp;id=2' in table and 'href="/elecciones?scope=es"' in page
+    assert '/casas?id=2' in table and 'href="/elecciones?scope=es"' in page
     assert 'id="pollsters-table"' not in page and 'Sesgo del margen' not in table  # ya no hay tabla de medias por casa
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
     assert 'id="results-more"' not in page  # cuatro partidos: nada que desplegar
@@ -1971,7 +1974,7 @@ def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site)
         assert 'Partido Popular' not in visible_text(page) and 'title="Partido Popular"' in page, path
     # routes, ids and file names keep their names
     page = html(call(events_site, '/elecciones', query='scope=es&date=2023-07-23')[2])
-    assert '/casas?scope=es&amp;id=2' in page
+    assert '/casas?id=2' in page
     source = open(os.path.join(pages.TEMPLATES_DIR, 'elecciones.html'), encoding='utf-8').read()
     assert '<select name="casa">' in source and "'/casas'" in source
 

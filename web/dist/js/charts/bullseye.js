@@ -83,8 +83,9 @@ function groupedTooltip(row, xBlock, yBlock) {
  * axes), symmetric axes and one point per row.
  *
  * @param {HTMLElement} el chart container
- * @param {object[]} rows poll-errors rows `{event, event_date, days, <block>: error}` (with `groupOf`, also
- *   `pollster` and an optional `href` for the tooltip)
+ * @param {object[]} rows poll-errors rows `{event, event_date, days, <block>: error}` (`name`, the full name of
+ *   the election, replaces `event` in the tooltip when present; with `groupOf`, also `pollster` and an optional
+ *   `href` for the tooltip)
  * @param {object} opts `blocks` (names of the x and y blocks), `groupOf` (`row => group`: one scatter series
  *   per group, in order of appearance; `null` draws a single series, grey or of `color`), `colors` (`{group: colour}`),
  *   `color` (colour of the single series), `legend` (show the legend of the groups, scrollable), `groupLabel`
@@ -138,7 +139,7 @@ export function renderBullseye(el, rows, {
           return groupedTooltip(row, xBlock, yBlock).join('<br>');
         }
         return [
-          `<strong>${escapeHtml(row.event)}</strong>`,
+          `<strong>${escapeHtml(row.name || row.event)}</strong>`,
           `${escapeHtml(fmtDate(row.event_date))} · ${escapeHtml(fmtNum(row.days))} días antes`,
           `${escapeHtml(xBlock)}: ${escapeHtml(fmtNum(row[xBlock], 1))}`,
           `${escapeHtml(yBlock)}: ${escapeHtml(fmtNum(row[yBlock], 1))}`,

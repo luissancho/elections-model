@@ -1,18 +1,20 @@
 """
 Houses page context.
 """
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 from .. import webapi
 from ..webapi import query_pollster, query_ratings, site
-from .common import api_url, bundle_part, common_context, scope_query
+from .common import analysis_part, api_url, common_context
+from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
+from .filters import fmt_date
 
 RATING_SCOPE = 'es'
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
                 'error_blocks', 'bias_blocks')
 PATH_KEYS = ('event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls')
-HERDING_KEYS = ('event_date', 'n', 'ratio', 'p_value')
+HERDING_KEYS = ('event_scope', 'event_date', 'n', 'ratio', 'p_value')
 ANALYSIS_CSV = (
     ('house-effects', None, 'Efectos de encuestadora por partido y bloque'),
     ('herding', None, 'Herding por encuestadora'),
@@ -20,30 +22,6 @@ ANALYSIS_CSV = (
     ('poll-errors', None, 'Error de los sondeos en cada elección'),
 )
 
-
-
-def analysis_part(scope: str, name: str) -> Optional[dict]:
-    """
-    Data of a part of the published houses analysis of a scope.
-
-    Parameters
-    ----------
-    scope : str
-        Scope code.
-    name : str
-        Part name, one of ``bundle.ANALYSIS_PARTS``.
-
-    Returns
-    -------
-    dict or None
-        The ``data`` member of the part envelope, or ``None`` when the part is not published.
-
-    Raises
-    ------
-    HttpError
-        Any error of the bundle other than the 404 of an unpublished analysis.
-    """
-    return bundle_part(site().analysis, scope, name)
 
 
 def ranking_rows(ratings, herding: Optional[dict]) -> list:
@@ -164,37 +142,69 @@ def profile_rows(records: list, keys: tuple) -> list:
     return sorted(rows, key=lambda row: row.get('event_date') or '')
 
 
-def effects_table(records: list) -> dict:
+def election_label(scope: str, date: str, names: dict, scope_names: dict) -> str:
+    """
+    Name of an election in the tables of a profile.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code of the election.
+    date : str
+        Its ISO date.
+    names : dict
+        ``{(scope, date): name}`` of the published elections.
+    scope_names : dict
+        ``{code: name}`` of the catalogue scopes.
+
+    Returns
+    -------
+    str
+        The published name or, for an election without a page (the current cycle, an old election), its date
+        and the name of its scope, which the date alone would not tell apart.
+    """
+    return names.get((scope, date)) or '{} · {}'.format(fmt_date(date), scope_names.get(scope, scope))
+
+
+def effects_table(records: list, label: Optional[Callable] = None, order: Sequence[str] = ()) -> dict:
     """
     House effects of a pollster by election and party.
 
     Parameters
     ----------
     records : list of dict
-        Its rows of the house effects table (``event_date``, ``party``, ``dev_result_c``...).
+        Its rows of the house effects table (``event_scope``, ``event_date``, ``party``, ``dev_result_c``...);
+        a row without ``event_scope`` belongs to ``RATING_SCOPE``.
+    label : callable, optional
+        ``(scope, date) -> str``, the name of each election; its date by default.
+    order : sequence of str, optional
+        Party names that go first, in this order (the catalogue of the run); the rest follow by first
+        appearance.
 
     Returns
     -------
     dict
-        ``{'columns': parties, 'rows': [{'event_date', 'cells'}]}``: the parties in order of first
-        appearance, one row per election by date and the ``dev_result_c`` of each party
-        (``None`` when missing). An election without any value (the next one, which has no
-        result yet) has no row.
+        ``{'columns': parties, 'rows': [{'scope', 'event_date', 'label', 'cells'}]}``: one row per election by
+        date (ties in catalogue order of the records) with the ``dev_result_c`` of each party (``None`` when
+        missing). An election without any value (the next one, which has no result yet) has no row.
     """
-    columns = []
+    seen = []
     values = {}
 
     for record in records:
         party = record.get('party')
 
-        if party not in columns:
-            columns.append(party)
+        if party not in seen:
+            seen.append(party)
 
-        values.setdefault(record.get('event_date'), {})[party] = record.get('dev_result_c')
+        key = (record.get('event_scope') or RATING_SCOPE, record.get('event_date'))
+        values.setdefault(key, {})[party] = record.get('dev_result_c')
 
+    columns = [name for name in order if name in seen] + [name for name in seen if name not in order]
     rows = [
-        {'event_date': event_date, 'cells': [values[event_date].get(party) for party in columns]}
-        for event_date in sorted(values, key=lambda value: value or '')
+        {'scope': scope, 'event_date': date, 'label': label(scope, date) if label else fmt_date(date),
+         'cells': [values[(scope, date)].get(party) for party in columns]}
+        for scope, date in sorted(values, key=lambda key: (key[1] or '', key[0]))
     ]
 
     return {'columns': columns, 'rows': [row for row in rows if any(cell is not None for cell in row['cells'])]}
@@ -223,7 +233,6 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         or ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``,
         ``pollster_ids`` (``{name: id}`` of the pollsters rated in the event, for the links),
         ``ranking_event`` (ISO date of the election the ranking is for, ``None`` without ratings),
-        ``ranking_query`` (``scope_query`` of the ranking scope, for the profile links of its rows),
         ``csv_links`` and ``initial`` (``state``, ``meta``, ``ranking`` and ``grid``).
 
     Raises
@@ -264,7 +273,6 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     }
     context['ranking_event'] = (
         str(ratings['event_date'].max())[:10] if 'event_date' in ratings.columns and not ratings.empty else None)
-    context['ranking_query'] = scope_query(RATING_SCOPE)
     context['csv_links'] = links
     context['initial'] = {'state': full, 'meta': context['meta'], 'ranking': ranking, 'grid': grid}
 
@@ -274,6 +282,11 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
 def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     """
     Template context of the profile of a pollster.
+
+    The profile is global, whatever the scope of the request: the ratings are the national ones
+    (``RATING_SCOPE``; the rating is the same number in every scope), the bullseye has its last poll in every
+    published election of every scope with analysis (the same elections as the error history) and the house
+    effects and the herding tables cover the elections and cycles of every scope.
 
     Parameters
     ----------
@@ -287,15 +300,16 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``profile`` (``webapi.query_pollster``), ``mtype`` (the type of
-        the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing),
-        ``current`` (the ``rating`` and ``quality`` of its last national ratings row (``RATING_SCOPE``), the
-        next general election: the rating is the same in every scope; both ``None`` without ratings), ``path``
-        (its ratings by election of the scope, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
-        (its herding by cycle, ``HERDING_KEYS``), ``bullseye`` (its rows of the ``poll-errors``
-        analysis part: ``event``, ``event_date``, ``days`` and the error of each block, by date;
-        empty without analysis), ``blocks`` (the blocks of that part), ``analysis_missing`` and
-        ``initial`` (``state``, ``meta``, ``path``, ``bullseye`` and ``blocks``).
+        The common context plus ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
+        the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing), ``current``
+        (the ``rating`` and ``quality`` of its last national ratings row, the next general election; both
+        ``None`` without ratings), ``path`` (its national ratings by election, ``PATH_KEYS``),
+        ``effects_table`` (``effects_table`` with the elections named by ``election_label``), ``herding_table``
+        (its herding by cycle, ``HERDING_KEYS`` plus ``label``, by date), ``bullseye`` (its rows of the
+        ``poll-errors`` parts of the published elections: ``event``, ``event_date``, ``days``, ``scope``,
+        ``name`` and the error of each block, by date; empty without analysis), ``blocks`` (the pair of
+        ``error_blocks``), ``analysis_missing`` (no scope has a published analysis) and ``initial`` (``state``,
+        ``meta``, ``path``, ``bullseye`` and ``blocks``).
 
     Raises
     ------
@@ -305,31 +319,38 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     """
     context = common_context(state, active)
     full = context['state']
-    scope = full['scope']
-    profile = query_pollster(pollster_id, scope)
-    missing = analysis_part(scope, 'meta') is None
-    errors = (None if missing else analysis_part(scope, 'poll-errors')) or {}
-    blocks = list(errors.get('blocks') or [])
+    profile = query_pollster(pollster_id, RATING_SCOPE, every_scope=True)
     name = profile['pollster'].get('name')
-    bullseye = profile_rows(
-        [row for row in errors.get('rows') or [] if row.get('pollster') == name],
-        ('event', 'event_date', 'days') + tuple(blocks),
-    )
-    path = profile_rows(profile['ratings'], PATH_KEYS)
-    national = profile if scope == RATING_SCOPE else query_pollster(pollster_id, RATING_SCOPE)
-    latest = profile_rows(national['ratings'], ('rating', 'quality', 'event_date'))
+    scopes = history_scopes()
+    parts = poll_error_parts(scopes)
+    events = history_events(scopes)
+    names = {(event['scope'], event['date']): event['name'] for event in events if event.get('name')}
+    scope_names = {row['code']: row['name'] for row in site().scopes()['scopes']}
+    blocks = error_blocks(scopes, parts)
 
+    def label(scope, date):
+        """Name of an election of the tables."""
+        return election_label(scope, date, names, scope_names)
+
+    bullseye = sorted(
+        (dict({key: row.get(key) for key in ('event', 'event_date', 'days', 'scope') + tuple(blocks)},
+              name=label(row['scope'], row['event_date']))
+         for row in history_rows(scopes, events, parts) if row.get('pollster') == name),
+        key=lambda row: row['event_date'] or '')
+    path = profile_rows(profile['ratings'], PATH_KEYS)
+    latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
     mtype = profile['pollster'].get('mtype')
 
     context['profile'] = profile
     context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
     context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
     context['path'] = path
-    context['effects_table'] = effects_table(profile['house_effects'])
-    context['herding_table'] = profile_rows(profile['herding'], HERDING_KEYS)
+    context['effects_table'] = effects_table(profile['house_effects'], label, order=list(context['catalog']))
+    context['herding_table'] = [dict(row, label=label(row.get('event_scope') or RATING_SCOPE, row['event_date']))
+                                for row in profile_rows(profile['herding'], HERDING_KEYS)]
     context['bullseye'] = bullseye
     context['blocks'] = blocks
-    context['analysis_missing'] = missing
+    context['analysis_missing'] = not any(scope['analysis'] for scope in scopes)
     context['initial'] = {'state': full, 'meta': context['meta'], 'path': path, 'bullseye': bullseye,
                           'blocks': blocks}
 

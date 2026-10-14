@@ -216,3 +216,13 @@ esa tarjeta, en Herding y en las descargas del análisis; la columna Herding del
 nacional (`RATING_SCOPE`), para que el ranking sea idéntico sea cual sea el ámbito del panel. En el perfil vive dentro
 de la tarjeta de cabecera, cuyo rating y calidad son los nacionales (`query_pollster(id, 'es')`); las tarjetas de
 abajo siguen al ámbito elegido. `/metodo/backtest` conserva el filtro sobre las tarjetas.
+
+Y, el mismo día, Luis aceptó la alternativa de hacer el perfil global ("Ok, hazlo así"): el perfil no lleva selector.
+El camino al rating es el nacional (el rating es el mismo número en todos los ámbitos), la diana lleva su último
+sondeo en cada elección publicada de cada ámbito con análisis (las mismas elecciones que el histórico:
+`history_scopes`/`history_events`/`history_rows`, que ahora importa `casas.py`; `analysis_part` se muda a `common.py`
+para evitar el ciclo de imports), y los efectos por elección y el herding por ciclo salen de las tablas de todos los
+ámbitos (`query_pollster(id, 'es', every_scope=True)` lee `get_house_effects(None)` y `get_herding(None)`, cacheados
+aparte). Las columnas de los efectos son la unión de partidos, el catálogo del run primero y el resto por aparición;
+cada elección se nombra por su nombre publicado o, sin página (el ciclo en curso, elecciones antiguas), por su fecha y
+su ámbito (`election_label`). Los enlaces al perfil van sin ámbito (`/casas?id=N`).
