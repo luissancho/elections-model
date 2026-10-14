@@ -34,12 +34,12 @@ function groupNames(points, groupOf) {
 /**
  * Scatter series of the points: one grey series, or one series per group with its colour.
  *
- * @param {object[]} points `{value, row}` points
- * @param {object} opts `groupOf`, `colors`, `labels` and `color` of `renderBullseye`
+ * @param {object[]} points `{value, row}` points (with the `itemStyle` and `label` of a faded point)
+ * @param {object} opts `groupOf`, `colors`, `labels`, `labelOf` and `color` of `renderBullseye`
  * @returns {object[]} ECharts series
  */
-function pointSeries(points, {groupOf, colors, labels, color}) {
-  const label = {show: labels, position: 'right', formatter: (params) => params.data.row.event, color: THEME.textColor};
+function pointSeries(points, {groupOf, colors, labels, labelOf, color}) {
+  const label = {show: labels, position: 'right', formatter: (params) => labelOf(params.data.row), color: THEME.textColor};
   if (!groupOf) {
     // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
     return [{type: 'scatter', data: points, symbolSize: 10, color: color || THEME.markColor, label,
@@ -52,8 +52,21 @@ function pointSeries(points, {groupOf, colors, labels, color}) {
     symbolSize: 10,
     color: colors[group] ?? THEME.markColor,
     label,
+    labelLayout: {hideOverlap: true},
     z: 10,
   }));
+}
+
+/**
+ * A hex colour with an alpha, as `rgba()`.
+ *
+ * @param {string} hex `#rrggbb`
+ * @param {number} alpha opacity, 0 to 1
+ * @returns {string} the rgba colour
+ */
+function withAlpha(hex, alpha) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /**
@@ -67,7 +80,7 @@ function pointSeries(points, {groupOf, colors, labels, color}) {
  */
 function groupedTooltip(row, xBlock, yBlock) {
   const lines = [
-    `<strong>${escapeHtml(row.pollster ?? row.event)}</strong>`,
+    `<strong>${escapeHtml(row.pollster ?? row.name ?? row.event)}</strong>`,
     `${escapeHtml(row.name || row.event)} · ${escapeHtml(fmtDate(row.event_date))} · ${escapeHtml(fmtNum(row.days))} días antes`,
     `${escapeHtml(xBlock)}: ${escapeHtml(fmtNum(row[xBlock], 1))}`,
     `${escapeHtml(yBlock)}: ${escapeHtml(fmtNum(row[yBlock], 1))}`,
@@ -89,16 +102,26 @@ function groupedTooltip(row, xBlock, yBlock) {
  * @param {object} opts `blocks` (names of the x and y blocks), `groupOf` (`row => group`: one scatter series
  *   per group, in order of appearance; `null` draws a single series, grey or of `color`), `colors` (`{group: colour}`),
  *   `color` (colour of the single series), `legend` (show the legend of the groups, scrollable), `groupLabel`
- *   (`group => text` of the legend) and `labels` (write `row.event` next to each point)
+ *   (`group => text` of the legend), `labels` (write a label next to each point), `labelOf` (`row => text` of
+ *   that label, `row.event` by default) and `alphaOf` (`row => opacity`, 0 to 1: the point and its label fade;
+ *   `null` keeps them opaque)
  * @returns {object} the ECharts instance
  */
 export function renderBullseye(el, rows, {
   blocks, groupOf = null, colors = {}, color = null, legend = false, labels = true, groupLabel = (group) => group,
+  labelOf = (row) => row.event, alphaOf = null,
 }) {
   const [xBlock, yBlock] = blocks;
+  const styled = (row) => {
+    if (!alphaOf) {
+      return {};
+    }
+    const alpha = Math.min(1, Math.max(0, alphaOf(row)));
+    return {itemStyle: {opacity: alpha}, label: {color: withAlpha(THEME.textColor, alpha)}};
+  };
   const points = rows
     .filter((row) => Number.isFinite(row[xBlock]) && Number.isFinite(row[yBlock]))
-    .map((row) => ({value: [row[xBlock], row[yBlock]], row}));
+    .map((row) => ({value: [row[xBlock], row[yBlock]], row, ...styled(row)}));
   const reach = Math.max(RINGS[RINGS.length - 1], ...points.flatMap((p) => p.value.map(Math.abs)));
   const limit = Math.ceil(reach * 1.1);
 
@@ -146,7 +169,7 @@ export function renderBullseye(el, rows, {
         ].join('<br>');
       },
     },
-    series: [...rings, ...pointSeries(points, {groupOf, colors, labels, color})],
+    series: [...rings, ...pointSeries(points, {groupOf, colors, labels, labelOf, color})],
   };
   if (legend && groupOf) {
     // Only the groups are named series, so the rings stay out of the legend.

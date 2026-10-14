@@ -238,3 +238,9 @@ La diana del perfil lleva un formulario `#bullseye-filter` (Ámbito: Todos o los
 Hasta: los años de sus elecciones) que el servidor pinta oculto y `casas.js` enseña y cablea con `filterRows` y
 `yearsOf` de `errors.js`; redibuja la diana y la tabla y escribe "N elecciones". Sin hash: el perfil no tiene otro
 estado. Las filas de la diana llevan `year` y `scope`; `initial.scopes` son los ámbitos ofrecidos.
+
+Y, en la misma diana (Luis, 2026-10-15): las generales en el azul del sitio y las autonómicas en naranja (`#c0672e`),
+con leyenda; cada punto etiquetado "{código}-{ámbito}" ("2023-23J-es", "2023-28M-es-md"); y los puntos más tenues
+cuanto más antigua la elección (`errors.js` `fadeByDate`: de 0,3 la más antigua a 1 la más reciente, lineal en días,
+fijado sobre todas las elecciones de la encuestadora para que el filtro no cambie el tono). `renderBullseye` gana
+`labelOf` y `alphaOf` (punto y etiqueta se atenúan juntos).

@@ -59,6 +59,24 @@ export function filterRows(rows, {scope = null, event = null, pollster = null, f
 }
 
 /**
+ * Opacity of each row by the age of its election: the newest is opaque, the oldest has `min`, the rest in
+ * between by date (linear in days).
+ *
+ * @param {object[]} rows rows with an ISO `event_date`
+ * @param {object} [opts] `min` (opacity of the oldest, 0.3 by default)
+ * @returns {number[]} one opacity per row, in their order (1 for every row when they share a date or lack it)
+ */
+export function fadeByDate(rows, {min = 0.3} = {}) {
+  const times = rows.map((row) => Date.parse(row.event_date));
+  const known = times.filter(Number.isFinite);
+  const [oldest, newest] = [Math.min(...known), Math.max(...known)];
+  if (!known.length || newest === oldest) {
+    return rows.map(() => 1);
+  }
+  return times.map((time) => (Number.isFinite(time) ? min + (1 - min) * ((time - oldest) / (newest - oldest)) : 1));
+}
+
+/**
  * Years present in the rows.
  *
  * @param {object[]} rows poll-errors rows

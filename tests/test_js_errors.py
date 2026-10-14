@@ -86,6 +86,15 @@ def test_trend_and_rest_points():
     assert run_js('e.restPoints(rows, "Nadie", "error_avg")') == []
 
 
+def test_fade_by_date_goes_from_the_minimum_to_one():
+    alphas = run_js('e.fadeByDate(rows)')
+    assert alphas[0] == 0.3 and alphas[-1] == 1 and 0.3 < alphas[2] < 1  # 2019 la más tenue, 2023 opaca, 2021 entre medias
+    assert run_js('e.fadeByDate(rows, {min: 0.5})')[0] == 0.5
+    assert run_js('e.fadeByDate([rows[0], rows[1]])') == [1, 1]  # misma fecha: todas opacas
+    assert run_js('e.fadeByDate([{...rows[0], event_date: null}, rows[5]])') == [1, 1]  # sin fechas distintas conocidas
+    assert run_js('e.fadeByDate([])') == []
+
+
 def test_filter_mean_and_weeks():
     assert run_js('e.meanOf(rows, "error_blocks_abs")') == 5.0 and run_js('e.meanOf([], "error_avg")') is None
     assert run_js('e.weekOf(6)') == 1 and run_js('e.weekOf(13)') == 2 and run_js('e.weekOf(42)') == 6

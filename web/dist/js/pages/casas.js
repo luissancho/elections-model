@@ -2,7 +2,7 @@
 // from the data embedded by the server. The bullseye of a profile has a scope and a years filter (no hash: the
 // profile has no other state), which redraws it and its table.
 import {fmtDate, fmtNum} from '../format.js';
-import {filterRows, yearsOf} from '../errors.js';
+import {fadeByDate, filterRows, yearsOf} from '../errors.js';
 import {renderBars} from '../charts/bars.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
@@ -13,6 +13,14 @@ import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 // Height of the rating bars: one row per rated house plus the axes.
 const BAR_ROW_HEIGHT = 22;
 const BAR_EXTRA_HEIGHT = 60;
+
+// The bullseye of a profile: general elections in the accent, regional ones in a contrasting tone; a point fades
+// with the age of its election down to this opacity.
+const NATIONAL_SCOPE = 'es';
+const KIND_GENERAL = 'Generales';
+const KIND_REGIONAL = 'Autonómicas';
+const REGIONAL_COLOR = '#c0672e';
+const OLDEST_ALPHA = 0.3;
 
 /**
  * Rebuild the body of the bullseye table with the rows shown.
@@ -54,8 +62,18 @@ function wireBullseye(bullseye, blocks) {
   const table = document.getElementById('bullseye-table');
   const count = document.getElementById('bullseye-count');
   const years = yearsOf(bullseye);
+  // The fading is fixed over every election of the house, so a filter does not change the tone of a point.
+  const alphas = new Map(fadeByDate(bullseye, {min: OLDEST_ALPHA}).map((alpha, i) => [bullseye[i], alpha]));
+  const options = {
+    blocks,
+    groupOf: (row) => (row.scope === NATIONAL_SCOPE ? KIND_GENERAL : KIND_REGIONAL),
+    colors: {[KIND_GENERAL]: THEME.accentColor, [KIND_REGIONAL]: REGIONAL_COLOR},
+    legend: true,
+    labelOf: (row) => `${row.event}-${row.scope}`,
+    alphaOf: (row) => alphas.get(row) ?? 1,
+  };
   const draw = (rows) => {
-    tryDraw(() => renderBullseye(target, rows, {blocks, color: THEME.accentColor}), 'the bullseye');
+    tryDraw(() => renderBullseye(target, rows, options), 'the bullseye');
     fillBullseyeTable(table, rows, blocks);
     if (count) {
       count.textContent = `${rows.length} ${rows.length === 1 ? 'elección' : 'elecciones'}`;
