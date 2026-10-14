@@ -47,6 +47,34 @@ def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
     return districts
 
 
+def get_district_communities(scope: str) -> dict:
+    """
+    Autonomous community of each district of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        ``{region_id: {'code': int, 'name': str} | None}`` per district of the scope. ``None`` for the
+        districts of an autonomous scope (their ``reg_code`` is the ``ine_code`` of the scope itself).
+    """
+    districts = get_districts(scope)
+    own_code = get_scopes().loc[scope, 'ine_code']
+    names = App.get_().data.read_csv('es-regions.csv').set_index('code')['region']
+    communities = {}
+    for region_id, reg_code in zip(districts['region_id'], districts['reg_code']):
+        if reg_code == own_code or reg_code not in names.index:
+            communities[int(region_id)] = None
+        else:
+            communities[int(region_id)] = {'code': int(reg_code), 'name': str(names[reg_code])}
+
+    return communities
+
+
 def get_scope_parent(scope: str) -> Optional[str]:
     """
     Parent of a scope in the catalogue (`es` for the autonomous communities); `None` for the national scope

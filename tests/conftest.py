@@ -37,3 +37,11 @@ def fresh_app():
     app = App.get_()
     yield app
     App._app = saved
+
+
+@pytest.fixture(autouse=True)
+def no_district_communities(monkeypatch):
+    """`publish_forecast` reads the community of each district from the catalogue; most tests have no `App.data`."""
+    from mtpy.lib import publish
+
+    monkeypatch.setattr(publish.forecast, 'get_district_communities', lambda scope: {})

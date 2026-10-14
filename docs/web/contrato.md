@@ -196,8 +196,10 @@ columna por partido.
 
 Votos y escaños por circunscripción, sin el total del ámbito. Fuente: `sim.unit_summary(r)` por región.
 
-`data`: `parties`, `regions` (`{id, name, seats}`, solo las circunscripciones: a diferencia de
-`meta.regions`, no incluye el total del ámbito) y `rows`. Cada fila tiene 11 columnas: `region_id`,
+`data`: `parties`, `regions` (`{id, name, seats, community, votes}`, solo las circunscripciones: a diferencia de
+`meta.regions`, no incluye el total del ámbito) y `rows`. `community` es `{code, name}` de la comunidad autónoma de la
+circunscripción (`null` en los ámbitos autonómicos) y `votes` los votos de la elección anterior
+(`sim.reg_totals`). Enmienda 2026-10-14 (fase 7c): los runs anteriores no llevan `community` ni `votes`. Cada fila tiene 11 columnas: `region_id`,
 `region`, `name`, `pct`, `pct_lo`, `pct_hi`, `seats`, `seats_mean`, `seats_lo`, `seats_hi`, `p_seats`.
 Aquí `seats` es la mediana de los escaños simulados redondeada a 1 decimal (un estadístico, como
 `seats_mean`), a diferencia del titular entero de `summary` y `headline`. CSV: las mismas filas.
