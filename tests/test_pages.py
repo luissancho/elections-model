@@ -258,14 +258,18 @@ def test_title_of_rules():
     assert pages.title_of('forecast', meta, False, True, False) == 'Pronóstico publicado el 13 oct 2026'
     assert pages.title_of('forecast', meta, False, False, True) == 'Pronóstico para el 29 nov 2026'
 
+def test_footer_names_the_publication_and_the_last_poll(api):
+    page = html(call(api, '/es')[2])
+    footer = page[page.index('<footer'):page.index('</footer>')]
+    assert 'Publicación: {} ('.format(RUN) in footer and '· Último sondeo: ' in footer
+    assert 'commit' not in footer and 'promedio leído' not in footer and '(sucio)' not in footer
 
-def test_mode_text_explains_how_to_read_the_mode_shown(api):
-    page = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
-    assert ('Si las elecciones fueran hoy: el promedio de sondeos leído el 8 oct 2026, con los sondeos publicados hasta '
-            'el 5 oct 2026.') in page
-    page = re.sub(r'\s+', ' ', html(call(api, '/es', query='mode=forecast')[2]))
-    assert 'Lo que puede pasar el 29 nov 2026: añade la deriva de la opinión' in page
-    assert '¿Qué cambia entre Hoy y Elección?' not in page  # the control it explained is gone
+
+def test_event_bar_and_promedios_have_no_mode_sentence_nor_headline(api):
+    page = html(call(api, '/es')[2])
+    assert 'mode-text' not in page and 'Si las elecciones fueran hoy' not in page
+    assert 'class="headline"' not in page and 'Si hoy hubiera elecciones, ' not in page
+    assert 'class="headline"' in html(call(api, '/es/escanos')[2])  # el titular de Escaños se queda
 
 
 def test_method_subpages_and_links():
@@ -727,36 +731,6 @@ def test_promedios_hides_the_blocks_view_without_blocks(api, fresh_app):
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es-md')[2])
     assert 'name="view"' not in page and 'id="series-parties"' in page and 'id="series-blocks"' not in page
-
-
-def test_promedios_headline_sentence_uses_the_mode(api):
-    assert 'Si hoy hubiera elecciones' in html(call(api, '/es')[2])
-    assert 'El 29 nov 2026' in html(call(api, '/es', query='mode=forecast')[2])
-
-
-def test_headline_text_names_the_leader_by_its_short_name_and_the_likeliest_majority():
-    current = {'parties': [{'name': 'PSOE', 'pct': 28.04, 'seats': 110}, {'name': 'PP', 'pct': 33.06, 'seats': 135}],
-               'p_majority': {'Izquierda': 0.08, 'Derecha': 0.41}}
-    meta = {'event_date': '2026-11-29'}
-    assert pages.headline_text(current, 'nowcast', meta, definitive=False) == (
-        'Si hoy hubiera elecciones, PP ganaría con el 33,1 % del voto y 135 escaños; probabilidad de '
-        'mayoría absoluta de Derecha: 41 %.')
-    assert pages.headline_text(current, 'forecast', meta, definitive=False).startswith(
-        'El 29 nov 2026, PP ganaría con el 33,1 %')
-    assert pages.headline_text(current, 'forecast', meta, definitive=True).startswith(
-        'Pronóstico definitivo: el 29 nov 2026, PP ganaría')
-    # sin probabilidades de mayoría la frase acaba en los escaños; sin partidos no hay titular
-    assert pages.headline_text(current | {'p_majority': {}}, 'nowcast', meta, definitive=False).endswith(
-        'y 135 escaños.')
-    assert pages.headline_text({'parties': []}, 'nowcast', meta, definitive=False) is None
-
-
-def test_promedios_frozen_latest_forecast_is_definitive(api, fresh_app):
-    publish.update_manifest(bundle.BundleWriter(fresh_app.fs), freeze={'active': True, 'message': 'Veda'})
-    webapi.site().manifest_cache_clear()
-    assert 'Pronóstico definitivo: el 29 nov 2026' in html(call(api, '/es')[2])
-    assert 'Pronóstico definitivo:' not in html(call(api, '/es', query='mode=nowcast')[2])
-
 
 def test_pollster_options_and_round_series():
     polls = [{'pollster': 'GAD3'}, {'pollster': 'CIS'}, {'pollster': 'GAD3'}, {'pollster': 'Sigma Dos'},
@@ -1671,13 +1645,12 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
         assert 'mode-help' not in page and 'id="event-controls"' not in page, path
         assert '¿Qué cambia entre Hoy y Elección?' not in page and 'class="segmented"' not in page, path
         assert 'stimación a ' + today in page, path
-        # without JS the bar still has the title, the date, the tabs and the reading sentence
+        # without JS the bar still has the title, the date and the tabs
         assert 'Elecciones generales' in bar and '29 nov 2026' in bar and 'href="/es/escanos?mode=nowcast"' in bar
-        assert 'Si las elecciones fueran hoy' in bar
-        # "Estimación a" is only ever followed by today; the footer names the reading date of the average otherwise
+        # "Estimación a" is only ever followed by today; the footer names the publication date otherwise
         assert set(re.findall(r'[Ee]stimación a (\d+ \w+ \d{4})', page)) == {today}, path
         footer = page[page.index('<footer'):]
-        assert 'promedio leído el 8 oct 2026' in footer and 'Estimación' not in footer, path
+        assert 'Publicación: {} (8 oct 2026)'.format(RUN) in footer and 'Estimación' not in footer, path
     write_bundle(fresh_app.fs, run_id=OLDER_RUN, manifest=False)
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
@@ -1701,7 +1674,6 @@ def test_frozen_site_has_no_control_and_shows_the_forecast(api, fresh_app):
         assert 'ronóstico definitivo para el 29 nov 2026' in page, path
         assert 'type="radio" id="mode-' not in page and 'name="mode"' not in bar, path
         assert 'id="event-controls"' not in page, path
-        assert 'Lo que puede pasar el 29 nov 2026' in page, path
 
 
 def test_frozen_nowcast_link_keeps_the_run_date_in_the_title(api, fresh_app):

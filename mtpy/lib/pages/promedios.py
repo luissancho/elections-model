@@ -9,10 +9,9 @@ from typing import Optional
 from .. import bundle
 from ..webapi import site
 from .common import Catalog, api_url, block_color, common_context, part
-from .filters import DASH, _is_missing, fmt_date, fmt_int, fmt_num, fmt_pct, fmt_prob
+from .filters import DASH, _is_missing, fmt_date, fmt_int, fmt_num
 
 TABLE_ROWS = 40
-DEFINITIVE_PREFIX = 'Pronóstico definitivo: '
 
 
 def majority_rows(p_majority: dict, meta: dict, parties: Catalog) -> list:
@@ -177,52 +176,6 @@ def round_series(series: dict, digits: int = 1) -> dict:
     return out
 
 
-def headline_text(current: dict, mode: str, meta: dict, definitive: bool) -> Optional[str]:
-    """
-    One-line headline of the page in plain words.
-
-    Parameters
-    ----------
-    current : dict
-        Headline of the mode shown (``parties`` with ``name``, ``pct``, ``seats``; ``p_majority``).
-    mode : str
-        ``'nowcast'`` or ``'forecast'``.
-    meta : dict
-        Data of the meta part (``event_date``).
-    definitive : bool
-        Whether the forecast shown is the final one (frozen publication, latest run).
-
-    Returns
-    -------
-    str or None
-        ``'Si hoy hubiera elecciones, {name} ganaría con el {pct} % del voto y {seats} escaños; probabilidad
-        de mayoría absoluta de {block}: {p}.'`` in nowcast; in forecast it opens with ``'El {event_date}'``,
-        after ``'Pronóstico definitivo: '`` (and in lower case) when ``definitive``. The leader is the party with
-        the highest ``pct`` and the block that with the highest ``p_majority``; without probabilities the sentence
-        ends after the seats. The party is named by its short name. ``None`` when the headline has no parties.
-    """
-    rows = current.get('parties') or []
-
-    if not rows:
-        return None
-
-    leader = max(rows, key=lambda row: row.get('pct') or 0)
-    sentence = '{} ganaría con el {} del voto y {} escaños'.format(
-        leader['name'], fmt_pct(leader.get('pct')), fmt_int(leader.get('seats')))
-    probs = {block: p for block, p in (current.get('p_majority') or {}).items() if not _is_missing(p)}
-
-    if probs:
-        block = max(probs, key=probs.get)
-        sentence += '; probabilidad de mayoría absoluta de {}: {}'.format(block, fmt_prob(probs[block]))
-
-    if mode == 'nowcast':
-        return 'Si hoy hubiera elecciones, {}.'.format(sentence)
-
-    text = 'El {}, {}.'.format(fmt_date(meta.get('event_date')), sentence)
-
-    return DEFINITIVE_PREFIX + text[0].lower() + text[1:] if definitive else text
-
-
 def promedios_context(state: dict) -> dict:
     """
     Template context of the Promedios tab of an event.
@@ -236,7 +189,7 @@ def promedios_context(state: dict) -> dict:
     -------
     dict
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``majority``
-        (``majority_rows``), ``headline_text`` (``headline_text``), ``table_parties`` (the ``main`` parties
+        (``majority_rows``), ``table_parties`` (the ``main`` parties
         present in the series, or all of them), ``table_rows`` (``table_rows``, the first ``TABLE_ROWS``),
         ``table_total`` (the polls of the polls part), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
@@ -263,11 +216,9 @@ def promedios_context(state: dict) -> dict:
     names = series.get('parties') or []
     main = [name for name in bmaps.get('main') or [] if name in names]
     blocks = bmaps.get('blocks')
-    definitive = mode == 'forecast' and context['frozen'] and run == site().latest_run(scope)
 
     context['headline'] = current
     context['majority'] = majority_rows(current.get('p_majority'), meta, parties)
-    context['headline_text'] = headline_text(current, mode, meta, definitive)
     context['table_parties'] = main or list(names)
     context['table_rows'] = table_rows(poll_rows, context['table_parties'])
     context['table_total'] = len(poll_rows)

@@ -522,41 +522,6 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool,
     return 'Pronóstico para el {}'.format(fmt_date(meta.get('event_date')))
 
 
-def mode_text(mode: str, meta: dict, days: Optional[int]) -> str:
-    """
-    Sentence that explains how to read the mode shown, in the event bar.
-
-    Parameters
-    ----------
-    mode : str
-        ``'nowcast'`` or ``'forecast'``.
-    meta : dict
-        Data of the meta part of the run shown (``as_of``, ``date_last``, ``event_date``).
-    days : int or None
-        Days left to the election (``days_left``).
-
-    Returns
-    -------
-    str
-        For nowcast, the reading date of the average and the date of the last poll; for
-        forecast, the election date and the drift to it, naming the days left only while there
-        are some.
-    """
-    if mode == 'nowcast':
-        return ('Si las elecciones fueran hoy: el promedio de sondeos leído el {}, con los sondeos publicados '
-                'hasta el {}.').format(fmt_date(meta.get('as_of')), fmt_date(meta.get('date_last')))
-
-    if days is not None and days > 1:
-        span = ' en los {} días que faltan'.format(days)
-    elif days == 1:
-        span = ' en el día que falta'
-    else:
-        span = ''
-
-    return ('Lo que puede pasar el {}: añade la deriva de la opinión{}, así que los intervalos son más '
-            'anchos.').format(fmt_date(meta.get('event_date')), span)
-
-
 def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str] = None,
             fmt: Optional[str] = None, kind: str = 'forecast', table: Optional[str] = None,
             date: Optional[str] = None) -> str:
@@ -736,7 +701,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
         ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
         (``event_info``, or ``None`` on a global page), ``manifest``, ``meta``, ``catalog``,
-        ``mode_text`` (``mode_text``), ``freeze`` (the manifest switch),
+        ``freeze`` (the manifest switch),
         ``frozen`` (whether it is active) and ``title_suffix`` (``title_of``).
 
     Raises
@@ -776,7 +741,6 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'frozen': frozen,
         'meta': meta,
         'catalog': catalog(meta),
-        'mode_text': mode_text(mode, meta, info['days_left'] if info else days_left(meta.get('event_date'))),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
     }
 

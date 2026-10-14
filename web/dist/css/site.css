@@ -124,14 +124,13 @@ main {
 }
 #freeze-banner[hidden] { display: none; }
 
-/* Event bar (Promedios and Escaños): name and date, the tabs, and the pinned run and the reading of the mode on
-   the right */
+/* Event bar (Promedios and Escaños): name and date, the tabs, and the pinned run on the right */
 #event-bar {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "title run"
-    "tabs  mode";
+    "tabs  tabs";
   gap: var(--space-1) var(--space-5);
   align-items: end;
   padding: var(--space-4) var(--band-pad) 0;
@@ -144,7 +143,6 @@ main {
 .event-title p { margin: var(--space-1) 0 0; }
 .event-tabs { grid-area: tabs; display: flex; gap: var(--space-1); margin-top: var(--space-2); }
 .event-run { grid-area: run; justify-self: end; }
-.mode-text { grid-area: mode; margin: 0; max-width: 34rem; color: var(--color-muted); font-size: 0.9rem; text-align: right; align-self: center; }
 
 .chip {
   display: inline-flex;
@@ -368,13 +366,12 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
   #event-bar {
     grid-template-columns: 1fr;
-    grid-template-areas: "title" "tabs" "run" "mode";
+    grid-template-areas: "title" "tabs" "run";
     gap: var(--space-2);
   }
   .event-title h2 { font-size: 1.35rem; }
   .event-tabs { overflow-x: auto; margin-top: 0; }
   .event-run { justify-self: start; }
-  .mode-text { text-align: left; }
 
   /* Larger tap targets for the chart controls and the pills */
   .chart-window label, .pill { min-height: var(--tap); }

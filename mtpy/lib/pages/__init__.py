@@ -18,7 +18,7 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING
                     casas_context, effects_table, herding_rows, house_effects_grid, profile_rows, ranking_rows)
 from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
                      SITE_TITLE, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
-                     default_mode, environment, event_info, event_query, event_title, ink_color, mode_text, parse_state,
+                     default_mode, environment, event_info, event_query, event_title, ink_color, parse_state,
                      part, published_scopes, resolve_event_scope, resolve_scope, scope_query, title_of)
 from .elecciones import (EVENT_CSV, SUMMARY_KEYS, eleccion_context, elecciones_context, error_rows, event_part,
                          history_headline, horizon_tables, published_events, resolve_event, with_abs)
@@ -28,5 +28,5 @@ from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, subpages, thresholds_rows)
-from .promedios import (DEFINITIVE_PREFIX, TABLE_ROWS, chart_polls, headline_text, majority_rows, poll_name,
+from .promedios import (TABLE_ROWS, chart_polls, majority_rows, poll_name,
                         pollster_options, promedios_context, round_series, table_rows)
