@@ -164,7 +164,7 @@
         {% else %}
         <div class="table-wrap">
           <table id="weeks-table">
-            <caption>Error medio, con la medida elegida en el histograma, y sondeos por elección y semana antes de la votación.</caption>
+            <caption>Error medio, con la medida elegida en los filtros, y sondeos por elección y semana antes de la votación.</caption>
             <thead></thead>
             <tbody></tbody>
           </table>
@@ -206,7 +206,7 @@
             <tbody>
               {% for event in events %}
               <tr data-scope="{{ event.scope }}" data-date="{{ event.date }}" data-year="{{ event.date[:4] }}">
-                <td><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a></td>
+                <td>{% if event.href %}<a href="{{ event.href }}">{% endif %}{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}{% if event.href %}</a>{% endif %}</td>
                 <td>{{ event.scope_name }}</td>
                 <td>{{ event.n_polls|int }}</td>
                 <td>{{ event.n_pollsters|int }}</td>

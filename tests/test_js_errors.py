@@ -121,12 +121,29 @@ def test_errors_hash_parse_and_round_trip():
     assert run_js(f'e.parseErrorsHash("#ambito=&casa=CIS", {CTX})')['scope'] is None
 
 
+CTX2 = ('{scopes: ["es", "es-cv"], events: ["es:2019-04-28", "es-cv:2019-04-28"], pollsters: [], years: [2019]}')
+CTX3 = ('{defaultScope: "es-md", scopes: ["es", "es-md", "es-cv"], events: ["es-md:2019-05-26", "es-cv:2019-05-26"], '
+        'pollsters: [], years: [2019]}')
+
+
+def test_swapped_years_come_back_in_order():
+    parsed = run_js(f'e.parseErrorsHash("#desde=2023&hasta=2021", {CTX})')
+    assert (parsed['from'], parsed['to']) == (2021, 2023)
+
+
+def test_weeks_table_without_valid_rows_is_empty():
+    assert run_js('e.weeksTable([], "error_avg")') == {'weeks': [], 'rows': []}
+    assert run_js('e.weeksTable([{...rows[0], days: null}], "error_avg")') == {'weeks': [], 'rows': []}
+
+
 def test_legacy_event_hash_resolves_to_a_unique_key():
     legacy = '#eleccion=2023-07-23&casa=GAD3&medida=error_avg'
     assert run_js(f'e.parseErrorsHash("{legacy}", {CTX})') == {
         'scope': None, 'event': 'es:2023-07-23', 'pollster': 'GAD3', 'from': None, 'to': None, 'measure': 'error_avg'}
+    assert run_js(f'e.parseErrorsHash("#eleccion=2019-04-28", {CTX2})')['event'] == 'es:2019-04-28'
+    assert run_js(f'e.parseErrorsHash("#eleccion=2019-05-26", {CTX3})')['event'] == 'es-md:2019-05-26'
     both = CTX.replace('"es:2023-07-23",', '"es:2023-07-23", "es-md:2023-07-23",')
-    assert run_js(f'e.parseErrorsHash("{legacy}", {both})')['event'] is None
+    assert run_js(f'e.parseErrorsHash("{legacy}", {both})')['event'] == 'es:2023-07-23'
     assert run_js(f'e.parseErrorsHash("#ambito=es-md&eleccion=2023-07-23", {both})')['event'] == 'es-md:2023-07-23'
     assert run_js(f'e.parseErrorsHash("#eleccion=2011-11-20", {CTX})')['event'] is None
 
@@ -145,4 +162,4 @@ def test_weeks_table_cells_and_order():
     # a row without the measure counts as a poll but not in the mean
     assert table['rows'][2]['cells']['3'] == {'n': 2, 'mean': 5.0}
     assert table['rows'][0]['cells'] == {'1': {'n': 1, 'mean': 4.0}, '2': {'n': 1, 'mean': 2.0}}
-    assert run_js('e.weeksTable([], "error_avg")') == {'weeks': [], 'rows': [{'event': 'Todas', 'event_date': None, 'cells': {}}]}
+    assert run_js('e.weeksTable([], "error_avg")') == {'weeks': [], 'rows': []}

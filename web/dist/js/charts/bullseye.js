@@ -55,7 +55,7 @@ function pointSeries(points, {groupOf, colors, labels}) {
 }
 
 /**
- * Tooltip lines of a point of the grouped bullseye: the house, the election and its days, the block errors and,
+ * Tooltip lines of a point of the grouped bullseye: the house, the election (with its scope name when the row has it) and its days, the block errors and,
  * when the row has an `href`, the link to the election.
  *
  * @param {object} row poll-errors row
@@ -66,7 +66,7 @@ function pointSeries(points, {groupOf, colors, labels}) {
 function groupedTooltip(row, xBlock, yBlock) {
   const lines = [
     `<strong>${escapeHtml(row.pollster ?? row.event)}</strong>`,
-    `${escapeHtml(row.event)} · ${escapeHtml(fmtDate(row.event_date))} · ${escapeHtml(fmtNum(row.days))} días antes`,
+    `${[row.event, row.scope_name].filter(Boolean).map(escapeHtml).join(' · ')} · ${escapeHtml(fmtDate(row.event_date))} · ${escapeHtml(fmtNum(row.days))} días antes`,
     `${escapeHtml(xBlock)}: ${escapeHtml(fmtNum(row[xBlock], 1))}`,
     `${escapeHtml(yBlock)}: ${escapeHtml(fmtNum(row[yBlock], 1))}`,
   ];

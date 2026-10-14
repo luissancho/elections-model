@@ -119,10 +119,14 @@ function weekCells(rows, measure) {
  * @param {object[]} rows poll-errors rows (`event`, `event_date`, `days` and the measure)
  * @param {string} measure column name
  * @returns {{weeks: number[], rows: object[]}} the weeks present (ascending) and one row per election (`scope:date`,
- *   labelled "{event} · {scope_name}"), newest first, `{event, event_date, cells: {week: {n, mean}}}`, closed by the `Todas` row of every poll
+ *   labelled "{event} · {scope_name}"), newest first, `{event, event_date, cells: {week: {n, mean}}}`, closed by the `Todas` row of every poll;
+ *   both empty without any row with a finite `days`
  */
 export function weeksTable(rows, measure) {
   const valid = rows.filter((row) => Number.isFinite(row.days));
+  if (!valid.length) {
+    return {weeks: [], rows: []};
+  }
   const weeks = [...new Set(valid.map((row) => weekOf(row.days)))].sort((a, b) => a - b);
   const events = new Map();
   for (const row of valid) {
@@ -240,13 +244,14 @@ export function restPoints(rows, pollster, measure) {
  * Filters of the error history from the URL hash; a value not offered falls back to its default.
  *
  * @param {string} hash `location.hash`, e.g. `#ambito=es-md&desde=2021&casa=CIS&medida=error_avg`; an old
- *   `eleccion=2023-07-23` without scope is resolved to the only election of that date (within the hash scope)
- * @param {{scopes: string[], events: string[], pollsters: string[], years: number[]}} options the scope codes,
- *   election keys (`scope:date`), house names and years offered
+ *   `eleccion=2023-07-23` without scope is resolved within the hash scope, or within `defaultScope`
+ * @param {{scopes: string[], events: string[], pollsters: string[], years: number[], defaultScope: string}} options
+ *   the scope codes, election keys (`scope:date`), house names and years offered; `defaultScope` (default `es`)
+ *   is where a date-only `eleccion=` is looked up when the hash has no valid `ambito`
  * @returns {{scope: (string|null), event: (string|null), pollster: (string|null), from: (number|null),
  *   to: (number|null), measure: string}} the filters (`null` = all; `from`/`to` are `null` at the extremes)
  */
-export function parseErrorsHash(hash, {scopes = [], events = [], pollsters = [], years = []}) {
+export function parseErrorsHash(hash, {scopes = [], events = [], pollsters = [], years = [], defaultScope = 'es'}) {
   const params = new Map();
   for (const entry of (hash || '').replace(/^#/, '').split('&')) {
     const at = entry.indexOf('=');
@@ -266,19 +271,20 @@ export function parseErrorsHash(hash, {scopes = [], events = [], pollsters = [],
   let event = params.get(EVENT_KEY);
   if (event !== undefined && !events.includes(event)) {
     const matches = events.filter((key) => key.slice(key.indexOf(':') + 1) === event
-      && (scope === null || key.slice(0, key.indexOf(':')) === scope));
+      && key.slice(0, key.indexOf(':')) === (scope ?? defaultScope));
     event = matches.length === 1 ? matches[0] : null;
   }
   const yearBound = (key, extreme) => {
     const year = Number(params.get(key));
     return params.has(key) && years.includes(year) && year !== extreme ? year : null;
   };
+  const bounds = orderedBounds(yearBound(FROM_KEY, years[0]), yearBound(TO_KEY, years[years.length - 1]));
   return {
     scope,
     event: event ?? null,
     pollster: pollsters.includes(pollster) ? pollster : null,
-    from: yearBound(FROM_KEY, years[0]),
-    to: yearBound(TO_KEY, years[years.length - 1]),
+    from: bounds.from,
+    to: bounds.to,
     measure: MEASURES.includes(measure) ? measure : DEFAULT_MEASURE,
   };
 }

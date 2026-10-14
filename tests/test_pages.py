@@ -1208,7 +1208,7 @@ def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     for name in ('eleccion', 'casa', 'desde', 'hasta'):
         assert 'name="{}"'.format(name) in page
     assert 'id="errors-measure"' in page and page.index('id="errors-measure"') < page.index('id="histogram"')
-    assert '3 elecciones analizadas (2 generales y 1 autonómicas)' in page
+    assert '3 elecciones analizadas (2 generales y 1 autonómica)' in page
     assert re.search(r'<tr data-scope="es-md" data-date="2021-05-04" data-year="2021">', page)
     assert '<p class="muted" id="events-count">3 elecciones</p>' in page and 'href="/casas"' in page
     data = initial(body)
@@ -1217,6 +1217,46 @@ def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     assert set(data['errors'][0]) == set(pages.HISTORY_COLUMNS) | set(data['error_blocks'])
     assert [e['scope'] for e in data['events']][:3] == ['es', 'es-md', 'es'] and data['years'] == sorted(data['years'])
     assert data['years'] == [2021, 2023]
+
+
+def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scopes, fresh_app):
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones y análisis, sin run
+    write_analysis(fresh_app.fs, scope='es-an')
+    errors = fixture_data('poll-errors')
+    errors['rows'] = [dict(row, event_date='2022-06-19', event='2022-19J') for row in errors['rows']]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es-an', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es-an')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    scopes = pages.history_scopes()
+    assert {s['code']: s['linkable'] for s in scopes} == {'es': True, 'es-an': False, 'es-md': True}
+    hrefs = {(e['scope'], e['date']): e['href'] for e in pages.history_events(scopes)}
+    assert hrefs[('es-an', '2022-06-19')] is None and hrefs[('es-md', '2021-05-04')].startswith('/elecciones?scope=es-md')
+    body = call(history_two_scopes, '/elecciones')[2]
+    row = re.search(r'<tr data-scope="es-an"[^>]*>\s*<td>(.*?)</td>', html(body), re.S).group(1)
+    assert '<a' not in row and '2022' in row
+    assert {s['code']: s['linkable'] for s in initial(body)['scopes']}['es-an'] is False
+
+
+def test_error_blocks_come_from_the_first_scope_with_two_and_parts_are_read_once(history_two_scopes, fresh_app):
+    errors = fixture_data('poll-errors')
+    errors['blocks'] = []
+    errors['rows'] = [dict(row, event_date='2021-05-04', event='2021-04M') for row in errors['rows']]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es-md', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es-md')
+    webapi.site().files.clear()
+    assert initial(call(history_two_scopes, '/elecciones')[2])['error_blocks'] == ['Derecha', 'Izquierda']
+    scopes = pages.history_scopes()
+    assert pages.error_blocks(scopes, pages.poll_error_parts(scopes)) == ['Derecha', 'Izquierda']
+    assert pages.error_blocks(scopes, {}) == []
+
+
+def test_history_headline_singular():
+    es = {'scope': 'es'}
+    md = {'scope': 'es-md'}
+    rows = [{'error_blocks_abs': 1.0}]
+    assert '(1 general y 1 autonómica)' in pages.history_headline([es, md], rows)
+    assert '(2 generales y 1 autonómica)' in pages.history_headline([es, es, md], rows)
 
 
 def test_elecciones_scope_query_preselects_the_scope_or_falls_back(history_two_scopes, fresh_app):

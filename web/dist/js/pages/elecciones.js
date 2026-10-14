@@ -36,6 +36,17 @@ const EVENT_COLORS = [
 ];
 
 /**
+ * Link to the detail of an election.
+ *
+ * @param {string} scope scope code
+ * @param {string} date election date
+ * @returns {string} the `/elecciones` URL of that election
+ */
+function detailHref(scope, date) {
+  return `/elecciones?scope=${encodeURIComponent(scope)}&date=${encodeURIComponent(date)}`;
+}
+
+/**
  * Draw the histogram of a measure of some poll-errors rows: polls counted (unweighted) in one-point bins, with
  * the mean marked.
  *
@@ -92,7 +103,7 @@ function wireMeasure(fieldset, measure, onChange) {
  */
 function fillWeeks(table, rows, measure, perElection) {
   const {weeks, rows: all} = weeksTable(rows, measure);
-  const lines = perElection ? all : all.slice(-1);
+  const lines = perElection ? all : all.slice(-1);  // empty without valid rows
   const cell = (tag, text, scope = null) => {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -143,6 +154,7 @@ function scopeColors(scopes) {
  */
 function drawTrend(el, rows, others, state, {scopes, events, colors}) {
   const names = new Map(events.map((event) => [event.key, event.name]));
+  const linkable = new Set(scopes.filter((scope) => scope.linkable).map((scope) => scope.code));
   const byScope = new Map(scopes.map(({name}) => [name, []]));
   for (const item of eventsOf(rows, state.measure).filter((entry) => entry.mean !== null)) {
     const key = eventKey(item);
@@ -151,7 +163,7 @@ function drawTrend(el, rows, others, state, {scopes, events, colors}) {
       value: item.mean,
       n: item.n,
       label: [fmtDate(item.event_date), names.get(key) || item.event, item.scope_name].join(' · '),
-      href: `/elecciones?scope=${encodeURIComponent(item.scope)}&date=${encodeURIComponent(item.event_date)}`,
+      href: linkable.has(item.scope) ? detailHref(item.scope, item.event_date) : null,
     });
   }
   const series = [...byScope].filter(([, points]) => points.length).map(([name, points]) => ({name, points}));
@@ -206,6 +218,7 @@ function wireHistory(initial) {
   const pollsters = [...new Set(errors.map((row) => row.pollster))];
   const state = parseErrorsHash(window.location.hash, {
     scopes: scopes.map((scope) => scope.code), events: events.map((event) => event.key), pollsters, years,
+    defaultScope: initial.selected_scope ?? 'es',
   });
   if (state.scope === null && !/(^|[#&])ambito=/.test(window.location.hash)
       && scopes.some((scope) => scope.code === initial.selected_scope)) {
@@ -222,9 +235,10 @@ function wireHistory(initial) {
   const complementsEl = document.getElementById('complements');
   const colors = scopeColors(scopes);
   const analysed = new Set(scopes.map((scope) => scope.code));
+  const linkable = new Set(allScopes.filter((scope) => scope.linkable).map((scope) => scope.code));
   const linked = errors.map((row) => ({
     ...row,
-    href: `/elecciones?scope=${encodeURIComponent(row.scope)}&date=${encodeURIComponent(row.event_date)}`,
+    href: linkable.has(row.scope) ? detailHref(row.scope, row.event_date) : null,
   }));
   const figureNodes = figures && {
     polls: document.getElementById('figure-polls'),
