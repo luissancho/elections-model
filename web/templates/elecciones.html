@@ -7,20 +7,27 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {% set with_herding = false %}
-    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if events %}
       {{ m.headline(headline_text) }}
-      {{ m.card_start('filters', 'Filtros', 'Elige una elección o una encuestadora para ver solo sus sondeos en el histograma, la diana y la tabla por semanas.') }}
+      {{ m.card_start('filters', 'Filtros', 'Elige un ámbito, una elección, una encuestadora o unos años para ver solo sus sondeos en el histograma, la diana y la tabla por semanas.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
         <form id="errors-filter" class="series-controls" hidden>
+          <label>Ámbito
+            <select name="ambito">
+              <option value=""{% if not selected_scope %} selected{% endif %}>Todos</option>
+              {% for scope in scopes if scope.analysis %}
+              <option value="{{ scope.code }}"{% if scope.code == selected_scope %} selected{% endif %}>{{ scope.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>Elección
             <select name="eleccion">
               <option value="">Todas</option>
               {% for event in filter_events %}
-              <option value="{{ event.date }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</option>
+              <option value="{{ event.key }}" data-scope="{{ event.scope }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %} · {{ event.scope_name }}</option>
               {% endfor %}
             </select>
           </label>
@@ -32,13 +39,32 @@
               {% endfor %}
             </select>
           </label>
+          <label>Desde
+            <select name="desde">
+              {% for year in years %}
+              <option value="{{ year }}"{% if loop.first %} selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Hasta
+            <select name="hasta">
+              {% for year in years %}
+              <option value="{{ year }}"{% if loop.last %} selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <fieldset id="errors-measure" class="seg">
+            <legend>Medida</legend>
+            <label><input type="radio" name="medida" value="error_blocks_abs" checked> Error de bloques</label>
+            <label><input type="radio" name="medida" value="error_avg"> Error medio</label>
+          </fieldset>
           <span class="muted" id="errors-count" aria-live="polite"></span>
         </form>
         <noscript><p class="muted">Los filtros necesitan JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
-          Los dos desplegables eligen qué sondeos entran en las tres tarjetas siguientes: los de una elección, los
-          de una encuestadora o los dos a la vez. El contador dice cuántos quedan del total.
+          Los desplegables eligen qué sondeos entran en las tres tarjetas siguientes: los de un ámbito, de una elección,
+          de una encuestadora o de unos años, solos o combinados. El contador dice cuántos quedan del total.
         </p>
         <p>
           Cada sondeo es el último que publicó una encuestadora en las semanas previas a una elección, frente al resultado
@@ -48,15 +74,10 @@
         {% endcall %}
         {% endif %}
       {{ m.card_end() }}
-      {{ m.card_start('histogram', 'Error de cada sondeo', 'Cuántos sondeos se equivocaron en cada tramo de un punto, con la media marcada. Los botones cambian la medida.') }}
+      {{ m.card_start('histogram', 'Error de cada sondeo', 'Cuántos sondeos se equivocaron en cada tramo de un punto, con la media marcada. La medida se elige en los filtros.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <fieldset id="errors-measure" class="seg" hidden>
-          <legend>Medida</legend>
-          <label><input type="radio" name="medida" value="error_blocks_abs" checked> Error de bloques</label>
-          <label><input type="radio" name="medida" value="error_avg"> Error medio</label>
-        </fieldset>
         <div class="chart" id="errors-histogram" role="img" aria-label="Número de sondeos por tramo de error, con la media marcada"></div>
         {% call m.how() %}
         <p>
@@ -133,13 +154,14 @@
         <p>Es una media de todas las encuestadoras: no dice cuáles fallaron. Eso está en el detalle de cada elección.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito y si el modelo tiene backtest en ella.') }}
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada, de todos los ámbitos, y si el modelo tiene backtest en ella.') }}
         <div class="table-wrap">
           <table id="events-table">
             <caption>Elecciones pasadas, de la más reciente a la más antigua. Pulsa en una para ver su detalle.</caption>
             <thead>
               <tr>
                 <th scope="col">Elección</th>
+                <th scope="col">Ámbito</th>
                 <th scope="col">Sondeos</th>
                 <th scope="col">Encuestadoras</th>
                 <th scope="col">Error medio</th>
@@ -150,8 +172,9 @@
             </thead>
             <tbody>
               {% for event in events %}
-              <tr>
+              <tr data-scope="{{ event.scope }}" data-date="{{ event.date }}" data-year="{{ event.date[:4] }}">
                 <td><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a></td>
+                <td>{{ event.scope_name }}</td>
                 <td>{{ event.n_polls|int }}</td>
                 <td>{{ event.n_pollsters|int }}</td>
                 <td>{{ event.error_avg|num(1) }}</td>
@@ -163,6 +186,7 @@
             </tbody>
           </table>
         </div>
+        <p class="muted" id="events-count">{{ events|length }} elecciones</p>
         {% call m.how() %}
         <p>
           Cada fila es una elección: cuántos sondeos y encuestadoras hubo, sus errores frente al resultado y si el modelo
@@ -174,12 +198,12 @@
         {% include '_glosario.html' %}
       {{ m.card_end() }}
       {% else %}
-      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito.') }}
-        <p class="notice">Todavía no hay elecciones publicadas en este ámbito.</p>
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada.') }}
+        <p class="notice">Todavía no hay elecciones publicadas.</p>
       {{ m.card_end() }}
       {% endif %}
       {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
                    'Los errores de esta página son la materia prima del rating de cada encuestadora. El texto del método cuenta cómo se convierten en una sola nota.',
-                   [{'href': '/casas' ~ scope_query, 'label': 'Ranking Encuestadoras de este ámbito'}]) }}
+                   [{'href': '/casas', 'label': 'Ranking Encuestadoras'}]) }}
     </div>
 {% endblock %}

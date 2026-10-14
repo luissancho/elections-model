@@ -10,6 +10,8 @@ from .common import api_url, bundle_part, common_context
 from .filters import fmt_num
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
+HISTORY_COLUMNS = ('scope', 'scope_name', 'year', 'event_date', 'event', 'pollster', 'days', 'error_avg',
+                   'error_blocks', 'error_blocks_abs', 'bias')
 EVENT_CSV = (
     ('pollsters', None, 'Encuestadoras en esta elección', False),
     ('polls', None, 'Sondeos de esta elección', False),
@@ -138,94 +140,196 @@ def error_rows(scope: str, dates: list) -> Optional[list]:
     return with_abs([row for row in errors.get('rows') or [] if row.get('event_date') in wanted])
 
 
-def history_headline(n_events: int, errors: Optional[list]) -> str:
+def history_scopes() -> list:
+    """
+    Scopes whose past elections are published, in catalogue order.
+
+    Returns
+    -------
+    list of dict
+        ``{'code', 'name', 'analysis'}`` for each catalogue scope with at least one published election;
+        ``analysis`` is whether its houses analysis is published (``meta`` part). A scope with analysis but
+        without elections does not appear.
+    """
+    return [{'code': row['code'], 'name': row['name'], 'analysis': analysis_part(row['code'], 'meta') is not None}
+            for row in site().scopes()['scopes'] if site().events(row['code'])]
+
+
+def history_events(scopes: list) -> list:
+    """
+    Published elections of several scopes in one list.
+
+    Parameters
+    ----------
+    scopes : list of dict
+        ``history_scopes`` rows.
+
+    Returns
+    -------
+    list of dict
+        ``published_events`` of each scope with ``scope``, ``scope_name`` and ``href`` added, newest first and,
+        on the same date, in catalogue order.
+    """
+    events = []
+
+    for scope in scopes:
+        for event in published_events(scope['code']):
+            event.update(scope=scope['code'], scope_name=scope['name'],
+                         href=f"/elecciones?scope={scope['code']}&date={event['date']}")
+            events.append(event)
+
+    order = {scope['code']: index for index, scope in enumerate(scopes)}
+    events.sort(key=lambda event: order[event['scope']])
+    events.sort(key=lambda event: event['date'], reverse=True)
+
+    return events
+
+
+def history_rows(scopes: list, events: list) -> list:
+    """
+    Error rows of the published elections of every scope with analysis.
+
+    Parameters
+    ----------
+    scopes : list of dict
+        ``history_scopes`` rows; only those with ``analysis`` are read.
+    events : list of dict
+        ``history_events`` rows.
+
+    Returns
+    -------
+    list of dict
+        ``error_rows`` of each scope with ``scope``, ``scope_name`` and ``year`` (int) added, reduced to
+        ``HISTORY_COLUMNS`` plus the block columns of the scope.
+    """
+    rows = []
+
+    for scope in scopes:
+        if not scope['analysis']:
+            continue
+
+        code = scope['code']
+        blocks = list((analysis_part(code, 'poll-errors') or {}).get('blocks') or [])
+
+        for row in error_rows(code, [event['date'] for event in events if event['scope'] == code]) or []:
+            row = dict(row, scope=code, scope_name=scope['name'], year=int(row['event_date'][:4]))
+            rows.append({key: row.get(key) for key in HISTORY_COLUMNS + tuple(blocks)})
+
+    return rows
+
+
+def common_blocks(scopes: list) -> list:
+    """
+    Blocks shared by every scope with analysis.
+
+    Parameters
+    ----------
+    scopes : list of dict
+        ``history_scopes`` rows.
+
+    Returns
+    -------
+    list of str
+        The ``poll-errors`` blocks present in all the scopes with analysis, in the order of the first one.
+    """
+    lists = [list((analysis_part(scope['code'], 'poll-errors') or {}).get('blocks') or [])
+             for scope in scopes if scope['analysis']]
+
+    if not lists:
+        return []
+
+    return [block for block in lists[0] if all(block in other for other in lists[1:])]
+
+
+def history_headline(events: list, errors: Optional[list]) -> str:
     """
     Headline of the error history: the published elections and the mean block error of the last poll of each house.
 
     Parameters
     ----------
-    n_events : int
-        Number of published elections.
+    events : list of dict
+        ``history_events`` rows (``scope`` tells general, ``es``, from regional elections).
     errors : list of dict or None
-        ``error_rows`` of those elections (``None`` without analysis).
+        ``history_rows`` of those elections (``None`` or empty without analysis).
 
     Returns
     -------
     str
-        The sentence with the mean of ``error_blocks_abs``, or only the count when there is no analysis or no
-        finite value to average.
+        The sentence with the count by class and the mean of ``error_blocks_abs``, or only the count when there
+        is no finite value to average.
     """
+    general = sum(1 for event in events if event['scope'] == 'es')
+    regional = len(events) - general
     values = [row['error_blocks_abs'] for row in errors or [] if row.get('error_blocks_abs') is not None]
 
     if not values:
-        return f'{n_events} elecciones analizadas.'
+        return f'{len(events)} elecciones analizadas.'
+
+    if general and regional:
+        count = f'{len(events)} elecciones analizadas ({general} generales y {regional} autonómicas)'
+    elif general:
+        count = f'{len(events)} elecciones analizadas (todas generales)'
+    else:
+        count = f'{len(events)} elecciones analizadas (todas autonómicas)'
 
     mean = fmt_num(sum(values) / len(values), 1)
 
-    return (f'En las {n_events} elecciones analizadas, el último sondeo de cada encuestadora se desvió de media '
+    return (f'En las {count}, el último sondeo de cada encuestadora se desvió de media '
             f'{mean} puntos en el margen entre bloques.')
 
 
 def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     """
-    Template context of the list of past elections.
+    Template context of the list of past elections, of every scope.
 
     Parameters
     ----------
     state : dict
-        Validated page parameters (``parse_state``).
+        Validated page parameters (``parse_state``); its raw ``scope`` (before ``common_context`` resolves
+        it) only preselects the scope filter.
     active : str, optional
         ``href`` of the page in the navigation.
 
     Returns
     -------
     dict
-        The common context plus ``events`` (``published_events``, each with its ``href``),
-        ``blocks`` (those of the newest election; empty without events), ``analysis_missing``, ``errors``
-        (``error_rows`` of the published elections, empty without analysis), ``error_blocks`` (the ``blocks`` of
-        the ``poll-errors`` part), ``filter_events`` (``date`` and ``name`` of each election, newest first),
-        ``filter_pollsters`` (the house names of ``errors``, alphabetical), ``headline_text``
-        (``history_headline``) and, only with events, ``initial``
-        (``state``, ``sector``: the average error by date ascending, ``blocks``, ``errors``, ``error_blocks`` and
-        ``events``: ``filter_events``).
+        The common context with ``scopes`` replaced by ``history_scopes``, plus ``events``
+        (``history_events``), ``errors`` (``history_rows``), ``error_blocks`` (``common_blocks``),
+        ``filter_events`` (``key`` ``scope:date``, ``date``, ``name``, ``scope`` and ``scope_name``),
+        ``filter_pollsters`` (house names, alphabetical), ``years`` (ascending), ``analysis_missing`` (no scope
+        has analysis), ``selected_scope`` (the raw ``scope`` when it has analysis, else ``None``),
+        ``headline_text`` (``history_headline``) and, only with events, ``initial`` (``state``, ``scopes``,
+        ``events``: ``filter_events``, ``errors``, ``error_blocks``, ``years`` and ``selected_scope``).
 
     Raises
     ------
     HttpError
         503 without a bundle; 404 for an unpublished scope or a missing run.
     """
+    raw_scope = state['scope']
     context = common_context(state, active)
-    scope = context['state']['scope']
-    events = published_events(scope)
-    blocks = []
+    scopes = history_scopes()
+    events = history_events(scopes)
+    errors = history_rows(scopes, events)
+    with_analysis = {scope['code'] for scope in scopes if scope['analysis']}
+    filter_events = [{'key': f"{event['scope']}:{event['date']}", 'date': event['date'], 'name': event['name'],
+                      'scope': event['scope'], 'scope_name': event['scope_name']} for event in events]
 
-    if events:
-        meta = event_part(scope, events[0]['date'], 'meta') or {}
-        blocks = list(meta.get('blocks') or [])
-
-    for event in events:
-        event['href'] = '/elecciones' + context['scope_query'] + '&date=' + event['date']
-
-    errors = error_rows(scope, [event['date'] for event in events])
-    analysis = analysis_part(scope, 'poll-errors') if errors is not None else None
-    error_blocks = list((analysis or {}).get('blocks') or [])
-    filter_events = [{'date': event['date'], 'name': event['name']} for event in events]
-
+    context['scopes'] = scopes
     context['events'] = events
-    context['blocks'] = blocks
-    context['analysis_missing'] = errors is None
-    context['errors'] = errors or []
-    context['error_blocks'] = error_blocks
+    context['analysis_missing'] = not with_analysis
+    context['errors'] = errors
+    context['error_blocks'] = common_blocks(scopes)
     context['filter_events'] = filter_events
-    context['filter_pollsters'] = sorted({row['pollster'] for row in errors or [] if row.get('pollster')},
-                                         key=str.casefold)
-    context['headline_text'] = history_headline(len(events), errors)
+    context['filter_pollsters'] = sorted({row['pollster'] for row in errors if row.get('pollster')}, key=str.casefold)
+    context['years'] = sorted({row['year'] for row in errors})
+    context['selected_scope'] = raw_scope if raw_scope in with_analysis else None
+    context['headline_text'] = history_headline(events, errors)
 
     if events:
-        sector = [{key: event[key] for key in ('date', 'error_avg', 'error_blocks', 'error_blocks_abs', 'bias_blocks')}
-                  for event in reversed(events)]
-        context['initial'] = {'state': context['state'], 'sector': sector, 'blocks': blocks,
-                              'errors': context['errors'], 'error_blocks': error_blocks, 'events': filter_events}
+        context['initial'] = {'state': context['state'], 'scopes': scopes, 'events': filter_events,
+                              'errors': errors, 'error_blocks': context['error_blocks'], 'years': context['years'],
+                              'selected_scope': context['selected_scope']}
 
     return context
 
