@@ -10,6 +10,7 @@ import {
   DEFAULT_MEASURE, MEASURES, complements, errorsHash, eventKey, eventsOf, filterRows, meanOf, parseErrorsHash,
   restPoints, trendPoints, weeksTable,
 } from '../errors.js';
+import {THEME} from '../charts/base.js';
 import {renderBars} from '../charts/bars.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHistogram} from '../charts/histogram.js';
@@ -22,8 +23,8 @@ import {wirePollsTable} from './polls-wire.js';
 const BAR_ROW_HEIGHT = 22;
 const BAR_EXTRA_HEIGHT = 60;
 
-// Accent of the national scope (`es`) in the trend and in the bullseye by scope.
-const ACCENT = '#1d4f86';
+// Accent of the national scope (`es`) in the trend and in the bullseye by scope, and of the detail's bullseye.
+const ACCENT = THEME.accentColor;
 const NATIONAL_SCOPE = 'es';
 
 // The weeks table lists the elections one by one only up to this many.

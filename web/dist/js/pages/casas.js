@@ -2,6 +2,7 @@
 // from the data embedded by the server.
 import {fmtNum} from '../format.js';
 import {renderBars} from '../charts/bars.js';
+import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHeatmap} from '../charts/heatmap.js';
 import {renderLine} from '../charts/line.js';
@@ -37,7 +38,7 @@ function paint() {
 
   const target = document.getElementById('bullseye-chart');
   if (target && bullseye.length && blocks.length >= 2) {
-    tryDraw(() => renderBullseye(target, bullseye, {blocks}), 'the bullseye');
+    tryDraw(() => renderBullseye(target, bullseye, {blocks, color: THEME.accentColor}), 'the bullseye');
   }
 }
 

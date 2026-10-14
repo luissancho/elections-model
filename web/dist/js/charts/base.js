@@ -15,6 +15,7 @@ export const THEME = {
   gridColor: 'rgba(0,0,0,.15)',
   intervalColor: '#333',
   markColor: '#555',
+  accentColor: '#1d4f86',  // the site accent (`--color-accent`): the points of a single-series bullseye
   barColor: '#3a6ea5',
   animationDuration: REDUCED_MOTION ? 0 : 300,
 };
