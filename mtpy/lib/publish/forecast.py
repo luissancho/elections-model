@@ -124,6 +124,10 @@ def export_dist(sim):
 def export_districts(sim, communities: Optional[dict] = None):
     """Export votes and seats per district, leaving out the scope total.
 
+    The ``votes`` of each district are the valid votes of the previous election (``sim.prev_totals``,
+    rounded to an integer): the totals of the upcoming election (``sim.reg_totals``) carry its seats but
+    no votes, since the loader cannot know them yet.
+
     Parameters
     ----------
     sim : Simulator
@@ -140,7 +144,7 @@ def export_districts(sim, communities: Optional[dict] = None):
     region_ids = [r for r in sim.params['regions'] if r != sim.default_region]
     regions = [{'id': r, 'name': sim.region_names.get(r, r), 'seats': int(sim.reg_totals.loc[r, 'seats']),
                 'community': communities.get(r) if communities else None,
-                'votes': int(sim.reg_totals.loc[r, 'votes'])}
+                'votes': int(round(float(sim.prev_totals.loc[r, 'votes'])))}
                for r in region_ids]
     rows = []
     for r in region_ids:

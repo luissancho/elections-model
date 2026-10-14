@@ -88,6 +88,17 @@ def test_export_districts_carries_the_community_and_the_votes():
     assert bare['regions'][0]['community'] is None and bare['regions'][0]['votes'] == 600
 
 
+def test_export_districts_takes_the_votes_from_the_previous_election():
+    # The totals of the upcoming election carry no votes (the loader only fills its seats): the votes of
+    # `districts.regions` are the valid votes of the previous election, `sim.prev_totals`, as integers
+    sim = synthetic_simulator()
+    assert sim.reg_totals['votes'].isnull().all()
+    sim.prev_totals.loc[28, 'votes'] = 600.4
+    result = valid('districts', publish.export_districts(sim)[0])
+    assert [r['votes'] for r in result['regions']] == [600, 400]
+    assert all(isinstance(r['votes'], int) for r in result['regions'])
+
+
 def test_district_communities_come_from_the_catalogue_and_are_null_in_their_own_scope(fresh_app):
     fresh_app.set('data', FileSystem(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')))
     national = data.get_district_communities('es')
