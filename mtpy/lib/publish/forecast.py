@@ -271,8 +271,26 @@ def export_series(fc, names):
     return data, pd.DataFrame(rows, columns=['date', 'name', 'mean', 'lo', 'hi'])
 
 
-def export_polls(fc, names):
-    """Export the published polls and the previous election result.
+def poll_seats(fc) -> dict:
+    """Seat projections of the polls, from ``fc.load_poll_seats()`` when the forecaster has it.
+
+    Parameters
+    ----------
+    fc : Forecaster
+        Fitted forecaster (``sim.model``). A forecaster without ``load_poll_seats`` (a test double) publishes
+        no projections.
+
+    Returns
+    -------
+    dict
+        ``{(date, pollster_id, sponsor_id): {party: [min, max]}}`` (see ``Forecaster.load_poll_seats``).
+    """
+    loader = getattr(fc, 'load_poll_seats', None)
+    return loader() if callable(loader) else {}
+
+
+def export_polls(fc, names, seats=None):
+    """Export the published polls, their seat projections and the previous election result.
 
     Parameters
     ----------
@@ -280,22 +298,39 @@ def export_polls(fc, names):
         Fitted forecaster (``sim.model``).
     names : list of str
         Party names to export.
+    seats : dict, optional
+        Seat projections by ``(date, pollster_id, sponsor_id)`` (``poll_seats``); none by default.
 
     Returns
     -------
     tuple of (dict, pandas.DataFrame)
-        Data for the ``polls`` schema and the polls table as its CSV twin.
+        Data for the ``polls`` schema and the polls table as its CSV twin. A poll with projections carries
+        ``seats`` (``{party: [min, max]}``, only the parties that have one); the CSV twin adds
+        ``seats_min_{party}`` and ``seats_max_{party}`` columns (nullable integers).
     """
     polls = fc.fc_series_raw.reset_index()
     for column in POLL_COLUMNS:
         if column not in polls.columns:
             polls[column] = None
+    seats = seats or {}
+    keys = [
+        (pd.Timestamp(d).strftime('%Y-%m-%d'), int(p), int(s) if pd.notnull(s) else 0)
+        for d, p, s in zip(polls['date'], polls['pollster_id'], polls['sponsor_id'] if 'sponsor_id' in polls.columns else [None] * len(polls))
+    ]
     polls = polls[POLL_COLUMNS + list(names)]
     polls[list(names)] = polls[list(names)].round(PCT_DECIMALS)
     polls['weight'] = polls['weight'].astype(float).round(PROB_DECIMALS)
+    records = polls.to_dict(orient='records')
+    for key, record in zip(keys, records):
+        found = {name: seats[key][name] for name in names if name in seats.get(key, {})}
+        if found:
+            record['seats'] = found
+    for name in names:
+        polls['seats_min_' + name] = pd.array([seats.get(k, {}).get(name, [None])[0] for k in keys], dtype='Int64')
+        polls['seats_max_' + name] = pd.array([seats.get(k, {}).get(name, [None, None])[-1] for k in keys], dtype='Int64')
     results = fc.nfc_series.reset_index()[['date', *names]]
     results = round_cols(results, pct=names)
-    data = {'parties': list(names), 'columns': list(POLL_COLUMNS), 'polls': polls.to_dict(orient='records'),
+    data = {'parties': list(names), 'columns': list(POLL_COLUMNS), 'polls': records,
             'results': results.to_dict(orient='records')}
     return data, polls
 
@@ -706,7 +741,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     forecast = report('forecast', lap())
     heads['forecast'] = publish_mode(sim, writer, scope, run_id, communities)
     fc = sim.model
-    cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names)), ('fan', export_fan(sim)),
+    cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names, seats=poll_seats(fc))),
+             ('fan', export_fan(sim)),
              ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)))
     for part, (data, frame) in cycle:
         writer.write_json(bundle.path_part(scope, run_id, part), part, data, scope, run_id)

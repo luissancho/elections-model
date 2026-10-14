@@ -112,3 +112,20 @@ def test_polls_count_is_singular_for_one_and_the_month_filter_ignores_empty_limi
     assert run_js('[p.pollsCount(1), p.pollsCount(0), p.pollsCount(315)]') == ['1 sondeo', '0 sondeos', '315 sondeos']
     undated = [{'pollster': 'CIS'}, {'pollster': 'GAD3'}]
     assert run_js('p.filterPolls({}, {{pollsters: null, from: "", to: ""}}).length'.format(json.dumps(undated))) == 2
+
+
+def test_seats_view_uses_the_pollsters_projections():
+    polls = [
+        {'date': '2026-10-01', 'pollster': 'GAD3', 'PP': 31.1, 'PSOE': 26.1, 'seats': {'PP': [138, 142], 'PSOE': [100, 100]}},
+        {'date': '2026-09-04', 'pollster': 'CIS', 'PP': 25.5, 'PSOE': 31.0},
+        {'date': '2026-09-02', 'pollster': '40dB', 'PP': 33.0, 'PSOE': 27.0, 'seats': {'PP': [150, 150]}},
+    ]
+    js = json.dumps(polls)
+    assert run_js('p.hasSeats({}[0]) && !p.hasSeats({}[1])'.format(js, js)) is True
+    assert run_js('[p.pollValue({}[0], "PP", "esc"), p.pollValue({}[0], "PSOE", "esc"), p.pollValue({}[1], "PP", "esc"), p.pollValue({}[0], "PP")]'.format(js, js, js, js)) == [140, 100, None, 31.1]
+    assert run_js('[p.seatsText({}[0], "PP"), p.seatsText({}[0], "PSOE"), p.seatsText({}[1], "PP")]'.format(js, js, js)) == ['138–142', '100', None]
+    assert run_js('p.filterPolls({}, {{pollsters: null, from: null, to: null, mode: "esc"}}).map((x) => x.pollster)'.format(js)) == ['GAD3', '40dB']
+    assert run_js('p.filterPolls({}, {{pollsters: null, from: null, to: null}}).length'.format(js)) == 3
+    assert run_js('p.sortPolls({}, "PP", false, "esc").map((x) => x.pollster)'.format(js)) == ['40dB', 'GAD3', 'CIS']  # sin escaños, al final
+    assert run_js('p.meanOf({}, ["PP", "PSOE"], "esc")'.format(js)) == {'PP': 145, 'PSOE': 100}  # puntos medios, enteros
+    assert run_js('p.meanOf({}, ["PP"])'.format(js)) == {'PP': 29.9}

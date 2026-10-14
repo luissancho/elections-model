@@ -171,8 +171,15 @@
         {% endcall %}
       {{ m.card_end() }}
       {% endif %}
-      {{ m.card_start('polls', 'Todas las encuestas', 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.') }}
+      {{ m.card_start('polls', 'Todas las encuestas', ('Lo que publicó cada sondeo del ciclo: la estimación de voto (%) y, en las encuestadoras que los dan, los escaños. Sombreado, el partido que va primero. Pulsa una cabecera para ordenar.' if has_seats else 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.')) }}
         <div class="bar" id="polls-controls" hidden>
+          {% if has_seats %}
+          <fieldset id="polls-mode" class="seg">
+            <legend>Qué mostrar</legend>
+            <label><input type="radio" name="pmode" value="pct" checked> % de voto</label>
+            <label><input type="radio" name="pmode" value="esc"> Escaños</label>
+          </fieldset>
+          {% endif %}
           <details class="dd" id="polls-parties">
             <summary>Partidos (<span data-count>{{ table_parties|length }}</span>/{{ table_parties|length }})</summary>
             <div class="dd-panel">
@@ -265,6 +272,10 @@
           Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, la fecha de publicación, la muestra y
           el voto de cada partido, sin ninguna corrección del modelo. La media simple del pie es la de los sondeos
           filtrados, todos con el mismo peso: no es el promedio del modelo, que pondera por calidad, muestra y fecha.
+        </p>
+        <p>
+          En la vista Escaños solo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra
+          como mín–máx y cuenta por su punto medio para ordenar y promediar.
         </p>
         {% endcall %}
       {{ m.card_end() }}

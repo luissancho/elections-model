@@ -436,7 +436,7 @@ def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
         assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | parties <= set(poll)
-        extra = {'sponsor', 'start_date', 'end_date'}
+        extra = {'sponsor', 'start_date', 'end_date', 'seats'}
         assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | extra | parties
 
 
@@ -1902,3 +1902,19 @@ def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(ap
     assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d %|0 %|100 %', cell) for cell in cells), cells
     home = html(call(api, '/')[2])
     assert re.search(r'(?:> )?\d+ % de probabilidad de mayoría absoluta', home)
+
+
+def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api, fresh_app):
+    page = html(call(api, '/es')[2])
+    assert 'id="polls-mode"' not in page and 'name="pmode"' not in page  # el fixture no trae escaños
+    polls = fixture_data('polls')
+    polls['polls'][0]['seats'] = {'PP': [140, 142]}
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
+    webapi.site().files.clear()
+    body = call(api, '/es')[2]
+    page = html(body).replace('\n', ' ')
+    assert re.search(r'<fieldset id="polls-mode" class="seg">', page)
+    assert 'name="pmode" value="pct" checked' in page and 'name="pmode" value="esc"' in page
+    assert 'en las encuestadoras que los dan, los escaños' in page and 'En la vista Escaños' in page
+    assert initial(body)['polls']['polls'][0]['seats'] == {'PP': [140, 142]}

@@ -327,6 +327,45 @@ class Forecaster(Core):
 
         return polls.set_index(['date', 'pollster_id', 'sponsor_id']).sort_index()
 
+    def load_poll_seats(self) -> dict:
+        """
+        Seat projections published with the polls of the cycle (the pollsters' own figures, read by the loader
+        from the polling tables), with the filters of `load_polls`. Not part of `build_series`: the publication
+        calls it, the model never uses them.
+
+        Returns
+        -------
+        dict
+            ``{(date, pollster_id, sponsor_id): {party: [min, max]}}`` with the date as ``YYYY-MM-DD`` and the
+            seats as integers, only for the polls and the parties of `self.parties` with a projection; empty
+            when no poll has one.
+        """
+        frames = {}
+        for metric in ('seats_min', 'seats_max'):
+            frames[metric] = get_poll_series(
+                scope=self.scope,
+                event_dates=[self.date_end.strftime('%Y-%m-%d')],
+                drange=self.drange,
+                drop_mtypes=self.drop_mtypes,
+                metric=metric
+            ).set_index(['date', 'pollster_id', 'sponsor_id'])
+
+        lo, hi = frames['seats_min'], frames['seats_max']
+        names = [n for n in self.parties.name.tolist() if n in lo.columns]
+        out = {}
+        for key, row in lo.iterrows():
+            upper = hi.loc[key] if key in hi.index else None
+            seats = {}
+            for name in names:
+                if pd.notnull(row.get(name)):
+                    top = upper.get(name) if upper is not None else None
+                    seats[name] = [int(row[name]), int(top) if pd.notnull(top) else int(row[name])]
+            if seats:
+                date, pollster_id, sponsor_id = key
+                out[(pd.Timestamp(date).strftime('%Y-%m-%d'), int(pollster_id), int(sponsor_id))] = seats
+
+        return out
+
     def build_series(self) -> Self:
         """
         Build the series of polls, weights and results for the election event.

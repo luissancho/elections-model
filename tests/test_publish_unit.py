@@ -177,7 +177,49 @@ def test_export_polls_keeps_the_published_figures_and_the_previous_result():
     assert first['date'] == '2026-09-05' and first['pollster'] == 'CIS' and first['sponsor'] is None and first['PP'] == 41.0
     assert data['polls'][2]['VOX'] is None
     assert data['results'] == [{'date': '2023-07-23', 'PP': 33.1, 'PSOE': 31.7, 'VOX': 12.4}]
-    assert list(frame.columns) == publish.POLL_COLUMNS + NAMES
+    seat_columns = [c + n for n in NAMES for c in ('seats_min_', 'seats_max_')]
+    assert sorted(frame.columns) == sorted(publish.POLL_COLUMNS + NAMES + seat_columns)
+    assert all('seats' not in poll for poll in data['polls']) and frame['seats_min_PP'].isna().all()
+
+
+def test_export_polls_carries_the_pollsters_seat_projections():
+    sim = synthetic_simulator()
+    seats = {('2026-09-05', 1, 0): {'PP': [140, 142], 'PSOE': [100, 100], 'OTRO': [1, 1]}, ('2026-09-12', 2, 0): {'VOX': [30, 30]}}
+    data, frame = publish.export_polls(sim.model, NAMES, seats=seats)
+    data = valid('polls', data, mode=None)
+    assert data['polls'][0]['seats'] == {'PP': [140, 142], 'PSOE': [100, 100]}  # solo los partidos exportados
+    assert data['polls'][1]['seats'] == {'VOX': [30, 30]} and 'seats' not in data['polls'][2]
+    assert frame.loc[0, 'seats_min_PP'] == 140 and frame.loc[0, 'seats_max_PP'] == 142 and pd.isna(frame.loc[0, 'seats_min_VOX'])
+    assert frame.loc[1, 'seats_min_VOX'] == 30 and str(frame['seats_min_PP'].dtype) == 'Int64'
+    # `poll_seats`: el doble sin `load_poll_seats` no publica nada; con él, lo que devuelva
+    assert publish.poll_seats(sim.model) == {}
+    sim.model.load_poll_seats = lambda: seats
+    assert publish.poll_seats(sim.model) is seats
+
+
+def test_forecaster_load_poll_seats_pairs_min_and_max_by_poll(monkeypatch):
+    import types
+    from mtpy.lib import forecaster as fc_module
+    frames = {
+        'seats_min': pd.DataFrame({'date': pd.to_datetime(['2026-09-05', '2026-09-12']), 'pollster_id': [1, 2], 'sponsor_id': [0, 5],
+                                   'pollster': ['CIS', 'GAD3'], 'PP': [140, np.nan], 'PSOE': [100, np.nan]}),
+        'seats_max': pd.DataFrame({'date': pd.to_datetime(['2026-09-05', '2026-09-12']), 'pollster_id': [1, 2], 'sponsor_id': [0, 5],
+                                   'pollster': ['CIS', 'GAD3'], 'PP': [142, np.nan], 'PSOE': [np.nan, np.nan]}),
+    }
+    calls = []
+
+    def fake_series(**kwargs):
+        calls.append(kwargs)
+        return frames[kwargs['metric']].copy()
+
+    monkeypatch.setattr(fc_module, 'get_poll_series', fake_series)
+    fake = types.SimpleNamespace(scope='es', date_end=pd.Timestamp('2026-11-29'), drange=(6, None), drop_mtypes=['exit'],
+                                 parties=pd.DataFrame({'name': ['PP', 'PSOE', 'VOX']}))
+    out = fc_module.Forecaster.load_poll_seats(fake)
+    assert out == {('2026-09-05', 1, 0): {'PP': [140, 142], 'PSOE': [100, 100]}}  # sin máximo, el mínimo repetido
+    assert [c['metric'] for c in calls] == ['seats_min', 'seats_max']
+    assert calls[0]['scope'] == 'es' and calls[0]['event_dates'] == ['2026-11-29'] and calls[0]['drange'] == (6, None)
+    assert calls[0]['drop_mtypes'] == ['exit']
 
 
 def test_export_fan_house_effects_and_dispersion():

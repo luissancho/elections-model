@@ -1,7 +1,7 @@
 // DOM builders of the "Todas las encuestas" table of Promedios: header, body and footer, built with
 // `createElement`/`textContent` (never HTML with data).
 import {fmtDate, fmtInt, fmtNum} from '../format.js';
-import {leaderOf, pollsCount, shortDate} from '../polls-table.js';
+import {leaderOf, pollsCount, seatsText, shortDate, valuesOf} from '../polls-table.js';
 
 const FIXED = [['pollster', 'Encuestadora'], ['date', 'Fecha'], ['sample_size', 'Muestra']];
 
@@ -25,16 +25,18 @@ function el(tag, text = '', className = '') {
 /**
  * Value cells of a row: one per party, the leader shaded in its colour.
  *
- * @param {Object<string, (number|null)>} values value by party name
+ * @param {Object<string, (number|null)>} values value by party name (what sorts and picks the leader)
  * @param {string[]} parties columns
  * @param {Catalog} catalog party catalogue
+ * @param {Object<string, (string|null)>} [texts] text by party name, replacing the share at one decimal
  * @returns {HTMLElement[]} the `td` cells
  */
-function valueCells(values, parties, catalog) {
+function valueCells(values, parties, catalog, texts = null) {
   const leaders = leaderOf(Object.fromEntries(parties.map((name) => [name, values[name]])));
   return parties.map((name) => {
     const missing = typeof values[name] !== 'number';
-    const td = el('td', missing ? '—' : fmtNum(values[name], 1), missing ? 'p na' : 'p');
+    const text = texts ? texts[name] : fmtNum(values[name], 1);
+    const td = el('td', missing ? '—' : text, missing ? 'p na' : 'p');
     if (leaders.includes(name)) {
       td.className = 'p mx';
       td.style.background = `${catalog.color(name)}24`;
@@ -84,8 +86,9 @@ export function renderHead(thead, parties, catalog, sort) {
  * @param {Array} polls polls of the page
  * @param {string[]} parties columns shown
  * @param {Catalog} catalog party catalogue
+ * @param {string} [mode='pct'] view: shares, or `esc` for the seat projections (`mín–máx` for a range)
  */
-export function renderBody(tbody, polls, parties, catalog) {
+export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
   if (!polls.length) {
     const td = el('td', 'Ningún sondeo con estos filtros.', 'empty');
     td.colSpan = FIXED.length + parties.length;
@@ -102,7 +105,8 @@ export function renderBody(tbody, polls, parties, catalog) {
       date.title = `Trabajo de campo: ${fmtDate(poll.start_date || poll.end_date)} – ${fmtDate(poll.end_date || poll.start_date)}`;
     }
     const tr = el('tr');
-    tr.append(first, date, el('td', fmtInt(poll.sample_size)), ...valueCells(poll, parties, catalog));
+    const texts = mode === 'esc' ? Object.fromEntries(parties.map((name) => [name, seatsText(poll, name)])) : null;
+    tr.append(first, date, el('td', fmtInt(poll.sample_size)), ...valueCells(valuesOf(poll, parties, mode), parties, catalog, texts));
     return tr;
   }));
 }
@@ -115,11 +119,13 @@ export function renderBody(tbody, polls, parties, catalog) {
  * @param {Object<string, (number|null)>} means mean by party name
  * @param {string[]} parties columns shown
  * @param {Catalog} catalog party catalogue
+ * @param {string} [mode='pct'] view: shares at one decimal, or `esc` for whole seats
  */
-export function renderFoot(tfoot, count, means, parties, catalog) {
+export function renderFoot(tfoot, count, means, parties, catalog, mode = 'pct') {
   const first = el('td', '', 'f l');
-  first.append(el('b', 'Media simple'), el('small', pollsCount(count)));
+  first.append(el('b', 'Media simple'), el('small', pollsCount(count) + (mode === 'esc' ? ' con escaños' : '')));
   const tr = el('tr');
-  tr.append(first, el('td'), el('td'), ...valueCells(means, parties, catalog));
+  const texts = mode === 'esc' ? Object.fromEntries(parties.map((name) => [name, fmtInt(means[name])])) : null;
+  tr.append(first, el('td'), el('td'), ...valueCells(means, parties, catalog, texts));
   tfoot.replaceChildren(tr);
 }
