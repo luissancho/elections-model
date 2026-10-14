@@ -1,6 +1,7 @@
 """
 Seats page context.
 """
+import unicodedata
 from typing import Optional
 
 from ...core.api import HttpError
@@ -181,6 +182,25 @@ def escanos_headline_text(summary: dict, meta: dict) -> str:
         top['name'], fmt_prob(top['p_majority']), majority, n_seats)
 
 
+def _sort_name(name: str) -> str:
+    """
+    Sort key of a territory name: accents folded and case ignored, as the table headers sort it.
+
+    Parameters
+    ----------
+    name : str
+        Territory name.
+
+    Returns
+    -------
+    str
+        The name without combining marks, casefolded.
+    """
+    decomposed = unicodedata.normalize('NFKD', str(name))
+
+    return ''.join(char for char in decomposed if not unicodedata.combining(char)).casefold()
+
+
 def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     """
     Overview table of the central scenario by district and party.
@@ -249,7 +269,7 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
         'parties': shown,
         'rows': [
             {'id': item['id'], 'name': item['name'], 'seats': item['seats'], 'cells': cells(item['id'])}
-            for item in regions
+            for item in sorted(regions, key=lambda item: _sort_name(item['name']))
         ],
         'total': total,
     }

@@ -55,6 +55,7 @@ export function renderHead(thead, parties, catalog, sort) {
   const tr = el('tr');
   const add = (th, key) => {
     th.dataset.key = key;
+    th.scope = 'col';
     const button = el('button', '', 'sort');
     button.type = 'button';
     button.append(...th.childNodes);

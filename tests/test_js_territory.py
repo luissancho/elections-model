@@ -101,3 +101,17 @@ def test_can_group_needs_votes_and_two_communities_and_ranking_and_ranges_are_de
     gap = dict(DISTRICTS, rows=[dict(r, seats_lo=None) if r['name'] == 'PP' else r for r in ROWS])
     out = run_js('t.territoryRows(d, s, u, {level: "prov", mode: "esc"}).rows[0].ranges', districts=gap)
     assert out['PP'] is None and out['PSOE'] == '2–4'
+
+
+def test_community_vote_counts_a_province_where_the_party_does_not_stand_as_zero():
+    regions = [
+        {'id': 35, 'name': 'Las Palmas', 'seats': 8, 'votes': 100, 'community': {'code': 5, 'name': 'Canarias'}},
+        {'id': 38, 'name': 'S. C. Tenerife', 'seats': 7, 'votes': 100, 'community': {'code': 5, 'name': 'Canarias'}},
+        REGIONS[0],
+    ]
+    rows = [_row(28, 'Madrid', 'PP', 40, 2, 4), _row(28, 'Madrid', 'VOX', 10, 0, 1), _row(35, 'Las Palmas', 'VOX', 12, 0, 1), _row(38, 'S. C. Tenerife', 'VOX', None, None, None),
+            _row(35, 'Las Palmas', 'PP', 30, 1, 3), _row(38, 'S. C. Tenerife', 'PP', 20, 1, 3)]
+    districts = {'parties': ['PP', 'VOX'], 'regions': regions, 'rows': rows}
+    out = run_js('t.territoryRows(d, s, u, {level: "ccaa", mode: "pct"})', districts)
+    canarias = next(row for row in out['rows'] if row['name'] == 'Canarias')
+    assert canarias['values']['VOX'] == 6.0 and canarias['values']['PP'] == 25.0

@@ -75,7 +75,8 @@
         {% elif section.id == 'publicacion' %}
         <p>
           Cada publicación es un run: una ejecución completa del modelo identificada por su fecha y hora y
-          por la versión del código (commit) con que se hizo, que figuran al pie de cada página. Un run
+          por la versión del código (commit) con que se hizo. El pie de cada página muestra el identificador y la fecha de
+          la publicación; el commit de cada run consta en su `meta.json`, accesible por la API. Un run
           publicado no se modifica nunca; el siguiente pasa a ser el más reciente. Los runs retrospectivos
           son reconstrucciones de días pasados con el modelo de hoy y solo los sondeos publicados hasta
           ese día, y van marcados como tales: en los gráficos de evolución, con puntos huecos.

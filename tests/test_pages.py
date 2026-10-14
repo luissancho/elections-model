@@ -367,7 +367,7 @@ def test_promedios_has_the_series_chart_the_polls_table_and_csv_link(api):
     page = html(body)
     assert 'id="series-chart"' in page and 'Todas las encuestas' in page
     assert 'href="/api/v1/forecast/es/polls?run={}&amp;format=csv"'.format(RUN) in page
-    assert '<th data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>' in page
+    assert '<th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>' in page
     data = initial(body)
     assert data['projection']['dates'] and data['vote']['when']
 
@@ -527,9 +527,10 @@ def test_promedios_polls_table_carries_all_parties_counters_and_hides_the_pagina
     assert '<option value="2026-10" selected>Oct 2026</option>' in page and 'id="polls-count">1 sondeo<' in page
     assert re.search(r'<div class="pag" id="polls-pag" hidden>', page)
     assert 'data-key="PP"' in page and 'title="Partido Popular"' in page
-    assert '<th data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>' in page
-    assert ('<th class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>'
+    assert '<th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>' in page
+    assert ('<th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>'
             in page)
+    assert 'th data-key' not in page and 'data-key="sample_size"' in page and '<th scope="col" data-key="sample_size"' in page
     assert '<b>Media simple</b><small>1 sondeo</small>' in page
     assert 'Cada fila es un sondeo' in page and 'no es el promedio del modelo' in page
 
@@ -766,6 +767,12 @@ def test_district_table_and_region_rows():
     absent = DISTRICTS['rows'][2] | {'name': 'VOX', 'pct': None, 'pct_lo': None, 'pct_hi': None, 'seats': 0.0}
     assert [r['name'] for r in pages.region_rows(DISTRICTS | {'rows': DISTRICTS['rows'] + [absent]}, 28)] == ['PP', 'PSOE']
     assert pages.resolve_region(None, DISTRICTS['regions'])['id'] == 28
+
+
+def test_district_table_rows_are_alphabetical_with_the_accents_folded():
+    regions = [{'id': i, 'name': name, 'seats': 1} for i, name in enumerate(['Zamora', 'Álava', 'Ávila', 'A Coruña'], 1)]
+    table = pages.district_table({'parties': ['PP'], 'regions': regions, 'rows': []}, {'parties': ['PP'], 'rows': []})
+    assert [r['name'] for r in table['rows']] == ['A Coruña', 'Álava', 'Ávila', 'Zamora']
 
 
 def test_district_table_keeps_scenario_parties_ordered_by_total_and_has_communities_needs_votes():
@@ -1682,6 +1689,8 @@ def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
         assert token in css, token
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
     assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
+    assert '.geo th:first-child' in css and '.geo tr.total td:first-child { background: var(--color-soft); }' in css
+    assert 'align-items: start' in css and '.hemi-card .chart { height: 460px; }' in css and 'flex: 1' not in css.split('.hemi-grid')[1].split('/* Escaños')[0]
 
 
 def test_controls_are_segments_on_every_page(api):
@@ -1834,7 +1843,7 @@ def test_promedios_controls_in_two_rows_and_the_polls_table_by_name(api):
     assert page.index('id="series-view"') < page.index('id="series-window"')
     before = page[:page.index('id="polls"')]
     assert 'class="pill"' not in page and 'data-all' not in before and 'data-none' not in before
-    assert '<th class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>' in page and '<th scope="col">Casa</th>' not in page
+    assert '<th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>' in page and '<th scope="col">Casa</th>' not in page
     data = initial(call(api, '/es')[2])
     assert data['polls']['polls'][0]['name'] and 'sample_size' in data['polls']['polls'][0]
 

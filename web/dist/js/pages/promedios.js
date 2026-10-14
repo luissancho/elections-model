@@ -9,7 +9,7 @@ import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
 import {PAGE_SIZE, filterPolls, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {WINDOW_DAYS} from '../range.js';
-import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 import {renderBody, renderFoot, renderHead} from './polls-dom.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
@@ -139,6 +139,7 @@ function wireAverage(initial, views, state, render) {
   for (const input of document.querySelectorAll('#series-view input[name=view]')) {
     input.checked = input.value === state.view;
   }
+  markSegments();
   tryDraw(draw, 'the poll average');
 
   // The controls only work with JavaScript, so the server renders them hidden.
@@ -212,6 +213,7 @@ function wireHouse(initial, views, start, render) {
   for (const input of document.querySelectorAll('#pollster-view input[name=pview]')) {
     input.checked = input.value === state.view;
   }
+  markSegments();
   tryDraw(draw, 'the house against the average');
 
   if (controls) {
@@ -319,6 +321,9 @@ function wireDropdown(dd, onChange) {
   return () => boxes.filter((box) => box.checked);
 }
 
+/** Sort keys of the fixed columns of the polls table; any other key is a party. */
+const FIXED_KEYS = ['pollster', 'date', 'sample_size'];
+
 /**
  * Wire the "Todas las encuestas" table: party and pollster dropdowns, month range, sortable headers and pages of
  * `PAGE_SIZE` rows, all computed in the browser from `initial.polls`. The server renders the 15 most recent rows
@@ -341,8 +346,11 @@ function wirePollsTable(initial, catalog) {
   const [prev, next] = pag.querySelectorAll('button');
   const pick = (checked, total) => (checked.length === total ? null : checked.map((box) => box.value));
 
-  const render = () => {
+  const render = (focusKey = null) => {
     const parties = checkedParties().map((box) => box.value);
+    if (!FIXED_KEYS.includes(state.sort.key) && !parties.includes(state.sort.key)) {
+      state.sort = {key: 'date', asc: false};
+    }
     const pollsters = pick(checkedPollsters(), pollsterTotal);
     const rows = sortPolls(filterPolls(polls, {
       pollsters,
@@ -363,6 +371,12 @@ function wirePollsTable(initial, catalog) {
     next.disabled = state.page >= pages - 1;
     document.getElementById('polls-range').textContent = pageLabel(state.page, shown.length, rows.length);
     pag.hidden = pages <= 1;
+    if (focusKey) {
+      const button = table.querySelector(`th[data-key="${CSS.escape(focusKey)}"] .sort`);
+      if (button) {
+        button.focus();
+      }
+    }
   };
   const refilter = () => { state.page = 0; render(); };
   const checkedParties = wireDropdown(document.getElementById('polls-parties'), refilter);
@@ -379,7 +393,7 @@ function wirePollsTable(initial, catalog) {
     const key = th.dataset.key;
     state.sort = key === state.sort.key ? {key, asc: !state.sort.asc} : {key, asc: key === 'pollster'};
     state.page = 0;
-    render();
+    render(key);
   });
   pag.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-page]');

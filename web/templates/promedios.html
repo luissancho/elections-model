@@ -52,7 +52,7 @@
         {{ m.card_start('parties-card', 'Resultados por partido', 'Voto y escaños previstos de cada partido y su probabilidad de quedar primero.', subtitle) }}
           <div class="table-wrap">
             <table id="parties-table">
-              <caption>Voto, escaños y probabilidad de quedar primero de cada partido.</caption>
+              <caption class="sr-only">Voto, escaños y probabilidad de quedar primero de cada partido.</caption>
               <thead>
                 <tr>
                   <th scope="col">Partido</th>
@@ -83,7 +83,7 @@
         {{ m.card_start('blocks-card', 'Resultados por bloque', 'Voto y escaños de cada bloque y su probabilidad de mayoría absoluta.', subtitle) }}
           <div class="table-wrap">
             <table id="blocks-result-table">
-              <caption>Voto, escaños y probabilidad de mayoría absoluta de cada bloque.</caption>
+              <caption class="sr-only">Voto, escaños y probabilidad de mayoría absoluta de cada bloque.</caption>
               <thead>
                 <tr>
                   <th scope="col">Bloque</th>
@@ -208,11 +208,11 @@
             </colgroup>
             <thead>
               <tr>
-                <th class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>
-                <th data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>
-                <th data-key="sample_size"><button type="button" class="sort">Muestra</button></th>
+                <th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>
+                <th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>
+                <th scope="col" data-key="sample_size"><button type="button" class="sort">Muestra</button></th>
                 {% for name in table_parties %}
-                <th class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><button type="button" class="sort"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</button></th>
+                <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><button type="button" class="sort"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</button></th>
                 {% endfor %}
               </tr>
             </thead>

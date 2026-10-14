@@ -80,10 +80,11 @@ export function groupByCommunity(rows, parties, mode) {
       if (!known.length) {
         values[party] = null;
       } else if (mode === 'pct') {
-        const weight = known.reduce((sum, row) => sum + row._weight, 0);
+        // A province where the party does not stand counts as 0 % of its votes, not as missing.
+        const weight = members.reduce((sum, row) => sum + row._weight, 0);
         values[party] = weight > 0
           ? known.reduce((sum, row) => sum + row.values[party] * row._weight, 0) / weight
-          : known.reduce((sum, row) => sum + row.values[party], 0) / known.length;
+          : known.reduce((sum, row) => sum + row.values[party], 0) / members.length;
       } else {
         values[party] = known.reduce((sum, row) => sum + row.values[party], 0);
       }

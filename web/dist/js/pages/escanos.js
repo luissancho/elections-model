@@ -74,6 +74,8 @@ function wireCoalition(dist, majority) {
 const CAPTION = {
   esc: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su '
     + 'circunscripción. Pasa el ratón para ver el rango del 95 %.',
+  ccaa: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de las '
+    + 'provincias de la comunidad.',
   pct: 'Voto estimado en cada territorio; en CCAA, la media ponderada por los votos de la elección anterior.',
 };
 
@@ -112,7 +114,7 @@ function wireTerritory(initial, catalog) {
     }
     const caption = table.querySelector('caption');
     if (caption) {
-      caption.textContent = CAPTION[mode];
+      caption.textContent = mode === 'esc' && state.level === 'ccaa' ? CAPTION.ccaa : CAPTION[mode];
     }
     const sorted = {...data, rows: sortTerritory(data.rows, state.sort.key, state.sort.asc)};
     renderHead(table.tHead, data.parties, catalog, state.sort, state.level === 'ccaa' ? 'CCAA' : 'Provincia');
