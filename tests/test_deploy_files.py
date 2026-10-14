@@ -24,10 +24,12 @@ def test_ecs_templates_are_valid_and_consistent():
     assert web['containerDefinitions'][0]['portMappings'][0]['containerPort'] == 8042
     assert job['memory'] == '4096' and all(e['name'] != 'APP_API' for e in job['containerDefinitions'][0]['environment'])
     assert run['overrides']['containerOverrides'][0]['environment'][0]['name'] == 'RUN_JOB'
-    # El clúster y la definición de la web se llaman `elections-model` (Luis, 2026-10-14); la del job sigue siendo
-    # `elections-job` y la imagen de ECR `elections-web`
+    # Nombres fijados por Luis (2026-10-14): clúster y definición de la web `elections-model`, definición del job
+    # `elections-model-job`, imagen de ECR `elections-model:<tag>`
     assert web['family'] == 'elections-model' and run['cluster'] == 'elections-model'
-    assert job['family'] == 'elections-job' and run['taskDefinition'] == 'elections-job'
+    assert job['family'] == 'elections-model-job' and run['taskDefinition'] == 'elections-model-job'
+    for template in (web, job):
+        assert template['containerDefinitions'][0]['image'].endswith('.amazonaws.com/elections-model:<tag>')
     for template in (web, job):
         adapter = {e['name']: e['value'] for e in template['containerDefinitions'][0]['environment']}['DB_ADAPTER']
         # `mtpy.run()` resuelve el adaptador con `getattr(dal, DB_ADAPTER)`: debe nombrar un módulo de `mtpy/core/dal/`

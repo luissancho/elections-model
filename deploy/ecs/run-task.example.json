@@ -1,6 +1,6 @@
 {
   "cluster": "elections-model",
-  "taskDefinition": "elections-job",
+  "taskDefinition": "elections-model-job",
   "launchType": "FARGATE",
   "count": 1,
   "networkConfiguration": {

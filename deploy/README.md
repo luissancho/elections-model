@@ -1,6 +1,6 @@
 # Despliegue de la web (fases 0-2 y páginas desde los controladores)
 
-Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>` por la etiqueta que uses.
+Guía breve para construir y probar la imagen `elections-model`. Sustituye `<tag>` por la etiqueta que uses.
 (Enmienda 2026-10-13, fase 6: la guía cubre ya las fases 0 a 6, incluido el despliegue en AWS ECS; el título se
 conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`.)
 
@@ -33,7 +33,7 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
 Desde la raíz del repositorio:
 
 ```
-docker build --platform linux/amd64 -t elections-web:<tag> .
+docker build --platform linux/amd64 -t elections-model:<tag> .
 ```
 
 La imagen copia el repositorio completo (`COPY . .`) salvo lo excluido en `.dockerignore`; `deploy/elections.env`,
@@ -44,7 +44,7 @@ nginx + gunicorn, `APP_CRONTAB` arranca supercronic con `deploy/docker/crontab`,
 ## Arrancar el contenedor
 
 ```
-docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/elections.env elections-web:<tag>
+docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/elections.env elections-model:<tag>
 ```
 
 ## La web
@@ -353,7 +353,7 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 
 ### Qué debe existir en AWS
 
-- Un clúster de ECS `elections-model` y un repositorio de ECR `elections-web`.
+- Un clúster de ECS `elections-model` y un repositorio de ECR `elections-model`.
 - Un servicio de ECS Fargate con la definición `elections-model`, con 2 tareas como mínimo, registrado en un target
   group (puerto 8042, protocolo HTTP) con health check en `/api/v1/health`, cada 30 s y 2 fallos para marcarlo
   no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group. (La spec de la
@@ -365,7 +365,7 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 - Rol de tarea de lectura (`<task-role-read>`): `s3:GetObject` sobre `arn:aws:s3:::<bucket>/site/*` y
   `s3:ListBucket` sobre `arn:aws:s3:::<bucket>` (condición de prefijo `site/*`). Es el que lee la web.
 - Rol de tarea de escritura (`<task-role-write>`): lo anterior más `s3:PutObject` y `s3:DeleteObject` sobre
-  `site/*` y `site-dry/*`. Solo para la definición `elections-job`.
+  `site/*` y `site-dry/*`. Solo para la definición `elections-model-job`.
 - Los dos roles de tarea, además, `logs:CreateLogStream` y `logs:PutLogEvents` sobre el grupo de logs
   (`arn:aws:logs:<region>:<account>:log-group:<log-group>:*`): el logger de la aplicación (`CWL_GROUP`) escribe con
   el rol de la tarea, mientras que el driver `awslogs` usa el rol de ejecución. (Enmienda 2026-10-13, revisión
@@ -399,9 +399,9 @@ salen del rol de la tarea. `DB_ADAPTER` es `PostgreSQL`, el nombre exacto del m�
 
 ```
 aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
-docker build --platform linux/amd64 -t elections-web:<tag> .
-docker tag elections-web:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
-docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
+docker build --platform linux/amd64 -t elections-model:<tag> .
+docker tag elections-model:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>
+docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>
 aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-web.example.json
 aws ecs update-service --cluster elections-model --service elections-model --task-definition elections-model --force-new-deployment
 bash deploy/check-api.sh https://<host>
@@ -430,7 +430,7 @@ El job se niega a probar un `files/` local (sería un falso visto bueno); para f
 Desde la imagen:
 
 ```
-docker run --rm --env-file deploy/elections.env -e RUN_JOB=check_s3 elections-web:<tag>
+docker run --rm --env-file deploy/elections.env -e RUN_JOB=check_s3 elections-model:<tag>
 ```
 
 Cada paso imprime `<paso> OK` o `<paso> FAIL: <error>`; si alguno falla, el job termina con error.
@@ -680,14 +680,14 @@ Desde la imagen (`RUN_JOB` es el nombre del job, la primera palabra, y después 
 `init.sh` lo pasa como un solo argumento; enmienda 2026-10-13, revisión final):
 
 ```
-docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}' elections-web:<tag>
+docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}' elections-model:<tag>
 ```
 
 Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pasos.
 
 ### Publicar desde ECS
 
-Registra la definición `elections-job` desde `deploy/ecs/task-job.example.json` (marcadores sustituidos) y lanza
+Registra la definición `elections-model-job` desde `deploy/ecs/task-job.example.json` (marcadores sustituidos) y lanza
 la tarea con `deploy/ecs/run-task.example.json` (también con los marcadores sustituidos):
 
 ```
@@ -709,7 +709,7 @@ que hiciste el `docker build`): la imagen no lleva `.git`, así que la procedenc
 (`meta.commit`, el commit del pie de la web) sale de esa variable, con `dirty: false`. Sin ella el run queda con
 `commit: null`. Actualízala cada vez que registres una imagen nueva.
 
-**Aviso**: un `run-task` de `elections-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
+**Aviso**: un `run-task` de `elections-model-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
 definición no lleva `APP_API`, `APP_CRONTAB` ni `APP_QUEUE`) y se queda esperando en `tail -f /dev/null`, con 2 vCPU
 y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster elections-model --task <task-id>`).
 

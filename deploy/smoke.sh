@@ -14,7 +14,7 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-image="elections-web:smoke"
+image="elections-model:smoke"
 name="elections-smoke"
 base="http://127.0.0.1:8042"
 env_file="${1:-}"
