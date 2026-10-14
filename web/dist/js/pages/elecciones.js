@@ -10,6 +10,7 @@ import {
   DEFAULT_MEASURE, MEASURES, complements, errorsHash, eventKey, eventsOf, filterRows, meanOf, parseErrorsHash,
   restPoints, trendPoints, weeksTable,
 } from '../errors.js';
+import {THEME} from '../charts/base.js';
 import {renderBars} from '../charts/bars.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHistogram} from '../charts/histogram.js';
@@ -22,8 +23,8 @@ import {wirePollsTable} from './polls-wire.js';
 const BAR_ROW_HEIGHT = 22;
 const BAR_EXTRA_HEIGHT = 60;
 
-// Accent of the national scope (`es`) in the trend and in the bullseye by scope.
-const ACCENT = '#1d4f86';
+// Accent of the national scope (`es`) in the trend and in the bullseye by scope, and of the detail's bullseye.
+const ACCENT = THEME.accentColor;
 const NATIONAL_SCOPE = 'es';
 
 // The weeks table lists the elections one by one only up to this many.
@@ -153,19 +154,17 @@ function scopeColors(scopes) {
  * @param {object[]} rows filtered rows
  * @param {object[]} others rows that pass every filter but the house
  * @param {object} state the filters and the measure
- * @param {object} context `scopes`, `events` and `colors` of the page
+ * @param {object} context `scopes` and `colors` of the page
  */
-function drawTrend(el, rows, others, state, {scopes, events, colors}) {
-  const names = new Map(events.map((event) => [event.key, event.name]));
+function drawTrend(el, rows, others, state, {scopes, colors}) {
   const linkable = new Set(scopes.filter((scope) => scope.linkable).map((scope) => scope.code));
   const byScope = new Map(scopes.map(({name}) => [name, []]));
   for (const item of eventsOf(rows, state.measure).filter((entry) => entry.mean !== null)) {
-    const key = eventKey(item);
     byScope.get(item.scope_name)?.push({
       date: item.event_date,
       value: item.mean,
       n: item.n,
-      label: [fmtDate(item.event_date), names.get(key) || item.event, item.scope_name].join(' · '),
+      label: `${fmtDate(item.event_date)} · ${item.name || item.event}`,
       href: linkable.has(item.scope) ? detailHref(item.scope, item.event_date) : null,
     });
   }
@@ -239,8 +238,11 @@ function wireHistory(initial) {
   const colors = scopeColors(scopes);
   const analysed = new Set(scopes.map((scope) => scope.code));
   const linkable = new Set(allScopes.filter((scope) => scope.linkable).map((scope) => scope.code));
+  // The rows carry the short code of their election (`2023-23J`); the charts and tables name it in full.
+  const names = new Map(events.map((event) => [event.key, event.name]));
   const linked = errors.map((row) => ({
     ...row,
+    name: names.get(eventKey(row)) || null,
     href: linkable.has(row.scope) ? detailHref(row.scope, row.event_date) : null,
   }));
   const figureNodes = figures && {
@@ -268,7 +270,7 @@ function wireHistory(initial) {
       && inYears(Number(event.date.slice(0, 4))));
     state.event = fillSelect(form.elements.eleccion, offered.map((event) => ({
       value: event.key,
-      label: [fmtDate(event.date), event.name, event.scope_name].filter(Boolean).join(' · '),
+      label: [fmtDate(event.date), event.name].filter(Boolean).join(' · '),
       scope: event.scope,
     })), 'Todas', state.event);
     const houses = [...new Set(inRange.map((row) => row.pollster))].sort((a, b) => a.localeCompare(b, 'es'));
@@ -304,7 +306,7 @@ function wireHistory(initial) {
       fillComplements(complementsEl, complements(linked, state, state.measure));
     }
     if (trendEl) {
-      drawTrend(trendEl, rows, others, state, {scopes, events, colors});
+      drawTrend(trendEl, rows, others, state, {scopes, colors});
     }
     if (histogramEl) {
       drawErrorHistogram(histogramEl, rows, state.measure);

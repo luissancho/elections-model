@@ -279,23 +279,26 @@ def query_pollsters() -> pd.DataFrame:
     return _query(('pollsters',), lambda: get_pollsters())
 
 
-def query_pollster(pollster_id: int, scope: str) -> dict:
+def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> dict:
     """
-    Profile of a pollster in a scope, composed from the cached per-scope tables.
+    Profile of a pollster, composed from the cached tables.
 
     Parameters
     ----------
     pollster_id : int
         Validated pollster id.
     scope : str
-        Validated scope code.
+        Validated scope code of the ratings.
+    every_scope : bool, optional
+        Take the house effects and the herding of every scope (the global profile) instead of those of
+        ``scope``.
 
     Returns
     -------
     dict
         ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...]}``:
-        the catalogue row of the pollster and its rows of the ratings (every event, the next
-        one included, by date), house effects and herding tables of the scope, as JSON records.
+        the catalogue row of the pollster and its rows of the ratings (every event of the scope, the next
+        one included, by date), house effects and herding tables, as JSON records.
 
     Raises
     ------
@@ -311,11 +314,13 @@ def query_pollster(pollster_id: int, scope: str) -> dict:
     if 'event_date' in ratings.columns:
         ratings = ratings.sort_values('event_date', ignore_index=True)
 
+    tables = None if every_scope else scope
+
     return {
         'pollster': frame_to_records(pollster)[0],
         'ratings': frame_to_records(ratings),
-        'house_effects': frame_to_records(_rows_of(query_house_effects(scope), 'pollster_id', pollster_id)),
-        'herding': frame_to_records(_rows_of(query_herding(scope), 'pollster_id', pollster_id)),
+        'house_effects': frame_to_records(_rows_of(query_house_effects(tables), 'pollster_id', pollster_id)),
+        'herding': frame_to_records(_rows_of(query_herding(tables), 'pollster_id', pollster_id)),
     }
 
 
@@ -510,14 +515,14 @@ def query_results(scope: str, date: str, region: int = 0) -> pd.DataFrame:
     return _rows_of(results, 'region_id', region)
 
 
-def query_house_effects(scope: str) -> pd.DataFrame:
+def query_house_effects(scope: Optional[str]) -> pd.DataFrame:
     """
-    House effects table (``pollsters_parties``) of a scope.
+    House effects table (``pollsters_parties``) of a scope, or of every scope.
 
     Parameters
     ----------
-    scope : str
-        Validated scope code.
+    scope : str or None
+        Validated scope code; ``None`` for the rows of every scope (``event_scope`` tells them apart).
 
     Returns
     -------
@@ -527,14 +532,14 @@ def query_house_effects(scope: str) -> pd.DataFrame:
     return _query(('house_effects', scope), lambda: get_house_effects(scope))
 
 
-def query_herding(scope: str) -> pd.DataFrame:
+def query_herding(scope: Optional[str]) -> pd.DataFrame:
     """
-    Herding table (``pollsters_herding``) of a scope.
+    Herding table (``pollsters_herding``) of a scope, or of every scope.
 
     Parameters
     ----------
-    scope : str
-        Validated scope code.
+    scope : str or None
+        Validated scope code; ``None`` for the rows of every scope (``event_scope`` tells them apart).
 
     Returns
     -------

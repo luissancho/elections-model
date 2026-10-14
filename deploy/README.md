@@ -102,15 +102,23 @@ fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`p
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
 (Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
 Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
-publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/casas` y `/metodo/backtest` llevan el filtro de ámbito
-(`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS); el resto
-de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
+publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/metodo/backtest` lleva el filtro de ámbito
+(`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS) sobre las
+tarjetas; en `/casas` el ranking es global y el filtro vive dentro de la tarjeta "Efectos de encuestadora" (manda también
+en Herding y en las descargas del análisis); el perfil de una encuestadora (`/casas?id=`) es global y no lo lleva:
+rating y camino nacionales, diana con su último sondeo en las elecciones publicadas de todos los ámbitos (como el
+histórico) y efectos y herding de las elecciones y ciclos de todos los ámbitos (`query_pollster(..., every_scope=True)`:
+`get_house_effects(None)` y `get_herding(None)`), con cada elección por su nombre publicado o, sin página, por su fecha
+y ámbito (2026-10-15); el resto de `/metodo` cita las cifras de las generales y no lo lleva. La diana del perfil tiene sus propios filtros de ámbito y años (`#bullseye-filter`, solo con JS;
+2026-10-15). La palabra pública para el herding es «rebaño» (2026-10-15); los nombres técnicos (parte `herding`,
+rutas, columnas CSV, ids) no cambian. Las subpáginas del método comparten la subnavegación
 `_metodo_nav.html`.
 
 Patrón de tarjeta (`web/templates/_macros.html`, `{% import '_macros.html' as m %}`): toda sección es
 `m.card_start(id, título, descripción, subtitle=None, classes='', level=2)` … `m.card_end()`, con la descripción
 siempre visible; dentro, `{% call m.how() %}…{% endcall %}` es el "Cómo leerlo" (`<details>`, siempre plegado
-desde la fase 7b; tres partes: qué es cada elemento, cómo leerlo y qué no dice, ≤ 120 palabras). Cada página abre con `m.headline(texto)` (una línea con cifras vivas) y las pestañas cierran con
+desde la fase 7b; tres partes: qué es cada elemento, cómo leerlo y qué no dice, ≤ 120 palabras). Inicio y las páginas del método abren con `m.headline(texto)` (una línea de presentación; las pestañas de evento,
+el histórico, el ranking y el perfil no llevan titular, por decisión de Luis, 2026-10-14/15) y las pestañas cierran con
 `m.closing(pregunta, method_href(...), adelanto, enlaces)`, la tarjeta de enlace a su texto del método.
 
 Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
@@ -134,8 +142,8 @@ Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
 - Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); los histogramas llevan la línea
   de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
   ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
-- Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 720 px y centrada en su tarjeta, como la
-  del detalle de una elección (`#bullseye-chart.big`, fase 7e); la del perfil (`#bullseye-chart`) sigue en 480 px.
+- Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 720 px y centrada en su tarjeta, como las
+  del detalle de una elección y del perfil de una encuestadora (`#bullseye-chart.big`, 2026-10-14/15).
 
 Fase 7c (2026-10-14): restyle con fondo gris, tarjetas blancas, controles en segmentos y contenedor fluido; tres
 tarjetas centrales en Promedios (hemiciclo, partidos, bloques); la leyenda de ECharts como selector de partidos;
@@ -154,6 +162,9 @@ las medias por casa de la parte `pollsters` ya no se pintan, siguen en el CSV y 
 con los puntos en azul, el histograma de los sondeos y "Todas las encuestas" del ciclo, la misma tabla que en
 Promedios (`_polls_table.html` + `pages/polls-wire.js`, compartidos) a partir de la parte nueva `cycle` de la
 elección. Una elección publicada antes de la parte `cycle` enseña un aviso en su lugar hasta que se republica.
+Ajustes del 2026-10-15: Histórico Errores, Ranking y perfil sin titular (`headline_text` y sus constructores
+eliminados), los textos de tarjeta (`.lead`, "Cómo leerlo", `.card p`) a 100 ch en vez de 72 y la diana del perfil
+grande y centrada.
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una

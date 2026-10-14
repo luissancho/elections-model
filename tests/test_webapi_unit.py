@@ -434,6 +434,23 @@ def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
     assert len(calls) == 4  # ninguna lectura más
 
 
+def test_query_pollster_of_every_scope_reads_the_tables_without_scope(fresh_app, monkeypatch):
+    """`every_scope`: los efectos y el herding se leen con `scope=None` (todos los ámbitos) y se cachean aparte;
+    los ratings siguen siendo los del ámbito."""
+    use_database(fresh_app)
+    scopes = []
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pd.DataFrame({'id': [2, 3], 'name': ['GAD3', 'CIS']}))
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: scopes.append(('ratings', scope)) or ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_house_effects',
+                        lambda scope: scopes.append(('house_effects', scope)) or pd.DataFrame({'pollster_id': [3], 'event_scope': ['es-md']}))
+    monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: scopes.append(('herding', scope)) or pd.DataFrame({'pollster_id': [3]}))
+    profile = webapi.query_pollster(3, 'es', every_scope=True)
+    assert profile['house_effects'] == [{'pollster_id': 3, 'event_scope': 'es-md'}] and profile['herding'] == [{'pollster_id': 3}]
+    assert sorted(scopes) == [('herding', None), ('house_effects', None), ('ratings', 'es')]
+    webapi.query_pollster(3, 'es', every_scope=True)
+    assert len(scopes) == 3  # cacheado
+
+
 def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeypatch):
     use_database(fresh_app)
     seen = []

@@ -55,7 +55,9 @@ def test_years_and_events():
     assert events[1]['event'] == '4M' and events[1]['scope_name'] == 'Madrid'
     # the CIS 2019 row has no error_blocks_abs: it does not count
     assert run_js('e.eventsOf(rows, "error_blocks_abs")')[0] == {
-        'event_date': '2019-11-10', 'event': '10N', 'scope': 'es', 'scope_name': 'España', 'n': 1, 'mean': 5.0}
+        'event_date': '2019-11-10', 'event': '10N', 'name': None, 'scope': 'es', 'scope_name': 'España', 'n': 1, 'mean': 5.0}
+    named = run_js('e.eventsOf(rows.map((r) => ({...r, name: r.event === "4M" ? "Elecciones Madrid Mayo 2021" : null})), "error_avg")')
+    assert [x['name'] for x in named] == [None, 'Elecciones Madrid Mayo 2021', None]
 
 
 def test_complements():
@@ -84,6 +86,15 @@ def test_trend_and_rest_points():
     assert run_js('e.restPoints(rows, "Nadie", "error_avg")') == []
 
 
+def test_fade_by_date_goes_from_the_minimum_to_one():
+    alphas = run_js('e.fadeByDate(rows)')
+    assert alphas[0] == 0.3 and alphas[-1] == 1 and 0.3 < alphas[2] < 1  # 2019 la más tenue, 2023 opaca, 2021 entre medias
+    assert run_js('e.fadeByDate(rows, {min: 0.5})')[0] == 0.5
+    assert run_js('e.fadeByDate([rows[0], rows[1]])') == [1, 1]  # misma fecha: todas opacas
+    assert run_js('e.fadeByDate([{...rows[0], event_date: null}, rows[5]])') == [1, 1]  # sin fechas distintas conocidas
+    assert run_js('e.fadeByDate([])') == []
+
+
 def test_filter_mean_and_weeks():
     assert run_js('e.meanOf(rows, "error_blocks_abs")') == 5.0 and run_js('e.meanOf([], "error_avg")') is None
     assert run_js('e.weekOf(6)') == 1 and run_js('e.weekOf(13)') == 2 and run_js('e.weekOf(42)') == 6
@@ -91,6 +102,9 @@ def test_filter_mean_and_weeks():
     assert table['weeks'] == [1, 2, 3]
     assert [r['event'] for r in table['rows']] == ['23J · España', '4M · Madrid', '10N · España', 'Todas']
     assert table['rows'][-1]['cells']['1'] == {'n': 3, 'mean': 5.0}
+    # with the full name of the election, the row is labelled by it alone (no scope)
+    named = run_js('e.weeksTable(rows.map((r) => ({...r, name: r.event === "23J" ? "Elecciones Generales Julio 2023" : null})), "error_avg")')
+    assert [r['event'] for r in named['rows']][:2] == ['Elecciones Generales Julio 2023', '4M · Madrid']
 
 
 def test_weeks_table_groups_by_scope_and_date():

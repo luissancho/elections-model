@@ -9,7 +9,6 @@
 {% set with_herding = false %}
     <div id="content" class="stack">
       {% if events %}
-      {{ m.headline(headline_text) }}
       {{ m.card_start('filters', 'Filtros', 'Elige un ámbito, una elección, una encuestadora o unos años para ver solo sus sondeos en las cifras, la evolución, el histograma, la diana y la tabla por semanas.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
@@ -27,7 +26,7 @@
             <select name="eleccion">
               <option value="">Todas</option>
               {% for event in filter_events %}
-              <option value="{{ event.key }}" data-scope="{{ event.scope }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %} · {{ event.scope_name }}</option>
+              <option value="{{ event.key }}" data-scope="{{ event.scope }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</option>
               {% endfor %}
             </select>
           </label>
@@ -194,7 +193,6 @@
             <thead>
               <tr>
                 <th scope="col">Elección</th>
-                <th scope="col">Ámbito</th>
                 <th scope="col">Sondeos</th>
                 <th scope="col">Encuestadoras</th>
                 <th scope="col">Error medio</th>
@@ -207,7 +205,6 @@
               {% for event in events %}
               <tr data-scope="{{ event.scope }}" data-date="{{ event.date }}" data-year="{{ event.date[:4] }}">
                 <td>{% if event.href %}<a href="{{ event.href }}">{% endif %}{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}{% if event.href %}</a>{% endif %}</td>
-                <td>{{ event.scope_name }}</td>
                 <td>{{ event.n_polls|int }}</td>
                 <td>{{ event.n_pollsters|int }}</td>
                 <td>{{ event.error_avg|num(1) }}</td>

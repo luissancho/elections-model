@@ -72,7 +72,8 @@ inglés con el trailer de siempre).
 ### D2. Filtros y estado (`web/dist/js/errors.js`, `web/templates/elecciones.html`)
 
 Tarjeta "Filtros" con, en este orden: Ámbito (`select`: "Todos" y los de `scopes`), Elección (`select`: "Todas" y
-las elecciones del ámbito elegido, o de todos, etiquetadas "{fecha} · {nombre} · {ámbito}"), Encuestadora
+las elecciones del ámbito elegido, o de todos, etiquetadas "{fecha} · {nombre}"; ajuste 2026-10-14: sin el ámbito,
+el nombre de la elección ya lo dice), Encuestadora
 (`select`: "Todas" y las encuestadoras con filas en la selección de ámbito y años), Años (dos `select`, "Desde" y
 "Hasta", con los años de `years`; por defecto el primero y el último) y Medida (`.seg`, error de bloques / error
 medio, que hoy vive en la tarjeta del histograma y se muda aquí). Cambiar el ámbito o los años vacía la
@@ -107,8 +108,8 @@ esas mismas elecciones. El aviso de cada punto dice elección, ámbito, media y 
   leyenda de ámbitos. Solo entran las filas con los dos bloques `vs`.
 - Semanas: una fila por elección si la selección tiene 15 elecciones o menos; con más, solo la fila "Todas" y una
   nota "Elige un ámbito o unos años para ver las elecciones una a una".
-- Tabla de elecciones (`#events-table`, del servidor): todas las de todos los ámbitos con una columna "Ámbito"
-  nueva tras la fecha; el JS oculta las filas que no pasan el filtro de ámbito, elección y años (la encuestadora
+- Tabla de elecciones (`#events-table`, del servidor): todas las de todos los ámbitos, sin columna "Ámbito" (ajuste
+  2026-10-14: el nombre de la elección basta; el `data-scope` de cada fila sigue sirviendo al filtro); el JS oculta las filas que no pasan el filtro de ámbito, elección y años (la encuestadora
   no aplica: son elecciones) y actualiza el pie "M elecciones".
 - La tarjeta de cierre enlaza a "Ranking Encuestadoras" (sin "de este ámbito").
 
@@ -188,3 +189,58 @@ Menores aplazados: las lecturas de un análisis ausente no se cachean (un GET a 
 petición; nginx cachea la página 60 s); la lógica de años se repite entre `errors.js` y el pegamento de la tabla;
 con más de 15 ámbitos autonómicos los colores se repiten; las opciones de Elección del servidor incluyen ámbitos
 sin análisis (el JS las rehace); `trendPoints` descarta las elecciones sin sondeos antes de la ventana.
+
+## Ajuste 2026-10-14: las elecciones se nombran sin el ámbito
+
+Luis: "A la hora de listar los eventos, no hace falta que añadas el ámbito, con el nombre del evento es suficiente".
+Quitado el sufijo " · {ámbito}" de la lista de elecciones pasadas de Inicio, del `select` de elección del histórico,
+del tooltip de la evolución y de la columna "Ámbito" de la tabla de elecciones. En la tabla por semanas y en el
+tooltip de la diana, donde las filas solo traían el código corto (`2023-23J`), ahora va el nombre completo de la
+elección (`name`, que `wireHistory` añade a cada fila desde `events`); sin nombre se conserva "{código} · {ámbito}",
+porque el código solo es ambiguo entre ámbitos que votaron el mismo día.
+
+## Ajuste 2026-10-15: sin titular
+
+Luis: "Elimina el texto de cabecera en 'Histórico Errores' y 'Ranking Encuestadoras'". Quitados el titular del
+histórico (`history_headline`, `headline_text`), el del ranking y el del perfil de una encuestadora (los tres
+constructores y sus pruebas); `m.headline` queda para Inicio y las páginas del método. En la misma tanda: los textos
+de tarjeta pasan de 72 a 100 ch y la diana del perfil toma la clase `big` (720 px, centrada).
+
+## Ajuste 2026-10-15: el selector de ámbito de `/casas` baja a los paneles
+
+Luis: "Quita también el selector de ámbito de 'Ranking Encuestadoras', ya que quiero un ranking global. Si hace falta
+en algún panel, déjalo en el panel". El ranking no depende del ámbito, pero los efectos de encuestadora y el herding
+son el análisis del ciclo de un ámbito, y el perfil (camino, diana, efectos y herding por elección) también. Así que
+el `_scope_filter.html` deja de ir sobre las tarjetas: en `/casas` vive dentro de "Efectos de encuestadora" y manda en
+esa tarjeta, en Herding y en las descargas del análisis; la columna Herding del ranking pasa a salir del análisis
+nacional (`RATING_SCOPE`), para que el ranking sea idéntico sea cual sea el ámbito del panel. En el perfil vive dentro
+de la tarjeta de cabecera, cuyo rating y calidad son los nacionales (`query_pollster(id, 'es')`); las tarjetas de
+abajo siguen al ámbito elegido. `/metodo/backtest` conserva el filtro sobre las tarjetas.
+
+Y, el mismo día, Luis aceptó la alternativa de hacer el perfil global ("Ok, hazlo así"): el perfil no lleva selector.
+El camino al rating es el nacional (el rating es el mismo número en todos los ámbitos), la diana lleva su último
+sondeo en cada elección publicada de cada ámbito con análisis (las mismas elecciones que el histórico:
+`history_scopes`/`history_events`/`history_rows`, que ahora importa `casas.py`; `analysis_part` se muda a `common.py`
+para evitar el ciclo de imports), y los efectos por elección y el herding por ciclo salen de las tablas de todos los
+ámbitos (`query_pollster(id, 'es', every_scope=True)` lee `get_house_effects(None)` y `get_herding(None)`, cacheados
+aparte). Las columnas de los efectos son la unión de partidos, el catálogo del run primero y el resto por aparición;
+cada elección se nombra por su nombre publicado o, sin página (el ciclo en curso, elecciones antiguas), por su fecha y
+su ámbito (`election_label`). Los enlaces al perfil van sin ámbito (`/casas?id=N`).
+
+## Ajuste 2026-10-15: «rebaño» y los filtros de la diana del perfil
+
+Luis: "Cambia la palabra 'herding' por 'rebaño' en todas partes" y "en el perfil de encuestadora, unos filtros en el
+gráfico de diana para elegir un ámbito (o todos) y un rango de años, parecido al del Histórico Errores, pero sólo
+esos dos filtros". La palabra pública es «rebaño» en todas las plantillas (tablas, tarjetas, glosario, textos del
+método y etiquetas de los CSV); los nombres técnicos no cambian: parte `herding` del análisis, rutas
+`/api/v1/analysis/{scope}/herding`, columnas de los CSV, claves de los contextos e ids de las tarjetas (`#herding`).
+La diana del perfil lleva un formulario `#bullseye-filter` (Ámbito: Todos o los ámbitos con sondeos suyos; Desde y
+Hasta: los años de sus elecciones) que el servidor pinta oculto y `casas.js` enseña y cablea con `filterRows` y
+`yearsOf` de `errors.js`; redibuja la diana y la tabla y escribe "N elecciones". Sin hash: el perfil no tiene otro
+estado. Las filas de la diana llevan `year` y `scope`; `initial.scopes` son los ámbitos ofrecidos.
+
+Y, en la misma diana (Luis, 2026-10-15): las generales en el azul del sitio y las autonómicas en naranja (`#c0672e`),
+con leyenda; cada punto etiquetado "{código}-{ámbito}" ("2023-23J-es", "2023-28M-es-md"); y los puntos más tenues
+cuanto más antigua la elección (`errors.js` `fadeByDate`: de 0,3 la más antigua a 1 la más reciente, lineal en días,
+fijado sobre todas las elecciones de la encuestadora para que el filtro no cambie el tono). `renderBullseye` gana
+`labelOf` y `alphaOf` (punto y etiqueta se atenúan juntos).

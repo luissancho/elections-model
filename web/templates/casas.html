@@ -8,10 +8,8 @@
 {% import '_macros.html' as m %}
 {% set with_herding = true %}
 {% set with_block_error = false %}
-    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
-      {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
-      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos; no depende del ámbito elegido arriba: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
+      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos, así que no depende de ningún ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
         {% if ranking %}
         <div class="chart" id="rating-chart" role="img" aria-label="Rating de cada encuestadora para la próxima elección"></div>
         {% else %}
@@ -29,13 +27,13 @@
                 <th scope="col">Elecciones</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Sesgo del margen</th>
-                <th scope="col">Herding</th>
+                <th scope="col">Rebaño</th>
               </tr>
             </thead>
             <tbody>
               {% for row in ranking %}
               <tr>
-                <td><a href="/casas{{ ranking_query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
+                <td><a href="/casas?id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
                 <td>{{ row.rating|num(1) }}</td>
                 <td>{{ row.quality|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
@@ -50,12 +48,13 @@
         </div>
         {% call m.how() %}
         <p>Cada fila es una encuestadora con rating para la próxima elección. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con una calidad previa que pesa más cuantos menos sondeos tiene.</p>
-        <p>Cuanto más alto, más pesan sus sondeos en el promedio. El error medio, el sesgo del margen y el herding se explican en «Qué mide cada columna». Pulsa en una encuestadora para ver su perfil.</p>
+        <p>Cuanto más alto, más pesan sus sondeos en el promedio. El error medio, el sesgo del margen y el rebaño se explican en «Qué mide cada columna». Pulsa en una encuestadora para ver su perfil.</p>
         <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('house-effects', 'Efectos de encuestadora', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual, por partido y por bloque.', '· ciclo actual') }}
+      {{ m.card_start('house-effects', 'Efectos de encuestadora', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual del ámbito elegido, por partido y por bloque. El ámbito vale también para el rebaño y las descargas del análisis.', '· ciclo actual') }}
+        {% include '_scope_filter.html' +%}
         {% if grid is none %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% elif not grid.rows %}
@@ -76,7 +75,7 @@
             <tbody>
               {% for row in grid.rows %}
               <tr>
-                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ scope_query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas?id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 {% for cell in row.cells %}
                 <td title="Historia: {{ cell.hist|num(1) }} · Tendencia: {{ cell.trend|num(1) }} al año">{{ cell.cycle|num(1) }}</td>
                 {% endfor %}
@@ -92,7 +91,7 @@
         <p>Una desviación no indica quién acierta: es una diferencia entre encuestadoras, no un error frente al resultado.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('herding', 'Herding', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar solo por el tamaño de sus muestras.') }}
+      {{ m.card_start('herding', 'Rebaño', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar solo por el tamaño de sus muestras; del ámbito elegido en Efectos de encuestadora.') }}
         {% if herding is none %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
@@ -102,7 +101,7 @@
             <thead>
               <tr>
                 <th scope="col">Encuestadora</th>
-                <th scope="col">Herding</th>
+                <th scope="col">Rebaño</th>
                 <th scope="col">Último ciclo</th>
                 <th scope="col">p-valor del último ciclo</th>
                 <th scope="col">Sondeos</th>
@@ -112,7 +111,7 @@
             <tbody>
               {% for row in herding %}
               <tr>
-                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ scope_query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas?id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 <td>{{ row.herding|num(2) }}</td>
                 <td>{{ row.herding_last|num(2) }}</td>
                 <td>{{ row.herding_p|num(3) }}</td>
@@ -125,12 +124,12 @@
         </div>
         {% endif %}
         {% call m.how() %}
-        <p>Cada fila compara la dispersión de los sondeos de una encuestadora con la que cabría esperar solo por el tamaño de sus muestras. El p-valor mide cómo de improbable es la dispersión de su último ciclo si no hubiera herding.</p>
+        <p>Cada fila compara la dispersión de los sondeos de una encuestadora con la que cabría esperar solo por el tamaño de sus muestras. El p-valor mide cómo de improbable es la dispersión de su último ciclo si no hubiera rebaño.</p>
         <p>Un valor cerca de 1 es lo esperable; por debajo de 1, sus sondeos se parecen entre sí más de lo que permite el azar.</p>
         <p>Un valor bajo es una señal, no una prueba de que la encuestadora copie a otras.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para este ámbito.') }}
+      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para el ámbito elegido en Efectos de encuestadora.') }}
         <p class="muted">Los ficheros conservan los nombres técnicos de las columnas.</p>
         <ul class="link-list">
           {% for link in csv_links %}

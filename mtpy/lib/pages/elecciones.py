@@ -5,8 +5,7 @@ from typing import Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, site
-from .casas import analysis_part
-from .common import api_url, bundle_part, common_context, published_scopes
+from .common import analysis_part, api_url, bundle_part, common_context, published_scopes
 from .filters import fmt_num
 from .promedios import chart_polls, poll_months, polls_table, pollster_options
 
@@ -314,46 +313,6 @@ def error_blocks(scopes: list, parts: dict) -> list:
     return []
 
 
-def history_headline(events: list, errors: Optional[list]) -> str:
-    """
-    Headline of the error history: the published elections and the mean block error of the last poll of each house.
-
-    Parameters
-    ----------
-    events : list of dict
-        ``history_events`` rows (``scope`` tells general, ``es``, from regional elections).
-    errors : list of dict or None
-        ``history_rows`` of those elections (``None`` or empty without analysis).
-
-    Returns
-    -------
-    str
-        The sentence with the count by class and the mean of ``error_blocks_abs``, or only the count when there
-        is no finite value to average.
-    """
-    general = sum(1 for event in events if event['scope'] == 'es')
-    regional = len(events) - general
-    values = [row['error_blocks_abs'] for row in errors or [] if row.get('error_blocks_abs') is not None]
-
-    if not values:
-        return f'{len(events)} elecciones analizadas.'
-
-    generals = f"{general} {'general' if general == 1 else 'generales'}"
-    regionals = f"{regional} {'autonómica' if regional == 1 else 'autonómicas'}"
-
-    if general and regional:
-        count = f'{len(events)} elecciones analizadas ({generals} y {regionals})'
-    elif general:
-        count = f'{len(events)} elecciones analizadas (todas generales)'
-    else:
-        count = f'{len(events)} elecciones analizadas (todas autonómicas)'
-
-    mean = fmt_num(sum(values) / len(values), 1)
-
-    return (f'En las {count}, el último sondeo de cada encuestadora se desvió de media '
-            f'{mean} puntos en el margen entre bloques.')
-
-
 def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     """
     Template context of the list of past elections, of every scope.
@@ -374,7 +333,7 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
         ``filter_events`` (``key`` ``scope:date``, ``date``, ``name``, ``scope`` and ``scope_name``),
         ``filter_pollsters`` (house names, alphabetical), ``years`` (ascending), ``analysis_missing`` (no scope
         has analysis), ``selected_scope`` (the raw ``scope`` when it has analysis, else ``None``),
-        ``headline_text`` (``history_headline``) and, only with events, ``initial`` (``state``, ``scopes``,
+        only with events, ``initial`` (``state``, ``scopes``,
         ``events``: ``filter_events``, ``errors``, ``error_blocks``, ``years`` and ``selected_scope``).
 
     Raises
@@ -401,7 +360,6 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     context['filter_pollsters'] = sorted({row['pollster'] for row in errors if row.get('pollster')}, key=str.casefold)
     context['years'] = sorted({row['year'] for row in errors})
     context['selected_scope'] = raw_scope if raw_scope in with_analysis else None
-    context['headline_text'] = history_headline(events, errors)
 
     if events:
         context['initial'] = {'state': context['state'], 'scopes': scopes, 'events': filter_events,
