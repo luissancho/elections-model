@@ -272,7 +272,7 @@ Escaños (`escanos_headline_text`) y los subtítulos de modo de las tarjetas ("�
 Cerrada el 2026-10-14 en `dev`, commits `6f97137..a822ef0` (plan `68c8551`; entre medias, dos commits ajenos de Luis,
 `80e5d17` y `f548c56`). Suite: 719 tests en verde (697 al empezar), 54 avisos preexistentes. Ejecutada en modo
 subagent-driven: ocho tareas con revisión por tarea, revisión final de toda la rama y una ola de correcciones
-(`591e4a5`, `ca78b33`, `2530399`, `a822ef0`).
+(`591e4a5`, `ca78b33`, `2530399`, `a822ef0`). Los iconos de marca se regeneraron con los colores nuevos a petición de Luis (commit siguiente al cierre).
 
 Hecho, por apartado: D1 (tokens grises, tarjetas con barra de acento, `.seg`, contenedor fluido, prosa a 72ch, tema
 de ECharts), D2 (pie "Publicación: … · Último sondeo: …", barra del evento sin la frase de modo, Promedios sin
@@ -285,8 +285,7 @@ servidor de territorios alinea partidos y orden con el primer dibujo del JS (tin
 JS); el hemiciclo no se estira a la altura de las tablas (`align-items: start`, 460 px en escritorio).
 
 Pendiente de Luis: recorrido visual en escritorio y móvil; publicar `forecast` de `es` (y de los autonómicos) para
-que los runs lleven `community`/`votes` y aparezca el nivel CCAA; decidir el fondo de los iconos de marca
-(`web/brand/build.py` sigue con el salmón `#fbf1e7` y el `INK` antiguo; regenerar `apple-touch-icon`); pregunta de
+que los runs lleven `community`/`votes` y aparezca el nivel CCAA; pregunta de
 modelo: VOX y SALF salen con `pct` nulo en S. C. Tenerife en `districts.rows` del run local (¿listas de candidatos?).
 
 Menores aplazados (sin efecto visible): `publish_mode` trata `export_districts` como caso especial; redondeo
