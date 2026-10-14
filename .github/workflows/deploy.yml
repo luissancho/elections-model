@@ -9,11 +9,11 @@ env:
   NAME: Elections Model
   ECR_REPOSITORY: elections-model
   IMAGE_TAG: latest
-  SERVICE: elections-model-897d
-  CLUSTER: elections-ecs-cluster
+  SERVICE: elections-model-service
+  CLUSTER: elections-model-cluster
 
 jobs:
-  deploy-api:
+  deploy:
     name: Deploy
     runs-on: ubuntu-latest
 
