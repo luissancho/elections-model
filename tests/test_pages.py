@@ -272,7 +272,7 @@ def test_event_bar_and_promedios_have_no_mode_sentence_nor_headline(api):
     page = html(call(api, '/es')[2])
     assert 'mode-text' not in page and 'Si las elecciones fueran hoy' not in page
     assert 'class="headline"' not in page and 'Si hoy hubiera elecciones, ' not in page
-    assert 'class="headline"' in html(call(api, '/es/escanos')[2])  # el titular de Escaños se queda
+    assert 'class="headline"' not in html(call(api, '/es/escanos')[2])  # tampoco en Escaños (2026-10-14)
 
 
 def test_method_subpages_and_links():
@@ -557,10 +557,15 @@ def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carr
 def test_escanos_table_histograms_blocks_and_pills(api):
     page = html(call(api, '/es/escanos')[2])
     assert '<th scope="col">Rango 95 %</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
-    # Un solo gráfico de crestas (una fila por partido) en vez de un histograma pequeño por partido
+    # Una sola tarjeta: vista Partidos/Bloques, la barra, la tabla de la vista y un solo gráfico de crestas
     assert 'id="ridge-chart"' in page and 'data-party=' not in page and 'id="histograms"' not in page
-    assert re.search(r'sobre el\s+mismo eje de escaños', page) and 'grid-small' not in page
-    assert 'id="vs-table"' not in page and 'id="blocks-table"' in page
+    assert re.search(r'cada una con su\s+propio eje', page) and 'grid-small' not in page
+    assert 'id="vs-table"' not in page and 'id="blocks-table"' in page and 'id="seats-bar"' in page
+    flat = page.replace('\n', ' ')
+    assert re.search(r'<fieldset id="seats-view" class="seg" hidden>', flat)
+    assert 'name="sview" value="partidos" checked' in flat and 'name="sview" value="bloques"' in flat
+    assert '<div id="seats-blocks" hidden>' in page and '<div id="seats-parties">' in page
+    assert 'id="blocks-chart"' not in page and 'id="blocks"' not in page and 'id="seats"' in page
     assert 'id="coalition-parties" class="pills"' in page.replace('class="pills" id="coalition-parties"', 'id="coalition-parties" class="pills"')
     assert 'class="pill"' in page and 'name="coalition"' in page
 
@@ -572,7 +577,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     assert '<title>Demoscopio · Escaños</title>' in page
     assert 'href="/es/escanos?mode=forecast" aria-current="page"' in page.replace('\n', ' ')
     assert 'id="parties-table"' in page and '<th scope="col">P(mayoría)</th>' in page
-    assert 'id="blocks-table"' in page and 'id="vs-table"' not in page and 'id="blocks-chart"' in page
+    assert 'id="blocks-table"' in page and 'id="vs-table"' not in page and 'id="seats-bar"' in page
     assert 'name="coalition" value="PP" checked' in page and 'id="coalition-result"' in page
     assert 'id="fan-chart"' in page and 'id="seats-evolution"' in page
     assert 'href="/api/v1/forecast/es/forecast/summary?run={}&amp;format=csv"'.format(RUN) in page
@@ -587,7 +592,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
 
 def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(api):
     page = html(call(api, '/es/escanos')[2])
-    assert 'bloque con más probabilidad de mayoría absoluta' in page
+    assert 'bloque con más probabilidad de mayoría absoluta' not in page  # sin titular desde 2026-10-14
     fan = page[page.index('id="fan"'):page.index('id="evolution"')]
     assert 'deriva' in fan and 'horizonte 0' in fan and 'no es una predicción de trayectoria' in fan
     evolution = page[page.index('id="evolution"'):page.index('id="downloads"')]
@@ -598,20 +603,6 @@ def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(a
     assert 'suben y bajan a la vez' not in coalition  # los partidos se sortean por separado
     assert ('La suma se hace en cada simulación: en cada una los escaños suman el total de la cámara, así que lo '
             'que gana un partido lo pierde otro') in coalition
-
-
-def test_escanos_headline_text_names_the_likeliest_block():
-    summary = {'majority': 176, 'n_seats': 350,
-               'blocks': [{'name': 'Izquierda', 'p_majority': 0.08}, {'name': 'Derecha', 'p_majority': 0.999}]}
-    assert pages.escanos_headline_text(summary, {}) == (
-        'Derecha es el bloque con más probabilidad de mayoría absoluta (> 99 %); la mayoría está en 176 escaños '
-        'de 350.')
-    tie = {'majority': 176, 'n_seats': 350, 'blocks': [{'name': 'A', 'p_majority': 0.5}, {'name': 'B', 'p_majority': 0.5}]}
-    assert pages.escanos_headline_text(tie, {}).startswith('A es el bloque')
-    assert pages.escanos_headline_text({'majority': 176, 'n_seats': 350, 'blocks': []}, {}) == (
-        'La mayoría absoluta está en 176 escaños de 350.')
-    assert pages.escanos_headline_text({'blocks': []}, {'majority': 130, 'n_seats': 250}) == (
-        'La mayoría absoluta está en 130 escaños de 250.')
 
 
 def test_escanos_region_lives_in_the_district_form_not_in_the_event_bar(api, fresh_app):

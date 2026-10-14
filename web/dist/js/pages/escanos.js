@@ -7,16 +7,14 @@ import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderRidge} from '../charts/ridge.js';
-import {ridgeData} from '../kde.js';
+import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
 import {coalitionHash, coalitionSeats, parseCoalition, summarize} from '../seats.js';
-import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
+import {mapNames, markPills, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
-/** Last seat of the ridge axis, as in the notebook (`xlim=(0, 200)`); smaller chambers use their size. */
-const RIDGE_MAX_SEATS = 200;
 
 /**
  * Wire the coalition calculator: restore the selection of the URL fragment, then recompute the summary
@@ -145,7 +143,87 @@ function wireTerritory(initial, catalog) {
   render();
 }
 
-/** Draw the histograms, the blocks bar, the fan and the evolution, and wire the coalition calculator. */
+/**
+ * Wire the seats card: the Partidos/Bloques switch draws the stacked bar and the ridges of the view and shows
+ * its table. Parties are ordered by headline seats (then by mean, like `Simulator.plot_dist_kde`); blocks the
+ * same way, their simulations being the sum of their parties.
+ *
+ * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
+ * @param {object} colors `{party: colour}`
+ */
+function wireSeats(initial, catalog, colors) {
+  const {meta, summary, dist} = initial;
+  const majority = meta.majority ?? summary.majority;
+  const nSeats = meta.n_seats ?? summary.n_seats;
+  const partyRows = (summary.parties || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  const bySeats = (a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ?? 0) - (a.seats_mean ?? 0));
+  const partyNames = [...partyRows].sort(bySeats).map((row) => row.name).filter((name) => dist.parties.includes(name));
+  const blockRows = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  const blockParties = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : {};
+  const blockColors = mapNames(blockRows.map((row) => row.name), (name) => catalog.blockColor(name));
+  const views = {
+    partidos: {
+      container: 'seats-parties',
+      bar: catalog.order(partyNames).map((name) => ({name, seats: partyRows.find((row) => row.name === name).seats})),
+      colors,
+      fullnames: mapNames(partyNames, (name) => catalog.fullname(name)),
+      headline: Object.fromEntries(partyRows.map((row) => [row.name, row.seats])),
+      ridges: () => ridgeData(dist, partyNames, {majority}),
+    },
+    bloques: {
+      container: 'seats-blocks',
+      bar: catalog.orderBlocks(blockRows.map((row) => row.name))
+        .map((name) => ({name, seats: blockRows.find((row) => row.name === name).seats})),
+      colors: blockColors,
+      fullnames: {},
+      headline: Object.fromEntries(blockRows.map((row) => [row.name, row.seats])),
+      ridges: () => ridgeBlocks(dist, [...blockRows].sort(bySeats)
+        .map((row) => ({name: row.name, parties: blockParties[row.name] || []})), {majority}),
+    },
+  };
+  const barEl = document.getElementById('seats-bar');
+  const ridgeEl = document.getElementById('ridge-chart');
+  const cache = {};
+
+  /** Draw the bar and the ridges of `view` and show its table. */
+  function draw(view) {
+    const chosen = views[view];
+    for (const [name, item] of Object.entries(views)) {
+      const container = document.getElementById(item.container);
+      if (container) {
+        container.hidden = name !== view;
+      }
+    }
+    if (barEl) {
+      tryDraw(() => renderStacked(barEl, chosen.bar, {
+        colors: chosen.colors, fullnames: chosen.fullnames, majority, total: nSeats,
+      }), `the ${view} bar`);
+    }
+    if (ridgeEl) {
+      cache[view] = cache[view] || chosen.ridges();
+      if (cache[view].length) {
+        tryDraw(() => renderRidge(ridgeEl, cache[view], {
+          colors: chosen.colors, majority, headline: chosen.headline, fullnames: chosen.fullnames,
+        }), `the ${view} distributions`);
+      }
+    }
+  }
+
+  draw('partidos');
+  const fieldset = document.getElementById('seats-view');
+  if (fieldset) {
+    fieldset.hidden = false;
+    fieldset.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=sview]') && views[event.target.value]) {
+        draw(event.target.value);
+        markSegments(fieldset);
+      }
+    });
+  }
+}
+
+/** Draw the seats card, the fan and the evolution, and wire the coalition calculator and the territory table. */
 function paint() {
   const initial = readInitial();
   const {state, meta, summary, dist, fan, runs} = initial;
@@ -158,29 +236,7 @@ function paint() {
   const names = [...new Set([...dist.parties, ...partyRows.map((row) => row.name), ...fanNames])];
   const colors = mapNames(names, (name) => catalog.color(name));
 
-  // Ridges ordered by headline seats and then by mean, like `Simulator.plot_dist_kde`
-  const ordered = [...partyRows]
-    .sort((a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ?? 0) - (a.seats_mean ?? 0)))
-    .map((row) => row.name)
-    .filter((name) => dist.parties.includes(name));
-  const xMax = Math.min(RIDGE_MAX_SEATS, nSeats);
-  const ridgeEl = document.getElementById('ridge-chart');
-  if (ridgeEl && ordered.length) {
-    const headline = Object.fromEntries(partyRows.filter((row) => row.seats !== null && row.seats !== undefined)
-      .map((row) => [row.name, row.seats]));
-    tryDraw(() => renderRidge(ridgeEl, ridgeData(dist, ordered, {xMax, majority}), {
-      colors, xMax, majority, headline, fullnames: mapNames(ordered, (name) => catalog.fullname(name)),
-    }), 'the seat distributions');
-  }
-
-  const blocks = new Map((summary.blocks || []).map((row) => [row.name, row]));
-  const blockRows = catalog.orderBlocks([...blocks.keys()])
-    .map((name) => ({name, seats: blocks.get(name).seats ?? 0}));
-  tryDraw(() => renderStacked(document.getElementById('blocks-chart'), blockRows, {
-    colors: mapNames([...blocks.keys()], (name) => catalog.blockColor(name)),
-    majority,
-    total: nSeats,
-  }), 'the blocks');
+  tryDraw(() => wireSeats(initial, catalog, colors), 'the seats card');
 
   tryDraw(() => wireCoalition(dist, majority), 'the coalition calculator');
   tryDraw(() => wireTerritory(initial, catalog), 'the territory table');

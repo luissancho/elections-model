@@ -36,20 +36,32 @@ def test_scott_bandwidth_and_density_match_scipy():
     assert got[1] == pytest.approx(kde(np.array(grid, dtype=float)).tolist(), rel=1e-9)
 
 
-def test_bandwidth_has_a_floor_and_counts_are_sorted():
+def test_bandwidth_floor_counts_grid_and_range():
     assert run_js('k.scottBandwidth([1, 1, 1, 1])') == 0.5 and run_js('k.scottBandwidth([3])') == 0.5
     assert run_js('[...k.counts([5, 3, 5, 1]).entries()]') == [[1, 1], [3, 1], [5, 2]]
-    assert run_js('k.seatGrid(2, 0.5)') == [0, 0.5, 1, 1.5, 2]
+    assert run_js('k.seatGrid(0, 2, 5)') == [0, 0.5, 1, 1.5, 2]
+    # Un escaño de margen a cada lado, nunca por debajo de 0, y un ancho mínimo para las distribuciones estrechas
+    assert run_js('k.seatRange({min: 133, max: 150})') == [132, 151]
+    assert run_js('k.seatRange({min: 0, max: 1})') == [0, 6] and run_js('k.seatRange({min: 1, max: 1}, 4)') == [0, 4]
 
 
-def test_ridge_data_scales_each_party_to_its_peak_and_carries_the_quantiles():
-    data = run_js('k.ridgeData(dist, ["PP", "UPN", "NOEXISTE"], {xMax: 200, step: 1, majority: 176})')
-    assert data['grid'][0] == 0 and data['grid'][-1] == 200 and len(data['grid']) == 201
-    assert [row['name'] for row in data['rows']] == ['PP', 'UPN']  # el partido ausente se salta
-    pp, upn = data['rows']
-    assert max(pp['y']) == pytest.approx(1.0) and len(pp['y']) == 201 and min(pp['y']) >= 0
-    assert pp['median'] == 139.5 and pp['lo'] == 133 and pp['hi'] == 150 and pp['n'] == 8
+def test_ridge_rows_scale_each_row_to_its_peak_over_its_own_range():
+    data = run_js('k.ridgeData(dist, ["PP", "UPN", "NOEXISTE"], {majority: 176})')
+    assert [row['name'] for row in data] == ['PP', 'UPN']  # el partido ausente se salta
+    pp, upn = data
+    assert (pp['x0'], pp['x1']) == (132, 151) and pp['grid'][0] == 132 and pp['grid'][-1] == 151 and len(pp['grid']) == 200
+    assert max(pp['y']) == pytest.approx(1.0) and min(pp['y']) >= 0
+    assert pp['median'] == 139.5 and pp['lo'] == 133 and pp['hi'] == 150 and pp['min'] == 133 and pp['n'] == 8
     assert sum(pp['pmf'].values()) == pytest.approx(1.0) and pp['pmf']['140'] == 0.125
-    # UPN siempre con 1 escaño: ancho de banda mínimo, curva finita con el pico en 1
-    assert upn['bw'] == 0.5 and max(upn['y']) == pytest.approx(1.0) and upn['y'][1] == pytest.approx(1.0)
+    # UPN siempre con 1 escaño: rango mínimo, ancho de banda mínimo y curva finita con el pico en 1
+    assert (upn['x0'], upn['x1']) == (0, 6) and upn['bw'] == 0.5 and max(upn['y']) == pytest.approx(1.0)
     assert all(np.isfinite(upn['y'])) and upn['pmf'] == {'1': 1.0}
+
+
+def test_ridge_blocks_sum_the_parties_of_each_block():
+    data = run_js('k.ridgeBlocks(dist, [{name: "Derecha", parties: ["PP", "VOX"]}, {name: "Vacio", parties: ["X"]}], {majority: 176})')
+    assert [row['name'] for row in data] == ['Derecha']
+    derecha = data[0]
+    sums = sorted(row[0] + row[2] for row in DIST['seats'])
+    assert derecha['min'] == sums[0] and derecha['max'] == sums[-1] and (derecha['x0'], derecha['x1']) == (sums[0] - 1, sums[-1] + 1)
+    assert derecha['pmf'][str(sums[0])] == 0.125

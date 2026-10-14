@@ -1,20 +1,22 @@
-// Ridge chart of the seat distributions: one row per party, the density filled with the party colour, a thick
-// mark at the median, thin ones at the ends of the interval and a dashed line at the majority, all over the
-// same seat axis, as `Simulator.plot_dist_kde` draws it in the notebooks.
+// Ridge chart of the seat distributions: one row per party or block, each over its own seat range, the density
+// filled with the row's colour, a thick mark at the median, thin ones at the ends of the interval and a dashed
+// line at the majority when it falls within the row, as `Simulator.plot_dist_kde` draws it in the notebooks but
+// with the detail of every row.
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {fmtInt, fmtProb} from '../format.js';
 
-const TOP = 12;
-const BOTTOM = 34;
+const TOP = 10;
+const BOTTOM = 10;
 const LEFT = 118;
 const RIGHT = 20;
-const GAP = 6;
+const AXIS = 18;
+const GAP = 8;
 
 /**
  * Height the container needs for `n` rows.
  *
  * @param {number} n rows
- * @param {number} rowHeight height of each row, in px
+ * @param {number} rowHeight height of each row, in px (curve plus its axis)
  * @returns {number} the height, in px
  */
 export function ridgeHeight(n, rowHeight) {
@@ -22,39 +24,38 @@ export function ridgeHeight(n, rowHeight) {
 }
 
 /**
- * Render the ridges of `rows` (from `kde.js` `ridgeData`) in `el`, whose height is set to fit them.
+ * Render `rows` (from `kde.js`) in `el`, whose height is set to fit them.
  *
  * @param {HTMLElement} el chart container
- * @param {{grid: number[], rows: object[]}} data the shared grid and one row per party
- * @param {object} opts `colors` ({name: colour}), `xMax` (last seat of the axis), `majority` (seats of the
- *   absolute majority; the dashed line is drawn when it lies within the axis), `rowHeight` (px per row, 56 by
- *   default), `headline` ({name: seats} shown in the row label instead of the median, so the figure matches the
- *   table) and `fullnames` ({name: full name}, tooltip)
+ * @param {object[]} rows one row per party or block (`ridgeRows`)
+ * @param {object} opts `colors` ({name: colour}), `majority` (seats of the absolute majority; the dashed line is
+ *   drawn in the rows whose range holds it), `rowHeight` (px per row, 72 by default), `headline` ({name: seats}
+ *   shown in the row label instead of the median, so the figure matches the table) and `fullnames` ({name: full
+ *   name}, tooltip)
  * @returns {object} the ECharts instance
  */
-export function renderRidge(el, {grid, rows}, {colors = {}, xMax, majority = null, rowHeight = 56, headline = {},
-  fullnames = {}} = {}) {
-  const last = rows.length - 1;
+export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight = 72, headline = {}, fullnames = {}} = {}) {
   el.style.height = `${ridgeHeight(rows.length, rowHeight)}px`;
-  const showMajority = majority !== null && majority !== undefined && majority > 0 && majority <= xMax;
   // Narrow containers (phones) give the labels less room
   const narrow = el.clientWidth > 0 && el.clientWidth < 600;
   const left = narrow ? 84 : LEFT;
+  const curveHeight = rowHeight - AXIS - GAP;
 
   const grids = rows.map((row, index) => ({
     top: TOP + index * rowHeight,
-    height: rowHeight - GAP,
+    height: curveHeight,
     left,
     right: RIGHT,
   }));
   const xAxes = rows.map((row, index) => ({
     type: 'value',
     gridIndex: index,
-    min: 0,
-    max: xMax,
-    axisLine: {show: index === last, lineStyle: {color: THEME.gridColor}},
-    axisTick: {show: index === last},
-    axisLabel: {show: index === last, formatter: (value) => fmtInt(value)},
+    min: row.x0,
+    max: row.x1,
+    minInterval: 1,
+    axisLine: {show: true, lineStyle: {color: THEME.gridColor}},
+    axisTick: {show: true, lineStyle: {color: THEME.gridColor}},
+    axisLabel: {show: true, fontSize: 10, color: THEME.markColor, formatter: (value) => fmtInt(value)},
     splitLine: {show: false},
   }));
   const yAxes = rows.map((row, index) => ({
@@ -71,12 +72,13 @@ export function renderRidge(el, {grid, rows}, {colors = {}, xMax, majority = nul
       {xAxis: row.lo, lineStyle: {color, width: 1, type: 'solid', opacity: 0.7}},
       {xAxis: row.hi, lineStyle: {color, width: 1, type: 'solid', opacity: 0.7}},
     ];
-    if (showMajority) {
+    const withMajority = majority !== null && majority !== undefined && majority >= row.x0 && majority <= row.x1;
+    if (withMajority) {
       marks.push({
         xAxis: majority,
         lineStyle: {color: THEME.markColor, width: 1, type: 'dashed'},
-        label: index === 0 ? {show: true, position: 'start', formatter: `Mayoría ${fmtInt(majority)}`,
-          color: THEME.textColor, fontSize: 11} : {show: false},
+        label: {show: true, position: 'insideEndTop', formatter: `Mayoría ${fmtInt(majority)}`,
+          color: THEME.textColor, fontSize: 11},
       });
     }
     return {
@@ -88,7 +90,7 @@ export function renderRidge(el, {grid, rows}, {colors = {}, xMax, majority = nul
       smooth: false,
       lineStyle: {color, width: 1.5},
       areaStyle: {color, opacity: 0.35},
-      data: grid.map((x, i) => [x, row.y[i]]),
+      data: row.grid.map((x, i) => [x, row.y[i]]),
       markLine: {silent: true, symbol: 'none', animation: false, data: marks, label: {show: false}},
       z: 2,
     };
@@ -96,7 +98,7 @@ export function renderRidge(el, {grid, rows}, {colors = {}, xMax, majority = nul
   const labels = rows.map((row, index) => ({
     type: 'text',
     left: 8,
-    top: TOP + index * rowHeight + (rowHeight - GAP) / 2 - 15,
+    top: TOP + index * rowHeight + curveHeight / 2 - 15,
     style: {
       text: `${row.name}\n${fmtInt(headline[row.name] ?? row.median)} (${fmtInt(row.lo)}–${fmtInt(row.hi)})`,
       fill: THEME.textColor,
@@ -111,10 +113,9 @@ export function renderRidge(el, {grid, rows}, {colors = {}, xMax, majority = nul
     xAxis: xAxes,
     yAxis: yAxes,
     graphic: labels,
-    axisPointer: {link: [{xAxisIndex: 'all'}], label: {show: false}},
     tooltip: {
       trigger: 'axis',
-      axisPointer: {type: 'line', lineStyle: {color: THEME.markColor}},
+      axisPointer: {type: 'line', lineStyle: {color: THEME.markColor}, label: {show: false}},
       formatter(params) {
         const first = Array.isArray(params) ? params[0] : params;
         if (!first) {
