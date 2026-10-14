@@ -379,7 +379,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .hemi-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .hemi-grid > * { min-width: 0; }
 .hemi-card { grid-row: 1 / 3; }
-.hemi-card .chart { height: 460px; }
+@media (min-width: 900px) {
+  .hemi-card .chart { height: 460px; }
+}
 @media (max-width: 899px) {
   .hemi-grid { grid-template-columns: 1fr; }
   .hemi-card { grid-row: auto; }

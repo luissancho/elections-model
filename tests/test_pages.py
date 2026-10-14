@@ -1690,7 +1690,7 @@ def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
     assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
     assert '.geo th:first-child' in css and '.geo tr.total td:first-child { background: var(--color-soft); }' in css
-    assert 'align-items: start' in css and '.hemi-card .chart { height: 460px; }' in css and 'flex: 1' not in css.split('.hemi-grid')[1].split('/* Escaños')[0]
+    assert 'align-items: start' in css and '@media (min-width: 900px) {\n  .hemi-card .chart { height: 460px; }' in css and 'flex: 1' not in css.split('.hemi-grid')[1].split('/* Escaños')[0]
 
 
 def test_controls_are_segments_on_every_page(api):
