@@ -116,11 +116,13 @@ function weekCells(rows, measure) {
 /**
  * Table of a measure by election and week before it.
  *
- * @param {object[]} rows poll-errors rows (`event`, `event_date`, `days` and the measure)
+ * @param {object[]} rows poll-errors rows (`event`, `event_date`, `days` and the measure; `name`, the full name of
+ *   the election, when the page knows it)
  * @param {string} measure column name
  * @returns {{weeks: number[], rows: object[]}} the weeks present (ascending) and one row per election (`scope:date`,
- *   labelled "{event} · {scope_name}"), newest first, `{event, event_date, cells: {week: {n, mean}}}`, closed by the `Todas` row of every poll;
- *   both empty without any row with a finite `days`
+ *   labelled with its `name` or, without one, "{event} · {scope_name}"), newest first,
+ *   `{event, event_date, cells: {week: {n, mean}}}`, closed by the `Todas` row of every poll; both empty without any
+ *   row with a finite `days`
  */
 export function weeksTable(rows, measure) {
   const valid = rows.filter((row) => Number.isFinite(row.days));
@@ -132,7 +134,7 @@ export function weeksTable(rows, measure) {
   for (const row of valid) {
     const key = eventKey(row);
     if (!events.has(key)) {
-      events.set(key, {event: `${row.event} · ${row.scope_name}`, event_date: row.event_date, rows: []});
+      events.set(key, {event: row.name || `${row.event} · ${row.scope_name}`, event_date: row.event_date, rows: []});
     }
     events.get(key).rows.push(row);
   }
@@ -148,15 +150,17 @@ export function weeksTable(rows, measure) {
  *
  * @param {object[]} rows poll-errors rows
  * @param {string} measure column name
- * @returns {object[]} `{event_date, event, scope, scope_name, n, mean}` by date ascending (ties by order of
- *   appearance); `n` counts the rows with a finite `measure` and `mean` is their mean (`null` without any)
+ * @returns {object[]} `{event_date, event, name, scope, scope_name, n, mean}` by date ascending (ties by order of
+ *   appearance; `name` is the full name of the election when the rows carry it, else `null`); `n` counts the rows
+ *   with a finite `measure` and `mean` is their mean (`null` without any)
  */
 export function eventsOf(rows, measure) {
   const groups = new Map();
   for (const row of rows) {
     const key = eventKey(row);
     if (!groups.has(key)) {
-      groups.set(key, {event_date: row.event_date, event: row.event, scope: row.scope, scope_name: row.scope_name, rows: []});
+      groups.set(key, {event_date: row.event_date, event: row.event, name: row.name ?? null, scope: row.scope,
+                       scope_name: row.scope_name, rows: []});
     }
     groups.get(key).rows.push(row);
   }

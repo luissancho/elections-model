@@ -28,7 +28,7 @@
       {{ m.card_start('past-events', 'Elecciones pasadas', 'Las elecciones ya celebradas con su análisis publicado, de la más reciente a la más antigua; cada una enlaza a su detalle.') }}
         <ul class="link-list">
           {% for event in past %}
-          <li><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a> <span class="muted">· {{ event.scope_name }}</span></li>
+          <li><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a></li>
           {% endfor %}
         </ul>
       {{ m.card_end() }}

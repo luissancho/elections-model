@@ -1125,7 +1125,7 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     assert 'id="sector-chart"' not in page and 'id="sector"' not in page
     table = re.search(r'<table id="events-table">(.*?)</table>', page, re.S).group(1)
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
-        'Elección', 'Ámbito', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
+        'Elección', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
 
 
 @pytest.fixture
@@ -1203,7 +1203,8 @@ def history_two_scopes(history_site, fresh_app):
 def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     body = call(history_two_scopes, '/elecciones')[2]
     page = html(body).replace('\n', ' ')
-    assert 'id="scope-filter"' not in page and '<th scope="col">Ámbito</th>' in page
+    assert 'id="scope-filter"' not in page and 'Ámbito</th>' not in page  # el nombre de la elección basta
+    assert '· Generales 2023</option>' in page and 'Generales 2023 · España' not in page and 'Madrid</option>' in page
     assert re.search(r'<select name="ambito">\s*<option value="" selected>Todos</option>', page)
     for name in ('eleccion', 'casa', 'desde', 'hasta'):
         assert 'name="{}"'.format(name) in page

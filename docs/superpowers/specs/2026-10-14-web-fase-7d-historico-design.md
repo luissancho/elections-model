@@ -72,7 +72,8 @@ inglés con el trailer de siempre).
 ### D2. Filtros y estado (`web/dist/js/errors.js`, `web/templates/elecciones.html`)
 
 Tarjeta "Filtros" con, en este orden: Ámbito (`select`: "Todos" y los de `scopes`), Elección (`select`: "Todas" y
-las elecciones del ámbito elegido, o de todos, etiquetadas "{fecha} · {nombre} · {ámbito}"), Encuestadora
+las elecciones del ámbito elegido, o de todos, etiquetadas "{fecha} · {nombre}"; ajuste 2026-10-14: sin el ámbito,
+el nombre de la elección ya lo dice), Encuestadora
 (`select`: "Todas" y las encuestadoras con filas en la selección de ámbito y años), Años (dos `select`, "Desde" y
 "Hasta", con los años de `years`; por defecto el primero y el último) y Medida (`.seg`, error de bloques / error
 medio, que hoy vive en la tarjeta del histograma y se muda aquí). Cambiar el ámbito o los años vacía la
@@ -107,8 +108,8 @@ esas mismas elecciones. El aviso de cada punto dice elección, ámbito, media y 
   leyenda de ámbitos. Solo entran las filas con los dos bloques `vs`.
 - Semanas: una fila por elección si la selección tiene 15 elecciones o menos; con más, solo la fila "Todas" y una
   nota "Elige un ámbito o unos años para ver las elecciones una a una".
-- Tabla de elecciones (`#events-table`, del servidor): todas las de todos los ámbitos con una columna "Ámbito"
-  nueva tras la fecha; el JS oculta las filas que no pasan el filtro de ámbito, elección y años (la encuestadora
+- Tabla de elecciones (`#events-table`, del servidor): todas las de todos los ámbitos, sin columna "Ámbito" (ajuste
+  2026-10-14: el nombre de la elección basta; el `data-scope` de cada fila sigue sirviendo al filtro); el JS oculta las filas que no pasan el filtro de ámbito, elección y años (la encuestadora
   no aplica: son elecciones) y actualiza el pie "M elecciones".
 - La tarjeta de cierre enlaza a "Ranking Encuestadoras" (sin "de este ámbito").
 
@@ -188,3 +189,12 @@ Menores aplazados: las lecturas de un análisis ausente no se cachean (un GET a 
 petición; nginx cachea la página 60 s); la lógica de años se repite entre `errors.js` y el pegamento de la tabla;
 con más de 15 ámbitos autonómicos los colores se repiten; las opciones de Elección del servidor incluyen ámbitos
 sin análisis (el JS las rehace); `trendPoints` descarta las elecciones sin sondeos antes de la ventana.
+
+## Ajuste 2026-10-14: las elecciones se nombran sin el ámbito
+
+Luis: "A la hora de listar los eventos, no hace falta que añadas el ámbito, con el nombre del evento es suficiente".
+Quitado el sufijo " · {ámbito}" de la lista de elecciones pasadas de Inicio, del `select` de elección del histórico,
+del tooltip de la evolución y de la columna "Ámbito" de la tabla de elecciones. En la tabla por semanas y en el
+tooltip de la diana, donde las filas solo traían el código corto (`2023-23J`), ahora va el nombre completo de la
+elección (`name`, que `wireHistory` añade a cada fila desde `events`); sin nombre se conserva "{código} · {ámbito}",
+porque el código solo es ambiguo entre ámbitos que votaron el mismo día.

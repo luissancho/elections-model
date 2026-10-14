@@ -55,7 +55,9 @@ def test_years_and_events():
     assert events[1]['event'] == '4M' and events[1]['scope_name'] == 'Madrid'
     # the CIS 2019 row has no error_blocks_abs: it does not count
     assert run_js('e.eventsOf(rows, "error_blocks_abs")')[0] == {
-        'event_date': '2019-11-10', 'event': '10N', 'scope': 'es', 'scope_name': 'España', 'n': 1, 'mean': 5.0}
+        'event_date': '2019-11-10', 'event': '10N', 'name': None, 'scope': 'es', 'scope_name': 'España', 'n': 1, 'mean': 5.0}
+    named = run_js('e.eventsOf(rows.map((r) => ({...r, name: r.event === "4M" ? "Elecciones Madrid Mayo 2021" : null})), "error_avg")')
+    assert [x['name'] for x in named] == [None, 'Elecciones Madrid Mayo 2021', None]
 
 
 def test_complements():
@@ -91,6 +93,9 @@ def test_filter_mean_and_weeks():
     assert table['weeks'] == [1, 2, 3]
     assert [r['event'] for r in table['rows']] == ['23J · España', '4M · Madrid', '10N · España', 'Todas']
     assert table['rows'][-1]['cells']['1'] == {'n': 3, 'mean': 5.0}
+    # with the full name of the election, the row is labelled by it alone (no scope)
+    named = run_js('e.weeksTable(rows.map((r) => ({...r, name: r.event === "23J" ? "Elecciones Generales Julio 2023" : null})), "error_avg")')
+    assert [r['event'] for r in named['rows']][:2] == ['Elecciones Generales Julio 2023', '4M · Madrid']
 
 
 def test_weeks_table_groups_by_scope_and_date():
