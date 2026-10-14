@@ -73,6 +73,27 @@ export function markPills(root) {
   }
 }
 
+/**
+ * Mirror the checked radio of every segmented control (`.seg`) in `root` on the class `is-on` of its label, for the
+ * browsers without `:has()` (the CSS paints a segment with either).
+ *
+ * @param {Document|Element} root where to look for segments
+ */
+export function markSegments(root = document) {
+  for (const input of root.querySelectorAll('.seg input[type=radio]')) {
+    input.closest('label').classList.toggle('is-on', input.checked);
+  }
+}
+
+// Every page imports this module: keep the segments marked from the start and after each change.
+markSegments();
+document.addEventListener('change', (event) => {
+  if (event.target.closest && event.target.closest('.seg')) {
+    markSegments();
+  }
+});
+window.addEventListener('pageshow', () => markSegments());
+
 /** Show `message` as an error in the status line. */
 export function showError(message) {
   const status = document.getElementById('status');

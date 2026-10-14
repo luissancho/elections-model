@@ -119,13 +119,13 @@
       {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el escenario central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
         <div class="series-controls" id="territory-controls" hidden>
           {% if territory_levels %}
-          <fieldset id="territory-level" class="chart-window">
+          <fieldset id="territory-level" class="seg">
             <legend>Nivel</legend>
             <label><input type="radio" name="level" value="ccaa" checked> CCAA</label>
             <label><input type="radio" name="level" value="prov"> Provincia</label>
           </fieldset>
           {% endif %}
-          <fieldset id="territory-mode" class="chart-window">
+          <fieldset id="territory-mode" class="seg">
             <legend>Mostrar</legend>
             <label><input type="radio" name="tmode" value="pct"> % Voto</label>
             <label><input type="radio" name="tmode" value="esc" checked> Escaños</label>

@@ -94,7 +94,7 @@
         {% include '_glosario.html' %}
       {{ m.card_end() }}
       {{ m.card_start('poll-histogram', 'Error de cada sondeo', 'Cuántos sondeos de esta elección se equivocaron en cada tramo de un punto, con la media marcada. Los botones cambian la medida.') }}
-        <fieldset id="poll-measure" class="chart-window" hidden>
+        <fieldset id="poll-measure" class="seg" hidden>
           <legend>Medida</legend>
           <label><input type="radio" name="medida" value="error_blocks_abs" checked> Error de bloques</label>
           <label><input type="radio" name="medida" value="error_avg"> Error medio</label>

@@ -3,7 +3,7 @@
     <h2>{{ event_bar.title }}</h2>
     <p class="muted">{{ event_bar.date|date }}{% if event_bar.days_text %} · {{ event_bar.days_text }}{% endif %}</p>
   </div>
-  <nav class="event-tabs" aria-label="Secciones del evento">
+  <nav class="event-tabs seg" aria-label="Secciones del evento">
     {% for tab in event_bar.tabs %}
     <a href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
     {% endfor %}

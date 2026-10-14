@@ -1676,6 +1676,21 @@ def test_fonts_are_vendored_and_declared():
     assert os.path.isfile(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'vendor', 'fonts', 'LICENSE'))
 
 
+def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
+    css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    for token in ('--color-bg: #f4f5f8;', '--color-card: #fff;', '--color-soft: #eceef2;', '--radius: 12px;', '--shadow: 0 2px 8px rgba(0,0,0,.06);', '--color-faint:'):
+        assert token in css, token
+    assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
+    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
+
+
+def test_controls_are_segments_on_every_page(api):
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    assert 'chart-window' not in page and re.search(r'<fieldset id="series-window" class="seg" hidden>', page)
+    assert re.search(r'<fieldset id="pollster-window" class="seg">', page)
+    assert 'chart-window' not in html(call(api, '/es/escanos')[2])
+
+
 def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     page = html(call(houses, '/casas')[2])
     assert 'encuestadoras con rating' in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page

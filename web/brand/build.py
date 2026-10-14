@@ -33,7 +33,7 @@ NAME = 'Demoscopio'
 WORD = NAME[:-1]  # the glyphs set in the font; the last "o" is the lens
 INK = '#1f1b18'  # --color-text
 ACCENT = '#1d4f86'  # --color-accent
-BACKGROUND = '#fbf1e7'  # --color-bg
+BACKGROUND = '#f4f5f8'  # --color-bg
 # Lens, in font units (1000 per em), relative to the origin of the "o" it replaces. The "o" of the font is
 # 482 wide and 507 tall (from -14 to 493), with 130-unit sides and 48-unit top and bottom: the ring takes its
 # height and a uniform stroke in between.
