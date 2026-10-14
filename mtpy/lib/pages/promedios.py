@@ -211,8 +211,7 @@ def promedios_context(state: dict) -> dict:
         present in the series, or all of them), ``table_rows`` (``table_rows``, the first ``TABLE_ROWS``),
         ``table_total`` (the polls of the polls part), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
-        them), ``block_colors`` (``block_color`` of each block, for its checkbox), ``main`` (the parties of
-        ``meta.bmaps.main`` present in the series) and ``initial`` (``state``, ``meta``, ``headline``,
+        them) and ``initial`` (``state``, ``meta``, ``headline``,
         ``series`` (``round_series``), ``polls`` (``chart_polls``), ``projection``, ``vote``, ``summary`` and
         ``runs``, the data the charts are drawn from; plus ``table``, ``{'parties', 'rows'}`` with every row of
         the polls table, only when ``table_total > TABLE_ROWS``, for the "Cargar más" button).
@@ -245,8 +244,6 @@ def promedios_context(state: dict) -> dict:
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
     context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
-    context['block_colors'] = {block: block_color(block, meta, parties) for block in context['blocks']}
-    context['main'] = main
     context['initial'] = {
         'state': full,
         'meta': meta,

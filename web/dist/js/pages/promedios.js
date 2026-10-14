@@ -1,7 +1,7 @@
 // Promedios tab of an event: the poll average with its window, party and block views, one house against the
 // average, the hemicycle, the evolution and the "Cargar más" rows of the polls table,
 // drawn from the data embedded by the server. The state of the average controls lives in the URL hash
-// (`blocks.js`), written only when a control changes.
+// (`blocks.js`), written only when a control changes; the legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
 import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} from '../blocks.js';
 import {renderEvolution} from '../charts/evolution.js';
@@ -9,7 +9,7 @@ import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
 import {captionText, nextRows} from '../polls-table.js';
 import {WINDOW_DAYS} from '../range.js';
-import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
@@ -83,37 +83,36 @@ function seriesViews(initial, catalog) {
 }
 
 /**
- * Draw the average and the house chart and wire their controls: view, window, party and block pills and the
- * house selector. The pills replace the ECharts legend of the average chart; the house chart keeps a read-only one. Every change of a control rewrites
- * the URL hash.
+ * Names of the view shown by a legend selection, or null when it is what the view shows without a choice
+ * (its defaults, or all of them).
+ *
+ * @param {object} current the view (`parties`, `defaults`)
+ * @param {object} legendSelected `{name: boolean}` as ECharts reports it
+ * @returns {string[]|null} the chosen names, in the order of the view
+ */
+function chosenNames(current, legendSelected) {
+  const chosen = current.parties.filter((name) => legendSelected[name] !== false);
+  const base = current.defaults || current.parties;
+  const same = chosen.length === base.length && chosen.every((name) => base.includes(name));
+  return same ? null : chosen;
+}
+
+/**
+ * Draw the poll average and wire its controls: view and window radios and the ECharts legend, which selects the
+ * parties or blocks shown. Every change rewrites the URL hash.
  *
  * @param {object} initial the page's initial data
- * @param {Catalog} catalog party catalogue of the run
+ * @param {object} views `seriesViews` of the page
+ * @param {object} state `{view, window, selected}` parsed from the hash
+ * @param {function} render draws a chart: `(el, polls, chartState) => chart`
+ * @returns {object} the state of the average, to seed the house chart
  */
-function wireSeries(initial, catalog) {
-  const {meta, polls, vote} = initial;
-  const views = seriesViews(initial, catalog);
-  const anchor = meta.date_last || meta.as_of;
-  const state = parseSeriesHash(window.location.hash, {
-    parties: views.partidos.parties,
-    blocks: views.bloques ? views.bloques.parties : [],
-    windows: WINDOWS,
-  });
+function wireAverage(initial, views, state, render) {
+  const anchor = initial.meta.date_last || initial.meta.as_of;
   const mainEl = document.getElementById('series-chart');
-  const houseEl = document.getElementById('pollster-chart');
-  const select = document.getElementById('pollster-select');
-  const houseControls = document.getElementById('pollster-controls');
-  const fieldsets = {
-    window: document.getElementById('series-window'),
-    view: document.getElementById('series-view'),
-    partidos: document.getElementById('series-parties'),
-    bloques: document.getElementById('series-blocks'),
-  };
-  const charts = [];
-
-  const view = () => views[state.view];
-  const selected = () => state.selected ?? view().defaults;
-  const boxes = (name) => (fieldsets[name] ? [...fieldsets[name].querySelectorAll('input[type=checkbox]')] : []);
+  const windowSet = document.getElementById('series-window');
+  const viewSet = document.getElementById('series-view');
+  let chart = null;
 
   /** Write the state of the controls to the URL hash without adding a history entry. */
   function writeHash() {
@@ -121,60 +120,15 @@ function wireSeries(initial, catalog) {
     window.history.replaceState(null, '', pathname + search + seriesHash(state));
   }
 
-  /** Polls of the chosen house, in the current view. */
-  function housePolls() {
-    const house = select ? select.value : '';
-    const chosen = (polls.polls || []).filter((poll) => poll.pollster === house);
-    return view().toPolls({parties: polls.parties, polls: chosen});
-  }
-
-  /** Check the pills of the current view that are shown and show only its fieldset. */
-  function syncBoxes() {
-    const shown = selected();
-    for (const name of ['partidos', 'bloques']) {
-      if (fieldsets[name]) {
-        fieldsets[name].hidden = name !== state.view;
-      }
-    }
-    for (const box of boxes(state.view)) {
-      box.checked = !shown || shown.includes(box.value);
-    }
-    markPills(fieldsets[state.view]);
-  }
-
-  /** Show or hide the names of the current view in both charts; a merged option keeps their zoom. */
-  function applySelection() {
-    const shown = selected();
-    const legend = {selected: mapNames(view().parties, (name) => !shown || shown.includes(name))};
-    for (const chart of charts) {
-      chart.setOption({legend});
-    }
-  }
-
-  /** Draw the chart `el` with the current view, window and selection and the given polls; returns the chart. */
-  function render(el, pollsOfChart, legend = false) {
-    const current = view();
-    return renderSeries(el, {
-      series: current.series,
-      polls: pollsOfChart,
-      projection: current.projection,
-      parties: current.parties,
-      selected: selected(),
-      colors: current.colors,
-      asOf: meta.as_of,
-      when: vote.when,
-      window: state.window,
-      anchor,
-      legend,
-    });
-  }
-
-  /** Draw the average chart and, when there is one, the house chart. */
-  function drawAll() {
-    charts.length = 0;
-    tryDraw(() => charts.push(render(mainEl, view().polls)), 'the poll average');
-    if (houseEl) {
-      tryDraw(() => charts.push(render(houseEl, housePolls(), 'readonly')), 'the house against the average');
+  /** Draw the chart and, the first time, listen to its legend. */
+  function draw() {
+    const drawn = render(mainEl, views[state.view].polls, state);
+    if (!chart) {
+      chart = drawn;
+      chart.on('legendselectchanged', (event) => {
+        state.selected = chosenNames(views[state.view], event.selected);
+        writeHash();
+      });
     }
   }
 
@@ -184,56 +138,148 @@ function wireSeries(initial, catalog) {
   for (const input of document.querySelectorAll('#series-view input[name=view]')) {
     input.checked = input.value === state.view;
   }
-  syncBoxes();
-  drawAll();
+  tryDraw(draw, 'the poll average');
 
   // The controls only work with JavaScript, so the server renders them hidden.
-  if (houseControls) {
-    houseControls.hidden = false;
-  }
-  if (fieldsets.window) {
-    fieldsets.window.hidden = false;
+  if (windowSet) {
+    windowSet.hidden = false;
     // `click` rather than `change`: clicking the option already checked after dragging the slider must restore
     // its window too.
-    fieldsets.window.addEventListener('click', (event) => {
-      if (event.target.matches('input[name=window]')) {
+    windowSet.addEventListener('click', (event) => {
+      if (event.target.matches('input[name=window]') && chart) {
         state.window = event.target.value;
-        for (const chart of charts) {
-          setWindow(chart, state.window, {series: view().series, projection: view().projection, anchor});
-        }
+        const current = views[state.view];
+        setWindow(chart, state.window, {series: current.series, projection: current.projection, anchor});
         writeHash();
       }
     });
   }
-  if (fieldsets.view) {
-    fieldsets.view.hidden = false;
-    fieldsets.view.addEventListener('change', (event) => {
+  if (viewSet) {
+    viewSet.hidden = false;
+    viewSet.addEventListener('change', (event) => {
       if (event.target.matches('input[name=view]') && views[event.target.value]) {
         state.view = event.target.value;
         state.selected = null;
-        syncBoxes();
-        drawAll();
+        tryDraw(draw, 'the poll average');
         writeHash();
       }
     });
   }
-  for (const name of ['partidos', 'bloques']) {
-    const fieldset = fieldsets[name];
-    if (!fieldset) {
-      continue;
+}
+
+/**
+ * Draw the house chart and wire its own controls (view, window, house selector and legend). Its state starts as
+ * the average's at load and never touches the URL hash.
+ *
+ * @param {object} initial the page's initial data
+ * @param {object} views `seriesViews` of the page
+ * @param {object} start `{view, window, selected}` of the average at load
+ * @param {function} render draws a chart: `(el, polls, chartState) => chart`
+ */
+function wireHouse(initial, views, start, render) {
+  const {meta, polls} = initial;
+  const anchor = meta.date_last || meta.as_of;
+  const houseEl = document.getElementById('pollster-chart');
+  const select = document.getElementById('pollster-select');
+  const controls = document.getElementById('pollster-controls');
+  const windowSet = document.getElementById('pollster-window');
+  const viewSet = document.getElementById('pollster-view');
+  const state = {...start};
+  let chart = null;
+
+  /** Polls of the chosen house, in the current view. */
+  function housePolls() {
+    const house = select ? select.value : '';
+    const chosen = (polls.polls || []).filter((poll) => poll.pollster === house);
+    return views[state.view].toPolls({parties: polls.parties, polls: chosen});
+  }
+
+  /** Draw the chart and, the first time, listen to its legend. */
+  function draw() {
+    const drawn = render(houseEl, housePolls(), state);
+    if (!chart) {
+      chart = drawn;
+      chart.on('legendselectchanged', (event) => {
+        state.selected = chosenNames(views[state.view], event.selected);
+      });
     }
-    fieldset.addEventListener('change', () => {
-      state.selected = boxes(name).filter((box) => box.checked).map((box) => box.value);
-      markPills(fieldset);
-      applySelection();
-      writeHash();
+  }
+
+  for (const input of document.querySelectorAll('#pollster-window input[name=pwindow]')) {
+    input.checked = input.value === state.window;
+  }
+  for (const input of document.querySelectorAll('#pollster-view input[name=pview]')) {
+    input.checked = input.value === state.view;
+  }
+  tryDraw(draw, 'the house against the average');
+
+  if (controls) {
+    controls.hidden = false;
+  }
+  if (windowSet) {
+    windowSet.hidden = false;
+    windowSet.addEventListener('click', (event) => {
+      if (event.target.matches('input[name=pwindow]') && chart) {
+        state.window = event.target.value;
+        const current = views[state.view];
+        setWindow(chart, state.window, {series: current.series, projection: current.projection, anchor});
+      }
     });
   }
-  if (select && houseEl) {
-    // `renderSeries` redraws the same ECharts instance, so `charts` keeps pointing at it.
-    select.addEventListener('change', () => {
-      tryDraw(() => render(houseEl, housePolls()), 'the house against the average');
+  if (viewSet) {
+    viewSet.hidden = false;
+    viewSet.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=pview]') && views[event.target.value]) {
+        state.view = event.target.value;
+        state.selected = null;
+        tryDraw(draw, 'the house against the average');
+      }
     });
+  }
+  if (select) {
+    // `renderSeries` redraws the same ECharts instance; the window, view and legend choices are kept.
+    select.addEventListener('change', () => tryDraw(draw, 'the house against the average'));
+  }
+}
+
+/**
+ * Wire the poll average and, when the page has one, the house chart.
+ *
+ * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
+ */
+function wireSeries(initial, catalog) {
+  const {meta, vote} = initial;
+  const views = seriesViews(initial, catalog);
+  const anchor = meta.date_last || meta.as_of;
+  const state = parseSeriesHash(window.location.hash, {
+    parties: views.partidos.parties,
+    blocks: views.bloques ? views.bloques.parties : [],
+    windows: WINDOWS,
+  });
+  const start = {...state};
+
+  /** Draw the chart `el` with the polls and the `{view, window, selected}` of a chart, legend on. */
+  function render(el, pollsOfChart, chartState) {
+    const current = views[chartState.view];
+    return renderSeries(el, {
+      series: current.series,
+      polls: pollsOfChart,
+      projection: current.projection,
+      parties: current.parties,
+      selected: chartState.selected ?? current.defaults,
+      colors: current.colors,
+      asOf: meta.as_of,
+      when: vote.when,
+      window: chartState.window,
+      anchor,
+      legend: true,
+    });
+  }
+
+  wireAverage(initial, views, state, render);
+  if (document.getElementById('pollster-chart')) {
+    wireHouse(initial, views, start, render);
   }
 }
 

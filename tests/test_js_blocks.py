@@ -71,6 +71,9 @@ def test_series_hash_round_trip_and_fallbacks():
     assert run_js(f'b.parseSeriesHash("", {ctx})') == {'window': 'all', 'view': 'partidos', 'selected': None}
     # los nombres se leen en el orden de la lista de la vista; los de la otra vista no valen
     assert run_js(f'b.parseSeriesHash("#sel=PSOE,PP,Derecha", {ctx})')['selected'] == ['PP', 'PSOE']
+    # los nombres que no son de la vista no llegan a la leyenda
+    assert run_js(f'b.parseSeriesHash("#vista=partidos&sel=Derecha,PP", {ctx})')['selected'] == ['PP']
+    assert run_js(f'b.parseSeriesHash("#vista=bloques&sel=Derecha", {ctx})')['selected'] == ['Derecha']
     # un nombre con coma o espacio vuelve igual; una codificación rota se ignora
     names = '["A,B", "C D"]'
     back = run_js(f'b.parseSeriesHash(b.seriesHash({{window: "3m", view: "partidos", selected: {names}}}), '

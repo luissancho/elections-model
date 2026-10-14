@@ -725,19 +725,18 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
     assert 'name="view" value="partidos"' in page and 'name="view" value="bloques"' in page
     assert 'id="pollster-select"' in page and 'href="/metodo' in page
-    assert re.search(r'<div class="series-controls"[^>]*\bhidden[^>]*>\s*<label>Encuestadora', page)
+    assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 
 
-def test_promedios_controls_are_hidden_without_js_and_check_the_main_parties(api):
-    """Sin JS los controles no hacen nada y no se muestran; las casillas marcan los partidos `main` del run."""
+def test_promedios_controls_are_hidden_without_js(api):
+    """Sin JS los controles no hacen nada y no se muestran."""
     page = html(call(api, '/es')[2]).replace('\n', ' ')
-    for control in ('series-window', 'series-view', 'series-parties', 'series-blocks'):
+    for control in ('series-window', 'series-view'):
         assert re.search(r'<fieldset id="{}" class="[^"]*" hidden>'.format(control), page), control
-    assert 'name="party" value="PP" checked' in page and 'name="block" value="Derecha" checked' in page
     assert 'data-all' not in page and 'data-none' not in page
     assert '<option value="Sigma Dos" selected>Sigma Dos (1)</option>' in page
     assert 'href="/elecciones?scope=es"' in page and 'href="/casas?scope=es"' in page
@@ -752,7 +751,7 @@ def test_promedios_hides_the_blocks_view_without_blocks(api, fresh_app):
                                                  'es-md', run_id='20261009-120000')
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es-md')[2])
-    assert 'name="view"' not in page and 'id="series-parties"' in page and 'id="series-blocks"' not in page
+    assert 'name="view"' not in page and 'name="pview"' not in page and 'id="series-window"' in page
 
 def test_pollster_options_and_round_series():
     polls = [{'pollster': 'GAD3'}, {'pollster': 'CIS'}, {'pollster': 'GAD3'}, {'pollster': 'Sigma Dos'},
@@ -1719,25 +1718,24 @@ def test_title_of_shows_today_in_the_nowcast():
     assert pages.title_of('forecast', meta, False, False, True, today=today) == 'Pronóstico para el 29 nov 2026'
 
 
-def test_promedios_controls_in_three_rows_with_pills_and_the_polls_table_by_name(api):
+def test_promedios_controls_in_two_rows_and_the_polls_table_by_name(api):
     page = html(call(api, '/es')[2])
-    assert page.index('id="series-view"') < page.index('id="series-window"') < page.index('id="series-parties"')
-    assert 'class="pill"' in page and 'data-all' not in page and 'data-none' not in page
+    assert page.index('id="series-view"') < page.index('id="series-window"')
+    assert 'class="pill"' not in page and 'data-all' not in page and 'data-none' not in page
     assert '<th scope="col">Sondeo</th>' in page and '<th scope="col">Casa</th>' not in page
+    assert '<th scope="col">Medio</th>' not in page and '<th scope="col">Encuestadora</th>' not in page
     assert 'id="polls-more"' in page
     data = initial(call(api, '/es')[2])
     assert data['polls']['polls'][0]['name'] and 'sample_size' in data['polls']['polls'][0]
 
 
-def test_promedios_pills_carry_the_colour_and_an_accessible_legend(api):
+def test_promedios_legend_is_the_party_selector_and_the_house_chart_has_its_own_controls(api):
     page = html(call(api, '/es')[2]).replace('\n', ' ')
-    pill = re.search(r'<label class="pill" style="--pill-color: ([^"]+)" title="[^"]+"><input type="checkbox" '
-                     r'name="party" value="PP" checked> PP</label>', page)
-    assert pill and pill.group(1).startswith('#')
-    assert '<legend class="sr-only">Partidos</legend>' in page and '<legend class="sr-only">Bloques</legend>' in page
-    assert re.search(r'<label class="pill" style="--pill-color: [^"]+"><input type="checkbox" name="block" '
-                     r'value="Derecha" checked> Derecha</label>', page)
-    assert '<th scope="col">Medio</th>' not in page and '<th scope="col">Encuestadora</th>' not in page
+    assert 'id="series-parties"' not in page and 'id="series-blocks"' not in page and 'name="party"' not in page
+    assert re.search(r'<fieldset id="pollster-view" class="[^"]*">', page) and re.search(r'<fieldset id="pollster-window" class="[^"]*">', page)
+    assert 'name="pview" value="partidos" checked' in page and 'name="pwindow" value="all" checked' in page and 'name="pwindow" value="3m"' in page
+    assert page.index('id="pollster-window"') < page.index('id="pollster-select"')
+    assert 'Pulsa un partido de la leyenda' in page and 'Tiene su propia ventana y vista' in page
 
 
 def test_poll_name_follows_the_loader_rule():
@@ -1757,10 +1755,9 @@ def test_ink_color_is_dark_on_light_colours_and_white_on_dark_ones():
     assert pages.environment().filters['ink'] is pages.ink_color
 
 
-def test_promedios_pills_carry_the_ink_of_their_colour(api):
-    page = html(call(api, '/es')[2])
+def test_escanos_pills_carry_the_ink_of_their_colour(api):
+    page = html(call(api, '/es/escanos')[2])
     for match in re.finditer(r'<label class="pill" style="--pill-color: (#[0-9a-fA-F]+); --pill-ink: (#[0-9a-f]+)"',
                              page):
         assert match.group(2) == pages.ink_color(match.group(1))
-    assert re.search(r'value="PP" checked> PP</label>', page)
     assert len(re.findall(r'--pill-ink: ', page)) == page.count('class="pill"') > 0
