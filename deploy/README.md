@@ -504,6 +504,16 @@ con `ValueError` antes de empezar).
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what` |
 | `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
+| `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
+
+Niveles de `verbose`:
+
+| Nivel | Qué sale |
+| --- | --- |
+| 0 | Solo la cabecera de la acción (`publish forecast: 18 ámbitos · run …`) y el resumen final (con "· n avisos" en cada línea) |
+| 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (en todas las acciones que recorren ámbitos) |
+| 2 | Lo anterior más las líneas de fase del pronóstico (`simulador listo`, `promedio ajustado`, `simulación de hoy`, …) |
+| 3 | Lo anterior más la salida propia del modelo (`Simulator`/`Computer`, que reciben `verbose - 2`) |
 
 ### Estados y resumen
 

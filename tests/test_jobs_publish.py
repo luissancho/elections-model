@@ -494,7 +494,7 @@ def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched
                                                                       ('2023-07-23', 'published')]
     capsys.readouterr()
     with pytest.raises(RuntimeError, match='es'):
-        Publish().run(what=['event'], scopes=['es'], event_date=['2023-07-23', '2023-13-01'], fs=fs)
+        Publish().run(what=['event'], scopes=['es'], event_date=['2023-07-23', '2023-13-01'], fs=fs, verbose=0)
     out = capsys.readouterr().out
     assert out.count('failed (') == 1 and 'ValueError: month must be in 1..12' in out and 'published' not in out
 
@@ -544,17 +544,58 @@ def test_forecast_collects_the_model_warnings_into_the_result(fresh_app, tmp_pat
     assert NO_POLLS not in summary[0] and len(recwarn) == 0
 
 
-def test_forecast_prints_the_model_warnings_live_only_when_verbose(fresh_app, tmp_path, patched, monkeypatch, capsys,
-                                                                   recwarn):
+def test_verbose_0_prints_only_the_header_and_the_summary(fresh_app, tmp_path, patched, monkeypatch, capsys, recwarn):
     from mtpy.jobs.Publish import Publish
 
     warned_forecast(monkeypatch, [NO_POLLS])
-    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'quiet')))
-    assert NO_POLLS not in capsys.readouterr().out
-    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'verbose')), verbose=1)
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), verbose=0)
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 3 and lines[0].startswith('[') and 'publish forecast: 1 ámbito · run ' in lines[0]
+    assert lines[1].startswith('es: published') and lines[1].endswith(' · 1 aviso') and lines[2].startswith('manifest')
+    assert not any(text in '\n'.join(lines) for text in ('empezando', 'simulador listo', NO_POLLS))
+    assert len(recwarn) == 0
+
+
+def test_verbose_1_is_the_default_and_prints_the_scope_lines_and_warnings_live(fresh_app, tmp_path, patched,
+                                                                             monkeypatch, capsys, recwarn):
+    from mtpy.jobs.Publish import Publish
+
+    warned_forecast(monkeypatch, [NO_POLLS])
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
     out = capsys.readouterr().out
-    live = out.index('es · aviso: ' + NO_POLLS)
-    assert out.count(NO_POLLS) == 1 and live < out.index('\nes: published') and len(recwarn) == 0
+    summary = out.index('\nes: published')
+    assert out.index('[1/1] es: empezando') < out.index('es · aviso: ' + NO_POLLS) < out.index('[1/1] es: published') < summary
+    assert out.count(NO_POLLS) == 1 and 'simulador listo' not in out and len(recwarn) == 0
+
+
+def test_verbose_2_adds_the_phase_lines(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), verbose=2)
+    out = capsys.readouterr().out
+    assert out.index('[1/1] es: empezando') < out.index('[1/1] es: simulador listo (') < out.index('[1/1] es: meta y titular (')
+
+
+def test_the_model_gets_verbose_minus_two(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    for level, expected in ((0, 0), (1, 0), (2, 0), (3, 1)):
+        patched.clear()
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / str(level))), verbose=level)
+        assert patched[0][3]['verbose'] == expected
+    patched.clear()
+    Publish().run(what=['analysis'], scopes=['es'], fs=FileSystem(str(tmp_path / 'analysis')), verbose=3)
+    assert patched[0][2] == {'verbose': 1}
+
+
+def test_analysis_prints_its_scope_lines_live_at_verbose_1(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    Publish().run(what=['analysis'], scopes=['es'], fs=FileSystem(str(tmp_path / 'one')))
+    out = capsys.readouterr().out
+    assert out.index('[1/1] es: empezando') < out.index('[1/1] es: analysis published') < out.index('\nes: analysis published')
+    Publish().run(what=['analysis'], scopes=['es'], fs=FileSystem(str(tmp_path / 'zero')), verbose=0)
+    assert 'empezando' not in capsys.readouterr().out
 
 
 def test_forecast_keeps_the_warnings_of_a_skipped_or_failed_scope(fresh_app, tmp_path, patched, monkeypatch, capsys,
@@ -574,7 +615,7 @@ def test_forecast_keeps_the_warnings_of_a_skipped_or_failed_scope(fresh_app, tmp
 
     monkeypatch.setattr(publish, 'publish_forecast', fake)
     with pytest.raises(RuntimeError, match='es-ar'):
-        Publish().run(what=['forecast'], scopes=['es-cb', 'es-ar'], fs=FileSystem(str(tmp_path)))
+        Publish().run(what=['forecast'], scopes=['es-cb', 'es-ar'], fs=FileSystem(str(tmp_path)), verbose=0)
     out = capsys.readouterr().out
     assert 'es-cb: skipped (Not enough polls to fit the average) · 2 avisos' in out
     assert "es-ar: failed (KeyError: 'x') · 2 avisos" in out
@@ -593,7 +634,7 @@ def test_forecast_prints_its_progress_live_before_the_summary(fresh_app, tmp_pat
 
     infos = []
     fresh_app.set('logger', types.SimpleNamespace(error=lambda m: None, info=infos.append))
-    Publish().run(what=['forecast'], scopes=['es', 'es-cb'], fs=FileSystem(str(tmp_path)))
+    Publish().run(what=['forecast'], scopes=['es', 'es-cb'], fs=FileSystem(str(tmp_path)), verbose=2)
     out = capsys.readouterr().out
     lines = out.splitlines()
     summary = next(i for i, line in enumerate(lines) if line.startswith('es: published'))
@@ -612,7 +653,7 @@ def test_backfill_progress_names_the_day(fresh_app, tmp_path, patched, capsys):
     from mtpy.jobs.Publish import Publish
 
     Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)),
-                  backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+                  backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09', verbose=2)
     out = capsys.readouterr().out
     assert 'publish forecast: 1 ámbito · backfill 2026-10-05..2026-10-06 (2 días)' in out
     assert out.index('[1/1] es 2026-10-05: empezando') < out.index('[1/1] es 2026-10-06: promedio ajustado (')
@@ -669,7 +710,7 @@ def test_progress_is_not_echoed_twice_by_a_console_logger(fresh_app, tmp_path, p
     log = app_log('test-publish-console', console)
     fresh_app.set('logger', log)
     try:
-        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), verbose=2)
     finally:
         drop_handlers(log)
     lines = capsys.readouterr().out.splitlines()
@@ -684,7 +725,7 @@ def test_progress_without_logger_prints_once_with_the_time(fresh_app, tmp_path, 
 
     from mtpy.jobs.Publish import Publish
 
-    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
+    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), verbose=2)
     lines = capsys.readouterr().out.splitlines()
     for text in PROGRESS:
         found = [line for line in lines if text in line]
@@ -700,7 +741,7 @@ def test_progress_with_a_file_logger_prints_and_logs_the_bare_text(fresh_app, tm
     log = app_log('test-publish-file', logging.NullHandler(), logging.FileHandler(str(tmp_path / 'info.log')), listed)
     fresh_app.set('logger', log)
     try:
-        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'site')))
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path / 'site')), verbose=2)
     finally:
         drop_handlers(log)
     out = capsys.readouterr().out

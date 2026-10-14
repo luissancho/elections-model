@@ -25,12 +25,13 @@ class ScopeProgress:
 
     Calling the object reports a phase of ``publish.publish_forecast`` (its ``progress``
     argument); ``start``, ``note`` and ``done`` print the start of the scope, a model warning
-    and its result line. Every line goes through ``say`` with the prefix ``[i/n] scope[ day]``.
+    and its result line. Every line goes through ``say`` with the prefix ``[i/n] scope[ day]`` and
+    its verbosity level: 1 for the start, the warnings and the result, 2 for the phases.
 
     Parameters
     ----------
     say : callable
-        Printer of one progress line (``Publish._say``).
+        Printer of one progress line, ``say(text, level)`` (``Publish._say``).
     scope : str
         Scope being published.
     index, total : int
@@ -46,22 +47,23 @@ class ScopeProgress:
 
     def __call__(self, step, seconds):
         """Report the end of the phase ``step`` (a key of ``STEPS``) after ``seconds``."""
-        self.say('{}: {} ({:.1f} s)'.format(self.prefix, STEPS.get(step, step), seconds))
+        self.say('{}: {} ({:.1f} s)'.format(self.prefix, STEPS.get(step, step), seconds), 2)
 
     def start(self):
         """Report that the scope (or day) starts."""
-        self.say('{}: empezando'.format(self.prefix))
+        self.say('{}: empezando'.format(self.prefix), 1)
 
     def note(self, text):
         """Report a model warning of the scope."""
-        self.say('{} · aviso: {}'.format(self.prefix, text))
+        self.say('{} · aviso: {}'.format(self.prefix, text), 1)
 
     def done(self, line):
         """Report the summary line of the result of the scope (``Publish._line``)."""
-        self.say('{} {}'.format(self.position, line))
+        self.say('{} {}'.format(self.position, line), 1)
 
 
 class Publish(Job):
+    verbose = 1
     """
     Publish the model results to the web bundle (``site/v1``) of the file system.
 
@@ -132,7 +134,7 @@ class Publish(Job):
 
     def run(self, what=('forecast',), scopes=('es',), event_date=None, n_sim=1000, seed=42, drange=6, max_fc=10,
             alpha=0.05, correctors=None, freeze=None, run=None, dry_run=False, force=False, fs=None, today=None,
-            backfill=None, source=None, verbose=0, **kwargs):
+            backfill=None, source=None, verbose=1, **kwargs):
         """
         Run the requested publication actions.
 
@@ -181,8 +183,11 @@ class Publish(Job):
         source : str, optional
             Results folder of ``backtest`` and of the model slice of ``event`` (default ``backtest/results`` of
             the repository).
-        verbose : int, default 0
-            Verbosity passed to the forecast and the analysis.
+        verbose : int, default 1
+            Verbosity of the console output: 0, only the header of the action and the final summary; 1, also
+            ``[i/n] scope: empezando``, the result line and the model warnings of each scope as they happen;
+            2, also the phase lines of the forecast; 3, also the own output of the model (``Simulator`` and
+            ``Computer`` receive ``verbose - 2``).
         **kwargs
             Ignored extra job arguments.
 
@@ -204,6 +209,8 @@ class Publish(Job):
             If no file system is configured, or any scope failed (raised after the
             manifest, the summary and the alert).
         """
+        self.verbose = verbose
+        model_verbose = max(0, verbose - 2)
         whats = [what] if isinstance(what, str) else list(what)
         for item in whats:
             if item not in self.WHAT:
@@ -244,7 +251,7 @@ class Publish(Job):
                 plan = [(day, publish.backfill_run_id(day),
                          {'limit_date': day, 'run_at': publish.backfill_run_at(day)}) for day in days]
             params = dict(n_sim=n_sim, seed=seed, drange=drange, max_fc=max_fc, alpha=alpha,
-                          correctors=correctors, verbose=verbose)
+                          correctors=correctors, verbose=model_verbose)
             targets = publish.resolve_scopes(scopes)
             n_scopes = counted(len(targets), 'ámbito', 'ámbitos')
             if days is None:
@@ -267,28 +274,41 @@ class Publish(Job):
                 lines.append(self._write_manifest(writer, failures, scopes=entries))
 
         if 'analysis' in whats:
-            for scope in publish.resolve_scopes(scopes):
-                result = self._analysis_scope(scope, writer, verbose, today, force, national)
+            targets = publish.resolve_scopes(scopes)
+            for index, scope in enumerate(targets, 1):
+                progress = self._progress(scope, index, len(targets))
+                progress.start()
+                result = self._analysis_scope(scope, writer, model_verbose, today, force, national)
                 results[scope] = result
                 if result['status'] == 'failed':
                     failures.append('{} ({})'.format(scope, 'analysis'))
                 lines.append(self._analysis_line(scope, result))
+                progress.done(lines[-1])
 
         if 'event' in whats:
-            for scope in publish.resolve_scopes(scopes):
-                outcomes = self._event_scope(scope, writer, event_date, today, source, verbose)
+            targets = publish.resolve_scopes(scopes)
+            for index, scope in enumerate(targets, 1):
+                progress = self._progress(scope, index, len(targets))
+                progress.start()
+                outcomes = self._event_scope(scope, writer, event_date, today, source, model_verbose)
                 results[scope] = outcomes
                 if any(result['status'] == 'failed' for result in outcomes):
                     failures.append('{} ({})'.format(scope, 'event'))
-                lines.extend(self._event_line(scope, result) for result in outcomes)
+                for result in outcomes:
+                    lines.append(self._event_line(scope, result))
+                    progress.done(lines[-1])
 
         if 'backtest' in whats:
-            for scope in publish.resolve_scopes(scopes):
+            targets = publish.resolve_scopes(scopes)
+            for index, scope in enumerate(targets, 1):
+                progress = self._progress(scope, index, len(targets))
+                progress.start()
                 result = self._backtest_scope(scope, writer, source)
                 results[scope] = result
                 if result['status'] == 'failed':
                     failures.append('{} ({})'.format(scope, 'backtest'))
                 lines.append(self._backtest_line(scope, result))
+                progress.done(lines[-1])
 
         if 'manifest' in whats:
             if dry_run:
@@ -454,7 +474,7 @@ class Publish(Job):
             Date of the next election of ``es``, for the LOREG guard of every scope.
         progress : ScopeProgress, optional
             Live progress of the scope: passed to ``publish.publish_forecast`` for its phases and,
-            with ``verbose``, used to print each model warning. ``None`` prints nothing.
+            used to print each model warning (level 1). ``None`` prints nothing.
         **params
             Forecast parameters.
 
@@ -466,10 +486,10 @@ class Publish(Job):
             ``refused`` for the LOREG guard and ``failed`` for an incomplete existing run (with
             ``skip_existing``) or any other exception. Every result carries the ``warnings``
             emitted while the model ran (unique messages, in order of appearance), which never
-            reach stderr; with ``verbose``, each one is also printed live as a progress line.
+            reach stderr; each one is also printed live as a progress line (level 1).
         """
         notes = []
-        note = progress.note if params.get('verbose') and progress is not None else None
+        note = progress.note if progress is not None else None
         try:
             value = event_date or publish.next_event_date(scope)
             if value is None:
@@ -550,9 +570,9 @@ class Publish(Job):
         """
         return ScopeProgress(self._say, scope, index, total, day)
 
-    def _say(self, text):
+    def _say(self, text, level=0):
         """
-        Report one progress line now, once on the console.
+        Report one progress line now, once on the console, if the run is verbose enough.
 
         The app logger, if there is one, gets the bare ``text`` (it adds its own timestamp). The line
         is also printed to stdout with ``[hh:mm:ss]`` and flushed, unless the logger already writes
@@ -562,7 +582,11 @@ class Publish(Job):
         ----------
         text : str
             Progress line, without time.
+        level : int, default 0
+            Minimum ``verbose`` of the run for the line to be reported (0: always).
         """
+        if self.verbose < level:
+            return
         logger = self.app.logger
         if logger is None or not self._logger_echoes_console(logger):
             print('[{}] {}'.format(datetime.now().strftime('%H:%M:%S'), text), flush=True)
