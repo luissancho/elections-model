@@ -7,6 +7,7 @@ import pandas as pd
 
 from .. import bundle
 from ..bundle import BundleWriter
+from ...core.app import App
 from ..data import get_district_communities
 from ..simulator import Simulator
 from ..utils import norm_range
@@ -576,13 +577,14 @@ def district_communities(scope: str) -> dict:
     Returns
     -------
     dict
-        ``data.get_district_communities(scope)``; empty when the app has no ``data`` filesystem or the
-        catalogue files cannot be read. Without the catalogue the districts carry ``community: None``.
+        ``data.get_district_communities(scope)``; empty only when the app has no ``data`` filesystem
+        (the fake apps of the unit tests), so the districts carry ``community: None``. A missing or
+        malformed catalogue raises.
     """
-    try:
-        return get_district_communities(scope)
-    except (AttributeError, FileNotFoundError, KeyError):
+    if getattr(App.get_(), 'data', None) is None:
         return {}
+
+    return get_district_communities(scope)
 
 
 def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: str, n_sim: int = 1000,

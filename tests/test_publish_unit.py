@@ -102,6 +102,12 @@ def test_without_the_catalogue_the_districts_carry_no_community(fresh_app):
     assert [r['community'] for r in regions] == [None, None] and [r['votes'] for r in regions] == [600, 400]
 
 
+def test_a_missing_catalogue_raises_instead_of_falling_back(fresh_app, tmp_path):
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    with pytest.raises(FileNotFoundError):
+        publish.forecast.district_communities('es')
+
+
 def test_export_scenario_is_a_real_simulation():
     sim = synthetic_simulator()
     data, frame = publish.export_scenario(sim)
