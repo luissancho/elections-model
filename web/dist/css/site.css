@@ -388,7 +388,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 }
 
 /* Escaños: histograms, blocks chart, coalition calculator and district form */
-.grid-small { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
+#ridge-chart { margin-top: var(--space-3); }
 #blocks-chart { height: 120px; }
 .coalition-result { font-size: 1.1rem; margin: var(--space-2) 0; }
 #district-form { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; margin-top: var(--space-3); }

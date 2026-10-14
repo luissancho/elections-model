@@ -38,18 +38,16 @@
             </tbody>
           </table>
         </div>
-        <div class="grid-small" id="histograms">
-          {% for row in party_rows %}
-          <div class="chart chart-small" data-party="{{ row.name }}" role="img" aria-label="Distribución de escaños de {{ row.name }} en las simulaciones"></div>
-          {% endfor %}
-        </div>
+        <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños de cada partido en las simulaciones, un partido por fila"></div>
         {% call m.how() %}
         <p>
-          Cada fila es un partido: la cifra de escaños es su resultado central, el rango deja fuera las
-          simulaciones más extremas de cada lado y los histogramas cuentan cuántas simulaciones dan cada número
-          de escaños, con una línea gruesa en la mediana y dos finas en los extremos del rango. P(escaño) es la
-          probabilidad de obtener al menos uno; P(primero), la de ser el partido con más escaños; P(mayoría), la
-          de llegar a la mayoría absoluta sin ayuda.
+          Cada fila es un partido: la cifra de escaños es su resultado central y el rango deja fuera las
+          simulaciones más extremas de cada lado. Las curvas de abajo muestran, partido a partido y sobre el
+          mismo eje de escaños, qué resultados salen más en las simulaciones: cada curva está a su propia escala
+          (su punto más alto es el resultado más frecuente), con una línea gruesa en la mediana, dos finas en los
+          extremos del rango y una discontinua en la mayoría absoluta. P(escaño) es la probabilidad de obtener
+          al menos uno; P(primero), la de ser el partido con más escaños; P(mayoría), la de llegar a la mayoría
+          absoluta sin ayuda.
         </p>
         <p>Si los rangos de dos partidos se solapan, pueden acabar en cualquier orden.</p>
         <p>Una probabilidad no es una predicción segura, y esto no dice quién gobernará ni con quién.</p>

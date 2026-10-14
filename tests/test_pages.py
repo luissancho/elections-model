@@ -557,6 +557,9 @@ def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carr
 def test_escanos_table_histograms_blocks_and_pills(api):
     page = html(call(api, '/es/escanos')[2])
     assert '<th scope="col">Rango 95 %</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
+    # Un solo gráfico de crestas (una fila por partido) en vez de un histograma pequeño por partido
+    assert 'id="ridge-chart"' in page and 'data-party=' not in page and 'id="histograms"' not in page
+    assert re.search(r'sobre el\s+mismo eje de escaños', page) and 'grid-small' not in page
     assert 'id="vs-table"' not in page and 'id="blocks-table"' in page
     assert 'id="coalition-parties" class="pills"' in page.replace('class="pills" id="coalition-parties"', 'id="coalition-parties" class="pills"')
     assert 'class="pill"' in page and 'name="coalition"' in page

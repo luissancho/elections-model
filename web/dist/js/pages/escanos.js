@@ -1,4 +1,4 @@
-// Seats page: party histograms, stacked blocks, coalition calculator, vote fan and seat evolution, drawn
+// Seats page: the ridge of the party seat distributions, stacked blocks, coalition calculator, vote fan and seat evolution, drawn
 // from the data embedded by the server.
 import {fmtInt, fmtProb, fmtRange} from '../format.js';
 import {Catalog} from '../catalog.js';
@@ -6,13 +6,17 @@ import {THEME} from '../charts/base.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
+import {renderRidge} from '../charts/ridge.js';
+import {ridgeData} from '../kde.js';
 import {renderStacked} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
-import {coalitionHash, coalitionSeats, column, parseCoalition, summarize} from '../seats.js';
+import {coalitionHash, coalitionSeats, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
+/** Last seat of the ridge axis, as in the notebook (`xlim=(0, 200)`); smaller chambers use their size. */
+const RIDGE_MAX_SEATS = 200;
 
 /**
  * Wire the coalition calculator: restore the selection of the URL fragment, then recompute the summary
@@ -154,18 +158,19 @@ function paint() {
   const names = [...new Set([...dist.parties, ...partyRows.map((row) => row.name), ...fanNames])];
   const colors = mapNames(names, (name) => catalog.color(name));
 
-  for (const el of document.querySelectorAll('#histograms div[data-party]')) {
-    const name = el.dataset.party;
-    const values = column(dist, name);
-    if (!values.length) {
-      el.hidden = true;
-      continue;
-    }
-    const stats = summarize(values, majority);
-    tryDraw(() => renderHistogram(el, values, {
-      color: colors[name], majority, median: stats.median, lo: stats.lo, hi: stats.hi, bounds: true,
-      markLabels: false,
-    }), `the histogram of ${name}`);
+  // Ridges ordered by headline seats and then by mean, like `Simulator.plot_dist_kde`
+  const ordered = [...partyRows]
+    .sort((a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ?? 0) - (a.seats_mean ?? 0)))
+    .map((row) => row.name)
+    .filter((name) => dist.parties.includes(name));
+  const xMax = Math.min(RIDGE_MAX_SEATS, nSeats);
+  const ridgeEl = document.getElementById('ridge-chart');
+  if (ridgeEl && ordered.length) {
+    const headline = Object.fromEntries(partyRows.filter((row) => row.seats !== null && row.seats !== undefined)
+      .map((row) => [row.name, row.seats]));
+    tryDraw(() => renderRidge(ridgeEl, ridgeData(dist, ordered, {xMax, majority}), {
+      colors, xMax, majority, headline, fullnames: mapNames(ordered, (name) => catalog.fullname(name)),
+    }), 'the seat distributions');
   }
 
   const blocks = new Map((summary.blocks || []).map((row) => [row.name, row]));
