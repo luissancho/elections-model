@@ -95,6 +95,13 @@ def test_district_communities_come_from_the_catalogue_and_are_null_in_their_own_
     assert data.get_district_communities('es-pv') == {1: None, 20: None, 48: None}
 
 
+def test_without_the_catalogue_the_districts_carry_no_community(fresh_app):
+    assert publish.forecast.district_communities('es') == {}
+    communities = publish.forecast.district_communities('es')
+    regions = valid('districts', publish.export_districts(synthetic_simulator(), communities)[0])['regions']
+    assert [r['community'] for r in regions] == [None, None] and [r['votes'] for r in regions] == [600, 400]
+
+
 def test_export_scenario_is_a_real_simulation():
     sim = synthetic_simulator()
     data, frame = publish.export_scenario(sim)

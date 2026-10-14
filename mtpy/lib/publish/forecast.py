@@ -565,6 +565,26 @@ def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str, communities
     return headline_mode(sim)
 
 
+def district_communities(scope: str) -> dict:
+    """Community of each district of a scope, or nothing when the catalogue is not available.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        ``data.get_district_communities(scope)``; empty when the app has no ``data`` filesystem or the
+        catalogue files cannot be read. Without the catalogue the districts carry ``community: None``.
+    """
+    try:
+        return get_district_communities(scope)
+    except (AttributeError, FileNotFoundError, KeyError):
+        return {}
+
+
 def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: str, n_sim: int = 1000,
                      seed: int = 42, drange=6, max_fc: int = 10, alpha: float = 0.05,
                      correctors: Optional[dict] = None, freeze: bool = False, verbose: int = 0,
@@ -671,7 +691,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     sim.run(split=True, random=True, n_sim=n_sim)
     clip['nowcast'] = float(sim.clip_rate())
     nowcast = report('nowcast', lap())
-    communities = get_district_communities(scope)
+    communities = district_communities(scope)
     heads['nowcast'] = publish_mode(sim, writer, scope, run_id, communities)
     export = report('export-nowcast', lap())
     sim.mode = 'forecast'
