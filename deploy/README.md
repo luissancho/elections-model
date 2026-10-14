@@ -11,9 +11,9 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
    "Comprobaciones de la infraestructura" (`nginx-check.sh`, `smoke.sh`, `check-api.sh`).
 3. "Despliegue en ECS": qué debe existir en AWS, marcadores de las plantillas de `deploy/ecs/` y procedimiento.
 4. "Comprobar S3" y "Si `check_s3` falla".
-5. "Publicar": parámetros, estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest,
-   publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el manifest,
-   retirada de un run y "Guarda LOREG".
+5. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
+   estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, publicar en local, en S3 y desde
+   ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el manifest, retirada de un run y "Guarda LOREG".
 6. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
 7. "Duraciones medidas": publicación, carga local, arranque de un worker y memoria del job.
 
@@ -444,11 +444,56 @@ El primer `FAIL` es la causa raíz (los pasos posteriores fallan en cascada). Un
 
 ## Publicar
 
-`python job.py publish` ejecuta el modelo, escribe un run inmutable en el paquete `site/v1` de `app.fs` y
-mueve los punteros (`history.json` por ámbito y `manifest.json`). El análisis de casas, las elecciones pasadas y el
-backtest (`analysis`, `event`, `backtest`) no son runs: sobrescriben su carpeta y no tocan los punteros. Contrato de
-los ficheros: `docs/web/contrato.md`. El código está en el paquete `mtpy/lib/publish/` (`common`, `forecast`,
-`analysis`, `backtest`, `events` y `pointers`); el job lo usa como `publish`.
+`python job.py publish` lleva al paquete `site/v1` de `app.fs` lo que la web dibuja del modelo. Solo `forecast`
+produce runs: ejecuta el modelo, escribe un run inmutable y mueve los punteros (`history.json` por ámbito y
+`manifest.json`). El análisis de casas, las elecciones pasadas y el backtest (`analysis`, `event`, `backtest`) no son
+runs: sobrescriben su carpeta y no tocan los punteros. `manifest`, `point` y `unpublish` solo mueven punteros.
+Contrato de los ficheros: `docs/web/contrato.md`. El código está en el paquete `mtpy/lib/publish/` (`common`,
+`forecast`, `analysis`, `backtest`, `events` y `pointers`); el job lo usa como `publish`.
+
+### Qué hace cada acción y cuándo lanzarla
+
+Antes de publicar está la carga, que no es cosa de este job: los notebooks de `notebooks/data-load/` (para `es`) y
+`load/run_load.py` (para los autonómicos: `--what urls polls results compute ratings`) meten en la base los sondeos y
+los resultados y recalculan ahí las series derivadas (pesos, errores, deriva, efectos de casa, herding) y los
+ratings de las encuestadoras. La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`),
+así que un recálculo de ratings se ve sin publicar nada. Todo lo demás sale del paquete y hay que publicarlo.
+
+| Acción | Qué escribe | Cuándo lanzarla | Guarda LOREG | Punteros |
+| --- | --- | --- | --- | --- |
+| `forecast` | Un run inmutable por ámbito en `runs/{ámbito}/{run_id}/`: promedio de hoy, pronóstico de la elección, sondeos del ciclo y titular (páginas Promedios y Escaños, portada) | Cada vez que se cargan sondeos nuevos de un ámbito; a diario en campaña. Con `scopes: "all"` se publica un run nuevo en todos los ámbitos con sondeos (los que no tienen bastantes quedan `skipped`); con una lista, solo en esos | Sí | Mueve `latest` al run nuevo |
+| `analysis` | `analysis/{ámbito}/`: efectos de casa del ciclo, herding, errores por sondeo de las elecciones pasadas y datos del estimador de error (tarjetas de `/casas`; histograma, diana y tabla de `/elecciones`) | Con cada `forecast`, en la misma llamada (`"what":["forecast","analysis"]`); también tras un recálculo de ratings y tras cargar los resultados de una elección, porque entra en los errores históricos | Sí | No |
+| `event` | `events/{ámbito}/{fecha}/`: error de cada encuestadora y de cada sondeo frente al resultado, resultado oficial y lo que el modelo habría dicho a cada horizonte (detalle de `/elecciones?date=`) | Una vez por elección celebrada, con los resultados oficiales cargados (`event_date` obligatorio). De nuevo, con `"event_date":"all"`, si se corrigen sondeos de elecciones pasadas o se rehace el backtest, porque su parte "modelo" sale de `backtest/results` | No | No |
+| `backtest` | `backtest/{ámbito}/`: las tablas de `backtest/results` convertidas al paquete (`/metodo/backtest`) | Tras cada ejecución de `backtest/run_backtest.py` (`--scope es` para `es`, `--scopes all` para los autonómicos), es decir, cuando cambia el método. No ejecuta el modelo ni lee la base: solo convierte ficheros | No | No |
+| `manifest` | Solo `manifest.json` | Congelar y descongelar la web en la veda (`freeze`). `forecast` ya reescribe el manifest, así que sola solo hace falta para eso | No | Sí |
+| `point` | Solo `manifest.json` | Volver a un run anterior sin borrar nada (`latest` nunca retrocede por sí solo) | No | Mueve `latest` al run indicado |
+| `unpublish` | Borra la carpeta del run y reconstruye `history.json` | Retirar un run malo; si era `latest`, vuelve al anterior | No | Sí |
+
+`what` admite las siete acciones y las ejecuta en ese orden; `event` exige `event_date` y no se combina con
+`forecast` (las dos cosas fallan con `ValueError` antes de empezar). `backtest` y `event` pueden ir en la misma
+llamada: los dos leen `backtest/results` del disco (o `source`), no el paquete.
+
+Rutina, por situación:
+
+- **Campaña (a diario, hasta el 23 de noviembre)**: cargar los sondeos y lanzar
+  `{"what":["forecast","analysis"],"scopes":"all"}` (o la lista de ámbitos con sondeos nuevos; `es` tarda unos
+  2 min). Comprobar en el resumen que cada ámbito termina `published` y mirar los "· n avisos".
+- **Veda (del 24 al 28)**: no se publica nada; `manifest` con `freeze` el 23 y la noche del 29 (ver "Veda"). La
+  guarda rechaza `forecast` y `analysis` en todos los ámbitos hasta el 29 incluido.
+- **Tras una elección**: cargar los resultados oficiales y lanzar `event` de esa fecha (no pasa por la guarda, así
+  que puede ir la misma noche); desde el día siguiente (la guarda cubre el propio día de la elección), `analysis`
+  para que sus errores entren en el histórico, y `forecast` cuando haya sondeos del ciclo siguiente.
+- **Tras un cambio del modelo**: `python backtest/run_backtest.py --scope es` y `--scopes all` (los autonómicos),
+  después `{"what":["backtest","event"],"scopes":"all","event_date":"all"}` y por último `forecast`, para que
+  `latest` lleve el modelo nuevo.
+- **Tras recalcular ratings** (`run_load --what ratings` o los notebooks de carga): el ranking de `/casas` cambia
+  solo; `forecast` y `analysis` para que el paquete use los ratings nuevos.
+- **Incidencias**: `unpublish` para retirar un run malo o `point` para taparlo con uno anterior (ver "Retirada de
+  un run"). `dry_run` ensaya `forecast`, `analysis`, `event` y `backtest` en `site-dry/v1` sin punteros (el manifest
+  no se escribe); `backfill` reconstruye días pasados de la evolución (ver "Relleno retroactivo"); `force` salta la
+  guarda y deja el run marcado con `meta.freeze: true`.
+
+### Ejemplos
 
 ```
 python job.py publish '{"what":["forecast"],"scopes":["es"]}'
@@ -478,10 +523,6 @@ python job.py publish '{"what":["backtest"],"scopes":"all"}'
 10. La elección general del 23 de julio de 2023 de `es` (enmienda 2026-10-11; ver "Elecciones pasadas").
 11. Todas las elecciones `featured` de `es` anteriores a hoy.
 12. El backtest de `es` y de todos los ámbitos autonómicos; los que no tienen resultados quedan `skipped`.
-
-`what` admite `forecast`, `analysis`, `event`, `backtest`, `manifest`, `point` y `unpublish` (se ejecutan en ese
-orden; enmienda 2026-10-11, fase 5). `event` exige `event_date` y no se combina con `forecast` (las dos cosas fallan
-con `ValueError` antes de empezar).
 
 ### Parámetros
 
@@ -595,8 +636,9 @@ error) y lo escribe bajo `analysis/{ámbito}/` del paquete (formato en "Análisi
   `es: analysis published (event 2026-11-29, <n> pollsters) in <s> s` o `es-md: analysis skipped (<motivo>)`.
 - Duración estimada de ≈ 1,5 min por ámbito (el análisis de `es` tardó 44 s en el test de integración contra la
   RDS). Va bien a mano o desde la imagen, igual que `forecast`.
-- Cadencia: repetirlo tras cada carga de sondeos y tras cada recálculo de ratings (`run_load --what ratings`);
-  el análisis no se actualiza solo.
+- Cadencia: repetirlo tras cada carga de sondeos (lo normal es en la misma llamada que `forecast`), tras cada
+  recálculo de ratings (`run_load --what ratings` o los notebooks de carga) y tras cargar los resultados de una
+  elección; el análisis no se actualiza solo (ver "Qué hace cada acción y cuándo lanzarla").
 
 Publicar en local o en S3 funciona como para `forecast` (ver abajo; en local, `S3_BUCKET=` delante):
 
