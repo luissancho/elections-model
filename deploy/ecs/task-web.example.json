@@ -1,5 +1,5 @@
 {
-  "family": "elections-web",
+  "family": "elections-model",
   "networkMode": "awsvpc",
   "requiresCompatibilities": [
     "FARGATE"

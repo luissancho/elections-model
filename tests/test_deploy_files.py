@@ -24,6 +24,10 @@ def test_ecs_templates_are_valid_and_consistent():
     assert web['containerDefinitions'][0]['portMappings'][0]['containerPort'] == 8042
     assert job['memory'] == '4096' and all(e['name'] != 'APP_API' for e in job['containerDefinitions'][0]['environment'])
     assert run['overrides']['containerOverrides'][0]['environment'][0]['name'] == 'RUN_JOB'
+    # El clúster y la definición de la web se llaman `elections-model` (Luis, 2026-10-14); la del job sigue siendo
+    # `elections-job` y la imagen de ECR `elections-web`
+    assert web['family'] == 'elections-model' and run['cluster'] == 'elections-model'
+    assert job['family'] == 'elections-job' and run['taskDefinition'] == 'elections-job'
     for template in (web, job):
         adapter = {e['name']: e['value'] for e in template['containerDefinitions'][0]['environment']}['DB_ADAPTER']
         # `mtpy.run()` resuelve el adaptador con `getattr(dal, DB_ADAPTER)`: debe nombrar un módulo de `mtpy/core/dal/`

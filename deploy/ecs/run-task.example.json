@@ -1,5 +1,5 @@
 {
-  "cluster": "<cluster>",
+  "cluster": "elections-model",
   "taskDefinition": "elections-job",
   "launchType": "FARGATE",
   "count": 1,

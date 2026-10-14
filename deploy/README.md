@@ -353,8 +353,8 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 
 ### Qué debe existir en AWS
 
-- Un clúster de ECS (`<cluster>`) y un repositorio de ECR `elections-web`.
-- Un servicio de ECS Fargate con la definición `elections-web`, con 2 tareas como mínimo, registrado en un target
+- Un clúster de ECS `elections-model` y un repositorio de ECR `elections-web`.
+- Un servicio de ECS Fargate con la definición `elections-model`, con 2 tareas como mínimo, registrado en un target
   group (puerto 8042, protocolo HTTP) con health check en `/api/v1/health`, cada 30 s y 2 fallos para marcarlo
   no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group. (La spec de la
   fase 6 decía que una tarea basta; con dos, cada tarea tiene su caché de nginx y de la API y el despliegue no
@@ -387,7 +387,6 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 | `<secret-arn>` | ARN del secreto con la contraseña (`DB_PASSWORD`) |
 | `<task-role-read>`, `<task-role-write>` | Roles de tarea de la web (lectura) y de los jobs (escritura) |
 | `<execution-role>` | Rol de ejecución (descarga la imagen, escribe logs, lee el secreto) |
-| `<cluster>` | Clúster en el que se lanzan los jobs |
 | `<subnet-id>`, `<security-group-id>` | Subred y grupo de seguridad de la tarea de job (necesita acceso a la RDS) |
 | `<git-sha>` | Commit de la imagen registrada (`GIT_COMMIT` de la tarea de jobs; ver "Publicar desde ECS") |
 
@@ -404,7 +403,7 @@ docker build --platform linux/amd64 -t elections-web:<tag> .
 docker tag elections-web:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
 docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
 aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-web.example.json
-aws ecs update-service --cluster <cluster> --service elections-web --task-definition elections-web --force-new-deployment
+aws ecs update-service --cluster elections-model --service elections-model --task-definition elections-model --force-new-deployment
 bash deploy/check-api.sh https://<host>
 ```
 
@@ -712,7 +711,7 @@ que hiciste el `docker build`): la imagen no lleva `.git`, así que la procedenc
 
 **Aviso**: un `run-task` de `elections-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
 definición no lleva `APP_API`, `APP_CRONTAB` ni `APP_QUEUE`) y se queda esperando en `tail -f /dev/null`, con 2 vCPU
-y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster <cluster> --task <task-id>`).
+y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster elections-model --task <task-id>`).
 
 ### Veda
 
