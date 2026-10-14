@@ -5,9 +5,10 @@ from typing import Optional
 
 from .. import webapi
 from ..webapi import query_pollster, query_ratings, site
-from .common import api_url, bundle_part, common_context
+from .common import api_url, bundle_part, common_context, scope_query
 from .filters import fmt_num
 
+RATING_SCOPE = 'es'
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
                 'error_blocks', 'bias_blocks')
@@ -250,7 +251,8 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     """
     Template context of the houses page.
 
-    The ranking comes from the database; the house effects and the herding from the houses
+    The ranking is always the national one (``RATING_SCOPE``), whatever the scope: the rating of a
+    pollster does not depend on it. It comes from the database; the house effects and the herding from the houses
     analysis of the scope, whose ``meta`` part marks it as complete.
 
     Parameters
@@ -266,6 +268,8 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         The common context plus ``ranking`` (``ranking_rows``), ``grid`` (``house_effects_grid``
         or ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``,
         ``pollster_ids`` (``{name: id}`` of the pollsters rated in the event, for the links),
+        ``ranking_event`` (ISO date of the election the ranking is for, ``None`` without ratings),
+        ``ranking_query`` (``scope_query`` of the ranking scope, for the profile links of its rows),
         ``csv_links`` and ``initial`` (``state``, ``meta``, ``ranking`` and ``grid``).
 
     Raises
@@ -277,13 +281,13 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context = common_context(state, active)
     full = context['state']
     scope = full['scope']
-    ratings = query_ratings(scope)
+    ratings = query_ratings(RATING_SCOPE)
     missing = analysis_part(scope, 'meta') is None
     effects = None if missing else analysis_part(scope, 'house-effects')
     herding = None if missing else analysis_part(scope, 'herding')
     ranking = ranking_rows(ratings, herding)
     grid = house_effects_grid(effects) if effects is not None else None
-    links = [{'label': 'Ratings de la próxima elección', 'href': api_url(scope, 'ratings', fmt='csv', kind='data')}]
+    links = [{'label': 'Ratings de la próxima elección general', 'href': api_url(RATING_SCOPE, 'ratings', fmt='csv', kind='data')}]
 
     if not missing:
         links += [
@@ -301,6 +305,9 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         for record in webapi.frame_to_records(ratings)
         if record.get('pollster') is not None and record.get('pollster_id') is not None
     }
+    context['ranking_event'] = (
+        str(ratings['event_date'].max())[:10] if 'event_date' in ratings.columns and not ratings.empty else None)
+    context['ranking_query'] = scope_query(RATING_SCOPE)
     context['csv_links'] = links
     context['initial'] = {'state': full, 'meta': context['meta'], 'ranking': ranking, 'grid': grid}
 

@@ -310,13 +310,16 @@ Como el análisis y el backtest, **se sobrescribe** en cada publicación: sin `r
 La fuente de verdad en código es `bundle.EVENT_PARTS`, `EVENT_SCHEMAS`, `EVENT_CSV` (`path_event`, `path_event_csv`,
 `BundleReader.list_events`, `event_exists`) y `publish.publish_event`.
 
-Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Cinco partes:
+Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Seis partes
+(`cycle` desde la enmienda 2026-10-14; una elección publicada antes no la tiene y la página lo avisa hasta que se
+republica):
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
 | `meta` | `event-meta@1` | `scope`, `event_date`, `name` (o `null`), `n_polls`, `n_pollsters`, `blocks` (partidos de cada bloque `vs`), `main`, `summary`, `has_model`, `horizons`, `commit`, `dirty`, `versions`, `seconds` |
 | `pollsters` | `event-pollsters@1` | `blocks`, `rows` |
 | `polls` | `event-polls@1` | `blocks`, `rows` |
+| `cycle` | `event-cycle@1` | `parties`, `columns`, `polls` |
 | `results` | `event-results@1` | `n_seats`, `rows` |
 | `model` | `event-model@1` | `horizons`, `shares`, `seats`, `blocks` |
 
@@ -331,6 +334,12 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
   de cada bloque; `blocks` los lista).
 - `polls.rows`: las filas de `poll-errors` (ver "Análisis") de todos los sondeos de la elección más `pollster_id`
   (tras `pollster`), por `days` ascendente (el más reciente primero); `blocks` lista las columnas de bloque.
+- `cycle`: los sondeos del ciclo tal como se publicaron, con la forma del `polls` de un run (`parties`, `columns` =
+  `POLL_COLUMNS` y `polls`, cada uno con `seats` `{partido: [mín, máx]}` cuando la casa publicó escaños; sin
+  `results`), para que la tabla "Todas las encuestas" del detalle sea la misma que la de Promedios. Son los mismos
+  sondeos que `polls.rows` (`Computer.filter_polls(featured=True)`: cada fila de la tabla tiene su error), por
+  fecha y casa ascendentes, con `sample_size` nulo cuando no se conoce y `weight` el producto del peso global y el
+  de muestra; los escaños salen de `forecaster.published_seats`. El gemelo CSV añade `seats_min_*`/`seats_max_*`.
 - `results.rows`: `party_id`, `party`, `votes` (entero), `pct` (2 decimales) y `seats` (entero) del resultado oficial
   nacional (región 0), por votos descendente; `n_seats` es la suma de `seats`.
 - `model` es el **corte del backtest** (ver "Backtest") a esta elección: `shares`, `seats` y `blocks` son las filas
@@ -338,7 +347,7 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
   `horizons` los horizontes que aparecen, ascendentes. Sin backtest, las tres listas y `horizons` van vacías.
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
-`pollsters`, `polls` y `results` y los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
+`pollsters`, `polls`, `cycle` y `results` y los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
 que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están);
 `meta` no tiene gemelo.
 
@@ -549,7 +558,7 @@ Solo `GET`. `events/{scope}` cruza la base de datos con el paquete; las otras do
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/events/{scope}` | | `{contract, scope, rows}`; cada fila `{date, name, featured, has_page}`, por fecha ascendente | `events-{scope}.csv` |
-| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `results`, `model`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `results`, `model-shares`, `model-seats`, `model-blocks` |
+| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `cycle`, `results`, `model`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `cycle`, `results`, `model-shares`, `model-seats`, `model-blocks` |
 | `/api/v1/backtest/{scope}/{part}` | `part` ∈ `meta`, `metrics`, `by-horizon`, `blocks`, `shares`, `seats` | el fichero del backtest tal cual (sobre completo) | `{scope}-backtest-{nombre}.csv`, con `nombre` ∈ `metrics`, `by-horizon`, `blocks`, `shares`, `seats` |
 
 - `events/{scope}` lee la tabla de elecciones de la base (caché de consultas de 60 s) y marca `has_page` con las

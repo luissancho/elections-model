@@ -1,0 +1,99 @@
+{#- "Todas las encuestas": the controls (hidden until the browser wires them), the table the server renders with
+    the `PAGE_SIZE` most recent polls, the scroll hint and the pagination. Shared by Promedios and the detail of a
+    past election; needs `has_seats`, `table_parties`, `catalog`, `pollsters`, `months`, `table_total`, `csv_href`
+    and `table` in the context (`polls_table`), and `wirePollsTable` of `pages/polls-wire.js` in the page module. -#}
+        <div class="bar" id="polls-controls" hidden>
+          {% if has_seats %}
+          <fieldset id="polls-mode" class="seg">
+            <legend>Qué mostrar</legend>
+            <label><input type="radio" name="pmode" value="pct" checked> % de voto</label>
+            <label><input type="radio" name="pmode" value="esc"> Escaños</label>
+          </fieldset>
+          {% endif %}
+          <details class="dd" id="polls-parties">
+            <summary>Partidos (<span data-count>{{ table_parties|length }}</span>/{{ table_parties|length }})</summary>
+            <div class="dd-panel">
+              <button type="button" data-all>Seleccionar todos</button>
+              <button type="button" data-none>Quitar todos</button>
+              {% for name in table_parties %}
+              <label class="chip" style="--pill-color: {{ catalog[name].color }}; --pill-ink: {{ catalog[name].color|ink }}" title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}" checked> {{ name }}</label>
+              {% endfor %}
+            </div>
+          </details>
+          <details class="dd" id="polls-pollsters">
+            <summary>Encuestadoras (<span data-count>{{ pollsters|length }}</span>/{{ pollsters|length }})</summary>
+            <div class="dd-panel">
+              <button type="button" data-all>Seleccionar todas</button>
+              <button type="button" data-none>Quitar todas</button>
+              {% for option in pollsters %}
+              <label class="chip"><input type="checkbox" name="pollster" value="{{ option.name }}" checked> {{ option.name }}</label>
+              {% endfor %}
+            </div>
+          </details>
+          <label>Desde
+            <select id="polls-from">
+              {% for month in months %}
+              <option value="{{ month.value }}"{% if loop.first %} selected{% endif %}>{{ month.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Hasta
+            <select id="polls-to">
+              {% for month in months %}
+              <option value="{{ month.value }}"{% if loop.last %} selected{% endif %}>{{ month.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <span class="bar-end"><span id="polls-count">{{ table_total|int }} {{ 'sondeo' if table_total == 1 else 'sondeos' }}</span> · <a href="{{ csv_href }}">Descargar CSV</a></span>
+        </div>
+        <noscript><p class="notice"><a href="{{ csv_href }}">Descargar CSV</a></p></noscript>
+        <div class="et-wrap">
+          <table class="et" id="polls-table">
+            <colgroup>
+              <col class="c-f"><col class="c-d"><col class="c-s">
+              {% for name in table_parties %}<col class="c-p">{% endfor %}
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>
+                <th scope="col" data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>
+                <th scope="col" data-key="sample_size"><button type="button" class="sort">Muestra</button></th>
+                {% for name in table_parties %}
+                <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><button type="button" class="sort"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</button></th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in table.rows %}
+              <tr>
+                <td class="f l"><b>{{ row.pollster }}</b><small>{{ row.sponsor or '—' }}</small></td>
+                <td{% if row.fieldwork %} title="{{ row.fieldwork }}"{% endif %}>{{ row.date }}</td>
+                <td>{{ row.sample }}</td>
+                {% for cell in row.cells %}
+                {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>
+                {% elif cell.value == '–' %}<td class="p na">—</td>
+                {% else %}<td class="p">{{ cell.value }}</td>{% endif %}
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td class="f l"><b>Media simple</b><small>{{ table.mean.n|int }} {{ 'sondeo' if table.mean.n == 1 else 'sondeos' }}</small></td>
+                <td></td>
+                <td></td>
+                {% for cell in table.mean.cells %}
+                {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>
+                {% elif cell.value == '–' %}<td class="p na">—</td>
+                {% else %}<td class="p">{{ cell.value }}</td>{% endif %}
+                {% endfor %}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
+        <div class="pag" id="polls-pag" hidden>
+          <button type="button" data-page="-1">‹ Más recientes</button>
+          <span id="polls-range"></span>
+          <button type="button" data-page="1">Más antiguos ›</button>
+        </div>

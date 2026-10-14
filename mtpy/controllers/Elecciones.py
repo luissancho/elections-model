@@ -7,7 +7,7 @@ from .Page import Page
 
 class Elecciones(Page):
     """
-    Past elections page: the published elections and the sector error; with ``?date=``, one election.
+    Past elections page: the error history of the published elections; with ``?date=``, one election.
     """
 
     active = '/elecciones'

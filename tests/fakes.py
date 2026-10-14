@@ -281,12 +281,33 @@ def synthetic_event():
     return types.SimpleNamespace(events=events, results=results, pollsters=pollsters)
 
 
+def synthetic_cycle():
+    """Sondeos del ciclo de `2023-07-23` con la forma de `Computer.filter_polls(featured=True)`: los tres de
+    `poll_errors` (40dB a 8 días, CIS a 13 sin muestra conocida, GAD3 a 7), indexados por las claves de la serie,
+    con `pollster` categórico como en la real y los pesos por separado (`weight_over`, `weight_sample`)."""
+    frame = pd.DataFrame({
+        'event_date': pd.Timestamp('2023-07-23'), 'date': pd.to_datetime(['2023-07-15', '2023-07-10', '2023-07-16']),
+        'pollster_id': [3, 1, 2], 'sponsor_id': [5, 0, 0],
+        'start_date': pd.to_datetime(['2023-07-10', '2023-07-03', '2023-07-12']),
+        'end_date': pd.to_datetime(['2023-07-14', '2023-07-08', '2023-07-15']),
+        'pollster': pd.Categorical(['40dB', 'CIS', 'GAD3']), 'sponsor': ['El País', None, None],
+        'mtype': ['online', 'cati', 'cati'], 'ctype': [None, None, None], 'computed': True, 'featured': True,
+        'sample_size': [1200, 0, 3000], 'parties': 3, 'days': [8, 13, 7], 'proc_sample': [1200, 1000, 3000],
+        'rating': [0.7, 0.8, 0.9], 'weight_sample': [0.9, 0.7, 1.1], 'weight_over': [0.90260, 0.81127, 1.12233],
+        'PP': [33.5, 31.2, 34.1], 'PSOE': [29.9, 32.4, 30.3], 'VOX': [13.1, 14.0, np.nan],
+    })
+    return frame.set_index(['event_date', 'date', 'pollster_id', 'sponsor_id']).sort_index()
+
+
+CYCLE_SEATS = {('2023-07-16', 2, 0): {'PP': [135, 140], 'PSOE': [120, 120]}}
+
+
 class FakeComputer:
     """Fábrica con la firma `Computer(scope=..., path=...)`: devuelve un Computer sintético con `scope`,
-    `event_dates` y `event_params` (bloques `vs` y partidos `main` del ciclo, como los lee el real),
-    `build_series` (devuelve el propio objeto) y los cuatro resúmenes de `synthetic_analysis`; anota las
-    llamadas y, con `fail`, lanza esa excepción al construir; con `fail_effects`, la lanza
-    `print_house_effects` (como el real cuando el evento en curso no tiene sondeos)."""
+    `event_dates`, `event_params` (bloques `vs` y partidos `main` del ciclo, como los lee el real) y `names`,
+    `build_series` (devuelve el propio objeto), `filter_polls` (`synthetic_cycle`) y los cuatro resúmenes de
+    `synthetic_analysis`; anota las llamadas y, con `fail`, lanza esa excepción al construir; con
+    `fail_effects`, la lanza `print_house_effects` (como el real cuando el evento en curso no tiene sondeos)."""
 
     def __init__(self, fail=None, fail_effects=None):
         self.calls, self.fail, self.fail_effects = [], fail, fail_effects
@@ -298,7 +319,7 @@ class FakeComputer:
         frames = synthetic_analysis()
         bmaps = {'main': list(BMAPS['main']), 'blocks': dict(BMAPS['blocks']), 'vs': dict(BMAPS['vs'])}
         comp = types.SimpleNamespace(scope=scope, path=path, event_dates=list(ANALYSIS_EVENTS), herding=None,
-                                     event_params={dt: {'bmaps': bmaps} for dt in ANALYSIS_EVENTS})
+                                     event_params={dt: {'bmaps': bmaps} for dt in ANALYSIS_EVENTS}, names=list(NAMES))
 
         def load_herding():
             comp.herding = frames.herding.copy()
@@ -317,8 +338,13 @@ class FakeComputer:
                  if lvl.name in ('event', 'pollster') else lvl for lvl in errors.index.levels])
             return errors
 
+        def filter_polls(featured=True, **kw):
+            self.calls.append(('filter_polls', featured, kw))
+            return synthetic_cycle()
+
         comp.build_series = lambda: comp
         comp.load_herding, comp.herding_summary, comp.get_polls_metric = load_herding, herding_summary, get_polls_metric
+        comp.filter_polls = filter_polls
         def print_house_effects(**kw):
             if self.fail_effects is not None:
                 raise self.fail_effects

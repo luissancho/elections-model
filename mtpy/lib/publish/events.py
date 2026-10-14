@@ -10,9 +10,11 @@ from .. import bundle
 from ..bundle import BundleWriter
 from ..computer import Computer
 from ..data import get_event_results, get_events, get_pollsters
+from ..forecaster import published_seats
 from .analysis import export_poll_errors
 from .backtest import BACKTEST_FILES, backtest_source, export_backtest_table
 from .common import NothingToPublish, provenance, REPO_ROOT, round_cols, _iso_dates, _iso_day, _today, _weighted_mean
+from .forecast import export_poll_rows, POLL_COLUMNS
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -62,6 +64,43 @@ def export_event_polls(frame: pd.DataFrame, blocks: Sequence[str], ids: dict) ->
     table = table.sort_values('days', kind='stable', ignore_index=True)
 
     return {'blocks': data['blocks'], 'rows': _records(table)}, table
+
+
+def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optional[dict] = None) -> tuple:
+    """Export the polls of the cycle of a past election as they were published, the oldest first.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        Polls of the election, as ``Computer.filter_polls(featured=True)`` gives them (indexed by
+        ``event_date``, ``date``, ``pollster_id`` and ``sponsor_id``, with ``pollster``, ``sponsor``,
+        ``start_date``, ``end_date``, ``sample_size``, ``mtype``, ``rating``, ``weight_sample``,
+        ``weight_over`` and one share per party).
+    names : sequence of str
+        Party names to export, in column order; one missing from the frame is skipped.
+    seats : dict, optional
+        Seat projections by ``(date, pollster_id, sponsor_id)`` (``published_seats``); none by default.
+
+    Returns
+    -------
+    tuple of (dict, pandas.DataFrame)
+        Data for the ``event-cycle`` schema (``parties``, ``columns`` and ``polls``, the same shape as the
+        ``polls`` part of a run so the pages draw both alike) and its CSV twin: ascending by date and pollster,
+        an unknown ``sample_size`` (zero) null and ``weight`` the product of the overall and sample weights.
+    """
+    table = frame.reset_index()
+    names = [name for name in names if name in table.columns]
+    for column in ('pollster', 'sponsor'):
+        if column in table.columns:
+            table[column] = table[column].astype(object).where(table[column].notna(), None)
+    if 'sample_size' in table.columns:
+        table['sample_size'] = table['sample_size'].where(table['sample_size'] > 0).astype('Int64')
+    if 'weight' not in table.columns and {'weight_over', 'weight_sample'} <= set(table.columns):
+        table['weight'] = table['weight_over'].astype(float) * table['weight_sample'].astype(float)
+    table = table.sort_values(['date', 'pollster_id'], kind='stable', ignore_index=True)
+    records, polls = export_poll_rows(table, names, seats)
+
+    return {'parties': list(names), 'columns': list(POLL_COLUMNS), 'polls': records}, polls
 
 
 def export_event_pollsters(frame: pd.DataFrame, blocks: Sequence[str], ids: dict) -> tuple:
@@ -264,15 +303,16 @@ def event_dates_to_publish(scope: str, event_date, events: Optional[Callable] = 
 
 def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: Optional[Callable] = None,
                   events: Optional[Callable] = None, results: Optional[Callable] = None,
-                  pollsters: Optional[Callable] = None, source: Optional[str] = None,
-                  prov: Optional[Callable] = None, verbose: int = 0) -> dict:
+                  pollsters: Optional[Callable] = None, seats: Optional[Callable] = None,
+                  source: Optional[str] = None, prov: Optional[Callable] = None, verbose: int = 0) -> dict:
     """Write one past election of a scope into the bundle, overwriting the previous publication.
 
-    The parts are written in the order ``pollsters``, ``polls``, ``results`` and ``model`` (each JSON with its
-    CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place. The polls
-    errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs')``), the results
-    from the database and the model from the backtest tables (see ``export_event_model``). The manifest and the
-    runs are not touched.
+    The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``results`` and ``model`` (each JSON
+    with its CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place. The
+    polls errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs')``), the
+    polls of the cycle as published from the same polls (``filter_polls(featured=True)``, so every poll of the
+    table has its error) with the seat projections of the loader, the results from the database and the model
+    from the backtest tables (see ``export_event_model``). The manifest and the runs are not touched.
 
     Parameters
     ----------
@@ -287,6 +327,8 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     events, results, pollsters : callable, optional
         Injectable replacements of ``data.get_events(scope)``, ``data.get_event_results(scope, date, region_id)``
         and ``data.get_pollsters()``.
+    seats : callable, optional
+        Injectable replacement of ``forecaster.published_seats(scope, event_date, names)``.
     source : str, optional
         Results folder of the backtest (see ``backtest_source``).
     prov : callable, optional
@@ -332,6 +374,7 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         bmaps = comp.event_params[event_date]['bmaps']
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
         errors = comp.get_polls_metric('error', bmap='vs')
+        cycle = comp.filter_polls(featured=True)
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
     if errors.empty:
@@ -351,6 +394,9 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     write('pollsters', data, {'pollsters': frame})
     data, frame = export_event_polls(errors, list(blocks), ids)
     write('polls', data, {'polls': frame})
+    names = [name for name in comp.names if name in cycle.columns]
+    data, frame = export_event_cycle(cycle, names, (seats or published_seats)(scope, event_date, names))
+    write('cycle', data, {'cycle': frame})
     seconds['polls'] = lap()
     data, frame = export_event_results(official)
     write('results', data, {'results': frame})

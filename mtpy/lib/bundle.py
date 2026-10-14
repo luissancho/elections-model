@@ -66,9 +66,9 @@ ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'er
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
-EVENT_PARTS = ('meta', 'pollsters', 'polls', 'results', 'model')
+EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
-EVENT_CSV = ('pollsters', 'polls', 'results', 'model-shares', 'model-seats', 'model-blocks')
+EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks')
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -115,6 +115,7 @@ SCHEMAS = {
                    'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'seconds': dict},
     'event-pollsters': {'blocks': list, 'rows': list},
     'event-polls': {'blocks': list, 'rows': list},
+    'event-cycle': {'parties': list, 'columns': list, 'polls': list},
     'event-results': {'n_seats': int, 'rows': list},
     'event-model': {'horizons': list, 'shares': list, 'seats': list, 'blocks': list},
 }

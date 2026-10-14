@@ -289,13 +289,14 @@ def poll_seats(fc) -> dict:
     return loader() if callable(loader) else {}
 
 
-def export_polls(fc, names, seats=None):
-    """Export the published polls, their seat projections and the previous election result.
+def export_poll_rows(polls, names, seats=None):
+    """Rows of a polls table as published: the ``POLL_COLUMNS``, the share of each party and the seat projections.
 
     Parameters
     ----------
-    fc : Forecaster
-        Fitted forecaster (``sim.model``).
+    polls : pandas.DataFrame
+        Polls with the columns of ``POLL_COLUMNS`` that exist (``date``, ``pollster_id`` and ``sponsor_id`` as
+        columns, not index levels; a missing column is exported null) and one share per party.
     names : list of str
         Party names to export.
     seats : dict, optional
@@ -303,12 +304,12 @@ def export_polls(fc, names, seats=None):
 
     Returns
     -------
-    tuple of (dict, pandas.DataFrame)
-        Data for the ``polls`` schema and the polls table as its CSV twin. A poll with projections carries
-        ``seats`` (``{party: [min, max]}``, only the parties that have one); the CSV twin adds
-        ``seats_min_{party}`` and ``seats_max_{party}`` columns (nullable integers).
+    tuple of (list of dict, pandas.DataFrame)
+        The records of the ``polls`` member of the ``polls`` and ``event-cycle`` schemas and the table of their
+        CSV twin. A poll with projections carries ``seats`` (``{party: [min, max]}``, only the parties that have
+        one); the table adds ``seats_min_{party}`` and ``seats_max_{party}`` columns (nullable integers).
     """
-    polls = fc.fc_series_raw.reset_index()
+    polls = polls.copy()
     for column in POLL_COLUMNS:
         if column not in polls.columns:
             polls[column] = None
@@ -328,6 +329,27 @@ def export_polls(fc, names, seats=None):
     for name in names:
         polls['seats_min_' + name] = pd.array([seats.get(k, {}).get(name, [None])[0] for k in keys], dtype='Int64')
         polls['seats_max_' + name] = pd.array([seats.get(k, {}).get(name, [None, None])[-1] for k in keys], dtype='Int64')
+    return records, polls
+
+
+def export_polls(fc, names, seats=None):
+    """Export the published polls, their seat projections and the previous election result.
+
+    Parameters
+    ----------
+    fc : Forecaster
+        Fitted forecaster (``sim.model``).
+    names : list of str
+        Party names to export.
+    seats : dict, optional
+        Seat projections by ``(date, pollster_id, sponsor_id)`` (``poll_seats``); none by default.
+
+    Returns
+    -------
+    tuple of (dict, pandas.DataFrame)
+        Data for the ``polls`` schema and the polls table as its CSV twin (see ``export_poll_rows``).
+    """
+    records, polls = export_poll_rows(fc.fc_series_raw.reset_index(), names, seats)
     results = fc.nfc_series.reset_index()[['date', *names]]
     results = round_cols(results, pct=names)
     data = {'parties': list(names), 'columns': list(POLL_COLUMNS), 'polls': records,

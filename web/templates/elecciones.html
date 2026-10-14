@@ -7,20 +7,27 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {% set with_herding = false %}
-    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if events %}
       {{ m.headline(headline_text) }}
-      {{ m.card_start('filters', 'Filtros', 'Elige una elección o una encuestadora para ver solo sus sondeos en el histograma, la diana y la tabla por semanas.') }}
+      {{ m.card_start('filters', 'Filtros', 'Elige un ámbito, una elección, una encuestadora o unos años para ver solo sus sondeos en las cifras, la evolución, el histograma, la diana y la tabla por semanas.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <form id="errors-filter" class="series-controls" hidden>
+        <form id="errors-filter" class="series-controls filters-bar" hidden>
+          <label>Ámbito
+            <select name="ambito">
+              <option value=""{% if not selected_scope %} selected{% endif %}>Todos</option>
+              {% for scope in scopes if scope.analysis %}
+              <option value="{{ scope.code }}"{% if scope.code == selected_scope %} selected{% endif %}>{{ scope.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>Elección
             <select name="eleccion">
               <option value="">Todas</option>
               {% for event in filter_events %}
-              <option value="{{ event.date }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</option>
+              <option value="{{ event.key }}" data-scope="{{ event.scope }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %} · {{ event.scope_name }}</option>
               {% endfor %}
             </select>
           </label>
@@ -32,13 +39,33 @@
               {% endfor %}
             </select>
           </label>
+          <label>Desde
+            <select name="desde">
+              {% for year in years %}
+              <option value="{{ year }}"{% if loop.first %} selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Hasta
+            <select name="hasta">
+              {% for year in years %}
+              <option value="{{ year }}"{% if loop.last %} selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <fieldset id="errors-measure" class="seg">
+            <legend>Medida</legend>
+            <label><input type="radio" name="medida" value="error_blocks_abs" checked> Error de bloques</label>
+            <label><input type="radio" name="medida" value="error_avg"> Error medio</label>
+          </fieldset>
           <span class="muted" id="errors-count" aria-live="polite"></span>
         </form>
         <noscript><p class="muted">Los filtros necesitan JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
-          Los dos desplegables eligen qué sondeos entran en las tres tarjetas siguientes: los de una elección, los
-          de una encuestadora o los dos a la vez. El contador dice cuántos quedan del total.
+          Los desplegables eligen qué sondeos entran en las tarjetas siguientes: los de un ámbito, de una elección,
+          de una encuestadora o de unos años, solos o combinados. Al elegir un ámbito o unos años, las listas de elecciones
+          y de encuestadoras se reducen a lo que queda. El contador dice cuántos sondeos y elecciones entran.
         </p>
         <p>
           Cada sondeo es el último que publicó una encuestadora en las semanas previas a una elección, frente al resultado
@@ -48,15 +75,55 @@
         {% endcall %}
         {% endif %}
       {{ m.card_end() }}
-      {{ m.card_start('histogram', 'Error de cada sondeo', 'Cuántos sondeos se equivocaron en cada tramo de un punto, con la media marcada. Los botones cambian la medida.') }}
+      {{ m.card_start('figures', 'Cifras de la selección', 'Cuántos sondeos y elecciones entran con los filtros de arriba, cuánto se equivocaron de media y hacia qué lado; debajo, lo mismo para lo que queda fuera de cada filtro.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <fieldset id="errors-measure" class="seg" hidden>
-          <legend>Medida</legend>
-          <label><input type="radio" name="medida" value="error_blocks_abs" checked> Error de bloques</label>
-          <label><input type="radio" name="medida" value="error_avg"> Error medio</label>
-        </fieldset>
+        <dl class="figures" id="figures-list" hidden>
+          <div><dt>Sondeos</dt><dd id="figure-polls">—</dd></div>
+          <div><dt>Elecciones</dt><dd id="figure-events">—</dd></div>
+          <div><dt id="figure-mean-label">Error de bloques</dt><dd id="figure-mean">—</dd></div>
+          <div><dt>Sesgo del margen</dt><dd id="figure-bias">—</dd></div>
+        </dl>
+        <ul class="complements" id="complements" aria-live="polite"></ul>
+        <noscript><p class="muted">Las cifras necesitan JavaScript.</p></noscript>
+        {% call m.how() %}
+        <p>
+          Sondeos y elecciones son las que pasan los filtros. La tercera cifra es el error medio con la medida elegida,
+          en puntos, y el sesgo del margen, la media con signo del margen entre los dos bloques principales frente al
+          resultado: positivo, los sondeos daban más margen al primer bloque del que hubo (el glosario del final lo define).
+        </p>
+        <p>
+          Cada línea de debajo repite la media con lo que un filtro deja fuera, y los demás filtros puestos: por ejemplo,
+          el resto de encuestadoras en las mismas elecciones, o la misma encuestadora en otros años.
+        </p>
+        <p>Una media de pocos sondeos varía mucho por azar: mira siempre cuántos son.</p>
+        {% endcall %}
+        {% endif %}
+      {{ m.card_end() }}
+      {{ m.card_start('trend', 'Evolución del error por elección', 'El error medio de los sondeos de cada elección a lo largo del tiempo, con la tendencia de las últimas cinco elecciones; con una encuestadora elegida, frente al resto.') }}
+        {% if analysis_missing %}
+        <p class="notice">Análisis no publicado todavía.</p>
+        {% else %}
+        <div class="chart" id="trend-chart" role="img" aria-label="Error medio de los sondeos en cada elección a lo largo del tiempo, con su tendencia"></div>
+        {% call m.how() %}
+        <p>
+          Cada punto es una elección; su altura es el error medio de sus sondeos con la medida elegida y su tamaño,
+          cuántos sondeos hay. El color dice el ámbito. La línea oscura es la media de las últimas cinco elecciones de
+          la selección, ponderada por sondeos. Pulsa un punto para ir a su elección.
+        </p>
+        <p>
+          Con una encuestadora elegida, la línea gris discontinua es la media de las demás encuestadoras en esas mismas
+          elecciones: si la encuestadora va por debajo, acertó más que el resto.
+        </p>
+        <p>Una tendencia que baja no promete que la próxima elección salga mejor: cada una tiene sus propias dificultades.</p>
+        {% endcall %}
+        {% endif %}
+      {{ m.card_end() }}
+      {{ m.card_start('histogram', 'Error de cada sondeo', 'Cuántos sondeos se equivocaron en cada tramo de un punto, con la media marcada. La medida se elige en los filtros.') }}
+        {% if analysis_missing %}
+        <p class="notice">Análisis no publicado todavía.</p>
+        {% else %}
         <div class="chart" id="errors-histogram" role="img" aria-label="Número de sondeos por tramo de error, con la media marcada"></div>
         {% call m.how() %}
         <p>
@@ -71,7 +138,7 @@
         {% endcall %}
         {% endif %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Hacia dónde se equivocaron', 'Cada punto es un sondeo, colocado según su error en el voto de cada uno de los dos bloques principales; el color dice de qué elección es.') }}
+      {{ m.card_start('bullseye', 'Hacia dónde se equivocaron', 'Cada punto es un sondeo, colocado según su error en el voto de cada uno de los dos bloques principales; con un ámbito elegido el color dice de qué elección es y con Todos, de qué ámbito.') }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
@@ -84,7 +151,7 @@
         </p>
         <p>
           Una nube de un color desplazada hacia un lado es un error que compartieron todas las encuestadoras en esa
-          elección; puntos repartidos alrededor del centro, errores propios de cada encuestadora. El aviso de cada
+          elección (con Todos, el color es el del ámbito y la nube junta sus elecciones); puntos repartidos alrededor del centro, errores propios de cada encuestadora. El aviso de cada
           punto enlaza a su elección.
         </p>
         <p>Que los sondeos fallaran hacia un lado en una elección no anticipa hacia dónde fallarán en la siguiente.</p>
@@ -97,11 +164,12 @@
         {% else %}
         <div class="table-wrap">
           <table id="weeks-table">
-            <caption>Error medio, con la medida elegida en el histograma, y sondeos por elección y semana antes de la votación.</caption>
+            <caption>Error medio, con la medida elegida en los filtros, y sondeos por elección y semana antes de la votación.</caption>
             <thead></thead>
             <tbody></tbody>
           </table>
         </div>
+        <p class="muted" id="weeks-note" hidden>Elige un ámbito o unos años para ver las elecciones una a una.</p>
         <noscript><p class="muted">La tabla necesita JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
@@ -119,27 +187,14 @@
         {% endcall %}
         {% endif %}
       {{ m.card_end() }}
-      {{ m.card_start('sector', 'Error del sector', 'El error medio de los sondeos frente al resultado en cada elección publicada, en puntos.') }}
-        <div class="chart" id="sector-chart" role="img" aria-label="Error medio de los sondeos del sector en cada elección pasada"></div>
-        {% call m.how() %}
-        <p>
-          Cada punto es una elección y su altura, el error medio de sus sondeos: la distancia media entre cada
-          sondeo y el resultado de cada partido principal.
-        </p>
-        <p>
-          Una línea que baja con los años diría que el sector acierta más; un pico señala una elección en la que
-          fallaron casi todos.
-        </p>
-        <p>Es una media de todas las encuestadoras: no dice cuáles fallaron. Eso está en el detalle de cada elección.</p>
-        {% endcall %}
-      {{ m.card_end() }}
-      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito y si el modelo tiene backtest en ella.') }}
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada, de todos los ámbitos, y si el modelo tiene backtest en ella.') }}
         <div class="table-wrap">
           <table id="events-table">
             <caption>Elecciones pasadas, de la más reciente a la más antigua. Pulsa en una para ver su detalle.</caption>
             <thead>
               <tr>
                 <th scope="col">Elección</th>
+                <th scope="col">Ámbito</th>
                 <th scope="col">Sondeos</th>
                 <th scope="col">Encuestadoras</th>
                 <th scope="col">Error medio</th>
@@ -150,8 +205,9 @@
             </thead>
             <tbody>
               {% for event in events %}
-              <tr>
-                <td><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a></td>
+              <tr data-scope="{{ event.scope }}" data-date="{{ event.date }}" data-year="{{ event.date[:4] }}">
+                <td>{% if event.href %}<a href="{{ event.href }}">{% endif %}{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}{% if event.href %}</a>{% endif %}</td>
+                <td>{{ event.scope_name }}</td>
                 <td>{{ event.n_polls|int }}</td>
                 <td>{{ event.n_pollsters|int }}</td>
                 <td>{{ event.error_avg|num(1) }}</td>
@@ -163,6 +219,7 @@
             </tbody>
           </table>
         </div>
+        <p class="muted" id="events-count">{{ events|length }} elecciones</p>
         {% call m.how() %}
         <p>
           Cada fila es una elección: cuántos sondeos y encuestadoras hubo, sus errores frente al resultado y si el modelo
@@ -174,12 +231,12 @@
         {% include '_glosario.html' %}
       {{ m.card_end() }}
       {% else %}
-      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada de este ámbito.') }}
-        <p class="notice">Todavía no hay elecciones publicadas en este ámbito.</p>
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada.') }}
+        <p class="notice">Todavía no hay elecciones publicadas.</p>
       {{ m.card_end() }}
       {% endif %}
       {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
                    'Los errores de esta página son la materia prima del rating de cada encuestadora. El texto del método cuenta cómo se convierten en una sola nota.',
-                   [{'href': '/casas' ~ scope_query, 'label': 'Ranking Encuestadoras de este ámbito'}]) }}
+                   [{'href': '/casas', 'label': 'Ranking Encuestadoras'}]) }}
     </div>
 {% endblock %}

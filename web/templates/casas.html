@@ -11,11 +11,11 @@
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
-      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección del ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', '· próxima elección') }}
+      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos; no depende del ámbito elegido arriba: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
         {% if ranking %}
         <div class="chart" id="rating-chart" role="img" aria-label="Rating de cada encuestadora para la próxima elección"></div>
         {% else %}
-        <p class="notice">Todavía no hay ratings de encuestadoras para este ámbito.</p>
+        <p class="notice">Todavía no hay ratings de encuestadoras para la próxima elección general.</p>
         {% endif %}
         <div class="table-wrap">
           <table id="ranking-table">
@@ -35,7 +35,7 @@
             <tbody>
               {% for row in ranking %}
               <tr>
-                <td><a href="/casas{{ scope_query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
+                <td><a href="/casas{{ ranking_query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
                 <td>{{ row.rating|num(1) }}</td>
                 <td>{{ row.quality|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>

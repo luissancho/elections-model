@@ -139,7 +139,7 @@ def test_default_scope_is_the_first_published(api, fresh_app):
     """Con `es` publicado, `?scope=` ausente lleva a `es`; un ámbito publicado adicional se lista en el filtro."""
     write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
     webapi.site().manifest_cache_clear()
-    page = html(call(api, '/elecciones')[2])
+    page = html(call(api, '/metodo/backtest')[2])
     assert '<option value="es" selected>' in page and '<option value="es-md">Madrid</option>' in page
 
 
@@ -193,12 +193,13 @@ def test_unpublished_catalogue_scope_is_a_404(api):
 
 
 def test_global_pages_carry_the_scope_filter_and_no_event_bar(api):
-    for path in ('/elecciones', '/metodo/backtest'):
+    assert 'id="scope-filter"' not in html(call(api, '/elecciones')[2])  # el histórico lleva su propio filtro de ámbito
+    for path in ('/metodo/backtest',):
         page = html(call(api, path)[2])
         assert 'id="scope-filter"' in page and 'id="event-bar"' not in page and 'name="mode"' not in page, path
     landing = html(call(api, '/metodo')[2])
     assert 'id="scope-filter"' not in landing and 'id="event-bar"' not in landing
-    assert '<option value="es" selected>' in html(call(api, '/elecciones', query='scope=es')[2])
+    assert '<option value="es" selected>' in html(call(api, '/metodo/backtest', query='scope=es')[2])
 
 
 def test_menu_has_the_four_global_entries(api):
@@ -934,6 +935,24 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
 
 
+def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    write_analysis(fresh_app.fs, scope='es-md')
+    webapi.site().manifest_cache_clear()
+    national = html(call(houses, '/casas', query='scope=es')[2])
+    madrid = html(call(houses, '/casas', query='scope=es-md')[2])
+    table = lambda page: re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    without_herding = lambda page: re.sub(r'\s*<td>[^<]*</td>\s*</tr>', '</tr>', table(page))  # herding: del ámbito elegido
+    assert without_herding(national) == without_herding(madrid) and '82,4' in table(madrid)
+    assert 'no depende del ámbito elegido' in madrid and 'elección general del' in madrid
+    assert 'href="/api/v1/ratings?scope=es&amp;format=csv"' in madrid and 'Ratings de la próxima elección general' in madrid
+    ranking = table(madrid)
+    assert 'href="/casas?scope=es&amp;id=' in ranking and 'href="/casas?scope=es-md&amp;id=' not in ranking
+    effects = madrid[madrid.index('id="house-effects"'):madrid.index('id="herding"')]
+    assert 'href="/casas?scope=es-md&amp;id=' in effects  # los efectos siguen con el ámbito elegido
+    assert 'href="/casas?scope=es-md&amp;id=' in madrid[madrid.index('id="herding"'):]  # y el herding también
+
+
 def test_casas_explains_the_relative_bias(houses):
     page = html(call(houses, '/casas', query='scope=es')[2]).replace('\n', ' ')
     page = re.sub(r'\s+', ' ', page)
@@ -1099,14 +1118,14 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     status, _, body = call(events_site, '/elecciones', query='scope=es')
     page = html(body)
     assert status == 200 and page.index('date=2023-07-23') < page.index('date=2019-11-10')
-    assert '/elecciones?scope=es&amp;date=2023-07-23' in page and 'action="/elecciones"' in page
+    assert '/elecciones?scope=es&amp;date=2023-07-23' in page
     data = initial(body)
-    assert [row['date'] for row in data['sector']] == ['2019-11-10', '2023-07-23']
-    assert data['blocks'] == ['Derecha', 'Izquierda']
-    assert 'id="sector-chart"' in page and 'aria-label=' in page
+    assert 'sector' not in data and 'blocks' not in data
+    assert [row['date'] for row in data['events']] == ['2023-07-23', '2019-11-10']
+    assert 'id="sector-chart"' not in page and 'id="sector"' not in page
     table = re.search(r'<table id="events-table">(.*?)</table>', page, re.S).group(1)
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
-        'Elección', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
+        'Elección', 'Ámbito', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
 
 
 @pytest.fixture
@@ -1124,7 +1143,7 @@ def test_elecciones_only_counts_the_published_elections(history_site, fresh_app)
     assert {row['event_date'] for row in data['errors']} <= {'2023-07-23', '2019-11-10'}
     assert [e['date'] for e in data['events']] == ['2023-07-23', '2019-11-10'] and data['error_blocks'] == ['Derecha', 'Izquierda']
     page = html(call(history_site, '/elecciones')[2])
-    assert 'En las 2 elecciones analizadas' in page and 'id="errors-filter"' in page and 'id="errors-histogram"' in page
+    assert 'En las 2 elecciones analizadas (todas generales)' in page and 'id="errors-filter"' in page and 'id="errors-histogram"' in page
     assert 'id="errors-bullseye"' in page and 'id="weeks-table"' in page and 'Sesgo de bloques' not in page and 'Desviación hacia' not in page
     assert 'id="glosario"' in page and '¿Cómo calculamos el rating de las encuestadoras?' in page
 
@@ -1144,22 +1163,129 @@ def test_eleccion_detail_has_the_error_histogram_and_the_glossary(events_site):
 def test_elecciones_history_context_filters_and_headline(history_site):
     context = pages.elecciones_context(pages.parse_state({'scope': 'es'}))
     assert not context['analysis_missing'] and len(context['errors']) == 2
-    assert context['filter_events'] == [{'date': '2023-07-23', 'name': 'Generales 2023'},
-                                        {'date': '2019-11-10', 'name': 'Generales 2023'}]
+    assert context['filter_events'] == [
+        {'key': 'es:2023-07-23', 'date': '2023-07-23', 'name': 'Generales 2023', 'scope': 'es', 'scope_name': 'España'},
+        {'key': 'es:2019-11-10', 'date': '2019-11-10', 'name': 'Generales 2023', 'scope': 'es', 'scope_name': 'España'}]
+    assert context['years'] == [2023] and context['selected_scope'] == 'es'
     assert context['filter_pollsters'] == ['GAD3', 'Sigma Dos']
-    assert context['headline_text'] == ('En las 2 elecciones analizadas, el último sondeo de cada encuestadora se '
+    assert context['headline_text'] == ('En las 2 elecciones analizadas (todas generales), el último sondeo de cada encuestadora se '
                                         'desvió de media 3,6 puntos en el margen entre bloques.')
     assert all(row['error_blocks_abs'] == abs(row['error_blocks']) for row in context['errors'])
-    assert set(context['initial']) >= {'state', 'sector', 'blocks', 'errors', 'error_blocks', 'events'}
+    assert set(context['initial']) == {'state', 'scopes', 'events', 'errors', 'error_blocks', 'years', 'selected_scope'}
     assert pages.error_rows('es', ['2019-11-10']) == [] and pages.error_rows('es-md', ['2023-07-23']) is None
     page = html(call(history_site, '/elecciones')[2])
-    assert page.index('id="filters"') < page.index('id="histogram"') < page.index('id="bullseye"') \
-        < page.index('id="weeks"') < page.index('id="sector"') < page.index('id="events"') < page.index('id="glosario"') \
+    assert page.index('id="filters"') < page.index('id="figures"') < page.index('id="trend"') < page.index('id="histogram"') \
+        < page.index('id="bullseye"') < page.index('id="weeks"') < page.index('id="events"') < page.index('id="glosario"') \
         < page.index('id="closing"')
-    assert '<option value="2019-11-10">' in page and '<option value="Sigma Dos">' in page
+    assert 'id="complements"' in page and 'id="trend-chart"' in page and 'id="sector-chart"' not in page
+    assert 'id="weeks-note"' in page and 'Elige un ámbito o unos años para ver las elecciones una a una.' in page
+    assert '<option value="es:2019-11-10" data-scope="es">' in page and '<option value="Sigma Dos">' in page
     assert 'positivo, el sondeo daba más margen a Derecha del que hubo' in page
     assert 'Herding' not in page and 'La tabla necesita JavaScript' in page
     assert page.count('Análisis no publicado todavía') == 0
+
+
+@pytest.fixture
+def history_two_scopes(history_site, fresh_app):
+    """`history_site` más Madrid: una elección (2021-05-04) con su análisis y un run publicado."""
+    write_bundle(fresh_app.fs, scope='es-md', manifest=True)
+    write_event(fresh_app.fs, scope='es-md', date='2021-05-04', model=False)
+    write_analysis(fresh_app.fs, scope='es-md')
+    errors = fixture_data('poll-errors')
+    errors['rows'] = [dict(row, event_date='2021-05-04', event='2021-04M') for row in errors['rows']]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es-md', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es-md')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    return history_site
+
+
+def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
+    body = call(history_two_scopes, '/elecciones')[2]
+    page = html(body).replace('\n', ' ')
+    assert 'id="scope-filter"' not in page and '<th scope="col">Ámbito</th>' in page
+    assert re.search(r'<select name="ambito">\s*<option value="" selected>Todos</option>', page)
+    for name in ('eleccion', 'casa', 'desde', 'hasta'):
+        assert 'name="{}"'.format(name) in page
+    assert 'id="errors-measure"' in page and page.index('id="errors-measure"') < page.index('id="histogram"')
+    assert '3 elecciones analizadas (2 generales y 1 autonómica)' in page
+    assert re.search(r'<tr data-scope="es-md" data-date="2021-05-04" data-year="2021">', page)
+    assert '<p class="muted" id="events-count">3 elecciones</p>' in page and 'href="/casas"' in page
+    data = initial(body)
+    assert [s['code'] for s in data['scopes']] == ['es', 'es-md'] and data['selected_scope'] is None
+    assert {row['scope'] for row in data['errors']} == {'es', 'es-md'} and all(isinstance(row['year'], int) for row in data['errors'])
+    assert set(data['errors'][0]) == set(pages.HISTORY_COLUMNS) | set(data['error_blocks'])
+    assert [e['scope'] for e in data['events']][:3] == ['es', 'es-md', 'es'] and data['years'] == sorted(data['years'])
+    assert data['years'] == [2021, 2023]
+
+
+def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scopes, fresh_app):
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones y análisis, sin run
+    write_analysis(fresh_app.fs, scope='es-an')
+    errors = fixture_data('poll-errors')
+    errors['rows'] = [dict(row, event_date='2022-06-19', event='2022-19J') for row in errors['rows']]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es-an', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es-an')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    scopes = pages.history_scopes()
+    assert {s['code']: s['linkable'] for s in scopes} == {'es': True, 'es-an': False, 'es-md': True}
+    hrefs = {(e['scope'], e['date']): e['href'] for e in pages.history_events(scopes)}
+    assert hrefs[('es-an', '2022-06-19')] is None and hrefs[('es-md', '2021-05-04')].startswith('/elecciones?scope=es-md')
+    body = call(history_two_scopes, '/elecciones')[2]
+    row = re.search(r'<tr data-scope="es-an"[^>]*>\s*<td>(.*?)</td>', html(body), re.S).group(1)
+    assert '<a' not in row and '2022' in row
+    assert {s['code']: s['linkable'] for s in initial(body)['scopes']}['es-an'] is False
+
+
+def test_error_blocks_come_from_the_first_scope_with_two_and_parts_are_read_once(history_two_scopes, fresh_app):
+    errors = fixture_data('poll-errors')
+    errors['blocks'] = []
+    errors['rows'] = [dict(row, event_date='2021-05-04', event='2021-04M') for row in errors['rows']]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es-md', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es-md')
+    webapi.site().files.clear()
+    assert initial(call(history_two_scopes, '/elecciones')[2])['error_blocks'] == ['Derecha', 'Izquierda']
+    scopes = pages.history_scopes()
+    assert pages.error_blocks(scopes, pages.poll_error_parts(scopes)) == ['Derecha', 'Izquierda']
+    assert pages.error_blocks(scopes, {}) == []
+
+
+def test_history_headline_singular():
+    es = {'scope': 'es'}
+    md = {'scope': 'es-md'}
+    rows = [{'error_blocks_abs': 1.0}]
+    assert '(1 general y 1 autonómica)' in pages.history_headline([es, md], rows)
+    assert '(2 generales y 1 autonómica)' in pages.history_headline([es, es, md], rows)
+
+
+def test_elecciones_scope_query_preselects_the_scope_or_falls_back(history_two_scopes, fresh_app):
+    page = html(call(history_two_scopes, '/elecciones', query='scope=es-md')[2]).replace('\n', ' ')
+    assert re.search(r'<option value="es-md" selected>Madrid</option>', page)
+    assert initial(call(history_two_scopes, '/elecciones', query='scope=es-md')[2])['selected_scope'] == 'es-md'
+    assert call(history_two_scopes, '/elecciones', query='scope=es-an')[0] == 404  # sin run publicado
+    write_bundle(fresh_app.fs, scope='es-ar', manifest=True)  # con run y elecciones, pero sin análisis
+    write_event(fresh_app.fs, scope='es-ar', date='2019-04-28', model=False)
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    body = call(history_two_scopes, '/elecciones', query='scope=es-ar')[2]
+    assert initial(body)['selected_scope'] is None
+    assert re.search(r'<option value="" selected>Todos</option>', html(body).replace('\n', ' '))
+
+
+def test_history_helpers_skip_scopes_without_events_or_analysis(history_two_scopes, fresh_app):
+    write_analysis(fresh_app.fs, scope='es-cb')  # análisis sin elecciones
+    write_event(fresh_app.fs, scope='es-ar', date='2019-04-28', model=False)  # elecciones sin análisis
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    scopes = pages.history_scopes()
+    assert [(s['code'], s['analysis']) for s in scopes] == [('es', True), ('es-ar', False), ('es-md', True)]
+    events = pages.history_events(scopes)
+    assert [e['scope'] for e in events] == ['es', 'es-md', 'es', 'es-ar']
+    rows = pages.history_rows(scopes, events)
+    assert {row['scope'] for row in rows} == {'es', 'es-md'}
+    assert pages.history_headline(events, rows).startswith('En las 4 elecciones analizadas (2 generales y 2 autonómicas)')
+    assert pages.history_headline(events, None) == '4 elecciones analizadas.'
 
 
 def test_elecciones_without_events_shows_a_notice(api):
@@ -1168,25 +1294,93 @@ def test_elecciones_without_events_shows_a_notice(api):
     assert '/dist/js/pages/elecciones.js' in html(body)  # el módulo se carga y debe tolerar la falta del bloque
 
 
-def test_eleccion_detail_renders_results_pollsters_bullseye_and_model(events_site):
+def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_site):
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
     page = html(body)
     assert status == 200 and 'Generales 2023' in page
-    assert page.count('/api/v1/events/es/2023-07-23/') == 6
-    assert page.index('GAD3') < page.index('40dB') < page.index('CIS')
-    assert '/casas?scope=es&amp;id=2' in page and 'href="/elecciones?scope=es"' in page
+    assert page.count('/api/v1/events/es/2023-07-23/') == 7 + 2  # las descargas y el CSV de la tabla (control y noscript)
+    table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
+    assert table.index('GAD3') < table.index('40dB') < table.index('CIS')  # de menor a mayor error de bloques
+    assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
+        'Encuestadora', 'Muestra', 'Días antes', 'Error medio', 'Error de bloques', 'Derecha', 'Izquierda']
+    assert '/casas?scope=es&amp;id=2' in table and 'href="/elecciones?scope=es"' in page
+    assert 'id="pollsters-table"' not in page and 'Sesgo del margen' not in table  # ya no hay tabla de medias por casa
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
+    assert 'id="results-more"' not in page  # cuatro partidos: nada que desplegar
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'pollsters', 'bullseye', 'blocks', 'poll_errors'}
-    assert data['bullseye'][0]['Derecha'] == 0.68 and data['pollsters'][0]['pollster'] == 'GAD3'
-    assert 'id="error-chart"' in page and 'id="bullseye-chart"' in page
+    assert set(data) == {'state', 'meta', 'last', 'blocks', 'poll_errors', 'catalog', 'polls'}
+    assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
+    assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
+                               'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
+    assert 'id="error-chart"' in page and 'class="chart big" id="bullseye-chart"' in page and 'class="split"' in page
+    assert page.index('id="results"') < page.index('class="split"') < page.index('id="last-errors"') < page.index('id="last"') \
+        < page.index('id="bullseye"') < page.index('id="poll-histogram"') < page.index('id="polls"') < page.index('id="model"')
+
+
+def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body).replace('\n', ' ')
+    assert status == 200 and 'Todas las encuestas' in page and 'id="polls-controls" hidden' in page
+    assert 'id="polls-mode"' in page and 'Escaños</label>' in page  # el fixture trae escaños
+    assert polls_tbody(page).count('<tr>') == 3 and '16/07/23' in page and 'El País' in page
+    assert '<span id="polls-count">3 sondeos</span>' in page and 'href="/api/v1/events/es/2023-07-23/cycle?format=csv"' in page
+    assert 'Sondeos del ciclo, tal como se publicaron' in page and 'no están publicados todavía' not in page
+    data = initial(body)
+    assert data['polls']['parties'] == ['PP', 'PSOE', 'VOX'] and data['polls']['polls'][2]['seats'] == {'PP': [135, 140], 'PSOE': [120, 120]}
+    assert [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX']
+    assert data['catalog']['parties'][0]['color'] != pages.OTHERS_COLOR and data['catalog']['parties'][2]['color'] == pages.OTHERS_COLOR
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    assert context['has_cycle'] and context['table_total'] == 3 and context['has_seats'] and context['months'][0]['value'] == '2023-07'
+
+
+def test_eleccion_detail_without_cycle_part_shows_a_notice(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+    monkeypatch.setattr(pages.elecciones, 'event_part', lambda scope, date, name: None if name == 'cycle' else real(scope, date, name))
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    assert status == 200 and 'Los sondeos de este ciclo no están publicados todavía' in page
+    assert 'id="polls-table"' not in page and 'id="polls-controls"' not in page
+    data = initial(body)
+    assert 'polls' not in data and data['catalog'] == {'parties': []}
+
+
+def test_eleccion_detail_hides_the_results_beyond_twenty_behind_a_button(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'results':
+            rows = [dict(data['rows'][0], party=f'P{i:02d}', seats=1) for i in range(23)]
+            data = {**data, 'rows': rows}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
+    assert status == 200 and table.count('<tr>') == 21 and table.count('<tr hidden>') == 3  # cabecera + 20 visibles
+    assert table.index('P19') < table.index('<tr hidden>') < table.index('P20')
+    assert '<button type="button" class="more" id="results-more" hidden>Ver los 3 partidos restantes</button>' in page
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    assert context['results_shown'] == 20 and context['results_hidden'] == 3
+
+
+def test_last_poll_rows_keep_the_closest_poll_of_each_house():
+    rows = pages.with_abs([
+        {'pollster': 'A', 'days': 3, 'error_blocks': -2.0}, {'pollster': 'B', 'days': 5, 'error_blocks': None},
+        {'pollster': 'A', 'days': 9, 'error_blocks': 0.5}, {'pollster': None, 'days': 1, 'error_blocks': 0.1},
+        {'pollster': 'C', 'days': 4, 'error_blocks': 1.0}, {'pollster': 'C', 'days': 4, 'error_blocks': 0.2},
+    ])
+    last = pages.last_poll_rows(rows)
+    assert [(row['pollster'], row['days'], row['error_blocks_abs']) for row in last] == [('C', 4, 1.0), ('A', 3, 2.0), ('B', 5, None)]
+    assert pages.last_poll_rows([]) == []
 
 
 def test_eleccion_without_model_shows_a_notice(events_site):
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2019-11-10')
     page = html(body)
     assert status == 200 and 'Sin backtest para esta elección' in page
-    assert page.count('/api/v1/events/es/2019-11-10/') == 3
+    assert page.count('/api/v1/events/es/2019-11-10/') == 4 + 2
 
 
 @pytest.mark.parametrize('query, status, text', [('scope=es&date=2023-13-01', 400, 'Fecha no válida.'),
@@ -1247,12 +1441,12 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     assert 'id="model-seats-30"' not in page and 'id="model-blocks-30"' not in page
 
 
-def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, monkeypatch):
+def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
-        if name == 'pollsters':
+        if name == 'polls':
             rows = [dict(row, error_blocks=error) for row, error in zip(data['rows'], (-3.0, 1.0, 2.0))]
             data = {**data, 'rows': rows}
         if name == 'meta':
@@ -1260,47 +1454,47 @@ def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, 
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
-    names = [row['pollster'] for row in real('es', '2023-07-23', 'pollsters')['rows']]
+    names = [row['pollster'] for row in real('es', '2023-07-23', 'polls')['rows']]
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
     page = html(body)
-    table = re.search(r'<table id="pollsters-table">(.*?)</table>', page, re.S).group(1)
-    assert status == 200 and 'Sesgo del margen' in table and '-3,0' in table
+    table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
+    assert status == 200 and '3,0' in table and '-3,0' not in table  # el error de bloques de la tabla va sin signo
     assert 'Error de bloques: 2,5 · Sesgo del margen: -2,5' in page
     shown = [re.sub(r'<.*?>', '', cell) for cell in re.findall(r'<tr>\s*<td>(.*?)</td>', table, re.S)]
     assert shown == [names[1], names[2], names[0]]
     data = initial(body)
-    assert [row['error_blocks_abs'] for row in data['pollsters']] == [1.0, 2.0, 3.0]
-    assert [row['error_blocks'] for row in data['pollsters']] == [1.0, 2.0, -3.0]
+    assert [row['error_blocks_abs'] for row in data['last']] == [1.0, 2.0, 3.0]
+    assert [row['error_blocks'] for row in data['last']] == [1.0, 2.0, -3.0]
 
 
-def test_pollster_rows_without_error_go_last_and_have_no_absolute_value(events_site, monkeypatch):
+def test_last_rows_without_error_go_last_and_have_no_absolute_value(events_site, monkeypatch):
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
-        if name == 'pollsters':
+        if name == 'polls':
             errors = (None, -2.0, 1.0)
             data = {**data, 'rows': [dict(row, error_blocks=error) for row, error in zip(data['rows'], errors)]}
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
-    assert [row['error_blocks_abs'] for row in context['pollster_rows']] == [1.0, 2.0, None]
+    assert [row['error_blocks_abs'] for row in context['last_rows']] == [1.0, 2.0, None]
     assert all('error_blocks_abs' in row for row in context['poll_rows'])
 
 
-def test_pollster_row_without_id_is_plain_text(events_site, monkeypatch):
+def test_last_row_without_id_is_plain_text(events_site, monkeypatch):
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
-        if name == 'pollsters':
+        if name == 'polls':
             data = {**data, 'rows': [dict(row, pollster_id=None) for row in data['rows']]}
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
-    table = re.search(r'<table id="pollsters-table">(.*?)</table>', html(body), re.S).group(1)
+    table = re.search(r'<table id="last-table">(.*?)</table>', html(body), re.S).group(1)
     assert status == 200 and 'GAD3' in table and '<a ' not in table
 
 
@@ -1751,7 +1945,7 @@ def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site)
     page = html(call(events_site, '/elecciones', query='scope=es&date=2023-07-23')[2])
     assert '/casas?scope=es&amp;id=2' in page
     source = open(os.path.join(pages.TEMPLATES_DIR, 'elecciones.html'), encoding='utf-8').read()
-    assert '<select name="casa">' in source and "'/casas' ~ scope_query" in source
+    assert '<select name="casa">' in source and "'/casas'" in source
 
 
 def test_houses_pages_use_encuestadora(houses):
