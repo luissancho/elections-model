@@ -102,7 +102,7 @@ fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`p
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
 (Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
 Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
-publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/elecciones`, `/casas` y `/metodo/backtest` llevan el filtro de ámbito
+publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/casas` y `/metodo/backtest` llevan el filtro de ámbito
 (`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS); el resto
 de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
 `_metodo_nav.html`.
@@ -142,6 +142,11 @@ tarjetas centrales en Promedios (hemiciclo, partidos, bloques); la leyenda de EC
 "Todas las encuestas" (`polls-table.js` + `pages/polls-dom.js`: filtros, orden y paginación en el navegador);
 "Resultados por territorio" en Escaños (`territory.js` + `pages/territory-dom.js`, nivel CCAA o provincia, escaños o
 voto); y `community`/`votes` en `districts.regions` (los runs antiguos, sin ellos, ocultan el nivel CCAA).
+
+Fase 7d (2026-10-14): histórico de todos los ámbitos con análisis (`/elecciones`: filtros ámbito/elección/encuestadora/
+años/medida en el hash de la URL, cifras con complementos, evolución del error por elección) y ranking único (`/casas`
+lee siempre los ratings de `es`). El filtro de ámbito de `/elecciones` es uno de sus propios filtros, no el
+desplegable común; el detalle de una elección solo se enlaza para los ámbitos con run publicado.
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
