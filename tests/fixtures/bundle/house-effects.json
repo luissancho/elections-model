@@ -1,0 +1,27 @@
+{
+  "schema": "house-effects@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": "20261008-120000",
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "pollster_id": 1,
+        "name": "sigma-dos",
+        "pollster": "Sigma Dos",
+        "n": 10,
+        "w": 0.1,
+        "level": 0.2,
+        "dev": 0.1,
+        "dev_err": 0.05,
+        "prior": 0.0,
+        "prior_err": 0.5,
+        "effect": 0.1,
+        "effect_err": 0.05,
+        "center": 0.0
+      }
+    ]
+  }
+}

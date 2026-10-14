@@ -1,0 +1,31 @@
+{
+  "schema": "manifest@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "contract": 1,
+    "updated_at": "2026-10-08T12:00:00Z",
+    "scopes": {
+      "es": {
+        "latest": "20261008-120000",
+        "run_at": "2026-10-08T12:00:00Z",
+        "event_date": "2026-11-29",
+        "as_of": "2026-10-08",
+        "date_last": "2026-10-05",
+        "n_polls": 120
+      }
+    },
+    "freeze": {
+      "active": false,
+      "message": null
+    },
+    "attribution": {
+      "polls": "Wikipedia",
+      "results": "Ministerio del Interior",
+      "model": "MT"
+    }
+  }
+}

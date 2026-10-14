@@ -1,0 +1,4 @@
+<form id="scope-filter" class="controls" method="get" action="{{ filter_action }}" autocomplete="off">
+  <label>Ámbito <select name="scope">{% for s in scope_filter %}<option value="{{ s.code }}"{% if s.code == state.scope %} selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+  <button type="submit" class="nojs-only">Ver</button>
+</form>

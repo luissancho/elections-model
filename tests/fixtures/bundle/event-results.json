@@ -1,0 +1,41 @@
+{
+  "schema": "event-results@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-11T12:00:00Z",
+  "data": {
+    "n_seats": 350,
+    "rows": [
+      {
+        "party_id": 1,
+        "party": "PP",
+        "votes": 8160837,
+        "pct": 33.06,
+        "seats": 160
+      },
+      {
+        "party_id": 2,
+        "party": "PSOE",
+        "votes": 7760970,
+        "pct": 31.44,
+        "seats": 150
+      },
+      {
+        "party_id": 3,
+        "party": "VOX",
+        "votes": 3033744,
+        "pct": 12.29,
+        "seats": 40
+      },
+      {
+        "party_id": 4,
+        "party": "Cs",
+        "votes": 18054,
+        "pct": 0.13,
+        "seats": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+<header id="site-header">
+  <h1><a href="/">{{ site_title }}</a></h1>
+  <nav aria-label="Secciones">
+    {% for page in pages %}
+    <a href="{{ page.href }}"{% if page.active %} aria-current="page"{% endif %}>{{ page.label }}</a>
+    {% endfor %}
+  </nav>
+</header>

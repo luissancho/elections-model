@@ -1,0 +1,129 @@
+{
+  "schema": "backtest-blocks@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "columns": [
+      "event_date",
+      "horizon",
+      "block",
+      "parties",
+      "official_seats",
+      "model_seats",
+      "p_majority",
+      "majority",
+      "brier",
+      "log_score",
+      "seats_valid"
+    ],
+    "rows": [
+      {
+        "event_date": "2019-11-10",
+        "horizon": 6,
+        "block": "Derecha",
+        "parties": "PP+VOX",
+        "official_seats": 169,
+        "model_seats": 171,
+        "p_majority": 0.384,
+        "majority": false,
+        "brier": 0.148,
+        "log_score": 0.481,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2019-11-10",
+        "horizon": 6,
+        "block": "Izquierda",
+        "parties": "PSOE",
+        "official_seats": 121,
+        "model_seats": 118,
+        "p_majority": 0.001,
+        "majority": false,
+        "brier": 0.0,
+        "log_score": 0.001,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2019-11-10",
+        "horizon": 30,
+        "block": "Derecha",
+        "parties": "PP+VOX",
+        "official_seats": 169,
+        "model_seats": 171,
+        "p_majority": 0.384,
+        "majority": false,
+        "brier": 0.148,
+        "log_score": 0.481,
+        "seats_valid": false
+      },
+      {
+        "event_date": "2019-11-10",
+        "horizon": 30,
+        "block": "Izquierda",
+        "parties": "PSOE",
+        "official_seats": 121,
+        "model_seats": 118,
+        "p_majority": null,
+        "majority": false,
+        "brier": 0.0,
+        "log_score": 0.001,
+        "seats_valid": false
+      },
+      {
+        "event_date": "2023-07-23",
+        "horizon": 6,
+        "block": "Derecha",
+        "parties": "PP+VOX",
+        "official_seats": 169,
+        "model_seats": 171,
+        "p_majority": 0.384,
+        "majority": false,
+        "brier": 0.148,
+        "log_score": 0.481,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2023-07-23",
+        "horizon": 6,
+        "block": "Izquierda",
+        "parties": "PSOE",
+        "official_seats": 121,
+        "model_seats": 118,
+        "p_majority": 0.001,
+        "majority": false,
+        "brier": 0.0,
+        "log_score": 0.001,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2023-07-23",
+        "horizon": 30,
+        "block": "Derecha",
+        "parties": "PP+VOX",
+        "official_seats": 169,
+        "model_seats": 171,
+        "p_majority": 0.384,
+        "majority": false,
+        "brier": 0.148,
+        "log_score": 0.481,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2023-07-23",
+        "horizon": 30,
+        "block": "Izquierda",
+        "parties": "PSOE",
+        "official_seats": 121,
+        "model_seats": 118,
+        "p_majority": null,
+        "majority": false,
+        "brier": 0.0,
+        "log_score": 0.001,
+        "seats_valid": true
+      }
+    ]
+  }
+}

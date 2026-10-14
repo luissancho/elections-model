@@ -6,7 +6,8 @@
             "port": "${DB_PORT}",
             "username": "${DB_USERNAME}",
             "password": "${DB_PASSWORD}",
-            "stage_dir": "${DB_STAGE_DIR}"
+            "stage_dir": "${DB_STAGE_DIR}",
+            "statement_timeout": "${DB_STATEMENT_TIMEOUT}"
         },
         "database": "${DB_DATABASE}"
     },
@@ -28,6 +29,10 @@
     },
     "s3": {
         "bucket": "${S3_BUCKET}"
+    },
+    "web": {
+        "prefix": "${WEB_PREFIX}",
+        "cache_ttl": "${WEB_CACHE_TTL}"
     },
     "cwl": {
         "group": "${CWL_GROUP}"

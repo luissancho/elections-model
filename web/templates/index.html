@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Inicio{% endblock %}
+{% block description %}Promedio de encuestas y simulación de escaños de las próximas elecciones generales y autonómicas de España.{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+    <div class="stack">
+      {{ m.headline(intro) }}
+      <section class="stack" id="events">
+        <h2>Próximas elecciones</h2>
+        {% set hero = cards[:1]|selectattr('published')|list %}
+        {% set rest = cards[hero|length:] %}
+        {% for card in hero %}
+        <div class="tile tile-hero">
+          {% include '_event_card.html' +%}
+        </div>
+        {% endfor %}
+        {% if rest %}
+        <div class="grid">
+          {% for card in rest %}
+          <div class="tile">
+            {% include '_event_card.html' +%}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </section>
+      {% if past %}
+      {{ m.card_start('past-events', 'Elecciones pasadas', 'Las elecciones ya celebradas con su análisis publicado, de la más reciente a la más antigua; cada una enlaza a su detalle.') }}
+        <ul class="link-list">
+          {% for event in past %}
+          <li><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a> <span class="muted">· {{ event.scope_name }}</span></li>
+          {% endfor %}
+        </ul>
+      {{ m.card_end() }}
+      {% endif %}
+      <section class="stack" id="more" aria-labelledby="more-title">
+        <h2 id="more-title">Para entender el modelo</h2>
+        <p class="lead">Tres páginas comunes a todas las elecciones: cómo acertaron las encuestas, qué encuestadoras aciertan más y cómo funciona el modelo.</p>
+        <div class="grid grid-three">
+          <a class="card card-link" href="/elecciones"><h3>Histórico Errores</h3><p>Cuánto se equivocaron los sondeos en cada elección pasada.</p></a>
+          <a class="card card-link" href="/casas"><h3>Ranking Encuestadoras</h3><p>Qué encuestadoras aciertan más y cuáles se desvían.</p></a>
+          <a class="card card-link" href="/metodo"><h3>Método</h3><p>Cómo se promedian los sondeos y se simulan los escaños.</p></a>
+        </div>
+      </section>
+    </div>
+{% endblock %}

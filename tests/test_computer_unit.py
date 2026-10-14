@@ -55,6 +55,20 @@ def test_house_effects_summary_decays_and_sums_blocks():
     assert cis.loc['Izquierda', 'cycle'] == pytest.approx(4.5)
 
 
+def test_house_effects_summary_accepts_a_cycle_without_history():
+    """Un ámbito sin filas en `pollsters_parties` (autonómicos) llega solo con el ciclo: sin `dev_result_c` ni
+    `n_result`. La tabla debe salir con `hist`/`trend` nulos y el `cycle` de cada casa (`publish analysis`)."""
+    cycle = pd.DataFrame({
+        'event_date': pd.to_datetime(['2027-05-23'] * 2), 'pollster': ['GAD3'] * 2, 'party': ['PP', 'PSOE'],
+        'dev_cycle': [-1.5, 2.], 'n_cycle': [12, 12]
+    })
+    blocks = {'Derecha': ['PP'], 'Izquierda': ['PSOE']}
+    out = Computer.house_effects_summary(cycle, blocks, current='2027-05-23', year_decay=0.9)
+    gad3 = out.loc['GAD3']
+    assert gad3.loc['PP', 'cycle'] == pytest.approx(-1.5) and gad3.loc['Izquierda', 'cycle'] == pytest.approx(2.)
+    assert gad3.loc['PP', 'n_events'] == 0 and np.isnan(gad3.loc['PP', 'hist']) and np.isnan(gad3.loc['PP', 'trend'])
+
+
 def test_within_block_bias_ignores_parties_the_poll_does_not_report():
     """Una encuesta que no publica a un partido del bloque no debe ser penalizada por ello (revisión M6)."""
     polls = pd.DataFrame({'PP': [33.], 'VOX': [12.], 'PSOE': [28.], 'UP': [12.], 'MP': [np.nan]})
@@ -166,3 +180,146 @@ def test_swing_noise_wls_keeps_the_fit_when_a_coefficient_is_clipped():
     # Sin restricción activa, el resultado es el de mínimos cuadrados ponderados ordinario
     a, b = SwingNoise.wls_nonneg(L, 0.01 + 0.2 * x, n)
     assert a == pytest.approx(0.01) and b == pytest.approx(0.2)
+
+
+# --- M11: ratings transversales (sondeos de varios ámbitos con peso por ámbito) ---
+
+def bare_computer():
+    """Computer sin base de datos: sólo los atributos que usa el algoritmo de ratings."""
+    c = Computer.__new__(Computer)
+    c.scope = 'es'
+    c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
+    c.pos_decay, c.week_decay, c.year_decay = .5, .7, .9
+    c.bias_dev_tau, c.min_polls, c.verbose = .01, 3, 0
+    c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
+    return c
+
+
+def pool(rows):
+    """Un sondeo por tupla (ámbito, fecha del evento, casa), 10 días antes del evento."""
+    ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
+    data = []
+    for scope, event_date, pollster in rows:
+        event_date = pd.Timestamp(event_date)
+        dev = .01 if pollster in ('A', 'C') else -.01
+        data.append({
+            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=10),
+            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': 10,
+            'weight_over': 1., 'weight_sample': 1.,
+            'error_avg': .03, 'error_blocks': .01, 'error_within': .02,
+            'bias_avg': .2, 'bias_blocks': .1, 'bias_within': .1, 'bias': .15,
+            'bias_dev_adj': dev, 'bias_dev_err': .01
+        })
+    return pd.DataFrame(data).set_index(['event_scope', 'event_date', 'date', 'pollster_id', 'sponsor_id']).sort_index()
+
+
+ES19 = [('es', '2019-11-10', 'A'), ('es', '2019-11-10', 'B')]
+MD21 = [('es-md', '2021-05-04', 'A'), ('es-md', '2021-05-04', 'C')]
+REG23 = [('es-md', '2023-05-28', 'C'), ('es-cl', '2023-05-28', 'D')]
+JULY23, MAY23 = pd.Timestamp('2023-07-23'), pd.Timestamp('2023-05-28')
+
+
+def test_scope_weight_zero_reproduces_single_scope_ratings():
+    c = bare_computer()
+    mixed = c.rate_events(pool(ES19 + MD21), [JULY23], {'es': 1., 'es-md': 0.}, c.pollsters)
+    alone = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
+    pd.testing.assert_frame_equal(mixed, alone)
+
+
+def test_scope_weight_one_equals_merging_the_events():
+    c = bare_computer()
+    mixed = c.rate_events(pool(ES19 + MD21), [JULY23], {'es': 1., 'es-md': 1.}, c.pollsters)
+    merged = c.rate_events(pool(ES19 + [('es', d, p) for _, d, p in MD21]), [JULY23], {'es': 1.}, c.pollsters)
+    pd.testing.assert_frame_equal(mixed, merged)
+
+
+def test_same_day_events_do_not_see_each_other():
+    c = bare_computer()
+    weights = {'es': 1., 'es-md': .5, 'es-cl': .5}
+    assert c.rate_events(pool(REG23), [MAY23], weights, c.pollsters).shape[0] == 0
+    july = c.rate_events(pool(REG23), [JULY23], weights, c.pollsters).set_index('pollster_id')
+    assert (july.loc[[3, 4], 'num_polls'] > 0).all()
+
+
+def test_regional_only_pollster_is_rated_and_events_are_scope_date_pairs():
+    # Foco 5: C sólo publica en Madrid y aun así tiene rating en un evento de `es`
+    c = bare_computer()
+    out = c.rate_events(pool(ES19 + MD21 + REG23), [JULY23], {'es': 1., 'es-md': .5, 'es-cl': .5}, c.pollsters)
+    out = out.set_index('pollster_id')
+    assert out.loc[3, 'num_events'] == 2 and out.loc[3, 'num_polls'] == 2      # C: Madrid 2021 y 2023
+    assert out.loc[1, 'num_events'] == 2                                       # A: es 2019 y Madrid 2021
+    assert out.loc[3, 'rating'] != out.loc[3, 'quality']
+
+
+def test_centre_house_results_handles_scopes_without_enough_polls():
+    """M11: en un ámbito con pocas encuestas por casa ninguna supera el mínimo; el centrado no debe fallar."""
+    cols = ['event_date', 'pollster_id', 'party', 'n_result', 'dev_result', 'dev_result_err']
+    result = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-05-28'] * 2), 'pollster_id': [1, 2], 'party': ['PP', 'PP'],
+        'n_result': [10, 10], 'dev_result': [1., 3.], 'dev_result_err': [.1, .1]
+    })
+    out = Computer.centre_house_results(result)
+    assert out['industry'].tolist() == [2., 2.] and out['dev_result_c'].tolist() == [-1., 1.]
+    empty = Computer.centre_house_results(result.iloc[:0])
+    assert empty.shape[0] == 0 and list(empty.columns) == cols + ['industry', 'dev_result_c']
+
+
+# --- M13: herding ---
+
+def test_herding_summary_pools_cycles_with_year_decay():
+    c = bare_computer()
+    data = pd.DataFrame({
+        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29']),
+        'pollster': ['A', 'A', 'B', 'A'],
+        'n': [10, 20, 8, 15],
+        'ss_obs': [4., 8., 18., 2.],
+        'ss_exp': [10., 10., 9., 10.],
+        'ratio': [np.sqrt(.4), np.sqrt(.8), np.sqrt(2.), np.sqrt(.2)],
+        'p_value': [.1, .3, .99, .01]
+    })
+    out = c.herding_summary(data=data)
+    d = np.power(.9, [7, 3, 0])  # años hasta 2026
+    expected = np.sqrt((d * [4., 8., 2.]).sum() / (d * [10., 10., 10.]).sum())
+    assert out.loc['A', 'herding'] == pytest.approx(expected)
+    assert out.loc['A', 'herding_last'] == pytest.approx(np.sqrt(.2)) and out.loc['A', 'herding_p'] == pytest.approx(.01)
+    assert out.loc['A', 'herding_n'] == 45 and out.loc['A', 'herding_events'] == 3
+    # Hasta 2023 no cuenta el ciclo actual
+    upto = c.herding_summary(event_date='2023-07-23', data=data)
+    assert upto.loc['A', 'herding_events'] == 2 and upto.loc['B', 'herding'] == pytest.approx(np.sqrt(2.))
+    assert c.herding_summary(data=data.iloc[0:0]).shape[0] == 0
+
+
+# --- get_polls_metric: una métrica nula en todos los sondeos del evento no puede desaparecer ---
+
+def single_event_computer():
+    """Computer sin base de datos con un solo evento de bloques `vs` de un partido (`bias_within` nulo)."""
+    c = Computer.__new__(Computer)
+    c.scope, c.verbose = 'es-cb', 0
+    c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
+    c.names = ['PP', 'PSOE']
+    c.event_params = {'2011-05-22': {'bmaps': {'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}}}
+    c.drange, c.n_last, c.drop_mtypes, c.drop_ctypes = (0, 60), None, None, None
+    event = pd.Timestamp('2011-05-22')
+    index = pd.MultiIndex.from_tuples(
+        [(event, pd.Timestamp('2011-05-12'), 1, 0), (event, pd.Timestamp('2011-05-15'), 2, 0)], names=c.keys
+    )
+    c.series = pd.DataFrame({
+        'pollster': ['A', 'B'], 'mtype': ['public', 'private'], 'ctype': ['phone', 'phone'],
+        'featured': [True, True], 'computed': [True, True], 'days': [10, 7], 'sample_size': [800, 1000],
+        'proc_sample': [800, 1000], 'weight_over': [1., 1.], 'weight_sample': [.8, 1.],
+        'error_avg': [1.5, 2.], 'bias_avg': [1., 1.2], 'error_blocks': [2., 3.], 'bias_blocks': [1.1, 1.4],
+        'error_within': [0., 0.], 'bias_within': [np.nan, np.nan], 'bias': [1.1, 1.4],
+        'PP': [45., 44.], 'PSOE': [40., 42.],
+    }, index=index)
+    c.errors = pd.DataFrame({'PP': [1.5, 0.5], 'PSOE': [-1.5, 0.5]}, index=index)
+    return c
+
+
+def test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll():
+    """Con bloques `vs` de un solo partido `bias_within` es nulo en todos los sondeos: la columna debe seguir ahí
+    (nula), no desaparecer con los partidos sin datos y romper la selección final (fallo real de `publish event`
+    en es-cb 2011-05-22)."""
+    df = single_event_computer().get_polls_metric('error', bmap='vs')
+    assert list(df.index.names) == ['event', 'pollster', 'days'] and len(df) == 2
+    assert 'bias_within' in df.columns and df['bias_within'].isna().all()
+    assert df['error_within'].tolist() == [0., 0.] and {'Derecha', 'Izquierda'} <= set(df.columns)

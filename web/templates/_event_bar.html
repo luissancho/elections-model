@@ -1,0 +1,15 @@
+<div id="event-bar">
+  <div class="event-title">
+    <h2>{{ event_bar.title }}</h2>
+    <p class="muted">{{ event_bar.date|date }}{% if event_bar.days_text %} · {{ event_bar.days_text }}{% endif %}</p>
+  </div>
+  <nav class="event-tabs" aria-label="Secciones del evento">
+    {% for tab in event_bar.tabs %}
+    <a href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
+    {% endfor %}
+  </nav>
+  {% if state.pinned %}
+  <span class="chip event-run">Run del {{ meta.run_at|date }}</span>
+  {% endif %}
+  <p class="mode-text">{{ mode_text }}</p>
+</div>

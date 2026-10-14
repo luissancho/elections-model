@@ -1,0 +1,46 @@
+{
+  "schema": "poll-errors@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "blocks": [
+      "Derecha",
+      "Izquierda"
+    ],
+    "rows": [
+      {
+        "event_date": "2023-07-23",
+        "event": "2023-23J",
+        "pollster": "GAD3",
+        "days": 7,
+        "sample_size": 10000,
+        "weight": 1.214,
+        "error_avg": 1.32,
+        "bias_avg": 0.41,
+        "error_blocks": 3.05,
+        "bias_blocks": 1.52,
+        "bias": 0.74,
+        "Derecha": 2.81,
+        "Izquierda": -0.24
+      },
+      {
+        "event_date": "2023-07-23",
+        "event": "2023-23J",
+        "pollster": "Sigma Dos",
+        "days": 8,
+        "sample_size": null,
+        "weight": 0.553,
+        "error_avg": 1.67,
+        "bias_avg": 0.62,
+        "error_blocks": 4.11,
+        "bias_blocks": 2.05,
+        "bias": 0.98,
+        "Derecha": 3.6,
+        "Izquierda": -0.51
+      }
+    ]
+  }
+}

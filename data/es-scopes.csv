@@ -1,0 +1,19 @@
+scode,name,ine_code,parent,demonym,threshold,threshold_scope,rating_weight,seats
+es,España,0,,Spanish,3,,1.0,350
+es-an,Andalucía,1,es,Andalusian,3,,0.5,109
+es-ar,Aragón,2,es,Aragonese,3,,0.5,67
+es-as,Asturias,3,es,Asturian,3,,0.5,45
+es-ib,Baleares,4,es,Balearic,5,,0.5,59
+es-cn,Canarias,5,es,Canarian,15,4,0.5,70
+es-cb,Cantabria,6,es,Cantabrian,5,,0.5,35
+es-cl,Castilla y León,7,es,Castilian-Leonese,3,,0.5,82
+es-cm,Castilla-La Mancha,8,es,Castilian-Manchegan,3,,0.5,33
+es-ct,Cataluña,9,es,Catalan,3,,0.5,135
+es-vc,Comunidad Valenciana,10,es,Valencian,,5,0.5,99
+es-ex,Extremadura,11,es,Extremaduran,5,5,0.5,65
+es-ga,Galicia,12,es,Galician,5,,0.5,75
+es-md,Madrid,13,es,Madrilenian,5,,0.5,143
+es-mc,Murcia,14,es,Murcian,3,,0.5,45
+es-nc,Navarra,15,es,Navarrese,3,,0.5,50
+es-pv,País Vasco,16,es,Basque,3,,0.5,75
+es-ri,La Rioja,17,es,Riojan,5,,0.5,33

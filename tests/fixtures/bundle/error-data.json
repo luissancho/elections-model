@@ -1,0 +1,32 @@
+{
+  "schema": "error-data@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "date": "2023-07-16",
+        "pollster": "GAD3",
+        "party": "PP",
+        "regional": 0,
+        "weeks": 1,
+        "weight": 1.21,
+        "pct": 35.12,
+        "error": 1.67
+      },
+      {
+        "date": "2023-07-16",
+        "pollster": "GAD3",
+        "party": "BNG",
+        "regional": 1,
+        "weeks": 1,
+        "weight": 1.21,
+        "pct": 0.61,
+        "error": 0.01
+      }
+    ]
+  }
+}

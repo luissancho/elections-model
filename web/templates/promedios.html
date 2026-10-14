@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+{% block title %}Promedios{% endblock %}
+{% block description %}Promedio de las encuestas, voto y escaños previstos y probabilidad de mayoría absoluta de {{ event_bar.title }}.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/promedios.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{% set subtitle = '· ' ~ title_suffix[:1]|lower ~ title_suffix[1:] %}
+{% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
+    <div id="content" class="stack">
+      {% if headline_text %}
+      {{ m.headline(headline_text) }}
+      {% endif %}
+      {{ m.card_start('series', 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección', 'La intención de voto de cada partido a lo largo del ciclo, según el promedio ponderado de los sondeos publicados.', subtitle) }}
+        <div class="series-controls">
+          {% if blocks %}
+          <fieldset id="series-view" class="chart-window" hidden>
+            <legend>Vista</legend>
+            <label><input type="radio" name="view" value="partidos" checked> Partidos</label>
+            <label><input type="radio" name="view" value="bloques"> Bloques</label>
+          </fieldset>
+          {% endif %}
+          <fieldset id="series-window" class="chart-window" hidden>
+            <legend>Ventana</legend>
+            <label><input type="radio" name="window" value="all" checked> Todo el ciclo</label>
+            <label><input type="radio" name="window" value="1a"> 1 año</label>
+            <label><input type="radio" name="window" value="6m"> 6 meses</label>
+            <label><input type="radio" name="window" value="3m"> 3 meses</label>
+          </fieldset>
+          <fieldset id="series-parties" class="pills" hidden>
+            <legend class="sr-only">Partidos</legend>
+            {% for name in initial.series.parties %}
+            <label class="pill" style="--pill-color: {{ catalog[name].color }}; --pill-ink: {{ catalog[name].color|ink }}" title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}"{% if name in main or not main %} checked{% endif %}> {{ name }}</label>
+            {% endfor %}
+          </fieldset>
+          {% if blocks %}
+          <fieldset id="series-blocks" class="pills" hidden>
+            <legend class="sr-only">Bloques</legend>
+            {% for block in blocks %}
+            <label class="pill" style="--pill-color: {{ block_colors[block] }}; --pill-ink: {{ block_colors[block]|ink }}"><input type="checkbox" name="block" value="{{ block }}" checked> {{ block }}</label>
+            {% endfor %}
+          </fieldset>
+          {% endif %}
+        </div>
+        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
+        {% call m.how() %}
+        <p>
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
+          promedio ponderado del modelo y la banda, su intervalo de confianza. En el modo Elección, la línea
+          discontinua proyecta el voto desde la estimación hasta el día de la elección. En la vista Bloques, cada
+          bloque suma sus partidos.
+        </p>
+        <p>
+          La banda dice dónde está el consenso de las encuestadoras, no dónde estará el voto el día de la elección.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('headline', title_suffix, 'El voto y los escaños previstos de cada partido, con su intervalo, y su probabilidad de quedar primero, a partir de miles de elecciones simuladas.') }}
+        <div class="table-wrap" id="headline-table">
+          <table>
+            <caption>Voto e intervalo del 95 %, escaños e intervalo del 95 % y probabilidad de quedar primero.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Partido</th>
+                <th scope="col">Voto</th>
+                <th scope="col">Escaños</th>
+                <th scope="col">Primero</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in headline.parties %}
+              <tr>
+                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
+                <td>{{ row.pct|pct }} <span class="muted">{{ row.lo|range(row.hi) }}</span></td>
+                <td>{{ row.seats|int }} <span class="muted">{{ row.seats_lo|range(row.seats_hi, 0) }}</span></td>
+                <td>{{ row.p_first|prob }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% call m.how() %}
+        <p>
+          El modelo agrega los sondeos publicados en un promedio ponderado y simula miles de elecciones para
+          estimar el voto y los escaños de cada partido con su incertidumbre. Los rangos son el intervalo
+          de las simulaciones; el promedio de sondeos de arriba muestra de dónde salen.
+        </p>
+        <p>
+          Primero es la probabilidad de sacar más escaños que nadie, no la de gobernar.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      <div class="grid" id="charts">
+        {{ m.card_start('vote', 'Voto', 'El porcentaje de voto previsto de cada partido, con su intervalo.', subtitle) }}
+          <div class="chart" id="vote-chart" role="img" aria-label="Voto previsto por partido, con el intervalo del 95 %"></div>
+          {% call m.how() %}
+          <p>
+            Cada barra es el voto central del partido y la línea que la cruza, el intervalo
+            de las simulaciones. Dos partidos cuyos intervalos se solapan pueden acabar en cualquier orden.
+          </p>
+          <p>Es una foto del momento elegido, no una tendencia: la evolución está más abajo.</p>
+          {% endcall %}
+        {{ m.card_end() }}
+        {{ m.card_start('seats', 'Escaños', 'Los escaños previstos de cada partido, con su intervalo, tras repartir el voto simulado en cada circunscripción.', subtitle) }}
+          <div class="chart" id="seats-chart" role="img" aria-label="Escaños previstos por partido, con el intervalo del 95 %"></div>
+          {% call m.how() %}
+          <p>
+            La barra es el resultado central y la línea, el intervalo de las simulaciones. Un partido
+            con el voto muy repartido puede sacar menos escaños de los que su voto haría pensar.
+          </p>
+          <p>El detalle por circunscripción está en la pestaña Escaños.</p>
+          {% endcall %}
+        {{ m.card_end() }}
+      </div>
+      <div class="grid">
+        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños, dibujado como el hemiciclo de la cámara.', subtitle) }}
+          <div class="chart" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
+          {% call m.how() %}
+          <p>
+            Cada punto es un escaño, con el color de su partido. Es el escenario central: en cada simulación el
+            reparto cambia, y los intervalos de la tarjeta de escaños dicen cuánto.
+          </p>
+          {% endcall %}
+        {{ m.card_end() }}
+        {{ m.card_start('majority-card', 'Mayoría absoluta', 'La probabilidad de que cada bloque alcance por sí solo la mayoría absoluta en las elecciones simuladas.', subtitle) }}
+          <div id="majority">
+            {% for row in majority %}
+            <div class="majority-row">
+              <strong>{{ row.block }}</strong>
+              <div class="majority-track"><div class="majority-bar" style="width: {{ row.width }}%; background-color: {{ row.color }}"></div></div>
+              <span class="majority-text">{{ row.p|prob }} de probabilidad de mayoría absoluta</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% call m.how() %}
+          <p>
+            La barra mide la fracción de simulaciones en que los partidos del bloque suman la mayoría absoluta.
+            Los pactos entre bloques no cuentan aquí: la calculadora de coaliciones de la pestaña Escaños los
+            prueba.
+          </p>
+          {% endcall %}
+        {{ m.card_end() }}
+      </div>
+      {{ m.card_start('evolution-card', 'Evolución de las publicaciones', 'El voto de cada partido en cada publicación del modelo, de la primera a la última.', '· ' ~ ('estimación' if state.mode == 'nowcast' else 'pronóstico') ~ ' de cada publicación') }}
+        <div class="chart" id="evolution" role="img" aria-label="Evolución de las publicaciones: estimación de cada publicación"></div>
+        {% call m.how() %}
+        <p>
+          Un punto por cada publicación. Los puntos huecos son estimaciones retrospectivas: el modelo de hoy
+          con los sondeos publicados hasta ese día.
+        </p>
+        <p>No es una serie de sondeos: cada punto es lo que el modelo publicó ese día.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {% if pollsters %}
+      {{ m.card_start('pollster', 'Una encuestadora frente al promedio', 'Los sondeos de una sola encuestadora frente al promedio de todas, para ver si suele quedar por encima o por debajo.') }}
+        <div class="series-controls" id="pollster-controls" hidden>
+          <label>Encuestadora
+            <select id="pollster-select">
+              {% for option in pollsters %}
+              <option value="{{ option.name }}"{% if loop.first %} selected{% endif %}>{{ option.name }} ({{ option.n|int }})</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la encuestadora elegida frente al promedio de sondeos{{ projection_label }}"></div>
+        {% call m.how() %}
+        <p>
+          Los puntos son solo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
+          Sigue la ventana, la vista y los partidos del gráfico del promedio.
+        </p>
+        <p>
+          Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en el
+          <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {% endif %}
+      {{ m.card_start('polls', 'Sondeos del ciclo', 'Los sondeos publicados en este ciclo electoral, del más reciente al más antiguo, tal como se publicaron.') }}
+        <div class="table-wrap" id="polls-table">
+          <table>
+            <caption><span id="polls-count">{% if table_total > table_rows|length %}Últimos {{ table_rows|length }} de {{ table_total|int }} sondeos{% else %}Todos los sondeos del ciclo ({{ table_total|int }}){% endif %}</span> · <a href="{{ csv_href }}">Descargar CSV</a></caption>
+            <thead>
+              <tr>
+                <th scope="col">Fecha</th>
+                <th scope="col">Sondeo</th>
+                <th scope="col">Muestra</th>
+                {% for name in table_parties %}
+                <th scope="col" title="{{ catalog[name].fullname }}">{{ name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in table_rows %}
+              <tr>
+                {% for cell in row %}
+                <td>{{ cell }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" id="polls-more" hidden>Cargar más</button>
+        {% call m.how() %}
+        <p>
+          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, el tamaño de la muestra y el voto de cada partido.
+          Las cifras no llevan ninguna corrección del modelo. El CSV tiene todos los sondeos del ciclo.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.closing('¿Cómo promediamos las encuestas?', method_href('promedio'),
+                   'Qué sondeos entran en el promedio, cuánto pesa cada uno y cómo se corrige la tendencia de cada encuestadora. También, qué mide la banda y qué no.',
+                   [{'href': '/elecciones' ~ scope_query, 'label': 'Cómo acertaron las encuestas en las elecciones anteriores'},
+                    {'href': '/casas' ~ scope_query, 'label': 'Las encuestadoras que sondean este ámbito'}]) }}
+    </div>
+{% endblock %}

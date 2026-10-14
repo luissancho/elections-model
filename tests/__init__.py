@@ -1,0 +1,1 @@
+"""Paquete de tests. El `__init__.py` hace de `tests` un paquete regular, que gana al paquete `tests` que IPython (importado por `mtpy/core/utils/dataviz.py`) añade a `sys.path` desde `IPython/extensions`; sin él, `from tests.fakes import ...` falla con ModuleNotFoundError."""

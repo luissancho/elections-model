@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block title %}Método{% endblock %}
+{% block description %}El método del modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, cómo se califica a las encuestadoras, cuánto acierta, de dónde salen sus datos y dónde están sus límites.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/metodo.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- One sentence per question of the method, for its card in the index. -#}
+{% set teasers = {
+  'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada encuestadora antes de promediar.',
+  'escanos': 'Cómo se pasa del promedio a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
+  'rating': 'Cómo se mide el acierto de cada encuestadora en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
+  'backtest': 'El modelo repetido en elecciones ya celebradas, viendo solo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
+} %}
+    <div id="content" class="stack">
+      {{ m.headline('El modelo tiene dos partes: un promedio de encuestas y una simulación de escaños; estas páginas cuentan cómo funcionan y cuánto aciertan.') }}
+      <section id="intro" class="card">
+        <h2>Qué es el modelo</h2>
+        <p>
+          Este sitio publica un modelo electoral: una estimación, hecha con las encuestas publicadas, de cómo se
+          repartirían el voto y los escaños en las elecciones generales y autonómicas si se votara hoy, y de lo
+          que puede pasar el día de la votación. No hace encuestas propias ni adivina el resultado: resume lo que
+          dicen las encuestas, tiene en cuenta cuánto se han equivocado en el pasado y lo expresa en escaños y
+          probabilidades.
+        </p>
+        <p>
+          Tiene dos partes. La primera es un promedio de encuestas: cada sondeo pesa más o menos según su muestra y
+          el historial de su encuestadora, y a cada encuestadora se le descuenta su sesgo propio. La segunda es una simulación: a
+          partir del promedio, el modelo sortea {% if figures.n_sim %}{{ figures.n_sim|int }} elecciones posibles
+          (en las generales){% else %}muchas elecciones posibles{% endif %}, reparte los escaños de cada una con
+          las reglas de cada circunscripción y cuenta en cuántas ocurre cada cosa. Las páginas de abajo
+          cuentan cómo funciona cada parte, cómo se califica a las encuestadoras y cuánto acierta el modelo.
+        </p>
+        <nav class="section-nav" aria-label="Secciones de esta página">
+          <a href="#preguntas">Las preguntas del método</a>
+          {% for section in sections %}
+          <a href="#{{ section.id }}">{{ section.title }}</a>
+          {% endfor %}
+        </nav>
+      </section>
+      <section id="preguntas" class="stack" aria-labelledby="preguntas-title">
+        <h2 id="preguntas-title">Las preguntas del método</h2>
+        <div class="grid">
+          {% for page in subpages %}
+          <article class="card" id="indice-{{ page.id }}">
+            <h3>{% if page.available %}<a href="{{ page.href }}">{{ page.title }}</a>{% else %}{{ page.title }} <span class="muted">próximamente</span>{% endif %}</h3>
+            <p class="lead">
+              {{ teasers[page.id] }}
+              {% if page.id == 'backtest' and figures.events %}
+              En las generales: {{ figures.events|length }} {{ 'elección' if figures.events|length == 1 else 'elecciones' }}, a {% for horizon in figures.horizons %}{{ horizon|int }}{{ ' y ' if loop.revindex == 2 else (', ' if not loop.last) }}{% endfor %} días de la votación.
+              {% endif %}
+            </p>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% for section in sections %}
+      <section id="{{ section.id }}" class="card">
+        <h2>{{ section.title }}</h2>
+        {% if section.id == 'datos' %}
+        <p>
+          El modelo parte de tres fuentes. Los sondeos son los que recoge Wikipedia, con su licencia
+          CC BY-SA 4.0: las tablas de intención de voto de cada elección general y autonómica. Los
+          resultados oficiales de las generales son los del Ministerio del Interior; los de las
+          autonómicas salen de los artículos de cada elección en Wikipedia. A ello se suma un catálogo
+          propio de cada ámbito con sus partidos, sus bloques (como derecha e izquierda) y sus
+          circunscripciones, con los escaños que reparte cada una.
+        </p>
+        <p>
+          Los datos se curan a mano: cada partido que aparece en un sondeo se asigna a uno del catálogo,
+          se anotan las herencias entre partidos que se fusionan o se refundan y cada encuestadora
+          recibe una calidad previa. No se cargan los sondeos firmados por un propio partido.
+        </p>
+        {% elif section.id == 'publicacion' %}
+        <p>
+          Cada publicación es un run: una ejecución completa del modelo identificada por su fecha y hora y
+          por la versión del código (commit) con que se hizo, que figuran al pie de cada página. Un run
+          publicado no se modifica nunca; el siguiente pasa a ser el más reciente. Los runs retrospectivos
+          son reconstrucciones de días pasados con el modelo de hoy y solo los sondeos publicados hasta
+          ese día, y van marcados como tales: en los gráficos de evolución, con puntos huecos.
+        </p>
+        <p>
+          Todos los datos del sitio están en la API pública, bajo <code>/api/v1</code>, en JSON y, en las
+          tablas, también en CSV con <code>?format=csv</code>; el <a href="/api/v1/manifest">manifiesto de
+          datos</a> enumera lo publicado.
+          {% for key in ['polls', 'results', 'model'] if manifest.attribution.get(key) -%}
+          {{ manifest.attribution[key] }}.
+          {% endfor %}
+        </p>
+        {% elif section.id == 'limitaciones' %}
+        <p>Lo que el modelo no puede hacer, o hace solo en parte:</p>
+        <ul>
+          <li>Pocas elecciones para calibrar: el error histórico, la deriva y el backtest se apoyan en un
+            puñado de elecciones generales con sondeos abundantes, y en las autonómicas hay aún menos por
+            comunidad. Las cifras del backtest son orientativas.</li>
+          <li>Calibración de los intervalos:
+            {% if figures.coverage|length > 1 %}{% set first = figures.coverage[0] %}{% set last = figures.coverage[-1] %}
+            en el <a href="/metodo/backtest">backtest</a> de las generales, el intervalo del 95 % contiene el
+            resultado el {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de la votación y
+            el {{ (last.cov95 * 100)|pct(0) }} a {{ last.horizon|int }} días.
+            {% elif figures.coverage %}{% set first = figures.coverage[0] %}
+            en el <a href="/metodo/backtest">backtest</a> de las generales, el intervalo del 95 % contiene el
+            resultado el {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de la votación.
+            {% else %}
+            el backtest de las generales, que comprueba si los intervalos contienen el resultado tantas veces como
+            anuncian, no está publicado todavía.
+            {% endif %}
+            {% if figures.coverage and figures.coverage[-1].cov95 < 0.95 %}
+            Por debajo del 95 %, los intervalos son demasiado estrechos; parte del error que les falta son
+            desviaciones comunes a todas las encuestadoras, que ninguna corrección por encuestadora elimina.
+            {% endif %}</li>
+          <li>Sucesión de partidos: cuando los partidos se fusionan, se separan o nacen, el modelo suma o
+            hereda sus sondeos y sus resultados según reglas fijadas a mano. Sumar los sondeos de las partes
+            suele sobreestimar a la coalición, la deriva adicional de un partido que se está disolviendo no
+            se modela y un partido sin resultado previo ni partido del que heredarlo no obtiene escaños en
+            la proyección.</li>
+          <li>Veda: la ley electoral prohíbe publicar sondeos nuevos en los cinco días anteriores a la
+            votación (artículo 69.7 de la LOREG), así que el promedio no puede recoger los movimientos de
+            la opinión en esos últimos días. La publicación se congela al empezar la veda, cinco días antes de
+            la votación, con el pronóstico
+            definitivo{% if frozen and freeze.since %}: desde el {{ freeze.since|date }}{% endif %}. Los sondeos
+            que se publican fuera de España durante la veda se cargan en la base, pero no entran en el promedio
+            porque su trabajo de campo acaba dentro de esos cinco días, y la API en vivo no los sirve.</li>
+        </ul>
+        {% endif %}
+      </section>
+      {% endfor %}
+    </div>
+{% endblock %}

@@ -262,3 +262,26 @@ def test_local_estimator_keeps_the_category_of_warnings_raised_in_the_loop(rng, 
         est.predict(np.array([10., 20., 30.]), alpha=0.05)
     assert len([w for w in record if w.category is RuntimeWarning]) == 1
 
+
+
+def test_isj_fixed_point_overflow_is_silent_and_returns_minus_inf():
+    """Lejos de la raíz, `exp(-i²·π²·x)` se desborda a 0 y el punto fijo vale `-inf` (lo que `isj_root` espera para
+    seguir buscando): sin `RuntimeWarning: divide by zero` por el camino."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        value = Kernel.isj_fixed_point(x=50.0, n=10, i_sq=np.arange(1, 8) ** 2, a_sq=np.full(7, 1e-3))
+    assert value == -np.inf
+
+
+def test_isj_bandwidth_of_few_poll_dates_is_finite_and_silent():
+    """Con 12 fechas en un rango pequeño no hay raíz: el ancho cae al suelo `2·pi·espaciado medio` sin avisos."""
+    import warnings
+
+    x = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5], float)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        bw = Kernel.get_bw_isj(x, np.ones(len(x)))
+    assert isinstance(bw, float) and np.isfinite(bw) and bw > 0
+    assert bw == pytest.approx(2 * np.pi * np.mean(np.diff(x)))

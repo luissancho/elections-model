@@ -17,10 +17,11 @@ from ..core.utils.dataviz import plot_kde_1d
 from .forecaster import Forecaster
 from .computer import Computer
 from .data import (
-    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties
+    get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
+    get_districts, get_scope_parent
 )
 from .utils import (
-    build_blocks, group_results, norm_range
+    build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -29,6 +30,7 @@ class Simulator(Core):
     OTHERS = '-'  # Residual category: other candidatures and blank votes (same label as the Forecaster)
     TERMINAL_WEEKS = 1  # The polling error is always the terminal one (last week); the drift is added apart
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
+    MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
 
     def __init__(
         self,
@@ -39,16 +41,20 @@ class Simulator(Core):
         alpha: float = 0.05,
         limit_date: Optional[str] = None,
         as_of: Optional[str] = None,
+        mode: Literal['nowcast', 'forecast'] = 'nowcast',
         n_last: int = 1,
         add_errors: bool = True,
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
-        threshold: Optional[float] = 3.0,
+        threshold: Optional[float] = None,
         house_effects: bool = True,
         industry_bias: bool = False,
         he_params: Optional[dict[str, Any]] = None,
+        dispersion: bool = True,
+        disp_params: Optional[dict[str, Any]] = None,
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
+        min_events: Optional[int] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -72,12 +78,19 @@ class Simulator(Core):
         alpha : float, optional
             Confidence interval.
         limit_date: str, optional
-            The date to be used as cut-off date for the polls and the forecast.
+            The latest day `as_of` may take (see `as_of`): it anchors the reading of the forecast and does not
+            filter the polls, whose window is `drange` (to freeze the polls known on a day, raise the lower
+            bound of `drange` to the days from that day to `event_date`, as the backtest does).
             If not provided, the date will be set to the last day of the campaign period (defined by `drange`).
         as_of: str, optional
             The day on which the forecast is read: the anchor of the nowcast. By default the last day actually
             fitted (`last poll + max_fc`) or `limit_date`, whichever comes first. The horizons of the simulation
             (see `run`) are counted from this day up to `event_date`, treated as the deadline of the legislature.
+        mode : {'nowcast', 'forecast'}, optional
+            Default horizon of the simulated election (see `run`, `horizon`, `vote_forecast`): `'nowcast'`
+            (default) holds it at `as_of`, with the polling error only; `'forecast'` holds it at `event_date`
+            (`horizon='deadline'`), adding the drift of the opinion over the `horizon_max` days left. The point
+            estimate is the same in both modes (the drift has zero mean): only the intervals widen.
         n_last: int, optional
             The number of last polls to include by each pollster.
             If not provided, only each pollster's last poll will be included.
@@ -90,8 +103,11 @@ class Simulator(Core):
             The party source map.
         threshold : float, optional
             Legal threshold, as a percentage of the valid votes of each district, below which a candidature
-            is excluded from the seat allocation (art. 163.1.a LOREG: 3 %). Applied when `split=True`;
-            `None` disables it.
+            is excluded from the seat allocation. Applied when `split=True`. `None` (default) takes the
+            thresholds of the scope (`data/es-scopes.csv`: 3 % in `es`, art. 163.1.a LOREG; some communities
+            have an alternative one over the whole scope, `threshold_scope`), with the override of the event
+            in `data/params.json`. A number fixes the district threshold and drops the alternative; 0
+            disables it.
         house_effects : bool, optional
             Subtract the house effect of each pollster (its systematic deviation on each series, estimated in
             the cycle with a prior from its past elections) from its polls before averaging. See
@@ -102,6 +118,13 @@ class Simulator(Core):
             inconsistent between elections for most parties.
         he_params : dict, optional
             Parameters of the house effects estimation, see `Forecaster.set_he_params`.
+        dispersion : bool, optional
+            Weigh the polls of each pollster by its effective sample, the one that would produce the
+            dispersion of its figures around the average (M12). See `Forecaster.fit_dispersion`.
+        disp_params : dict, optional
+            Parameters of the effective sample, see `Forecaster.set_disp_params`. By default the weight of the
+            pollsters less dispersed than their samples allow is also reduced (M13); `{'herding': False}` keeps
+            only the penalty of the over-dispersed ones (M12).
         composition : float or 'auto', optional
             Joint noise of the national parties: the ratio between the variance of the sum of their errors and
             the sum of their variances (`Computer.composition_ratio`). `'auto'` estimates it from the past
@@ -113,6 +136,12 @@ class Simulator(Core):
             elections: a multiplicative shock per party and autonomous community and a smaller one per
             province, keeping the national share of each party (M9, `apply_swing_noise`). The national draw
             is identical with or without them (own random generator, `seed + 1`).
+        min_events : int, optional
+            Featured elections of the scope held before the event needed to fit the estimators (polling
+            error, drift, seats, composition) on the scope itself; with fewer, they are fitted on its parent
+            scope (`es`). `None` (default) always uses the parent: the own estimators of the regional scopes
+            did not improve the backtest (M11 validation). A scope without parent always uses its own
+            elections. See `estimator_scope`.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -121,15 +150,23 @@ class Simulator(Core):
             Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
             (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
         """
+        if mode not in self.MODES:
+            raise ValueError('`mode` must be one of {}'.format(list(self.MODES)))
+
         super().__init__()
 
         self.scope = scope
         self.event_date = event_date
+        self.mode = mode
+        self.parent = get_scope_parent(scope)  # Parent scope (`es` for the autonomous communities), if any
         self.house_effects = bool(house_effects)
         self.industry_bias = bool(industry_bias)
         self.he_params = he_params
+        self.dispersion = bool(dispersion)
+        self.disp_params = disp_params
         self.composition = composition
         self.regional_noise = bool(regional_noise)
+        self.min_events = None if min_events is None else int(min_events)
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -139,7 +176,10 @@ class Simulator(Core):
         self.add_errors = add_errors
         self.reg_params = reg_params
         self.smap = smap
-        self.threshold = threshold
+        if threshold is None:
+            self.threshold, self.threshold_scope = get_thresholds(self.scope, self.event_date)
+        else:
+            self.threshold, self.threshold_scope = float(threshold), None
 
         self.seed = seed  # Base random seed
         self.verbose = verbose  # Print progress
@@ -184,6 +224,8 @@ class Simulator(Core):
             alpha=self.alpha,
             house_effects=self.house_effects,
             he_params=self.he_params,
+            dispersion=self.dispersion,
+            disp_params=self.disp_params,
             verbose=self.verbose,
             path=self.path
         ).build_series()
@@ -191,26 +233,21 @@ class Simulator(Core):
         # Previous election (base of the provincial projection): first non-poll row of the Forecaster series
         self.prev_date = self.model.nfc_series.index[0].strftime('%Y-%m-%d')
 
-        event_dates = get_event_dates(
-            scope=self.scope,
-            date_from='1980-01-01',
-            date_to=self.event_date,
-            skip=1
-        )
         # Durations (days) of the past legislatures: the empirical prior of the election date (see `horizon_candidates`)
         all_dates = pd.to_datetime(get_event_dates(scope=self.scope, date_to=self.event_date, skip=1))
         self.durations = [int(d) for d in np.diff(all_dates.values).astype('timedelta64[D]').astype(int)]
 
-        if len(event_dates) > 0:
-            self.computer = Computer(
-                scope=self.scope,
-                event_dates=event_dates,
-                drop_mtypes=self.drop_mtypes,
-                verbose=self.verbose,
-                path=self.path
-            ).build_series()
+        # The estimators (seats, polling error, drift, composition) are fitted on the past elections of the
+        # parent scope, or on those of the scope itself with `min_events` (see `estimator_scope`)
+        self.n_featured = len([d for d in get_event_dates(scope=self.scope, featured=True) if d < self.event_date])
+        self.est_scope = self.estimator_scope(self.scope, self.parent, self.n_featured, min_events=self.min_events)
+        self.computer = self._past_computer(self.est_scope)
+
+        # Past polls of the scope itself: the age of its parties is counted from them (see `party_ages`)
+        if self.est_scope == self.scope:
+            self.computer_own = self.computer
         else:
-            self.computer = None
+            self.computer_own = self._past_computer(self.scope, min_polls=1)
 
         self.parties = get_parties()
         self.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']
@@ -248,12 +285,20 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load swing noise estimator...')
 
-        # Regional and provincial deviations from the proportional swing (M9), see `Computer.get_swing_noise`
-        if self.regional_noise and self.computer is not None:
-            self.v2swing = self.computer.get_swing_noise()
+        # Regional and provincial deviations from the proportional swing (M9), see `Computer.get_swing_noise`.
+        # They are always estimated on the national elections: within an autonomous community only the
+        # deviation per district applies (see `_add_swing_noise`), with the provincial curve of `es`
+        if not self.regional_noise:
+            swing_computer = None
+        elif self.parent is None or self.est_scope == self.parent:
+            swing_computer = self.computer
         else:
-            self.v2swing = None
-        self.region_groups = self.app.data.read_csv('es-provinces.csv').set_index('code')['reg_code'].to_dict()
+            swing_computer = self._past_computer(self.parent)
+        self.v2swing = swing_computer.get_swing_noise() if swing_computer is not None else None
+
+        # Districts of the scope: autonomous community of each one (the groups of the regional shocks)
+        self.districts = get_districts(self.scope).set_index('region_id')
+        self.region_groups = self.districts['reg_code'].to_dict()
 
         # Composition of the national errors: a common negative correlation between the national parties,
         # set by the ratio between the variance of their sum and the sum of their variances (M7)
@@ -286,7 +331,7 @@ class Simulator(Core):
             'random': False,
             'names': None,
             'regions': None,
-            'horizon': None,
+            'horizon': self.MODES[self.mode],
             'date_prior': 'historical'
         }
 
@@ -357,6 +402,47 @@ class Simulator(Core):
 
         return self
 
+    @staticmethod
+    def estimator_scope(
+        scope: str,
+        parent: Optional[str],
+        n_featured: int,
+        min_events: Optional[int] = None
+    ) -> str:
+        """
+        Scope whose past elections fit the estimators of the simulator: the scope itself when it has no parent
+        or when `min_events` is given and it has at least that many featured elections before the event; its
+        parent scope otherwise (always, with `min_events=None`).
+        """
+        if parent is None or (min_events is not None and n_featured >= min_events):
+            return scope
+
+        return parent
+
+    def _past_computer(
+        self,
+        scope: str,
+        min_polls: int = 0
+    ) -> Optional[Computer]:
+        """
+        Computer of the elections of `scope` held strictly before the event (from 1980), or `None` when there
+        is none. With `min_polls`, only the elections with at least that many polls.
+        """
+        dates = [
+            d for d in get_event_dates(scope=scope, date_from='1980-01-01', min_polls=min_polls)
+            if d < self.event_date
+        ]
+        if len(dates) == 0:
+            return None
+
+        return Computer(
+            scope=scope,
+            event_dates=dates,
+            drop_mtypes=self.drop_mtypes,
+            verbose=self.verbose,
+            path=self.path
+        ).build_series()
+
     def get_reg_totals(self) -> pd.DataFrame:
         """
         Get each region's total votes and seats available for the event.
@@ -370,7 +456,10 @@ class Simulator(Core):
         # Regions are indexed by `region_id` (the official province code; 0 = national total), which is
         # what the `smap` rules refer to. The names are kept aside for display purposes.
         df['region_id'] = df['region_id'].astype(int)
-        self.region_names = dict(zip(df['region_id'], unset_categorical(df['region']).fillna(self.scope)))
+        # Names of the catalogue of districts; those stored with the event, or the scope for the total, otherwise
+        stored = dict(zip(df['region_id'], unset_categorical(df['region']).fillna(self.scope)))
+        names = self.districts['name'].to_dict()
+        self.region_names = {r: names.get(r, stored[r]) if r != self.default_region else stored[r] for r in stored}
 
         return df.set_index('region_id')[['votes', 'seats']]
     
@@ -401,6 +490,12 @@ class Simulator(Core):
                     if name not in names:
                         names.append(name)
 
+        # Simulated parties without previous results nor a rule (the rules of `params.json` replace the derived
+        # ones, which list every new party): kept as empty columns, they get no seats (see `build_umat`)
+        for n in self.names:
+            if n not in names:
+                names.append(n)
+
         df = df.sort_values(['region_id', 'party_id']).groupby(['region_id', 'party'], sort=False, observed=True, dropna=False)[[
             'votes', 'pct', 'seats'
         ]].sum()
@@ -412,6 +507,14 @@ class Simulator(Core):
         for c in cols:
             if c not in df.columns:
                 df.loc[:, c] = .0
+
+        # A district that did not exist in the previous election (Murcia became a single district in 2019; the
+        # Canarian regional list dates from 2019) takes the results of the whole scope as its base
+        missing = [r for r in ix if r not in df.index]
+        if len(missing) > 0:
+            df = df.reindex(df.index.tolist() + missing)
+            for region in missing:
+                df.loc[region] = df.loc[self.default_region].to_numpy()
 
         df = df.where(df > 0, np.nan).loc[ix, cols]
 
@@ -431,7 +534,12 @@ class Simulator(Core):
         """
         df = get_event_data(self.scope, self.prev_date)
         df['region_id'] = df['region_id'].astype(int)
-        df = df.set_index('region_id').reindex(self.regions)
+        df = df.set_index('region_id')
+        # Districts that did not exist then take the totals of the whole scope (see `get_prev_results`)
+        missing = [r for r in self.regions if r not in df.index]
+        df = df.reindex(self.regions)
+        for region in missing:
+            df.loc[region] = df.loc[self.default_region].to_numpy()
 
         # Stored as int32 in the database: cast before any arithmetic to prevent overflows
         votes = df['votes'].astype('float64')
@@ -461,9 +569,24 @@ class Simulator(Core):
 
     def fit_forecast(self, **kwargs) -> pd.DataFrame:
         self.model.fit_forecast(**kwargs)
-        self.forecast = self.build_forecast()
+        self.forecast = self.require_forecast(self.build_forecast(), self.scope, self.event_date)
 
         return self.forecast
+
+    @staticmethod
+    def require_forecast(
+        forecast: pd.DataFrame,
+        scope: str,
+        event_date: str
+    ) -> pd.DataFrame:
+        """
+        Forecast of the event, or a `ValueError` when the average of no party could be fitted (a handful of
+        polls scattered over the legislature): the simulation would otherwise give every party zero seats.
+        """
+        if forecast.drop(index=Simulator.OTHERS, errors='ignore')['mean'].notnull().sum() == 0:
+            raise ValueError('Not enough polls to fit the average of {} {}'.format(scope, event_date))
+
+        return forecast
     
     def save_forecast(self, prefix: str) -> Self:
         self.model.save_forecast(prefix)
@@ -499,7 +622,7 @@ class Simulator(Core):
         if self._as_of is not None and as_of < pd.Timestamp(self.model.date_last):
             warnings.warn(
                 '`as_of` {} precedes the last poll: the kernel average is two-sided, so the value read there '
-                'uses later polls and is not a freeze (use `limit_date` for that)'.format(as_of.date())
+                'uses later polls and is not a freeze (cut the polls with `drange` for that)'.format(as_of.date())
             )
 
         self.as_of = as_of
@@ -513,7 +636,7 @@ class Simulator(Core):
         inherit the polls of the predecessors its block absorbs). A block of `bmap` takes the age of its
         head party.
         """
-        past = self.computer.party_first_polls() if self.computer is not None else pd.Series(dtype='datetime64[ns]')
+        past = self.computer_own.party_first_polls() if self.computer_own is not None else pd.Series(dtype='datetime64[ns]')
 
         current = self.model.party_first_polls
         if current is None:
@@ -571,6 +694,12 @@ class Simulator(Core):
         fc.loc[self.OTHERS] = (max(0., 100. - fc['mean'].sum()), np.nan, np.nan)
 
         regional = self.parties.set_index('name').loc[names].regional.astype(int).to_dict()
+        if self.parent is not None:
+            # Within an autonomous community the curated flag does not apply: a party is "regional" when it ran
+            # only in part of the districts in the previous election (see `partial_parties`)
+            prev = self.prev_results['pct'].drop(index=[self.default_region, REGIONAL_LIST_ID], errors='ignore')
+            partial = partial_parties(prev, self.prev_totals['votes'])
+            regional = {n: int(n in partial) for n in names}
         regional[self.OTHERS] = 0
         fc['regional'] = fc.index.map(regional).astype(int)
 
@@ -832,12 +961,30 @@ class Simulator(Core):
         pd.DataFrame
             `party`, `horizon`, `mean`, `sd`, `lo`, `hi` (long) or the wide table.
         """
-        if self.forecast is None or self.horizon_max is None:
-            raise ValueError('No forecast available: call `fit_forecast()` first.')
+        self._require_forecast()
 
-        alpha = self.alpha if alpha is None else alpha
         if horizons is None:
             horizons = sorted(set(self.DEFAULT_FAN) | {self.horizon_max})
+
+        df = self._fan(horizons, alpha=alpha).drop(columns='dof')
+
+        if wide:
+            order = [n for n in self.params['names'] if n in set(df['party'])]
+
+            return df.pivot(index='party', columns='horizon', values=['lo', 'hi']).loc[order]
+
+        return df
+
+    def _fan(
+        self,
+        horizons: list[int] | tuple[int, ...] | range,
+        alpha: Optional[float] = None
+    ) -> pd.DataFrame:
+        """
+        Long fan of `fan` for the given horizons (clipped to `[0, horizon_max]`), with the degrees of freedom
+        of the Student t of each party (`dof`, the same as in `build_frame`).
+        """
+        alpha = self.alpha if alpha is None else alpha
         horizons = [int(h) for h in horizons if 0 <= int(h) <= self.horizon_max]
 
         names = self.params['names']
@@ -862,17 +1009,130 @@ class Simulator(Core):
                 sd = float(np.sqrt(base + drift_var))
                 rows.append({
                     'party': n, 'horizon': h, 'mean': mean, 'sd': sd,
-                    'lo': max(mean - q * sd, 0.), 'hi': mean + q * sd
+                    'lo': max(mean - q * sd, 0.), 'hi': mean + q * sd, 'dof': dof
                 })
 
-        df = pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'sd', 'lo', 'hi'])
+        return pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'sd', 'lo', 'hi', 'dof'])
 
-        if wide:
+    def _require_forecast(self) -> None:
+        if self.forecast is None or self.horizon_max is None:
+            raise ValueError('No forecast available: call `fit_forecast()` first.')
+
+    @property
+    def horizon(self) -> int:
+        """
+        Days from `as_of` to the election simulated by default (see `mode`): 0 in a nowcast, `horizon_max`
+        (the days left to `event_date`) in a forecast.
+        """
+        self._require_forecast()
+
+        return 0 if self.MODES[self.mode] is None else int(self.horizon_max)
+
+    @property
+    def when(self) -> pd.Timestamp:
+        """
+        Day of the election simulated by default (see `mode`): `as_of` in a nowcast, `event_date` in a forecast.
+        """
+        horizon = self.horizon
+
+        return self.as_of + pd.Timedelta(days=horizon)
+
+    def vote_forecast(self, alpha: Optional[float] = None) -> pd.DataFrame:
+        """
+        Forecast of the national vote share of each party for the election of the `mode`: the point estimate
+        (`pct`, the house-corrected poll average read at `as_of`) and its interval at `horizon` days, with the
+        polling error and, in a forecast, the drift of the opinion (the analytic counterpart of the draws of
+        `run`, see `fan`).
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Confidence level of the interval; the one given to the constructor by default.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per party with a positive average (in the order of `names`): `pct`, `sd`, `lo`, `hi`,
+            `horizon`.
+        """
+        self._require_forecast()
+
+        df = self._fan([self.horizon], alpha=alpha).drop(columns='dof')
+
+        return df.rename(columns={'mean': 'pct'}).set_index('party')[['pct', 'sd', 'lo', 'hi', 'horizon']]
+
+    def projection(
+        self,
+        names: Optional[str | dict[str, Any] | list | tuple] = None,
+        alpha: Optional[float] = None
+    ) -> pd.DataFrame:
+        """
+        Daily band of the vote share of each party from `as_of` to the election of the `mode` (a single row,
+        `as_of`, in a nowcast): the point estimate is flat (the drift has zero mean) and the interval widens
+        with the days, as in `fan`.
+
+        Parameters
+        ----------
+        names : str, dict or list, optional
+            Parties (a list) or blocks of parties (a `bmap` name or a dict); every simulated party if `None`.
+            A block takes the sum of the means and the standard deviation of the sum of the errors of its
+            parties (see `block_variance`: independent draws, or the common correlation of the national parties
+            with `composition`), with the Student t of its member with the fewest degrees of freedom.
+        alpha : float, optional
+            Confidence level of the band; the one given to the constructor by default.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by date, with columns `(stat, series)` for `stat` in `mean`, `lo`, `hi`.
+        """
+        self._require_forecast()
+
+        alpha = self.alpha if alpha is None else alpha
+        df = self._fan(range(self.horizon + 1), alpha=alpha)
+
+        if isinstance(names, str):
+            names = self.model.bmaps[names]
+
+        if isinstance(names, dict):
+            groups = {k: [v] if isinstance(v, str) else list(v) for k, v in names.items()}
+            national = df['party'].map(lambda n: int(self.forecast.loc[n, 'regional']) == 0)
+            # Common correlation of the national parties at each horizon, as in the draws of `build_frame` (M7)
+            rho = df[national].groupby('horizon')['sd'].apply(
+                lambda x: self.equicorrelation(x.to_numpy(dtype=float), self.composition_ratio)[0]
+            )
+            parts = []
+            for block, members in groups.items():
+                # A block without simulated members is left out: assigning `national` to an empty frame would
+                # reindex it to rows of NaN that group to nothing
+                mask = df['party'].isin(members)
+                if not mask.any():
+                    continue
+                d = df[mask].assign(national=national[mask])
+                g = d.groupby('horizon').apply(lambda x: pd.Series({
+                    'mean': float(x['mean'].sum()),
+                    'var': self.block_variance(
+                        x['sd'].to_numpy(dtype=float), x['national'].to_numpy(dtype=bool), float(rho.get(x.name, 0.))
+                    ),
+                    'dof': float(x['dof'].min())
+                }), include_groups=False)
+                q = student_t.ppf(1 - alpha / 2, g['dof'].to_numpy(dtype=float))
+                sd = np.sqrt(g['var'].to_numpy(dtype=float))
+                parts.append(pd.DataFrame({
+                    'party': block, 'horizon': g.index, 'mean': g['mean'].to_numpy(),
+                    'lo': np.clip(g['mean'].to_numpy() - q * sd, 0., None), 'hi': g['mean'].to_numpy() + q * sd
+                }))
+            df = pd.concat(parts, ignore_index=True) if len(parts) > 0 else df.iloc[0:0]
+            order = [b for b in groups if b in set(df['party'])]
+        else:
+            names = self.params['names'] if names is None else list(names)
+            df = df[df['party'].isin(names)]
             order = [n for n in names if n in set(df['party'])]
 
-            return df.pivot(index='party', columns='horizon', values=['lo', 'hi']).loc[order]
+        df = df.assign(date=self.as_of + pd.to_timedelta(df['horizon'], unit='D'))
+        out = df.pivot(index='date', columns='party', values=['mean', 'lo', 'hi'])
 
-        return df
+        return out.reindex(columns=pd.MultiIndex.from_product([['mean', 'lo', 'hi'], order]))
 
     def _require_dist(self) -> pd.DataFrame:
         if self.results is None:
@@ -898,6 +1158,37 @@ class Simulator(Core):
             **kwargs
         )
 
+    @staticmethod
+    def block_variance(
+        sd: np.ndarray,
+        national: np.ndarray,
+        rho: float = 0.
+    ) -> float:
+        """
+        Variance of the sum of the errors of the parties of a block: the sum of their variances plus the
+        covariance `rho · sd_i · sd_j` of every pair of national parties (the common correlation of the joint
+        draws, M7; 0 with independent draws). The regional parties are drawn independently.
+        """
+        sd = np.asarray(sd, dtype=float)
+        nat = sd[np.asarray(national, dtype=bool)]
+
+        return float(np.square(sd).sum() + rho * (np.square(nat.sum()) - np.square(nat).sum()))
+
+    def plot_forecast_series(
+        self,
+        names: Optional[list[str] | dict[str, Any] | str] = None,
+        projection: bool = True,
+        **kwargs
+    ) -> None:
+        """
+        Plot the poll average (see `Forecaster.plot_forecast_series`) with the band of `projection` up to the
+        election of the `mode`, for the same parties or blocks.
+        """
+        if projection:
+            kwargs['projection'] = self.projection(names)
+
+        self.model.plot_forecast_series(names=names, **kwargs)
+
     def plot_dist_kde(
         self,
         regional: bool = False,
@@ -909,6 +1200,8 @@ class Simulator(Core):
             n for n in key.sort_values(['seats', 'mean'], ascending=False, kind='stable').index
             if self.forecast.loc[n].regional == int(regional)
         ]
+        if len(names) == 0:
+            return  # No party of that kind in this scope: nothing to plot
 
         # The interval drawn is the empirical one, the same as in `summary()`
         kwargs.setdefault('ci_method', 'quantile')
@@ -941,11 +1234,18 @@ class Simulator(Core):
         d_votes: dict[str, float],
         n_seats: int,
         valid_votes: Optional[float] = None,
-        threshold: Optional[float] = None
+        threshold: Optional[float] = None,
+        scope_shares: Optional[dict[str, float]] = None,
+        threshold_scope: Optional[float] = None
     ) -> dict[str, int]:
         """
         D'Hondt allocation with the legal threshold (art. 163.1.a LOREG): candidatures with less than
         `threshold` percent of the valid votes of the district are excluded from the allocation.
+
+        Some regional laws add or substitute a threshold over the whole scope (Canary Islands: 15 % in the
+        island or 4 % in the archipelago; Valencian Community: only 5 % in the community). A candidature
+        takes part when it passes the threshold of the district **or** that of the scope; a threshold that is
+        `None` cannot be passed, and with both `None` there is no threshold.
 
         Parameters
         ----------
@@ -956,7 +1256,11 @@ class Simulator(Core):
         valid_votes : float, optional
             Base of the threshold (votes to candidatures plus blank votes). The sum of `d_votes` if `None`.
         threshold : float, optional
-            Percentage of the valid votes needed to take part in the allocation. `None` disables it.
+            Percentage of the valid votes of the district needed to take part in the allocation.
+        scope_shares : dict, optional
+            Share of each candidature in the whole scope (percentage), for `threshold_scope`.
+        threshold_scope : float, optional
+            Alternative threshold: percentage of the valid votes of the whole scope.
 
         Returns
         -------
@@ -965,10 +1269,17 @@ class Simulator(Core):
             allocated.
         """
         base = valid_votes if valid_votes else sum(d_votes.values())
-        eligible = {
-            n: v for n, v in d_votes.items()
-            if v > 0 and (threshold is None or base <= 0 or 100. * v / base >= threshold)
-        }
+        scope_shares = scope_shares if scope_shares is not None else {}
+
+        def qualifies(name, votes):
+            if (threshold is None and threshold_scope is None) or base <= 0:
+                return True
+            if threshold is not None and 100. * votes / base >= threshold:
+                return True
+
+            return threshold_scope is not None and scope_shares.get(name, 0.) >= threshold_scope
+
+        eligible = {n: v for n, v in d_votes.items() if v > 0 and qualifies(n, v)}
 
         seats = {n: 0 for n in d_votes.keys()}
         if n_seats > 0 and len(eligible) > 0:
@@ -1631,7 +1942,11 @@ class Simulator(Core):
         with relative standard deviations from `v2swing` at the predicted level of each party in the community
         and in the province, and apply them with `apply_swing_noise` (national shares preserved).
         """
-        provinces = [r for r in vpred_pcts.index if r != self.default_region]
+        # The Canarian regional list is voted by the whole scope: it is not one more district to perturb, and
+        # with the valid votes of the whole archipelago it would dominate the mean the shocks must preserve
+        provinces = [r for r in vpred_pcts.index if r not in (self.default_region, REGIONAL_LIST_ID)]
+        if len(provinces) < 2:
+            return vpred_pcts  # A single district is the whole scope: nothing to redistribute
         # Work on the provincial shares as the allocation will see them (each province renormalised to 100
         # with the residual): the shocks must keep the mean structure of the deterministic projection, whose
         # raw swing rows do not sum to 100 (e.g. below it in the Basque provinces)
@@ -1644,12 +1959,17 @@ class Simulator(Core):
         target = prov[names].fillna(0.).mul(w, axis=0).sum() / w.sum()
 
         level_prov = prov[names].fillna(0.)
-        level_reg = level_prov.mul(w, axis=0).groupby(groups.to_numpy()).sum().div(w.groupby(groups.to_numpy()).sum(), axis=0)
+        if groups.nunique(dropna=False) > 1:
+            level_reg = level_prov.mul(w, axis=0).groupby(groups.to_numpy()).sum().div(w.groupby(groups.to_numpy()).sum(), axis=0)
 
-        eps = pd.DataFrame(
-            self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy())),
-            index=level_reg.index, columns=names
-        )
+            eps = pd.DataFrame(
+                self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_region(level_reg.to_numpy())),
+                index=level_reg.index, columns=names
+            )
+        else:
+            # Every district belongs to the same community (a regional scope): no shock per community, which
+            # would be a shift of the whole scope
+            eps = pd.DataFrame()
         eta = pd.DataFrame(
             self.lognormal_shocks(self.rng_swing, self.v2swing.sigma_province(level_prov.to_numpy())),
             index=prov.index, columns=names
@@ -1712,6 +2032,9 @@ class Simulator(Core):
             if umat is None:
                 umat = self.build_umat(frame)
 
+            # Shares of the whole scope in this simulation, for the alternative threshold of some communities
+            scope_shares = frame.loc[self.params['names'], 'vpred'].fillna(0).to_dict()
+
             for region in self.params['regions']:
                 if region == self.default_region:
                     continue
@@ -1722,13 +2045,17 @@ class Simulator(Core):
                 d_votes = (shares[self.params['names']] * valid / 100).round().to_dict()
                 n_seats = int(self.reg_totals.loc[region]['seats'])
 
-                result.loc[region] = self.alloc_seats(d_votes, n_seats, valid_votes=valid, threshold=self.threshold)
+                result.loc[region] = self.alloc_seats(
+                    d_votes, n_seats, valid_votes=valid, threshold=self.threshold,
+                    scope_shares=scope_shares, threshold_scope=self.threshold_scope
+                )
 
             result.loc[self.default_region] = result.loc[result.index != self.default_region].sum(axis=0)
         else:
             p = frame.loc[self.params['names'], ['vpred', 'regional']].fillna(0).values
 
-            result.loc[self.default_region] = self.v2seats.predict(p).clip(0).values
+            # The estimator predicts the share of the seats of the chamber (see `Computer.get_seats_estimator`)
+            result.loc[self.default_region] = self.v2seats.predict(p).clip(0).values * self.n_seats
 
         return result
 
@@ -1742,6 +2069,8 @@ class Simulator(Core):
         an integer (days from `as_of`, adding the drift of the opinion), `'deadline'` (the legislature runs
         to its end) or `'random'` (each simulation draws its horizon from `date_prior`: `'historical'`,
         `'uniform'` or an array of days, see `horizon_candidates`). The horizons are stored in `horizons`.
+        Without `horizon`, the one of the `mode` given to the constructor (`None` in a nowcast,
+        `'deadline'` in a forecast).
         """
         self.set_params(reset=reset, **kwargs)
 

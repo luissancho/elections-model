@@ -51,6 +51,10 @@ def build_blocks(
         elif p is None:
             p = {'parties': [parties[-1]] + [i for i in names[:-1] if i not in pinc]}
 
+        # A block without parties (e.g. no regionalist party in the scope) is not a block
+        if len(p['parties']) == 0:
+            continue
+
         if 'color' not in p:
             default_color = get_color(random.choice(palette))
             p['color'] = parties.get(p['parties'][0], default_color) if isinstance(parties, dict) else default_color
@@ -187,3 +191,74 @@ def normal_update(
     post_err = np.where(none, np.inf, post_err)
 
     return post_mean, post_err
+
+
+REGIONAL_LIST_ID = 100  # `region_id` of a list voted by the whole scope (Canary Islands): not a part of it
+
+
+def partial_parties(
+    pct: pd.DataFrame,
+    votes: pd.Series,
+    max_share: float = 0.5
+) -> list[str]:
+    """
+    Parties that run only in part of the territory of a scope: those whose districts hold less than
+    `max_share` of the valid votes of the scope. They are the "regional" parties of the estimators within an
+    autonomous community (UPL, Por Ávila, the parties of a single island).
+
+    Parameters
+    ----------
+    pct : pd.DataFrame
+        Shares of one election by district (index) and party (columns); NaN or 0 where the party did not run.
+    votes : pd.Series
+        Valid votes of each district.
+    max_share : float, optional
+        Share of the votes of the scope below which the party counts as partial.
+
+    Returns
+    -------
+    list of str
+        Names of the partial parties, in the order of the columns. A party without any district is not one.
+    """
+    w = votes.reindex(pct.index).astype(float)
+    total = w.sum()
+    if pct.shape[0] < 2 or not total > 0:
+        return []
+
+    present = pct.fillna(0.).gt(0)
+    covered = present.mul(w, axis=0).sum() / total
+
+    return [n for n in pct.columns if present[n].any() and covered[n] < max_share]
+
+
+def party_roots(parties: pd.DataFrame) -> pd.Series:
+    """
+    Root of each party following `parent_id`: a regional brand (PSC, PSE-EE, Más Madrid) resolves to its
+    national party, a successor (PDeCAT, JxCat) to the lineage it comes from (CiU). The house effects measured
+    on any party of the lineage inform the prior of all of them.
+
+    Parameters
+    ----------
+    parties : pd.DataFrame
+        Parties table with `id`, `name` and `parent_id`.
+
+    Returns
+    -------
+    pd.Series
+        Root name indexed by party name (the party itself when it has no parent, or on a cycle).
+    """
+    by_id = parties.set_index('id')
+    names = by_id['name'].to_dict()
+    parents = by_id['parent_id'].to_dict()
+    roots = {}
+    for pid, name in names.items():
+        current, seen = pid, {pid}
+        while True:
+            parent = parents.get(current)
+            if parent is None or pd.isnull(parent) or int(parent) not in names or int(parent) in seen:
+                break
+            current = int(parent)
+            seen.add(current)
+        roots[name] = names[current]
+
+    return pd.Series(roots, name='root')

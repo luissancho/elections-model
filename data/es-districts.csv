@@ -1,0 +1,119 @@
+scope,region_id,name,slug,ine_code,reg_code,population,seats,aliases
+es,1,Álava,alava,1,16,331549,4,Araba|Araba-Álava
+es,2,Albacete,albacete,2,8,388167,4,
+es,3,Alicante,alicante,3,10,1858683,12,Alacant
+es,4,Almería,almeria,4,1,716820,6,
+es,5,Ávila,avila,5,7,157640,3,
+es,6,Badajoz,badajoz,6,11,673559,5,
+es,7,Baleares,baleares,7,4,1149460,8,Balearic Islands|Illes Balears
+es,8,Barcelona,barcelona,8,9,5664579,32,
+es,9,Burgos,burgos,9,7,356958,4,
+es,10,Cáceres,caceres,10,11,394151,4,
+es,11,Cádiz,cadiz,11,1,1240155,9,Cadiz
+es,12,Castellón,castellon,12,10,579962,5,Castelló
+es,13,Ciudad Real,ciudad-real,13,8,495761,5,
+es,14,Córdoba,cordoba,14,1,782979,6,Cordova
+es,15,La Coruña,la-coruna,15,12,1119596,8,A Coruña
+es,16,Cuenca,cuenca,16,8,196329,3,
+es,17,Gerona,gerona,17,9,771044,6,Girona
+es,18,Granada,granada,18,1,914678,7,
+es,19,Guadalajara,guadalajara,19,8,257762,3,
+es,20,Guipúzcoa,guipuzcoa,20,16,723576,6,Gipuzkoa
+es,21,Huelva,huelva,21,1,521870,5,
+es,22,Huesca,huesca,22,2,220461,3,
+es,23,Jaén,jaen,23,1,633564,5,
+es,24,León,leon,24,7,460001,4,
+es,25,Lérida,lerida,25,9,434930,4,Lleida
+es,26,La Rioja,la-rioja,26,17,316798,4,
+es,27,Lugo,lugo,27,12,329587,4,
+es,28,Madrid,madrid,28,13,6663394,37,
+es,29,Málaga,malaga,29,1,1661785,11,
+es,30,Murcia,murcia,30,14,1493898,10,
+es,31,Navarra,navarra,31,15,654214,5,Navarre
+es,32,Orense,orense,32,12,307651,4,Ourense
+es,33,Asturias,asturias,33,3,1022800,7,
+es,34,Palencia,palencia,34,7,160980,3,
+es,35,Las Palmas,las-palmas,35,5,1120406,8,
+es,36,Pontevedra,pontevedra,36,12,942665,7,
+es,37,Salamanca,salamanca,37,7,330119,4,
+es,38,S. C. Tenerife,s-c-tenerife,38,5,1032983,7,
+es,39,Cantabria,cantabria,39,6,581078,5,
+es,40,Segovia,segovia,40,7,153129,3,
+es,41,Sevilla,sevilla,41,1,1942389,12,Seville
+es,42,Soria,soria,42,7,88636,2,
+es,43,Tarragona,tarragona,43,9,804664,6,
+es,44,Teruel,teruel,44,2,134137,3,
+es,45,Toledo,toledo,45,8,694844,6,
+es,46,Valencia,valencia,46,10,2565124,16,València
+es,47,Valladolid,valladolid,47,7,519546,5,
+es,48,Vizcaya,vizcaya,48,16,1152651,8,Biscay|Bizkaia
+es,49,Zamora,zamora,49,7,172539,3,
+es,50,Zaragoza,zaragoza,50,2,964693,7,Saragossa
+es,51,Ceuta,ceuta,51,18,84777,1,
+es,52,Melilla,melilla,52,19,86487,1,
+es-an,4,Almería,almeria,4,1,716820,12,
+es-an,11,Cádiz,cadiz,11,1,1240155,15,Cadiz
+es-an,14,Córdoba,cordoba,14,1,782979,12,Cordova
+es-an,18,Granada,granada,18,1,914678,13,
+es-an,21,Huelva,huelva,21,1,521870,11,
+es-an,23,Jaén,jaen,23,1,633564,11,
+es-an,29,Málaga,malaga,29,1,1661785,17,
+es-an,41,Sevilla,sevilla,41,1,1942389,18,Seville
+es-ar,22,Huesca,huesca,22,2,220461,18,
+es-ar,44,Teruel,teruel,44,2,134137,14,
+es-ar,50,Zaragoza,zaragoza,50,2,964693,35,Saragossa
+es-as,101,Central,central,,3,843336,34,
+es-as,102,Occidental,occidental,,3,100383,6,Western
+es-as,103,Oriental,oriental,,3,69810,5,Eastern
+es-ib,101,Mallorca,mallorca,,4,912544,33,Majorca
+es-ib,102,Menorca,menorca,,4,95936,13,Minorca
+es-ib,103,Ibiza,ibiza,,4,152820,12,Eivissa
+es-ib,104,Formentera,formentera,,4,11708,1,
+es-cn,100,Lista autonómica,lista-autonomica,,5,,9,Regional
+es-cn,101,El Hierro,el-hierro,,5,11298,3,
+es-cn,102,Fuerteventura,fuerteventura,,5,119662,8,
+es-cn,103,Gran Canaria,gran-canaria,,5,852688,15,
+es-cn,104,La Gomera,la-gomera,,5,21734,4,
+es-cn,105,La Palma,la-palma,,5,83380,8,
+es-cn,106,Lanzarote,lanzarote,,5,156189,8,
+es-cn,107,Tenerife,tenerife,,5,927993,15,
+es-cb,39,Cantabria,cantabria,39,6,581078,35,
+es-cl,5,Ávila,avila,5,7,157640,7,
+es-cl,9,Burgos,burgos,9,7,356958,11,
+es-cl,24,León,leon,24,7,460001,13,
+es-cl,34,Palencia,palencia,34,7,160980,7,
+es-cl,37,Salamanca,salamanca,37,7,330119,10,
+es-cl,40,Segovia,segovia,40,7,153129,7,
+es-cl,42,Soria,soria,42,7,88636,5,
+es-cl,47,Valladolid,valladolid,47,7,519546,15,
+es-cl,49,Zamora,zamora,49,7,172539,7,
+es-cm,2,Albacete,albacete,2,8,388167,6,
+es-cm,13,Ciudad Real,ciudad-real,13,8,495761,7,
+es-cm,16,Cuenca,cuenca,16,8,196329,5,
+es-cm,19,Guadalajara,guadalajara,19,8,257762,6,
+es-cm,45,Toledo,toledo,45,8,694844,9,
+es-ct,8,Barcelona,barcelona,8,9,5664579,85,
+es-ct,17,Gerona,gerona,17,9,771044,17,Girona
+es-ct,25,Lérida,lerida,25,9,434930,15,Lleida
+es-ct,43,Tarragona,tarragona,43,9,804664,18,
+es-vc,3,Alicante,alicante,3,10,1858683,35,Alacant
+es-vc,12,Castellón,castellon,12,10,579962,24,Castelló
+es-vc,46,Valencia,valencia,46,10,2565124,40,València
+es-ex,6,Badajoz,badajoz,6,11,673559,36,
+es-ex,10,Cáceres,caceres,10,11,394151,29,
+es-ga,15,La Coruña,la-coruna,15,12,1119596,25,A Coruña
+es-ga,27,Lugo,lugo,27,12,329587,14,
+es-ga,32,Orense,orense,32,12,307651,14,Ourense
+es-ga,36,Pontevedra,pontevedra,36,12,942665,22,
+es-md,28,Madrid,madrid,28,13,6663394,143,
+es-mc,30,Murcia,murcia,30,14,1493898,45,
+es-mc,101,Distrito 1 (Lorca),distrito-1-lorca,,14,254733,,One|District One
+es-mc,102,Distrito 2 (Cartagena),distrito-2-cartagena,,14,389340,,Two|District Two
+es-mc,103,Distrito 3 (Murcia),distrito-3-murcia,,14,784976,,Three|District Three
+es-mc,104,Distrito 4 (Noroeste),distrito-4-noroeste,,14,96062,,Four|District Four
+es-mc,105,Distrito 5 (Altiplano),distrito-5-altiplano,,14,64027,,Five|District Five
+es-nc,31,Navarra,navarra,31,15,654214,50,Navarre
+es-pv,1,Álava,alava,1,16,331549,25,Araba|Araba-Álava
+es-pv,20,Guipúzcoa,guipuzcoa,20,16,723576,25,Gipuzkoa
+es-pv,48,Vizcaya,vizcaya,48,16,1152651,25,Biscay|Bizkaia
+es-ri,26,La Rioja,la-rioja,26,17,316798,33,

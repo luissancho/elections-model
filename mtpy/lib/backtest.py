@@ -19,7 +19,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
-from .data import get_event_results
+from .data import get_event_dates, get_event_results
 from .simulator import Simulator
 
 DEFAULT_EVENTS = ['2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10', '2023-07-23']
@@ -61,6 +61,17 @@ def log_score(p: float, y: bool | int, eps: float = 1e-3) -> float:
 
 def covered(lo: float, hi: float, y: float) -> bool:
     return bool(np.isfinite(lo) and np.isfinite(hi) and lo <= y <= hi)
+
+
+def default_events(scope: str, since: str = '2019-01-01') -> list[str]:
+    """
+    Elections evaluated by default in the backtest of a scope: `DEFAULT_EVENTS` in the national one; in the
+    others, their featured elections (official result and enough polls) held from `since`.
+    """
+    if scope == 'es':
+        return list(DEFAULT_EVENTS)
+
+    return get_event_dates(scope=scope, date_from=since, featured=True)
 
 
 def official_provinces(scope: str, event_date: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -154,8 +165,11 @@ def run_case(
     nowcast_only: bool = False,
     house_effects: bool = True,
     industry_bias: bool = False,
+    dispersion: bool = True,
+    herding: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    min_events: Optional[int] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -169,9 +183,14 @@ def run_case(
 
     `house_effects` and `industry_bias` are passed to the `Simulator` (M6): the effects of the cycle are
     estimated with the polls up to `limit_date` only, and their prior with the elections before `event_date`;
-    the baselines are computed on the raw polls. `composition` sets the joint noise of the national parties
+    the baselines are computed on the raw polls. `dispersion` weighs each pollster by its effective sample,
+    measured on the same polls (M12); `herding` also reduces the weight of the pollsters less dispersed than
+    their samples allow (M13). `composition` sets the joint noise of the national parties
     (M7): `'auto'` estimates the ratio from the elections before `event_date`; `None` or 1 (default) draws
-    them independently.
+    them independently. `min_events` is the number of featured elections of the scope before the event from
+    which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
+    `None`, the default, always takes the parent); `meta` records the scope used (`est_scope`) and the count
+    (`n_featured`).
 
     Returns
     -------
@@ -185,7 +204,8 @@ def run_case(
         warnings.simplefilter('ignore')
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
-            house_effects=house_effects, industry_bias=industry_bias, composition=composition, regional_noise=regional_noise
+            house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
+            disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -299,9 +319,11 @@ def run_case(
         'young_parties': '+'.join(sorted(
             n for n in names if sim.v2drift is not None and sim.ages is not None and sim.ages.get(n, np.nan) < sim.v2drift.age_max
         )),
-        'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias),
+        'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias), 'dispersion': bool(dispersion), 'herding': bool(herding),
         'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
         'regional_noise': bool(regional_noise),
+        'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured),
+        'min_events': int(min_events) if min_events is not None else np.nan,
         'swing_ar': sim.v2swing.a_r if sim.v2swing is not None else np.nan, 'swing_br': sim.v2swing.b_r if sim.v2swing is not None else np.nan,
         'clip_rate': float(clip_rate),
         'he_pollsters': int(he_active.index.get_level_values('pollster_id').nunique()) if he_active is not None else 0,
@@ -401,8 +423,11 @@ def run_backtest(
     nowcast_only: bool = False,
     house_effects: bool = True,
     industry_bias: bool = False,
+    dispersion: bool = True,
+    herding: bool = True,
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
+    min_events: Optional[int] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -414,7 +439,7 @@ def run_backtest(
         `shares`, `seats`, `blocks`, `meta` (concatenated per case), `metrics` (one row per case) and
         `by_horizon` (means over the events, per horizon).
     """
-    events = events or DEFAULT_EVENTS
+    events = events or default_events(scope)
     horizons = horizons or DEFAULT_HORIZONS
 
     parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'meta': []}
@@ -427,8 +452,8 @@ def run_backtest(
             try:
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
-                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias,
-                    composition=composition, regional_noise=regional_noise
+                    nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
+                    herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -440,8 +465,13 @@ def run_backtest(
                 parts[key].append(case[key])
             metrics.append({'event_date': event_date, 'horizon': horizon} | summarize_case(case['shares'], case['seats'], case['blocks'], case['provinces']))
 
-    out = {key: pd.concat(frames, ignore_index=True) for key, frames in parts.items()}
+    out = {key: pd.concat(frames, ignore_index=True) if len(frames) > 0 else pd.DataFrame() for key, frames in parts.items()}
     out['metrics'] = pd.DataFrame(metrics)
+    if len(metrics) == 0:
+        # Every case was skipped (recorded in `meta`): nothing to aggregate
+        out['by_horizon'] = pd.DataFrame()
+        return out
+
     numeric = [c for c in out['metrics'].columns if c not in ('event_date', 'horizon', 'seats_valid')]
     by_horizon = out['metrics'].groupby('horizon')[numeric].mean()
     by_horizon.insert(0, 'n_cases', out['metrics'].groupby('horizon')['mae_shares'].count())

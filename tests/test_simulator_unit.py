@@ -380,3 +380,101 @@ def test_lognormal_shocks_have_unit_mean_multiplier():
     assert np.allclose(mult, 1., atol=0.02)
     assert draws[:, 0, 1].std() == pytest.approx(0.3, rel=0.03)
     assert Simulator.lognormal_shocks(rng, np.zeros((2, 2))).tolist() == [[0., 0.], [0., 0.]]
+
+
+# --- M11: umbral por ámbito y umbral alternativo ---
+
+def test_alloc_seats_alternative_scope_threshold():
+    # Canarias: 15 % en la isla o 4 % en el conjunto
+    votes, shares = {'A': 50, 'B': 36, 'C': 14}, {'A': 40., 'B': 30., 'C': 5.}
+    assert Simulator.alloc_seats(votes, 10, valid_votes=100, threshold=15.0)['C'] == 0
+    assert Simulator.alloc_seats(votes, 10, valid_votes=100, threshold=15.0, scope_shares=shares, threshold_scope=4.0) == {'A': 5, 'B': 4, 'C': 1}
+    assert Simulator.alloc_seats(votes, 10, valid_votes=100, threshold=15.0, scope_shares={**shares, 'C': 3.9}, threshold_scope=4.0)['C'] == 0
+
+
+def test_alloc_seats_scope_threshold_only():
+    # Comunidad Valenciana: sólo 5 % autonómico
+    votes = {'A': 60, 'B': 34, 'C': 6}
+    below, above = {'A': 60., 'B': 35.1, 'C': 4.9}, {'A': 60., 'B': 34., 'C': 6.}
+    assert Simulator.alloc_seats(votes, 20, valid_votes=100, scope_shares=below, threshold_scope=5.0)['C'] == 0
+    assert Simulator.alloc_seats(votes, 20, valid_votes=100, scope_shares=above, threshold_scope=5.0) == {'A': 12, 'B': 7, 'C': 1}
+
+
+# --- M11: estimadores con caída al ámbito padre y ruido sólo por circunscripción ---
+
+def test_estimator_scope_falls_back_to_the_parent():
+    """Validación del mínimo (M11): por defecto un ámbito con padre usa siempre los estimadores del padre;
+    con `min_events`, los propios a partir de ese número de elecciones featured anteriores."""
+    assert Simulator.estimator_scope('es-md', 'es', 5) == 'es'
+    assert Simulator.estimator_scope('es-md', 'es', 2, min_events=3) == 'es'
+    assert Simulator.estimator_scope('es-md', 'es', 3, min_events=3) == 'es-md'
+    assert Simulator.estimator_scope('es', None, 0) == 'es'
+
+
+def test_apply_swing_noise_without_regional_shocks_keeps_means():
+    # Ámbito autonómico: sólo el choque por circunscripción; la cuota del ámbito se conserva
+    shares = pd.DataFrame({'A': [40., 30., 20.], 'B': [30., 40., 50.], '-': [30., 30., 30.]}, index=[5, 9, 24])
+    weights, groups = pd.Series([1., 2., 3.], index=shares.index), pd.Series(7, index=shares.index)
+    target = shares[['A', 'B']].mul(weights, axis=0).sum() / weights.sum()
+    eta = pd.DataFrame({'A': [.1, -.1, 0.], 'B': [0., .05, -.05]}, index=shares.index)
+    out = Simulator.apply_swing_noise(shares, weights, target, pd.DataFrame(), eta, groups, ['A', 'B'], '-')
+    assert np.allclose(out.sum(axis=1), 100)
+    assert np.allclose(out[['A', 'B']].mul(weights, axis=0).sum() / weights.sum(), target, atol=0.1)
+    assert not np.allclose(out['A'], shares['A'])
+
+
+def test_require_forecast_rejects_an_average_without_values():
+    # Con tres o cuatro sondeos en toda la legislatura el promedio no se puede ajustar: error claro, no ceros
+    fc = pd.DataFrame({'mean': [30., 20., 50.]}, index=['PP', 'PSOE', '-'])
+    assert Simulator.require_forecast(fc, 'es-md', '2027-05-23') is fc
+    empty = pd.DataFrame({'mean': [np.nan, np.nan, 100.]}, index=['PP', 'PSOE', '-'])
+    with pytest.raises(ValueError, match='Not enough polls to fit the average of es-cb 2027-05-23'):
+        Simulator.require_forecast(empty, 'es-cb', '2027-05-23')
+
+
+def test_swing_noise_leaves_the_regional_list_alone():
+    # La lista autonómica canaria (100) la vota todo el archipiélago: no es una isla más del ruido M9
+    from mtpy.lib.computer import SwingNoise
+    sim = Simulator.__new__(Simulator)
+    sim.default_region = 0
+    sim.region_groups = {100: 5, 101: 5, 102: 5}
+    sim.v2swing = SwingNoise(a_r=0.01, b_r=0.1, a_p=0.01, b_p=0.05, n=100)
+    sim.rng_swing = np.random.default_rng(1)
+    vpred = pd.DataFrame({'A': [35., 36., 40., 30.], 'B': [45., 44., 40., 50.], '-': [20.] * 4}, index=[0, 100, 101, 102])
+    valid = pd.Series([1000., 1000., 600., 400.], index=[0, 100, 101, 102])
+    out = sim._add_swing_noise(vpred, ['A', 'B'], valid)
+    assert out.loc[100].equals(vpred.loc[100]) and out.loc[0].equals(vpred.loc[0])
+    islands, w = [101, 102], valid.loc[[101, 102]]
+    assert not np.allclose(out.loc[islands, 'A'], vpred.loc[islands, 'A'])
+    assert (out.loc[islands, 'A'] * w).sum() / w.sum() == pytest.approx((vpred.loc[islands, 'A'] * w).sum() / w.sum(), abs=0.1)
+
+
+# --- Modo nowcast / forecast ---
+
+def test_unknown_mode_raises_before_touching_data():
+    with pytest.raises(ValueError):
+        Simulator(scope='es', event_date='2026-11-29', mode='tomorrow')
+
+
+def test_block_variance_adds_the_covariance_of_the_national_parties():
+    sd, national = np.array([3., 2., 1.]), np.array([True, True, False])
+    assert Simulator.block_variance(sd, national) == pytest.approx(14.)  # independientes: suma de varianzas
+    # rho = -0,25 entre los dos nacionales: 14 + 2 · (-0,25) · 3 · 2
+    assert Simulator.block_variance(sd, national, rho=-0.25) == pytest.approx(11.)
+
+
+@pytest.mark.parametrize('mode', ['nowcast', 'forecast'])
+def test_projection_skips_a_block_without_members_present(mode):
+    """Un bloque vacío (`Regionalista: []`) o sin partidos simulados no aparece y no rompe a los demás: antes la
+    asignación de `national` reindexaba el marco vacío a filas de NaN y `export_projection` caía en `KeyError: 'var'`."""
+    from tests.fakes import NAMES, synthetic_simulator
+
+    sim = synthetic_simulator(mode=mode)
+    first = NAMES[0]
+    out = sim.projection({'A': [first], 'B': []})
+    assert list(out.columns) == [('mean', 'A'), ('lo', 'A'), ('hi', 'A')]
+    assert out[('mean', 'A')].notna().all()
+    assert out.equals(sim.projection({'A': [first]}))
+    assert sim.projection({'A': [first], 'C': ['NOEXISTE']}).equals(out)
+    empty = sim.projection({'B': []})
+    assert empty.empty and len(empty.columns) == 0

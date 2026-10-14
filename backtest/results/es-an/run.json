@@ -1,0 +1,26 @@
+{
+ "run_at": "2026-10-07T16:46:20",
+ "commit": "a59059f",
+ "scope": "es-an",
+ "n_sim": 500,
+ "seed": 42,
+ "max_fc": 10,
+ "nowcast_only": false,
+ "house_effects": true,
+ "industry_bias": false,
+ "dispersion": true,
+ "herding": true,
+ "composition": null,
+ "regional_noise": true,
+ "min_events": null,
+ "events": [
+  "2022-06-19",
+  "2026-05-17"
+ ],
+ "horizons": [
+  6,
+  30
+ ],
+ "db_polls": 325,
+ "db_last_poll": "2026-05-16"
+}

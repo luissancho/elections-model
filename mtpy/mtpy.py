@@ -97,7 +97,29 @@ def run(fspath=None):
     return app
 
 
-def api():
+def api(routes=None, not_found=None):
+    """
+    Build the HTTP API with its router registered in the booted App.
+
+    The home route ``/`` -> ``index`` is always registered; extra routes are
+    added after it, in the given order, and then the not-found rules.
+
+    Parameters
+    ----------
+    routes : list of tuple, optional
+        Extra routes, each ``(pattern, controller, action)`` or
+        ``(pattern, controller, action, methods)``, passed as is to
+        ``Router.add_route``.
+    not_found : list of tuple, optional
+        Not-found rules, each ``(prefix, controller)``, passed as is to
+        ``Router.add_not_found`` in the given order: an unmatched path goes to the
+        ``not_found`` action of the controller of the first prefix it starts with.
+
+    Returns
+    -------
+    Api or None
+        The ASGI application, or None if no App has been booted.
+    """
     if not App.has_():
         return
 
@@ -105,6 +127,12 @@ def api():
 
     router = Router()
     router.add_route('/', 'index')
+
+    for route in routes or []:
+        router.add_route(*route)
+
+    for pattern, controller in not_found or []:
+        router.add_not_found(pattern, controller)
 
     app.set('router', router)
 

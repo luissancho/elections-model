@@ -1,0 +1,809 @@
+"""
+Common parts of the web pages: routes, messages, the Jinja2 environment and the shared context.
+"""
+import os
+import re
+from datetime import date, datetime
+from typing import Optional
+from urllib.parse import urlencode
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
+
+from ...core.api import HttpError
+from ...core.app import App
+from .. import bundle
+from ..webapi import check_mode, check_run, check_scope, scope_codes, site
+from .filters import (_madrid_tz, _parse_datetime, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob,
+                      fmt_range)
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
+SITE_TITLE = 'Pronóstico electoral'
+# Main menu: the global pages. Promedios and Escaños are the tabs of the event bar (``EVENT_TABS``).
+PAGES = (
+    {'href': '/', 'label': 'Inicio'},
+    {'href': '/elecciones', 'label': 'Histórico Errores'},
+    {'href': '/casas', 'label': 'Ranking Encuestadoras'},
+    {'href': '/metodo', 'label': 'Método'},
+)
+EVENT_TABS = (
+    {'suffix': '', 'label': 'Promedios'},
+    {'suffix': '/escanos', 'label': 'Escaños'},
+)
+# ``Router.handle`` returns the first route that matches: the fixed routes go before ``/{scope}``.
+ROUTES = [
+    ('/promedio', 'redirect', 'promedio', ['GET']),
+    ('/escanos', 'redirect', 'escanos', ['GET']),
+    ('/modelo', 'redirect', 'modelo', ['GET']),
+    ('/casas', 'casas', 'index', ['GET']),
+    ('/elecciones', 'elecciones', 'index', ['GET']),
+    ('/metodo', 'metodo', 'index', ['GET']),
+    ('/metodo/{section:str}', 'metodo', 'section', ['GET']),
+    ('/{scope}', 'promedios', 'index', ['GET']),
+    ('/{scope}/escanos', 'escanos', 'index', ['GET']),
+]
+NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
+MESSAGES = {
+    'no bundle published yet': 'Todavía no hay ningún pronóstico publicado.',
+    'scope not published': 'Este ámbito no tiene pronóstico publicado.',
+    'run not found': 'Ese run no existe.',
+    'no runs published': 'Este ámbito no tiene runs publicados.',
+    'invalid scope': 'Ámbito no válido.',
+    'invalid run': 'Run no válido.',
+    'invalid mode': 'Modo no válido.',
+    'invalid region': 'Circunscripción no válida.',
+    'region not found': 'Circunscripción no encontrada.',
+    'no database configured': 'La base de datos no está disponible.',
+    'database unavailable': 'La base de datos no está disponible.',
+    'pollster not found': 'Encuestadora no encontrada.',
+    'invalid pollster': 'Encuestadora no válida.',
+    'invalid date': 'Fecha no válida.',
+    'event not published': 'Elección no publicada.',
+    'backtest not published': 'Backtest no publicado.',
+    'unknown scope': 'Ámbito desconocido.',
+    'section not found': 'Página del método no encontrada.',
+}
+OTHERS_COLOR = '#9e9e9e'
+_COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
+DARK_INK = '#111'
+LIGHT_INK = '#fff'
+
+
+def ink_color(color: Optional[str]) -> str:
+    """
+    Text colour readable on a background of ``color``: dark on light colours, white on dark ones.
+
+    Parameters
+    ----------
+    color : str or None
+        Hex colour ``#rgb``, ``#rrggbb`` or ``#rrggbbaa`` (the alpha is ignored).
+
+    Returns
+    -------
+    str
+        ``'#111'`` when the relative luminance (WCAG, linear sRGB) of the colour is above 0.5, ``'#fff'``
+        otherwise or when the colour is not a valid hex colour (``OTHERS_COLOR`` gives white).
+    """
+    if not isinstance(color, str) or not re.fullmatch(r'#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})', color):
+        return LIGHT_INK
+
+    digits = color[1:]
+    if len(digits) == 3:
+        digits = ''.join(char * 2 for char in digits)
+
+    def linear(channel):
+        value = int(channel, 16) / 255
+        return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (linear(digits[i:i + 2]) for i in (0, 2, 4))
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    return DARK_INK if luminance > 0.5 else LIGHT_INK
+
+
+def environment() -> Environment:
+    """
+    Jinja2 environment of the pages, created on first use and cached in the App.
+
+    It loads ``TEMPLATES_DIR`` with autoescape on for ``.html``, ``StrictUndefined``, the
+    filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime`` and ``ink``
+    (``ink_color``) and the global ``method_href`` (``metodo.method_href``: link to a subpage of the method, or to the
+    method itself while the subpage has no text). Without a booted App the environment is built
+    but not cached.
+
+    Returns
+    -------
+    jinja2.Environment
+        The shared environment (``App.get_().templates``).
+    """
+    app = App.get_() if App.has_() else None
+    env = app.templates if app is not None else None
+
+    if env is None:
+        env = Environment(
+            loader=FileSystemLoader(TEMPLATES_DIR),
+            autoescape=select_autoescape(('html',)),
+            undefined=StrictUndefined,
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+        env.policies['json.dumps_kwargs'] = {'sort_keys': False}
+        env.filters.update({
+            'num': fmt_num,
+            'int': fmt_int,
+            'pct': fmt_pct,
+            'prob': fmt_prob,
+            'range': fmt_range,
+            'date': fmt_date,
+            'datetime': fmt_datetime,
+            'ink': ink_color,
+        })
+        # imported here: ``metodo`` imports this module
+        from .metodo import method_href
+        env.globals['method_href'] = method_href
+
+        if app is not None:
+            app.set('templates', env)
+
+    return env
+
+
+def parse_state(query: dict, scope: Optional[str] = None) -> dict:
+    """
+    Validate the page parameters of a request.
+
+    Parameters
+    ----------
+    query : dict
+        Query string parameters (``scope``, ``mode``, ``run``; others are ignored).
+    scope : str, optional
+        Scope of the route of an event page (already checked by ``resolve_event_scope``); when
+        given it wins over the ``scope`` of the query, which is then ignored.
+
+    Returns
+    -------
+    dict
+        ``{'scope': str or None, 'mode': str or None, 'run': str or None}``; an empty value counts
+        as missing and a missing ``mode`` stays ``None`` (``common_context`` resolves it with
+        ``default_mode``).
+
+    Raises
+    ------
+    HttpError
+        400 when a given parameter is invalid.
+    """
+    if scope is None:
+        scope = query.get('scope') or None
+
+        if scope is not None:
+            scope = check_scope(scope)
+
+    mode = query.get('mode') or None
+
+    return {
+        'scope': scope,
+        'mode': check_mode(mode) if mode is not None else None,
+        'run': check_run(query.get('run')),
+    }
+
+
+def default_mode(frozen: bool) -> str:
+    """
+    Mode an event page shows when the request does not choose one.
+
+    Parameters
+    ----------
+    frozen : bool
+        Whether the publication is frozen (``manifest.freeze.active``).
+
+    Returns
+    -------
+    str
+        ``'forecast'`` while frozen (the final forecast is what matters and "today" no longer
+        gets polls), otherwise ``'nowcast'``.
+    """
+    return 'forecast' if frozen else 'nowcast'
+
+
+def published_scopes() -> list:
+    """
+    Scopes with a published forecast, in catalogue order.
+
+    Returns
+    -------
+    list of dict
+        Rows of ``site().scopes()`` whose ``simulable`` is true (``code``, ``name``...).
+    """
+    return [row for row in site().scopes()['scopes'] if row['simulable']]
+
+
+def resolve_scope(scope: Optional[str]) -> str:
+    """
+    Scope a page shows.
+
+    Parameters
+    ----------
+    scope : str or None
+        Validated scope of the request, or ``None`` when it was not given.
+
+    Returns
+    -------
+    str
+        ``scope`` when it is published; without it, the first published scope in catalogue
+        order.
+
+    Raises
+    ------
+    HttpError
+        503 when nothing is published; 404 when the given scope is not published.
+    """
+    manifest = site().manifest_data()
+
+    if scope is None:
+        codes = [row['code'] for row in published_scopes()]
+
+        if not codes:
+            raise HttpError(503, 'no bundle published yet')
+
+        return codes[0]
+
+    if scope not in manifest['scopes']:
+        raise HttpError(404, 'scope not published')
+
+    return scope
+
+
+def resolve_event_scope(raw: str) -> str:
+    """
+    Scope of the route of an event page (``/{scope}``, ``/{scope}/escanos``).
+
+    Parameters
+    ----------
+    raw : str
+        Path segment captured by the route (lower case letters, digits, ``_`` and ``-``).
+
+    Returns
+    -------
+    str
+        The scope, when it is in the catalogue and published.
+
+    Raises
+    ------
+    HttpError
+        404 ``unknown scope`` outside the catalogue; 404 ``scope not published`` for a catalogue
+        scope without a published forecast; 503 without a bundle.
+    """
+    if raw not in scope_codes():
+        raise HttpError(404, 'unknown scope')
+
+    return resolve_scope(raw)
+
+
+def part(scope: str, run: str, name: str, mode: Optional[str] = None) -> dict:
+    """
+    Data of a part of a published run.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    run : str
+        Run id.
+    name : str
+        Part name.
+    mode : str, optional
+        Simulation mode, for the mode parts.
+
+    Returns
+    -------
+    dict
+        The ``data`` member of the part envelope.
+
+    Raises
+    ------
+    HttpError
+        404 when the run or the part does not exist.
+    """
+    return bundle.loads(site().run_file(scope, run, name, mode))['data']
+
+
+def event_query(state: dict) -> str:
+    """
+    Query string that keeps the state of an event page in its links (the scope is in the path).
+
+    Parameters
+    ----------
+    state : dict
+        ``mode``, ``run`` and ``pinned``; ``run`` is kept only when ``pinned`` is true.
+
+    Returns
+    -------
+    str
+        ``'?mode=nowcast'``, plus ``&run=...`` for a pinned run.
+    """
+    params = [('mode', state.get('mode'))]
+
+    if state.get('pinned'):
+        params.append(('run', state.get('run')))
+
+    return '?' + urlencode([(key, value) for key, value in params if value])
+
+
+def scope_query(scope: str) -> str:
+    """
+    Query string of a global page filtered by a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    str
+        ``'?scope=es'``.
+    """
+    return '?' + urlencode([('scope', scope)])
+
+
+def days_left(event_date: Optional[str], today: Optional[date] = None) -> Optional[int]:
+    """
+    Days from today to an election.
+
+    Parameters
+    ----------
+    event_date : str or None
+        ISO date of the election.
+    today : datetime.date, optional
+        Reference day; today in Europe/Madrid by default.
+
+    Returns
+    -------
+    int or None
+        Days left (0 on election day, negative after it), or ``None`` when the date is missing
+        or invalid.
+    """
+    when = _parse_datetime(event_date)
+
+    if when is None:
+        return None
+
+    if today is None:
+        today = datetime.now(_madrid_tz()).date()
+
+    return (when.date() - today).days
+
+
+def days_text(days: Optional[int]) -> Optional[str]:
+    """
+    Sentence of the days left to an election.
+
+    Parameters
+    ----------
+    days : int or None
+        Days left (``days_left``).
+
+    Returns
+    -------
+    str or None
+        ``'Faltan {n} días'``, ``'Falta 1 día'``, ``'Jornada electoral'`` (0) or
+        ``'Celebradas hace {n} días'`` (negative); ``None`` without a date.
+    """
+    if days is None:
+        return None
+
+    if days > 1:
+        return 'Faltan {} días'.format(days)
+
+    if days == 1:
+        return 'Falta 1 día'
+
+    if days == 0:
+        return 'Jornada electoral'
+
+    return 'Celebradas hace {} día{}'.format(-days, '' if days == -1 else 's')
+
+
+def event_title(scope: str, scopes: list) -> str:
+    """
+    Name of the event (the next election) of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    scopes : list of dict
+        Rows of ``published_scopes()`` (``code``, ``name``).
+
+    Returns
+    -------
+    str
+        ``'Elecciones generales'`` for ``es``, otherwise ``'Elecciones autonómicas · {name}'`` with
+        the catalogue name (the code when the scope is not in ``scopes``).
+    """
+    if scope == 'es':
+        return 'Elecciones generales'
+
+    names = {row['code']: row['name'] for row in scopes}
+
+    return 'Elecciones autonómicas · {}'.format(names.get(scope, scope))
+
+
+def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: Optional[date] = None,
+               scopes: Optional[list] = None) -> dict:
+    """
+    Data of the event bar of an event page.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    meta : dict
+        Data of the meta part of the run shown (``event_date``).
+    active_suffix : str
+        Suffix of the current tab in ``EVENT_TABS`` (``''`` or ``'/escanos'``).
+    state : dict
+        Resolved page state (``mode``, ``run``, ``pinned``).
+    today : datetime.date, optional
+        Reference day for ``days_left``.
+    scopes : list of dict, optional
+        Rows of ``published_scopes()``, read when not given.
+
+    Returns
+    -------
+    dict
+        ``title`` (``event_title``), ``date`` (``event_date``), ``days_left``, ``days_text``
+        (``days_text``), ``href`` (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per
+        entry of ``EVENT_TABS``, the links keeping the state (``event_query``).
+    """
+    if scopes is None:
+        scopes = published_scopes()
+
+    event_date = meta.get('event_date')
+    days = days_left(event_date, today)
+    query = event_query(state)
+
+    return {
+        'title': event_title(scope, scopes),
+        'date': event_date,
+        'days_left': days,
+        'days_text': days_text(days),
+        'href': '/' + scope,
+        'tabs': [{'href': '/' + scope + tab['suffix'] + query, 'label': tab['label'],
+                  'active': tab['suffix'] == active_suffix} for tab in EVENT_TABS],
+    }
+
+
+def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool,
+             today: Optional[date] = None) -> str:
+    """
+    Title of the estimate a page shows.
+
+    Parameters
+    ----------
+    mode : str
+        ``'nowcast'`` or ``'forecast'``.
+    meta : dict
+        Data of the meta part of the run shown (``event_date``, ``run_at``).
+    frozen : bool
+        Whether the publication is frozen.
+    pinned : bool
+        Whether the run was chosen with ``?run=``.
+    is_latest : bool
+        Whether the run shown is the latest of the scope in the manifest.
+    today : datetime.date, optional
+        Date of the nowcast title of the latest run; today in Europe/Madrid by default.
+
+    Returns
+    -------
+    str
+        In nowcast mode ``'Estimación a {today}'`` for the latest run and ``'Estimación del {run_at}'`` for
+        an older pinned run or while frozen (never today's date over a run read before the veda); in forecast mode ``'Pronóstico definitivo para el {event_date}'`` only while
+        frozen and showing the latest run, ``'Pronóstico publicado el {run_at}'`` for an older pinned run and
+        ``'Pronóstico para el {event_date}'`` otherwise.
+    """
+    if mode == 'nowcast':
+        if not is_latest or frozen:
+            return 'Estimación del {}'.format(fmt_date(meta.get('run_at')))
+
+        if today is None:
+            today = datetime.now(_madrid_tz()).date()
+
+        return 'Estimación a {}'.format(fmt_date(today.isoformat()))
+
+    if frozen and is_latest:
+        return 'Pronóstico definitivo para el {}'.format(fmt_date(meta.get('event_date')))
+
+    if pinned and not is_latest:
+        return 'Pronóstico publicado el {}'.format(fmt_date(meta.get('run_at')))
+
+    return 'Pronóstico para el {}'.format(fmt_date(meta.get('event_date')))
+
+
+def mode_text(mode: str, meta: dict, days: Optional[int]) -> str:
+    """
+    Sentence that explains how to read the mode shown, in the event bar.
+
+    Parameters
+    ----------
+    mode : str
+        ``'nowcast'`` or ``'forecast'``.
+    meta : dict
+        Data of the meta part of the run shown (``as_of``, ``date_last``, ``event_date``).
+    days : int or None
+        Days left to the election (``days_left``).
+
+    Returns
+    -------
+    str
+        For nowcast, the reading date of the average and the date of the last poll; for
+        forecast, the election date and the drift to it, naming the days left only while there
+        are some.
+    """
+    if mode == 'nowcast':
+        return ('Si las elecciones fueran hoy: el promedio de sondeos leído el {}, con los sondeos publicados '
+                'hasta el {}.').format(fmt_date(meta.get('as_of')), fmt_date(meta.get('date_last')))
+
+    if days is not None and days > 1:
+        span = ' en los {} días que faltan'.format(days)
+    elif days == 1:
+        span = ' en el día que falta'
+    else:
+        span = ''
+
+    return ('Lo que puede pasar el {}: añade la deriva de la opinión{}, así que los intervalos son más '
+            'anchos.').format(fmt_date(meta.get('event_date')), span)
+
+
+def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str] = None,
+            fmt: Optional[str] = None, kind: str = 'forecast', table: Optional[str] = None,
+            date: Optional[str] = None) -> str:
+    """
+    URL of a part in the ``/api/v1`` routes.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    part : str
+        Part name; ``'meta'`` is the scope route itself in the forecast routes; the table name
+        (``'ratings'``...) in the database routes.
+    mode : str, optional
+        Simulation mode, for the mode parts of the forecast.
+    run : str, optional
+        Run id, for the forecast.
+    fmt : str, optional
+        Output format (``'json'`` or ``'csv'``).
+    kind : str, optional
+        ``'forecast'`` (the default), ``'analysis'`` (the houses analysis), ``'data'`` (the
+        tables of the database), ``'events'`` (the list of elections of a scope), ``'event'``
+        (a part of a past election, needs ``date``) or ``'backtest'``.
+    table : str, optional
+        CSV table of an analysis part (``'events'`` for the herding by cycle) or of the model of
+        an event (``'shares'``, ``'seats'`` or ``'blocks'``).
+    date : str, optional
+        Election date, for ``kind='event'``.
+
+    Returns
+    -------
+    str
+        ``'/api/v1/forecast/{scope}[/{mode}]/{part}[?run=...&format=...]'``,
+        ``'/api/v1/analysis/{scope}/{part}[?format=...&table=...]'``,
+        ``'/api/v1/{part}?scope={scope}[&format=...]'``, ``'/api/v1/events/{scope}[?format=...]'``,
+        ``'/api/v1/events/{scope}/{date}/{part}[?format=...&table=...]'`` or
+        ``'/api/v1/backtest/{scope}/{part}[?format=...]'``.
+    """
+    if kind == 'analysis':
+        url = '/api/v1/analysis/{}/{}'.format(scope, part)
+        params = (('format', fmt), ('table', table))
+    elif kind == 'events':
+        url = '/api/v1/events/' + scope
+        params = (('format', fmt),)
+    elif kind == 'event':
+        url = '/api/v1/events/{}/{}/{}'.format(scope, date, part)
+        params = (('format', fmt), ('table', table))
+    elif kind == 'backtest':
+        url = '/api/v1/backtest/{}/{}'.format(scope, part)
+        params = (('format', fmt),)
+    elif kind == 'data':
+        url = '/api/v1/' + part
+        params = (('scope', scope), ('format', fmt))
+    else:
+        url = '/api/v1/forecast/' + scope
+
+        if mode:
+            url += '/' + mode
+
+        if part != 'meta':
+            url += '/' + part
+
+        params = (('run', run), ('format', fmt))
+
+    params = [(key, value) for key, value in params if value]
+
+    return url + ('?' + urlencode(params) if params else '')
+
+
+class Catalog(dict):
+    """
+    Parties of a run by name (``{name: {fullname, color, block}}``).
+
+    A party missing from the run metadata gets its name as full name, the grey of the
+    others and no block, so the templates can look up any name.
+    """
+
+    def __missing__(self, name):
+        """
+        Entry of a party outside the catalogue.
+
+        Parameters
+        ----------
+        name : str
+            Party name.
+
+        Returns
+        -------
+        dict
+            ``{'fullname': name, 'color': OTHERS_COLOR, 'block': None}``.
+        """
+        return {'fullname': name, 'color': OTHERS_COLOR, 'block': None}
+
+
+def catalog(meta: dict) -> Catalog:
+    """
+    Party catalogue of a run.
+
+    Parameters
+    ----------
+    meta : dict
+        Data of the meta part.
+
+    Returns
+    -------
+    Catalog
+        Entries from ``meta['parties']``; a missing full name falls back to the name and a
+        missing or malformed colour to ``OTHERS_COLOR``.
+    """
+    entries = Catalog()
+
+    for party in meta.get('parties') or []:
+        color = party.get('color')
+        entries[party['name']] = {
+            'fullname': party.get('fullname') or party['name'],
+            'color': color if isinstance(color, str) and _COLOR_RE.fullmatch(color) else OTHERS_COLOR,
+            'block': party.get('block'),
+        }
+
+    return entries
+
+
+def block_color(block: str, meta: dict, parties: Catalog) -> str:
+    """
+    Colour of a block: that of its first party in ``bmaps.vs``, then in ``bmaps.blocks``.
+
+    Parameters
+    ----------
+    block : str
+        Block name.
+    meta : dict
+        Data of the meta part.
+    parties : Catalog
+        Party catalogue of the run.
+
+    Returns
+    -------
+    str
+        The colour, or ``OTHERS_COLOR`` when the block has no party in either map.
+    """
+    bmaps = meta.get('bmaps') or {}
+
+    for key in ('vs', 'blocks'):
+        groups = bmaps.get(key)
+        names = groups.get(block) if isinstance(groups, dict) else None
+
+        if names:
+            return parties[names[0]]['color']
+
+    return OTHERS_COLOR
+
+
+def common_context(state: dict, active: Optional[str], event: bool = False, active_suffix: str = '') -> dict:
+    """
+    Template context shared by every page.
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``); on an event page ``scope`` comes from the
+        route (``resolve_event_scope``).
+    active : str or None
+        ``href`` of the current page in the main menu; ``None`` for the event pages, which are
+        not in it.
+    event : bool, optional
+        Whether the page is an event page (Promedios or Escaños): it gets the event bar and links
+        that keep ``mode`` and ``run``; a global page gets links that keep ``scope``.
+    active_suffix : str, optional
+        Suffix of the current tab of the event bar (``EVENT_TABS``).
+
+    Returns
+    -------
+    dict
+        ``site_title``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
+        ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
+        on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
+        ``scope_filter`` (``published_scopes()``, the options of the scope filter),
+        ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
+        (``event_info``, or ``None`` on a global page), ``manifest``, ``meta``, ``catalog``,
+        ``mode_text`` (``mode_text``), ``freeze`` (the manifest switch),
+        ``frozen`` (whether it is active) and ``title_suffix`` (``title_of``).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle; 404 for an unpublished scope or a missing run.
+    """
+    scope = resolve_scope(state['scope'])
+    pinned = state['run'] is not None
+    latest = site().latest_run(scope)
+    run = state['run'] or latest
+    meta = part(scope, run, 'meta')
+
+    manifest = site().manifest_data()
+    # a manifest written before phase 6 has no ``since``: complete the switch for StrictUndefined
+    freeze = {'active': False, 'message': None, 'since': None, **(manifest.get('freeze') or {})}
+    frozen = bool(freeze.get('active'))
+    mode = state['mode'] or default_mode(frozen)
+    full = {'scope': scope, 'mode': mode, 'run': run, 'pinned': pinned}
+    scopes = published_scopes()
+    info = event_info(scope, meta, active_suffix, full, scopes=scopes) if event else None
+
+    return {
+        'site_title': SITE_TITLE,
+        'pages': [dict(page, active=page['href'] == active) for page in PAGES],
+        'state': full,
+        'query': event_query(full) if event else scope_query(scope),
+        'scope_query': scope_query(scope),
+        'scopes': scopes,
+        'scope_filter': scopes,
+        'filter_action': active,
+        'is_event': event,
+        'event_bar': info,
+        'manifest': manifest,
+        'freeze': freeze,
+        'frozen': frozen,
+        'meta': meta,
+        'catalog': catalog(meta),
+        'mode_text': mode_text(mode, meta, info['days_left'] if info else days_left(meta.get('event_date'))),
+        'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
+    }
+
+
+def bundle_part(read, *args) -> Optional[dict]:
+    """
+    Data of a published part, or ``None`` when it is not published.
+
+    Parameters
+    ----------
+    read : callable
+        Reader of the site that returns the bytes of the part envelope (``site().analysis``,
+        ``site().event`` or ``site().backtest``).
+    *args
+        Arguments of the reader.
+
+    Returns
+    -------
+    dict or None
+        The ``data`` member of the part envelope, or ``None`` when the reader answers 404.
+
+    Raises
+    ------
+    HttpError
+        Any error of the reader other than the 404 of an unpublished part.
+    """
+    try:
+        return bundle.loads(read(*args))['data']
+    except HttpError as error:
+        if error.status == 404:
+            return None
+
+        raise

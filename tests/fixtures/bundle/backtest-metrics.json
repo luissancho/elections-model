@@ -1,0 +1,92 @@
+{
+  "schema": "backtest-metrics@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-10T12:00:00Z",
+  "data": {
+    "columns": [
+      "event_date",
+      "horizon",
+      "mae_shares",
+      "rmse_shares",
+      "mae_last_poll",
+      "mae_mean_4w",
+      "mae_prev_result",
+      "cov_shares95",
+      "cov_seats95",
+      "mae_seats",
+      "brier_vs",
+      "log_score_vs",
+      "n_prov_cells",
+      "seats_valid"
+    ],
+    "rows": [
+      {
+        "event_date": "2019-11-10",
+        "horizon": 6,
+        "mae_shares": 1.97,
+        "rmse_shares": 2.53,
+        "mae_last_poll": 1.74,
+        "mae_mean_4w": 1.86,
+        "mae_prev_result": 5.77,
+        "cov_shares95": 0.933,
+        "cov_seats95": null,
+        "mae_seats": null,
+        "brier_vs": 0.037,
+        "log_score_vs": 0.156,
+        "n_prov_cells": 277.5,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2019-11-10",
+        "horizon": 30,
+        "mae_shares": 2.51,
+        "rmse_shares": 3.23,
+        "mae_last_poll": 2.3,
+        "mae_mean_4w": 2.28,
+        "mae_prev_result": 5.9,
+        "cov_shares95": 1.0,
+        "cov_seats95": null,
+        "mae_seats": null,
+        "brier_vs": 0.041,
+        "log_score_vs": 0.17,
+        "n_prov_cells": 276.75,
+        "seats_valid": false
+      },
+      {
+        "event_date": "2023-07-23",
+        "horizon": 6,
+        "mae_shares": 1.41,
+        "rmse_shares": 1.9,
+        "mae_last_poll": 1.61,
+        "mae_mean_4w": 1.59,
+        "mae_prev_result": 5.12,
+        "cov_shares95": 0.9,
+        "cov_seats95": 1.0,
+        "mae_seats": 4.5,
+        "brier_vs": 0.03,
+        "log_score_vs": 0.1,
+        "n_prov_cells": 278.0,
+        "seats_valid": true
+      },
+      {
+        "event_date": "2023-07-23",
+        "horizon": 30,
+        "mae_shares": 1.5,
+        "rmse_shares": 2.1,
+        "mae_last_poll": 2.01,
+        "mae_mean_4w": 2.11,
+        "mae_prev_result": 5.64,
+        "cov_shares95": 1.0,
+        "cov_seats95": 0.933,
+        "mae_seats": 5.25,
+        "brier_vs": 0.05,
+        "log_score_vs": null,
+        "n_prov_cells": 277.0,
+        "seats_valid": true
+      }
+    ]
+  }
+}

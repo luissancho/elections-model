@@ -2,14 +2,127 @@ import json
 import pandas as pd
 import warnings
 
-from typing import Literal, Optional
+from typing import Any, Literal, Mapping, Optional
 
 from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
-    Drift, Events, EventsData, EventsResults, Polls, PollsResults,
-    Pollsters, PollstersParties, PollstersRatings, Parties
+    Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
+    Pollsters, PollstersHerding, PollstersParties, PollstersRatings, Parties, Scopes
 )
+
+
+def get_scopes() -> pd.DataFrame:
+    """
+    Catalogue of election scopes (`data/es-scopes.csv`): `es` and the autonomous communities (`es-*`).
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by `scode`: `name`, `ine_code`, `parent`, `demonym`, `threshold`, `threshold_scope`,
+        `rating_weight` and `seats`.
+    """
+    return App.get_().data.read_csv('es-scopes.csv').set_index('scode')
+
+
+def get_districts(scope: Optional[str] = None) -> pd.DataFrame:
+    """
+    Catalogue of electoral districts (`data/es-districts.csv`).
+
+    Parameters
+    ----------
+    scope : str, optional
+        Only the districts of this scope.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per district: `scope`, `region_id`, `name`, `slug`, `ine_code`, `reg_code`, `population`,
+        `seats` and `aliases`.
+    """
+    districts = App.get_().data.read_csv('es-districts.csv')
+    if scope is not None:
+        districts = districts.loc[districts['scope'] == scope].reset_index(drop=True)
+
+    return districts
+
+
+def get_scope_parent(scope: str) -> Optional[str]:
+    """
+    Parent of a scope in the catalogue (`es` for the autonomous communities); `None` for the national scope
+    and for a scope that is not in the catalogue.
+    """
+    scopes = get_scopes()
+    if scope not in scopes.index or pd.isnull(scopes.loc[scope, 'parent']):
+        return None
+
+    return str(scopes.loc[scope, 'parent'])
+
+
+def resolve_thresholds(
+    scope_row: Mapping[str, Any],
+    event_conf: Optional[Mapping[str, Any]] = None
+) -> tuple[Optional[float], Optional[float]]:
+    """
+    Legal thresholds of an event: those of its scope unless the event overrides them.
+
+    Parameters
+    ----------
+    scope_row : Mapping
+        Row of the scope in the catalogue: `threshold` (district) and `threshold_scope` (whole scope).
+    event_conf : Mapping, optional
+        Entry of the event in `data/params.json`. The keys `threshold` and `threshold_scope` present in it
+        prevail even when they are null (e.g. Murcia until 2015: no district threshold, 5 % regional).
+
+    Returns
+    -------
+    tuple
+        District and scope thresholds, as percentages; `None` where there is none.
+    """
+    out = []
+    for key in ('threshold', 'threshold_scope'):
+        value = event_conf[key] if event_conf is not None and key in event_conf else scope_row[key]
+        out.append(None if value is None or pd.isnull(value) else float(value))
+
+    return out[0], out[1]
+
+
+def get_thresholds(
+    scope: str,
+    event_date: str
+) -> tuple[Optional[float], Optional[float]]:
+    """
+    Legal thresholds of an event (see `resolve_thresholds`), from the catalogue of scopes and the entry of
+    the event in `data/params.json`.
+    """
+    params = json.loads(App.get_().data.read('params.json')).get(scope, {})
+
+    return resolve_thresholds(get_scopes().loc[scope], params.get(event_date))
+
+
+def save_catalogues() -> dict[str, int]:
+    """
+    Replicate the versioned catalogues of scopes and districts into the database. The tables are created
+    when missing (never replaced) and their rows upserted by key.
+
+    Returns
+    -------
+    dict
+        Rows written to `scopes` and `districts`.
+    """
+    out = {}
+    for name, model, data in [
+        ('scopes', Scopes(), get_scopes().reset_index()),
+        ('districts', Districts(), get_districts())
+    ]:
+        if not model.table_exists():
+            model.create(replace=False)
+
+        df = model.format_data(data, int_type='nullable', bin_type='nullable', sort=True)
+        model.upsert(df)
+        out[name] = int(df.shape[0])
+
+    return out
 
 
 def get_event_dmat(
@@ -26,13 +139,21 @@ def get_event_dmat(
     if parties is None:
         parties = get_parties()
 
-    dpolls = polls.loc[event_date][[p for p in parties['name'] if p in polls.columns]].dropna(axis=1, how='all')
+    poll_cols = [p for p in parties['name'] if p in polls.columns]
+    if event_date in polls.index.get_level_values(0):
+        dpolls = polls.loc[event_date][poll_cols].dropna(axis=1, how='all')
+    else:
+        # An election without polls (e.g. the one before the first polled one of a regional scope)
+        dpolls = polls.iloc[:0].droplevel(0)[poll_cols].dropna(axis=1, how='all')
     poll_parties = dpolls.mean().sort_values(ascending=False).index.tolist()
 
     devent = events.loc[event_date].loc[[p for p in parties['name'] if p in events.columns]].dropna()
     event_parties = devent.sort_values(ascending=False).index.tolist()
 
-    final_parties = [p for p in event_parties if p in poll_parties]
+    if dpolls.shape[0] > 0:
+        final_parties = [p for p in event_parties if p in poll_parties]
+    else:
+        final_parties = event_parties
     all_parties = final_parties + [p for p in poll_parties if p not in final_parties]
 
     dpolls = dpolls.reindex(all_parties, axis=1)[all_parties]
@@ -41,9 +162,14 @@ def get_event_dmat(
     if dpolls.loc[1:42].shape[0] > 0:
         dpolls = dpolls.loc[1:42]
 
-    dagg = dpolls.agg(['count', 'mean', 'std'])
-    dagg.loc['count'] /= dpolls.shape[0] / 100
-    dagg.loc['result'] = devent
+    if dpolls.shape[0] > 0:
+        dagg = dpolls.agg(['count', 'mean', 'std'])
+        dagg.loc['count'] /= dpolls.shape[0] / 100
+    else:
+        # No polls (and, for an upcoming event, no parties either): empty statistics
+        dagg = pd.DataFrame(float('nan'), index=['count', 'mean', 'std', 'result'], columns=all_parties)
+    if len(all_parties) > 0:
+        dagg.loc['result'] = devent
     dagg['days'] = 0
     dagg = dagg.rename_axis('pollster').reset_index().set_index(['days', 'pollster']).round(2)[all_parties]
 
@@ -66,7 +192,7 @@ def get_event_params(
     if path is not None:
         params = json.loads(
             App.get_().data.read('params.json')
-        )[scope]
+        ).get(scope, {})
 
         event_params = {dt: params[dt] if dt in params else {} for dt in event_dates}
     else:
@@ -88,7 +214,9 @@ def get_event_params(
     for dt in event_dates:
         params = event_params[dt]
 
-        df = get_event_dmat(scope, dt, polls, events, parties)
+        # Sorted index: `.loc[(0, ...)]` on the unsorted, non-unique (days, pollster) index
+        # takes pandas' linear path and raises a PerformanceWarning per lookup.
+        df = get_event_dmat(scope, dt, polls, events, parties).sort_index()
 
         all_parties = df.columns.tolist()
         final_parties = df.loc[(0, 'result')].squeeze().dropna().index.tolist()
@@ -373,6 +501,25 @@ def get_parties() -> pd.DataFrame:
     return parties
 
 
+def get_events(scope: str) -> pd.DataFrame:
+    """
+    Elections of a scope.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per election, with `date`, `scope`, `name` and `featured`.
+    """
+    return Events().get_results(query={
+        'filters': ["scope = '{}'".format(scope)]
+    }, formatted=True)
+
+
 def get_pollsters() -> pd.DataFrame:
     pollsters = Pollsters().get_results(formatted=True)
 
@@ -416,11 +563,20 @@ def save_model_data(
 
 
 def save_ratings_data(
-    data: pd.DataFrame
+    data: pd.DataFrame,
+    update_pollsters: bool = True
 ) -> int:
     """
     Save data to the ratings table into the database.
     Also save each pollster's last rating to the pollsters table.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Ratings indexed by `event_scope`, `event_date` and `pollster_id`.
+    update_pollsters : bool, optional
+        Whether to write the last rating of each pollster to `pollsters.rating`. That column holds the
+        rating of the national scope, so the ratings of a regional scope must not touch it.
 
     Returns
     -------
@@ -441,6 +597,9 @@ def save_ratings_data(
     ))
 
     nrows = rmodel.upsert(dr)
+    if not update_pollsters:
+        return nrows
+
     rlast = dr.groupby('pollster_id')['rating'].last()
 
     pmodel = Pollsters()
@@ -453,6 +612,69 @@ def save_ratings_data(
     pmodel.upsert(dp)
 
     return nrows
+
+
+def get_herding(
+    scope: Optional[str] = 'es',
+    event_dates: Optional[list[str]] = None
+) -> pd.DataFrame:
+    """
+    Load the herding table (see `Computer.compute_herding`): one row per election cycle and pollster. An
+    empty frame with the model columns is returned when the table has not been created yet.
+
+    Parameters
+    ----------
+    scope : str, optional
+        Election scope; `None` loads every scope.
+    event_dates : list of str, optional
+        Restrict to these elections.
+    """
+    model = PollstersHerding()
+    if not model.table_exists():
+        return pd.DataFrame(columns=model.columns)
+
+    filters = []
+    if scope is not None:
+        filters.append("event_scope = '{}'".format(scope))
+    if event_dates is not None:
+        if len(event_dates) == 0:
+            return pd.DataFrame(columns=model.columns)
+        filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+
+    return model.get_results(query=dict(filters=filters), formatted=True)
+
+
+def save_herding_data(
+    data: pd.DataFrame
+) -> int:
+    """
+    Save the herding data into the database, replacing the rows of the same elections. The table is created
+    when missing (never replaced).
+
+    Returns
+    -------
+    int
+        Number of rows updated.
+    """
+    model = PollstersHerding()
+    if not model.table_exists():
+        model.create(replace=False)
+
+    df = data.copy().reset_index(drop=True)
+    df = df.loc[df['pollster_id'].notnull()]
+    if df.shape[0] == 0:
+        return 0
+
+    df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)
+
+    # Remove previous data for the same election events
+    model.execute("DELETE FROM {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
+        model.table,
+        "', '".join(df.event_scope.unique()),
+        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
+    ))
+
+    return model.upsert(df)
 
 
 def get_drift(
@@ -522,8 +744,9 @@ def save_drift_data(
 
 
 def get_house_effects(
-    scope: str = 'es',
-    event_dates: Optional[list[str]] = None
+    scope: Optional[str] = 'es',
+    event_dates: Optional[list[str]] = None,
+    date_to: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Load the house effects table (see `Computer.compute_house_effects`): one row per election, pollster and
@@ -531,20 +754,26 @@ def get_house_effects(
 
     Parameters
     ----------
-    scope : str, default 'es'
-        Election scope.
+    scope : str, optional
+        Election scope; `None` loads every scope (the global prior of the house effects, M11).
     event_dates : list of str, optional
         Restrict to these elections (e.g. the ones before the event being forecast).
+    date_to : str, optional
+        Only the elections held strictly before this date.
     """
     model = PollstersParties()
     if not model.table_exists() or set(model.columns) - set(model._dal.get_columns(model.table)):
         return pd.DataFrame(columns=model.columns)
 
-    filters = ["event_scope = '{}'".format(scope)]
+    filters = []
+    if scope is not None:
+        filters.append("event_scope = '{}'".format(scope))
     if event_dates is not None:
         if len(event_dates) == 0:
             return pd.DataFrame(columns=model.columns)
         filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+    if date_to is not None:
+        filters.append("event_date < '{}'".format(pd.Timestamp(date_to).strftime('%Y-%m-%d')))
 
     return model.get_results(query=dict(filters=filters), formatted=True)
 
@@ -588,6 +817,52 @@ def save_house_effects_data(
     ))
 
     return model.upsert(df)
+
+
+def update_featured(
+    scope: str,
+    min_polls: int = 10,
+    drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+    drop_ctypes: Optional[list[str]] = ['wban', 'exit']
+) -> int:
+    """
+    Mark as `featured` the events of a scope with an official result and at least `min_polls` useful polls:
+    computed (see `Computer.compute_weights`), with a positive overlap weight and not of the dropped
+    methodology or context types. The other events of the scope are unmarked.
+
+    Parameters
+    ----------
+    scope : str
+        Election scope.
+    min_polls : int, optional
+        Useful polls needed.
+    drop_mtypes : list of str, optional
+        Methodology types that do not count (aggregators and online panels).
+    drop_ctypes : list of str, optional
+        Context types that do not count (polls within the ban and exit polls).
+
+    Returns
+    -------
+    int
+        Number of featured events of the scope.
+    """
+    model = Events()
+    events = model.get_results(query=dict(filters=["scope = '{}'".format(scope)]), formatted=True)
+
+    data = EventsData().get_results(query=dict(
+        filters=["scope = '{}'".format(scope), 'region_id = 0', 'votes IS NOT NULL']
+    ), formatted=True)
+
+    polls = Polls().get_results(query=dict(filters=["event_scope = '{}'".format(scope)]), formatted=True)
+    useful = polls.loc[
+        polls['computed'].fillna(False).astype(bool) & (polls['weight_over'] > 0)
+        & ~polls['mtype'].isin(drop_mtypes or []) & ~polls['ctype'].isin(drop_ctypes or [])
+    ].groupby('event_date', observed=True).size()
+
+    events['featured'] = events['date'].isin(data['date']) & (events['date'].map(useful).fillna(0) >= min_polls)
+    model.upsert(model.format_data(events, int_type='nullable', bin_type='nullable', sort=True))
+
+    return int(events['featured'].sum())
 
 
 def get_event_dates(

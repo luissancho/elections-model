@@ -98,3 +98,24 @@ def test_run_case_provincial_metrics(app):
     off = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True, regional_noise=False)
     assert bool(off['meta'].iloc[0]['regional_noise']) is False
     assert np.allclose(off['shares']['model'], case['shares']['model'])   # el nowcast nacional no cambia
+
+
+def test_run_case_regional_2023_6_days(app):
+    """M11: un caso autonómico (Madrid 2023 a 6 días) con los eventos por defecto de su ámbito."""
+    from mtpy.lib.backtest import default_events, run_case
+    assert '2023-05-28' in default_events('es-md') and '2026-11-29' not in default_events('es')
+    case = run_case('es-md', '2023-05-28', 6, n_sim=50, nowcast_only=True)
+    assert case['shares'].shape[0] >= 4 and int(case['seats']['official'].sum()) == 135
+
+
+def test_run_case_records_the_scope_of_the_estimators(app):
+    """Validación del mínimo (M11): `min_events` llega al Simulator y `meta` registra con qué ámbito se ajustó."""
+    from mtpy.lib.backtest import run_case
+
+    import pandas as pd
+
+    own = run_case('es-md', '2023-05-28', 6, n_sim=10, nowcast_only=True, min_events=3)['meta'].loc[0]
+    parent = run_case('es-md', '2023-05-28', 6, n_sim=10, nowcast_only=True)['meta'].loc[0]
+
+    assert (own['est_scope'], own['n_featured'], own['min_events']) == ('es-md', 4, 3)
+    assert (parent['est_scope'], parent['n_featured']) == ('es', 4) and pd.isnull(parent['min_events'])

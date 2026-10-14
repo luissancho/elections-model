@@ -133,3 +133,49 @@ def test_summarize_case_provincial_metrics_skip_cells_without_projection():
 
     m = summarize_case(shares, seats.assign(seats_valid=False), blocks.assign(seats_valid=False), provinces)
     assert np.isnan(m['cov_prov_shares50']) and np.isnan(m['mae_prov_shares']) and np.isnan(m['n_prov_cells'])
+
+
+def test_results_dir_keeps_es_at_the_root():
+    """M11: los resultados de `es` siguen en la raíz; cada ámbito autonómico tiene su carpeta."""
+    import importlib.util
+    import os
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.results_dir('backtest/results', 'es') == 'backtest/results'
+    assert module.results_dir('backtest/results', 'es-md') == os.path.join('backtest/results', 'es-md')
+
+
+def test_run_backtest_survives_when_every_case_is_skipped(monkeypatch):
+    """M11: un ámbito cuyos casos fallan todos devuelve tablas vacías, no una excepción."""
+    import warnings
+    from mtpy.lib import backtest
+
+    def failing_case(*args, **kwargs):
+        raise ValueError('no usable polls')
+
+    monkeypatch.setattr(backtest, 'run_case', failing_case)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        out = backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30])
+    assert out['metrics'].shape[0] == 0 and out['by_horizon'].shape[0] == 0
+    assert out['meta'].shape[0] == 2 and out['meta']['error'].eq('no usable polls').all()
+
+
+def test_run_backtest_passes_min_events_to_every_case(monkeypatch):
+    """Validación del mínimo (M11): `run_backtest` traslada `min_events` a cada caso."""
+    import warnings
+    from mtpy.lib import backtest
+
+    seen = []
+
+    def failing_case(*args, **kwargs):
+        seen.append(kwargs.get('min_events'))
+        raise ValueError('no usable polls')
+
+    monkeypatch.setattr(backtest, 'run_case', failing_case)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30], min_events=99)
+    assert seen == [99, 99]

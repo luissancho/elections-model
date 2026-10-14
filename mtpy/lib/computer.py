@@ -22,10 +22,12 @@ from ..core.utils.dataviz import (
 from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
-    get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results
+    get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
+    get_herding, save_herding_data,
+    get_scope_parent, get_event_data
 )
 from .utils import (
-    build_blocks, group_results, norm_range
+    build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
 
 
@@ -475,6 +477,7 @@ class Computer(Core):
         self.ratings = None
         self.drift = None  # Drift table of the current events (see `get_drift_data`)
         self.house_effects = None  # House effects table of the current events (see `get_house_effects_data`)
+        self.herding = None  # Herding table of the current events (see `get_herding_data`)
 
         self.seats_estimator = None
         self.error_estimator = None
@@ -503,6 +506,33 @@ class Computer(Core):
             A DataFrame with the polls predictions.
         """
         return self.series.loc[self.series.pollster.notnull()]
+
+    def regional_flags(self) -> pd.Series:
+        """
+        `regional` flag of every party (1: it only runs in part of the territory of the scope), indexed by
+        name. In the national scope it is the curated flag of the parties table. Within an autonomous
+        community it is derived from the results by district of the current events: a party is regional when,
+        in the last election it ran, its districts held less than half of the valid votes of the community
+        (see `partial_parties`: UPL or Por Ávila in Castilla y León, the parties of a single island).
+        """
+        flags = get_parties().set_index('name')['regional'].astype(int)
+        if get_scope_parent(self.scope) is None:
+            return flags
+
+        flags[:] = 0
+        dates = list(self.event_dates)
+        res = get_event_results(self.scope, dates)
+        res = res.loc[(res['party_id'] > 0) & (res['region_id'] > 0) & (res['region_id'] != REGIONAL_LIST_ID)]
+        data = get_event_data(self.scope, dates)
+        for date, g in res.groupby('date', sort=True):
+            pct = g.pivot_table(index='region_id', columns='party', values='pct', aggfunc='sum', observed=True)
+            votes = data.loc[data['date'] == date].set_index('region_id')['votes'].astype(float)
+            partial = partial_parties(pct, votes)
+            for name in pct.columns:
+                if name in flags.index and pct[name].fillna(0).gt(0).any():
+                    flags[name] = int(name in partial)
+
+        return flags
 
     def merge_bmaps(
         self,
@@ -1197,7 +1227,9 @@ class Computer(Core):
 
     def compute_ratings(
         self,
-        save: bool = False
+        save: bool = False,
+        scopes: Optional[list[str] | str] = None,
+        rating_weights: Optional[dict[str, float]] = None
     ) -> pd.DataFrame:
         """
         Compute the ratings of all the pollsters that have polls performed in the current events.
@@ -1241,10 +1273,21 @@ class Computer(Core):
 
         The resulting rating is the mean reverted deviation scaled to the range [5-95].
 
+        The rating of an event can also learn from the polls of other scopes (M11): with `scopes`, the polls
+        of every election held strictly before the event, in any of those scopes, enter the algorithm with
+        their weight multiplied by the `rating_weight` of their scope (1 for the national one, 0.5 for the
+        regional ones). The events rated are always those of the scope of this computer.
+
         Parameters
         ----------
         save : bool, optional
             Whether to save the data to the database.
+        scopes : list of str or 'all', optional
+            Scopes whose polls feed the ratings. `None` uses only the scope of this computer (weight 1);
+            `'all'` takes every scope of the catalogue (`data/es-scopes.csv`) with a positive weight.
+        rating_weights : dict, optional
+            Weight of the polls of each scope, replacing those of the catalogue. Scopes with weight 0 are
+            left out.
 
         Returns
         -------
@@ -1259,44 +1302,35 @@ class Computer(Core):
         ]
         rkeys = ['event_date', 'pollster_id']
 
-        polls = self.filter_polls().drop(columns=columns + self.names + ['-'])
-
-        # Scale absolute percentage errors to the range [0, 1]
-        polls[['error_avg', 'error_blocks', 'error_within']] = polls[['error_avg', 'error_blocks', 'error_within']].div(100)
-        # Scale bias deviations to the log odds ratio scale
-        polls[[
-            'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err'
-        ]] = polls[[
-            'bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err'
-        ]].apply(self.bias_to_lor)
-
-        dr = pd.DataFrame(columns=rkeys + rparams)
+        if scopes is None:
+            weights = {self.scope: 1.}
+        else:
+            weights = rating_weights if rating_weights is not None else get_scopes()['rating_weight'].to_dict()
+            names = list(weights) if scopes == 'all' else list(scopes)
+            weights = {s: float(weights.get(s, 0.)) for s in names}
+            weights.setdefault(self.scope, 1.)
+        weights = {s: w for s, w in weights.items() if w > 0 or s == self.scope}
 
         if self.verbose > 0:
             print('Compute ratings...')
 
-        edts = polls.index.get_level_values('event_date').unique()
-        for i in np.arange(1, len(edts) + 1):
-            event_date = edts[i] if i < len(edts) else get_next_event_date(self.scope, date_from=edts[i - 1])
+        pool = self.rating_pool(list(weights))
 
-            if self.verbose > 0:
-                print('Compute ratings for {}...'.format(event_date))
+        # Pollsters rated: those of this scope plus those with polls in the scopes that weigh
+        pollsters = self.pollsters
+        if len(weights) > 1:
+            every = get_pollsters()
+            rated = set(pollsters['name']) | set(pool['pollster'].dropna().astype(str).unique())
+            pollsters = every.loc[every['name'].isin(rated)]
 
-            iter_polls = polls.loc[:edts[i - 1]]
-            if iter_polls.shape[0] == 0 or iter_polls['bias'].isnull().any():
-                if self.verbose > 0:
-                    print('No polls found, skipping...')
+        # Events rated: those of this scope with polls, and its next one
+        own = pool.xs(self.scope, level='event_scope').index.get_level_values('event_date').unique().sort_values()
+        targets = list(own)
+        if len(own) > 0:
+            next_date = get_next_event_date(self.scope, date_from=own[-1])
+            targets.append(pd.to_datetime(next_date) if next_date is not None else pd.NaT)
 
-                continue
-
-            ratings = self.pollster_ratings(iter_polls).reset_index()
-
-            
-            ratings['event_date'] = pd.to_datetime(event_date) if event_date is not None else pd.NaT
-            ratings['pollster_id'] = ratings['pollster'].map(self.pollsters.set_index('name')['id'])
-            ratings = ratings[dr.columns]
-
-            dr = pd.concat([dr, ratings], ignore_index=True)
+        dr = self.rate_events(pool, targets, weights, pollsters)
 
         if self.verbose > 0:
             print('Process data...')
@@ -1322,9 +1356,10 @@ class Computer(Core):
             if self.verbose > 0:
                 print('Save ratings data...')
 
-            # Add the common missing `event_scope` index to the polls DataFrame and save data
+            # Add the common missing `event_scope` index to the polls DataFrame and save data.
+            # `pollsters.rating` keeps the last rating of the national scope only
             data = pd.concat([dr], keys=[self.scope], names=['event_scope'] + rkeys)
-            nrows = save_ratings_data(data)
+            nrows = save_ratings_data(data, update_pollsters=(self.scope == 'es'))
 
             if self.verbose > 0:
                 print('{} rows updated...'.format(nrows))
@@ -1345,10 +1380,117 @@ class Computer(Core):
 
         # Update series
         self.series[columns] = df.reindex(self.series.index)
-        # Update ratings
+        # Update ratings: every row computed, also those of pollsters not stored yet for these events
+        new_rows = dr.index.difference(self.ratings.index)
+        self.ratings = self.ratings.reindex(self.ratings.index.union(dr.index))
         self.ratings[rparams] = dr.reindex(self.ratings.index)
+        if len(new_rows) > 0 and 'pollster' in self.ratings.columns:
+            names = pollsters.set_index('id')['name']
+            self.ratings.loc[new_rows, 'pollster'] = new_rows.get_level_values('pollster_id').map(names)
 
         return df
+
+    def rating_pool(
+        self,
+        scopes: list[str]
+    ) -> pd.DataFrame:
+        """
+        Polls that feed the ratings: the filtered polls (`filter_polls`) of each scope, without the party
+        columns, indexed by `event_scope` plus the keys of the series. The scale of the errors is the internal
+        one of the rating algorithm ([0, 1] and log odds ratio).
+
+        Parameters
+        ----------
+        scopes : list of str
+            Scopes to gather; the one of this computer uses its own series, the others a computer of that
+            scope with the same filters. Scopes without polls are skipped.
+        """
+        columns = ['rating', 'weight_rating']
+        bias_cols = ['bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err']
+        frames = {}
+
+        for scope in scopes:
+            if scope == self.scope:
+                comp = self
+            else:
+                if len(get_event_dates(scope=scope, min_polls=1)) == 0:
+                    continue
+                comp = Computer(
+                    scope=scope, drop_mtypes=self.drop_mtypes, drop_ctypes=self.drop_ctypes, drange=self.drange,
+                    n_last=self.n_last, verbose=0, path=self.path
+                ).build_series()
+
+            polls = comp.filter_polls().drop(columns=columns + comp.names + ['-'], errors='ignore')
+            # Scale absolute percentage errors to the range [0, 1]
+            polls[['error_avg', 'error_blocks', 'error_within']] = polls[['error_avg', 'error_blocks', 'error_within']].div(100)
+            # Scale bias deviations to the log odds ratio scale
+            polls[bias_cols] = polls[bias_cols].apply(self.bias_to_lor)
+            frames[scope] = polls
+
+        return pd.concat(frames, names=['event_scope'] + self.keys)
+
+    def rate_events(
+        self,
+        pool: pd.DataFrame,
+        targets: list[pd.Timestamp],
+        rating_weights: dict[str, float],
+        pollsters: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Pollster ratings before each event of `targets`: the rating algorithm (`pollster_ratings`) over the
+        polls of `pool` whose election was held strictly before the event, whatever their scope. Elections
+        held on the same day do not see each other. Polls of scopes with weight 0 are dropped before any
+        weight is computed (they would otherwise move the reference year of the time decay).
+
+        Parameters
+        ----------
+        pool : pd.DataFrame
+            Polls indexed by `event_scope` plus the keys of the series (see `rating_pool`).
+        targets : list of pd.Timestamp
+            Dates of the events to rate; `NaT` rates with every poll (no next event known).
+        rating_weights : dict
+            Weight of the polls of each scope.
+        pollsters : pd.DataFrame
+            Pollsters to rate (`id`, `name`, `quality`).
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event and pollster: `event_date`, `pollster_id` and the rating columns, in the
+            internal scale. Events without previous polls are skipped.
+        """
+        rparams = [
+            'quality', 'num_events', 'num_polls', 'num_polls_w',
+            'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias',
+            'bias_dev_adj', 'bias_dev_err', 'rating_adj', 'rating', 'weight_rating'
+        ]
+        rkeys = ['event_date', 'pollster_id']
+        frames = []
+
+        scope_weights = pool.index.get_level_values('event_scope').map(lambda s: rating_weights.get(s, 1.))
+        pool = pool.loc[np.asarray(scope_weights, dtype=float) > 0]
+        dates = pool.index.get_level_values('event_date')
+
+        for target in targets:
+            if self.verbose > 0:
+                print('Compute ratings for {}...'.format(target))
+
+            iter_polls = pool if pd.isnull(target) else pool.loc[dates < pd.Timestamp(target)]
+            if iter_polls.shape[0] == 0 or iter_polls['bias'].isnull().any():
+                if self.verbose > 0:
+                    print('No polls found, skipping...')
+
+                continue
+
+            ratings = self.pollster_ratings(iter_polls, rating_weights=rating_weights, pollsters=pollsters).reset_index()
+            ratings['event_date'] = pd.to_datetime(target) if not pd.isnull(target) else pd.NaT
+            ratings['pollster_id'] = ratings['pollster'].map(pollsters.set_index('name')['id'])
+            frames.append(ratings[rkeys + rparams])
+
+        if len(frames) == 0:
+            return pd.DataFrame(columns=rkeys + rparams)
+
+        return pd.concat(frames, ignore_index=True)
 
     def poll_errors(
         self,
@@ -1438,7 +1580,9 @@ class Computer(Core):
 
     def pollster_ratings(
         self,
-        polls: pd.DataFrame
+        polls: pd.DataFrame,
+        rating_weights: Optional[dict[str, float]] = None,
+        pollsters: Optional[pd.DataFrame] = None
     ) -> pd.DataFrame:
         """
         Pollster rating algorithm.
@@ -1449,20 +1593,26 @@ class Computer(Core):
         ----------
         polls : pd.DataFrame
             Polls to be used in the rating algorithm.
+        rating_weights : dict, optional
+            Weight of the polls of each scope (`weight_scope`), when `polls` gathers several scopes (index
+            level `event_scope`); 1 for every poll by default.
+        pollsters : pd.DataFrame, optional
+            Pollsters to rate (`name`, `quality`); those of the series by default.
 
         Returns
         -------
         pd.DataFrame
             A table containing the computed values of each pollster.
         """
+        pollsters = self.pollsters if pollsters is None else pollsters
         df = polls[polls['bias'].notnull()]
 
         # Compute additional weights of each poll
-        df[['weight_pos', 'weight_week', 'weight_year']] = self.poll_rating_weights(df)
+        df[['weight_pos', 'weight_week', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df, rating_weights)
 
         # Compute the final weight of each poll by multiplying all the other weights computed
         df['weight'] = df[[
-            'weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year'
+            'weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year', 'weight_scope'
         ]].prod(axis=1)
 
         # Remove polls with weight below the threshold
@@ -1470,32 +1620,37 @@ class Computer(Core):
 
         # Create a DataFrame to store the results, using the pollster names as index
         dr = pd.DataFrame(
-            index=self.pollsters['name'].rename('pollster')
+            index=pollsters['name'].rename('pollster')
         )
 
         # Get the quality of each pollster, a scoring value of the pollster's metodology and historical standards
         # It is set to be a number between 0 and 100, the greater this value, the more reliable the pollster
-        dr['quality'] = self.pollsters.set_index('name').quality.astype(float).div(100)
+        dr['quality'] = pollsters.set_index('name').quality.astype(float).div(100)
 
-        # Get the total number of events concurred and polls published by each pollster
+        # Get the total number of events concurred and polls published by each pollster (an event is a scope
+        # and a date: two regional elections held on the same day count twice)
         # Pollsters without evaluable polls contribute zero evidence, so their rating equals their prior quality
-        dr['num_events'] = df.groupby('pollster', observed=True)['event_date'].nunique().reindex(dr.index).fillna(0)
+        if 'event_scope' in df.columns:
+            df['event_key'] = df['event_scope'].astype(str) + '|' + df['event_date'].astype(str)
+        else:
+            df['event_key'] = df['event_date']
+        dr['num_events'] = df.groupby('pollster', observed=True)['event_key'].nunique().reindex(dr.index).fillna(0)
         dr['num_polls'] = df.groupby('pollster', observed=True)['event_date'].count().reindex(dr.index).fillna(0)
         # Weighted number of polls, giving more importance to the most recent polls
         dr['num_polls_w'] = df.groupby('pollster', observed=True)['weight'].sum().reindex(dr.index).fillna(0)
 
         # Compute the weighted mean of each pollster's poll errors
         for col in ['error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias']:
-            dr[col] = df.groupby('pollster').apply(
+            dr[col] = df.groupby('pollster', observed=True).apply(
                 lambda x: np.sum(x[col] * x['weight']) / np.sum(x['weight'])
             ).reindex(dr.index)
 
         # Compute the weighted mean of each pollster's poll deviations
-        dr['bias_dev_adj'] = df.groupby('pollster').apply(
+        dr['bias_dev_adj'] = df.groupby('pollster', observed=True).apply(
             lambda x: np.sum(x['weight'] * x['bias_dev_adj']) / np.sum(x['weight'])
         ).reindex(dr.index)
         # Compute the weighted standard error of each pollster's poll deviations
-        dr['bias_dev_err'] = df.groupby('pollster').apply(
+        dr['bias_dev_err'] = df.groupby('pollster', observed=True).apply(
             lambda x: np.sqrt(np.sum(np.square(x['weight']) * np.square(x['bias_dev_err'])) / np.square(np.sum(x['weight'])))
         ).reindex(dr.index) * np.sqrt(
             (dr['num_polls_w'] + 1) / dr['num_polls_w']
@@ -1537,7 +1692,8 @@ class Computer(Core):
     
     def poll_rating_weights(
         self,
-        polls: pd.DataFrame
+        polls: pd.DataFrame,
+        rating_weights: Optional[dict[str, float]] = None
     ) -> pd.DataFrame:
         """
         Compute additional weights needed to compute pollster ratings and an estimation of their relative deviation
@@ -1546,7 +1702,10 @@ class Computer(Core):
         Parameters
         ----------
         polls : pd.DataFrame, optional
-            The polls to get the rating for.
+            The polls to get the rating for. When they gather several scopes (index level `event_scope`), an
+            event is a scope and a date.
+        rating_weights : dict, optional
+            Weight of the polls of each scope (`weight_scope`); 1 by default.
 
         Returns
         -------
@@ -1554,14 +1713,16 @@ class Computer(Core):
             The polls data with the new weights and deviations.
         """
         df = polls.reset_index()
+        if 'event_scope' not in df.columns:
+            df['event_scope'] = self.scope
+        rating_weights = rating_weights if rating_weights is not None else {}
 
         # We use all polls published by each pollster, but give more weight to the ones published closer to the event
-        df['seq_pos'] = df.groupby(['event_date', 'pollster_id'])['date'].cumcount(ascending=False)
+        df['seq_pos'] = df.groupby(['event_date', 'event_scope', 'pollster_id'], observed=True)['date'].cumcount(ascending=False)
         df['weight_pos'] = df['seq_pos'].apply(lambda x: np.power(self.pos_decay, x))
 
         # We give more weight to the polls published closer to the event
-        event_dlimits = polls.groupby('event_date')['days'].min().to_dict()
-        df['event_dlimits'] = df['event_date'].map(event_dlimits)
+        df['event_dlimits'] = df.groupby(['event_date', 'event_scope'], observed=True)['days'].transform('min')
         df['weeks'] = ((df['days'] - df['event_dlimits'] + 1) // 7).clip(0)
         df['weight_week'] = np.power(self.week_decay, df['weeks'])
 
@@ -1570,8 +1731,11 @@ class Computer(Core):
         df['years'] = df['event_year'].max() - df['event_year']
         df['weight_year'] = np.power(self.year_decay, df['years'])
 
-        df = df.set_index(self.keys)[[
-            'weight_pos', 'weight_week', 'weight_year'
+        # Weight of the scope of the poll: regional elections inform the rating less than national ones
+        df['weight_scope'] = df['event_scope'].map(lambda x: rating_weights.get(x, 1.)).astype(float)
+
+        df = df.set_index(list(polls.index.names))[[
+            'weight_pos', 'weight_week', 'weight_year', 'weight_scope'
         ]].round(2).astype(float)
 
         return df
@@ -1764,9 +1928,13 @@ class Computer(Core):
         Returns
         -------
         pd.DataFrame
-            The polls data with the specified metric.
+            The polls data with the specified metric, indexed by `(event, pollster, days)`; `event_date` is the
+            ISO date of the `event` label.
         """
-        df = self.filter_polls(featured, **kwargs).dropna(axis=1, how='all')
+        df = self.filter_polls(featured, **kwargs)
+        # Drop only the parties no poll reports: a metric that is null for every poll of the selection (as
+        # `bias_within` when every `vs` block has a single party) must stay, null, in the output
+        df = df.drop(columns=[n for n in self.names if n in df.columns and df[n].isna().all()])
 
         names = [n for n in self.names if n in df.columns]
         if metric == 'error':
@@ -1796,10 +1964,11 @@ class Computer(Core):
             df = df.loc[df.pollster_id == pollster]
 
         df['event'] = ['{}-{}{}'.format(dt.year, dt.day, dt.strftime('%b')[0]) for dt in df.event_date]
+        df['event_date'] = pd.to_datetime(df['event_date']).dt.strftime('%Y-%m-%d')  # the unambiguous date of `event`
         df[['days', 'sample_size', 'proc_sample']] = df[['days', 'sample_size', 'proc_sample']].fillna(0).astype(int)
         df['weight'] = df.weight_over * df.weight_sample
         df = df.set_index(['event', 'pollster', 'days']).sort_index(ascending=(True, True, False))[[
-            'sample_size', 'proc_sample', 'weight', 'error_avg', 'bias_avg', 'error_blocks', 'bias_blocks', 'error_within', 'bias_within', 'bias'
+            'event_date', 'sample_size', 'proc_sample', 'weight', 'error_avg', 'bias_avg', 'error_blocks', 'bias_blocks', 'error_within', 'bias_within', 'bias'
         ] + names]
 
         return df
@@ -1904,7 +2073,7 @@ class Computer(Core):
 
         df['error'] = df.error.abs()
         df['pollster'] = df.pollster_id.map(self.pollsters.set_index('id').name)
-        df['regional'] = df.party.map(self.parties.set_index('name').regional).astype(int)
+        df['regional'] = df.party.map(self.regional_flags()).astype(int)
         df['color'] = df.party.map(self.parties.set_index('name').color)
         df['weeks'] = (df.days + 1) // 7
 
@@ -2210,15 +2379,23 @@ class Computer(Core):
                 err = np.nan
             return pd.Series({'n_result': n, 'dev_result': dev, 'dev_result_err': err})
 
-        result = long.groupby(keys, observed=True)[['w', 'e']].apply(agg_result).reset_index()
+        if long.shape[0] > 0:
+            result = long.groupby(keys, observed=True)[['w', 'e']].apply(agg_result).reset_index()
+        else:
+            # No poll with a computed error in the window (e.g. the first load of a scope)
+            result = pd.DataFrame(columns=keys + ['n_result', 'dev_result', 'dev_result_err'])
         result = result.loc[result['n_result'] >= he_min_polls]
 
         # Centre across pollsters, per event and party: the industry-wide deviation is kept apart
-        def centre(g):
-            industry = float((g['dev_result'] * g['n_result']).sum() / g['n_result'].sum())
-            return g.assign(industry=industry, dev_result_c=g['dev_result'] - industry)
+        result = self.centre_house_results(result)
 
-        result = result.groupby(['event_date', 'party'], observed=True, group_keys=False)[result.columns].apply(centre)
+        columns = [
+            'event_date', 'event_scope', 'pollster_id', 'party_id', 'pollster', 'party', 'level',
+            'n_result', 'dev_result', 'dev_result_err', 'dev_result_c', 'industry', 'n_cycle', 'dev_cycle', 'dev_cycle_err'
+        ]
+        if result.shape[0] == 0:
+            # No pollster with enough polls in the campaign of any event: no house effects for this scope
+            return pd.DataFrame(columns=columns)
 
         # (b) Deviation from the consensus of the cycle, all polls, no prior
         rows = []
@@ -2261,12 +2438,36 @@ class Computer(Core):
             for dt, party in zip(df['event_date'], df['party'])
         ]
 
-        columns = [
-            'event_date', 'event_scope', 'pollster_id', 'party_id', 'pollster', 'party', 'level',
-            'n_result', 'dev_result', 'dev_result_err', 'dev_result_c', 'industry', 'n_cycle', 'dev_cycle', 'dev_cycle_err'
-        ]
-
         return df[columns].sort_values(['event_date', 'pollster_id', 'party_id'], ignore_index=True)
+
+    @staticmethod
+    def centre_house_results(
+        result: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Centre the deviations of the pollsters from the official result across pollsters, per event and party:
+        `industry` is the mean deviation of the industry (weighted by the polls of each pollster, `n_result`)
+        and `dev_result_c` the deviation of each pollster from it.
+
+        Parameters
+        ----------
+        result : pd.DataFrame
+            One row per event, pollster and party with `n_result` and `dev_result`. It may be empty (a scope
+            where no pollster has enough polls in the campaign).
+
+        Returns
+        -------
+        pd.DataFrame
+            `result` with the columns `industry` and `dev_result_c`.
+        """
+        if result.shape[0] == 0:
+            return result.assign(industry=pd.Series(dtype=float), dev_result_c=pd.Series(dtype=float))
+
+        def centre(g):
+            industry = float((g['dev_result'] * g['n_result']).sum() / g['n_result'].sum())
+            return g.assign(industry=industry, dev_result_c=g['dev_result'] - industry)
+
+        return result.groupby(['event_date', 'party'], observed=True, group_keys=False)[result.columns].apply(centre)
 
     def compute_house_effects(
         self,
@@ -2294,6 +2495,145 @@ class Computer(Core):
         self.house_effects = df
 
         return df
+
+    # --- Herding (M13) ---------------------------------------------------------------------------------------
+
+    def get_herding_data(
+        self,
+        n_series: int = 4,
+        min_polls: int = 5
+    ) -> pd.DataFrame:
+        """
+        Measure the herding of each pollster in every election cycle with polls, the current one included (it
+        does not need the result): the dispersion of its published figures around the average fitted without
+        its own polls, relative to the sampling error of its samples, over the `n_series` main series of the
+        cycle (`Forecaster.measure_herding` on the raw polls, without house effects nor effective sample).
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event and pollster: `event_date`, `event_scope`, `pollster_id`, `pollster`, `n`,
+            `n_series`, `ss_obs`, `ss_exp`, `dof`, `ratio`, `p_value`.
+        """
+        from .forecaster import Forecaster
+
+        columns = ['event_date', 'event_scope', 'pollster_id', 'pollster', 'n', 'n_series', 'ss_obs', 'ss_exp', 'dof', 'ratio', 'p_value']
+        events = sorted(self.polls.index.get_level_values('event_date').unique().strftime('%Y-%m-%d'))
+        frames = []
+
+        events_ = tqdm(events) if self.verbose > 0 else events
+        for event_date in events_:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                try:
+                    fc = Forecaster(
+                        scope=self.scope, event_date=event_date, drop_mtypes=self.drop_mtypes, drange=None,
+                        alpha=self.alpha, bmap=None, house_effects=False, dispersion=False, verbose=0, path=self.path
+                    ).build_series()
+                    herd = fc.measure_herding(n_series=n_series, min_polls=min_polls)
+                except Exception as e:  # A cycle without enough polls to fit an average
+                    if self.verbose > 0:
+                        print('Herding {} skipped: {}'.format(event_date, e))
+                    continue
+
+            if herd.shape[0] == 0:
+                continue
+            herd = herd.reset_index()
+            herd['event_date'] = pd.Timestamp(event_date)
+            herd['event_scope'] = self.scope
+            frames.append(herd)
+
+        if len(frames) == 0:
+            return pd.DataFrame(columns=columns)
+
+        df = pd.concat(frames, ignore_index=True)
+        df['pollster_id'] = df['pollster_id'].astype(int)
+
+        return df[columns].sort_values(['event_date', 'pollster_id'], ignore_index=True)
+
+    def compute_herding(
+        self,
+        save: bool = False,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Compute the herding table of the current events (see `get_herding_data`) and, optionally, save it into
+        the `pollsters_herding` table of the database, replacing the rows of the same events.
+        """
+        if self.verbose > 0:
+            print('Compute herding...')
+
+        df = self.get_herding_data(**kwargs)
+
+        if save:
+            if self.verbose > 0:
+                print('Save herding data...')
+
+            nrows = save_herding_data(df)
+
+            if self.verbose > 0:
+                print('{} rows updated...'.format(nrows))
+
+        self.herding = df
+
+        return df
+
+    def load_herding(self) -> pd.DataFrame:
+        """
+        Load the herding table of the scope from the database (empty if it was never computed).
+        """
+        self.herding = get_herding(scope=self.scope)
+
+        return self.herding
+
+    def herding_summary(
+        self,
+        event_date: Optional[str] = None,
+        data: Optional[pd.DataFrame] = None
+    ) -> pd.DataFrame:
+        """
+        Herding of each pollster up to an election: its sums of squares pooled over the cycles held up to
+        `event_date` (included: the herding of a cycle is known before its result), each cycle weighed by
+        `year_decay` per year of age, as in the ratings. Informative: it does not enter the rating.
+
+        Parameters
+        ----------
+        event_date : str, optional
+            Last cycle counted; every cycle by default.
+        data : pd.DataFrame, optional
+            Herding table (`get_herding_data`); the one of the computer, or the database, by default.
+
+        Returns
+        -------
+        pd.DataFrame
+            Indexed by `pollster`: `herding` (pooled ratio), `herding_last` (ratio of its last cycle),
+            `herding_p` (p-value of its last cycle), `herding_n` (polls) and `herding_events` (cycles).
+        """
+        if data is None:
+            data = self.herding if self.herding is not None else self.load_herding()
+
+        columns = ['herding', 'herding_last', 'herding_p', 'herding_n', 'herding_events']
+        df = data.copy()
+        if df.shape[0] == 0:
+            return pd.DataFrame(columns=columns, index=pd.Index([], name='pollster'))
+
+        df['event_date'] = pd.to_datetime(df['event_date'])
+        target = df['event_date'].max() if event_date is None else pd.Timestamp(event_date)
+        df = df.loc[df['event_date'] <= target]
+        df['d'] = np.power(self.year_decay, target.year - df['event_date'].dt.year)
+        df['pollster'] = df['pollster'].astype(str)
+
+        def pool(g):
+            g = g.sort_values('event_date')
+            return pd.Series({
+                'herding': float(np.sqrt((g['d'] * g['ss_obs']).sum() / (g['d'] * g['ss_exp']).sum())),
+                'herding_last': float(g['ratio'].iloc[-1]),
+                'herding_p': float(g['p_value'].iloc[-1]),
+                'herding_n': int(g['n'].sum()),
+                'herding_events': int(g.shape[0])
+            })
+
+        return df.groupby('pollster')[['event_date', 'd', 'ss_obs', 'ss_exp', 'ratio', 'p_value', 'n']].apply(pool)[columns]
 
     # --- House effects and error decomposition (M6): pure helpers -------------------------------------------
 
@@ -2400,6 +2740,10 @@ class Computer(Core):
         df = data.copy()
         df['event_date'] = pd.to_datetime(df['event_date'])
         current = pd.Timestamp(current) if current is not None else df['event_date'].max()
+        # Data with the current cycle only (a scope without rows in `pollsters_parties`) has no history columns
+        for column in ('dev_result_c', 'n_result'):
+            if column not in df.columns:
+                df[column] = np.nan
         hist = df.loc[(df['event_date'] < current) & df['dev_result_c'].notnull() & (df['n_result'] > 0)]
         cyc = df.loc[df['event_date'] == current]
 
@@ -2421,7 +2765,7 @@ class Computer(Core):
         # Current cycle rows (pollsters without history included)
         cycle = cyc[['pollster', 'party', 'dev_cycle', 'n_cycle']].rename(columns={'party': 'name', 'dev_cycle': 'cycle'})
         out = out.merge(cycle, on=['pollster', 'name'], how='outer')
-        out['n_events'] = out['n_events'].fillna(0).astype(int)
+        out['n_events'] = out['n_events'].astype(float).fillna(0).astype(int)  # object dtype without history
 
         # Blocks: the sum of the parties of the block
         parts = []
@@ -2557,7 +2901,7 @@ class Computer(Core):
         he['event_date'] = pd.to_datetime(he['event_date'])
         ind = he.groupby(['event_date', 'party'], observed=True)['industry'].first().reset_index()
 
-        regional = get_parties().set_index('name')['regional'].astype(int)
+        regional = self.regional_flags()
         ind = ind.loc[ind['party'].map(regional).fillna(1).astype(int) == 0]
 
         return self.composition_ratio(ind, pd.Timestamp(self.event_dates[-1]), year_decay=self.year_decay, min_events=min_events)
@@ -2628,10 +2972,12 @@ class Computer(Core):
             A table containing the data.
         """
         df = pd.DataFrame()
+        seats_total = None
 
         for metric in ['pct', 'seats']:
             d = self.load_events(metric)
             if metric == 'seats':
+                seats_total = d['seats'].astype(float)  # Seats of the chamber in each election
                 d = d.drop(columns=['seats'])
 
             names = [n for n in self.names if n in d.columns]
@@ -2648,16 +2994,19 @@ class Computer(Core):
             (df.pct >= 0.1) & (df.seats > 0)
         ].dropna().reset_index().sort_values(['date', 'pct'], ascending=[True, False], ignore_index=True)
 
-        df['regional'] = df.party.map(self.parties.set_index('name').regional.to_dict()).astype(int)
+        df['regional'] = df.party.map(self.regional_flags().to_dict()).astype(int)
         df['color'] = df.party.map(self.parties.set_index('name').color.to_dict())
         df['year'] = df.date.dt.year.astype(int)
         df['years'] = df.year.max() - df.year
         df['weight'] = np.power(0.97, df.years).round(2)
         df['ratio'] = (df.seats / df.pct).fillna(0).round(2)
         df['pos'] = df.groupby('date').cumcount() + 1
+        # Share of the seats of the chamber: comparable between parliaments of different sizes
+        df['seats_total'] = df.date.map(seats_total)
+        df['share'] = df.seats / df.seats_total
 
         df = df.sort_values('pct', ignore_index=True)[[
-            'party', 'regional', 'pct', 'seats', 'pos', 'color', 'years', 'weight', 'ratio'
+            'party', 'regional', 'pct', 'seats', 'pos', 'color', 'years', 'weight', 'ratio', 'seats_total', 'share'
         ]]
 
         return df
@@ -2669,8 +3018,9 @@ class Computer(Core):
         """
         Build an estimator of the seats based on the percentage of votes.
 
-        Runs a regression analysis that predicts the number of seats based on the
-        percentage of votes and whether the party is regional or not.
+        Runs a regression analysis that predicts the share of the seats of the chamber (`seats / seats_total`,
+        so that parliaments of 33 and 350 seats are comparable) based on the percentage of votes and whether
+        the party is regional or not. Multiply the prediction by the seats of the chamber to get seats.
 
         Parameters
         ----------
@@ -2686,7 +3036,7 @@ class Computer(Core):
 
         return LeastSquaresEstimator(
             x=df[['pct', 'regional']],
-            y=df['seats'],
+            y=df['share'],
             weights=df['weight'],
             **kwargs
         ).fit()
@@ -3082,6 +3432,11 @@ class Computer(Core):
         ]].sort_values('rating', ascending=False)
         df['rating'] = df['rating'].round()
 
+        # Herding of each pollster up to the event (M13): informative, it does not enter the rating
+        herding = self.herding_summary(event_date=event_date)
+        if herding.shape[0] > 0:
+            df['herding'] = herding['herding'].reindex(df.index).round(2)
+
         bars = [
             {
                 'color': 'green-light',
@@ -3109,6 +3464,15 @@ class Computer(Core):
                 'vmin': 0
             }
         ]
+        if 'herding' in df.columns:
+            # Centred at 1: herding (below) in red, over-dispersion (above, already penalized by M12) in grey
+            bars.append({
+                'color': ['red-light', 'grey-alpha'],
+                'subset': ['herding'],
+                'align': 1.,
+                'vmin': 0,
+                'vmax': 2
+            })
 
         dfs = get_df_styler(
             df,

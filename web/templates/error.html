@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ site_title }} · Error {{ status }}</title>
+  <meta name="description" content="Pronóstico electoral: promedio de encuestas y simulación de escaños.">
+  <link rel="stylesheet" href="/dist/css/site.css">
+</head>
+<body>
+  <header id="site-header">
+    <h1><a href="/">{{ site_title }}</a></h1>
+  </header>
+  <main id="main">
+    <section class="card">
+      <p class="status error">{{ message }}</p>
+      <p class="muted">Error {{ status }} · <a href="/">Volver al inicio</a></p>
+    </section>
+  </main>
+</body>
+</html>

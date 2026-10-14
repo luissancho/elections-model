@@ -1,0 +1,61 @@
+{
+  "schema": "event-pollsters@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-11T12:00:00Z",
+  "data": {
+    "blocks": [
+      "Derecha",
+      "Izquierda"
+    ],
+    "rows": [
+      {
+        "pollster_id": 2,
+        "pollster": "GAD3",
+        "n_polls": 1,
+        "sample_size": 3000,
+        "error_avg": 0.99,
+        "error_blocks": 1.36,
+        "bias_blocks": 0.54,
+        "last_days": 7,
+        "last_error_avg": 0.99,
+        "last_error_blocks": 1.36,
+        "last_bias_blocks": 0.54,
+        "last_Derecha": 0.68,
+        "last_Izquierda": -0.68
+      },
+      {
+        "pollster_id": 3,
+        "pollster": "40dB",
+        "n_polls": 1,
+        "sample_size": 1200,
+        "error_avg": 1.23,
+        "error_blocks": 2.35,
+        "bias_blocks": 0.23,
+        "last_days": 8,
+        "last_error_avg": 1.23,
+        "last_error_blocks": 2.35,
+        "last_bias_blocks": 0.23,
+        "last_Derecha": 1.23,
+        "last_Izquierda": -1.11
+      },
+      {
+        "pollster_id": 1,
+        "pollster": "CIS",
+        "n_polls": 1,
+        "sample_size": null,
+        "error_avg": 2.35,
+        "error_blocks": 4.57,
+        "bias_blocks": -1.23,
+        "last_days": 13,
+        "last_error_avg": 2.35,
+        "last_error_blocks": 4.57,
+        "last_bias_blocks": -1.23,
+        "last_Derecha": -2.35,
+        "last_Izquierda": 2.22
+      }
+    ]
+  }
+}

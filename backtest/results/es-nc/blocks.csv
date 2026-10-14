@@ -1,0 +1,9 @@
+event_date,horizon,block,parties,official_seats,model_seats,p_majority,majority,brier,log_score,seats_valid,model_seats_h,p_majority_h,brier_h,log_score_h
+2019-05-26,6,Derecha,,0.0,0.0,,False,,,False,0.0,,,
+2019-05-26,6,Izquierda,PSOE,11.0,9.0,0.0,False,0.0,0.0010005003335835344,False,9.0,0.0,0.0,0.0010005003335835344
+2019-05-26,30,Derecha,,0.0,0.0,,False,,,True,0.0,,,
+2019-05-26,30,Izquierda,PSOE,11.0,9.0,0.0,False,0.0,0.0010005003335835344,True,9.0,0.0,0.0,0.0010005003335835344
+2023-05-28,6,Derecha,PP+VOX,5.0,6.0,0.0,False,0.0,0.0010005003335835344,False,6.0,0.0,0.0,0.0010005003335835344
+2023-05-28,6,Izquierda,PSOE+UP,14.0,15.0,0.0,False,0.0,0.0010005003335835344,False,15.0,0.0,0.0,0.0010005003335835344
+2023-05-28,30,Derecha,PP+VOX,5.0,8.0,0.0,False,0.0,0.0010005003335835344,False,8.0,0.0,0.0,0.0010005003335835344
+2023-05-28,30,Izquierda,PSOE+UP,14.0,13.0,0.0,False,0.0,0.0010005003335835344,False,13.0,0.0,0.0,0.0010005003335835344

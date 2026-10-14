@@ -1,9 +1,13 @@
 """Tests del Forecaster que no necesitan base de datos (M6: efectos de casa)."""
+import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
 
 from mtpy.lib.forecaster import Forecaster
+from mtpy.lib.utils import build_blocks
+
+matplotlib.use('Agg')
 
 
 def _polls(offsets, n=6, start='2026-01-01', truth=None):
@@ -98,9 +102,13 @@ def test_center_effects_weighted_mean_is_zero_per_name():
 
 # --- M6: backfitting completo sin base de datos ---
 
-def _synthetic_forecaster(seed=0):
-    """Forecaster sin base de datos: serie sintética de 300 días, dos nombres, cuatro casas con desplazamiento."""
+def _synthetic_forecaster(seed=0, noise=None):
+    """
+    Forecaster sin base de datos: serie sintética de 300 días, dos nombres, cuatro casas con desplazamiento.
+    `noise` fija la desviación típica del ruido de una casa (0,8 por defecto; muestras de 1.000).
+    """
     rng = np.random.default_rng(seed)
+    noise = noise or {}
     start, end = pd.Timestamp('2026-01-01'), pd.Timestamp('2026-10-27')
     days = pd.date_range(start, end, freq='D')
     t = np.arange(len(days))
@@ -110,9 +118,10 @@ def _synthetic_forecaster(seed=0):
     rows = []
     for pid, (off_pp, off_psoe, span) in houses.items():
         for d in span[pid::10]:
+            sd = noise.get(pid, 0.8)
             rows.append({'date': d, 'pollster_id': pid, 'sponsor_id': 0, 'pollster': 'H{}'.format(pid), 'computed': True,
-                         'weight_over': 1., 'weight_sample': 1., 'weight_rating': 1., 'weight': 1.,
-                         'PP': truth.loc[d, 'PP'] + off_pp + rng.normal(0, 0.8), 'PSOE': truth.loc[d, 'PSOE'] + off_psoe + rng.normal(0, 0.8)})
+                         'proc_sample': 1000, 'sample_size': 1000, 'weight_over': 1., 'weight_sample': 1., 'weight_rating': 1., 'weight': 1.,
+                         'PP': truth.loc[d, 'PP'] + off_pp + rng.normal(0, sd), 'PSOE': truth.loc[d, 'PSOE'] + off_psoe + rng.normal(0, sd)})
     series = pd.DataFrame(rows).set_index(['date', 'pollster_id', 'sponsor_id']).sort_index()
     series['-'] = 100. - series[['PP', 'PSOE']].sum(axis=1)
 
@@ -125,6 +134,7 @@ def _synthetic_forecaster(seed=0):
     fc.reg_params = Forecaster.set_reg_params(fc, None)
     fc.he_params = Forecaster.set_he_params(fc, {'prior': None})
     fc.he_enabled, fc.house_effects, fc.date_fit_last = True, None, None
+    fc.disp_enabled, fc.disp_params, fc.dispersion = False, Forecaster.set_disp_params(fc, None), None
     fc.series_raw = None
     fc._set_series(series)
     return fc, truth, houses
@@ -139,7 +149,7 @@ def test_fit_house_effects_recovers_centered_offsets_and_removes_house_step():
     assert list(effects.index.names) == ['pollster_id', 'name']
     assert {'n', 'dev', 'dev_err', 'prior', 'prior_err', 'effect', 'effect_err'} <= set(effects.columns)
 
-    # Los efectos se recentran con los pesos de precisión del algoritmo (`w`, con decaimiento por antigüedad):
+    # Los efectos se recentran con los pesos de las encuestas en el promedio (`w`, con decaimiento por antigüedad):
     # media ponderada 0 por nombre; y recuperan los desplazamientos relativos
     pp = effects.xs('PP', level='name')
     w = pp['w']
@@ -167,6 +177,24 @@ def test_fit_house_effects_recovers_centered_offsets_and_removes_house_step():
     assert rmse_corr < rmse_raw
 
 
+def test_house_effects_are_centred_with_the_weights_of_the_average():
+    # Una casa muy desviada y con mal rating (el CIS con el PP) pesa poco en el promedio: debe pesar igual de
+    # poco en el consenso respecto al que se miden los efectos, o corregirlos desplaza el nivel del promedio
+    fc, _, _ = _synthetic_forecaster()
+    series = fc.series_raw.copy()
+    low = series.index.get_level_values('pollster_id') == 3
+    series.loc[low, 'PP'] -= 5.
+    series.loc[low, ['weight_rating', 'weight']] = 0.2
+    fc.series_raw = None
+    fc._set_series(series)
+    raw_fit = fc.fit('PP')
+
+    pp = fc.fit_house_effects(prior=None).xs('PP', level='name')
+    corr_fit = fc.fit('PP')
+    assert abs(float((corr_fit - raw_fit).mean())) < 0.2            # el nivel medio del ciclo no cambia
+    assert pp.loc[3, 'effect'] - pp.loc[4, 'effect'] == pytest.approx(-5.5, abs=0.5)   # y la casa se corrige entera
+
+
 def test_fit_forecast_applies_house_effects_lazily_and_can_be_disabled():
     fc, _, _ = _synthetic_forecaster()
     fc.fit_forecast(names=['PP'], max_fc=0)
@@ -178,6 +206,76 @@ def test_fit_forecast_applies_house_effects_lazily_and_can_be_disabled():
     off.fit_forecast(names=['PP'], max_fc=0)
     assert off.house_effects is None
     assert off.series['PP'].equals(off.series_raw['PP'])
+
+
+def test_fc_series_raw_keeps_the_published_polls_after_house_effects():
+    fc, _, _ = _synthetic_forecaster()
+    published = fc.fc_series['PP'].copy()
+    fc.fit_forecast(names=['PP'], max_fc=0)
+    assert fc.fc_series_raw['PP'].equals(published)       # lo publicado no cambia
+    assert not fc.fc_series['PP'].equals(published)       # lo que se promedia sí
+
+
+def test_plot_forecast_series_draws_the_published_polls_not_the_corrected_ones():
+    fc, _, _ = _synthetic_forecaster()
+    fc.blocks = build_blocks(['PP', 'PSOE'], {'PP': '#1d84ce', 'PSOE': '#ef1c27'})
+    fc.fit_forecast(max_fc=0)
+    raw = fc.series_raw.reset_index(['pollster_id', 'sponsor_id'])
+
+    # Los puntos de la casa destacada y los del resto son los sondeos tal como se publicaron
+    _, ax = matplotlib.pyplot.subplots()
+    fc.plot_forecast_series(
+        names=['PP'], pollster=1, dt_max='2026-10-27', show_forecast=False, show_events=False, show=False, ax=ax
+    )
+    house, others = (np.sort(c.get_offsets()[:, 1]) for c in ax.collections)
+    assert np.allclose(house, np.sort(raw.loc[raw.pollster_id == 1, 'PP']))
+    assert np.allclose(others, np.sort(raw.loc[raw.pollster_id != 1, 'PP']))
+    matplotlib.pyplot.close('all')
+
+
+# --- Muestra efectiva: dispersión de cada casa frente a su error muestral ---
+
+def test_house_dispersion_measures_the_excess_noise_of_a_house():
+    # Casa 1: ruido de muestreo puro (n = 1000, sd ≈ 1,45 puntos); casa 2: el triple
+    rng = np.random.default_rng(1)
+    truth = {'PP': 30., 'PSOE': 20.}
+    rows = []
+    for pid, sd_mult in [(1, 1.), (2, 3.)]:
+        for i in range(200):
+            rows.append({'date': pd.Timestamp('2026-01-01') + pd.Timedelta(days=i), 'pollster_id': pid, 'proc_sample': 1000,
+                         'PP': 30. + rng.normal(0, sd_mult * 100 * np.sqrt(.3 * .7 / 1000)),
+                         'PSOE': 20. + rng.normal(0, sd_mult * 100 * np.sqrt(.2 * .8 / 1000))})
+    polls = pd.DataFrame(rows).set_index('date').sort_index()
+    disp = Forecaster.house_dispersion(polls, _fitted(polls.index, truth), ['PP', 'PSOE'], min_polls=5, n_prior=0)
+    assert disp.loc[1, 'ratio'] == pytest.approx(1., abs=0.15)
+    assert disp.loc[2, 'ratio'] == pytest.approx(3., abs=0.4)
+    assert disp.loc[1, 'factor'] == 1.                        # nunca se premia la poca dispersión
+    assert disp.loc[2, 'factor'] == pytest.approx(1. / disp.loc[2, 'ratio'])
+    # Con pocas encuestas no hay medida: ratio 1; y el encogimiento acerca la ratio a 1
+    few = Forecaster.house_dispersion(polls.iloc[:3], _fitted(polls.index, truth), ['PP'], min_polls=5)
+    assert (few['ratio'] == 1.).all()
+    shrunk = Forecaster.house_dispersion(polls, _fitted(polls.index, truth), ['PP', 'PSOE'], min_polls=5, n_prior=200)
+    assert 1. < shrunk.loc[2, 'ratio'] < disp.loc[2, 'ratio']
+
+
+def test_fit_dispersion_rescales_the_sample_weight_of_the_noisy_house_only():
+    fc, _, _ = _synthetic_forecaster(noise={3: 4.5})
+    fc.disp_enabled = True
+    fc.disp_params['herding'] = False  # Solo M12: las demás casas oscilan menos que su muestra (0,8 frente a 1,45)
+    before = fc.fc_series.groupby('pollster_id')[['weight_sample', 'weight']].mean()
+
+    disp = fc.fit_dispersion()
+    after = fc.fc_series.groupby('pollster_id')[['weight_sample', 'weight']].mean()
+    assert disp.loc[3, 'ratio'] > 2.
+    assert after.loc[3, 'weight_sample'] == pytest.approx(before.loc[3, 'weight_sample'] * disp.loc[3, 'factor'])
+    assert after.loc[3, 'weight'] == pytest.approx(before.loc[3, 'weight'] * disp.loc[3, 'factor'])
+    for pid in (1, 2, 4):
+        assert after.loc[pid, 'weight'] == pytest.approx(before.loc[pid, 'weight'])
+    # Los pesos cambian también en la serie publicada, para que los efectos de casa los usen
+    assert fc.fc_series_raw.groupby('pollster_id')['weight'].mean().loc[3] == pytest.approx(after.loc[3, 'weight'])
+    # fit_forecast lo aplica una sola vez
+    fc.fit_forecast(names=['PP'], max_fc=0)
+    assert fc.fc_series.groupby('pollster_id')['weight'].mean().loc[3] == pytest.approx(after.loc[3, 'weight'])
 
 
 def test_industry_bias_from_history_is_relative_decayed_and_uncertain():
@@ -224,3 +322,104 @@ def test_fit_cluster_error_exceeds_hac_when_houses_disagree():
     ratio = (err_cluster / err_hac).dropna()
     assert ratio.median() > 1.2, ratio.describe()
 
+
+
+def test_usable_history_needs_three_events():
+    """M11: con menos de 3 elecciones previas el prior de los efectos de casa se anula."""
+    dates = pd.to_datetime(['2015-05-24', '2019-05-26', '2021-05-04'])
+    history = pd.DataFrame({'event_date': dates.repeat(2), 'pollster_id': [1, 2] * 3, 'dev_result_c': 1.})
+    assert Forecaster.usable_history(history).shape[0] == 6
+    short = Forecaster.usable_history(history.iloc[:4])
+    assert short.shape[0] == 0 and list(short.columns) == list(history.columns)
+
+
+def test_require_polls_names_the_event_without_polls():
+    """M11: un evento sin sondeos (una comunidad que acaba de votar) falla con un mensaje claro."""
+    polls = pd.DataFrame({'PP': [30.]}, index=pd.to_datetime(['2026-01-01']))
+    assert Forecaster.require_polls(polls, 'es-md', '2027-05-23') is polls
+    with pytest.raises(ValueError, match='No polls for es-an 2030-06-16'):
+        Forecaster.require_polls(polls.iloc[:0], 'es-an', '2030-06-16')
+
+
+# --- M11b: prior de efectos de casa global (todas las elecciones, con peso por ámbito y partido raíz) ---
+
+def test_house_prior_weighs_regional_elections_by_their_scope_weight():
+    """Dos elecciones a la misma distancia y con los mismos sondeos: la nacional pesa 1 y la autonómica 0,5."""
+    ref = pd.Timestamp('2027-05-23')
+    dates = pd.to_datetime(['2023-07-23', '2023-05-28'])
+    history = pd.DataFrame({
+        'event_date': dates, 'event_scope': ['es', 'es-md'], 'dev_result_c': [2., -2.], 'level': [20., 20.],
+        'n_result': [10, 10], 'w_scope': [1., .5]
+    })
+    years = ((ref - dates).days / 365.25).to_numpy()
+    w = 0.9 ** years * 10 * np.array([1., .5])
+    expected = float((w * np.array([.1, -.1])).sum() / (w.sum() + 10 * 1.)) * 30.
+    mean, err = Forecaster.house_prior(history, 30., ref, year_decay=0.9, he_tau=0.08, he_prior_events=1., n_cap=10)
+    assert mean == pytest.approx(expected) and mean > 0 and err == pytest.approx(0.08 * 30.)
+    # Sin la columna, todas las elecciones pesan igual (comportamiento anterior)
+    same, _ = Forecaster.house_prior(history.drop(columns='w_scope'), 30., ref, year_decay=0.9)
+    assert same < mean
+
+
+def test_industry_bias_weighs_elections_by_their_scope_weight():
+    history = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-07-23', '2023-05-28']), 'event_scope': ['es', 'es-md'], 'party': ['PP', 'PP'],
+        'industry': [2., -2.], 'level': [20., 20.], 'w_scope': [1., .5]
+    })
+    weighted = Forecaster.industry_bias(history, pd.Series({'PP': 30.}), pd.Timestamp('2027-05-23'))
+    flat = Forecaster.industry_bias(history.drop(columns='w_scope'), pd.Series({'PP': 30.}), pd.Timestamp('2027-05-23'))
+    assert weighted.loc['PP', 'bias'] > 0 and weighted.loc['PP', 'bias'] > flat.loc['PP', 'bias']
+
+
+def test_usable_history_counts_scope_and_date_pairs():
+    """Tres autonómicas del mismo día son tres elecciones."""
+    history = pd.DataFrame({
+        'event_date': pd.to_datetime(['2023-05-28'] * 3), 'event_scope': ['es-md', 'es-cl', 'es-vc'],
+        'pollster_id': [1, 1, 1], 'dev_result_c': 1.
+    })
+    assert Forecaster.usable_history(history).shape[0] == 3
+    assert Forecaster.usable_history(history.iloc[:2]).shape[0] == 0
+
+
+# --- M13: herding ---
+
+def test_pool_herding_ratio_and_lower_tail():
+    # Dos series de una casa con 10 encuestas: la mitad de la varianza esperada -> razón sqrt(0,5)
+    rows = pd.DataFrame({'pollster_id': [7, 7], 'name': ['PP', 'PSOE'], 'k': [10, 10], 'ss_obs': [4., 5.], 'ss_exp': [9., 9.]})
+    out = Forecaster.pool_herding(rows)
+    assert out.loc[7, 'n'] == 10 and out.loc[7, 'n_series'] == 2 and out.loc[7, 'dof'] == 9
+    assert out.loc[7, 'ratio'] == pytest.approx(np.sqrt(0.5))
+    assert 0 < out.loc[7, 'p_value'] < 0.5  # por debajo de lo esperado: cola inferior
+    # Sin herding la razón es 1 y el p-valor ronda 0,5
+    same = Forecaster.pool_herding(rows.assign(ss_obs=[9., 9.]))
+    assert same.loc[7, 'ratio'] == pytest.approx(1.) and 0.4 < same.loc[7, 'p_value'] < 0.7
+    assert Forecaster.pool_herding(rows.iloc[0:0]).shape[0] == 0
+
+
+def test_shrink_ratio_toward_one():
+    out = Forecaster.shrink_ratio(pd.Series([0.5, 2.]), pd.Series([5, 45]), n_prior=5.)
+    assert out.tolist() == pytest.approx([0.75, 1.9])
+
+
+def test_dispersion_factor_is_symmetric():
+    ratio = pd.Series([2., 1., 1., 1.], index=list('ABCD'))  # M12: razón recortada por debajo en 1
+    herd = pd.Series([0.4, 0.6, 1.3, np.nan], index=list('ABCD'))
+    out = Forecaster.dispersion_factor(ratio, herd, max_ratio=10.)
+    # A: sobredispersa (manda M12); B: rebaño; C: ni una cosa ni otra; D: sin medida
+    assert out.tolist() == pytest.approx([0.5, 0.6, 1., 1.])
+    # El suelo es 1 / max_ratio
+    assert Forecaster.dispersion_factor(pd.Series([1.]), pd.Series([0.01]), max_ratio=10.).iloc[0] == pytest.approx(0.1)
+
+
+def test_fit_dispersion_penalizes_the_herder_by_default():
+    # Ruido de muestreo puro (1,45 puntos con 1.000 entrevistas al 30 %) salvo la casa 4, pegada a la verdad
+    fc, _, _ = _synthetic_forecaster(noise={1: 1.45, 2: 1.45, 3: 1.45, 4: 0.3})
+    fc.disp_enabled = True
+    assert fc.disp_params['herding'] is True
+    disp = fc.fit_dispersion()
+    # El promedio sin la casa también tiene error: el residuo no baja hasta el 0,3 / 1,45 del ruido
+    assert disp.loc[4, 'herd_ratio'] < 0.75 and disp.loc[4, 'factor'] == pytest.approx(disp.loc[4, 'herd_ratio'])
+    others = disp.loc[[1, 2, 3], 'factor']
+    assert (others > 0.9).all() and (others > disp.loc[4, 'factor']).all()
+    herd = fc.measure_herding(names=['PP', 'PSOE'])
+    assert herd.loc[4, 'p_value'] < 0.01 and (herd.loc[[1, 2, 3], 'p_value'] > 0.01).all()

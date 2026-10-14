@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% block title %}Ranking Encuestadoras{% endblock %}
+{% block description %}Ranking Encuestadoras: qué encuestadoras aciertan más, cuánto se separa cada una del promedio y cuáles se ciñen al resto.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/casas.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{% set with_herding = true %}
+{% set with_block_error = false %}
+    {% include '_scope_filter.html' +%}
+    <div id="content" class="stack">
+      {% if headline_text %}{{ m.headline(headline_text) }}{% endif %}
+      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección del ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', '· próxima elección') }}
+        {% if ranking %}
+        <div class="chart" id="rating-chart" role="img" aria-label="Rating de cada encuestadora para la próxima elección"></div>
+        {% else %}
+        <p class="notice">Todavía no hay ratings de encuestadoras para este ámbito.</p>
+        {% endif %}
+        <div class="table-wrap">
+          <table id="ranking-table">
+            <caption>Encuestadoras con rating, de mayor a menor. Pulsa en una encuestadora para ver su perfil.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Encuestadora</th>
+                <th scope="col">Rating</th>
+                <th scope="col">Calidad</th>
+                <th scope="col">Sondeos</th>
+                <th scope="col">Elecciones</th>
+                <th scope="col">Error medio</th>
+                <th scope="col">Sesgo del margen</th>
+                <th scope="col">Herding</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in ranking %}
+              <tr>
+                <td><a href="/casas{{ scope_query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a></td>
+                <td>{{ row.rating|num(1) }}</td>
+                <td>{{ row.quality|num(1) }}</td>
+                <td>{{ row.num_polls|int }}</td>
+                <td>{{ row.num_events|int }}</td>
+                <td>{{ row.error_avg|num(1) }}</td>
+                <td>{{ row.error_blocks|num(1) }}</td>
+                <td>{{ row.herding|num(2) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% call m.how() %}
+        <p>Cada fila es una encuestadora con rating para la próxima elección. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con una calidad previa que pesa más cuantos menos sondeos tiene.</p>
+        <p>Cuanto más alto, más pesan sus sondeos en el promedio. El error medio, el sesgo del margen y el herding se explican en «Qué mide cada columna». Pulsa en una encuestadora para ver su perfil.</p>
+        <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
+        {% endcall %}
+        {% include '_glosario.html' %}
+      {{ m.card_end() }}
+      {{ m.card_start('house-effects', 'Efectos de encuestadora', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual, por partido y por bloque.', '· ciclo actual') }}
+        {% if grid is none %}
+        <p class="notice">Análisis no publicado todavía.</p>
+        {% elif not grid.rows %}
+        <p class="notice">Ninguna encuestadora tiene efectos de encuestadora en el ciclo actual.</p>
+        {% else %}
+        <div class="chart" id="effects-heatmap" role="img" aria-label="Mapa de calor del efecto de encuestadora del ciclo actual por encuestadora y por partido o bloque"></div>
+        <div class="table-wrap">
+          <table id="effects-table">
+            <caption>Desviación del ciclo actual. Pasa el ratón por una celda para ver la historia y la tendencia.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Encuestadora</th>
+                {% for name in grid.columns %}
+                <th scope="col">{{ name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in grid.rows %}
+              <tr>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ scope_query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                {% for cell in row.cells %}
+                <td title="Historia: {{ cell.hist|num(1) }} · Tendencia: {{ cell.trend|num(1) }} al año">{{ cell.cycle|num(1) }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% call m.how() %}
+        <p>Cada celda es la desviación de una encuestadora respecto al promedio de todas en el ciclo actual; la historia es su desviación media frente al resultado en elecciones pasadas y la tendencia, cuánto cambia cada año.</p>
+        <p>Positivo: la encuestadora da a ese partido o bloque más voto que el promedio; negativo, menos. Solo aparecen las encuestadoras con sondeos en el ciclo actual.</p>
+        <p>Una desviación no indica quién acierta: es una diferencia entre encuestadoras, no un error frente al resultado.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('herding', 'Herding', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar solo por el tamaño de sus muestras.') }}
+        {% if herding is none %}
+        <p class="notice">Análisis no publicado todavía.</p>
+        {% else %}
+        <div class="table-wrap">
+          <table id="herding-table">
+            <caption>De la encuestadora que más se ciñe al resto a la que menos.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Encuestadora</th>
+                <th scope="col">Herding</th>
+                <th scope="col">Último ciclo</th>
+                <th scope="col">p-valor del último ciclo</th>
+                <th scope="col">Sondeos</th>
+                <th scope="col">Ciclos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in herding %}
+              <tr>
+                <td>{% if row.pollster in pollster_ids %}<a href="/casas{{ scope_query }}&amp;id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{{ row.herding|num(2) }}</td>
+                <td>{{ row.herding_last|num(2) }}</td>
+                <td>{{ row.herding_p|num(3) }}</td>
+                <td>{{ row.herding_n|int }}</td>
+                <td>{{ row.herding_events|int }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% call m.how() %}
+        <p>Cada fila compara la dispersión de los sondeos de una encuestadora con la que cabría esperar solo por el tamaño de sus muestras. El p-valor mide cómo de improbable es la dispersión de su último ciclo si no hubiera herding.</p>
+        <p>Un valor cerca de 1 es lo esperable; por debajo de 1, sus sondeos se parecen entre sí más de lo que permite el azar.</p>
+        <p>Un valor bajo es una señal, no una prueba de que la encuestadora copie a otras.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para este ámbito.') }}
+        <p class="muted">Los ficheros conservan los nombres técnicos de las columnas.</p>
+        <ul class="link-list">
+          {% for link in csv_links %}
+          <li><a href="{{ link.href }}">{{ link.label }}</a> <span class="muted">CSV</span></li>
+          {% endfor %}
+        </ul>
+      {{ m.card_end() }}
+      {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
+                   'El rating resume los errores que ves en la página de elecciones. El texto del método cuenta cómo se convierten en una sola nota.',
+                   [{'href': '/elecciones' ~ scope_query, 'label': 'Error de los sondeos en cada elección'}]) }}
+    </div>
+{% endblock %}
