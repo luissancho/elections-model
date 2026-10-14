@@ -269,4 +269,27 @@ Escaños (`escanos_headline_text`) y los subtítulos de modo de las tarjetas ("�
 
 ## Estado al cierre de la fase 7c
 
-(Se rellena al cerrar.)
+Cerrada el 2026-10-14 en `dev`, commits `6f97137..a822ef0` (plan `68c8551`; entre medias, dos commits ajenos de Luis,
+`80e5d17` y `f548c56`). Suite: 719 tests en verde (697 al empezar), 54 avisos preexistentes. Ejecutada en modo
+subagent-driven: ocho tareas con revisión por tarea, revisión final de toda la rama y una ola de correcciones
+(`591e4a5`, `ca78b33`, `2530399`, `a822ef0`).
+
+Hecho, por apartado: D1 (tokens grises, tarjetas con barra de acento, `.seg`, contenedor fluido, prosa a 72ch, tema
+de ECharts), D2 (pie "Publicación: … · Último sondeo: …", barra del evento sin la frase de modo, Promedios sin
+titular), D3 (tres tarjetas: hemiciclo continuo, "Resultados por partido", "Resultados por bloque"), D4 (leyenda
+como selector, controles propios del gráfico de encuestadora), D5 ("Todas las encuestas": `polls-table.js` +
+`pages/polls-dom.js`, 15 filas del servidor, media simple sobre todos los sondeos), D6 ("Resultados por
+territorio": `territory.js` + `pages/territory-dom.js`, `community` y `votes` en `districts.regions`, enmienda del
+contrato). Desviaciones registradas: la media del servidor cubre todos los sondeos (no "esas 15"); la tabla del
+servidor de territorios alinea partidos y orden con el primer dibujo del JS (tintes y puntos del ganador solo con
+JS); el hemiciclo no se estira a la altura de las tablas (`align-items: start`, 460 px en escritorio).
+
+Pendiente de Luis: recorrido visual en escritorio y móvil; publicar `forecast` de `es` (y de los autonómicos) para
+que los runs lleven `community`/`votes` y aparezca el nivel CCAA; decidir el fondo de los iconos de marca
+(`web/brand/build.py` sigue con el salmón `#fbf1e7` y el `INK` antiguo; regenerar `apple-touch-icon`); pregunta de
+modelo: VOX y SALF salen con `pct` nulo en S. C. Tenerife en `districts.rows` del run local (¿listas de candidatos?).
+
+Menores aplazados (sin efecto visible): `publish_mode` trata `export_districts` como caso especial; redondeo
+bancario de Python frente a `Math.round` en medias exactas .x5; empate de totales iguales ordenado distinto en
+servidor y JS; el botón de paginación desactivado pierde el foco; `markSegments` replica `markPills`;
+`--gutter` sin uso; el test del CSS no fija todos los tokens.
