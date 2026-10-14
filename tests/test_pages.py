@@ -934,6 +934,24 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
 
 
+def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    write_analysis(fresh_app.fs, scope='es-md')
+    webapi.site().manifest_cache_clear()
+    national = html(call(houses, '/casas', query='scope=es')[2])
+    madrid = html(call(houses, '/casas', query='scope=es-md')[2])
+    table = lambda page: re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    without_herding = lambda page: re.sub(r'\s*<td>[^<]*</td>\s*</tr>', '</tr>', table(page))  # herding: del ámbito elegido
+    assert without_herding(national) == without_herding(madrid) and '82,4' in table(madrid)
+    assert 'no depende del ámbito elegido' in madrid and 'elección general del' in madrid
+    assert 'href="/api/v1/ratings?scope=es&amp;format=csv"' in madrid and 'Ratings de la próxima elección general' in madrid
+    ranking = table(madrid)
+    assert 'href="/casas?scope=es&amp;id=' in ranking and 'href="/casas?scope=es-md&amp;id=' not in ranking
+    effects = madrid[madrid.index('id="house-effects"'):madrid.index('id="herding"')]
+    assert 'href="/casas?scope=es-md&amp;id=' in effects  # los efectos siguen con el ámbito elegido
+    assert 'href="/casas?scope=es-md&amp;id=' in madrid[madrid.index('id="herding"'):]  # y el herding también
+
+
 def test_casas_explains_the_relative_bias(houses):
     page = html(call(houses, '/casas', query='scope=es')[2]).replace('\n', ' ')
     page = re.sub(r'\s+', ' ', page)
