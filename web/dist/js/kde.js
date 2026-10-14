@@ -99,18 +99,19 @@ export function seatRange(stats, minWidth = 6) {
  *
  * @param {{name: string, values: number[]}[]} series rows to draw, in order (those without values are skipped)
  * @param {object} opts `majority` (seats of the absolute majority, for `summarize`), `points` (grid points
- *   per row, `GRID_POINTS` by default) and `minWidth` (smallest range width, see `seatRange`)
+ *   per row, `GRID_POINTS` by default), `minWidth` (smallest range width, see `seatRange`) and `range`
+ *   (`[x0, x1]` shared by every row; without it each row gets its own `seatRange`)
  * @returns {object[]} per row: `name`, `x0`, `x1`, `grid`, `y` (scaled density per grid point), `peak` (the
  *   raw peak density), `bw`, `median`, `lo`, `hi`, `min`, `max`, `n` and `pmf` (`{seats: share}`)
  */
-export function ridgeRows(series, {majority = 0, points = GRID_POINTS, minWidth = 6} = {}) {
+export function ridgeRows(series, {majority = 0, points = GRID_POINTS, minWidth = 6, range = null} = {}) {
   const rows = [];
   for (const {name, values} of series) {
     if (!values || !values.length) {
       continue;
     }
     const stats = summarize(values, majority);
-    const [x0, x1] = seatRange(stats, minWidth);
+    const [x0, x1] = range ? range : seatRange(stats, minWidth);
     const grid = seatGrid(x0, x1, points);
     const bw = scottBandwidth(values);
     const raw = density(values, grid, bw);

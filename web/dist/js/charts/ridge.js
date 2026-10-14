@@ -29,17 +29,20 @@ export function ridgeHeight(n, rowHeight) {
  * @param {HTMLElement} el chart container
  * @param {object[]} rows one row per party or block (`ridgeRows`)
  * @param {object} opts `colors` ({name: colour}), `majority` (seats of the absolute majority; the dashed line is
- *   drawn in the rows whose range holds it), `rowHeight` (px per row, 72 by default), `headline` ({name: seats}
- *   shown in the row label instead of the median, so the figure matches the table) and `fullnames` ({name: full
- *   name}, tooltip)
+ *   drawn in the rows whose range holds it, labelled on the first), `rowHeight` (px per row, 144 by default),
+ *   `headline` ({name: seats} shown in the row label instead of the median, so the figure matches the table) and
+ *   `fullnames` ({name: full name}, tooltip). When every row shares the same range, only the last row shows the
+ *   axis labels; otherwise each row shows its own.
  * @returns {object} the ECharts instance
  */
-export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight = 72, headline = {}, fullnames = {}} = {}) {
+export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight = 144, headline = {}, fullnames = {}} = {}) {
   el.style.height = `${ridgeHeight(rows.length, rowHeight)}px`;
   // Narrow containers (phones) give the labels less room
   const narrow = el.clientWidth > 0 && el.clientWidth < 600;
   const left = narrow ? 84 : LEFT;
   const curveHeight = rowHeight - AXIS - GAP;
+  const last = rows.length - 1;
+  const shared = rows.length > 0 && rows.every((row) => row.x0 === rows[0].x0 && row.x1 === rows[0].x1);
 
   const grids = rows.map((row, index) => ({
     top: TOP + index * rowHeight,
@@ -54,8 +57,8 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     max: row.x1,
     minInterval: 1,
     axisLine: {show: true, lineStyle: {color: THEME.gridColor}},
-    axisTick: {show: true, lineStyle: {color: THEME.gridColor}},
-    axisLabel: {show: true, fontSize: 10, color: THEME.markColor, formatter: (value) => fmtInt(value)},
+    axisTick: {show: !shared || index === last, lineStyle: {color: THEME.gridColor}},
+    axisLabel: {show: !shared || index === last, fontSize: 10, color: THEME.markColor, formatter: (value) => fmtInt(value)},
     splitLine: {show: false},
   }));
   const yAxes = rows.map((row, index) => ({
@@ -77,7 +80,7 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
       marks.push({
         xAxis: majority,
         lineStyle: {color: THEME.markColor, width: 1, type: 'dashed'},
-        label: {show: true, position: 'insideEndTop', formatter: `Mayoría ${fmtInt(majority)}`,
+        label: {show: index === 0, position: 'insideEndTop', formatter: `Mayoría ${fmtInt(majority)}`,
           color: THEME.textColor, fontSize: 11},
       });
     }

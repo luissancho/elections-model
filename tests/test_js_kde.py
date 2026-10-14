@@ -65,3 +65,10 @@ def test_ridge_blocks_sum_the_parties_of_each_block():
     sums = sorted(row[0] + row[2] for row in DIST['seats'])
     assert derecha['min'] == sums[0] and derecha['max'] == sums[-1] and (derecha['x0'], derecha['x1']) == (sums[0] - 1, sums[-1] + 1)
     assert derecha['pmf'][str(sums[0])] == 0.125
+
+
+def test_ridge_rows_can_share_one_axis():
+    data = run_js('k.ridgeData(dist, ["PP", "UPN"], {majority: 176, range: [0, 210]})')
+    assert [(row['x0'], row['x1']) for row in data] == [(0, 210), (0, 210)]
+    assert data[0]['grid'][0] == 0 and data[0]['grid'][-1] == 210 and len(data[0]['grid']) == 200
+    assert max(data[1]['y']) == pytest.approx(1.0)  # cada fila sigue a su propia escala

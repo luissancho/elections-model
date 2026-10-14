@@ -15,6 +15,9 @@ import {coalitionHash, coalitionSeats, parseCoalition, summarize} from '../seats
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
+/** Shared seat axis of the ridges, as a share of the chamber: parties up to 60 %, blocks up to 80 % (Luis, 2026-10-14). */
+const PARTY_AXIS_SHARE = 0.6;
+const BLOCK_AXIS_SHARE = 0.8;
 
 /**
  * Wire the coalition calculator: restore the selection of the URL fragment, then recompute the summary
@@ -169,7 +172,7 @@ function wireSeats(initial, catalog, colors) {
       colors,
       fullnames: mapNames(partyNames, (name) => catalog.fullname(name)),
       headline: Object.fromEntries(partyRows.map((row) => [row.name, row.seats])),
-      ridges: () => ridgeData(dist, partyNames, {majority}),
+      ridges: () => ridgeData(dist, partyNames, {majority, range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)]}),
     },
     bloques: {
       container: 'seats-blocks',
@@ -179,7 +182,8 @@ function wireSeats(initial, catalog, colors) {
       fullnames: {},
       headline: Object.fromEntries(blockRows.map((row) => [row.name, row.seats])),
       ridges: () => ridgeBlocks(dist, [...blockRows].sort(bySeats)
-        .map((row) => ({name: row.name, parties: blockParties[row.name] || []})), {majority}),
+        .map((row) => ({name: row.name, parties: blockParties[row.name] || []})),
+      {majority, range: [0, Math.round(nSeats * BLOCK_AXIS_SHARE)]}),
     },
   };
   const barEl = document.getElementById('seats-bar');
