@@ -8,10 +8,11 @@ from typing import Optional
 
 from .. import bundle
 from ..webapi import site
-from .common import Catalog, api_url, block_color, common_context, part
-from .filters import DASH, _is_missing, fmt_date, fmt_int, fmt_num
+from .common import OTHERS_COLOR, Catalog, api_url, block_color, common_context, part
+from .filters import DASH, _is_missing, _parse_datetime, fmt_date, fmt_int, fmt_num
 
-TABLE_ROWS = 40
+PAGE_SIZE = 15
+MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
 BLOCK_ORDER = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
 
 
@@ -99,11 +100,12 @@ def chart_polls(polls: dict) -> dict:
     -------
     dict
         ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``,
-        ``pollster`` and one value per party (the keys it has), plus ``name`` (``poll_name``) and
-        ``sample_size`` (``None`` when missing), shown in the box of each poll.
+        ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
+        plus ``name`` (``poll_name``) and ``sample_size`` (``None`` when missing): the box of each poll of the
+        charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
-    keys = ['date', 'pollster_id', 'pollster'] + parties
+    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date'] + parties
 
     return {
         'parties': parties,
@@ -115,36 +117,138 @@ def chart_polls(polls: dict) -> dict:
     }
 
 
-def table_rows(polls: list, parties: list, n: Optional[int] = TABLE_ROWS) -> list:
+def short_date(value) -> str:
     """
-    Formatted rows of the polls table, the most recent first.
+    Format a date as ``'01/10/26'``.
+
+    Parameters
+    ----------
+    value : str or datetime.date or None
+        ISO date or date-time.
+
+    Returns
+    -------
+    str
+        ``dd/mm/aa``, or ``DASH`` when it is missing or invalid.
+    """
+    parsed = _parse_datetime(value)
+
+    return DASH if parsed is None else '{:02d}/{:02d}/{:02d}'.format(parsed.day, parsed.month, parsed.year % 100)
+
+
+def poll_months(polls: list) -> list:
+    """
+    Months with polls, for the "Desde" and "Hasta" selectors of the polls table.
 
     Parameters
     ----------
     polls : list of dict
-        Polls of the polls part (``date``, ``pollster``, ``sponsor``, ``sample_size`` and one
-        percentage per party), in publication order.
+        Polls of the polls part (``date``); a poll without a valid date is not counted.
+
+    Returns
+    -------
+    list of dict
+        ``{'value': 'YYYY-MM', 'label': 'Ago 2023'}`` per month, ascending.
+    """
+    months = set()
+
+    for poll in polls:
+        parsed = _parse_datetime(poll.get('date'))
+
+        if parsed is not None:
+            months.add((parsed.year, parsed.month))
+
+    return [
+        {'value': '{:04d}-{:02d}'.format(year, month), 'label': '{} {}'.format(MONTH_LABELS[month - 1], year)}
+        for year, month in sorted(months)
+    ]
+
+
+def _leaders(values: list) -> list:
+    """
+    Flags of the highest value.
+
+    Parameters
+    ----------
+    values : list of float or None
+        One value per party.
+
+    Returns
+    -------
+    list of bool
+        ``True`` where the value equals the maximum of the present ones (every tied value); all ``False``
+        without values.
+    """
+    present = [value for value in values if not _is_missing(value)]
+
+    return [not _is_missing(value) and value == max(present) for value in values]
+
+
+def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAGE_SIZE) -> dict:
+    """
+    Formatted rows of the polls table, the most recent first, with the simple mean of those rows.
+
+    Parameters
+    ----------
+    polls : list of dict
+        Polls of the polls part (``date``, ``pollster``, ``sponsor``, ``sample_size``, ``start_date``,
+        ``end_date`` and one percentage per party), in publication order.
     parties : list of str
         Parties to show, in column order.
+    colors : dict
+        Colour by party name; a party without one gets ``OTHERS_COLOR``.
     n : int, optional
         Maximum number of rows; ``None`` for all of them.
 
     Returns
     -------
-    list of list of str
-        The last ``n`` polls by date (ties keep the later published first) as ``date``, poll name
-        (``poll_name``), sample size and one percentage per party, all formatted.
+    dict
+        ``{'rows', 'mean', 'total'}``: ``total`` is ``len(polls)``; each row of the last ``n`` polls by date
+        (ties keep the later published first) is ``{'pollster', 'sponsor', 'date' (dd/mm/aa), 'fieldwork'
+        (``None`` without fieldwork dates), 'sample', 'cells'}`` with a ``{'value', 'leader', 'color'}`` cell
+        per party (``leader``: the highest of the row, every tied one); ``mean`` is ``{'n', 'cells'}``, the
+        unweighted mean of those rows at one decimal in the same cells.
     """
     latest = sorted(reversed(polls), key=lambda poll: poll.get('date') or '', reverse=True)[:n]
+    rows = []
 
-    return [
-        [
-            fmt_date(poll.get('date')),
-            poll_name(poll) or DASH,
-            fmt_int(poll.get('sample_size')),
-        ] + [fmt_num(poll.get(name), 1) for name in parties]
-        for poll in latest
-    ]
+    for poll in latest:
+        start, end = poll.get('start_date'), poll.get('end_date')
+        fieldwork = None
+
+        if start or end:
+            fieldwork = 'Trabajo de campo: {} – {}'.format(fmt_date(start or end), fmt_date(end or start))
+
+        values = [poll.get(name) for name in parties]
+        rows.append({
+            'pollster': poll.get('pollster') or DASH,
+            'sponsor': poll.get('sponsor') or None,
+            'date': short_date(poll.get('date')),
+            'fieldwork': fieldwork,
+            'sample': fmt_int(poll.get('sample_size')),
+            'cells': [
+                {'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
+                for name, value, leader in zip(parties, values, _leaders(values))
+            ],
+        })
+
+    means = []
+
+    for name in parties:
+        present = [poll[name] for poll in latest if not _is_missing(poll.get(name))]
+        means.append(round(sum(present) / len(present), 1) if present else None)
+
+    return {
+        'rows': rows,
+        'mean': {
+            'n': len(latest),
+            'cells': [
+                {'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
+                for name, value, leader in zip(parties, means, _leaders(means))
+            ],
+        },
+        'total': len(polls),
+    }
 
 
 def pollster_options(polls: list) -> list:
@@ -207,14 +311,13 @@ def promedios_context(state: dict) -> dict:
     -------
     dict
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``result_rows``
-        and ``block_result_rows`` (the tables of results of the summary), ``table_parties`` (the ``main`` parties
-        present in the series, or all of them), ``table_rows`` (``table_rows``, the first ``TABLE_ROWS``),
-        ``table_total`` (the polls of the polls part), ``csv_href``,
+        and ``block_result_rows`` (the tables of results of the summary), ``table_parties`` (every party of the
+        polls part), ``table`` (``polls_table``, the ``PAGE_SIZE`` most recent polls the server renders),
+        ``table_total`` (the polls of the polls part), ``months`` (``poll_months``), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them) and ``initial`` (``state``, ``meta``, ``headline``,
-        ``series`` (``round_series``), ``polls`` (``chart_polls``), ``projection``, ``vote``, ``summary`` and
-        ``runs``, the data the charts are drawn from; plus ``table``, ``{'parties', 'rows'}`` with every row of
-        the polls table, only when ``table_total > TABLE_ROWS``, for the "Cargar más" button).
+        ``series`` (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered,
+        sorted and paginated in the browser), ``projection``, ``vote``, ``summary`` and ``runs``).
 
     Raises
     ------
@@ -230,17 +333,17 @@ def promedios_context(state: dict) -> dict:
     polls = part(scope, run, 'polls')
     poll_rows = polls.get('polls') or []
     bmaps = meta.get('bmaps') or {}
-    names = series.get('parties') or []
-    main = [name for name in bmaps.get('main') or [] if name in names]
     blocks = bmaps.get('blocks')
 
     context['headline'] = current
     summary = part(scope, run, 'summary', mode=mode)
     context['result_rows'] = result_rows(summary)
     context['block_result_rows'] = block_result_rows(summary, meta, parties)
-    context['table_parties'] = main or list(names)
-    context['table_rows'] = table_rows(poll_rows, context['table_parties'])
+    context['table_parties'] = list(polls.get('parties') or [])
+    colors = {name: parties[name]['color'] for name in context['table_parties']}
+    context['table'] = polls_table(poll_rows, context['table_parties'], colors)
     context['table_total'] = len(poll_rows)
+    context['months'] = poll_months(poll_rows)
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)
     context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
@@ -255,11 +358,5 @@ def promedios_context(state: dict) -> dict:
         'summary': summary,
         'runs': bundle.loads(site().history(scope))['data'],
     }
-
-    if context['table_total'] > TABLE_ROWS:
-        context['initial']['table'] = {
-            'parties': context['table_parties'],
-            'rows': table_rows(poll_rows, context['table_parties'], n=None),
-        }
 
     return context

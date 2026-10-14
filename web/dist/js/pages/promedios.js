@@ -1,5 +1,5 @@
 // Promedios tab of an event: the poll average with its window, party and block views, one house against the
-// average, the hemicycle, the evolution and the "Cargar más" rows of the polls table,
+// average, the hemicycle, the evolution and the filterable, sortable table of all the polls,
 // drawn from the data embedded by the server. The state of the average controls lives in the URL hash
 // (`blocks.js`), written only when a control changes; the legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
@@ -7,9 +7,11 @@ import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} f
 import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
-import {captionText, nextRows} from '../polls-table.js';
+import {fmtInt} from '../format.js';
+import {PAGE_SIZE, filterPolls, meanOf, pageLabel, pageOf, sortPolls} from '../polls-table.js';
 import {WINDOW_DAYS} from '../range.js';
 import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {renderBody, renderFoot, renderHead} from './polls-dom.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
@@ -284,45 +286,118 @@ function wireSeries(initial, catalog) {
 }
 
 /**
- * Wire the "Cargar más" button of the polls table: when the page embeds every row (`initial.table`, only with
- * more polls than the server rendered), each click appends the next rows and updates the caption; the button
- * goes away once the table holds them all.
+ * Wire the controls of a dropdown of checkboxes (`details.dd`): "Seleccionar todos" and "Quitar todos" (which
+ * leaves the first one checked), at least one box always checked, and the counter of its summary.
+ *
+ * @param {HTMLElement} dd the `details` element
+ * @param {Function} onChange called after any change
+ * @returns {function(): HTMLInputElement[]} the boxes that are checked now
+ */
+function wireDropdown(dd, onChange) {
+  const boxes = [...dd.querySelectorAll('input[type="checkbox"]')];
+  const sync = () => {
+    dd.querySelector('[data-count]').textContent = String(boxes.filter((box) => box.checked).length);
+    boxes.forEach((box) => box.closest('.chip').classList.toggle('is-on', box.checked));
+  };
+  const set = (checked) => {
+    boxes.forEach((box) => { box.checked = checked; });
+    if (!checked && boxes.length) {
+      boxes[0].checked = true;
+    }
+    sync();
+    onChange();
+  };
+  dd.querySelector('[data-all]').addEventListener('click', () => set(true));
+  dd.querySelector('[data-none]').addEventListener('click', () => set(false));
+  dd.addEventListener('change', (event) => {
+    if (!boxes.some((box) => box.checked)) {
+      event.target.checked = true;
+    }
+    sync();
+    onChange();
+  });
+  sync();
+  return () => boxes.filter((box) => box.checked);
+}
+
+/**
+ * Wire the "Todas las encuestas" table: party and pollster dropdowns, month range, sortable headers and pages of
+ * `PAGE_SIZE` rows, all computed in the browser from `initial.polls`. The server renders the 15 most recent rows
+ * and hides the controls, which this function shows.
  *
  * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
  */
-function wirePollsTable(initial) {
-  const all = initial.table ? initial.table.rows : null;
-  const button = document.getElementById('polls-more');
-  const body = document.querySelector('#polls-table tbody');
-  const count = document.getElementById('polls-count');
-  if (!all || !button || !body) {
+function wirePollsTable(initial, catalog) {
+  const controls = document.getElementById('polls-controls');
+  const table = document.getElementById('polls-table');
+  const pag = document.getElementById('polls-pag');
+  if (!controls || !table || !pag) {
     return;
   }
-  let shown = body.rows.length;
-  button.hidden = shown >= all.length;
-  button.addEventListener('click', () => {
-    for (const row of nextRows(all, shown)) {
-      const tr = document.createElement('tr');
-      for (const cell of row) {
-        const td = document.createElement('td');
-        td.textContent = cell;
-        tr.appendChild(td);
-      }
-      body.appendChild(tr);
-      shown += 1;
+  const polls = initial.polls.polls;
+  const from = document.getElementById('polls-from');
+  const to = document.getElementById('polls-to');
+  const state = {sort: {key: 'date', asc: false}, page: 0};
+  const [prev, next] = pag.querySelectorAll('button');
+  const pick = (checked, total) => (checked.length === total ? null : checked.map((box) => box.value));
+
+  const render = () => {
+    const parties = checkedParties().map((box) => box.value);
+    const pollsters = pick(checkedPollsters(), pollsterTotal);
+    const rows = sortPolls(filterPolls(polls, {
+      pollsters,
+      from: from.selectedIndex === 0 ? null : from.value,
+      to: to.selectedIndex === to.options.length - 1 ? null : to.value,
+    }), state.sort.key, state.sort.asc);
+    const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    state.page = Math.min(state.page, pages - 1);
+    const shown = pageOf(rows, state.page);
+    renderHead(table.tHead, parties, catalog, state.sort);
+    renderBody(table.tBodies[0], shown, parties, catalog);
+    renderFoot(table.tFoot, rows.length, meanOf(rows, parties), parties, catalog);
+    document.getElementById('polls-count').textContent = `${fmtInt(rows.length)} sondeos`;
+    const recent = state.sort.key === 'date' && !state.sort.asc;
+    prev.textContent = recent ? '‹ Más recientes' : '‹ Anteriores';
+    next.textContent = recent ? 'Más antiguos ›' : 'Siguientes ›';
+    prev.disabled = state.page === 0;
+    next.disabled = state.page >= pages - 1;
+    document.getElementById('polls-range').textContent = pageLabel(state.page, shown.length, rows.length);
+    pag.hidden = pages <= 1;
+  };
+  const refilter = () => { state.page = 0; render(); };
+  const checkedParties = wireDropdown(document.getElementById('polls-parties'), refilter);
+  const checkedPollsters = wireDropdown(document.getElementById('polls-pollsters'), refilter);
+  const pollsterTotal = document.querySelectorAll('#polls-pollsters input[type="checkbox"]').length;
+
+  from.addEventListener('change', refilter);
+  to.addEventListener('change', refilter);
+  table.tHead.addEventListener('click', (event) => {
+    const th = event.target.closest('th[data-key]');
+    if (!th) {
+      return;
     }
-    if (count) {
-      count.textContent = captionText(shown, all.length);
+    const key = th.dataset.key;
+    state.sort = key === state.sort.key ? {key, asc: !state.sort.asc} : {key, asc: key === 'pollster'};
+    state.page = 0;
+    render();
+  });
+  pag.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-page]');
+    if (button && !button.disabled) {
+      state.page += Number(button.dataset.page);
+      render();
     }
-    if (shown >= all.length) {
-      // The button goes away: keep the keyboard focus on the caption that says every poll is shown.
-      button.hidden = true;
-      if (count) {
-        count.tabIndex = -1;
-        count.focus();
+  });
+  document.addEventListener('click', (event) => {
+    for (const dd of controls.querySelectorAll('details.dd[open]')) {
+      if (!dd.contains(event.target)) {
+        dd.open = false;
       }
     }
   });
+  controls.hidden = false;
+  render();
 }
 
 /** Draw the page from the embedded data. */
@@ -331,7 +406,7 @@ function paint() {
   const catalog = new Catalog(initial.meta);
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
-  tryDraw(() => wirePollsTable(initial), 'the polls table');
+  tryDraw(() => wirePollsTable(initial, catalog), 'the polls table');
 }
 
 wireControls();

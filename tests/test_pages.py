@@ -30,6 +30,8 @@ def api(fresh_app, tmp_path):
     write_bundle(fresh_app.fs)
     return site_api(fresh_app)
 
+FIXTURE_POLLS = 1  # polls of the `polls` part of tests/fixtures/bundle
+
 
 def html(body):
     return body.decode('utf-8')
@@ -362,23 +364,11 @@ def test_filters_follow_the_js_rules():
 def test_promedios_has_the_series_chart_the_polls_table_and_csv_link(api):
     body = call(api, '/es', query='mode=forecast')[2]
     page = html(body)
-    assert 'id="series-chart"' in page and 'Sondeos del ciclo' in page
+    assert 'id="series-chart"' in page and 'Todas las encuestas' in page
     assert 'href="/api/v1/forecast/es/polls?run={}&amp;format=csv"'.format(RUN) in page
-    assert '<th scope="col">Fecha</th>' in page
+    assert '<th data-key="date" aria-sort="descending">Fecha</th>' in page
     data = initial(body)
     assert data['projection']['dates'] and data['vote']['when']
-
-
-def test_table_rows_are_newest_first_and_formatted():
-    polls = [
-        {'date': '2026-09-05', 'pollster': 'CIS', 'sponsor': None, 'sample_size': 4000, 'PP': 41.0, 'PSOE': 29.0},
-        {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': None, 'PP': None, 'PSOE': 30.5},
-        {'date': '2026-10-01', 'pollster': 'CIS', 'sponsor': None, 'sample_size': 4000, 'PP': 40.5, 'PSOE': 29.5},
-    ]
-    rows = pages.table_rows(polls, ['PP', 'PSOE'], n=2)
-    assert rows == [['1 oct 2026', 'CIS', '4.000', '40,5', '29,5'], ['1 oct 2026', 'GAD3 / ABC', '–', '–', '30,5']]
-    assert len(pages.table_rows(polls, ['PP'])) == 3
-    assert len(pages.table_rows(polls * 20, ['PP'], n=None)) == 60
 
 
 def test_unexpected_error_is_a_generic_500_page_and_is_logged(api, fresh_app, monkeypatch):
@@ -436,12 +426,13 @@ def test_promedios_pinned_run_keeps_the_run_in_the_csv_link(api):
     assert 'name="run"' not in page and 'Run del 8 oct 2026' in page  # the bar shows the run, without a form
 
 
-def test_promedios_initial_polls_carry_only_the_chart_columns(api):
+def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     data = initial(call(api, '/es')[2])
     parties = set(data['polls']['parties'])
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
-        assert set(poll) == {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | parties
+        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | parties <= set(poll)
+        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'sponsor', 'start_date', 'end_date'} | parties
 
 
 def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, tmp_path):
@@ -453,10 +444,38 @@ def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, t
     assert status == 503 and 'Todavía no hay ningún pronóstico publicado' in html(body)
 
 
-def test_table_rows_tolerate_a_poll_without_date():
-    polls = [{'date': '2026-10-01', 'pollster': 'CIS', 'PP': 40.0}, {'pollster': 'GAD3', 'PP': 41.0}]
-    rows = pages.table_rows(polls, ['PP'])
-    assert rows[0][0] == '1 oct 2026' and rows[1][0] == '–' and rows[1][1] == 'GAD3' and rows[1][2] == '–'
+def test_polls_table_marks_the_leader_formats_the_values_and_averages_the_rows():
+    polls = [
+        {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1010, 'start_date': '2026-09-28', 'end_date': '2026-09-30', 'PP': 31.1, 'PSOE': 26.1},
+        {'date': '2026-09-04', 'pollster': 'CIS', 'sponsor': None, 'sample_size': None, 'PP': 25.5, 'PSOE': 31.0},
+        {'date': '2026-09-02', 'pollster': '40dB', 'sponsor': 'Prisa', 'sample_size': 2000, 'PP': None, 'PSOE': None},
+    ]
+    table = pages.polls_table(polls, ['PP', 'PSOE'], {'PP': '#1d84ce', 'PSOE': '#ef1c27'}, n=2)
+    assert table['total'] == 3 and [r['pollster'] for r in table['rows']] == ['GAD3', 'CIS']
+    first = table['rows'][0]
+    assert first['date'] == '01/10/26' and first['sponsor'] == 'ABC' and first['sample'] == '1.010'
+    assert first['fieldwork'] == 'Trabajo de campo: 28 sept 2026 – 30 sept 2026'
+    assert first['cells'] == [{'value': '31,1', 'leader': True, 'color': '#1d84ce'}, {'value': '26,1', 'leader': False, 'color': '#ef1c27'}]
+    assert table['rows'][1]['sample'] == '–' and table['rows'][1]['fieldwork'] is None and table['rows'][1]['cells'][1]['leader']
+    assert table['mean'] == {'n': 2, 'cells': [{'value': '28,3', 'leader': False, 'color': '#1d84ce'}, {'value': '28,6', 'leader': True, 'color': '#ef1c27'}]}
+    empty = pages.polls_table(polls[2:], ['PP', 'PSOE'], {'PP': '#1', 'PSOE': '#2'})
+    assert empty['rows'][0]['cells'][0] == {'value': '–', 'leader': False, 'color': '#1'} and empty['mean']['cells'][0]['value'] == '–'
+    assert pages.poll_months(polls) == [{'value': '2026-09', 'label': 'Sep 2026'}, {'value': '2026-10', 'label': 'Oct 2026'}]
+
+
+def test_polls_table_orders_by_date_keeps_ties_and_tolerates_a_poll_without_date_or_house():
+    polls = [
+        {'date': '2026-09-05', 'pollster': 'CIS', 'PP': 41.0},
+        {'date': '2026-10-01', 'pollster': 'GAD3', 'PP': 30.5},
+        {'date': '2026-10-01', 'pollster': 'CIS', 'PP': 40.5, 'PSOE': 40.5},
+        {'pollster': None, 'PP': 29.0},
+    ]
+    table = pages.polls_table(polls, ['PP', 'PSOE'], {})
+    assert [(r['pollster'], r['date']) for r in table['rows']] == [('CIS', '01/10/26'), ('GAD3', '01/10/26'), ('CIS', '05/09/26'), ('–', '–')]
+    assert table['rows'][0]['cells'][0]['leader'] and table['rows'][0]['cells'][1]['leader']  # tie: both marked
+    assert table['rows'][3]['sponsor'] is None and table['rows'][3]['cells'][1]['color'] == pages.OTHERS_COLOR
+    assert len(pages.polls_table(polls * 20, ['PP'], {}, n=None)['rows']) == 80
+    assert [m['value'] for m in pages.poll_months(polls)] == ['2026-09', '2026-10']
 
 
 def test_promedios_title_mentions_the_projection_only_in_forecast(api):
@@ -467,30 +486,47 @@ def test_promedios_title_mentions_the_projection_only_in_forecast(api):
     assert 'banda de incertidumbre y la proyección"' in html(call(api, '/es', query='mode=forecast')[2])
 
 
-def test_promedio_caption_counts_the_polls(api):
-    """La tabla cuenta los sondeos de la parte `polls` (uno en el fixture): todos caben, nada que cargar."""
+def test_promedios_polls_table_is_server_rendered_with_fifteen_rows_and_hidden_controls(api):
     body = call(api, '/es')[2]
-    page = html(body)
-    assert 'Todos los sondeos del ciclo (1)' in page
-    assert '<button type="button" id="polls-more" hidden>Cargar más</button>' in page
-    assert 'table' not in initial(body)
+    page = html(body).replace('\n', ' ')
+    assert 'Todas las encuestas' in page and 'Sondeos del ciclo' not in page and 'id="polls-more"' not in page
+    assert re.search(r'<div class="bar" id="polls-controls" hidden>', page) and 'id="polls-from"' in page and 'id="polls-to"' in page
+    assert 'Seleccionar todos' in page and 'Seleccionar todas' in page
+    tbody = page[page.index('<tbody>', page.index('id="polls-table"')):page.index('</tbody>', page.index('id="polls-table"'))]
+    assert tbody.count('<tr>') == min(15, FIXTURE_POLLS) and 'Media simple' in page and 'class="p mx"' in page
+    assert 'Descargar CSV' in page and 'Desliza para ver más' in page
+    data = initial(body)
+    assert 'table' not in data and {'date', 'pollster'} <= set(data['polls']['polls'][0])  # the fixture polls carry no sponsor
 
 
-def test_promedios_loads_more_polls_when_the_cycle_has_more_than_forty(api, fresh_app):
-    """Con 50 sondeos se pintan 40, el pie dice «Últimos 40 de 50» y la isla lleva las 50 filas ya formateadas."""
+def test_promedios_polls_table_carries_all_parties_counters_and_hides_the_pagination_up_to_fifteen(api):
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    assert '<summary>Partidos (<span data-count>1</span>/1)</summary>' in page
+    assert '<summary>Encuestadoras (<span data-count>1</span>/1)</summary>' in page
+    assert re.search(r'<input type="checkbox" name="party" value="PP" checked>', page)
+    assert re.search(r'<input type="checkbox" name="pollster" value="Sigma Dos" checked>', page)
+    assert '<option value="2026-10" selected>Oct 2026</option>' in page and 'id="polls-count">1 sondeos<' in page
+    assert re.search(r'<div class="pag" id="polls-pag" hidden>', page)
+    assert 'aria-sort="descending"' in page and 'data-key="PP"' in page and 'title="Partido Popular"' in page
+    assert '<b>Media simple</b><small>1 sondeos</small>' in page
+    assert 'Cada fila es un sondeo' in page and 'no es el promedio del modelo' in page
+
+
+def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carries_them_all(api, fresh_app):
     polls = fixture_data('polls')
     base = polls['polls'][0]
-    polls['polls'] = [base | {'date': '2026-08-{:02d}'.format(i % 28 + 1), 'sponsor': 'M{}'.format(i)}
-                      for i in range(50)]
+    polls['polls'] = [base | {'date': '2026-08-{:02d}'.format(i % 28 + 1), 'sponsor': 'M{}'.format(i),
+                              'start_date': '2026-08-01', 'end_date': '2026-08-02'} for i in range(20)]
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
     webapi.site().files.clear()
     body = call(api, '/es')[2]
-    page = html(body)
-    assert 'Últimos 40 de 50 sondeos' in page and 'id="polls-more"' in page
-    assert len(re.findall(r'<td>Sigma Dos / M\d+</td>', page)) == 40
-    table = initial(body)['table']
-    assert table['parties'] == ['PP'] and len(table['rows']) == 50
-    assert table['rows'][0][0] == '28 ago 2026' and table['rows'][0][1].startswith('Sigma Dos / M')
+    page = html(body).replace('\n', ' ')
+    tbody = page[page.index('<tbody>', page.index('id="polls-table"')):page.index('</tbody>', page.index('id="polls-table"'))]
+    assert tbody.count('<tr>') == 15 and '<small>M' in tbody and 'title="Trabajo de campo: 1 ago 2026 – 2 ago 2026"' in tbody
+    assert 'id="polls-count">20 sondeos<' in page and '<small>15 sondeos</small>' in page
+    assert re.search(r'<div class="pag" id="polls-pag" hidden>', page)  # the JS shows it: there are more pages
+    data = initial(body)['polls']['polls']
+    assert len(data) == 20 and {'sponsor', 'start_date', 'end_date'} <= set(data[0])
 
 
 def test_escanos_table_histograms_blocks_and_pills(api):
@@ -737,7 +773,8 @@ def test_promedios_controls_are_hidden_without_js(api):
     page = html(call(api, '/es')[2]).replace('\n', ' ')
     for control in ('series-window', 'series-view'):
         assert re.search(r'<fieldset id="{}" class="[^"]*" hidden>'.format(control), page), control
-    assert 'data-all' not in page and 'data-none' not in page
+    before = page[:page.index('id="polls"')]
+    assert 'data-all' not in before and 'data-none' not in before
     assert '<option value="Sigma Dos" selected>Sigma Dos (1)</option>' in page
     assert 'href="/elecciones?scope=es"' in page and 'href="/casas?scope=es"' in page
     assert '¿Cómo promediamos las encuestas?' in page and '/dist/js/pages/promedios.js' in page
@@ -1721,17 +1758,17 @@ def test_title_of_shows_today_in_the_nowcast():
 def test_promedios_controls_in_two_rows_and_the_polls_table_by_name(api):
     page = html(call(api, '/es')[2])
     assert page.index('id="series-view"') < page.index('id="series-window"')
-    assert 'class="pill"' not in page and 'data-all' not in page and 'data-none' not in page
-    assert '<th scope="col">Sondeo</th>' in page and '<th scope="col">Casa</th>' not in page
-    assert '<th scope="col">Medio</th>' not in page and '<th scope="col">Encuestadora</th>' not in page
-    assert 'id="polls-more"' in page
+    before = page[:page.index('id="polls"')]
+    assert 'class="pill"' not in page and 'data-all' not in before and 'data-none' not in before
+    assert '<th class="f l" data-key="pollster">Encuestadora</th>' in page and '<th scope="col">Casa</th>' not in page
     data = initial(call(api, '/es')[2])
     assert data['polls']['polls'][0]['name'] and 'sample_size' in data['polls']['polls'][0]
 
 
 def test_promedios_legend_is_the_party_selector_and_the_house_chart_has_its_own_controls(api):
     page = html(call(api, '/es')[2]).replace('\n', ' ')
-    assert 'id="series-parties"' not in page and 'id="series-blocks"' not in page and 'name="party"' not in page
+    assert 'id="series-parties"' not in page and 'id="series-blocks"' not in page
+    assert 'name="party"' not in page[:page.index('id="polls"')]  # the chips of the polls table are not the legend
     assert re.search(r'<fieldset id="pollster-view" class="[^"]*">', page) and re.search(r'<fieldset id="pollster-window" class="[^"]*">', page)
     assert 'name="pview" value="partidos" checked' in page and 'name="pwindow" value="all" checked' in page and 'name="pwindow" value="3m"' in page
     assert page.index('id="pollster-window"') < page.index('id="pollster-select"')

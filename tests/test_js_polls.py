@@ -1,4 +1,4 @@
-"""Recuadro de un sondeo del gráfico del promedio (`web/dist/js/polls-tooltip.js`) y carga progresiva de la tabla de
+"""Recuadro de un sondeo del gráfico del promedio (`web/dist/js/polls-tooltip.js`) y funciones puras de la tabla de
 sondeos (`web/dist/js/polls-table.js`), comprobados con `node` (se salta sin él)."""
 import json
 import os
@@ -49,14 +49,50 @@ def test_mean_tooltip_line_shows_the_average_its_interval_and_the_date():
     assert projected.startswith('Proyección<br>') and projected.endswith('PP: 33,1 % (–) · 29 nov 2026')
 
 
-def test_next_rows_pages_by_forty_and_stops():
-    assert run_js('p.nextRows(Array.from({length: 95}, (_, i) => i), 40)') == list(range(40, 80))
-    assert run_js('p.nextRows(Array.from({length: 95}, (_, i) => i), 80)') == list(range(80, 95))
-    assert run_js('p.nextRows(Array.from({length: 30}, (_, i) => i), 30)') == []
-    assert run_js('p.nextRows([1, 2, 3], 1, 1)') == [2]
-    assert run_js('p.nextRows([], 0)') == []
+TABLE_POLLS = [
+    {'date': '2026-10-01', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1010, 'PP': 31.1, 'PSOE': 26.1},
+    {'date': '2026-09-04', 'pollster': 'CIS', 'sponsor': None, 'sample_size': None, 'PP': 25.5, 'PSOE': 31.0},
+    {'date': '2026-09-02', 'pollster': '40dB', 'sponsor': 'Prisa', 'sample_size': 2000, 'PP': None, 'PSOE': None},
+]
 
 
-def test_caption_counts_the_rows_shown_and_says_all_at_the_end():
-    assert run_js('p.captionText(80, 315)') == 'Últimos 80 de 315 sondeos'
-    assert run_js('p.captionText(315, 315)') == 'Todos los sondeos del ciclo (315)'
+def table_js(expr):
+    return run_js(expr.replace('POLLS', json.dumps(TABLE_POLLS)))
+
+
+def test_months_labels_and_short_dates_of_the_polls_table():
+    assert table_js('p.monthsOf(POLLS)') == ['2026-09', '2026-10']
+    assert table_js('p.monthOf({date: "2026-10-01"})') == '2026-10' and table_js('p.monthOf({})') is None
+    assert table_js('p.monthLabel("2023-08")') == 'Ago 2023' and table_js('p.monthLabel("2026-12")') == 'Dic 2026'
+    assert table_js('p.shortDate("2026-10-01")') == '01/10/26' and table_js('p.shortDate(null)') == '–'
+    assert table_js('p.PAGE_SIZE') == 15
+
+
+def test_filter_polls_by_pollster_and_inclusive_months():
+    assert table_js('p.filterPolls(POLLS, {pollsters: ["CIS"], from: null, to: null}).length') == 1
+    assert table_js('p.filterPolls(POLLS, {pollsters: null, from: "2026-10", to: "2026-10"}).length') == 1
+    assert table_js('p.filterPolls(POLLS, {pollsters: null, from: "2026-09", to: "2026-10"}).length') == 3
+    assert table_js('p.filterPolls(POLLS, {pollsters: [], from: null, to: null}).length') == 0
+    assert table_js('p.filterPolls([{pollster: "X"}], {pollsters: null, from: "2026-09", to: null}).length') == 0
+
+
+def test_sort_polls_puts_missing_values_last_in_both_directions_and_breaks_ties_by_date():
+    assert table_js('p.sortPolls(POLLS, "PP", false).map(x => x.pollster)') == ['GAD3', 'CIS', '40dB']
+    assert table_js('p.sortPolls(POLLS, "PP", true).map(x => x.pollster)') == ['CIS', 'GAD3', '40dB']
+    assert table_js('p.sortPolls(POLLS, "date", true).map(x => x.pollster)') == ['40dB', 'CIS', 'GAD3']
+    assert table_js('p.sortPolls(POLLS, "pollster", true).map(x => x.pollster)') == ['40dB', 'CIS', 'GAD3']
+    assert table_js('p.sortPolls(POLLS, "sample_size", false).map(x => x.pollster)') == ['40dB', 'GAD3', 'CIS']
+    assert table_js('p.sortPolls(POLLS, "sample_size", true).map(x => x.pollster)') == ['GAD3', '40dB', 'CIS']
+    tie = [{'pollster': 'A', 'date': '2026-01-01', 'PP': 1}, {'pollster': 'B', 'date': '2026-02-01', 'PP': 1}]
+    assert run_js('p.sortPolls({}, "PP", true).map(x => x.pollster)'.format(json.dumps(tie))) == ['B', 'A']
+    assert table_js('POLLS.map(x => x.pollster)') == ['GAD3', 'CIS', '40dB']  # the input is not reordered
+
+
+def test_page_label_mean_and_leader_of_the_polls_table():
+    assert run_js('p.pageOf([1, 2, 3, 4], 1, 3)') == [4] and run_js('p.pageOf([1, 2, 3, 4], 0, 3)') == [1, 2, 3]
+    assert run_js('p.pageLabel(0, 15, 315)') == '1–15 de 315' and run_js('p.pageLabel(2, 5, 35)') == '31–35 de 35'
+    assert run_js('p.pageLabel(0, 0, 0)') == '0 de 0'
+    assert table_js('p.meanOf(POLLS, ["PP", "PSOE"])') == {'PP': 28.3, 'PSOE': 28.6}
+    assert table_js('p.meanOf(POLLS.slice(2), ["PP"])') == {'PP': None}
+    assert run_js('p.leaderOf({PP: 31.1, PSOE: 31.1, VOX: null})') == ['PP', 'PSOE']
+    assert run_js('p.leaderOf({PP: null})') == []

@@ -161,36 +161,100 @@
         {% endcall %}
       {{ m.card_end() }}
       {% endif %}
-      {{ m.card_start('polls', 'Sondeos del ciclo', 'Los sondeos publicados en este ciclo electoral, del más reciente al más antiguo, tal como se publicaron.') }}
-        <div class="table-wrap" id="polls-table">
-          <table>
-            <caption><span id="polls-count">{% if table_total > table_rows|length %}Últimos {{ table_rows|length }} de {{ table_total|int }} sondeos{% else %}Todos los sondeos del ciclo ({{ table_total|int }}){% endif %}</span> · <a href="{{ csv_href }}">Descargar CSV</a></caption>
+      {{ m.card_start('polls', 'Todas las encuestas', 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.') }}
+        <div class="bar" id="polls-controls" hidden>
+          <details class="dd" id="polls-parties">
+            <summary>Partidos (<span data-count>{{ table_parties|length }}</span>/{{ table_parties|length }})</summary>
+            <div class="dd-panel">
+              <button type="button" data-all>Seleccionar todos</button>
+              <button type="button" data-none>Quitar todos</button>
+              {% for name in table_parties %}
+              <label class="chip" style="--pill-color: {{ catalog[name].color }}; --pill-ink: {{ catalog[name].color|ink }}" title="{{ catalog[name].fullname }}"><input type="checkbox" name="party" value="{{ name }}" checked> {{ name }}</label>
+              {% endfor %}
+            </div>
+          </details>
+          <details class="dd" id="polls-pollsters">
+            <summary>Encuestadoras (<span data-count>{{ pollsters|length }}</span>/{{ pollsters|length }})</summary>
+            <div class="dd-panel">
+              <button type="button" data-all>Seleccionar todas</button>
+              <button type="button" data-none>Quitar todas</button>
+              {% for option in pollsters %}
+              <label class="chip"><input type="checkbox" name="pollster" value="{{ option.name }}" checked> {{ option.name }}</label>
+              {% endfor %}
+            </div>
+          </details>
+          <label>Desde
+            <select id="polls-from">
+              {% for month in months %}
+              <option value="{{ month.value }}"{% if loop.first %} selected{% endif %}>{{ month.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Hasta
+            <select id="polls-to">
+              {% for month in months %}
+              <option value="{{ month.value }}"{% if loop.last %} selected{% endif %}>{{ month.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <span class="bar-end"><span id="polls-count">{{ table_total|int }} sondeos</span> · <a href="{{ csv_href }}">Descargar CSV</a></span>
+        </div>
+        <noscript><p class="notice"><a href="{{ csv_href }}">Descargar CSV</a></p></noscript>
+        <div class="et-wrap">
+          <table class="et" id="polls-table">
+            <colgroup>
+              <col class="c-f"><col class="c-d"><col class="c-s">
+              {% for name in table_parties %}<col class="c-p">{% endfor %}
+            </colgroup>
             <thead>
               <tr>
-                <th scope="col">Fecha</th>
-                <th scope="col">Sondeo</th>
-                <th scope="col">Muestra</th>
+                <th class="f l" data-key="pollster">Encuestadora</th>
+                <th data-key="date" aria-sort="descending">Fecha</th>
+                <th data-key="sample_size">Muestra</th>
                 {% for name in table_parties %}
-                <th scope="col" title="{{ catalog[name].fullname }}">{{ name }}</th>
+                <th class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</th>
                 {% endfor %}
               </tr>
             </thead>
             <tbody>
-              {% for row in table_rows %}
+              {% for row in table.rows %}
               <tr>
-                {% for cell in row %}
-                <td>{{ cell }}</td>
+                <td class="f l"><b>{{ row.pollster }}</b><small>{{ row.sponsor or '—' }}</small></td>
+                <td{% if row.fieldwork %} title="{{ row.fieldwork }}"{% endif %}>{{ row.date }}</td>
+                <td>{{ row.sample }}</td>
+                {% for cell in row.cells %}
+                {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>
+                {% elif cell.value == '–' %}<td class="p na">—</td>
+                {% else %}<td class="p">{{ cell.value }}</td>{% endif %}
                 {% endfor %}
               </tr>
               {% endfor %}
             </tbody>
+            <tfoot>
+              <tr>
+                <td class="f l"><b>Media simple</b><small>{{ table.mean.n|int }} sondeos</small></td>
+                <td></td>
+                <td></td>
+                {% for cell in table.mean.cells %}
+                {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>
+                {% elif cell.value == '–' %}<td class="p na">—</td>
+                {% else %}<td class="p">{{ cell.value }}</td>{% endif %}
+                {% endfor %}
+              </tr>
+            </tfoot>
           </table>
         </div>
-        <button type="button" id="polls-more" hidden>Cargar más</button>
+        <p class="scroll-hint">Desliza para ver más →</p>
+        <div class="pag" id="polls-pag" hidden>
+          <button type="button" data-page="-1">‹ Más recientes</button>
+          <span id="polls-range"></span>
+          <button type="button" data-page="1">Más antiguos ›</button>
+        </div>
         {% call m.how() %}
         <p>
-          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, el tamaño de la muestra y el voto de cada partido.
-          Las cifras no llevan ninguna corrección del modelo. El CSV tiene todos los sondeos del ciclo.
+          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, la fecha de publicación, la muestra y
+          el voto de cada partido, sin ninguna corrección del modelo. La media simple del pie es la de los sondeos
+          filtrados, todos con el mismo peso: no es el promedio del modelo, que pondera por calidad, muestra y fecha.
         </p>
         {% endcall %}
       {{ m.card_end() }}
