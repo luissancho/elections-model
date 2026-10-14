@@ -571,3 +571,4 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .figures dt { color: var(--color-muted); font-size: 0.85rem; }
 .complements { list-style: none; margin: var(--space-3) 0 0; padding: 0; color: var(--color-muted); }
 .complements li { margin: 0 0 var(--space-1); }
+.series-controls.filters-bar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }

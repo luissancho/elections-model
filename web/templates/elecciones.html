@@ -14,7 +14,7 @@
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <form id="errors-filter" class="series-controls" hidden>
+        <form id="errors-filter" class="series-controls filters-bar" hidden>
           <label>Ámbito
             <select name="ambito">
               <option value=""{% if not selected_scope %} selected{% endif %}>Todos</option>
@@ -79,7 +79,7 @@
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <dl class="figures" id="figures" hidden>
+        <dl class="figures" id="figures-list" hidden>
           <div><dt>Sondeos</dt><dd id="figure-polls">—</dd></div>
           <div><dt>Elecciones</dt><dd id="figure-events">—</dd></div>
           <div><dt id="figure-mean-label">Error de bloques</dt><dd id="figure-mean">—</dd></div>

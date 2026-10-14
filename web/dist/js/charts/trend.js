@@ -3,6 +3,7 @@
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
 import {fmtDate, fmtNum} from '../format.js';
 
+const YEAR_MS = 365 * 24 * 3600 * 1000;
 const MIN_SIZE = 6;
 const SIZE_RANGE = 12;
 const TREND_NAME = 'Tendencia (últimas cinco elecciones)';
@@ -48,6 +49,7 @@ export function renderTrend(el, {series, trend, rest}, {formatter = (x) => fmtNu
     legend: {top: 0, type: 'scroll', textStyle: {color: THEME.textColor}},
     xAxis: {
       type: 'time',
+      minInterval: YEAR_MS,
       axisLabel: {formatter: (ms) => String(new Date(ms).getUTCFullYear())},
     },
     yAxis: {

@@ -122,10 +122,11 @@ function fillWeeks(table, rows, measure, perElection) {
  * @returns {object} `{scope name: colour}`
  */
 function scopeColors(scopes) {
+  const tones = EVENT_COLORS.slice(1);  // the first tone is too close to the accent
   const colors = {};
   let next = 0;
   for (const {code, name} of scopes) {
-    colors[name] = code === NATIONAL_SCOPE ? ACCENT : EVENT_COLORS[next++ % EVENT_COLORS.length];
+    colors[name] = code === NATIONAL_SCOPE ? ACCENT : tones[next++ % tones.length];
   }
   return colors;
 }
@@ -173,15 +174,17 @@ function drawTrend(el, rows, others, state, {scopes, events, colors}) {
 function drawErrorBullseye(el, rows, blocks, scope, {events, colors}) {
   let groupOf = (row) => row.scope_name;
   let palette = colors;
+  let groupLabel = (group) => group;
   if (scope !== null) {
-    groupOf = (row) => row.event;
+    groupOf = eventKey;
     palette = {};
-    const labels = new Map(rows.map((row) => [eventKey(row), row.event]));
-    events.filter((event) => event.scope === scope && labels.has(event.key)).forEach((event, i) => {
-      palette[labels.get(event.key)] = EVENT_COLORS[i % EVENT_COLORS.length];
+    events.filter((event) => event.scope === scope).forEach((event, i) => {
+      palette[event.key] = EVENT_COLORS[i % EVENT_COLORS.length];
     });
+    const labels = new Map(rows.map((row) => [eventKey(row), row.event]));
+    groupLabel = (key) => labels.get(key) ?? key;
   }
-  tryDraw(() => renderBullseye(el, rows, {blocks, groupOf, colors: palette, legend: true, labels: false}),
+  tryDraw(() => renderBullseye(el, rows, {blocks, groupOf, colors: palette, legend: true, labels: false, groupLabel}),
     'the errors bullseye');
 }
 
@@ -215,7 +218,7 @@ function wireHistory(initial) {
   const weeksEl = document.getElementById('weeks-table');
   const weeksNote = document.getElementById('weeks-note');
   const eventsTable = document.getElementById('events-table');
-  const figures = document.querySelector('dl.figures');  // the card carries the id `figures` too
+  const figures = document.getElementById('figures-list');
   const complementsEl = document.getElementById('complements');
   const colors = scopeColors(scopes);
   const analysed = new Set(scopes.map((scope) => scope.code));
@@ -259,7 +262,9 @@ function wireHistory(initial) {
   /** Write the filters to the URL hash without adding a history entry. */
   function writeHash() {
     const {pathname, search} = window.location;
-    window.history.replaceState(null, '', pathname + search + errorsHash(state));
+    // An explicit empty `ambito=` keeps "Todos" when the page would preselect a scope on its own.
+    const scope = state.scope === null && initial.selected_scope ? '' : state.scope;
+    window.history.replaceState(null, '', pathname + search + errorsHash({...state, scope}));
   }
 
   /** Redraw everything that depends on the filters. */

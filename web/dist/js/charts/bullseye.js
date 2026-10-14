@@ -85,10 +85,10 @@ function groupedTooltip(row, xBlock, yBlock) {
  *   `pollster` and an optional `href` for the tooltip)
  * @param {object} opts `blocks` (names of the x and y blocks), `groupOf` (`row => group`: one scatter series
  *   per group, in order of appearance; `null` draws a single grey series), `colors` (`{group: colour}`),
- *   `legend` (show the legend of the groups, scrollable) and `labels` (write `row.event` next to each point)
+ *   `legend` (show the legend of the groups, scrollable), `groupLabel` (`group => text` of the legend) and `labels` (write `row.event` next to each point)
  * @returns {object} the ECharts instance
  */
-export function renderBullseye(el, rows, {blocks, groupOf = null, colors = {}, legend = false, labels = true}) {
+export function renderBullseye(el, rows, {blocks, groupOf = null, colors = {}, legend = false, labels = true, groupLabel = (group) => group}) {
   const [xBlock, yBlock] = blocks;
   const points = rows
     .filter((row) => Number.isFinite(row[xBlock]) && Number.isFinite(row[yBlock]))
@@ -144,7 +144,7 @@ export function renderBullseye(el, rows, {blocks, groupOf = null, colors = {}, l
   };
   if (legend && groupOf) {
     // Only the groups are named series, so the rings stay out of the legend.
-    option.legend = {type: 'scroll', bottom: 0, data: groupNames(points, groupOf)};
+    option.legend = {type: 'scroll', bottom: 0, data: groupNames(points, groupOf), formatter: groupLabel};
     option.grid = {...option.grid, bottom: 40};
   }
   return mountChart(el, option);

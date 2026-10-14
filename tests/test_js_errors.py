@@ -116,6 +116,9 @@ def test_errors_hash_parse_and_round_trip():
     assert run_js(f'e.parseErrorsHash({json.dumps(hash_)}, {CTX})') == {
         'scope': 'es-md', 'event': 'es-md:2021-05-04', 'pollster': 'CIS', 'from': 2021, 'to': 2021, 'measure': 'error_avg'}
     assert run_js('e.errorsHash({scope: null, event: null, pollster: null, from: null, to: null, measure: "error_blocks_abs"})') == ''
+    # An explicit empty `ambito=` (Todos with a page default) writes and parses as no scope.
+    assert run_js('e.errorsHash({scope: "", event: null, pollster: null, from: null, to: null, measure: "error_blocks_abs"})') == '#ambito='
+    assert run_js(f'e.parseErrorsHash("#ambito=&casa=CIS", {CTX})')['scope'] is None
 
 
 def test_legacy_event_hash_resolves_to_a_unique_key():
