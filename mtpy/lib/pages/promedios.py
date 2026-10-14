@@ -186,7 +186,7 @@ def _leaders(values: list) -> list:
 
 def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAGE_SIZE) -> dict:
     """
-    Formatted rows of the polls table, the most recent first, with the simple mean of those rows.
+    Formatted rows of the polls table, the most recent first, with the simple mean of all the polls.
 
     Parameters
     ----------
@@ -198,7 +198,7 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
     colors : dict
         Colour by party name; a party without one gets ``OTHERS_COLOR``.
     n : int, optional
-        Maximum number of rows; ``None`` for all of them.
+        Maximum number of rows; ``None`` for all of them. The mean always covers every poll.
 
     Returns
     -------
@@ -207,7 +207,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
         (ties keep the later published first) is ``{'pollster', 'sponsor', 'date' (dd/mm/aa), 'fieldwork'
         (``None`` without fieldwork dates), 'sample', 'cells'}`` with a ``{'value', 'leader', 'color'}`` cell
         per party (``leader``: the highest of the row, every tied one); ``mean`` is ``{'n', 'cells'}``, the
-        unweighted mean of those rows at one decimal in the same cells.
+        unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
+        browser shows before any filter.
     """
     latest = sorted(reversed(polls), key=lambda poll: poll.get('date') or '', reverse=True)[:n]
     rows = []
@@ -235,13 +236,13 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
     means = []
 
     for name in parties:
-        present = [poll[name] for poll in latest if not _is_missing(poll.get(name))]
+        present = [poll[name] for poll in polls if not _is_missing(poll.get(name))]
         means.append(round(sum(present) / len(present), 1) if present else None)
 
     return {
         'rows': rows,
         'mean': {
-            'n': len(latest),
+            'n': len(polls),
             'cells': [
                 {'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
                 for name, value, leader in zip(parties, means, _leaders(means))

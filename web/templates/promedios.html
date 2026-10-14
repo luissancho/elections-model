@@ -197,7 +197,7 @@
               {% endfor %}
             </select>
           </label>
-          <span class="bar-end"><span id="polls-count">{{ table_total|int }} sondeos</span> · <a href="{{ csv_href }}">Descargar CSV</a></span>
+          <span class="bar-end"><span id="polls-count">{{ table_total|int }} {{ 'sondeo' if table_total == 1 else 'sondeos' }}</span> · <a href="{{ csv_href }}">Descargar CSV</a></span>
         </div>
         <noscript><p class="notice"><a href="{{ csv_href }}">Descargar CSV</a></p></noscript>
         <div class="et-wrap">
@@ -208,11 +208,11 @@
             </colgroup>
             <thead>
               <tr>
-                <th class="f l" data-key="pollster">Encuestadora</th>
-                <th data-key="date" aria-sort="descending">Fecha</th>
-                <th data-key="sample_size">Muestra</th>
+                <th class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>
+                <th data-key="date" aria-sort="descending"><button type="button" class="sort">Fecha</button></th>
+                <th data-key="sample_size"><button type="button" class="sort">Muestra</button></th>
                 {% for name in table_parties %}
-                <th class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</th>
+                <th class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><button type="button" class="sort"><i class="pd" style="background: {{ catalog[name].color }}"></i>{{ name }}</button></th>
                 {% endfor %}
               </tr>
             </thead>
@@ -232,7 +232,7 @@
             </tbody>
             <tfoot>
               <tr>
-                <td class="f l"><b>Media simple</b><small>{{ table.mean.n|int }} sondeos</small></td>
+                <td class="f l"><b>Media simple</b><small>{{ table.mean.n|int }} {{ 'sondeo' if table.mean.n == 1 else 'sondeos' }}</small></td>
                 <td></td>
                 <td></td>
                 {% for cell in table.mean.cells %}

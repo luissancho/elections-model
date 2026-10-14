@@ -7,8 +7,7 @@ import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} f
 import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
-import {fmtInt} from '../format.js';
-import {PAGE_SIZE, filterPolls, meanOf, pageLabel, pageOf, sortPolls} from '../polls-table.js';
+import {PAGE_SIZE, filterPolls, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {WINDOW_DAYS} from '../range.js';
 import {mapNames, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 import {renderBody, renderFoot, renderHead} from './polls-dom.js';
@@ -347,7 +346,7 @@ function wirePollsTable(initial, catalog) {
     const pollsters = pick(checkedPollsters(), pollsterTotal);
     const rows = sortPolls(filterPolls(polls, {
       pollsters,
-      from: from.selectedIndex === 0 ? null : from.value,
+      from: from.selectedIndex <= 0 ? null : from.value,
       to: to.selectedIndex === to.options.length - 1 ? null : to.value,
     }), state.sort.key, state.sort.asc);
     const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -356,7 +355,7 @@ function wirePollsTable(initial, catalog) {
     renderHead(table.tHead, parties, catalog, state.sort);
     renderBody(table.tBodies[0], shown, parties, catalog);
     renderFoot(table.tFoot, rows.length, meanOf(rows, parties), parties, catalog);
-    document.getElementById('polls-count').textContent = `${fmtInt(rows.length)} sondeos`;
+    document.getElementById('polls-count').textContent = pollsCount(rows.length);
     const recent = state.sort.key === 'date' && !state.sort.asc;
     prev.textContent = recent ? '‹ Más recientes' : '‹ Anteriores';
     next.textContent = recent ? 'Más antiguos ›' : 'Siguientes ›';

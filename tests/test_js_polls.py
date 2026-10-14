@@ -96,3 +96,19 @@ def test_page_label_mean_and_leader_of_the_polls_table():
     assert table_js('p.meanOf(POLLS.slice(2), ["PP"])') == {'PP': None}
     assert run_js('p.leaderOf({PP: 31.1, PSOE: 31.1, VOX: null})') == ['PP', 'PSOE']
     assert run_js('p.leaderOf({PP: null})') == []
+
+
+def test_sort_polls_keeps_the_server_order_of_same_date_ties_and_reverses_it_ascending():
+    polls = [{'pollster': 'first', 'date': '2026-10-01'}, {'pollster': 'second', 'date': '2026-10-01'},
+             {'pollster': 'old', 'date': '2026-09-01'}]
+    expr = 'p.sortPolls({}, "date", {}).map(x => x.pollster)'
+    assert run_js(expr.format(json.dumps(polls), 'false')) == ['second', 'first', 'old']
+    assert run_js(expr.format(json.dumps(polls), 'true')) == ['old', 'first', 'second']
+    by_value = [{'pollster': 'a', 'date': '2026-10-01', 'PP': 1}, {'pollster': 'b', 'date': '2026-10-01', 'PP': 1}]
+    assert run_js('p.sortPolls({}, "PP", false).map(x => x.pollster)'.format(json.dumps(by_value))) == ['b', 'a']
+
+
+def test_polls_count_is_singular_for_one_and_the_month_filter_ignores_empty_limits():
+    assert run_js('[p.pollsCount(1), p.pollsCount(0), p.pollsCount(315)]') == ['1 sondeo', '0 sondeos', '315 sondeos']
+    undated = [{'pollster': 'CIS'}, {'pollster': 'GAD3'}]
+    assert run_js('p.filterPolls({}, {{pollsters: null, from: "", to: ""}}).length'.format(json.dumps(undated))) == 2

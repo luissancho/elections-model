@@ -1,7 +1,7 @@
 // DOM builders of the "Todas las encuestas" table of Promedios: header, body and footer, built with
 // `createElement`/`textContent` (never HTML with data).
 import {fmtDate, fmtInt, fmtNum} from '../format.js';
-import {leaderOf, shortDate} from '../polls-table.js';
+import {leaderOf, pollsCount, shortDate} from '../polls-table.js';
 
 const FIXED = [['pollster', 'Encuestadora'], ['date', 'Fecha'], ['sample_size', 'Muestra']];
 
@@ -55,6 +55,10 @@ export function renderHead(thead, parties, catalog, sort) {
   const tr = el('tr');
   const add = (th, key) => {
     th.dataset.key = key;
+    const button = el('button', '', 'sort');
+    button.type = 'button';
+    button.append(...th.childNodes);
+    th.appendChild(button);
     if (key === sort.key) {
       th.setAttribute('aria-sort', sort.asc ? 'ascending' : 'descending');
     }
@@ -113,7 +117,7 @@ export function renderBody(tbody, polls, parties, catalog) {
  */
 export function renderFoot(tfoot, count, means, parties, catalog) {
   const first = el('td', '', 'f l');
-  first.append(el('b', 'Media simple'), el('small', `${fmtInt(count)} sondeos`));
+  first.append(el('b', 'Media simple'), el('small', pollsCount(count)));
   const tr = el('tr');
   tr.append(first, el('td'), el('td'), ...valueCells(means, parties, catalog));
   tfoot.replaceChildren(tr);

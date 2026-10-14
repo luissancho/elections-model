@@ -8,6 +8,16 @@ const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 const DASH = '–';
 
 /**
+ * Count of polls with its noun.
+ *
+ * @param {number} n number of polls
+ * @returns {string} `1 sondeo`, or `{n} sondeos` otherwise
+ */
+export function pollsCount(n) {
+  return `${n} ${n === 1 ? 'sondeo' : 'sondeos'}`;
+}
+
+/**
  * Month of a poll.
  *
  * @param {object} poll poll with an ISO `date`
@@ -55,7 +65,7 @@ export function shortDate(iso) {
  *
  * @param {Array} polls polls of the cycle
  * @param {{pollsters: (string[]|null), from: (string|null), to: (string|null)}} filter pollster names (null: all)
- *   and inclusive `YYYY-MM` months (null: no limit); a poll without a date fails any month limit
+ *   and inclusive `YYYY-MM` months (null or empty: no limit); a poll without a date fails any month limit
  * @returns {Array} the polls that pass, in their order
  */
 export function filterPolls(polls, {pollsters, from, to}) {
@@ -65,35 +75,41 @@ export function filterPolls(polls, {pollsters, from, to}) {
       return false;
     }
     const month = monthOf(poll);
-    if (from !== null && (month === null || month < from)) {
+    if (from && (month === null || month < from)) {
       return false;
     }
-    return !(to !== null && (month === null || month > to));
+    return !(to && (month === null || month > to));
   });
 }
 
 /**
  * Sort polls by a column.
  *
- * @param {Array} polls polls to sort (not modified)
+ * @param {Array} polls polls to sort, in publication order (not modified)
  * @param {string} key `date`, `pollster`, `sample_size` or a party name
  * @param {boolean} asc ascending order
- * @returns {Array} a sorted copy: missing values last in both directions, ties by date descending
+ * @returns {Array} a sorted copy: missing values last in both directions; ties by date descending and then by
+ *   publication, the later published first (the order of the server); sorting by `date` ascending is the exact
+ *   reverse of descending
  */
 export function sortPolls(polls, key, asc) {
   const sign = asc ? 1 : -1;
-  const byDate = (a, b) => (b.date || '').localeCompare(a.date || '');
-  return [...polls].sort((a, b) => {
-    const x = a[key];
-    const y = b[key];
-    const missingX = x === null || x === undefined || x === '';
-    const missingY = y === null || y === undefined || y === '';
-    if (missingX || missingY) {
-      return missingX === missingY ? byDate(a, b) : (missingX ? 1 : -1);
+  const byDate = (a, b) => (b.poll.date || '').localeCompare(a.poll.date || '') || b.index - a.index;
+  const indexed = polls.map((poll, index) => ({poll, index}));
+  const missing = (value) => value === null || value === undefined || value === '';
+  indexed.sort((a, b) => {
+    const x = a.poll[key];
+    const y = b.poll[key];
+    if (missing(x) || missing(y)) {
+      return missing(x) === missing(y) ? byDate(a, b) : (missing(x) ? 1 : -1);
+    }
+    if (key === 'date') {
+      return sign * (x.localeCompare(y) || a.index - b.index);
     }
     const order = typeof x === 'string' ? x.localeCompare(y, 'es') : x - y;
     return order === 0 ? byDate(a, b) : sign * order;
   });
+  return indexed.map((entry) => entry.poll);
 }
 
 /**
