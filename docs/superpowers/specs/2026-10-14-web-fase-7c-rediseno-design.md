@@ -272,7 +272,7 @@ Escaños (`escanos_headline_text`) y los subtítulos de modo de las tarjetas ("�
 Cerrada el 2026-10-14 en `dev`, commits `6f97137..a822ef0` (plan `68c8551`; entre medias, dos commits ajenos de Luis,
 `80e5d17` y `f548c56`). Suite: 719 tests en verde (697 al empezar), 54 avisos preexistentes. Ejecutada en modo
 subagent-driven: ocho tareas con revisión por tarea, revisión final de toda la rama y una ola de correcciones
-(`591e4a5`, `ca78b33`, `2530399`, `a822ef0`). Los iconos de marca se regeneraron con los colores nuevos a petición de Luis (commit siguiente al cierre).
+(`591e4a5`, `ca78b33`, `2530399`, `a822ef0`). Los iconos de marca se regeneraron con los colores nuevos a petición de Luis (commit siguiente al cierre). Ajuste posterior de Luis (2026-10-14, `9db413a`): el bloque central pasa a un solo par hemiciclo/tabla a la misma altura, con un selector Partidos/Bloques en la tarjeta del hemiciclo que cambia el hemiciclo (por partido o por bloque) y muestra la tabla correspondiente; sin JS se ve la de partidos.
 
 Hecho, por apartado: D1 (tokens grises, tarjetas con barra de acento, `.seg`, contenedor fluido, prosa a 72ch, tema
 de ECharts), D2 (pie "Publicación: … · Último sondeo: …", barra del evento sin la frase de modo, Promedios sin
