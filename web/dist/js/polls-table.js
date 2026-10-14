@@ -61,16 +61,75 @@ export function shortDate(iso) {
 }
 
 /**
- * Polls of the chosen pollsters and months.
+ * Whether a poll carries seat projections of its pollster.
+ *
+ * @param {object} poll a poll of the cycle
+ * @returns {boolean} true with a non-empty `seats` object
+ */
+export function hasSeats(poll) {
+  return Boolean(poll && poll.seats && typeof poll.seats === 'object' && Object.keys(poll.seats).length);
+}
+
+/**
+ * Value of a party in a poll for a view.
+ *
+ * @param {object} poll a poll of the cycle
+ * @param {string} name party name
+ * @param {string} [mode='pct'] `pct` (the share) or `esc` (the midpoint of the seat projection)
+ * @returns {(number|null)} the value, null when the poll does not give it
+ */
+export function pollValue(poll, name, mode = 'pct') {
+  if (mode === 'esc') {
+    const range = poll.seats ? poll.seats[name] : null;
+    return Array.isArray(range) && range.length ? (range[0] + range[range.length - 1]) / 2 : null;
+  }
+  const value = poll[name];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Text of a seat projection: the number, or `mín–máx` for a range.
+ *
+ * @param {object} poll a poll of the cycle
+ * @param {string} name party name
+ * @returns {(string|null)} the text, null without a projection
+ */
+export function seatsText(poll, name) {
+  const range = poll.seats ? poll.seats[name] : null;
+  if (!Array.isArray(range) || !range.length) {
+    return null;
+  }
+  const [lo, hi] = [range[0], range[range.length - 1]];
+  return lo === hi ? String(lo) : `${lo}–${hi}`;
+}
+
+/**
+ * Values of the parties of a poll for a view.
+ *
+ * @param {object} poll a poll of the cycle
+ * @param {string[]} parties party names
+ * @param {string} [mode='pct'] view (see `pollValue`)
+ * @returns {Object<string, (number|null)>} value by party name
+ */
+export function valuesOf(poll, parties, mode = 'pct') {
+  return Object.fromEntries(parties.map((name) => [name, pollValue(poll, name, mode)]));
+}
+
+/**
+ * Polls of the chosen pollsters and months, and of the view.
  *
  * @param {Array} polls polls of the cycle
- * @param {{pollsters: (string[]|null), from: (string|null), to: (string|null)}} filter pollster names (null: all)
- *   and inclusive `YYYY-MM` months (null or empty: no limit); a poll without a date fails any month limit
+ * @param {{pollsters: (string[]|null), from: (string|null), to: (string|null), mode: (string|undefined)}} filter
+ *   pollster names (null: all), inclusive `YYYY-MM` months (null or empty: no limit; a poll without a date fails
+ *   any month limit) and the view (`esc` keeps only the polls with seat projections)
  * @returns {Array} the polls that pass, in their order
  */
-export function filterPolls(polls, {pollsters, from, to}) {
+export function filterPolls(polls, {pollsters, from, to, mode = 'pct'}) {
   const names = pollsters === null ? null : new Set(pollsters);
   return polls.filter((poll) => {
+    if (mode === 'esc' && !hasSeats(poll)) {
+      return false;
+    }
     if (names !== null && !names.has(poll.pollster)) {
       return false;
     }
@@ -88,18 +147,20 @@ export function filterPolls(polls, {pollsters, from, to}) {
  * @param {Array} polls polls to sort, in publication order (not modified)
  * @param {string} key `date`, `pollster`, `sample_size` or a party name
  * @param {boolean} asc ascending order
+ * @param {string} [mode='pct'] view of the party columns (see `pollValue`)
  * @returns {Array} a sorted copy: missing values last in both directions; ties by date descending and then by
  *   publication, the later published first (the order of the server); sorting by `date` ascending is the exact
  *   reverse of descending
  */
-export function sortPolls(polls, key, asc) {
+export function sortPolls(polls, key, asc, mode = 'pct') {
   const sign = asc ? 1 : -1;
   const byDate = (a, b) => (b.poll.date || '').localeCompare(a.poll.date || '') || b.index - a.index;
   const indexed = polls.map((poll, index) => ({poll, index}));
   const missing = (value) => value === null || value === undefined || value === '';
+  const fixed = ['date', 'pollster', 'sample_size'].includes(key);
   indexed.sort((a, b) => {
-    const x = a.poll[key];
-    const y = b.poll[key];
+    const x = fixed ? a.poll[key] : pollValue(a.poll, key, mode);
+    const y = fixed ? b.poll[key] : pollValue(b.poll, key, mode);
     if (missing(x) || missing(y)) {
       return missing(x) === missing(y) ? byDate(a, b) : (missing(x) ? 1 : -1);
     }
@@ -145,13 +206,16 @@ export function pageLabel(page, shown, total) {
  *
  * @param {Array} rows polls
  * @param {string[]} parties party names
- * @returns {Object<string, (number|null)>} the mean at one decimal, null when no poll has the party
+ * @param {string} [mode='pct'] view (see `pollValue`): shares at one decimal, seats (midpoints) rounded to a
+ *   whole number
+ * @returns {Object<string, (number|null)>} the mean, null when no poll has the party
  */
-export function meanOf(rows, parties) {
+export function meanOf(rows, parties, mode = 'pct') {
   const means = {};
+  const scale = mode === 'esc' ? 1 : 10;
   for (const name of parties) {
-    const values = rows.map((row) => row[name]).filter((value) => typeof value === 'number' && Number.isFinite(value));
-    means[name] = values.length ? Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 10) / 10 : null;
+    const values = rows.map((row) => pollValue(row, name, mode)).filter((value) => value !== null);
+    means[name] = values.length ? Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * scale) / scale : null;
   }
   return means;
 }

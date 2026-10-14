@@ -354,6 +354,9 @@ def test_filters_follow_the_js_rules():
     assert pages.fmt_num(-1234.5, 1) == '-1.234,5' and pages.fmt_num(-1.25, 1) == '-1,3'
     assert pages.fmt_prob(0.995) == '> 99 %' and pages.fmt_prob(0.003) == '< 1 %' and pages.fmt_prob(0) == '0 %'
     assert pages.fmt_prob(1) == '100 %' and pages.fmt_prob(0.968) == '97 %' and pages.fmt_prob(None) == '–'
+    # Con un decimal (el filtro `prob` de las tablas): el tope y el suelo se mueven un orden de magnitud
+    assert pages.fmt_prob(0.968, 1) == '96,8 %' and pages.fmt_prob(0.995, 1) == '99,5 %' and pages.fmt_prob(0.9995, 1) == '> 99,9 %'
+    assert pages.fmt_prob(0.003, 1) == '0,3 %' and pages.fmt_prob(0.0004, 1) == '< 0,1 %' and pages.fmt_prob(0, 1) == '0 %'
     assert pages.fmt_range(27.31, 38.02) == '27,3–38,0' and pages.fmt_range(118.0, 159.5, 0) == '118–160'
     assert pages.fmt_date('2026-10-13') == '13 oct 2026' and pages.fmt_date('2026-09-05') == '5 sept 2026'
     assert pages.fmt_date('garbage') == '–' and pages.fmt_date(None) == '–'
@@ -433,7 +436,7 @@ def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
         assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | parties <= set(poll)
-        extra = {'sponsor', 'start_date', 'end_date'}
+        extra = {'sponsor', 'start_date', 'end_date', 'seats'}
         assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | extra | parties
 
 
@@ -1890,3 +1893,28 @@ def test_promedios_results_switch_between_parties_and_blocks_from_the_hemicycle_
     assert 'Con la vista Bloques' in hemi
     assert re.search(r'<section class="card" id="blocks-card" hidden>', page)
     assert not re.search(r'<section class="card" id="parties-card" hidden>', page)
+
+
+def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(api):
+    page = html(call(api, '/es/escanos')[2])
+    table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]
+    cells = re.findall(r'<td>([^<]*%)</td>', table)
+    assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d %|0 %|100 %', cell) for cell in cells), cells
+    home = html(call(api, '/')[2])
+    assert re.search(r'(?:> )?\d+ % de probabilidad de mayoría absoluta', home)
+
+
+def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api, fresh_app):
+    page = html(call(api, '/es')[2])
+    assert 'id="polls-mode"' not in page and 'name="pmode"' not in page  # el fixture no trae escaños
+    polls = fixture_data('polls')
+    polls['polls'][0]['seats'] = {'PP': [140, 142]}
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
+    webapi.site().files.clear()
+    body = call(api, '/es')[2]
+    page = html(body).replace('\n', ' ')
+    assert re.search(r'<fieldset id="polls-mode" class="seg">', page)
+    assert 'name="pmode" value="pct" checked' in page and 'name="pmode" value="esc"' in page
+    assert 'en las encuestadoras que los dan, los escaños' in page and 'En la vista Escaños' in page
+    assert initial(body)['polls']['polls'][0]['seats'] == {'PP': [140, 142]}

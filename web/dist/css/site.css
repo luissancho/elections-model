@@ -341,7 +341,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Charts: ECharts containers, 360 px high on desktop and 240 px on mobile */
 .chart { width: 100%; height: 360px; }
-.chart.chart-tall { height: 480px; }
+.chart.chart-tall { height: 600px; }
 .chart.chart-small { height: 160px; }
 
 /* Promedios: controls of the average chart, one per row (view, window, party or block pills) */

@@ -99,13 +99,14 @@ def chart_polls(polls: dict) -> dict:
     Returns
     -------
     dict
-        ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``,
+        ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``, ``seats``
+        (the pollster's projections, when it has them),
         ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
         plus ``name`` (``poll_name``) and ``sample_size`` (``None`` when missing): the box of each poll of the
         charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
-    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date'] + parties
+    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats'] + parties
 
     return {
         'parties': parties,
@@ -344,6 +345,7 @@ def promedios_context(state: dict) -> dict:
     colors = {name: parties[name]['color'] for name in context['table_parties']}
     context['table'] = polls_table(poll_rows, context['table_parties'], colors)
     context['table_total'] = len(poll_rows)
+    context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch
     context['months'] = poll_months(poll_rows)
     context['csv_href'] = api_url(scope, 'polls', run=run, fmt='csv')
     context['pollsters'] = pollster_options(poll_rows)

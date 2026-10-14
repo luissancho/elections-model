@@ -131,10 +131,14 @@ Sondeos publicados y resultado anterior. Fuente: `Forecaster.fc_series_raw` y `F
 
 - `polls`: registros con `date, pollster_id, pollster, sponsor, start_date, end_date, sample_size, mtype,
   rating, weight` (10 columnas) más una columna por partido en puntos porcentuales. `weight` a 3
-  decimales.
+  decimales. Enmienda 2026-10-14 (fase 7c): el sondeo que publica escaños lleva además `seats`,
+  `{partido: [mín, máx]}` (enteros; la encuestadora da un número, `mín = máx`, o una horquilla), solo con los
+  partidos que los tienen; los sondeos sin escaños no llevan la clave. Son las cifras de la encuestadora
+  (`polls_results.seats_min/seats_max`), no del modelo. Los runs anteriores no las tienen.
 - `results`: registros `date` + una columna por partido (resultado de elecciones anteriores).
 
-CSV `csv/polls.csv`: la tabla `polls`.
+CSV `csv/polls.csv`: la tabla `polls` más, por partido, `seats_min_{partido}` y `seats_max_{partido}` (enteros
+vacíos sin proyección; enmienda 2026-10-14).
 
 ### `fan`
 

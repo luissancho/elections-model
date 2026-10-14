@@ -382,7 +382,8 @@ function wirePollsTable(initial, catalog) {
   const polls = initial.polls.polls;
   const from = document.getElementById('polls-from');
   const to = document.getElementById('polls-to');
-  const state = {sort: {key: 'date', asc: false}, page: 0};
+  const state = {sort: {key: 'date', asc: false}, page: 0, mode: 'pct'};
+  const modeSwitch = document.getElementById('polls-mode');
   const [prev, next] = pag.querySelectorAll('button');
   const pick = (checked, total) => (checked.length === total ? null : checked.map((box) => box.value));
 
@@ -396,14 +397,15 @@ function wirePollsTable(initial, catalog) {
       pollsters,
       from: from.selectedIndex <= 0 ? null : from.value,
       to: to.selectedIndex === to.options.length - 1 ? null : to.value,
-    }), state.sort.key, state.sort.asc);
+      mode: state.mode,
+    }), state.sort.key, state.sort.asc, state.mode);
     const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
     state.page = Math.min(state.page, pages - 1);
     const shown = pageOf(rows, state.page);
     renderHead(table.tHead, parties, catalog, state.sort);
-    renderBody(table.tBodies[0], shown, parties, catalog);
-    renderFoot(table.tFoot, rows.length, meanOf(rows, parties), parties, catalog);
-    document.getElementById('polls-count').textContent = pollsCount(rows.length);
+    renderBody(table.tBodies[0], shown, parties, catalog, state.mode);
+    renderFoot(table.tFoot, rows.length, meanOf(rows, parties, state.mode), parties, catalog, state.mode);
+    document.getElementById('polls-count').textContent = pollsCount(rows.length) + (state.mode === 'esc' ? ' con escaños' : '');
     const recent = state.sort.key === 'date' && !state.sort.asc;
     prev.textContent = recent ? '‹ Más recientes' : '‹ Anteriores';
     next.textContent = recent ? 'Más antiguos ›' : 'Siguientes ›';
@@ -425,6 +427,15 @@ function wirePollsTable(initial, catalog) {
 
   from.addEventListener('change', refilter);
   to.addEventListener('change', refilter);
+  if (modeSwitch) {
+    modeSwitch.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=pmode]')) {
+        state.mode = event.target.value === 'esc' ? 'esc' : 'pct';
+        markSegments(modeSwitch);
+        refilter();
+      }
+    });
+  }
   table.tHead.addEventListener('click', (event) => {
     const th = event.target.closest('th[data-key]');
     if (!th) {

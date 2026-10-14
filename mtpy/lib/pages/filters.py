@@ -121,8 +121,10 @@ def fmt_prob(p, digits: int = 0) -> str:
     Returns
     -------
     str
-        ``'0 %'`` and ``'100 %'`` only when exact, ``'> 99 %'`` from 0.995, ``'< 1 %'`` up to
-        0.005 (0 excluded), else the percentage; ``DASH`` when ``p`` is missing.
+        ``'0 %'`` and ``'100 %'`` only when exact; a near-certainty is capped below the top value the
+        decimals can show (``'> 99 %'`` from 0.995 with no decimals, ``'> 99,9 %'`` from 0.9995 with one) and
+        a near-impossibility floored above zero (``'< 1 %'`` up to 0.005, ``'< 0,1 %'`` up to 0.0005), else
+        the percentage with ``digits`` decimals; ``DASH`` when ``p`` is missing.
     """
     if isinstance(p, bool) or _is_missing(p):
         return DASH
@@ -133,11 +135,14 @@ def fmt_prob(p, digits: int = 0) -> str:
     if p == 1:
         return '100 %'
 
-    if p >= 0.995:
-        return '> 99 %'
+    unit = 10 ** (-digits)  # smallest percentage the decimals can show
+    edge = unit / 2 / 100  # as a probability
 
-    if 0 < p <= 0.005:
-        return '< 1 %'
+    if p >= 1 - edge:
+        return '> ' + fmt_pct(100 - unit, digits)
+
+    if 0 < p <= edge:
+        return '< ' + fmt_pct(unit, digits)
 
     return fmt_pct(p * 100, digits)
 
