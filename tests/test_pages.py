@@ -47,9 +47,9 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'public, max-age=60' and headers['etag'].startswith('"')
     assert '<title>Demoscopio · Promedios</title>' in page
-    assert 'Pronóstico para el' in page and 'href="/es?mode=forecast" aria-current="page"' in page
+    assert 'pronóstico para el' in page and 'href="/es?mode=forecast" aria-current="page"' in page
     assert 'name="mode"' not in page  # `?mode=` switches the page, but no control is rendered
-    assert 'id="headline-table"' in page and '<th scope="col">Partido</th>' in page
+    assert 'id="parties-table"' in page and '<th scope="col">Partido</th>' in page
     assert fixture_data('headline')['forecast']['parties'][0]['name'] in page
     assert '/dist/css/site.css' in page and '/dist/vendor/echarts-5.6.0.min.js' in page and '/dist/js/pages/promedios.js' in page
     assert 'onclick=' not in page and '<script>' not in page
@@ -68,7 +68,7 @@ def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
 def test_nowcast_and_pinned_run_are_reflected(api):
     status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     page = html(body)
-    assert status == 200 and 'Estimación a' in page
+    assert status == 200 and 'estimación a' in page
     assert 'name="mode"' not in page and '<span class="chip event-run">Run del 8 oct 2026</span>' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
     assert 'href="/es/escanos?mode=nowcast&amp;run={}"'.format(RUN) in page
@@ -145,7 +145,7 @@ def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
     page = html(body)
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
     assert '<title>Demoscopio · Promedios</title>' in page
-    assert 'Estimación a' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
+    assert 'estimación a' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
     assert 'name="mode"' not in page
     assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
@@ -159,9 +159,9 @@ def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_def
     publish.update_manifest(writer, {'es': publish.latest_entry(fixture_data('headline') | {'run_id': RUN})},
                             freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
     webapi.site().manifest_cache_clear()
-    assert 'Pronóstico definitivo para el' in html(call(api, '/es')[2])
+    assert 'pronóstico definitivo para el' in html(call(api, '/es')[2])
     page = html(call(api, '/es', query='run=20261001-120000&mode=forecast')[2])
-    assert 'Pronóstico publicado el' in page and 'definitivo' not in page
+    assert 'pronóstico publicado el' in page and 'definitivo' not in page
 
 
 @pytest.mark.parametrize('path, query, location', [
@@ -695,9 +695,31 @@ def test_evolution_cards_explain_the_retrospective_points(api):
         assert 'Evolución de las publicaciones' in page and 'estimaciones retrospectivas' in page
 
 
+def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_order():
+    summary = {'parties': [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'p_first': 0.95, 'p_majority': 0.0}],
+               'blocks': [{'name': 'Izquierda', 'pct': 35.4, 'seats': 117, 'p_majority': 0.0},
+                          {'name': 'Derecha', 'pct': 52.5, 'seats': 203, 'p_majority': 0.995},
+                          {'name': 'Separatista', 'pct': None, 'seats': None, 'p_majority': None}]}
+    assert pages.result_rows(summary) == [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'p_first': 0.95}]
+    rows = pages.block_result_rows(summary, fixture_data('meta'), pages.Catalog(fixture_data('meta')))
+    assert [r['name'] for r in rows] == ['Derecha', 'Izquierda'] and rows[0]['p_majority'] == 0.995 and rows[0]['color'].startswith('#')
+    assert pages.result_rows({}) == [] and pages.block_result_rows({}, fixture_data('meta'), pages.Catalog(fixture_data('meta'))) == []
+
+
+def test_promedios_central_block_is_three_cards_without_ranges(api):
+    page = html(call(api, '/es')[2])
+    order = [page.index(m) for m in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"', 'id="evolution-card"')]
+    assert order == sorted(order)
+    heads = re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="parties-table"'):page.index('id="blocks-result-table"')])
+    assert heads == ['Partido', '% Voto', 'Escaños', 'P(primero)']
+    assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'P(mayoría)']
+    for gone in ('id="vote-chart"', 'id="seats-chart"', 'id="majority"', 'id="headline-table"', 'Rango 95'):
+        assert gone not in page
+
+
 def test_promedios_orders_the_story_and_carries_the_controls(api):
     page = html(call(api, '/es')[2])
-    order = [page.index(marker) for marker in ('id="series"', 'id="headline"', 'id="vote-chart"', 'id="hemicycle"',
+    order = [page.index(marker) for marker in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"',
                                               'id="evolution"', 'id="pollster"', 'id="polls"', 'id="closing"')]
     assert order == sorted(order)
     assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
@@ -1425,16 +1447,16 @@ def test_frozen_manifest_marks_every_page(api, fresh_app):
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es')
     page = html(body)
-    assert status == 200 and 'Pronóstico definitivo para el' in page and 'congelado desde 23 nov 2026' in page
+    assert status == 200 and 'pronóstico definitivo para el' in page and 'congelado desde 23 nov 2026' in page
     assert 'freeze-banner' in page and 'href="/metodo#limitaciones"' in page
     status, _, body = call(api, '/es', query='mode=nowcast')
-    assert 'Estimación del' in html(body) and 'Pronóstico definitivo' not in html(body)
+    assert 'estimación del' in html(body) and 'pronóstico definitivo' not in html(body)
     status, _, body = call(api, '/metodo', query='scope=es')
     assert 'freeze-banner' in html(body)
     publish.update_manifest(writer, freeze={'active': False})
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es', query='mode=forecast')
-    assert 'freeze-banner' not in html(body) and 'Pronóstico para el' in html(body) and 'congelado desde' not in html(body)
+    assert 'freeze-banner' not in html(body) and 'pronóstico para el' in html(body) and 'congelado desde' not in html(body)
 
 
 def test_window_options_run_from_the_whole_cycle_to_three_months(api):
@@ -1654,12 +1676,12 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
     write_bundle(fresh_app.fs, run_id=OLDER_RUN, manifest=False)
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
-    assert 'Estimación del 8 oct 2026' in page and 'Estimación a ' + today not in page  # run_at of the fixture
+    assert 'estimación del 8 oct 2026' in page and 'Estimación a ' + today not in page  # run_at of the fixture
     bar = page[page.index('id="event-bar"'):page.index('<main')]
     assert '<span class="chip event-run">Run del 8 oct 2026</span>' in bar and '<form' not in bar
     # `?mode=` is still accepted in the query and kept in the tabs
     page = html(call(api, '/es', query='mode=forecast')[2])
-    assert 'Pronóstico para el 29 nov 2026' in page and 'href="/es/escanos?mode=forecast"' in page
+    assert 'pronóstico para el 29 nov 2026' in page and 'href="/es/escanos?mode=forecast"' in page
     assert 'name="mode"' not in page
 
 
@@ -1683,7 +1705,7 @@ def test_frozen_nowcast_link_keeps_the_run_date_in_the_title(api, fresh_app):
                             freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es', query='mode=nowcast')[2])
-    assert 'Estimación del' in page
+    assert 'estimación del' in page
     assert 'Estimación a {}'.format(pages.fmt_date(date.today().isoformat())) not in page
 
 

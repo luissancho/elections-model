@@ -1,11 +1,9 @@
 // Promedios tab of an event: the poll average with its window, party and block views, one house against the
-// average, the vote and seat bars, the hemicycle, the evolution and the "Cargar más" rows of the polls table,
+// average, the hemicycle, the evolution and the "Cargar más" rows of the polls table,
 // drawn from the data embedded by the server. The state of the average controls lives in the URL hash
 // (`blocks.js`), written only when a control changes.
-import {fmtInt, fmtPct} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} from '../blocks.js';
-import {renderBars} from '../charts/bars.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
@@ -17,37 +15,23 @@ const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
 
 /**
- * Draw the vote and seat bars, the hemicycle and the evolution.
+ * Draw the hemicycle and the evolution.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
  */
 function paintResults(initial, catalog) {
-  const {meta, headline, vote, summary, runs} = initial;
+  const {meta, headline, summary, runs} = initial;
   const mode = initial.state.mode;
   const current = headline[mode];
   const names = [...new Set([
     ...catalog.parties.map((party) => party.name),
     ...current.parties.map((party) => party.name),
-    ...vote.rows.map((row) => row.name),
     ...summary.parties.map((row) => row.name),
   ])];
   const colors = mapNames(names, (name) => catalog.color(name));
   const nSeats = meta.n_seats ?? summary.n_seats;
   const majority = meta.majority ?? summary.majority;
-
-  const voteRows = [...vote.rows].sort((a, b) => b.pct - a.pct);
-  tryDraw(() => renderBars(document.getElementById('vote-chart'), voteRows, {
-    value: 'pct', lo: 'lo', hi: 'hi', colors,
-    formatter: (x) => fmtPct(x), axisFormatter: (x) => fmtPct(x, 0),
-  }), 'the vote bars');
-
-  const seatRows = summary.parties
-    .filter((row) => row.seats > 0 || row.seats_hi > 0)
-    .sort((a, b) => b.seats - a.seats);
-  tryDraw(() => renderBars(document.getElementById('seats-chart'), seatRows, {
-    value: 'seats', lo: 'seats_lo', hi: 'seats_hi', colors, formatter: fmtInt, majority,
-  }), 'the seat bars');
 
   const seats = summary.totals
     ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats]));

@@ -1,6 +1,6 @@
 """
 Context of the Promedios tab of an event (``/{scope}``): the poll average with its window, party and block views,
-the headline table, vote and seats, majorities, the evolution of the publications, one house against the average
+the hemicycle and the results by party and by block, the evolution of the publications, one house against the average
 and the polls of the cycle.
 """
 from collections import Counter
@@ -12,16 +12,37 @@ from .common import Catalog, api_url, block_color, common_context, part
 from .filters import DASH, _is_missing, fmt_date, fmt_int, fmt_num
 
 TABLE_ROWS = 40
+BLOCK_ORDER = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
 
 
-def majority_rows(p_majority: dict, meta: dict, parties: Catalog) -> list:
+def result_rows(summary: dict) -> list:
     """
-    Rows of the absolute majority block, one per block in the given order.
+    Rows of the table of results by party.
 
     Parameters
     ----------
-    p_majority : dict
-        Probability of an absolute majority by block.
+    summary : dict
+        Data of the summary part (``parties``).
+
+    Returns
+    -------
+    list of dict
+        ``{'name', 'pct', 'seats', 'p_first'}`` per party of the summary, in its order and unformatted.
+    """
+    return [
+        {key: row.get(key) for key in ('name', 'pct', 'seats', 'p_first')}
+        for row in (summary or {}).get('parties') or []
+    ]
+
+
+def block_result_rows(summary: dict, meta: dict, parties: Catalog) -> list:
+    """
+    Rows of the table of results by block.
+
+    Parameters
+    ----------
+    summary : dict
+        Data of the summary part (``blocks``).
     meta : dict
         Data of the meta part.
     parties : Catalog
@@ -30,21 +51,18 @@ def majority_rows(p_majority: dict, meta: dict, parties: Catalog) -> list:
     Returns
     -------
     list of dict
-        ``{'block', 'p', 'width', 'color'}``; ``width`` is the bar width in percent (0-100,
-        one decimal).
+        ``{'name', 'pct', 'seats', 'p_majority', 'color'}`` per block with parties (``seats`` not ``None``),
+        unformatted: the blocks of ``BLOCK_ORDER`` first, in that order, and then the others in the order of
+        the summary.
     """
-    rows = []
+    blocks = [row for row in (summary or {}).get('blocks') or [] if row.get('seats') is not None]
+    blocks.sort(key=lambda row: BLOCK_ORDER.index(row['name']) if row['name'] in BLOCK_ORDER else len(BLOCK_ORDER))
 
-    for block, p in (p_majority or {}).items():
-        share = 0.0 if _is_missing(p) else max(0.0, min(1.0, float(p)))
-        rows.append({
-            'block': block,
-            'p': p,
-            'width': round(share * 100, 1),
-            'color': block_color(block, meta, parties),
-        })
-
-    return rows
+    return [
+        {key: row.get(key) for key in ('name', 'pct', 'seats', 'p_majority')}
+        | {'color': block_color(row['name'], meta, parties)}
+        for row in blocks
+    ]
 
 
 def poll_name(poll: dict) -> str:
@@ -188,8 +206,8 @@ def promedios_context(state: dict) -> dict:
     Returns
     -------
     dict
-        ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``majority``
-        (``majority_rows``), ``table_parties`` (the ``main`` parties
+        ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``result_rows``
+        and ``block_result_rows`` (the tables of results of the summary), ``table_parties`` (the ``main`` parties
         present in the series, or all of them), ``table_rows`` (``table_rows``, the first ``TABLE_ROWS``),
         ``table_total`` (the polls of the polls part), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
@@ -218,7 +236,9 @@ def promedios_context(state: dict) -> dict:
     blocks = bmaps.get('blocks')
 
     context['headline'] = current
-    context['majority'] = majority_rows(current.get('p_majority'), meta, parties)
+    summary = part(scope, run, 'summary', mode=mode)
+    context['result_rows'] = result_rows(summary)
+    context['block_result_rows'] = block_result_rows(summary, meta, parties)
     context['table_parties'] = main or list(names)
     context['table_rows'] = table_rows(poll_rows, context['table_parties'])
     context['table_total'] = len(poll_rows)
@@ -235,7 +255,7 @@ def promedios_context(state: dict) -> dict:
         'polls': chart_polls(polls),
         'projection': part(scope, run, 'projection', mode=mode),
         'vote': part(scope, run, 'vote', mode=mode),
-        'summary': part(scope, run, 'summary', mode=mode),
+        'summary': summary,
         'runs': bundle.loads(site().history(scope))['data'],
     }
 

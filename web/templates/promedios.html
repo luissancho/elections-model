@@ -53,88 +53,76 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('headline', title_suffix, 'El voto y los escaños previstos de cada partido, con su intervalo, y su probabilidad de quedar primero, a partir de miles de elecciones simuladas.') }}
-        <div class="table-wrap" id="headline-table">
-          <table>
-            <caption>Voto e intervalo del 95 %, escaños e intervalo del 95 % y probabilidad de quedar primero.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Partido</th>
-                <th scope="col">Voto</th>
-                <th scope="col">Escaños</th>
-                <th scope="col">Primero</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in headline.parties %}
-              <tr>
-                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
-                <td>{{ row.pct|pct }} <span class="muted">{{ row.lo|range(row.hi) }}</span></td>
-                <td>{{ row.seats|int }} <span class="muted">{{ row.seats_lo|range(row.seats_hi, 0) }}</span></td>
-                <td>{{ row.p_first|prob }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% call m.how() %}
-        <p>
-          El modelo agrega los sondeos publicados en un promedio ponderado y simula miles de elecciones para
-          estimar el voto y los escaños de cada partido con su incertidumbre. Los rangos son el intervalo
-          de las simulaciones; el promedio de sondeos de arriba muestra de dónde salen.
-        </p>
-        <p>
-          Primero es la probabilidad de sacar más escaños que nadie, no la de gobernar.
-        </p>
-        {% endcall %}
-      {{ m.card_end() }}
-      <div class="grid" id="charts">
-        {{ m.card_start('vote', 'Voto', 'El porcentaje de voto previsto de cada partido, con su intervalo.', subtitle) }}
-          <div class="chart" id="vote-chart" role="img" aria-label="Voto previsto por partido, con el intervalo del 95 %"></div>
-          {% call m.how() %}
-          <p>
-            Cada barra es el voto central del partido y la línea que la cruza, el intervalo
-            de las simulaciones. Dos partidos cuyos intervalos se solapan pueden acabar en cualquier orden.
-          </p>
-          <p>Es una foto del momento elegido, no una tendencia: la evolución está más abajo.</p>
-          {% endcall %}
-        {{ m.card_end() }}
-        {{ m.card_start('seats', 'Escaños', 'Los escaños previstos de cada partido, con su intervalo, tras repartir el voto simulado en cada circunscripción.', subtitle) }}
-          <div class="chart" id="seats-chart" role="img" aria-label="Escaños previstos por partido, con el intervalo del 95 %"></div>
-          {% call m.how() %}
-          <p>
-            La barra es el resultado central y la línea, el intervalo de las simulaciones. Un partido
-            con el voto muy repartido puede sacar menos escaños de los que su voto haría pensar.
-          </p>
-          <p>El detalle por circunscripción está en la pestaña Escaños.</p>
-          {% endcall %}
-        {{ m.card_end() }}
-      </div>
-      <div class="grid">
-        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños, dibujado como el hemiciclo de la cámara.', subtitle) }}
+      <div class="hemi-grid">
+        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card') }}
           <div class="chart" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
           {% call m.how() %}
           <p>
-            Cada punto es un escaño, con el color de su partido. Es el escenario central: en cada simulación el
-            reparto cambia, y los intervalos de la tarjeta de escaños dicen cuánto.
+            Cada sector es un partido con los escaños del escenario central; la línea marca la mayoría absoluta.
+            En cada simulación el reparto cambia: la pestaña Escaños enseña cuánto.
           </p>
           {% endcall %}
         {{ m.card_end() }}
-        {{ m.card_start('majority-card', 'Mayoría absoluta', 'La probabilidad de que cada bloque alcance por sí solo la mayoría absoluta en las elecciones simuladas.', subtitle) }}
-          <div id="majority">
-            {% for row in majority %}
-            <div class="majority-row">
-              <strong>{{ row.block }}</strong>
-              <div class="majority-track"><div class="majority-bar" style="width: {{ row.width }}%; background-color: {{ row.color }}"></div></div>
-              <span class="majority-text">{{ row.p|prob }} de probabilidad de mayoría absoluta</span>
-            </div>
-            {% endfor %}
+        {{ m.card_start('parties-card', 'Resultados por partido', 'Voto y escaños previstos de cada partido y su probabilidad de quedar primero.', subtitle) }}
+          <div class="table-wrap">
+            <table id="parties-table">
+              <caption>Voto, escaños y probabilidad de quedar primero de cada partido.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Partido</th>
+                  <th scope="col">% Voto</th>
+                  <th scope="col">Escaños</th>
+                  <th scope="col">P(primero)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in result_rows %}
+                <tr>
+                  <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
+                  <td>{{ row.pct|pct }}</td>
+                  <td><strong>{{ row.seats|int }}</strong></td>
+                  <td>{{ row.p_first|prob }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
           {% call m.how() %}
           <p>
-            La barra mide la fracción de simulaciones en que los partidos del bloque suman la mayoría absoluta.
-            Los pactos entre bloques no cuentan aquí: la calculadora de coaliciones de la pestaña Escaños los
-            prueba.
+            Primero es la probabilidad de sacar más escaños que nadie, no la de gobernar. Los rangos de cada
+            partido están en la pestaña Escaños.
+          </p>
+          {% endcall %}
+        {{ m.card_end() }}
+        {{ m.card_start('blocks-card', 'Resultados por bloque', 'Voto y escaños de cada bloque y su probabilidad de mayoría absoluta.', subtitle) }}
+          <div class="table-wrap">
+            <table id="blocks-result-table">
+              <caption>Voto, escaños y probabilidad de mayoría absoluta de cada bloque.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Bloque</th>
+                  <th scope="col">% Voto</th>
+                  <th scope="col">Escaños</th>
+                  <th scope="col">P(mayoría)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in block_result_rows %}
+                <tr>
+                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
+                  <td>{{ row.pct|pct }}</td>
+                  <td><strong>{{ row.seats|int }}</strong></td>
+                  <td>{{ row.p_majority|prob }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% call m.how() %}
+          <p>
+            La probabilidad mide la fracción de simulaciones en que los partidos del bloque suman la mayoría
+            absoluta. Los pactos entre bloques no cuentan aquí: la calculadora de coaliciones de la pestaña
+            Escaños los prueba.
           </p>
           {% endcall %}
         {{ m.card_end() }}

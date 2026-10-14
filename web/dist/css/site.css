@@ -279,7 +279,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .chart.chart-tall { height: 480px; }
 .chart.chart-small { height: 160px; }
 
-/* Promedios: controls of the average chart, one per row (view, window, party or block pills), and the majority bars */
+/* Promedios: controls of the average chart, one per row (view, window, party or block pills) */
 .series-controls { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin: 0 0 var(--space-2); }
 .chart-window { font-size: 0.9rem; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .chart-window legend { color: var(--color-muted); }
@@ -322,10 +322,15 @@ dd { margin: 0; overflow-wrap: anywhere; }
   white-space: nowrap;
   border: 0;
 }
-.majority-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-1) var(--space-3); align-items: center; margin: var(--space-4) 0; }
-.majority-track { height: 20px; background: var(--color-soft); border-radius: 3px; overflow: hidden; }
-.majority-bar { height: 100%; }
-.majority-text { grid-column: 2; font-size: 0.9rem; }
+/* Promedios: hemicycle on the left over two rows, the party and block tables stacked on the right */
+.hemi-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--space-4); }
+.hemi-grid > * { min-width: 0; }
+.hemi-card { grid-row: 1 / 3; display: flex; flex-direction: column; }
+.hemi-card .chart { flex: 1; min-height: 380px; }
+@media (max-width: 899px) {
+  .hemi-grid { grid-template-columns: 1fr; }
+  .hemi-card { grid-row: auto; }
+}
 
 /* Escaños: histograms, blocks chart, coalition calculator and district form */
 .grid-small { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
@@ -353,6 +358,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   body { font-size: 1rem; }
   main { padding-top: var(--space-4); }
   .grid, .grid-three { grid-template-columns: 1fr; }
+  .hemi-card { grid-row: auto; }
   .card { padding: var(--space-3) var(--space-4); }
   .headline { font-size: 1.2rem; }
   .chart { height: 240px; }
