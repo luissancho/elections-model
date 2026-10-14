@@ -166,4 +166,25 @@ otros usos: el perfil de encuestadora dibuja su rating con `renderLine`).
 
 ## Estado al cierre
 
-(Se rellena al cerrar.)
+Cerrada el 2026-10-14 en `dev`, commits `6044b85..5fa356d` (spec y plan en `337a313`). Suite: 745 tests en verde (730 al
+empezar), 54 avisos preexistentes. Ejecutada en modo subagent-driven: cuatro tareas con revisión por tarea, revisión
+final de toda la rama y una ola de correcciones (`e2c2a56`, `5fa356d`).
+
+Hecho: D1 (datos de todos los ámbitos con elecciones publicadas; análisis opcional por ámbito; `poll-errors` leído
+una vez por ámbito), D2 (filtros encadenados en una barra, estado en el hash con la clave `{ámbito}:{fecha}` y
+`ambito=` explícito para "Todos"; los enlaces antiguos por fecha se resuelven dentro del ámbito de la página o de
+`es`), D3 (cifras y complementos por filtro activo), D4 (`charts/trend.js`, evolución por elección con tendencia
+ponderada y "resto de encuestadoras"), D5 (histograma, diana por elección o por ámbito, semanas con tope de 15,
+tabla de elecciones de todos los ámbitos filtrada en el navegador) y D6 (ranking único de `es`, enlaces del ranking
+con `scope=es`). Desviación registrada: las elecciones de ámbitos sin pronóstico publicado salen en el histórico
+sin enlace al detalle (el detalle sigue necesitando un run, decisión 2); publicar `forecast` en esos ámbitos activa
+los enlaces.
+
+Pendiente de Luis: recorrido visual en escritorio y móvil; publicar `analysis` en los ámbitos que no lo tienen
+(Andalucía) para que entren en el histórico, y `forecast` en los autonómicos para que sus elecciones enlacen al
+detalle.
+
+Menores aplazados: las lecturas de un análisis ausente no se cachean (un GET a S3 por ámbito sin análisis y
+petición; nginx cachea la página 60 s); la lógica de años se repite entre `errors.js` y el pegamento de la tabla;
+con más de 15 ámbitos autonómicos los colores se repiten; las opciones de Elección del servidor incluyen ámbitos
+sin análisis (el JS las rehace); `trendPoints` descarta las elecciones sin sondeos antes de la ventana.
