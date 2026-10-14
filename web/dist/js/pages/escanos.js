@@ -7,6 +7,8 @@ import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderStacked} from '../charts/stacked.js';
+import {sortTerritory, territoryRows} from '../territory.js';
+import {renderBody, renderHead} from './territory-dom.js';
 import {coalitionHash, coalitionSeats, column, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
@@ -69,9 +71,78 @@ function wireCoalition(dist, majority) {
   update();
 }
 
+const CAPTION = {
+  esc: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su '
+    + 'circunscripción. Pasa el ratón para ver el rango del 95 %.',
+  pct: 'Voto estimado en cada territorio; en CCAA, la media ponderada por los votos de la elección anterior.',
+};
+
+/**
+ * Wire "Resultados por territorio": rebuild the table of the central scenario from the embedded `districts`,
+ * `scenario` and `summary` for the chosen level (CCAA or province) and mode (seats or vote), sortable from its
+ * headers. The server draws the province-by-seats table; this replaces it and shows the controls.
+ *
+ * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
+ */
+function wireTerritory(initial, catalog) {
+  const controls = document.getElementById('territory-controls');
+  const table = document.getElementById('district-table');
+  if (!controls || !table || !initial.districts || !initial.scenario) {
+    return;
+  }
+  const levels = document.getElementById('territory-level');
+  const {scope, mode: runMode, run, pinned} = initial.state;
+  const state = {sort: {key: 'name', asc: true}};
+  const checked = (name, fallback) => {
+    const input = document.querySelector(`#territory-controls input[name="${name}"]:checked`);
+    return input ? input.value : fallback;
+  };
+  const hrefOf = (row) => (state.level === 'prov' && row.id !== null
+    ? `/${scope}/escanos?mode=${runMode}${pinned ? `&run=${run}` : ''}&region=${row.id}#districts`
+    : null);
+
+  const render = (focusKey = null) => {
+    state.level = levels ? checked('level', 'ccaa') : 'prov';
+    const mode = checked('tmode', 'esc');
+    const data = territoryRows(initial.districts, initial.scenario, initial.summary,
+      {level: state.level, mode});
+    if (state.sort.key !== 'name' && state.sort.key !== 'total' && !data.parties.includes(state.sort.key)) {
+      state.sort = {key: 'name', asc: true};
+    }
+    const caption = table.querySelector('caption');
+    if (caption) {
+      caption.textContent = CAPTION[mode];
+    }
+    const sorted = {...data, rows: sortTerritory(data.rows, state.sort.key, state.sort.asc)};
+    renderHead(table.tHead, data.parties, catalog, state.sort, state.level === 'ccaa' ? 'CCAA' : 'Provincia');
+    renderBody(table.tBodies[0], sorted, mode, catalog, hrefOf);
+    if (focusKey) {
+      const button = table.querySelector(`th[data-key="${CSS.escape(focusKey)}"] .sort`);
+      if (button) {
+        button.focus();
+      }
+    }
+  };
+
+  controls.addEventListener('change', () => render());
+  table.tHead.addEventListener('click', (event) => {
+    const th = event.target.closest('th[data-key]');
+    if (!th) {
+      return;
+    }
+    const key = th.dataset.key;
+    state.sort = key === state.sort.key ? {key, asc: !state.sort.asc} : {key, asc: key === 'name'};
+    render(key);
+  });
+  controls.hidden = false;
+  render();
+}
+
 /** Draw the histograms, the blocks bar, the fan and the evolution, and wire the coalition calculator. */
 function paint() {
-  const {state, meta, summary, dist, fan, runs} = readInitial();
+  const initial = readInitial();
+  const {state, meta, summary, dist, fan, runs} = initial;
 
   const catalog = new Catalog(meta);
   const majority = meta.majority ?? summary.majority;
@@ -105,6 +176,7 @@ function paint() {
   }), 'the blocks');
 
   tryDraw(() => wireCoalition(dist, majority), 'the coalition calculator');
+  tryDraw(() => wireTerritory(initial, catalog), 'the territory table');
 
   const main = (catalog.bmaps.main || []).filter((name) => fanNames.includes(name));
   tryDraw(() => renderFan(document.getElementById('fan-chart'), fan, {

@@ -465,6 +465,18 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et td.empty { text-align: center; color: var(--color-muted); }
 .et tfoot td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); border-bottom: 0; }
 .et tfoot td.f { background: var(--color-soft); }
+/* Escaños, "Resultados por territorio": tinted cells, the winner in bold with a thin ring, and the TOTAL row */
+.geo { min-width: 900px; }
+.geo th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-muted); user-select: none; }
+.geo th .sort { min-height: 0; padding: 0; font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; border-radius: 0; }
+.geo th .sort:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.geo th[aria-sort="descending"] .sort::after { content: " ▾"; }
+.geo th[aria-sort="ascending"] .sort::after { content: " ▴"; }
+.geo th.p .dot { display: block; margin: 0 0 2px auto; }
+.geo .cell { display: inline-block; border-radius: 6px; padding: 3px 6px; min-width: 54px; text-align: right; }
+.geo .cell.is-win { font-weight: 800; box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18); }
+.tdot { display: inline-block; width: 8px; height: 8px; margin-left: 4px; border-radius: 50%; vertical-align: middle; }
+.geo tr.total td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); font-weight: 700; }
 .scroll-hint { display: none; margin: var(--space-1) 0 0; color: var(--color-muted); font-size: 0.85rem; }
 .pag { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); }
 .pag[hidden] { display: none; }

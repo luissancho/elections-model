@@ -116,41 +116,56 @@
         {% endcall %}
       {{ m.card_end() }}
       {% if district_table %}
-      {{ m.card_start('districts', 'Circunscripciones', 'El reparto de escaños de cada circunscripción en el escenario central y, para la que elijas, el voto y los escaños previstos de cada partido.', subtitle) }}
-        <div class="table-wrap">
-          <table id="district-table">
+      {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el escenario central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
+        <div class="series-controls" id="territory-controls" hidden>
+          {% if territory_levels %}
+          <fieldset id="territory-level" class="chart-window">
+            <legend>Nivel</legend>
+            <label><input type="radio" name="level" value="ccaa" checked> CCAA</label>
+            <label><input type="radio" name="level" value="prov"> Provincia</label>
+          </fieldset>
+          {% endif %}
+          <fieldset id="territory-mode" class="chart-window">
+            <legend>Mostrar</legend>
+            <label><input type="radio" name="tmode" value="pct"> % Voto</label>
+            <label><input type="radio" name="tmode" value="esc" checked> Escaños</label>
+          </fieldset>
+        </div>
+        <div class="et-wrap">
+          <table id="district-table" class="geo">
             <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el rango del 95 %.</caption>
             <thead>
               <tr>
-                <th scope="col">Circunscripción</th>
-                <th scope="col">Escaños</th>
+                <th scope="col" data-key="name">Circunscripción</th>
                 {% for name in district_table.parties %}
-                <th scope="col" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
+                <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
                 {% endfor %}
+                <th scope="col" data-key="total">Total</th>
               </tr>
             </thead>
             <tbody>
               {% for row in district_table.rows %}
               <tr>
                 <td><a href="/{{ state.scope }}/escanos{{ query }}&amp;region={{ row.id }}">{{ row.name }}</a></td>
-                <td>{{ row.seats|int }}</td>
                 {% for cell in row.cells %}
                 <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
                 {% endfor %}
+                <td>{{ row.seats|int }}</td>
               </tr>
               {% endfor %}
               {% if district_table.total %}
-              <tr>
-                <td>Total</td>
-                <td>{{ district_table.total.seats|int }}</td>
+              <tr class="total">
+                <td>TOTAL</td>
                 {% for cell in district_table.total.cells %}
                 <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
                 {% endfor %}
+                <td>{{ district_table.total.seats|int }}</td>
               </tr>
               {% endif %}
             </tbody>
           </table>
         </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
         <form id="district-form" method="get" action="/{{ state.scope }}/escanos#districts">
           <input type="hidden" name="mode" value="{{ state.mode }}">
           {% if state.pinned %}
@@ -203,6 +218,10 @@
         <p>
           Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto; en las
           circunscripciones pequeñas, pocos votos cambian un escaño.
+        </p>
+        <p>
+          En CCAA los escaños son la suma de sus provincias y el voto, la media ponderada por los votos de la
+          elección anterior.
         </p>
         <p>Es un escenario entre muchos posibles, no la predicción de ninguna circunscripción.</p>
         {% endcall %}

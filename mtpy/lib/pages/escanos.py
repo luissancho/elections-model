@@ -254,6 +254,26 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     }
 
 
+def has_communities(regions: list) -> bool:
+    """
+    Whether the districts can be grouped by autonomous community.
+
+    Parameters
+    ----------
+    regions : list of dict
+        ``districts['regions']`` (older runs have no ``community``).
+
+    Returns
+    -------
+    bool
+        True when at least two different non-null ``community`` codes are present.
+    """
+    codes = {(item.get('community') or {}).get('code') for item in regions}
+    codes.discard(None)
+
+    return len(codes) > 1
+
+
 def region_rows(districts: dict, region_id: int) -> list:
     """
     Party rows of one district.
@@ -304,8 +324,9 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         ``headline_text`` (``escanos_headline_text``), ``calculator`` (``name``,
         ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``) and
-        ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan`` and ``runs``, the data
-        the charts and the calculator are drawn from).
+        ``territory_levels`` (``has_communities``) and ``initial`` (``state``, ``meta``, ``summary``,
+        ``dist``, ``fan``, ``districts``, ``scenario`` and ``runs``, the data the charts, the calculator and the
+        territory table are drawn from).
 
     Raises
     ------
@@ -339,6 +360,7 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
     context['district_table'] = district_table(districts, scenario)
     context['regions'] = districts.get('regions') or []
+    context['territory_levels'] = has_communities(context['regions'])
     context['region'] = current
     context['region_rows'] = region_rows(districts, current['id']) if current else []
     context['initial'] = {
@@ -347,6 +369,8 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         'summary': summary,
         'dist': dist,
         'fan': part(scope, run, 'fan'),
+        'districts': districts,
+        'scenario': scenario,
         'runs': bundle.loads(site().history(scope))['data'],
     }
 

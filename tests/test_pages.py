@@ -576,7 +576,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     assert page.count('format=csv') == 5 and 'id="districts"' in page
     assert '/dist/js/pages/escanos.js' in page
     data = initial(body)
-    assert list(data) == ['state', 'meta', 'summary', 'dist', 'fan', 'runs']
+    assert list(data) == ['state', 'meta', 'summary', 'dist', 'fan', 'districts', 'scenario', 'runs']
     assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
     assert data['dist']['parties'] == ['PP'] and data['summary']['majority'] == 176
 
@@ -678,11 +678,30 @@ def test_escanos_districts_default_to_the_largest_and_link_the_rows(api, fresh_a
     assert 'Madrid · 37 escaños' in page  # caption del detalle
     assert 'href="/es/escanos?mode=forecast&amp;region=8"' in page
     assert '<td title="6–8">7</td>' in page and '<td title="14–18">16</td>' in page
-    assert '<td>Total</td>' in page and '140' in page
+    assert '<td>TOTAL</td>' in page and '140' in page and '<th scope="col" data-key="total">Total</th>' in page
     page = html(call(api, '/es/escanos', query='mode=forecast&region=8')[2])
     assert '<option value="8" selected>Barcelona</option>' in page and 'Barcelona · 32 escaños' in page
     assert '<form id="district-form" method="get" action="/es/escanos#districts">' in page
     assert 'name="scope"' not in page  # el ámbito va en la ruta
+
+
+def test_escanos_territory_table_has_hidden_controls_and_the_island_carries_the_districts(api, fresh_app):
+    write_districts(fresh_app.fs)
+    body = call(api, '/es/escanos', query='mode=forecast')[2]
+    page = html(body).replace('\n', ' ')
+    assert 'Resultados por territorio' in page and 'Circunscripciones</h2>' not in page
+    assert re.search(r'<div class="series-controls" id="territory-controls" hidden>', page)
+    assert 'name="tmode" value="esc" checked' in page and 'name="level"' not in page  # el fixture no trae comunidades
+    assert '<table id="district-table" class="geo">' in page and 'data-key="total"' in page and 'TOTAL' in page
+    assert 'Desliza para ver más' in page and 'id="district-form"' in page and 'id="region-table"' in page
+    assert 'la media ponderada por los votos de la elección anterior' in re.sub(r'\s+', ' ', page)
+    data = initial(body)
+    assert {'districts', 'scenario'} <= set(data) and data['districts']['regions'][0]['id'] == 8
+    with_communities = {**DISTRICTS, 'regions': [dict(r, community={'code': 13 if r['id'] == 28 else 9, 'name': 'X'}, votes=100) for r in DISTRICTS['regions']]}
+    write_districts(fresh_app.fs, districts=with_communities)
+    webapi.site().files.clear()
+    page = html(call(api, '/es/escanos', query='mode=forecast')[2]).replace('\n', ' ')
+    assert 'name="level" value="ccaa" checked' in page and 'name="level" value="prov"' in page
 
 
 def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
