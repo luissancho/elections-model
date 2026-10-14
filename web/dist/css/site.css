@@ -1,10 +1,11 @@
 /*
- * Site stylesheet: tokens first, then one section per component. Warm pastel page background, white cards
- * with a 1 px border, a serif for headings and a sans for everything else. Party colours come from the run
+ * Site stylesheet: tokens first, then one section per component. Light grey page background, white cards with a
+ * soft shadow, a fluid container, a serif for headings and a sans for everything else. Party colours come from the run
  * catalogue and block colours from THEME (charts/base.js); nothing here overrides them. No dark mode.
  */
 
-/* Fonts: vendored woff2 (SIL OFL, see /dist/vendor/fonts/LICENSE); bold body text is synthesised */
+/* Fonts: vendored woff2 (SIL OFL, see /dist/vendor/fonts/LICENSE): the serif in semibold for the headings, the sans
+   in regular and semibold (bold body text and the bold labels drawn on the chart canvases use the semibold) */
 @font-face {
   font-family: 'Source Serif 4';
   src: url('/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2') format('woff2');
@@ -21,30 +22,41 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/dist/vendor/fonts/SourceSans3-3.052-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Tokens. Muted text and links pass WCAG AA (4.5:1) on both the page background and the cards. */
 :root {
-  --color-bg: #fbf1e7;
+  --color-bg: #f4f5f8;
   --color-card: #fff;
-  --color-text: #1f1b18;
-  --color-muted: #635a52;
-  --color-line: #e2d3c3;
-  --color-line-strong: #cdb9a5;
+  --color-text: #1a1c22;
+  --color-muted: #5a5f72;
+  /* Only for uppercase table headers and small notes, never running text (4.5:1 on white) */
+  --color-faint: #6b7186;
+  --color-line: rgba(0,0,0,.08);
+  --color-line-strong: rgba(0,0,0,.15);
   --color-accent: #1d4f86;
-  --color-soft: #f3e3d3;
+  --color-soft: #eceef2;
+  --color-row-hover: #f6f8fb;
   --color-error: #b00020;
   --font-head: 'Source Serif 4', Georgia, serif;
   --font-body: 'Source Sans 3', system-ui, sans-serif;
-  --max-width: 1100px;
   --gutter: 16px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
-  --radius: 4px;
+  --radius: 12px;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
   --tap: 40px;
-  /* Side padding that keeps full-width bands aligned with the content column */
-  --band-pad: max(var(--gutter), calc((100% - var(--max-width)) / 2 + var(--gutter)));
+  /* Side padding of `main` and of the full-width bands, so they all align */
+  --band-pad: 32px;
 }
 
 /* Base */
@@ -68,12 +80,12 @@ a { color: var(--color-accent); text-underline-offset: 2px; }
 code { font-size: 0.92em; }
 
 main {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: var(--space-5) var(--gutter) 40px;
+  max-width: none;
+  margin: 0;
+  padding: var(--space-5) var(--band-pad) 40px;
 }
 
-/* Site header: name on the left, the four-entry menu on the right */
+/* Site header: wordmark and tagline on the left, the four-entry menu on the right */
 #site-header {
   display: flex;
   flex-wrap: wrap;
@@ -85,12 +97,16 @@ main {
   border-bottom: 1px solid var(--color-line);
 }
 
-#site-header h1 { margin: 0; font-size: 1.5rem; }
+#site-header .brand { display: flex; flex-direction: column; }
+#site-header h1 { margin: 0; font-size: 1.5rem; line-height: 1; }
 #site-header h1 a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--color-text); text-decoration: none; }
+/* The wordmark (logo.svg, 563 x 102 intrinsic) scaled to the height of the old text name */
+#site-header h1 img { display: block; height: 30px; width: auto; }
+.brand-tagline { margin: -4px 0 0; font-size: 0.85rem; line-height: 1.2; color: var(--color-muted); }
+@media (max-width: 760px) { .brand-tagline { display: none; } }
 #site-header nav { display: flex; gap: var(--space-1); }
 
-#site-header nav a,
-.event-tabs a {
+#site-header nav a {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
@@ -101,11 +117,9 @@ main {
   border-bottom: 3px solid transparent;
 }
 
-#site-header nav a:hover,
-.event-tabs a:hover { color: var(--color-accent); }
+#site-header nav a:hover { color: var(--color-accent); }
 
-#site-header nav a[aria-current="page"],
-.event-tabs a[aria-current="page"] {
+#site-header nav a[aria-current="page"] {
   border-bottom-color: var(--color-accent);
   font-weight: 600;
 }
@@ -119,27 +133,23 @@ main {
 }
 #freeze-banner[hidden] { display: none; }
 
-/* Event bar (Promedios and Escaños): name and date, the tabs, and the pinned run and the reading of the mode on
-   the right */
+/* Event bar (Promedios and Escaños): name and date, the tabs as a segmented control, the pinned run on the right */
 #event-bar {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "title run"
-    "tabs  mode";
-  gap: var(--space-1) var(--space-5);
-  align-items: end;
+    "tabs  run";
+  gap: var(--space-2) var(--space-5);
+  align-items: center;
   padding: var(--space-4) var(--band-pad) 0;
-  background: var(--color-soft);
-  border-bottom: 1px solid var(--color-line);
 }
 
 .event-title { grid-area: title; }
 .event-title h2 { margin: 0; font-size: 1.6rem; }
 .event-title p { margin: var(--space-1) 0 0; }
-.event-tabs { grid-area: tabs; display: flex; gap: var(--space-1); margin-top: var(--space-2); }
+.event-tabs { grid-area: tabs; justify-self: start; }
 .event-run { grid-area: run; justify-self: end; }
-.mode-text { grid-area: mode; margin: 0; max-width: 34rem; color: var(--color-muted); font-size: 0.9rem; text-align: right; align-self: center; }
 
 .chip {
   display: inline-flex;
@@ -166,11 +176,57 @@ select {
   color: var(--color-text);
   background: var(--color-card);
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius);
+  border-radius: 999px;
 }
 
 button { cursor: pointer; }
 button:hover { border-color: var(--color-accent); }
+
+/* Segmented controls: every radio group (and the event tabs). The checked option is filled with the accent. `is-on`
+   is the fallback set by JS for browsers without `:has()`, in a rule of its own: a selector list with `:has()` is
+   dropped whole by them. The radio stays focusable. */
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-soft);
+}
+.seg legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.seg label, .event-tabs a {
+  position: relative;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.seg label.is-on { background: var(--color-accent); color: #fff; }
+.seg label:has(input:checked) { background: var(--color-accent); color: #fff; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.event-tabs a { display: inline-flex; align-items: center; }
+.event-tabs a:hover { color: var(--color-accent); }
+.event-tabs a[aria-current="page"] { background: var(--color-accent); color: #fff; }
+.seg[hidden] { display: none; }
+@supports not selector(:has(*)) {
+  .seg label:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+}
 
 /* Scope filter of the global pages: discreet, above the cards */
 #scope-filter { margin: 0 0 var(--space-4); font-size: 0.95rem; color: var(--color-muted); }
@@ -178,7 +234,7 @@ button:hover { border-color: var(--color-accent); }
 
 /* Layout helpers */
 .stack > * + * { margin-top: var(--space-4); }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: var(--space-4); }
 .grid > * { min-width: 0; }
 
 /* Page headline: one line outside the cards with the situation in plain words */
@@ -195,17 +251,28 @@ button:hover { border-color: var(--color-accent); }
 /* Card pattern: title, lead, body, "Cómo leerlo" */
 .card {
   min-width: 0;
-  padding: var(--space-4) 20px;
+  padding: 20px 22px;
   background: var(--color-card);
   border: 1px solid var(--color-line);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .card-head { margin-bottom: var(--space-3); }
-.card-head h2, .card-head h3 { margin: 0; }
+.card-head h2, .card-head h3 { display: flex; align-items: center; gap: 10px; margin: 0; }
+.card-head h2::before, .card-head h3::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--color-accent);
+}
 .card > h2:first-child, .card > h3:first-child { margin-top: 0; }
 .mode-subtitle { font-family: var(--font-body); font-weight: 400; font-size: 0.9rem; color: var(--color-muted); }
 .lead { margin: var(--space-1) 0 0; color: var(--color-muted); }
+/* Prose keeps a readable measure inside the fluid container */
+.lead, .how-body, .card p, #glosario dd { max-width: 72ch; }
 
 .how { margin-top: var(--space-3); border-top: 1px solid var(--color-line); }
 
@@ -223,7 +290,7 @@ button:hover { border-color: var(--color-accent); }
 .how summary::-webkit-details-marker { display: none; }
 .how summary::before { content: '+'; display: inline-block; width: 1.2em; font-weight: 600; }
 .how[open] summary::before { content: '−'; }
-.how-body { font-size: 0.95rem; max-width: 46rem; }
+.how-body { font-size: 0.95rem; }
 .how-body p { margin: 0 0 var(--space-2); }
 
 /* Event tiles of the Inicio; the first one (the general election) is the hero */
@@ -237,7 +304,7 @@ article.card p, .card-link p { margin: 6px 0; }
 .card-link h3 { margin-top: 0; }
 .card-muted { background: var(--color-soft); border-style: dashed; color: var(--color-muted); cursor: default; }
 .card-muted h3 { margin-top: 0; color: inherit; }
-.grid-three { grid-template-columns: repeat(3, 1fr); }
+.grid-three { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .card h3 a { color: var(--color-text); text-decoration: none; }
 .card h3 a:hover { color: var(--color-accent); text-decoration: underline; }
 
@@ -265,7 +332,8 @@ article.card p, .card-link p { margin: 6px 0; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 caption { caption-side: top; text-align: left; padding: 0 0 var(--space-2); color: var(--color-muted); font-size: 0.9rem; }
 th, td { padding: 6px var(--space-2); border-bottom: 1px solid var(--color-line); text-align: right; white-space: nowrap; }
-th { font-weight: 600; font-size: 0.9rem; border-bottom: 2px solid var(--color-line-strong); }
+th { font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-faint); border-bottom: 1.5px solid var(--color-line-strong); }
+tr:hover td { background: var(--color-row-hover); }
 th:first-child, td:first-child { text-align: left; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-4); margin: 0; }
 dt { color: var(--color-muted); }
@@ -276,11 +344,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .chart.chart-tall { height: 480px; }
 .chart.chart-small { height: 160px; }
 
-/* Promedios: controls of the average chart, one per row (view, window, party or block pills), and the majority bars */
+/* Promedios: controls of the average chart, one per row (view, window, party or block pills) */
 .series-controls { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin: 0 0 var(--space-2); }
-.chart-window { font-size: 0.9rem; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
-.chart-window legend { color: var(--color-muted); }
-.chart-window[hidden], .series-controls[hidden], .pills[hidden] { display: none; }
+.series-controls[hidden], .pills[hidden] { display: none; }
 
 /* Pills: a group of checkboxes drawn like a chart legend, bordered in the colour of each name and filled with it
    when checked, with the ink the server picks for that colour (`--pill-ink`). `is-on` is the fallback set by JS for
@@ -307,7 +373,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 @supports not selector(:has(*)) {
   .pill:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 }
-#polls-more { margin-top: var(--space-2); }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -319,14 +384,21 @@ dd { margin: 0; overflow-wrap: anywhere; }
   white-space: nowrap;
   border: 0;
 }
-.majority-row { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-1) var(--space-3); align-items: center; margin: var(--space-4) 0; }
-.majority-track { height: 20px; background: var(--color-soft); border-radius: 3px; overflow: hidden; }
-.majority-bar { height: 100%; }
-.majority-text { grid-column: 2; font-size: 0.9rem; }
+/* Promedios: the hemicycle on the left and the party or block table on the right, the same height; the view
+   switch lives in the hemicycle card and shows one table or the other */
+.hemi-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
+.hemi-grid > * { min-width: 0; }
+.hemi-card { display: flex; flex-direction: column; }
+@media (min-width: 900px) {
+  .hemi-card .chart { flex: 1; height: auto; min-height: 420px; max-height: 600px; }
+}
+@media (max-width: 899px) {
+  .hemi-grid { grid-template-columns: 1fr; }
+}
 
 /* Escaños: histograms, blocks chart, coalition calculator and district form */
-.grid-small { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
-#blocks-chart { height: 120px; }
+#ridge-chart { margin-top: var(--space-3); }
+#seats-bar { height: 120px; }
 .coalition-result { font-size: 1.1rem; margin: var(--space-2) 0; }
 #district-form { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; margin-top: var(--space-3); }
 
@@ -339,6 +411,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Footer */
 #site-footer {
   padding: var(--space-4) var(--band-pad) 40px;
+  background: var(--color-bg);
   border-top: 1px solid var(--color-line);
   color: var(--color-muted);
   font-size: 0.85rem;
@@ -347,6 +420,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Mobile (< 720 px): one column, the menu row scrolls sideways, the event bar stacks */
 @media (max-width: 719px) {
+  :root { --band-pad: 16px; }
   body { font-size: 1rem; }
   main { padding-top: var(--space-4); }
   .grid, .grid-three { grid-template-columns: 1fr; }
@@ -363,16 +437,15 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
   #event-bar {
     grid-template-columns: 1fr;
-    grid-template-areas: "title" "tabs" "run" "mode";
+    grid-template-areas: "title" "tabs" "run";
     gap: var(--space-2);
   }
   .event-title h2 { font-size: 1.35rem; }
-  .event-tabs { overflow-x: auto; margin-top: 0; }
+  .event-tabs { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; }
   .event-run { justify-self: start; }
-  .mode-text { text-align: left; }
 
   /* Larger tap targets for the chart controls and the pills */
-  .chart-window label, .pill { min-height: var(--tap); }
+  .seg label, .event-tabs a, .pill { min-height: var(--tap); display: inline-flex; align-items: center; }
 
   .table-wrap th:first-child,
   .table-wrap td:first-child {
@@ -384,6 +457,17 @@ dd { margin: 0; overflow-wrap: anywhere; }
     white-space: normal;
     min-width: 7rem;
   }
+
+  .geo th:first-child,
+  .geo td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--color-card);
+    box-shadow: 1px 0 0 var(--color-line);
+  }
+  .geo tr.total th:first-child,
+  .geo tr.total td:first-child { background: var(--color-soft); }
 }
 
 /* No motion for those who ask: nothing animates on entry; ECharts reads the same query (charts/base.js) */
@@ -391,5 +475,91 @@ dd { margin: 0; overflow-wrap: anywhere; }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 
-/* The poll name column reads left-aligned, unlike the numeric ones. */
-#polls-table th:nth-child(2), #polls-table td:nth-child(2) { text-align: left; }
+/* Promedios, "Todas las encuestas": control bar, dropdowns of chips, the table `.et` and its pages */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); font-size: 0.9rem; }
+.bar[hidden] { display: none; }
+.bar label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.bar-end { margin-left: auto; color: var(--color-muted); }
+.dd { position: relative; }
+.dd > summary {
+  list-style: none;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 999px;
+  background: var(--color-card);
+  cursor: pointer;
+}
+.dd > summary::-webkit-details-marker { display: none; }
+.dd > summary::after { content: "▾"; margin-left: var(--space-2); color: var(--color-muted); }
+.dd[open] > summary::after { content: "▴"; }
+.dd-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  width: max-content;
+  max-width: min(420px, 90vw);
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-card);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+.dd-panel > button { flex: none; }
+.dd-panel .chip { position: relative; cursor: pointer; user-select: none; border-color: var(--pill-color, var(--color-line-strong)); color: var(--color-muted); }
+.dd-panel .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.dd-panel .chip.is-on { background: var(--pill-color, var(--color-soft)); color: var(--pill-ink, var(--color-text)); }
+.dd-panel .chip:has(input:checked) { background: var(--pill-color, var(--color-soft)); color: var(--pill-ink, var(--color-text)); }
+.dd-panel .chip:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+.et-wrap { overflow-x: auto; margin-top: var(--space-2); }
+.et { table-layout: fixed; min-width: 980px; }
+.et col.c-f { width: 200px; }
+.et col.c-d { width: 80px; }
+.et col.c-s { width: 80px; }
+.et col.c-p { width: 72px; }
+.et th { color: var(--color-faint); user-select: none; }
+.et th .sort { min-height: 0; padding: 0; font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; border-radius: 0; }
+.et th .sort:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.et th[aria-sort="descending"] .sort::after { content: " ▾"; }
+.et th[aria-sort="ascending"] .sort::after { content: " ▴"; }
+.et th .pd { display: block; width: 10px; height: 10px; margin: 0 0 2px auto; border-radius: 50%; }
+.et th.l, .et td.l { text-align: left; }
+.et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
+.et td.f { white-space: normal; }
+.et tr:hover td.f { background: var(--color-row-hover); }
+.et td.f b, .et td.f small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.et td.f small { color: var(--color-muted); font-size: 0.75rem; }
+.et td.mx { font-weight: 700; }
+.et td.na { color: var(--color-muted); }
+.et td.empty { text-align: center; color: var(--color-muted); }
+.et tfoot td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); border-bottom: 0; }
+.et tfoot td.f { background: var(--color-soft); }
+/* Escaños, "Resultados por territorio": tinted cells, the winner in bold with a thin ring, and the TOTAL row */
+.geo { min-width: 900px; }
+.geo th { color: var(--color-faint); user-select: none; }
+.geo th .sort { min-height: 0; padding: 0; font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; border-radius: 0; }
+.geo th .sort:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.geo th[aria-sort="descending"] .sort::after { content: " ▾"; }
+.geo th[aria-sort="ascending"] .sort::after { content: " ▴"; }
+.geo th.p .dot { display: block; margin: 0 0 2px auto; }
+.geo .cell { display: inline-block; border-radius: 6px; padding: 3px 6px; min-width: 54px; text-align: right; }
+.geo .cell.is-win { font-weight: 800; box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18); }
+.tdot { display: inline-block; width: 8px; height: 8px; margin-left: 4px; border-radius: 50%; vertical-align: middle; }
+.geo tr.total td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); font-weight: 700; }
+.scroll-hint { display: none; margin: var(--space-1) 0 0; color: var(--color-muted); font-size: 0.85rem; }
+.pag { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); }
+.pag[hidden] { display: none; }
+.pag button:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 719px) {
+  .scroll-hint { display: block; }
+  .bar-end { margin-left: 0; width: 100%; }
+}

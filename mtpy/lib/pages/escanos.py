@@ -1,6 +1,7 @@
 """
 Seats page context.
 """
+import unicodedata
 from typing import Optional
 
 from ...core.api import HttpError
@@ -147,38 +148,23 @@ def resolve_region(region: Optional[int], regions: list) -> Optional[dict]:
     raise HttpError(404, 'region not found')
 
 
-def escanos_headline_text(summary: dict, meta: dict) -> str:
+def _sort_name(name: str) -> str:
     """
-    One-line headline of the seats page in plain words.
+    Sort key of a territory name: accents folded and case ignored, as the table headers sort it.
 
     Parameters
     ----------
-    summary : dict
-        Data of the summary part (``blocks`` with ``name`` and ``p_majority``; ``majority`` and
-        ``n_seats``).
-    meta : dict
-        Data of the meta part (``majority`` and ``n_seats``, which take precedence).
+    name : str
+        Territory name.
 
     Returns
     -------
     str
-        ``'{block} es el bloque con más probabilidad de mayoría absoluta ({p}); la mayoría está en
-        {majority} escaños de {n_seats}.'``, the block being that with the highest ``p_majority`` (the
-        first one on ties); without blocks with a probability, ``'La mayoría absoluta está en
-        {majority} escaños de {n_seats}.'``.
+        The name without combining marks, casefolded.
     """
-    majority = fmt_int(meta.get('majority') if meta.get('majority') is not None else summary.get('majority'))
-    n_seats = fmt_int(meta.get('n_seats') if meta.get('n_seats') is not None else summary.get('n_seats'))
-    rows = [row for row in summary.get('blocks') or [] if not _is_missing(row.get('p_majority'))]
+    decomposed = unicodedata.normalize('NFKD', str(name))
 
-    if not rows:
-        return 'La mayoría absoluta está en {} escaños de {}.'.format(majority, n_seats)
-
-    top = max(rows, key=lambda row: row['p_majority'])
-
-    return ('{} es el bloque con más probabilidad de mayoría absoluta ({}); '
-            'la mayoría está en {} escaños de {}.').format(
-        top['name'], fmt_prob(top['p_majority']), majority, n_seats)
+    return ''.join(char for char in decomposed if not unicodedata.combining(char)).casefold()
 
 
 def district_table(districts: dict, scenario: dict) -> Optional[dict]:
@@ -195,8 +181,8 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``None`` without districts. Otherwise ``parties`` (names with any seat in the scenario or
-        ``seats_hi`` above zero, in the order of ``districts['parties']``), ``rows`` (``id``,
+        ``None`` without districts. Otherwise ``parties`` (names with any seat in the scenario, by
+        scenario total descending; ties in the order of ``districts['parties']``), ``rows`` (``id``,
         ``name``, ``seats`` and ``cells`` per district) and ``total`` (the scenario row of the
         whole scope, or ``None``). Each cell is ``{'seats': int or None, 'range': str}``: the
         scenario seats (``None`` when the district is not in the scenario) and the 95 % interval.
@@ -219,13 +205,14 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
 
         return values[scenario_parties.index(name)]
 
-    def has_seats(name):
-        if any((seats_of(region_id, name) or 0) > 0 for region_id in scenario_rows):
-            return True
+    def total_of(name):
+        if 0 in scenario_rows:
+            return seats_of(0, name) or 0
 
-        return any((item['seats_hi'] or 0) > 0 for (_, party), item in intervals.items() if party == name)
+        return sum((seats_of(region_id, name) or 0) for region_id in scenario_rows)
 
-    shown = [name for name in names if has_seats(name)]
+    shown = [name for name in names if any((seats_of(region_id, name) or 0) > 0 for region_id in scenario_rows)]
+    shown.sort(key=lambda name: -total_of(name))
 
     def cells(region_id):
         out = []
@@ -248,10 +235,37 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
         'parties': shown,
         'rows': [
             {'id': item['id'], 'name': item['name'], 'seats': item['seats'], 'cells': cells(item['id'])}
-            for item in regions
+            for item in sorted(regions, key=lambda item: _sort_name(item['name']))
         ],
         'total': total,
     }
+
+
+def has_communities(regions: list) -> bool:
+    """
+    Whether the districts can be grouped by autonomous community.
+
+    Parameters
+    ----------
+    regions : list of dict
+        ``districts['regions']`` (older runs have no ``community`` or ``votes``).
+
+    Returns
+    -------
+    bool
+        True when every region has a ``community`` and a numeric ``votes`` and there are at least two
+        different community codes (the rule of ``canGroup`` in ``territory.js``).
+    """
+    if not regions:
+        return False
+
+    for item in regions:
+        votes = item.get('votes')
+
+        if not item.get('community') or isinstance(votes, bool) or not isinstance(votes, (int, float)):
+            return False
+
+    return len({item['community'].get('code') for item in regions}) > 1
 
 
 def region_rows(districts: dict, region_id: int) -> list:
@@ -300,12 +314,12 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     Returns
     -------
     dict
-        The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows`` and
-        ``headline_text`` (``escanos_headline_text``), ``calculator`` (``name``,
+        The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows``, ``calculator`` (``name``,
         ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``) and
-        ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan`` and ``runs``, the data
-        the charts and the calculator are drawn from).
+        ``territory_levels`` (``has_communities``) and ``initial`` (``state``, ``meta``, ``summary``,
+        ``dist``, ``fan``, ``districts``, ``scenario`` and ``runs``, the data the charts, the calculator and the
+        territory table are drawn from).
 
     Raises
     ------
@@ -327,7 +341,6 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     suffix = context['title_suffix']
 
     context['summary'] = summary
-    context['headline_text'] = escanos_headline_text(summary, meta)
     context['party_rows'] = seat_rows(summary.get('parties') or [])
     context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
     context['calculator'] = [
@@ -339,6 +352,7 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
     context['district_table'] = district_table(districts, scenario)
     context['regions'] = districts.get('regions') or []
+    context['territory_levels'] = has_communities(context['regions'])
     context['region'] = current
     context['region_rows'] = region_rows(districts, current['id']) if current else []
     context['initial'] = {
@@ -347,6 +361,8 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         'summary': summary,
         'dist': dist,
         'fan': part(scope, run, 'fan'),
+        'districts': districts,
+        'scenario': scenario,
         'runs': bundle.loads(site().history(scope))['data'],
     }
 

@@ -1,5 +1,5 @@
 <footer id="site-footer">
-  <p>Run {{ meta.run_id }} · promedio leído el {{ meta.as_of|date }} · último sondeo {{ meta.date_last|date }} · commit {{ meta.commit or '–' }}{% if meta.dirty %} (sucio){% endif %}{% if frozen and freeze.since %} · congelado desde {{ freeze.since|date }}{% endif %}</p>
+  <p>Publicación: {{ meta.run_id }} ({{ meta.run_at|date }}) · Último sondeo: {{ meta.date_last|date }}{% if frozen and freeze.since %} · congelado desde {{ freeze.since|date }}{% endif %}</p>
   {% for key in ['polls', 'results', 'model'] if manifest.attribution.get(key) %}
   <p>{{ manifest.attribution[key] }}</p>
   {% endfor %}

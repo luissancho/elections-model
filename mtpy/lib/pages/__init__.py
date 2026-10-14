@@ -16,17 +16,17 @@ does not import the model nor ``publish``, so the web workers stay light.
 from .backtest import backtest_context, backtest_part, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING_KEYS, analysis_part, casa_context,
                     casas_context, effects_table, herding_rows, house_effects_grid, profile_rows, ranking_rows)
-from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TITLE,
-                     TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
-                     default_mode, environment, event_info, event_query, event_title, ink_color, mode_text, parse_state,
+from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
+                     SITE_TITLE, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
+                     default_mode, environment, event_info, event_query, event_title, ink_color, parse_state,
                      part, published_scopes, resolve_event_scope, resolve_scope, scope_query, title_of)
 from .elecciones import (EVENT_CSV, SUMMARY_KEYS, eleccion_context, elecciones_context, error_rows, event_part,
                          history_headline, horizon_tables, published_events, resolve_event, with_abs)
-from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, escanos_context,
-                      escanos_headline_text, region_rows, resolve_region, seat_rows)
+from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, has_communities, escanos_context,
+                      region_rows, resolve_region, seat_rows)
 from .filters import DASH, MONTHS, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, subpages, thresholds_rows)
-from .promedios import (DEFINITIVE_PREFIX, TABLE_ROWS, chart_polls, headline_text, majority_rows, poll_name,
-                        pollster_options, promedios_context, round_series, table_rows)
+from .promedios import (BLOCK_ORDER, PAGE_SIZE, block_result_rows, chart_polls, poll_months, poll_name, polls_table,
+                        pollster_options, promedios_context, result_rows, round_series, short_date)

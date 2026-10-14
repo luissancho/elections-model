@@ -72,7 +72,12 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.drange, sim.alpha = (6, None), 0.05
     sim.names, sim.default_region, sim.regions = NAMES, 0, REGIONS
     sim.region_names = {0: 'es', 28: 'Madrid', 8: 'Barcelona'}
-    sim.reg_totals = pd.DataFrame({'votes': [1000, 600, 400], 'seats': [10, 6, 4]}, index=pd.Index(REGIONS, name='region_id'))
+    # Como en producción: los totales de la elección futura solo traen escaños (el cargador no rellena `votes`)
+    # y los votos válidos de la elección anterior están en `prev_totals`
+    sim.reg_totals = pd.DataFrame({'votes': [np.nan, np.nan, np.nan], 'seats': [10, 6, 4]},
+                                  index=pd.Index(REGIONS, name='region_id'))
+    sim.prev_totals = pd.DataFrame({'votes': [1000., 600., 400.], 'blank_pct': [1.0, 1.2, 0.8]},
+                                   index=pd.Index(REGIONS, name='region_id'))
     sim.params = {'n_sim': n_sim, 'split': True, 'random': True, 'names': NAMES, 'regions': REGIONS,
                   'horizon': None, 'date_prior': 'historical'}
     sim.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']

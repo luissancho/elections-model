@@ -148,6 +148,8 @@ check /nope 404 html
 check_nginx_only /dist/vendor/echarts-5.6.0.min.js application/javascript
 check_nginx_only /dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2 font/woff2
 check_nginx_only /dist/css/site.css text/css
+check_nginx_only /dist/img/logo.svg image/svg+xml
+check_nginx_only /favicon.ico image/x-icon
 check /api/v1/health 200 json
 check /api/v1/manifest 200 json
 # Congelacion editorial: si el manifest la declara activa, la cabecera y el banner deben verse.

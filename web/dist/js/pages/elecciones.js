@@ -8,7 +8,7 @@ import {renderBars} from '../charts/bars.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderLine} from '../charts/line.js';
-import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
 // Height of the error bars: one row per house plus the axes.
 const BAR_ROW_HEIGHT = 22;
@@ -60,6 +60,7 @@ function wireMeasure(fieldset, measure, onChange) {
   for (const input of fieldset.querySelectorAll('input[name=medida]')) {
     input.checked = input.value === measure;
   }
+  markSegments(fieldset);
   fieldset.hidden = false;
   fieldset.addEventListener('change', (event) => {
     if (event.target.matches('input[name=medida]') && MEASURES.includes(event.target.value)) {

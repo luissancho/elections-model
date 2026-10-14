@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ site_title }} · Error {{ status }}</title>
-  <meta name="description" content="Pronóstico electoral: promedio de encuestas y simulación de escaños.">
+  <meta name="description" content="{{ site_title }}: {{ site_tagline|lower }} en España.">
+  {% include '_icons.html' +%}
   <link rel="stylesheet" href="/dist/css/site.css">
 </head>
 <body>
   <header id="site-header">
-    <h1><a href="/">{{ site_title }}</a></h1>
+    {% include '_brand.html' +%}
   </header>
   <main id="main">
     <section class="card">

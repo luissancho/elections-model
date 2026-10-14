@@ -4,7 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ site_title }} · {% block title %}{% endblock %}</title>
-  <meta name="description" content="{% block description %}Pronóstico electoral: promedio de encuestas y simulación de escaños.{% endblock %}">
+  <meta name="description" content="{% block description %}{{ site_title }}: {{ site_tagline|lower }} en España.{% endblock %}">
+  <link rel="canonical" href="{{ canonical }}">
+  <meta property="og:site_name" content="{{ site_title }}">
+  <meta property="og:title" content="{{ site_title }} · {{ self.title() }}">
+  <meta property="og:description" content="{{ self.description() }}">
+  <meta property="og:url" content="{{ canonical }}">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_ES">
+  <meta name="twitter:card" content="summary">
+  {% include '_icons.html' +%}
   <link rel="stylesheet" href="/dist/css/site.css">
   <script defer src="/dist/vendor/echarts-5.6.0.min.js"></script>
   {% block scripts %}{% endblock %}

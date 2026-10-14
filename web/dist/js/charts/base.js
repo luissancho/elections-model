@@ -11,8 +11,8 @@ const REDUCED_MOTION = Boolean(window.matchMedia && window.matchMedia('(prefers-
  */
 export const THEME = {
   fontFamily: "'Source Sans 3', system-ui, sans-serif",
-  textColor: '#333',
-  gridColor: '#e5e5e5',
+  textColor: '#1a1c22',
+  gridColor: 'rgba(0,0,0,.15)',
   intervalColor: '#333',
   markColor: '#555',
   barColor: '#3a6ea5',

@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from mtpy.core.io import FileSystem
-from mtpy.lib import bundle, publish
+from mtpy.lib import bundle, data, publish
 from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
                          synthetic_backtest, synthetic_event, synthetic_simulator, write_backtest_source)
 
@@ -71,12 +71,52 @@ def test_export_districts_excludes_the_total_region():
     data, frame = publish.export_districts(synthetic_simulator())
     data = valid('districts', data)
     assert [r['id'] for r in data['regions']] == [28, 8]
-    assert data['regions'][0] == {'id': 28, 'name': 'Madrid', 'seats': 6}
+    assert [r['seats'] for r in data['regions']][0] == 6
     assert len(data['rows']) == 2 * len(NAMES)
     assert set(data['rows'][0]) == {'region_id', 'region', 'name', 'pct', 'pct_lo', 'pct_hi', 'seats', 'seats_mean', 'seats_lo',
                                     'seats_hi', 'p_seats'}
     assert frame.shape[0] == 6
     assert all(isinstance(r['seats'], float) and r['seats'] == round(r['seats'], 1) for r in data['rows'])
+
+
+def test_export_districts_carries_the_community_and_the_votes():
+    communities = {28: {'code': 13, 'name': 'Madrid'}, 8: {'code': 9, 'name': 'Cataluña'}}
+    result = valid('districts', publish.export_districts(synthetic_simulator(), communities=communities)[0])
+    assert result['regions'][0] == {'id': 28, 'name': 'Madrid', 'seats': 6, 'community': {'code': 13, 'name': 'Madrid'}, 'votes': 600}
+    assert result['regions'][1]['community'] == {'code': 9, 'name': 'Cataluña'} and result['regions'][1]['votes'] == 400
+    bare = valid('districts', publish.export_districts(synthetic_simulator())[0])
+    assert bare['regions'][0]['community'] is None and bare['regions'][0]['votes'] == 600
+
+
+def test_export_districts_takes_the_votes_from_the_previous_election():
+    # The totals of the upcoming election carry no votes (the loader only fills its seats): the votes of
+    # `districts.regions` are the valid votes of the previous election, `sim.prev_totals`, as integers
+    sim = synthetic_simulator()
+    assert sim.reg_totals['votes'].isnull().all()
+    sim.prev_totals.loc[28, 'votes'] = 600.4
+    result = valid('districts', publish.export_districts(sim)[0])
+    assert [r['votes'] for r in result['regions']] == [600, 400]
+    assert all(isinstance(r['votes'], int) for r in result['regions'])
+
+
+def test_district_communities_come_from_the_catalogue_and_are_null_in_their_own_scope(fresh_app):
+    fresh_app.set('data', FileSystem(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')))
+    national = data.get_district_communities('es')
+    assert len(national) == 52 and national[1] == {'code': 16, 'name': 'País Vasco'} and national[28] == {'code': 13, 'name': 'Madrid'}
+    assert data.get_district_communities('es-pv') == {1: None, 20: None, 48: None}
+
+
+def test_without_the_catalogue_the_districts_carry_no_community(fresh_app):
+    assert publish.forecast.district_communities('es') == {}
+    communities = publish.forecast.district_communities('es')
+    regions = valid('districts', publish.export_districts(synthetic_simulator(), communities)[0])['regions']
+    assert [r['community'] for r in regions] == [None, None] and [r['votes'] for r in regions] == [600, 400]
+
+
+def test_a_missing_catalogue_raises_instead_of_falling_back(fresh_app, tmp_path):
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    with pytest.raises(FileNotFoundError):
+        publish.forecast.district_communities('es')
 
 
 def test_export_scenario_is_a_real_simulation():

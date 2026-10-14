@@ -7,12 +7,20 @@
 {% block content %}
 {% import '_macros.html' as m %}
     <div id="content" class="stack">
-      {% if headline_text %}
-      {{ m.headline(headline_text) }}
-      {% endif %}
-      {{ m.card_start('parties', 'Escaños por partido', 'Los escaños que obtiene cada partido en miles de elecciones simuladas: el resultado central, su intervalo y la distribución completa.', subtitle) }}
-        <div class="table-wrap">
-          <table id="parties-table">
+      {{ m.card_start('seats', 'Reparto de escaños', 'Los escaños de cada partido, o de cada bloque, en miles de elecciones simuladas: el reparto central, el intervalo de cada uno y la distribución completa.', subtitle) }}
+        {% if block_rows %}
+        <div class="series-controls">
+          <fieldset id="seats-view" class="seg" hidden>
+            <legend>Vista</legend>
+            <label><input type="radio" name="sview" value="partidos" checked> Partidos</label>
+            <label><input type="radio" name="sview" value="bloques"> Bloques</label>
+          </fieldset>
+        </div>
+        {% endif %}
+        <div class="chart" id="seats-bar" role="img" aria-label="Reparto central de los escaños, con la mayoría absoluta marcada"></div>
+        <div id="seats-parties">
+          <div class="table-wrap">
+            <table id="parties-table">
             <caption>Escaños previstos de {{ summary.n_seats|int }}; la mayoría absoluta está en {{ summary.majority|int }}.</caption>
             <thead>
               <tr>
@@ -37,35 +45,18 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
         </div>
-        <div class="grid-small" id="histograms">
-          {% for row in party_rows %}
-          <div class="chart chart-small" data-party="{{ row.name }}" role="img" aria-label="Distribución de escaños de {{ row.name }} en las simulaciones"></div>
-          {% endfor %}
-        </div>
-        {% call m.how() %}
-        <p>
-          Cada fila es un partido: la cifra de escaños es su resultado central, el rango deja fuera las
-          simulaciones más extremas de cada lado y los histogramas cuentan cuántas simulaciones dan cada número
-          de escaños, con una línea gruesa en la mediana y dos finas en los extremos del rango. P(escaño) es la
-          probabilidad de obtener al menos uno; P(primero), la de ser el partido con más escaños; P(mayoría), la
-          de llegar a la mayoría absoluta sin ayuda.
-        </p>
-        <p>Si los rangos de dos partidos se solapan, pueden acabar en cualquier orden.</p>
-        <p>Una probabilidad no es una predicción segura, y esto no dice quién gobernará ni con quién.</p>
-        {% endcall %}
-      {{ m.card_end() }}
-      {{ m.card_start('blocks', 'Bloques', 'La suma de escaños de los partidos de cada bloque en cada simulación y la probabilidad de que el bloque alcance la mayoría absoluta.', subtitle) }}
-        <div class="chart" id="blocks-chart" role="img" aria-label="Escaños previstos por bloque ideológico"></div>
-        <div class="table-wrap">
-          <table id="blocks-table">
+        <div id="seats-blocks" hidden>
+          <div class="table-wrap">
+            <table id="blocks-table">
             <caption>Bloques ideológicos, con todos los partidos.</caption>
             <thead>
               <tr>
                 <th scope="col">Bloque</th>
                 <th scope="col">Escaños</th>
                 <th scope="col">Rango 95 %</th>
-                <th scope="col">P(mayoría absoluta)</th>
+                <th scope="col">P(mayoría)</th>
               </tr>
             </thead>
             <tbody>
@@ -79,17 +70,28 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
         </div>
+        <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños en las simulaciones, una fila por partido o bloque"></div>
         {% call m.how() %}
         <p>
-          El gráfico y la tabla reparten todos los partidos entre los bloques. La mayoría absoluta está en
-          {{ summary.majority|int }} escaños.
+          La barra reparte los escaños del escenario central y marca la mayoría absoluta, que está en
+          {{ summary.majority|int }} de {{ summary.n_seats|int }}. En la tabla, la cifra de escaños es el
+          resultado central y el rango deja fuera las simulaciones más extremas de cada lado; P(escaño) es la
+          probabilidad de obtener al menos uno, P(primero), la de ser el partido con más escaños, y P(mayoría),
+          la de llegar a la mayoría absoluta sin ayuda (en un bloque, sumando sus partidos).
         </p>
         <p>
-          P(mayoría absoluta) es la fracción de simulaciones en que el bloque llega a esa cifra por sí solo:
-          cuanto más disputada, más abierto está el resultado.
+          Las curvas de abajo muestran, fila a fila y cada una con su propio eje, qué resultados salen más en
+          las simulaciones: el punto más alto es el más frecuente, la línea gruesa la mediana, las finas los
+          extremos del rango y la discontinua la mayoría absoluta cuando cae dentro. Al pasar por encima se ve
+          en qué fracción de simulaciones sale cada número de escaños.
         </p>
-        <p>Que un bloque sume la mayoría no quiere decir que sus partidos vayan a gobernar juntos.</p>
+        <p>
+          Si los rangos de dos partidos se solapan, pueden acabar en cualquier orden. Que un bloque sume la
+          mayoría no quiere decir que sus partidos vayan a gobernar juntos, y una probabilidad no es una
+          predicción segura.
+        </p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('coalition', 'Calculadora de coaliciones', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle) }}
@@ -116,41 +118,56 @@
         {% endcall %}
       {{ m.card_end() }}
       {% if district_table %}
-      {{ m.card_start('districts', 'Circunscripciones', 'El reparto de escaños de cada circunscripción en el escenario central y, para la que elijas, el voto y los escaños previstos de cada partido.', subtitle) }}
-        <div class="table-wrap">
-          <table id="district-table">
+      {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el escenario central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
+        <div class="series-controls" id="territory-controls" hidden>
+          {% if territory_levels %}
+          <fieldset id="territory-level" class="seg">
+            <legend>Nivel</legend>
+            <label><input type="radio" name="level" value="ccaa" checked> CCAA</label>
+            <label><input type="radio" name="level" value="prov"> Provincia</label>
+          </fieldset>
+          {% endif %}
+          <fieldset id="territory-mode" class="seg">
+            <legend>Mostrar</legend>
+            <label><input type="radio" name="tmode" value="pct"> % Voto</label>
+            <label><input type="radio" name="tmode" value="esc" checked> Escaños</label>
+          </fieldset>
+        </div>
+        <div class="et-wrap">
+          <table id="district-table" class="geo">
             <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el rango del 95 %.</caption>
             <thead>
               <tr>
-                <th scope="col">Circunscripción</th>
-                <th scope="col">Escaños</th>
+                <th scope="col" data-key="name" aria-sort="ascending">Circunscripción</th>
                 {% for name in district_table.parties %}
-                <th scope="col" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
+                <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
                 {% endfor %}
+                <th scope="col" data-key="total">Total</th>
               </tr>
             </thead>
             <tbody>
               {% for row in district_table.rows %}
               <tr>
                 <td><a href="/{{ state.scope }}/escanos{{ query }}&amp;region={{ row.id }}">{{ row.name }}</a></td>
-                <td>{{ row.seats|int }}</td>
                 {% for cell in row.cells %}
-                <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
+                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
                 {% endfor %}
+                <td>{{ row.seats|int }}</td>
               </tr>
               {% endfor %}
               {% if district_table.total %}
-              <tr>
-                <td>Total</td>
-                <td>{{ district_table.total.seats|int }}</td>
+              <tr class="total">
+                <td>TOTAL</td>
                 {% for cell in district_table.total.cells %}
-                <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
+                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
                 {% endfor %}
+                <td>{{ district_table.total.seats|int }}</td>
               </tr>
               {% endif %}
             </tbody>
           </table>
         </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
         <form id="district-form" method="get" action="/{{ state.scope }}/escanos#districts">
           <input type="hidden" name="mode" value="{{ state.mode }}">
           {% if state.pinned %}
@@ -203,6 +220,10 @@
         <p>
           Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto; en las
           circunscripciones pequeñas, pocos votos cambian un escaño.
+        </p>
+        <p>
+          En CCAA los escaños son la suma de sus provincias y el voto, la media ponderada por los votos de la
+          elección anterior.
         </p>
         <p>Es un escenario entre muchos posibles, no la predicción de ninguna circunscripción.</p>
         {% endcall %}

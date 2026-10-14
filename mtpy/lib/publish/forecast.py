@@ -7,6 +7,8 @@ import pandas as pd
 
 from .. import bundle
 from ..bundle import BundleWriter
+from ...core.app import App
+from ..data import get_district_communities
 from ..simulator import Simulator
 from ..utils import norm_range
 from .common import (
@@ -119,13 +121,20 @@ def export_dist(sim):
     return data, frame
 
 
-def export_districts(sim):
+def export_districts(sim, communities: Optional[dict] = None):
     """Export votes and seats per district, leaving out the scope total.
+
+    The ``votes`` of each district are the valid votes of the previous election (``sim.prev_totals``,
+    rounded to an integer): the totals of the upcoming election (``sim.reg_totals``) carry its seats but
+    no votes, since the loader cannot know them yet.
 
     Parameters
     ----------
     sim : Simulator
         Simulator already run.
+    communities : dict, optional
+        ``{region_id: {'code', 'name'} | None}``, the autonomous community of each district
+        (``data.get_district_communities``). Without it every ``community`` is ``None``.
 
     Returns
     -------
@@ -133,7 +142,9 @@ def export_districts(sim):
         Data for the ``districts`` schema and its CSV twin.
     """
     region_ids = [r for r in sim.params['regions'] if r != sim.default_region]
-    regions = [{'id': r, 'name': sim.region_names.get(r, r), 'seats': int(sim.reg_totals.loc[r, 'seats'])}
+    regions = [{'id': r, 'name': sim.region_names.get(r, r), 'seats': int(sim.reg_totals.loc[r, 'seats']),
+                'community': communities.get(r) if communities else None,
+                'votes': int(round(float(sim.prev_totals.loc[r, 'votes'])))}
                for r in region_ids]
     rows = []
     for r in region_ids:
@@ -532,7 +543,7 @@ MODE_EXPORTERS = (('vote', export_vote), ('summary', export_summary), ('dist', e
                   ('districts', export_districts), ('scenario', export_scenario), ('projection', export_projection))
 
 
-def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str) -> dict:
+def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str, communities: Optional[dict] = None) -> dict:
     """Write the files of the current mode of the simulator (JSON and CSV per part).
 
     Parameters
@@ -543,6 +554,8 @@ def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str) -> dict:
         Bundle destination.
     scope, run_id : str
         Scope and run being written.
+    communities : dict, optional
+        Community of each district, for ``export_districts``.
 
     Returns
     -------
@@ -551,10 +564,31 @@ def publish_mode(sim, writer: BundleWriter, scope: str, run_id: str) -> dict:
     """
     mode = sim.mode
     for part, exporter in MODE_EXPORTERS:
-        data, frame = exporter(sim)
+        data, frame = exporter(sim, communities=communities) if exporter is export_districts else exporter(sim)
         writer.write_json(bundle.path_part(scope, run_id, part, mode), part, data, scope, run_id, mode)
         writer.write_csv(bundle.path_csv(scope, run_id, part, mode), frame)
     return headline_mode(sim)
+
+
+def district_communities(scope: str) -> dict:
+    """Community of each district of a scope, or nothing when the catalogue is not available.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        ``data.get_district_communities(scope)``; empty only when the app has no ``data`` filesystem
+        (the fake apps of the unit tests), so the districts carry ``community: None``. A missing or
+        malformed catalogue raises.
+    """
+    if getattr(App.get_(), 'data', None) is None:
+        return {}
+
+    return get_district_communities(scope)
 
 
 def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: str, n_sim: int = 1000,
@@ -663,13 +697,14 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     sim.run(split=True, random=True, n_sim=n_sim)
     clip['nowcast'] = float(sim.clip_rate())
     nowcast = report('nowcast', lap())
-    heads['nowcast'] = publish_mode(sim, writer, scope, run_id)
+    communities = district_communities(scope)
+    heads['nowcast'] = publish_mode(sim, writer, scope, run_id, communities)
     export = report('export-nowcast', lap())
     sim.mode = 'forecast'
     sim.run(split=True, random=True, n_sim=n_sim, horizon='deadline')
     clip['forecast'] = float(sim.clip_rate())
     forecast = report('forecast', lap())
-    heads['forecast'] = publish_mode(sim, writer, scope, run_id)
+    heads['forecast'] = publish_mode(sim, writer, scope, run_id, communities)
     fc = sim.model
     cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names)), ('fan', export_fan(sim)),
              ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)))

@@ -1,6 +1,6 @@
 # Despliegue de la web (fases 0-2 y páginas desde los controladores)
 
-Guía breve para construir y probar la imagen `elections-web`. Sustituye `<tag>` por la etiqueta que uses.
+Guía breve para construir y probar la imagen `elections-model`. Sustituye `<tag>` por la etiqueta que uses.
 (Enmienda 2026-10-13, fase 6: la guía cubre ya las fases 0 a 6, incluido el despliegue en AWS ECS; el título se
 conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web-publicacion-design.md`.)
 
@@ -11,9 +11,9 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
    "Comprobaciones de la infraestructura" (`nginx-check.sh`, `smoke.sh`, `check-api.sh`).
 3. "Despliegue en ECS": qué debe existir en AWS, marcadores de las plantillas de `deploy/ecs/` y procedimiento.
 4. "Comprobar S3" y "Si `check_s3` falla".
-5. "Publicar": parámetros, estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest,
-   publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el manifest,
-   retirada de un run y "Guarda LOREG".
+5. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
+   estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, publicar en local, en S3 y desde
+   ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el manifest, retirada de un run y "Guarda LOREG".
 6. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
 7. "Duraciones medidas": publicación, carga local, arranque de un worker y memoria del job.
 
@@ -33,7 +33,7 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
 Desde la raíz del repositorio:
 
 ```
-docker build --platform linux/amd64 -t elections-web:<tag> .
+docker build --platform linux/amd64 -t elections-model:<tag> .
 ```
 
 La imagen copia el repositorio completo (`COPY . .`) salvo lo excluido en `.dockerignore`; `deploy/elections.env`,
@@ -44,7 +44,7 @@ nginx + gunicorn, `APP_CRONTAB` arranca supercronic con `deploy/docker/crontab`,
 ## Arrancar el contenedor
 
 ```
-docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/elections.env elections-web:<tag>
+docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/elections.env elections-model:<tag>
 ```
 
 ## La web
@@ -52,6 +52,7 @@ docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/
 Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de proxy del resto:
 
 - `/dist/` → ficheros de `web/dist/` (`css`, `js`, `vendor`, `img`), con cabeceras de seguridad.
+- `/favicon.ico` → `web/dist/img/favicon.ico` (caché de una semana), para los clientes que lo piden sin mirar la página.
   `/dist/vendor/` (ECharts, con la versión en el nombre, y desde la fase 7 las fuentes de `/dist/vendor/fonts/`)
   lleva caché de un año; el resto de `/dist/` (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
@@ -97,8 +98,7 @@ Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desd
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
 el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
 `event_bar` de `common_context`): nombre del evento ("Elecciones generales" o "Elecciones autonómicas · {nombre}"),
-fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), la línea que
-explica el modo mostrado (`pages.mode_text`) y, con un run fijado, el chip del run. Desde la fase 7b la barra no
+fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), y, con un run fijado, el chip del run. Desde la fase 7b la barra no
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
 (Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
 Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
@@ -121,23 +121,27 @@ Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
 - Inicio: cada tarjeta es entera un enlace (`<a class="card card-link">`, con su `<h3>` dentro); la del primer
   ámbito (`.tile-hero`) es la grande y "Ver escaños" queda fuera del enlace, debajo. "Para entender el modelo" son
   tres tarjetas clicables: Histórico Errores, Ranking Encuestadoras y Método.
-- Píldoras (`fieldset.pills` > `label.pill` con su casilla oculta pero enfocable): el selector de partidos o
-  bloques, coloreado al estilo de la leyenda de ECharts, sin título ni botones Todos/Ninguno. La píldora marcada
+- Píldoras (`fieldset.pills` > `label.pill` con su casilla oculta pero enfocable): el selector de partidos de la
+  calculadora de coaliciones de Escaños, coloreado al estilo de la leyenda de ECharts. La píldora marcada
   toma el color del partido (`--pill-color`) y una tinta legible calculada en el servidor (filtro `ink`,
   `pages.ink_color`: texto oscuro sobre colores claros, blanco sobre oscuros); sin `:has()` el JS pone la clase
-  `is-on`. Se usan en Promedios y en la calculadora de coaliciones de Escaños; las leyendas de ECharts de Promedios
-  se ocultan.
+  `is-on`. En Promedios la leyenda de ECharts es el selector (fase 7c).
 - Promedios: los controles en tres líneas, en este orden: Vista (Partidos/Bloques), Ventana y las píldoras. El
   tooltip es por sondeo (`trigger: 'item'`): nombre, fecha, muestra y las siglas en su color con su valor, de mayor a
-  menor. La tabla "Sondeos del ciclo" tiene la columna "Sondeo" (`pages.poll_name`: `encuestadora / medio`, o la
-  encuestadora sola, como el cargador) en lugar de Casa y Patrocinador; se pintan las primeras `TABLE_ROWS` (40)
-  filas, la isla lleva todas y "Cargar más" añade las siguientes hasta que no quedan (entonces desaparece; con 40
-  sondeos o menos nunca aparece). Sin JS se ven las 40 primeras y el CSV tiene todas.
+  menor. La tabla "Todas las encuestas" (fase 7c) tiene la columna "Sondeo" (`pages.poll_name`: `encuestadora / medio`, o la
+  encuestadora sola, como el cargador) en lugar de Casa y Patrocinador; el servidor pinta las 15 más recientes, la
+  isla lleva todas y el JS pagina, filtra y ordena. Sin JS se ven esas filas y el CSV tiene todas.
 - Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); los histogramas llevan la línea
   de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
   ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
 - Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 640 px y centrada en su tarjeta; la del
   detalle de una elección y la del perfil (`#bullseye-chart`) siguen en 480 px.
+
+Fase 7c (2026-10-14): restyle con fondo gris, tarjetas blancas, controles en segmentos y contenedor fluido; tres
+tarjetas centrales en Promedios (hemiciclo, partidos, bloques); la leyenda de ECharts como selector de partidos;
+"Todas las encuestas" (`polls-table.js` + `pages/polls-dom.js`: filtros, orden y paginación en el navegador);
+"Resultados por territorio" en Escaños (`territory.js` + `pages/territory-dom.js`, nivel CCAA o provincia, escaños o
+voto); y `community`/`votes` en `districts.regions` (los runs antiguos, sin ellos, ocultan el nivel CCAA).
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
@@ -148,6 +152,15 @@ Fuentes: Source Serif 4 Semibold (títulos) y Source Sans 3 Regular (texto) en w
 licencia (`LICENSE`, SIL OFL); 188 KB entre las dos, servidas con la caché de un año de `/dist/vendor/` y
 `font-display: swap`, con la pila del sistema como respaldo. Para cambiar una fuente, cambia también el nombre del
 fichero (la caché es de un año). Los tokens de color y tipografía están en `:root` de `web/dist/css/site.css`.
+
+Marca: el sitio se llama Demoscopio (`pages.SITE_TITLE`; `SITE_TAGLINE` es la línea bajo el nombre y la descripción
+por defecto de las páginas). La cabecera (`_brand.html`) muestra el logotipo `web/dist/img/logo.svg`: "Demoscopi" en
+Source Serif 4 Semibold convertida a trazos, con la última "o" como lente (anillo y punto en el azul de acento), que es
+también el favicon (`favicon.svg`, `favicon.ico` en 16/32/48 y `apple-touch-icon.png`, enlazados desde `_icons.html`).
+Los cuatro ficheros los genera `python web/brand/build.py` desde la fuente (necesita `fonttools[woff]` y Pillow, que
+no son dependencias de la web): para cambiar el nombre, los colores o la lente, edita las constantes del script y
+vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
+más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página.
 
 Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
 publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400 ("Fecha no válida.") y una
@@ -197,7 +210,9 @@ la web, también sus jobs quedan limitados a 10 s. Mientras `deploy/docker/cront
 conflicto; si un día el contenedor ejecuta publicaciones o cargas, ejecútalas en otro contenedor con la
 variable vacía (un `RUN_JOB` es siempre un `docker run` aparte: `-e DB_STATEMENT_TIMEOUT=` lo anula, porque
 `-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
-paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
+paquete, por defecto `site/v1`), `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60) y
+`WEB_SITE_URL` (origen público del sitio para las `canonical`, por defecto `https://demoscopio.es`; en el
+`.env` local va el host de desarrollo, `https://demoscopio.dev`).
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
 
@@ -266,11 +281,12 @@ Si la página dibuja gráficos, el módulo `web/dist/js/pages/<nombre>.js` lee `
 ### Desarrollo sin Docker
 
 En el Mac, Luis tiene un nginx local en el puerto 8080. Hay que añadir a su `server` las dos `location`
-de `/dist/` y el proxy, con `<repo>` la ruta del repositorio:
+de `/dist/`, la de `/favicon.ico` y el proxy, con `<repo>` la ruta del repositorio:
 
 ```
 location ^~ /dist/vendor/ { alias <repo>/web/dist/vendor/; expires 1y; }
 location ^~ /dist/ { alias <repo>/web/dist/; expires -1; }
+location = /favicon.ico { alias <repo>/web/dist/img/favicon.ico; expires 7d; }
 location / {
     proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -353,8 +369,8 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 
 ### Qué debe existir en AWS
 
-- Un clúster de ECS (`<cluster>`) y un repositorio de ECR `elections-web`.
-- Un servicio de ECS Fargate con la definición `elections-web`, con 2 tareas como mínimo, registrado en un target
+- Un clúster de ECS `elections-model` y un repositorio de ECR `elections-model`.
+- Un servicio de ECS Fargate con la definición `elections-model`, con 2 tareas como mínimo, registrado en un target
   group (puerto 8042, protocolo HTTP) con health check en `/api/v1/health`, cada 30 s y 2 fallos para marcarlo
   no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group. (La spec de la
   fase 6 decía que una tarea basta; con dos, cada tarea tiene su caché de nginx y de la API y el despliegue no
@@ -365,7 +381,7 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 - Rol de tarea de lectura (`<task-role-read>`): `s3:GetObject` sobre `arn:aws:s3:::<bucket>/site/*` y
   `s3:ListBucket` sobre `arn:aws:s3:::<bucket>` (condición de prefijo `site/*`). Es el que lee la web.
 - Rol de tarea de escritura (`<task-role-write>`): lo anterior más `s3:PutObject` y `s3:DeleteObject` sobre
-  `site/*` y `site-dry/*`. Solo para la definición `elections-job`.
+  `site/*` y `site-dry/*`. Solo para la definición `elections-model-job`.
 - Los dos roles de tarea, además, `logs:CreateLogStream` y `logs:PutLogEvents` sobre el grupo de logs
   (`arn:aws:logs:<region>:<account>:log-group:<log-group>:*`): el logger de la aplicación (`CWL_GROUP`) escribe con
   el rol de la tarea, mientras que el driver `awslogs` usa el rol de ejecución. (Enmienda 2026-10-13, revisión
@@ -387,7 +403,6 @@ comentarios; los valores entre `<>` son marcadores que hay que sustituir):
 | `<secret-arn>` | ARN del secreto con la contraseña (`DB_PASSWORD`) |
 | `<task-role-read>`, `<task-role-write>` | Roles de tarea de la web (lectura) y de los jobs (escritura) |
 | `<execution-role>` | Rol de ejecución (descarga la imagen, escribe logs, lee el secreto) |
-| `<cluster>` | Clúster en el que se lanzan los jobs |
 | `<subnet-id>`, `<security-group-id>` | Subred y grupo de seguridad de la tarea de job (necesita acceso a la RDS) |
 | `<git-sha>` | Commit de la imagen registrada (`GIT_COMMIT` de la tarea de jobs; ver "Publicar desde ECS") |
 
@@ -400,11 +415,11 @@ salen del rol de la tarea. `DB_ADAPTER` es `PostgreSQL`, el nombre exacto del m�
 
 ```
 aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
-docker build --platform linux/amd64 -t elections-web:<tag> .
-docker tag elections-web:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
-docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-web:<tag>
+docker build --platform linux/amd64 -t elections-model:<tag> .
+docker tag elections-model:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>
+docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>
 aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-web.example.json
-aws ecs update-service --cluster <cluster> --service elections-web --task-definition elections-web --force-new-deployment
+aws ecs update-service --cluster elections-model --service elections-model --task-definition elections-model --force-new-deployment
 bash deploy/check-api.sh https://<host>
 ```
 
@@ -431,7 +446,7 @@ El job se niega a probar un `files/` local (sería un falso visto bueno); para f
 Desde la imagen:
 
 ```
-docker run --rm --env-file deploy/elections.env -e RUN_JOB=check_s3 elections-web:<tag>
+docker run --rm --env-file deploy/elections.env -e RUN_JOB=check_s3 elections-model:<tag>
 ```
 
 Cada paso imprime `<paso> OK` o `<paso> FAIL: <error>`; si alguno falla, el job termina con error.
@@ -445,11 +460,56 @@ El primer `FAIL` es la causa raíz (los pasos posteriores fallan en cascada). Un
 
 ## Publicar
 
-`python job.py publish` ejecuta el modelo, escribe un run inmutable en el paquete `site/v1` de `app.fs` y
-mueve los punteros (`history.json` por ámbito y `manifest.json`). El análisis de casas, las elecciones pasadas y el
-backtest (`analysis`, `event`, `backtest`) no son runs: sobrescriben su carpeta y no tocan los punteros. Contrato de
-los ficheros: `docs/web/contrato.md`. El código está en el paquete `mtpy/lib/publish/` (`common`, `forecast`,
-`analysis`, `backtest`, `events` y `pointers`); el job lo usa como `publish`.
+`python job.py publish` lleva al paquete `site/v1` de `app.fs` lo que la web dibuja del modelo. Solo `forecast`
+produce runs: ejecuta el modelo, escribe un run inmutable y mueve los punteros (`history.json` por ámbito y
+`manifest.json`). El análisis de casas, las elecciones pasadas y el backtest (`analysis`, `event`, `backtest`) no son
+runs: sobrescriben su carpeta y no tocan los punteros. `manifest`, `point` y `unpublish` solo mueven punteros.
+Contrato de los ficheros: `docs/web/contrato.md`. El código está en el paquete `mtpy/lib/publish/` (`common`,
+`forecast`, `analysis`, `backtest`, `events` y `pointers`); el job lo usa como `publish`.
+
+### Qué hace cada acción y cuándo lanzarla
+
+Antes de publicar está la carga, que no es cosa de este job: los notebooks de `notebooks/data-load/` (para `es`) y
+`load/run_load.py` (para los autonómicos: `--what urls polls results compute ratings`) meten en la base los sondeos y
+los resultados y recalculan ahí las series derivadas (pesos, errores, deriva, efectos de casa, herding) y los
+ratings de las encuestadoras. La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`),
+así que un recálculo de ratings se ve sin publicar nada. Todo lo demás sale del paquete y hay que publicarlo.
+
+| Acción | Qué escribe | Cuándo lanzarla | Guarda LOREG | Punteros |
+| --- | --- | --- | --- | --- |
+| `forecast` | Un run inmutable por ámbito en `runs/{ámbito}/{run_id}/`: promedio de hoy, pronóstico de la elección, sondeos del ciclo y titular (páginas Promedios y Escaños, portada) | Cada vez que se cargan sondeos nuevos de un ámbito; a diario en campaña. Con `scopes: "all"` se publica un run nuevo en todos los ámbitos con sondeos (los que no tienen bastantes quedan `skipped`); con una lista, solo en esos | Sí | Mueve `latest` al run nuevo |
+| `analysis` | `analysis/{ámbito}/`: efectos de casa del ciclo, herding, errores por sondeo de las elecciones pasadas y datos del estimador de error (tarjetas de `/casas`; histograma, diana y tabla de `/elecciones`) | Con cada `forecast`, en la misma llamada (`"what":["forecast","analysis"]`); también tras un recálculo de ratings y tras cargar los resultados de una elección, porque entra en los errores históricos | Sí | No |
+| `event` | `events/{ámbito}/{fecha}/`: error de cada encuestadora y de cada sondeo frente al resultado, resultado oficial y lo que el modelo habría dicho a cada horizonte (detalle de `/elecciones?date=`) | Una vez por elección celebrada, con los resultados oficiales cargados (`event_date` obligatorio). De nuevo, con `"event_date":"all"`, si se corrigen sondeos de elecciones pasadas o se rehace el backtest, porque su parte "modelo" sale de `backtest/results` | No | No |
+| `backtest` | `backtest/{ámbito}/`: las tablas de `backtest/results` convertidas al paquete (`/metodo/backtest`) | Tras cada ejecución de `backtest/run_backtest.py` (`--scope es` para `es`, `--scopes all` para los autonómicos), es decir, cuando cambia el método. No ejecuta el modelo ni lee la base: solo convierte ficheros | No | No |
+| `manifest` | Solo `manifest.json` | Congelar y descongelar la web en la veda (`freeze`). `forecast` ya reescribe el manifest, así que sola solo hace falta para eso | No | Sí |
+| `point` | Solo `manifest.json` | Volver a un run anterior sin borrar nada (`latest` nunca retrocede por sí solo) | No | Mueve `latest` al run indicado |
+| `unpublish` | Borra la carpeta del run y reconstruye `history.json` | Retirar un run malo; si era `latest`, vuelve al anterior | No | Sí |
+
+`what` admite las siete acciones y las ejecuta en ese orden; `event` exige `event_date` y no se combina con
+`forecast` (las dos cosas fallan con `ValueError` antes de empezar). `backtest` y `event` pueden ir en la misma
+llamada: los dos leen `backtest/results` del disco (o `source`), no el paquete.
+
+Rutina, por situación:
+
+- **Campaña (a diario, hasta el 23 de noviembre)**: cargar los sondeos y lanzar
+  `{"what":["forecast","analysis"],"scopes":"all"}` (o la lista de ámbitos con sondeos nuevos; `es` tarda unos
+  2 min). Comprobar en el resumen que cada ámbito termina `published` y mirar los "· n avisos".
+- **Veda (del 24 al 28)**: no se publica nada; `manifest` con `freeze` el 23 y la noche del 29 (ver "Veda"). La
+  guarda rechaza `forecast` y `analysis` en todos los ámbitos hasta el 29 incluido.
+- **Tras una elección**: cargar los resultados oficiales y lanzar `event` de esa fecha (no pasa por la guarda, así
+  que puede ir la misma noche); desde el día siguiente (la guarda cubre el propio día de la elección), `analysis`
+  para que sus errores entren en el histórico, y `forecast` cuando haya sondeos del ciclo siguiente.
+- **Tras un cambio del modelo**: `python backtest/run_backtest.py --scope es` y `--scopes all` (los autonómicos),
+  después `{"what":["backtest","event"],"scopes":"all","event_date":"all"}` y por último `forecast`, para que
+  `latest` lleve el modelo nuevo.
+- **Tras recalcular ratings** (`run_load --what ratings` o los notebooks de carga): el ranking de `/casas` cambia
+  solo; `forecast` y `analysis` para que el paquete use los ratings nuevos.
+- **Incidencias**: `unpublish` para retirar un run malo o `point` para taparlo con uno anterior (ver "Retirada de
+  un run"). `dry_run` ensaya `forecast`, `analysis`, `event` y `backtest` en `site-dry/v1` sin punteros (el manifest
+  no se escribe); `backfill` reconstruye días pasados de la evolución (ver "Relleno retroactivo"); `force` salta la
+  guarda y deja el run marcado con `meta.freeze: true`.
+
+### Ejemplos
 
 ```
 python job.py publish '{"what":["forecast"],"scopes":["es"]}'
@@ -479,10 +539,6 @@ python job.py publish '{"what":["backtest"],"scopes":"all"}'
 10. La elección general del 23 de julio de 2023 de `es` (enmienda 2026-10-11; ver "Elecciones pasadas").
 11. Todas las elecciones `featured` de `es` anteriores a hoy.
 12. El backtest de `es` y de todos los ámbitos autonómicos; los que no tienen resultados quedan `skipped`.
-
-`what` admite `forecast`, `analysis`, `event`, `backtest`, `manifest`, `point` y `unpublish` (se ejecutan en ese
-orden; enmienda 2026-10-11, fase 5). `event` exige `event_date` y no se combina con `forecast` (las dos cosas fallan
-con `ValueError` antes de empezar).
 
 ### Parámetros
 
@@ -596,8 +652,9 @@ error) y lo escribe bajo `analysis/{ámbito}/` del paquete (formato en "Análisi
   `es: analysis published (event 2026-11-29, <n> pollsters) in <s> s` o `es-md: analysis skipped (<motivo>)`.
 - Duración estimada de ≈ 1,5 min por ámbito (el análisis de `es` tardó 44 s en el test de integración contra la
   RDS). Va bien a mano o desde la imagen, igual que `forecast`.
-- Cadencia: repetirlo tras cada carga de sondeos y tras cada recálculo de ratings (`run_load --what ratings`);
-  el análisis no se actualiza solo.
+- Cadencia: repetirlo tras cada carga de sondeos (lo normal es en la misma llamada que `forecast`), tras cada
+  recálculo de ratings (`run_load --what ratings` o los notebooks de carga) y tras cargar los resultados de una
+  elección; el análisis no se actualiza solo (ver "Qué hace cada acción y cuándo lanzarla").
 
 Publicar en local o en S3 funciona como para `forecast` (ver abajo; en local, `S3_BUCKET=` delante):
 
@@ -681,14 +738,14 @@ Desde la imagen (`RUN_JOB` es el nombre del job, la primera palabra, y después 
 `init.sh` lo pasa como un solo argumento; enmienda 2026-10-13, revisión final):
 
 ```
-docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}' elections-web:<tag>
+docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}' elections-model:<tag>
 ```
 
 Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pasos.
 
 ### Publicar desde ECS
 
-Registra la definición `elections-job` desde `deploy/ecs/task-job.example.json` (marcadores sustituidos) y lanza
+Registra la definición `elections-model-job` desde `deploy/ecs/task-job.example.json` (marcadores sustituidos) y lanza
 la tarea con `deploy/ecs/run-task.example.json` (también con los marcadores sustituidos):
 
 ```
@@ -710,9 +767,9 @@ que hiciste el `docker build`): la imagen no lleva `.git`, así que la procedenc
 (`meta.commit`, el commit del pie de la web) sale de esa variable, con `dirty: false`. Sin ella el run queda con
 `commit: null`. Actualízala cada vez que registres una imagen nueva.
 
-**Aviso**: un `run-task` de `elections-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
+**Aviso**: un `run-task` de `elections-model-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
 definición no lleva `APP_API`, `APP_CRONTAB` ni `APP_QUEUE`) y se queda esperando en `tail -f /dev/null`, con 2 vCPU
-y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster <cluster> --task <task-id>`).
+y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster elections-model --task <task-id>`).
 
 ### Veda
 

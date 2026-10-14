@@ -1,59 +1,84 @@
 // Promedios tab of an event: the poll average with its window, party and block views, one house against the
-// average, the vote and seat bars, the hemicycle, the evolution and the "Cargar más" rows of the polls table,
+// average, the hemicycle, the evolution and the filterable, sortable table of all the polls,
 // drawn from the data embedded by the server. The state of the average controls lives in the URL hash
-// (`blocks.js`), written only when a control changes.
-import {fmtInt, fmtPct} from '../format.js';
+// (`blocks.js`), written only when a control changes; the legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
 import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} from '../blocks.js';
-import {renderBars} from '../charts/bars.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
-import {captionText, nextRows} from '../polls-table.js';
+import {PAGE_SIZE, filterPolls, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {WINDOW_DAYS} from '../range.js';
-import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {renderBody, renderFoot, renderHead} from './polls-dom.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
 
 /**
- * Draw the vote and seat bars, the hemicycle and the evolution.
+ * Draw the hemicycle, wire its Partidos/Bloques switch (which also shows the matching results table) and draw
+ * the evolution.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
  */
 function paintResults(initial, catalog) {
-  const {meta, headline, vote, summary, runs} = initial;
+  const {meta, headline, summary, runs} = initial;
   const mode = initial.state.mode;
   const current = headline[mode];
   const names = [...new Set([
     ...catalog.parties.map((party) => party.name),
     ...current.parties.map((party) => party.name),
-    ...vote.rows.map((row) => row.name),
     ...summary.parties.map((row) => row.name),
   ])];
   const colors = mapNames(names, (name) => catalog.color(name));
   const nSeats = meta.n_seats ?? summary.n_seats;
   const majority = meta.majority ?? summary.majority;
+  const blocks = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  const views = {
+    partidos: {
+      seats: summary.totals ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats])),
+      colors,
+      order: (list) => catalog.order(list),
+      label: 'Hemiciclo con los escaños previstos por partido',
+      card: 'parties-card',
+    },
+    bloques: {
+      seats: Object.fromEntries(blocks.map((row) => [row.name, row.seats])),
+      colors: mapNames(blocks.map((row) => row.name), (name) => catalog.blockColor(name)),
+      order: (list) => catalog.orderBlocks(list),
+      label: 'Hemiciclo con los escaños previstos por bloque',
+      card: 'blocks-card',
+    },
+  };
+  const el = document.getElementById('hemicycle');
 
-  const voteRows = [...vote.rows].sort((a, b) => b.pct - a.pct);
-  tryDraw(() => renderBars(document.getElementById('vote-chart'), voteRows, {
-    value: 'pct', lo: 'lo', hi: 'hi', colors,
-    formatter: (x) => fmtPct(x), axisFormatter: (x) => fmtPct(x, 0),
-  }), 'the vote bars');
+  /** Draw the hemicycle of `view` and show its results table, hiding the other one. */
+  function draw(view) {
+    const chosen = views[view];
+    el.setAttribute('aria-label', chosen.label);
+    tryDraw(() => renderHemicycle(el, chosen.seats, {
+      colors: chosen.colors, order: chosen.order, nSeats, majority,
+    }), 'the hemicycle');
+    for (const [name, item] of Object.entries(views)) {
+      const card = document.getElementById(item.card);
+      if (card) {
+        card.hidden = name !== view;
+      }
+    }
+  }
 
-  const seatRows = summary.parties
-    .filter((row) => row.seats > 0 || row.seats_hi > 0)
-    .sort((a, b) => b.seats - a.seats);
-  tryDraw(() => renderBars(document.getElementById('seats-chart'), seatRows, {
-    value: 'seats', lo: 'seats_lo', hi: 'seats_hi', colors, formatter: fmtInt, majority,
-  }), 'the seat bars');
-
-  const seats = summary.totals
-    ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats]));
-  tryDraw(() => renderHemicycle(document.getElementById('hemicycle'), seats, {
-    colors, order: (list) => catalog.order(list), nSeats, majority,
-  }), 'the hemicycle');
+  draw('partidos');
+  const fieldset = document.getElementById('results-view');
+  if (fieldset) {
+    fieldset.hidden = false;
+    fieldset.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=rview]') && views[event.target.value]) {
+        draw(event.target.value);
+        markSegments(fieldset);
+      }
+    });
+  }
 
   tryDraw(() => renderEvolution(document.getElementById('evolution'), runs.runs, mode, {
     colors, parties: current.parties.map((party) => party.name),
@@ -99,37 +124,36 @@ function seriesViews(initial, catalog) {
 }
 
 /**
- * Draw the average and the house chart and wire their controls: view, window, party and block pills and the
- * house selector. The pills replace the ECharts legend of the average chart; the house chart keeps a read-only one. Every change of a control rewrites
- * the URL hash.
+ * Names of the view shown by a legend selection, or null when it is what the view shows without a choice
+ * (its defaults, or all of them).
+ *
+ * @param {object} current the view (`parties`, `defaults`)
+ * @param {object} legendSelected `{name: boolean}` as ECharts reports it
+ * @returns {string[]|null} the chosen names, in the order of the view
+ */
+function chosenNames(current, legendSelected) {
+  const chosen = current.parties.filter((name) => legendSelected[name] !== false);
+  const base = current.defaults || current.parties;
+  const same = chosen.length === base.length && chosen.every((name) => base.includes(name));
+  return same ? null : chosen;
+}
+
+/**
+ * Draw the poll average and wire its controls: view and window radios and the ECharts legend, which selects the
+ * parties or blocks shown. Every change rewrites the URL hash.
  *
  * @param {object} initial the page's initial data
- * @param {Catalog} catalog party catalogue of the run
+ * @param {object} views `seriesViews` of the page
+ * @param {object} state `{view, window, selected}` parsed from the hash
+ * @param {function} render draws a chart: `(el, polls, chartState) => chart`
+ * @returns {object} the state of the average, to seed the house chart
  */
-function wireSeries(initial, catalog) {
-  const {meta, polls, vote} = initial;
-  const views = seriesViews(initial, catalog);
-  const anchor = meta.date_last || meta.as_of;
-  const state = parseSeriesHash(window.location.hash, {
-    parties: views.partidos.parties,
-    blocks: views.bloques ? views.bloques.parties : [],
-    windows: WINDOWS,
-  });
+function wireAverage(initial, views, state, render) {
+  const anchor = initial.meta.date_last || initial.meta.as_of;
   const mainEl = document.getElementById('series-chart');
-  const houseEl = document.getElementById('pollster-chart');
-  const select = document.getElementById('pollster-select');
-  const houseControls = document.getElementById('pollster-controls');
-  const fieldsets = {
-    window: document.getElementById('series-window'),
-    view: document.getElementById('series-view'),
-    partidos: document.getElementById('series-parties'),
-    bloques: document.getElementById('series-blocks'),
-  };
-  const charts = [];
-
-  const view = () => views[state.view];
-  const selected = () => state.selected ?? view().defaults;
-  const boxes = (name) => (fieldsets[name] ? [...fieldsets[name].querySelectorAll('input[type=checkbox]')] : []);
+  const windowSet = document.getElementById('series-window');
+  const viewSet = document.getElementById('series-view');
+  let chart = null;
 
   /** Write the state of the controls to the URL hash without adding a history entry. */
   function writeHash() {
@@ -137,60 +161,15 @@ function wireSeries(initial, catalog) {
     window.history.replaceState(null, '', pathname + search + seriesHash(state));
   }
 
-  /** Polls of the chosen house, in the current view. */
-  function housePolls() {
-    const house = select ? select.value : '';
-    const chosen = (polls.polls || []).filter((poll) => poll.pollster === house);
-    return view().toPolls({parties: polls.parties, polls: chosen});
-  }
-
-  /** Check the pills of the current view that are shown and show only its fieldset. */
-  function syncBoxes() {
-    const shown = selected();
-    for (const name of ['partidos', 'bloques']) {
-      if (fieldsets[name]) {
-        fieldsets[name].hidden = name !== state.view;
-      }
-    }
-    for (const box of boxes(state.view)) {
-      box.checked = !shown || shown.includes(box.value);
-    }
-    markPills(fieldsets[state.view]);
-  }
-
-  /** Show or hide the names of the current view in both charts; a merged option keeps their zoom. */
-  function applySelection() {
-    const shown = selected();
-    const legend = {selected: mapNames(view().parties, (name) => !shown || shown.includes(name))};
-    for (const chart of charts) {
-      chart.setOption({legend});
-    }
-  }
-
-  /** Draw the chart `el` with the current view, window and selection and the given polls; returns the chart. */
-  function render(el, pollsOfChart, legend = false) {
-    const current = view();
-    return renderSeries(el, {
-      series: current.series,
-      polls: pollsOfChart,
-      projection: current.projection,
-      parties: current.parties,
-      selected: selected(),
-      colors: current.colors,
-      asOf: meta.as_of,
-      when: vote.when,
-      window: state.window,
-      anchor,
-      legend,
-    });
-  }
-
-  /** Draw the average chart and, when there is one, the house chart. */
-  function drawAll() {
-    charts.length = 0;
-    tryDraw(() => charts.push(render(mainEl, view().polls)), 'the poll average');
-    if (houseEl) {
-      tryDraw(() => charts.push(render(houseEl, housePolls(), 'readonly')), 'the house against the average');
+  /** Draw the chart and, the first time, listen to its legend. */
+  function draw() {
+    const drawn = render(mainEl, views[state.view].polls, state);
+    if (!chart) {
+      chart = drawn;
+      chart.on('legendselectchanged', (event) => {
+        state.selected = chosenNames(views[state.view], event.selected);
+        writeHash();
+      });
     }
   }
 
@@ -200,99 +179,278 @@ function wireSeries(initial, catalog) {
   for (const input of document.querySelectorAll('#series-view input[name=view]')) {
     input.checked = input.value === state.view;
   }
-  syncBoxes();
-  drawAll();
+  markSegments();
+  tryDraw(draw, 'the poll average');
 
   // The controls only work with JavaScript, so the server renders them hidden.
-  if (houseControls) {
-    houseControls.hidden = false;
-  }
-  if (fieldsets.window) {
-    fieldsets.window.hidden = false;
+  if (windowSet) {
+    windowSet.hidden = false;
     // `click` rather than `change`: clicking the option already checked after dragging the slider must restore
     // its window too.
-    fieldsets.window.addEventListener('click', (event) => {
-      if (event.target.matches('input[name=window]')) {
+    windowSet.addEventListener('click', (event) => {
+      if (event.target.matches('input[name=window]') && chart) {
         state.window = event.target.value;
-        for (const chart of charts) {
-          setWindow(chart, state.window, {series: view().series, projection: view().projection, anchor});
-        }
+        const current = views[state.view];
+        setWindow(chart, state.window, {series: current.series, projection: current.projection, anchor});
         writeHash();
       }
     });
   }
-  if (fieldsets.view) {
-    fieldsets.view.hidden = false;
-    fieldsets.view.addEventListener('change', (event) => {
+  if (viewSet) {
+    viewSet.hidden = false;
+    viewSet.addEventListener('change', (event) => {
       if (event.target.matches('input[name=view]') && views[event.target.value]) {
         state.view = event.target.value;
         state.selected = null;
-        syncBoxes();
-        drawAll();
+        tryDraw(draw, 'the poll average');
         writeHash();
       }
-    });
-  }
-  for (const name of ['partidos', 'bloques']) {
-    const fieldset = fieldsets[name];
-    if (!fieldset) {
-      continue;
-    }
-    fieldset.addEventListener('change', () => {
-      state.selected = boxes(name).filter((box) => box.checked).map((box) => box.value);
-      markPills(fieldset);
-      applySelection();
-      writeHash();
-    });
-  }
-  if (select && houseEl) {
-    // `renderSeries` redraws the same ECharts instance, so `charts` keeps pointing at it.
-    select.addEventListener('change', () => {
-      tryDraw(() => render(houseEl, housePolls()), 'the house against the average');
     });
   }
 }
 
 /**
- * Wire the "Cargar más" button of the polls table: when the page embeds every row (`initial.table`, only with
- * more polls than the server rendered), each click appends the next rows and updates the caption; the button
- * goes away once the table holds them all.
+ * Draw the house chart and wire its own controls (view, window, house selector and legend). Its state starts as
+ * the average's at load and never touches the URL hash.
  *
  * @param {object} initial the page's initial data
+ * @param {object} views `seriesViews` of the page
+ * @param {object} start `{view, window, selected}` of the average at load
+ * @param {function} render draws a chart: `(el, polls, chartState) => chart`
  */
-function wirePollsTable(initial) {
-  const all = initial.table ? initial.table.rows : null;
-  const button = document.getElementById('polls-more');
-  const body = document.querySelector('#polls-table tbody');
-  const count = document.getElementById('polls-count');
-  if (!all || !button || !body) {
+function wireHouse(initial, views, start, render) {
+  const {meta, polls} = initial;
+  const anchor = meta.date_last || meta.as_of;
+  const houseEl = document.getElementById('pollster-chart');
+  const select = document.getElementById('pollster-select');
+  const controls = document.getElementById('pollster-controls');
+  const windowSet = document.getElementById('pollster-window');
+  const viewSet = document.getElementById('pollster-view');
+  const state = {...start};
+  let chart = null;
+
+  /** Polls of the chosen house, in the current view. */
+  function housePolls() {
+    const house = select ? select.value : '';
+    const chosen = (polls.polls || []).filter((poll) => poll.pollster === house);
+    return views[state.view].toPolls({parties: polls.parties, polls: chosen});
+  }
+
+  /** Draw the chart and, the first time, listen to its legend. */
+  function draw() {
+    const drawn = render(houseEl, housePolls(), state);
+    if (!chart) {
+      chart = drawn;
+      chart.on('legendselectchanged', (event) => {
+        state.selected = chosenNames(views[state.view], event.selected);
+      });
+    }
+  }
+
+  for (const input of document.querySelectorAll('#pollster-window input[name=pwindow]')) {
+    input.checked = input.value === state.window;
+  }
+  for (const input of document.querySelectorAll('#pollster-view input[name=pview]')) {
+    input.checked = input.value === state.view;
+  }
+  markSegments();
+  tryDraw(draw, 'the house against the average');
+
+  if (controls) {
+    controls.hidden = false;
+  }
+  if (windowSet) {
+    windowSet.hidden = false;
+    windowSet.addEventListener('click', (event) => {
+      if (event.target.matches('input[name=pwindow]') && chart) {
+        state.window = event.target.value;
+        const current = views[state.view];
+        setWindow(chart, state.window, {series: current.series, projection: current.projection, anchor});
+      }
+    });
+  }
+  if (viewSet) {
+    viewSet.hidden = false;
+    viewSet.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=pview]') && views[event.target.value]) {
+        state.view = event.target.value;
+        state.selected = null;
+        tryDraw(draw, 'the house against the average');
+      }
+    });
+  }
+  if (select) {
+    // `renderSeries` redraws the same ECharts instance; the window, view and legend choices are kept.
+    select.addEventListener('change', () => tryDraw(draw, 'the house against the average'));
+  }
+}
+
+/**
+ * Wire the poll average and, when the page has one, the house chart.
+ *
+ * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
+ */
+function wireSeries(initial, catalog) {
+  const {meta, vote} = initial;
+  const views = seriesViews(initial, catalog);
+  const anchor = meta.date_last || meta.as_of;
+  const state = parseSeriesHash(window.location.hash, {
+    parties: views.partidos.parties,
+    blocks: views.bloques ? views.bloques.parties : [],
+    windows: WINDOWS,
+  });
+  const start = {...state};
+
+  /** Draw the chart `el` with the polls and the `{view, window, selected}` of a chart, legend on. */
+  function render(el, pollsOfChart, chartState) {
+    const current = views[chartState.view];
+    return renderSeries(el, {
+      series: current.series,
+      polls: pollsOfChart,
+      projection: current.projection,
+      parties: current.parties,
+      selected: chartState.selected ?? current.defaults,
+      colors: current.colors,
+      asOf: meta.as_of,
+      when: vote.when,
+      window: chartState.window,
+      anchor,
+      legend: true,
+    });
+  }
+
+  wireAverage(initial, views, state, render);
+  if (document.getElementById('pollster-chart')) {
+    wireHouse(initial, views, start, render);
+  }
+}
+
+/**
+ * Wire the controls of a dropdown of checkboxes (`details.dd`): "Seleccionar todos" and "Quitar todos" (which
+ * leaves the first one checked), at least one box always checked, and the counter of its summary.
+ *
+ * @param {HTMLElement} dd the `details` element
+ * @param {Function} onChange called after any change
+ * @returns {function(): HTMLInputElement[]} the boxes that are checked now
+ */
+function wireDropdown(dd, onChange) {
+  const boxes = [...dd.querySelectorAll('input[type="checkbox"]')];
+  const sync = () => {
+    dd.querySelector('[data-count]').textContent = String(boxes.filter((box) => box.checked).length);
+    boxes.forEach((box) => box.closest('.chip').classList.toggle('is-on', box.checked));
+  };
+  const set = (checked) => {
+    boxes.forEach((box) => { box.checked = checked; });
+    if (!checked && boxes.length) {
+      boxes[0].checked = true;
+    }
+    sync();
+    onChange();
+  };
+  dd.querySelector('[data-all]').addEventListener('click', () => set(true));
+  dd.querySelector('[data-none]').addEventListener('click', () => set(false));
+  dd.addEventListener('change', (event) => {
+    if (!boxes.some((box) => box.checked)) {
+      event.target.checked = true;
+    }
+    sync();
+    onChange();
+  });
+  sync();
+  return () => boxes.filter((box) => box.checked);
+}
+
+/** Sort keys of the fixed columns of the polls table; any other key is a party. */
+const FIXED_KEYS = ['pollster', 'date', 'sample_size'];
+
+/**
+ * Wire the "Todas las encuestas" table: party and pollster dropdowns, month range, sortable headers and pages of
+ * `PAGE_SIZE` rows, all computed in the browser from `initial.polls`. The server renders the 15 most recent rows
+ * and hides the controls, which this function shows.
+ *
+ * @param {object} initial the page's initial data
+ * @param {Catalog} catalog party catalogue of the run
+ */
+function wirePollsTable(initial, catalog) {
+  const controls = document.getElementById('polls-controls');
+  const table = document.getElementById('polls-table');
+  const pag = document.getElementById('polls-pag');
+  if (!controls || !table || !pag) {
     return;
   }
-  let shown = body.rows.length;
-  button.hidden = shown >= all.length;
-  button.addEventListener('click', () => {
-    for (const row of nextRows(all, shown)) {
-      const tr = document.createElement('tr');
-      for (const cell of row) {
-        const td = document.createElement('td');
-        td.textContent = cell;
-        tr.appendChild(td);
+  const polls = initial.polls.polls;
+  const from = document.getElementById('polls-from');
+  const to = document.getElementById('polls-to');
+  const state = {sort: {key: 'date', asc: false}, page: 0};
+  const [prev, next] = pag.querySelectorAll('button');
+  const pick = (checked, total) => (checked.length === total ? null : checked.map((box) => box.value));
+
+  const render = (focusKey = null) => {
+    const parties = checkedParties().map((box) => box.value);
+    if (!FIXED_KEYS.includes(state.sort.key) && !parties.includes(state.sort.key)) {
+      state.sort = {key: 'date', asc: false};
+    }
+    const pollsters = pick(checkedPollsters(), pollsterTotal);
+    const rows = sortPolls(filterPolls(polls, {
+      pollsters,
+      from: from.selectedIndex <= 0 ? null : from.value,
+      to: to.selectedIndex === to.options.length - 1 ? null : to.value,
+    }), state.sort.key, state.sort.asc);
+    const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    state.page = Math.min(state.page, pages - 1);
+    const shown = pageOf(rows, state.page);
+    renderHead(table.tHead, parties, catalog, state.sort);
+    renderBody(table.tBodies[0], shown, parties, catalog);
+    renderFoot(table.tFoot, rows.length, meanOf(rows, parties), parties, catalog);
+    document.getElementById('polls-count').textContent = pollsCount(rows.length);
+    const recent = state.sort.key === 'date' && !state.sort.asc;
+    prev.textContent = recent ? '‹ Más recientes' : '‹ Anteriores';
+    next.textContent = recent ? 'Más antiguos ›' : 'Siguientes ›';
+    prev.disabled = state.page === 0;
+    next.disabled = state.page >= pages - 1;
+    document.getElementById('polls-range').textContent = pageLabel(state.page, shown.length, rows.length);
+    pag.hidden = pages <= 1;
+    if (focusKey) {
+      const button = table.querySelector(`th[data-key="${CSS.escape(focusKey)}"] .sort`);
+      if (button) {
+        button.focus();
       }
-      body.appendChild(tr);
-      shown += 1;
     }
-    if (count) {
-      count.textContent = captionText(shown, all.length);
+  };
+  const refilter = () => { state.page = 0; render(); };
+  const checkedParties = wireDropdown(document.getElementById('polls-parties'), refilter);
+  const checkedPollsters = wireDropdown(document.getElementById('polls-pollsters'), refilter);
+  const pollsterTotal = document.querySelectorAll('#polls-pollsters input[type="checkbox"]').length;
+
+  from.addEventListener('change', refilter);
+  to.addEventListener('change', refilter);
+  table.tHead.addEventListener('click', (event) => {
+    const th = event.target.closest('th[data-key]');
+    if (!th) {
+      return;
     }
-    if (shown >= all.length) {
-      // The button goes away: keep the keyboard focus on the caption that says every poll is shown.
-      button.hidden = true;
-      if (count) {
-        count.tabIndex = -1;
-        count.focus();
+    const key = th.dataset.key;
+    state.sort = key === state.sort.key ? {key, asc: !state.sort.asc} : {key, asc: key === 'pollster'};
+    state.page = 0;
+    render(key);
+  });
+  pag.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-page]');
+    if (button && !button.disabled) {
+      state.page += Number(button.dataset.page);
+      render();
+    }
+  });
+  document.addEventListener('click', (event) => {
+    for (const dd of controls.querySelectorAll('details.dd[open]')) {
+      if (!dd.contains(event.target)) {
+        dd.open = false;
       }
     }
   });
+  controls.hidden = false;
+  render();
 }
 
 /** Draw the page from the embedded data. */
@@ -301,7 +459,7 @@ function paint() {
   const catalog = new Catalog(initial.meta);
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
-  tryDraw(() => wirePollsTable(initial), 'the polls table');
+  tryDraw(() => wirePollsTable(initial, catalog), 'the polls table');
 }
 
 wireControls();

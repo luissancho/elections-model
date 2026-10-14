@@ -379,7 +379,7 @@ def test_index_route_returns_the_home_page(fresh_app):
     status, headers, body = call(api, '/')
     assert status == 503
     assert headers['content-type'] == 'text/html; charset=utf-8'
-    assert 'pronóstico' in body.decode('utf-8').lower()
+    assert 'demoscopio' in body.decode('utf-8').lower()
 
 
 def test_router_uses_the_class_when_the_package_binds_the_controller_module(fresh_app, monkeypatch):
