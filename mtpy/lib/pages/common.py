@@ -134,7 +134,7 @@ def environment() -> Environment:
             'num': fmt_num,
             'int': fmt_int,
             'pct': fmt_pct,
-            'prob': fmt_prob,
+            'prob': lambda p, digits=1: fmt_prob(p, digits),  # tables show one decimal (Luis, 2026-10-14)
             'range': fmt_range,
             'date': fmt_date,
             'datetime': fmt_datetime,

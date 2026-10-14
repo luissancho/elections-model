@@ -9,7 +9,7 @@
 <p>—</p>
 {% endif %}
 {% if card.majority %}
-<p>{{ card.majority.block }}: {{ card.majority.p|prob }} de probabilidad de mayoría absoluta</p>
+<p>{{ card.majority.block }}: {{ card.majority.p|prob(0) }} de probabilidad de mayoría absoluta</p>
 {% else %}
 <p>—</p>
 {% endif %}

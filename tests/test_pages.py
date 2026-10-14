@@ -354,6 +354,9 @@ def test_filters_follow_the_js_rules():
     assert pages.fmt_num(-1234.5, 1) == '-1.234,5' and pages.fmt_num(-1.25, 1) == '-1,3'
     assert pages.fmt_prob(0.995) == '> 99 %' and pages.fmt_prob(0.003) == '< 1 %' and pages.fmt_prob(0) == '0 %'
     assert pages.fmt_prob(1) == '100 %' and pages.fmt_prob(0.968) == '97 %' and pages.fmt_prob(None) == '–'
+    # Con un decimal (el filtro `prob` de las tablas): el tope y el suelo se mueven un orden de magnitud
+    assert pages.fmt_prob(0.968, 1) == '96,8 %' and pages.fmt_prob(0.995, 1) == '99,5 %' and pages.fmt_prob(0.9995, 1) == '> 99,9 %'
+    assert pages.fmt_prob(0.003, 1) == '0,3 %' and pages.fmt_prob(0.0004, 1) == '< 0,1 %' and pages.fmt_prob(0, 1) == '0 %'
     assert pages.fmt_range(27.31, 38.02) == '27,3–38,0' and pages.fmt_range(118.0, 159.5, 0) == '118–160'
     assert pages.fmt_date('2026-10-13') == '13 oct 2026' and pages.fmt_date('2026-09-05') == '5 sept 2026'
     assert pages.fmt_date('garbage') == '–' and pages.fmt_date(None) == '–'
@@ -1890,3 +1893,12 @@ def test_promedios_results_switch_between_parties_and_blocks_from_the_hemicycle_
     assert 'Con la vista Bloques' in hemi
     assert re.search(r'<section class="card" id="blocks-card" hidden>', page)
     assert not re.search(r'<section class="card" id="parties-card" hidden>', page)
+
+
+def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(api):
+    page = html(call(api, '/es/escanos')[2])
+    table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]
+    cells = re.findall(r'<td>([^<]*%)</td>', table)
+    assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d %|0 %|100 %', cell) for cell in cells), cells
+    home = html(call(api, '/')[2])
+    assert re.search(r'(?:> )?\d+ % de probabilidad de mayoría absoluta', home)
