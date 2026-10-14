@@ -109,7 +109,9 @@ en Herding y en las descargas del análisis); el perfil de una encuestadora (`/c
 rating y camino nacionales, diana con su último sondeo en las elecciones publicadas de todos los ámbitos (como el
 histórico) y efectos y herding de las elecciones y ciclos de todos los ámbitos (`query_pollster(..., every_scope=True)`:
 `get_house_effects(None)` y `get_herding(None)`), con cada elección por su nombre publicado o, sin página, por su fecha
-y ámbito (2026-10-15); el resto de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
+y ámbito (2026-10-15); el resto de `/metodo` cita las cifras de las generales y no lo lleva. La diana del perfil tiene sus propios filtros de ámbito y años (`#bullseye-filter`, solo con JS;
+2026-10-15). La palabra pública para el herding es «rebaño» (2026-10-15); los nombres técnicos (parte `herding`,
+rutas, columnas CSV, ids) no cambian. Las subpáginas del método comparten la subnavegación
 `_metodo_nav.html`.
 
 Patrón de tarjeta (`web/templates/_macros.html`, `{% import '_macros.html' as m %}`): toda sección es

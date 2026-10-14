@@ -226,3 +226,15 @@ para evitar el ciclo de imports), y los efectos por elección y el herding por c
 aparte). Las columnas de los efectos son la unión de partidos, el catálogo del run primero y el resto por aparición;
 cada elección se nombra por su nombre publicado o, sin página (el ciclo en curso, elecciones antiguas), por su fecha y
 su ámbito (`election_label`). Los enlaces al perfil van sin ámbito (`/casas?id=N`).
+
+## Ajuste 2026-10-15: «rebaño» y los filtros de la diana del perfil
+
+Luis: "Cambia la palabra 'herding' por 'rebaño' en todas partes" y "en el perfil de encuestadora, unos filtros en el
+gráfico de diana para elegir un ámbito (o todos) y un rango de años, parecido al del Histórico Errores, pero sólo
+esos dos filtros". La palabra pública es «rebaño» en todas las plantillas (tablas, tarjetas, glosario, textos del
+método y etiquetas de los CSV); los nombres técnicos no cambian: parte `herding` del análisis, rutas
+`/api/v1/analysis/{scope}/herding`, columnas de los CSV, claves de los contextos e ids de las tarjetas (`#herding`).
+La diana del perfil lleva un formulario `#bullseye-filter` (Ámbito: Todos o los ámbitos con sondeos suyos; Desde y
+Hasta: los años de sus elecciones) que el servidor pinta oculto y `casas.js` enseña y cablea con `filterRows` y
+`yearsOf` de `errors.js`; redibuja la diana y la tabla y escribe "N elecciones". Sin hash: el perfil no tiene otro
+estado. Las filas de la diana llevan `year` y `scope`; `initial.scopes` son los ámbitos ofrecidos.

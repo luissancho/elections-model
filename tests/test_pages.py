@@ -983,7 +983,7 @@ def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas', query='scope=es&id=2')[2])
-    assert list(data) == ['state', 'meta', 'path', 'bullseye', 'blocks'] and data['path'][0]['event_date'] == '2023-07-23'
+    assert list(data) == ['state', 'meta', 'path', 'bullseye', 'blocks', 'scopes'] and data['path'][0]['event_date'] == '2023-07-23'
 
 
 @pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Encuestadora no válida'),
@@ -1032,9 +1032,13 @@ def test_casa_profile_tables_and_bullseye(houses):
     data = initial(body)
     assert [row['event_date'] for row in data['path']] == ['2023-07-23', '2026-11-29']
     assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
-    assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'scope': 'es', 'name': 'Generales 2023',
-                                 'Derecha': 2.81, 'Izquierda': -0.24}]
-    assert data['blocks'] == ['Derecha', 'Izquierda']
+    assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'year': 2023, 'days': 7, 'scope': 'es',
+                                 'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24}]
+    assert data['blocks'] == ['Derecha', 'Izquierda'] and data['scopes'] == [{'code': 'es', 'name': 'España'}]
+    # los filtros de la diana: ámbito (solo los que tienen sondeos suyos) y años, ocultos hasta que el JS los cablea
+    form = re.search(r'<form id="bullseye-filter"[^>]*hidden>(.*?)</form>', page, re.S).group(1)
+    assert re.findall(r'<option value="([^"]*)"', form) == ['', 'es', '2023', '2023'] and 'id="bullseye-count"' in form
+    assert page.index('id="bullseye-filter"') < page.index('id="bullseye-chart"') < page.index('id="bullseye-table"')
 
 
 def test_casas_ranking_and_profile_header_are_national_whatever_the_panel_scope(houses, fresh_app, monkeypatch):
@@ -1069,7 +1073,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     page = html(body)
     assert status == 200 and '<h2>Nueva' in page and 'Calidad: – · Rating: –' in page
     assert 'class="headline"' not in page  # el perfil no lleva titular (2026-10-15)
-    assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page
+    assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page and 'id="bullseye-filter"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
     assert data['path'] == [] and data['bullseye'] == []
@@ -1222,7 +1226,7 @@ def test_elecciones_history_context_filters(history_site):
     assert 'id="weeks-note"' in page and 'Elige un ámbito o unos años para ver las elecciones una a una.' in page
     assert '<option value="es:2019-11-10" data-scope="es">' in page and '<option value="Sigma Dos">' in page
     assert 'positivo, el sondeo daba más margen a Derecha del que hubo' in page
-    assert 'Herding' not in page and 'La tabla necesita JavaScript' in page
+    assert 'Herding' not in page and 'Rebaño' not in page and 'La tabla necesita JavaScript' in page
     assert page.count('Análisis no publicado todavía') == 0
 
 
@@ -1932,7 +1936,8 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     ranking = page[page.index('id="ranking-table"'):]
     heads = re.findall(r'<th scope="col">([^<]*)</th>', ranking[:ranking.index('</thead>')])
     assert heads == ['Encuestadora', 'Rating', 'Calidad', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo del margen',
-                     'Herding']
+                     'Rebaño']
+    assert 'Herding' not in page  # la palabra pública es «rebaño» (2026-10-15)
 
 
 def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):

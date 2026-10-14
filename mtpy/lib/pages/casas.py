@@ -17,8 +17,8 @@ PATH_KEYS = ('event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks'
 HERDING_KEYS = ('event_scope', 'event_date', 'n', 'ratio', 'p_value')
 ANALYSIS_CSV = (
     ('house-effects', None, 'Efectos de encuestadora por partido y bloque'),
-    ('herding', None, 'Herding por encuestadora'),
-    ('herding', 'events', 'Herding por encuestadora y ciclo'),
+    ('herding', None, 'Rebaño por encuestadora'),
+    ('herding', 'events', 'Rebaño por encuestadora y ciclo'),
     ('poll-errors', None, 'Error de los sondeos en cada elección'),
 )
 
@@ -306,10 +306,12 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
         ``None`` without ratings), ``path`` (its national ratings by election, ``PATH_KEYS``),
         ``effects_table`` (``effects_table`` with the elections named by ``election_label``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS`` plus ``label``, by date), ``bullseye`` (its rows of the
-        ``poll-errors`` parts of the published elections: ``event``, ``event_date``, ``days``, ``scope``,
-        ``name`` and the error of each block, by date; empty without analysis), ``blocks`` (the pair of
+        ``poll-errors`` parts of the published elections: ``event``, ``event_date``, ``year``, ``days``,
+        ``scope``, ``name`` and the error of each block, by date; empty without analysis), ``bullseye_scopes``
+        (``{code, name}`` of the scopes with a bullseye row, in catalogue order) and ``bullseye_years`` (the
+        years of the rows, ascending), the options of the bullseye filters, ``blocks`` (the pair of
         ``error_blocks``), ``analysis_missing`` (no scope has a published analysis) and ``initial`` (``state``,
-        ``meta``, ``path``, ``bullseye`` and ``blocks``).
+        ``meta``, ``path``, ``bullseye``, ``blocks`` and ``scopes`` = ``bullseye_scopes``).
 
     Raises
     ------
@@ -333,10 +335,13 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
         return election_label(scope, date, names, scope_names)
 
     bullseye = sorted(
-        (dict({key: row.get(key) for key in ('event', 'event_date', 'days', 'scope') + tuple(blocks)},
+        (dict({key: row.get(key) for key in ('event', 'event_date', 'year', 'days', 'scope') + tuple(blocks)},
               name=label(row['scope'], row['event_date']))
          for row in history_rows(scopes, events, parts) if row.get('pollster') == name),
         key=lambda row: row['event_date'] or '')
+    polled = {row['scope'] for row in bullseye}
+    bullseye_scopes = [{'code': scope['code'], 'name': scope['name']} for scope in scopes if scope['code'] in polled]
+    bullseye_years = sorted({row['year'] for row in bullseye if row.get('year') is not None})
     path = profile_rows(profile['ratings'], PATH_KEYS)
     latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
     mtype = profile['pollster'].get('mtype')
@@ -349,9 +354,11 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     context['herding_table'] = [dict(row, label=label(row.get('event_scope') or RATING_SCOPE, row['event_date']))
                                 for row in profile_rows(profile['herding'], HERDING_KEYS)]
     context['bullseye'] = bullseye
+    context['bullseye_scopes'] = bullseye_scopes
+    context['bullseye_years'] = bullseye_years
     context['blocks'] = blocks
     context['analysis_missing'] = not any(scope['analysis'] for scope in scopes)
     context['initial'] = {'state': full, 'meta': context['meta'], 'path': path, 'bullseye': bullseye,
-                          'blocks': blocks}
+                          'blocks': blocks, 'scopes': bullseye_scopes}
 
     return context

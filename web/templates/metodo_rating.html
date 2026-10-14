@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo calculamos el rating de las encuestadoras?{% endblock %}
-{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa, del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el herding se publica aparte.{% endblock %}
+{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa, del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el rebaño se publica aparte.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -26,14 +26,14 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         <a href="#calidad-previa">La calidad previa</a>
         <a href="#rating-final">Del rating ajustado al rating final</a>
         <a href="#ranking-global">Un ranking global</a>
-        <a href="#herding">El herding, aparte</a>
+        <a href="#herding">El rebaño, aparte</a>
       </nav>
       {{ m.card_start('resumen', 'En resumen', 'El rating de las encuestadoras en cuatro ideas.') }}
         <ul>
           <li>Cada sondeo pasado se compara con el resultado: en el tamaño de los bloques y en el reparto dentro de cada bloque.</li>
           <li>Ese error se compara con el de los sondeos de la misma elección y las mismas fechas: un fallo de todo el sector no penaliza.</li>
           <li>Con pocos sondeos manda una calidad previa puesta a mano; con muchos, lo medido. El rating va de 0 a 100.</li>
-          <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el herding se publica aparte y solo resta peso.</li>
+          <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el rebaño se publica aparte y solo resta peso.</li>
         </ul>
       {{ m.card_end() }}
       {{ m.card_start('que-se-mide', 'Qué se mide', 'El rating no premia acertar, sino acertar más que los demás: el error de cada sondeo se compara con el de los sondeos de la misma elección publicados en fechas cercanas.') }}
@@ -197,10 +197,10 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
             equivocaron sus sondeos en la diferencia entre los dos bloques principales. Las dos son medias
             ponderadas con los pesos del rating y describen a la encuestadora, pero no entran en la nota: la nota sale
             solo de la desviación.</li>
-          <li><strong>Herding</strong>: la medida de la sección siguiente.</li>
+          <li><strong>Rebaño</strong>: la medida de la sección siguiente.</li>
         </ul>
       {{ m.card_end() }}
-      {{ m.card_start('herding', 'El herding, aparte', 'El herding mide si las cifras de una encuestadora se mueven menos de lo que permitiría el azar de sus muestras; se publica junto al rating, pero no entra en él.') }}
+      {{ m.card_start('herding', 'El rebaño, aparte', 'El rebaño mide si las cifras de una encuestadora se mueven menos de lo que permitiría el azar de sus muestras; se publica junto al rating, pero no entra en él.') }}
         <p>
           <strong>La medida.</strong> Una encuestadora con cinco o más sondeos con muestra publicada en un ciclo se
           compara con el promedio calculado sin sus sondeos, para que no lo arrastre hacia ella. En las cuatro
@@ -217,10 +217,10 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
           igual: sus sondeos aportan menos información independiente de lo que sugiere su muestra.
         </p>
         <p>
-          En <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>, «Herding» reúne los ciclos del ámbito
+          En <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>, «Rebaño» reúne los ciclos del ámbito
           hasta hoy, el actual incluido, porque no necesita el resultado; cada ciclo pesa 0,9 por año de
           antigüedad, como en el rating. La tabla da también el del último ciclo y su p-valor: la probabilidad de
-          un valor tan bajo si no hubiera herding.
+          un valor tan bajo si no hubiera rebaño.
         </p>
         <p>
           <strong>Por qué no entra en el rating.</strong> El rating mide el error frente al sector, y una encuestadora
@@ -229,7 +229,7 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         </p>
         <p>
           <strong>Qué hace en el peso.</strong> En el ciclo que se promedia, una encuestadora por debajo de 1 pesa como
-          una muestra más pequeña: su peso por muestra se multiplica por su herding ya acercado a 1, más cuanto
+          una muestra más pequeña: su peso por muestra se multiplica por su rebaño ya acercado a 1, más cuanto
           menos sondeos tiene; llamando <var>h</var>′ a ese valor acercado, es como si cada sondeo tuviera su
           muestra multiplicada por <var>h</var>′<sup>2</sup>. Con la encuestadora que oscila de más pasa lo mismo al
           revés: pesa como la muestra que produciría esa oscilación. Los detalles están en
