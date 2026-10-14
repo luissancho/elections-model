@@ -16,7 +16,8 @@ const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
 
 /**
- * Draw the hemicycle and the evolution.
+ * Draw the hemicycle, wire its Partidos/Bloques switch (which also shows the matching results table) and draw
+ * the evolution.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
@@ -33,12 +34,51 @@ function paintResults(initial, catalog) {
   const colors = mapNames(names, (name) => catalog.color(name));
   const nSeats = meta.n_seats ?? summary.n_seats;
   const majority = meta.majority ?? summary.majority;
+  const blocks = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  const views = {
+    partidos: {
+      seats: summary.totals ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats])),
+      colors,
+      order: (list) => catalog.order(list),
+      label: 'Hemiciclo con los escaños previstos por partido',
+      card: 'parties-card',
+    },
+    bloques: {
+      seats: Object.fromEntries(blocks.map((row) => [row.name, row.seats])),
+      colors: mapNames(blocks.map((row) => row.name), (name) => catalog.blockColor(name)),
+      order: (list) => catalog.orderBlocks(list),
+      label: 'Hemiciclo con los escaños previstos por bloque',
+      card: 'blocks-card',
+    },
+  };
+  const el = document.getElementById('hemicycle');
 
-  const seats = summary.totals
-    ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats]));
-  tryDraw(() => renderHemicycle(document.getElementById('hemicycle'), seats, {
-    colors, order: (list) => catalog.order(list), nSeats, majority,
-  }), 'the hemicycle');
+  /** Draw the hemicycle of `view` and show its results table, hiding the other one. */
+  function draw(view) {
+    const chosen = views[view];
+    el.setAttribute('aria-label', chosen.label);
+    tryDraw(() => renderHemicycle(el, chosen.seats, {
+      colors: chosen.colors, order: chosen.order, nSeats, majority,
+    }), 'the hemicycle');
+    for (const [name, item] of Object.entries(views)) {
+      const card = document.getElementById(item.card);
+      if (card) {
+        card.hidden = name !== view;
+      }
+    }
+  }
+
+  draw('partidos');
+  const fieldset = document.getElementById('results-view');
+  if (fieldset) {
+    fieldset.hidden = false;
+    fieldset.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=rview]') && views[event.target.value]) {
+        draw(event.target.value);
+        markSegments(fieldset);
+      }
+    });
+  }
 
   tryDraw(() => renderEvolution(document.getElementById('evolution'), runs.runs, mode, {
     colors, parties: current.parties.map((party) => party.name),

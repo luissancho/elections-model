@@ -1690,7 +1690,9 @@ def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
     assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
     assert '.geo th:first-child' in css and '.geo tr.total td:first-child { background: var(--color-soft); }' in css
-    assert 'align-items: start' in css and '@media (min-width: 900px) {\n  .hemi-card .chart { height: 460px; }' in css and 'flex: 1' not in css.split('.hemi-grid')[1].split('/* Escaños')[0]
+    hemi = css[css.index('.hemi-grid'):css.index('/* Escaños')]
+    assert 'align-items: stretch' in css and '.hemi-card { display: flex; flex-direction: column; }' in css
+    assert '.hemi-card .chart { flex: 1; height: auto; min-height: 420px; max-height: 600px; }' in hemi and 'grid-row' not in hemi
 
 
 def test_controls_are_segments_on_every_page(api):
@@ -1881,3 +1883,15 @@ def test_escanos_pills_carry_the_ink_of_their_colour(api):
                              page):
         assert match.group(2) == pages.ink_color(match.group(1))
     assert len(re.findall(r'--pill-ink: ', page)) == page.count('class="pill"') > 0
+
+
+def test_promedios_results_switch_between_parties_and_blocks_from_the_hemicycle_card(api):
+    """Un solo par hemiciclo/tabla: la vista Partidos/Bloques vive en la tarjeta del hemiciclo y la tabla de bloques
+    sale oculta del servidor (sin JS se ven los partidos)."""
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    hemi = page[page.index('id="hemicycle-card"'):page.index('id="parties-card"')]
+    assert re.search(r'<fieldset id="results-view" class="seg" hidden>', hemi)
+    assert 'name="rview" value="partidos" checked' in hemi and 'name="rview" value="bloques"' in hemi
+    assert 'Con la vista Bloques' in hemi
+    assert re.search(r'<section class="card" id="blocks-card" hidden>', page)
+    assert not re.search(r'<section class="card" id="parties-card" hidden>', page)

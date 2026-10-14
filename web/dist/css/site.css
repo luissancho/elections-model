@@ -375,16 +375,16 @@ dd { margin: 0; overflow-wrap: anywhere; }
   white-space: nowrap;
   border: 0;
 }
-/* Promedios: hemicycle on the left over two rows, the party and block tables stacked on the right */
-.hemi-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+/* Promedios: the hemicycle on the left and the party or block table on the right, the same height; the view
+   switch lives in the hemicycle card and shows one table or the other */
+.hemi-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
 .hemi-grid > * { min-width: 0; }
-.hemi-card { grid-row: 1 / 3; }
+.hemi-card { display: flex; flex-direction: column; }
 @media (min-width: 900px) {
-  .hemi-card .chart { height: 460px; }
+  .hemi-card .chart { flex: 1; height: auto; min-height: 420px; max-height: 600px; }
 }
 @media (max-width: 899px) {
   .hemi-grid { grid-template-columns: 1fr; }
-  .hemi-card { grid-row: auto; }
 }
 
 /* Escaños: histograms, blocks chart, coalition calculator and district form */
@@ -415,7 +415,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
   body { font-size: 1rem; }
   main { padding-top: var(--space-4); }
   .grid, .grid-three { grid-template-columns: 1fr; }
-  .hemi-card { grid-row: auto; }
   .card { padding: var(--space-3) var(--space-4); }
   .headline { font-size: 1.2rem; }
   .chart { height: 240px; }

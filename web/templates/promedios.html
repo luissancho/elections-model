@@ -41,12 +41,22 @@
       {{ m.card_end() }}
       <div class="hemi-grid">
         {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card') }}
+          {% if block_result_rows %}
+          <div class="series-controls">
+            <fieldset id="results-view" class="seg" hidden>
+              <legend>Vista</legend>
+              <label><input type="radio" name="rview" value="partidos" checked> Partidos</label>
+              <label><input type="radio" name="rview" value="bloques"> Bloques</label>
+            </fieldset>
+          </div>
+          {% endif %}
           <div class="chart" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
           {% call m.how() %}
           <p>
             Cada sector es un partido con los escaños del escenario central; la línea marca la mayoría absoluta.
             En cada simulación el reparto cambia: la pestaña Escaños enseña cuánto.
           </p>
+          <p>Con la vista Bloques, cada sector es un bloque y la tabla de al lado pasa a los bloques.</p>
           {% endcall %}
         {{ m.card_end() }}
         {{ m.card_start('parties-card', 'Resultados por partido', 'Voto y escaños previstos de cada partido y su probabilidad de quedar primero.', subtitle) }}
@@ -80,7 +90,7 @@
           </p>
           {% endcall %}
         {{ m.card_end() }}
-        {{ m.card_start('blocks-card', 'Resultados por bloque', 'Voto y escaños de cada bloque y su probabilidad de mayoría absoluta.', subtitle) }}
+        {{ m.card_start('blocks-card', 'Resultados por bloque', 'Voto y escaños de cada bloque y su probabilidad de mayoría absoluta.', subtitle, hidden=True) }}
           <div class="table-wrap">
             <table id="blocks-result-table">
               <caption class="sr-only">Voto, escaños y probabilidad de mayoría absoluta de cada bloque.</caption>
