@@ -136,7 +136,7 @@
             <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el rango del 95 %.</caption>
             <thead>
               <tr>
-                <th scope="col" data-key="name">Circunscripción</th>
+                <th scope="col" data-key="name" aria-sort="ascending">Circunscripción</th>
                 {% for name in district_table.parties %}
                 <th scope="col" class="p" data-key="{{ name }}" title="{{ catalog[name].fullname }}"><span class="dot" style="background-color: {{ catalog[name].color }}"></span>{{ name }}</th>
                 {% endfor %}
@@ -148,7 +148,7 @@
               <tr>
                 <td><a href="/{{ state.scope }}/escanos{{ query }}&amp;region={{ row.id }}">{{ row.name }}</a></td>
                 {% for cell in row.cells %}
-                <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
+                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
                 {% endfor %}
                 <td>{{ row.seats|int }}</td>
               </tr>
@@ -157,7 +157,7 @@
               <tr class="total">
                 <td>TOTAL</td>
                 {% for cell in district_table.total.cells %}
-                <td title="{{ cell.range }}">{{ cell.seats|int }}</td>
+                <td title="{{ cell.range }}">{{ cell.seats|int if cell.seats else '—' }}</td>
                 {% endfor %}
                 <td>{{ district_table.total.seats|int }}</td>
               </tr>

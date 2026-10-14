@@ -195,8 +195,8 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``None`` without districts. Otherwise ``parties`` (names with any seat in the scenario or
-        ``seats_hi`` above zero, in the order of ``districts['parties']``), ``rows`` (``id``,
+        ``None`` without districts. Otherwise ``parties`` (names with any seat in the scenario, by
+        scenario total descending; ties in the order of ``districts['parties']``), ``rows`` (``id``,
         ``name``, ``seats`` and ``cells`` per district) and ``total`` (the scenario row of the
         whole scope, or ``None``). Each cell is ``{'seats': int or None, 'range': str}``: the
         scenario seats (``None`` when the district is not in the scenario) and the 95 % interval.
@@ -219,13 +219,14 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
 
         return values[scenario_parties.index(name)]
 
-    def has_seats(name):
-        if any((seats_of(region_id, name) or 0) > 0 for region_id in scenario_rows):
-            return True
+    def total_of(name):
+        if 0 in scenario_rows:
+            return seats_of(0, name) or 0
 
-        return any((item['seats_hi'] or 0) > 0 for (_, party), item in intervals.items() if party == name)
+        return sum((seats_of(region_id, name) or 0) for region_id in scenario_rows)
 
-    shown = [name for name in names if has_seats(name)]
+    shown = [name for name in names if any((seats_of(region_id, name) or 0) > 0 for region_id in scenario_rows)]
+    shown.sort(key=lambda name: -total_of(name))
 
     def cells(region_id):
         out = []
@@ -261,17 +262,24 @@ def has_communities(regions: list) -> bool:
     Parameters
     ----------
     regions : list of dict
-        ``districts['regions']`` (older runs have no ``community``).
+        ``districts['regions']`` (older runs have no ``community`` or ``votes``).
 
     Returns
     -------
     bool
-        True when at least two different non-null ``community`` codes are present.
+        True when every region has a ``community`` and a numeric ``votes`` and there are at least two
+        different community codes (the rule of ``canGroup`` in ``territory.js``).
     """
-    codes = {(item.get('community') or {}).get('code') for item in regions}
-    codes.discard(None)
+    if not regions:
+        return False
 
-    return len(codes) > 1
+    for item in regions:
+        votes = item.get('votes')
+
+        if not item.get('community') or isinstance(votes, bool) or not isinstance(votes, (int, float)):
+            return False
+
+    return len({item['community'].get('code') for item in regions}) > 1
 
 
 def region_rows(districts: dict, region_id: int) -> list:

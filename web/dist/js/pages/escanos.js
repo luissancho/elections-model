@@ -7,7 +7,7 @@ import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderStacked} from '../charts/stacked.js';
-import {sortTerritory, territoryRows} from '../territory.js';
+import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
 import {coalitionHash, coalitionSeats, column, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
@@ -103,7 +103,7 @@ function wireTerritory(initial, catalog) {
     : null);
 
   const render = (focusKey = null) => {
-    state.level = levels ? checked('level', 'ccaa') : 'prov';
+    state.level = levels && canGroup(initial.districts.regions || []) ? checked('level', 'ccaa') : 'prov';
     const mode = checked('tmode', 'esc');
     const data = territoryRows(initial.districts, initial.scenario, initial.summary,
       {level: state.level, mode});

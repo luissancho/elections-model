@@ -44,7 +44,8 @@ function provinceRows(districts, scenario, parties, mode) {
       } else {
         const row = seats.get(region.id);
         values[name] = row && index.has(name) ? row[index.get(name)] : null;
-        ranges[name] = cell ? fmtRange(cell.seats_lo, cell.seats_hi, 0) : null;
+        ranges[name] = cell && isNumber(cell.seats_lo) && isNumber(cell.seats_hi)
+          ? fmtRange(cell.seats_lo, cell.seats_hi, 0) : null;
       }
     }
     return {
@@ -116,7 +117,7 @@ export function territoryRows(districts, scenario, summary, {level = 'prov', mod
   const parties = mode === 'pct'
     ? [...(districts.parties || [])]
     : scenarioParties.filter((name, i) => regionRows.some((row) => (row.seats[i] || 0) > 0));
-  parties.sort((a, b) => (rank(b) ?? -Infinity) - (rank(a) ?? -Infinity));
+  parties.sort((a, b) => ((rank(b) ?? 0) - (rank(a) ?? 0)) || a.localeCompare(b, 'es'));
 
   let rows = provinceRows(districts, scenario, parties, mode);
   if (level === 'ccaa' && canGroup(districts.regions || [])) {

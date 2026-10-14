@@ -88,3 +88,16 @@ def test_winner_tint_and_sort():
     assert [r['name'] for r in run_js('t.sortTerritory(%s, "PP", false)' % first)] == ['Madrid', 'Barcelona', 'Girona']
     assert [r['name'] for r in run_js('t.sortTerritory(%s, "name", true)' % first)] == ['Barcelona', 'Girona', 'Madrid']
     assert [r['name'] for r in run_js('t.sortTerritory(%s, "PSOE", true)' % first)] == ['Girona', 'Barcelona', 'Madrid']
+
+
+def test_can_group_needs_votes_and_two_communities_and_ranking_and_ranges_are_defined():
+    assert run_js('t.canGroup(d.regions)') is True
+    assert run_js('t.canGroup(d.regions.map(r => ({...r, votes: undefined})))') is False
+    assert run_js('t.canGroup(d.regions.slice(0, 1))') is False
+    # sin ranking (partido ausente del resumen): orden por nombre, sin NaN
+    out = run_js('t.territoryRows(d, s, {parties: []}, {level: "prov", mode: "pct"}).parties')
+    assert out == ['PP', 'PSOE', 'VOX']
+    # sin límites del rango, la celda no lleva rango
+    gap = dict(DISTRICTS, rows=[dict(r, seats_lo=None) if r['name'] == 'PP' else r for r in ROWS])
+    out = run_js('t.territoryRows(d, s, u, {level: "prov", mode: "esc"}).rows[0].ranges', districts=gap)
+    assert out['PP'] is None and out['PSOE'] == '2–4'

@@ -768,6 +768,22 @@ def test_district_table_and_region_rows():
     assert pages.resolve_region(None, DISTRICTS['regions'])['id'] == 28
 
 
+def test_district_table_keeps_scenario_parties_ordered_by_total_and_has_communities_needs_votes():
+    districts = DISTRICTS | {'parties': ['PP', 'PSOE', 'VOX']}
+    scenario = {'parties': ['PP', 'PSOE', 'VOX'], 'rows': [
+        {'region_id': 0, 'region': 'es', 'seats': [10, 30, 0]},
+        {'region_id': 8, 'region': 'Barcelona', 'seats': [10, 0, 0]}, {'region_id': 28, 'region': 'Madrid', 'seats': [0, 30, 0]}]}
+    table = pages.district_table(districts, scenario)
+    assert table['parties'] == ['PSOE', 'PP']  # VOX sin escaños fuera, PSOE antes por su total
+    assert [c['seats'] for c in table['rows'][0]['cells']] == [0, 10]
+    regions = [dict(r, community={'code': r['id'], 'name': 'X'}, votes=10) for r in DISTRICTS['regions']]
+    assert pages.has_communities(regions) is True
+    assert pages.has_communities([dict(regions[0], votes=None), regions[1]]) is False
+    assert pages.has_communities([{k: v for k, v in r.items() if k != 'votes'} for r in regions]) is False
+    assert pages.has_communities([dict(r, community={'code': 1, 'name': 'X'}) for r in regions]) is False
+    assert pages.has_communities([]) is False
+
+
 def test_evolution_cards_explain_the_retrospective_points(api):
     for path in ('/es', '/es/escanos'):
         page = html(call(api, path)[2])
