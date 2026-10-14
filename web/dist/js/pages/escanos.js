@@ -171,7 +171,6 @@ function wireSeats(initial, catalog, colors) {
       bar: catalog.order(partyNames).map((name) => ({name, seats: partyRows.find((row) => row.name === name).seats})),
       colors,
       fullnames: mapNames(partyNames, (name) => catalog.fullname(name)),
-      headline: Object.fromEntries(partyRows.map((row) => [row.name, row.seats])),
       ridges: () => ridgeData(dist, partyNames, {majority, range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)]}),
     },
     bloques: {
@@ -180,7 +179,6 @@ function wireSeats(initial, catalog, colors) {
         .map((name) => ({name, seats: blockRows.find((row) => row.name === name).seats})),
       colors: blockColors,
       fullnames: {},
-      headline: Object.fromEntries(blockRows.map((row) => [row.name, row.seats])),
       ridges: () => ridgeBlocks(dist, [...blockRows].sort(bySeats)
         .map((row) => ({name: row.name, parties: blockParties[row.name] || []})),
       {majority, range: [0, Math.round(nSeats * BLOCK_AXIS_SHARE)]}),
@@ -208,7 +206,7 @@ function wireSeats(initial, catalog, colors) {
       cache[view] = cache[view] || chosen.ridges();
       if (cache[view].length) {
         tryDraw(() => renderRidge(ridgeEl, cache[view], {
-          colors: chosen.colors, majority, headline: chosen.headline, fullnames: chosen.fullnames,
+          colors: chosen.colors, majority, fullnames: chosen.fullnames,
         }), `the ${view} distributions`);
       }
     }

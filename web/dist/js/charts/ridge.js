@@ -3,11 +3,11 @@
 // line at the majority when it falls within the row, as `Simulator.plot_dist_kde` draws it in the notebooks but
 // with the detail of every row.
 import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
-import {fmtInt, fmtProb} from '../format.js';
+import {fmtInt, fmtProb, fmtRange} from '../format.js';
 
 const TOP = 10;
 const BOTTOM = 10;
-const LEFT = 118;
+const LEFT = 150;
 const RIGHT = 20;
 const AXIS = 18;
 const GAP = 8;
@@ -30,16 +30,17 @@ export function ridgeHeight(n, rowHeight) {
  * @param {object[]} rows one row per party or block (`ridgeRows`)
  * @param {object} opts `colors` ({name: colour}), `majority` (seats of the absolute majority; the dashed line is
  *   drawn in the rows whose range holds it, labelled on the first), `rowHeight` (px per row, 144 by default),
- *   `headline` ({name: seats} shown in the row label instead of the median, so the figure matches the table) and
- *   `fullnames` ({name: full name}, tooltip). When every row shares the same range, only the last row shows the
- *   axis labels; otherwise each row shows its own.
+ *   `fullnames` ({name: full name}, tooltip) and `guideEvery` (seats between the faint dashed vertical guides;
+ *   10 by default, 20 on narrow containers). The row label reads the name, `Mediana: …` and `Rango 95 %: …`.
+ *   When every row shares the same range, only the last row shows the axis labels; otherwise each row shows its own.
  * @returns {object} the ECharts instance
  */
-export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight = 144, headline = {}, fullnames = {}} = {}) {
+export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight = 144, fullnames = {}, guideEvery = null} = {}) {
   el.style.height = `${ridgeHeight(rows.length, rowHeight)}px`;
   // Narrow containers (phones) give the labels less room
   const narrow = el.clientWidth > 0 && el.clientWidth < 600;
-  const left = narrow ? 84 : LEFT;
+  const left = narrow ? 108 : LEFT;
+  const every = guideEvery || (narrow ? 20 : 10);
   const curveHeight = rowHeight - AXIS - GAP;
   const last = rows.length - 1;
   const shared = rows.length > 0 && rows.every((row) => row.x0 === rows[0].x0 && row.x1 === rows[0].x1);
@@ -70,11 +71,18 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
   }));
   const series = rows.map((row, index) => {
     const color = colors[row.name] || THEME.barColor;
-    const marks = [
+    const marks = [];
+    // Faint dashed guides every `every` seats, behind the marks of the row
+    for (let x = every; x < row.x1; x += every) {
+      if (x > row.x0) {
+        marks.push({xAxis: x, lineStyle: {color: THEME.gridColor, width: 1, type: 'dashed', opacity: 0.8}});
+      }
+    }
+    marks.push(
       {xAxis: row.median, lineStyle: {color, width: 2, type: 'solid'}},
       {xAxis: row.lo, lineStyle: {color, width: 1, type: 'solid', opacity: 0.7}},
       {xAxis: row.hi, lineStyle: {color, width: 1, type: 'solid', opacity: 0.7}},
-    ];
+    );
     const withMajority = majority !== null && majority !== undefined && majority >= row.x0 && majority <= row.x1;
     if (withMajority) {
       marks.push({
@@ -101,11 +109,11 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
   const labels = rows.map((row, index) => ({
     type: 'text',
     left: 8,
-    top: TOP + index * rowHeight + curveHeight / 2 - 15,
+    top: TOP + index * rowHeight + curveHeight / 2 - 24,
     style: {
-      text: `${row.name}\n${fmtInt(headline[row.name] ?? row.median)} (${fmtInt(row.lo)}–${fmtInt(row.hi)})`,
+      text: `${row.name}\nMediana: ${fmtInt(row.median)}\nRango 95 %: ${fmtRange(row.lo, row.hi, 0)}`,
       fill: THEME.textColor,
-      font: `600 ${narrow ? 11 : 13}px ${THEME.fontFamily}`,
+      font: `${narrow ? 10.5 : 12}px ${THEME.fontFamily}`,
       lineHeight: 16,
     },
   }));
