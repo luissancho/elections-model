@@ -35,12 +35,14 @@ from .common import (
     SEATS_DECIMALS
 )
 from .events import (
-    event_dates_to_publish, EVENT_MODEL_PARTS, EVENT_POLLSTER_COLUMNS, event_summary, export_event_meta,
-    export_event_model, export_event_polls, export_event_pollsters, export_event_results, publish_event
+    event_dates_to_publish, EVENT_MODEL_PARTS, EVENT_POLLSTER_COLUMNS, event_summary, export_event_cycle,
+    export_event_meta, export_event_model, export_event_polls, export_event_pollsters, export_event_results,
+    publish_event
 )
 from .forecast import (
     backfill_days, backfill_run_at, backfill_run_id, DEFAULT_CORRECTORS, DISP_COLUMNS, export_dispersion,
-    export_dist, export_districts, export_fan, export_headline, export_house_effects, export_meta, export_polls, poll_seats,
+    export_dist, export_districts, export_fan, export_headline, export_house_effects, export_meta, export_poll_rows,
+    export_polls, poll_seats,
     export_projection, export_scenario, export_series, export_summary, export_vote, HE_COLUMNS, headline_mode,
     MODE_EXPORTERS, n_polls, PCT_COLS, POLL_COLUMNS, PROB_COLS, publish_forecast, publish_mode, SEATS_COLS,
     SUMMARY_COLS

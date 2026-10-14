@@ -35,13 +35,15 @@ function groupNames(points, groupOf) {
  * Scatter series of the points: one grey series, or one series per group with its colour.
  *
  * @param {object[]} points `{value, row}` points
- * @param {object} opts `groupOf`, `colors` and `labels` of `renderBullseye`
+ * @param {object} opts `groupOf`, `colors`, `labels` and `color` of `renderBullseye`
  * @returns {object[]} ECharts series
  */
-function pointSeries(points, {groupOf, colors, labels}) {
+function pointSeries(points, {groupOf, colors, labels, color}) {
   const label = {show: labels, position: 'right', formatter: (params) => params.data.row.event, color: THEME.textColor};
   if (!groupOf) {
-    return [{type: 'scatter', data: points, symbolSize: 10, color: THEME.markColor, label, z: 10}];
+    // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
+    return [{type: 'scatter', data: points, symbolSize: 10, color: color || THEME.markColor, label,
+             labelLayout: {hideOverlap: true}, z: 10}];
   }
   return groupNames(points, groupOf).map((group) => ({
     type: 'scatter',
@@ -84,11 +86,14 @@ function groupedTooltip(row, xBlock, yBlock) {
  * @param {object[]} rows poll-errors rows `{event, event_date, days, <block>: error}` (with `groupOf`, also
  *   `pollster` and an optional `href` for the tooltip)
  * @param {object} opts `blocks` (names of the x and y blocks), `groupOf` (`row => group`: one scatter series
- *   per group, in order of appearance; `null` draws a single grey series), `colors` (`{group: colour}`),
- *   `legend` (show the legend of the groups, scrollable), `groupLabel` (`group => text` of the legend) and `labels` (write `row.event` next to each point)
+ *   per group, in order of appearance; `null` draws a single series, grey or of `color`), `colors` (`{group: colour}`),
+ *   `color` (colour of the single series), `legend` (show the legend of the groups, scrollable), `groupLabel`
+ *   (`group => text` of the legend) and `labels` (write `row.event` next to each point)
  * @returns {object} the ECharts instance
  */
-export function renderBullseye(el, rows, {blocks, groupOf = null, colors = {}, legend = false, labels = true, groupLabel = (group) => group}) {
+export function renderBullseye(el, rows, {
+  blocks, groupOf = null, colors = {}, color = null, legend = false, labels = true, groupLabel = (group) => group,
+}) {
   const [xBlock, yBlock] = blocks;
   const points = rows
     .filter((row) => Number.isFinite(row[xBlock]) && Number.isFinite(row[yBlock]))
@@ -140,7 +145,7 @@ export function renderBullseye(el, rows, {blocks, groupOf = null, colors = {}, l
         ].join('<br>');
       },
     },
-    series: [...rings, ...pointSeries(points, {groupOf, colors, labels})],
+    series: [...rings, ...pointSeries(points, {groupOf, colors, labels, color})],
   };
   if (legend && groupOf) {
     // Only the groups are named series, so the rings stay out of the legend.

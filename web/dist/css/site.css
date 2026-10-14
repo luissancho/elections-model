@@ -404,8 +404,15 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Casas and elections: bullseye and the house-effects table */
 #bullseye-chart, #errors-bullseye { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
-/* The history bullseye is the page's main chart: larger and centred in its card */
-#errors-bullseye { max-width: 640px; margin: 0 auto; }
+/* The history bullseye and the one of an election are the main chart of their card: larger and centred */
+#errors-bullseye, #bullseye-chart.big { max-width: 720px; margin: 0 auto; }
+/* Election detail: the last-poll error bars and their table side by side, and "Ver más" under the results */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
+.split > * { min-width: 0; }
+@media (max-width: 899px) {
+  .split { grid-template-columns: 1fr; }
+}
+.more { margin-top: var(--space-3); }
 #effects-table td[title] { cursor: help; }
 
 /* Footer */

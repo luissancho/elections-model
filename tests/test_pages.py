@@ -1294,25 +1294,93 @@ def test_elecciones_without_events_shows_a_notice(api):
     assert '/dist/js/pages/elecciones.js' in html(body)  # el módulo se carga y debe tolerar la falta del bloque
 
 
-def test_eleccion_detail_renders_results_pollsters_bullseye_and_model(events_site):
+def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_site):
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
     page = html(body)
     assert status == 200 and 'Generales 2023' in page
-    assert page.count('/api/v1/events/es/2023-07-23/') == 6
-    assert page.index('GAD3') < page.index('40dB') < page.index('CIS')
-    assert '/casas?scope=es&amp;id=2' in page and 'href="/elecciones?scope=es"' in page
+    assert page.count('/api/v1/events/es/2023-07-23/') == 7 + 2  # las descargas y el CSV de la tabla (control y noscript)
+    table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
+    assert table.index('GAD3') < table.index('40dB') < table.index('CIS')  # de menor a mayor error de bloques
+    assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
+        'Encuestadora', 'Muestra', 'Días antes', 'Error medio', 'Error de bloques', 'Derecha', 'Izquierda']
+    assert '/casas?scope=es&amp;id=2' in table and 'href="/elecciones?scope=es"' in page
+    assert 'id="pollsters-table"' not in page and 'Sesgo del margen' not in table  # ya no hay tabla de medias por casa
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
+    assert 'id="results-more"' not in page  # cuatro partidos: nada que desplegar
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'pollsters', 'bullseye', 'blocks', 'poll_errors'}
-    assert data['bullseye'][0]['Derecha'] == 0.68 and data['pollsters'][0]['pollster'] == 'GAD3'
-    assert 'id="error-chart"' in page and 'id="bullseye-chart"' in page
+    assert set(data) == {'state', 'meta', 'last', 'blocks', 'poll_errors', 'catalog', 'polls'}
+    assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
+    assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
+                               'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
+    assert 'id="error-chart"' in page and 'class="chart big" id="bullseye-chart"' in page and 'class="split"' in page
+    assert page.index('id="results"') < page.index('class="split"') < page.index('id="last-errors"') < page.index('id="last"') \
+        < page.index('id="bullseye"') < page.index('id="poll-histogram"') < page.index('id="polls"') < page.index('id="model"')
+
+
+def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body).replace('\n', ' ')
+    assert status == 200 and 'Todas las encuestas' in page and 'id="polls-controls" hidden' in page
+    assert 'id="polls-mode"' in page and 'Escaños</label>' in page  # el fixture trae escaños
+    assert polls_tbody(page).count('<tr>') == 3 and '16/07/23' in page and 'El País' in page
+    assert '<span id="polls-count">3 sondeos</span>' in page and 'href="/api/v1/events/es/2023-07-23/cycle?format=csv"' in page
+    assert 'Sondeos del ciclo, tal como se publicaron' in page and 'no están publicados todavía' not in page
+    data = initial(body)
+    assert data['polls']['parties'] == ['PP', 'PSOE', 'VOX'] and data['polls']['polls'][2]['seats'] == {'PP': [135, 140], 'PSOE': [120, 120]}
+    assert [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX']
+    assert data['catalog']['parties'][0]['color'] != pages.OTHERS_COLOR and data['catalog']['parties'][2]['color'] == pages.OTHERS_COLOR
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    assert context['has_cycle'] and context['table_total'] == 3 and context['has_seats'] and context['months'][0]['value'] == '2023-07'
+
+
+def test_eleccion_detail_without_cycle_part_shows_a_notice(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+    monkeypatch.setattr(pages.elecciones, 'event_part', lambda scope, date, name: None if name == 'cycle' else real(scope, date, name))
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    assert status == 200 and 'Los sondeos de este ciclo no están publicados todavía' in page
+    assert 'id="polls-table"' not in page and 'id="polls-controls"' not in page
+    data = initial(body)
+    assert 'polls' not in data and data['catalog'] == {'parties': []}
+
+
+def test_eleccion_detail_hides_the_results_beyond_twenty_behind_a_button(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'results':
+            rows = [dict(data['rows'][0], party=f'P{i:02d}', seats=1) for i in range(23)]
+            data = {**data, 'rows': rows}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+    page = html(body)
+    table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
+    assert status == 200 and table.count('<tr>') == 21 and table.count('<tr hidden>') == 3  # cabecera + 20 visibles
+    assert table.index('P19') < table.index('<tr hidden>') < table.index('P20')
+    assert '<button type="button" class="more" id="results-more" hidden>Ver los 3 partidos restantes</button>' in page
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    assert context['results_shown'] == 20 and context['results_hidden'] == 3
+
+
+def test_last_poll_rows_keep_the_closest_poll_of_each_house():
+    rows = pages.with_abs([
+        {'pollster': 'A', 'days': 3, 'error_blocks': -2.0}, {'pollster': 'B', 'days': 5, 'error_blocks': None},
+        {'pollster': 'A', 'days': 9, 'error_blocks': 0.5}, {'pollster': None, 'days': 1, 'error_blocks': 0.1},
+        {'pollster': 'C', 'days': 4, 'error_blocks': 1.0}, {'pollster': 'C', 'days': 4, 'error_blocks': 0.2},
+    ])
+    last = pages.last_poll_rows(rows)
+    assert [(row['pollster'], row['days'], row['error_blocks_abs']) for row in last] == [('C', 4, 1.0), ('A', 3, 2.0), ('B', 5, None)]
+    assert pages.last_poll_rows([]) == []
 
 
 def test_eleccion_without_model_shows_a_notice(events_site):
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2019-11-10')
     page = html(body)
     assert status == 200 and 'Sin backtest para esta elección' in page
-    assert page.count('/api/v1/events/es/2019-11-10/') == 3
+    assert page.count('/api/v1/events/es/2019-11-10/') == 4 + 2
 
 
 @pytest.mark.parametrize('query, status, text', [('scope=es&date=2023-13-01', 400, 'Fecha no válida.'),
@@ -1373,12 +1441,12 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     assert 'id="model-seats-30"' not in page and 'id="model-blocks-30"' not in page
 
 
-def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, monkeypatch):
+def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
-        if name == 'pollsters':
+        if name == 'polls':
             rows = [dict(row, error_blocks=error) for row, error in zip(data['rows'], (-3.0, 1.0, 2.0))]
             data = {**data, 'rows': rows}
         if name == 'meta':
@@ -1386,47 +1454,47 @@ def test_eleccion_detail_orders_houses_by_the_absolute_block_error(events_site, 
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
-    names = [row['pollster'] for row in real('es', '2023-07-23', 'pollsters')['rows']]
+    names = [row['pollster'] for row in real('es', '2023-07-23', 'polls')['rows']]
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
     page = html(body)
-    table = re.search(r'<table id="pollsters-table">(.*?)</table>', page, re.S).group(1)
-    assert status == 200 and 'Sesgo del margen' in table and '-3,0' in table
+    table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
+    assert status == 200 and '3,0' in table and '-3,0' not in table  # el error de bloques de la tabla va sin signo
     assert 'Error de bloques: 2,5 · Sesgo del margen: -2,5' in page
     shown = [re.sub(r'<.*?>', '', cell) for cell in re.findall(r'<tr>\s*<td>(.*?)</td>', table, re.S)]
     assert shown == [names[1], names[2], names[0]]
     data = initial(body)
-    assert [row['error_blocks_abs'] for row in data['pollsters']] == [1.0, 2.0, 3.0]
-    assert [row['error_blocks'] for row in data['pollsters']] == [1.0, 2.0, -3.0]
+    assert [row['error_blocks_abs'] for row in data['last']] == [1.0, 2.0, 3.0]
+    assert [row['error_blocks'] for row in data['last']] == [1.0, 2.0, -3.0]
 
 
-def test_pollster_rows_without_error_go_last_and_have_no_absolute_value(events_site, monkeypatch):
+def test_last_rows_without_error_go_last_and_have_no_absolute_value(events_site, monkeypatch):
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
-        if name == 'pollsters':
+        if name == 'polls':
             errors = (None, -2.0, 1.0)
             data = {**data, 'rows': [dict(row, error_blocks=error) for row, error in zip(data['rows'], errors)]}
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
-    assert [row['error_blocks_abs'] for row in context['pollster_rows']] == [1.0, 2.0, None]
+    assert [row['error_blocks_abs'] for row in context['last_rows']] == [1.0, 2.0, None]
     assert all('error_blocks_abs' in row for row in context['poll_rows'])
 
 
-def test_pollster_row_without_id_is_plain_text(events_site, monkeypatch):
+def test_last_row_without_id_is_plain_text(events_site, monkeypatch):
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
-        if name == 'pollsters':
+        if name == 'polls':
             data = {**data, 'rows': [dict(row, pollster_id=None) for row in data['rows']]}
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
     status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
-    table = re.search(r'<table id="pollsters-table">(.*?)</table>', html(body), re.S).group(1)
+    table = re.search(r'<table id="last-table">(.*?)</table>', html(body), re.S).group(1)
     assert status == 200 and 'GAD3' in table and '<a ' not in table
 
 

@@ -37,7 +37,7 @@
             </thead>
             <tbody>
               {% for row in results_rows %}
-              <tr>
+              <tr{% if loop.index > results_shown %} hidden{% endif %}>
                 <td title="{{ row.fullname }}"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.party }}</td>
                 <td>{{ row.pct|num(1) }}</td>
                 <td>{{ row.seats|int }}</td>
@@ -46,38 +46,59 @@
             </tbody>
           </table>
         </div>
+        {% if results_hidden %}
+        <button type="button" class="more" id="results-more" hidden>Ver {{ 'el partido restante' if results_hidden == 1 else 'los ' ~ results_hidden ~ ' partidos restantes' }}</button>
+        {% endif %}
         {% call m.how() %}
         <p>Cada fila es un partido, con su voto en porcentaje y sus escaños según el resultado oficial.</p>
         <p>Es la referencia con la que se miden todos los errores de esta página: cada error es sondeo menos resultado.</p>
         <p>No dice cómo se repartió el voto en cada circunscripción: es el total del ámbito.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('pollsters', 'Encuestadoras', 'Cuánto se equivocó cada encuestadora en esta elección, en puntos.') }}
-        {% if pollster_rows %}
-        <div class="chart" id="error-chart" role="img" aria-label="Error de bloques de cada encuestadora en esta elección"></div>
+      <div class="split">
+      {{ m.card_start('last-errors', 'Error del último sondeo', 'Cuánto se equivocó el último sondeo de cada encuestadora en el margen entre bloques, en puntos.') }}
+        {% if last_rows %}
+        <div class="chart" id="error-chart" role="img" aria-label="Error de bloques del último sondeo de cada encuestadora"></div>
+        <noscript><p class="muted">El gráfico necesita JavaScript; la tabla de al lado tiene las mismas cifras.</p></noscript>
+        {% else %}
+        <p class="notice">Sin sondeos en esta elección.</p>
         {% endif %}
+        {% call m.how() %}
+        <p>
+          Cada barra es una encuestadora y su longitud, el error de bloques de su último sondeo antes de la elección.
+          Las medidas se definen en la tarjeta de al lado.
+        </p>
+        <p>Las encuestadoras van de menor a mayor error: las primeras acertaron mejor el margen entre bloques.</p>
+        <p>Un solo sondeo no basta para juzgar a una encuestadora: su historial está en su ficha.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('last', 'Último sondeo de cada encuestadora', 'La muestra, los días de antelación y los errores del último sondeo de cada encuestadora.') }}
         <div class="table-wrap">
-          <table id="pollsters-table">
-            <caption>Encuestadoras con sondeos en esta elección, de menor a mayor error de bloques.</caption>
+          <table id="last-table">
+            <caption>Último sondeo de cada encuestadora, de menor a mayor error de bloques; errores en puntos (sondeo menos resultado).</caption>
             <thead>
               <tr>
                 <th scope="col">Encuestadora</th>
-                <th scope="col">Sondeos</th>
                 <th scope="col">Muestra</th>
+                <th scope="col">Días antes</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
-                <th scope="col">Sesgo del margen</th>
+                {% for block in blocks %}
+                <th scope="col">{{ block }}</th>
+                {% endfor %}
               </tr>
             </thead>
             <tbody>
-              {% for row in pollster_rows %}
+              {% for row in last_rows %}
               <tr>
                 <td>{% if row.pollster_id %}<a href="/casas{{ scope_query }}&amp;id={{ row.pollster_id }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
-                <td>{{ row.n_polls|int }}</td>
                 <td>{{ row.sample_size|int }}</td>
+                <td>{{ row.days|int }}</td>
                 <td>{{ row.error_avg|num(1) }}</td>
                 <td>{{ row.error_blocks_abs|num(1) }}</td>
-                <td>{{ row.error_blocks|num(1) }}</td>
+                {% for block in blocks %}
+                <td>{{ row[block]|num(1) }}</td>
+                {% endfor %}
               </tr>
               {% endfor %}
             </tbody>
@@ -85,13 +106,34 @@
         </div>
         {% call m.how() %}
         <p>
-          Cada barra es una encuestadora y su longitud, su error de bloques en esta elección. La tabla añade sus sondeos, su
-          muestra, el error medio y el sesgo del margen; las medidas se definen justo debajo.
+          Cada fila es el último sondeo de una encuestadora: su muestra, cuántos días antes de votar se publicó y sus
+          errores. Las columnas de bloque llevan signo: positivo, el sondeo daba al bloque más voto que el resultado.
         </p>
-        <p>Las encuestadoras van de menor a mayor error de bloques: las primeras acertaron mejor el margen entre bloques.</p>
-        <p>Una sola elección no basta para juzgar a una encuestadora: su historial está en su ficha, enlazada desde el nombre.</p>
+        <p>Las encuestadoras van de menor a mayor error de bloques, como las barras.</p>
+        <p>El último sondeo puede ser de semanas antes de votar: no recoge lo que cambió después. Los demás sondeos están en el CSV.</p>
         {% endcall %}
         {% include '_glosario.html' %}
+      {{ m.card_end() }}
+      </div>
+      {{ m.card_start('bullseye', 'La diana', 'El error del último sondeo de cada encuestadora en cada bloque: cuanto más cerca del centro, más acertó.') }}
+        {% if last_rows and blocks|length >= 2 %}
+        <div class="chart big" id="bullseye-chart" role="img" aria-label="Error del último sondeo de cada encuestadora por bloque"></div>
+        <noscript><p class="muted">La diana necesita JavaScript; la tabla de arriba tiene las mismas cifras.</p></noscript>
+        {% else %}
+        <p class="notice">Sin diana: la elección no tiene dos bloques con sondeos.</p>
+        {% endif %}
+        {% call m.how() %}
+        <p>
+          Cada punto es el último sondeo de una encuestadora: {% if blocks|length >= 2 %}el eje horizontal es su
+          error en {{ blocks[0] }} y el vertical en {{ blocks[1] }}{% else %}cada eje es su error en un bloque{% endif %}.
+          El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
+        </p>
+        <p>
+          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. Puntos juntos lejos del
+          centro indican un error común a todas las encuestadoras.
+        </p>
+        <p>El último sondeo puede ser de semanas antes de votar: no recoge lo que cambió después.</p>
+        {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('poll-histogram', 'Error de cada sondeo', 'Cuántos sondeos de esta elección se equivocaron en cada tramo de un punto, con la media marcada. Los botones cambian la medida.') }}
         <fieldset id="poll-measure" class="seg" hidden>
@@ -113,97 +155,24 @@
         <p>Las dos medidas van sin signo: no dicen hacia qué lado se equivocó cada sondeo.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Último sondeo de cada encuestadora', 'El error del último sondeo de cada encuestadora antes de la elección, en cada bloque.') }}
-        {% if pollster_rows and blocks|length >= 2 %}
-        <div class="chart" id="bullseye-chart" role="img" aria-label="Error del último sondeo de cada encuestadora por bloque"></div>
+      {{ m.card_start('polls', 'Todas las encuestas', ('Lo que publicó cada sondeo del ciclo: la estimación de voto (%) y, en las encuestadoras que los dan, los escaños. Sombreado, el partido que va primero. Pulsa una cabecera para ordenar.' if has_seats else 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.')) }}
+        {% if has_cycle %}
+        {% include '_polls_table.html' %}
+        {% call m.how() %}
+        <p>
+          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, la fecha de publicación, la muestra y
+          el voto de cada partido, tal como se publicó. La media simple del pie es la de los sondeos filtrados, todos
+          con el mismo peso.
+        </p>
+        <p>
+          En la vista Escaños solo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra
+          como mín–máx y cuenta por su punto medio para ordenar y promediar.
+        </p>
+        <p>Es lo que dijo cada sondeo, no cuánto se equivocó: el error de cada uno está en el CSV de sondeos de esta elección.</p>
+        {% endcall %}
+        {% else %}
+        <p class="notice">Los sondeos de este ciclo no están publicados todavía; sus errores están en el CSV de sondeos de esta elección.</p>
         {% endif %}
-        <div class="table-wrap">
-          <table id="last-table">
-            <caption>Error del último sondeo de cada encuestadora, en puntos (sondeo menos resultado).</caption>
-            <thead>
-              <tr>
-                <th scope="col">Encuestadora</th>
-                <th scope="col">Días antes</th>
-                <th scope="col">Error medio</th>
-                <th scope="col">Error de bloques</th>
-                {% for block in blocks %}
-                <th scope="col">{{ block }}</th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in pollster_rows %}
-              <tr>
-                <td>{{ row.pollster }}</td>
-                <td>{{ row.last_days|int }}</td>
-                <td>{{ row.last_error_avg|num(1) }}</td>
-                <td>{{ row.last_error_blocks_abs|num(1) }}</td>
-                {% for block in blocks %}
-                <td>{{ row['last_' ~ block]|num(1) }}</td>
-                {% endfor %}
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% call m.how() %}
-        <p>
-          Cada punto de la diana es el último sondeo de una encuestadora: {% if blocks|length >= 2 %}el eje horizontal es su
-          error en {{ blocks[0] }} y el vertical en {{ blocks[1] }}{% else %}cada eje es su error en un bloque{% endif %}.
-          El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
-        </p>
-        <p>
-          Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. Puntos juntos lejos del
-          centro indican un error común a todas las encuestadoras.
-        </p>
-        <p>El último sondeo puede ser de semanas antes de votar: no recoge lo que cambió después.</p>
-        {% endcall %}
-      {{ m.card_end() }}
-      {{ m.card_start('polls', 'Sondeos', 'Todos los sondeos publicados de la elección, con su error frente al resultado.') }}
-        <div class="table-wrap">
-          <table id="polls-table">
-            <caption>Sondeos de la elección, del más cercano al más lejano.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Encuestadora</th>
-                <th scope="col">Días antes</th>
-                <th scope="col">Muestra</th>
-                <th scope="col">Error medio</th>
-                <th scope="col">Error de bloques</th>
-                <th scope="col">Sesgo del margen</th>
-                {% for block in blocks %}
-                <th scope="col">{{ block }}</th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in poll_rows %}
-              <tr>
-                <td>{{ row.pollster }}</td>
-                <td>{{ row.days|int }}</td>
-                <td>{{ row.sample_size|int }}</td>
-                <td>{{ row.error_avg|num(1) }}</td>
-                <td>{{ row.error_blocks_abs|num(1) }}</td>
-                <td>{{ row.error_blocks|num(1) }}</td>
-                {% for block in blocks %}
-                <td>{{ row[block]|num(1) }}</td>
-                {% endfor %}
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% call m.how() %}
-        <p>
-          Cada fila es un sondeo: su encuestadora, cuántos días antes de votar se publicó, su muestra y sus errores. Las
-          medidas se definen en la tarjeta de las encuestadoras.
-        </p>
-        <p>
-          Las columnas de bloque son el error de cada bloque: positivo, el sondeo le daba más voto que el
-          resultado; negativo, menos.
-        </p>
-        <p>Un sondeo lejano de la votación no tenía por qué fallar: el voto pudo moverse después.</p>
-        {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('model', 'El modelo a cada horizonte', 'Lo que el modelo habría dicho con los sondeos disponibles a cada distancia de la elección, frente al resultado.') }}
         {% if horizon_tables %}

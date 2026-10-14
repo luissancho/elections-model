@@ -63,6 +63,7 @@ def write_event(fs, scope='es', date='2023-07-23', model=True):
     tables = {
         'pollsters': pd.DataFrame({'pollster': ['GAD3'], 'error_avg': [0.99]}),
         'polls': pd.DataFrame({'event_date': [date], 'pollster': ['GAD3']}),
+        'cycle': pd.DataFrame({'date': ['2023-07-16'], 'pollster': ['GAD3']}),
         'results': pd.DataFrame({'party': ['PP'], 'pct': [33.06]}),
     }
     if model:

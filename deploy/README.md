@@ -134,8 +134,8 @@ Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
 - Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); los histogramas llevan la línea
   de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
   ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
-- Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 640 px y centrada en su tarjeta; la del
-  detalle de una elección y la del perfil (`#bullseye-chart`) siguen en 480 px.
+- Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 720 px y centrada en su tarjeta, como la
+  del detalle de una elección (`#bullseye-chart.big`, fase 7e); la del perfil (`#bullseye-chart`) sigue en 480 px.
 
 Fase 7c (2026-10-14): restyle con fondo gris, tarjetas blancas, controles en segmentos y contenedor fluido; tres
 tarjetas centrales en Promedios (hemiciclo, partidos, bloques); la leyenda de ECharts como selector de partidos;
@@ -147,6 +147,13 @@ Fase 7d (2026-10-14): histórico de todos los ámbitos con análisis (`/eleccion
 años/medida en el hash de la URL, cifras con complementos, evolución del error por elección) y ranking único (`/casas`
 lee siempre los ratings de `es`). El filtro de ámbito de `/elecciones` es uno de sus propios filtros, no el
 desplegable común; el detalle de una elección solo se enlaza para los ámbitos con run publicado.
+
+Fase 7e (2026-10-14): el detalle de una elección (`/elecciones?scope=&date=`) enseña los 20 primeros resultados y un
+"Ver más", el error del último sondeo de cada encuestadora (barras y tabla en dos tarjetas de una fila, `.split`;
+las medias por casa de la parte `pollsters` ya no se pintan, siguen en el CSV y la API), la diana grande y centrada
+con los puntos en azul, el histograma de los sondeos y "Todas las encuestas" del ciclo, la misma tabla que en
+Promedios (`_polls_table.html` + `pages/polls-wire.js`, compartidos) a partir de la parte nueva `cycle` de la
+elección. Una elección publicada antes de la parte `cycle` enseña un aviso en su lugar hasta que se republica.
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
@@ -484,7 +491,7 @@ así que un recálculo de ratings se ve sin publicar nada. Todo lo demás sale d
 | --- | --- | --- | --- | --- |
 | `forecast` | Un run inmutable por ámbito en `runs/{ámbito}/{run_id}/`: promedio de hoy, pronóstico de la elección, sondeos del ciclo y titular (páginas Promedios y Escaños, portada) | Cada vez que se cargan sondeos nuevos de un ámbito; a diario en campaña. Con `scopes: "all"` se publica un run nuevo en todos los ámbitos con sondeos (los que no tienen bastantes quedan `skipped`); con una lista, solo en esos | Sí | Mueve `latest` al run nuevo |
 | `analysis` | `analysis/{ámbito}/`: efectos de casa del ciclo, herding, errores por sondeo de las elecciones pasadas y datos del estimador de error (tarjetas de `/casas`; histograma, diana y tabla de `/elecciones`) | Con cada `forecast`, en la misma llamada (`"what":["forecast","analysis"]`); también tras un recálculo de ratings y tras cargar los resultados de una elección, porque entra en los errores históricos | Sí | No |
-| `event` | `events/{ámbito}/{fecha}/`: error de cada encuestadora y de cada sondeo frente al resultado, resultado oficial y lo que el modelo habría dicho a cada horizonte (detalle de `/elecciones?date=`) | Una vez por elección celebrada, con los resultados oficiales cargados (`event_date` obligatorio). De nuevo, con `"event_date":"all"`, si se corrigen sondeos de elecciones pasadas o se rehace el backtest, porque su parte "modelo" sale de `backtest/results` | No | No |
+| `event` | `events/{ámbito}/{fecha}/`: error de cada encuestadora y de cada sondeo frente al resultado, los sondeos del ciclo tal como se publicaron, resultado oficial y lo que el modelo habría dicho a cada horizonte (detalle de `/elecciones?date=`) | Una vez por elección celebrada, con los resultados oficiales cargados (`event_date` obligatorio). De nuevo, con `"event_date":"all"`, si se corrigen sondeos de elecciones pasadas o se rehace el backtest, porque su parte "modelo" sale de `backtest/results` | No | No |
 | `backtest` | `backtest/{ámbito}/`: las tablas de `backtest/results` convertidas al paquete (`/metodo/backtest`) | Tras cada ejecución de `backtest/run_backtest.py` (`--scope es` para `es`, `--scopes all` para los autonómicos), es decir, cuando cambia el método. No ejecuta el modelo ni lee la base: solo convierte ficheros | No | No |
 | `manifest` | Solo `manifest.json` | Congelar y descongelar la web en la veda (`freeze`). `forecast` ya reescribe el manifest, así que sola solo hace falta para eso | No | Sí |
 | `point` | Solo `manifest.json` | Volver a un run anterior sin borrar nada (`latest` nunca retrocede por sí solo) | No | Mueve `latest` al run indicado |
@@ -673,8 +680,10 @@ set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["analysi
 Enmienda 2026-10-11 (fase 5). `{"what":["event"],"scopes":["es"],"event_date":...}` publica, para cada fecha, la
 elección pasada que lee `/elecciones?date=` bajo `events/{ámbito}/{fecha}/` del paquete (formato en "Eventos" de
 `docs/web/contrato.md`): el error de cada casa y de cada sondeo frente al resultado (un `Computer` de esa elección
-sola, como `notebooks/PollstersEvent.ipynb`), el resultado oficial (región 0) y el corte del backtest del modelo de esa
-elección (de `source`; vacío si el backtest no la tiene), con el error del sector en `meta.summary`:
+sola, como `notebooks/PollstersEvent.ipynb`), los sondeos del ciclo tal como se publicaron, con los escaños de las casas
+que los dan (parte `cycle`, desde 2026-10-14: la tabla "Todas las encuestas" del detalle), el resultado oficial
+(región 0) y el corte del backtest del modelo de esa elección (de `source`; vacío si el backtest no la tiene), con el
+error del sector en `meta.summary`:
 
 - `event_date` es una fecha, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy).
   Lee la base (elecciones, resultados y sondeos): en local, la del `.env` de la raíz.
@@ -686,7 +695,9 @@ elección (de `source`; vacío si el backtest no la tiene), con el error del sec
   o no tiene sondeos) o `failed`; el resto continúa y el job termina con error si alguna falla.
 - Una elección de `es` tardó 15 s en el test de integración contra la RDS (2026-10-11).
 - Cuándo relanzar: tras cargar los resultados oficiales de una elección (y tras corregir sus sondeos) y tras un
-  nuevo `run_backtest`, porque el corte del modelo sale de los resultados del backtest.
+  nuevo `run_backtest`, porque el corte del modelo sale de los resultados del backtest. Y una vez con
+  `"event_date":"all"` en cada ámbito tras desplegar la fase 7e, para que las elecciones ya publicadas tengan la
+  parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados).
 
 ### Backtest
 

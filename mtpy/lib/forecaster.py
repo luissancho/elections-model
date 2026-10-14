@@ -31,6 +31,64 @@ from .utils import (
     build_blocks, group_results, norm_range
 )
 
+def published_seats(
+    scope: str,
+    event_date: str,
+    names: list[str],
+    drange: Optional[tuple[int, int] | int] = None,
+    drop_mtypes: Optional[list[str]] = None
+) -> dict:
+    """
+    Seat projections published with the polls of an election cycle: the pollsters' own figures, read by the
+    loader from the polling tables (`seats_min` and `seats_max` metrics of `get_poll_series`).
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the election event.
+    event_date : str
+        Date of the election event (`YYYY-MM-DD`); the cycle is the one that ends in it.
+    names : list of str
+        Party names to keep.
+    drange : tuple of int or int, optional
+        Days range of the polls, as in `Forecaster`; `None` keeps every poll of the cycle.
+    drop_mtypes : list of str, optional
+        Methodology types to drop, as in `Forecaster`; `None` keeps every poll.
+
+    Returns
+    -------
+    dict
+        ``{(date, pollster_id, sponsor_id): {party: [min, max]}}`` with the date as ``YYYY-MM-DD`` and the seats
+        as integers, only for the polls and the parties of `names` with a projection (a party with a minimum but
+        no maximum repeats the minimum); empty when no poll has one.
+    """
+    frames = {}
+    for metric in ('seats_min', 'seats_max'):
+        frames[metric] = get_poll_series(
+            scope=scope,
+            event_dates=[event_date],
+            drange=drange,
+            drop_mtypes=drop_mtypes,
+            metric=metric
+        ).set_index(['date', 'pollster_id', 'sponsor_id'])
+
+    lo, hi = frames['seats_min'], frames['seats_max']
+    names = [n for n in names if n in lo.columns]
+    out = {}
+    for key, row in lo.iterrows():
+        upper = hi.loc[key] if key in hi.index else None
+        seats = {}
+        for name in names:
+            if pd.notnull(row.get(name)):
+                top = upper.get(name) if upper is not None else None
+                seats[name] = [int(row[name]), int(top) if pd.notnull(top) else int(row[name])]
+        if seats:
+            date, pollster_id, sponsor_id = key
+            out[(pd.Timestamp(date).strftime('%Y-%m-%d'), int(pollster_id), int(sponsor_id))] = seats
+
+    return out
+
+
 class Forecaster(Core):
 
     def __init__(
@@ -331,7 +389,7 @@ class Forecaster(Core):
         """
         Seat projections published with the polls of the cycle (the pollsters' own figures, read by the loader
         from the polling tables), with the filters of `load_polls`. Not part of `build_series`: the publication
-        calls it, the model never uses them.
+        calls it, the model never uses them. See `published_seats`.
 
         Returns
         -------
@@ -340,31 +398,8 @@ class Forecaster(Core):
             seats as integers, only for the polls and the parties of `self.parties` with a projection; empty
             when no poll has one.
         """
-        frames = {}
-        for metric in ('seats_min', 'seats_max'):
-            frames[metric] = get_poll_series(
-                scope=self.scope,
-                event_dates=[self.date_end.strftime('%Y-%m-%d')],
-                drange=self.drange,
-                drop_mtypes=self.drop_mtypes,
-                metric=metric
-            ).set_index(['date', 'pollster_id', 'sponsor_id'])
-
-        lo, hi = frames['seats_min'], frames['seats_max']
-        names = [n for n in self.parties.name.tolist() if n in lo.columns]
-        out = {}
-        for key, row in lo.iterrows():
-            upper = hi.loc[key] if key in hi.index else None
-            seats = {}
-            for name in names:
-                if pd.notnull(row.get(name)):
-                    top = upper.get(name) if upper is not None else None
-                    seats[name] = [int(row[name]), int(top) if pd.notnull(top) else int(row[name])]
-            if seats:
-                date, pollster_id, sponsor_id = key
-                out[(pd.Timestamp(date).strftime('%Y-%m-%d'), int(pollster_id), int(sponsor_id))] = seats
-
-        return out
+        return published_seats(self.scope, self.date_end.strftime('%Y-%m-%d'), self.parties.name.tolist(),
+                               drange=self.drange, drop_mtypes=self.drop_mtypes)
 
     def build_series(self) -> Self:
         """

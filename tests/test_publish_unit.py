@@ -11,7 +11,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_backtest, synthetic_event, synthetic_simulator, write_backtest_source)
+                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS)
 
 
 def valid(name, data, mode='nowcast'):
@@ -844,7 +844,7 @@ def test_publish_backtest_converts_the_repository_results(tmp_path):
 
 def event_readers(ev):
     return dict(events=lambda scope: ev.events, results=lambda scope, date, region: ev.results.loc[ev.results.date == date],
-                pollsters=lambda: ev.pollsters)
+                pollsters=lambda: ev.pollsters, seats=lambda scope, date, names: dict(CYCLE_SEATS))
 
 
 def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
@@ -856,7 +856,7 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
                                 prov=fake_prov, **event_readers(ev))
     assert out['n_polls'] == 3 and out['n_pollsters'] == 3 and out['has_model'] is True
     written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
-    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 5 and sum(p.endswith('.csv') for p in written) == 6
+    assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 6 and sum(p.endswith('.csv') for p in written) == 7
     meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))
     assert meta['schema'] == 'event-meta@1' and meta['data']['name'] == 'Generales 2023' and meta['data']['horizons'] == [6, 30]
     assert set(meta['data']['summary']) == {'n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias'}
@@ -866,6 +866,16 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
     assert houses[0] == {**houses[0], 'pollster_id': 2, 'n_polls': 1, 'last_days': 7, 'last_Derecha': 0.68}
     polls = writer.read_json(bundle.path_event('es', '2023-07-23', 'polls'))['data']['rows']
     assert [r['days'] for r in polls] == [7, 8, 13] and polls[1]['pollster_id'] == 3
+    cycle = writer.read_json(bundle.path_event('es', '2023-07-23', 'cycle'))
+    assert cycle['schema'] == 'event-cycle@1' and cycle['data']['parties'] == NAMES and cycle['data']['columns'] == publish.POLL_COLUMNS
+    rows = cycle['data']['polls']
+    assert [(r['date'], r['pollster']) for r in rows] == [('2023-07-10', 'CIS'), ('2023-07-15', '40dB'), ('2023-07-16', 'GAD3')]
+    assert rows[0]['sample_size'] is None and rows[1]['sponsor'] == 'El País' and rows[1]['sample_size'] == 1200
+    assert rows[2]['seats'] == {'PP': [135, 140], 'PSOE': [120, 120]} and 'seats' not in rows[0] and rows[2]['VOX'] is None
+    assert rows[0]['weight'] == round(0.81127 * 0.7, 3) and rows[0]['PP'] == 31.2
+    twin = pd.read_csv(tmp_path / 'site' / 'site' / 'v1' / 'events' / 'es' / '2023-07-23' / 'csv' / 'cycle.csv')
+    assert list(twin.columns)[:len(publish.POLL_COLUMNS)] == publish.POLL_COLUMNS and 'seats_min_PP' in twin.columns
+    assert twin['seats_max_PP'].tolist()[-1] == 140 and pd.isna(twin['sample_size'].iloc[0])
     results = writer.read_json(bundle.path_event('es', '2023-07-23', 'results'))['data']
     assert results['n_seats'] == 350 and results['rows'][-1]['party'] == 'Cs' and results['rows'][0]['votes'] >= results['rows'][1]['votes']
     model = writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data']
@@ -941,6 +951,16 @@ def test_event_summary_weights_by_poll_weight():
     assert summary['error_blocks'] == round(float(np.average(frame['error_blocks'], weights=weights)), 2)
     assert summary['bias']['Derecha'] == round(float(np.average(frame['Derecha'], weights=weights)), 2)
     assert set(summary['bias']) == {'Derecha', 'Izquierda'}
+
+
+def test_export_event_cycle_keeps_the_shape_of_the_run_polls_and_skips_unknown_parties():
+    data, table = publish.export_event_cycle(synthetic_cycle(), ['PP', 'VOX', 'Nadie'], {('2023-07-10', 1, 0): {'PP': [130, 130]}})
+    assert data['parties'] == ['PP', 'VOX'] and set(data['polls'][0]) >= set(publish.POLL_COLUMNS) | {'PP', 'VOX', 'seats'}
+    assert data['polls'][0]['seats'] == {'PP': [130, 130]} and all('seats' not in row for row in data['polls'][1:])
+    assert [row['pollster_id'] for row in data['polls']] == [1, 3, 2] and data['polls'][0]['sponsor'] is None
+    assert 'PSOE' not in data['polls'][0] and table['seats_min_PP'].tolist()[0] == 130 and 'seats_min_PSOE' not in table.columns
+    empty, _ = publish.export_event_cycle(synthetic_cycle().iloc[:0], ['PP'])
+    assert empty == {'parties': ['PP'], 'columns': publish.POLL_COLUMNS, 'polls': []}
 
 
 def test_export_event_pollsters_orders_by_error_with_nulls_last():

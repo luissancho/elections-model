@@ -2,7 +2,9 @@
 // filters of scope, election, house and years, whose state lives in the URL hash (`errors.js`), the figures of the
 // selection, the evolution of the error by election, the histogram of the poll errors, the bullseye coloured by
 // election or scope, the table by weeks before the election and the table of elections. The detail of one
-// election has the error of each house, the histogram of its polls and the bullseye of their last poll.
+// election has the results behind "Ver más", the error of the last poll of each house (bars and bullseye), the
+// histogram of its polls and the table of every poll of the cycle (`polls-wire.js`).
+import {Catalog} from '../catalog.js';
 import {fmtDate, fmtNum} from '../format.js';
 import {
   DEFAULT_MEASURE, MEASURES, complements, errorsHash, eventKey, eventsOf, filterRows, meanOf, parseErrorsHash,
@@ -14,6 +16,7 @@ import {renderHistogram} from '../charts/histogram.js';
 import {renderTrend} from '../charts/trend.js';
 import {fillComplements, fillFigures, fillSelect, filterEventsTable} from './history-dom.js';
 import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {wirePollsTable} from './polls-wire.js';
 
 // Height of the error bars: one row per house plus the axes.
 const BAR_ROW_HEIGHT = 22;
@@ -386,28 +389,48 @@ function wirePollHistogram(polls) {
 }
 
 /**
+ * "Ver más" of the results table: the server hides the rows beyond the first ones and renders the button hidden
+ * (it only works with JavaScript); show it and reveal the rows on click.
+ */
+function wireResultsMore() {
+  const button = document.getElementById('results-more');
+  const table = document.getElementById('results-table');
+  if (!button || !table) {
+    return;
+  }
+  button.hidden = false;
+  button.addEventListener('click', () => {
+    for (const row of table.querySelectorAll('tbody tr[hidden]')) {
+      row.hidden = false;
+    }
+    button.hidden = true;
+  });
+}
+
+/**
  * Draw the charts whose container is present and has data. A scope without published elections renders no
  * `#initial-data` island (and no charts), so there is nothing to draw and `readInitial` must not be called.
  */
 function paint() {
+  wireResultsMore();
   if (!document.getElementById('initial-data')) {
     return;
   }
 
   const initial = readInitial();
-  const {meta = {}, pollsters = [], bullseye = [], blocks = []} = initial;
+  const {meta = {}, last = [], blocks = []} = initial;
 
   if (initial.errors) {
     wireHistory(initial);
   }
 
   const bars = document.getElementById('error-chart');
-  const rows = pollsters.filter((row) => row.error_blocks_abs !== null && row.error_blocks_abs !== undefined)
+  const rows = last.filter((row) => Number.isFinite(row.error_blocks_abs))
     .map((row) => ({name: row.pollster, error_blocks_abs: row.error_blocks_abs}));
   if (bars && rows.length) {
     bars.style.height = `${rows.length * BAR_ROW_HEIGHT + BAR_EXTRA_HEIGHT}px`;
     tryDraw(() => renderBars(bars, rows, {value: 'error_blocks_abs', formatter: (x) => fmtNum(x, 1)}),
-      'the house errors');
+      'the last-poll errors');
   }
 
   if (initial.poll_errors) {
@@ -415,12 +438,16 @@ function paint() {
   }
 
   const target = document.getElementById('bullseye-chart');
-  if (target && bullseye.length && blocks.length >= 2) {
+  if (target && last.length && blocks.length >= 2) {
     tryDraw(() => renderBullseye(
       target,
-      bullseye.map((row) => ({...row, event: row.pollster, event_date: meta.event_date})),
-      {blocks},
+      last.map((row) => ({...row, event: row.pollster, event_date: meta.event_date})),
+      {blocks, color: ACCENT},
     ), 'the bullseye');
+  }
+
+  if (initial.polls) {
+    tryDraw(() => wirePollsTable(initial.polls.polls, new Catalog(initial.catalog || {})), 'the polls table');
   }
 }
 

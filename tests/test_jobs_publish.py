@@ -53,6 +53,7 @@ def patched(monkeypatch):
         ev = synthetic_event()
         return real_event(scope, event_date, writer, computer=FakeComputer(), events=lambda s: ev.events,
                           results=lambda s, d, r: ev.results.loc[ev.results.date == d], pollsters=lambda: ev.pollsters,
+                          seats=lambda s, d, names: {},
                           prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
     monkeypatch.setattr(publish, 'publish_event', fake_event)

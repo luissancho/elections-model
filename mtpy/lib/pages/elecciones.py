@@ -8,18 +8,24 @@ from ..webapi import check_date, site
 from .casas import analysis_part
 from .common import api_url, bundle_part, common_context, published_scopes
 from .filters import fmt_num
+from .promedios import chart_polls, poll_months, polls_table, pollster_options
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 HISTORY_COLUMNS = ('scope', 'scope_name', 'year', 'event_date', 'event', 'pollster', 'days', 'error_avg',
                    'error_blocks', 'error_blocks_abs', 'bias')
 EVENT_CSV = (
     ('pollsters', None, 'Encuestadoras en esta elección', False),
-    ('polls', None, 'Sondeos de esta elección', False),
+    ('polls', None, 'Sondeos de esta elección, con su error', False),
+    ('cycle', None, 'Sondeos del ciclo, tal como se publicaron', False),
     ('results', None, 'Resultados oficiales', False),
     ('model', 'shares', 'Modelo: voto a cada horizonte', True),
     ('model', 'seats', 'Modelo: escaños a cada horizonte', True),
     ('model', 'blocks', 'Modelo: bloques a cada horizonte', True),
 )
+# Rows of the results table the detail shows before "Ver más".
+RESULTS_SHOWN = 20
+# Keys of a last-poll row the detail embeds for its charts (plus the signed error of each block).
+LAST_KEYS = ('pollster', 'pollster_id', 'days', 'sample_size', 'error_avg', 'error_blocks', 'error_blocks_abs')
 
 
 def event_part(scope: str, date: str, name: str) -> Optional[dict]:
@@ -76,6 +82,40 @@ def with_abs(rows: list) -> list:
         result.append(new)
 
     return result
+
+
+def last_poll_rows(rows: list) -> list:
+    """
+    The last poll of each pollster of a past election.
+
+    Parameters
+    ----------
+    rows : list of dict
+        Rows of the ``polls`` part (``with_abs``): one per poll with ``pollster`` and ``days``.
+
+    Returns
+    -------
+    list of dict
+        One copy per pollster of its poll with the fewest ``days`` (the first one of the part on a tie, as the
+        rows come ascending by ``days``; a row without a pollster is skipped), from the smallest to the largest
+        ``error_blocks_abs`` (``None`` last).
+    """
+    last = {}
+
+    for row in rows:
+        name = row.get('pollster')
+
+        if name is None:
+            continue
+
+        current = last.get(name)
+        days = row.get('days')
+
+        if current is None or (days is not None and (current.get('days') is None or days < current['days'])):
+            last[name] = row
+
+    return sorted((dict(row) for row in last.values()),
+                  key=lambda row: (row['error_blocks_abs'] is None, row['error_blocks_abs'] or 0.0))
 
 
 def published_events(scope: str) -> list:
@@ -462,11 +502,18 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     -------
     dict
         The common context plus ``event`` (its ``meta``), ``results_rows`` (as published, with the
-        ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party),
-        ``n_seats``, ``pollster_rows``, ``poll_rows``, ``blocks``, ``horizon_tables``, ``has_model``,
-        ``csv_links`` (the model ones only with a backtest) and ``initial`` (``state``, ``meta``,
-        ``pollsters``, ``bullseye``, ``blocks`` and ``poll_errors``: ``error_avg`` and ``error_blocks_abs`` of
-        each poll, for the error histogram).
+        ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party), ``results_shown``
+        (``RESULTS_SHOWN``) and ``results_hidden`` (rows beyond them, behind "Ver más"), ``n_seats``,
+        ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
+        ``poll_rows``, ``blocks``, ``horizon_tables``, ``has_model``, ``csv_links`` (the model ones only with a
+        backtest), the keys of the "Todas las encuestas" table of Promedios drawn from the ``cycle`` part
+        (``has_cycle``, ``table``, ``table_parties``, ``table_total``, ``has_seats``, ``months``, ``pollsters``
+        and ``csv_href``; ``has_cycle`` is false for an election published before the part existed, and the
+        table then gives way to a notice) and ``initial`` (``state``, ``meta``, ``last`` (``LAST_KEYS`` and
+        the signed error of each block of every last poll, for the bars and the bullseye), ``blocks``,
+        ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for the error histogram),
+        ``catalog`` (``parties`` of the table, for the browser's catalogue) and, with the cycle, ``polls``
+        (``chart_polls``)).
 
     Raises
     ------
@@ -482,14 +529,14 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     if meta is None:
         raise HttpError(404, 'event not published')
 
-    pollsters = event_part(scope, date, 'pollsters') or {}
     polls = event_part(scope, date, 'polls') or {}
+    cycle = event_part(scope, date, 'cycle')
     results = event_part(scope, date, 'results') or {}
     model = event_part(scope, date, 'model') or {}
     has_model = bool(meta.get('has_model'))
-    blocks = list(pollsters.get('blocks') or meta.get('blocks') or [])
-    pollster_rows = sorted(with_abs(pollsters.get('rows') or []),
-                           key=lambda row: (row['error_blocks_abs'] is None, row['error_blocks_abs'] or 0.0))
+    blocks = list(polls.get('blocks') or meta.get('blocks') or [])
+    poll_rows = with_abs(polls.get('rows') or [])
+    last_rows = last_poll_rows(poll_rows)
     catalog = context['catalog']
     results_rows = [
         {'party': row['party'], 'fullname': catalog[row['party']]['fullname'],
@@ -504,27 +551,39 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     summary = dict(meta.get('summary') or {})
     error = summary.get('error_blocks')
     summary['error_blocks_abs'] = None if error is None else abs(error)
+    cycle_polls = (cycle or {}).get('polls') or []
+    table_parties = list((cycle or {}).get('parties') or [])
+    colors = {name: catalog[name]['color'] for name in table_parties}
     context['event'] = dict(meta, summary=summary)
     context['results_rows'] = results_rows
+    context['results_shown'] = RESULTS_SHOWN
+    context['results_hidden'] = max(0, len(results_rows) - RESULTS_SHOWN)
     context['n_seats'] = results.get('n_seats')
-    context['pollster_rows'] = pollster_rows
-    context['poll_rows'] = with_abs(polls.get('rows') or [])
+    context['last_rows'] = last_rows
+    context['poll_rows'] = poll_rows
     context['blocks'] = blocks
     context['horizon_tables'] = horizon_tables(model) if has_model else []
     context['has_model'] = has_model
     context['csv_links'] = links
+    context['has_cycle'] = cycle is not None
+    context['table_parties'] = table_parties
+    context['table'] = polls_table(cycle_polls, table_parties, colors)
+    context['table_total'] = len(cycle_polls)
+    context['has_seats'] = any(poll.get('seats') for poll in cycle_polls)
+    context['months'] = poll_months(cycle_polls)
+    context['pollsters'] = pollster_options(cycle_polls)
+    context['csv_href'] = api_url(scope, 'cycle', fmt='csv', kind='event', date=date)
     context['initial'] = {
         'state': full,
         'meta': meta,
-        'pollsters': [{key: row.get(key)
-                       for key in ('pollster', 'error_blocks', 'error_blocks_abs', 'last_error_blocks')}
-                      for row in pollster_rows],
-        'bullseye': [dict({'pollster': row['pollster'], 'days': row.get('last_days')},
-                          **{block: row.get('last_' + block) for block in blocks})
-                     for row in pollster_rows],
+        'last': [dict({key: row.get(key) for key in LAST_KEYS}, **{block: row.get(block) for block in blocks})
+                 for row in last_rows],
         'blocks': blocks,
-        'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')}
-                        for row in context['poll_rows']],
+        'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')} for row in poll_rows],
+        'catalog': {'parties': [dict(catalog[name], name=name) for name in table_parties]},
     }
+
+    if cycle is not None:
+        context['initial']['polls'] = chart_polls(cycle)
 
     return context
