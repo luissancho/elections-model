@@ -102,9 +102,12 @@ fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`p
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
 (Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
 Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
-publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/casas` y `/metodo/backtest` llevan el filtro de ámbito
-(`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS); el resto
-de `/metodo` cita las cifras de las generales y no lo lleva. Las subpáginas del método comparten la subnavegación
+publicado el {run_at}" (run fijado anterior) (`pages.title_of`). `/metodo/backtest` lleva el filtro de ámbito
+(`_scope_filter.html`: desplegable de los ámbitos publicados, GET + "Ver" sin JS, envío al cambiar con JS) sobre las
+tarjetas; en `/casas` el ranking es global y el filtro vive dentro de la tarjeta "Efectos de encuestadora" (manda también
+en Herding y en las descargas del análisis) y, en el perfil, dentro de su cabecera (el rating de la cabecera es el
+nacional; el resto del perfil, del ámbito elegido) (2026-10-15); el resto de `/metodo` cita las cifras de las
+generales y no lo lleva. Las subpáginas del método comparten la subnavegación
 `_metodo_nav.html`.
 
 Patrón de tarjeta (`web/templates/_macros.html`, `{% import '_macros.html' as m %}`): toda sección es

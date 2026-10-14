@@ -205,8 +205,9 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     Template context of the houses page.
 
     The ranking is always the national one (``RATING_SCOPE``), whatever the scope: the rating of a
-    pollster does not depend on it. It comes from the database; the house effects and the herding from the houses
-    analysis of the scope, whose ``meta`` part marks it as complete.
+    pollster does not depend on it, and its herding column comes from the national analysis for the same
+    reason. The ratings come from the database; the house effects and the herding cards from the houses analysis
+    of the scope (chosen in the house-effects card), whose ``meta`` part marks it as complete.
 
     Parameters
     ----------
@@ -238,7 +239,11 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     missing = analysis_part(scope, 'meta') is None
     effects = None if missing else analysis_part(scope, 'house-effects')
     herding = None if missing else analysis_part(scope, 'herding')
-    ranking = ranking_rows(ratings, herding)
+    if scope == RATING_SCOPE:
+        national_herding = herding
+    else:
+        national_herding = None if analysis_part(RATING_SCOPE, 'meta') is None else analysis_part(RATING_SCOPE, 'herding')
+    ranking = ranking_rows(ratings, national_herding)
     grid = house_effects_grid(effects) if effects is not None else None
     links = [{'label': 'Ratings de la próxima elección general', 'href': api_url(RATING_SCOPE, 'ratings', fmt='csv', kind='data')}]
 
@@ -284,10 +289,9 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     dict
         The common context plus ``profile`` (``webapi.query_pollster``), ``mtype`` (the type of
         the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing),
-        ``current`` (the ``rating`` and ``quality`` of its last ratings row in the scope, the next
-        election; both
-        ``None`` without ratings: the catalogue keeps only the national rating), ``path`` (its
-        ratings by election, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
+        ``current`` (the ``rating`` and ``quality`` of its last national ratings row (``RATING_SCOPE``), the
+        next general election: the rating is the same in every scope; both ``None`` without ratings), ``path``
+        (its ratings by election of the scope, ``PATH_KEYS``), ``effects_table`` (``effects_table``), ``herding_table``
         (its herding by cycle, ``HERDING_KEYS``), ``bullseye`` (its rows of the ``poll-errors``
         analysis part: ``event``, ``event_date``, ``days`` and the error of each block, by date;
         empty without analysis), ``blocks`` (the blocks of that part), ``analysis_missing`` and
@@ -312,7 +316,8 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
         ('event', 'event_date', 'days') + tuple(blocks),
     )
     path = profile_rows(profile['ratings'], PATH_KEYS)
-    latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
+    national = profile if scope == RATING_SCOPE else query_pollster(pollster_id, RATING_SCOPE)
+    latest = profile_rows(national['ratings'], ('rating', 'quality', 'event_date'))
 
     mtype = profile['pollster'].get('mtype')
 

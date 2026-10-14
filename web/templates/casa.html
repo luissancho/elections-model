@@ -8,11 +8,11 @@
 {% import '_macros.html' as m %}
 {% set with_herding = true %}
 {% set with_block_error = false %}
-    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       <p class="back"><a href="/casas{{ scope_query }}">← Todas las encuestadoras</a></p>
-      {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora en este ámbito: su tipo, su calidad previa y el rating con el que entra en el promedio.') }}
+      {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su calidad previa y el rating con el que entra en el promedio, el mismo en todos los ámbitos. El ámbito elegido aquí manda en el resto de la página.') }}
         <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
+        {% include '_scope_filter.html' +%}
       {{ m.card_end() }}
       {{ m.card_start('path', 'Camino al rating', 'El rating de la encuestadora en cada elección del ámbito, calculado con lo que se sabía antes de ella.') }}
         {% if path %}

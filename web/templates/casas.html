@@ -8,9 +8,8 @@
 {% import '_macros.html' as m %}
 {% set with_herding = true %}
 {% set with_block_error = false %}
-    {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
-      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos; no depende del ámbito elegido arriba: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
+      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos, así que no depende de ningún ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
         {% if ranking %}
         <div class="chart" id="rating-chart" role="img" aria-label="Rating de cada encuestadora para la próxima elección"></div>
         {% else %}
@@ -54,7 +53,8 @@
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('house-effects', 'Efectos de encuestadora', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual, por partido y por bloque.', '· ciclo actual') }}
+      {{ m.card_start('house-effects', 'Efectos de encuestadora', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual del ámbito elegido, por partido y por bloque. El ámbito vale también para el herding y las descargas del análisis.', '· ciclo actual') }}
+        {% include '_scope_filter.html' +%}
         {% if grid is none %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% elif not grid.rows %}
@@ -91,7 +91,7 @@
         <p>Una desviación no indica quién acierta: es una diferencia entre encuestadoras, no un error frente al resultado.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('herding', 'Herding', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar solo por el tamaño de sus muestras.') }}
+      {{ m.card_start('herding', 'Herding', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar solo por el tamaño de sus muestras; del ámbito elegido en Efectos de encuestadora.') }}
         {% if herding is none %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
@@ -129,7 +129,7 @@
         <p>Un valor bajo es una señal, no una prueba de que la encuestadora copie a otras.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para este ámbito.') }}
+      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para el ámbito elegido en Efectos de encuestadora.') }}
         <p class="muted">Los ficheros conservan los nombres técnicos de las columnas.</p>
         <ul class="link-list">
           {% for link in csv_links %}

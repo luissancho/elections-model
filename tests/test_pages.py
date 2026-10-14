@@ -927,6 +927,8 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert status == 200 and 'aria-current="page"' in page and 'id="ranking-table"' in page
     assert page.index('GAD3') < page.index('CIS')  # orden por rating desc en el fixture
     assert 'href="/casas?scope=es&amp;id=2"' in page and 'id="scope-filter"' in page
+    # el selector de ámbito vive en la tarjeta de efectos (el ranking es global), no sobre las tarjetas
+    assert page.index('id="ranking"') < page.index('id="house-effects"') < page.index('id="scope-filter"') < page.index('id="herding"')
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
     assert 'Cada fila es una encuestadora con rating para la próxima elección' in page
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
@@ -943,9 +945,8 @@ def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app)
     national = html(call(houses, '/casas', query='scope=es')[2])
     madrid = html(call(houses, '/casas', query='scope=es-md')[2])
     table = lambda page: re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    without_herding = lambda page: re.sub(r'\s*<td>[^<]*</td>\s*</tr>', '</tr>', table(page))  # herding: del ámbito elegido
-    assert without_herding(national) == without_herding(madrid) and '82,4' in table(madrid)
-    assert 'no depende del ámbito elegido' in madrid and 'elección general del' in madrid
+    assert table(national) == table(madrid) and '82,4' in table(madrid)  # la columna Herding también es la nacional
+    assert 'no depende de ningún ámbito' in madrid and 'elección general del' in madrid
     assert 'href="/api/v1/ratings?scope=es&amp;format=csv"' in madrid and 'Ratings de la próxima elección general' in madrid
     ranking = table(madrid)
     assert 'href="/casas?scope=es&amp;id=' in ranking and 'href="/casas?scope=es-md&amp;id=' not in ranking
@@ -1013,6 +1014,7 @@ def test_casa_profile_tables_and_bullseye(houses):
     page = html(body)
     assert status == 200 and 'href="/casas?scope=es"' in page  # "Todas las casas"
     assert 'id="scope-filter"' in page and 'action="/casas"' in page
+    assert page.index('id="profile"') < page.index('id="scope-filter"') < page.index('id="path"')  # dentro de la cabecera
     assert 'id="path-table"' in page and '2023-23J' in page
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
@@ -1022,6 +1024,40 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': 2.81, 'Izquierda': -0.24}]
     assert data['blocks'] == ['Derecha', 'Izquierda']
+
+
+def test_casas_ranking_and_profile_header_are_national_whatever_the_panel_scope(houses, fresh_app, monkeypatch):
+    """Con el ámbito de los paneles en Madrid, el ranking (y su columna Herding) y el rating de la cabecera del
+    perfil siguen siendo los nacionales; los efectos, el herding y el camino son los del ámbito."""
+    write_bundle(fresh_app.fs, scope='es-md')
+    write_analysis(fresh_app.fs, scope='es-md')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    real_part = pages.casas.analysis_part
+
+    def part(scope, name):
+        data = real_part(scope, name)
+        if scope == 'es-md' and name == 'herding' and data is not None:
+            data = {**data, 'rows': [dict(row, herding=0.5) for row in data['rows']]}
+        return data
+
+    real_query = pages.casas.query_pollster
+
+    def query(pollster_id, scope):
+        profile = real_query(pollster_id, scope)
+        return {**profile, 'ratings': []} if scope == 'es-md' else profile  # sin ratings en Madrid
+
+    monkeypatch.setattr(pages.casas, 'analysis_part', part)
+    monkeypatch.setattr(pages.casas, 'query_pollster', query)
+    page = html(call(houses, '/casas', query='scope=es-md')[2])
+    ranking = re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    herding = re.search(r'<table id="herding-table">(.*?)</table>', page, re.S).group(1)
+    national = real_part('es', 'herding')['rows'][0]['herding']
+    assert '0,50' not in ranking and pages.fmt_num(national, 2) in ranking and '0,50' in herding
+    assert '<option value="es-md" selected>' in page and 'href="/casas?scope=es&amp;id=2"' in page
+    page = html(call(houses, '/casas', query='scope=es-md&id=2')[2])
+    assert 'Rating: 82,4' in page and 'Esta encuestadora no tiene ratings en este ámbito.' in page
+    assert '<option value="es-md" selected>' in page and 'href="/casas?scope=es-md"' in page
 
 
 def test_casa_profile_of_a_house_without_ratings(houses):

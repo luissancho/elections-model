@@ -205,3 +205,14 @@ Luis: "Elimina el texto de cabecera en 'Histórico Errores' y 'Ranking Encuestad
 histórico (`history_headline`, `headline_text`), el del ranking y el del perfil de una encuestadora (los tres
 constructores y sus pruebas); `m.headline` queda para Inicio y las páginas del método. En la misma tanda: los textos
 de tarjeta pasan de 72 a 100 ch y la diana del perfil toma la clase `big` (720 px, centrada).
+
+## Ajuste 2026-10-15: el selector de ámbito de `/casas` baja a los paneles
+
+Luis: "Quita también el selector de ámbito de 'Ranking Encuestadoras', ya que quiero un ranking global. Si hace falta
+en algún panel, déjalo en el panel". El ranking no depende del ámbito, pero los efectos de encuestadora y el herding
+son el análisis del ciclo de un ámbito, y el perfil (camino, diana, efectos y herding por elección) también. Así que
+el `_scope_filter.html` deja de ir sobre las tarjetas: en `/casas` vive dentro de "Efectos de encuestadora" y manda en
+esa tarjeta, en Herding y en las descargas del análisis; la columna Herding del ranking pasa a salir del análisis
+nacional (`RATING_SCOPE`), para que el ranking sea idéntico sea cual sea el ámbito del panel. En el perfil vive dentro
+de la tarjeta de cabecera, cuyo rating y calidad son los nacionales (`query_pollster(id, 'es')`); las tarjetas de
+abajo siguen al ámbito elegido. `/metodo/backtest` conserva el filtro sobre las tarjetas.
