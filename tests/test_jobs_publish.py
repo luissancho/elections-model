@@ -777,3 +777,9 @@ def test_logger_echoes_console_only_with_a_console_stream_handler(tmp_path):
         assert echoes(parent) is False  # un `info` que no se emite no se repite
     finally:
         drop_handlers(parent)
+
+
+def test_publish_class_docstring_survives_and_mentions_the_levels():
+    from mtpy.jobs.Publish import Publish
+
+    assert Publish.__doc__ is not None and 'four levels' in Publish.__doc__

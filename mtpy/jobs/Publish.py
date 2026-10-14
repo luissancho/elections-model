@@ -63,7 +63,6 @@ class ScopeProgress:
 
 
 class Publish(Job):
-    verbose = 1
     """
     Publish the model results to the web bundle (``site/v1``) of the file system.
 
@@ -77,8 +76,9 @@ class Publish(Job):
     such as a bundle validation failure or a non-ISO ``event_date``). ``forecast`` prints its
     progress live (``[i/n] scope: phase (seconds)`` and the result line of each scope, also to the
     logger) and collects the model warnings of each scope into its result (``warnings``) and the
-    count of its summary line instead of letting them reach stderr; with ``verbose``, it prints
-    them live too.
+    count of its summary line instead of letting them reach stderr; from ``verbose`` 1 (the default), it prints
+    them live too. ``verbose`` has four levels (0 header and summary, 1 scope lines and warnings, 2 phases,
+    3 model output); see ``run``.
 
     ``analysis`` computes the houses analysis of each scope (house effects, herding, poll
     errors and error data of the ``Computer``) and overwrites ``analysis/{scope}/``. It has no
@@ -129,6 +129,7 @@ class Publish(Job):
     """
 
     WHAT = ('forecast', 'analysis', 'event', 'backtest', 'manifest', 'point', 'unpublish')
+    verbose = 1
     RUN_EXISTS = 'run exists'
     RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
 
@@ -637,7 +638,7 @@ class Publish(Job):
         writer : BundleWriter
             Bundle writer.
         verbose : int
-            Verbosity passed to the analysis.
+            Verbosity of the model (``max(0, verbose - 2)`` of the job), passed to the analysis.
         today : str or None
             Date taken as today by the LOREG guard.
         force : bool
@@ -684,7 +685,7 @@ class Publish(Job):
         source : str or None
             Results folder of the backtest (see ``publish.backtest_source``).
         verbose : int
-            Verbosity passed to the computer.
+            Verbosity of the model (``max(0, verbose - 2)`` of the job), passed to the computer.
 
         Returns
         -------
