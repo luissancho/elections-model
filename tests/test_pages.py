@@ -1122,7 +1122,7 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     data = initial(body)
     assert 'sector' not in data and 'blocks' not in data
     assert [row['date'] for row in data['events']] == ['2023-07-23', '2019-11-10']
-    assert 'id="sector-chart"' in page and 'aria-label=' in page
+    assert 'id="sector-chart"' not in page and 'id="sector"' not in page
     table = re.search(r'<table id="events-table">(.*?)</table>', page, re.S).group(1)
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
         'Elección', 'Ámbito', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
@@ -1174,9 +1174,11 @@ def test_elecciones_history_context_filters_and_headline(history_site):
     assert set(context['initial']) == {'state', 'scopes', 'events', 'errors', 'error_blocks', 'years', 'selected_scope'}
     assert pages.error_rows('es', ['2019-11-10']) == [] and pages.error_rows('es-md', ['2023-07-23']) is None
     page = html(call(history_site, '/elecciones')[2])
-    assert page.index('id="filters"') < page.index('id="histogram"') < page.index('id="bullseye"') \
-        < page.index('id="weeks"') < page.index('id="sector"') < page.index('id="events"') < page.index('id="glosario"') \
+    assert page.index('id="filters"') < page.index('id="figures"') < page.index('id="trend"') < page.index('id="histogram"') \
+        < page.index('id="bullseye"') < page.index('id="weeks"') < page.index('id="events"') < page.index('id="glosario"') \
         < page.index('id="closing"')
+    assert 'id="complements"' in page and 'id="trend-chart"' in page and 'id="sector-chart"' not in page
+    assert 'id="weeks-note"' in page and 'Elige un ámbito o unos años para ver las elecciones una a una.' in page
     assert '<option value="es:2019-11-10" data-scope="es">' in page and '<option value="Sigma Dos">' in page
     assert 'positivo, el sondeo daba más margen a Derecha del que hubo' in page
     assert 'Herding' not in page and 'La tabla necesita JavaScript' in page

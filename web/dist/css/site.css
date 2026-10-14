@@ -563,3 +563,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .scroll-hint { display: block; }
   .bar-end { margin-left: 0; width: 100%; }
 }
+
+/* Figures of the selection in the error history, and the lines of what each filter leaves out. */
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); }
+.figures[hidden] { display: none; }
+.figures dd { font-family: var(--font-head); font-size: 1.6rem; margin: 0; }
+.figures dt { color: var(--color-muted); font-size: 0.85rem; }
+.complements { list-style: none; margin: var(--space-3) 0 0; padding: 0; color: var(--color-muted); }
+.complements li { margin: 0 0 var(--space-1); }
