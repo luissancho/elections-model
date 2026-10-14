@@ -9,6 +9,9 @@ from ...core.app import App
 from .. import bundle
 
 DEFAULT_TTL = 60
+# Public origin of the site (``WEB_SITE_URL``: demoscopio.es in production, the local host in development),
+# for the canonical links of the pages
+DEFAULT_SITE_URL = 'https://demoscopio.es'
 LRU_SIZE = 200
 
 
@@ -19,14 +22,16 @@ def settings() -> dict:
     Returns
     -------
     dict
-        ``{'prefix': str, 'cache_ttl': float}``. Missing or empty values fall back to
-        ``bundle.PREFIX`` and ``DEFAULT_TTL``; a ``cache_ttl`` that is not a number
-        also falls back, with a warning.
+        ``{'prefix': str, 'cache_ttl': float, 'site_url': str}``. Missing or empty values fall back
+        to ``bundle.PREFIX``, ``DEFAULT_TTL`` and ``DEFAULT_SITE_URL``; a ``cache_ttl`` that is not a
+        number also falls back, with a warning. ``site_url`` (the public origin of the site, for
+        the canonical links) loses its trailing slash.
     """
     config = getattr(App.get_(), 'config', None)
     web = getattr(config, 'web', None) if config is not None else None
     prefix = getattr(web, 'prefix', None)
     ttl = getattr(web, 'cache_ttl', None)
+    site_url = getattr(web, 'site_url', None)
 
     try:
         cache_ttl = float(ttl) if ttl not in (None, '') else float(DEFAULT_TTL)
@@ -37,6 +42,7 @@ def settings() -> dict:
     return {
         'prefix': str(prefix) if prefix not in (None, '') else bundle.PREFIX,
         'cache_ttl': cache_ttl,
+        'site_url': str(site_url).rstrip('/') if site_url not in (None, '') else DEFAULT_SITE_URL,
     }
 
 

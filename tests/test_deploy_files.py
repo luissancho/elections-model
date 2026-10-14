@@ -1,7 +1,10 @@
-"""Tests de los ficheros de despliegue (plantillas de ECS, supervisord, init.sh y nginx)."""
+"""Tests de los ficheros de despliegue (plantillas de ECS, supervisord, init.sh y nginx) y de los activos de marca."""
 import json
+import re
 import subprocess
 from pathlib import Path
+
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -69,3 +72,25 @@ def test_load_test_script_is_valid_bash():
     path = ROOT / 'deploy' / 'load-test.sh'
     assert path.is_file()
     assert subprocess.run(['bash', '-n', 'deploy/load-test.sh'], cwd=ROOT).returncode == 0
+
+
+def test_brand_assets_match_the_templates_and_nginx_serves_the_favicon():
+    """Los iconos y el logotipo que enlazan las plantillas existen en `web/dist/img`, el ICO trae 16, 32 y 48 px, el
+    logotipo SVG declara el nombre y el tamaño que repite `_brand.html`, y nginx sirve `/favicon.ico`."""
+    img = ROOT / 'web' / 'dist' / 'img'
+    linked = set(re.findall(r'/dist/img/([\w.-]+)', read('web/templates/_icons.html') + read('web/templates/_brand.html')))
+    assert linked == {'logo.svg', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'}
+    for name in linked:
+        assert (img / name).is_file(), name
+    logo = read('web/dist/img/logo.svg')
+    assert logo.startswith('<svg xmlns="http://www.w3.org/2000/svg"') and '<title id="title">Demoscopio</title>' in logo
+    width, height = re.search(r' width="([\d.]+)" height="([\d.]+)"', logo).groups()
+    assert 'width="{}" height="{}"'.format(round(float(width)), round(float(height))) in read('web/templates/_brand.html')
+    assert read('web/dist/img/favicon.svg').startswith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">')
+    with Image.open(img / 'favicon.ico') as ico:
+        assert ico.info['sizes'] == {(16, 16), (32, 32), (48, 48)}
+    with Image.open(img / 'apple-touch-icon.png') as png:
+        assert png.size == (180, 180)
+    conf = read('deploy/docker/nginx.conf')
+    assert 'location = /favicon.ico {' in conf and 'alias /app/web/dist/img/favicon.ico;' in conf
+    assert conf.index('location = /favicon.ico') < conf.index('location / {')

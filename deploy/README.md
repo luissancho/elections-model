@@ -52,6 +52,7 @@ docker run -d --restart unless-stopped -p 127.0.0.1:8042:8042 --env-file deploy/
 Dentro del contenedor, nginx (puerto 8042) sirve solo los recursos y hace de proxy del resto:
 
 - `/dist/` → ficheros de `web/dist/` (`css`, `js`, `vendor`, `img`), con cabeceras de seguridad.
+- `/favicon.ico` → `web/dist/img/favicon.ico` (caché de una semana), para los clientes que lo piden sin mirar la página.
   `/dist/vendor/` (ECharts, con la versión en el nombre, y desde la fase 7 las fuentes de `/dist/vendor/fonts/`)
   lleva caché de un año; el resto de `/dist/` (`.js`, `.css`) se revalida siempre. Un fichero que falta bajo `/dist/` da el 404 de nginx.
 - `/` y `/api/` → gunicorn (`127.0.0.1:8000`) con `proxy_cache` de 60 s (zona `api_cache` en
@@ -149,6 +150,15 @@ licencia (`LICENSE`, SIL OFL); 188 KB entre las dos, servidas con la caché de u
 `font-display: swap`, con la pila del sistema como respaldo. Para cambiar una fuente, cambia también el nombre del
 fichero (la caché es de un año). Los tokens de color y tipografía están en `:root` de `web/dist/css/site.css`.
 
+Marca: el sitio se llama Demoscopio (`pages.SITE_TITLE`; `SITE_TAGLINE` es la línea bajo el nombre y la descripción
+por defecto de las páginas). La cabecera (`_brand.html`) muestra el logotipo `web/dist/img/logo.svg`: "Demoscopi" en
+Source Serif 4 Semibold convertida a trazos, con la última "o" como lente (anillo y punto en el azul de acento), que es
+también el favicon (`favicon.svg`, `favicon.ico` en 16/32/48 y `apple-touch-icon.png`, enlazados desde `_icons.html`).
+Los cuatro ficheros los genera `python web/brand/build.py` desde la fuente (necesita `fonttools[woff]` y Pillow, que
+no son dependencias de la web): para cambiar el nombre, los colores o la lente, edita las constantes del script y
+vuelve a ejecutarlo. Cada página lleva `<link rel="canonical">` y `og:url` (`Page.canonical_url`): `WEB_SITE_URL`
+más la ruta y la consulta sin `mode` ni `run`, que solo cambian la vista de la misma página.
+
 Datos y errores: `/elecciones` y `/metodo/backtest` leen solo el paquete (sin base): sin elecciones o sin backtest
 publicados del ámbito responden 200 con un aviso; `/elecciones?date=` mal formada da 400 ("Fecha no válida.") y una
 elección no publicada, 404 ("Elección no publicada."); una subpágina del método desconocida, 404 ("Página del método
@@ -197,7 +207,9 @@ la web, también sus jobs quedan limitados a 10 s. Mientras `deploy/docker/cront
 conflicto; si un día el contenedor ejecuta publicaciones o cargas, ejecútalas en otro contenedor con la
 variable vacía (un `RUN_JOB` es siempre un `docker run` aparte: `-e DB_STATEMENT_TIMEOUT=` lo anula, porque
 `-e` gana a `--env-file`). Variables opcionales de `deploy/elections.env`: `WEB_PREFIX` (prefijo del
-paquete, por defecto `site/v1`) y `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60).
+paquete, por defecto `site/v1`), `WEB_CACHE_TTL` (TTL de los punteros en segundos, por defecto 60) y
+`WEB_SITE_URL` (origen público del sitio para las `canonical`, por defecto `https://demoscopio.es`; en el
+`.env` local va el host de desarrollo, `https://demoscopio.dev`).
 Sin ningún run publicado, la API responde 503 `no bundle published yet` y las páginas muestran un 503
 en HTML.
 
@@ -266,11 +278,12 @@ Si la página dibuja gráficos, el módulo `web/dist/js/pages/<nombre>.js` lee `
 ### Desarrollo sin Docker
 
 En el Mac, Luis tiene un nginx local en el puerto 8080. Hay que añadir a su `server` las dos `location`
-de `/dist/` y el proxy, con `<repo>` la ruta del repositorio:
+de `/dist/`, la de `/favicon.ico` y el proxy, con `<repo>` la ruta del repositorio:
 
 ```
 location ^~ /dist/vendor/ { alias <repo>/web/dist/vendor/; expires 1y; }
 location ^~ /dist/ { alias <repo>/web/dist/; expires -1; }
+location = /favicon.ico { alias <repo>/web/dist/img/favicon.ico; expires 7d; }
 location / {
     proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

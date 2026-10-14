@@ -83,6 +83,22 @@ class Page(Controller):
 
         return ''
 
+    def canonical_url(self) -> str:
+        """
+        Canonical URL of the page of the request: the public origin, the path and the query without the
+        parameters that only change the view of the same page.
+
+        ``mode`` (the default view is the canonical one) and ``run`` (a pinned run is a snapshot of the
+        page) are dropped; the parameters that select the content (``scope``, ``region``, ``date``,
+        ``id``...) are kept in their order.
+
+        Returns
+        -------
+        str
+            ``'<site_url>/<path><query>'``, for ``<link rel="canonical">`` and ``og:url``.
+        """
+        return '{}/{}{}'.format(webapi.settings()['site_url'], self.request.uri, self.query_without('mode', 'run'))
+
     def render(self, template: str, **context) -> str:
         """
         Render a page template as a cacheable HTML response.
@@ -94,13 +110,14 @@ class Page(Controller):
         template : str
             Template name in ``web/templates``.
         **context
-            Template variables.
+            Template variables; ``canonical`` (``canonical_url``) is added when missing.
 
         Returns
         -------
         str
             The rendered HTML.
         """
+        context.setdefault('canonical', self.canonical_url())
         html = pages.environment().get_template(template).render(**context)
 
         self.response.set_content_type('text/html')
@@ -143,7 +160,7 @@ class Page(Controller):
         self.response.set_header('content-disposition', None)
 
         return pages.environment().get_template('error.html').render(
-            site_title=pages.SITE_TITLE, status=status, message=text
+            site_title=pages.SITE_TITLE, site_tagline=pages.SITE_TAGLINE, status=status, message=text
         )
 
     def error_result(self, status: int, message: str) -> str:

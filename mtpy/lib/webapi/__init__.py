@@ -10,7 +10,7 @@ only ``bundle``; ``data`` (and with it the database models) is imported on the f
 so the web workers that never touch the database do not load it.
 """
 from .caches import (
-    DEFAULT_TTL, LRU_SIZE, LRUCache, TTLCache, settings,
+    DEFAULT_SITE_URL, DEFAULT_TTL, LRU_SIZE, LRUCache, TTLCache, settings,
 )
 from .checks import (
     ANALYSIS_PARTS, BACKTEST_PARTS, CSV_PARTS, DATE_RE, DEFAULT_LIMIT, EVENT_PARTS, FORMATS, INT_RE, MAX_LIMIT,

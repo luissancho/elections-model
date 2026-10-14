@@ -46,7 +46,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'public, max-age=60' and headers['etag'].startswith('"')
-    assert '<title>Pronóstico electoral · Promedios</title>' in page
+    assert '<title>Demoscopio · Promedios</title>' in page
     assert 'Pronóstico para el' in page and 'href="/es?mode=forecast" aria-current="page"' in page
     assert 'name="mode"' not in page  # `?mode=` switches the page, but no control is rendered
     assert 'id="headline-table"' in page and '<th scope="col">Partido</th>' in page
@@ -116,7 +116,7 @@ def test_page_errors_are_html_and_not_cached(api, fresh_app, monkeypatch, path, 
     got, headers, body = call(api, path, query=query)
     assert got == status and headers['content-type'] == 'text/html; charset=utf-8'
     assert headers['cache-control'] == 'no-store' and 'etag' not in headers
-    assert text in html(body) and 'Pronóstico electoral' in html(body)
+    assert text in html(body) and 'alt="Demoscopio"' in html(body)
 
 
 def test_api_not_found_stays_json(api):
@@ -144,7 +144,7 @@ def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
     status, headers, body = call(api, '/es')
     page = html(body)
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
-    assert '<title>Pronóstico electoral · Promedios</title>' in page
+    assert '<title>Demoscopio · Promedios</title>' in page
     assert 'Estimación a' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
     assert 'name="mode"' not in page
     assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
@@ -280,11 +280,62 @@ def test_method_subpages_and_links():
     assert pages.method_href('promedio') == '/metodo/promedio' and pages.method_href('escanos') == '/metodo/escanos'
 
 
+def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
+    """La cabecera lleva el logotipo (SVG con el nombre como alt), la línea bajo el nombre, los iconos y las
+    metaetiquetas Open Graph con el mismo título y descripción que la página."""
+    status, headers, body = call(api, '/es', query='mode=forecast')
+    page = html(body)
+    assert status == 200
+    assert '<h1><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="563" height="102"></a></h1>' in page
+    assert '<p class="brand-tagline">Promedio de encuestas, previsión de escaños y ranking de encuestadoras</p>' in page
+    assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
+    assert '<link rel="icon" href="/dist/img/favicon.ico" sizes="16x16 32x32 48x48">' in page
+    assert '<link rel="apple-touch-icon" href="/dist/img/apple-touch-icon.png">' in page
+    assert '<meta property="og:site_name" content="Demoscopio">' in page
+    assert '<meta property="og:title" content="Demoscopio · Promedios">' in page
+    assert '<link rel="canonical" href="https://demoscopio.es/es">' in page
+    assert '<meta property="og:url" content="https://demoscopio.es/es">' in page
+    description = re.search(r'<meta name="description" content="([^"]+)">', page).group(1)
+    assert description and description == re.search(r'<meta property="og:description" content="([^"]+)">', page).group(1)
+    assert 'Pronóstico electoral' not in page
+
+
+def test_canonical_drops_the_view_parameters_and_keeps_the_content_ones(api, fresh_app):
+    """La canonical es la URL pública de la página sin `mode` ni `run` (vistas de la misma página), con `scope` y los
+    demás parámetros que eligen el contenido, y el origen sale de `web.site_url` (`WEB_SITE_URL`)."""
+    status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es">' in html(body)
+    status, headers, body = call(api, '/es/escanos', query='region=28&mode=forecast')
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/es/escanos?region=28">' in html(body)
+    status, headers, body = call(api, '/metodo', query='scope=es')
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/metodo?scope=es">' in html(body)
+    status, headers, body = call(api, '/')
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.es/">' in html(body)
+    from mtpy.core.app import Config
+    fresh_app.set('config', Config({'web': {'site_url': 'https://demoscopio.dev/'}}))
+    status, headers, body = call(api, '/es')
+    assert status == 200 and '<link rel="canonical" href="https://demoscopio.dev/es">' in html(body)
+    assert '<meta property="og:url" content="https://demoscopio.dev/es">' in html(body)
+
+
+def test_error_page_carries_the_brand_and_the_default_description(api):
+    """El error 404 HTML lleva la misma cabecera e iconos, y describe el sitio con el nombre y la línea bajo él (la
+    descripción por defecto de `base.html`, que todas las páginas sobrescriben)."""
+    status, headers, body = call(api, '/nope')
+    page = html(body)
+    assert status == 404 and '<title>Demoscopio · Error 404</title>' in page
+    assert ('<meta name="description" content="Demoscopio: promedio de encuestas, previsión de escaños y ranking de '
+            'encuestadoras en España.">') in page
+    assert '<img src="/dist/img/logo.svg" alt="Demoscopio" width="563" height="102">' in page
+    assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
+    assert '<p class="brand-tagline">Promedio de encuestas, previsión de escaños y ranking de encuestadoras</p>' in page
+
+
 def test_templates_compile_with_strict_undefined():
     env = pages.environment()
     names = sorted(f for f in os.listdir(pages.TEMPLATES_DIR) if f.endswith('.html'))
-    assert {'base.html', '_header.html', '_footer.html', '_event_bar.html', '_scope_filter.html', 'error.html',
-            'promedios.html', 'escanos.html', 'casas.html', 'casa.html',
+    assert {'base.html', '_header.html', '_brand.html', '_icons.html', '_footer.html', '_event_bar.html',
+            '_scope_filter.html', 'error.html', 'promedios.html', 'escanos.html', 'casas.html', 'casa.html',
             'metodo_backtest.html'} <= set(names)
     for name in names:
         env.get_template(name)
@@ -450,7 +501,7 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     status, headers, body = call(api, '/es/escanos', query='mode=forecast')
     page = html(body)
     assert status == 200 and headers['content-type'] == 'text/html; charset=utf-8'
-    assert '<title>Pronóstico electoral · Escaños</title>' in page
+    assert '<title>Demoscopio · Escaños</title>' in page
     assert 'href="/es/escanos?mode=forecast" aria-current="page"' in page.replace('\n', ' ')
     assert 'id="parties-table"' in page and '<th scope="col">P(mayoría)</th>' in page
     assert 'id="blocks-table"' in page and 'id="vs-table"' not in page and 'id="blocks-chart"' in page
@@ -1202,7 +1253,7 @@ def test_backtest_without_backtest_shows_a_notice(api):
     status, _, body = call(api, '/metodo/backtest', query='scope=es')
     page = html(body)
     assert status == 200 and 'Backtest no publicado todavía' in page and 'initial-data' not in page
-    assert '/dist/js/pages/metodo.js' in page and '<title>Pronóstico electoral · Cuánto acierta el modelo</title>' in page
+    assert '/dist/js/pages/metodo.js' in page and '<title>Demoscopio · Cuánto acierta el modelo</title>' in page
     assert 'action="/metodo/backtest"' in page and 'aria-current="page">Método</a>' in page
 
 
@@ -1295,7 +1346,7 @@ def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
 def test_metodo_promedio_text(api):
     status, _, body = call(api, '/metodo/promedio')
     page = html(body)
-    assert status == 200 and '<title>Pronóstico electoral · ¿Cómo promediamos las encuestas?</title>' in page
+    assert status == 200 and '<title>Demoscopio · ¿Cómo promediamos las encuestas?</title>' in page
     for anchor in ('que-entra', 'peso', 'efectos-de-casa', 'regresion', 'banda', 'voto-estimado'):
         assert 'id="' + anchor + '"' in page, anchor
     assert 'id="metodo-nav"' in page and '<math' in page and 'En resumen' in page
@@ -1442,7 +1493,7 @@ def test_home_lists_the_published_events_with_their_headline(api, fresh_app):
     webapi.site().manifest_cache_clear()
     status, headers, body = call(api, '/')
     page = html(body)
-    assert status == 200 and '<title>Pronóstico electoral · Inicio</title>' in page
+    assert status == 200 and '<title>Demoscopio · Inicio</title>' in page
     assert page.index('Elecciones generales') < page.index('Elecciones autonómicas · Madrid')
     assert 'href="/es"' in page and 'href="/es-md"' in page and 'href="/es/escanos"' not in page
     leader = max(fixture_data('headline')['nowcast']['parties'], key=lambda row: row['pct'])
@@ -1594,7 +1645,7 @@ def test_houses_pages_use_encuestadora(houses):
         assert_public_wording(page, query)
         assert '/dist/js/pages/casas.js' in page
     page = html(call(houses, '/casas')[2])
-    assert '<title>Pronóstico electoral · Ranking Encuestadoras</title>' in page
+    assert '<title>Demoscopio · Ranking Encuestadoras</title>' in page
     assert 'aria-current="page">Ranking Encuestadoras</a>' in page
     status, _, body = call(houses, '/casas', query='id=999')
     assert status == 404 and 'Encuestadora no encontrada' in html(body)
@@ -1603,7 +1654,7 @@ def test_houses_pages_use_encuestadora(houses):
 def test_menu_labels_and_titles(api):
     page = html(call(api, '/elecciones')[2])
     assert '>Histórico Errores</a>' in page and '>Ranking Encuestadoras</a>' in page
-    assert '<title>Pronóstico electoral · Histórico Errores</title>' in page
+    assert '<title>Demoscopio · Histórico Errores</title>' in page
     assert [entry['label'] for entry in pages.PAGES] == ['Inicio', 'Histórico Errores', 'Ranking Encuestadoras',
                                                           'Método']
 

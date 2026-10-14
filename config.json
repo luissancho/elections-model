@@ -32,7 +32,8 @@
     },
     "web": {
         "prefix": "${WEB_PREFIX}",
-        "cache_ttl": "${WEB_CACHE_TTL}"
+        "cache_ttl": "${WEB_CACHE_TTL}",
+        "site_url": "${WEB_SITE_URL}"
     },
     "cwl": {
         "group": "${CWL_GROUP}"
