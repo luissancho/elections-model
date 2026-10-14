@@ -98,8 +98,7 @@ Redirecciones 301 (`Page.redirect`, desde `Redirect.py` y, para `/?scope=`, desd
 Cabecera, barra de evento y filtro: la cabecera (`_header.html`) lleva el nombre del sitio y el menú, sin selectores;
 el banner de veda va encima. Las páginas de evento añaden la barra de evento (`_event_bar.html`, contexto
 `event_bar` de `common_context`): nombre del evento ("Elecciones generales" o "Elecciones autonómicas · {nombre}"),
-fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), la línea que
-explica el modo mostrado (`pages.mode_text`) y, con un run fijado, el chip del run. Desde la fase 7b la barra no
+fecha y días que faltan (Europe/Madrid), las pestañas Promedios | Escaños (`pages.EVENT_TABS`), y, con un run fijado, el chip del run. Desde la fase 7b la barra no
 lleva formulario: ni control Hoy / Elección ni el `<details>` que lo explicaba. El título dice "Estimación a {hoy}"
 (Europe/Madrid) en modo Hoy con el último run y "Estimación del {run_at}" con un run fijado anterior; en modo
 Elección, "Pronóstico para el {fecha}", "Pronóstico definitivo para el {fecha}" (congelado, último run) o "Pronóstico
@@ -122,23 +121,27 @@ Componentes de la fase 7b (ajustes tras el recorrido de Luis, 2026-10-13):
 - Inicio: cada tarjeta es entera un enlace (`<a class="card card-link">`, con su `<h3>` dentro); la del primer
   ámbito (`.tile-hero`) es la grande y "Ver escaños" queda fuera del enlace, debajo. "Para entender el modelo" son
   tres tarjetas clicables: Histórico Errores, Ranking Encuestadoras y Método.
-- Píldoras (`fieldset.pills` > `label.pill` con su casilla oculta pero enfocable): el selector de partidos o
-  bloques, coloreado al estilo de la leyenda de ECharts, sin título ni botones Todos/Ninguno. La píldora marcada
+- Píldoras (`fieldset.pills` > `label.pill` con su casilla oculta pero enfocable): el selector de partidos de la
+  calculadora de coaliciones de Escaños, coloreado al estilo de la leyenda de ECharts. La píldora marcada
   toma el color del partido (`--pill-color`) y una tinta legible calculada en el servidor (filtro `ink`,
   `pages.ink_color`: texto oscuro sobre colores claros, blanco sobre oscuros); sin `:has()` el JS pone la clase
-  `is-on`. Se usan en Promedios y en la calculadora de coaliciones de Escaños; las leyendas de ECharts de Promedios
-  se ocultan.
+  `is-on`. En Promedios la leyenda de ECharts es el selector (fase 7c).
 - Promedios: los controles en tres líneas, en este orden: Vista (Partidos/Bloques), Ventana y las píldoras. El
   tooltip es por sondeo (`trigger: 'item'`): nombre, fecha, muestra y las siglas en su color con su valor, de mayor a
-  menor. La tabla "Sondeos del ciclo" tiene la columna "Sondeo" (`pages.poll_name`: `encuestadora / medio`, o la
-  encuestadora sola, como el cargador) en lugar de Casa y Patrocinador; se pintan las primeras `TABLE_ROWS` (40)
-  filas, la isla lleva todas y "Cargar más" añade las siguientes hasta que no quedan (entonces desaparece; con 40
-  sondeos o menos nunca aparece). Sin JS se ven las 40 primeras y el CSV tiene todas.
+  menor. La tabla "Todas las encuestas" (fase 7c) tiene la columna "Sondeo" (`pages.poll_name`: `encuestadora / medio`, o la
+  encuestadora sola, como el cargador) en lugar de Casa y Patrocinador; el servidor pinta las 15 más recientes, la
+  isla lleva todas y el JS pagina, filtra y ordena. Sin JS se ven esas filas y el CSV tiene todas.
 - Escaños: tabla Partido, Escaños, Rango 95 %, P(escaño), P(primero), P(mayoría); los histogramas llevan la línea
   de la mediana (gruesa) y las del rango del 95 % (finas), sin el valor escrito; una sola tabla de bloques
   ("Bloques ideológicos, con todos los partidos"); la calculadora usa las mismas píldoras.
 - Histórico Errores: la diana (`#errors-bullseye`) es cuadrada, de hasta 640 px y centrada en su tarjeta; la del
   detalle de una elección y la del perfil (`#bullseye-chart`) siguen en 480 px.
+
+Fase 7c (2026-10-14): restyle con fondo gris, tarjetas blancas, controles en segmentos y contenedor fluido; tres
+tarjetas centrales en Promedios (hemiciclo, partidos, bloques); la leyenda de ECharts como selector de partidos;
+"Todas las encuestas" (`polls-table.js` + `pages/polls-dom.js`: filtros, orden y paginación en el navegador);
+"Resultados por territorio" en Escaños (`territory.js` + `pages/territory-dom.js`, nivel CCAA o provincia, escaños o
+voto); y `community`/`votes` en `districts.regions` (los runs antiguos, sin ellos, ocultan el nivel CCAA).
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
