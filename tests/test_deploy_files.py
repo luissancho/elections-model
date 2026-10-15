@@ -94,3 +94,20 @@ def test_brand_assets_match_the_templates_and_nginx_serves_the_favicon():
     conf = read('deploy/docker/nginx.conf')
     assert 'location = /favicon.ico {' in conf and 'alias /app/web/dist/img/favicon.ico;' in conf
     assert conf.index('location = /favicon.ico') < conf.index('location / {')
+
+
+def test_site_fonts_are_vendored_and_licensed():
+    """Las dos fuentes variables que `site.css` declara existen en `web/dist/vendor/fonts`, pesan lo que un
+    subconjunto latino, están en `LICENSE` y las antiguas ya no se referencian."""
+    css = read('web/dist/css/site.css')
+    faces = re.findall(r"@font-face\s*{[^}]*font-family:\s*'([^']+)'[^}]*font-weight:\s*([\d ]+);[^}]*url\('/dist/vendor/fonts/([\w.-]+)'\)", css, re.S)
+    assert {(family, weight) for family, weight, _ in faces} == {('DM Sans', '400 700'), ('Outfit', '700 800')}
+    licence = read('web/dist/vendor/fonts/LICENSE')
+    for _, _, name in faces:
+        path = ROOT / 'web' / 'dist' / 'vendor' / 'fonts' / name
+        assert path.is_file() and path.stat().st_size < 70_000, name
+        assert name in licence, name
+    assert 'Source Serif' not in css and 'Source Sans' not in css
+    assert 'Indian Type Foundry' in licence and 'Outfit Project Authors' in licence
+    assert "--font-body: 'DM Sans'" in css and "--font-head: 'Outfit'" in css
+    assert 'font-variant-numeric: tabular-nums' in css

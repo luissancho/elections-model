@@ -1,11 +1,12 @@
-Source Serif 4 (SourceSerif4-4.005-Semibold.woff2, release 4.005R):
-Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+DM Sans (DMSans.woff2, variable font, axes opsz 9-40 and wght 400-700, latin subset):
+Copyright 2014-2017 Indian Type Foundry (info@indiantypefoundry.com), with Reserved Font Name 'DM Sans'.
+Copyright 2019 Google LLC. Copyright 2023 The DM Sans Project Authors (https://github.com/googlefonts/dm-fonts).
 
-Source Sans 3 (SourceSans3-3.052-Regular.woff2, release 3.052R):
-Copyright 2010-2024 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+Outfit (Outfit.woff2, variable font, axis wght 700-800, latin subset):
+Copyright 2021 The Outfit Project Authors (https://github.com/Outfitio/Outfit-Fonts), with Reserved Font Name 'Outfit'.
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1.
-
+Both fonts are licensed under the SIL Open Font License, Version 1.1, and were fetched from Google Fonts with
+web/brand/fonts.py (latin subset, axes cut down to the ranges the site uses).
 This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
 
 

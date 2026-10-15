@@ -1,60 +1,64 @@
 /*
- * Site stylesheet: tokens first, then one section per component. Light grey page background, white cards with a
- * soft shadow, a fluid container, a serif for headings and a sans for everything else. Party colours come from the run
- * catalogue and block colours from THEME (charts/base.js); nothing here overrides them. No dark mode.
+ * Site stylesheet: tokens first, then one section per component. Light grey page background, white cards of
+ * radius 18 with a soft layered shadow, a fluid container, DM Sans for the text and Outfit for the headings and
+ * the big figures (both variable fonts, vendored). Party colours come from the run catalogue and block colours
+ * from THEME (charts/base.js); nothing here overrides them. No dark mode.
  */
 
-/* Fonts: vendored woff2 (SIL OFL, see /dist/vendor/fonts/LICENSE): the serif in semibold for the headings, the sans
-   in regular and semibold (bold body text and the bold labels drawn on the chart canvases use the semibold) */
+/* Fonts: vendored variable woff2 (SIL OFL, see /dist/vendor/fonts/LICENSE), latin subset; DM Sans carries the
+   optical size axis, so the small text of the tables gets the 9 pt design */
 @font-face {
-  font-family: 'Source Serif 4';
-  src: url('/dist/vendor/fonts/SourceSerif4-4.005-Semibold.woff2') format('woff2');
-  font-weight: 600;
+  font-family: 'DM Sans';
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
+  src: url('/dist/vendor/fonts/DMSans.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Source Sans 3';
-  src: url('/dist/vendor/fonts/SourceSans3-3.052-Regular.woff2') format('woff2');
-  font-weight: 400;
+  font-family: 'Outfit';
+  font-weight: 700 800;
   font-style: normal;
   font-display: swap;
+  src: url('/dist/vendor/fonts/Outfit.woff2') format('woff2');
 }
 
-@font-face {
-  font-family: 'Source Sans 3';
-  src: url('/dist/vendor/fonts/SourceSans3-3.052-Semibold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Tokens. Muted text and links pass WCAG AA (4.5:1) on both the page background and the cards. */
+/* Tokens (spec of phase 8, D1). Muted text passes WCAG AA (4.5:1) on both the page background and the cards. */
 :root {
   --color-bg: #f4f5f8;
   --color-card: #fff;
+  --color-soft: #eceef2;
+  --color-soft2: #e3e6ec;
   --color-text: #1a1c22;
   --color-muted: #5a5f72;
-  /* Only for uppercase table headers and small notes, never running text (4.5:1 on white) */
-  --color-faint: #6b7186;
+  /* Decorative only (chevrons, points of the axes), never text */
+  --color-faint: #9298ac;
   --color-line: rgba(0,0,0,.08);
   --color-line-strong: rgba(0,0,0,.15);
+  /* The brand: the lens, links, the bar of the card titles and the active entry of the menu. Never a selected
+     control: those go in ink, so that nothing looks like the blue of a party. */
   --color-accent: #1d4f86;
-  --color-soft: #eceef2;
-  --color-row-hover: #f6f8fb;
+  --color-accent-soft: #e7eef8;
+  --color-hover: #eff4ff;
+  --color-row-hover: var(--color-hover);
+  --color-ok: #16a34a;
+  --color-ok-soft: #ecfdf3;
+  --color-bad: #dc2626;
+  --color-bad-soft: #fef2f2;
   --color-error: #b00020;
-  --font-head: 'Source Serif 4', Georgia, serif;
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  --font-head: 'Outfit', 'DM Sans', sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
   --gutter: 16px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
-  --radius: 12px;
-  --shadow: 0 2px 8px rgba(0,0,0,.06);
-  --tap: 40px;
+  --radius: 18px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --shadow-up: 0 2px 4px rgba(16,24,40,.05), 0 14px 32px rgba(16,24,40,.09);
+  --tap: 44px;
   /* Side padding of `main` and of the full-width bands, so they all align */
   --band-pad: 32px;
 }
@@ -67,14 +71,18 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
-  font-size: 1.0625rem;
+  font-size: 15px;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 { font-family: var(--font-head); font-weight: 600; line-height: 1.25; }
-h2 { font-size: 1.3rem; margin: 0 0 var(--space-3); }
-h3 { font-size: 1.1rem; margin: var(--space-4) 0 var(--space-2); }
+/* Headings in the display face: the titles of the cards (16 px), of the sections (22 px, `.sec-h`) and of the
+   events (26 px, the event bar); the big figures use `--font-head` too */
+h1, h2, h3 { font-family: var(--font-head); font-weight: 700; line-height: 1.15; }
+h2 { font-size: 16px; margin: 0 0 var(--space-3); }
+h3 { font-size: 16px; margin: var(--space-4) 0 var(--space-2); }
 a { color: var(--color-accent); text-underline-offset: 2px; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 code { font-size: 0.92em; }
@@ -241,9 +249,10 @@ button:hover { border-color: var(--color-accent); }
 .headline {
   margin: 0 0 var(--space-2);
   font-family: var(--font-head);
-  font-weight: 600;
-  font-size: 1.4rem;
-  line-height: 1.35;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -.01em;
 }
 
 .back { margin: 0; font-size: 0.95rem; }
@@ -270,7 +279,7 @@ button:hover { border-color: var(--color-accent); }
 }
 .card > h2:first-child, .card > h3:first-child { margin-top: 0; }
 .mode-subtitle { font-family: var(--font-body); font-weight: 400; font-size: 0.9rem; color: var(--color-muted); }
-.lead { margin: var(--space-1) 0 0; color: var(--color-muted); }
+.lead { margin: var(--space-1) 0 0; font-size: 13.5px; color: var(--color-muted); }
 /* Prose keeps a readable measure inside the fluid container */
 .lead, .how-body, .card p, #glosario dd { max-width: 100ch; }
 
@@ -329,10 +338,10 @@ article.card p, .card-link p { margin: 6px 0; }
 
 /* Tables: horizontal scroll inside `.table-wrap`; the first column sticks on narrow screens */
 .table-wrap { overflow-x: auto; margin-top: var(--space-2); }
-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
 caption { caption-side: top; text-align: left; padding: 0 0 var(--space-2); color: var(--color-muted); font-size: 0.9rem; }
-th, td { padding: 6px var(--space-2); border-bottom: 1px solid var(--color-line); text-align: right; white-space: nowrap; }
-th { font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-faint); border-bottom: 1.5px solid var(--color-line-strong); }
+th, td { padding: 7px var(--space-2); border-bottom: 1px solid var(--color-line); text-align: right; white-space: nowrap; }
+th { font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); border-bottom: 1.5px solid var(--color-line-strong); }
 tr:hover td { background: var(--color-row-hover); }
 th:first-child, td:first-child { text-align: left; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-4); margin: 0; }
@@ -429,7 +438,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Mobile (< 720 px): one column, the menu row scrolls sideways, the event bar stacks */
 @media (max-width: 719px) {
   :root { --band-pad: 16px; }
-  body { font-size: 1rem; }
+  table { font-size: 12.5px; }
   main { padding-top: var(--space-4); }
   .grid, .grid-three { grid-template-columns: 1fr; }
   .card { padding: var(--space-3) var(--space-4); }
@@ -534,7 +543,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et col.c-d { width: 80px; }
 .et col.c-s { width: 80px; }
 .et col.c-p { width: 72px; }
-.et th { color: var(--color-faint); user-select: none; }
+.et th { color: var(--color-muted); user-select: none; }
 .et th .sort { min-height: 0; padding: 0; font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; border-radius: 0; }
 .et th .sort:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .et th[aria-sort="descending"] .sort::after { content: " ▾"; }
@@ -567,7 +576,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .cell-diverging::before { content: ""; position: absolute; left: 50%; top: 3px; bottom: 3px; border-left: 1px solid var(--color-line-strong); }
 /* Escaños, "Resultados por territorio": tinted cells, the winner in bold with a thin ring, and the TOTAL row */
 .geo { min-width: 900px; }
-.geo th { color: var(--color-faint); user-select: none; }
+.geo th { color: var(--color-muted); user-select: none; }
 .geo th .sort { min-height: 0; padding: 0; font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; border-radius: 0; }
 .geo th .sort:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .geo th[aria-sort="descending"] .sort::after { content: " ▾"; }
@@ -589,7 +598,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Figures of the selection in the error history, and the lines of what each filter leaves out. */
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); }
 .figures[hidden] { display: none; }
-.figures dd { font-family: var(--font-head); font-size: 1.6rem; margin: 0; }
+.figures dd { font-family: var(--font-head); font-size: 22px; margin: 0; }
 .figures dt { color: var(--color-muted); font-size: 0.85rem; }
 .complements { list-style: none; margin: var(--space-3) 0 0; padding: 0; color: var(--color-muted); }
 .complements li { margin: 0 0 var(--space-1); }
