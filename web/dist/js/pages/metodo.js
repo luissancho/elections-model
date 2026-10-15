@@ -1,8 +1,10 @@
-// Method pages: the controls and, on the backtest subpage, the vote error, the coverage and the seat error of the
-// backtest by horizon, drawn from the data embedded by the server. The landing page has no data and draws nothing.
+// Method pages: the controls; on the backtest subpage, the vote error, the coverage and the seat error of the
+// backtest by horizon; on the average subpage, the live example of the weights of the polls (`charts/weights.js`),
+// all drawn from the data embedded by the server. The landing page has no data and draws nothing.
 import {fmtNum} from '../format.js';
 import {renderLines} from '../charts/line.js';
-import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {renderWeights} from '../charts/weights.js';
+import {mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 
 // Series colours: the model stands out, the baselines are lighter.
 const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev_result: '#009e73'};
@@ -28,7 +30,13 @@ function paint() {
     return;
   }
 
-  const {horizons = [], mae = {}, coverage = {}, seats = {}} = readInitial();
+  const data = readInitial();
+  const weightsEl = document.getElementById('weights-chart');
+  if (weightsEl && data.example) {
+    tryDraw(() => renderWeights(weightsEl, data.example), 'the weights example');
+  }
+
+  const {horizons = [], mae = {}, coverage = {}, seats = {}} = data;
 
   const maeEl = document.getElementById('mae-chart');
   if (maeEl && horizons.length) {
@@ -66,4 +74,5 @@ function paint() {
 }
 
 wireControls();
+wireMore('weights-more', 'weights-table');
 mountWhenReady(paint);
