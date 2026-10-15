@@ -10,11 +10,7 @@
 {% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
     <div id="content" class="stack">
       {% if kpis %}
-      <div class="kpis" id="kpis">
-        {% for kpi in kpis %}
-        <div class="kpi"><div class="l">{{ kpi.label }}</div><div class="v"{% if kpi.color %} style="color: {{ kpi.color }}"{% endif %}>{{ kpi.value }}<small>{{ kpi.unit }}</small></div><div class="s{% if kpi.ok %} ok{% endif %}">{{ kpi.support }}</div></div>
-        {% endfor %}
-      </div>
+      {{ m.kpis(kpis, id='kpis') }}
       {% endif %}
       {% if cards %}
       <div class="pcards" id="pcards">

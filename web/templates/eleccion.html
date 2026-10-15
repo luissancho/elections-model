@@ -36,8 +36,11 @@
             </fieldset>
           </div>
           {% endif %}
-          <div class="chart" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños de cada partido en el resultado oficial"></div>
+          <div class="chart hemi" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños de cada partido en el resultado oficial"></div>
           <noscript><p class="muted">El hemiciclo necesita JavaScript; la tabla de al lado tiene los escaños.</p></noscript>
+          {% if lead %}
+          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}superó la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}</p>
+          {% endif %}
           {% else %}
           <p class="notice">Sin resultado oficial publicado.</p>
           {% endif %}
@@ -58,14 +61,16 @@
                 <tr>
                   <th scope="col">Partido</th>
                   <th scope="col">% Voto</th>
+                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   <th scope="col">Escaños</th>
                 </tr>
               </thead>
               <tbody>
                 {% for row in results_rows %}
                 <tr{% if not row.shown %} hidden{% endif %}>
-                  <td title="{{ row.fullname }}"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.party }}</td>
+                  <td title="{{ row.fullname }}"><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.party }}</span></td>
                   <td>{{ row.pct|pct }}</td>
+                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, pct_max) }}%; background: {{ row.color }}"></i></span></td>
                   <td><strong>{{ row.seats|int }}</strong></td>
                 </tr>
                 {% endfor %}

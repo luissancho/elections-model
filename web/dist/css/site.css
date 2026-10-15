@@ -281,7 +281,7 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
   white-space: nowrap;
   border: 0;
 }
-.seg label, .seg > span, .event-tabs a {
+.seg label, .seg > span, .seg > a, .event-tabs a {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -295,10 +295,10 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
   white-space: nowrap;
   cursor: pointer;
 }
-.seg.lg label, .seg.lg > span, .seg.lg a { padding: 7px 14px; font-size: 13px; }
+.seg.lg label, .seg.lg > span, .seg.lg > a { padding: 7px 14px; font-size: 13px; }
 .seg svg { width: 14px; height: 14px; stroke-width: 2.4; }
 .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
-.seg label.is-on, .seg > span.on, .seg a.on { background: var(--color-text); color: #fff; }
+.seg label.is-on, .seg > span.on, .seg > a.on { background: var(--color-text); color: #fff; }
 .seg label:has(input:checked) { background: var(--color-text); color: #fff; }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .event-tabs a:hover { color: var(--color-text); }
@@ -628,7 +628,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Escaños: histograms, blocks chart, coalition calculator and district form */
 #ridge-chart { margin-top: var(--space-3); }
 #seats-bar { height: 120px; }
-.coalition-result { font-size: 1.1rem; margin: var(--space-2) 0; }
+#coalition-result { margin: var(--space-2) 0; }
 #district-form { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; margin-top: var(--space-3); }
 
 /* Casas and elections: bullseye and the house-effects table */
@@ -755,11 +755,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .pag[hidden] { display: none; }
 .pag button:disabled { opacity: 0.45; cursor: default; }
 
-/* Figures of the selection in the error history, and the lines of what each filter leaves out. */
-.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); }
-.figures[hidden] { display: none; }
-.figures dd { font-family: var(--font-head); font-size: 22px; margin: 0; }
-.figures dt { color: var(--color-muted); font-size: 12px; }
+/* The lines of what each filter of the error history leaves out (the figures are a KPI row). */
 .complements { list-style: none; margin: var(--space-3) 0 0; padding: 0; color: var(--color-muted); font-size: 13.5px; }
 .complements li { margin: 0 0 var(--space-1); }
 .series-controls.filters-bar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
@@ -860,7 +856,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .pc { flex: 0 0 210px; scroll-snap-align: start; }
 
   /* Larger tap targets for the chart controls and the pills */
-  .seg label, .seg > span, .event-tabs a, .pills .pill { min-height: 40px; display: inline-flex; align-items: center; }
+  .seg label, .seg > span, .seg > a, .event-tabs a, .pills .pill { min-height: 40px; display: inline-flex; align-items: center; }
   .ctrls .seg { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
   .bar { width: 84px; }
   .rng { width: 100px; }

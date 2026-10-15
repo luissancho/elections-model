@@ -78,12 +78,12 @@
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <dl class="figures" id="figures-list" hidden>
-          <div><dt>Sondeos</dt><dd id="figure-polls">—</dd></div>
-          <div><dt>Elecciones</dt><dd id="figure-events">—</dd></div>
-          <div><dt id="figure-mean-label">Error de bloques</dt><dd id="figure-mean">—</dd></div>
-          <div><dt>Sesgo del margen</dt><dd id="figure-bias">—</dd></div>
-        </dl>
+        <div class="kpis" id="figures-list" hidden>
+          <div class="kpi"><div class="l">Sondeos</div><div class="v" id="figure-polls">—</div></div>
+          <div class="kpi"><div class="l">Elecciones</div><div class="v" id="figure-events">—</div></div>
+          <div class="kpi"><div class="l" id="figure-mean-label">Error de bloques</div><div class="v" id="figure-mean">—</div></div>
+          <div class="kpi"><div class="l">Sesgo del margen</div><div class="v" id="figure-bias">—</div></div>
+        </div>
         <ul class="complements" id="complements" aria-live="polite"></ul>
         <noscript><p class="muted">Las cifras necesitan JavaScript.</p></noscript>
         {% call m.how() %}

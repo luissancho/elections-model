@@ -11,7 +11,7 @@
     <div id="content" class="stack">
       <p class="back"><a href="/casas">← Todas las encuestadoras</a></p>
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su calidad previa y el rating con el que entra en el promedio, el mismo en todos los ámbitos. Debajo, su historial en las elecciones de todos los ámbitos.') }}
-        <p class="muted">Tipo: {{ mtype or '–' }} · Calidad: {{ current.quality|num(1) }} · Rating: {{ current.rating|num(1) }}</p>
+        {{ m.kpis(kpis) }}
       {{ m.card_end() }}
       {{ m.card_start('path', 'Camino al rating', 'El rating de la encuestadora en cada elección general, calculado con lo que se sabía antes de ella.') }}
         {% if path %}

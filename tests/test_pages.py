@@ -569,7 +569,7 @@ def test_escanos_table_histograms_blocks_and_pills(api):
     assert 'name="sview" value="partidos" checked' in flat and 'name="sview" value="bloques"' in flat
     assert '<div id="seats-blocks" hidden>' in page and '<div id="seats-parties">' in page
     assert 'id="blocks-chart"' not in page and 'id="blocks"' not in page and 'id="seats"' in page
-    assert 'id="coalition-parties" class="pills"' in page.replace('class="pills" id="coalition-parties"', 'id="coalition-parties" class="pills"')
+    assert '<fieldset class="pills lg" id="coalition-parties">' in page
     assert 'class="pill"' in page and 'name="coalition"' in page
 
 
@@ -1103,14 +1103,14 @@ def test_casas_ranking_and_profile_header_are_national_whatever_the_panel_scope(
     assert '0,50' not in ranking and pages.fmt_num(national, 2) in ranking and '0,50' in herding
     assert '<option value="es-md" selected>' in page and 'href="/casas?id=2"' in page
     page = html(call(houses, '/casas', query='scope=es-md&id=2')[2])
-    assert 'Rating: 82,4' in page and 'id="scope-filter"' not in page and 'Generales 2023' in page  # perfil global
+    assert '<div class="v">82,4<small></small></div>' in page.replace('\n', '') and 'id="scope-filter"' not in page and 'Generales 2023' in page  # perfil global
 
 
 def test_casa_profile_of_a_house_without_ratings(houses):
     """Una casa del catálogo sin ratings en el ámbito: perfil con tablas vacías, sin camino ni diana."""
     status, _, body = call(houses, '/casas', query='id=4')
     page = html(body)
-    assert status == 200 and '<h2>Nueva' in page and 'Calidad: – · Rating: –' in page
+    assert status == 200 and '<h2>Nueva' in page and page.replace('\n', '').count('<div class="v">–<small></small></div>') == 3
     assert 'class="headline"' not in page  # el perfil no lleva titular (2026-10-15)
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page and 'id="bullseye-filter"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
@@ -1165,8 +1165,10 @@ def test_analysis_part_is_none_when_not_published(api, fresh_app):
 def test_casa_profile_header_uses_the_scope_rating(houses):
     """La cabecera toma rating y calidad de la última fila del camino del ámbito, no del catálogo (nacional, truncado)."""
     page = html(call(houses, '/casas', query='id=2')[2])
-    assert 'Tipo: privada · Calidad: 80,0 · Rating: 82,4' in page and 'Rating: 70' not in page
-    assert 'Tipo: pública' in html(call(houses, '/casas', query='id=1')[2])  # `mtype` con su etiqueta en castellano
+    flat = page.replace('\n', '')
+    assert '<div class="v">82,4<small></small></div>' in flat and '<div class="v">80,0<small></small></div>' in flat
+    assert '<div class="l">Tipo</div><div class="v">privada<small></small></div>' in flat and '>70,' not in flat
+    assert '<div class="v">pública<small></small></div>' in html(call(houses, '/casas', query='id=1')[2]).replace('\n', '')  # `mtype` con su etiqueta en castellano
 
 
 def test_pages_package_layout():
@@ -1404,7 +1406,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert data['block_colors'] == {'Derecha': fixture_data('meta')['parties'][0]['color'], 'Izquierda': pages.OTHERS_COLOR}
     # primera fila como en Promedios: hemiciclo y tabla de resultados (% Voto y Escaños, sin P(primero))
     results = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
-    assert re.findall(r'<th scope="col">(.*?)</th>', results) == ['Partido', '% Voto', 'Escaños']
+    assert re.findall(r'<th scope="col">(.*?)</th>', results) == ['Partido', '% Voto', '<span class="sr-only">Barra del voto</span>', 'Escaños']
     assert '<td>33,1 %</td>' in results and '<td><strong>160</strong></td>' in results and 'P(primero)' not in page
     assert 'id="hemicycle"' in page and 'de los 350 de la cámara' in page
     assert 'id="error-chart"' in page and 'id="split-chart"' in page and 'class="chart big" id="bullseye-chart"' in page
@@ -2418,3 +2420,44 @@ def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
     past = page[page.index('id="past"'):]
     assert 'href="/elecciones?scope=es&amp;date=2023-07-23"' in past and past.index('2023') < past.index('2019')
     assert 'PP −25 escaños <small>vs 2023</small>' in page.replace('\n', '')  # el chip de delta del hero
+
+
+def test_escanos_table_draws_the_seat_range_and_the_ridge_is_compact(api):
+    page = html(call(api, '/es/escanos')[2])
+    table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
+    assert 'class="rng"' in table and '<u style="left: 50.3%"></u>' in table and '120–150' in table
+    assert '<fieldset class="pills lg" id="coalition-parties">' in page
+    assert '<p class="chip" id="coalition-result">' in page
+
+
+def test_history_figures_are_a_kpi_row(history_site):
+    page = html(call(history_site, '/elecciones')[2])
+    kpis = re.search(r'<div class="kpis" id="figures-list" hidden>(.*?)</div>\s*<ul class="complements"', page, re.S).group(1)
+    assert kpis.count('<div class="kpi">') == 4
+    for id_ in ('figure-polls', 'figure-events', 'figure-mean', 'figure-bias'):
+        assert 'class="v" id="%s"' % id_ in kpis, id_
+    assert 'id="figure-mean-label"' in kpis and '<dl class="figures"' not in page
+
+
+def test_profile_opens_with_three_kpis_and_keeps_the_path_table(houses):
+    page = html(call(houses, '/casas', query='scope=es&id=2')[2])
+    profile = page[page.index('id="profile"'):page.index('id="path"')]
+    assert re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', profile) == ['Rating', 'Calidad previa', 'Tipo']
+    assert '<div class="v">82,4<small></small></div>' in profile.replace('\n', '') and 'entra así en el promedio' in profile
+    assert 'Tipo: ' not in profile and 'id="path-table"' in page and 'id="rating-path"' in page
+
+
+def test_election_detail_has_the_lead_strip_without_p_first(events_site):
+    page = html(call(events_site, '/elecciones', query='scope=es&date=2023-07-23')[2])
+    strip = re.search(r'<p class="lead-strip">(.*?)</p>', page, re.S).group(1).replace('\n', '')
+    assert 'Líder: <b>PP</b> · <b>160 escaños</b>' in strip and 'P(primero)' not in strip
+    assert 'le faltan <b>16</b> para la mayoría' in strip
+    assert 'class="chart hemi"' in page
+    table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
+    assert '<span class="bar"><i style="width: 100.0%;' in table
+
+
+def test_method_nav_is_a_segmented_control(api):
+    page = html(call(api, '/metodo/promedio')[2])
+    nav = re.search(r'<nav id="metodo-nav" class="seg metodo-nav"[^>]*>(.*?)</nav>', page, re.S).group(1)
+    assert re.search(r'<a class="on" href="/metodo/promedio"[^>]*aria-current="page"', nav)

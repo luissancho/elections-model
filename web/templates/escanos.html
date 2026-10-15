@@ -34,10 +34,12 @@
             </thead>
             <tbody>
               {% for row in party_rows %}
+              {% set color = catalog[row.name].color %}
+              {% set r = row.seats_lo|rng(row.seats_hi, row.seats, summary.n_seats, summary.majority) %}
               <tr>
-                <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
-                <td>{{ row.seats|int }}</td>
-                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
+                <td><strong>{{ row.seats|int }}</strong></td>
+                <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_seats|prob }}</td>
                 <td>{{ row.p_first|prob }}</td>
                 <td>{{ row.p_majority|prob }}</td>
@@ -61,10 +63,11 @@
             </thead>
             <tbody>
               {% for row in block_rows %}
+              {% set r = row.seats_lo|rng(row.seats_hi, row.seats, summary.n_seats, summary.majority) %}
               <tr>
-                <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
-                <td>{{ row.seats|int }}</td>
-                <td>{{ row.seats_lo|range(row.seats_hi, 0) }}</td>
+                <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
+                <td><strong>{{ row.seats|int }}</strong></td>
+                <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_majority|prob }}</td>
               </tr>
               {% endfor %}
@@ -95,13 +98,13 @@
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('coalition', 'Calculadora de coaliciones', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle) }}
-        <fieldset class="pills" id="coalition-parties">
+        <fieldset class="pills lg" id="coalition-parties">
           <legend class="sr-only">Partidos de la coalición</legend>
           {% for entry in calculator %}
           <label class="pill" style="--pill-color: {{ entry.color }}; --pill-ink: {{ entry.color|ink }}" title="{{ entry.fullname }}"><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> {{ entry.name }}</label>
           {% endfor %}
         </fieldset>
-        <p class="coalition-result" id="coalition-result">Marca partidos para calcular su mayoría.</p>
+        <p class="chip" id="coalition-result">Marca partidos para calcular su mayoría.</p>
         <div class="chart" id="coalition-chart" role="img" aria-label="Distribución de escaños de la coalición marcada en las simulaciones"></div>
         <noscript><p class="muted">La calculadora necesita JavaScript.</p></noscript>
         {% call m.how() %}

@@ -38,3 +38,14 @@
   {% endif %}
 </section>
 {%- endmacro %}
+
+
+{#- KPI row (spec of phase 8, D3.5): one card split in columns, each `{'label', 'value', 'unit', 'support', 'ok',
+    'color'}`. `id` and `hidden` for the rows the browser fills (the figures of the error history). -#}
+{% macro kpis(rows, id='', hidden=False) -%}
+<div class="kpis"{% if id %} id="{{ id }}"{% endif %}{% if hidden %} hidden{% endif %}>
+  {% for kpi in rows %}
+  <div class="kpi"><div class="l">{{ kpi.label }}</div><div class="v"{% if kpi.color %} style="color: {{ kpi.color }}"{% endif %}>{{ kpi.value }}<small>{{ kpi.unit }}</small></div>{% if kpi.support is defined and kpi.support %}<div class="s{% if kpi.ok %} ok{% endif %}">{{ kpi.support }}</div>{% endif %}</div>
+  {% endfor %}
+</div>
+{%- endmacro %}

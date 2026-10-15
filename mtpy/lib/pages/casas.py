@@ -7,7 +7,7 @@ from .. import webapi
 from ..webapi import query_pollster, query_ratings, site
 from .common import analysis_part, api_url, common_context
 from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
-from .filters import fmt_date
+from .filters import fmt_num, fmt_date
 
 RATING_SCOPE = 'es'
 # Rows of the ranking the page shows before "Cargar más".
@@ -287,6 +287,31 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     return context
 
 
+def profile_kpis(current: dict, mtype: Optional[str]) -> list:
+    """
+    The KPI row of a pollster profile: its rating, its prior quality and its type.
+
+    Parameters
+    ----------
+    current : dict
+        The latest rating row (``rating``, ``quality``).
+    mtype : str or None
+        Label of the type of the pollster.
+
+    Returns
+    -------
+    list of dict
+        Three ``{'label', 'value', 'unit', 'support', 'ok', 'color'}`` rows for ``_macros.kpis``.
+    """
+    return [
+        {'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '', 'support': 'entra así en el promedio',
+         'ok': False, 'color': None},
+        {'label': 'Calidad previa', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': '', 'ok': False,
+         'color': None},
+        {'label': 'Tipo', 'value': mtype or '–', 'unit': '', 'support': '', 'ok': False, 'color': None},
+    ]
+
+
 def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     """
     Template context of the profile of a pollster.
@@ -308,7 +333,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
+        The common context plus ``kpis`` (``profile_kpis``), ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
         the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing), ``current``
         (the ``rating`` and ``quality`` of its last national ratings row, the next general election; both
         ``None`` without ratings), ``path`` (its national ratings by election, ``PATH_KEYS``),
@@ -357,6 +382,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     context['profile'] = profile
     context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
     context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
+    context['kpis'] = profile_kpis(context['current'], context['mtype'])
     context['path'] = path
     context['effects_table'] = effects_table(profile['house_effects'], label, order=list(context['catalog']))
     context['herding_table'] = [dict(row, label=label(row.get('event_scope') or RATING_SCOPE, row['event_date']))

@@ -7,7 +7,7 @@ from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
 from .common import Catalog, analysis_part, api_url, block_color, bundle_part, common_context, published_scopes
 from .filters import fmt_num
-from .promedios import BLOCK_ORDER, chart_polls, poll_months, polls_table, pollster_options
+from .promedios import BLOCK_ORDER, chart_polls, lead_strip, poll_months, polls_table, pollster_options
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 # Block drawn to the left in the chart that splits the error of the last polls by block (its mate goes right).
@@ -760,6 +760,10 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['event'] = dict(meta, summary=summary)
     context['results_rows'] = results_rows
     context['results_hidden'] = sum(1 for row in results_rows if not row['shown'])
+    context['pct_max'] = max((row['pct'] for row in results_rows if row.get('pct') is not None), default=0)
+    context['majority'] = majority_of(n_seats)
+    context['lead'] = lead_strip([{'name': row['party'], 'seats': row.get('seats')} for row in results_rows],
+                                 majority_of(n_seats), with_first=False)
     context['block_result_rows'] = block_rows
     context['n_seats'] = n_seats
     context['last_rows'] = last_rows
