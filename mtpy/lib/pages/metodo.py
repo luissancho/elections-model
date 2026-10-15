@@ -137,11 +137,6 @@ def national_figures() -> dict:
     }
 
 
-def _scale(rows: list, key: str, floor: float) -> float:
-    """Scale of a bar column of the example: ``floor`` (the ``vmax`` of ``print_weights``) unless a value exceeds it."""
-    return max([floor] + [row[key] for row in rows if row.get(key) is not None])
-
-
 def weights_example() -> Optional[dict]:
     """
     The live example of the average: the polls that weigh on the average of the party leading the vote of the
@@ -150,9 +145,9 @@ def weights_example() -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``name``, ``fullname``, ``color`` (from ``meta``), ``date`` (the day read), ``run``, ``stats`` (those of
-        the leader), ``rows`` (the rows of the leader, by date), ``n_rows``, ``weight_max``, ``sample_max`` and ``rating_max``
-        (scales of the bars: 3, 2 and 2 unless a value exceeds them), ``line`` and ``kernel``. ``None`` without a national run, when the run
+        ``name``, ``fullname``, ``color`` (from ``meta``), ``date`` (the day the average is read, the centre of
+        the kernel), ``published`` (the day of the run, ``run_at``, the date the texts show), ``run``, ``stats``
+        (those of the leader), ``rows`` (the rows of the leader, newest first), ``n_rows``, ``line`` and ``kernel``. ``None`` without a national run, when the run
         has no ``weights`` part (published before the part existed), when the headline has no parties or when the
         leader has no fit in the part.
 
@@ -163,7 +158,8 @@ def weights_example() -> Optional[dict]:
     """
     try:
         run = site().latest_run(NATIONAL_SCOPE)
-        parties = (part(NATIONAL_SCOPE, run, 'headline').get('nowcast') or {}).get('parties') or []
+        headline = part(NATIONAL_SCOPE, run, 'headline')
+        parties = (headline.get('nowcast') or {}).get('parties') or []
         if not parties:
             return None
         leader = max(parties, key=lambda row: row['pct'] if row.get('pct') is not None else float('-inf'))['name']
@@ -178,20 +174,19 @@ def weights_example() -> Optional[dict]:
         return None
 
     catalogue = next((row for row in part(NATIONAL_SCOPE, run, 'meta').get('parties') or [] if row['name'] == leader), {})
-    rows = sorted((row for row in weights['rows'] if row['name'] == leader), key=lambda row: row['date'])
+    # Newest first: the reader looks for the latest polls
+    rows = sorted((row for row in weights['rows'] if row['name'] == leader), key=lambda row: row['date'], reverse=True)
 
     return {
         'name': leader,
         'fullname': catalogue.get('fullname'),
         'color': catalogue.get('color'),
         'date': weights['date'],
+        'published': (headline.get('run_at') or '')[:10] or weights['date'],
         'run': run,
         'stats': weights['stats'][leader],
         'rows': rows,
         'n_rows': len(rows),
-        'weight_max': _scale(rows, 'weight', 3.0),
-        'sample_max': _scale(rows, 'weight_sample', 2.0),
-        'rating_max': _scale(rows, 'weight_rating', 2.0),
         'line': weights['line'][leader],
         'kernel': weights['kernel'][leader],
     }

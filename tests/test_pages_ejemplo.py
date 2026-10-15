@@ -23,9 +23,10 @@ def test_weights_example_picks_the_leader_and_its_slice(api):
     example = metodo.weights_example()
     assert example['name'] == 'PP' and example['fullname'] == fixture_data('meta')['parties'][0]['fullname']
     assert example['color'] == '#1d84ce' and example['date'] == '2026-10-08' and example['run'] == RUN
-    assert example['n_rows'] == 3 == example['stats']['nobs'] and example['weight_max'] == 3
-    assert example['rating_max'] == 2 and example['sample_max'] == 2            # las escalas de las barras
-    assert [row['date'] for row in example['rows']] == ['2026-09-24', '2026-10-01', '2026-10-05']
+    assert example['published'] == fixture_data('headline')['run_at'][:10] == '2026-10-08'
+    assert example['n_rows'] == 3 == example['stats']['nobs']
+    assert 'weight_max' not in example and 'rating_max' not in example and 'sample_max' not in example
+    assert [row['date'] for row in example['rows']] == ['2026-10-05', '2026-10-01', '2026-09-24']   # los más nuevos arriba
     assert example['line']['dates'][-1] == '2026-10-08' and len(example['kernel']['values']) == 15
 
 
@@ -37,14 +38,6 @@ def test_weights_example_is_none_without_the_part_or_the_leader(api, tmp_path, m
     monkeypatch.undo()
     without_weights(tmp_path)
     assert metodo.weights_example() is None
-
-
-def test_weights_example_widens_the_bar_scales_when_a_factor_exceeds_them(api, monkeypatch):
-    weights = fixture_data('weights')
-    weights['rows'][0] = {**weights['rows'][0], 'weight_rating': 3.2, 'weight_sample': 2.5, 'weight': 4.1}
-    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: weights if name == 'weights' else fixture_data(name))
-    example = metodo.weights_example()
-    assert example['rating_max'] == 3.2 and example['sample_max'] == 2.5 and example['weight_max'] == 4.1
 
 
 def test_weights_example_lets_other_errors_through(api, monkeypatch):
@@ -81,15 +74,35 @@ def test_promedio_page_shows_the_example_block(api):
     assert status == 200 and 'id="ejemplo"' in page and 'Un ejemplo: el promedio del PP hoy' in page
     assert 'href="#ejemplo"' in page and page.index('id="banda"') < page.index('id="ejemplo"') < page.index('id="voto-estimado"')
     assert 'id="weights-table"' in page and 'id="weights-chart"' in page and 'id="weights-more"' not in page
+    assert page.index('id="weights-chart"') < page.index('id="weights-list"') < page.index('id="weights-table"')
+    assert 'class="chart chart-tall"' in page and '<details class="weights-list" id="weights-list">' in page   # plegado
+    assert re.search(r'<summary[^>]*>\s*Ver los 3 sondeos', page)
     assert len(re.findall(r'<tr>\s*<td class="f l">', page)) == 3 and '<tr hidden>' not in page
+    headers = re.findall(r'<th scope="col"[^>]*>([^<]+)</th>', page[page.index('id="weights-table"'):])
+    assert headers == ['Fecha', 'Casa', 'Muestra', 'Predicción', 'Peso', 'F(kernel)', 'F(solape)', 'F(muestra)', 'F(rating)']
+    rows = re.findall(r'<tr>\s*<td class="f l">([^<]+)</td>', page)
+    assert rows == ['5 oct', '1 oct', '24 sept']                                   # los más nuevos arriba
     text = re.sub(r'\s+', ' ', page)
     assert 'se leía en 33,1%, con una banda de 32,4% a 33,8%' in text and 'Entraban en la recta 3 sondeos' in text
     assert 'unos 2,6 sondeos de igual peso' in text and 'unos 42 días de anchura' in text and '8 oct 2026' in text
-    assert '<b>GAD3</b> / ABC' in text and '24 sept' in text and '>–<' in page     # muestra ausente → guion
+    assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
     assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
+    assert 'class="cell-shade" style="background-color: rgba(29, 79, 134, 0.352)"' in page   # F(kernel) 0,64 sobre 1
+    assert 'class="cell-shade" style="background-color: rgba(29, 79, 134, 0.22)"' in page    # F(muestra) 0,8 sobre 2
+    assert 'class="cell-shade" style="background-color: rgba(29, 79, 134, 0.275)"' in page   # F(rating) 1,0 sobre 2
     assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
     data = initial(body)
     assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
+
+
+def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
+    headline = {**fixture_data('headline'), 'run_at': '2026-10-09T08:00:00Z'}
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: headline if name == 'headline' else fixture_data(name))
+    status, _, body = call(api, '/metodo/promedio')
+    text = re.sub(r'\s+', ' ', html(body))
+    assert status == 200 and 'El 9 oct 2026 el promedio del PP se leía en 33,1%' in text and 'publicado el 9 oct 2026' in text
+    assert '8 oct 2026' not in text                       # la fecha de lectura (as_of) no se imprime
+    assert initial(body)['example']['date'] == '2026-10-08'    # pero el gráfico sigue centrado en ella
 
 
 def test_promedio_page_hides_the_rows_beyond_the_batch_and_offers_more(api, monkeypatch):

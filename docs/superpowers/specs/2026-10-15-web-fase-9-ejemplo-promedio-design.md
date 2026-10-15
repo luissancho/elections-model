@@ -340,3 +340,22 @@ que las cifras del ejemplo sean exactamente las publicadas.
   estimador).
 - El fixture sintético de `weights.json` y los datos del doble `weights_at`.
 - La redacción final del «Cómo leerlo» y de las cabeceras de la tabla, en el tono del resto de la página.
+
+## Ajustes 2026-10-16 (paseo de Luis con datos reales)
+
+Luis vio el bloque tras publicar un run y pidió:
+
+1. El gráfico arriba y la lista debajo, plegada al cargar, con un botón para desplegarla («Ver los N sondeos»; es
+   un `details` nativo, así que funciona sin JavaScript).
+2. El gráfico mucho más alto: 600 px en escritorio (`.chart.chart-tall`, la clase que ya tenían las series; 280 px
+   en móvil).
+3. La lista en orden inverso, los más nuevos arriba.
+4. Las columnas se llaman «Fecha», «Casa», «Muestra», «Predicción», «Peso», «F(kernel)», «F(solape)», «F(muestra)»
+   y «F(rating)». «Casa» es la segunda excepción a la regla «encuestadora» del texto público (la primera, el título
+   «Efectos de casa por elección» del perfil); la prosa sigue diciendo «encuestadora».
+5. «Peso» con una barra azul fija de 0 a 3; los cuatro F(*) con un degradado azul de fondo (`shade`), de 0 a 1 para
+   F(kernel) y F(solape) y de 0 a 2 para F(muestra) y F(rating). Las escalas que se ensanchaban con los datos
+   (decisión 6 de la revisión) se retiran: un valor por encima del tope satura, como en `print_weights`.
+6. La fecha que imprimen los textos es la de publicación del run (`headline.run_at`), no el día en que se lee el
+   promedio (`as_of`, último sondeo + `max_fc`). El cálculo, la guía del gráfico y el centro de la campana siguen
+   en `as_of`, como en Promedios, donde la estimación «de hoy» es el valor de la recta prolongada ese día.

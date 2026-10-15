@@ -2041,12 +2041,14 @@ def visible_text(page):
 
 # The one public "casa": the title Luis asked for in the profile (2026-10-15).
 EFFECTS_TITLE = 'Efectos de casa por elección'
+# The other public "casa": the column header Luis asked for in the weights example of the method (2026-10-16).
+WEIGHTS_HOUSE_HEADER = '<th scope="col">Casa</th>'
 
 
 def assert_public_wording(page, label):
-    """Ni "casa/s" ni "patrocinador/es" en el texto visible (salvo el título `EFFECTS_TITLE` del perfil), y ningún
-    "Cómo leerlo" abierto."""
-    text = visible_text(page).replace(EFFECTS_TITLE, ' ')
+    """Ni "casa/s" ni "patrocinador/es" en el texto visible (salvo el título `EFFECTS_TITLE` del perfil y la cabecera
+    `WEIGHTS_HOUSE_HEADER` del ejemplo del promedio), y ningún "Cómo leerlo" abierto."""
+    text = visible_text(page.replace(WEIGHTS_HOUSE_HEADER, ' ')).replace(EFFECTS_TITLE, ' ')
     assert not re.search(r'\b[Cc]asas?\b', text), (label, re.findall(r'.{40}\b[Cc]asas?\b.{20}', text)[:3])
     assert not re.search(r'\b[Pp]atrocinador(es)?\b', text), label
     assert '<details class="how" open' not in page, label
