@@ -86,8 +86,8 @@ def test_promedio_page_shows_the_example_block(api):
     assert ('Los sondeos que aportan peso en el promedio del PP publicado el 8 oct 2026 y la recta que se ajusta a ellos: '
             'lo que las secciones anteriores explican, con los datos a día de hoy.') in text
     assert ('El 8 oct 2026 el promedio del PP se establece en el 33,1%, con una banda del 32,4% al 33,8%. Se calcula a partir '
-            'de 3 sondeos, que por sus pesos equivalen a unos 2,6 sondeos efectivos en los últimos 42 días, penalizando los '
-            'más antiguos a través del kernel gaussiano aplicado.') in text
+            'de 3 sondeos, que por sus pesos equivalen a unos 2,6 sondeos efectivos, penalizando los más antiguos a través '
+            'del kernel gaussiano con un ancho de banda de 42 días.') in text
     assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
     assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
     table = page[page.index('id="weights-table"'):page.index('</table>')]
