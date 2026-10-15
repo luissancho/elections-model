@@ -27,6 +27,15 @@
       <div class="hemi-grid">
         {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto oficial de los escaños, dibujado como la cámara.', None, 'hemi-card') }}
           {% if results_rows and n_seats %}
+          {% if block_result_rows %}
+          <div class="series-controls">
+            <fieldset id="results-view" class="seg" hidden>
+              <legend>Vista</legend>
+              <label><input type="radio" name="rview" value="partidos" checked> Partidos</label>
+              <label><input type="radio" name="rview" value="bloques"> Bloques</label>
+            </fieldset>
+          </div>
+          {% endif %}
           <div class="chart" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños de cada partido en el resultado oficial"></div>
           <noscript><p class="muted">El hemiciclo necesita JavaScript; la tabla de al lado tiene los escaños.</p></noscript>
           {% else %}
@@ -37,6 +46,7 @@
             Cada sector es un partido con sus escaños del resultado oficial, ordenados por bloques de izquierda a
             derecha; la línea marca la mayoría absoluta.
           </p>
+          <p>Con la vista Bloques, cada sector es un bloque y la tabla de al lado pasa a los bloques.</p>
           <p>Es el resultado, no una previsión: aquí no hay simulaciones ni intervalos.</p>
           {% endcall %}
         {{ m.card_end() }}
@@ -53,7 +63,7 @@
               </thead>
               <tbody>
                 {% for row in results_rows %}
-                <tr{% if loop.index > results_shown %} hidden{% endif %}>
+                <tr{% if not row.shown %} hidden{% endif %}>
                   <td title="{{ row.fullname }}"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.party }}</td>
                   <td>{{ row.pct|pct }}</td>
                   <td><strong>{{ row.seats|int }}</strong></td>
@@ -66,11 +76,43 @@
           <button type="button" class="more" id="results-more" hidden>Ver {{ 'el partido restante' if results_hidden == 1 else 'los ' ~ results_hidden ~ ' partidos restantes' }}</button>
           {% endif %}
           {% call m.how() %}
-          <p>Cada fila es un partido, con su voto en porcentaje y sus escaños según el resultado oficial.</p>
+          <p>
+            Cada fila es un partido, con su voto en porcentaje y sus escaños según el resultado oficial. La tabla
+            enseña los partidos principales de la elección; «Ver más» destapa el resto.
+          </p>
           <p>Es la referencia con la que se miden todos los errores de esta página: cada error es sondeo menos resultado.</p>
           <p>No dice cómo se repartió el voto en cada circunscripción: es el total del ámbito.</p>
           {% endcall %}
         {{ m.card_end() }}
+        {% if block_result_rows %}
+        {{ m.card_start('results-blocks', 'Resultados por bloque', 'El resultado oficial sumado por bloques: el voto en porcentaje y los escaños de cada bloque.', hidden=True) }}
+          <div class="table-wrap">
+            <table id="blocks-result-table">
+              <caption class="sr-only">Resultado oficial por bloque; {{ n_seats|int }} escaños.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Bloque</th>
+                  <th scope="col">% Voto</th>
+                  <th scope="col">Escaños</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in block_result_rows %}
+                <tr>
+                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
+                  <td>{{ row.pct|pct }}</td>
+                  <td><strong>{{ row.seats|int }}</strong></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% call m.how() %}
+          <p>Cada fila es un bloque: la suma del voto y de los escaños de sus partidos en el resultado oficial.</p>
+          <p>Un partido sin bloque no suma en ninguno; está en la tabla de partidos.</p>
+          {% endcall %}
+        {{ m.card_end() }}
+        {% endif %}
       </div>
       <div class="split">
       {{ m.card_start('last-errors', 'Error del último sondeo', 'Cuánto se equivocó el último sondeo de cada encuestadora en el margen entre bloques, en puntos.') }}

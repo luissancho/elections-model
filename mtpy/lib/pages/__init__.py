@@ -14,16 +14,18 @@ The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``web
 does not import the model nor ``publish``, so the web workers stay light.
 """
 from .backtest import backtest_context, backtest_part, project
-from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING_KEYS, analysis_part, casa_context,
-                    casas_context, effects_table, herding_rows, house_effects_grid, profile_rows, ranking_rows)
+from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING_KEYS, RANKING_MIN_EVENTS,
+                    RANKING_MIN_POLLS, analysis_part, casa_context, casas_context, effects_table, eligible_pollsters,
+                    herding_rows, house_effects_grid, profile_rows, ranking_rows)
 from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
                      SITE_TITLE, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
                      default_mode, environment, event_info, event_query, event_title, ink_color, parse_state,
                      part, published_scopes, resolve_event_scope, resolve_scope, scope_query, title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, chart_parties,
-                         error_blocks, history_events, history_rows, history_scopes, eleccion_context,
+                         error_blocks, event_block_rows, history_events, history_rows, history_scopes, eleccion_context,
                          elecciones_context, error_rows, event_part, last_poll_rows, horizon_tables, majority_of,
-                         poll_error_parts, published_events, resolve_event, split_sides, with_abs)
+                         mark_shown, party_blocks, poll_error_parts, published_events, resolve_event, shown_parties,
+                         split_sides, with_abs)
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, has_communities, escanos_context,
                       region_rows, resolve_region, seat_rows)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob,

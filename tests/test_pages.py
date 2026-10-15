@@ -903,8 +903,16 @@ def fake_houses(monkeypatch, name='CIS'):
         'pollster_id': [2, 2, 2], 'pollster': ['GAD3', 'GAD3', 'GAD3'],
         'n': [14, 17, 9], 'ratio': [0.781, 0.705, 0.912], 'p_value': [0.034, 0.012, 0.21],
     })
+    # sondeos evaluables por elección: CIS y GAD3 tienen dos elecciones con dos o más (entran en el ranking);
+    # Hamalgama, una sola
+    poll_counts = pd.DataFrame({
+        'pollster_id': [1, 1, 2, 2, 3], 'event_scope': ['es', 'es', 'es', 'es-md', 'es'],
+        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2021-05-04', '2023-07-23']),
+        'n': [10, 12, 14, 9, 2],
+    })
     monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
+    monkeypatch.setattr(webapi.queries, 'get_poll_counts', lambda: poll_counts)
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
@@ -945,6 +953,31 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
     assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
+
+
+def test_casas_ranking_needs_two_polls_in_two_elections(houses, monkeypatch):
+    """CIS se queda con un solo sondeo en 2019: una sola elección con dos o más, así que sale del ranking (tabla y
+    barras); sigue enlazada en los demás paneles."""
+    counts = pd.DataFrame({'pollster_id': [1, 1, 2, 2], 'event_scope': ['es', 'es', 'es', 'es-md'],
+                           'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2021-05-04']),
+                           'n': [1, 12, 14, 9]})
+    monkeypatch.setattr(webapi.queries, 'get_poll_counts', lambda: counts)
+    webapi.queries._QUERIES.clear()
+    body = call(houses, '/casas')[2]
+    page = html(body)
+    ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert 'GAD3' in ranking and 'CIS' not in ranking and ranking.count('<tr>') == 2  # cabecera y GAD3
+    assert [row['pollster'] for row in initial(body)['ranking']] == ['GAD3']
+    assert 'href="/casas?id=1"' in page  # CIS sigue en los efectos de encuestadora
+    assert 'al menos dos sondeos en al menos dos elecciones' in page
+    assert pages.eligible_pollsters(counts) == {2} and pages.eligible_pollsters(None) == set()
+    assert pages.eligible_pollsters(counts, min_polls=1) == {1, 2} and pages.eligible_pollsters(counts, min_events=3) == set()
+    assert pages.eligible_pollsters(pd.DataFrame(columns=['pollster_id', 'n'])) == set()
+    assert pages.RANKING_MIN_POLLS == 2 and pages.RANKING_MIN_EVENTS == 2
+    # sin sondeos evaluables en la base, nadie entra
+    monkeypatch.setattr(webapi.queries, 'get_poll_counts', lambda: pd.DataFrame(columns=['pollster_id', 'event_scope', 'event_date', 'n']))
+    webapi.queries._QUERIES.clear()
+    assert initial(call(houses, '/casas')[2])['ranking'] == []
 
 
 def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app):
@@ -1353,7 +1386,17 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert '/casas?id=2' in table and 'href="/elecciones?scope=es"' in page
     assert 'id="pollsters-table"' not in page and 'Sesgo del margen' not in table  # ya no hay tabla de medias por casa
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
-    assert 'id="results-more"' not in page  # cuatro partidos: nada que desplegar
+    # la tabla enseña los partidos de `parties.event` de data/params.json (PP, PSOE, VOX); Cs queda tras "Ver más"
+    results = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
+    assert results.count('<tr>') == 4 and results.count('<tr hidden>') == 1 and results.index('VOX') < results.index('<tr hidden>') < results.index('Cs')
+    assert '<button type="button" class="more" id="results-more" hidden>Ver el partido restante</button>' in page
+    # el selector Partidos/Bloques del hemiciclo y la tabla por bloques (oculta): Derecha = PP + VOX + Cs según los
+    # parámetros, Izquierda = PSOE
+    assert '<fieldset id="results-view" class="seg" hidden>' in page and 'name="rview"' in page
+    blocks = re.search(r'<section class="card" id="results-blocks" hidden>(.*?)</section>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col">(.*?)</th>', blocks) == ['Bloque', '% Voto', 'Escaños']
+    assert re.findall(r'</span>(\w+)</td>\s*<td>(.*?)</td>\s*<td><strong>(\d+)</strong>', blocks) == [
+        ('Derecha', '45,5 %', '200'), ('Izquierda', '31,4 %', '150')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
@@ -1361,7 +1404,8 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
     # el hemiciclo del resultado oficial y el reparto del error por bloque (Izquierda a la izquierda)
     assert data['results'] == {'n_seats': 350, 'majority': 176, 'rows': [
-        {'name': 'PP', 'seats': 160}, {'name': 'PSOE', 'seats': 150}, {'name': 'VOX', 'seats': 40}, {'name': 'Cs', 'seats': 0}]}
+        {'name': 'PP', 'seats': 160}, {'name': 'PSOE', 'seats': 150}, {'name': 'VOX', 'seats': 40}, {'name': 'Cs', 'seats': 0}],
+        'blocks': [{'name': 'Derecha', 'seats': 200}, {'name': 'Izquierda', 'seats': 150}]}
     assert data['split'] == {'left': 'Izquierda', 'right': 'Derecha'}
     assert data['block_colors'] == {'Derecha': fixture_data('meta')['parties'][0]['color'], 'Izquierda': pages.OTHERS_COLOR}
     # primera fila como en Promedios: hemiciclo y tabla de resultados (% Voto y Escaños, sin P(primero))
@@ -1406,7 +1450,9 @@ def test_eleccion_detail_without_cycle_part_shows_a_notice(events_site, monkeypa
     assert 'polls' not in data and [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX', 'Cs']
 
 
-def test_eleccion_detail_hides_the_results_beyond_twenty_behind_a_button(events_site, monkeypatch):
+def test_eleccion_detail_hides_the_results_beyond_fifteen_without_params(events_site, monkeypatch):
+    """Sin lista de partidos en los parámetros (o sin ninguno de sus partidos en ella), la tabla enseña los 15
+    primeros; sin bloques en ninguna fuente, ni selector ni tabla por bloques."""
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
@@ -1414,17 +1460,63 @@ def test_eleccion_detail_hides_the_results_beyond_twenty_behind_a_button(events_
         if name == 'results':
             rows = [dict(data['rows'][0], party=f'P{i:02d}', seats=1) for i in range(23)]
             data = {**data, 'rows': rows}
+        if name == 'meta':
+            data = {**data, 'blocks': {}}
         return data
 
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
-    status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
-    page = html(body)
-    table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
-    assert status == 200 and table.count('<tr>') == 21 and table.count('<tr hidden>') == 3  # cabecera + 20 visibles
-    assert table.index('P19') < table.index('<tr hidden>') < table.index('P20')
-    assert '<button type="button" class="more" id="results-more" hidden>Ver los 3 partidos restantes</button>' in page
+    for params in ({}, {'parties': {'event': ['PP', 'PSOE']}}):  # sin lista, o una lista sin ninguno de los partidos
+        monkeypatch.setattr(pages.elecciones, 'event_params', lambda scope, date, params=params: params)
+        status, _, body = call(events_site, '/elecciones', query='scope=es&date=2023-07-23')
+        page = html(body)
+        table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
+        assert status == 200 and table.count('<tr>') == 16 and table.count('<tr hidden>') == 8  # cabecera + 15 visibles
+        assert table.index('P14') < table.index('<tr hidden>') < table.index('P15')
+        assert '<button type="button" class="more" id="results-more" hidden>Ver los 8 partidos restantes</button>' in page
+        assert 'id="results-view"' not in page and 'id="results-blocks"' not in page
+        assert initial(body)['results']['blocks'] == []
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
-    assert context['results_shown'] == 20 and context['results_hidden'] == 3
+    assert context['results_hidden'] == 8 and context['block_result_rows'] == [] and pages.RESULTS_SHOWN == 15
+
+
+def test_eleccion_detail_helpers_of_the_shown_parties_and_the_blocks():
+    assert pages.shown_parties({'parties': {'event': ['PP', 'PSOE'], 'polls': ['PP']}}) == ['PP', 'PSOE']
+    assert pages.shown_parties({}) is None and pages.shown_parties({'parties': {}}) is None and pages.shown_parties(None) is None
+    rows = [{'party': 'PP', 'pct': 33.06, 'seats': 160}, {'party': 'PSOE', 'pct': 31.44, 'seats': 150},
+            {'party': 'Cs', 'pct': 0.13, 'seats': 0}, {'party': 'ERC', 'pct': 1.9, 'seats': 7}]
+    assert [row['shown'] for row in pages.mark_shown(rows, ['PSOE', 'ERC', 'UP'])] == [False, True, False, True]
+    assert [row['shown'] for row in pages.mark_shown(rows, None, limit=2)] == [True, True, False, False]
+    assert [row['shown'] for row in pages.mark_shown(rows, ['UP'], limit=3)] == [True, True, True, False]  # ninguno en la lista
+    assert pages.mark_shown([], ['PP']) == []
+    catalog = pages.Catalog({'PP': {'block': 'Derecha'}, 'ERC': {'block': 'Separatista'}})
+    params = {'bmaps': {'blocks': {'Derecha': ['PP', 'Cs'], 'Izquierda': ['PSOE']}}}
+    meta_blocks = {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'UP']}
+    names = ['PP', 'PSOE', 'Cs', 'ERC', 'UP', 'MM']
+    # los parámetros primero, luego el meta de la elección, luego el catálogo del run; sin fuente, nada
+    assert pages.party_blocks(names, params, meta_blocks, catalog) == {
+        'PP': 'Derecha', 'PSOE': 'Izquierda', 'Cs': 'Derecha', 'ERC': 'Separatista', 'UP': 'Izquierda', 'MM': None}
+    assert pages.party_blocks(names, {}, None, catalog) == {'PP': 'Derecha', 'PSOE': None, 'Cs': None, 'ERC': 'Separatista', 'UP': None, 'MM': None}
+    blocks = pages.party_blocks(names, params, meta_blocks, catalog)
+    assert pages.event_block_rows(rows, blocks, lambda block: block[0]) == [
+        {'name': 'Derecha', 'pct': 33.19, 'seats': 160, 'color': 'D'}, {'name': 'Izquierda', 'pct': 31.44, 'seats': 150, 'color': 'I'},
+        {'name': 'Separatista', 'pct': 1.9, 'seats': 7, 'color': 'S'}]
+    assert pages.event_block_rows([{'party': 'X', 'pct': None, 'seats': None}], {'X': 'Otro'}, str) == [
+        {'name': 'Otro', 'pct': None, 'seats': None, 'color': 'Otro'}]
+    assert pages.event_block_rows(rows, {}, str) == []
+
+
+def test_event_params_reads_the_data_file_through_a_cache(fresh_app, tmp_path):
+    fresh_app.set('data', FileSystem(os.path.join(ROOT, 'data')))
+    webapi.checks._PARAMS.clear()
+    params = webapi.event_params('es', '2023-07-23')
+    assert params['parties']['event'][:3] == ['PP', 'PSOE', 'VOX'] and 'Cs' in params['bmaps']['blocks']['Derecha']
+    assert webapi.event_params('es', '1900-01-01') == {} and webapi.event_params('xx', '2023-07-23') == {}
+    # sin fichero, o sin directorio de datos, no hay parámetros
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    webapi.checks._PARAMS.clear()
+    assert webapi.event_params('es', '2023-07-23') == {}
+    fresh_app.set('data', None)
+    assert webapi.event_params('es', '2023-07-23') == {}
 
 
 def test_last_poll_rows_keep_the_closest_poll_of_each_house():

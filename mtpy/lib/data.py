@@ -522,6 +522,31 @@ def get_ratings(
     return ratings
 
 
+def get_poll_counts() -> pd.DataFrame:
+    """
+    Evaluable polls of each pollster in each election, of every scope.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per ``pollster_id``, ``event_scope`` and ``event_date`` with ``n``, the number of polls of
+        the pollster in that election that have a ``bias`` (the polls that enter the ratings); sorted by
+        those keys.
+    """
+    counts = Polls().get_agg(query=dict(
+        columns={'bias': 'count'},
+        groupby=['pollster_id', 'event_scope', 'event_date'],
+        filters=['bias IS NOT NULL']
+    ))
+
+    if not isinstance(counts, pd.DataFrame) or counts.empty:
+        return pd.DataFrame(columns=['pollster_id', 'event_scope', 'event_date', 'n'])
+
+    return counts.rename(columns={'bias__count': 'n'}).sort_values(
+        ['pollster_id', 'event_scope', 'event_date'], ignore_index=True
+    )
+
+
 def get_parties() -> pd.DataFrame:
     parties = Parties().get_results(formatted=True)
     parties = parties.rename(index={0: parties.shape[0]}).sort_index(ignore_index=True)

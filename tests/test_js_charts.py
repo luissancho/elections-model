@@ -39,19 +39,30 @@ def run_js(expr, rows=ROWS):
     return json.loads(out.stdout)
 
 
+def scatter(option):
+    """Series de puntos y sus gemelas de etiquetas (silenciosas), en orden."""
+    series = [s for s in option['series'] if s['type'] == 'scatter']
+    return [s for s in series if not s.get('silent')], [s for s in series if s.get('silent')]
+
+
 def test_bullseye_names_the_axes_at_the_edges_and_draws_small_points():
     option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], color: "#1d4f86"})')
-    assert option['xAxis']['name'] == 'Error Derecha' and option['yAxis']['name'] == 'Error Izquierda'
+    assert option['xAxis']['name'] == 'Derecha' and option['yAxis']['name'] == 'Izquierda'
     assert option['xAxis']['nameLocation'] == 'middle' and option['yAxis']['nameLocation'] == 'middle'
     # los ejes en los bordes (no sobre el cero) y la cruz del cero como series de línea, tras los tres anillos
     assert option['xAxis']['axisLine']['onZero'] is False and option['yAxis']['axisLine']['onZero'] is False
     assert option['xAxis']['axisLabel'] == {'showMinLabel': False, 'showMaxLabel': False}
     lines = [s for s in option['series'] if s['type'] == 'line']
     assert len(lines) == 5 and lines[3]['data'] == [[-11, 0], [11, 0]] and lines[4]['data'] == [[0, -11], [0, 11]]
-    points = [s for s in option['series'] if s['type'] == 'scatter']
+    points, labels = scatter(option)
     assert len(points) == 1 and points[0]['symbolSize'] == 8 and points[0]['z'] == 10 and points[0]['color'] == '#1d4f86'
+    assert points[0]['label'] == {'show': False} and 'tooltip' not in points[0]
     # la fila sin error en un bloque no se dibuja
     assert [p['row']['event'] for p in points[0]['data']] == ['2023-23J', '2019-10N', '2021-4M']
+    # las etiquetas van en una gemela invisible y silenciosa, sin tooltip: solo los puntos lo abren
+    assert len(labels) == 1 and labels[0]['itemStyle'] == {'opacity': 0} and labels[0]['tooltip'] == {'show': False}
+    assert labels[0]['label']['show'] is True and labels[0]['label']['position'] == 'right' and labels[0]['labelLayout'] == {'hideOverlap': True}
+    assert labels[0]['symbolSize'] == 8 and labels[0]['z'] == 10 and [p['row']['event'] for p in labels[0]['data']] == ['2023-23J', '2019-10N', '2021-4M']
     assert option['xAxis']['min'] == -11 and option['yAxis']['max'] == 11 and 'legend' not in option
 
 
@@ -59,15 +70,22 @@ def test_bullseye_draws_the_groups_on_top_over_the_others():
     option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], '
                     'groupOf: (row) => (row.scope === "es" ? "Generales" : "Autonómicas"), '
                     'colors: {Generales: "#1d4f86", "Autonómicas": "#c0672e"}, legend: true, '
-                    'onTop: (group) => group === "Generales"})')
-    points = {s['name']: s for s in option['series'] if s['type'] == 'scatter'}
-    assert list(points) == ['Generales', 'Autonómicas']
-    assert points['Generales']['z'] == 12 and points['Autonómicas']['z'] == 10
-    assert points['Generales']['symbolSize'] == 8 and points['Autonómicas']['color'] == '#c0672e'
+                    'onTop: (group) => group === "Generales", alphaOf: (row) => (row.scope === "es" ? 1 : 0.5)})')
+    points, labels = scatter(option)
+    assert [s['name'] for s in points] == ['Generales', 'Autonómicas'] and [s['name'] for s in labels] == ['Generales', 'Autonómicas']
+    assert [s['z'] for s in points] == [12, 10] and [s['z'] for s in labels] == [12, 10]
+    assert points[0]['symbolSize'] == 8 and points[1]['color'] == '#c0672e' and labels[1]['color'] == '#c0672e'
     assert option['legend']['data'] == ['Generales', 'Autonómicas'] and option['grid']['bottom'] == 52
-    # sin `onTop`, todos los grupos al mismo nivel
+    # un punto atenuado: la opacidad en el punto y el color de la etiqueta en la gemela, nunca al revés (la gemela
+    # debe seguir invisible)
+    assert points[1]['data'][0]['itemStyle'] == {'opacity': 0.5} and 'label' not in points[1]['data'][0]
+    assert labels[1]['data'][0]['label'] == {'color': 'rgba(26, 28, 34, 0.5)'} and 'itemStyle' not in labels[1]['data'][0]
+    assert points[0]['data'][0]['itemStyle'] == {'opacity': 1} and labels[0]['data'][0]['label'] == {'color': 'rgba(26, 28, 34, 1)'}
+    # sin `onTop`, todos los grupos al mismo nivel; sin `alphaOf`, los datos van sin estilos
     option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], groupOf: (row) => row.scope})')
-    assert [s['z'] for s in option['series'] if s['type'] == 'scatter'] == [10, 10]
+    assert [s['z'] for s in option['series'] if s['type'] == 'scatter'] == [10, 10, 10, 10]
+    points, labels = scatter(option)
+    assert all(set(item) == {'value', 'row'} for series in points + labels for item in series['data'])
 
 
 def test_diverging_grows_each_side_from_zero_as_magnitudes():

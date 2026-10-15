@@ -1,13 +1,13 @@
 """
 Past elections page context: the list of published elections and the detail of one.
 """
-from typing import Optional
+from typing import Callable, Optional
 
 from ...core.api import HttpError
-from ..webapi import check_date, site
+from ..webapi import check_date, event_params, site
 from .common import Catalog, analysis_part, api_url, block_color, bundle_part, common_context, published_scopes
 from .filters import fmt_num
-from .promedios import chart_polls, poll_months, polls_table, pollster_options
+from .promedios import BLOCK_ORDER, chart_polls, poll_months, polls_table, pollster_options
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 # Block drawn to the left in the chart that splits the error of the last polls by block (its mate goes right).
@@ -23,8 +23,9 @@ EVENT_CSV = (
     ('model', 'seats', 'Modelo: escaños a cada horizonte', True),
     ('model', 'blocks', 'Modelo: bloques a cada horizonte', True),
 )
-# Rows of the results table the detail shows before "Ver más".
-RESULTS_SHOWN = 20
+# Rows of the results table the detail shows before "Ver más" when the election has no list of parties in
+# ``data/params.json`` (``parties.event``), or when none of its results is in that list.
+RESULTS_SHOWN = 15
 # Keys of a last-poll row the detail embeds for its charts (plus the signed error of each block).
 LAST_KEYS = ('pollster', 'pollster_id', 'days', 'sample_size', 'error_avg', 'error_blocks', 'error_blocks_abs')
 
@@ -400,6 +401,130 @@ def resolve_event(scope: str, date: str) -> str:
     return date
 
 
+def shown_parties(params: dict) -> Optional[list]:
+    """
+    Parties the results table of an election shows before "Ver más", from its parameters.
+
+    Parameters
+    ----------
+    params : dict
+        Parameters of the election (``webapi.event_params``).
+
+    Returns
+    -------
+    list of str or None
+        ``parties.event`` of the parameters, or ``None`` when the election has no such list.
+    """
+    parties = (params.get('parties') or {}).get('event') if isinstance(params, dict) else None
+
+    return list(parties) if isinstance(parties, (list, tuple)) else None
+
+
+def mark_shown(rows: list, parties: Optional[list], limit: int = RESULTS_SHOWN) -> list:
+    """
+    Copy results rows marking the ones the table shows before "Ver más".
+
+    Parameters
+    ----------
+    rows : list of dict
+        Results rows with ``party``.
+    parties : list of str or None
+        Parties to show (``shown_parties``), or ``None`` to show the first rows.
+    limit : int, optional
+        Rows shown without a list, or when no row is in it.
+
+    Returns
+    -------
+    list of dict
+        Each row with ``shown``: whether its party is in ``parties``; without a list, or when none of the rows
+        is in it, whether the row is among the first ``limit``.
+    """
+    wanted = set(parties) if parties is not None else set()
+
+    if any(row.get('party') in wanted for row in rows):
+        return [dict(row, shown=row.get('party') in wanted) for row in rows]
+
+    return [dict(row, shown=index < limit) for index, row in enumerate(rows)]
+
+
+def party_blocks(names: list, params: dict, event_blocks: Optional[dict], catalog: Catalog) -> dict:
+    """
+    Block of each party of a past election.
+
+    Parameters
+    ----------
+    names : list of str
+        Parties of the results.
+    params : dict
+        Parameters of the election (``webapi.event_params``); ``bmaps.blocks`` lists the parties of each block.
+    event_blocks : dict or None
+        ``blocks`` of the event meta: the parties of each of the two main blocks.
+    catalog : Catalog
+        Party catalogue of the run, whose parties have a block.
+
+    Returns
+    -------
+    dict
+        ``{name: block}`` by the first source that lists the party: the parameters, the event meta, the run
+        catalogue; ``None`` when none does.
+    """
+    maps = []
+
+    for source in ((params.get('bmaps') or {}).get('blocks') if isinstance(params, dict) else None, event_blocks):
+        if isinstance(source, dict):
+            maps.append({party: block for block, parties in source.items() for party in (parties or [])})
+
+    blocks = {}
+
+    for name in names:
+        block = next((mapping[name] for mapping in maps if name in mapping), None)
+        blocks[name] = block if block is not None else catalog[name].get('block')
+
+    return blocks
+
+
+def event_block_rows(rows: list, blocks: dict, color: Callable) -> list:
+    """
+    Rows of the results table by block of a past election.
+
+    Parameters
+    ----------
+    rows : list of dict
+        Results rows with ``party``, ``pct`` and ``seats``.
+    blocks : dict
+        Block of each party (``party_blocks``); a party without one counts for no block.
+    color : callable
+        ``block -> colour``.
+
+    Returns
+    -------
+    list of dict
+        ``{'name', 'pct', 'seats', 'color'}`` per block with some party: the sums of their ``pct`` (2 decimals)
+        and ``seats`` (``None`` when no party has the value); the blocks of ``BLOCK_ORDER`` first, in that
+        order, then the others by first appearance.
+    """
+    totals = {}
+
+    for row in rows:
+        block = blocks.get(row.get('party'))
+
+        if block is None:
+            continue
+
+        total = totals.setdefault(block, {'pct': None, 'seats': None})
+
+        for key in ('pct', 'seats'):
+            value = row.get(key)
+
+            if value is not None:
+                total[key] = value if total[key] is None else total[key] + value
+
+    order = [block for block in BLOCK_ORDER if block in totals] + [block for block in totals if block not in BLOCK_ORDER]
+
+    return [{'name': block, 'pct': None if totals[block]['pct'] is None else round(totals[block]['pct'], 2),
+             'seats': totals[block]['seats'], 'color': color(block)} for block in order]
+
+
 def majority_of(n_seats) -> Optional[int]:
     """
     Absolute majority of a chamber.
@@ -538,8 +663,11 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     -------
     dict
         The common context plus ``event`` (its ``meta``), ``results_rows`` (as published, with the
-        ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party), ``results_shown``
-        (``RESULTS_SHOWN``) and ``results_hidden`` (rows beyond them, behind "Ver más"), ``n_seats``,
+        ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party, and ``shown``:
+        ``mark_shown`` with the ``parties.event`` of the election in ``data/params.json``, else the first
+        ``RESULTS_SHOWN``), ``results_hidden`` (the rows not shown, behind "Ver más"), ``block_result_rows``
+        (``event_block_rows``: the results by block, ``party_blocks`` from the parameters, the event meta and the
+        run catalogue, coloured by ``block_color``; empty when no party has a block), ``n_seats``,
         ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
         ``poll_rows``, ``blocks``, ``split_blocks`` (``split_sides``: the block of each side of the chart that
         splits the error of the last polls, ``None`` without two blocks), ``horizon_tables``, ``has_model``,
@@ -547,10 +675,11 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         Promedios drawn from the ``cycle`` part (``has_cycle``, ``table``, ``table_parties``, ``table_total``,
         ``has_seats``, ``months``, ``pollsters`` and ``csv_href``; ``has_cycle`` is false for an election
         published before the part existed, and the table then gives way to a notice) and ``initial`` (``state``,
-        ``meta``, ``results`` (``n_seats``, ``majority`` (``majority_of``) and ``rows`` (``name`` and ``seats``
-        of each party, as published) for the hemicycle), ``last`` (``LAST_KEYS`` and the signed error of each
-        block of every last poll, for the bars, the split by block and the bullseye), ``blocks``, ``split``
-        (``split_blocks``), ``block_colors`` (``{block: colour}`` from the run's ``bmaps``, ``block_color``),
+        ``meta``, ``results`` (``n_seats``, ``majority`` (``majority_of``), ``rows`` (``name`` and ``seats``
+        of each party, as published) and ``blocks`` (``name`` and ``seats`` of each block) for the hemicycle),
+        ``last`` (``LAST_KEYS`` and the signed error of each block of every last poll, for the bars, the split
+        by block and the bullseye), ``blocks``, ``split`` (``split_blocks``), ``block_colors`` (``{block:
+        colour}`` of the error blocks and of the result blocks, from the run's ``bmaps``, ``block_color``),
         ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for the error histogram),
         ``catalog`` (``parties`` of the table and of the results, ``chart_parties``, for the browser's catalogue)
         and, with the cycle, ``polls`` (``chart_polls``)).
@@ -578,11 +707,14 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     poll_rows = with_abs(polls.get('rows') or [])
     last_rows = last_poll_rows(poll_rows)
     catalog = context['catalog']
-    results_rows = [
+    params = event_params(scope, date)
+    results_rows = mark_shown([
         {'party': row['party'], 'fullname': catalog[row['party']]['fullname'],
          'color': catalog[row['party']]['color'], 'pct': row.get('pct'), 'seats': row.get('seats')}
         for row in results.get('rows') or []
-    ]
+    ], shown_parties(params))
+    blocks_of = party_blocks([row['party'] for row in results_rows], params, meta.get('blocks'), catalog)
+    block_rows = event_block_rows(results_rows, blocks_of, lambda block: block_color(block, context['meta'], catalog))
     links = [
         {'label': label, 'href': api_url(scope, name, fmt='csv', kind='event', date=date, table=table)}
         for name, table, label, needs_model in EVENT_CSV if has_model or not needs_model
@@ -599,8 +731,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     parties = chart_parties(catalog, table_parties, [row['party'] for row in results_rows])
     context['event'] = dict(meta, summary=summary)
     context['results_rows'] = results_rows
-    context['results_shown'] = RESULTS_SHOWN
-    context['results_hidden'] = max(0, len(results_rows) - RESULTS_SHOWN)
+    context['results_hidden'] = sum(1 for row in results_rows if not row['shown'])
+    context['block_result_rows'] = block_rows
     context['n_seats'] = n_seats
     context['last_rows'] = last_rows
     context['poll_rows'] = poll_rows
@@ -621,12 +753,14 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         'state': full,
         'meta': meta,
         'results': {'n_seats': n_seats, 'majority': majority_of(n_seats),
-                    'rows': [{'name': row['party'], 'seats': row['seats']} for row in results_rows]},
+                    'rows': [{'name': row['party'], 'seats': row['seats']} for row in results_rows],
+                    'blocks': [{'name': row['name'], 'seats': row['seats']} for row in block_rows]},
         'last': [dict({key: row.get(key) for key in LAST_KEYS}, **{block: row.get(block) for block in blocks})
                  for row in last_rows],
         'blocks': blocks,
         'split': split,
-        'block_colors': {block: block_color(block, context['meta'], catalog) for block in blocks},
+        'block_colors': {block: block_color(block, context['meta'], catalog) for block in blocks}
+        | {row['name']: row['color'] for row in block_rows},
         'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')} for row in poll_rows],
         'catalog': {'parties': [dict(catalog[name], name=name) for name in parties]},
     }

@@ -176,7 +176,14 @@ magnitud, `pages.split_sides`); la diana; la tabla del último sondeo; y el rest
 Encuestadoras la tabla va antes que las barras, con el marcado `.et.et-rank` de "Todas las encuestas" y los formatos
 de `Computer.print_ratings` calculados en el servidor (filtros `bar`, `sides` y `shade`): barra del rating de 0 a 100,
 barra del sesgo del margen desde el centro (rojo a la izquierda, verde a la derecha, ±2) y sombreado del error medio
-(hasta el mayor de la columna) y del rebaño (rojo por debajo de 1, gris por encima).
+(hasta el mayor de la columna) y del rebaño (rojo por debajo de 1, gris por encima). Segunda tanda del mismo día: el
+ranking (tabla y barras) solo lista las encuestadoras con al menos dos sondeos evaluables en al menos dos elecciones
+de cualquier ámbito (`webapi.query_poll_counts`, recuento de `elections.polls` con `bias`; `pages.eligible_pollsters`);
+el detalle de una elección lleva el selector Partidos/Bloques de Promedios (hemiciclo y tabla por bloques, bloques de
+los parámetros de la elección, del `meta` o del catálogo del run) y su tabla de partidos enseña solo los de
+`parties.event` de `data/params.json` (`webapi.event_params`, leído del `data` del App con caché TTL) o, sin lista,
+los 15 primeros, con "Ver los N restantes"; las dianas nombran los ejes "Derecha" e "Izquierda" y abren el tooltip
+solo sobre los puntos (las etiquetas van en una serie gemela silenciosa).
 
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una

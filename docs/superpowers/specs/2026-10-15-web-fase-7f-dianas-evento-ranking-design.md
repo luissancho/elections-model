@@ -79,3 +79,36 @@ Diseño y UX quedan para después ("Aplica esto y luego ya hablamos de diseño y
 - Render a SVG con `node` (ECharts en modo servidor) de las tres dianas y del gráfico divergente, y capturas con
   Chrome sin cabeza de `/elecciones?date=`, `/casas`, `/casas?id=` y `/elecciones` con los fixtures: sin errores de
   consola.
+
+## Ajustes 2026-10-15 (segunda tanda)
+
+Luis, tras recorrer la primera tanda ("Está muy bien"):
+
+1. **Ranking solo con historial**: "muestra sólo las que tengan al menos 2 encuestas en al menos 2 elecciones", en la
+   tabla y en las barras. Los ratings traen `num_polls`/`num_events` acumulados, no por elección, y la parte
+   `poll-errors` del análisis solo lleva el último sondeo de cada casa por elección (`n_last: 1`), así que el recuento
+   sale de la base: consulta nueva `data.get_poll_counts()` (`elections.polls` agrupado por `pollster_id`,
+   `event_scope` y `event_date`, contando los sondeos con `bias`, los que entran en los ratings; 1.155 filas en la base
+   real), servida por `webapi.query_poll_counts()` (caché de consultas). `pages.eligible_pollsters(counts)` da los ids
+   con al menos `RANKING_MIN_POLLS` (2) sondeos en al menos `RANKING_MIN_EVENTS` (2) elecciones de cualquier ámbito y
+   `ranking_rows` descarta el resto (73 de las 125 encuestadoras con sondeos cumplen). El perfil y los enlaces de los
+   demás paneles no cambian. La leyenda de la tabla y el "Cómo leerlo" lo dicen.
+2. **Detalle de una elección**: el selector Partidos/Bloques de Promedios en la primera fila (`#results-view` en la
+   tarjeta del hemiciclo; cambia el hemiciclo y muestra "Resultados por bloque", `#results-blocks`, oculta por
+   defecto, con Bloque, % Voto y Escaños sumados). El bloque de cada partido sale de la primera fuente que lo lista
+   (`pages.party_blocks`): `bmaps.blocks` de los parámetros de la elección, `blocks` (vs) del `meta` publicado, el
+   catálogo del run; sin bloque, el partido no suma. La tabla de partidos enseña solo los de `parties.event` de los
+   parámetros de la elección en `data/params.json` (`webapi.event_params(scope, date)`, leído del `data` del App con
+   caché TTL; `pages.shown_parties`/`mark_shown`) y el resto tras "Ver los N restantes"; sin lista, o si ninguno de
+   sus partidos está en ella, los 15 primeros (`RESULTS_SHOWN` baja de 20 a 15). La parte `results` publicada no
+   cambia.
+3. **Dianas**: los ejes se llaman "Derecha" e "Izquierda" (sin "Error "), y el tooltip solo se abre sobre los puntos:
+   las etiquetas van en una serie gemela invisible y silenciosa de cada serie de puntos (mismo nombre, para que la
+   leyenda apague las dos; `itemStyle.opacity: 0`, `silent: true`, `tooltip.show: false`), porque en ECharts la
+   etiqueta de un punto responde al ratón como el punto. Los puntos atenuados (`alphaOf`) llevan su opacidad en la
+   serie de puntos y el color de su etiqueta en la gemela.
+
+Comprobación: `tests/test_js_charts.py` (gemelas, nombres de los ejes), `tests/test_pages.py` (ranking filtrado,
+`event_params`, partidos mostrados, bloques, selector y tabla por bloques; la caché de parámetros se vacía por test
+como la de consultas), 761 pruebas; consulta de recuentos ejecutada una vez contra la base real; capturas con Chrome
+sin cabeza de las dos vistas del detalle, del ranking y del perfil, sin errores de consola.

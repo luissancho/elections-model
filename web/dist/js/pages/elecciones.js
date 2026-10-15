@@ -419,26 +419,68 @@ function wireResultsMore() {
 }
 
 /**
- * Hemicycle of the official result of an election: the seats of each party, ordered by block and catalogue as
- * in Promedios, with the absolute majority written in the centre.
+ * Hemicycle of the official result of an election with its Partidos/Bloques switch (as in Promedios): the seats
+ * of each party, ordered by block and catalogue, or of each block; the switch also shows the matching results
+ * table and hides the other one. The absolute majority is written in the centre.
  *
- * @param {HTMLElement|null} el chart container
- * @param {object|null} results `results` of the initial data (`n_seats`, `majority`, `rows` as `{name, seats}`)
+ * @param {object} initial the page's initial data (`results` with `n_seats`, `majority`, `rows` and `blocks` as
+ *   `{name, seats}`; `block_colors`)
  * @param {Catalog} catalog party catalogue of the page (colours, full names and order)
  */
-function drawHemicycle(el, results, catalog) {
+function wireHemicycle(initial, catalog) {
+  const el = document.getElementById('hemicycle');
+  const {results = null, block_colors: blockColors = {}} = initial;
   if (!el || !results || !results.rows || !results.rows.length) {
     return;
   }
   const names = results.rows.map((row) => row.name);
-  const seats = Object.fromEntries(results.rows.map((row) => [row.name, row.seats]));
-  tryDraw(() => renderHemicycle(el, seats, {
-    colors: mapNames(names, (name) => catalog.color(name)),
-    fullnames: mapNames(names, (name) => catalog.fullname(name)),
-    order: (list) => catalog.order(list),
-    nSeats: results.n_seats,
-    majority: results.majority,
-  }), 'the hemicycle');
+  const blocks = (results.blocks || []).filter((row) => Number.isFinite(row.seats));
+  const views = {
+    partidos: {
+      seats: Object.fromEntries(results.rows.map((row) => [row.name, row.seats])),
+      colors: mapNames(names, (name) => catalog.color(name)),
+      fullnames: mapNames(names, (name) => catalog.fullname(name)),
+      order: (list) => catalog.order(list),
+      label: 'Hemiciclo con los escaños de cada partido en el resultado oficial',
+      card: 'results',
+    },
+    bloques: {
+      seats: Object.fromEntries(blocks.map((row) => [row.name, row.seats])),
+      colors: mapNames(blocks.map((row) => row.name), (name) => blockColors[name] || THEME.barColor),
+      fullnames: {},
+      order: (list) => catalog.orderBlocks(list),
+      label: 'Hemiciclo con los escaños de cada bloque en el resultado oficial',
+      card: 'results-blocks',
+    },
+  };
+
+  /** Draw the hemicycle of `view` and show its results table, hiding the other one. */
+  function draw(view) {
+    const chosen = views[view];
+    el.setAttribute('aria-label', chosen.label);
+    tryDraw(() => renderHemicycle(el, chosen.seats, {
+      colors: chosen.colors, fullnames: chosen.fullnames, order: chosen.order, nSeats: results.n_seats,
+      majority: results.majority,
+    }), 'the hemicycle');
+    for (const [name, item] of Object.entries(views)) {
+      const card = document.getElementById(item.card);
+      if (card) {
+        card.hidden = name !== view;
+      }
+    }
+  }
+
+  draw('partidos');
+  const fieldset = document.getElementById('results-view');
+  if (fieldset && blocks.length) {
+    fieldset.hidden = false;
+    fieldset.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=rview]') && views[event.target.value]) {
+        draw(event.target.value);
+        markSegments(fieldset);
+      }
+    });
+  }
 }
 
 /**
@@ -486,7 +528,7 @@ function paint() {
     wireHistory(initial);
   }
 
-  drawHemicycle(document.getElementById('hemicycle'), initial.results, catalog);
+  wireHemicycle(initial, catalog);
   drawLastErrors(initial);
 
   if (initial.poll_errors) {

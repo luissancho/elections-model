@@ -36,30 +36,33 @@ function groupNames(points, groupOf) {
 }
 
 /**
- * Scatter series of the points: one grey series, or one series per group with its colour. The series of the
- * groups `onTop` get a higher `z`, so their points (and labels) are drawn over the other groups'.
+ * Scatter series of the points: one grey series, or one series per group with its colour, each followed by its
+ * twin that writes the labels. The twin is an invisible, silent copy of the points (same name, so the legend
+ * toggles both): hovering a label must not open the tooltip of its point, and a silent series takes no mouse
+ * events. The series of the groups `onTop` get a higher `z`, so their points and labels are drawn over the other
+ * groups'.
  *
- * @param {object[]} points `{value, row}` points (with the `itemStyle` and `label` of a faded point)
+ * @param {object[]} points `{value, row, itemStyle, label}` points (`itemStyle` and `label` only on a faded one)
  * @param {object} opts `groupOf`, `colors`, `labels`, `labelOf`, `color` and `onTop` of `renderBullseye`
  * @returns {object[]} ECharts series
  */
 function pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop}) {
   const label = {show: labels, position: 'right', formatter: (params) => labelOf(params.data.row), color: THEME.textColor};
-  if (!groupOf) {
+  const pair = (data, style) => [
+    {...style, type: 'scatter', symbolSize: POINT_SIZE, label: {show: false},
+     data: data.map(({value, row, itemStyle}) => (itemStyle ? {value, row, itemStyle} : {value, row}))},
     // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
-    return [{type: 'scatter', data: points, symbolSize: POINT_SIZE, color: color || THEME.markColor, label,
-             labelLayout: {hideOverlap: true}, z: POINT_Z}];
+    {...style, type: 'scatter', symbolSize: POINT_SIZE, itemStyle: {opacity: 0}, silent: true, tooltip: {show: false},
+     label, labelLayout: {hideOverlap: true},
+     data: data.map(({value, row, label: faded}) => (faded ? {value, row, label: faded} : {value, row}))},
+  ];
+  if (!groupOf) {
+    return pair(points, {color: color || THEME.markColor, z: POINT_Z});
   }
-  return groupNames(points, groupOf).map((group) => ({
-    type: 'scatter',
-    name: group,
-    data: points.filter((point) => groupOf(point.row) === group),
-    symbolSize: POINT_SIZE,
-    color: colors[group] ?? THEME.markColor,
-    label,
-    labelLayout: {hideOverlap: true},
-    z: onTop && onTop(group) ? TOP_Z : POINT_Z,
-  }));
+  return groupNames(points, groupOf).flatMap((group) => pair(
+    points.filter((point) => groupOf(point.row) === group),
+    {name: group, color: colors[group] ?? THEME.markColor, z: onTop && onTop(group) ? TOP_Z : POINT_Z},
+  ));
 }
 
 /**
@@ -126,7 +129,8 @@ function guideSeries(limit) {
 
 /**
  * ECharts option of the bullseye: the rings at ±2, ±5 and ±10 points and the zero cross as line series,
- * symmetric axes at the edges of the grid, each named "Error {block}", and one point per row.
+ * symmetric axes at the edges of the grid, each named after its block, and one point per row (with its label on
+ * a silent twin series, so only the points open the tooltip).
  *
  * @param {object[]} rows poll-errors rows (see `renderBullseye`)
  * @param {object} opts options of `renderBullseye`
@@ -152,7 +156,7 @@ export function bullseyeOption(rows, {
 
   const axis = (name) => ({
     type: 'value',
-    name: `Error ${name}`,
+    name,
     nameLocation: 'middle',
     nameTextStyle: {fontWeight: 600},
     min: -limit,
