@@ -147,14 +147,15 @@ function chosenNames(current, legendSelected) {
  * @param {object} current the view (`parties`, `colors`, `defaults`)
  * @param {string[]|null} selected names shown (null: the defaults of the view, or all)
  * @param {object} chart the ECharts instance
+ * @param {object} inks `{name: ink colour}` of the island (`initial.inks`)
  */
-function fillLegend(legendEl, current, selected, chart) {
+function fillLegend(legendEl, current, selected, chart, inks = {}) {
   if (!legendEl) {
     return;
   }
   const shown = selected || current.defaults || current.parties;
   renderLegend(legendEl, current.parties.map((name) => ({
-    name, color: current.colors[name], on: shown.includes(name),
+    name, color: current.colors[name], ink: inks[name], on: shown.includes(name),
   })), (name) => chart.dispatchAction({type: 'legendToggleSelect', name}));
 }
 
@@ -195,7 +196,7 @@ function wireAverage(initial, views, state, render) {
         writeHash();
       });
     }
-    fillLegend(legendEl, views[state.view], state.selected, chart);
+    fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});
   }
 
   for (const input of document.querySelectorAll('#series-window input[name=window]')) {
@@ -274,7 +275,7 @@ function wireHouse(initial, views, start, render) {
         }
       });
     }
-    fillLegend(legendEl, views[state.view], state.selected, chart);
+    fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});
   }
 
   for (const input of document.querySelectorAll('#pollster-window input[name=pwindow]')) {

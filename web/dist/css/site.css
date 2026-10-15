@@ -116,7 +116,6 @@ main {
 #site-header h1 a { display: inline-flex; align-items: center; min-height: 40px; color: var(--color-text); text-decoration: none; }
 /* The wordmark (logo.svg, 563 x 102 intrinsic) at 24 px tall */
 #site-header h1 img { display: block; height: 24px; width: auto; }
-.brand-tagline { display: none; }
 #site-header nav, .hdr nav { display: flex; gap: var(--space-1); }
 
 #site-header nav a, .hdr nav a {
@@ -188,13 +187,11 @@ svg[hidden] { display: none; }
   padding: 20px var(--band-pad) 0;
 }
 
-.event-title { grid-area: title; }
-.event-title h2, .evbar > h2 { grid-area: title; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.015em; line-height: 1.1; }
-.event-title p { margin: var(--space-1) 0 0; font-size: 13px; color: var(--color-muted); }
+.evbar > h2 { grid-area: title; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.015em; line-height: 1.1; }
 .evbar > h2 small { display: block; margin-top: 3px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--color-muted); }
 .event-tabs { grid-area: tabs; justify-self: start; }
-.event-run, .evbar .run { grid-area: run; justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.evbar .run small { font-size: 11.5px; color: var(--color-faint); }
+.evbar .run { grid-area: run; justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.evbar .run small { font-size: 11.5px; color: var(--color-muted); }
 
 /* Pills: small labels (a date, a mode, a figure) */
 .pill, .chip {
@@ -367,6 +364,8 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 /* Prose keeps a readable measure inside the fluid container */
 .lead { max-width: 90ch; }
 .how-body, .card p, #glosario dd { max-width: 72ch; }
+/* The strip under a hemicycle spans its card (`.card p` would cap it) */
+.card .lead-strip { max-width: none; }
 
 .how { margin-top: var(--space-3); border-top: 1px solid var(--color-line); }
 
@@ -434,7 +433,7 @@ article.card p, .card-link p { margin: 6px 0; }
 
 /* Text helpers */
 .muted { color: var(--color-muted); font-size: 0.9em; }
-.mut { color: var(--color-faint); font-size: 12px; }
+.mut { color: var(--color-muted); font-size: 12px; }
 .notice { color: var(--color-muted); font-style: italic; margin: var(--space-2) 0; }
 .status { color: var(--color-muted); }
 .status.error { color: var(--color-error); }
@@ -467,7 +466,7 @@ dt { color: var(--color-muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 
 /* KPI row: one card split in equal columns with a thin divider */
-.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--color-card); border: 1px solid var(--color-line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); background: var(--color-card); border: 1px solid var(--color-line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .kpis[hidden] { display: none; }
 .kpi { position: relative; min-width: 0; min-height: 86px; padding: 14px 16px; }
 .kpi + .kpi::before { content: ""; position: absolute; left: 0; top: 20%; bottom: 20%; width: 1px; background: var(--color-line); }
@@ -519,7 +518,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .rows-2 .row-foot { grid-column: 1 / -1; }
 
 /* The strip under a hemicycle: leader, seats and the distance to the majority */
-.lead-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; margin: var(--space-2) 0 0; padding: 10px 12px; border-radius: 12px; background: var(--color-soft); font-size: 13px; color: var(--color-muted); }
+.lead-strip { max-width: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; margin: var(--space-2) 0 0; padding: 10px 12px; border-radius: 12px; background: var(--color-soft); font-size: 13px; color: var(--color-muted); }
 .lead-strip b { color: var(--color-text); }
 
 /* HTML legend of the series charts: a pill per party, bordered in its colour and filled when on */
@@ -755,6 +754,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .pag { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-3); font-size: 13px; }
 .pag[hidden] { display: none; }
 .pag button:disabled { opacity: 0.45; cursor: default; }
+.csv-link { margin: var(--space-2) 0 0; font-size: 12.5px; }
 
 /* The lines of what each filter of the error history leaves out (the figures are a KPI row). */
 .complements { list-style: none; margin: var(--space-3) 0 0; padding: 0; color: var(--color-muted); font-size: 13.5px; }
@@ -824,9 +824,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
     gap: 10px;
     padding-top: 14px;
   }
-  .event-title h2, .evbar > h2 { font-size: 22px; }
+  .evbar > h2 { font-size: 22px; }
   .event-tabs { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
-  .event-run, .evbar .run { justify-self: start; align-items: flex-start; }
+  .evbar .run { justify-self: start; align-items: flex-start; }
 
   .hero-t { font-size: 32px; margin: var(--space-2) 0; }
   .hero-p { font-size: 15px; margin-bottom: 14px; }
@@ -848,8 +848,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .kpi + .kpi::before { display: none; }
   .kpi:nth-child(odd)::after { content: ""; position: absolute; right: 0; top: 20%; bottom: 20%; width: 1px; background: var(--color-line); }
   .kpi:nth-child(n+3) { border-top: 1px solid var(--color-line); }
-  .kpi:last-child { grid-column: 1 / -1; }
-  .kpi:last-child::after { display: none; }
+  .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .kpi:last-child:nth-child(odd)::after { display: none; }
   .kpi .v { font-size: 20px; }
   /* The party cards slide sideways, bleeding to the edges, 16 px under the KPIs like every block of the stack */
   .pcards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: var(--space-4) calc(-1 * var(--band-pad)) 0; padding: 2px var(--band-pad) var(--space-2); scrollbar-width: none; }

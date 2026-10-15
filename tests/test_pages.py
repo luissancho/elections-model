@@ -61,7 +61,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
 
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks'}
     assert data['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
@@ -826,7 +826,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert 'id="pollster-select"' in page and 'href="/metodo' in page
     assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 
@@ -2461,3 +2461,22 @@ def test_method_nav_is_a_segmented_control(api):
     page = html(call(api, '/metodo/promedio')[2])
     nav = re.search(r'<nav id="metodo-nav" class="seg metodo-nav"[^>]*>(.*?)</nav>', page, re.S).group(1)
     assert re.search(r'<a class="on" href="/metodo/promedio"[^>]*aria-current="page"', nav)
+
+
+def test_polls_csv_link_survives_a_single_page_and_the_legend_is_accessible(api):
+    """Revisión final de la fase 8: el enlace CSV queda fuera de la paginación (que el navegador esconde con una sola
+    página), la leyenda de píldoras lleva su grupo y sus tintas, y el texto apagado pasa AA."""
+    page = html(call(api, '/es')[2])
+    polls = page[page.index('id="polls"'):page.index('id="closing"')]
+    pag = re.search(r'<div class="pag" id="polls-pag" hidden>(.*?)</div>', polls, re.S).group(1)
+    assert 'Descargar CSV' not in pag and re.search(r'<p class="csv-link"><a href="/api/v1/forecast/es/polls\?[^"]*format=csv">Descargar CSV</a></p>', polls)
+    assert '<div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden>' in page
+    data = initial(call(api, '/es')[2])
+    assert data['inks'] == {'PP': pages.ink_color('#1d84ce'), 'Derecha': pages.ink_color('#1d84ce')}
+    css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert '.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr));' in css
+    assert '.kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }' in css
+    assert '.mut { color: var(--color-muted); font-size: 12px; }' in css and '.evbar .run small { font-size: 11.5px; color: var(--color-muted); }' in css
+    assert '.card .lead-strip { max-width: none; }' in css  # beats `.card p { max-width: 72ch }`
+    for gone in ('.event-title', '.brand-tagline', '.event-run,'):
+        assert gone not in css, gone

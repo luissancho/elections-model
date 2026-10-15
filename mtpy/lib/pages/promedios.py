@@ -8,7 +8,7 @@ from typing import Optional
 
 from .. import bundle
 from ..webapi import site
-from .common import OTHERS_COLOR, Catalog, api_url, block_color, bundle_part, common_context, part
+from .common import OTHERS_COLOR, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
                       fmt_prob, fmt_range)
 
@@ -508,8 +508,9 @@ def promedios_context(state: dict) -> dict:
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them) and ``initial`` (``state``, ``meta``, ``headline``,
         ``series`` (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered,
-        sorted and paginated in the browser), ``projection``, ``vote``, ``summary``, ``runs`` and ``cards`` (name
-        and colour of the party cards, for the sparklines)).
+        sorted and paginated in the browser), ``projection``, ``vote``, ``summary``, ``runs``, ``cards`` (name
+        and colour of the party cards, for the sparklines) and ``inks`` (the ink over the colour of every party
+        and block, for the pills of the legend)).
 
     Raises
     ------
@@ -562,6 +563,9 @@ def promedios_context(state: dict) -> dict:
         'summary': summary,
         'runs': bundle.loads(site().history(scope))['data'],
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
+        # ink of every party and block of the series charts, for the pills of the legend when they are on
+        'inks': {**{name: ink_color(parties[name]['color']) for name in series.get('parties') or []},
+                 **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},
     }
 
     return context

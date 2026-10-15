@@ -36,7 +36,7 @@
             <label><input type="radio" name="window" value="3m"> 3 meses</label>
           </fieldset>
         </div>
-        <div class="legend" id="series-legend" hidden></div>
+        <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
         <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
@@ -184,7 +184,7 @@
             </select>
           </label>
         </div>
-        <div class="legend" id="pollster-legend" hidden></div>
+        <div class="legend" id="pollster-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
         <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la encuestadora elegida frente al promedio de sondeos{{ projection_label }}"></div>
         {% call m.how() %}
         <p>

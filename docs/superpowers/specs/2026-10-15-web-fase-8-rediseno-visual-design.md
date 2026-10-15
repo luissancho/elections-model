@@ -497,6 +497,11 @@ nuevos. Lo que difiere del texto de arriba, decidido durante la construcción y 
 - Las tarjetas de partido muestran el nombre completo bajo las siglas (D3.6); la prueba de "siglas siempre" lo
   excluye. Las claves `values` y `clear` no sirven en los contextos de Jinja (las tapan los métodos de `dict`).
 - La portada conserva dos `h1` (la marca y el titular), como la maqueta.
+- El subtítulo del centro del hemiciclo se acorta a "ESCAÑOS" cuando el radio baja de 190 px (el móvil): el texto
+  largo no cabe en el hueco y la píldora ya dice la mayoría.
+- Tras la revisión final: el enlace "Descargar CSV" vive fuera de la paginación (que se esconde con una sola
+  página), la fila de KPIs reparte las columnas que tenga, las píldoras de la leyenda llevan `aria-pressed`, su
+  grupo y la tinta de cada color, y el texto apagado va en `--color-muted` (AA).
 
 Comprobado en el navegador (Chrome sin cabeza, paquete local y base del `.env`): `/`, `/es`, `/es/escanos`,
 `/casas`, `/casas?id=2`, `/elecciones` (sin elecciones publicadas en local), `/metodo` y `/metodo/promedio` a
