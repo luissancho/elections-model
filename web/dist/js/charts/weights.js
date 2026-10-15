@@ -42,6 +42,16 @@ export function pollLines(row, name) {
 }
 
 /**
+ * Line of the tooltip of one day of the kernel bell: the factor, named as in the list.
+ *
+ * @param {number|null} value kernel weight of the day, in [0, 1]
+ * @returns {string} the HTML line, escaped
+ */
+export function kernelLine(value) {
+  return escapeText(`F(kernel) ${fmtNum(value, 2)}`);
+}
+
+/**
  * ECharts option of the example: the local line of the day with its band, the polls sized and shaded by weight,
  * the kernel bell on the right axis and the guides at the day and the value read.
  *
@@ -94,7 +104,7 @@ export function weightsOption(example) {
       return meanTooltipLine(name, line.mean[i] ?? null, line.lo[i] ?? null, line.hi[i] ?? null, line.dates[i], color);
     }
     if (params.seriesName === NAMES.kernel) {
-      return escapeText(`Peso por cercanía ${fmtNum(params.data[1], 2)}`);
+      return kernelLine(params.data[1]);
     }
     return '';
   }

@@ -254,3 +254,8 @@ def test_weights_option_gives_the_line_and_the_kernel_hover_symbols_for_their_to
     for series in (option['series'][0], option['series'][4]):   # la recta y la campana
         assert series['showSymbol'] is True and series['symbol'] == 'circle' and series['symbolSize'] == 8
         assert series['itemStyle']['opacity'] == 0 and series['emphasis']['itemStyle']['opacity'] == 1
+
+
+def test_weights_kernel_line_names_the_factor():
+    assert run_js('w.kernelLine(0.946)') == 'F(kernel) 0,95'
+    assert run_js('w.kernelLine(null)') == 'F(kernel) –'
