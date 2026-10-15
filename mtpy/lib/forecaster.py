@@ -13,7 +13,7 @@ from typing import Any, Optional
 from typing_extensions import Self
 
 from ..core.app import Core
-from ..core.utils.dates import add_delta, ts_from_delta
+from ..core.utils.dates import add_delta, ts_from_delta, ts_to_delta
 from ..core.utils.helpers import format_number
 from ..core.utils.stat import LocalKernelEstimator, Kernel
 from ..core.utils.dataviz import (
@@ -215,6 +215,7 @@ class Forecaster(Core):
         self.date_last = None  # Date of the last poll published for the current election event
         self.date_end = None  # Date of the current election event
         self.date_fit_last = None  # Last day with a fitted value (before any forward fill), see `fit_forecast`
+        self.max_fc = 0  # Days forecast after the last poll by the last `fit_forecast` (the grid of `fit`)
 
     @property
     def bmaps(self) -> dict[str, Any]:
@@ -619,6 +620,7 @@ class Forecaster(Core):
         if self.he_enabled and self.house_effects is None:
             self.fit_house_effects()
 
+        self.max_fc = max_fc
         names_ = tqdm(names) if self.verbose > 0 else names  # Show progress bar if verbose
         for name in names_:
             res = self.fit(name, max_fc=max_fc, ret_stat=True)
@@ -733,6 +735,121 @@ class Forecaster(Core):
         return self.forecast
 
     # --- Effective sample (M12) --------------------------------------------------------------------------
+
+    def weights_at(
+        self,
+        name: str,
+        date: Optional[str | pd.Timestamp] = None
+    ) -> Optional[dict[str, Any]]:
+        """
+        Polls that weigh on the average of a party or block on one day, with the local line of that day.
+
+        The estimator, its grid and its band are those of `fit`: the same kernel bandwidths (the adaptive
+        bandwidth depends on the whole grid) and the cluster-robust error by pollster, so the line read on `date`
+        is the published average of that day.
+
+        Parameters
+        ----------
+        name : str
+            Name of the party or block.
+        date : str or Timestamp, optional
+            Day on which the average is read. By default `date_fit_last` when the average is fitted, otherwise
+            the earliest of today and the last poll. A day after the end of the grid of the party (last usable
+            poll + `max_fc`) is read at that end.
+
+        Returns
+        -------
+        dict or None
+            `polls` (DataFrame indexed by date, ascending: the polls of the local regression of that day with
+            `pollster_id`, `pollster`, `sponsor`, `sample_size`, `pct` (as published), `pct_adj` (net of the
+            house effect), `weight` (kernel times poll weight), `weight_kernel`, `weight_over`, `weight_sample`
+            and `weight_rating`), `line` (daily DataFrame over the window: `mean`, `cmin`, `cmax`, `err`),
+            `kernel` (daily Series over the window, the Gaussian bell centred on the day, max 1) and `stats`
+            (`date`, `mean`, `cmin`, `cmax`, `err`, `nobs`, `neff`, `bandwidth` in days). `None` with fewer
+            than three usable polls or a `date` before the first one.
+        """
+        usable = self.fc_series[name].notnull() & (self.fc_series['weight'] > 0)
+        df = self.fc_series[usable]
+
+        if df.shape[0] < 3:
+            warnings.warn('Fewer than three usable polls for `{}`: no weights'.format(name))
+            return None
+
+        if date is not None:
+            date = pd.Timestamp(date)
+        elif self.date_fit_last is not None:
+            date = self.date_fit_last
+        else:
+            date = min(pd.to_datetime('now').floor('d', ambiguous=False), df.index.max())
+
+        if date < df.index.min():
+            return None
+
+        # The grid of `fit`: from the first usable poll to the last one plus `max_fc`
+        ix = self.fc_index
+        px = ix[(ix >= df.index.min()) & (ix <= add_delta(df.index.max(), f'P{self.max_fc}D'))]
+        date = min(date, px.max())
+
+        groups = df['pollster_id'].to_numpy() if self.reg_params.get('cov_type') == 'cluster' else None
+        est = LocalKernelEstimator(
+            df[name],
+            weights=df.weight.values,
+            groups=groups,
+            **self.reg_params
+        )
+        kws = est.build_pred(px).get_kernel().get_weights(est.pred)
+        pos = (date - px.min()).days
+
+        mask = est.local_mask(kws, pos)
+        loc_est = est.get_local_estimator(kws, pos)
+
+        if loc_est is None:
+            return None
+
+        # The polls of the regression of that day, as published and as fitted
+        polls = pd.DataFrame({
+            'pollster_id': df['pollster_id'],
+            'pollster': df['pollster'],
+            'sponsor': df['sponsor'] if 'sponsor' in df.columns else None,
+            'sample_size': df['sample_size'] if 'sample_size' in df.columns else None,
+            'pct': self.fc_series_raw.loc[usable, name].values,
+            'pct_adj': df[name],
+            'weight': kws[pos] * df.weight.values,
+            'weight_kernel': kws[pos],
+            'weight_over': df['weight_over'],
+            'weight_sample': df['weight_sample'],
+            'weight_rating': df['weight_rating']
+        }, index=df.index)[mask].sort_index()
+
+        # The window: from the first poll with an appreciable kernel weight to the later of the last one and `date`
+        near = df.index[kws[pos] >= 1e-2]
+        days = pd.date_range(near.min(), max(near.max(), date), freq='D')
+        deltas = np.asarray(ts_to_delta(days, dt_from=est.ranges[0][0], freq=est.ts_freq), dtype=float)
+
+        line = loc_est.fit(deltas, alpha=self.alpha)
+        line.index = days
+        line = line[['mean', 'cmin', 'cmax', 'err']]
+
+        kernel = est.get_kernel()
+        if kernel.bw_type == 'fixed':
+            bandwidth = float(kernel.bw[0])
+        else:
+            bandwidth = float(kernel.get_bw_adaptive(kernel.data[:, 0], kernel.weights, kernel.bw[0], p=est.pred[:, 0])[pos])
+
+        bell = pd.Series(Kernel.kernel_gaussian(deltas, est.pred[pos, 0], bandwidth).squeeze(), index=days)
+
+        stats = {
+            'date': date,
+            'mean': float(line.loc[date, 'mean']),
+            'cmin': float(line.loc[date, 'cmin']),
+            'cmax': float(line.loc[date, 'cmax']),
+            'err': float(line.loc[date, 'err']),
+            'nobs': int(loc_est.nobs),
+            'neff': float(loc_est.neff),
+            'bandwidth': bandwidth
+        }
+
+        return {'polls': polls, 'line': line, 'kernel': bell, 'stats': stats}
 
     def fit_dispersion(self) -> pd.DataFrame:
         """

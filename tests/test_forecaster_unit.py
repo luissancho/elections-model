@@ -134,6 +134,7 @@ def _synthetic_forecaster(seed=0, noise=None):
     fc.reg_params = Forecaster.set_reg_params(fc, None)
     fc.he_params = Forecaster.set_he_params(fc, {'prior': None})
     fc.he_enabled, fc.house_effects, fc.date_fit_last = True, None, None
+    fc.max_fc = 0
     fc.disp_enabled, fc.disp_params, fc.dispersion = False, Forecaster.set_disp_params(fc, None), None
     fc.series_raw = None
     fc._set_series(series)
@@ -423,3 +424,55 @@ def test_fit_dispersion_penalizes_the_herder_by_default():
     assert (others > 0.9).all() and (others > disp.loc[4, 'factor']).all()
     herd = fc.measure_herding(names=['PP', 'PSOE'])
     assert herd.loc[4, 'p_value'] < 0.01 and (herd.loc[[1, 2, 3], 'p_value'] > 0.01).all()
+
+
+# --- Fase 9: los pesos de los sondeos en un día (`weights_at`) ---
+def test_weights_at_matches_the_fitted_average_and_its_band_on_the_same_grid():
+    fc, _, _ = _synthetic_forecaster()
+    fc.fit_forecast(names=['PP'], max_fc=10)
+    when = fc.date_fit_last
+    out = fc.weights_at('PP')                       # date=None → date_fit_last
+    assert fc.max_fc == 10 and out['stats']['date'] == when
+    cell = fc.fc_stat.loc[when, 'PP']
+    assert out['stats']['mean'] == pytest.approx(fc.forecast.loc[when, 'PP'])
+    assert out['stats']['cmin'] == pytest.approx(cell['cmin']) and out['stats']['cmax'] == pytest.approx(cell['cmax'])
+    assert out['stats']['err'] == pytest.approx(cell['err']) and out['stats']['nobs'] == cell['nobs']
+    assert out['stats']['neff'] == pytest.approx(cell['neff']) and out['stats']['bandwidth'] > 0
+    polls = out['polls']
+    assert len(polls) == cell['nobs'] and polls.index.is_monotonic_increasing
+    assert list(polls.columns) == ['pollster_id', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight',
+                                   'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating']
+    assert np.allclose(polls['weight'], polls['weight_kernel'] * polls['weight_over'] * polls['weight_sample'] * polls['weight_rating'])
+    assert np.allclose(polls['pct'], fc.fc_series_raw.loc[polls.index, 'PP'])     # lo publicado
+    assert np.allclose(polls['pct_adj'], fc.fc_series.loc[polls.index, 'PP'])     # lo que ajusta la recta
+    assert not np.allclose(polls['pct'], polls['pct_adj']) and polls['sponsor'].isnull().all()
+    line, kernel = out['line'], out['kernel']
+    assert line.index[-1] == when and (line.index.to_series().diff().dropna() == pd.Timedelta(days=1)).all()
+    assert line.loc[when, 'mean'] == pytest.approx(out['stats']['mean'])
+    assert line.index[0] <= polls.index[0]                       # la ventana empieza en el primer sondeo con kernel apreciable
+    assert kernel.index.equals(line.index) and kernel.loc[when] == pytest.approx(1.0) and kernel.max() <= 1.0
+    assert kernel.iloc[0] < kernel.loc[when]
+
+
+def test_weights_at_reads_a_party_without_recent_polls_at_the_end_of_its_grid():
+    fc, _, _ = _synthetic_forecaster()
+    dates = fc.series.index.get_level_values('date')
+    cut = fc.date_last - pd.Timedelta(days=60)
+    fc.series.loc[dates > cut, 'PSOE'] = np.nan
+    fc.series_raw.loc[dates > cut, 'PSOE'] = np.nan
+    fc.fit_forecast(names=['PP', 'PSOE'], max_fc=10, fillna=True)
+    last = fc.series.loc[fc.series['PSOE'].notnull()].index.get_level_values('date').max()
+    end = last + pd.Timedelta(days=10)
+    out = fc.weights_at('PSOE')
+    assert end < fc.date_fit_last and out['stats']['date'] == end
+    assert out['stats']['mean'] == pytest.approx(fc.forecast.loc[end, 'PSOE'])
+    assert out['line'].index[-1] == end and out['polls'].index.max() <= last
+
+
+def test_weights_at_returns_none_without_three_polls_or_before_the_first():
+    fc, _, _ = _synthetic_forecaster()
+    assert fc.weights_at('PP', date='2025-12-01') is None
+    dates = fc.series.index.get_level_values('date')
+    fc.series.loc[dates > dates.min() + pd.Timedelta(days=2), 'PSOE'] = np.nan   # quedan dos sondeos (días 1 y 3)
+    with pytest.warns(UserWarning):
+        assert fc.weights_at('PSOE') is None
