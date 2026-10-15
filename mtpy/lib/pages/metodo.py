@@ -137,6 +137,11 @@ def national_figures() -> dict:
     }
 
 
+def _scale(rows: list, key: str, floor: float) -> float:
+    """Scale of a bar column of the example: ``floor`` (the ``vmax`` of ``print_weights``) unless a value exceeds it."""
+    return max([floor] + [row[key] for row in rows if row.get(key) is not None])
+
+
 def weights_example() -> Optional[dict]:
     """
     The live example of the average: the polls that weigh on the average of the party leading the vote of the
@@ -146,8 +151,8 @@ def weights_example() -> Optional[dict]:
     -------
     dict or None
         ``name``, ``fullname``, ``color`` (from ``meta``), ``date`` (the day read), ``run``, ``stats`` (those of
-        the leader), ``rows`` (the rows of the leader, by date), ``n_rows``, ``weight_max`` (scale of the weight
-        bar: 3 unless a weight exceeds it), ``line`` and ``kernel``. ``None`` without a national run, when the run
+        the leader), ``rows`` (the rows of the leader, by date), ``n_rows``, ``weight_max``, ``sample_max`` and ``rating_max``
+        (scales of the bars: 3, 2 and 2 unless a value exceeds them), ``line`` and ``kernel``. ``None`` without a national run, when the run
         has no ``weights`` part (published before the part existed), when the headline has no parties or when the
         leader has no fit in the part.
 
@@ -184,7 +189,9 @@ def weights_example() -> Optional[dict]:
         'stats': weights['stats'][leader],
         'rows': rows,
         'n_rows': len(rows),
-        'weight_max': max([3.0] + [row['weight'] for row in rows if row.get('weight') is not None]),
+        'weight_max': _scale(rows, 'weight', 3.0),
+        'sample_max': _scale(rows, 'weight_sample', 2.0),
+        'rating_max': _scale(rows, 'weight_rating', 2.0),
         'line': weights['line'][leader],
         'kernel': weights['kernel'][leader],
     }

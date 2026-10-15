@@ -12,6 +12,14 @@ const MIN_SIZE = 6;
 const SIZE_RANGE = 14;
 const MIN_OPACITY = 0.25;
 const NAMES = {line: 'Recta del día', band: 'Banda 95 %', polls: 'Sondeos', kernel: 'Kernel', marks: 'marks'};
+// Symbols of the line and the bell: invisible until hovered, so that each day has its own tooltip (as `series.js`).
+const HOVER_SYMBOLS = {
+  showSymbol: true,
+  symbol: 'circle',
+  symbolSize: 8,
+  itemStyle: {opacity: 0},
+  emphasis: {itemStyle: {opacity: 1}},
+};
 
 /**
  * Lines of the tooltip of one poll of the example: pollster (and sponsor), date and sample, the published and the
@@ -55,13 +63,13 @@ export function weightsOption(example) {
   });
   const series = [
     {
-      type: 'line', name: NAMES.line, color, z: 3, symbol: 'none', connectNulls: false, lineStyle: {width: 2},
+      type: 'line', name: NAMES.line, color, z: 3, ...HOVER_SYMBOLS, connectNulls: false, lineStyle: {width: 2},
       data: times.map((t, i) => [t, line.mean[i] ?? null]),
     },
     ...bandSeries(NAMES.band, times, line.lo, line.hi, {color, opacity: BAND_OPACITY, stack: 'band:weights'}),
     {type: 'scatter', name: NAMES.polls, color, z: 4, data: points},
     {
-      type: 'line', name: NAMES.kernel, yAxisIndex: 1, color: THEME.mutedColor, z: 2, symbol: 'none',
+      type: 'line', name: NAMES.kernel, yAxisIndex: 1, color: THEME.mutedColor, z: 2, ...HOVER_SYMBOLS,
       lineStyle: {width: 1.5, type: 'dashed'},
       data: kernel.dates.map((d, i) => [dayTime(d), kernel.values[i] ?? null]),
     },

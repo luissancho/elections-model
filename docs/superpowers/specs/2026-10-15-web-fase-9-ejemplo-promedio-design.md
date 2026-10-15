@@ -95,9 +95,10 @@ Forecaster.weights_at(name: str, date: Optional[str | pd.Timestamp] = None) -> d
   es, literalmente, los sondeos de la recta. El constructor expone esa máscara desde el estimador en lugar de
   reproducir el reescalado.
 - Recta local: `est.get_local_estimator(kws, pos)` ajustado con `alpha=self.alpha` sobre los días de la ventana.
-  La ventana va del primer sondeo con `weight_kernel >= 1e-2` hasta el máximo entre el último de ellos y `date`:
-  en un run publicado `date` cae días después del último sondeo, y la recta, la campana y el eje tienen que llegar
-  hasta el día que se lee. Ese estimador es una sola recta: su valor en `date` es el promedio del día y sus
+  La ventana cubre los sondeos con `weight_kernel >= 1e-2`, todos los sondeos de la regresión (un sondeo de mucho
+  peso entra en ella con un kernel menor) y `date`: en un run publicado `date` cae días después del último sondeo, y
+  la recta, la campana y el eje tienen que llegar hasta el día que se lee y arrancar en el primer sondeo de la tabla
+  (revisión final, 2026-10-15). Ese estimador es una sola recta: su valor en `date` es el promedio del día y sus
   `cmin`/`cmax` son la banda publicada.
 - Campana del kernel: la gaussiana centrada en `date` con la anchura que el kernel adaptativo da a ese punto de la
   rejilla completa (la posición de `date` en las anchuras de `get_bw_adaptive(p=rejilla)`, las que usan los
@@ -325,6 +326,11 @@ que las cifras del ejemplo sean exactamente las publicadas.
 4. La anchura de la campana es la de la rejilla completa en la posición de la fecha; `get_bw_adaptive` con un solo
    punto devuelve la anchura fija.
 5. El líder es el partido de mayor `pct` del titular, no el primero: el titular viene en el orden del catálogo.
+6. (Revisión final del código, 2026-10-15.) La ventana de la recta se reconcilia con la máscara de la tabla: con los
+   datos reales, dos sondeos antiguos de mucho peso entraban en la regresión con un kernel menor que 0,01 y quedaban
+   fuera del eje; la ventana cubre ahora también los sondeos de la tabla. Además, la recta y la campana llevan
+   símbolos invisibles para que su tooltip se dispare (como las líneas del promedio), y las barras del factor de
+   muestra y del rating ensanchan su escala cuando un valor supera 2, como ya hacía la del peso con 3.
 
 ## Lo que queda al constructor
 

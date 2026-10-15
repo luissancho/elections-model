@@ -236,8 +236,8 @@
                 <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight|bar(0, example.weight_max) }}%"></i><span>{{ row.weight|num(2) }}</span></td>
                 <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_kernel|bar(0, 1) }}%"></i><span>{{ row.weight_kernel|num(2) }}</span></td>
                 <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_over|bar(0, 1) }}%"></i><span>{{ row.weight_over|num(2) }}</span></td>
-                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_sample|bar(0, 2) }}%"></i><span>{{ row.weight_sample|num(2) }}</span></td>
-                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_rating|bar(0, 2) }}%"></i><span>{{ row.weight_rating|num(2) }}</span></td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_sample|bar(0, example.sample_max) }}%"></i><span>{{ row.weight_sample|num(2) }}</span></td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_rating|bar(0, example.rating_max) }}%"></i><span>{{ row.weight_rating|num(2) }}</span></td>
               </tr>
               {% endfor %}
             </tbody>

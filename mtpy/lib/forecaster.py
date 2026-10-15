@@ -821,9 +821,10 @@ class Forecaster(Core):
             'weight_rating': df['weight_rating']
         }, index=df.index)[mask].sort_index()
 
-        # The window: from the first poll with an appreciable kernel weight to the later of the last one and `date`
+        # The window: every poll with an appreciable kernel weight, every poll of the regression (a heavy poll enters
+        # it with a smaller kernel) and `date`
         near = df.index[kws[pos] >= 1e-2]
-        days = pd.date_range(near.min(), max(near.max(), date), freq='D')
+        days = pd.date_range(min(near.min(), polls.index.min()), max(near.max(), polls.index.max(), date), freq='D')
         deltas = np.asarray(ts_to_delta(days, dt_from=est.ranges[0][0], freq=est.ts_freq), dtype=float)
 
         line = loc_est.fit(deltas, alpha=self.alpha)

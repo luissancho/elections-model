@@ -180,7 +180,8 @@ con la rejilla y el error agrupado de `fit`, así que la recta leída ese día e
   de `weight_over`, `weight_sample` (con la dispersión de la casa dentro) y `weight_rating`. Porcentajes a 1
   decimal, pesos a 3.
 - `line`: `{partido: {dates, mean, lo, hi}}`, la recta local del día y su banda del 95 %, día a día en la
-  ventana (del primer sondeo con kernel apreciable hasta el día leído). Columnar, como `series`.
+  ventana (desde el primero entre los sondeos con kernel apreciable y los de `rows`, hasta el día leído). Columnar,
+  como `series`.
 - `kernel`: `{partido: {dates, values}}`, la campana del kernel centrada en el día leído, en `[0, 1]` (3
   decimales), en los mismos días que `line`.
 - `stats`: `{partido: {date, mean, lo, hi, err, nobs, neff, bandwidth}}`: el día leído para ese partido (solo

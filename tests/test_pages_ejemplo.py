@@ -24,6 +24,7 @@ def test_weights_example_picks_the_leader_and_its_slice(api):
     assert example['name'] == 'PP' and example['fullname'] == fixture_data('meta')['parties'][0]['fullname']
     assert example['color'] == '#1d84ce' and example['date'] == '2026-10-08' and example['run'] == RUN
     assert example['n_rows'] == 3 == example['stats']['nobs'] and example['weight_max'] == 3
+    assert example['rating_max'] == 2 and example['sample_max'] == 2            # las escalas de las barras
     assert [row['date'] for row in example['rows']] == ['2026-09-24', '2026-10-01', '2026-10-05']
     assert example['line']['dates'][-1] == '2026-10-08' and len(example['kernel']['values']) == 15
 
@@ -36,6 +37,14 @@ def test_weights_example_is_none_without_the_part_or_the_leader(api, tmp_path, m
     monkeypatch.undo()
     without_weights(tmp_path)
     assert metodo.weights_example() is None
+
+
+def test_weights_example_widens_the_bar_scales_when_a_factor_exceeds_them(api, monkeypatch):
+    weights = fixture_data('weights')
+    weights['rows'][0] = {**weights['rows'][0], 'weight_rating': 3.2, 'weight_sample': 2.5, 'weight': 4.1}
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: weights if name == 'weights' else fixture_data(name))
+    example = metodo.weights_example()
+    assert example['rating_max'] == 3.2 and example['sample_max'] == 2.5 and example['weight_max'] == 4.1
 
 
 def test_weights_example_lets_other_errors_through(api, monkeypatch):

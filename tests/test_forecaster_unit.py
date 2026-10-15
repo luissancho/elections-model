@@ -494,3 +494,18 @@ def test_print_weights_keeps_its_columns_and_plot_weights_draws_the_daily_kernel
     assert len(ax.collections) == 1 and len(ax.collections[0].get_offsets()) == len(out['polls'])
     assert len(twin.lines) == 1 and len(twin.lines[0].get_xdata()) == len(out['kernel'])
     matplotlib.pyplot.close('all')
+
+
+def test_weights_at_window_covers_every_poll_of_the_regression():
+    """Un sondeo lejano con mucho peso entra en la regresión aunque su kernel baje de 0,01: la ventana de la recta,
+    la campana y el eje debe cubrirlo (revisión final de la fase 9)."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.reg_params = Forecaster.set_reg_params(fc, {'bw_type': 'fixed', 'bw': 30})
+    first = fc.series.index[0]
+    fc.series.loc[first, 'weight'] = 50.
+    date = first[0] + pd.Timedelta(days=96)          # kernel exp(-(96/30)²/2) ≈ 0,006 < 0,01
+    out = fc.weights_at('PP', date=date)
+    polls, line = out['polls'], out['line']
+    assert polls.index.min() == first[0] and polls['weight_kernel'].min() < 1e-2
+    assert line.index[0] <= polls.index.min() and line.index[-1] >= max(polls.index.max(), date)
+    assert out['kernel'].index.equals(line.index) and out['stats']['bandwidth'] == 30.

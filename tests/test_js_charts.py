@@ -246,3 +246,10 @@ def test_weights_poll_lines_name_the_sponsor_and_the_weight_factors():
     assert lines[2:] == ['Publicado 32,4% · corregido 32,9%', 'Peso 0,50', 'cercanía 0,64 · sobre. 1,00 · muestra 0,80 · rating 1,00']
     lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][1]))
     assert lines[0] == '<strong>Sigma Dos</strong>' and lines[1].endswith('· muestra –')
+
+
+def test_weights_option_gives_the_line_and_the_kernel_hover_symbols_for_their_tooltips():
+    option = run_js('w.weightsOption(%s)' % json.dumps(EXAMPLE))
+    for series in (option['series'][0], option['series'][4]):   # la recta y la campana
+        assert series['showSymbol'] is True and series['symbol'] == 'circle' and series['symbolSize'] == 8
+        assert series['itemStyle']['opacity'] == 0 and series['emphasis']['itemStyle']['opacity'] == 1
