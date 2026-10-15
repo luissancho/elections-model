@@ -72,7 +72,7 @@ def test_nowcast_and_pinned_run_are_reflected(api):
     status, headers, body = call(api, '/es', query='mode=nowcast&run=' + RUN)
     page = html(body)
     assert status == 200 and 'estimación a' in page
-    assert 'name="mode"' not in page and '<span class="chip event-run">Run del 8 oct 2026</span>' in page
+    assert 'name="mode"' not in page and '<span class="pill event-run">Run del 8 oct 2026</span>' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': True}
     assert 'href="/es/escanos?mode=nowcast&amp;run={}"'.format(RUN) in page
 
@@ -295,7 +295,7 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     page = html(body)
     assert status == 200
     assert '<h1><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="563" height="102"></a></h1>' in page
-    assert '<p class="brand-tagline">Promedio de encuestas, previsión de escaños y ranking de encuestadoras</p>' in page
+    assert 'brand-tagline' not in page  # the tagline only lives in the description since phase 8
     assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
     assert '<link rel="icon" href="/dist/img/favicon.ico" sizes="16x16 32x32 48x48">' in page
     assert '<link rel="apple-touch-icon" href="/dist/img/apple-touch-icon.png">' in page
@@ -336,7 +336,7 @@ def test_error_page_carries_the_brand_and_the_default_description(api):
             'encuestadoras en España.">') in page
     assert '<img src="/dist/img/logo.svg" alt="Demoscopio" width="563" height="102">' in page
     assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
-    assert '<p class="brand-tagline">Promedio de encuestas, previsión de escaños y ranking de encuestadoras</p>' in page
+    assert 'brand-tagline' not in page  # the tagline only lives in the description since phase 8
 
 
 def test_templates_compile_with_strict_undefined():
@@ -1932,7 +1932,8 @@ def test_home_lists_the_published_events_with_their_headline(api, fresh_app):
     page = html(body)
     assert status == 200 and '<title>Demoscopio · Inicio</title>' in page
     assert page.index('Elecciones generales') < page.index('Elecciones autonómicas · Madrid')
-    assert 'href="/es"' in page and 'href="/es-md"' in page and 'href="/es/escanos"' not in page
+    main = page[page.index('<main'):page.index('</main>')]  # the tab bar links the seats; the cards do not
+    assert 'href="/es"' in main and 'href="/es-md"' in main and 'href="/es/escanos"' not in main
     leader = max(fixture_data('headline')['nowcast']['parties'], key=lambda row: row['pct'])
     assert leader['name'] in page and 'de probabilidad de mayoría absoluta' in page
     assert 'id="event-bar"' not in page and 'id="scope-filter"' not in page and 'initial-data' not in page
@@ -2140,7 +2141,7 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
     page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
     assert 'estimación del 8 oct 2026' in page and 'Estimación a ' + today not in page  # run_at of the fixture
     bar = page[page.index('id="event-bar"'):page.index('<main')]
-    assert '<span class="chip event-run">Run del 8 oct 2026</span>' in bar and '<form' not in bar
+    assert '<span class="pill event-run">Run del 8 oct 2026</span>' in bar and '<form' not in bar
     # `?mode=` is still accepted in the query and kept in the tabs
     page = html(call(api, '/es', query='mode=forecast')[2])
     assert 'pronóstico para el 29 nov 2026' in page and 'href="/es/escanos?mode=forecast"' in page
@@ -2307,3 +2308,40 @@ def test_rng_cell_places_the_range_the_median_and_the_majority():
 def test_card_subtitle_is_a_pill(api):
     page = html(call(api, '/es')[2])
     assert '<span class="pill">estimación a ' in page and 'mode-subtitle' not in page
+
+
+def test_tabbar_links_the_five_sections_and_marks_the_active_one():
+    bar = pages.tabbar('es', None, '/escanos', True, '?mode=forecast')
+    assert [row['href'] for row in bar] == ['/', '/es?mode=forecast', '/es/escanos?mode=forecast', '/elecciones?scope=es', '/casas']
+    assert [row['active'] for row in bar] == [False, False, True, False, False]
+    assert [row['icon'] for row in bar] == ['home', 'line', 'hemi', 'target', 'trophy']
+    bar = pages.tabbar('es-md', '/casas', '', False, '')
+    assert bar[1]['href'] == '/es-md' and bar[3]['href'] == '/elecciones?scope=es-md' and bar[4]['active']
+    assert not any(row['active'] for row in pages.tabbar('es', '/metodo', '', False, ''))
+    assert pages.chamber_text('es', {'n_seats': 350}) == 'Congreso, 350 escaños'
+    assert pages.chamber_text('es-md', {'n_seats': 135}) == 'Parlamento, 135 escaños'
+    assert pages.chamber_text('es', {}) is None
+
+
+def test_header_is_compact_and_the_pages_carry_the_tabbar_and_the_icons(api):
+    page = html(call(api, '/es')[2])
+    assert 'brand-tagline' not in page and '<meta name="description"' in page
+    assert '<svg hidden aria-hidden="true"' in page and page.index('<symbol id="i-home"') < page.index('<main')
+    assert 'class="ico-btn" href="/metodo" aria-label="Método"' in page
+    bar = re.search(r'<nav class="tabbar" aria-label="Secciones">(.*?)</nav>', page, re.S).group(1)
+    assert bar.count('<a ') == 5 and 'href="/es/escanos?mode=nowcast"' in bar and '<use href="#i-trophy"' in bar
+    assert re.search(r'<a class="on" href="/es\?mode=nowcast"[^>]*><svg[^>]*><use href="#i-line"', bar)
+    assert page.index('</footer>') < page.index('<nav class="tabbar"')
+
+
+def test_event_bar_names_the_chamber_and_the_publication(api):
+    page = html(call(api, '/es')[2])
+    assert '<h2>Elecciones generales<small>29 nov 2026 · ' in page and 'Congreso, 350 escaños</small></h2>' in page
+    assert '<span class="pill brand">Estimación a ' in page
+    assert 'Publicación del 8 oct 2026 · 120 sondeos' in page
+    assert 'class="seg lg event-tabs"' in page and re.search(r'<a class="on" href="/es\?mode=nowcast" aria-current="page"><svg', page)
+
+
+def test_error_page_has_no_tabbar(api):
+    status, _, body = call(api, '/nope')
+    assert status == 404 and 'class="tabbar"' not in html(body) and '<svg hidden aria-hidden="true"' not in html(body)

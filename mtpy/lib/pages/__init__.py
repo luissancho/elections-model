@@ -18,9 +18,9 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING
                     casa_context, casas_context, effects_table, herding_rows, house_effects_grid, profile_rows,
                     ranking_rows)
 from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
-                     SITE_TITLE, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, common_context, days_left, days_text,
-                     default_mode, environment, event_info, event_query, event_title, ink_color, parse_state,
-                     part, published_scopes, resolve_event_scope, resolve_scope, scope_query, title_of)
+                     SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, chamber_text, common_context,
+                     days_left, days_text, default_mode, environment, event_info, event_query, event_title, ink_color,
+                     parse_state, part, published_scopes, resolve_event_scope, resolve_scope, scope_query, tabbar, title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, chart_parties,
                          error_blocks, event_block_rows, history_events, history_rows, history_scopes, eleccion_context,
                          elecciones_context, error_rows, event_part, last_poll_rows, horizon_tables, majority_of,

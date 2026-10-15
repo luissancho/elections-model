@@ -21,6 +21,7 @@
   {% block scripts %}{% endblock %}
 </head>
 <body>
+  {% include '_svg.html' +%}
   {% if manifest.freeze.active %}
   <div id="freeze-banner">{{ manifest.freeze.message or 'Publicación congelada.' }} <a href="/metodo#limitaciones">Más información</a></div>
   {% endif %}
@@ -33,6 +34,7 @@
     {% block content %}{% endblock %}
   </main>
   {% include '_footer.html' +%}
+  {% include '_tabbar.html' +%}
   {% if initial is defined %}
   <script type="application/json" id="initial-data">{{ initial|tojson }}</script>
   {% endif %}

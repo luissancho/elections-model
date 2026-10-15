@@ -32,6 +32,20 @@ EVENT_TABS = (
     {'suffix': '', 'label': 'Promedios'},
     {'suffix': '/escanos', 'label': 'Escaños'},
 )
+# Bottom tab bar of the phones: five entries with an icon of the sprite (``_svg.html``); the method goes in the
+# round button of the header
+TABBAR = (
+    {'key': 'inicio', 'label': 'Inicio', 'icon': 'home'},
+    {'key': 'promedios', 'label': 'Promedios', 'icon': 'line'},
+    {'key': 'escanos', 'label': 'Escaños', 'icon': 'hemi'},
+    {'key': 'historico', 'label': 'Histórico', 'icon': 'target'},
+    {'key': 'ranking', 'label': 'Ranking', 'icon': 'trophy'},
+)
+# Entry of the tab bar lit by each global page (``PAGES`` href); the method lights none
+TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking'}
+# Chamber of a scope, for the event bar and the home ("Congreso, 350 escaños")
+CHAMBERS = {'es': 'Congreso'}
+DEFAULT_CHAMBER = 'Parlamento'
 # ``Router.handle`` returns the first route that matches: the fixed routes go before ``/{scope}``.
 ROUTES = [
     ('/promedio', 'redirect', 'promedio', ['GET']),
@@ -460,6 +474,73 @@ def event_title(scope: str, scopes: list) -> str:
     return 'Elecciones autonómicas · {}'.format(names.get(scope, scope))
 
 
+def chamber_text(scope: str, meta: dict) -> Optional[str]:
+    """
+    Name of the chamber of a scope with its seats.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    meta : dict
+        Data of the meta part of the run (``n_seats``).
+
+    Returns
+    -------
+    str or None
+        ``'Congreso, 350 escaños'`` for ``es``, ``'Parlamento, {n} escaños'`` for the rest; ``None`` without
+        ``n_seats``.
+    """
+    seats = meta.get('n_seats')
+
+    if seats is None:
+        return None
+
+    return '{}, {} escaños'.format(CHAMBERS.get(scope, DEFAULT_CHAMBER), fmt_int(seats))
+
+
+def tabbar(scope: str, active: Optional[str], active_suffix: str, event: bool, query: str) -> list:
+    """
+    Entries of the bottom tab bar.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the page (the event shown, or the scope the global page reads).
+    active : str or None
+        ``href`` of the current global page in ``PAGES``; ``None`` on an event page.
+    active_suffix : str
+        Suffix of the current tab of the event bar (``''`` or ``'/escanos'``), on an event page.
+    event : bool
+        Whether the page is an event page: its links keep ``query``.
+    query : str
+        ``event_query`` of the page state (``''`` outside an event).
+
+    Returns
+    -------
+    list of dict
+        One entry per row of ``TABBAR``: ``key``, ``label``, ``icon``, ``href`` and ``active``. Promedios and
+        Escaños link the event of ``scope`` (with ``query`` on an event page), Histórico keeps the scope in its
+        query and Ranking goes to ``/casas``; the active one is the tab of an event page or the global page of
+        ``TABBAR_ACTIVE`` (none for the method).
+    """
+    keep = query if event else ''
+    hrefs = {
+        'inicio': '/',
+        'promedios': '/' + scope + keep,
+        'escanos': '/' + scope + '/escanos' + keep,
+        'historico': '/elecciones' + scope_query(scope),
+        'ranking': '/casas',
+    }
+
+    if event:
+        lit = 'escanos' if active_suffix == '/escanos' else 'promedios'
+    else:
+        lit = TABBAR_ACTIVE.get(active)
+
+    return [dict(row, href=hrefs[row['key']], active=row['key'] == lit) for row in TABBAR]
+
+
 def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: Optional[date] = None,
                scopes: Optional[list] = None) -> dict:
     """
@@ -484,8 +565,9 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
     -------
     dict
         ``title`` (``event_title``), ``date`` (``event_date``), ``days_left``, ``days_text``
-        (``days_text``), ``href`` (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per
-        entry of ``EVENT_TABS``, the links keeping the state (``event_query``).
+        (``days_text``), ``chamber`` (``chamber_text``), ``run_at`` and ``n_polls`` (of the run), ``href``
+        (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per entry of ``EVENT_TABS``, the links
+        keeping the state (``event_query``).
     """
     if scopes is None:
         scopes = published_scopes()
@@ -499,6 +581,9 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
         'date': event_date,
         'days_left': days,
         'days_text': days_text(days),
+        'chamber': chamber_text(scope, meta),
+        'run_at': meta.get('run_at'),
+        'n_polls': meta.get('n_polls'),
         'href': '/' + scope,
         'tabs': [{'href': '/' + scope + tab['suffix'] + query, 'label': tab['label'],
                   'active': tab['suffix'] == active_suffix} for tab in EVENT_TABS],
@@ -731,7 +816,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
         (``event_info``, or ``None`` on a global page), ``manifest``, ``meta``, ``catalog``,
         ``freeze`` (the manifest switch),
-        ``frozen`` (whether it is active) and ``title_suffix`` (``title_of``).
+        ``frozen`` (whether it is active), ``title_suffix`` (``title_of``) and ``tabbar`` (``tabbar``, the
+        bottom bar of the phones).
 
     Raises
     ------
@@ -771,6 +857,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'meta': meta,
         'catalog': catalog(meta),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
+        'tabbar': tabbar(scope, active, active_suffix, event, event_query(full) if event else ''),
     }
 
 
