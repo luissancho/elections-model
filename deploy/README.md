@@ -284,6 +284,15 @@ error si alguna falla. Lo que escriben `publish event` y `publish backtest` pued
 casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
 publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquier otra respuesta.
 
+### Tipografías y marca
+
+El sitio usa dos fuentes variables vendidas en `web/dist/vendor/fonts/` (SIL OFL, subconjunto latino): DM Sans
+(texto, ejes `opsz` 9-40 y `wght` 400-700) y Outfit (títulos y cifras grandes, `wght` 700-800). Se descargan de
+Google Fonts y se recortan a esos ejes con `python web/brand/fonts.py` (necesita `fonttools` con `brotli`); la CSP
+no permite fuentes externas, así que `site.css` solo las carga de `/dist/vendor/`. El wordmark de la cabecera
+(`web/dist/img/logo.svg`) se regenera con `python web/brand/build.py`, que instancia Outfit al peso 800 y dibuja la
+lente en el sitio de la última "o"; el favicon sale del mismo script y no depende de la fuente.
+
 ### Cómo añadir una página
 
 (Enmienda 2026-10-13, fase 7.) Primero, la familia:

@@ -111,3 +111,15 @@ def test_site_fonts_are_vendored_and_licensed():
     assert 'Indian Type Foundry' in licence and 'Outfit Project Authors' in licence
     assert "--font-body: 'DM Sans'" in css and "--font-head: 'Outfit'" in css
     assert 'font-variant-numeric: tabular-nums' in css
+
+
+def test_wordmark_is_set_in_outfit_and_the_old_fonts_are_gone():
+    """El wordmark se genera con Outfit (la fuente variable del sitio, instanciada al peso 800), las fuentes Source
+    ya no están y el favicon no cambia."""
+    source = read('web/brand/build.py')
+    assert "'Outfit.woff2'" in source and 'WEIGHT = 800' in source and 'SourceSerif4' not in source
+    fonts = ROOT / 'web' / 'dist' / 'vendor' / 'fonts'
+    assert not list(fonts.glob('Source*')) and 'Source' not in read('web/dist/vendor/fonts/LICENSE')
+    logo = read('web/dist/img/logo.svg')
+    assert logo.count('<path d=') == 9  # D e m o s c o p i: nueve glifos, la lente aparte
+    assert read('web/dist/img/favicon.svg').startswith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">')

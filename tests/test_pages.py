@@ -294,7 +294,7 @@ def test_header_shows_the_wordmark_the_tagline_and_the_icons(api):
     status, headers, body = call(api, '/es', query='mode=forecast')
     page = html(body)
     assert status == 200
-    assert '<h1><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="563" height="102"></a></h1>' in page
+    assert '<h1><a href="/"><img src="/dist/img/logo.svg" alt="Demoscopio" width="574" height="100"></a></h1>' in page
     assert 'brand-tagline' not in page  # the tagline only lives in the description since phase 8
     assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
     assert '<link rel="icon" href="/dist/img/favicon.ico" sizes="16x16 32x32 48x48">' in page
@@ -334,7 +334,7 @@ def test_error_page_carries_the_brand_and_the_default_description(api):
     assert status == 404 and '<title>Demoscopio · Error 404</title>' in page
     assert ('<meta name="description" content="Demoscopio: promedio de encuestas, previsión de escaños y ranking de '
             'encuestadoras en España.">') in page
-    assert '<img src="/dist/img/logo.svg" alt="Demoscopio" width="563" height="102">' in page
+    assert '<img src="/dist/img/logo.svg" alt="Demoscopio" width="574" height="100">' in page
     assert '<link rel="icon" href="/dist/img/favicon.svg" type="image/svg+xml">' in page
     assert 'brand-tagline' not in page  # the tagline only lives in the description since phase 8
 

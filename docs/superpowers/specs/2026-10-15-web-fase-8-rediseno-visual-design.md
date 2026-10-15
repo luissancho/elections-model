@@ -477,7 +477,31 @@ así que las resolvió el autor y quedan marcadas en el texto:
 6. Perfil de encuestadora: los KPIs son los tres de la cabecera; "Camino al rating" conserva gráfico y tabla
    (D6).
 
-## Estado
+## Estado al cierre de la fase 8
 
-Aprobada el 15 de octubre de 2026 tras la revisión del constructor y los dos apuntes de Luis. Siguiente paso: el
-plan de implementación (`docs/superpowers/plans/`).
+Implementada el 15 de octubre de 2026 en `dev` siguiendo el plan `docs/superpowers/plans/2026-10-15-web-fase-8-rediseno-visual.md`
+(ocho tareas, un commit por tarea, desde `0fbfb40`). Suite: 782 pruebas (75 de integración saltadas), sin avisos
+nuevos. Lo que difiere del texto de arriba, decidido durante la construcción y anotado en el libro del plan:
+
+- Fuentes: Google Fonts sirve las variables, así que son dos ficheros (`DMSans.woff2`, 36 KB, ejes `opsz` 9-40 y
+  `wght` 400-700; `Outfit.woff2`, 22 KB, `wght` 700-800), recortados con el instanciador de fontTools por
+  `web/brand/fonts.py`, en vez de seis estáticos.
+- El "desbordamiento en móvil" de la Intención era un artefacto de las capturas con Chrome sin cabeza (ancho mínimo
+  de ventana de 500 px); medido dentro de un iframe de 390 px, ninguna página desborda. El único desbordamiento real
+  que apareció (la frase de la calculadora de coaliciones como chip sin salto de línea) quedó corregido.
+- Los enlaces de la barra inferior y de las pestañas del evento llevan `?mode=`, como las pestañas de siempre.
+- `last_results` vive en `pages/elecciones.py` y devuelve también la fecha y el año de la elección; Promedios lo
+  importa localmente (los dos módulos se importan entre sí).
+- El líder del hero sale del `headline` del modo (como las tarjetas antiguas, y así la veda sigue cambiando la
+  portada); la barra de escaños y los extremos de bloque, del `summary`.
+- Las tarjetas de partido muestran el nombre completo bajo las siglas (D3.6); la prueba de "siglas siempre" lo
+  excluye. Las claves `values` y `clear` no sirven en los contextos de Jinja (las tapan los métodos de `dict`).
+- La portada conserva dos `h1` (la marca y el titular), como la maqueta.
+
+Comprobado en el navegador (Chrome sin cabeza, paquete local y base del `.env`): `/`, `/es`, `/es/escanos`,
+`/casas`, `/casas?id=2`, `/elecciones` (sin elecciones publicadas en local), `/metodo` y `/metodo/promedio` a
+1920, 1440 y 1000 px, y a 390 px dentro de un iframe (capturas en `.superpowers/sdd/2026-10-15-web-fase-8-rediseno-visual/captures/`
+mientras exista el espacio del plan); sin errores de consola y con `scrollWidth == innerWidth` a 390 px en `/`,
+`/es`, `/es/escanos`, `/casas` y `/metodo`. Pendiente de Luis: recorrer las páginas con datos reales (el detalle de
+una elección no se pudo capturar en local), rellenar el hueco bajo la columna lateral de la portada en otra fase y
+el modo oscuro.
