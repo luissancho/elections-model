@@ -35,7 +35,7 @@
               {% for row in ranking %}
               {% set bias = row.error_blocks|sides(2) %}
               <tr{% if loop.index > ranking_shown %} hidden{% endif %}>
-                <td class="f l"><a href="/casas?id={{ row.pollster_id }}"><b>{{ row.pollster }}</b></a></td>
+                <td class="f l"><a href="{{ pollster_href(row.pollster, row.pollster_id) }}"><b>{{ row.pollster }}</b></a></td>
                 <td class="cell-bar"><i class="fill pos" style="left: 0; width: {{ row.rating|bar(0, 100) }}%"></i><span>{{ row.rating|num(1) }}</span></td>
                 <td>{{ row.quality|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
@@ -81,7 +81,7 @@
             <tbody>
               {% for row in grid.rows %}
               <tr>
-                <td>{% if row.pollster in pollster_ids %}<a href="/casas?id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster in pollster_ids %}<a href="{{ pollster_href(row.pollster, pollster_ids[row.pollster]) }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 {% for cell in row.cells %}
                 <td title="Historia: {{ cell.hist|num(1) }} · Tendencia: {{ cell.trend|num(1) }} al año">{{ cell.cycle|num(1) }}</td>
                 {% endfor %}
@@ -117,7 +117,7 @@
             <tbody>
               {% for row in herding %}
               <tr>
-                <td>{% if row.pollster in pollster_ids %}<a href="/casas?id={{ pollster_ids[row.pollster] }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster in pollster_ids %}<a href="{{ pollster_href(row.pollster, pollster_ids[row.pollster]) }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 <td>{{ row.herding|num(2) }}</td>
                 <td>{{ row.herding_last|num(2) }}</td>
                 <td>{{ row.herding_p|num(3) }}</td>

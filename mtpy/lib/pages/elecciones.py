@@ -9,6 +9,7 @@ from ..webapi import check_date, event_params, site
 from .common import Catalog, analysis_part, api_url, block_color, bundle_part, common_context, published_scopes
 from .filters import _madrid_tz, fmt_num
 from .promedios import BLOCK_ORDER, chart_polls, lead_strip, poll_months, polls_table, pollster_options
+from .slugs import event_href
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
 # Block drawn to the left in the chart that splits the error of the last polls by block (its mate goes right).
@@ -244,14 +245,17 @@ def history_events(scopes: list) -> list:
     Returns
     -------
     list of dict
-        ``published_events`` of each scope with ``scope``, ``scope_name`` and ``href`` added (``None`` when the scope is
-        not ``linkable``: its detail would be a 404), newest first and, on the same date, in catalogue order.
+        ``published_events`` of each scope with ``scope``, ``scope_name`` and ``href`` (``event_href``) added (``None``
+        when the scope is not ``linkable``: its detail would be a 404), newest first and, on the same date, in
+        catalogue order.
     """
     events = []
 
     for scope in scopes:
+        dates = site().events(scope['code'])
+
         for event in published_events(scope['code']):
-            href = f"/elecciones?scope={scope['code']}&date={event['date']}" if scope.get('linkable') else None
+            href = event_href(scope['code'], event['date'], dates) if scope.get('linkable') else None
             event.update(scope=scope['code'], scope_name=scope['name'], href=href)
             events.append(event)
 
@@ -382,7 +386,8 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     errors = history_rows(scopes, events, parts)
     with_analysis = {scope['code'] for scope in scopes if scope['analysis']}
     filter_events = [{'key': f"{event['scope']}:{event['date']}", 'date': event['date'], 'name': event['name'],
-                      'scope': event['scope'], 'scope_name': event['scope_name']} for event in events]
+                      'scope': event['scope'], 'scope_name': event['scope_name'], 'href': event['href']}
+                     for event in events]
 
     context['scopes'] = scopes
     context['events'] = events

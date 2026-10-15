@@ -11,6 +11,7 @@ from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context
 from .elecciones import last_results, published_events
 from .filters import _madrid_tz, delta_text, fmt_date_short
 from .promedios import lead_strip, leader_of, poll_sample
+from .slugs import event_href
 
 INTRO = ('Demoscopio promedia los sondeos de cada elección, simula el reparto de escaños y puntúa a las encuestadoras '
          'según lo que acertaron. Un proyecto transparente y divulgativo, con el método y modelo a la vista.')
@@ -130,18 +131,21 @@ def past_events(scopes: list) -> list:
     Returns
     -------
     list of dict
-        ``scope``, ``scope_name``, ``date``, ``name`` and ``href`` (the detail in ``/elecciones``) per election.
+        ``scope``, ``scope_name``, ``date``, ``name`` and ``href`` (``event_href``: the detail of the election) per
+        election.
     """
     events = []
 
     for row in scopes:
+        dates = site().events(row['code'])
+
         for event in published_events(row['code']):
             events.append({
                 'scope': row['code'],
                 'scope_name': row['name'],
                 'date': event['date'],
                 'name': event['name'],
-                'href': '/elecciones?scope={}&date={}'.format(row['code'], event['date']),
+                'href': event_href(row['code'], event['date'], dates),
             })
 
     return sorted(events, key=lambda event: event['date'], reverse=True)

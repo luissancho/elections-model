@@ -57,7 +57,9 @@ ROUTES = [
     ('/escanos', 'redirect', 'escanos', ['GET']),
     ('/modelo', 'redirect', 'modelo', ['GET']),
     ('/casas', 'casas', 'index', ['GET']),
+    ('/casas/{pollster}', 'casas', 'profile', ['GET']),
     ('/elecciones', 'elecciones', 'index', ['GET']),
+    ('/elecciones/{country:loc}/{scope}/{date}', 'elecciones', 'detail', ['GET']),
     ('/metodo', 'metodo', 'index', ['GET']),
     ('/metodo/{section:str}', 'metodo', 'section', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
@@ -129,8 +131,9 @@ def environment() -> Environment:
     It loads ``TEMPLATES_DIR`` with autoescape on for ``.html``, ``StrictUndefined``, the
     filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime``, ``ink``, ``rng``
     (``ink_color``), ``bar`` (``bar_width``), ``sides`` (``bar_sides``) and ``shade`` (``shade``: the bars and
-    shades of the cells of the ranking) and the global ``method_href`` (``metodo.method_href``: link to a
-    subpage of the method, or to the method itself while the subpage has no text). Without a booted App the
+    shades of the cells of the ranking) and the globals ``method_href`` (``metodo.method_href``: link to a
+    subpage of the method, or to the method itself while the subpage has no text) and ``pollster_href``
+    (``slugs.pollster_href``: link to the profile of a pollster). Without a booted App the
     environment is built but not cached.
 
     Returns
@@ -166,9 +169,11 @@ def environment() -> Environment:
             'date_short': fmt_date_short,
             'delta': delta_text,
         })
-        # imported here: ``metodo`` imports this module
+        # imported here: ``metodo`` and ``slugs`` import this module
         from .metodo import method_href
+        from .slugs import pollster_href
         env.globals['method_href'] = method_href
+        env.globals['pollster_href'] = pollster_href
 
         if app is not None:
             app.set('templates', env)

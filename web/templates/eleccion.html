@@ -195,7 +195,7 @@
             <tbody>
               {% for row in last_rows %}
               <tr>
-                <td>{% if row.pollster_id %}<a href="/casas?id={{ row.pollster_id }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
+                <td>{% if row.pollster_id %}<a href="{{ pollster_href(row.pollster, row.pollster_id) }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 <td>{{ row.sample_size|int }}</td>
                 <td>{{ row.days|int }}</td>
                 <td>{{ row.error_avg|num(1) }}</td>

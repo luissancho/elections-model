@@ -44,17 +44,6 @@ const EVENT_COLORS = [
 ];
 
 /**
- * Link to the detail of an election.
- *
- * @param {string} scope scope code
- * @param {string} date election date
- * @returns {string} the `/elecciones` URL of that election
- */
-function detailHref(scope, date) {
-  return `/elecciones?scope=${encodeURIComponent(scope)}&date=${encodeURIComponent(date)}`;
-}
-
-/**
  * Draw the histogram of a measure of some poll-errors rows: polls counted (unweighted) in one-point bins, with
  * the mean marked.
  *
@@ -158,10 +147,9 @@ function scopeColors(scopes) {
  * @param {object[]} rows filtered rows
  * @param {object[]} others rows that pass every filter but the house
  * @param {object} state the filters and the measure
- * @param {object} context `scopes` and `colors` of the page
+ * @param {object} context `scopes`, `colors` and `hrefs` (link of each election by key) of the page
  */
-function drawTrend(el, rows, others, state, {scopes, colors}) {
-  const linkable = new Set(scopes.filter((scope) => scope.linkable).map((scope) => scope.code));
+function drawTrend(el, rows, others, state, {scopes, colors, hrefs}) {
   const byScope = new Map(scopes.map(({name}) => [name, []]));
   for (const item of eventsOf(rows, state.measure).filter((entry) => entry.mean !== null)) {
     byScope.get(item.scope_name)?.push({
@@ -169,7 +157,7 @@ function drawTrend(el, rows, others, state, {scopes, colors}) {
       value: item.mean,
       n: item.n,
       label: `${fmtDate(item.event_date)} · ${item.name || item.event}`,
-      href: linkable.has(item.scope) ? detailHref(item.scope, item.event_date) : null,
+      href: hrefs.get(eventKey(item)) ?? null,
     });
   }
   const series = [...byScope].filter(([, points]) => points.length).map(([name, points]) => ({name, points}));
@@ -246,13 +234,14 @@ function wireHistory(initial) {
   const colors = scopeColors(scopes);
   const national = scopes.find((scope) => scope.code === NATIONAL_SCOPE)?.name ?? null;
   const analysed = new Set(scopes.map((scope) => scope.code));
-  const linkable = new Set(allScopes.filter((scope) => scope.linkable).map((scope) => scope.code));
-  // The rows carry the short code of their election (`2023-23J`); the charts and tables name it in full.
+  // The rows carry the short code of their election (`2023-23J`); the charts and tables name it in full and
+  // link its detail (the server gives the link of each election, `null` for a scope without a run).
   const names = new Map(events.map((event) => [event.key, event.name]));
+  const hrefs = new Map(events.map((event) => [event.key, event.href ?? null]));
   const linked = errors.map((row) => ({
     ...row,
     name: names.get(eventKey(row)) || null,
-    href: linkable.has(row.scope) ? detailHref(row.scope, row.event_date) : null,
+    href: hrefs.get(eventKey(row)) ?? null,
   }));
   const figureNodes = figures && {
     polls: document.getElementById('figure-polls'),
@@ -315,7 +304,7 @@ function wireHistory(initial) {
       fillComplements(complementsEl, complements(linked, state, state.measure));
     }
     if (trendEl) {
-      drawTrend(trendEl, rows, others, state, {scopes, colors});
+      drawTrend(trendEl, rows, others, state, {scopes, colors, hrefs});
     }
     if (histogramEl) {
       drawErrorHistogram(histogramEl, rows, state.measure);

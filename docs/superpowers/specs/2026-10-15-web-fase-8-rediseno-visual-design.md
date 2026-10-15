@@ -510,3 +510,17 @@ mientras exista el espacio del plan); sin errores de consola y con `scrollWidth 
 `/es`, `/es/escanos`, `/casas` y `/metodo`. Pendiente de Luis: recorrer las páginas con datos reales (el detalle de
 una elección no se pudo capturar en local), rellenar el hueco bajo la columna lateral de la portada en otra fase y
 el modo oscuro.
+
+### Seguimiento 2026-10-15: URLs limpias del perfil y del detalle de elección
+
+Pedido por Luis tras el recorrido: el perfil de una encuestadora vive en `/casas/{slug}` (`/casas/gad3`,
+`/casas/sigma-dos`, `/casas/simple-logica`: el nombre en ASCII, minúsculas y guiones; los 136 nombres de la base
+dan slugs distintos, y ante una colisión el slug lleva al id más bajo y el otro perfil queda en `/casas/{id}`) y el
+detalle de una elección en `/elecciones/{país}/{ámbito}/{año-mes}` (`/elecciones/es/generales/2023-07`,
+`/elecciones/es/madrid/2023-05`: `generales` para el ámbito nacional, el nombre del catálogo para los autonómicos;
+si dos elecciones del ámbito cayeran en el mismo mes, el enlace lleva la fecha completa y el mes solo responde 404).
+Las URLs antiguas (`/casas?id=2`, `/elecciones?scope=es&date=2023-07-23`) responden 301 a las nuevas conservando el
+resto de la query; la canonical y `og:url` de ambas páginas son siempre la URL limpia (el mes, aunque se entre por la
+fecha). Los enlaces del ranking, de los efectos, del detalle, del histórico (el servidor da el `href` de cada
+elección al JavaScript) y de la portada usan las nuevas rutas. Módulo `mtpy/lib/pages/slugs.py`, rutas
+`/casas/{pollster}` y `/elecciones/{country:loc}/{scope}/{date}` antes de `/{scope}`.
