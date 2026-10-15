@@ -372,3 +372,42 @@ def shade(x, start, end, color: str, alpha: float = 0.55) -> str:
     r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
 
     return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha * fraction, 3))
+
+
+def rng_cell(lo, hi, median, total, majority=None) -> Optional[dict]:
+    """
+    Geometry of the range cell of a seats table: the 95 % interval as a band, the median as a mark and the
+    absolute majority as a line, all as percentages of the chamber.
+
+    Parameters
+    ----------
+    lo, hi : int or float or None
+        Bounds of the interval, in seats.
+    median : int or float or None
+        Central value, in seats.
+    total : int or float or None
+        Seats of the chamber (the full width of the cell).
+    majority : int or float, optional
+        Absolute majority, in seats.
+
+    Returns
+    -------
+    dict or None
+        ``{'left': start of the band, 'width': its width, 'mark': the median, 'line': the majority or None}``,
+        percentages of the cell with one decimal, each value clipped to [0, 100] before the width is taken; ``None``
+        when a bound, the median or the total is missing, the total is not positive or the interval is inverted.
+    """
+    if any(isinstance(x, bool) or _is_missing(x) for x in (lo, hi, median, total)) or total <= 0 or lo > hi:
+        return None
+
+    def place(x) -> float:
+        return round(100 * min(1.0, max(0.0, x / total)), 1)
+
+    left = place(lo)
+
+    return {
+        'left': left,
+        'width': round(place(hi) - left, 1),
+        'mark': place(median),
+        'line': None if _is_missing(majority) else place(majority),
+    }

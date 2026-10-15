@@ -2,7 +2,7 @@
     the `PAGE_SIZE` most recent polls, the scroll hint and the pagination. Shared by Promedios and the detail of a
     past election; needs `has_seats`, `table_parties`, `catalog`, `pollsters`, `months`, `table_total`, `csv_href`
     and `table` in the context (`polls_table`), and `wirePollsTable` of `pages/polls-wire.js` in the page module. -#}
-        <div class="bar" id="polls-controls" hidden>
+        <div class="ctrl-bar" id="polls-controls" hidden>
           {% if has_seats %}
           <fieldset id="polls-mode" class="seg">
             <legend>Qué mostrar</legend>

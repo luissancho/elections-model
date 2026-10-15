@@ -5,7 +5,7 @@
     two sentences that say what the card shows and where it comes from). `level` is the heading level: 2 for a card
     of the page, 3 for a card inside a section that already has its own h2. Close it with `card_end()`. -#}
 {% macro card_start(id, title, lead, subtitle=None, classes='', level=2, hidden=False) -%}
-<section class="card{% if classes %} {{ classes }}{% endif %}" id="{{ id }}"{% if hidden %} hidden{% endif %}><header class="card-head"><h{{ level }}>{{ title }}{% if subtitle %} <span class="mode-subtitle">{{ subtitle }}</span>{% endif %}</h{{ level }}><p class="lead">{{ lead }}</p></header>
+<section class="card{% if classes %} {{ classes }}{% endif %}" id="{{ id }}"{% if hidden %} hidden{% endif %}><header class="card-head"><h{{ level }}>{{ title }}{% if subtitle %} <span class="pill">{{ subtitle|replace('· ', '', 1) }}</span>{% endif %}</h{{ level }}><p class="lead">{{ lead }}</p></header>
 {%- endmacro %}
 
 {% macro card_end() -%}

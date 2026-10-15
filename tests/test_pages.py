@@ -153,7 +153,7 @@ def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
     assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     status, _, body = call(api, '/es/escanos', query='mode=forecast&run=' + RUN)
-    assert status == 200 and '· pronóstico para el' in html(body) and 'Run del 8 oct 2026' in html(body)
+    assert status == 200 and 'pronóstico para el' in html(body) and 'Run del 8 oct 2026' in html(body)
 
 
 def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_definitive(api, fresh_app):
@@ -511,7 +511,7 @@ def test_promedios_polls_table_is_server_rendered_with_fifteen_rows_and_hidden_c
     body = call(api, '/es')[2]
     page = html(body).replace('\n', ' ')
     assert 'Todas las encuestas' in page and 'Sondeos del ciclo' not in page and 'id="polls-more"' not in page
-    assert re.search(r'<div class="bar" id="polls-controls" hidden>', page)
+    assert re.search(r'<div class="ctrl-bar" id="polls-controls" hidden>', page)
     assert 'id="polls-from"' in page and 'id="polls-to"' in page
     assert 'Seleccionar todos' in page and 'Seleccionar todas' in page
     assert polls_tbody(page).count('<tr>') == min(15, FIXTURE_POLLS)
@@ -622,7 +622,7 @@ def test_escanos_region_lives_in_the_district_form_not_in_the_event_bar(api, fre
 
 def test_escanos_nowcast_and_pinned_run(api):
     page = html(call(api, '/es/escanos', query='mode=nowcast&run=' + RUN)[2])
-    assert '· estimación a ' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
+    assert '<span class="pill">estimación a ' in page and 'type="hidden" name="run" value="{}"'.format(RUN) in page
     assert page.count('run={}&amp;format=csv'.format(RUN)) == 5
 
 
@@ -2028,11 +2028,11 @@ def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
     for token in ('--color-bg: #f4f5f8;', '--color-card: #fff;', '--color-soft: #eceef2;', '--radius: 18px;', '--shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);', '--color-faint:'):
         assert token in css, token
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
-    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 100ch' in css and '.pill {' in css
+    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
     assert '.geo th:first-child' in css and '.geo tr.total td:first-child { background: var(--color-soft); }' in css
     hemi = css[css.index('.hemi-grid'):css.index('/* Escaños')]
     assert 'align-items: stretch' in css and '.hemi-card { display: flex; flex-direction: column; }' in css
-    assert '.hemi-card .chart { flex: 1; height: auto; min-height: 420px; max-height: 600px; }' in hemi and 'grid-row' not in hemi
+    assert '.chart.hemi { height: auto; aspect-ratio: 2 / 1.1; max-width: 620px; margin: 0 auto; }' in css and 'grid-row' not in hemi
 
 
 def test_controls_are_segments_on_every_page(api):
@@ -2185,7 +2185,7 @@ def test_promedios_controls_in_two_rows_and_the_polls_table_by_name(api):
     page = html(call(api, '/es')[2])
     assert page.index('id="series-view"') < page.index('id="series-window"')
     before = page[:page.index('id="polls"')]
-    assert 'class="pill"' not in page and 'data-all' not in before and 'data-none' not in before
+    assert '<label class="pill"' not in page and 'data-all' not in before and 'data-none' not in before
     assert '<th scope="col" class="f l" data-key="pollster"><button type="button" class="sort">Encuestadora</button></th>' in page and '<th scope="col">Casa</th>' not in page
     data = initial(call(api, '/es')[2])
     assert data['polls']['polls'][0]['name'] and 'sample_size' in data['polls']['polls'][0]
@@ -2223,7 +2223,7 @@ def test_escanos_pills_carry_the_ink_of_their_colour(api):
     for match in re.finditer(r'<label class="pill" style="--pill-color: (#[0-9a-fA-F]+); --pill-ink: (#[0-9a-f]+)"',
                              page):
         assert match.group(2) == pages.ink_color(match.group(1))
-    assert len(re.findall(r'--pill-ink: ', page)) == page.count('class="pill"') > 0
+    assert len(re.findall(r'--pill-ink: ', page)) == page.count('<label class="pill"') > 0
 
 
 def test_promedios_results_switch_between_parties_and_blocks_from_the_hemicycle_card(api):
@@ -2293,3 +2293,17 @@ def test_event_detail_helpers_of_the_hemicycle_and_the_split():
     catalog = pages.Catalog({'PSOE': {}, 'PP': {}, 'VOX': {}})
     assert pages.chart_parties(catalog, ['PP', 'VOX', 'ERC'], ['PP', 'PSOE', 'Cs', 'ERC']) == ['PSOE', 'PP', 'VOX', 'ERC', 'Cs']
     assert pages.chart_parties(catalog) == [] and pages.chart_parties(pages.Catalog(), ['Cs']) == ['Cs']
+
+
+def test_rng_cell_places_the_range_the_median_and_the_majority():
+    assert pages.rng_cell(118, 160, 140, 350, 176) == {'left': 33.7, 'width': 12.0, 'mark': 40.0, 'line': 50.3}
+    assert pages.rng_cell(0, 4, 0, 350) == {'left': 0.0, 'width': 1.1, 'mark': 0.0, 'line': None}
+    assert pages.rng_cell(300, 420, 350, 350, 176)['width'] == 14.3  # recortado a 100
+    assert pages.rng_cell(None, 160, 140, 350) is None and pages.rng_cell(118, 160, None, 350) is None
+    assert pages.rng_cell(118, 160, 140, 0) is None and pages.rng_cell(160, 118, 140, 350) is None
+    assert pages.environment().filters['rng'] is pages.rng_cell
+
+
+def test_card_subtitle_is_a_pill(api):
+    page = html(call(api, '/es')[2])
+    assert '<span class="pill">estimación a ' in page and 'mode-subtitle' not in page
