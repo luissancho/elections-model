@@ -166,6 +166,18 @@ Ajustes del 2026-10-15: Histórico Errores, Ranking y perfil sin titular (`headl
 eliminados), los textos de tarjeta (`.lead`, "Cómo leerlo", `.card p`) a 100 ch en vez de 72 y la diana del perfil
 grande y centrada.
 
+Fase 7f (2026-10-15): las dianas llevan los ejes en los bordes, cada uno con su nombre ("Error Derecha", "Error
+Izquierda"), la cruz del cero dibujada, puntos de 8 px y las elecciones generales por encima de las demás (`onTop` de
+`renderBullseye`: Generales en el perfil, el ámbito nacional en el histórico con "Todos"). El detalle de una elección
+se reordena: cabecera; hemiciclo del resultado oficial (`initial.results`, mayoría `n_seats // 2 + 1`) junto a la
+tabla de resultados (Partido, % Voto, Escaños, como Promedios sin "P(primero)"); las barras del error del último
+sondeo junto a su reparto por bloque (`charts/diverging.js`: Izquierda a la izquierda y Derecha a la derecha, en
+magnitud, `pages.split_sides`); la diana; la tabla del último sondeo; y el resto como estaba. En Ranking
+Encuestadoras la tabla va antes que las barras, con el marcado `.et.et-rank` de "Todas las encuestas" y los formatos
+de `Computer.print_ratings` calculados en el servidor (filtros `bar`, `sides` y `shade`): barra del rating de 0 a 100,
+barra del sesgo del margen desde el centro (rojo a la izquierda, verde a la derecha, ±2) y sombreado del error medio
+(hasta el mayor de la columna) y del rebaño (rojo por debajo de 1, gris por encima).
+
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
 elección, el ranking y el perfil de encuestadora, con `with_herding` (y `with_block_error`, por defecto verdadero) fijados

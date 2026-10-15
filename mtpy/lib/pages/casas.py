@@ -229,7 +229,8 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``ranking`` (``ranking_rows``), ``grid`` (``house_effects_grid``
+        The common context plus ``ranking`` (``ranking_rows``), ``error_max`` (the largest ``error_avg`` of
+        the ranking, the fullest shade of that column; 0 without one), ``grid`` (``house_effects_grid``
         or ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``,
         ``pollster_ids`` (``{name: id}`` of the pollsters rated in the event, for the links),
         ``ranking_event`` (ISO date of the election the ranking is for, ``None`` without ratings),
@@ -263,6 +264,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         ]
 
     context['ranking'] = ranking
+    context['error_max'] = max((row['error_avg'] for row in ranking if row.get('error_avg') is not None), default=0)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
     context['analysis_missing'] = missing

@@ -266,3 +266,109 @@ def fmt_datetime(iso) -> str:
         return DASH
 
     return '{}, {:02d}:{:02d}'.format(fmt_date(value), value.hour, value.minute)
+
+
+def _fraction(x, start, end) -> Optional[float]:
+    """
+    Position of a value in a range, as a fraction clipped to [0, 1].
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value to place.
+    start, end : int or float
+        Bounds of the range; it may run downwards (``start > end``), so the fraction grows towards ``end``.
+
+    Returns
+    -------
+    float or None
+        ``(x - start) / (end - start)`` clipped to [0, 1], or ``None`` when ``x`` is missing or the range is
+        empty.
+    """
+    if isinstance(x, bool) or _is_missing(x) or _is_missing(start) or _is_missing(end) or start == end:
+        return None
+
+    return min(1.0, max(0.0, (x - start) / (end - start)))
+
+
+def bar_width(x, vmin=0, vmax=100) -> float:
+    """
+    Width of the bar of a table cell, as a percentage of the cell (the bars of ``Computer.print_ratings``).
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    vmin, vmax : int or float, optional
+        Values that give an empty and a full bar.
+
+    Returns
+    -------
+    float
+        The percentage, 0 to 100 with one decimal; 0 when ``x`` is missing or ``vmin == vmax``.
+    """
+    fraction = _fraction(x, vmin, vmax)
+
+    return 0.0 if fraction is None else round(100 * fraction, 1)
+
+
+def bar_sides(x, limit) -> dict:
+    """
+    Geometry of a bar centred at zero inside a table cell: it grows to the left with a negative value and to the
+    right with a positive one, up to ``limit`` in either direction (the diverging bars of ``print_ratings``).
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    limit : int or float
+        Value (in absolute terms) that fills a whole side.
+
+    Returns
+    -------
+    dict
+        ``{'left': start of the bar, 'width': its width, 'side': 'neg' | 'pos' | 'zero'}``, ``left`` and
+        ``width`` as percentages of the cell with one decimal; an empty bar at the centre (``'zero'``) when
+        ``x`` is zero, missing or ``limit`` is not positive.
+    """
+    if isinstance(x, bool) or _is_missing(x) or _is_missing(limit) or limit <= 0 or x == 0:
+        return {'left': 50.0, 'width': 0.0, 'side': 'zero'}
+
+    width = round(50 * min(abs(x), limit) / limit, 1)
+
+    if x < 0:
+        return {'left': round(50 - width, 1), 'width': width, 'side': 'neg'}
+
+    return {'left': 50.0, 'width': width, 'side': 'pos'}
+
+
+def shade(x, start, end, color: str, alpha: float = 0.55) -> str:
+    """
+    Background of a shaded table cell: ``color`` with an opacity that grows with the value from ``start``
+    (transparent) to ``end`` (``alpha``), like the gradients of ``Computer.print_ratings``.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    start, end : int or float
+        Values of the transparent and the fullest cells; the range may run downwards (``start > end``).
+    color : str
+        Hex colour ``#rrggbb``.
+    alpha : float, optional
+        Opacity of the fullest cell.
+
+    Returns
+    -------
+    str
+        An ``rgba()`` colour, or ``'transparent'`` when ``x`` is missing, the range is empty or the colour is
+        not a six-digit hex colour.
+    """
+    fraction = _fraction(x, start, end)
+
+    if fraction is None or not isinstance(color, str) or not re.fullmatch(r'#[0-9A-Fa-f]{6}', color):
+        return 'transparent'
+
+    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+
+    return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha * fraction, 3))

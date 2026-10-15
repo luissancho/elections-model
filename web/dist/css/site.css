@@ -551,6 +551,20 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et td.empty { text-align: center; color: var(--color-muted); }
 .et tfoot td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); border-bottom: 0; }
 .et tfoot td.f { background: var(--color-soft); }
+/* Ranking Encuestadoras: the table in the style of "Todas las encuestas", with the formats of the notebook's
+   `print_ratings`: a bar inside the cell (the rating from 0 to 100; the bias of the margin growing left in red or
+   right in green from the centre line) and a shaded background (the mean error and the herding) */
+.et-rank { min-width: 820px; }
+.et-rank col.c-bar { width: 150px; }
+.et-rank col.c-n { width: 90px; }
+.et-rank td.f a { color: inherit; text-decoration: none; }
+.et-rank td.f a:hover { color: var(--color-accent); text-decoration: underline; }
+.cell-bar { position: relative; }
+.cell-bar .fill { position: absolute; top: 5px; bottom: 5px; border-radius: 3px; }
+.cell-bar .fill.pos { background: rgba(44, 160, 44, 0.4); }
+.cell-bar .fill.neg { background: rgba(214, 39, 40, 0.4); }
+.cell-bar span { position: relative; }
+.cell-diverging::before { content: ""; position: absolute; left: 50%; top: 3px; bottom: 3px; border-left: 1px solid var(--color-line-strong); }
 /* Escaños, "Resultados por territorio": tinted cells, the winner in bold with a thin ring, and the TOTAL row */
 .geo { min-width: 900px; }
 .geo th { color: var(--color-faint); user-select: none; }

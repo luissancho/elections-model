@@ -6,6 +6,10 @@ import {fmtDate, fmtNum} from '../format.js';
 
 const RINGS = [2, 5, 10];
 const RING_STEPS = 72;
+// Size of a point; the series of the groups `onTop` are drawn over the others.
+const POINT_SIZE = 8;
+const POINT_Z = 10;
+const TOP_Z = 12;
 
 /**
  * Closed polygon approximating the circle of the given radius, in axis units.
@@ -32,28 +36,29 @@ function groupNames(points, groupOf) {
 }
 
 /**
- * Scatter series of the points: one grey series, or one series per group with its colour.
+ * Scatter series of the points: one grey series, or one series per group with its colour. The series of the
+ * groups `onTop` get a higher `z`, so their points (and labels) are drawn over the other groups'.
  *
  * @param {object[]} points `{value, row}` points (with the `itemStyle` and `label` of a faded point)
- * @param {object} opts `groupOf`, `colors`, `labels`, `labelOf` and `color` of `renderBullseye`
+ * @param {object} opts `groupOf`, `colors`, `labels`, `labelOf`, `color` and `onTop` of `renderBullseye`
  * @returns {object[]} ECharts series
  */
-function pointSeries(points, {groupOf, colors, labels, labelOf, color}) {
+function pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop}) {
   const label = {show: labels, position: 'right', formatter: (params) => labelOf(params.data.row), color: THEME.textColor};
   if (!groupOf) {
     // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
-    return [{type: 'scatter', data: points, symbolSize: 10, color: color || THEME.markColor, label,
-             labelLayout: {hideOverlap: true}, z: 10}];
+    return [{type: 'scatter', data: points, symbolSize: POINT_SIZE, color: color || THEME.markColor, label,
+             labelLayout: {hideOverlap: true}, z: POINT_Z}];
   }
   return groupNames(points, groupOf).map((group) => ({
     type: 'scatter',
     name: group,
     data: points.filter((point) => groupOf(point.row) === group),
-    symbolSize: 10,
+    symbolSize: POINT_SIZE,
     color: colors[group] ?? THEME.markColor,
     label,
     labelLayout: {hideOverlap: true},
-    z: 10,
+    z: onTop && onTop(group) ? TOP_Z : POINT_Z,
   }));
 }
 
@@ -92,24 +97,44 @@ function groupedTooltip(row, xBlock, yBlock) {
 }
 
 /**
- * Render the bullseye: rings at ±2, ±5 and ±10 points (line series in axis units, so they follow the
- * axes), symmetric axes and one point per row.
+ * Silent line series of the rings (±2, ±5 and ±10 points) and of the zero cross, in axis units so they follow
+ * the axes.
  *
- * @param {HTMLElement} el chart container
- * @param {object[]} rows poll-errors rows `{event, event_date, days, <block>: error}` (`name`, the full name of
- *   the election, replaces `event` in the tooltip when present; with `groupOf`, also `pollster` and an optional
- *   `href` for the tooltip)
- * @param {object} opts `blocks` (names of the x and y blocks), `groupOf` (`row => group`: one scatter series
- *   per group, in order of appearance; `null` draws a single series, grey or of `color`), `colors` (`{group: colour}`),
- *   `color` (colour of the single series), `legend` (show the legend of the groups, scrollable), `groupLabel`
- *   (`group => text` of the legend), `labels` (write a label next to each point), `labelOf` (`row => text` of
- *   that label, `row.event` by default) and `alphaOf` (`row => opacity`, 0 to 1: the point and its label fade;
- *   `null` keeps them opaque)
- * @returns {object} the ECharts instance
+ * @param {number} limit extent of both axes
+ * @returns {object[]} ECharts line series
  */
-export function renderBullseye(el, rows, {
+function guideSeries(limit) {
+  const rings = RINGS.map((radius) => ({
+    type: 'line',
+    data: ringPoints(radius),
+    showSymbol: false,
+    silent: true,
+    lineStyle: {color: THEME.gridColor, width: 1},
+    endLabel: {show: true, formatter: `±${radius}`, color: THEME.markColor},
+    tooltip: {show: false},
+  }));
+  const cross = [[[-limit, 0], [limit, 0]], [[0, -limit], [0, limit]]].map((data) => ({
+    type: 'line',
+    data,
+    showSymbol: false,
+    silent: true,
+    lineStyle: {color: THEME.gridColor, width: 1},
+    tooltip: {show: false},
+  }));
+  return [...rings, ...cross];
+}
+
+/**
+ * ECharts option of the bullseye: the rings at ±2, ±5 and ±10 points and the zero cross as line series,
+ * symmetric axes at the edges of the grid, each named "Error {block}", and one point per row.
+ *
+ * @param {object[]} rows poll-errors rows (see `renderBullseye`)
+ * @param {object} opts options of `renderBullseye`
+ * @returns {object} the option
+ */
+export function bullseyeOption(rows, {
   blocks, groupOf = null, colors = {}, color = null, legend = false, labels = true, groupLabel = (group) => group,
-  labelOf = (row) => row.event, alphaOf = null,
+  labelOf = (row) => row.event, alphaOf = null, onTop = null,
 }) {
   const [xBlock, yBlock] = blocks;
   const styled = (row) => {
@@ -125,30 +150,24 @@ export function renderBullseye(el, rows, {
   const reach = Math.max(RINGS[RINGS.length - 1], ...points.flatMap((p) => p.value.map(Math.abs)));
   const limit = Math.ceil(reach * 1.1);
 
-  const rings = RINGS.map((radius) => ({
-    type: 'line',
-    data: ringPoints(radius),
-    showSymbol: false,
-    silent: true,
-    lineStyle: {color: THEME.gridColor, width: 1},
-    endLabel: {show: true, formatter: `±${radius}`, color: THEME.markColor},
-    tooltip: {show: false},
-  }));
   const axis = (name) => ({
     type: 'value',
-    name: `${name} (pts)`,
+    name: `Error ${name}`,
     nameLocation: 'middle',
-    nameGap: 28,
+    nameTextStyle: {fontWeight: 600},
     min: -limit,
     max: limit,
     splitLine: {show: false},
-    axisLine: {onZero: true},
+    axisLine: {onZero: false, show: true},
+    axisTick: {show: false},
+    // The extent is not a round number: its labels would crowd the last round tick.
+    axisLabel: {showMinLabel: false, showMaxLabel: false},
   });
   const option = {
     ...baseOption(),
-    grid: {left: 8, right: 24, top: 16, bottom: 8, containLabel: true},
-    xAxis: axis(xBlock),
-    yAxis: {...axis(yBlock), nameLocation: 'middle', nameGap: 36},
+    grid: {left: 20, right: 24, top: 16, bottom: 20, containLabel: true},
+    xAxis: {...axis(xBlock), nameGap: 26},
+    yAxis: {...axis(yBlock), nameGap: 34},
     tooltip: {
       trigger: 'item',
       // A grouped point may carry the link to its election, so the tooltip must let the pointer in.
@@ -169,12 +188,32 @@ export function renderBullseye(el, rows, {
         ].join('<br>');
       },
     },
-    series: [...rings, ...pointSeries(points, {groupOf, colors, labels, labelOf, color})],
+    series: [...guideSeries(limit), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop})],
   };
   if (legend && groupOf) {
     // Only the groups are named series, so the rings stay out of the legend.
     option.legend = {type: 'scroll', bottom: 0, data: groupNames(points, groupOf), formatter: groupLabel};
-    option.grid = {...option.grid, bottom: 40};
+    option.grid = {...option.grid, bottom: 52};
   }
-  return mountChart(el, option);
+  return option;
+}
+
+/**
+ * Render the bullseye (`bullseyeOption`) in `el`.
+ *
+ * @param {HTMLElement} el chart container
+ * @param {object[]} rows poll-errors rows `{event, event_date, days, <block>: error}` (`name`, the full name of
+ *   the election, replaces `event` in the tooltip when present; with `groupOf`, also `pollster` and an optional
+ *   `href` for the tooltip)
+ * @param {object} opts `blocks` (names of the x and y blocks), `groupOf` (`row => group`: one scatter series
+ *   per group, in order of appearance; `null` draws a single series, grey or of `color`), `colors` (`{group: colour}`),
+ *   `color` (colour of the single series), `legend` (show the legend of the groups, scrollable), `groupLabel`
+ *   (`group => text` of the legend), `labels` (write a label next to each point), `labelOf` (`row => text` of
+ *   that label, `row.event` by default), `alphaOf` (`row => opacity`, 0 to 1: the point and its label fade;
+ *   `null` keeps them opaque) and `onTop` (`group => boolean`: the points of those groups are drawn over the
+ *   other groups', e.g. the general elections over the regional ones; `null` keeps the order of the groups)
+ * @returns {object} the ECharts instance
+ */
+export function renderBullseye(el, rows, opts) {
+  return mountChart(el, bullseyeOption(rows, opts));
 }

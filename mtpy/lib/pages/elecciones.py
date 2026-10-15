@@ -5,11 +5,13 @@ from typing import Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, site
-from .common import analysis_part, api_url, bundle_part, common_context, published_scopes
+from .common import Catalog, analysis_part, api_url, block_color, bundle_part, common_context, published_scopes
 from .filters import fmt_num
 from .promedios import chart_polls, poll_months, polls_table, pollster_options
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
+# Block drawn to the left in the chart that splits the error of the last polls by block (its mate goes right).
+LEFT_BLOCK = 'Izquierda'
 HISTORY_COLUMNS = ('scope', 'scope_name', 'year', 'event_date', 'event', 'pollster', 'days', 'error_avg',
                    'error_blocks', 'error_blocks_abs', 'bias')
 EVENT_CSV = (
@@ -398,6 +400,82 @@ def resolve_event(scope: str, date: str) -> str:
     return date
 
 
+def majority_of(n_seats) -> Optional[int]:
+    """
+    Absolute majority of a chamber.
+
+    Parameters
+    ----------
+    n_seats : int or None
+        Seats of the chamber.
+
+    Returns
+    -------
+    int or None
+        ``n_seats // 2 + 1``, or ``None`` when ``n_seats`` is not a positive integer.
+    """
+    if isinstance(n_seats, bool) or not isinstance(n_seats, int) or n_seats <= 0:
+        return None
+
+    return n_seats // 2 + 1
+
+
+def split_sides(blocks: list) -> Optional[dict]:
+    """
+    Sides of the chart that splits the block error of the last poll of each house.
+
+    Parameters
+    ----------
+    blocks : list of str
+        Blocks of the election, as published.
+
+    Returns
+    -------
+    dict or None
+        ``{'left': block, 'right': block}`` with the first two blocks: ``LEFT_BLOCK`` goes left when it is the
+        first one, otherwise the second block goes left and the first right (the notebook's deviation chart);
+        ``None`` with fewer than two blocks.
+    """
+    if len(blocks) < 2:
+        return None
+
+    first, second = blocks[0], blocks[1]
+
+    if first == LEFT_BLOCK:
+        return {'left': first, 'right': second}
+
+    return {'left': second, 'right': first}
+
+
+def chart_parties(catalog: Catalog, *groups: list) -> list:
+    """
+    Parties of the browser's catalogue of the detail of an election.
+
+    Parameters
+    ----------
+    catalog : Catalog
+        Party catalogue of the run.
+    *groups : list of str
+        Lists of party names (the parties of the polls table, those of the results).
+
+    Returns
+    -------
+    list of str
+        Every name of the groups once: those of the run catalogue first, in its order, then the rest by
+        appearance.
+    """
+    wanted = []
+
+    for group in groups:
+        for name in group:
+            if name not in wanted:
+                wanted.append(name)
+
+    known = [name for name in catalog if name in wanted]
+
+    return known + [name for name in wanted if name not in known]
+
+
 def horizon_tables(model: dict) -> list:
     """
     Tables of the backtest of an election, one per horizon.
@@ -463,15 +541,19 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party), ``results_shown``
         (``RESULTS_SHOWN``) and ``results_hidden`` (rows beyond them, behind "Ver más"), ``n_seats``,
         ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
-        ``poll_rows``, ``blocks``, ``horizon_tables``, ``has_model``, ``csv_links`` (the model ones only with a
-        backtest), the keys of the "Todas las encuestas" table of Promedios drawn from the ``cycle`` part
-        (``has_cycle``, ``table``, ``table_parties``, ``table_total``, ``has_seats``, ``months``, ``pollsters``
-        and ``csv_href``; ``has_cycle`` is false for an election published before the part existed, and the
-        table then gives way to a notice) and ``initial`` (``state``, ``meta``, ``last`` (``LAST_KEYS`` and
-        the signed error of each block of every last poll, for the bars and the bullseye), ``blocks``,
+        ``poll_rows``, ``blocks``, ``split_blocks`` (``split_sides``: the block of each side of the chart that
+        splits the error of the last polls, ``None`` without two blocks), ``horizon_tables``, ``has_model``,
+        ``csv_links`` (the model ones only with a backtest), the keys of the "Todas las encuestas" table of
+        Promedios drawn from the ``cycle`` part (``has_cycle``, ``table``, ``table_parties``, ``table_total``,
+        ``has_seats``, ``months``, ``pollsters`` and ``csv_href``; ``has_cycle`` is false for an election
+        published before the part existed, and the table then gives way to a notice) and ``initial`` (``state``,
+        ``meta``, ``results`` (``n_seats``, ``majority`` (``majority_of``) and ``rows`` (``name`` and ``seats``
+        of each party, as published) for the hemicycle), ``last`` (``LAST_KEYS`` and the signed error of each
+        block of every last poll, for the bars, the split by block and the bullseye), ``blocks``, ``split``
+        (``split_blocks``), ``block_colors`` (``{block: colour}`` from the run's ``bmaps``, ``block_color``),
         ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for the error histogram),
-        ``catalog`` (``parties`` of the table, for the browser's catalogue) and, with the cycle, ``polls``
-        (``chart_polls``)).
+        ``catalog`` (``parties`` of the table and of the results, ``chart_parties``, for the browser's catalogue)
+        and, with the cycle, ``polls`` (``chart_polls``)).
 
     Raises
     ------
@@ -512,14 +594,18 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     cycle_polls = (cycle or {}).get('polls') or []
     table_parties = list((cycle or {}).get('parties') or [])
     colors = {name: catalog[name]['color'] for name in table_parties}
+    n_seats = results.get('n_seats')
+    split = split_sides(blocks)
+    parties = chart_parties(catalog, table_parties, [row['party'] for row in results_rows])
     context['event'] = dict(meta, summary=summary)
     context['results_rows'] = results_rows
     context['results_shown'] = RESULTS_SHOWN
     context['results_hidden'] = max(0, len(results_rows) - RESULTS_SHOWN)
-    context['n_seats'] = results.get('n_seats')
+    context['n_seats'] = n_seats
     context['last_rows'] = last_rows
     context['poll_rows'] = poll_rows
     context['blocks'] = blocks
+    context['split_blocks'] = split
     context['horizon_tables'] = horizon_tables(model) if has_model else []
     context['has_model'] = has_model
     context['csv_links'] = links
@@ -534,11 +620,15 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['initial'] = {
         'state': full,
         'meta': meta,
+        'results': {'n_seats': n_seats, 'majority': majority_of(n_seats),
+                    'rows': [{'name': row['party'], 'seats': row['seats']} for row in results_rows]},
         'last': [dict({key: row.get(key) for key in LAST_KEYS}, **{block: row.get(block) for block in blocks})
                  for row in last_rows],
         'blocks': blocks,
+        'split': split,
+        'block_colors': {block: block_color(block, context['meta'], catalog) for block in blocks},
         'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')} for row in poll_rows],
-        'catalog': {'parties': [dict(catalog[name], name=name) for name in table_parties]},
+        'catalog': {'parties': [dict(catalog[name], name=name) for name in parties]},
     }
 
     if cycle is not None:

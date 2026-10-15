@@ -71,6 +71,7 @@ function wireBullseye(bullseye, blocks) {
     legend: true,
     labelOf: (row) => `${row.event}-${row.scope}`,
     alphaOf: (row) => alphas.get(row) ?? 1,
+    onTop: (group) => group === KIND_GENERAL,  // the general elections over the regional ones
   };
   const draw = (rows) => {
     tryDraw(() => renderBullseye(target, rows, options), 'the bullseye');

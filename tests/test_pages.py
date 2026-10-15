@@ -936,6 +936,9 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     # el selector de ámbito vive en la tarjeta de efectos (el ranking es global), no sobre las tarjetas
     assert page.index('id="ranking"') < page.index('id="house-effects"') < page.index('id="scope-filter"') < page.index('id="herding"')
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
+    # la tabla, al estilo de "Todas las encuestas", antes que las barras del rating
+    ranking = page[page.index('id="ranking"'):page.index('id="house-effects"')]
+    assert '<table class="et et-rank" id="ranking-table">' in ranking and ranking.index('id="ranking-table"') < ranking.index('id="rating-chart"')
     assert 'Cada fila es una encuestadora con rating para la próxima elección' in page
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert not re.search(r'\ba el\b', page) and 'al primer bloque' in page
@@ -950,7 +953,7 @@ def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app)
     webapi.site().manifest_cache_clear()
     national = html(call(houses, '/casas', query='scope=es')[2])
     madrid = html(call(houses, '/casas', query='scope=es-md')[2])
-    table = lambda page: re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    table = lambda page: re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert table(national) == table(madrid) and '82,4' in table(madrid)  # la columna Herding también es la nacional
     assert 'no depende de ningún ámbito' in madrid and 'elección general del' in madrid
     assert 'href="/api/v1/ratings?scope=es&amp;format=csv"' in madrid and 'Ratings de la próxima elección general' in madrid
@@ -999,6 +1002,15 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     ranking = ranking[:ranking.index('</table>')]
     assert 'Hamalgama' not in ranking and ranking.count('<tr>') == 3  # cabecera, GAD3 y CIS
     assert '82,4' in ranking and '0,74' in ranking  # rating (escala 0-100) y herding (análisis) de GAD3
+    # los formatos de `print_ratings`: barra del rating de 0 a 100, barra del sesgo desde el centro (saturada en ±2),
+    # sombreado del error medio (el mayor, CIS, a tope) y del rebaño (más rojo cuanto más por debajo de 1)
+    assert '<td class="f l"><a href="/casas?id=2"><b>GAD3</b></a></td>' in ranking
+    assert '<td class="cell-bar"><i class="fill pos" style="left: 0; width: 82.4%"></i><span>82,4</span></td>' in ranking
+    assert '<td class="cell-bar cell-diverging"><i class="fill pos" style="left: 50.0%; width: 50.0%"></i><span>3,0</span></td>' in ranking
+    assert 'style="background-color: rgba(214, 39, 40, 0.55)">1,9</td>' in ranking  # CIS, error medio 1,85
+    assert 'style="background-color: rgba(214, 39, 40, 0.386)">1,3</td>' in ranking  # GAD3, 1,3 de 1,85
+    assert 'style="background-color: rgba(214, 39, 40, 0.142)">0,74</td>' in ranking  # rebaño de GAD3
+    assert 'style="background-color: transparent">–</td>' in ranking  # CIS no tiene rebaño en el análisis
     assert 'id="rating-chart"' in page and 'id="effects-table"' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv&amp;table=events"' in page
     assert 'href="/api/v1/analysis/es/house-effects?format=csv"' in page and 'href="/api/v1/analysis/es/poll-errors?format=csv"' in page
@@ -1058,7 +1070,7 @@ def test_casas_ranking_and_profile_header_are_national_whatever_the_panel_scope(
 
     monkeypatch.setattr(pages.casas, 'analysis_part', part)
     page = html(call(houses, '/casas', query='scope=es-md')[2])
-    ranking = re.search(r'<table id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
     herding = re.search(r'<table id="herding-table">(.*?)</table>', page, re.S).group(1)
     national = real_part('es', 'herding')['rows'][0]['herding']
     assert '0,50' not in ranking and pages.fmt_num(national, 2) in ranking and '0,50' in herding
@@ -1343,13 +1355,26 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
     assert 'id="results-more"' not in page  # cuatro partidos: nada que desplegar
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'last', 'blocks', 'poll_errors', 'catalog', 'polls'}
+    assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
     assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
-    assert 'id="error-chart"' in page and 'class="chart big" id="bullseye-chart"' in page and 'class="split"' in page
-    assert page.index('id="results"') < page.index('class="split"') < page.index('id="last-errors"') < page.index('id="last"') \
-        < page.index('id="bullseye"') < page.index('id="poll-histogram"') < page.index('id="polls"') < page.index('id="model"')
+    # el hemiciclo del resultado oficial y el reparto del error por bloque (Izquierda a la izquierda)
+    assert data['results'] == {'n_seats': 350, 'majority': 176, 'rows': [
+        {'name': 'PP', 'seats': 160}, {'name': 'PSOE', 'seats': 150}, {'name': 'VOX', 'seats': 40}, {'name': 'Cs', 'seats': 0}]}
+    assert data['split'] == {'left': 'Izquierda', 'right': 'Derecha'}
+    assert data['block_colors'] == {'Derecha': fixture_data('meta')['parties'][0]['color'], 'Izquierda': pages.OTHERS_COLOR}
+    # primera fila como en Promedios: hemiciclo y tabla de resultados (% Voto y Escaños, sin P(primero))
+    results = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col">(.*?)</th>', results) == ['Partido', '% Voto', 'Escaños']
+    assert '<td>33,1 %</td>' in results and '<td><strong>160</strong></td>' in results and 'P(primero)' not in page
+    assert 'id="hemicycle"' in page and 'de los 350 de la cámara' in page
+    assert 'id="error-chart"' in page and 'id="split-chart"' in page and 'class="chart big" id="bullseye-chart"' in page
+    assert 'cuánto falló cada sondeo en Izquierda y a la derecha, en Derecha' in page
+    assert page.index('id="event"') < page.index('class="hemi-grid"') < page.index('id="hemicycle-card"') < page.index('id="results"') \
+        < page.index('class="split"') < page.index('id="last-errors"') < page.index('id="last-split"') < page.index('id="bullseye"') \
+        < page.index('id="last"') < page.index('id="glosario"') < page.index('id="poll-histogram"') < page.index('id="polls"') \
+        < page.index('id="model"') < page.index('id="downloads"')
 
 
 def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):
@@ -1362,8 +1387,10 @@ def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):
     assert 'Sondeos del ciclo, tal como se publicaron' in page and 'no están publicados todavía' not in page
     data = initial(body)
     assert data['polls']['parties'] == ['PP', 'PSOE', 'VOX'] and data['polls']['polls'][2]['seats'] == {'PP': [135, 140], 'PSOE': [120, 120]}
-    assert [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX']
+    # el catálogo del navegador: el del run primero (PP), luego los de la tabla y los de los resultados (Cs)
+    assert [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX', 'Cs']
     assert data['catalog']['parties'][0]['color'] != pages.OTHERS_COLOR and data['catalog']['parties'][2]['color'] == pages.OTHERS_COLOR
+    assert data['catalog']['parties'][0]['block'] == 'Derecha' and data['catalog']['parties'][3]['block'] is None
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
     assert context['has_cycle'] and context['table_total'] == 3 and context['has_seats'] and context['months'][0]['value'] == '2023-07'
 
@@ -1376,7 +1403,7 @@ def test_eleccion_detail_without_cycle_part_shows_a_notice(events_site, monkeypa
     assert status == 200 and 'Los sondeos de este ciclo no están publicados todavía' in page
     assert 'id="polls-table"' not in page and 'id="polls-controls"' not in page
     data = initial(body)
-    assert 'polls' not in data and data['catalog'] == {'parties': []}
+    assert 'polls' not in data and [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX', 'Cs']
 
 
 def test_eleccion_detail_hides_the_results_beyond_twenty_behind_a_button(events_site, monkeypatch):
@@ -1934,7 +1961,7 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     assert 'class="headline"' not in page and 'id="glosario"' in page and 'Sesgo de bloques' not in page
     assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
     ranking = page[page.index('id="ranking-table"'):]
-    heads = re.findall(r'<th scope="col">([^<]*)</th>', ranking[:ranking.index('</thead>')])
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', ranking[:ranking.index('</thead>')])
     assert heads == ['Encuestadora', 'Rating', 'Calidad', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo del margen',
                      'Rebaño']
     assert 'Herding' not in page  # la palabra pública es «rebaño» (2026-10-15)
@@ -2148,3 +2175,35 @@ def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api,
     assert 'name="pmode" value="pct" checked' in page and 'name="pmode" value="esc"' in page
     assert 'en las encuestadoras que los dan, los escaños' in page and 'En la vista Escaños' in page
     assert initial(body)['polls']['polls'][0]['seats'] == {'PP': [140, 142]}
+
+
+def test_bar_and_shade_filters_follow_print_ratings():
+    assert pages.bar_width(82.37) == 82.4 and pages.bar_width(120) == 100 and pages.bar_width(-3) == 0
+    assert pages.bar_width(None) == 0 and pages.bar_width(5, 10, 10) == 0 and pages.bar_width(1.5, 1, 2) == 50
+    assert pages.bar_sides(-1.0, 2) == {'left': 25.0, 'width': 25.0, 'side': 'neg'}
+    assert pages.bar_sides(0.5, 2) == {'left': 50.0, 'width': 12.5, 'side': 'pos'}
+    assert pages.bar_sides(3.0, 2) == {'left': 50.0, 'width': 50.0, 'side': 'pos'}  # saturada en el límite
+    assert pages.bar_sides(-9, 2) == {'left': 0.0, 'width': 50.0, 'side': 'neg'}
+    for value, limit in ((0, 2), (None, 2), (float('nan'), 2), (1, 0), (True, 2)):
+        assert pages.bar_sides(value, limit) == {'left': 50.0, 'width': 0.0, 'side': 'zero'}
+    assert pages.shade(2, 0, 4, '#d62728') == 'rgba(214, 39, 40, 0.275)'
+    assert pages.shade(9, 0, 4, '#d62728') == 'rgba(214, 39, 40, 0.55)'  # recortado al tope
+    assert pages.shade(0.5, 1, 0, '#d62728') == 'rgba(214, 39, 40, 0.275)'  # el rango puede ir hacia abajo
+    assert pages.shade(1.5, 1, 2, '#7f7f7f', alpha=0.4) == 'rgba(127, 127, 127, 0.2)'
+    assert pages.shade(0, 0, 4, '#d62728') == 'rgba(214, 39, 40, 0.0)'
+    for value, start, end, color in ((None, 0, 4, '#d62728'), (1, 2, 2, '#d62728'), (1, 0, 4, 'red'), (True, 0, 4, '#d62728')):
+        assert pages.shade(value, start, end, color) == 'transparent'
+    env = pages.environment()
+    assert env.filters['bar'] is pages.bar_width and env.filters['sides'] is pages.bar_sides and env.filters['shade'] is pages.shade
+
+
+def test_event_detail_helpers_of_the_hemicycle_and_the_split():
+    assert pages.majority_of(350) == 176 and pages.majority_of(135) == 68 and pages.majority_of(0) is None
+    assert pages.majority_of(None) is None and pages.majority_of(True) is None and pages.majority_of(350.0) is None
+    assert pages.split_sides(['Derecha', 'Izquierda']) == {'left': 'Izquierda', 'right': 'Derecha'}
+    assert pages.split_sides(['Izquierda', 'Derecha', 'Otro']) == {'left': 'Izquierda', 'right': 'Derecha'}
+    assert pages.split_sides(['A', 'B']) == {'left': 'B', 'right': 'A'}  # como el cuaderno: el primero a la derecha
+    assert pages.split_sides(['Derecha']) is None and pages.split_sides([]) is None
+    catalog = pages.Catalog({'PSOE': {}, 'PP': {}, 'VOX': {}})
+    assert pages.chart_parties(catalog, ['PP', 'VOX', 'ERC'], ['PP', 'PSOE', 'Cs', 'ERC']) == ['PSOE', 'PP', 'VOX', 'ERC', 'Cs']
+    assert pages.chart_parties(catalog) == [] and pages.chart_parties(pages.Catalog(), ['Cs']) == ['Cs']
