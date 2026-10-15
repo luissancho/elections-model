@@ -476,3 +476,21 @@ def test_weights_at_returns_none_without_three_polls_or_before_the_first():
     fc.series.loc[dates > dates.min() + pd.Timedelta(days=2), 'PSOE'] = np.nan   # quedan dos sondeos (días 1 y 3)
     with pytest.warns(UserWarning):
         assert fc.weights_at('PSOE') is None
+
+
+def test_print_weights_keeps_its_columns_and_plot_weights_draws_the_daily_kernel(monkeypatch):
+    monkeypatch.setattr('mtpy.lib.forecaster.plot_figure', lambda **kwargs: None)   # `plot_figure` vacía la figura
+    fc, _, _ = _synthetic_forecaster()
+    out = fc.weights_at('PP', date='2026-06-01')
+    table = fc.print_weights('PP', date='2026-06-01', show=False)
+    assert list(table.columns) == ['date', 'pollster', 'weight', 'tfs', 'tte', 'sample_size', 'weight_kernel',
+                                   'weight_over', 'weight_sample', 'weight_rating']
+    assert len(table) == len(out['polls']) and table['tfs'].min() == 0 and table['tte'].min() == 0
+    assert table['date'].iloc[0] == out['polls'].index[0].strftime('%d-%b')
+    assert np.allclose(table['weight'], out['polls']['weight'])
+    _, ax = matplotlib.pyplot.subplots()
+    fc.plot_weights('PP', date='2026-06-01', show=False, ax=ax)
+    twin = [a for a in ax.figure.axes if a is not ax][0]
+    assert len(ax.collections) == 1 and len(ax.collections[0].get_offsets()) == len(out['polls'])
+    assert len(twin.lines) == 1 and len(twin.lines[0].get_xdata()) == len(out['kernel'])
+    matplotlib.pyplot.close('all')

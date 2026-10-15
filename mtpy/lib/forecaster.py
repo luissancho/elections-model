@@ -1607,7 +1607,7 @@ class Forecaster(Core):
         name: str,
         date: Optional[str] = None,
         show: bool = True
-    ) -> None:
+    ) -> Optional[pd.DataFrame]:
         """
         Print a table with the weights for each poll that affects the estimation at a specific date.
 
@@ -1616,47 +1616,27 @@ class Forecaster(Core):
         name : str
             Name of the party or block to be fitted.
         date : str or datetime, optional
-            Date to choose as the center of the kernel window.
-            If `None`, the last available date will be used.
+            Date to choose as the center of the kernel window (see `weights_at` for the default).
         show : bool, optional
             Print the table.
+
+        Returns
+        -------
+        pd.DataFrame or None
+            With `show=False`, the table (`date`, `pollster`, `weight`, `tfs`, `tte`, `sample_size`,
+            `weight_kernel`, `weight_over`, `weight_sample`, `weight_rating`); `tfs` counts the days since the
+            first poll of the table and `tte` the days until the last one. `None` when `weights_at` has nothing.
         """
-        df = self.fc_series[self.fc_series[name].notnull()]
-        ix = self.fc_index[(self.fc_index >= df.index.min()) & (self.fc_index <= df.index.max())]
-        weights = df.weight.values
+        out = self.weights_at(name, date)
 
-        if date is None:
-            date = np.min([
-                pd.to_datetime('now').floor('d', ambiguous=False),
-                ix.max()
-            ])
+        if out is None:
+            return None
 
-        # Get the estimator instance
-        est = LocalKernelEstimator(
-            df.tfs,
-            weights=weights,
-            **self.reg_params
-        )
-
-        # Compute the pairwise kernel weights for each day in the index
-        kws = est.build_pred(ix).get_kernel().get_weights(est.pred)
-        # This kernel weights are combined with the poll weights in order to be used in the model
-        weights = kws * weights
-
-        # Get the index position of the specified date and assign the corresponding individual weights
-        pos = (pd.to_datetime(date) - ix.min()).days
-        df['weight_kernel'] = kws[pos]
-        df['weight'] = weights[pos]
-
-        # Remove polls with a weight lower than 1e-2, in order to speed up the computation without losing accuracy
-        df = df[df['weight'] >= 1e-2].reset_index()
-
-        # Format dates
+        df = out['polls'].reset_index()
+        df['tfs'] = (df.date - df.date.min()).dt.days
+        df['tte'] = (df.date.max() - df.date).dt.days
         df['date'] = df.date.dt.strftime('%d-%b')
-        df['tfs'] = df.tfs - df.tfs.min()
-        df['tte'] = df.tte - df.tte.min()
 
-        # Set result
         df = df[[
             'date', 'pollster', 'weight', 'tfs', 'tte', 'sample_size',
             'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating'
@@ -1717,7 +1697,9 @@ class Forecaster(Core):
         **kwargs
     ) -> None:
         """
-        Plot the weights for each poll that affects the estimation at a specific date.
+        Plot the weights for each poll that affects the estimation at a specific date: the polls sized and
+        shaded by their weight, the local line of that day with its band and the kernel bell on a twin axis
+        (see `weights_at`).
         """
         _plt_params = dict(
             freq='D', margin=0.05, legend=True, title=None, note=None
@@ -1726,44 +1708,18 @@ class Forecaster(Core):
             figsize=(20, 10)
         )
 
-        df = self.fc_series[self.fc_series[name].notnull()]
-        ix = self.fc_index[(self.fc_index >= df.index.min()) & (self.fc_index <= df.index.max())]
-        weights = df.weight.values
+        out = self.weights_at(name, date)
 
-        if date is None:
-            date = np.min([
-                pd.to_datetime('now').floor('d', ambiguous=False),
-                ix.max()
-            ])
+        if out is None:
+            return
 
         plt_params = get_params(_plt_params, None, 'plt_params', **kwargs)
         fig_params = get_params(_fig_params, None, 'fig_params', **kwargs)
 
-        # Get the estimator instance
-        est = LocalKernelEstimator(
-            df[name],
-            weights=weights,
-            **self.reg_params
-        )
-
-        # Compute the pairwise kernel weights for each day in the index
-        kws = est.build_pred(ix).get_kernel().get_weights(est.pred)
-        # This kernel weights are combined with the poll weights in order to be used in the model
-        weights = kws * weights
-
-        # Get the index position of the specified date and assign the corresponding individual weights
-        pos = (pd.to_datetime(date) - ix.min()).days
-        df['weight_kernel'] = kws[pos]
-        df['weight'] = weights[pos]
-
-        dt_from, dt_to = df.loc[df.weight_kernel >= 1e-2].index[[0, -1]]
-        df = df.loc[df.weight >= 1e-2].loc[dt_from:dt_to]
-
-        loc_est = est.get_local_estimator(kws, pos)
-        dr = loc_est.fit(np.arange(loc_est.ranges[0][0], loc_est.ranges[0][1] + 1), alpha=self.alpha)
+        df, dr, bell, stats = out['polls'], out['line'].copy(), out['kernel'], out['stats']
+        date = stats['date']
         dr['cint'] = dr['cmax'] - dr['mean']
-        dr.index = ts_from_delta(dr.index, dt_from=est.ranges[0][0], freq=est.ts_freq)
-        dr = dr.loc[dt_from:dt_to]
+        dt_from, dt_to = dr.index[0], dr.index[-1]
 
         cmap = build_color_seq_map('blue', beta=0.1)
         sw_scaled = df.weight / df.weight.max(axis=0)
@@ -1771,12 +1727,13 @@ class Forecaster(Core):
         s = (200 * (1 + sw_scaled)).values.round().astype(int)
 
         lbl_reg = 'Forecast: {} | CI 95%: {}'.format(
-            format_number(dr['mean'].loc[date]),
-            format_number(dr['cint'].loc[date])
+            format_number(stats['mean']),
+            format_number(stats['cmax'] - stats['mean'])
         )
-        lbl_score = 'Error: {}'.format(format_number(dr['err'].loc[date]))
+        lbl_score = 'Error: {}'.format(format_number(stats['err']))
 
         fig, ax = create_figure(ax=ax, **fig_params)
+        fig = fig if fig is not None else ax.figure  # `create_figure` gives no figure for a given axis
 
         col_params = {
             'mean': dict(cm=get_color('blue'), label=lbl_reg),
@@ -1784,12 +1741,12 @@ class Forecaster(Core):
             'cmax': dict(cm=get_color('yellow'), lw=2, ls='--', label=None)
         }
 
-        ax.axvline(pd.to_datetime(date), color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
-        ax.axhline(dr['mean'].loc[date], color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
+        ax.axvline(date, color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
+        ax.axhline(stats['mean'], color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
 
         ax.scatter(
             df.index.values,
-            df[name].values,
+            df['pct_adj'].values,
             s=s,
             marker='.',
             color=color,
@@ -1809,8 +1766,8 @@ class Forecaster(Core):
 
         ax2 = ax.twinx()
         ax2.plot(
-            df.index.values,
-            df.weight_kernel.values,
+            bell.index.values,
+            bell.values,
             color=get_color('purple-light'),
             lw=2,
             label='Kernel'
