@@ -13,7 +13,7 @@
 {% macro regional_weight() -%}
 {% if national and national.rating_weight and regional_weights|length == 1 -%}
 {% set ratio = regional_weights[0] / national.rating_weight -%}
-{% if ratio == 0.5 %}pesa la mitad que uno de unas generales{% else %}pesa el {{ (ratio * 100)|pct(0) }} de uno de unas generales{% endif %}
+{% if ratio == 0.5%}pesa la mitad que uno de unas generales{% else %}pesa el {{ (ratio * 100)|pct(0) }} de uno de unas generales{% endif %}
 {%- else -%}
 pesa menos que uno de unas generales, según el peso que el catálogo da a su comunidad
 {%- endif %}
@@ -59,8 +59,8 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         </math>
         <p>
           Los errores se miden en una escala relativa, la de los <em>log-odds</em> (el logaritmo de la razón
-          de probabilidades): en ella, dos puntos de error con un partido del 20 % son más error que con uno del
-          45 %. Cada bloque y cada partido cuenta en proporción a su voto real. En esa escala, el error dentro
+          de probabilidades): en ella, dos puntos de error con un partido del 20% son más error que con uno del
+          45%. Cada bloque y cada partido cuenta en proporción a su voto real. En esa escala, el error dentro
           del bloque suele ser unas tres veces mayor que el de los bloques, porque la cuota del socio menor
           dentro de su bloque se mueve mucho en términos relativos; con los pesos de arriba, las dos partes
           acaban contando de hecho parecido.

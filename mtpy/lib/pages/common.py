@@ -21,6 +21,9 @@ TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
 SITE_TITLE = 'Demoscopio'
 # Under the wordmark in the header, and the default description of the pages
 SITE_TAGLINE = 'Promedio de encuestas, previsión de escaños y ranking de encuestadoras'
+# The author, linked from the footer next to the model attribution
+AUTHOR_HANDLE = '@luis_sancho'
+AUTHOR_URL = 'https://x.com/luis_sancho'
 # Main menu: the global pages. Promedios and Escaños are the tabs of the event bar (``EVENT_TABS``).
 PAGES = (
     {'href': '/', 'label': 'Inicio'},
@@ -840,7 +843,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     Returns
     -------
     dict
-        ``site_title``, ``site_tagline``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
+        ``site_title``, ``site_tagline``, ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
         ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
         on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
@@ -873,6 +876,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     return {
         'site_title': SITE_TITLE,
         'site_tagline': SITE_TAGLINE,
+        'author_handle': AUTHOR_HANDLE,
+        'author_url': AUTHOR_URL,
         'pages': [dict(page, active=page['href'] == active) for page in PAGES],
         'state': full,
         'query': event_query(full) if event else scope_query(scope),

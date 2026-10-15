@@ -96,19 +96,19 @@
             puñado de elecciones generales con sondeos abundantes, y en las autonómicas hay aún menos por
             comunidad. Las cifras del backtest son orientativas.</li>
           <li>Calibración de los intervalos:
-            {% if figures.coverage|length > 1 %}{% set first = figures.coverage[0] %}{% set last = figures.coverage[-1] %}
-            en el <a href="/metodo/backtest">backtest</a> de las generales, el intervalo del 95 % contiene el
+            {% if figures.coverage|length > 1%}{% set first = figures.coverage[0] %}{% set last = figures.coverage[-1] %}
+            en el <a href="/metodo/backtest">backtest</a> de las generales, el intervalo del 95% contiene el
             resultado el {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de la votación y
             el {{ (last.cov95 * 100)|pct(0) }} a {{ last.horizon|int }} días.
             {% elif figures.coverage %}{% set first = figures.coverage[0] %}
-            en el <a href="/metodo/backtest">backtest</a> de las generales, el intervalo del 95 % contiene el
+            en el <a href="/metodo/backtest">backtest</a> de las generales, el intervalo del 95% contiene el
             resultado el {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de la votación.
             {% else %}
             el backtest de las generales, que comprueba si los intervalos contienen el resultado tantas veces como
             anuncian, no está publicado todavía.
             {% endif %}
-            {% if figures.coverage and figures.coverage[-1].cov95 < 0.95 %}
-            Por debajo del 95 %, los intervalos son demasiado estrechos; parte del error que les falta son
+            {% if figures.coverage and figures.coverage[-1].cov95 < 0.95%}
+            Por debajo del 95%, los intervalos son demasiado estrechos; parte del error que les falta son
             desviaciones comunes a todas las encuestadoras, que ninguna corrección por encuestadora elimina.
             {% endif %}</li>
           <li>Sucesión de partidos: cuando los partidos se fusionan, se separan o nacen, el modelo suma o

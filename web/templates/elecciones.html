@@ -144,7 +144,7 @@
         <div class="chart" id="errors-bullseye" role="img" aria-label="Error de cada sondeo en el voto de los dos bloques principales, por elección"></div>
         {% call m.how() %}
         <p>
-          {% if error_blocks|length >= 2 %}El eje horizontal es el error en {{ error_blocks[0] }} y el vertical en
+          {% if error_blocks|length >= 2%}El eje horizontal es el error en {{ error_blocks[0] }} y el vertical en
           {{ error_blocks[1] }}{% else %}Cada eje es el error en uno de los dos bloques{% endif %}, en puntos:
           sondeo menos resultado. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
         </p>

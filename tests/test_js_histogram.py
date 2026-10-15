@@ -31,8 +31,8 @@ def run_js(call):
 
 def test_default_draws_the_share_of_simulations_in_seats():
     out = run_js('h.renderHistogram({}, [170, 171, 171, 175], {median: 171, lo: 170, hi: 175, width: 1})')
-    assert out['data'][:2] == [25.0, 50.0] and out['ticks'] == ['0 %', '1 %', '2 %'] and out['minInterval'] is None
-    assert out['tip'] == '<strong>170 escaños: 25,0 %</strong><br>Mediana: 171 · rango 95 %: 170–175'
+    assert out['data'][:2] == [25.0, 50.0] and out['ticks'] == ['0%', '1%', '2%'] and out['minInterval'] is None
+    assert out['tip'] == '<strong>170 escaños: 25,0%</strong><br>Mediana: 171 · rango 95%: 170–175'
     assert out['marks'] == ['171'] and out['color'] == '#3a6ea5'  # THEME.barColor, the neutral blue
 
 

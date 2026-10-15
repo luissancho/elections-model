@@ -265,7 +265,7 @@ def test_title_of_rules():
 def test_footer_names_the_publication_and_the_last_poll(api):
     page = html(call(api, '/es')[2])
     footer = page[page.index('<footer'):page.index('</footer>')]
-    assert 'Publicación: {} ('.format(RUN) in footer and '· Último sondeo: ' in footer
+    assert 'Actualizado: {} ('.format(RUN) in footer and '· Último sondeo: ' in footer
     assert 'commit' not in footer and 'promedio leído' not in footer and '(sucio)' not in footer
 
 
@@ -350,14 +350,14 @@ def test_templates_compile_with_strict_undefined():
 
 
 def test_filters_follow_the_js_rules():
-    assert pages.fmt_pct(32.66) == '32,7 %' and pages.fmt_pct(None) == '–'
+    assert pages.fmt_pct(32.66) == '32,7%' and pages.fmt_pct(None) == '–' and pages.fmt_pct(40, 0) == '40%'
     assert pages.fmt_num(1234567) == '1.234.567' and pages.fmt_num(3.14159, 1) == '3,1'
     assert pages.fmt_num(-1234.5, 1) == '-1.234,5' and pages.fmt_num(-1.25, 1) == '-1,3'
-    assert pages.fmt_prob(0.995) == '> 99 %' and pages.fmt_prob(0.003) == '< 1 %' and pages.fmt_prob(0) == '0 %'
-    assert pages.fmt_prob(1) == '100 %' and pages.fmt_prob(0.968) == '97 %' and pages.fmt_prob(None) == '–'
+    assert pages.fmt_prob(0.995, 0) == '> 99%' and pages.fmt_prob(0.003, 0) == '< 1%' and pages.fmt_prob(0) == '0,0%'
+    assert pages.fmt_prob(1) == '100,0%' and pages.fmt_prob(0.968) == '96,8%' and pages.fmt_prob(0.968, 0) == '97%' and pages.fmt_prob(None) == '–'
     # Con un decimal (el filtro `prob` de las tablas): el tope y el suelo se mueven un orden de magnitud
-    assert pages.fmt_prob(0.968, 1) == '96,8 %' and pages.fmt_prob(0.995, 1) == '99,5 %' and pages.fmt_prob(0.9995, 1) == '> 99,9 %'
-    assert pages.fmt_prob(0.003, 1) == '0,3 %' and pages.fmt_prob(0.0004, 1) == '< 0,1 %' and pages.fmt_prob(0, 1) == '0 %'
+    assert pages.fmt_prob(0.968, 1) == '96,8%' and pages.fmt_prob(0.995) == '99,5%' and pages.fmt_prob(0.9995) == '> 99,9%'
+    assert pages.fmt_prob(0.003) == '0,3%' and pages.fmt_prob(0.0004) == '< 0,1%' and pages.fmt_prob(0, 0) == '0%' and pages.fmt_prob(1, 0) == '100%'
     assert pages.fmt_range(27.31, 38.02) == '27,3–38,0' and pages.fmt_range(118.0, 159.5, 0) == '118–160'
     assert pages.fmt_date('2026-10-13') == '13 oct 2026' and pages.fmt_date('2026-09-05') == '5 sept 2026'
     assert pages.fmt_date('garbage') == '–' and pages.fmt_date(None) == '–'
@@ -559,7 +559,7 @@ def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carr
 
 def test_escanos_table_histograms_blocks_and_pills(api):
     page = html(call(api, '/es/escanos')[2])
-    assert '<th scope="col">Rango 95 %</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
+    assert '<th scope="col">Rango 95%</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
     # Una sola tarjeta: vista Partidos/Bloques, la barra, la tabla de la vista y un solo gráfico de crestas
     assert 'id="ridge-chart"' in page and 'data-party=' not in page and 'id="histograms"' not in page
     assert re.search(r'cada una con su\s+propio eje', page) and 'grid-small' not in page
@@ -710,7 +710,7 @@ def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
     detail = page[page.index('id="region-table"'):]
     detail = detail[:detail.index('</table>')]
     assert '– %' not in detail and detail.count('<tr>') == 3  # cabecera, PP y PSOE
-    assert '34,0–44,0 %' in detail
+    assert '34,0–44,0%' in detail
 
 
 def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
@@ -810,8 +810,8 @@ def test_promedios_central_block_is_three_cards_with_ranges(api):
     order = [page.index(m) for m in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"', 'id="evolution-card"')]
     assert order == sorted(order)
     heads = re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="parties-table"'):page.index('id="blocks-result-table"')])
-    assert heads == ['Partido', '% Voto', 'Escaños', 'Rango 95 %', 'P(primero)']  # the bar column has a hidden head
-    assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'Rango 95 %', 'P(mayoría)']
+    assert heads == ['Partido', '% Voto', 'Escaños', 'Rango 95%', 'P(primero)']  # the bar column has a hidden head
+    assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'Rango 95%', 'P(mayoría)']
     for gone in ('id="vote-chart"', 'id="seats-chart"', 'id="majority"', 'id="headline-table"'):
         assert gone not in page
 
@@ -1392,7 +1392,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     blocks = re.search(r'<section class="card" id="results-blocks" hidden>(.*?)</section>', page, re.S).group(1)
     assert re.findall(r'<th scope="col">(.*?)</th>', blocks) == ['Bloque', '% Voto', 'Escaños']
     assert re.findall(r'</span>(\w+)</td>\s*<td>(.*?)</td>\s*<td><strong>(\d+)</strong>', blocks) == [
-        ('Derecha', '45,5 %', '200'), ('Izquierda', '31,4 %', '150')]
+        ('Derecha', '45,5%', '200'), ('Izquierda', '31,4%', '150')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
@@ -1407,7 +1407,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     # primera fila como en Promedios: hemiciclo y tabla de resultados (% Voto y Escaños, sin P(primero))
     results = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
     assert re.findall(r'<th scope="col">(.*?)</th>', results) == ['Partido', '% Voto', '<span class="sr-only">Barra del voto</span>', 'Escaños']
-    assert '<td>33,1 %</td>' in results and '<td><strong>160</strong></td>' in results and 'P(primero)' not in page
+    assert '<td>33,1%</td>' in results and '<td><strong>160</strong></td>' in results and 'P(primero)' not in page
     assert 'id="hemicycle"' in page and 'de los 350 de la cámara' in page
     assert 'id="error-chart"' in page and 'id="split-chart"' in page and 'class="chart big" id="bullseye-chart"' in page
     assert 'cuánto falló cada sondeo en Izquierda y a la derecha, en Derecha' in page
@@ -1724,9 +1724,9 @@ def test_metodo_renders_the_sections_without_data(api):
 def test_metodo_landing_quotes_the_coverage_of_the_general_backtest(api, fresh_app):
     write_backtest(fresh_app.fs)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
-    assert 'contiene el resultado el 96 % de las veces a 6 días de la votación y el 100 % a 30 días' in page
+    assert 'contiene el resultado el 96% de las veces a 6 días de la votación y el 100% a 30 días' in page
     assert 'En las generales: 2 elecciones, a 6 y 30 días de la votación.' in page
-    # a 30 días el fixture cubre el 100 %: sin la coletilla de los intervalos demasiado estrechos
+    # a 30 días el fixture cubre el 100%: sin la coletilla de los intervalos demasiado estrechos
     assert 'demasiado estrechos' not in page
 
 
@@ -1737,8 +1737,8 @@ def test_metodo_landing_says_the_intervals_fall_short_only_below_95(api, fresh_a
                'coverage': [{'horizon': 6, 'cov95': 0.97}, {'horizon': 90, 'cov95': 0.88}]}
     monkeypatch.setattr(pages.metodo, 'national_figures', lambda: figures)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
-    assert 'el 97 % de las veces a 6 días de la votación y el 88 % a 90 días' in page
-    assert 'Por debajo del 95 %, los intervalos son demasiado estrechos' in page
+    assert 'el 97% de las veces a 6 días de la votación y el 88% a 90 días' in page
+    assert 'Por debajo del 95%, los intervalos son demasiado estrechos' in page
 
 
 def test_metodo_landing_names_a_single_backtest_election_in_singular(api, fresh_app):
@@ -1801,7 +1801,7 @@ def test_metodo_escanos_text(api):
     assert str(fixture_data('meta')['n_sim']) in page.replace('.', '') and '1.000 simulaciones' not in page
     assert '<math' in page and 'Ejemplo' in page
     text = re.sub(r'\s+', ' ', page)
-    assert 'en un mes, uno al 30 % puede moverse alrededor de un punto' in text and 'en unos meses' not in text
+    assert 'en un mes, uno al 30% puede moverse alrededor de un punto' in text and 'en unos meses' not in text
     assert 'suben y bajan a la vez' not in text and 'lo que gana un partido lo pierde otro' in text
 
 
@@ -1809,7 +1809,7 @@ def test_metodo_rating_text(api):
     page = html(call(api, '/metodo/rating')[2])
     for anchor in ('que-se-mide', 'calidad-previa', 'rating-final', 'ranking-global', 'herding'):
         assert 'id="' + anchor + '"' in page, anchor
-    assert 'la mitad' in page or '50 %' in page  # rating_weight 0,5 leído del catálogo
+    assert 'la mitad' in page or '50%' in page  # rating_weight 0,5 leído del catálogo
     assert '<math' in page
     landing = html(call(api, '/metodo')[2])
     assert 'Cómo funciona el modelo' not in landing and 'href="/metodo/rating"' in landing
@@ -1829,7 +1829,7 @@ def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypat
     changed.loc[changed.index != 'es', 'rating_weight'] = 0.25
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa el 25 % de uno de unas generales' in page and 'la mitad' not in page
+    assert 'pesa el 25% de uno de unas generales' in page and 'la mitad' not in page
     mixed = changed.copy()
     mixed.loc['es-md', 'rating_weight'] = 0.5
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
@@ -1839,17 +1839,17 @@ def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypat
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
-    assert 'en las generales, el 3 % de los votos válidos' in page
+    assert 'en las generales, el 3% de los votos válidos' in page
     table = page[page.index('id="thresholds-table"'):]
     table = table[:table.index('</table>')]
-    assert '<th scope="row">Canarias</th> <td>15 %</td> <td>4 %</td>' in table
-    assert '<th scope="row">Comunidad Valenciana</th> <td>–</td> <td>5 %</td>' in table
+    assert '<th scope="row">Canarias</th> <td>15%</td> <td>4%</td>' in table
+    assert '<th scope="row">Comunidad Valenciana</th> <td>–</td> <td>5%</td>' in table
     assert 'href="/es/escanos"' in page and 'id="metodo-nav"' in page and 'aria-current="page"' in page
     changed = webapi.catalogue().copy()
     changed.loc['es', 'threshold'] = 4.5
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
-    assert 'en las generales, el 4,5 % de los votos válidos' in page and 'el 3 % de los votos' not in page
+    assert 'en las generales, el 4,5% de los votos válidos' in page and 'el 3% de los votos' not in page
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed.drop(index='es'))
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
     assert 'en las generales, la que fija la ley electoral, de los votos válidos' in page
@@ -1860,7 +1860,7 @@ def test_metodo_escanos_quotes_the_coverage_only_with_a_backtest(api, fresh_app)
     assert 'contiene el resultado' not in page and 'se comprueba en <a href="/metodo/backtest">' in page
     write_backtest(fresh_app.fs)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
-    assert 'el intervalo del 95 % del voto contiene el resultado el 96 % de las veces a 6 días' in page
+    assert 'el intervalo del 95% del voto contiene el resultado el 96% de las veces a 6 días' in page
 
 
 def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fresh_app):
@@ -2067,7 +2067,7 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
         # "Estimación a" is only ever followed by today; the footer names the publication date otherwise
         assert set(re.findall(r'[Ee]stimación a (\d+ \w+ \d{4})', page)) == {today}, path
         footer = page[page.index('<footer'):]
-        assert 'Publicación: {} (8 oct 2026)'.format(RUN) in footer and 'Estimación' not in footer, path
+        assert 'Actualizado: {} (8 oct 2026)'.format(RUN) in footer and 'Estimación' not in footer, path
     write_bundle(fresh_app.fs, run_id=OLDER_RUN, manifest=False)
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
@@ -2175,9 +2175,9 @@ def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(ap
     page = html(call(api, '/es/escanos')[2])
     table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]
     cells = re.findall(r'<td>([^<]*%)</td>', table)
-    assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d %|0 %|100 %', cell) for cell in cells), cells
+    assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d%', cell) for cell in cells), cells
     home = html(call(api, '/')[2])
-    assert re.search(r'· Derecha (?:> )?\d+ %</small>', home)  # the majority chip of the hero, without decimals
+    assert re.search(r'· Derecha (?:> )?\d+,\d%</small>', home)  # the majority chip of the hero, one decimal
 
 
 def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api, fresh_app):
@@ -2285,15 +2285,15 @@ def test_promedios_opens_with_the_kpis_the_party_cards_and_the_lead_strip(events
     kpis = re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', page)
     assert kpis == ['Primer partido', 'Escaños del líder', 'Mayoría absoluta', 'Sondeos del ciclo', 'Último sondeo']
     flat = page.replace('\n', '')
-    assert '<div class="v" style="color: #1d84ce">PP<small>33,1 % del voto</small></div>' in flat
-    assert '135<small>de 350</small>' in flat and 'Rango 95 %: 120–150' in page
-    assert '<div class="s">PP: 135 escaños</div>' in page and '41 %<small>Derecha</small>' in flat
+    assert '<div class="v" style="color: #1d84ce">PP<small>33,1% del voto</small></div>' in flat
+    assert '135<small>de 350</small>' in flat and 'Rango 95%: 120–150' in page
+    assert '<div class="s">PP: 135 escaños</div>' in page and '41,0%<small>Derecha</small>' in flat
     assert '120<small>de 15 encuestadoras</small>' in flat and '5 oct<small>Sigma Dos</small>' in flat
     card = re.search(r'<article class="pc" style="--c: #1d84ce" data-name="PP">(.*?)</article>', page, re.S).group(1)
-    assert '<span class="rk">1.º</span>' in card and '<b>135</b><span>33,1 %</span>' in card
+    assert '<span class="rk">1.º</span>' in card and '<b>135</b><span>33,1%</span>' in card
     assert '−25 esc. <i>vs 2023</i>' in card and '+0,0 <i>pt</i>' in card  # 135 − 160; 33,1 − 33,06 = +0,04 → +0,0
     assert 'class="spark"' in card and 'Último año' in card
-    assert 'Líder: <b>PP</b> · <b>135 escaños</b> · le faltan <b>41</b> para la mayoría · P(primero) <b>62 %</b>' in flat
+    assert 'Líder: <b>PP</b> · <b>135 escaños</b> · le faltan <b>41</b> para la mayoría · P(primero) <b>62,0%</b>' in flat
 
 
 def test_promedios_party_table_draws_the_vote_bar_and_the_seat_range(api):
@@ -2301,7 +2301,7 @@ def test_promedios_party_table_draws_the_vote_bar_and_the_seat_range(api):
     table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
     assert '<span class="bar"><i style="width: 100.0%; background: #1d84ce"></i></span>' in table
     assert 'class="rng"' in table and 'left: 34.3%; width: 8.6%' in table and 'calc(38.6% - 1px)' in table and '<u style="left: 50.3%"></u>' in table
-    assert '120–150' in table and '<th scope="col">Rango 95 %</th>' in table
+    assert '120–150' in table and '<th scope="col">Rango 95%</th>' in table
 
 
 def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(api, fresh_app, tmp_path):
@@ -2325,20 +2325,20 @@ def test_home_hero_is_the_national_scope_with_its_figures(api):
     assert '<h1 class="hero-t">' in page and 'un solo <em>promedio</em>.' in page and pages.inicio.INTRO in page
     assert 'Generales · 29 nov 2026 · ' in page and 'id="hero-card"' in page and 'class="flag"' in page
     assert 'Congreso de los Diputados · 350 escaños · 29 nov 2026' in page
-    assert '<b style="color: #1d84ce">135</b>' in flat and 'primer partido con el <strong>33,1 %</strong>' in page
+    assert '<b style="color: #1d84ce">135</b>' in flat and 'primer partido con el <strong>33,1%</strong>' in page
     bar = re.search(r'<div class="seatbar" id="hero-seatbar">(.*?)<div class="chips">', page, re.S).group(1)
     assert '<i style="width: 38.6%; background: #1d84ce" title="PP 135"></i>' in bar and 'left: 50.3%' in bar
     assert 'Derecha 135' in bar
-    # con p < 0,5 el chip va en gris: "Sin mayoría clara · Derecha 41 %" (D4); con p >= 0,5, `.chip.ok`
-    assert '<span class="chip">Sin mayoría clara <small>· Derecha 41 %</small></span>' in flat
+    # con p < 0,5 el chip va en gris: "Sin mayoría clara · Derecha 41%" (D4); con p >= 0,5, `.chip.ok`
+    assert '<span class="chip">Sin mayoría clara <small>· Derecha 41,0%</small></span>' in flat
     assert 'href="/es">Ver el promedio' in page and 'class="btn" href="/es/escanos">Escaños' in page
-    assert 'Última publicación: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page
+    assert 'Actualizado: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page
     assert 'id="hemicycle-mini"' in page and '/dist/js/pages/inicio.js' in page
     data = initial(call(api, '/')[2])
     assert data == {'hero': {'seats': {'PP': 135}, 'colors': {'PP': '#1d84ce'}, 'fullnames': {'PP': 'Partido Popular'},
                              'order': ['PP'], 'n_seats': 350, 'majority': 176}}
     polls = re.search(r'<div class="plist" id="latest-polls">(.*?)</div>\s*</section>', page, re.S).group(1)
-    assert polls.count('class="pr"') == FIXTURE_POLLS and '<b>5</b>oct' in polls and 'Sigma Dos' in polls and '33,1 %' in polls
+    assert polls.count('class="pr"') == FIXTURE_POLLS and '<b>5</b>oct' in polls and 'Sigma Dos' in polls and '33,1%' in polls
 
 
 def test_home_lists_the_regional_scopes_as_rows_and_names_the_unpublished_ones(api, fresh_app):
@@ -2347,7 +2347,7 @@ def test_home_lists_the_regional_scopes_as_rows_and_names_the_unpublished_ones(a
     page = html(call(api, '/')[2])
     rows = re.search(r'<div class="card rows" id="auto-rows">(.*?)</div>\s*</div>\s*<aside', page, re.S).group(1)
     assert rows.count('class="row"') == 1 and 'href="/es-md"' in rows and '<div class="n">Madrid</div>' in rows
-    assert 'PP 33,1 % · 135 esc.' in rows and 'Derecha: <b>41 %</b> de mayoría' in rows
+    assert 'PP 33,1% · 135 esc.' in rows and 'Derecha: <b>41,0%</b> de mayoría' in rows
     assert 'Sin pronóstico todavía: Andalucía, Aragón' in rows and rows.count(',') >= 15 and 'Madrid,' not in rows
     assert 'card-muted' not in page and 'Pronóstico no publicado todavía' not in page
     assert page.index('href="/es"') < page.index('href="/es-md"')
@@ -2384,7 +2384,7 @@ def test_home_without_summary_or_polls_keeps_the_hero_without_the_bar(api, fresh
     assert status == 200 and 'id="hero-card"' in page and 'id="hero-seatbar"' not in page
     assert 'id="latest-polls"' not in page and 'initial-data' not in page
     assert '<b style="color: #1d84ce">135</b>' in page.replace('\n', '')  # el líder sale del headline
-    assert 'Sin mayoría clara <small>· Derecha 41 %</small>' in page.replace('\n', '')
+    assert 'Sin mayoría clara <small>· Derecha 41,0%</small>' in page.replace('\n', '')
 
 
 def test_home_hero_segments_read_the_chamber_from_the_summary():
@@ -2408,7 +2408,7 @@ def test_home_follows_the_default_mode_while_frozen(api, fresh_app):
                             freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/')[2])
-    assert 'Pronóstico definitivo' in page and '41,5 %' in page and '>161</b>' in page and 'Si hoy hubiera' not in page
+    assert 'Pronóstico definitivo' in page and '41,5%' in page and '>161</b>' in page and 'Si hoy hubiera' not in page
 
 
 def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
@@ -2499,3 +2499,22 @@ def test_profile_effects_switch_between_result_and_cycle_deviations(houses):
                {'event_date': '2019-11-10', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': 0.4, 'dev_cycle': None}]
     assert [row['event_date'] for row in pages.effects_table(records)['rows']] == ['2019-11-10']
     assert [row['event_date'] for row in pages.effects_table(records, key='dev_cycle')['rows']] == ['2023-07-23']
+
+
+def test_home_wording_of_the_second_walkthrough(api):
+    """Apuntes de Luis del 15 de octubre: la fecha de la estimación es la de hoy, "Actualizado:", sin la nota de las
+    tres páginas, el subtítulo nuevo, diez encuestas, el pie con el perfil de X y aire bajo la barra de escaños."""
+    from datetime import datetime
+    page = html(call(api, '/')[2])
+    today = pages.fmt_date(datetime.now(pages.filters._madrid_tz()).date().isoformat())
+    side = page[page.index('id="side-hemicycle"'):page.index('id="side-polls"')]
+    assert '<span class="pill">%s</span>' % today in side
+    assert 'Actualizado: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page and 'Última publicación' not in page
+    assert 'Tres páginas comunes' not in page
+    assert 'Un proyecto transparente y divulgativo, con el método y modelo a la vista.' in page and 'Sin cookies' not in page
+    assert pages.inicio.LATEST_POLLS == 10
+    footer = page[page.index('<footer'):]
+    assert 'Actualizado: {} (8 oct 2026)'.format(RUN) in footer and 'Publicación:' not in footer
+    assert 'Modelo y curación: Luis Sancho (<a href="https://x.com/luis_sancho" rel="me">@luis_sancho</a>)' in footer
+    css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert '.seatbar { position: relative; margin: 6px 0 34px; }' in css

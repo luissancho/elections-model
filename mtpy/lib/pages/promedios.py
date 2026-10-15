@@ -368,10 +368,10 @@ def kpi_rows(summary: dict, meta: dict, parties: Catalog, polls: list) -> list:
 
     if leader:
         kpis.append({'label': 'Primer partido', 'value': leader['name'], 'unit': fmt_pct(leader.get('pct')) + ' del voto',
-                     'support': 'P(primero) ' + fmt_prob(leader.get('p_first'), 0), 'ok': False,
+                     'support': 'P(primero) ' + fmt_prob(leader.get('p_first')), 'ok': False,
                      'color': parties[leader['name']]['color']})
         kpis.append({'label': 'Escaños del líder', 'value': fmt_int(leader.get('seats')), 'unit': 'de ' + fmt_int(n_seats),
-                     'support': 'Rango 95 %: ' + fmt_range(leader.get('seats_lo'), leader.get('seats_hi'), 0),
+                     'support': 'Rango 95%: ' + fmt_range(leader.get('seats_lo'), leader.get('seats_hi'), 0),
                      'ok': False, 'color': None})
 
     probs = summary.get('p_majority') or {}
@@ -382,7 +382,7 @@ def kpi_rows(summary: dict, meta: dict, parties: Catalog, polls: list) -> list:
                       if row.get('name') == block), None)
         members = ((meta.get('bmaps') or {}).get('vs') or {}).get(block) or []
         support = ' + '.join(members) + ': ' + fmt_int(seats) + ' escaños' if members and seats is not None else ''
-        kpis.append({'label': 'Mayoría absoluta', 'value': fmt_prob(probs[block], 0), 'unit': block, 'support': support,
+        kpis.append({'label': 'Mayoría absoluta', 'value': fmt_prob(probs[block]), 'unit': block, 'support': support,
                      'ok': probs[block] >= 0.5, 'color': None})
 
     dated = [poll for poll in polls if poll.get('date')]

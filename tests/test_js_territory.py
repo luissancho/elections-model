@@ -55,9 +55,9 @@ def test_territory_rows_by_community_weight_the_vote_by_the_votes_of_each_provin
     out = run_js('t.territoryRows(d, s, u, {level: "ccaa", mode: "pct"})')
     assert out['parties'] == ['PP', 'PSOE', 'VOX'] and len(out['rows']) == 2
     catalonia = next(row for row in out['rows'] if row['name'] == 'Cataluña')
-    assert catalonia['id'] is None and catalonia['total'] == '100 %'
+    assert catalonia['id'] is None and catalonia['total'] == '100%'
     assert round(catalonia['values']['PP'], 1) == 26.7 and catalonia['ranges'] == {}
-    assert out['total'] == {'values': {'PP': 33, 'PSOE': 30, 'VOX': 7}, 'total': '100 %'}
+    assert out['total'] == {'values': {'PP': 33, 'PSOE': 30, 'VOX': 7}, 'total': '100%'}
 
 
 def test_territory_rows_by_community_add_up_the_seats():

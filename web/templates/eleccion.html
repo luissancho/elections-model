@@ -157,7 +157,7 @@
       {{ m.card_end() }}
       </div>
       {{ m.card_start('bullseye', 'La diana', 'El error del último sondeo de cada encuestadora en cada bloque: cuanto más cerca del centro, más acertó.') }}
-        {% if last_rows and blocks|length >= 2 %}
+        {% if last_rows and blocks|length >= 2%}
         <div class="chart big" id="bullseye-chart" role="img" aria-label="Error del último sondeo de cada encuestadora por bloque"></div>
         <noscript><p class="muted">La diana necesita JavaScript; la tabla de abajo tiene las mismas cifras.</p></noscript>
         {% else %}
@@ -165,7 +165,7 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          Cada punto es el último sondeo de una encuestadora: {% if blocks|length >= 2 %}el eje horizontal es su
+          Cada punto es el último sondeo de una encuestadora: {% if blocks|length >= 2%}el eje horizontal es su
           error en {{ blocks[0] }} y el vertical en {{ blocks[1] }}{% else %}cada eje es su error en un bloque{% endif %}.
           El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
         </p>

@@ -2,25 +2,25 @@
 Home page context: the hero of the next election (the first published scope), the rows of the other published
 scopes, the latest polls and the past elections.
 """
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from ..webapi import site
 from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context, days_left, days_text, default_mode,
                      event_title, hemicycle_order, published_scopes)
 from .elecciones import last_results, published_events
-from .filters import delta_text, fmt_date_short
+from .filters import _madrid_tz, delta_text, fmt_date_short
 from .promedios import lead_strip, leader_of, poll_sample
 
 INTRO = ('Demoscopio promedia los sondeos de cada elección, simula el reparto de escaños y puntúa a las encuestadoras '
-         'según lo que acertaron. Sin cookies y con el método a la vista.')
+         'según lo que acertaron. Un proyecto transparente y divulgativo, con el método y modelo a la vista.')
 # Long names of the chambers, for the featured card
 CHAMBER_NAMES = {'es': 'Congreso de los Diputados'}
 DEFAULT_CHAMBER_NAME = 'Parlamento'
 # Past elections shown as chips before "+ N más"
 PAST_SHOWN = 12
 # Rows of "Últimas encuestas" and the parties whose figures they show
-LATEST_POLLS = 5
+LATEST_POLLS = 10
 TOP_PARTIES = 3
 
 
@@ -227,7 +227,8 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
         headline of the mode), ``rows`` (the parties of the headline), ``segments`` (``hero_segments``),
         ``majority_pct``, ``ends`` (seats of the ``vs`` blocks, Izquierda first), ``chip`` (``majority_chip``),
         ``deltas`` (the two parties with most seats present in the last results, ``{'name', 'text'}``),
-        ``results_year``, ``lead`` (``lead_strip``), ``run_at``, ``as_of``, ``n_polls``, ``n_pollsters``, ``top``
+        ``results_year``, ``lead`` (``lead_strip``), ``run_at``, ``as_of``, ``estimated`` (the date of the estimate
+        shown: today for a live nowcast, the publication date otherwise), ``n_polls``, ``n_pollsters``, ``top``
         (the names of the ``TOP_PARTIES`` parties by vote), ``top_seats`` (the four parties with most seats, for
         the legend of the small hemicycle), ``others`` (the seats of the rest) and ``catalog``.
     """
@@ -285,6 +286,9 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
         'lead': lead_strip(rows, majority),
         'run_at': card['run_at'],
         'as_of': headline.get('as_of') or meta.get('as_of'),
+        # the date of the estimate shown: today for the live nowcast (as the event bar says), the publication
+        # date once frozen or in forecast mode
+        'estimated': (today or datetime.now(_madrid_tz()).date()).isoformat() if not forecast and not card['frozen'] else card['run_at'],
         'n_polls': meta.get('n_polls'),
         'n_pollsters': meta.get('n_pollsters'),
         'top': [row['name'] for row in sorted(rows, key=lambda row: -(row.get('pct') or 0))[:TOP_PARTIES]],

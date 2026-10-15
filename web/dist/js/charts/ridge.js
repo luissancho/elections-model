@@ -32,7 +32,7 @@ export function ridgeHeight(n, rowHeight) {
  *   drawn in the rows whose range holds it, labelled on the first), `rowHeight` (px per row, 144 by default),
  *   `fullnames` ({name: full name}, tooltip) and `guideEvery` (seats between the faint dashed vertical guides;
  *   10 by default, 20 on narrow containers; the labelled axis shows a number at each). The row label reads the
- *   name, `Mediana: …` and `Rango 95 %: …`, with the name and the figures in bold.
+ *   name, `Mediana: …` and `Rango 95%: …`, with the name and the figures in bold.
  *   When every row shares the same range, only the last row shows the axis labels; otherwise each row shows its own.
  * @returns {object} the ECharts instance
  */
@@ -114,7 +114,7 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     top: TOP + index * rowHeight + curveHeight / 2 - 24,
     style: {
       // Rich text: the name, the median and the range in bold, the captions in regular weight
-      text: `{b|${row.name}}\nMediana: {b|${fmtInt(row.median)}}\nRango 95 %: {b|${fmtRange(row.lo, row.hi, 0)}}`,
+      text: `{b|${row.name}}\nMediana: {b|${fmtInt(row.median)}}\nRango 95%: {b|${fmtRange(row.lo, row.hi, 0)}}`,
       fill: THEME.textColor,
       fontSize: narrow ? 10.5 : 12,
       fontFamily: THEME.fontFamily,

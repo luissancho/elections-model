@@ -100,14 +100,14 @@ def fmt_pct(x, digits: int = 1) -> str:
     Returns
     -------
     str
-        ``'32,7 %'``, or ``DASH`` when ``x`` is missing.
+        ``'32,7%'`` (the sign attached, Luis, 2026-10-15), or ``DASH`` when ``x`` is missing.
     """
     text = fmt_num(x, digits)
 
-    return text if text == DASH else text + ' %'
+    return text if text == DASH else text + '%'
 
 
-def fmt_prob(p, digits: int = 0) -> str:
+def fmt_prob(p, digits: int = 1) -> str:
     """
     Format a probability in [0, 1] as a percentage that never rounds a near-certainty away.
 
@@ -116,24 +116,24 @@ def fmt_prob(p, digits: int = 0) -> str:
     p : float or None
         Probability.
     digits : int, optional
-        Number of decimals of the percentage.
+        Number of decimals of the percentage (one everywhere, Luis, 2026-10-15).
 
     Returns
     -------
     str
-        ``'0 %'`` and ``'100 %'`` only when exact; a near-certainty is capped below the top value the
-        decimals can show (``'> 99 %'`` from 0.995 with no decimals, ``'> 99,9 %'`` from 0.9995 with one) and
-        a near-impossibility floored above zero (``'< 1 %'`` up to 0.005, ``'< 0,1 %'`` up to 0.0005), else
+        ``'0,0%'`` and ``'100,0%'`` only when exact; a near-certainty is capped below the top value the
+        decimals can show (``'> 99,9%'`` from 0.9995 with one decimal, ``'> 99%'`` from 0.995 with none) and
+        a near-impossibility floored above zero (``'< 0,1%'`` up to 0.0005, ``'< 1%'`` up to 0.005), else
         the percentage with ``digits`` decimals; ``DASH`` when ``p`` is missing.
     """
     if isinstance(p, bool) or _is_missing(p):
         return DASH
 
     if p == 0:
-        return '0 %'
+        return fmt_pct(0, digits)
 
     if p == 1:
-        return '100 %'
+        return fmt_pct(100, digits)
 
     unit = 10 ** (-digits)  # smallest percentage the decimals can show
     edge = unit / 2 / 100  # as a probability

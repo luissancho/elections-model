@@ -562,7 +562,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .bignum b { font: 800 60px/1 var(--font-head); letter-spacing: -.03em; }
 .bignum span { font-size: 15px; color: var(--color-muted); }
 .bignum span strong { color: var(--color-text); font-weight: 700; }
-.seatbar { position: relative; margin: 6px 0 22px; }
+.seatbar { position: relative; margin: 6px 0 34px; }
 .seatbar .trk { display: flex; height: 16px; border-radius: 6px; overflow: hidden; background: var(--color-soft2); }
 .seatbar .trk i { display: block; height: 100%; }
 .seatbar .mk { position: absolute; top: -5px; bottom: -5px; width: 0; border-left: 2px solid var(--color-text); }

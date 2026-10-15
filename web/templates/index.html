@@ -36,15 +36,15 @@
           {% endif %}
           <div class="chips">
             {% if hero.chip %}
-            {% if hero.chip.reached %}<span class="chip ok">{{ hero.chip.block }}{% if hero.chip.seats is not none %} {{ hero.chip.seats|int }} escaños{% endif %} <small>· {{ hero.chip.p|prob(0) }} de mayoría absoluta</small></span>
-            {% else %}<span class="chip">Sin mayoría clara <small>· {{ hero.chip.block }} {{ hero.chip.p|prob(0) }}</small></span>{% endif %}
+            {% if hero.chip.reached %}<span class="chip ok">{{ hero.chip.block }}{% if hero.chip.seats is not none %} {{ hero.chip.seats|int }} escaños{% endif %} <small>· {{ hero.chip.p|prob }} de mayoría absoluta</small></span>
+            {% else %}<span class="chip">Sin mayoría clara <small>· {{ hero.chip.block }} {{ hero.chip.p|prob }}</small></span>{% endif %}
             {% endif %}
             {% for delta in hero.deltas %}<span class="chip">{{ delta.name }} {{ delta.text }} escaños <small>vs {{ hero.results_year }}</small></span>{% endfor %}
           </div>
           <div class="cta">
             <a class="btn pri" href="{{ hero.href }}">Ver el promedio <span aria-hidden="true">→</span></a>
             <a class="btn" href="{{ hero.href_seats }}">Escaños</a>
-            <span class="mut">Última publicación: {{ hero.run_at|date }}{% if hero.n_polls %} · {{ hero.n_polls|int }} sondeos{% if hero.n_pollsters %} de {{ hero.n_pollsters|int }} encuestadoras{% endif %}{% endif %}</span>
+            <span class="mut">Actualizado: {{ hero.run_at|date }}{% if hero.n_polls %} · {{ hero.n_polls|int }} sondeos{% if hero.n_pollsters %} de {{ hero.n_pollsters|int }} encuestadoras{% endif %}{% endif %}</span>
           </div>
         </article>
         {% endif %}
@@ -55,7 +55,7 @@
           <a class="row" href="{{ card.href }}">
             <div><div class="n">{{ card.name }}</div><div class="d">{{ card.event_date|date }}{% if card.days_text %} · {{ card.days_text[:1]|lower ~ card.days_text[1:] }}{% endif %}</div></div>
             {% if card.leader %}<span class="pill" title="{{ card.leader.fullname }}"><i class="dot" style="background: {{ card.leader.color }}"></i>{{ card.leader.name }} {{ card.leader.pct|pct }} · {{ card.leader.seats|int }} esc.</span>{% else %}<span class="pill">–</span>{% endif %}
-            <div class="maj">{% if card.majority %}{{ card.majority.block }}: <b>{{ card.majority.p|prob(0) }}</b> de mayoría{% endif %}</div>
+            <div class="maj">{% if card.majority %}{{ card.majority.block }}: <b>{{ card.majority.p|prob }}</b> de mayoría{% endif %}</div>
             <span class="chev" aria-hidden="true">›</span>
           </a>
           {% endfor %}
@@ -66,7 +66,7 @@
       <aside class="side">
         {% if hero %}
         <section class="card" id="side-hemicycle">
-          <header class="card-head split-head"><h2>{{ hero.side_title }}</h2>{% if hero.as_of %}<span class="pill">{{ hero.as_of|date }}</span>{% endif %}</header>
+          <header class="card-head split-head"><h2>{{ hero.side_title }}</h2>{% if hero.estimated %}<span class="pill">{{ hero.estimated|date }}</span>{% endif %}</header>
           {% if initial is defined %}
           <div class="chart hemi" id="hemicycle-mini" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
           {% endif %}
@@ -77,7 +77,7 @@
           </div>
           {% endif %}
           {% if hero.lead %}
-          <p class="lead-strip">Líder: <b>{{ hero.lead.name }}</b> · <b>{{ hero.lead.seats|int }} escaños</b> · {% if hero.lead.over %}supera la mayoría en <b>{{ (hero.lead.seats - hero.majority)|int }}</b>{% else %}le faltan <b>{{ hero.lead.short|int }}</b> para la mayoría{% endif %}{% if hero.lead.p_first is not none %} · P(primero) <b>{{ hero.lead.p_first|prob(0) }}</b>{% endif %}</p>
+          <p class="lead-strip">Líder: <b>{{ hero.lead.name }}</b> · <b>{{ hero.lead.seats|int }} escaños</b> · {% if hero.lead.over %}supera la mayoría en <b>{{ (hero.lead.seats - hero.majority)|int }}</b>{% else %}le faltan <b>{{ hero.lead.short|int }}</b> para la mayoría{% endif %}{% if hero.lead.p_first is not none %} · P(primero) <b>{{ hero.lead.p_first|prob }}</b>{% endif %}</p>
           {% endif %}
         </section>
         {% endif %}
@@ -94,7 +94,7 @@
       </aside>
     </section>
 
-    <div class="sec-h"><h2>Para entender el modelo</h2><p>Tres páginas comunes a todas las elecciones.</p></div>
+    <div class="sec-h"><h2>Para entender el modelo</h2></div>
     <div class="grid3" id="more">
       <a class="card card-link" href="/elecciones">
         <span class="ic"><svg aria-hidden="true"><use href="#i-target"/></svg></span>

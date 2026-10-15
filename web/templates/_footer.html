@@ -1,7 +1,7 @@
 <footer id="site-footer">
-  <p>Publicación: {{ meta.run_id }} ({{ meta.run_at|date }}) · Último sondeo: {{ meta.date_last|date }}{% if frozen and freeze.since %} · congelado desde {{ freeze.since|date }}{% endif %}</p>
+  <p>Actualizado: {{ meta.run_id }} ({{ meta.run_at|date }}) · Último sondeo: {{ meta.date_last|date }}{% if frozen and freeze.since %} · congelado desde {{ freeze.since|date }}{% endif %}</p>
   {% for key in ['polls', 'results', 'model'] if manifest.attribution.get(key) %}
-  <p>{{ manifest.attribution[key] }}</p>
+  <p>{{ manifest.attribution[key] }}{% if key == 'model' %} (<a href="{{ author_url }}" rel="me">{{ author_handle }}</a>){% endif %}</p>
   {% endfor %}
   <p><a href="/metodo">Método</a> · <a href="/api/v1/manifest">Manifiesto de datos</a></p>
 </footer>

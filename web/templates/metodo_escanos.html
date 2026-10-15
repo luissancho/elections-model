@@ -101,7 +101,7 @@
           <li><strong>Crece con los días.</strong> <var>h</var> son los días que faltan; la deriva crece con su
             raíz cuadrada, como un paseo al azar: a cuatro veces más días, el doble de deriva.</li>
           <li><strong>Es proporcional al tamaño.</strong> Se multiplica por el voto <var>p</var> del partido: en un
-            mes, uno al 30 % puede moverse alrededor de un punto; uno al 1 %, unas centésimas (y en cuatro meses,
+            mes, uno al 30% puede moverse alrededor de un punto; uno al 1%, unas centésimas (y en cuatro meses,
             el doble). La constante <var>k</var> sale de cuánto se movieron los promedios de los partidos en los
             ciclos anteriores, con más peso para los recientes, porque el sistema de muchos partidos se mueve más
             que el bipartidismo.</li>
@@ -123,9 +123,9 @@
       {{ m.card_start('circunscripciones', 'De España a las circunscripciones', 'El voto sorteado es el del conjunto; para repartir escaños hace falta el de cada circunscripción, y el modelo lo deduce de la elección anterior.') }}
         <p>
           <strong>El swing proporcional.</strong> Cada partido conserva la geografía de su voto en la elección
-          anterior y la escala en la misma proporción que su voto en el conjunto. Si pasa del 20 % al 22 %, un
-          10 % más, su voto crece un 10 % en cada circunscripción: del 30 % al 33 % donde era fuerte, del 10 % al
-          11 % donde era débil. «Otros» se escala igual; el voto en blanco mantiene el porcentaje que tuvo en cada
+          anterior y la escala en la misma proporción que su voto en el conjunto. Si pasa del 20% al 22%, un
+          10% más, su voto crece un 10% en cada circunscripción: del 30% al 33% donde era fuerte, del 10% al
+          11% donde era débil. «Otros» se escala igual; el voto en blanco mantiene el porcentaje que tuvo en cada
           circunscripción. Al final, cada circunscripción se reajusta para sumar 100.
         </p>
         <p>
@@ -197,7 +197,7 @@
           {%- endif %} de los votos válidos (los de las candidaturas más el voto en blanco) de cada circunscripción.
           Con los votos oficiales, D'Hondt con esa barrera reproduce escaño a escaño los repartos de las cinco
           elecciones generales de 2015 a 2023; sin ella fallaría en uno: en Barcelona, en abril de 2019, Front
-          Republicà, con el 2,72 %, se habría llevado el escaño que fue a Unidas Podemos.
+          Republicà, con el 2,72%, se habría llevado el escaño que fue a Unidas Podemos.
         </p>
         <p>
           Algunas comunidades tienen una segunda barrera, sobre los votos de toda la comunidad. Una candidatura
@@ -237,8 +237,8 @@
         </ul>
         <p>
           La tabla es la de hoy. En las elecciones pasadas, el modelo aplica la barrera de su momento: en Murcia,
-          hasta 2015, el 5 % de toda la comunidad, sin barrera por circunscripción; en Canarias, en 2011 y 2015,
-          el 30 % de la isla o el 6 % del archipiélago.
+          hasta 2015, el 5% de toda la comunidad, sin barrera por circunscripción; en Canarias, en 2011 y 2015,
+          el 30% de la isla o el 6% del archipiélago.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('cifras', 'Qué es cada cifra', 'Las cifras publicadas resumen todas las simulaciones de un modo: cuentan en cuántas ocurre cada cosa.') }}
@@ -246,8 +246,8 @@
           <li><strong>Los escaños de cada partido</strong> son su mediana: la mitad de las simulaciones le dan
             esa cifra o menos, y la otra mitad esa cifra o más. Como las medianas no tienen por qué sumar el total
             de la cámara, se ajustan en proporción y se redondean para que lo sumen.</li>
-          <li><strong>El intervalo del 95 %</strong> de los escaños deja fuera el 2,5 % de las simulaciones más
-            bajas y el 2,5 % de las más altas. El del voto que acompaña a cada partido se calcula directamente
+          <li><strong>El intervalo del 95%</strong> de los escaños deja fuera el 2,5% de las simulaciones más
+            bajas y el 2,5% de las más altas. El del voto que acompaña a cada partido se calcula directamente
             con los errores del sorteo, sin pasar por el reparto.</li>
           <li><strong>Las probabilidades</strong> son la fracción de simulaciones en que algo ocurre: que un
             partido obtenga al menos un escaño, que sea el que más tiene o que un bloque o una coalición sume la
@@ -259,7 +259,7 @@
         </ul>
         <p>
           {% if figures.coverage %}{% set first = figures.coverage[0] %}
-          En el <a href="{{ method_href('backtest') }}">backtest</a> de las generales, el intervalo del 95 % del voto
+          En el <a href="{{ method_href('backtest') }}">backtest</a> de las generales, el intervalo del 95% del voto
           contiene el resultado el {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de
           la votación.
           {% else %}

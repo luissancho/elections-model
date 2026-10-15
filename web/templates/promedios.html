@@ -63,7 +63,7 @@
           {% endif %}
           <div class="chart hemi" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
           {% if lead %}
-          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}supera la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}{% if lead.p_first is not none %} · P(primero) <b>{{ lead.p_first|prob(0) }}</b>{% endif %}</p>
+          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}supera la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}{% if lead.p_first is not none %} · P(primero) <b>{{ lead.p_first|prob }}</b>{% endif %}</p>
           {% endif %}
           {% call m.how() %}
           <p>
@@ -83,7 +83,7 @@
                   <th scope="col">% Voto</th>
                   <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   <th scope="col">Escaños</th>
-                  <th scope="col">Rango 95 %</th>
+                  <th scope="col">Rango 95%</th>
                   <th scope="col">P(primero)</th>
                 </tr>
               </thead>
@@ -120,12 +120,12 @@
                   <th scope="col">% Voto</th>
                   <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   <th scope="col">Escaños</th>
-                  <th scope="col">Rango 95 %</th>
+                  <th scope="col">Rango 95%</th>
                   <th scope="col">P(mayoría)</th>
                 </tr>
               </thead>
               <tbody>
-                {% set block_max = block_result_rows|map(attribute='pct')|reject('none')|max if block_result_rows else 0 %}
+                {% set block_max = block_result_rows|map(attribute='pct')|reject('none')|max if block_result_rows else 0%}
                 {% for row in block_result_rows %}
                 {% set r = row.seats_lo|rng(row.seats_hi, row.seats, n_seats, majority) %}
                 <tr>

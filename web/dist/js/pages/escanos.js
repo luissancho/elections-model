@@ -18,7 +18,7 @@ const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 /** Height of each ridge row, in px: compact, so the card does not take two screens (phase 8). */
 const RIDGE_ROW_HEIGHT = 64;
 
-/** Shared seat axis of the ridges, as a share of the chamber: parties up to 60 %, blocks up to 80 % (Luis, 2026-10-14). */
+/** Shared seat axis of the ridges, as a share of the chamber: parties up to 60%, blocks up to 80% (Luis, 2026-10-14). */
 const PARTY_AXIS_SHARE = 0.6;
 const BLOCK_AXIS_SHARE = 0.8;
 
@@ -61,7 +61,7 @@ function wireCoalition(dist, majority) {
       result.textContent = [
         count,
         `mediana ${fmtInt(stats.median)} escaños`,
-        `rango 95 % ${fmtRange(stats.lo, stats.hi, 0)}`,
+        `rango 95% ${fmtRange(stats.lo, stats.hi, 0)}`,
         `mayoría absoluta (${fmtInt(majority)}): ${fmtProb(stats.pMajority)}`,
       ].join(' · ');
       renderHistogram(chart, values, {
@@ -82,7 +82,7 @@ function wireCoalition(dist, majority) {
 
 const CAPTION = {
   esc: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su '
-    + 'circunscripción. Pasa el ratón para ver el rango del 95 %.',
+    + 'circunscripción. Pasa el ratón para ver el rango del 95%.',
   ccaa: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de las '
     + 'provincias de la comunidad.',
   pct: 'Voto estimado en cada territorio; en CCAA, la media ponderada por los votos de la elección anterior.',
