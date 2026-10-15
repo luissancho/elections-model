@@ -23,7 +23,8 @@ const HOVER_SYMBOLS = {
 
 /**
  * Lines of the tooltip of one poll of the example: pollster (and sponsor), date and sample, the published and the
- * corrected figure, the total weight and its four factors.
+ * corrected figure, the total weight and its four factors, named as the columns of the list (F(kernel), F(solape),
+ * F(muestra), F(rating)).
  *
  * @param {object} row a row of the example (`pollster`, `sponsor`, `date`, `sample_size`, `pct`, `pct_adj`,
  *   `weight`, `weight_kernel`, `weight_over`, `weight_sample`, `weight_rating`)
@@ -35,8 +36,8 @@ export function pollLines(row, name) {
   const lines = pollTooltipLines({name: who, date: row.date, sample_size: row.sample_size}, [], {});
   lines.push(escapeText(`Publicado ${fmtPct(row.pct)} · corregido ${fmtPct(row.pct_adj)}`));
   lines.push(escapeText(`Peso ${fmtNum(row.weight, 2)}`));
-  lines.push(escapeText(`cercanía ${fmtNum(row.weight_kernel, 2)} · sobre. ${fmtNum(row.weight_over, 2)}`
-    + ` · muestra ${fmtNum(row.weight_sample, 2)} · rating ${fmtNum(row.weight_rating, 2)}`));
+  lines.push(escapeText(`F(kernel) ${fmtNum(row.weight_kernel, 2)} · F(solape) ${fmtNum(row.weight_over, 2)}`
+    + ` · F(muestra) ${fmtNum(row.weight_sample, 2)} · F(rating) ${fmtNum(row.weight_rating, 2)}`));
   return lines;
 }
 

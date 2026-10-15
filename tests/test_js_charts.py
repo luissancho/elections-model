@@ -244,7 +244,7 @@ def test_weights_option_sizes_the_polls_by_weight_and_draws_the_line_the_band_th
 def test_weights_poll_lines_name_the_sponsor_and_the_weight_factors():
     lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][0]))
     assert lines[0] == '<strong>GAD3 / ABC</strong>' and lines[1].endswith('· muestra 1200')   # es-ES: sin separador hasta 5 cifras
-    assert lines[2:] == ['Publicado 32,4% · corregido 32,9%', 'Peso 0,50', 'cercanía 0,64 · sobre. 1,00 · muestra 0,80 · rating 1,00']
+    assert lines[2:] == ['Publicado 32,4% · corregido 32,9%', 'Peso 0,50', 'F(kernel) 0,64 · F(solape) 1,00 · F(muestra) 0,80 · F(rating) 1,00']
     lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][1]))
     assert lines[0] == '<strong>Sigma Dos</strong>' and lines[1].endswith('· muestra –')
 
