@@ -15,6 +15,9 @@ DIST = os.path.join(ROOT, 'web', 'dist')
 ECHARTS = os.path.join(DIST, 'vendor', 'echarts-5.6.0.min.js')
 BULLSEYE_JS = pathlib.Path(DIST, 'js', 'charts', 'bullseye.js').as_uri()
 DIVERGING_JS = pathlib.Path(DIST, 'js', 'charts', 'diverging.js').as_uri()
+HEMICYCLE_JS = pathlib.Path(DIST, 'js', 'charts', 'hemicycle.js').as_uri()
+SERIES_JS = pathlib.Path(DIST, 'js', 'charts', 'series.js').as_uri()
+BASE_JS = pathlib.Path(DIST, 'js', 'charts', 'base.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -27,14 +30,16 @@ ROWS = [
 
 
 def run_js(expr, rows=ROWS):
-    """Evalúa `expr` con `b` (diana), `d` (divergentes) y `rows` definidos y devuelve su JSON (las funciones de la
-    opción se pierden en la serialización, como en `JSON.stringify`)."""
+    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema) y `rows`
+    definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
+    `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
-        'const b = await import("{}"); const d = await import("{}"); const rows = {}; '
+        'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
+        'const s = await import("{}"); const base = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
-    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, json.dumps(rows), expr)
+    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -51,7 +56,7 @@ def test_bullseye_names_the_axes_at_the_edges_and_draws_small_points():
     assert option['xAxis']['nameLocation'] == 'middle' and option['yAxis']['nameLocation'] == 'middle'
     # los ejes en los bordes (no sobre el cero) y la cruz del cero como series de línea, tras los tres anillos
     assert option['xAxis']['axisLine']['onZero'] is False and option['yAxis']['axisLine']['onZero'] is False
-    assert option['xAxis']['axisLabel'] == {'showMinLabel': False, 'showMaxLabel': False}
+    assert option['xAxis']['axisLabel'] == {'color': '#5a5f72', 'fontSize': 10.5, 'showMinLabel': False, 'showMaxLabel': False}
     lines = [s for s in option['series'] if s['type'] == 'line']
     assert len(lines) == 5 and lines[3]['data'] == [[-11, 0], [11, 0]] and lines[4]['data'] == [[0, -11], [0, 11]]
     points, labels = scatter(option)
@@ -107,3 +112,50 @@ def test_diverging_grows_each_side_from_zero_as_magnitudes():
     # sin color, el azul neutro de las barras
     option = run_js('d.divergingOption(rows, {left: {key: "Izquierda", name: "I"}, right: {key: "Derecha", name: "D"}})', rows=rows)
     assert option['series'][0]['color'] == '#3a6ea5'
+
+
+def test_hemicycle_puts_the_labels_inside_and_marks_the_majority():
+    option = run_js('h.hemicycleOption({PP: 140, PSOE: 107, VOX: 63, ERC: 9, BNG: 2}, {colors: {PP: "#1d84ce"}, nSeats: 350, majority: 176, width: 600, height: 330})')
+    pies = [s for s in option['series'] if s['type'] == 'pie']
+    assert len(pies) == 2 and pies[0]['startAngle'] == 180 and pies[0]['endAngle'] == 0
+    # R = max(40, min(600 / 2 - 10, 330 - 36)) = 290; centro en [width / 2, height - 12]
+    assert pies[0]['center'] == [300, 318] and pies[0]['radius'] == [150.8, 290]
+    assert pies[1]['center'] == [300, 318] and pies[1]['radius'] == [145, 300]
+    labels = {row['name']: row['label']['show'] for row in pies[0]['data']}
+    assert labels == {'PP': True, 'PSOE': True, 'VOX': True, 'ERC': False, 'BNG': False}
+    assert pies[0]['label']['position'] == 'inside' and pies[0]['labelLine']['show'] is False
+    assert pies[0]['label']['rich']['seats']['fontSize'] == 24 and 'Outfit' in pies[0]['label']['rich']['seats']['fontFamily']
+    assert pies[1]['silent'] is True and [round(d['value'], 2) for d in pies[1]['data']] == [175.65, 0.7, 173.65]
+    texts = [g for g in option['graphic'] if g['type'] == 'text']
+    assert [g['style']['text'] for g in texts] == ['176', '350', 'ESCAÑOS · MAYORÍA ABSOLUTA 176']
+    assert [g for g in option['graphic'] if g['type'] == 'rect'][0]['shape'] == {'x': 284, 'y': 4, 'width': 32, 'height': 16, 'r': 8}
+    assert pies[0]['data'][0]['itemStyle']['color'] == '#1d84ce' and pies[0]['data'][3]['itemStyle']['color'] == '#9e9e9e'
+    assert option['tooltip']['borderRadius'] == 10
+
+
+def test_hemicycle_shortens_the_centre_text_when_small():
+    option = run_js('h.hemicycleOption({PP: 140, PSOE: 107}, {nSeats: 350, majority: 176, width: 358, height: 197})')
+    assert [g['style']['text'] for g in option['graphic'] if g['type'] == 'text'] == ['176', '350', 'ESCAÑOS']
+
+
+def test_hemicycle_without_majority_has_no_mark():
+    option = run_js('h.hemicycleOption({A: 10, B: 5}, {nSeats: 15, width: 400, height: 220})')
+    assert len([s for s in option['series'] if s['type'] == 'pie']) == 1
+    assert [g['style']['text'] for g in option['graphic'] if g['type'] == 'text'] == ['15', 'ESCAÑOS']
+    assert [g for g in option['graphic'] if g['type'] == 'rect'] == []
+
+
+SERIES_ARGS = ("{series: {dates: ['2026-10-01', '2026-10-02'], parties: ['PP'], mean: {PP: [30, 31]}, lo: {PP: [29, 30]}, "
+               "hi: {PP: [31, 32]}}, polls: {parties: ['PP'], polls: []}, projection: null, parties: ['PP'], selected: null, "
+               "colors: {PP: '#1d84ce'}, asOf: '2026-10-02', when: '2026-10-02', window: 'all', legend: %s}")
+
+
+def test_series_hidden_legend_keeps_the_component_and_the_theme():
+    option = run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))
+    assert option['legend'] == {'show': False, 'selectedMode': True, 'type': 'scroll', 'top': 0, 'data': ['PP'], 'selected': {'PP': True}}
+    assert option['grid']['top'] == 24 and option['yAxis']['axisLabel']['color'] == '#5a5f72'
+    assert option['yAxis']['splitLine']['lineStyle']['color'] == 'rgba(0,0,0,.08)' and option['tooltip']['borderRadius'] == 10
+    shown = run_js('s.seriesOption(%s)' % (SERIES_ARGS % 'true'))
+    assert shown['legend']['show'] is True and shown['grid']['top'] == 40
+    theme = run_js('base.THEME')
+    assert theme['fontFamily'].startswith("'DM Sans'") and theme['headFamily'].startswith("'Outfit'") and theme['mutedColor'] == '#5a5f72'

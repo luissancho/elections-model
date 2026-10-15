@@ -1,5 +1,5 @@
 // Evolution of a published estimate (vote or seats), one line per party over the run timestamps.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
 
@@ -62,16 +62,17 @@ export function renderEvolution(el, runs, mode, {
     xAxis: {
       type: 'time',
       minInterval: DAY_MS,
-      axisLabel: {formatter: (value) => fmtDateShort(new Date(value).toISOString())},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(new Date(value).toISOString())},
       splitLine: {show: false},
     },
     yAxis: {
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (value) => formatter(value, 0)},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => formatter(value, 0)},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       formatter(params) {
         if (!params.length) {

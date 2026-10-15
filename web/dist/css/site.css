@@ -170,7 +170,9 @@ body:has(#freeze-banner:not([hidden])) #site-header, body:has(#freeze-banner:not
 /* Bottom tab bar (mobile only): five entries with an icon and a label; hidden on desktop */
 .tabbar { display: none; }
 
-/* Icons: an inline sprite at the start of the body, referenced with <use>; they take the text colour */
+/* Icons: an inline sprite at the start of the body (hidden: an SVG root ignores the `hidden` attribute in some
+   browsers), referenced with <use>; they take the text colour */
+svg[hidden] { display: none; }
 .icon, .tabbar a svg, .seg svg, .card-link .ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Event bar (Promedios and Escaños): name and date on the left, the tabs as a large segmented control under it,

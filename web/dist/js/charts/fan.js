@@ -1,5 +1,5 @@
 // Fan of the vote share by horizon: per party the mean line and the `lo–hi` band over the days ahead.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {bandSeries} from './series.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtInt, fmtPct, fmtRange} from '../format.js';
@@ -92,16 +92,17 @@ export function renderFan(el, fan, {
       type: 'value',
       min: Math.min(...horizons, markAt ?? Infinity),
       max: Math.max(...horizons, markAt ?? -Infinity),
-      axisLabel: {formatter: '{value} d'},
+      axisLabel: {...axisLabelStyle(), formatter: '{value} d'},
       splitLine: {show: false},
     },
     yAxis: {
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (v) => fmtPct(v, 0)},
+      axisLabel: {...axisLabelStyle(), formatter: (v) => fmtPct(v, 0)},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       confine: true,
       axisPointer: {type: 'line', snap: true},

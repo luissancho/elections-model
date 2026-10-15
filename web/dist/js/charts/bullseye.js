@@ -1,7 +1,7 @@
 // Bullseye of poll errors: one point per row, x = error of the first block, y = of the second. By default one grey
 // labelled point per election (house profile, event detail); with `groupOf`, one coloured series per group (the
 // error history colours the polls by election, with a legend).
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtDate, fmtNum} from '../format.js';
 
 const RINGS = [2, 5, 10];
@@ -112,7 +112,7 @@ function guideSeries(limit) {
     data: ringPoints(radius),
     showSymbol: false,
     silent: true,
-    lineStyle: {color: THEME.gridColor, width: 1},
+    lineStyle: {color: THEME.axisColor, width: 1},
     endLabel: {show: true, formatter: `±${radius}`, color: THEME.markColor},
     tooltip: {show: false},
   }));
@@ -121,7 +121,7 @@ function guideSeries(limit) {
     data,
     showSymbol: false,
     silent: true,
-    lineStyle: {color: THEME.gridColor, width: 1},
+    lineStyle: {color: THEME.axisColor, width: 1},
     tooltip: {show: false},
   }));
   return [...rings, ...cross];
@@ -165,7 +165,7 @@ export function bullseyeOption(rows, {
     axisLine: {onZero: false, show: true},
     axisTick: {show: false},
     // The extent is not a round number: its labels would crowd the last round tick.
-    axisLabel: {showMinLabel: false, showMaxLabel: false},
+    axisLabel: {...axisLabelStyle(), showMinLabel: false, showMaxLabel: false},
   });
   const option = {
     ...baseOption(),
@@ -173,6 +173,7 @@ export function bullseyeOption(rows, {
     xAxis: {...axis(xBlock), nameGap: 26},
     yAxis: {...axis(yBlock), nameGap: 34},
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'item',
       // A grouped point may carry the link to its election, so the tooltip must let the pointer in.
       enterable: groupOf !== null,

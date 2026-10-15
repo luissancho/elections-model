@@ -1,6 +1,6 @@
 // Diverging horizontal bars: two measures per row drawn from a common zero, one to the left and one to the right
 // (the error of the last poll of each house in each of the two blocks, as the notebook's deviation chart).
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {niceMax} from './bars.js';
 
 /**
@@ -63,7 +63,7 @@ export function divergingOption(rows, {left, right, formatter = String, axisForm
       max: limit,
       splitLine: {lineStyle: {color: THEME.gridColor}},
       // The extent is not a round number: its labels would crowd the last round tick.
-      axisLabel: {formatter: (x) => axisFormatter(Math.abs(x)), showMinLabel: false, showMaxLabel: false},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(Math.abs(x)), showMinLabel: false, showMaxLabel: false},
     },
     yAxis: {
       type: 'category',
@@ -73,6 +73,7 @@ export function divergingOption(rows, {left, right, formatter = String, axisForm
       axisLine: {onZero: false},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       axisPointer: {type: 'shadow'},
       formatter(params) {

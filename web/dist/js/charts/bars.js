@@ -1,5 +1,5 @@
 // Horizontal bars with an interval line per row (vote shares or seats).
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 
 /**
  * Round `x` up to a readable axis limit: a multiple of a fifth of its power of ten.
@@ -116,7 +116,7 @@ export function renderBars(el, rows, {
       min: 0,
       max: niceMax(top * 1.15),
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (x) => axisFormatter(x)},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => axisFormatter(x)},
     },
     yAxis: {
       type: 'category',
@@ -125,6 +125,7 @@ export function renderBars(el, rows, {
       axisTick: {show: false},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       axisPointer: {type: 'shadow'},
       formatter(params) {
