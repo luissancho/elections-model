@@ -100,8 +100,9 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: headline if name == 'headline' else fixture_data(name))
     status, _, body = call(api, '/metodo/promedio')
     text = re.sub(r'\s+', ' ', html(body))
-    assert status == 200 and 'El 9 oct 2026 el promedio del PP se leía en 33,1%' in text and 'publicado el 9 oct 2026' in text
-    assert '8 oct 2026' not in text                       # la fecha de lectura (as_of) no se imprime
+    card = text[text.index('id="ejemplo"'):text.index('id="voto-estimado"')]
+    assert status == 200 and 'El 9 oct 2026 el promedio del PP se leía en 33,1%' in card and 'publicado el 9 oct 2026' in card
+    assert '8 oct 2026' not in card                       # la fecha de lectura (as_of) no se imprime en la tarjeta
     assert initial(body)['example']['date'] == '2026-10-08'    # pero el gráfico sigue centrado en ella
 
 
