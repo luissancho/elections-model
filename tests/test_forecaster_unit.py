@@ -134,6 +134,7 @@ def _synthetic_forecaster(seed=0, noise=None):
     fc.reg_params = Forecaster.set_reg_params(fc, None)
     fc.he_params = Forecaster.set_he_params(fc, {'prior': None})
     fc.he_enabled, fc.house_effects, fc.date_fit_last = True, None, None
+    fc.max_fc = 0
     fc.disp_enabled, fc.disp_params, fc.dispersion = False, Forecaster.set_disp_params(fc, None), None
     fc.series_raw = None
     fc._set_series(series)
@@ -423,3 +424,88 @@ def test_fit_dispersion_penalizes_the_herder_by_default():
     assert (others > 0.9).all() and (others > disp.loc[4, 'factor']).all()
     herd = fc.measure_herding(names=['PP', 'PSOE'])
     assert herd.loc[4, 'p_value'] < 0.01 and (herd.loc[[1, 2, 3], 'p_value'] > 0.01).all()
+
+
+# --- Fase 9: los pesos de los sondeos en un día (`weights_at`) ---
+def test_weights_at_matches_the_fitted_average_and_its_band_on_the_same_grid():
+    fc, _, _ = _synthetic_forecaster()
+    fc.fit_forecast(names=['PP'], max_fc=10)
+    when = fc.date_fit_last
+    out = fc.weights_at('PP')                       # date=None → date_fit_last
+    assert fc.max_fc == 10 and out['stats']['date'] == when
+    cell = fc.fc_stat.loc[when, 'PP']
+    assert out['stats']['mean'] == pytest.approx(fc.forecast.loc[when, 'PP'])
+    assert out['stats']['cmin'] == pytest.approx(cell['cmin']) and out['stats']['cmax'] == pytest.approx(cell['cmax'])
+    assert out['stats']['err'] == pytest.approx(cell['err']) and out['stats']['nobs'] == cell['nobs']
+    assert out['stats']['neff'] == pytest.approx(cell['neff']) and out['stats']['bandwidth'] > 0
+    polls = out['polls']
+    assert len(polls) == cell['nobs'] and polls.index.is_monotonic_increasing
+    assert list(polls.columns) == ['pollster_id', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight',
+                                   'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating']
+    assert np.allclose(polls['weight'], polls['weight_kernel'] * polls['weight_over'] * polls['weight_sample'] * polls['weight_rating'])
+    assert np.allclose(polls['pct'], fc.fc_series_raw.loc[polls.index, 'PP'])     # lo publicado
+    assert np.allclose(polls['pct_adj'], fc.fc_series.loc[polls.index, 'PP'])     # lo que ajusta la recta
+    assert not np.allclose(polls['pct'], polls['pct_adj']) and polls['sponsor'].isnull().all()
+    line, kernel = out['line'], out['kernel']
+    assert line.index[-1] == when and (line.index.to_series().diff().dropna() == pd.Timedelta(days=1)).all()
+    assert line.loc[when, 'mean'] == pytest.approx(out['stats']['mean'])
+    assert line.index[0] <= polls.index[0]                       # la ventana empieza en el primer sondeo con kernel apreciable
+    assert kernel.index.equals(line.index) and kernel.loc[when] == pytest.approx(1.0) and kernel.max() <= 1.0
+    assert kernel.iloc[0] < kernel.loc[when]
+
+
+def test_weights_at_reads_a_party_without_recent_polls_at_the_end_of_its_grid():
+    fc, _, _ = _synthetic_forecaster()
+    dates = fc.series.index.get_level_values('date')
+    cut = fc.date_last - pd.Timedelta(days=60)
+    fc.series.loc[dates > cut, 'PSOE'] = np.nan
+    fc.series_raw.loc[dates > cut, 'PSOE'] = np.nan
+    fc.fit_forecast(names=['PP', 'PSOE'], max_fc=10, fillna=True)
+    last = fc.series.loc[fc.series['PSOE'].notnull()].index.get_level_values('date').max()
+    end = last + pd.Timedelta(days=10)
+    out = fc.weights_at('PSOE')
+    assert end < fc.date_fit_last and out['stats']['date'] == end
+    assert out['stats']['mean'] == pytest.approx(fc.forecast.loc[end, 'PSOE'])
+    assert out['line'].index[-1] == end and out['polls'].index.max() <= last
+
+
+def test_weights_at_returns_none_without_three_polls_or_before_the_first():
+    fc, _, _ = _synthetic_forecaster()
+    assert fc.weights_at('PP', date='2025-12-01') is None
+    dates = fc.series.index.get_level_values('date')
+    fc.series.loc[dates > dates.min() + pd.Timedelta(days=2), 'PSOE'] = np.nan   # quedan dos sondeos (días 1 y 3)
+    with pytest.warns(UserWarning):
+        assert fc.weights_at('PSOE') is None
+
+
+def test_print_weights_keeps_its_columns_and_plot_weights_draws_the_daily_kernel(monkeypatch):
+    monkeypatch.setattr('mtpy.lib.forecaster.plot_figure', lambda **kwargs: None)   # `plot_figure` vacía la figura
+    fc, _, _ = _synthetic_forecaster()
+    out = fc.weights_at('PP', date='2026-06-01')
+    table = fc.print_weights('PP', date='2026-06-01', show=False)
+    assert list(table.columns) == ['date', 'pollster', 'weight', 'tfs', 'tte', 'sample_size', 'weight_kernel',
+                                   'weight_over', 'weight_sample', 'weight_rating']
+    assert len(table) == len(out['polls']) and table['tfs'].min() == 0 and table['tte'].min() == 0
+    assert table['date'].iloc[0] == out['polls'].index[0].strftime('%d-%b')
+    assert np.allclose(table['weight'], out['polls']['weight'])
+    _, ax = matplotlib.pyplot.subplots()
+    fc.plot_weights('PP', date='2026-06-01', show=False, ax=ax)
+    twin = [a for a in ax.figure.axes if a is not ax][0]
+    assert len(ax.collections) == 1 and len(ax.collections[0].get_offsets()) == len(out['polls'])
+    assert len(twin.lines) == 1 and len(twin.lines[0].get_xdata()) == len(out['kernel'])
+    matplotlib.pyplot.close('all')
+
+
+def test_weights_at_window_covers_every_poll_of_the_regression():
+    """Un sondeo lejano con mucho peso entra en la regresión aunque su kernel baje de 0,01: la ventana de la recta,
+    la campana y el eje debe cubrirlo (revisión final de la fase 9)."""
+    fc, _, _ = _synthetic_forecaster()
+    fc.reg_params = Forecaster.set_reg_params(fc, {'bw_type': 'fixed', 'bw': 30})
+    first = fc.series.index[0]
+    fc.series.loc[first, 'weight'] = 50.
+    date = first[0] + pd.Timedelta(days=96)          # kernel exp(-(96/30)²/2) ≈ 0,006 < 0,01
+    out = fc.weights_at('PP', date=date)
+    polls, line = out['polls'], out['line']
+    assert polls.index.min() == first[0] and polls['weight_kernel'].min() < 1e-2
+    assert line.index[0] <= polls.index.min() and line.index[-1] >= max(polls.index.max(), date)
+    assert out['kernel'].index.equals(line.index) and out['stats']['bandwidth'] == 30.

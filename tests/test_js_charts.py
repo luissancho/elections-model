@@ -19,6 +19,8 @@ HEMICYCLE_JS = pathlib.Path(DIST, 'js', 'charts', 'hemicycle.js').as_uri()
 SERIES_JS = pathlib.Path(DIST, 'js', 'charts', 'series.js').as_uri()
 BASE_JS = pathlib.Path(DIST, 'js', 'charts', 'base.js').as_uri()
 RIDGE_JS = pathlib.Path(DIST, 'js', 'charts', 'ridge.js').as_uri()
+PATH_JS = pathlib.Path(DIST, 'js', 'charts', 'path.js').as_uri()
+WEIGHTS_JS = pathlib.Path(DIST, 'js', 'charts', 'weights.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -38,9 +40,11 @@ def run_js(expr, rows=ROWS):
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
-        'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); const rows = {}; '
+        'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); '
+        'const p = await import("{}"); const w = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
-    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, json.dumps(rows), expr)
+    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
+             WEIGHTS_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -165,3 +169,93 @@ def test_series_hidden_legend_keeps_the_component_and_the_theme():
 def test_ridge_rows_are_taller_on_desktop():
     assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
     assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64
+
+
+PATH_POINTS = [
+    {'event_date': '2021-05-04', 'scopes': ['es-md'], 'label': '4 may 2021 · Madrid', 'kind': 'regional', 'n_polls': 7, 'rating': 71.0},
+    {'event_date': '2023-07-23', 'scopes': ['es'], 'label': 'Generales 2023', 'kind': 'general', 'n_polls': 14, 'rating': 80.0},
+    {'event_date': '2024-05-12', 'scopes': ['es-ct'], 'label': '12 may 2024 · Cataluña', 'kind': 'regional', 'n_polls': 4, 'rating': None},
+]
+PATH_TODAY = {'event_date': '2026-10-15', 'label': 'Hoy', 'kind': 'today', 'rating': 82.4}
+
+
+def test_rating_path_runs_from_zero_to_a_hundred_with_coloured_points_and_a_dashed_tail_to_today():
+    option = run_js('p.ratingPathOption(rows, {today: %s, colors: {general: "#1d4f86", regional: "#c0672e"}})'
+                    % json.dumps(PATH_TODAY), rows=PATH_POINTS)
+    assert option['xAxis']['type'] == 'time' and option['yAxis']['min'] == 0 and option['yAxis']['max'] == 100
+    names = [s['name'] for s in option['series']]
+    assert names == ['Rating', 'Generales', 'Autonómicas', 'Hoy']
+    line, general, regional, tail = option['series']
+    # la línea une los puntos con rating (el de Cataluña, sin rating, no está) y no lleva símbolos
+    assert line['type'] == 'line' and line['showSymbol'] is False and line['data'] == [['2021-05-04', 71.0], ['2023-07-23', 80.0]]
+    assert general['type'] == 'scatter' and general['color'] == '#1d4f86' and [p['row']['label'] for p in general['data']] == ['Generales 2023']
+    assert regional['type'] == 'scatter' and regional['color'] == '#c0672e' and [p['value'] for p in regional['data']] == [['2021-05-04', 71.0]]
+    # el tramo final: discontinuo desde la última elección hasta hoy, con un punto hueco solo en hoy
+    assert tail['type'] == 'line' and tail['lineStyle']['type'] == 'dashed'
+    assert [p['value'] for p in tail['data']] == [['2023-07-23', 80.0], ['2026-10-15', 82.4]]
+    assert tail['data'][0]['symbol'] == 'none' and tail['data'][1]['symbol'] == 'emptyCircle'
+    assert option['legend']['data'] == ['Generales', 'Autonómicas', 'Hoy'] and option['tooltip']['trigger'] == 'item'
+
+
+def test_rating_path_without_today_or_regional_points_keeps_only_what_it_has():
+    option = run_js('p.ratingPathOption(rows, {colors: {general: "#1d4f86", regional: "#c0672e"}})', rows=PATH_POINTS[1:2])
+    assert [s['name'] for s in option['series']] == ['Rating', 'Generales'] and option['legend']['data'] == ['Generales']
+
+
+def test_rating_path_ticks_show_the_year_on_new_year_and_the_day_otherwise():
+    # ECharts places the ticks of a time axis at local midnight: 1 January must read as the year, not "31 dic"
+    labels = run_js('[p.tickLabel(new Date(2024, 0, 1).getTime()), p.tickLabel(new Date(2024, 4, 12).getTime())]')
+    assert labels == ['2024', '12 may']
+
+
+# --- Fase 9: el gráfico de los pesos (`charts/weights.js`) ---
+EXAMPLE = {
+    'name': 'PP', 'color': '#1d84ce', 'date': '2026-10-08',
+    'stats': {'date': '2026-10-08', 'mean': 33.1, 'lo': 32.4, 'hi': 33.8, 'err': 0.35, 'nobs': 2, 'neff': 1.8, 'bandwidth': 42.0},
+    'rows': [
+        {'date': '2026-09-24', 'pollster': 'GAD3', 'sponsor': 'ABC', 'sample_size': 1200, 'pct': 32.4, 'pct_adj': 32.9,
+         'weight': 0.5, 'weight_kernel': 0.64, 'weight_over': 1.0, 'weight_sample': 0.8, 'weight_rating': 1.0},
+        {'date': '2026-10-05', 'pollster': 'Sigma Dos', 'sponsor': None, 'sample_size': None, 'pct': 33.1, 'pct_adj': 33.0,
+         'weight': 1.0, 'weight_kernel': 0.98, 'weight_over': 1.0, 'weight_sample': 1.0, 'weight_rating': 1.0},
+    ],
+    'line': {'dates': ['2026-09-24', '2026-10-01', '2026-10-08'], 'mean': [32.8, 32.95, 33.1],
+             'lo': [32.1, 32.25, 32.4], 'hi': [33.5, 33.65, 33.8]},
+    'kernel': {'dates': ['2026-09-24', '2026-10-01', '2026-10-08'], 'values': [0.946, 0.986, 1.0]},
+}
+
+
+def test_weights_option_sizes_the_polls_by_weight_and_draws_the_line_the_band_the_kernel_and_the_guides():
+    option = run_js('w.weightsOption(%s)' % json.dumps(EXAMPLE))
+    assert [s['name'] for s in option['series']] == ['Recta del día', 'Banda 95 %', 'Banda 95 %', 'Sondeos', 'Kernel', 'marks']
+    line, band, points, kernel, marks = option['series'][0], option['series'][2], option['series'][3], option['series'][4], option['series'][5]
+    assert line['color'] == '#1d84ce' and line['lineStyle']['width'] == 2 and line['data'][2][1] == 33.1
+    assert band['areaStyle'] == {'color': '#1d84ce', 'opacity': 0.15} and band['stack'] == 'band:weights'
+    assert [p['symbolSize'] for p in points['data']] == [13, 20]
+    assert [p['itemStyle']['opacity'] for p in points['data']] == [0.625, 1] and points['data'][1]['value'][1:] == [33.1, 1]
+    assert kernel['yAxisIndex'] == 1 and kernel['lineStyle']['type'] == 'dashed' and kernel['data'][2][1] == 1.0
+    assert option['yAxis'][1]['max'] == 1 and option['yAxis'][1]['show'] is False and option['yAxis'][0]['scale'] is True
+    assert option['yAxis'][0]['position'] == 'right' and option['grid']['right'] == 48 and option['grid']['left'] == 16   # los ticks del % a la derecha
+    day = run_js('s.dayTime("2026-10-08")')
+    assert marks['markLine']['data'] == [{'xAxis': day}, {'yAxis': 33.1}] and marks['markLine']['label'] == {'show': False}
+    assert option['xAxis']['min'] == run_js('s.dayTime("2026-09-24")') and option['xAxis']['max'] == day
+    assert option['legend']['data'] == ['Sondeos', 'Recta del día', 'Banda 95 %', 'Kernel'] and option['tooltip']['trigger'] == 'item'
+
+
+def test_weights_poll_lines_name_the_sponsor_and_the_weight_factors():
+    lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][0]))
+    assert lines[0] == '<strong>GAD3 / ABC</strong>' and lines[1].endswith('· muestra 1200')   # es-ES: sin separador hasta 5 cifras
+    assert lines[2:] == ['Publicado 32,4% · corregido 32,9%', 'Peso 0,50', 'F(kernel) 0,64 · F(solape) 1,00 · F(muestra) 0,80 · F(rating) 1,00']
+    lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][1]))
+    assert lines[0] == '<strong>Sigma Dos</strong>' and lines[1].endswith('· muestra –')
+
+
+def test_weights_option_gives_the_line_and_the_kernel_hover_symbols_for_their_tooltips():
+    option = run_js('w.weightsOption(%s)' % json.dumps(EXAMPLE))
+    for series in (option['series'][0], option['series'][4]):   # la recta y la campana
+        assert series['showSymbol'] is True and series['symbol'] == 'circle' and series['symbolSize'] == 8
+        assert series['itemStyle']['opacity'] == 0 and series['emphasis']['itemStyle']['opacity'] == 1
+
+
+def test_weights_kernel_line_names_the_factor():
+    assert run_js('w.kernelLine(0.946)') == 'F(kernel) 0,95'
+    assert run_js('w.kernelLine(null)') == 'F(kernel) –'

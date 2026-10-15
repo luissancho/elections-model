@@ -26,11 +26,11 @@ site/v1/
         csv/ pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
     runs/{scope}/history.json                   headline de cada run, ascendente por run_id
     runs/{scope}/{run_id}/
-        meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json
+        meta.json headline.json series.json polls.json fan.json house-effects.json dispersion.json weights.json
         {nowcast,forecast}/
             vote.json summary.json dist.json districts.json scenario.json projection.json
         csv/
-            series.csv polls.csv fan.csv house-effects.csv dispersion.csv
+            series.csv polls.csv fan.csv house-effects.csv dispersion.csv weights.csv
             {nowcast,forecast}-{vote,summary,dist,districts,scenario,projection}.csv
 ```
 
@@ -163,6 +163,33 @@ calculó.
 
 `data`: `rows` con las 9 columnas `DISP_COLUMNS`: `pollster_id, pollster, n, ss_obs, ss_exp, ratio_raw,
 ratio, herd_ratio, factor` (todas menos las tres primeras a 3 decimales). CSV `csv/dispersion.csv`.
+
+### `weights`
+
+Los sondeos que pesan en el promedio el día en que el run lee el voto estimado, con la recta local de ese día.
+Enmienda 2026-10-15 (fase 9): los runs anteriores no la tienen. Fuente: `Forecaster.weights_at(name, date)`
+leído en `sim.as_of` (en un run normal, `date_fit_last`; en uno retrospectivo o en la última semana, antes),
+con la rejilla y el error agrupado de `fit`, así que la recta leída ese día es el promedio publicado.
+
+`data`: `date` (el día leído), `parties` (los partidos con ajuste), `rows`, `line`, `kernel` y `stats`.
+
+- `rows`: formato largo, una fila por partido y sondeo de la regresión de ese día, con las 13 columnas
+  `WEIGHTS_COLUMNS`: `name, date, pollster_id, pollster, sponsor, sample_size, pct, pct_adj, weight,
+  weight_kernel, weight_over, weight_sample, weight_rating`. `pct` es el voto publicado y `pct_adj` el neto del
+  efecto de casa (el que ajusta la recta); `weight` es `weight_kernel` por el peso del sondeo, que es el producto
+  de `weight_over`, `weight_sample` (con la dispersión de la casa dentro) y `weight_rating`. Porcentajes a 1
+  decimal, pesos a 3.
+- `line`: `{partido: {dates, mean, lo, hi}}`, la recta local del día y su banda del 95 %, día a día en la
+  ventana (desde el primero entre los sondeos con kernel apreciable y los de `rows`, hasta el día leído). Columnar,
+  como `series`.
+- `kernel`: `{partido: {dates, values}}`, la campana del kernel centrada en el día leído, en `[0, 1]` (3
+  decimales), en los mismos días que `line`.
+- `stats`: `{partido: {date, mean, lo, hi, err, nobs, neff, bandwidth}}`: el día leído para ese partido (solo
+  difiere de `date` si su rejilla acaba antes), el promedio, la banda, su error, los sondeos de la regresión
+  (`nobs`, entero), a cuántos equivalen por sus pesos (`neff`, 1 decimal) y la anchura del kernel ese día en días
+  (`bandwidth`, 1 decimal).
+
+CSV `csv/weights.csv`: la tabla `rows`. La recta y la campana no tienen gemelo CSV.
 
 ## Ficheros por modo
 
@@ -401,7 +428,7 @@ código es `ROUTES` en `mtpy/lib/webapi.py` y los controladores `mtpy/controller
 | `/api/v1/scopes` | catálogo `data/es-scopes.csv` cruzado con el manifest (ver abajo) | `public, max-age=60` |
 | `/api/v1/forecast/{scope}` | `meta.json` del run (atajo de `/forecast/{scope}/meta`) | 60 s, o inmutable con `?run=` |
 | `/api/v1/forecast/{scope}/runs` | `runs/{scope}/history.json` | `public, max-age=60` |
-| `/api/v1/forecast/{scope}/{part}` | `part` ∈ `meta`, `headline`, `series`, `polls`, `fan`, `house-effects`, `dispersion` | 60 s, o inmutable con `?run=` |
+| `/api/v1/forecast/{scope}/{part}` | `part` ∈ `meta`, `headline`, `series`, `polls`, `fan`, `house-effects`, `dispersion`, `weights` (enmienda 2026-10-15) | 60 s, o inmutable con `?run=` |
 | `/api/v1/forecast/{scope}/{mode}/{part}` | `mode` ∈ `nowcast`, `forecast`; `part` ∈ `vote`, `summary`, `dist`, `districts`, `scenario`, `projection` | 60 s, o inmutable con `?run=` |
 
 Enmienda 2026-10-10 (fase 4): diez rutas más, de dos controladores. `Data` lee las tablas de la base de
@@ -450,7 +477,7 @@ entre peticiones.
 
 - `run`: `YYYYMMDD-HHMMSS` (UTC). Vacío o ausente equivale al último run del ámbito.
 - `format`: `json` (por defecto) o `csv`. Solo hay gemelo CSV para `series`, `polls`, `fan`,
-  `house-effects` y `dispersion`, y para las seis partes de cada modo; `meta` y `headline` no lo tienen.
+  `house-effects`, `dispersion` y `weights`, y para las seis partes de cada modo; `meta` y `headline` no lo tienen.
   El CSV se sirve como `text/csv` con `Content-Disposition: attachment; filename="..."`, con nombre
   `{scope}-{run}-{part}.csv` o `{scope}-{run}-{mode}-{part}.csv`.
 

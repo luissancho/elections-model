@@ -24,7 +24,8 @@ from .queries import (
     QUERY_CACHE_SIZE, check_event, database, database_host, frame_to_csv, frame_to_records, get_drift,
     get_event_dates, get_event_results, get_events, get_herding, get_house_effects, get_next_event_date,
     get_parties, get_poll_series, get_pollsters, get_ratings, polls_event, query_drift, query_events,
-    query_herding, query_house_effects, query_parties, query_polls, query_pollster, query_pollsters,
+    query_herding, query_house_effects, query_parties, query_polls, query_pollster, query_pollster_path,
+    query_pollsters,
     query_ratings, query_results, ratings_event,
 )
 

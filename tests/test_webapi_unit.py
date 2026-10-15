@@ -623,3 +623,19 @@ def test_manifest_is_parsed_once_per_ttl(site_app, monkeypatch):
     s.manifest_data()
     s.manifest()
     assert len(calls) == 1 and s.manifest_data()['scopes'] and isinstance(s.manifest(), bytes)
+
+
+def test_query_pollster_path_reads_both_tables_once_per_pollster(fresh_app, monkeypatch):
+    """El camino al rating de una casa: sus ratings en todos los ámbitos y las elecciones que sondeó, cada tabla leída
+    una vez por casa."""
+    use_database(fresh_app)
+    calls = []
+    monkeypatch.setattr(webapi.queries, 'get_pollster_ratings', lambda pollster_id: calls.append(('ratings', pollster_id)) or pd.DataFrame({
+        'event_scope': ['es'], 'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [pollster_id], 'rating': [80.0]}))
+    monkeypatch.setattr(webapi.queries, 'get_pollster_events', lambda pollster_id: calls.append(('events', pollster_id)) or pd.DataFrame({
+        'event_scope': ['es'], 'event_date': pd.to_datetime(['2023-07-23']), 'n_polls': [14]}))
+    path = webapi.query_pollster_path(2)
+    assert path == {'ratings': [{'event_scope': 'es', 'event_date': '2023-07-23', 'pollster_id': 2, 'rating': 80.0}],
+                    'events': [{'event_scope': 'es', 'event_date': '2023-07-23', 'n_polls': 14}]}
+    assert webapi.query_pollster_path(2) == path and webapi.query_pollster_path(3)['ratings'][0]['pollster_id'] == 3
+    assert calls == [('ratings', 2), ('events', 2), ('ratings', 3), ('events', 3)]

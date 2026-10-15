@@ -910,8 +910,30 @@ def fake_houses(monkeypatch, name='CIS'):
         'pollster_id': [2, 2, 2], 'pollster': ['GAD3', 'GAD3', 'GAD3'],
         'n': [14, 17, 9], 'ratio': [0.781, 0.705, 0.912], 'p_value': [0.034, 0.012, 0.21],
     })
+    # el camino al rating: los ratings de la casa en todos los ámbitos (las próximas elecciones incluidas) y las
+    # elecciones que sondeó; GAD3 sondeó Madrid 2021, Madrid y Aragón el 28-M de 2023 y las generales de 2023
+    path_ratings = pd.DataFrame({
+        'event_scope': ['es', 'es', 'es-md', 'es-md', 'es-ar', 'es-md', 'es', 'es'],
+        'event_date': pd.to_datetime(['2023-07-23', '2026-11-29', '2021-05-04', '2023-05-28', '2023-05-28', '2027-05-23',
+                                      '2019-11-10', '2023-07-23']),
+        'pollster_id': [2, 2, 2, 2, 2, 2, 1, 1],
+        'rating': [80.0, 82.37, 71.0, 78.5, 78.5, 82.37, 51.0, 53.0],
+        'rating_adj': [80.0, 83.1, 72.3, 77.9, 77.9, 83.1, 50.0, 52.0],
+    })
+    path_events = pd.DataFrame({
+        'event_scope': ['es', 'es-md', 'es-md', 'es-ar', 'es', 'es'],
+        'event_date': pd.to_datetime(['2023-07-23', '2021-05-04', '2023-05-28', '2023-05-28', '2019-11-10', '2023-07-23']),
+        'pollster_id': [2, 2, 2, 2, 1, 1],
+        'n_polls': [14, 7, 3, 2, 10, 12],
+        'error_avg': [1.3, 2.1, 1.8, 2.8, 1.9, 1.8], 'error_blocks': [1.5, -0.8, 0.6, -0.4, 2.5, 2.4],
+        'bias_dev_adj': [-0.2, -1.5, -2.0, 0.5, 2.5, 3.6],
+    })
     monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
+    monkeypatch.setattr(webapi.queries, 'get_pollster_ratings',
+                        lambda pollster_id: path_ratings[path_ratings.pollster_id == pollster_id].reset_index(drop=True))
+    monkeypatch.setattr(webapi.queries, 'get_pollster_events',
+                        lambda pollster_id: path_events[path_events.pollster_id == pollster_id].reset_index(drop=True))
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
@@ -988,7 +1010,11 @@ def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app)
     madrid = html(call(houses, '/casas', query='scope=es-md')[2])
     table = lambda page: re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert table(national) == table(madrid) and '82,4' in table(madrid)  # la columna Herding también es la nacional
-    assert 'no depende de ningún ámbito' in madrid and 'elección general del' in madrid
+    # la píldora del ranking lleva la fecha de la última actualización (la del run, como el pie), no la de la próxima
+    # elección general ni la de hoy (Luis, 2026-10-15)
+    assert 'no depende de ningún ámbito' in madrid and 'elección general del' not in madrid
+    pill = re.search(r'<span class="pill">actualizado el (\d{1,2} [a-z]+ \d{4})</span>', madrid)
+    assert pill and 'Actualizado: {} ({})'.format(RUN, pill.group(1)) in madrid  # la misma fecha que el pie
     assert 'href="/api/v1/ratings?scope=es&amp;format=csv"' in madrid and 'Ratings de la próxima elección general' in madrid
     ranking = table(madrid)
     assert 'href="/casas/gad3"' in ranking and 'scope=es-md&amp;id=' not in madrid  # el perfil es global: sin ámbito
@@ -1019,7 +1045,7 @@ def test_casa_profile_shows_the_path_bullseye_and_tables(houses):
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert 'id="profile-effects"' in page and 'id="profile-herding"' in page and 'Todas las encuestadoras' in page
     data = initial(call(houses, '/casas/gad3', query='scope=es')[2])
-    assert list(data) == ['state', 'meta', 'path', 'bullseye', 'blocks', 'scopes'] and data['path'][0]['event_date'] == '2023-07-23'
+    assert list(data) == ['state', 'meta', 'path', 'today', 'bullseye', 'blocks', 'scopes'] and data['path'][0]['event_date'] == '2021-05-04'
 
 
 @pytest.mark.parametrize('query, status, text', [('id=abc', 400, 'Encuestadora no válida'),
@@ -1070,13 +1096,14 @@ def test_casa_profile_tables_and_bullseye(houses):
     effects = page[page.index('id="profile-effects"'):]
     effects = effects[:effects.index('</table>')]
     # la próxima elección no tiene resultado; Madrid 2021 no está publicada y va con fecha y ámbito
-    assert effects.count('<tr>') == 3 and effects.index('4 may 2021 · Madrid') < effects.index('Generales 2023')
+    assert effects.count('<tr>') == 3 and effects.index('Generales 2023') < effects.index('4 may 2021 · Madrid')  # de nueva a antigua
     assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', effects) == ['Elección', 'PP', 'PSOE', 'MM']  # el catálogo primero
     herding = page[page.index('id="profile-herding"'):]
     assert herding[:herding.index('</table>')].count('<tr>') == 4 and '29 nov 2026 · España' in herding
     data = initial(body)
-    assert [row['event_date'] for row in data['path']] == ['2023-07-23', '2026-11-29']
-    assert list(data['path'][0]) == ['event_date', 'rating', 'rating_adj', 'error_blocks', 'bias_blocks', 'num_polls']
+    assert [row['event_date'] for row in data['path']] == ['2021-05-04', '2023-05-28', '2023-07-23']  # el gráfico, en orden
+    assert list(data['path'][0]) == ['event_date', 'scopes', 'label', 'kind', 'n_polls', 'error_avg', 'error_blocks',
+                                     'bias_dev_adj', 'rating', 'change']
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'year': 2023, 'days': 7, 'scope': 'es',
                                  'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24}]
     assert data['blocks'] == ['Derecha', 'Izquierda'] and data['scopes'] == [{'code': 'es', 'name': 'España'}]
@@ -1121,7 +1148,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page and 'id="bullseye-filter"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
     data = initial(body)
-    assert data['path'] == [] and data['bullseye'] == []
+    assert data['path'] == [] and data['today'] is None and data['bullseye'] == []
 
 
 def test_casa_profile_without_analysis_has_no_bullseye(houses_without_analysis):
@@ -1994,12 +2021,11 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
 
 def test_casa_profile_shows_the_magnitude_and_the_signed_margin(houses):
     page = html(call(houses, '/casas/cis')[2])
-    assert '<th scope="col">Sesgo del margen</th>' in page and 'Error de bloques' not in page
-    assert 'Sesgo de bloques' not in page and 'miden lo mismo' not in page and 'id="glosario"' in page
-    assert page.count('<td') == page.count('</td>')
+    assert 'Error de bloques' not in page and 'Sesgo de bloques' not in page and 'miden lo mismo' not in page
+    assert 'id="glosario"' in page and page.count('<td') == page.count('</td>')
     row = page[page.index('id="path-table"'):]
     row = row[row.index('<tbody>'):]
-    assert row[:row.index('</tr>')].count('<td') == 5
+    assert row[:row.index('</tr>')].count('<td') == 7  # Elección, Sondeos, las tres medidas, Rating y Cambio (2026-10-15)
 
 
 # Fase 7b, tarea 1: terminología pública, siglas, sin control de modo, fecha de hoy en el título, "Cómo leerlo"
@@ -2013,9 +2039,16 @@ def visible_text(page):
     return re.sub(r'<[^>]+>', ' ', page)
 
 
+# The one public "casa": the title Luis asked for in the profile (2026-10-15).
+EFFECTS_TITLE = 'Efectos de casa por elección'
+# The other public "casa": the column header Luis asked for in the weights example of the method (2026-10-16).
+WEIGHTS_HOUSE_HEADER = '<th scope="col">Casa</th>'
+
+
 def assert_public_wording(page, label):
-    """Ni "casa/s" ni "patrocinador/es" en el texto visible, y ningún "Cómo leerlo" abierto."""
-    text = visible_text(page)
+    """Ni "casa/s" ni "patrocinador/es" en el texto visible (salvo el título `EFFECTS_TITLE` del perfil y la cabecera
+    `WEIGHTS_HOUSE_HEADER` del ejemplo del promedio), y ningún "Cómo leerlo" abierto."""
+    text = visible_text(page.replace(WEIGHTS_HOUSE_HEADER, ' ')).replace(EFFECTS_TITLE, ' ')
     assert not re.search(r'\b[Cc]asas?\b', text), (label, re.findall(r'.{40}\b[Cc]asas?\b.{20}', text)[:3])
     assert not re.search(r'\b[Pp]atrocinador(es)?\b', text), label
     assert '<details class="how" open' not in page, label
@@ -2636,7 +2669,7 @@ def test_casa_profile_has_a_clean_url_and_the_old_one_redirects(houses):
     status, _, body = call(houses, '/casas/gad3')
     page = html(body)
     assert status == 200 and '<title>Demoscopio · GAD3</title>' in page and 'id="profile-effects"' in page
-    assert initial(body)['path'][0]['event_date'] == '2023-07-23'
+    assert initial(body)['path'][0]['event_date'] == '2021-05-04'  # el primer punto del camino
     status, headers, _ = call(houses, '/casas', query='id=2')
     assert status == 301 and headers['location'] == '/casas/gad3' and headers['cache-control'] == 'no-store'
     status, headers, _ = call(houses, '/casas', query='scope=es&id=2&mode=forecast')
@@ -2691,3 +2724,225 @@ def test_history_and_home_link_the_elections_by_slug(history_two_scopes):
     home = html(call(history_two_scopes, '/')[2])
     past = home[home.index('id="past"'):]
     assert 'href="/elecciones/es/generales/2023-07"' in past and 'href="/elecciones/es/madrid/2021-05"' in past
+
+
+# Seguimiento 2026-10-15 (recorrido de Luis): en el perfil, los cuatro listados van de la elección más nueva a la
+# más antigua, la tarjeta de efectos se llama "Efectos de casa por elección" y encima va "Último sondeo por
+# elección": cuánto se separó el último sondeo de la casa del resultado de cada partido o, con el conmutador, de
+# la media de los últimos sondeos de las demás casas (los del histórico de errores).
+LAST_ROWS = [
+    {'scope': 'es', 'event_date': '2023-07-23', 'pollster': 'GAD3', 'days': 7},
+    {'scope': 'es', 'event_date': '2023-07-23', 'pollster': 'Sigma Dos', 'days': 8},
+    {'scope': 'es', 'event_date': '2023-07-23', 'pollster': 'CIS', 'days': 12},  # su sondeo del ciclo es del día 10
+]
+LAST_CYCLE = {'parties': ['PP', 'PSOE', 'VOX'], 'polls': [
+    {'date': '2023-07-10', 'pollster': 'CIS', 'PP': 31.2, 'PSOE': 32.4, 'VOX': 14.0},
+    {'date': '2023-07-15', 'pollster': '40dB', 'PP': 33.5, 'PSOE': 29.9, 'VOX': 13.1},  # sin fila en el análisis
+    {'date': '2023-07-15', 'pollster': 'Sigma Dos', 'PP': 32.1, 'PSOE': 31.3, 'VOX': 12.0},
+    {'date': '2023-07-16', 'pollster': 'GAD3', 'PP': 34.1, 'PSOE': 30.3, 'VOX': None},
+    {'date': '2023-07-16', 'pollster': 'GAD3', 'PP': 36.0, 'PSOE': 28.0, 'VOX': 10.0},  # segundo del mismo día: no cuenta
+]}
+LAST_RESULTS = {'rows': [{'party': 'PP', 'pct': 33.06}, {'party': 'PSOE', 'pct': 31.44}, {'party': 'Cs', 'pct': 0.13}]}
+
+
+def test_last_poll_records_measure_the_last_poll_against_the_result_and_the_other_houses():
+    records = pages.last_poll_records('es', LAST_ROWS, LAST_CYCLE, LAST_RESULTS, 'GAD3')
+    assert records == [
+        {'event_scope': 'es', 'event_date': '2023-07-23', 'party': 'PP', 'result': 1.04, 'consensus': 2.0},
+        {'event_scope': 'es', 'event_date': '2023-07-23', 'party': 'PSOE', 'result': -1.14, 'consensus': -1.0},
+        {'event_scope': 'es', 'event_date': '2023-07-23', 'party': 'VOX', 'result': None, 'consensus': None},
+    ]
+    # para Sigma Dos la única otra casa con su último sondeo en el ciclo es GAD3, que no da VOX; VOX tampoco está en
+    # el resultado publicado
+    records = pages.last_poll_records('es', LAST_ROWS, LAST_CYCLE, LAST_RESULTS, 'Sigma Dos')
+    assert [(row['party'], row['result'], row['consensus']) for row in records] == [
+        ('PP', -0.96, -2.0), ('PSOE', -0.14, 1.0), ('VOX', None, None)]
+
+
+def test_last_poll_records_without_the_poll_the_cycle_or_the_results():
+    assert pages.last_poll_records('es', LAST_ROWS, LAST_CYCLE, LAST_RESULTS, 'CIS') == []  # no está en el ciclo
+    assert pages.last_poll_records('es', LAST_ROWS, None, LAST_RESULTS, 'GAD3') == []
+    assert pages.last_poll_records('es', [], LAST_CYCLE, LAST_RESULTS, 'GAD3') == []  # sin fila en el análisis
+    records = pages.last_poll_records('es', LAST_ROWS, LAST_CYCLE, None, 'GAD3')
+    assert [(row['result'], row['consensus']) for row in records] == [(None, 2.0), (None, -1.0), (None, None)]
+
+
+def test_profile_rows_can_run_from_the_newest_event():
+    records = [{'event_date': '2019-11-10', 'n': 1}, {'event_date': '2026-11-29', 'n': 2}, {'event_date': '2023-07-23', 'n': 3}]
+    assert [row['n'] for row in pages.profile_rows(records, ('event_date', 'n'))] == [1, 3, 2]
+    assert [row['n'] for row in pages.profile_rows(records, ('event_date', 'n'), newest_first=True)] == [2, 3, 1]
+
+
+def test_effects_table_runs_from_the_newest_election():
+    records = [{'event_date': '2019-11-10', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': 0.4},
+               {'event_date': '2023-07-23', 'event_scope': 'es-md', 'party': 'PP', 'dev_result_c': 0.2},
+               {'event_date': '2023-07-23', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': 1.5}]
+    rows = pages.effects_table(records)['rows']
+    assert [(row['event_date'], row['scope']) for row in rows] == [('2023-07-23', 'es'), ('2023-07-23', 'es-md'), ('2019-11-10', 'es')]
+
+
+def test_casa_profile_lists_run_from_the_newest_election_to_the_oldest(houses, fresh_app):
+    """Los cuatro listados del perfil van de la elección más nueva a la más antigua: el camino al rating (la próxima
+    elección, la primera), la diana, los efectos (las dos vistas) y el rebaño; el gráfico del camino sigue en orden."""
+    write_event(fresh_app.fs, date='2019-11-10')  # una segunda elección con su fila en el análisis: dos en la diana
+    data = fixture_data('poll-errors')
+    data['rows'].append(dict(data['rows'][0], event_date='2019-11-10', event='2019-10N', days=9))
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es', 'poll-errors'), 'poll-errors', data, 'es')
+    status, _, body = call(houses, '/casas/gad3')
+    page = html(body)
+    assert status == 200
+    path = re.search(r'<table id="path-table">(.*?)</table>', page, re.S).group(1)
+    assert path.index('Generales 2023') < path.index('4 may 2021 · Madrid') and 'de la más nueva a la más antigua' in path
+    assert 'Hoy' not in path  # el rating de hoy es el final de la última elección; lo marca el gráfico
+    bullseye = re.search(r'<table id="bullseye-table">(.*?)</table>', page, re.S).group(1)
+    assert bullseye.count('<tr>') == 3 and bullseye.index('23 jul 2023') < bullseye.index('10 nov 2019')
+    effects = re.search(r'<table id="profile-effects">(.*?)</table>', page, re.S).group(1)
+    assert effects.index('Generales 2023') < effects.index('4 may 2021 · Madrid')
+    cycle = re.search(r'<table id="profile-effects-cycle">(.*?)</table>', page, re.S).group(1)
+    assert cycle.index('29 nov 2026') < cycle.index('Generales 2023') < cycle.index('4 may 2021 · Madrid')
+    herding = re.search(r'<table id="profile-herding">(.*?)</table>', page, re.S).group(1)
+    assert herding.index('29 nov 2026') < herding.index('Generales 2023') < herding.index('4 may 2021 · Madrid')
+    data = initial(body)
+    assert [row['event_date'] for row in data['bullseye']] == ['2023-07-23', '2019-11-10']
+    assert [row['event_date'] for row in data['path']] == ['2021-05-04', '2023-05-28', '2023-07-23']
+
+
+def test_casa_profile_shows_the_last_poll_by_election_over_the_house_effects(houses, fresh_app):
+    """Encima de "Efectos de casa por elección" (antes "de encuestadora"), la tarjeta del último sondeo: cuánto se
+    separó de cada partido frente al resultado o, con el conmutador, frente a la media de los últimos sondeos de las
+    demás casas; los sondeos son los del histórico de errores, leídos del ciclo publicado de cada elección."""
+    data = fixture_data('event-cycle')
+    data['polls'][1] = dict(data['polls'][1], pollster_id=4, pollster='Sigma Dos', PP=32.1, PSOE=31.3, VOX=12.0)
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_event('es', '2023-07-23', 'cycle'), 'event-cycle', data, 'es')
+    page = html(call(houses, '/casas/gad3')[2])
+    assert 'Efectos de casa por elección' in page and 'Efectos de encuestadora por elección' not in page
+    assert page.index('id="bullseye"') < page.index('id="last"') < page.index('id="effects"') < page.index('id="herding"')
+    card = page[page.index('id="last"'):page.index('id="effects"')]
+    assert '<h2>Último sondeo por elección</h2>' in card
+    assert '<fieldset id="last-view" class="seg" hidden>' in card
+    assert 'name="lview" value="resultado" checked' in card and 'name="lview" value="consenso"' in card
+    result = re.search(r'<table id="profile-last">(.*?)</table>', card, re.S).group(1)
+    consensus = re.search(r'<table id="profile-last-consensus">(.*?)</table>', card, re.S).group(1)
+    # VOX no tiene valor en ninguna fila: fuera de las columnas (2026-10-15)
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', result) == ['Elección', 'PP', 'PSOE']
+    assert re.findall(r'<td[^>]*>([^<]*)</td>', result) == ['Generales 2023', '1,0', '-1,1']
+    assert re.findall(r'<td[^>]*>([^<]*)</td>', consensus) == ['Generales 2023', '2,0', '-1,0']
+    # el fondo es más rojo cuanto mayor la desviación en cualquier sentido, hasta 8 puntos
+    from mtpy.lib.pages.filters import shade
+    assert '<td class="cell-shade" style="background-color: {}">-1,1</td>'.format(shade(1.14, 0, 8, '#d62728')) in result
+    assert '<td class="cell-shade" style="background-color: {}">2,0</td>'.format(shade(2.0, 0, 8, '#d62728')) in consensus
+    assert '<div class="table-wrap" id="profile-last-consensus-wrap" hidden>' in card
+    assert 'sondeo menos resultado' in card and 'demás encuestadoras' in card and 'más rojo' in card
+    # una casa sin sondeos en las elecciones analizadas: aviso en vez de tablas
+    page = html(call(houses, '/casas/nueva')[2])
+    card = page[page.index('id="last"'):page.index('id="effects"')]
+    assert 'no tiene sondeos en las elecciones analizadas' in card and 'id="profile-last"' not in card
+
+
+def test_casa_profile_last_poll_card_without_analysis(houses_without_analysis):
+    page = html(call(houses_without_analysis, '/casas/gad3')[2])
+    card = page[page.index('id="last"'):page.index('id="effects"')]
+    assert 'Análisis no publicado todavía' in card and 'id="profile-last"' not in card
+
+
+# Seguimiento 2026-10-15 (recorrido de Luis): "Camino al rating" rehecho. El gráfico es el rating con el que la casa
+# llegó a cada elección que sondeó, de cualquier ámbito (las del mismo día, fundidas), de 0 a 100, hasta hoy; la
+# tabla lleva las mismas filas, de la más nueva a la más antigua, con "Hoy" la primera, y «Qué mide cada columna»
+# define justo sus columnas.
+PATH_RATINGS = [
+    {'event_scope': 'es', 'event_date': '2023-07-23', 'rating': 80.0, 'rating_adj': 80.5},
+    {'event_scope': 'es', 'event_date': '2026-11-29', 'rating': 82.4, 'rating_adj': 83.1},
+    {'event_scope': 'es-md', 'event_date': '2021-05-04', 'rating': 71.0, 'rating_adj': 70.2},
+    {'event_scope': 'es-md', 'event_date': '2023-05-28', 'rating': 78.5, 'rating_adj': 77.9},
+    {'event_scope': 'es-ar', 'event_date': '2023-05-28', 'rating': 78.5, 'rating_adj': 77.9},
+    {'event_scope': 'es-md', 'event_date': '2027-05-23', 'rating': 82.4, 'rating_adj': 83.1},
+]
+PATH_EVENTS = [
+    {'event_scope': 'es', 'event_date': '2023-07-23', 'n_polls': 14, 'error_avg': 1.3, 'error_blocks': 1.5, 'bias_dev_adj': -0.2},
+    {'event_scope': 'es-md', 'event_date': '2021-05-04', 'n_polls': 7, 'error_avg': 2.1, 'error_blocks': -0.8, 'bias_dev_adj': -1.5},
+    {'event_scope': 'es-md', 'event_date': '2023-05-28', 'n_polls': 3, 'error_avg': 1.8, 'error_blocks': 0.6, 'bias_dev_adj': -2.0},
+    {'event_scope': 'es-ar', 'event_date': '2023-05-28', 'n_polls': 2, 'error_avg': 2.8, 'error_blocks': -0.4, 'bias_dev_adj': 0.5},
+    {'event_scope': 'es-ct', 'event_date': '2024-05-12', 'n_polls': 4, 'error_avg': 1.1, 'error_blocks': None,
+     'bias_dev_adj': None},  # sin rating
+    {'event_scope': 'es-an', 'event_date': '2026-05-17', 'n_polls': 4, 'error_avg': 0.9, 'error_blocks': 0.1,
+     'bias_dev_adj': -1.8},  # tras "hoy"
+]
+PATH_SCOPES = {'es': 'España', 'es-an': 'Andalucía', 'es-ar': 'Aragón', 'es-ct': 'Cataluña', 'es-md': 'Madrid'}
+
+
+def path_label(scope, date):
+    return 'Generales 2023' if (scope, date) == ('es', '2023-07-23') else '{} · {}'.format(pages.fmt_date(date), PATH_SCOPES[scope])
+
+
+def test_rating_path_has_a_point_per_polled_election_date_up_to_today():
+    path = pages.rating_path(PATH_RATINGS, PATH_EVENTS, path_label, PATH_SCOPES, list(PATH_SCOPES), date(2025, 1, 1))
+    assert list(path) == ['points', 'today']
+    # las medidas de una fecha con varios ámbitos: la media de sus sondeos, ponderada por ámbito; el rating es el que le
+    # quedó tras ese evento (el del siguiente cálculo, que ya lo incluye) y el cambio, frente al que tenía al llegar (la
+    # fila de ese evento o, sin ella, la última anterior)
+    assert path['points'] == [
+        {'event_date': '2021-05-04', 'scopes': ['es-md'], 'label': '4 may 2021 · Madrid', 'kind': 'regional', 'n_polls': 7,
+         'error_avg': 2.1, 'error_blocks': -0.8, 'bias_dev_adj': -1.5, 'rating': 78.5, 'change': 7.5},
+        {'event_date': '2023-05-28', 'scopes': ['es-ar', 'es-md'], 'label': '28 may 2023 · Aragón y Madrid', 'kind': 'regional',
+         'n_polls': 5, 'error_avg': 2.2, 'error_blocks': 0.2, 'bias_dev_adj': -1.0, 'rating': 80.0, 'change': 1.5},
+        {'event_date': '2023-07-23', 'scopes': ['es'], 'label': 'Generales 2023', 'kind': 'general', 'n_polls': 14,
+         'error_avg': 1.3, 'error_blocks': 1.5, 'bias_dev_adj': -0.2, 'rating': 82.4, 'change': 2.4},
+        {'event_date': '2024-05-12', 'scopes': ['es-ct'], 'label': '12 may 2024 · Cataluña', 'kind': 'regional', 'n_polls': 4,
+         'error_avg': 1.1, 'error_blocks': None, 'bias_dev_adj': None, 'rating': 82.4, 'change': 2.4},
+    ]
+    # hoy: el rating de la próxima elección general, sin sondeos, medidas ni cambio
+    assert path['today'] == {'event_date': '2025-01-01', 'scopes': [], 'label': 'Hoy', 'kind': 'today', 'n_polls': None,
+                             'error_avg': None, 'error_blocks': None, 'bias_dev_adj': None, 'rating': 82.4, 'change': None}
+
+
+def test_rating_path_names_many_scopes_and_falls_back_without_a_national_row():
+    events = [{'event_scope': scope, 'event_date': '2015-05-24', 'n_polls': 1} for scope in ('es-an', 'es-ar', 'es-ct', 'es-md')]
+    ratings = [{'event_scope': 'es-md', 'event_date': '2015-05-24', 'rating': 58.6, 'rating_adj': 39.8},
+               {'event_scope': 'es-ct', 'event_date': '2028-06-26', 'rating': 70.0, 'rating_adj': 71.0}]
+    path = pages.rating_path(ratings, events, path_label, PATH_SCOPES, list(PATH_SCOPES), date(2026, 10, 15))
+    assert [point['label'] for point in path['points']] == ['24 may 2015 · Andalucía, Aragón y 2 más']
+    assert path['points'][0]['n_polls'] == 4 and path['points'][0]['rating'] == 70.0  # el siguiente cálculo tras esa fecha
+    assert path['points'][0]['change'] == 11.4  # frente al rating con el que llegó (58,6)
+    assert path['today']['rating'] == 70.0 and path['today']['event_date'] == '2026-10-15'  # la última fila, sin nacional
+    empty = pages.rating_path([], events, path_label, PATH_SCOPES, list(PATH_SCOPES), date(2026, 10, 15))
+    assert empty['today'] is None and empty['points'][0]['rating'] is None and empty['points'][0]['change'] is None
+
+
+def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_columns(houses):
+    status, _, body = call(houses, '/casas/gad3')
+    page = html(body)
+    assert status == 200 and 'id="rating-path"' in page
+    card = page[page.index('id="path"'):page.index('id="bullseye"')]
+    table = re.search(r'<table id="path-table">(.*?)</table>', card, re.S).group(1)
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', table) == [
+        'Elección', 'Sondeos', 'Error Medio', 'Sesgo Margen', 'Diferencial', 'Rating', 'Cambio']
+    cells = lambda row: [re.sub(r'<[^>]+>', '', cell).strip() for cell in re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)]
+    trs = re.findall(r'<tr>(.*?)</tr>', table, re.S)[1:]
+    assert [cells(row) for row in trs] == [['Generales 2023', '14', '1,3', '1,5', '-0,2', '82,4', '2,4'],
+                                            ['28 may 2023 · Aragón y Madrid', '5', '2,2', '0,2', '-1,0', '80,0', '1,5'],
+                                            ['4 may 2021 · Madrid', '7', '2,1', '-0,8', '-1,5', '78,5', '7,5']]
+    # los formatos del ranking: rojos del error medio (0 a 8), barra divergente del diferencial (±2, verde a la izquierda
+    # y rojo a la derecha) y rojo o verde del cambio (hasta ±20)
+    from mtpy.lib.pages.filters import shade
+    first = trs[0]
+    assert '<td class="cell-shade" style="background-color: {}">1,3</td>'.format(shade(1.3, 0, 8, '#d62728')) in first
+    assert '<td class="cell-bar cell-diverging"><i class="fill pos" style="left: 45.0%; width: 5.0%"></i><span>-0,2</span></td>' in first
+    assert '<td class="cell-shade" style="background-color: {}">2,4</td>'.format(shade(2.37, 0, 20, '#2ca02c')) in first
+    glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', card, re.S).group(1)
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo del margen', 'Diferencial', 'Rating', 'Cambio']
+    assert 'a Derecha' in glossary and 'sube el rating' in glossary and 'Error de bloques' not in card and 'Rebaño' not in card
+    assert 'de 0 a 100' in card and 'hasta hoy' in card
+    data = initial(body)
+    assert [(point['event_date'], point['kind'], point['n_polls']) for point in data['path']] == [
+        ('2021-05-04', 'regional', 7), ('2023-05-28', 'regional', 5), ('2023-07-23', 'general', 14)]
+    assert data['today']['rating'] == 82.37 and data['today']['label'] == 'Hoy'
+
+
+def test_effects_table_drops_the_parties_without_any_value():
+    records = [{'event_date': '2023-07-23', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': 0.4, 'dev_cycle': 0.1},
+               {'event_date': '2023-07-23', 'event_scope': 'es', 'party': 'VOX', 'dev_result_c': None, 'dev_cycle': -0.3},
+               {'event_date': '2019-11-10', 'event_scope': 'es', 'party': 'VOX', 'dev_result_c': None, 'dev_cycle': None}]
+    result = pages.effects_table(records)
+    assert result['columns'] == ['PP'] and [row['cells'] for row in result['rows']] == [[0.4]]
+    cycle = pages.effects_table(records, key='dev_cycle')
+    assert cycle['columns'] == ['PP', 'VOX'] and [row['cells'] for row in cycle['rows']] == [[0.1, -0.3]]

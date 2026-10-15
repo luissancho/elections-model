@@ -15,6 +15,7 @@
         <a href="#efectos-de-casa">Los efectos de encuestadora</a>
         <a href="#regresion">La regresión local</a>
         <a href="#banda">La banda del promedio</a>
+        {% if example %}<a href="#ejemplo">Un ejemplo: el {{ example.name }} hoy</a>{% endif %}
         <a href="#voto-estimado">De las encuestas al voto estimado</a>
       </nav>
       {{ m.card_start('resumen', 'En resumen', 'El promedio de encuestas en cuatro ideas.') }}
@@ -200,6 +201,79 @@
           Por eso el resultado cae a menudo fuera de la banda sin que sea un fallo.
         </p>
       {{ m.card_end() }}
+      {% if example %}
+      {{ m.card_start('ejemplo', 'Un ejemplo: el promedio del ' ~ example.name ~ ' hoy', 'Los sondeos que aportan peso en el promedio del ' ~ example.name ~ ' publicado el ' ~ (example.published|date) ~ ' y la recta que se ajusta a ellos: lo que las secciones anteriores explican, con los datos a día de hoy.') }}
+        <p>
+          El {{ example.published|date }} el promedio del {{ example.name }} se establece en el {{ example.stats.mean|pct }},
+          con una banda del {{ example.stats.lo|pct }} al {{ example.stats.hi|pct }}. Se calcula a partir de
+          {{ example.stats.nobs|int }} sondeos, que por sus pesos equivalen a unos {{ example.stats.neff|num(1) }} sondeos
+          efectivos, penalizando los más antiguos a través del kernel gaussiano con un ancho de banda de
+          {{ example.stats.bandwidth|num(0) }} días.
+        </p>
+        <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} publicado el {{ example.published|date }}, con la recta local, su banda y la campana del kernel"></div>
+        <details class="weights-list" id="weights-list">
+          <summary>Ver los {{ example.n_rows }} sondeos</summary>
+          <div class="table-wrap">
+            <table class="et" id="weights-table">
+              <caption>Sondeos que entran en la recta del promedio publicado el {{ example.published|date }} y sus pesos, los más recientes primero.</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="f l">Fecha</th>
+                  <th scope="col">Casa</th>
+                  <th scope="col" title="Entrevistas del sondeo">Muestra</th>
+                  <th scope="col" title="Voto publicado para el partido">Predicción</th>
+                  <th scope="col" title="Peso total en la recta: el producto de los cuatro factores (barra de 0 a 3)">Peso</th>
+                  <th scope="col" title="Factor de cercanía al día: la campana del kernel">F(kernel)</th>
+                  <th scope="col" title="Factor de solape: la sobrerrepresentación de la encuestadora">F(solape)</th>
+                  <th scope="col" title="Factor de muestra, con la dispersión de la encuestadora dentro">F(muestra)</th>
+                  <th scope="col" title="Factor del rating de la encuestadora">F(rating)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in example.rows %}
+                <tr>
+                  <td class="f l">{{ row.date|date_short }}</td>
+                  <td><b>{{ row.pollster }}</b>{% if row.sponsor %} / {{ row.sponsor }}{% endif %}</td>
+                  <td>{{ row.sample_size|int }}</td>
+                  <td>{{ row.pct|pct }}</td>
+                  <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight|bar(0, 3) }}%"></i><span>{{ row.weight|num(2) }}</span></td>
+                  <td>{{ row.weight_kernel|num(2) }}</td>
+                  <td>{{ row.weight_over|num(2) }}</td>
+                  <td>{{ row.weight_sample|num(2) }}</td>
+                  <td>{{ row.weight_rating|num(2) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="scroll-hint">Desliza para ver más →</p>
+        </details>
+        {% call m.how() %}
+        <p>
+          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
+          ver quién lo hizo, cuándo y con qué peso. La recta es la que se ajusta a los sondeos el día en que se lee
+          el promedio, con su banda del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía
+          de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
+        </p>
+        <p>
+          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
+          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
+          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
+          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
+          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
+          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
+        </p>
+        <p>
+          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
+          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
+          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
+          puntos. La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
+          promedio</a>).
+        </p>
+        {% endcall %}
+        <p class="notice"><a href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
+      {{ m.card_end() }}
+      {% endif %}
       {{ m.card_start('voto-estimado', 'De las encuestas al voto estimado', 'El voto estimado de cada partido es el promedio corregido leído en la fecha de la estimación; su intervalo suma más errores que la banda.') }}
         <p>
           El promedio se lee en un día, la fecha de la estimación: normalmente el último que alcanza la línea, unos

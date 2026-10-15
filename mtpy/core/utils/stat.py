@@ -983,13 +983,36 @@ class LocalKernelEstimator(Estimator):
             **self.bw_kwargs
         )
 
+    def local_mask(
+        self,
+        kws: np.ndarray,
+        pos: int
+    ) -> np.ndarray:
+        """
+        Observations that enter the local regression at the prediction point `pos`.
+
+        Parameters
+        ----------
+        kws : np.ndarray
+            Pairwise kernel weights (`Kernel.get_weights`), one row per prediction point.
+        pos : int
+            Position of the prediction point.
+
+        Returns
+        -------
+        np.ndarray
+            Boolean mask, one entry per observation: the kernel weight times the (rescaled) observation weight
+            is at least `1e-2`.
+        """
+        return np.abs(kws[pos] * self.weights.squeeze()) >= 1e-2
+
     def get_local_estimator(
         self,
         kws: np.ndarray,
         pos: int
     ) -> Optional[LeastSquaresEstimator]:
         weights = kws[pos] * self.weights.squeeze()
-        vind = np.abs(weights) >= 1e-2
+        vind = self.local_mask(kws, pos)
 
         if not np.isfinite(self.endog[vind]).any():
             return

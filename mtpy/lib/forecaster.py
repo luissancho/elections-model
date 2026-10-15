@@ -13,7 +13,7 @@ from typing import Any, Optional
 from typing_extensions import Self
 
 from ..core.app import Core
-from ..core.utils.dates import add_delta, ts_from_delta
+from ..core.utils.dates import add_delta, ts_from_delta, ts_to_delta
 from ..core.utils.helpers import format_number
 from ..core.utils.stat import LocalKernelEstimator, Kernel
 from ..core.utils.dataviz import (
@@ -215,6 +215,7 @@ class Forecaster(Core):
         self.date_last = None  # Date of the last poll published for the current election event
         self.date_end = None  # Date of the current election event
         self.date_fit_last = None  # Last day with a fitted value (before any forward fill), see `fit_forecast`
+        self.max_fc = 0  # Days forecast after the last poll by the last `fit_forecast` (the grid of `fit`)
 
     @property
     def bmaps(self) -> dict[str, Any]:
@@ -619,6 +620,7 @@ class Forecaster(Core):
         if self.he_enabled and self.house_effects is None:
             self.fit_house_effects()
 
+        self.max_fc = max_fc
         names_ = tqdm(names) if self.verbose > 0 else names  # Show progress bar if verbose
         for name in names_:
             res = self.fit(name, max_fc=max_fc, ret_stat=True)
@@ -733,6 +735,122 @@ class Forecaster(Core):
         return self.forecast
 
     # --- Effective sample (M12) --------------------------------------------------------------------------
+
+    def weights_at(
+        self,
+        name: str,
+        date: Optional[str | pd.Timestamp] = None
+    ) -> Optional[dict[str, Any]]:
+        """
+        Polls that weigh on the average of a party or block on one day, with the local line of that day.
+
+        The estimator, its grid and its band are those of `fit`: the same kernel bandwidths (the adaptive
+        bandwidth depends on the whole grid) and the cluster-robust error by pollster, so the line read on `date`
+        is the published average of that day.
+
+        Parameters
+        ----------
+        name : str
+            Name of the party or block.
+        date : str or Timestamp, optional
+            Day on which the average is read. By default `date_fit_last` when the average is fitted, otherwise
+            the earliest of today and the last poll. A day after the end of the grid of the party (last usable
+            poll + `max_fc`) is read at that end.
+
+        Returns
+        -------
+        dict or None
+            `polls` (DataFrame indexed by date, ascending: the polls of the local regression of that day with
+            `pollster_id`, `pollster`, `sponsor`, `sample_size`, `pct` (as published), `pct_adj` (net of the
+            house effect), `weight` (kernel times poll weight), `weight_kernel`, `weight_over`, `weight_sample`
+            and `weight_rating`), `line` (daily DataFrame over the window: `mean`, `cmin`, `cmax`, `err`),
+            `kernel` (daily Series over the window, the Gaussian bell centred on the day, max 1) and `stats`
+            (`date`, `mean`, `cmin`, `cmax`, `err`, `nobs`, `neff`, `bandwidth` in days). `None` with fewer
+            than three usable polls or a `date` before the first one.
+        """
+        usable = self.fc_series[name].notnull() & (self.fc_series['weight'] > 0)
+        df = self.fc_series[usable]
+
+        if df.shape[0] < 3:
+            warnings.warn('Fewer than three usable polls for `{}`: no weights'.format(name))
+            return None
+
+        if date is not None:
+            date = pd.Timestamp(date)
+        elif self.date_fit_last is not None:
+            date = self.date_fit_last
+        else:
+            date = min(pd.to_datetime('now').floor('d', ambiguous=False), df.index.max())
+
+        if date < df.index.min():
+            return None
+
+        # The grid of `fit`: from the first usable poll to the last one plus `max_fc`
+        ix = self.fc_index
+        px = ix[(ix >= df.index.min()) & (ix <= add_delta(df.index.max(), f'P{self.max_fc}D'))]
+        date = min(date, px.max())
+
+        groups = df['pollster_id'].to_numpy() if self.reg_params.get('cov_type') == 'cluster' else None
+        est = LocalKernelEstimator(
+            df[name],
+            weights=df.weight.values,
+            groups=groups,
+            **self.reg_params
+        )
+        kws = est.build_pred(px).get_kernel().get_weights(est.pred)
+        pos = (date - px.min()).days
+
+        mask = est.local_mask(kws, pos)
+        loc_est = est.get_local_estimator(kws, pos)
+
+        if loc_est is None:
+            return None
+
+        # The polls of the regression of that day, as published and as fitted
+        polls = pd.DataFrame({
+            'pollster_id': df['pollster_id'],
+            'pollster': df['pollster'],
+            'sponsor': df['sponsor'] if 'sponsor' in df.columns else None,
+            'sample_size': df['sample_size'] if 'sample_size' in df.columns else None,
+            'pct': self.fc_series_raw.loc[usable, name].values,
+            'pct_adj': df[name],
+            'weight': kws[pos] * df.weight.values,
+            'weight_kernel': kws[pos],
+            'weight_over': df['weight_over'],
+            'weight_sample': df['weight_sample'],
+            'weight_rating': df['weight_rating']
+        }, index=df.index)[mask].sort_index()
+
+        # The window: every poll with an appreciable kernel weight, every poll of the regression (a heavy poll enters
+        # it with a smaller kernel) and `date`
+        near = df.index[kws[pos] >= 1e-2]
+        days = pd.date_range(min(near.min(), polls.index.min()), max(near.max(), polls.index.max(), date), freq='D')
+        deltas = np.asarray(ts_to_delta(days, dt_from=est.ranges[0][0], freq=est.ts_freq), dtype=float)
+
+        line = loc_est.fit(deltas, alpha=self.alpha)
+        line.index = days
+        line = line[['mean', 'cmin', 'cmax', 'err']]
+
+        kernel = est.get_kernel()
+        if kernel.bw_type == 'fixed':
+            bandwidth = float(kernel.bw[0])
+        else:
+            bandwidth = float(kernel.get_bw_adaptive(kernel.data[:, 0], kernel.weights, kernel.bw[0], p=est.pred[:, 0])[pos])
+
+        bell = pd.Series(Kernel.kernel_gaussian(deltas, est.pred[pos, 0], bandwidth).squeeze(), index=days)
+
+        stats = {
+            'date': date,
+            'mean': float(line.loc[date, 'mean']),
+            'cmin': float(line.loc[date, 'cmin']),
+            'cmax': float(line.loc[date, 'cmax']),
+            'err': float(line.loc[date, 'err']),
+            'nobs': int(loc_est.nobs),
+            'neff': float(loc_est.neff),
+            'bandwidth': bandwidth
+        }
+
+        return {'polls': polls, 'line': line, 'kernel': bell, 'stats': stats}
 
     def fit_dispersion(self) -> pd.DataFrame:
         """
@@ -1490,7 +1608,7 @@ class Forecaster(Core):
         name: str,
         date: Optional[str] = None,
         show: bool = True
-    ) -> None:
+    ) -> Optional[pd.DataFrame]:
         """
         Print a table with the weights for each poll that affects the estimation at a specific date.
 
@@ -1499,47 +1617,27 @@ class Forecaster(Core):
         name : str
             Name of the party or block to be fitted.
         date : str or datetime, optional
-            Date to choose as the center of the kernel window.
-            If `None`, the last available date will be used.
+            Date to choose as the center of the kernel window (see `weights_at` for the default).
         show : bool, optional
             Print the table.
+
+        Returns
+        -------
+        pd.DataFrame or None
+            With `show=False`, the table (`date`, `pollster`, `weight`, `tfs`, `tte`, `sample_size`,
+            `weight_kernel`, `weight_over`, `weight_sample`, `weight_rating`); `tfs` counts the days since the
+            first poll of the table and `tte` the days until the last one. `None` when `weights_at` has nothing.
         """
-        df = self.fc_series[self.fc_series[name].notnull()]
-        ix = self.fc_index[(self.fc_index >= df.index.min()) & (self.fc_index <= df.index.max())]
-        weights = df.weight.values
+        out = self.weights_at(name, date)
 
-        if date is None:
-            date = np.min([
-                pd.to_datetime('now').floor('d', ambiguous=False),
-                ix.max()
-            ])
+        if out is None:
+            return None
 
-        # Get the estimator instance
-        est = LocalKernelEstimator(
-            df.tfs,
-            weights=weights,
-            **self.reg_params
-        )
-
-        # Compute the pairwise kernel weights for each day in the index
-        kws = est.build_pred(ix).get_kernel().get_weights(est.pred)
-        # This kernel weights are combined with the poll weights in order to be used in the model
-        weights = kws * weights
-
-        # Get the index position of the specified date and assign the corresponding individual weights
-        pos = (pd.to_datetime(date) - ix.min()).days
-        df['weight_kernel'] = kws[pos]
-        df['weight'] = weights[pos]
-
-        # Remove polls with a weight lower than 1e-2, in order to speed up the computation without losing accuracy
-        df = df[df['weight'] >= 1e-2].reset_index()
-
-        # Format dates
+        df = out['polls'].reset_index()
+        df['tfs'] = (df.date - df.date.min()).dt.days
+        df['tte'] = (df.date.max() - df.date).dt.days
         df['date'] = df.date.dt.strftime('%d-%b')
-        df['tfs'] = df.tfs - df.tfs.min()
-        df['tte'] = df.tte - df.tte.min()
 
-        # Set result
         df = df[[
             'date', 'pollster', 'weight', 'tfs', 'tte', 'sample_size',
             'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating'
@@ -1600,7 +1698,9 @@ class Forecaster(Core):
         **kwargs
     ) -> None:
         """
-        Plot the weights for each poll that affects the estimation at a specific date.
+        Plot the weights for each poll that affects the estimation at a specific date: the polls sized and
+        shaded by their weight, the local line of that day with its band and the kernel bell on a twin axis
+        (see `weights_at`).
         """
         _plt_params = dict(
             freq='D', margin=0.05, legend=True, title=None, note=None
@@ -1609,44 +1709,18 @@ class Forecaster(Core):
             figsize=(20, 10)
         )
 
-        df = self.fc_series[self.fc_series[name].notnull()]
-        ix = self.fc_index[(self.fc_index >= df.index.min()) & (self.fc_index <= df.index.max())]
-        weights = df.weight.values
+        out = self.weights_at(name, date)
 
-        if date is None:
-            date = np.min([
-                pd.to_datetime('now').floor('d', ambiguous=False),
-                ix.max()
-            ])
+        if out is None:
+            return
 
         plt_params = get_params(_plt_params, None, 'plt_params', **kwargs)
         fig_params = get_params(_fig_params, None, 'fig_params', **kwargs)
 
-        # Get the estimator instance
-        est = LocalKernelEstimator(
-            df[name],
-            weights=weights,
-            **self.reg_params
-        )
-
-        # Compute the pairwise kernel weights for each day in the index
-        kws = est.build_pred(ix).get_kernel().get_weights(est.pred)
-        # This kernel weights are combined with the poll weights in order to be used in the model
-        weights = kws * weights
-
-        # Get the index position of the specified date and assign the corresponding individual weights
-        pos = (pd.to_datetime(date) - ix.min()).days
-        df['weight_kernel'] = kws[pos]
-        df['weight'] = weights[pos]
-
-        dt_from, dt_to = df.loc[df.weight_kernel >= 1e-2].index[[0, -1]]
-        df = df.loc[df.weight >= 1e-2].loc[dt_from:dt_to]
-
-        loc_est = est.get_local_estimator(kws, pos)
-        dr = loc_est.fit(np.arange(loc_est.ranges[0][0], loc_est.ranges[0][1] + 1), alpha=self.alpha)
+        df, dr, bell, stats = out['polls'], out['line'].copy(), out['kernel'], out['stats']
+        date = stats['date']
         dr['cint'] = dr['cmax'] - dr['mean']
-        dr.index = ts_from_delta(dr.index, dt_from=est.ranges[0][0], freq=est.ts_freq)
-        dr = dr.loc[dt_from:dt_to]
+        dt_from, dt_to = dr.index[0], dr.index[-1]
 
         cmap = build_color_seq_map('blue', beta=0.1)
         sw_scaled = df.weight / df.weight.max(axis=0)
@@ -1654,12 +1728,13 @@ class Forecaster(Core):
         s = (200 * (1 + sw_scaled)).values.round().astype(int)
 
         lbl_reg = 'Forecast: {} | CI 95%: {}'.format(
-            format_number(dr['mean'].loc[date]),
-            format_number(dr['cint'].loc[date])
+            format_number(stats['mean']),
+            format_number(stats['cmax'] - stats['mean'])
         )
-        lbl_score = 'Error: {}'.format(format_number(dr['err'].loc[date]))
+        lbl_score = 'Error: {}'.format(format_number(stats['err']))
 
         fig, ax = create_figure(ax=ax, **fig_params)
+        fig = fig if fig is not None else ax.figure  # `create_figure` gives no figure for a given axis
 
         col_params = {
             'mean': dict(cm=get_color('blue'), label=lbl_reg),
@@ -1667,12 +1742,12 @@ class Forecaster(Core):
             'cmax': dict(cm=get_color('yellow'), lw=2, ls='--', label=None)
         }
 
-        ax.axvline(pd.to_datetime(date), color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
-        ax.axhline(dr['mean'].loc[date], color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
+        ax.axvline(date, color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
+        ax.axhline(stats['mean'], color=get_color('grey-light'), ls='--', lw=2, alpha=0.5)
 
         ax.scatter(
             df.index.values,
-            df[name].values,
+            df['pct_adj'].values,
             s=s,
             marker='.',
             color=color,
@@ -1692,8 +1767,8 @@ class Forecaster(Core):
 
         ax2 = ax.twinx()
         ax2.plot(
-            df.index.values,
-            df.weight_kernel.values,
+            bell.index.values,
+            bell.values,
             color=get_color('purple-light'),
             lw=2,
             label='Kernel'

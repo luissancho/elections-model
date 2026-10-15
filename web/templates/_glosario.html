@@ -1,8 +1,14 @@
 {#- Glossary of the error measures (spec "Glosario de medidas de error"): one definition for every page that shows
     them. Needs `error_blocks` or `blocks` (the first block names the sign of the margin) and `with_herding` and optionally `with_block_error` (default true) (set them
-    before the include: `{% set with_herding = false %}`). -#}
+    before the include: `{% set with_herding = false %}`). `with_errors` (default true) drops the three error
+    measures and `with_rating` (default false) adds the columns of the rating path of a profile. -#}
 {%- set glossary_blocks = error_blocks if error_blocks is defined and error_blocks else (blocks if blocks is defined else []) %}
 <details class="how" id="glosario"><summary>Qué mide cada columna</summary><dl>
+  {% if with_rating is defined and with_rating %}
+  <dt>Sondeos</dt>
+  <dd>Cuántos sondeos publicó para esa elección de los que entran en el modelo; el error medio, el sesgo del margen y el diferencial son la media de esos sondeos.</dd>
+  {% endif %}
+  {% if with_errors is not defined or with_errors %}
   <dt>Error medio</dt>
   <dd>Distancia media, en puntos, entre el sondeo y el resultado de cada partido principal. Sin signo.</dd>
   {% if with_block_error is not defined or with_block_error %}
@@ -11,6 +17,15 @@
   {% endif %}
   <dt>Sesgo del margen</dt>
   <dd>El mismo error con signo: positivo, el sondeo daba más margen {{ 'a ' ~ glossary_blocks[0] if glossary_blocks else 'al primer bloque' }} del que hubo; negativo, menos.</dd>
+  {% endif %}
+  {% if with_rating is defined and with_rating %}
+  <dt>Diferencial</dt>
+  <dd>Cuánto se separó el sesgo de sus sondeos del de los sondeos comparables de esa elección (misma fecha y tamaño), en la escala del sesgo del modelo, no en puntos: negativo, menos sesgo que los demás, y eso sube el rating; positivo, más. Un 2 ya es una diferencia grande.</dd>
+  <dt>Rating</dt>
+  <dd>La nota, de 0 a 100, con la que quedó tras evaluar esa elección con todo su historial anterior, mezclada con su calidad previa: la que se le aplica hasta la siguiente. La de la primera fila es la de hoy, la que entra en el promedio.</dd>
+  <dt>Cambio</dt>
+  <dd>Cuánto subió o bajó el rating tras esa elección frente al que tenía al llegar.</dd>
+  {% endif %}
   {% if with_herding %}
   <dt>Rebaño</dt>
   <dd>Por debajo de 1, sus sondeos varían menos de lo que permite el azar.</dd>

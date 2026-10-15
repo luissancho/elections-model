@@ -1,17 +1,21 @@
 """
 Method page contexts: the landing page (``/metodo``) and its subpages (``/metodo/{section}``), with the live
-figures of the general election (simulations and backtest coverage) and the thresholds of the scopes catalogue.
+figures of the general election (simulations and backtest coverage), the thresholds of the scopes catalogue and,
+on the ``promedio`` subpage, the live example of the average (the ``weights`` part of the latest national run).
 """
 from typing import Optional
 
 from ...core.api import HttpError
 from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
-from .common import common_context, part
+from .common import api_url, common_context, part
 from .filters import _is_missing
 
 # Scope whose figures the method texts quote ("en las generales"): the texts have no scope filter.
 NATIONAL_SCOPE = 'es'
+# Keys of a row of the example that the chart needs (the island carries no more).
+ISLAND_ROW_KEYS = ('date', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight', 'weight_kernel',
+                   'weight_over', 'weight_sample', 'weight_rating')
 # Cross-cutting sections of the landing page, which belong to no question of the method.
 SECTIONS = (
     ('datos', 'Los datos'),
@@ -131,6 +135,61 @@ def national_figures() -> dict:
     }
 
 
+def weights_example() -> Optional[dict]:
+    """
+    The live example of the average: the polls that weigh on the average of the party leading the vote of the
+    latest national run, on the day that run read its estimate (the ``weights`` part).
+
+    Returns
+    -------
+    dict or None
+        ``name``, ``fullname``, ``color`` (from ``meta``), ``date`` (the day the average is read, the centre of
+        the kernel), ``published`` (the day of the run, ``run_at``, the date the texts show), ``run``, ``stats``
+        (those of the leader), ``rows`` (the rows of the leader, newest first), ``n_rows``, ``line`` and ``kernel``. ``None`` without a national run, when the run
+        has no ``weights`` part (published before the part existed), when the headline has no parties or when the
+        leader has no fit in the part.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than a 404.
+    """
+    try:
+        run = site().latest_run(NATIONAL_SCOPE)
+        headline = part(NATIONAL_SCOPE, run, 'headline')
+        parties = (headline.get('nowcast') or {}).get('parties') or []
+        if not parties:
+            return None
+        leader = max(parties, key=lambda row: row['pct'] if row.get('pct') is not None else float('-inf'))['name']
+        weights = part(NATIONAL_SCOPE, run, 'weights')
+    except HttpError as error:
+        if error.status != 404:
+            raise
+
+        return None
+
+    if leader not in (weights.get('parties') or []):
+        return None
+
+    catalogue = next((row for row in part(NATIONAL_SCOPE, run, 'meta').get('parties') or [] if row['name'] == leader), {})
+    # Newest first: the reader looks for the latest polls
+    rows = sorted((row for row in weights['rows'] if row['name'] == leader), key=lambda row: row['date'], reverse=True)
+
+    return {
+        'name': leader,
+        'fullname': catalogue.get('fullname'),
+        'color': catalogue.get('color'),
+        'date': weights['date'],
+        'published': (headline.get('run_at') or '')[:10] or weights['date'],
+        'run': run,
+        'stats': weights['stats'][leader],
+        'rows': rows,
+        'n_rows': len(rows),
+        'line': weights['line'][leader],
+        'kernel': weights['kernel'][leader],
+    }
+
+
 def metodo_context(state: dict) -> dict:
     """
     Template context of the method landing page.
@@ -180,7 +239,10 @@ def metodo_section_context(state: dict, section: str) -> dict:
     dict
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
-        ``section``.
+        ``section``. The ``promedio`` subpage adds ``example`` (``weights_example``, ``None`` without one),
+        ``example_csv`` (the CSV of the ``weights`` part) and, with an example, the ``initial`` island
+        (``state`` and the ``example`` slice the chart draws: ``name``, ``color``, ``date``, ``stats``, ``rows``
+        with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``).
 
     Raises
     ------
@@ -199,5 +261,21 @@ def metodo_section_context(state: dict, section: str) -> dict:
     context['figures'] = national_figures()
     context['thresholds'] = thresholds_rows()
     context['section'] = section
+
+    if section == 'promedio':
+        example = weights_example()
+        context['example'] = example
+        context['example_csv'] = api_url(NATIONAL_SCOPE, 'weights', fmt='csv')
+
+        if example is not None:
+            context['initial'] = {
+                'state': context['state'],
+                'example': {
+                    'name': example['name'], 'color': example['color'], 'date': example['date'],
+                    'stats': example['stats'],
+                    'rows': [{key: row.get(key) for key in ISLAND_ROW_KEYS} for row in example['rows']],
+                    'line': example['line'], 'kernel': example['kernel'],
+                },
+            }
 
     return context
