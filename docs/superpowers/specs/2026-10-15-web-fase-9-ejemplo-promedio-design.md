@@ -1,8 +1,11 @@
 # Web, fase 9: el ejemplo vivo del promedio en el método
 
-Fecha: 2026-10-15. Estado: descripción aprobada por Luis en el chat el 15 de octubre ("Nada que cambiar");
-revisión del constructor hecha el mismo día (tres preguntas, resueltas como decisiones mías en la sección
-"Decisiones tomadas tras la revisión"); documento pendiente de la lectura de Luis. Sigue a la fase 8
+Fecha: 2026-10-15. Estado: cerrada el 2026-10-15 en `dev` (plan
+`docs/superpowers/plans/2026-10-15-web-fase-9-ejemplo-promedio.md`, ocho commits desde `89b1f0d`; 856 tests).
+Descripción aprobada por Luis en el chat el 15 de octubre ("Nada que cambiar") y documento aprobado el mismo día
+("Adelante") tras la revisión del constructor (tres preguntas, resueltas como decisiones mías en la sección
+"Decisiones tomadas tras la revisión"). Pendiente de Luis: publicar un run (`publish forecast`) para que el bloque
+aparezca con datos reales. Sigue a la fase 8
 (`docs/superpowers/specs/2026-10-15-web-fase-8-rediseno-visual-design.md`). Esta spec solo describe lo que
 cambia respecto de lo que hay en `dev` (`ada3a17`).
 
