@@ -1,5 +1,5 @@
 // Heat map of the house effects: one row per pollster, one column per party or block.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtNum} from '../format.js';
 
 const NEGATIVE_COLOR = '#c0392b';
@@ -50,6 +50,7 @@ export function renderHeatmap(el, {columns, rows}, {formatter = (x) => fmtNum(x,
       formatter: (x) => formatter(x),
     },
     tooltip: {
+      ...tooltipStyle(),
       formatter(params) {
         const cell = rows[params.value[1]].cells[params.value[0]];
         return `<strong>${escapeHtml(rows[params.value[1]].pollster)} · ${escapeHtml(columns[params.value[0]])}</strong><br>`

@@ -1,46 +1,135 @@
 {% extends 'base.html' %}
 {% block title %}Inicio{% endblock %}
 {% block description %}Promedio de encuestas y simulación de escaños de las próximas elecciones generales y autonómicas de España.{% endblock %}
+{% block scripts %}
+  {% if initial is defined %}
+  <script type="module" src="/dist/js/pages/inicio.js"></script>
+  {% endif %}
+{% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
-    <div class="stack">
-      {{ m.headline(intro) }}
-      <section class="stack" id="events">
-        <h2>Próximas elecciones</h2>
-        {% set hero = cards[:1]|selectattr('published')|list %}
-        {% set rest = cards[hero|length:] %}
-        {% for card in hero %}
-        <div class="tile tile-hero">
-          {% include '_event_card.html' +%}
-        </div>
-        {% endfor %}
-        {% if rest %}
-        <div class="grid">
-          {% for card in rest %}
-          <div class="tile">
-            {% include '_event_card.html' +%}
+    <section class="hero" id="hero">
+      <div>
+        {% if hero %}
+        <span class="eyebrow">{{ hero.eyebrow }} · {{ hero.date|date }} · {% if hero.mode_label == 'Pronóstico definitivo' %}pronóstico definitivo{% elif hero.days_text %}{{ hero.days_text[:1]|lower ~ hero.days_text[1:] }}{% endif %}</span>
+        {% endif %}
+        <h1 class="hero-t">Todas las encuestas,<br>un solo <em>promedio</em>.</h1>
+        <p class="hero-p">{{ intro }}</p>
+        {% if hero %}
+        <article class="card hcard" id="hero-card">
+          <div class="hcard-top">
+            <div class="hcard-id">
+              {% if hero.flag %}<span class="flag"><svg viewBox="0 0 42 28" aria-hidden="true"><rect width="42" height="28" fill="#c60b1e"/><rect y="7" width="42" height="14" fill="#ffc400"/></svg></span>{% endif %}
+              <div><h2>{{ hero.title }}</h2><p>{{ hero.chamber }}{% if hero.n_seats %} · {{ hero.n_seats|int }} escaños{% endif %} · {{ hero.date|date }}</p></div>
+            </div>
+            <span class="pill brand">{{ hero.mode_label }}</span>
           </div>
+          {% if hero.leader %}
+          <div class="bignum"><b style="color: {{ hero.leader.color }}">{{ hero.leader.seats|int }}</b><span>{% if hero.n_seats %}de {{ hero.n_seats|int }} escaños {% else %}escaños {% endif %}para el <strong title="{{ hero.leader.fullname }}">{{ hero.leader.name }}</strong>, primer partido con el <strong>{{ hero.leader.pct|pct }}</strong> del voto</span></div>
+          {% endif %}
+          {% if hero.segments %}
+          <div class="seatbar" id="hero-seatbar">
+            <div class="trk">{% for segment in hero.segments %}<i style="width: {{ segment.width }}%; background: {{ segment.color }}" title="{{ segment.name }} {{ segment.seats|int }}"></i>{% endfor %}</div>
+            {% if hero.majority_pct %}<div class="mk" style="left: {{ hero.majority_pct }}%"><span>{{ hero.majority|int }} · mayoría absoluta</span></div>{% endif %}
+            {% if hero.ends %}<div class="ends">{% for end in hero.ends %}<span>{{ end.name }} {{ end.seats|int }}</span>{% endfor %}</div>{% endif %}
+          </div>
+          {% endif %}
+          <div class="chips">
+            {% if hero.chip %}
+            {% if hero.chip.reached %}<span class="chip ok">{{ hero.chip.block }}{% if hero.chip.seats is not none %} {{ hero.chip.seats|int }} escaños{% endif %} <small>· {{ hero.chip.p|prob }} de mayoría absoluta</small></span>
+            {% else %}<span class="chip">Sin mayoría clara <small>· {{ hero.chip.block }} {{ hero.chip.p|prob }}</small></span>{% endif %}
+            {% endif %}
+            {% for delta in hero.deltas %}<span class="chip">{{ delta.name }} {{ delta.text }} escaños <small>vs {{ hero.results_year }}</small></span>{% endfor %}
+          </div>
+          <div class="cta">
+            <a class="btn pri" href="{{ hero.href }}">Ver el promedio <span aria-hidden="true">→</span></a>
+            <a class="btn" href="{{ hero.href_seats }}">Escaños</a>
+            <span class="mut">Actualizado: {{ hero.run_at|date }}{% if hero.n_polls %} · {{ hero.n_polls|int }} sondeos{% if hero.n_pollsters %} de {{ hero.n_pollsters|int }} encuestadoras{% endif %}{% endif %}</span>
+          </div>
+        </article>
+        {% endif %}
+        {% if autonomics %}
+        <div class="sec-h"><h2>Autonómicas</h2><p>{{ autonomics|length }} {{ 'comunidad' if autonomics|length == 1 else 'comunidades' }} con pronóstico publicado, por fecha de elección.</p></div>
+        <div class="card rows" id="auto-rows">
+          {% for card in autonomics %}
+          <a class="row" href="{{ card.href }}">
+            <div><div class="n">{{ card.name }}</div><div class="d">{{ card.event_date|date }}{% if card.days_text %} · {{ card.days_text[:1]|lower ~ card.days_text[1:] }}{% endif %}</div></div>
+            {% if card.leader %}<span class="pill" title="{{ card.leader.fullname }}"><i class="dot" style="background: {{ card.leader.color }}"></i>{{ card.leader.name }} {{ card.leader.pct|pct }} · {{ card.leader.seats|int }} esc.</span>{% else %}<span class="pill">–</span>{% endif %}
+            <div class="maj">{% if card.majority %}{{ card.majority.block }}: <b>{{ card.majority.p|prob }}</b> de mayoría{% endif %}</div>
+            <span class="chev" aria-hidden="true">›</span>
+          </a>
           {% endfor %}
+          {% if unpublished %}<p class="row-foot">Sin pronóstico todavía: {{ unpublished|join(', ') }}.</p>{% endif %}
         </div>
         {% endif %}
-      </section>
-      {% if past %}
-      {{ m.card_start('past-events', 'Elecciones pasadas', 'Las elecciones ya celebradas con su análisis publicado, de la más reciente a la más antigua; cada una enlaza a su detalle.') }}
-        <ul class="link-list">
-          {% for event in past %}
-          <li><a href="{{ event.href }}">{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}</a></li>
-          {% endfor %}
-        </ul>
-      {{ m.card_end() }}
-      {% endif %}
-      <section class="stack" id="more" aria-labelledby="more-title">
-        <h2 id="more-title">Para entender el modelo</h2>
-        <p class="lead">Tres páginas comunes a todas las elecciones: cómo acertaron las encuestas, qué encuestadoras aciertan más y cómo funciona el modelo.</p>
-        <div class="grid grid-three">
-          <a class="card card-link" href="/elecciones"><h3>Histórico Errores</h3><p>Cuánto se equivocaron los sondeos en cada elección pasada.</p></a>
-          <a class="card card-link" href="/casas"><h3>Ranking Encuestadoras</h3><p>Qué encuestadoras aciertan más y cuáles se desvían.</p></a>
-          <a class="card card-link" href="/metodo"><h3>Método</h3><p>Cómo se promedian los sondeos y se simulan los escaños.</p></a>
-        </div>
-      </section>
+      </div>
+      <aside class="side">
+        {% if hero %}
+        <section class="card" id="side-hemicycle">
+          <header class="card-head split-head"><h2>{{ hero.side_title }}</h2>{% if hero.estimated %}<span class="pill">{{ hero.estimated|date }}</span>{% endif %}</header>
+          {% if initial is defined %}
+          <div class="chart hemi" id="hemicycle-mini" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
+          {% endif %}
+          {% if hero.top_seats %}
+          <div class="hemi-lg">
+            {% for row in hero.top_seats %}<span><i class="dot" style="background: {{ row.color }}"></i>{{ row.name }} <small>{{ row.seats|int }} · {{ row.pct|pct }}</small></span>{% endfor %}
+            {% if hero.others %}<span><i class="dot" style="background: #9e9e9e"></i>Otros <small>{{ hero.others|int }}</small></span>{% endif %}
+          </div>
+          {% endif %}
+          {% if hero.lead %}
+          <p class="lead-strip">Líder: <b>{{ hero.lead.name }}</b> · <b>{{ hero.lead.seats|int }} escaños</b> · {% if hero.lead.over %}supera la mayoría en <b>{{ (hero.lead.seats - hero.majority)|int }}</b>{% else %}le faltan <b>{{ hero.lead.short|int }}</b> para la mayoría{% endif %}{% if hero.lead.p_first is not none %} · P(primero) <b>{{ hero.lead.p_first|prob }}</b>{% endif %}</p>
+          {% endif %}
+        </section>
+        {% endif %}
+        {% if latest_polls %}
+        <section class="card" id="side-polls">
+          <header class="card-head split-head"><h2>Últimas encuestas</h2><a class="more-link" href="{{ hero.href }}#polls">Ver todas ›</a></header>
+          <div class="plist" id="latest-polls">
+            {% for poll in latest_polls %}
+            <a class="pr" href="{{ hero.href }}#polls"><span class="dt"><b>{{ poll.day }}</b>{{ poll.month }}</span><span class="who"><b>{{ poll.pollster }}</b><small>{% if poll.sponsor %}para {{ poll.sponsor }}{% endif %}{% if poll.sample %}{% if poll.sponsor %} · {% endif %}{{ poll.sample|int }} entrevistas{% endif %}</small></span><span class="vals">{% for value in poll.figures %}<span style="--c: {{ value.color }}">{{ value.pct|pct }}</span>{% endfor %}</span></a>
+            {% endfor %}
+          </div>
+        </section>
+        {% endif %}
+      </aside>
+    </section>
+
+    <div class="sec-h"><h2>Para entender el modelo</h2></div>
+    <div class="grid3" id="more">
+      <a class="card card-link" href="/elecciones">
+        <span class="ic"><svg aria-hidden="true"><use href="#i-target"/></svg></span>
+        <h3>Histórico Errores</h3>
+        <p>Cuánto se equivocaron los sondeos en cada elección pasada, encuestadora a encuestadora, con su diana de errores.</p>
+        <span class="go">Ver el histórico →</span>
+      </a>
+      <a class="card card-link" href="/casas">
+        <span class="ic"><svg aria-hidden="true"><use href="#i-trophy"/></svg></span>
+        <h3>Ranking Encuestadoras</h3>
+        <p>Qué encuestadoras aciertan más, cuáles se desvían y cuánto pesan sus sondeos en el promedio.</p>
+        <span class="go">Ver el ranking →</span>
+      </a>
+      <a class="card card-link" href="/metodo">
+        <span class="ic"><svg aria-hidden="true"><use href="#i-book"/></svg></span>
+        <h3>Método</h3>
+        <p>Cómo se promedian los sondeos, cómo se simulan los escaños y cómo se comprueba todo contra las elecciones pasadas.</p>
+        <span class="go">Leer el método →</span>
+      </a>
     </div>
+
+    <div class="sec-h"><h2>¿Cómo funciona Demoscopio?</h2></div>
+    <div class="steps" id="how">
+      <div class="card step"><span class="n">1</span><h3>Recoge los sondeos</h3><p>Todos los publicados en cada ámbito, con su encuestadora, su medio, su muestra y sus fechas.</p></div>
+      <div class="card step"><span class="n">2</span><h3>Los promedia con pesos</h3><p>Cada sondeo pesa según su antigüedad, su muestra y el rating de su encuestadora, y se le descuenta su sesgo propio.</p></div>
+      <div class="card step"><span class="n">3</span><h3>Simula los escaños</h3><p>Miles de elecciones simuladas y repartidas por circunscripción, de donde salen los rangos y las probabilidades.</p></div>
+      <div class="card step"><span class="n">4</span><h3>Se comprueba a sí mismo</h3><p>Contra cada elección pasada: errores por encuestadora, rating y efecto rebaño.</p></div>
+    </div>
+
+    {% if past_shown %}
+    <div class="sec-h" id="past"><h2>Elecciones pasadas</h2><a href="/elecciones">Ver el histórico ›</a></div>
+    <div class="past">
+      {% for event in past_shown %}<a href="{{ event.href }}">{{ 'Generales' if event.scope == 'es' else event.scope_name }} <small>{{ event.date|date }}</small></a>
+      {% endfor %}
+      {% if past_more %}<a href="/elecciones">+ {{ past_more }} más</a>{% endif %}
+    </div>
+    {% endif %}
 {% endblock %}

@@ -1,5 +1,5 @@
 // One horizontal bar split into stacked segments (seats per block), with the majority marked.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtInt} from '../format.js';
 
@@ -53,10 +53,11 @@ export function renderStacked(el, rows, {colors = {}, fullnames = {}, majority =
       min: 0,
       max: total,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (value) => fmtInt(value)},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtInt(value)},
     },
     yAxis: {type: 'category', data: ['Escaños'], show: false},
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'item',
       formatter(params) {
         const name = fullnames[params.seriesName] || params.seriesName;

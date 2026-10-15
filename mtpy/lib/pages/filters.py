@@ -100,14 +100,14 @@ def fmt_pct(x, digits: int = 1) -> str:
     Returns
     -------
     str
-        ``'32,7 %'``, or ``DASH`` when ``x`` is missing.
+        ``'32,7%'`` (the sign attached, Luis, 2026-10-15), or ``DASH`` when ``x`` is missing.
     """
     text = fmt_num(x, digits)
 
-    return text if text == DASH else text + ' %'
+    return text if text == DASH else text + '%'
 
 
-def fmt_prob(p, digits: int = 0) -> str:
+def fmt_prob(p, digits: int = 1) -> str:
     """
     Format a probability in [0, 1] as a percentage that never rounds a near-certainty away.
 
@@ -116,24 +116,24 @@ def fmt_prob(p, digits: int = 0) -> str:
     p : float or None
         Probability.
     digits : int, optional
-        Number of decimals of the percentage.
+        Number of decimals of the percentage (one everywhere, Luis, 2026-10-15).
 
     Returns
     -------
     str
-        ``'0 %'`` and ``'100 %'`` only when exact; a near-certainty is capped below the top value the
-        decimals can show (``'> 99 %'`` from 0.995 with no decimals, ``'> 99,9 %'`` from 0.9995 with one) and
-        a near-impossibility floored above zero (``'< 1 %'`` up to 0.005, ``'< 0,1 %'`` up to 0.0005), else
+        ``'0,0%'`` and ``'100,0%'`` only when exact; a near-certainty is capped below the top value the
+        decimals can show (``'> 99,9%'`` from 0.9995 with one decimal, ``'> 99%'`` from 0.995 with none) and
+        a near-impossibility floored above zero (``'< 0,1%'`` up to 0.0005, ``'< 1%'`` up to 0.005), else
         the percentage with ``digits`` decimals; ``DASH`` when ``p`` is missing.
     """
     if isinstance(p, bool) or _is_missing(p):
         return DASH
 
     if p == 0:
-        return '0 %'
+        return fmt_pct(0, digits)
 
     if p == 1:
-        return '100 %'
+        return fmt_pct(100, digits)
 
     unit = 10 ** (-digits)  # smallest percentage the decimals can show
     edge = unit / 2 / 100  # as a probability
@@ -246,6 +246,54 @@ def fmt_date(iso) -> str:
     return '{} {} {}'.format(value.day, MONTHS[value.month - 1], value.year)
 
 
+def fmt_date_short(iso) -> str:
+    """
+    Format a date as ``'3 oct'`` (day and month, no year).
+
+    Parameters
+    ----------
+    iso : str or datetime.date or None
+        ISO date or date-time.
+
+    Returns
+    -------
+    str
+        The formatted date, or ``DASH`` when it is missing or invalid.
+    """
+    value = _parse_datetime(iso)
+
+    if value is None:
+        return DASH
+
+    return '{} {}'.format(value.day, MONTHS[value.month - 1])
+
+
+def delta_text(x, digits: int = 0) -> str:
+    """
+    Format a difference with its sign: ``'+3'``, ``'−14'`` (typographic minus), ``'+0,0'``.
+
+    Parameters
+    ----------
+    x : int or float or None
+        The difference.
+    digits : int, optional
+        Number of decimals.
+
+    Returns
+    -------
+    str
+        The signed number, or ``DASH`` when ``x`` is missing.
+    """
+    text = fmt_num(abs(x), digits) if not (isinstance(x, bool) or _is_missing(x)) else DASH
+
+    if text == DASH:
+        return DASH
+
+    negative = round(x, digits) < 0
+
+    return ('−' if negative else '+') + text
+
+
 def fmt_datetime(iso) -> str:
     """
     Format an instant as ``'8 oct 2026, 20:11'`` in Europe/Madrid time.
@@ -266,3 +314,148 @@ def fmt_datetime(iso) -> str:
         return DASH
 
     return '{}, {:02d}:{:02d}'.format(fmt_date(value), value.hour, value.minute)
+
+
+def _fraction(x, start, end) -> Optional[float]:
+    """
+    Position of a value in a range, as a fraction clipped to [0, 1].
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value to place.
+    start, end : int or float
+        Bounds of the range; it may run downwards (``start > end``), so the fraction grows towards ``end``.
+
+    Returns
+    -------
+    float or None
+        ``(x - start) / (end - start)`` clipped to [0, 1], or ``None`` when ``x`` is missing or the range is
+        empty.
+    """
+    if isinstance(x, bool) or _is_missing(x) or _is_missing(start) or _is_missing(end) or start == end:
+        return None
+
+    return min(1.0, max(0.0, (x - start) / (end - start)))
+
+
+def bar_width(x, vmin=0, vmax=100) -> float:
+    """
+    Width of the bar of a table cell, as a percentage of the cell (the bars of ``Computer.print_ratings``).
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    vmin, vmax : int or float, optional
+        Values that give an empty and a full bar.
+
+    Returns
+    -------
+    float
+        The percentage, 0 to 100 with one decimal; 0 when ``x`` is missing or ``vmin == vmax``.
+    """
+    fraction = _fraction(x, vmin, vmax)
+
+    return 0.0 if fraction is None else round(100 * fraction, 1)
+
+
+def bar_sides(x, limit) -> dict:
+    """
+    Geometry of a bar centred at zero inside a table cell: it grows to the left with a negative value and to the
+    right with a positive one, up to ``limit`` in either direction (the diverging bars of ``print_ratings``).
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    limit : int or float
+        Value (in absolute terms) that fills a whole side.
+
+    Returns
+    -------
+    dict
+        ``{'left': start of the bar, 'width': its width, 'side': 'neg' | 'pos' | 'zero'}``, ``left`` and
+        ``width`` as percentages of the cell with one decimal; an empty bar at the centre (``'zero'``) when
+        ``x`` is zero, missing or ``limit`` is not positive.
+    """
+    if isinstance(x, bool) or _is_missing(x) or _is_missing(limit) or limit <= 0 or x == 0:
+        return {'left': 50.0, 'width': 0.0, 'side': 'zero'}
+
+    width = round(50 * min(abs(x), limit) / limit, 1)
+
+    if x < 0:
+        return {'left': round(50 - width, 1), 'width': width, 'side': 'neg'}
+
+    return {'left': 50.0, 'width': width, 'side': 'pos'}
+
+
+def shade(x, start, end, color: str, alpha: float = 0.55) -> str:
+    """
+    Background of a shaded table cell: ``color`` with an opacity that grows with the value from ``start``
+    (transparent) to ``end`` (``alpha``), like the gradients of ``Computer.print_ratings``.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    start, end : int or float
+        Values of the transparent and the fullest cells; the range may run downwards (``start > end``).
+    color : str
+        Hex colour ``#rrggbb``.
+    alpha : float, optional
+        Opacity of the fullest cell.
+
+    Returns
+    -------
+    str
+        An ``rgba()`` colour, or ``'transparent'`` when ``x`` is missing, the range is empty or the colour is
+        not a six-digit hex colour.
+    """
+    fraction = _fraction(x, start, end)
+
+    if fraction is None or not isinstance(color, str) or not re.fullmatch(r'#[0-9A-Fa-f]{6}', color):
+        return 'transparent'
+
+    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+
+    return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha * fraction, 3))
+
+
+def rng_cell(lo, hi, median, total, majority=None) -> Optional[dict]:
+    """
+    Geometry of the range cell of a seats table: the 95 % interval as a band, the median as a mark and the
+    absolute majority as a line, all as percentages of the chamber.
+
+    Parameters
+    ----------
+    lo, hi : int or float or None
+        Bounds of the interval, in seats.
+    median : int or float or None
+        Central value, in seats.
+    total : int or float or None
+        Seats of the chamber (the full width of the cell).
+    majority : int or float, optional
+        Absolute majority, in seats.
+
+    Returns
+    -------
+    dict or None
+        ``{'left': start of the band, 'width': its width, 'mark': the median, 'line': the majority or None}``,
+        percentages of the cell with one decimal, each value clipped to [0, 100] before the width is taken; ``None``
+        when a bound, the median or the total is missing, the total is not positive or the interval is inverted.
+    """
+    if any(isinstance(x, bool) or _is_missing(x) for x in (lo, hi, median, total)) or total <= 0 or lo > hi:
+        return None
+
+    def place(x) -> float:
+        return round(100 * min(1.0, max(0.0, x / total)), 1)
+
+    left = place(lo)
+
+    return {
+        'left': left,
+        'width': round(place(hi) - left, 1),
+        'mark': place(median),
+        'line': None if _is_missing(majority) else place(majority),
+    }

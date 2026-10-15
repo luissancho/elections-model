@@ -78,12 +78,12 @@
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
-        <dl class="figures" id="figures-list" hidden>
-          <div><dt>Sondeos</dt><dd id="figure-polls">—</dd></div>
-          <div><dt>Elecciones</dt><dd id="figure-events">—</dd></div>
-          <div><dt id="figure-mean-label">Error de bloques</dt><dd id="figure-mean">—</dd></div>
-          <div><dt>Sesgo del margen</dt><dd id="figure-bias">—</dd></div>
-        </dl>
+        <div class="kpis" id="figures-list" hidden>
+          <div class="kpi"><div class="l">Sondeos</div><div class="v" id="figure-polls">—</div></div>
+          <div class="kpi"><div class="l">Elecciones</div><div class="v" id="figure-events">—</div></div>
+          <div class="kpi"><div class="l" id="figure-mean-label">Error de bloques</div><div class="v" id="figure-mean">—</div></div>
+          <div class="kpi"><div class="l">Sesgo del margen</div><div class="v" id="figure-bias">—</div></div>
+        </div>
         <ul class="complements" id="complements" aria-live="polite"></ul>
         <noscript><p class="muted">Las cifras necesitan JavaScript.</p></noscript>
         {% call m.how() %}
@@ -144,7 +144,7 @@
         <div class="chart" id="errors-bullseye" role="img" aria-label="Error de cada sondeo en el voto de los dos bloques principales, por elección"></div>
         {% call m.how() %}
         <p>
-          {% if error_blocks|length >= 2 %}El eje horizontal es el error en {{ error_blocks[0] }} y el vertical en
+          {% if error_blocks|length >= 2%}El eje horizontal es el error en {{ error_blocks[0] }} y el vertical en
           {{ error_blocks[1] }}{% else %}Cada eje es el error en uno de los dos bloques{% endif %}, en puntos:
           sondeo menos resultado. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.
         </p>

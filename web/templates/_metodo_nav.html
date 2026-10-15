@@ -1,10 +1,10 @@
 {#- Subnavigation of the method: the landing page and its four questions (`subpages`). A question without text yet
     is not linked and says "próximamente". -#}
-<nav id="metodo-nav" class="section-nav metodo-nav" aria-label="Páginas del método">
+<nav id="metodo-nav" class="seg metodo-nav" aria-label="Páginas del método">
   <a href="/metodo">Método</a>
   {% for page in subpages %}
   {% if page.available %}
-  <a href="{{ page.href }}"{% if page.active %} aria-current="page"{% endif %}>{{ page.title }}</a>
+  <a{% if page.active %} class="on"{% endif %} href="{{ page.href }}"{% if page.active %} aria-current="page"{% endif %}>{{ page.title }}</a>
   {% else %}
   <span class="muted">{{ page.title }} (próximamente)</span>
   {% endif %}

@@ -1,5 +1,5 @@
 // Poll average over time: fitted series with its band, published polls and the projection to the event.
-import {baseOption, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtPct} from '../format.js';
 import {meanTooltipLine, pollTooltipLines} from '../polls-tooltip.js';
@@ -134,16 +134,16 @@ export function setWindow(chart, choice, {series, projection, anchor = null}) {
  * The tooltip follows the item under the pointer: a poll shows its box (`pollTooltipLines`), a day of the
  * average or of the projection its value and band (`meanTooltipLine`); the bands have none.
  *
- * @param {HTMLElement} el chart container
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
  *   `asOf`, `when` (ISO dates), `window` (choice of the window control), `anchor` (ISO date the window counts
  *   back from: the last poll) and `legend` (`true`: selectable legend; `'readonly'`: a legend that only shows the
- *   key and follows `selected`; `false`: hidden, but its `selected` still decides the names shown, for pages
- *   with their own selector)
- * @returns {object} the ECharts instance
+ *   key and follows `selected`; `'hidden'`: no legend drawn but a selectable one kept, for the HTML pill legend
+ *   that drives it with `legendToggleSelect`; `false`: hidden, but its `selected` still decides the names shown,
+ *   for pages with their own selector)
+ * @returns {object} the ECharts option
  */
-export function renderSeries(el, {
+export function seriesOption({
   series, polls, projection, parties, selected = null, colors = {}, asOf, when,
   window: windowChoice = DEFAULT_WINDOW, anchor = null, legend = true,
 }) {
@@ -242,32 +242,36 @@ export function renderSeries(el, {
     return '';
   }
 
-  const option = {
+  const drawn = Boolean(legend) && legend !== 'hidden';
+  return {
     ...baseOption(),
     legend: {
-      show: Boolean(legend),
+      show: drawn,
       ...(legend === 'readonly' ? {selectedMode: false} : {}),
+      ...(legend === 'hidden' ? {selectedMode: true} : {}),
       type: 'scroll',
       top: 0,
       data: parties,
       selected: Object.fromEntries(parties.map((name) => [name, !selected || selected.includes(name)])),
     },
     // Right margin wide enough for the centred mark-line labels at the end of the axis.
-    // Without the legend the top margin only keeps room for the mark-line labels.
-    grid: {left: 8, right: 48, top: legend ? 40 : 24, bottom: 56, containLabel: true},
+    // Without a drawn legend the top margin only keeps room for the mark-line labels.
+    grid: {left: 8, right: 48, top: drawn ? 40 : 24, bottom: 56, containLabel: true},
     xAxis: {
       type: 'time',
       minInterval: DAY_MS,
-      axisLabel: {formatter: (value) => fmtDateShort(isoDay(value))},
+      axisLine: {lineStyle: {color: THEME.axisColor}},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(isoDay(value))},
       splitLine: {show: false},
     },
     yAxis: {
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (value) => fmtPct(value, 0)},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtPct(value, 0)},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'item',
       confine: true,
       formatter: tooltip,
@@ -282,5 +286,15 @@ export function renderSeries(el, {
     }] : [],
     series: allSeries,
   };
-  return mountChart(el, option);
+}
+
+/**
+ * Render the poll average in `el` (see `seriesOption` for the data).
+ *
+ * @param {HTMLElement} el chart container
+ * @param {object} data the arguments of `seriesOption`
+ * @returns {object} the ECharts instance
+ */
+export function renderSeries(el, data) {
+  return mountChart(el, seriesOption(data));
 }

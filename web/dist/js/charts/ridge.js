@@ -2,7 +2,7 @@
 // filled with the row's colour, a thick mark at the median, thin ones at the ends of the interval and a dashed
 // line at the majority when it falls within the row, as `Simulator.plot_dist_kde` draws it in the notebooks but
 // with the detail of every row.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtInt, fmtProb, fmtRange} from '../format.js';
 
 const TOP = 10;
@@ -11,6 +11,21 @@ const LEFT = 150;
 const RIGHT = 20;
 const AXIS = 18;
 const GAP = 8;
+
+/** Row heights of the ridges: tall on desktop, so the curves read well, compact on phones (Luis, 2026-10-15). */
+const ROW_HEIGHT_DESKTOP = 110;
+const ROW_HEIGHT_PHONE = 64;
+const PHONE_WIDTH = 720;
+
+/**
+ * Height of each ridge row for a viewport width.
+ *
+ * @param {number} width viewport width, in px
+ * @returns {number} px per row
+ */
+export function ridgeRowHeight(width) {
+  return width < PHONE_WIDTH ? ROW_HEIGHT_PHONE : ROW_HEIGHT_DESKTOP;
+}
 
 /**
  * Height the container needs for `n` rows.
@@ -32,7 +47,7 @@ export function ridgeHeight(n, rowHeight) {
  *   drawn in the rows whose range holds it, labelled on the first), `rowHeight` (px per row, 144 by default),
  *   `fullnames` ({name: full name}, tooltip) and `guideEvery` (seats between the faint dashed vertical guides;
  *   10 by default, 20 on narrow containers; the labelled axis shows a number at each). The row label reads the
- *   name, `Mediana: …` and `Rango 95 %: …`, with the name and the figures in bold.
+ *   name, `Mediana: …` and `Rango 95%: …`, with the name and the figures in bold.
  *   When every row shares the same range, only the last row shows the axis labels; otherwise each row shows its own.
  * @returns {object} the ECharts instance
  */
@@ -59,9 +74,9 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     max: row.x1,
     // A tick (and, on the labelled row, a number) at every guide
     interval: every,
-    axisLine: {show: true, lineStyle: {color: THEME.gridColor}},
-    axisTick: {show: !shared || index === last, lineStyle: {color: THEME.gridColor}},
-    axisLabel: {show: !shared || index === last, fontSize: 10, color: THEME.markColor, formatter: (value) => fmtInt(value)},
+    axisLine: {show: true, lineStyle: {color: THEME.axisColor}},
+    axisTick: {show: !shared || index === last, lineStyle: {color: THEME.axisColor}},
+    axisLabel: {...axisLabelStyle(), show: !shared || index === last, fontSize: 10, color: THEME.markColor, formatter: (value) => fmtInt(value)},
     splitLine: {show: false},
   }));
   const yAxes = rows.map((row, index) => ({
@@ -114,7 +129,7 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     top: TOP + index * rowHeight + curveHeight / 2 - 24,
     style: {
       // Rich text: the name, the median and the range in bold, the captions in regular weight
-      text: `{b|${row.name}}\nMediana: {b|${fmtInt(row.median)}}\nRango 95 %: {b|${fmtRange(row.lo, row.hi, 0)}}`,
+      text: `{b|${row.name}}\nMediana: {b|${fmtInt(row.median)}}\nRango 95%: {b|${fmtRange(row.lo, row.hi, 0)}}`,
       fill: THEME.textColor,
       fontSize: narrow ? 10.5 : 12,
       fontFamily: THEME.fontFamily,
@@ -130,6 +145,7 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
     yAxis: yAxes,
     graphic: labels,
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       axisPointer: {type: 'line', lineStyle: {color: THEME.markColor}, label: {show: false}},
       formatter(params) {

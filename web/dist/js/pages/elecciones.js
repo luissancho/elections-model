@@ -2,8 +2,9 @@
 // filters of scope, election, house and years, whose state lives in the URL hash (`errors.js`), the figures of the
 // selection, the evolution of the error by election, the histogram of the poll errors, the bullseye coloured by
 // election or scope, the table by weeks before the election and the table of elections. The detail of one
-// election has the results behind "Ver más", the error of the last poll of each house (bars and bullseye), the
-// histogram of its polls and the table of every poll of the cycle (`polls-wire.js`).
+// election has the hemicycle of the official result next to the results table (behind "Ver más"), the error of
+// the last poll of each house (bars, the split by block and the bullseye), the histogram of its polls and the table
+// of every poll of the cycle (`polls-wire.js`).
 import {Catalog} from '../catalog.js';
 import {fmtDate, fmtNum} from '../format.js';
 import {
@@ -13,15 +14,18 @@ import {
 import {THEME} from '../charts/base.js';
 import {renderBars} from '../charts/bars.js';
 import {renderBullseye} from '../charts/bullseye.js';
+import {renderDiverging} from '../charts/diverging.js';
+import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderTrend} from '../charts/trend.js';
 import {fillComplements, fillFigures, fillSelect, filterEventsTable} from './history-dom.js';
-import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 import {wirePollsTable} from './polls-wire.js';
 
-// Height of the error bars: one row per house plus the axes.
+// Height of the error bars: one row per house plus the axes (and the legend, in the split by block).
 const BAR_ROW_HEIGHT = 22;
 const BAR_EXTRA_HEIGHT = 60;
+const SPLIT_EXTRA_HEIGHT = 80;
 
 // Accent of the national scope (`es`) in the trend and in the bullseye by scope, and of the detail's bullseye.
 const ACCENT = THEME.accentColor;
@@ -38,17 +42,6 @@ const EVENT_COLORS = [
   '#3b6e8f', '#c0672e', '#5a8a4f', '#8a5a8c', '#9a8a1f', '#a8505a', '#2f8f8f', '#6b6b6b',
   '#7a4e2d', '#5468b0', '#b0487f', '#4f7a2a', '#d08a1c', '#2c5d5d', '#8c7aa8', '#1f3f5c',
 ];
-
-/**
- * Link to the detail of an election.
- *
- * @param {string} scope scope code
- * @param {string} date election date
- * @returns {string} the `/elecciones` URL of that election
- */
-function detailHref(scope, date) {
-  return `/elecciones?scope=${encodeURIComponent(scope)}&date=${encodeURIComponent(date)}`;
-}
 
 /**
  * Draw the histogram of a measure of some poll-errors rows: polls counted (unweighted) in one-point bins, with
@@ -154,10 +147,9 @@ function scopeColors(scopes) {
  * @param {object[]} rows filtered rows
  * @param {object[]} others rows that pass every filter but the house
  * @param {object} state the filters and the measure
- * @param {object} context `scopes` and `colors` of the page
+ * @param {object} context `scopes`, `colors` and `hrefs` (link of each election by key) of the page
  */
-function drawTrend(el, rows, others, state, {scopes, colors}) {
-  const linkable = new Set(scopes.filter((scope) => scope.linkable).map((scope) => scope.code));
+function drawTrend(el, rows, others, state, {scopes, colors, hrefs}) {
   const byScope = new Map(scopes.map(({name}) => [name, []]));
   for (const item of eventsOf(rows, state.measure).filter((entry) => entry.mean !== null)) {
     byScope.get(item.scope_name)?.push({
@@ -165,7 +157,7 @@ function drawTrend(el, rows, others, state, {scopes, colors}) {
       value: item.mean,
       n: item.n,
       label: `${fmtDate(item.event_date)} · ${item.name || item.event}`,
-      href: linkable.has(item.scope) ? detailHref(item.scope, item.event_date) : null,
+      href: hrefs.get(eventKey(item)) ?? null,
     });
   }
   const series = [...byScope].filter(([, points]) => points.length).map(([name, points]) => ({name, points}));
@@ -177,28 +169,32 @@ function drawTrend(el, rows, others, state, {scopes, colors}) {
 }
 
 /**
- * Bullseye of the filtered rows: coloured by election with a scope chosen and by scope with "Todos".
+ * Bullseye of the filtered rows: coloured by election with a scope chosen and by scope with "Todos" (the
+ * national scope, the general elections, drawn over the others).
  *
  * @param {HTMLElement} el chart container
  * @param {object[]} rows filtered rows with their `href`
  * @param {string[]} blocks the two blocks of the axes
  * @param {(string|null)} scope the chosen scope
- * @param {object} context `events` (published list) and `colors` (by scope name) of the page
+ * @param {object} context `events` (published list), `colors` (by scope name) and `national` (name of the
+ *   national scope) of the page
  */
-function drawErrorBullseye(el, rows, blocks, scope, {events, colors}) {
+function drawErrorBullseye(el, rows, blocks, scope, {events, colors, national}) {
   let groupOf = (row) => row.scope_name;
   let palette = colors;
   let groupLabel = (group) => group;
+  let onTop = (group) => group === national;
   if (scope !== null) {
     groupOf = eventKey;
     palette = {};
+    onTop = null;
     events.filter((event) => event.scope === scope).forEach((event, i) => {
       palette[event.key] = EVENT_COLORS[i % EVENT_COLORS.length];
     });
     const labels = new Map(rows.map((row) => [eventKey(row), row.event]));
     groupLabel = (key) => labels.get(key) ?? key;
   }
-  tryDraw(() => renderBullseye(el, rows, {blocks, groupOf, colors: palette, legend: true, labels: false, groupLabel}),
+  tryDraw(() => renderBullseye(el, rows, {blocks, groupOf, colors: palette, legend: true, labels: false, groupLabel, onTop}),
     'the errors bullseye');
 }
 
@@ -236,14 +232,16 @@ function wireHistory(initial) {
   const figures = document.getElementById('figures-list');
   const complementsEl = document.getElementById('complements');
   const colors = scopeColors(scopes);
+  const national = scopes.find((scope) => scope.code === NATIONAL_SCOPE)?.name ?? null;
   const analysed = new Set(scopes.map((scope) => scope.code));
-  const linkable = new Set(allScopes.filter((scope) => scope.linkable).map((scope) => scope.code));
-  // The rows carry the short code of their election (`2023-23J`); the charts and tables name it in full.
+  // The rows carry the short code of their election (`2023-23J`); the charts and tables name it in full and
+  // link its detail (the server gives the link of each election, `null` for a scope without a run).
   const names = new Map(events.map((event) => [event.key, event.name]));
+  const hrefs = new Map(events.map((event) => [event.key, event.href ?? null]));
   const linked = errors.map((row) => ({
     ...row,
     name: names.get(eventKey(row)) || null,
-    href: linkable.has(row.scope) ? detailHref(row.scope, row.event_date) : null,
+    href: hrefs.get(eventKey(row)) ?? null,
   }));
   const figureNodes = figures && {
     polls: document.getElementById('figure-polls'),
@@ -306,13 +304,13 @@ function wireHistory(initial) {
       fillComplements(complementsEl, complements(linked, state, state.measure));
     }
     if (trendEl) {
-      drawTrend(trendEl, rows, others, state, {scopes, colors});
+      drawTrend(trendEl, rows, others, state, {scopes, colors, hrefs});
     }
     if (histogramEl) {
       drawErrorHistogram(histogramEl, rows, state.measure);
     }
     if (bullseyeEl && blocks.length >= 2) {
-      drawErrorBullseye(bullseyeEl, rows, blocks, state.scope, {events, colors});
+      drawErrorBullseye(bullseyeEl, rows, blocks, state.scope, {events, colors, national});
     }
     if (weeksEl) {
       const perElection = keys.size <= WEEKS_MAX_EVENTS;
@@ -391,22 +389,95 @@ function wirePollHistogram(polls) {
 }
 
 /**
- * "Ver más" of the results table: the server hides the rows beyond the first ones and renders the button hidden
- * (it only works with JavaScript); show it and reveal the rows on click.
+ * Hemicycle of the official result of an election with its Partidos/Bloques switch (as in Promedios): the seats
+ * of each party, ordered by block and catalogue, or of each block; the switch also shows the matching results
+ * table and hides the other one. The absolute majority is written in the centre.
+ *
+ * @param {object} initial the page's initial data (`results` with `n_seats`, `majority`, `rows` and `blocks` as
+ *   `{name, seats}`; `block_colors`)
+ * @param {Catalog} catalog party catalogue of the page (colours, full names and order)
  */
-function wireResultsMore() {
-  const button = document.getElementById('results-more');
-  const table = document.getElementById('results-table');
-  if (!button || !table) {
+function wireHemicycle(initial, catalog) {
+  const el = document.getElementById('hemicycle');
+  const {results = null, block_colors: blockColors = {}} = initial;
+  if (!el || !results || !results.rows || !results.rows.length) {
     return;
   }
-  button.hidden = false;
-  button.addEventListener('click', () => {
-    for (const row of table.querySelectorAll('tbody tr[hidden]')) {
-      row.hidden = false;
+  const names = results.rows.map((row) => row.name);
+  const blocks = (results.blocks || []).filter((row) => Number.isFinite(row.seats));
+  const views = {
+    partidos: {
+      seats: Object.fromEntries(results.rows.map((row) => [row.name, row.seats])),
+      colors: mapNames(names, (name) => catalog.color(name)),
+      fullnames: mapNames(names, (name) => catalog.fullname(name)),
+      order: (list) => catalog.order(list),
+      label: 'Hemiciclo con los escaños de cada partido en el resultado oficial',
+      card: 'results',
+    },
+    bloques: {
+      seats: Object.fromEntries(blocks.map((row) => [row.name, row.seats])),
+      colors: mapNames(blocks.map((row) => row.name), (name) => blockColors[name] || THEME.barColor),
+      fullnames: {},
+      order: (list) => catalog.orderBlocks(list),
+      label: 'Hemiciclo con los escaños de cada bloque en el resultado oficial',
+      card: 'results-blocks',
+    },
+  };
+
+  /** Draw the hemicycle of `view` and show its results table, hiding the other one. */
+  function draw(view) {
+    const chosen = views[view];
+    el.setAttribute('aria-label', chosen.label);
+    tryDraw(() => renderHemicycle(el, chosen.seats, {
+      colors: chosen.colors, fullnames: chosen.fullnames, order: chosen.order, nSeats: results.n_seats,
+      majority: results.majority,
+    }), 'the hemicycle');
+    for (const [name, item] of Object.entries(views)) {
+      const card = document.getElementById(item.card);
+      if (card) {
+        card.hidden = name !== view;
+      }
     }
-    button.hidden = true;
-  });
+  }
+
+  draw('partidos');
+  const fieldset = document.getElementById('results-view');
+  if (fieldset && blocks.length) {
+    fieldset.hidden = false;
+    fieldset.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=rview]') && views[event.target.value]) {
+        draw(event.target.value);
+        markSegments(fieldset);
+      }
+    });
+  }
+}
+
+/**
+ * Error of the last poll of each house: the bars of the block error and, next to them, the same houses with the
+ * error of each block, one growing to the left and the other to the right (`initial.split` says which).
+ *
+ * @param {object} initial the page's initial data (`last`, `blocks`, `split`, `block_colors`)
+ */
+function drawLastErrors(initial) {
+  const {last = [], blocks = [], split = null, block_colors: colors = {}} = initial;
+  const rows = last.filter((row) => Number.isFinite(row.error_blocks_abs));
+  if (!rows.length) {
+    return;
+  }
+  const bars = document.getElementById('error-chart');
+  if (bars) {
+    bars.style.height = `${rows.length * BAR_ROW_HEIGHT + BAR_EXTRA_HEIGHT}px`;
+    tryDraw(() => renderBars(bars, rows.map((row) => ({name: row.pollster, error_blocks_abs: row.error_blocks_abs})),
+      {value: 'error_blocks_abs', formatter: (x) => fmtNum(x, 1)}), 'the last-poll errors');
+  }
+  const el = document.getElementById('split-chart');
+  if (el && split && blocks.length >= 2) {
+    el.style.height = `${rows.length * BAR_ROW_HEIGHT + SPLIT_EXTRA_HEIGHT}px`;
+    const side = (block) => ({key: block, name: block, color: colors[block] || THEME.barColor});
+    tryDraw(() => renderDiverging(el, rows.map((row) => ({name: row.pollster, [split.left]: row[split.left], [split.right]: row[split.right]})),
+      {left: side(split.left), right: side(split.right), formatter: (x) => fmtNum(x, 1)}), 'the block errors');
+  }
 }
 
 /**
@@ -414,26 +485,21 @@ function wireResultsMore() {
  * `#initial-data` island (and no charts), so there is nothing to draw and `readInitial` must not be called.
  */
 function paint() {
-  wireResultsMore();
+  wireMore('results-more', 'results-table');
   if (!document.getElementById('initial-data')) {
     return;
   }
 
   const initial = readInitial();
   const {meta = {}, last = [], blocks = []} = initial;
+  const catalog = new Catalog(initial.catalog || {});
 
   if (initial.errors) {
     wireHistory(initial);
   }
 
-  const bars = document.getElementById('error-chart');
-  const rows = last.filter((row) => Number.isFinite(row.error_blocks_abs))
-    .map((row) => ({name: row.pollster, error_blocks_abs: row.error_blocks_abs}));
-  if (bars && rows.length) {
-    bars.style.height = `${rows.length * BAR_ROW_HEIGHT + BAR_EXTRA_HEIGHT}px`;
-    tryDraw(() => renderBars(bars, rows, {value: 'error_blocks_abs', formatter: (x) => fmtNum(x, 1)}),
-      'the last-poll errors');
-  }
+  wireHemicycle(initial, catalog);
+  drawLastErrors(initial);
 
   if (initial.poll_errors) {
     wirePollHistogram(initial.poll_errors);
@@ -449,7 +515,7 @@ function paint() {
   }
 
   if (initial.polls) {
-    tryDraw(() => wirePollsTable(initial.polls.polls, new Catalog(initial.catalog || {})), 'the polls table');
+    tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
   }
 }
 

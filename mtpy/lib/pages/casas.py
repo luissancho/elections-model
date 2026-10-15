@@ -7,9 +7,11 @@ from .. import webapi
 from ..webapi import query_pollster, query_ratings, site
 from .common import analysis_part, api_url, common_context
 from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
-from .filters import fmt_date
+from .filters import fmt_num, fmt_date
 
 RATING_SCOPE = 'es'
+# Rows of the ranking the page shows before "Cargar más".
+RANKING_SHOWN = 50
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
                 'error_blocks', 'bias_blocks')
@@ -38,10 +40,10 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
     Returns
     -------
     list of dict
-        The pollsters with a rating, by ``rating`` descending (ties keep the input order), with
-        the keys of ``RANKING_KEYS`` (``None`` when a column is missing) plus ``herding``, the
-        pooled herding of the analysis for that pollster name or ``None``. ``pollster_id`` is an
-        integer, for the profile links.
+        The pollsters with a rating and at least one poll (``num_polls``; a pollster without polls has its
+        prior quality as rating, nothing to rank), by ``rating`` descending (ties keep the input order), with
+        the keys of ``RANKING_KEYS`` (``None`` when a column is missing) plus ``herding``, the pooled herding of
+        the analysis for that pollster name or ``None``. ``pollster_id`` is an integer, for the profile links.
     """
     if ratings.empty or 'rating' not in ratings.columns:
         return []
@@ -50,7 +52,7 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
     rows = []
 
     for record in webapi.frame_to_records(ratings):
-        if record.get('rating') is None:
+        if record.get('rating') is None or not record.get('num_polls'):
             continue
 
         row = {key: record.get(key) for key in RANKING_KEYS}
@@ -166,27 +168,32 @@ def election_label(scope: str, date: str, names: dict, scope_names: dict) -> str
     return names.get((scope, date)) or '{} · {}'.format(fmt_date(date), scope_names.get(scope, scope))
 
 
-def effects_table(records: list, label: Optional[Callable] = None, order: Sequence[str] = ()) -> dict:
+def effects_table(records: list, label: Optional[Callable] = None, order: Sequence[str] = (),
+                  key: str = 'dev_result_c') -> dict:
     """
     House effects of a pollster by election and party.
 
     Parameters
     ----------
     records : list of dict
-        Its rows of the house effects table (``event_scope``, ``event_date``, ``party``, ``dev_result_c``...);
-        a row without ``event_scope`` belongs to ``RATING_SCOPE``.
+        Its rows of the house effects table (``event_scope``, ``event_date``, ``party``, ``dev_result_c``,
+        ``dev_cycle``...); a row without ``event_scope`` belongs to ``RATING_SCOPE``.
     label : callable, optional
         ``(scope, date) -> str``, the name of each election; its date by default.
     order : sequence of str, optional
         Party names that go first, in this order (the catalogue of the run); the rest follow by first
         appearance.
+    key : str, optional
+        Column shown: ``dev_result_c`` (the deviation from the result, centred; only the elections where the
+        pollster had enough polls in the final window) or ``dev_cycle`` (the deviation from the consensus of the
+        whole cycle).
 
     Returns
     -------
     dict
         ``{'columns': parties, 'rows': [{'scope', 'event_date', 'label', 'cells'}]}``: one row per election by
-        date (ties in catalogue order of the records) with the ``dev_result_c`` of each party (``None`` when
-        missing). An election without any value (the next one, which has no result yet) has no row.
+        date (ties in catalogue order of the records) with the ``key`` of each party (``None`` when missing). An
+        election without any value (the next one, which has no result yet) has no row.
     """
     seen = []
     values = {}
@@ -197,8 +204,8 @@ def effects_table(records: list, label: Optional[Callable] = None, order: Sequen
         if party not in seen:
             seen.append(party)
 
-        key = (record.get('event_scope') or RATING_SCOPE, record.get('event_date'))
-        values.setdefault(key, {})[party] = record.get('dev_result_c')
+        election = (record.get('event_scope') or RATING_SCOPE, record.get('event_date'))
+        values.setdefault(election, {})[party] = record.get(key)
 
     columns = [name for name in order if name in seen] + [name for name in seen if name not in order]
     rows = [
@@ -216,8 +223,9 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
 
     The ranking is always the national one (``RATING_SCOPE``), whatever the scope: the rating of a
     pollster does not depend on it, and its herding column comes from the national analysis for the same
-    reason. The ratings come from the database; the house effects and the herding cards from the houses analysis
-    of the scope (chosen in the house-effects card), whose ``meta`` part marks it as complete.
+    reason. The page renders every row and hides those beyond ``RANKING_SHOWN`` behind "Cargar más". The
+    ratings come from the database; the house effects and the herding cards from the houses analysis of the
+    scope (chosen in the house-effects card), whose ``meta`` part marks it as complete.
 
     Parameters
     ----------
@@ -229,11 +237,13 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``ranking`` (``ranking_rows``), ``grid`` (``house_effects_grid``
-        or ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``,
-        ``pollster_ids`` (``{name: id}`` of the pollsters rated in the event, for the links),
-        ``ranking_event`` (ISO date of the election the ranking is for, ``None`` without ratings),
-        ``csv_links`` and ``initial`` (``state``, ``meta``, ``ranking`` and ``grid``).
+        The common context plus ``ranking`` (``ranking_rows``), ``ranking_shown`` (``RANKING_SHOWN``) and
+        ``ranking_hidden`` (rows beyond them, behind "Cargar más"), ``error_max`` (the largest ``error_avg`` of
+        the ranking, the fullest shade of that column; 0 without one), ``grid`` (``house_effects_grid`` or
+        ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``, ``pollster_ids``
+        (``{name: id}`` of the pollsters rated in the event, for the links), ``ranking_event`` (ISO date of the
+        election the ranking is for, ``None`` without ratings), ``csv_links`` and ``initial`` (``state``,
+        ``meta`` and ``grid``).
 
     Raises
     ------
@@ -263,6 +273,9 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         ]
 
     context['ranking'] = ranking
+    context['ranking_shown'] = RANKING_SHOWN
+    context['ranking_hidden'] = max(0, len(ranking) - RANKING_SHOWN)
+    context['error_max'] = max((row['error_avg'] for row in ranking if row.get('error_avg') is not None), default=0)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
     context['analysis_missing'] = missing
@@ -274,9 +287,34 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context['ranking_event'] = (
         str(ratings['event_date'].max())[:10] if 'event_date' in ratings.columns and not ratings.empty else None)
     context['csv_links'] = links
-    context['initial'] = {'state': full, 'meta': context['meta'], 'ranking': ranking, 'grid': grid}
+    context['initial'] = {'state': full, 'meta': context['meta'], 'grid': grid}
 
     return context
+
+
+def profile_kpis(current: dict, mtype: Optional[str]) -> list:
+    """
+    The KPI row of a pollster profile: its rating, its prior quality and its type.
+
+    Parameters
+    ----------
+    current : dict
+        The latest rating row (``rating``, ``quality``).
+    mtype : str or None
+        Label of the type of the pollster.
+
+    Returns
+    -------
+    list of dict
+        Three ``{'label', 'value', 'unit', 'support', 'ok', 'color'}`` rows for ``_macros.kpis``.
+    """
+    return [
+        {'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '', 'support': 'entra así en el promedio',
+         'ok': False, 'color': None},
+        {'label': 'Calidad previa', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': '', 'ok': False,
+         'color': None},
+        {'label': 'Tipo', 'value': mtype or '–', 'unit': '', 'support': '', 'ok': False, 'color': None},
+    ]
 
 
 def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
@@ -300,7 +338,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
+        The common context plus ``kpis`` (``profile_kpis``), ``cycle_table`` (``effects_table`` of ``dev_cycle``), ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
         the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing), ``current``
         (the ``rating`` and ``quality`` of its last national ratings row, the next general election; both
         ``None`` without ratings), ``path`` (its national ratings by election, ``PATH_KEYS``),
@@ -349,8 +387,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     context['profile'] = profile
     context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
     context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
+    context['kpis'] = profile_kpis(context['current'], context['mtype'])
     context['path'] = path
     context['effects_table'] = effects_table(profile['house_effects'], label, order=list(context['catalog']))
+    context['cycle_table'] = effects_table(profile['house_effects'], label, order=list(context['catalog']), key='dev_cycle')
     context['herding_table'] = [dict(row, label=label(row.get('event_scope') or RATING_SCOPE, row['event_date']))
                                 for row in profile_rows(profile['herding'], HERDING_KEYS)]
     context['bullseye'] = bullseye

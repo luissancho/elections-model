@@ -1,8 +1,9 @@
-<header id="site-header">
+<header id="site-header" class="hdr">
   {% include '_brand.html' +%}
   <nav aria-label="Secciones">
     {% for page in pages %}
     <a href="{{ page.href }}"{% if page.active %} aria-current="page"{% endif %}>{{ page.label }}</a>
     {% endfor %}
   </nav>
+  <a class="ico-btn" href="/metodo" aria-label="Método"><svg aria-hidden="true"><use href="#i-help"/></svg></a>
 </header>

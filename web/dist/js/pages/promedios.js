@@ -1,14 +1,16 @@
 // Promedios tab of an event: the poll average with its window, party and block views, one house against the
 // average, the hemicycle, the evolution and the filterable, sortable table of all the polls,
 // drawn from the data embedded by the server. The state of the average controls lives in the URL hash
-// (`blocks.js`), written only when a control changes; the legend of the average selects the parties.
+// (`blocks.js`), written only when a control changes; the pill legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
 import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} from '../blocks.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
+import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {markLegend, renderLegend} from './legend-dom.js';
 import {wirePollsTable} from './polls-wire.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
@@ -138,8 +140,28 @@ function chosenNames(current, legendSelected) {
 }
 
 /**
- * Draw the poll average and wire its controls: view and window radios and the ECharts legend, which selects the
- * parties or blocks shown. Every change rewrites the URL hash.
+ * Fill the HTML legend of a chart with the names of its view, lit as its selection says, each pill toggling the
+ * ECharts legend of `chart`.
+ *
+ * @param {HTMLElement|null} legendEl the `.legend` container (nothing without it)
+ * @param {object} current the view (`parties`, `colors`, `defaults`)
+ * @param {string[]|null} selected names shown (null: the defaults of the view, or all)
+ * @param {object} chart the ECharts instance
+ * @param {object} inks `{name: ink colour}` of the island (`initial.inks`)
+ */
+function fillLegend(legendEl, current, selected, chart, inks = {}) {
+  if (!legendEl) {
+    return;
+  }
+  const shown = selected || current.defaults || current.parties;
+  renderLegend(legendEl, current.parties.map((name) => ({
+    name, color: current.colors[name], ink: inks[name], on: shown.includes(name),
+  })), (name) => chart.dispatchAction({type: 'legendToggleSelect', name}));
+}
+
+/**
+ * Draw the poll average and wire its controls: view and window radios and the pill legend, which selects the
+ * parties or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash.
  *
  * @param {object} initial the page's initial data
  * @param {object} views `seriesViews` of the page
@@ -150,6 +172,7 @@ function chosenNames(current, legendSelected) {
 function wireAverage(initial, views, state, render) {
   const anchor = initial.meta.date_last || initial.meta.as_of;
   const mainEl = document.getElementById('series-chart');
+  const legendEl = document.getElementById('series-legend');
   const windowSet = document.getElementById('series-window');
   const viewSet = document.getElementById('series-view');
   let chart = null;
@@ -160,16 +183,20 @@ function wireAverage(initial, views, state, render) {
     window.history.replaceState(null, '', pathname + search + seriesHash(state));
   }
 
-  /** Draw the chart and, the first time, listen to its legend. */
+  /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
   function draw() {
     const drawn = render(mainEl, views[state.view].polls, state);
     if (!chart) {
       chart = drawn;
       chart.on('legendselectchanged', (event) => {
         state.selected = chosenNames(views[state.view], event.selected);
+        if (legendEl) {
+          markLegend(legendEl, event.selected);
+        }
         writeHash();
       });
     }
+    fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});
   }
 
   for (const input of document.querySelectorAll('#series-window input[name=window]')) {
@@ -221,6 +248,7 @@ function wireHouse(initial, views, start, render) {
   const {meta, polls} = initial;
   const anchor = meta.date_last || meta.as_of;
   const houseEl = document.getElementById('pollster-chart');
+  const legendEl = document.getElementById('pollster-legend');
   const select = document.getElementById('pollster-select');
   const controls = document.getElementById('pollster-controls');
   const windowSet = document.getElementById('pollster-window');
@@ -235,15 +263,19 @@ function wireHouse(initial, views, start, render) {
     return views[state.view].toPolls({parties: polls.parties, polls: chosen});
   }
 
-  /** Draw the chart and, the first time, listen to its legend. */
+  /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
   function draw() {
     const drawn = render(houseEl, housePolls(), state);
     if (!chart) {
       chart = drawn;
       chart.on('legendselectchanged', (event) => {
         state.selected = chosenNames(views[state.view], event.selected);
+        if (legendEl) {
+          markLegend(legendEl, event.selected);
+        }
       });
     }
+    fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});
   }
 
   for (const input of document.querySelectorAll('#pollster-window input[name=pwindow]')) {
@@ -301,7 +333,8 @@ function wireSeries(initial, catalog) {
   });
   const start = {...state};
 
-  /** Draw the chart `el` with the polls and the `{view, window, selected}` of a chart, legend on. */
+  /** Draw the chart `el` with the polls and the `{view, window, selected}` of a chart; the ECharts legend stays
+   * hidden and selectable, driven by the pill legend. */
   function render(el, pollsOfChart, chartState) {
     const current = views[chartState.view];
     return renderSeries(el, {
@@ -315,7 +348,7 @@ function wireSeries(initial, catalog) {
       when: vote.when,
       window: chartState.window,
       anchor,
-      legend: true,
+      legend: 'hidden',
     });
   }
 
@@ -325,10 +358,35 @@ function wireSeries(initial, catalog) {
   }
 }
 
+/** Days of the average the sparkline of a party card covers, and the sampling step. */
+const SPARK_DAYS = 365;
+const SPARK_STEP = 7;
+
+/**
+ * Draw the sparkline of every party card (`article.pc[data-name]`): the mean of the last year of the average,
+ * one point a week.
+ *
+ * @param {object} initial the page's initial data (`series.mean`)
+ */
+function paintCards(initial) {
+  const mean = (initial.series && initial.series.mean) || {};
+  for (const card of document.querySelectorAll('article.pc[data-name]')) {
+    const svg = card.querySelector('svg.spark');
+    const values = mean[card.dataset.name];
+    if (!svg || !values) {
+      continue;
+    }
+    const recent = values.slice(-SPARK_DAYS);
+    const sampled = recent.filter((_, i) => i % SPARK_STEP === 0 || i === recent.length - 1);
+    sparklineSvg(svg, sampled);
+  }
+}
+
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
   const catalog = new Catalog(initial.meta);
+  tryDraw(() => paintCards(initial), 'the party cards');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');

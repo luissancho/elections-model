@@ -25,29 +25,34 @@ export function fmtInt(x) {
   return fmtNum(x, 0);
 }
 
+/** Percentage already in the 0-100 scale, the sign attached: '32,7%'. */
 export function fmtPct(x, digits = 1) {
-  return isMissing(x) ? DASH : `${numberFormat(digits).format(x)} %`;
+  return isMissing(x) ? DASH : `${numberFormat(digits).format(x)}%`;
 }
 
 /**
- * Probability in [0, 1] as a percentage that never rounds a near-certainty to 0 % or 100 %:
- * '> 99 %' from 0.995, '< 1 %' up to 0.005 (exclusive of 0), '0 %' and '100 %' only when exact.
+ * Probability in [0, 1] as a percentage that never rounds a near-certainty away (the mirror of `fmt_prob` of
+ * `pages/filters.py`): '0,0%' and '100,0%' only when exact; capped below the top value the decimals can show
+ * ('> 99,9%' from 0.9995 with one decimal, '> 99%' from 0.995 with none) and floored above zero ('< 0,1%' up to
+ * 0.0005, '< 1%' up to 0.005).
  */
-export function fmtProb(p, digits = 0) {
+export function fmtProb(p, digits = 1) {
   if (isMissing(p)) {
     return DASH;
   }
   if (p === 0) {
-    return '0 %';
+    return fmtPct(0, digits);
   }
   if (p === 1) {
-    return '100 %';
+    return fmtPct(100, digits);
   }
-  if (p >= 0.995) {
-    return '> 99 %';
+  const unit = 10 ** -digits;
+  const edge = unit / 2 / 100;
+  if (p >= 1 - edge) {
+    return `> ${fmtPct(100 - unit, digits)}`;
   }
-  if (p > 0 && p <= 0.005) {
-    return '< 1 %';
+  if (p > 0 && p <= edge) {
+    return `< ${fmtPct(unit, digits)}`;
   }
   return fmtPct(p * 100, digits);
 }

@@ -1,6 +1,6 @@
 // Histogram of seats over the simulations, with mark lines at the median and at the majority. The unit, the bin
 // labels and the median mark are options, so the error history reuses it for the poll errors (in points).
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtInt, fmtPct} from '../format.js';
 import {binWidth, histogram, majorityInRange} from '../seats.js';
 
@@ -84,7 +84,7 @@ export function renderHistogram(el, values, {
   } else if (median !== null) {
     subtitle = `Mediana: ${formatter(median)}`;
     if (lo !== null && hi !== null) {
-      subtitle += ` · rango 95 %: ${formatter(lo)}–${formatter(hi)}`;
+      subtitle += ` · rango 95%: ${formatter(lo)}–${formatter(hi)}`;
     }
   }
 
@@ -95,16 +95,17 @@ export function renderHistogram(el, values, {
       type: 'category',
       data: starts.map(String),
       axisTick: {alignWithLabel: true},
-      axisLabel: {formatter: (value) => formatter(Number(value))},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => formatter(Number(value))},
     },
     yAxis: {
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: share ? (value) => fmtPct(value, 0) : (value) => fmtInt(value)},
+      axisLabel: {...axisLabelStyle(), formatter: share ? (value) => fmtPct(value, 0) : (value) => fmtInt(value)},
       ...(share ? {} : {minInterval: 1}),
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       confine: true,
       axisPointer: {type: 'shadow'},

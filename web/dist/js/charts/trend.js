@@ -1,6 +1,6 @@
 // Mean error of the polls of each election over time: one scatter point per election (sized by its polls, one
 // series per scope), a trend line and, with a house chosen, the line of the other houses.
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtDate, fmtNum} from '../format.js';
 
 const YEAR_MS = 365 * 24 * 3600 * 1000;
@@ -50,15 +50,16 @@ export function renderTrend(el, {series, trend, rest}, {formatter = (x) => fmtNu
     xAxis: {
       type: 'time',
       minInterval: YEAR_MS,
-      axisLabel: {formatter: (ms) => String(new Date(ms).getUTCFullYear())},
+      axisLabel: {...axisLabelStyle(), formatter: (ms) => String(new Date(ms).getUTCFullYear())},
     },
     yAxis: {
       type: 'value',
       min: 0,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (x) => formatter(x)},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => formatter(x)},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'item',
       formatter(params) {
         const point = params.data && params.data.point;

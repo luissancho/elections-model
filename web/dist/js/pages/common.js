@@ -94,6 +94,31 @@ document.addEventListener('change', (event) => {
 });
 window.addEventListener('pageshow', () => markSegments());
 
+/**
+ * "Ver más" / "Cargar más" of a table: the server renders every row, hides those beyond the first ones and
+ * renders the button hidden (it only works with JavaScript); show the button and, on each click, reveal the next
+ * batch of hidden rows (`data-batch` of the button; all of them without it), hiding the button when none is left.
+ *
+ * @param {string} buttonId id of the button
+ * @param {string} tableId id of the table
+ */
+export function wireMore(buttonId, tableId) {
+  const button = document.getElementById(buttonId);
+  const table = document.getElementById(tableId);
+  if (!button || !table) {
+    return;
+  }
+  const batch = Number(button.dataset.batch) || Infinity;
+  const hidden = () => [...table.querySelectorAll('tbody tr[hidden]')];
+  button.hidden = hidden().length === 0;
+  button.addEventListener('click', () => {
+    for (const row of hidden().slice(0, batch)) {
+      row.hidden = false;
+    }
+    button.hidden = hidden().length === 0;
+  });
+}
+
 /** Show `message` as an error in the status line. */
 export function showError(message) {
   const status = document.getElementById('status');

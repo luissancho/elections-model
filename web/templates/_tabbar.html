@@ -1,0 +1,9 @@
+{#- Bottom tab bar of the phones (hidden on desktop by the CSS): the five entries of `tabbar` (`pages.tabbar`),
+    each with its icon of the sprite. Only the pages with the common context carry it. -#}
+{% if tabbar is defined %}
+<nav class="tabbar" aria-label="Secciones">
+  {% for row in tabbar %}
+  <a{% if row.active %} class="on"{% endif %} href="{{ row.href }}"{% if row.active %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#i-{{ row.icon }}"/></svg>{{ row.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}

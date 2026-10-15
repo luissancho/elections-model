@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockups · Demoscopio rediseño</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+/* ===== Visor de mockups (no forma parte del diseño) ===== */
+html, body { margin: 0; }
+body { background: #d9dce3; font-family: 'DM Sans', system-ui, sans-serif; }
+#bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 8px 16px; background: #1a1c22; color: #fff; font-size: 13px; }
+#bar strong { font-family: Outfit, sans-serif; font-weight: 800; letter-spacing: -.01em; font-size: 15px; }
+#bar .grp { display: flex; gap: 2px; background: rgba(255,255,255,.12); padding: 3px; border-radius: 999px; }
+#bar button { font: 600 12px 'DM Sans', sans-serif; padding: 5px 12px; border-radius: 999px; border: 0; background: transparent; color: #cfd3dc; cursor: pointer; }
+#bar button.on { background: #fff; color: #1a1c22; }
+#bar .note { margin-left: auto; color: #9298ac; font-size: 12px; }
+#stage { display: flex; justify-content: center; padding: 24px 16px 60px; }
+#stage.desk { padding: 0; }
+#stage.desk .page { width: 100%; min-height: calc(100vh - 41px); }
+#stage.mob .page { width: 390px; height: 844px; overflow: auto; border-radius: 44px; border: 10px solid #1a1c22; box-shadow: 0 30px 80px rgba(0,0,0,.35); scrollbar-width: none; }
+#stage.mob .page::-webkit-scrollbar { display: none; }
+#stage.mobfull .page { width: 390px; }
+.page[hidden] { display: none; }
+
+/* ===== Sistema de diseño propuesto (lo que iría a site.css) ===== */
+.page {
+  --bg: #f4f5f8; --card: #fff; --soft: #eceef2; --soft2: #e3e6ec;
+  --line: rgba(0,0,0,.08); --line2: rgba(0,0,0,.15);
+  --ink: #1a1c22; --text2: #5a5f72; --text3: #9298ac;
+  --brand: #1d4f86; --brand-soft: #e7eef8; --hover: #eff4ff;
+  --green: #16a34a; --green-soft: #ecfdf3; --red: #dc2626; --red-soft: #fef2f2; --amber: #d97706;
+  --r: 18px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --pad: 32px;
+  container-type: inline-size; container-name: page;
+  position: relative; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 'DM Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+.page * { box-sizing: border-box; }
+.page a { color: inherit; text-decoration: none; }
+.page h1, .page h2, .page h3 { font-family: Outfit, sans-serif; margin: 0; line-height: 1.15; }
+.num { font-family: Outfit, sans-serif; }
+
+/* Cabecera */
+.hdr { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 var(--pad); background: var(--card); border-bottom: 1px solid var(--line); }
+.wm { display: inline-flex; align-items: center; gap: 1px; font: 800 24px/1 Outfit, sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.wm svg { width: 20px; height: 20px; margin-left: 1px; }
+.hdr nav { display: flex; gap: 4px; }
+.hdr nav a { display: inline-flex; align-items: center; height: 56px; padding: 0 12px; font-size: 13.5px; font-weight: 500; color: var(--text2); }
+.hdr nav a:hover { color: var(--ink); }
+.hdr nav a.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--brand); }
+.hdr .ico-btn { display: none; width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--line2); background: var(--card); align-items: center; justify-content: center; color: var(--text2); }
+
+/* Barra inferior (móvil) */
+.tabbar { display: none; }
+
+.main { padding: 24px var(--pad) 48px; }
+.stack > * + * { margin-top: 16px; }
+
+/* Tarjeta */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; }
+.card-t { display: flex; align-items: center; gap: 9px; font: 700 16px/1.2 Outfit, sans-serif; }
+.card-t::before { content: ""; width: 4px; height: 18px; border-radius: 3px; background: var(--brand); }
+.card-t .pill { margin-left: 2px; }
+.lead { margin: 0 0 12px; font-size: 13.5px; color: var(--text2); max-width: 90ch; }
+.how { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.how::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--brand-soft); font-size: 13px; }
+
+/* Píldoras, chips, botones, segmentado */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--text2); font-size: 11px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.pill.ok { background: var(--green-soft); color: #15803d; }
+.pill.warn { background: #fff7ed; color: #c2410c; }
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+.pill .dot { width: 8px; height: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 10px; background: var(--soft); font-size: 13px; font-weight: 600; }
+.chip.ok { background: var(--green-soft); color: #15803d; }
+.chip small { font-weight: 500; color: var(--text2); }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--line2); background: var(--card); color: var(--ink); font: 600 13px 'DM Sans', sans-serif; cursor: pointer; }
+.btn.pri { background: var(--ink); border-color: var(--ink); color: #fff; }
+.btn.pri:hover { background: #2a2d36; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); }
+.seg span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; }
+.seg span.on { background: var(--ink); color: #fff; }
+.seg.lg span { padding: 7px 14px; font-size: 13px; }
+.ctrls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 6px 0 4px; }
+.lg { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 7px; border-radius: 999px; border: 1.5px solid var(--c); font-size: 12px; font-weight: 600; color: var(--ink); }
+.lg.on { background: var(--c); color: #fff; }
+.lg .dot { background: var(--c); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+/* Tablas */
+.tw { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { padding: 6px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line2); }
+.t td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t th:first-child, .t td:first-child { text-align: left; }
+.t tbody tr:hover td { background: var(--hover); }
+.t .pn { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
+.t .b { font-weight: 700; }
+.t .mut { color: var(--text3); }
+.t .pos { color: var(--green); font-weight: 600; }
+.t .neg { color: var(--red); font-weight: 600; }
+.bar { display: inline-block; position: relative; width: 90px; height: 8px; border-radius: 4px; background: var(--soft2); vertical-align: middle; overflow: hidden; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.rng { display: inline-block; position: relative; width: 110px; height: 12px; border-radius: 6px; background: var(--soft2); vertical-align: middle; }
+.rng i { position: absolute; top: 0; bottom: 0; border-radius: 6px; opacity: .45; }
+.rng b { position: absolute; top: -2px; width: 3px; height: 16px; border-radius: 2px; }
+.rng u { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 1.5px dashed var(--text3); }
+.t.polls td.f { text-align: left; }
+.t.polls td.f b { display: block; }
+.t.polls td.f small { color: var(--text2); font-size: 11.5px; }
+.t .mx { font-weight: 800; }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.kpi { position: relative; padding: 14px 16px; min-height: 86px; min-width: 0; }
+.kpi + .kpi::before { content: ""; position: absolute; left: 0; top: 20%; bottom: 20%; width: 1px; background: var(--line); }
+.kpi .l { font-size: 12px; font-weight: 500; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; font: 700 22px/1.1 Outfit, sans-serif; white-space: nowrap; }
+.kpi .v small { font: 600 12px 'DM Sans', sans-serif; color: var(--text2); }
+.kpi .s { margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .s.ok { color: var(--green); }
+
+/* Tarjetas de partido */
+.pcards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.pc { position: relative; overflow: hidden; min-height: 178px; padding: 14px 14px 46px; border-radius: 16px; color: #fff; box-shadow: var(--shadow);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--c) 88%, #000), color-mix(in srgb, var(--c) 60%, #000)); }
+.pc .rk { position: absolute; top: 12px; right: 12px; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,.18); font: 700 10.5px 'DM Sans', sans-serif; letter-spacing: .04em; }
+.pc .nm { font: 700 15px/1.1 Outfit, sans-serif; }
+.pc .fl { font-size: 11px; opacity: .78; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc .big { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
+.pc .big b { font: 800 38px/1 Outfit, sans-serif; letter-spacing: -.02em; }
+.pc .big span { font: 600 17px/1 Outfit, sans-serif; }
+.pc .lb { display: flex; gap: 10px; margin-top: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; opacity: .8; }
+.pc .lb span { width: 56px; }
+.pc .dl { display: flex; gap: 12px; margin-top: 8px; font-size: 11.5px; font-weight: 600; }
+.pc .dl i { font-style: normal; opacity: .75; font-weight: 500; }
+.pc svg.spark { position: absolute; left: 14px; right: 14px; bottom: 10px; width: calc(100% - 28px); height: 28px; opacity: .9; }
+.pc .sl { position: absolute; left: 14px; bottom: 38px; font-size: 9.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; opacity: .65; }
+
+/* Hero (portada) */
+.hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .85fr); gap: 24px; align-items: start; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); }
+.eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 3px rgba(220,38,38,.18); }
+.hero-t { margin: 10px 0 10px; font: 800 46px/1.05 Outfit, sans-serif; letter-spacing: -.025em; }
+.hero-t em { font-style: normal; color: var(--brand); }
+.hero-p { margin: 0 0 18px; max-width: 58ch; font-size: 16px; color: var(--text2); }
+.hcard { padding: 20px 22px; }
+.hcard-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.hcard-id { display: flex; align-items: center; gap: 12px; }
+.flag { width: 42px; height: 28px; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.08); flex: none; }
+.hcard-id h2 { font: 800 22px/1.1 Outfit, sans-serif; }
+.hcard-id p { margin: 2px 0 0; font-size: 12.5px; color: var(--text2); }
+.bignum { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin: 16px 0 10px; }
+.bignum b { font: 800 60px/1 Outfit, sans-serif; letter-spacing: -.03em; color: var(--c, var(--ink)); }
+.bignum span { font-size: 15px; color: var(--text2); }
+.bignum span strong { color: var(--ink); font-weight: 700; }
+.seatbar { position: relative; margin: 6px 0 22px; }
+.seatbar .trk { display: flex; height: 16px; border-radius: 6px; overflow: hidden; background: var(--soft2); }
+.seatbar .trk i { display: block; height: 100%; }
+.seatbar .mk { position: absolute; top: -5px; bottom: -5px; left: 50.2857%; width: 0; border-left: 2px solid var(--ink); }
+.seatbar .mk span { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; font-size: 10.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.seatbar .ends { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--text2); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.cta .mut { margin-left: auto; font-size: 12px; color: var(--text3); }
+
+.sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 28px 0 12px; }
+.sec-h h2 { font: 800 22px/1.1 Outfit, sans-serif; letter-spacing: -.01em; }
+.sec-h a { font-size: 13px; font-weight: 600; color: var(--brand); }
+.sec-h p { margin: 0; font-size: 13.5px; color: var(--text2); }
+
+.rows { padding: 4px 0; }
+.row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--hover); }
+.row .n { font-weight: 700; font-size: 14px; }
+.row .d { font-size: 12px; color: var(--text2); }
+.row .maj { font-size: 12.5px; color: var(--text2); text-align: right; white-space: nowrap; }
+.row .maj b { color: var(--ink); }
+.row .chev { color: var(--text3); font-size: 18px; line-height: 1; }
+.row-foot { padding: 10px 18px 6px; font-size: 12.5px; color: var(--text2); border-top: 1px solid var(--line); }
+.rows-2 { display: grid; grid-template-columns: 1fr 1fr; padding: 4px 0; }
+.rows-2 .row:nth-child(2) { border-top: 0; }
+.rows-2 .row:nth-child(even) { border-left: 1px solid var(--line); }
+.rows-2 .row-foot { grid-column: 1 / -1; }
+
+.side .card + .card { margin-top: 16px; }
+.hemi-mini { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.hemi-lg { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; font-weight: 600; }
+.hemi-lg span { display: inline-flex; align-items: center; gap: 6px; }
+.hemi-lg small { color: var(--text2); font-weight: 500; }
+.lead-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 13px; color: var(--text2); }
+.lead-strip b { color: var(--ink); }
+
+.plist .pr { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.plist .pr:first-child { border-top: 0; padding-top: 2px; }
+.plist .dt { font: 700 11px/1.15 'DM Sans', sans-serif; text-transform: uppercase; letter-spacing: .02em; color: var(--text2); text-align: center; padding: 4px 0; border-radius: 8px; background: var(--soft); }
+.plist .dt b { display: block; font: 800 15px/1.1 Outfit, sans-serif; color: var(--ink); }
+.plist .who b { display: block; font-size: 13.5px; }
+.plist .who small { font-size: 12px; color: var(--text2); }
+.plist .vals { display: flex; gap: 8px; font: 700 12.5px Outfit, sans-serif; }
+.plist .vals span { color: var(--c); }
+
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.lcard { display: flex; flex-direction: column; gap: 8px; transition: transform .15s, box-shadow .15s; }
+.lcard:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(16,24,40,.05), 0 14px 32px rgba(16,24,40,.09); }
+.lcard .ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--brand-soft); color: var(--brand); }
+.lcard h3 { font: 700 17px/1.2 Outfit, sans-serif; }
+.lcard p { margin: 0; font-size: 13.5px; color: var(--text2); flex: 1; }
+.lcard .go { font-size: 13px; font-weight: 700; color: var(--brand); }
+
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.step { padding: 16px 18px; }
+.step .n { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 999px; background: var(--ink); color: #fff; font: 800 14px Outfit, sans-serif; margin-bottom: 10px; }
+.step h3 { font: 700 15px/1.2 Outfit, sans-serif; margin-bottom: 4px; }
+.step p { margin: 0; font-size: 13px; color: var(--text2); }
+.past { display: flex; flex-wrap: wrap; gap: 8px; }
+.past a { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.past a small { font-weight: 500; color: var(--text2); }
+
+.ftr { padding: 20px var(--pad) 40px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text2); }
+.ftr p { margin: 0 0 4px; }
+.ftr a { color: var(--brand); font-weight: 600; }
+
+/* Barra de evento (Promedios / Escaños) */
+.evbar { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "title run" "tabs run"; gap: 8px 24px; align-items: center; padding: 20px var(--pad) 0; }
+.evbar h2 { grid-area: title; font: 800 26px/1.1 Outfit, sans-serif; letter-spacing: -.015em; }
+.evbar h2 small { display: block; margin-top: 3px; font: 500 13px 'DM Sans', sans-serif; color: var(--text2); }
+.evbar .seg { grid-area: tabs; justify-self: start; }
+.evbar .run { grid-area: run; justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.evbar .run small { font-size: 11.5px; color: var(--text3); }
+
+.hemi-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: stretch; }
+.chart { width: 100%; height: 340px; display: block; }
+.chart.lg { height: 380px; }
+.hemi-svg { width: 100%; height: auto; display: block; }
+#hemi-big { max-width: 620px; margin: 0 auto; }
+#hemi-mini { max-width: 520px; margin: 0 auto; }
+
+/* ===== Pantallas estrechas y tabletas (contenedor ≤ 1099 px) ===== */
+@container page (max-width: 1099px) {
+  .hero { grid-template-columns: 1fr; }
+  .side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .side .card + .card { margin-top: 0; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi:nth-child(n+4) { border-top: 1px solid var(--line); }
+  .kpi:nth-child(4)::before { display: none; }
+  .pcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hemi-grid { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rows-2 { grid-template-columns: 1fr; }
+  .rows-2 .row:nth-child(2) { border-top: 1px solid var(--line); }
+  .rows-2 .row:nth-child(even) { border-left: 0; }
+}
+@container page (max-width: 899px) {
+  .grid3 { grid-template-columns: 1fr; }
+  .side { grid-template-columns: 1fr; }
+}
+
+/* ===== Móvil (contenedor ≤ 719 px) ===== */
+@container page (max-width: 719px) {
+  .page { --pad: 16px; }
+  .hdr { height: 52px; }
+  .hdr nav { display: none; }
+  .hdr .ico-btn { display: inline-flex; }
+  .wm { font-size: 22px; }
+  .main { padding: 16px var(--pad) 92px; }
+  .tabbar { position: sticky; bottom: 0; z-index: 20; display: grid; grid-template-columns: repeat(5, 1fr); background: var(--card); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; font-size: 10.5px; font-weight: 600; color: var(--text2); }
+  .tabbar a svg { width: 22px; height: 22px; }
+  .tabbar a.on { color: var(--brand); }
+  .tabbar a.on svg { color: var(--brand); }
+  .hero { grid-template-columns: 1fr; gap: 16px; }
+  .hero-t { font-size: 32px; margin: 8px 0; }
+  .hero-p { font-size: 15px; margin-bottom: 14px; }
+  .hcard { padding: 16px; }
+  .bignum b { font-size: 48px; }
+  .bignum span { font-size: 14px; }
+  .cta .mut { margin-left: 0; width: 100%; }
+  .row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name chev" "lead chev" "maj chev"; gap: 3px 10px; padding: 10px 16px; }
+  .row > :nth-child(1) { grid-area: name; }
+  .row > :nth-child(2) { grid-area: lead; }
+  .row > :nth-child(3) { grid-area: maj; text-align: left; }
+  .row > :nth-child(4) { grid-area: chev; }
+  .rows-2 { grid-template-columns: 1fr; }
+  .rows-2 .row:nth-child(2) { border-top: 1px solid var(--line); }
+  .rows-2 .row:nth-child(even) { border-left: 0; }
+  .sec-h { flex-wrap: wrap; margin-top: 22px; }
+  .sec-h h2 { font-size: 20px; }
+  .grid3, .steps { grid-template-columns: 1fr; gap: 12px; }
+  .evbar { grid-template-columns: 1fr; grid-template-areas: "title" "tabs" "run"; gap: 10px; padding-top: 14px; }
+  .evbar h2 { font-size: 22px; }
+  .evbar .run { justify-self: start; align-items: flex-start; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi { min-height: 76px; padding: 12px 14px; }
+  .kpi + .kpi::before { display: none; }
+  .kpi:nth-child(odd)::after { content: ""; position: absolute; right: 0; top: 20%; bottom: 20%; width: 1px; background: var(--line); }
+  .kpi:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .kpi:last-child { grid-column: 1 / -1; }
+  .kpi:last-child::after { display: none; }
+  .kpi .v { font-size: 20px; }
+  .pcards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 16px calc(-1 * var(--pad)) 0; padding: 2px var(--pad) 8px; scrollbar-width: none; }
+  .pcards::-webkit-scrollbar { display: none; }
+  .pc { flex: 0 0 210px; scroll-snap-align: start; }
+  .chart { height: 250px; }
+  .chart.lg { height: 280px; }
+  .hemi-grid { grid-template-columns: 1fr; }
+  .card { padding: 14px 16px; }
+  .tw { margin: 0 -16px; padding: 0 16px; }
+  .t { font-size: 12.5px; }
+  .t th:first-child, .t td:first-child { position: sticky; left: 0; background: var(--card); z-index: 1; box-shadow: 1px 0 0 var(--line); }
+  .t tbody tr:hover td:first-child { background: var(--hover); }
+  .bar { width: 84px; }
+  .rng { width: 110px; }
+  .ctrls .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .ftr { padding-bottom: 24px; }
+}
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>Mockups · Demoscopio</strong>
+  <div class="grp"><button class="on" data-page="inicio">Portada</button><button data-page="promedios">Promedios</button></div>
+  <div class="grp"><button class="on" data-view="desk">Escritorio</button><button data-view="mob">Móvil</button></div>
+  <span class="note">Cifras reales del run del 8 oct 2026 (paquete local) · Tipografías: DM Sans + Outfit</span>
+</div>
+
+<div id="stage" class="desk">
+
+<!-- ============================== PORTADA ============================== -->
+<div class="page" id="p-inicio">
+  <header class="hdr">
+    <a class="wm" href="#">Demoscopi<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10.5" r="7" fill="none" stroke="#1d4f86" stroke-width="3"/><circle cx="10" cy="10.5" r="2.6" fill="#1d4f86"/></svg></a>
+    <nav>
+      <a class="on" href="#">Inicio</a>
+      <a href="#">Histórico Errores</a>
+      <a href="#">Ranking Encuestadoras</a>
+      <a href="#">Método</a>
+    </nav>
+    <a class="ico-btn" href="#" aria-label="Método"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7"/><path d="M12 17h.01"/></svg></a>
+  </header>
+
+  <main class="main">
+    <section class="hero">
+      <div>
+        <span class="eyebrow" id="eyebrow">Generales · 29 nov 2026 · faltan 45 días</span>
+        <h1 class="hero-t">Todas las encuestas,<br>un solo <em>promedio</em>.</h1>
+        <p class="hero-p">Demoscopio promedia los sondeos de cada elección, simula el reparto de escaños y puntúa a las encuestadoras según lo que acertaron. Sin cookies y con el método a la vista.</p>
+
+        <article class="card hcard">
+          <div class="hcard-top">
+            <div class="hcard-id">
+              <span class="flag"><svg viewBox="0 0 42 28" width="42" height="28"><rect width="42" height="28" fill="#c60b1e"/><rect y="7" width="42" height="14" fill="#ffc400"/></svg></span>
+              <div><h2>Elecciones generales</h2><p>Congreso de los Diputados · 350 escaños · 29 nov 2026</p></div>
+            </div>
+            <span class="pill brand">Si hoy hubiera elecciones</span>
+          </div>
+          <div class="bignum" id="hero-big"></div>
+          <div class="seatbar" id="hero-seatbar"></div>
+          <div class="chips" id="hero-chips"></div>
+          <div class="cta">
+            <a class="btn pri" href="#">Ver el promedio <span aria-hidden="true">→</span></a>
+            <a class="btn" href="#">Escaños</a>
+            <span class="mut">Última publicación: 8 oct 2026 · 315 sondeos de 23 encuestadoras</span>
+          </div>
+        </article>
+
+        <div class="sec-h"><h2>Autonómicas</h2><p>Once comunidades con pronóstico publicado, por fecha de elección.</p></div>
+        <div class="card rows" id="auto-rows" style="padding:4px 0"></div>
+      </div>
+
+      <aside class="side">
+        <section class="card">
+          <div class="card-h"><h2 class="card-t">Si hoy hubiera generales</h2><span class="pill">13 oct 2026</span></div>
+          <div class="hemi-mini">
+            <svg class="hemi-svg" id="hemi-mini" viewBox="0 0 400 230"></svg>
+            <div class="hemi-lg" id="hemi-mini-lg"></div>
+          </div>
+          <div class="lead-strip" id="lead-strip"></div>
+        </section>
+        <section class="card">
+          <div class="card-h"><h2 class="card-t">Últimas encuestas</h2><a class="how" style="margin:0" href="#">Ver todas ›</a></div>
+          <div class="plist" id="plist"></div>
+        </section>
+      </aside>
+    </section>
+
+    <div class="sec-h"><h2>Para entender el modelo</h2><p>Tres páginas comunes a todas las elecciones.</p></div>
+    <div class="grid3">
+      <a class="card lcard" href="#">
+        <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg></span>
+        <h3>Histórico Errores</h3>
+        <p>Cuánto se equivocaron los sondeos en cada elección pasada, encuestadora a encuestadora, con su diana de errores.</p>
+        <span class="go">Ver el histórico →</span>
+      </a>
+      <a class="card lcard" href="#">
+        <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/></svg></span>
+        <h3>Ranking Encuestadoras</h3>
+        <p>Qué encuestadoras aciertan más, cuáles se desvían y cuánto pesan sus sondeos en el promedio.</p>
+        <span class="go">Ver el ranking →</span>
+      </a>
+      <a class="card lcard" href="#">
+        <span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h8M8 11h6"/></svg></span>
+        <h3>Método</h3>
+        <p>Cómo se promedian los sondeos, cómo se simulan los escaños y cómo se comprueba todo contra las elecciones pasadas.</p>
+        <span class="go">Leer el método →</span>
+      </a>
+    </div>
+
+    <div class="sec-h"><h2>¿Cómo funciona Demoscopio?</h2></div>
+    <div class="steps">
+      <div class="card step"><span class="n">1</span><h3>Recoge los sondeos</h3><p>Todos los publicados en cada ámbito, con su encuestadora, su medio, su muestra y sus fechas.</p></div>
+      <div class="card step"><span class="n">2</span><h3>Los promedia con pesos</h3><p>Cada sondeo pesa según su antigüedad, su muestra, el rating de la encuestadora y su efecto casa.</p></div>
+      <div class="card step"><span class="n">3</span><h3>Simula los escaños</h3><p>Miles de elecciones simuladas y repartidas por circunscripción, de donde salen los rangos y las probabilidades.</p></div>
+      <div class="card step"><span class="n">4</span><h3>Se comprueba a sí mismo</h3><p>Contra cada elección pasada: errores por encuestadora, rating y efecto rebaño.</p></div>
+    </div>
+
+    <div class="sec-h"><h2>Elecciones pasadas</h2><a href="#">Ver el histórico ›</a></div>
+    <div class="past">
+      <a href="#">Cataluña <small>12 may 2024</small></a>
+      <a href="#">País Vasco <small>21 abr 2024</small></a>
+      <a href="#">Galicia <small>18 feb 2024</small></a>
+      <a href="#">Generales <small>23 jul 2023</small></a>
+      <a href="#">Asturias <small>28 may 2023</small></a>
+      <a href="#">Baleares <small>28 may 2023</small></a>
+      <a href="#">Canarias <small>28 may 2023</small></a>
+      <a href="#">Castilla-La Mancha <small>28 may 2023</small></a>
+      <a href="#">Madrid <small>28 may 2023</small></a>
+      <a href="#">Murcia <small>28 may 2023</small></a>
+      <a href="#">Navarra <small>28 may 2023</small></a>
+      <a href="#">Comunidad Valenciana <small>28 may 2023</small></a>
+      <a href="#">+ 14 más</a>
+    </div>
+  </main>
+
+  <footer class="ftr">
+    <p>Publicación: 20261008-181100 (8 oct 2026) · Último sondeo: 3 oct 2026</p>
+    <p>Sondeos: recopilación propia a partir de las fichas publicadas. Resultados: Ministerio del Interior. Modelo: Demoscopio.</p>
+    <p><a href="#">Método</a> · <a href="#">Manifiesto de datos</a> · Sin cookies, sin agenda, sin afiliación política.</p>
+  </footer>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <a class="on" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l5-6 4 3 5-7 4 4"/><path d="M3 21h18"/></svg>Promedios</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 18a9 9 0 0 1 18 0z"/><path d="M12 9v9"/></svg>Escaños</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/></svg>Ranking</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/></svg>Método</a>
+  </nav>
+</div>
+
+<!-- ============================== PROMEDIOS ============================== -->
+<div class="page" id="p-promedios" hidden>
+  <header class="hdr">
+    <a class="wm" href="#">Demoscopi<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10.5" r="7" fill="none" stroke="#1d4f86" stroke-width="3"/><circle cx="10" cy="10.5" r="2.6" fill="#1d4f86"/></svg></a>
+    <nav>
+      <a href="#">Inicio</a>
+      <a href="#">Histórico Errores</a>
+      <a href="#">Ranking Encuestadoras</a>
+      <a href="#">Método</a>
+    </nav>
+    <a class="ico-btn" href="#" aria-label="Método"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7"/><path d="M12 17h.01"/></svg></a>
+  </header>
+
+  <div class="evbar">
+    <h2>Elecciones generales<small>Domingo 29 nov 2026 · faltan 45 días · Congreso, 350 escaños</small></h2>
+    <div class="seg lg">
+      <span class="on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>Promedios</span>
+      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 18a9 9 0 0 1 18 0z"/></svg>Escaños</span>
+    </div>
+    <div class="run"><span class="pill brand">Estimación a 13 oct 2026</span><small>Publicación del 8 oct · 315 sondeos</small></div>
+  </div>
+
+  <main class="main stack">
+    <div class="kpis" id="kpis"></div>
+    <div class="pcards" id="pcards"></div>
+
+    <section class="card">
+      <div class="card-h"><h2 class="card-t">Promedio de sondeos <span class="pill">estimación a 13 oct 2026</span></h2></div>
+      <p class="lead">La intención de voto de cada partido a lo largo del ciclo, según el promedio ponderado de los sondeos publicados.</p>
+      <div class="ctrls">
+        <div class="seg"><span class="on">Partidos</span><span>Bloques</span></div>
+        <div class="seg"><span class="on">Todo el ciclo</span><span>1 año</span><span>6 meses</span><span>3 meses</span></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <svg class="chart lg" id="chart"></svg>
+      <a class="how" href="#">Cómo leerlo</a>
+    </section>
+
+    <div class="hemi-grid">
+      <section class="card">
+        <div class="card-h"><h2 class="card-t">Hemiciclo</h2><div class="seg"><span class="on">Partidos</span><span>Bloques</span></div></div>
+        <p class="lead">El reparto central de los escaños si hoy hubiera elecciones, dibujado como la cámara.</p>
+        <svg class="hemi-svg" id="hemi-big" viewBox="0 0 520 300"></svg>
+        <div class="lead-strip" id="lead-strip-2"></div>
+        <a class="how" href="#">Cómo leerlo</a>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2 class="card-t">Resultados por partido</h2><span class="pill">13 oct 2026</span></div>
+        <p class="lead">Voto y escaños previstos de cada partido, su rango del 95 % y su probabilidad de quedar primero.</p>
+        <div class="tw"><table class="t" id="ptable"><thead><tr><th>Partido</th><th>% voto</th><th></th><th>Escaños</th><th>Rango 95 %</th><th>P(primero)</th></tr></thead><tbody></tbody></table></div>
+        <a class="how" href="#">Cómo leerlo</a>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-h"><h2 class="card-t">Todas las encuestas</h2><span class="pill">315 sondeos · 23 encuestadoras</span></div>
+      <p class="lead">Lo que publicó cada sondeo del ciclo. Pulsa una cabecera para ordenar; el mejor dato de cada fila va en negrita.</p>
+      <div class="ctrls">
+        <div class="seg"><span class="on">% de voto</span><span>Escaños</span></div>
+        <span class="chip">Encuestadoras <small>23/23</small> ▾</span>
+        <span class="chip">Desde <small>ago 2023</small> ▾</span>
+        <span class="chip">Hasta <small>oct 2026</small> ▾</span>
+      </div>
+      <div class="tw"><table class="t polls" id="polls"><thead></thead><tbody></tbody></table></div>
+      <div class="cta" style="margin-top:10px"><a class="btn" href="#">Ver más (307)</a><span class="mut">Descargar CSV</span></div>
+    </section>
+  </main>
+
+  <footer class="ftr">
+    <p>Publicación: 20261008-181100 (8 oct 2026) · Último sondeo: 3 oct 2026</p>
+    <p>Sondeos: recopilación propia a partir de las fichas publicadas. Resultados: Ministerio del Interior. Modelo: Demoscopio.</p>
+    <p><a href="#">Método</a> · <a href="#">Manifiesto de datos</a></p>
+  </footer>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a>
+    <a class="on" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l5-6 4 3 5-7 4 4"/><path d="M3 21h18"/></svg>Promedios</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 18a9 9 0 0 1 18 0z"/><path d="M12 9v9"/></svg>Escaños</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/></svg>Ranking</a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/></svg>Método</a>
+  </nav>
+</div>
+
+</div>
+
+<script>
+const D={"as_of": "2026-10-13", "date_last": "2026-10-03", "run_at": "2026-10-08T18:11:02Z", "n_polls": 315, "n_pollsters": 23, "event_date": "2026-11-29", "majority": 176, "n_seats": 350, "parties": [{"name": "PP", "full": "Partido Popular", "color": "#1d84ce", "block": "Derecha", "pct": 32.66, "pct_lo": 27.8, "pct_hi": 37.71, "seats": 140, "lo": 118.0, "hi": 159.5, "p_first": 0.968, "seats23": 137, "pct23": 33.06}, {"name": "PSOE", "full": "Partido Socialista Obrero Español", "color": "#ef1c27", "block": "Izquierda", "pct": 26.36, "pct_lo": 21.79, "pct_hi": 30.76, "seats": 107, "lo": 86.5, "hi": 125.5, "p_first": 0.032, "seats23": 121, "pct23": 31.68}, {"name": "VOX", "full": "VOX", "color": "#63be21", "block": "Derecha", "pct": 17.91, "pct_lo": 13.92, "pct_hi": 22.06, "seats": 63, "lo": 43.0, "hi": 80.0, "p_first": 0.0, "seats23": 33, "pct23": 12.38}, {"name": "SUMAR", "full": "Sumar", "color": "#ef4b91", "block": "Izquierda", "pct": 5.95, "pct_lo": 2.96, "pct_hi": 9.2, "seats": 8, "lo": 2.0, "hi": 19.0, "p_first": 0.0, "seats23": 31, "pct23": 12.33}, {"name": "UP", "full": "Unidas Podemos", "color": "#7b4977", "block": "Izquierda", "pct": 3.11, "pct_lo": 0.2, "pct_hi": 5.9, "seats": 2, "lo": 0.0, "hi": 7.0, "p_first": 0.0, "seats23": null, "pct23": null}, {"name": "SALF", "full": "Se Acabó la Fiesta", "color": "#785a46", "block": "Derecha", "pct": 1.9, "pct_lo": 0.0, "pct_hi": 4.58, "seats": 0, "lo": 0.0, "hi": 4.0, "p_first": 0.0, "seats23": null, "pct23": null}, {"name": "JxCat", "full": "Junts per Catalunya", "color": "#ed5975", "block": "Separatista", "pct": 1.22, "pct_lo": 0.93, "pct_hi": 1.5, "seats": 5, "lo": 3.0, "hi": 7.0, "p_first": 0.0, "seats23": 7, "pct23": 1.6}, {"name": "ERC", "full": "Esquerra Republicana de Catalunya", "color": "#ffb232", "block": "Separatista", "pct": 2.22, "pct_lo": 1.84, "pct_hi": 2.58, "seats": 9, "lo": 7.0, "hi": 12.0, "p_first": 0.0, "seats23": 7, "pct23": 1.89}, {"name": "EHB", "full": "EH Bildu", "color": "#b5cf18", "block": "Separatista", "pct": 1.35, "pct_lo": 1.06, "pct_hi": 1.62, "seats": 7, "lo": 6.0, "hi": 9.0, "p_first": 0.0, "seats23": 6, "pct23": 1.36}, {"name": "PNV", "full": "Partido Nacionalista Vasco", "color": "#4aae4a", "block": "Regionalista", "pct": 0.97, "pct_lo": 0.71, "pct_hi": 1.21, "seats": 5, "lo": 3.0, "hi": 6.0, "p_first": 0.0, "seats23": 5, "pct23": 1.12}, {"name": "BNG", "full": "Bloque Nacionalista Galego", "color": "#adcfef", "block": "Regionalista", "pct": 0.84, "pct_lo": 0.64, "pct_hi": 1.07, "seats": 2, "lo": 1.0, "hi": 3.0, "p_first": 0.0, "seats23": 1, "pct23": 0.62}, {"name": "CC", "full": "Coalición Canaria", "color": "#baf73e", "block": "Regionalista", "pct": 0.48, "pct_lo": 0.27, "pct_hi": 0.68, "seats": 1, "lo": 1.0, "hi": 3.0, "p_first": 0.0, "seats23": 1, "pct23": 0.42}, {"name": "UPN", "full": "Unión del Pueblo Navarro", "color": "#00599b", "block": "Regionalista", "pct": 0.2, "pct_lo": 0.03, "pct_hi": 0.37, "seats": 1, "lo": 0.0, "hi": 2.0, "p_first": 0.0, "seats23": 1, "pct23": 0.2}], "blocks": [{"name": "Derecha", "pct": 52.48, "seats": 203, "lo": 184.0, "hi": 222.5, "p_majority": 0.999}, {"name": "Izquierda", "pct": 35.42, "seats": 117, "lo": 97.0, "hi": 138.0, "p_majority": 0.0}, {"name": "Regionalista", "pct": 2.48, "seats": 9, "lo": 6.0, "hi": 12.0, "p_majority": 0.0}, {"name": "Separatista", "pct": 4.79, "seats": 21, "lo": 17.0, "hi": 24.5, "p_majority": 0.0}], "bmaps": {"max": ["PP", "PSOE", "VOX", "SUMAR", "UP", "SALF"], "min": {"PP": "PP", "PSOE": "PSOE", "VOX+SALF": ["VOX", "SALF"], "SUMAR+UP": ["SUMAR", "UP"]}, "main": ["PP", "PSOE", "VOX", "SUMAR", "UP", "SALF"], "blocks": {"Derecha": ["PP", "VOX", "SALF"], "Izquierda": ["PSOE", "UP", "SUMAR"], "Regionalista": ["PNV", "CC", "BNG", "UPN"], "Separatista": ["ERC", "JxCat", "EHB"]}, "vs": {"Derecha": ["PP", "VOX", "SALF"], "Izquierda": ["PSOE", "SUMAR", "UP"]}}, "series": {"dates": ["2023-08-07", "2023-08-14", "2023-08-21", "2023-08-28", "2023-09-04", "2023-09-11", "2023-09-18", "2023-09-25", "2023-10-02", "2023-10-09", "2023-10-16", "2023-10-23", "2023-10-30", "2023-11-06", "2023-11-13", "2023-11-20", "2023-11-27", "2023-12-04", "2023-12-11", "2023-12-18", "2023-12-25", "2024-01-01", "2024-01-08", "2024-01-15", "2024-01-22", "2024-01-29", "2024-02-05", "2024-02-12", "2024-02-19", "2024-02-26", "2024-03-04", "2024-03-11", "2024-03-18", "2024-03-25", "2024-04-01", "2024-04-08", "2024-04-15", "2024-04-22", "2024-04-29", "2024-05-06", "2024-05-13", "2024-05-20", "2024-05-27", "2024-06-03", "2024-06-10", "2024-06-17", "2024-06-24", "2024-07-01", "2024-07-08", "2024-07-15", "2024-07-22", "2024-07-29", "2024-08-05", "2024-08-12", "2024-08-19", "2024-08-26", "2024-09-02", "2024-09-09", "2024-09-16", "2024-09-23", "2024-09-30", "2024-10-07", "2024-10-14", "2024-10-21", "2024-10-28", "2024-11-04", "2024-11-11", "2024-11-18", "2024-11-25", "2024-12-02", "2024-12-09", "2024-12-16", "2024-12-23", "2024-12-30", "2025-01-06", "2025-01-13", "2025-01-20", "2025-01-27", "2025-02-03", "2025-02-10", "2025-02-17", "2025-02-24", "2025-03-03", "2025-03-10", "2025-03-17", "2025-03-24", "2025-03-31", "2025-04-07", "2025-04-14", "2025-04-21", "2025-04-28", "2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02", "2026-03-09", "2026-03-16", "2026-03-23", "2026-03-30", "2026-04-06", "2026-04-13", "2026-04-20", "2026-04-27", "2026-05-04", "2026-05-11", "2026-05-18", "2026-05-25", "2026-06-01", "2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29", "2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27", "2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05", "2026-10-12", "2026-10-13"], "mean": {"PP": [34.6, 34.6, 34.6, 34.7, 34.8, 34.8, 34.9, 35.0, 35.2, 35.3, 35.4, 35.5, 35.7, 35.8, 35.9, 36.0, 36.1, 36.2, 36.3, 36.4, 36.5, 36.6, 36.7, 36.7, 36.8, 36.8, 36.9, 36.9, 36.9, 36.8, 36.8, 36.8, 36.7, 36.6, 36.5, 36.4, 36.4, 36.2, 36.2, 36.1, 36.0, 35.9, 35.8, 35.7, 35.6, 35.5, 35.4, 35.3, 35.2, 35.1, 35.0, 35.0, 34.9, 34.8, 34.7, 34.7, 34.6, 34.5, 34.5, 34.5, 34.4, 34.4, 34.3, 34.3, 34.2, 34.2, 34.1, 34.1, 34.0, 34.0, 33.9, 33.9, 33.8, 33.8, 33.8, 33.8, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.8, 33.8, 33.8, 33.8, 33.8, 33.8, 33.9, 33.9, 33.9, 33.9, 33.9, 33.8, 33.8, 33.8, 33.7, 33.7, 33.6, 33.6, 33.5, 33.4, 33.4, 33.3, 33.2, 33.1, 33.0, 32.9, 32.8, 32.8, 32.7, 32.6, 32.5, 32.4, 32.4, 32.3, 32.2, 32.2, 32.1, 32.1, 32.0, 32.0, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 31.9, 32.0, 32.0, 32.0, 32.0, 32.1, 32.1, 32.1, 32.2, 32.2, 32.2, 32.3, 32.3, 32.3, 32.3, 32.4, 32.4, 32.4, 32.4, 32.5, 32.5, 32.5, 32.5, 32.5, 32.6, 32.6, 32.6, 32.6, 32.7, 32.7], "PSOE": [31.7, 31.6, 31.6, 31.5, 31.5, 31.4, 31.3, 31.3, 31.2, 31.1, 31.0, 30.9, 30.8, 30.7, 30.6, 30.6, 30.5, 30.4, 30.3, 30.2, 30.2, 30.1, 30.0, 30.0, 29.9, 29.8, 29.8, 29.8, 29.7, 29.7, 29.7, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.6, 29.5, 29.5, 29.5, 29.4, 29.4, 29.4, 29.3, 29.3, 29.2, 29.2, 29.1, 29.1, 29.0, 28.9, 28.9, 28.8, 28.8, 28.8, 28.7, 28.7, 28.7, 28.7, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.6, 28.5, 28.5, 28.5, 28.4, 28.4, 28.3, 28.3, 28.2, 28.1, 28.1, 28.0, 27.9, 27.9, 27.8, 27.7, 27.7, 27.6, 27.6, 27.6, 27.5, 27.5, 27.5, 27.5, 27.4, 27.4, 27.4, 27.4, 27.4, 27.4, 27.4, 27.4, 27.3, 27.3, 27.3, 27.3, 27.3, 27.3, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.2, 27.1, 27.1, 27.1, 27.1, 27.1, 27.0, 27.0, 27.0, 26.9, 26.9, 26.9, 26.8, 26.8, 26.7, 26.7, 26.6, 26.6, 26.6, 26.5, 26.5, 26.5, 26.4, 26.4, 26.4, 26.4, 26.4], "VOX": [11.8, 11.7, 11.7, 11.7, 11.7, 11.6, 11.6, 11.6, 11.5, 11.5, 11.4, 11.4, 11.3, 11.3, 11.2, 11.2, 11.2, 11.1, 11.1, 11.0, 11.0, 11.0, 11.0, 10.9, 10.9, 10.9, 10.9, 10.9, 10.9, 10.9, 10.9, 10.9, 10.9, 10.9, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.1, 11.1, 11.1, 11.1, 11.1, 11.1, 11.1, 11.2, 11.2, 11.2, 11.3, 11.3, 11.4, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 12.0, 12.1, 12.2, 12.4, 12.5, 12.6, 12.8, 12.9, 13.0, 13.1, 13.2, 13.3, 13.4, 13.4, 13.5, 13.6, 13.6, 13.6, 13.7, 13.7, 13.7, 13.8, 13.8, 13.8, 13.9, 13.9, 14.0, 14.1, 14.1, 14.2, 14.3, 14.3, 14.4, 14.6, 14.7, 14.8, 14.9, 15.0, 15.2, 15.3, 15.4, 15.6, 15.7, 15.8, 15.9, 16.1, 16.2, 16.3, 16.4, 16.6, 16.7, 16.8, 16.9, 17.0, 17.1, 17.2, 17.2, 17.3, 17.4, 17.5, 17.5, 17.6, 17.6, 17.7, 17.7, 17.7, 17.7, 17.8, 17.8, 17.8, 17.8, 17.8, 17.8, 17.8, 17.7, 17.7, 17.7, 17.7, 17.7, 17.7, 17.7, 17.6, 17.6, 17.6, 17.6, 17.6, 17.6, 17.6, 17.6, 17.6, 17.6, 17.7, 17.7, 17.7, 17.7, 17.8, 17.8, 17.8, 17.8, 17.9, 17.9, 17.9, 17.9, 17.9, 17.9], "SUMAR": [12.3, 12.2, 12.1, 12.0, 11.9, 11.8, 11.7, 11.6, 11.6, 11.5, 11.4, 11.3, 11.3, 11.2, 11.1, 11.1, 11.0, 10.9, 10.8, 10.8, 10.7, 10.6, 10.5, 10.4, 10.3, 10.2, 10.1, 10.0, 9.8, 9.7, 9.6, 9.5, 9.3, 9.2, 9.1, 8.9, 8.8, 8.7, 8.5, 8.4, 8.3, 8.2, 8.1, 7.9, 7.8, 7.7, 7.6, 7.5, 7.4, 7.3, 7.3, 7.2, 7.1, 7.0, 7.0, 6.9, 6.8, 6.8, 6.8, 6.7, 6.7, 6.7, 6.6, 6.6, 6.6, 6.6, 6.5, 6.5, 6.5, 6.5, 6.4, 6.4, 6.4, 6.4, 6.4, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.3, 6.4, 6.4, 6.4, 6.4, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.6, 6.6, 6.6, 6.6, 6.6, 6.6, 6.6, 6.6, 6.6, 6.6, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.7, 6.6, 6.6, 6.6, 6.6, 6.6, 6.6, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.4, 6.4, 6.4, 6.4, 6.4, 6.3, 6.3, 6.3, 6.3, 6.3, 6.2, 6.2, 6.2, 6.2, 6.2, 6.1, 6.1, 6.1, 6.1, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0], "UP": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 2.1, 2.1, 2.2, 2.2, 2.2, 2.3, 2.3, 2.3, 2.4, 2.4, 2.5, 2.5, 2.5, 2.6, 2.6, 2.7, 2.7, 2.8, 2.8, 2.9, 2.9, 2.9, 3.0, 3.0, 3.1, 3.1, 3.1, 3.2, 3.2, 3.3, 3.3, 3.3, 3.4, 3.4, 3.4, 3.5, 3.5, 3.5, 3.6, 3.6, 3.6, 3.7, 3.7, 3.7, 3.8, 3.8, 3.8, 3.9, 3.9, 3.9, 4.0, 4.0, 4.0, 4.1, 4.1, 4.1, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.1, 4.1, 4.1, 4.1, 4.1, 4.1, 4.1, 4.1, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.9, 3.9, 3.9, 3.9, 3.9, 3.9, 3.8, 3.8, 3.8, 3.8, 3.8, 3.7, 3.7, 3.7, 3.6, 3.6, 3.6, 3.6, 3.5, 3.5, 3.5, 3.4, 3.4, 3.4, 3.4, 3.3, 3.3, 3.3, 3.3, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.2, 3.1, 3.1, 3.1, 3.1, 3.1], "SALF": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 3.8, 3.8, 3.8, 3.7, 3.7, 3.6, 3.6, 3.6, 3.5, 3.5, 3.5, 3.4, 3.4, 3.3, 3.3, 3.2, 3.2, 3.1, 3.1, 3.0, 3.0, 2.9, 2.9, 2.8, 2.7, 2.7, 2.6, 2.6, 2.5, 2.5, 2.5, 2.4, 2.4, 2.4, 2.3, 2.3, 2.3, 2.2, 2.2, 2.2, 2.2, 2.1, 2.1, 2.1, 2.1, 2.0, 2.0, 2.0, 2.0, 1.9, 1.9, 1.9, 1.9, 1.8, 1.8, 1.8, 1.8, 1.8, 1.7, 1.7, 1.7, 1.7, 1.7, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.7, 1.7, 1.7, 1.7, 1.7, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9], "JxCat": [null, null, null, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.6, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2], "ERC": [null, null, null, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.7, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 1.9, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2, 2.2], "EHB": [null, null, null, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.3, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4], "PNV": [null, null, null, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "BNG": [null, null, null, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8], "CC": [null, null, null, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], "UPN": [null, null, null, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]}}, "scatter": [{"d": "2023-08-07", "PP": 31.9, "PSOE": 31.2, "VOX": 12.9, "SUMAR": 12.7, "UP": null, "SALF": null}, {"d": "2023-08-24", "PP": 34.2, "PSOE": 31.7, "VOX": 12.7, "SUMAR": 12.4, "UP": null, "SALF": null}, {"d": "2023-08-28", "PP": 33.8, "PSOE": 32.3, "VOX": 10.9, "SUMAR": 12.0, "UP": null, "SALF": null}, {"d": "2023-09-01", "PP": 35.5, "PSOE": 31.0, "VOX": 11.4, "SUMAR": 11.2, "UP": null, "SALF": null}, {"d": "2023-09-07", "PP": 33.6, "PSOE": 31.8, "VOX": 11.7, "SUMAR": 12.3, "UP": null, "SALF": null}, {"d": "2023-09-12", "PP": 31.7, "PSOE": 33.5, "VOX": 11.1, "SUMAR": 11.9, "UP": null, "SALF": null}, {"d": "2023-09-17", "PP": 34.1, "PSOE": 32.3, "VOX": 12.1, "SUMAR": 10.9, "UP": null, "SALF": null}, {"d": "2023-09-21", "PP": 35.4, "PSOE": 30.9, "VOX": 11.9, "SUMAR": 11.5, "UP": null, "SALF": null}, {"d": "2023-09-23", "PP": 37.0, "PSOE": 30.9, "VOX": 11.6, "SUMAR": 10.8, "UP": null, "SALF": null}, {"d": "2023-09-28", "PP": 36.1, "PSOE": 30.8, "VOX": 11.3, "SUMAR": 12.5, "UP": null, "SALF": null}, {"d": "2023-10-02", "PP": 34.2, "PSOE": 32.1, "VOX": 11.7, "SUMAR": 11.1, "UP": null, "SALF": null}, {"d": "2023-10-04", "PP": 34.5, "PSOE": 30.8, "VOX": 11.9, "SUMAR": 11.8, "UP": null, "SALF": null}, {"d": "2023-10-06", "PP": 32.2, "PSOE": 32.6, "VOX": 10.1, "SUMAR": 12.7, "UP": null, "SALF": null}, {"d": "2023-10-10", "PP": 34.1, "PSOE": 32.3, "VOX": 10.7, "SUMAR": 12.0, "UP": null, "SALF": null}, {"d": "2023-10-20", "PP": 34.7, "PSOE": 32.6, "VOX": 10.1, "SUMAR": 10.2, "UP": null, "SALF": null}, {"d": "2023-10-22", "PP": 34.9, "PSOE": 32.6, "VOX": 12.4, "SUMAR": 10.3, "UP": null, "SALF": null}, {"d": "2023-10-26", "PP": 35.6, "PSOE": 31.3, "VOX": 12.1, "SUMAR": 11.2, "UP": null, "SALF": null}, {"d": "2023-10-27", "PP": 37.8, "PSOE": 30.2, "VOX": 11.0, "SUMAR": 11.0, "UP": null, "SALF": null}, {"d": "2023-10-30", "PP": 34.7, "PSOE": 31.2, "VOX": 11.2, "SUMAR": 11.7, "UP": null, "SALF": null}, {"d": "2023-11-03", "PP": 35.5, "PSOE": 29.7, "VOX": 11.6, "SUMAR": 12.0, "UP": null, "SALF": null}, {"d": "2023-11-03", "PP": 36.7, "PSOE": 31.2, "VOX": 10.9, "SUMAR": 11.2, "UP": null, "SALF": null}, {"d": "2023-11-03", "PP": 37.2, "PSOE": 31.1, "VOX": 9.5, "SUMAR": 9.9, "UP": null, "SALF": null}, {"d": "2023-11-04", "PP": 35.8, "PSOE": 31.0, "VOX": 11.2, "SUMAR": 11.0, "UP": null, "SALF": null}, {"d": "2023-11-06", "PP": 33.9, "PSOE": 31.3, "VOX": 10.0, "SUMAR": 11.8, "UP": null, "SALF": null}, {"d": "2023-11-10", "PP": 36.5, "PSOE": 30.6, "VOX": 10.9, "SUMAR": 11.3, "UP": null, "SALF": null}, {"d": "2023-11-13", "PP": 35.9, "PSOE": 30.3, "VOX": 11.6, "SUMAR": 11.7, "UP": null, "SALF": null}, {"d": "2023-11-17", "PP": 36.3, "PSOE": 28.8, "VOX": 11.6, "SUMAR": 11.7, "UP": null, "SALF": null}, {"d": "2023-11-17", "PP": 36.0, "PSOE": 32.9, "VOX": 9.7, "SUMAR": 9.9, "UP": null, "SALF": null}, {"d": "2023-11-18", "PP": 36.9, "PSOE": 29.0, "VOX": 11.1, "SUMAR": 11.1, "UP": null, "SALF": null}, {"d": "2023-11-23", "PP": 36.2, "PSOE": 30.7, "VOX": 11.8, "SUMAR": 11.0, "UP": null, "SALF": null}, {"d": "2023-11-23", "PP": 35.2, "PSOE": 27.3, "VOX": 12.5, "SUMAR": 12.5, "UP": null, "SALF": null}, {"d": "2023-11-24", "PP": 38.7, "PSOE": 30.1, "VOX": 10.6, "SUMAR": 10.2, "UP": null, "SALF": null}, {"d": "2023-11-27", "PP": 35.0, "PSOE": 30.5, "VOX": 11.5, "SUMAR": 11.3, "UP": null, "SALF": null}, {"d": "2023-12-01", "PP": 37.4, "PSOE": 30.5, "VOX": 11.4, "SUMAR": 11.1, "UP": null, "SALF": null}, {"d": "2023-12-07", "PP": 33.2, "PSOE": 31.8, "VOX": 8.5, "SUMAR": 11.8, "UP": null, "SALF": null}, {"d": "2023-12-11", "PP": 35.5, "PSOE": 29.6, "VOX": 12.3, "SUMAR": 12.0, "UP": null, "SALF": null}, {"d": "2023-12-15", "PP": 36.1, "PSOE": 33.2, "VOX": 10.0, "SUMAR": 9.8, "UP": null, "SALF": null}, {"d": "2023-12-15", "PP": 37.1, "PSOE": 29.9, "VOX": 11.0, "SUMAR": 8.8, "UP": 2.3, "SALF": null}, {"d": "2023-12-16", "PP": 37.1, "PSOE": 30.1, "VOX": 11.0, "SUMAR": 10.9, "UP": null, "SALF": null}, {"d": "2023-12-26", "PP": 37.2, "PSOE": 29.8, "VOX": 11.2, "SUMAR": 11.8, "UP": null, "SALF": null}, {"d": "2023-12-27", "PP": 37.0, "PSOE": 30.3, "VOX": 10.8, "SUMAR": 10.1, "UP": 1.1, "SALF": null}, {"d": "2023-12-31", "PP": 38.7, "PSOE": 29.2, "VOX": 11.0, "SUMAR": 10.8, "UP": null, "SALF": null}, {"d": "2024-01-05", "PP": 32.1, "PSOE": 34.0, "VOX": 8.3, "SUMAR": 9.7, "UP": 2.7, "SALF": null}, {"d": "2024-01-08", "PP": 34.7, "PSOE": 31.4, "VOX": 10.9, "SUMAR": 11.0, "UP": null, "SALF": null}, {"d": "2024-01-09", "PP": 36.6, "PSOE": 29.4, "VOX": 11.4, "SUMAR": 10.7, "UP": 2.4, "SALF": null}, {"d": "2024-01-19", "PP": 37.5, "PSOE": 32.3, "VOX": 9.8, "SUMAR": 9.6, "UP": null, "SALF": null}, {"d": "2024-01-29", "PP": 34.4, "PSOE": 30.5, "VOX": 11.8, "SUMAR": 10.9, "UP": null, "SALF": null}, {"d": "2024-02-01", "PP": 36.8, "PSOE": 30.2, "VOX": 10.5, "SUMAR": 9.6, "UP": 2.6, "SALF": null}, {"d": "2024-02-06", "PP": 33.2, "PSOE": 33.0, "VOX": 7.9, "SUMAR": 10.2, "UP": 2.9, "SALF": null}, {"d": "2024-02-09", "PP": 36.6, "PSOE": 29.7, "VOX": 12.0, "SUMAR": 11.1, "UP": 2.3, "SALF": null}, {"d": "2024-02-09", "PP": 38.5, "PSOE": 29.0, "VOX": 10.8, "SUMAR": 10.5, "UP": null, "SALF": null}, {"d": "2024-02-21", "PP": 38.5, "PSOE": 28.0, "VOX": 9.1, "SUMAR": 10.2, "UP": 1.8, "SALF": null}, {"d": "2024-02-22", "PP": 38.8, "PSOE": 28.2, "VOX": 11.6, "SUMAR": 9.9, "UP": null, "SALF": null}, {"d": "2024-02-29", "PP": 37.9, "PSOE": 28.4, "VOX": 11.1, "SUMAR": 8.8, "UP": 2.4, "SALF": null}, {"d": "2024-02-29", "PP": 37.9, "PSOE": 29.3, "VOX": 10.2, "SUMAR": 9.4, "UP": 2.8, "SALF": null}, {"d": "2024-03-03", "PP": 35.2, "PSOE": 30.7, "VOX": 10.6, "SUMAR": 11.7, "UP": null, "SALF": null}, {"d": "2024-03-05", "PP": 34.0, "PSOE": 31.3, "VOX": 9.9, "SUMAR": 9.2, "UP": 2.2, "SALF": null}, {"d": "2024-03-06", "PP": 38.5, "PSOE": 28.8, "VOX": 10.5, "SUMAR": 10.4, "UP": 1.7, "SALF": null}, {"d": "2024-03-07", "PP": 38.8, "PSOE": 26.9, "VOX": 10.7, "SUMAR": 10.8, "UP": null, "SALF": null}, {"d": "2024-03-08", "PP": 36.1, "PSOE": 29.8, "VOX": 10.8, "SUMAR": 11.6, "UP": 2.0, "SALF": null}, {"d": "2024-03-09", "PP": 40.0, "PSOE": 28.2, "VOX": 10.5, "SUMAR": 10.1, "UP": null, "SALF": null}, {"d": "2024-03-21", "PP": 37.3, "PSOE": 27.6, "VOX": 11.7, "SUMAR": 8.7, "UP": 3.1, "SALF": null}, {"d": "2024-03-21", "PP": 38.7, "PSOE": 27.8, "VOX": 11.2, "SUMAR": 9.6, "UP": null, "SALF": null}, {"d": "2024-03-22", "PP": 38.6, "PSOE": 30.9, "VOX": 9.6, "SUMAR": 9.4, "UP": null, "SALF": null}, {"d": "2024-03-26", "PP": 38.2, "PSOE": 29.8, "VOX": 9.4, "SUMAR": 9.8, "UP": 2.5, "SALF": null}, {"d": "2024-03-27", "PP": 38.4, "PSOE": 28.4, "VOX": 10.8, "SUMAR": 9.3, "UP": null, "SALF": null}, {"d": "2024-03-27", "PP": 35.5, "PSOE": 30.0, "VOX": 11.3, "SUMAR": 8.2, "UP": 2.9, "SALF": null}, {"d": "2024-04-04", "PP": 33.5, "PSOE": 32.5, "VOX": 10.1, "SUMAR": 8.2, "UP": 3.1, "SALF": null}, {"d": "2024-04-09", "PP": 35.7, "PSOE": 30.5, "VOX": 11.7, "SUMAR": 10.4, "UP": 1.5, "SALF": null}, {"d": "2024-04-12", "PP": 39.1, "PSOE": 27.0, "VOX": 11.3, "SUMAR": 8.4, "UP": 2.5, "SALF": null}, {"d": "2024-04-26", "PP": 29.2, "PSOE": 38.6, "VOX": 11.0, "SUMAR": 7.2, "UP": 2.6, "SALF": null}, {"d": "2024-05-04", "PP": 39.4, "PSOE": 27.6, "VOX": 11.1, "SUMAR": 8.0, "UP": 2.6, "SALF": null}, {"d": "2024-05-08", "PP": 30.4, "PSOE": 35.5, "VOX": 10.2, "SUMAR": 8.0, "UP": 2.2, "SALF": null}, {"d": "2024-05-09", "PP": 34.4, "PSOE": 29.9, "VOX": 12.4, "SUMAR": 9.5, "UP": 1.6, "SALF": null}, {"d": "2024-05-13", "PP": 34.5, "PSOE": 30.9, "VOX": 13.4, "SUMAR": 7.2, "UP": 2.6, "SALF": null}, {"d": "2024-05-19", "PP": 37.1, "PSOE": 29.6, "VOX": 11.5, "SUMAR": 8.2, "UP": 2.7, "SALF": null}, {"d": "2024-05-29", "PP": 33.9, "PSOE": 29.2, "VOX": 12.8, "SUMAR": 8.2, "UP": 3.6, "SALF": null}, {"d": "2024-05-30", "PP": 33.8, "PSOE": 30.7, "VOX": 13.1, "SUMAR": 7.2, "UP": 3.4, "SALF": null}, {"d": "2024-05-31", "PP": 32.8, "PSOE": 29.5, "VOX": 12.5, "SUMAR": 9.5, "UP": 2.6, "SALF": null}, {"d": "2024-06-06", "PP": 30.7, "PSOE": 31.7, "VOX": 12.1, "SUMAR": 8.8, "UP": 3.6, "SALF": 1.5}, {"d": "2024-06-11", "PP": 33.8, "PSOE": 30.1, "VOX": 11.5, "SUMAR": 9.0, "UP": 3.6, "SALF": null}, {"d": "2024-06-14", "PP": 38.5, "PSOE": 31.7, "VOX": 11.1, "SUMAR": 8.4, "UP": null, "SALF": null}, {"d": "2024-06-15", "PP": 34.4, "PSOE": 29.8, "VOX": 10.3, "SUMAR": 6.3, "UP": 3.5, "SALF": 4.3}, {"d": "2024-06-24", "PP": 33.3, "PSOE": 31.2, "VOX": 10.4, "SUMAR": 5.9, "UP": 3.0, "SALF": 4.4}, {"d": "2024-06-27", "PP": 34.9, "PSOE": 29.6, "VOX": 9.8, "SUMAR": 5.5, "UP": 4.4, "SALF": 3.8}, {"d": "2024-06-28", "PP": 33.8, "PSOE": 30.0, "VOX": 10.9, "SUMAR": 6.6, "UP": 3.4, "SALF": 2.7}, {"d": "2024-07-04", "PP": 30.2, "PSOE": 32.9, "VOX": 12.2, "SUMAR": 6.6, "UP": 4.0, "SALF": 2.7}, {"d": "2024-07-04", "PP": 34.6, "PSOE": 29.9, "VOX": 11.3, "SUMAR": 5.9, "UP": 3.8, "SALF": 3.7}, {"d": "2024-07-10", "PP": 33.5, "PSOE": 31.6, "VOX": 10.5, "SUMAR": 8.6, "UP": 2.7, "SALF": 3.1}, {"d": "2024-07-18", "PP": 34.8, "PSOE": 29.9, "VOX": 9.0, "SUMAR": 6.9, "UP": 3.6, "SALF": 2.9}, {"d": "2024-07-20", "PP": 34.4, "PSOE": 29.3, "VOX": 11.2, "SUMAR": 7.4, "UP": 3.7, "SALF": 4.1}, {"d": "2024-07-22", "PP": 34.0, "PSOE": 30.8, "VOX": 10.8, "SUMAR": 5.8, "UP": 4.9, "SALF": 4.1}, {"d": "2024-08-08", "PP": 35.3, "PSOE": 28.9, "VOX": 9.9, "SUMAR": 6.3, "UP": 3.4, "SALF": 3.1}, {"d": "2024-08-09", "PP": 33.5, "PSOE": 30.5, "VOX": 10.5, "SUMAR": 7.7, "UP": 2.9, "SALF": 3.7}, {"d": "2024-08-23", "PP": 35.4, "PSOE": 28.7, "VOX": 9.6, "SUMAR": 6.0, "UP": 3.5, "SALF": 3.8}, {"d": "2024-08-23", "PP": 34.0, "PSOE": 30.5, "VOX": 10.6, "SUMAR": 6.1, "UP": 2.7, "SALF": 4.7}, {"d": "2024-08-29", "PP": 35.4, "PSOE": 28.8, "VOX": 9.6, "SUMAR": 6.8, "UP": 3.3, "SALF": 3.4}, {"d": "2024-08-31", "PP": 34.0, "PSOE": 29.1, "VOX": 11.1, "SUMAR": 6.1, "UP": 4.6, "SALF": 4.5}, {"d": "2024-09-06", "PP": 28.5, "PSOE": 33.0, "VOX": 13.1, "SUMAR": 7.8, "UP": 3.6, "SALF": 2.9}, {"d": "2024-09-06", "PP": 35.5, "PSOE": 29.6, "VOX": 10.4, "SUMAR": 7.0, "UP": 3.2, "SALF": 3.3}, {"d": "2024-09-06", "PP": 34.9, "PSOE": 29.2, "VOX": 11.3, "SUMAR": 6.2, "UP": 3.7, "SALF": 3.9}, {"d": "2024-09-13", "PP": 33.5, "PSOE": 30.6, "VOX": 10.5, "SUMAR": 7.4, "UP": 3.4, "SALF": 3.8}, {"d": "2024-09-19", "PP": 34.6, "PSOE": 30.3, "VOX": 10.0, "SUMAR": 6.8, "UP": 4.4, "SALF": 4.0}, {"d": "2024-09-20", "PP": 37.1, "PSOE": 30.1, "VOX": 10.9, "SUMAR": 6.0, "UP": null, "SALF": null}, {"d": "2024-09-26", "PP": 33.3, "PSOE": 27.0, "VOX": 13.0, "SUMAR": 10.9, "UP": 3.1, "SALF": 2.2}, {"d": "2024-09-27", "PP": 35.5, "PSOE": 28.7, "VOX": 9.5, "SUMAR": 6.9, "UP": 3.4, "SALF": 3.3}, {"d": "2024-09-27", "PP": 34.6, "PSOE": 29.7, "VOX": 10.5, "SUMAR": 6.1, "UP": 2.7, "SALF": 4.9}, {"d": "2024-10-09", "PP": 35.7, "PSOE": 29.3, "VOX": 10.7, "SUMAR": 6.9, "UP": 3.7, "SALF": 2.6}, {"d": "2024-10-11", "PP": 31.5, "PSOE": 34.0, "VOX": 11.8, "SUMAR": 6.3, "UP": 3.3, "SALF": 1.7}, {"d": "2024-10-11", "PP": 35.2, "PSOE": 28.9, "VOX": 11.4, "SUMAR": 6.8, "UP": 3.1, "SALF": 3.0}, {"d": "2024-10-18", "PP": 35.2, "PSOE": 28.3, "VOX": 11.2, "SUMAR": 6.6, "UP": 3.4, "SALF": 3.4}, {"d": "2024-10-18", "PP": 36.9, "PSOE": 28.8, "VOX": 11.2, "SUMAR": 7.5, "UP": 2.5, "SALF": 2.0}, {"d": "2024-10-18", "PP": 35.2, "PSOE": 29.2, "VOX": 10.6, "SUMAR": 8.5, "UP": 3.1, "SALF": 3.1}, {"d": "2024-10-24", "PP": 34.1, "PSOE": 28.2, "VOX": 12.9, "SUMAR": 8.4, "UP": 3.3, "SALF": 1.9}, {"d": "2024-10-31", "PP": 35.9, "PSOE": 28.2, "VOX": 10.5, "SUMAR": 5.5, "UP": 4.9, "SALF": 3.3}, {"d": "2024-11-07", "PP": 29.3, "PSOE": 34.2, "VOX": 11.8, "SUMAR": 7.0, "UP": 3.4, "SALF": 2.0}, {"d": "2024-11-08", "PP": 35.3, "PSOE": 28.5, "VOX": 12.5, "SUMAR": 5.8, "UP": 4.2, "SALF": 1.7}, {"d": "2024-11-11", "PP": 33.1, "PSOE": 28.2, "VOX": 12.6, "SUMAR": 7.5, "UP": 4.9, "SALF": 1.6}, {"d": "2024-11-14", "PP": 32.5, "PSOE": 27.7, "VOX": 15.6, "SUMAR": 6.0, "UP": 4.0, "SALF": 2.3}, {"d": "2024-11-15", "PP": 34.9, "PSOE": 28.7, "VOX": 12.4, "SUMAR": 5.8, "UP": 5.1, "SALF": 1.9}, {"d": "2024-11-22", "PP": 32.2, "PSOE": 28.3, "VOX": 14.6, "SUMAR": 5.7, "UP": 4.7, "SALF": 2.9}, {"d": "2024-11-22", "PP": 33.8, "PSOE": 28.4, "VOX": 14.5, "SUMAR": 5.9, "UP": 3.4, "SALF": 1.9}, {"d": "2024-11-24", "PP": 34.8, "PSOE": 26.7, "VOX": 13.5, "SUMAR": 6.9, "UP": 3.6, "SALF": 2.7}, {"d": "2024-11-27", "PP": 33.3, "PSOE": 29.9, "VOX": 13.1, "SUMAR": 5.0, "UP": 2.8, "SALF": 3.1}, {"d": "2024-11-29", "PP": 35.5, "PSOE": 28.4, "VOX": 13.5, "SUMAR": 5.4, "UP": 4.2, "SALF": null}, {"d": "2024-12-04", "PP": 34.8, "PSOE": 27.4, "VOX": 11.9, "SUMAR": 6.2, "UP": 5.0, "SALF": 3.1}, {"d": "2024-12-04", "PP": 31.1, "PSOE": 28.3, "VOX": 14.9, "SUMAR": 8.0, "UP": 3.5, "SALF": 2.3}, {"d": "2024-12-09", "PP": 28.4, "PSOE": 32.2, "VOX": 12.2, "SUMAR": 7.0, "UP": 4.1, "SALF": 2.8}, {"d": "2024-12-11", "PP": 32.6, "PSOE": 28.2, "VOX": 14.3, "SUMAR": 7.9, "UP": 4.0, "SALF": null}, {"d": "2024-12-12", "PP": 34.9, "PSOE": 28.1, "VOX": 13.2, "SUMAR": 5.8, "UP": 4.2, "SALF": 1.8}, {"d": "2024-12-26", "PP": 34.4, "PSOE": 27.1, "VOX": 12.4, "SUMAR": 6.4, "UP": 4.7, "SALF": 3.3}, {"d": "2024-12-26", "PP": 33.0, "PSOE": 29.5, "VOX": 13.8, "SUMAR": 5.1, "UP": 4.0, "SALF": 2.4}, {"d": "2024-12-27", "PP": 35.1, "PSOE": 28.0, "VOX": 13.9, "SUMAR": 5.3, "UP": 4.5, "SALF": null}, {"d": "2024-12-30", "PP": 33.5, "PSOE": 28.3, "VOX": 14.1, "SUMAR": 7.1, "UP": 4.2, "SALF": 2.5}, {"d": "2024-12-30", "PP": 32.7, "PSOE": 28.5, "VOX": 14.9, "SUMAR": 6.9, "UP": 5.0, "SALF": 2.3}, {"d": "2025-01-03", "PP": 34.5, "PSOE": 28.3, "VOX": 14.0, "SUMAR": 5.6, "UP": 4.7, "SALF": 1.6}, {"d": "2025-01-09", "PP": 29.7, "PSOE": 31.8, "VOX": 12.4, "SUMAR": 6.5, "UP": 3.9, "SALF": 2.4}, {"d": "2025-01-11", "PP": 34.1, "PSOE": 28.1, "VOX": 14.3, "SUMAR": 6.2, "UP": 5.1, "SALF": 2.1}, {"d": "2025-01-20", "PP": 34.8, "PSOE": 28.8, "VOX": 12.9, "SUMAR": 6.4, "UP": 5.0, "SALF": 1.0}, {"d": "2025-01-23", "PP": 34.9, "PSOE": 27.3, "VOX": 14.2, "SUMAR": 6.9, "UP": 4.0, "SALF": 2.1}, {"d": "2025-01-24", "PP": 33.2, "PSOE": 28.9, "VOX": 15.5, "SUMAR": 5.9, "UP": 5.2, "SALF": 1.7}, {"d": "2025-01-27", "PP": 32.6, "PSOE": 28.4, "VOX": 14.2, "SUMAR": 5.9, "UP": 3.4, "SALF": 2.5}, {"d": "2025-01-31", "PP": 33.7, "PSOE": 27.6, "VOX": 13.1, "SUMAR": 6.4, "UP": 4.7, "SALF": 3.2}, {"d": "2025-01-31", "PP": 34.5, "PSOE": 27.8, "VOX": 14.3, "SUMAR": 5.9, "UP": 4.9, "SALF": 1.7}, {"d": "2025-02-06", "PP": 28.1, "PSOE": 33.4, "VOX": 13.3, "SUMAR": 6.4, "UP": 4.4, "SALF": 1.6}, {"d": "2025-02-07", "PP": 34.8, "PSOE": 27.9, "VOX": 14.3, "SUMAR": 5.6, "UP": 4.7, "SALF": null}, {"d": "2025-02-14", "PP": 33.8, "PSOE": 27.8, "VOX": 14.3, "SUMAR": 6.6, "UP": 4.4, "SALF": 2.1}, {"d": "2025-02-17", "PP": 34.3, "PSOE": 27.9, "VOX": 14.2, "SUMAR": 6.5, "UP": 5.4, "SALF": 2.0}, {"d": "2025-02-21", "PP": 33.1, "PSOE": 29.9, "VOX": 14.2, "SUMAR": 6.4, "UP": 4.2, "SALF": 2.3}, {"d": "2025-02-24", "PP": 32.2, "PSOE": 29.6, "VOX": 14.1, "SUMAR": 5.9, "UP": 3.6, "SALF": 1.9}, {"d": "2025-02-28", "PP": 34.3, "PSOE": 27.5, "VOX": 14.7, "SUMAR": 6.1, "UP": 5.0, "SALF": 1.8}, {"d": "2025-03-06", "PP": 32.1, "PSOE": 27.0, "VOX": 14.6, "SUMAR": 7.5, "UP": 3.3, "SALF": 2.5}, {"d": "2025-03-07", "PP": 29.2, "PSOE": 34.5, "VOX": 11.7, "SUMAR": 7.6, "UP": 3.8, "SALF": 1.9}, {"d": "2025-03-07", "PP": 33.8, "PSOE": 27.8, "VOX": 12.9, "SUMAR": 6.4, "UP": 5.2, "SALF": 2.9}, {"d": "2025-03-07", "PP": 34.1, "PSOE": 28.5, "VOX": 14.5, "SUMAR": 5.8, "UP": 4.7, "SALF": null}, {"d": "2025-03-16", "PP": 35.4, "PSOE": 29.1, "VOX": 12.0, "SUMAR": 6.3, "UP": 4.5, "SALF": null}, {"d": "2025-03-21", "PP": 34.0, "PSOE": 28.3, "VOX": 13.9, "SUMAR": 6.5, "UP": 4.2, "SALF": 2.2}, {"d": "2025-03-21", "PP": 34.4, "PSOE": 28.0, "VOX": 14.0, "SUMAR": 6.3, "UP": 5.3, "SALF": 1.9}, {"d": "2025-03-21", "PP": 33.1, "PSOE": 30.2, "VOX": 14.1, "SUMAR": 5.5, "UP": 4.3, "SALF": 2.0}, {"d": "2025-03-28", "PP": 35.3, "PSOE": 28.6, "VOX": 13.9, "SUMAR": 5.5, "UP": null, "SALF": null}, {"d": "2025-03-28", "PP": 35.3, "PSOE": 28.6, "VOX": 13.9, "SUMAR": 5.5, "UP": null, "SALF": null}, {"d": "2025-03-31", "PP": 32.6, "PSOE": 29.5, "VOX": 14.1, "SUMAR": 5.1, "UP": 3.3, "SALF": 2.7}, {"d": "2025-04-08", "PP": 26.1, "PSOE": 32.6, "VOX": 15.2, "SUMAR": 6.2, "UP": 4.0, "SALF": 1.9}, {"d": "2025-04-15", "PP": 33.9, "PSOE": 27.9, "VOX": 12.6, "SUMAR": 6.9, "UP": 4.8, "SALF": 2.4}, {"d": "2025-04-15", "PP": 34.2, "PSOE": 27.8, "VOX": 14.6, "SUMAR": 5.6, "UP": 4.9, "SALF": null}, {"d": "2025-04-17", "PP": 34.3, "PSOE": 28.6, "VOX": 14.1, "SUMAR": 5.4, "UP": 4.4, "SALF": null}, {"d": "2025-04-25", "PP": 34.8, "PSOE": 29.5, "VOX": 13.5, "SUMAR": 6.5, "UP": 4.0, "SALF": 2.2}, {"d": "2025-04-25", "PP": 33.5, "PSOE": 28.1, "VOX": 14.3, "SUMAR": 6.5, "UP": 5.3, "SALF": 1.8}, {"d": "2025-04-27", "PP": 33.9, "PSOE": 29.3, "VOX": 13.4, "SUMAR": 5.4, "UP": 3.1, "SALF": 2.1}, {"d": "2025-05-06", "PP": 34.5, "PSOE": 28.4, "VOX": 13.5, "SUMAR": 5.7, "UP": 5.5, "SALF": 1.9}, {"d": "2025-05-08", "PP": 29.3, "PSOE": 32.0, "VOX": 13.7, "SUMAR": 6.1, "UP": 4.3, "SALF": 1.5}, {"d": "2025-05-19", "PP": 35.9, "PSOE": 28.7, "VOX": 12.3, "SUMAR": 6.2, "UP": 5.1, "SALF": 0.7}, {"d": "2025-05-21", "PP": 34.4, "PSOE": 30.4, "VOX": 14.1, "SUMAR": 5.8, "UP": 2.7, "SALF": 1.7}, {"d": "2025-05-22", "PP": 34.9, "PSOE": 29.0, "VOX": 13.5, "SUMAR": 5.4, "UP": 4.1, "SALF": 2.0}, {"d": "2025-05-23", "PP": 34.5, "PSOE": 27.6, "VOX": 14.5, "SUMAR": 5.4, "UP": 5.1, "SALF": null}, {"d": "2025-05-23", "PP": 33.1, "PSOE": 28.8, "VOX": 13.9, "SUMAR": 6.7, "UP": 4.4, "SALF": 1.9}, {"d": "2025-05-26", "PP": 32.8, "PSOE": 29.8, "VOX": 13.9, "SUMAR": 5.4, "UP": 3.8, "SALF": 1.6}, {"d": "2025-05-28", "PP": 34.1, "PSOE": 28.4, "VOX": 13.5, "SUMAR": 7.5, "UP": 5.1, "SALF": 2.1}, {"d": "2025-05-29", "PP": 33.8, "PSOE": 27.6, "VOX": 14.9, "SUMAR": 7.5, "UP": 4.7, "SALF": null}, {"d": "2025-06-07", "PP": 27.3, "PSOE": 34.3, "VOX": 13.2, "SUMAR": 7.0, "UP": 4.2, "SALF": 1.5}, {"d": "2025-06-12", "PP": 30.5, "PSOE": 27.0, "VOX": 16.0, "SUMAR": 7.5, "UP": 3.8, "SALF": 2.0}, {"d": "2025-06-13", "PP": 35.7, "PSOE": 30.2, "VOX": 13.8, "SUMAR": 4.7, "UP": 3.7, "SALF": 2.3}, {"d": "2025-06-17", "PP": 36.0, "PSOE": 26.1, "VOX": 13.6, "SUMAR": 7.6, "UP": 3.5, "SALF": 0.6}, {"d": "2025-06-20", "PP": 36.6, "PSOE": 29.3, "VOX": 14.1, "SUMAR": 4.5, "UP": 3.9, "SALF": 2.0}, {"d": "2025-06-20", "PP": 34.0, "PSOE": 26.3, "VOX": 15.8, "SUMAR": 7.4, "UP": 2.9, "SALF": 2.3}, {"d": "2025-06-21", "PP": 35.7, "PSOE": 25.5, "VOX": 14.8, "SUMAR": 4.5, "UP": 5.8, "SALF": null}, {"d": "2025-06-21", "PP": 35.1, "PSOE": 26.7, "VOX": 14.0, "SUMAR": 6.2, "UP": 3.9, "SALF": 1.8}, {"d": "2025-06-27", "PP": 34.7, "PSOE": 26.8, "VOX": 13.9, "SUMAR": 7.5, "UP": 4.5, "SALF": 1.3}, {"d": "2025-06-30", "PP": 33.3, "PSOE": 27.0, "VOX": 15.2, "SUMAR": 6.2, "UP": 3.8, "SALF": 2.5}, {"d": "2025-07-04", "PP": 36.2, "PSOE": 29.2, "VOX": 14.2, "SUMAR": 5.2, "UP": 4.1, "SALF": 1.9}, {"d": "2025-07-07", "PP": 26.5, "PSOE": 27.0, "VOX": 18.9, "SUMAR": 7.8, "UP": 4.4, "SALF": 1.7}, {"d": "2025-07-10", "PP": 34.6, "PSOE": 26.0, "VOX": 15.6, "SUMAR": 7.0, "UP": 4.2, "SALF": 1.9}, {"d": "2025-07-14", "PP": 36.1, "PSOE": 26.1, "VOX": 14.6, "SUMAR": 6.6, "UP": 3.7, "SALF": 1.0}, {"d": "2025-07-14", "PP": 35.5, "PSOE": 25.6, "VOX": 14.3, "SUMAR": 6.9, "UP": 5.4, "SALF": 1.9}, {"d": "2025-07-18", "PP": 35.0, "PSOE": 25.4, "VOX": 15.4, "SUMAR": 5.6, "UP": 5.3, "SALF": 2.2}, {"d": "2025-07-24", "PP": 35.5, "PSOE": 25.0, "VOX": 16.0, "SUMAR": 6.3, "UP": 3.8, "SALF": 1.7}, {"d": "2025-07-30", "PP": 34.9, "PSOE": 26.7, "VOX": 14.8, "SUMAR": 7.9, "UP": 4.4, "SALF": 1.5}, {"d": "2025-08-28", "PP": 34.4, "PSOE": 27.0, "VOX": 15.1, "SUMAR": 7.8, "UP": 4.2, "SALF": 1.2}, {"d": "2025-08-29", "PP": 34.5, "PSOE": 26.2, "VOX": 16.1, "SUMAR": 6.9, "UP": 4.0, "SALF": 1.7}, {"d": "2025-09-01", "PP": 30.7, "PSOE": 27.7, "VOX": 17.4, "SUMAR": 6.6, "UP": 3.4, "SALF": 1.6}, {"d": "2025-09-05", "PP": 35.1, "PSOE": 26.6, "VOX": 16.7, "SUMAR": 6.1, "UP": 5.1, "SALF": 1.7}, {"d": "2025-09-06", "PP": 23.7, "PSOE": 32.7, "VOX": 17.3, "SUMAR": 7.9, "UP": 4.3, "SALF": 1.6}, {"d": "2025-09-06", "PP": 35.2, "PSOE": 25.8, "VOX": 15.4, "SUMAR": 4.9, "UP": 5.2, "SALF": null}, {"d": "2025-09-09", "PP": 34.4, "PSOE": 25.8, "VOX": 16.0, "SUMAR": 6.0, "UP": 4.7, "SALF": 2.0}, {"d": "2025-09-11", "PP": 32.0, "PSOE": 26.9, "VOX": 17.9, "SUMAR": 6.6, "UP": 4.0, "SALF": 2.0}, {"d": "2025-09-11", "PP": 31.6, "PSOE": 27.0, "VOX": 17.2, "SUMAR": 7.4, "UP": 4.1, "SALF": 1.9}, {"d": "2025-09-12", "PP": 34.9, "PSOE": 26.1, "VOX": 15.2, "SUMAR": 6.9, "UP": 4.7, "SALF": 1.7}, {"d": "2025-09-15", "PP": 35.2, "PSOE": 26.9, "VOX": 15.7, "SUMAR": 5.6, "UP": 3.9, "SALF": 0.4}, {"d": "2025-09-19", "PP": 36.1, "PSOE": 28.3, "VOX": 16.3, "SUMAR": 4.7, "UP": 4.0, "SALF": 1.5}, {"d": "2025-09-28", "PP": 30.5, "PSOE": 29.4, "VOX": 16.7, "SUMAR": 6.7, "UP": 2.8, "SALF": 1.3}, {"d": "2025-09-30", "PP": 27.4, "PSOE": 30.4, "VOX": 20.6, "SUMAR": 5.1, "UP": 3.8, "SALF": 1.4}, {"d": "2025-10-01", "PP": 33.8, "PSOE": 27.2, "VOX": 15.9, "SUMAR": 7.4, "UP": 4.0, "SALF": 1.3}, {"d": "2025-10-04", "PP": 34.4, "PSOE": 26.6, "VOX": 16.1, "SUMAR": 4.8, "UP": 4.6, "SALF": null}, {"d": "2025-10-07", "PP": 19.8, "PSOE": 34.8, "VOX": 17.7, "SUMAR": 7.7, "UP": 4.9, "SALF": 1.3}, {"d": "2025-10-09", "PP": 29.0, "PSOE": 27.8, "VOX": 18.4, "SUMAR": 8.0, "UP": 3.7, "SALF": 1.6}, {"d": "2025-10-10", "PP": 34.0, "PSOE": 26.9, "VOX": 16.6, "SUMAR": 6.2, "UP": 3.9, "SALF": 1.6}, {"d": "2025-10-26", "PP": 30.5, "PSOE": 28.3, "VOX": 17.1, "SUMAR": 6.8, "UP": 3.0, "SALF": 1.6}, {"d": "2025-11-04", "PP": 33.6, "PSOE": 26.5, "VOX": 18.6, "SUMAR": 6.2, "UP": 4.1, "SALF": 1.6}, {"d": "2025-11-04", "PP": 28.2, "PSOE": 28.1, "VOX": 19.5, "SUMAR": 6.9, "UP": 3.1, "SALF": 1.6}, {"d": "2025-11-06", "PP": 33.6, "PSOE": 27.4, "VOX": 16.2, "SUMAR": 7.5, "UP": 4.2, "SALF": 0.9}, {"d": "2025-11-06", "PP": 31.2, "PSOE": 28.4, "VOX": 18.5, "SUMAR": 5.4, "UP": 4.5, "SALF": 1.2}, {"d": "2025-11-08", "PP": 33.7, "PSOE": 27.2, "VOX": 16.9, "SUMAR": 6.6, "UP": 3.5, "SALF": 1.7}, {"d": "2025-11-12", "PP": 22.4, "PSOE": 32.6, "VOX": 18.8, "SUMAR": 7.1, "UP": 4.0, "SALF": 0.6}, {"d": "2025-11-14", "PP": 33.8, "PSOE": 27.2, "VOX": 16.7, "SUMAR": 5.6, "UP": 4.1, "SALF": 1.9}, {"d": "2025-11-14", "PP": 33.4, "PSOE": 27.3, "VOX": 16.2, "SUMAR": 6.3, "UP": 4.0, "SALF": null}, {"d": "2025-11-17", "PP": 33.5, "PSOE": 28.6, "VOX": 17.4, "SUMAR": null, "UP": null, "SALF": null}, {"d": "2025-11-19", "PP": 29.2, "PSOE": 28.1, "VOX": 19.0, "SUMAR": 6.1, "UP": 3.6, "SALF": 2.0}, {"d": "2025-11-21", "PP": 33.5, "PSOE": 28.6, "VOX": 17.4, "SUMAR": null, "UP": null, "SALF": null}, {"d": "2025-12-01", "PP": 33.2, "PSOE": 27.6, "VOX": 18.5, "SUMAR": 5.0, "UP": 3.8, "SALF": 1.4}, {"d": "2025-12-01", "PP": 31.0, "PSOE": 27.8, "VOX": 17.4, "SUMAR": 5.7, "UP": 3.7, "SALF": 2.3}, {"d": "2025-12-05", "PP": 22.4, "PSOE": 31.4, "VOX": 17.6, "SUMAR": 7.8, "UP": 4.1, "SALF": 2.4}, {"d": "2025-12-05", "PP": 33.1, "PSOE": 27.3, "VOX": 16.9, "SUMAR": 7.8, "UP": 4.3, "SALF": 1.2}, {"d": "2025-12-05", "PP": 33.2, "PSOE": 27.6, "VOX": 18.5, "SUMAR": 5.0, "UP": 3.8, "SALF": 1.4}, {"d": "2025-12-07", "PP": 33.4, "PSOE": 26.2, "VOX": 17.4, "SUMAR": 7.5, "UP": 2.8, "SALF": 2.3}, {"d": "2025-12-15", "PP": 33.5, "PSOE": 27.4, "VOX": 18.6, "SUMAR": 5.2, "UP": 3.8, "SALF": 1.5}, {"d": "2025-12-19", "PP": 33.5, "PSOE": 27.4, "VOX": 18.6, "SUMAR": 5.2, "UP": 3.8, "SALF": 1.5}, {"d": "2025-12-29", "PP": 32.7, "PSOE": 26.5, "VOX": 17.2, "SUMAR": 8.5, "UP": 4.4, "SALF": 1.2}, {"d": "2026-01-05", "PP": 31.5, "PSOE": 27.1, "VOX": 17.9, "SUMAR": 5.9, "UP": 3.5, "SALF": 2.1}, {"d": "2026-01-09", "PP": 33.5, "PSOE": 26.3, "VOX": 17.6, "SUMAR": 6.1, "UP": 4.4, "SALF": null}, {"d": "2026-01-10", "PP": 23.0, "PSOE": 31.7, "VOX": 17.7, "SUMAR": 7.2, "UP": 3.5, "SALF": 1.8}, {"d": "2026-01-10", "PP": 32.5, "PSOE": 25.7, "VOX": 17.9, "SUMAR": 6.5, "UP": 3.8, "SALF": 2.1}, {"d": "2026-01-15", "PP": 30.0, "PSOE": 26.5, "VOX": 17.8, "SUMAR": 8.3, "UP": 4.3, "SALF": 1.7}, {"d": "2026-01-15", "PP": 30.0, "PSOE": 26.1, "VOX": 19.2, "SUMAR": 8.0, "UP": 3.2, "SALF": 1.8}, {"d": "2026-01-18", "PP": 33.7, "PSOE": 27.1, "VOX": 16.9, "SUMAR": 5.2, "UP": 4.9, "SALF": 0.7}, {"d": "2026-01-25", "PP": 34.4, "PSOE": 27.0, "VOX": 16.6, "SUMAR": 5.0, "UP": 5.1, "SALF": 0.5}, {"d": "2026-01-30", "PP": 32.4, "PSOE": 26.1, "VOX": 17.8, "SUMAR": 8.2, "UP": 4.6, "SALF": null}, {"d": "2026-02-02", "PP": 31.2, "PSOE": 27.7, "VOX": 18.0, "SUMAR": 6.4, "UP": 3.7, "SALF": 1.6}, {"d": "2026-02-06", "PP": 22.9, "PSOE": 32.6, "VOX": 18.9, "SUMAR": 7.0, "UP": 3.9, "SALF": 2.4}, {"d": "2026-02-10", "PP": 31.6, "PSOE": 26.0, "VOX": 19.5, "SUMAR": 6.6, "UP": 2.2, "SALF": 2.9}, {"d": "2026-02-13", "PP": 33.1, "PSOE": 25.9, "VOX": 18.1, "SUMAR": 6.0, "UP": 4.3, "SALF": null}, {"d": "2026-02-13", "PP": 32.1, "PSOE": 25.0, "VOX": 18.4, "SUMAR": 7.2, "UP": 4.2, "SALF": 2.5}, {"d": "2026-02-19", "PP": 30.5, "PSOE": 25.8, "VOX": 20.3, "SUMAR": 6.7, "UP": 3.7, "SALF": 2.4}, {"d": "2026-02-22", "PP": 29.4, "PSOE": 27.0, "VOX": 20.3, "SUMAR": 7.2, "UP": 3.8, "SALF": null}, {"d": "2026-02-23", "PP": 30.2, "PSOE": 27.7, "VOX": 18.8, "SUMAR": 5.9, "UP": 3.3, "SALF": 2.3}, {"d": "2026-02-27", "PP": 31.9, "PSOE": 26.4, "VOX": 18.3, "SUMAR": 8.4, "UP": 4.1, "SALF": null}, {"d": "2026-03-06", "PP": 23.3, "PSOE": 31.8, "VOX": 16.6, "SUMAR": 7.1, "UP": 2.9, "SALF": 2.1}, {"d": "2026-03-21", "PP": 31.9, "PSOE": 26.5, "VOX": 18.0, "SUMAR": 6.6, "UP": 3.6, "SALF": 2.5}, {"d": "2026-03-23", "PP": 34.6, "PSOE": 27.9, "VOX": 15.8, "SUMAR": 4.9, "UP": 3.8, "SALF": 0.8}, {"d": "2026-03-25", "PP": 31.1, "PSOE": 28.6, "VOX": 18.7, "SUMAR": 5.8, "UP": 2.7, "SALF": 1.6}, {"d": "2026-03-26", "PP": 31.7, "PSOE": 27.6, "VOX": 18.3, "SUMAR": 6.9, "UP": 3.3, "SALF": 2.2}, {"d": "2026-03-31", "PP": 32.5, "PSOE": 27.7, "VOX": 17.1, "SUMAR": 7.7, "UP": 3.5, "SALF": null}, {"d": "2026-04-08", "PP": 30.9, "PSOE": 28.4, "VOX": 18.3, "SUMAR": 5.8, "UP": 1.8, "SALF": 2.2}, {"d": "2026-04-09", "PP": 32.8, "PSOE": 26.9, "VOX": 18.3, "SUMAR": 5.8, "UP": 3.8, "SALF": null}, {"d": "2026-04-10", "PP": 23.6, "PSOE": 36.4, "VOX": 14.7, "SUMAR": 5.8, "UP": 2.2, "SALF": 1.7}, {"d": "2026-04-18", "PP": 31.8, "PSOE": 27.0, "VOX": 16.9, "SUMAR": 6.6, "UP": 3.4, "SALF": 2.6}, {"d": "2026-04-25", "PP": 31.1, "PSOE": 28.0, "VOX": 17.1, "SUMAR": 7.7, "UP": 2.9, "SALF": 1.8}, {"d": "2026-04-26", "PP": 31.7, "PSOE": 27.5, "VOX": 18.4, "SUMAR": 5.6, "UP": 3.8, "SALF": 2.6}, {"d": "2026-04-27", "PP": 31.3, "PSOE": 28.4, "VOX": 17.9, "SUMAR": 5.7, "UP": 2.5, "SALF": 2.3}, {"d": "2026-04-29", "PP": 32.3, "PSOE": 28.4, "VOX": 17.2, "SUMAR": 6.9, "UP": 3.5, "SALF": null}, {"d": "2026-05-18", "PP": 24.9, "PSOE": 36.2, "VOX": 16.2, "SUMAR": 5.7, "UP": 2.5, "SALF": 2.4}, {"d": "2026-05-22", "PP": 34.8, "PSOE": 27.7, "VOX": 16.0, "SUMAR": 5.7, "UP": 3.5, "SALF": 1.1}, {"d": "2026-05-27", "PP": 34.7, "PSOE": 25.1, "VOX": 17.9, "SUMAR": 6.3, "UP": 3.6, "SALF": null}, {"d": "2026-05-28", "PP": 33.1, "PSOE": 26.8, "VOX": 17.1, "SUMAR": 5.9, "UP": 3.1, "SALF": 1.4}, {"d": "2026-05-28", "PP": 31.2, "PSOE": 25.4, "VOX": 18.9, "SUMAR": 5.3, "UP": 3.1, "SALF": 2.0}, {"d": "2026-05-29", "PP": 33.1, "PSOE": 27.8, "VOX": 17.6, "SUMAR": 5.5, "UP": 3.6, "SALF": 1.7}, {"d": "2026-05-30", "PP": 33.9, "PSOE": 25.9, "VOX": 17.4, "SUMAR": 5.7, "UP": 2.2, "SALF": 2.5}, {"d": "2026-06-01", "PP": 32.4, "PSOE": 27.7, "VOX": 17.4, "SUMAR": 6.2, "UP": 2.3, "SALF": 2.1}, {"d": "2026-06-04", "PP": 27.1, "PSOE": 31.3, "VOX": 15.8, "SUMAR": 6.4, "UP": 2.8, "SALF": 1.9}, {"d": "2026-06-11", "PP": 32.6, "PSOE": 26.4, "VOX": 17.2, "SUMAR": 7.0, "UP": 3.4, "SALF": null}, {"d": "2026-06-18", "PP": 32.0, "PSOE": 25.6, "VOX": 18.1, "SUMAR": 7.2, "UP": 3.2, "SALF": 2.2}, {"d": "2026-06-26", "PP": 33.5, "PSOE": 27.3, "VOX": 17.5, "SUMAR": 5.7, "UP": 3.5, "SALF": 1.7}, {"d": "2026-06-28", "PP": 31.3, "PSOE": 25.7, "VOX": 17.1, "SUMAR": 8.2, "UP": 3.3, "SALF": 2.2}, {"d": "2026-06-29", "PP": 32.0, "PSOE": 28.0, "VOX": 17.2, "SUMAR": 5.8, "UP": 3.1, "SALF": 2.1}, {"d": "2026-06-29", "PP": 31.2, "PSOE": 27.1, "VOX": 18.5, "SUMAR": 7.6, "UP": 1.8, "SALF": 1.9}, {"d": "2026-07-01", "PP": 34.5, "PSOE": 25.0, "VOX": 17.8, "SUMAR": 6.1, "UP": 3.6, "SALF": null}, {"d": "2026-07-04", "PP": 33.6, "PSOE": 25.7, "VOX": 16.9, "SUMAR": 6.0, "UP": 2.8, "SALF": 2.2}, {"d": "2026-07-06", "PP": 25.1, "PSOE": 33.0, "VOX": 15.3, "SUMAR": 6.1, "UP": 2.5, "SALF": 2.6}, {"d": "2026-07-06", "PP": 33.8, "PSOE": 25.9, "VOX": 18.8, "SUMAR": 5.9, "UP": 3.8, "SALF": 1.6}, {"d": "2026-07-09", "PP": 29.4, "PSOE": 26.5, "VOX": 17.8, "SUMAR": 7.7, "UP": 4.0, "SALF": 2.0}, {"d": "2026-07-09", "PP": 29.5, "PSOE": 27.0, "VOX": 19.2, "SUMAR": 7.2, "UP": 3.7, "SALF": 1.6}, {"d": "2026-07-17", "PP": 32.1, "PSOE": 26.1, "VOX": 17.6, "SUMAR": 6.1, "UP": 2.7, "SALF": 2.4}, {"d": "2026-07-20", "PP": 32.8, "PSOE": 26.1, "VOX": 17.3, "SUMAR": 7.4, "UP": 3.0, "SALF": null}, {"d": "2026-07-20", "PP": 34.9, "PSOE": 27.0, "VOX": 16.5, "SUMAR": 3.8, "UP": 4.1, "SALF": 1.0}, {"d": "2026-08-04", "PP": 34.2, "PSOE": 25.2, "VOX": 18.0, "SUMAR": 5.9, "UP": 3.5, "SALF": null}, {"d": "2026-08-06", "PP": 33.8, "PSOE": 26.0, "VOX": 17.0, "SUMAR": 5.9, "UP": 2.7, "SALF": 2.3}, {"d": "2026-08-25", "PP": 30.1, "PSOE": 28.1, "VOX": 16.1, "SUMAR": 6.1, "UP": 3.6, "SALF": 1.7}, {"d": "2026-08-26", "PP": 33.1, "PSOE": 25.4, "VOX": 17.9, "SUMAR": 6.6, "UP": 2.8, "SALF": null}, {"d": "2026-08-27", "PP": 34.3, "PSOE": 25.4, "VOX": 18.1, "SUMAR": 6.3, "UP": 3.6, "SALF": null}, {"d": "2026-08-28", "PP": 28.7, "PSOE": 27.0, "VOX": 20.3, "SUMAR": 6.6, "UP": 3.6, "SALF": 2.3}, {"d": "2026-09-02", "PP": 32.4, "PSOE": 27.6, "VOX": 17.8, "SUMAR": 5.7, "UP": 2.8, "SALF": 2.2}, {"d": "2026-09-03", "PP": 31.1, "PSOE": 26.1, "VOX": 19.2, "SUMAR": 7.0, "UP": 3.1, "SALF": 1.5}, {"d": "2026-09-03", "PP": 34.5, "PSOE": 24.9, "VOX": 18.3, "SUMAR": 5.7, "UP": 3.4, "SALF": null}, {"d": "2026-09-04", "PP": 25.5, "PSOE": 31.0, "VOX": 16.6, "SUMAR": 5.7, "UP": 3.7, "SALF": 1.8}, {"d": "2026-09-08", "PP": 33.6, "PSOE": 25.1, "VOX": 19.3, "SUMAR": 5.6, "UP": 3.8, "SALF": 1.6}, {"d": "2026-09-10", "PP": 31.5, "PSOE": 25.6, "VOX": 18.9, "SUMAR": 6.9, "UP": 2.8, "SALF": 2.5}, {"d": "2026-09-11", "PP": 33.7, "PSOE": 26.8, "VOX": 18.6, "SUMAR": 6.1, "UP": 3.3, "SALF": 1.8}, {"d": "2026-09-21", "PP": 34.7, "PSOE": 26.3, "VOX": 17.3, "SUMAR": 4.5, "UP": 3.7, "SALF": 1.0}, {"d": "2026-09-21", "PP": 33.9, "PSOE": 25.4, "VOX": 17.8, "SUMAR": 6.4, "UP": 3.3, "SALF": 1.7}, {"d": "2026-09-26", "PP": 33.9, "PSOE": 25.7, "VOX": 18.0, "SUMAR": 5.7, "UP": 3.3, "SALF": 2.0}, {"d": "2026-09-28", "PP": 31.6, "PSOE": 27.4, "VOX": 18.4, "SUMAR": 5.6, "UP": 2.7, "SALF": 2.0}, {"d": "2026-10-01", "PP": 32.6, "PSOE": 25.6, "VOX": 18.3, "SUMAR": 6.6, "UP": 3.3, "SALF": null}, {"d": "2026-10-01", "PP": 33.2, "PSOE": 27.5, "VOX": 19.2, "SUMAR": 7.0, "UP": 3.3, "SALF": null}, {"d": "2026-10-01", "PP": 31.3, "PSOE": 24.9, "VOX": 19.1, "SUMAR": 6.8, "UP": 3.9, "SALF": null}, {"d": "2026-10-02", "PP": 34.0, "PSOE": 26.1, "VOX": 18.6, "SUMAR": 5.2, "UP": 4.3, "SALF": 1.4}, {"d": "2026-10-03", "PP": 33.4, "PSOE": 26.5, "VOX": 18.1, "SUMAR": 5.3, "UP": 3.1, "SALF": 2.2}], "last_polls": [{"date": "2026-10-03", "pollster": "SocioMétrica", "sponsor": "El Español", "n": 1000.0, "start": "2026-10-01", "end": "2026-10-03", "PP": 33.4, "PSOE": 26.5, "VOX": 18.1, "SUMAR": 5.3, "UP": 3.1, "SALF": 2.2, "ERC": 2.2, "JxCat": 1.2, "EHB": 1.3, "PNV": 1.0}, {"date": "2026-10-02", "pollster": "Data10", "sponsor": "OKDiario", "n": 1000.0, "start": "2026-10-02", "end": "2026-10-02", "PP": 34.0, "PSOE": 26.1, "VOX": 18.6, "SUMAR": 5.2, "UP": 4.3, "SALF": 1.4, "ERC": 1.9, "JxCat": 1.5, "EHB": 1.4, "PNV": 0.8}, {"date": "2026-10-01", "pollster": "Winston", "sponsor": "Artículo 14", "n": 1201.0, "start": "2026-09-29", "end": "2026-10-01", "PP": 31.3, "PSOE": 24.9, "VOX": 19.1, "SUMAR": 6.8, "UP": 3.9, "SALF": null, "ERC": null, "JxCat": null, "EHB": null, "PNV": null}, {"date": "2026-10-01", "pollster": "Ateneo del Dato", "sponsor": "elDiario.es", "n": 1500.0, "start": "2026-09-29", "end": "2026-10-01", "PP": 33.2, "PSOE": 27.5, "VOX": 19.2, "SUMAR": 7.0, "UP": 3.3, "SALF": null, "ERC": null, "JxCat": null, "EHB": null, "PNV": null}, {"date": "2026-10-01", "pollster": "Sigma Dos", "sponsor": "El Mundo", "n": 2116.0, "start": "2026-09-22", "end": "2026-10-01", "PP": 32.6, "PSOE": 25.6, "VOX": 18.3, "SUMAR": 6.6, "UP": 3.3, "SALF": null, "ERC": 2.5, "JxCat": 1.1, "EHB": 1.3, "PNV": 1.0}, {"date": "2026-09-28", "pollster": "40dB", "sponsor": "Prisa", "n": 2000.0, "start": "2026-09-25", "end": "2026-09-28", "PP": 31.6, "PSOE": 27.4, "VOX": 18.4, "SUMAR": 5.6, "UP": 2.7, "SALF": 2.0, "ERC": null, "JxCat": null, "EHB": null, "PNV": null}, {"date": "2026-09-26", "pollster": "SocioMétrica", "sponsor": "El Español", "n": 1200.0, "start": "2026-09-24", "end": "2026-09-26", "PP": 33.9, "PSOE": 25.7, "VOX": 18.0, "SUMAR": 5.7, "UP": 3.3, "SALF": 2.0, "ERC": 2.0, "JxCat": 1.2, "EHB": 1.4, "PNV": 0.9}, {"date": "2026-09-21", "pollster": "Celeste Tel", "sponsor": "Onda Cero", "n": 1100.0, "start": "2026-09-16", "end": "2026-09-21", "PP": 33.9, "PSOE": 25.4, "VOX": 17.8, "SUMAR": 6.4, "UP": 3.3, "SALF": 1.7, "ERC": 2.0, "JxCat": 1.5, "EHB": 1.4, "PNV": 1.1}]};
+</script>
+<script>
+(function () {
+  const $ = (s, el) => (el || document).querySelector(s);
+  const P = D.parties, byName = Object.fromEntries(P.map(p => [p.name, p]));
+  const col = n => (byName[n] || {}).color || '#9e9e9e';
+  const BLOCKS = ['Izquierda', 'Separatista', 'Regionalista', 'Derecha'];
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const fd = iso => { const [y, m, d] = iso.split('-'); return `${+d} ${MESES[+m - 1]} ${y}`; };
+  const fdd = iso => { const [y, m, d] = iso.split('-'); return `${+d} ${MESES[+m - 1]}`; };
+  const pct = (v, d = 1) => v == null ? '–' : v.toFixed(d).replace('.', ',') + ' %';
+  const pp = v => (v === 0 ? '0 %' : v >= 0.995 ? '> 99 %' : v < 0.005 ? '< 1 %' : Math.round(v * 100) + ' %');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const hemiOrder = () => {
+    const out = [];
+    for (const b of BLOCKS) out.push(...P.filter(p => p.block === b && p.seats > 0).sort((a, b) => b.seats - a.seats));
+    return out;
+  };
+  const leader = [...P].sort((a, b) => b.seats - a.seats)[0];
+  const right = D.blocks.find(b => b.name === 'Derecha');
+
+  /* ---------- Portada ---------- */
+  const big = $('#hero-big');
+  big.style.setProperty('--c', col(leader.name));
+  big.innerHTML = `<b>${leader.seats}</b><span>de 350 escaños para el <strong>${leader.name}</strong>, primer partido con el <strong>${pct(leader.pct)}</strong> del voto</span>`;
+  const sb = $('#hero-seatbar');
+  const order = hemiOrder();
+  sb.innerHTML = `<div class="trk">${order.map(p => `<i style="width:${p.seats / 350 * 100}%;background:${p.color}" title="${p.name} ${p.seats}"></i>`).join('')}</div>` +
+    `<div class="mk"><span>176 · mayoría absoluta</span></div>` +
+    `<div class="ends"><span>Izquierda ${D.blocks.find(b => b.name === 'Izquierda').seats}</span><span>Derecha ${right.seats}</span></div>`;
+  $('#hero-chips').innerHTML =
+    `<span class="chip ok">Derecha ${right.seats} escaños <small>· ${pp(right.p_majority)} de mayoría absoluta</small></span>` +
+    `<span class="chip">${leader.name} +${leader.seats - leader.seats23} <small>escaños vs 2023</small></span>` +
+    `<span class="chip">VOX +${byName.VOX.seats - byName.VOX.seats23} <small>escaños vs 2023</small></span>`;
+
+  const AUTO = [
+    ['Asturias', '2027-05-23', 'PSOE', 33.5, 17, 'Derecha', .82],
+    ['Castilla-La Mancha', '2027-05-23', 'PSOE', 41.4, 16, 'Derecha', .52],
+    ['Madrid', '2027-05-23', 'PP', 48.4, 75, 'Derecha', .995],
+    ['Murcia', '2027-05-23', 'PP', 41.3, 21, 'Derecha', 1],
+    ['Navarra', '2027-05-23', 'UPN', 26.7, 15, 'Derecha', 0],
+    ['Baleares', '2027-06-27', 'PP', 36.7, 27, 'Derecha', .99],
+    ['Canarias', '2027-06-27', 'PSOE', 25.9, 27, 'Izquierda', .01],
+    ['Comunidad Valenciana', '2027-06-27', 'PP', 29.5, 34, 'Derecha', .88],
+    ['Galicia', '2028-03-25', 'PP', 45.3, 39, 'Derecha', .73],
+    ['País Vasco', '2028-05-21', 'PNV', 35.5, 28, 'Derecha', 0],
+    ['Cataluña', '2028-06-26', 'PSC', 23.6, 34, 'Derecha', 0],
+  ];
+  const today = new Date('2026-10-15');
+  const days = iso => Math.round((new Date(iso) - today) / 864e5);
+  $('#auto-rows').innerHTML = AUTO.map(([n, d, l, v, s, blk, p]) => {
+    const c = col(l === 'PSC' ? 'PSOE' : l);
+    return `<a class="row" href="#"><div><div class="n">${n}</div><div class="d">${fd(d)} · faltan ${days(d)} días</div></div>` +
+      `<span class="pill" style="justify-self:start"><i class="dot" style="background:${c}"></i>${l} ${pct(v)} · ${s} esc.</span>` +
+      `<div class="maj">${blk}: <b>${pp(p)}</b> de mayoría</div><span class="chev">›</span></a>`;
+  }).join('') + `<div class="row-foot">Sin pronóstico todavía: Andalucía, Aragón, Cantabria, Castilla y León, Extremadura y La Rioja.</div>`;
+
+  /* ---------- Hemiciclos ---------- */
+  function hemi(svg, opts) {
+    const W = opts.w, H = opts.h, cx = W / 2, cy = H - 18, R = opts.r, r0 = R * opts.inner;
+    const tot = 350, maj = 176;
+    const arc = (a0, a1, ri, ro) => {
+      const p = (a, r) => [cx + r * Math.cos(a), cy - r * Math.sin(a)];
+      const [x0, y0] = p(a0, ro), [x1, y1] = p(a1, ro), [x2, y2] = p(a1, ri), [x3, y3] = p(a0, ri);
+      const lg = (a0 - a1) > Math.PI ? 1 : 0;
+      return `M${x0},${y0} A${ro},${ro} 0 ${lg} 1 ${x1},${y1} L${x2},${y2} A${ri},${ri} 0 ${lg} 0 ${x3},${y3} Z`;
+    };
+    let cum = 0, out = '';
+    for (const p of hemiOrder()) {
+      const a0 = Math.PI * (1 - cum / tot), a1 = Math.PI * (1 - (cum + p.seats) / tot);
+      out += `<path d="${arc(a0, a1, r0, R)}" fill="${p.color}" stroke="#fff" stroke-width="1.5"><title>${p.name}: ${p.seats} escaños</title></path>`;
+      if (p.seats >= (opts.labelMin || 20)) {
+        const am = (a0 + a1) / 2, rm = (r0 + R) / 2;
+        out += `<text x="${cx + rm * Math.cos(am)}" y="${cy - rm * Math.sin(am)}" text-anchor="middle" fill="#fff" font-family="Outfit, DM Sans, sans-serif" font-weight="800" font-size="${opts.fs}"><tspan x="${cx + rm * Math.cos(am)}" dy="-0.35em" font-size="${opts.fs * .62}" font-weight="700">${p.name}</tspan><tspan x="${cx + rm * Math.cos(am)}" dy="1.05em">${p.seats}</tspan></text>`;
+      }
+      cum += p.seats;
+    }
+    const am = Math.PI * (1 - maj / tot);
+    out += `<line x1="${cx + (r0 - 6) * Math.cos(am)}" y1="${cy - (r0 - 6) * Math.sin(am)}" x2="${cx + (R + 10) * Math.cos(am)}" y2="${cy - (R + 10) * Math.sin(am)}" stroke="#1a1c22" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    out += `<rect x="${cx - 16}" y="${cy - R - 26}" width="32" height="16" rx="8" fill="#1a1c22"/><text x="${cx}" y="${cy - R - 14.5}" text-anchor="middle" fill="#fff" font-family="DM Sans, system-ui, sans-serif" font-weight="700" font-size="10">176</text>`;
+    out += `<text x="${cx}" y="${cy - 16}" text-anchor="middle" font-family="Outfit, DM Sans, sans-serif" font-weight="800" font-size="${opts.fs * 1.4}" fill="#1a1c22">350</text>`;
+    out += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-family="DM Sans, system-ui, sans-serif" font-weight="600" font-size="${opts.fs * .48}" fill="#5a5f72" letter-spacing=".08em">${opts.sub || 'ESCAÑOS'}</text>`;
+    svg.innerHTML = out;
+  }
+  hemi($('#hemi-mini'), { w: 400, h: 230, r: 185, inner: .52, fs: 20, labelMin: 30, sub: 'ESCAÑOS' });
+  hemi($('#hemi-big'), { w: 520, h: 300, r: 245, inner: .54, fs: 24, labelMin: 20, sub: 'ESCAÑOS · MAYORÍA ABSOLUTA 176' });
+  const top4 = [...P].sort((a, b) => b.seats - a.seats).slice(0, 4);
+  $('#hemi-mini-lg').innerHTML = top4.map(p => `<span><i class="dot" style="background:${p.color}"></i>${p.name} <small>${p.seats} · ${pct(p.pct)}</small></span>`).join('') + `<span><i class="dot" style="background:#9e9e9e"></i>Otros <small>${350 - top4.reduce((s, p) => s + p.seats, 0)}</small></span>`;
+  const strip = `Líder: <b>${leader.name}</b> · <b>${leader.seats} escaños</b> · le faltan <b>${176 - leader.seats}</b> para la mayoría · P(primero) <b>${pp(leader.p_first)}</b>`;
+  $('#lead-strip').innerHTML = strip; $('#lead-strip-2').innerHTML = strip;
+
+  /* ---------- Últimas encuestas ---------- */
+  $('#plist').innerHTML = D.last_polls.slice(0, 5).map(p => {
+    const [y, m, d] = p.date.split('-');
+    return `<a class="pr" href="#"><span class="dt"><b>${+d}</b>${MESES[+m - 1]}</span><span class="who"><b>${esc(p.pollster)}</b><small>para ${esc(p.sponsor)} · ${p.n ? Math.round(p.n).toLocaleString('es') + ' entrevistas' : ''}</small></span>` +
+      `<span class="vals">${['PP', 'PSOE', 'VOX'].map(k => `<span style="--c:${col(k)}">${pct(p[k])}</span>`).join('')}</span></a>`;
+  }).join('');
+
+  /* ---------- Promedios: KPIs ---------- */
+  const lastPoll = D.last_polls[0];
+  $('#kpis').innerHTML = [
+    ['Primer partido', `<span style="color:${col(leader.name)}">${leader.name}</span><small>${pct(leader.pct)} del voto</small>`, `P(primero) ${pp(leader.p_first)}`, ''],
+    ['Escaños del líder', `${leader.seats}<small>de 350</small>`, `Rango 95 %: ${leader.lo}–${Math.round(leader.hi)}`, ''],
+    ['Mayoría absoluta', `${pp(right.p_majority)}<small>Derecha</small>`, `PP + VOX + SALF: ${right.seats} escaños`, 'ok'],
+    ['Sondeos del ciclo', `315<small>de 23 encuestadoras</small>`, 'Desde el 7 ago 2023', ''],
+    ['Último sondeo', `${fdd(lastPoll.date)}<small>${esc(lastPoll.pollster)}</small>`, `para ${esc(lastPoll.sponsor)} · ${Math.round(lastPoll.n).toLocaleString('es')} entrevistas`, ''],
+  ].map(([l, v, s, cls]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s ${cls}">${s}</div></div>`).join('');
+
+  /* ---------- Promedios: tarjetas de partido ---------- */
+  const spark = (name, w = 180, h = 28) => {
+    const n = D.series.dates.length, vals = D.series.mean[name].slice(n - 52).map(v => v == null ? null : v);
+    const vs = vals.filter(v => v != null), mn = Math.min(...vs), mx = Math.max(...vs);
+    const pts = vals.map((v, i) => v == null ? null : [i / (vals.length - 1) * w, h - 3 - (mx === mn ? .5 : (v - mn) / (mx - mn)) * (h - 6)]).filter(Boolean);
+    return `<span class="sl">Último año</span><svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".9" vector-effect="non-scaling-stroke"/><circle cx="${pts[pts.length - 1][0]}" cy="${pts[pts.length - 1][1]}" r="2.6" fill="#fff"/></svg>`;
+  };
+  const rank = [...P].sort((a, b) => b.seats - a.seats || b.pct - a.pct);
+  $('#pcards').innerHTML = D.bmaps.main.map(n => {
+    const p = byName[n], i = rank.indexOf(p) + 1;
+    const ds = p.seats23 == null ? '<i>nuevo</i>' : (p.seats - p.seats23 >= 0 ? '+' : '') + (p.seats - p.seats23) + ' <i>esc. vs 2023</i>';
+    const dv = p.pct23 == null ? '' : ((p.pct - p.pct23 >= 0 ? '+' : '−') + Math.abs(p.pct - p.pct23).toFixed(1).replace('.', ',')) + ' <i>pt</i>';
+    return `<article class="pc" style="--c:${p.color}"><span class="rk">${i}.º</span><div class="nm">${p.name}</div><div class="fl">${esc(p.full)}</div>` +
+      `<div class="big"><b>${p.seats}</b><span>${pct(p.pct)}</span></div><div class="lb"><span>escaños</span><span>voto</span></div>` +
+      `<div class="dl"><span>${ds}</span><span>${dv}</span></div>${spark(n)}</article>`;
+  }).join('');
+
+  /* ---------- Promedios: gráfico ---------- */
+  $('#legend').innerHTML = P.map((p, i) => `<span class="lg${i < 6 ? ' on' : ''}" style="--c:${p.color}"><i class="dot"></i>${p.name}</span>`).join('');
+  function drawChart() {
+    const svg = $('#chart'); if (!svg || !svg.clientWidth) return;
+    const W = svg.clientWidth, H = svg.clientHeight, ml = 8, mr = 48, mt = 22, mb = 26;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const t0 = +new Date(D.series.dates[0]), t1 = +new Date(D.series.dates[D.series.dates.length - 1]);
+    const x = d => ml + (+new Date(d) - t0) / (t1 - t0) * (W - ml - mr), y = v => mt + (1 - v / 40) * (H - mt - mb);
+    let out = '', labels = '';
+    for (let v = 0; v <= 40; v += 10) { out += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(0,0,0,.08)"/>`; labels += `<text x="${ml}" y="${y(v) - 5}" font-size="10.5" font-weight="700" fill="#5a5f72" stroke="#fff" stroke-width="3" paint-order="stroke" font-family="DM Sans, system-ui, sans-serif">${v} %</text>`; }
+    for (let yr = 2024; yr <= 2026; yr++) for (const m of ['01', '07']) { const d = `${yr}-${m}-01`; if (+new Date(d) < t1) out += `<text x="${x(d)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="#9298ac" font-family="DM Sans, system-ui, sans-serif">${m === '01' ? '1 ene ' + yr : '1 jul'}</text>`; }
+    const main = D.bmaps.main;
+    for (const n of main) for (const s of D.scatter) if (s[n] != null) out += `<circle cx="${x(s.d)}" cy="${y(s[n])}" r="${W < 500 ? 1.8 : 2.4}" fill="${col(n)}" opacity=".42"/>`;
+    for (const n of main) {
+      const pts = D.series.dates.map((d, i) => D.series.mean[n][i] == null ? null : `${x(d).toFixed(1)},${y(D.series.mean[n][i]).toFixed(1)}`).filter(Boolean);
+      out += `<polyline points="${pts.join(' ')}" fill="none" stroke="${col(n)}" stroke-width="2.6" stroke-linejoin="round"/>`;
+      const last = D.series.mean[n][D.series.mean[n].length - 1];
+      out += `<text x="${W - mr + 6}" y="${y(last) + 3.5}" font-size="11" font-weight="700" fill="${col(n)}" font-family="DM Sans, system-ui, sans-serif">${last.toFixed(1).replace('.', ',')} %</text>`;
+    }
+    out += `<line x1="${x(D.series.dates[D.series.dates.length - 1])}" x2="${x(D.series.dates[D.series.dates.length - 1])}" y1="${mt}" y2="${H - mb}" stroke="#1a1c22" stroke-dasharray="3 3"/>`;
+    svg.innerHTML = out + labels;
+  }
+
+  /* ---------- Promedios: tabla de partidos ---------- */
+  const maxp = Math.max(...P.map(p => p.pct));
+  $('#ptable tbody').innerHTML = rank.map(p => {
+    const lo = p.lo / 350 * 100, hi = p.hi / 350 * 100, md = p.seats / 350 * 100;
+    return `<tr><td><span class="pn"><i class="dot" style="background:${p.color}"></i>${p.name}</span></td><td class="b">${pct(p.pct)}</td><td><span class="bar"><i style="width:${p.pct / maxp * 100}%;background:${p.color}"></i></span></td><td class="b">${p.seats}</td>` +
+      `<td><span class="rng"><i style="left:${lo}%;width:${hi - lo}%;background:${p.color}"></i><b style="left:calc(${md}% - 1px);background:${p.color}"></b><u style="left:50.3%"></u></span> <span class="mut">${p.lo}–${Math.round(p.hi)}</span></td><td>${pp(p.p_first)}</td></tr>`;
+  }).join('');
+
+  /* ---------- Promedios: tabla de encuestas ---------- */
+  const cols = ['PP', 'PSOE', 'VOX', 'SUMAR', 'UP', 'SALF', 'ERC', 'JxCat', 'EHB', 'PNV'];
+  $('#polls thead').innerHTML = `<tr><th>Encuestadora</th><th>Fecha</th><th>Muestra</th>${cols.map(c => `<th><i class="dot" style="display:block;margin:0 0 3px auto;background:${col(c)}"></i>${c}</th>`).join('')}</tr>`;
+  $('#polls tbody').innerHTML = D.last_polls.map(p => `<tr><td class="f"><b>${esc(p.pollster)}</b><small>para ${esc(p.sponsor)}</small></td><td>${fdd(p.date)} ${p.date.slice(0, 4)}</td><td>${p.n ? Math.round(p.n).toLocaleString('es') : '–'}</td>${cols.map((c, i) => `<td class="${i === 0 ? 'mx' : ''}">${p[c] == null ? '<span class="mut">–</span>' : p[c].toFixed(1).replace('.', ',')}</td>`).join('')}</tr>`).join('');
+
+  /* ---------- Visor ---------- */
+  const stage = $('#stage');
+  document.querySelectorAll('#bar button[data-page]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#bar button[data-page]').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.page').forEach(p => p.hidden = p.id !== 'p-' + b.dataset.page);
+    requestAnimationFrame(drawChart);
+  });
+  document.querySelectorAll('#bar button[data-view]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#bar button[data-view]').forEach(x => x.classList.toggle('on', x === b));
+    stage.className = b.dataset.view;
+    requestAnimationFrame(drawChart);
+  });
+  window.addEventListener('resize', drawChart);
+  /* Estado inicial por hash (#promedios-mob, #inicio-mobfull para capturas largas) */
+  const [pg0, vw0] = (location.hash.slice(1) || 'inicio-desk').split('-');
+  if (pg0) document.querySelectorAll('.page').forEach(p => p.hidden = p.id !== 'p-' + pg0);
+  document.querySelectorAll('#bar button[data-page]').forEach(x => x.classList.toggle('on', x.dataset.page === pg0));
+  if (vw0) { stage.className = vw0; document.querySelectorAll('#bar button[data-view]').forEach(x => x.classList.toggle('on', x.dataset.view === vw0)); }
+  document.fonts && document.fonts.ready.then(drawChart);
+  window.addEventListener('load', drawChart);
+  setTimeout(drawChart, 800);
+  drawChart();
+})();
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // A single line with markers over a time axis (e.g. the rating of a pollster at each election).
-import {baseOption, escapeHtml, mountChart, THEME} from './base.js';
+import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtDate, fmtDateShort, fmtNum} from '../format.js';
 
 /**
@@ -16,15 +16,16 @@ export function renderLine(el, points, {formatter = (x) => fmtNum(x, 1), name = 
     grid: {left: 8, right: 24, top: 24, bottom: 8, containLabel: true},
     xAxis: {
       type: 'time',
-      axisLabel: {formatter: (ms) => fmtDateShort(new Date(ms).toISOString().slice(0, 10))},
+      axisLabel: {...axisLabelStyle(), formatter: (ms) => fmtDateShort(new Date(ms).toISOString().slice(0, 10))},
     },
     yAxis: {
       type: 'value',
       scale: true,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (x) => formatter(x)},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => formatter(x)},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       formatter(params) {
         const [date, value] = params[0].value;
@@ -91,16 +92,17 @@ export function renderLines(el, series, {formatter = (x) => fmtNum(x, 1), yMin =
     ...baseOption(),
     grid: {left: 8, right: 24, top: 40, bottom: 8, containLabel: true},
     legend: {top: 0, data: series.map((line) => line.name), textStyle: {color: THEME.textColor}},
-    xAxis: {type: 'category', data: categories, axisLabel: {formatter: (x) => `${x} d`}},
+    xAxis: {type: 'category', data: categories, axisLabel: {...axisLabelStyle(), formatter: (x) => `${x} d`}},
     yAxis: {
       type: 'value',
       scale: true,
       min: yMin,
       max: yMax,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {formatter: (x) => formatter(x)},
+      axisLabel: {...axisLabelStyle(), formatter: (x) => formatter(x)},
     },
     tooltip: {
+      ...tooltipStyle(),
       trigger: 'axis',
       formatter(params) {
         const rows = params

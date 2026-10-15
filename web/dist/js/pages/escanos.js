@@ -6,7 +6,7 @@ import {THEME} from '../charts/base.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
-import {renderRidge} from '../charts/ridge.js';
+import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
 import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
@@ -15,7 +15,7 @@ import {coalitionHash, coalitionSeats, parseCoalition, summarize} from '../seats
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
-/** Shared seat axis of the ridges, as a share of the chamber: parties up to 60 %, blocks up to 80 % (Luis, 2026-10-14). */
+/** Shared seat axis of the ridges, as a share of the chamber: parties up to 60%, blocks up to 80% (Luis, 2026-10-14). */
 const PARTY_AXIS_SHARE = 0.6;
 const BLOCK_AXIS_SHARE = 0.8;
 
@@ -47,6 +47,7 @@ function wireCoalition(dist, majority) {
     const names = boxes.filter((box) => box.checked).map((box) => box.value);
     const values = coalitionSeats(dist, names);
     const stats = summarize(values, majority);
+    result.classList.toggle('ok', Boolean(stats) && stats.pMajority >= 0.5);
     if (!stats) {
       result.textContent = EMPTY_COALITION;
       if (chart.__chart) {
@@ -57,7 +58,7 @@ function wireCoalition(dist, majority) {
       result.textContent = [
         count,
         `mediana ${fmtInt(stats.median)} escaños`,
-        `rango 95 % ${fmtRange(stats.lo, stats.hi, 0)}`,
+        `rango 95% ${fmtRange(stats.lo, stats.hi, 0)}`,
         `mayoría absoluta (${fmtInt(majority)}): ${fmtProb(stats.pMajority)}`,
       ].join(' · ');
       renderHistogram(chart, values, {
@@ -78,7 +79,7 @@ function wireCoalition(dist, majority) {
 
 const CAPTION = {
   esc: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su '
-    + 'circunscripción. Pasa el ratón para ver el rango del 95 %.',
+    + 'circunscripción. Pasa el ratón para ver el rango del 95%.',
   ccaa: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de las '
     + 'provincias de la comunidad.',
   pct: 'Voto estimado en cada territorio; en CCAA, la media ponderada por los votos de la elección anterior.',
@@ -206,7 +207,7 @@ function wireSeats(initial, catalog, colors) {
       cache[view] = cache[view] || chosen.ridges();
       if (cache[view].length) {
         tryDraw(() => renderRidge(ridgeEl, cache[view], {
-          colors: chosen.colors, majority, fullnames: chosen.fullnames,
+          colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: ridgeRowHeight(window.innerWidth),
         }), `the ${view} distributions`);
       }
     }

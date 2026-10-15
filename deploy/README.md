@@ -166,6 +166,25 @@ Ajustes del 2026-10-15: Histórico Errores, Ranking y perfil sin titular (`headl
 eliminados), los textos de tarjeta (`.lead`, "Cómo leerlo", `.card p`) a 100 ch en vez de 72 y la diana del perfil
 grande y centrada.
 
+Fase 7f (2026-10-15): las dianas llevan los ejes en los bordes, cada uno con su nombre ("Error Derecha", "Error
+Izquierda"), la cruz del cero dibujada, puntos de 8 px y las elecciones generales por encima de las demás (`onTop` de
+`renderBullseye`: Generales en el perfil, el ámbito nacional en el histórico con "Todos"). El detalle de una elección
+se reordena: cabecera; hemiciclo del resultado oficial (`initial.results`, mayoría `n_seats // 2 + 1`) junto a la
+tabla de resultados (Partido, % Voto, Escaños, como Promedios sin "P(primero)"); las barras del error del último
+sondeo junto a su reparto por bloque (`charts/diverging.js`: Izquierda a la izquierda y Derecha a la derecha, en
+magnitud, `pages.split_sides`); la diana; la tabla del último sondeo; y el resto como estaba. En Ranking
+Encuestadoras la tabla va antes que las barras, con el marcado `.et.et-rank` de "Todas las encuestas" y los formatos
+de `Computer.print_ratings` calculados en el servidor (filtros `bar`, `sides` y `shade`): barra del rating de 0 a 100,
+barra del sesgo del margen desde el centro (rojo a la izquierda, verde a la derecha, ±2) y sombreado del error medio
+(hasta el mayor de la columna) y del rebaño (rojo por debajo de 1, gris por encima). Segunda tanda del mismo día: el
+ranking deja fuera las encuestadoras sin sondeos (`num_polls` 0), enseña 50 filas y el resto tras "Cargar más"
+(`wireMore` de `pages/common.js`, de 50 en 50), y pierde el gráfico de barras, redundante con la barra de la tabla;
+el detalle de una elección lleva el selector Partidos/Bloques de Promedios (hemiciclo y tabla por bloques, bloques de
+los parámetros de la elección, del `meta` o del catálogo del run) y su tabla de partidos enseña solo los de
+`parties.event` de `data/params.json` (`webapi.event_params`, leído del `data` del App con caché TTL) o, sin lista,
+los 15 primeros, con "Ver los N restantes"; las dianas nombran los ejes "Derecha" e "Izquierda" y abren el tooltip
+solo sobre los puntos (las etiquetas van en una serie gemela silenciosa).
+
 Glosario: `web/templates/_glosario.html` define una sola vez Error medio, Error de bloques (magnitud), Sesgo del
 margen (con signo) y Herding; se incluye al pie de las tarjetas con esas columnas en el histórico, el detalle de una
 elección, el ranking y el perfil de encuestadora, con `with_herding` (y `with_block_error`, por defecto verdadero) fijados
@@ -264,6 +283,15 @@ JSON si están publicados), `/api/v1/events/es/2023-13-01/meta` (400) y `/api/v1
 error si alguna falla. Lo que escriben `publish event` y `publish backtest` puede faltar en el paquete (en local,
 casi siempre): `check_published` marca `n/a  RUTA sin publicar` un 404 cuyo cuerpo dice `not published` (API) o "no
 publicada"/"no publicado" (páginas), y comprueba como `check RUTA 200` cualquier otra respuesta.
+
+### Tipografías y marca
+
+El sitio usa dos fuentes variables vendidas en `web/dist/vendor/fonts/` (SIL OFL, subconjunto latino): DM Sans
+(texto, ejes `opsz` 9-40 y `wght` 400-700) y Outfit (títulos y cifras grandes, `wght` 700-800). Se descargan de
+Google Fonts y se recortan a esos ejes con `python web/brand/fonts.py` (necesita `fonttools` con `brotli`); la CSP
+no permite fuentes externas, así que `site.css` solo las carga de `/dist/vendor/`. El wordmark de la cabecera
+(`web/dist/img/logo.svg`) se regenera con `python web/brand/build.py`, que instancia Outfit al peso 800 y dibuja la
+lente en el sitio de la última "o"; el favicon sale del mismo script y no depende de la fuente.
 
 ### Cómo añadir una página
 

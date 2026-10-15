@@ -99,10 +99,13 @@ def write_backtest(fs, scope='es', meta=None):
 
 @pytest.fixture(autouse=True)
 def clear_queries():
-    """La caché de consultas a base es del módulo: se vacía antes de cada test."""
+    """Las cachés de consultas a base y de los parámetros de las elecciones son del módulo: se vacían antes de cada
+    test."""
     webapi.queries._QUERIES.clear()
+    webapi.checks._PARAMS.clear()
     yield
     webapi.queries._QUERIES.clear()
+    webapi.checks._PARAMS.clear()
 
 
 def use_database(app, host='db.test'):

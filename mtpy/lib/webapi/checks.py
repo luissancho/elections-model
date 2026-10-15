@@ -1,5 +1,6 @@
-"""Request validators of the web API and the scope catalogue they rely on."""
+"""Request validators of the web API, the scope catalogue they rely on and the parameters of the elections."""
 import datetime
+import json
 import re
 from typing import Optional, Sequence
 
@@ -25,6 +26,42 @@ MODES = bundle.MODES
 
 
 _CATALOGUE = TTLCache(DEFAULT_TTL)
+_PARAMS = TTLCache(DEFAULT_TTL)
+
+
+def event_params(scope: str, date: str) -> dict:
+    """
+    Parameters of an election in ``data/params.json``, the file ``data.get_event_params`` reads.
+
+    The file is read through a TTL cache; without a data directory or the file, no election has parameters.
+
+    Parameters
+    ----------
+    scope : str
+        Validated scope code.
+    date : str
+        Validated election date.
+
+    Returns
+    -------
+    dict
+        The entry of the election (``parties``, ``bmaps``, ``smap``...), or ``{}`` when the file or the
+        entry is missing.
+    """
+    data = App.get_().data
+
+    if data is None:
+        return {}
+
+    _PARAMS.ttl = settings()['cache_ttl']
+
+    def load():
+        return json.loads(data.read('params.json')) if data.exists('params.json') else {}
+
+    params = _PARAMS.get('params', load)
+    entry = (params.get(scope) or {}).get(date) if isinstance(params, dict) else None
+
+    return entry if isinstance(entry, dict) else {}
 
 
 def catalogue() -> pd.DataFrame:

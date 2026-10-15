@@ -13,14 +13,17 @@ from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
 from ..webapi import check_mode, check_run, check_scope, scope_codes, site
-from .filters import (_madrid_tz, _parse_datetime, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob,
-                      fmt_range)
+from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_text, fmt_date, fmt_date_short,
+                      fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade)
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
 SITE_TITLE = 'Demoscopio'
 # Under the wordmark in the header, and the default description of the pages
 SITE_TAGLINE = 'Promedio de encuestas, previsión de escaños y ranking de encuestadoras'
+# The author, linked from the footer next to the model attribution
+AUTHOR_HANDLE = '@luis_sancho'
+AUTHOR_URL = 'https://x.com/luis_sancho'
 # Main menu: the global pages. Promedios and Escaños are the tabs of the event bar (``EVENT_TABS``).
 PAGES = (
     {'href': '/', 'label': 'Inicio'},
@@ -32,13 +35,31 @@ EVENT_TABS = (
     {'suffix': '', 'label': 'Promedios'},
     {'suffix': '/escanos', 'label': 'Escaños'},
 )
+# Bottom tab bar of the phones: five entries with an icon of the sprite (``_svg.html``); the method goes in the
+# round button of the header
+TABBAR = (
+    {'key': 'inicio', 'label': 'Inicio', 'icon': 'home'},
+    {'key': 'promedios', 'label': 'Promedios', 'icon': 'line'},
+    {'key': 'escanos', 'label': 'Escaños', 'icon': 'hemi'},
+    {'key': 'historico', 'label': 'Histórico', 'icon': 'target'},
+    {'key': 'ranking', 'label': 'Ranking', 'icon': 'trophy'},
+)
+# Entry of the tab bar lit by each global page (``PAGES`` href); the method lights none
+TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking'}
+# Blocks of the hemicycle from left to right (the mirror of ``BLOCK_ORDER`` of ``catalog.js``)
+HEMICYCLE_BLOCKS = ('Izquierda', 'Separatista', 'Regionalista', 'Derecha')
+# Chamber of a scope, for the event bar and the home ("Congreso, 350 escaños")
+CHAMBERS = {'es': 'Congreso'}
+DEFAULT_CHAMBER = 'Parlamento'
 # ``Router.handle`` returns the first route that matches: the fixed routes go before ``/{scope}``.
 ROUTES = [
     ('/promedio', 'redirect', 'promedio', ['GET']),
     ('/escanos', 'redirect', 'escanos', ['GET']),
     ('/modelo', 'redirect', 'modelo', ['GET']),
     ('/casas', 'casas', 'index', ['GET']),
+    ('/casas/{pollster}', 'casas', 'profile', ['GET']),
     ('/elecciones', 'elecciones', 'index', ['GET']),
+    ('/elecciones/{country:loc}/{scope}/{date}', 'elecciones', 'detail', ['GET']),
     ('/metodo', 'metodo', 'index', ['GET']),
     ('/metodo/{section:str}', 'metodo', 'section', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
@@ -108,10 +129,12 @@ def environment() -> Environment:
     Jinja2 environment of the pages, created on first use and cached in the App.
 
     It loads ``TEMPLATES_DIR`` with autoescape on for ``.html``, ``StrictUndefined``, the
-    filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime`` and ``ink``
-    (``ink_color``) and the global ``method_href`` (``metodo.method_href``: link to a subpage of the method, or to the
-    method itself while the subpage has no text). Without a booted App the environment is built
-    but not cached.
+    filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime``, ``ink``, ``rng``
+    (``ink_color``), ``bar`` (``bar_width``), ``sides`` (``bar_sides``) and ``shade`` (``shade``: the bars and
+    shades of the cells of the ranking) and the globals ``method_href`` (``metodo.method_href``: link to a
+    subpage of the method, or to the method itself while the subpage has no text) and ``pollster_href``
+    (``slugs.pollster_href``: link to the profile of a pollster). Without a booted App the
+    environment is built but not cached.
 
     Returns
     -------
@@ -139,10 +162,18 @@ def environment() -> Environment:
             'date': fmt_date,
             'datetime': fmt_datetime,
             'ink': ink_color,
+            'bar': bar_width,
+            'sides': bar_sides,
+            'shade': shade,
+            'rng': rng_cell,
+            'date_short': fmt_date_short,
+            'delta': delta_text,
         })
-        # imported here: ``metodo`` imports this module
+        # imported here: ``metodo`` and ``slugs`` import this module
         from .metodo import method_href
+        from .slugs import pollster_href
         env.globals['method_href'] = method_href
+        env.globals['pollster_href'] = pollster_href
 
         if app is not None:
             app.set('templates', env)
@@ -455,6 +486,73 @@ def event_title(scope: str, scopes: list) -> str:
     return 'Elecciones autonómicas · {}'.format(names.get(scope, scope))
 
 
+def chamber_text(scope: str, meta: dict) -> Optional[str]:
+    """
+    Name of the chamber of a scope with its seats.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    meta : dict
+        Data of the meta part of the run (``n_seats``).
+
+    Returns
+    -------
+    str or None
+        ``'Congreso, 350 escaños'`` for ``es``, ``'Parlamento, {n} escaños'`` for the rest; ``None`` without
+        ``n_seats``.
+    """
+    seats = meta.get('n_seats')
+
+    if seats is None:
+        return None
+
+    return '{}, {} escaños'.format(CHAMBERS.get(scope, DEFAULT_CHAMBER), fmt_int(seats))
+
+
+def tabbar(scope: str, active: Optional[str], active_suffix: str, event: bool, query: str) -> list:
+    """
+    Entries of the bottom tab bar.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the page (the event shown, or the scope the global page reads).
+    active : str or None
+        ``href`` of the current global page in ``PAGES``; ``None`` on an event page.
+    active_suffix : str
+        Suffix of the current tab of the event bar (``''`` or ``'/escanos'``), on an event page.
+    event : bool
+        Whether the page is an event page: its links keep ``query``.
+    query : str
+        ``event_query`` of the page state (``''`` outside an event).
+
+    Returns
+    -------
+    list of dict
+        One entry per row of ``TABBAR``: ``key``, ``label``, ``icon``, ``href`` and ``active``. Promedios and
+        Escaños link the event of ``scope`` (with ``query`` on an event page), Histórico keeps the scope in its
+        query and Ranking goes to ``/casas``; the active one is the tab of an event page or the global page of
+        ``TABBAR_ACTIVE`` (none for the method).
+    """
+    keep = query if event else ''
+    hrefs = {
+        'inicio': '/',
+        'promedios': '/' + scope + keep,
+        'escanos': '/' + scope + '/escanos' + keep,
+        'historico': '/elecciones' + scope_query(scope),
+        'ranking': '/casas',
+    }
+
+    if event:
+        lit = 'escanos' if active_suffix == '/escanos' else 'promedios'
+    else:
+        lit = TABBAR_ACTIVE.get(active)
+
+    return [dict(row, href=hrefs[row['key']], active=row['key'] == lit) for row in TABBAR]
+
+
 def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: Optional[date] = None,
                scopes: Optional[list] = None) -> dict:
     """
@@ -479,8 +577,9 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
     -------
     dict
         ``title`` (``event_title``), ``date`` (``event_date``), ``days_left``, ``days_text``
-        (``days_text``), ``href`` (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per
-        entry of ``EVENT_TABS``, the links keeping the state (``event_query``).
+        (``days_text``), ``chamber`` (``chamber_text``), ``run_at`` and ``n_polls`` (of the run), ``href``
+        (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per entry of ``EVENT_TABS``, the links
+        keeping the state (``event_query``).
     """
     if scopes is None:
         scopes = published_scopes()
@@ -494,6 +593,9 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
         'date': event_date,
         'days_left': days,
         'days_text': days_text(days),
+        'chamber': chamber_text(scope, meta),
+        'run_at': meta.get('run_at'),
+        'n_polls': meta.get('n_polls'),
         'href': '/' + scope,
         'tabs': [{'href': '/' + scope + tab['suffix'] + query, 'label': tab['label'],
                   'active': tab['suffix'] == active_suffix} for tab in EVENT_TABS],
@@ -668,6 +770,33 @@ def catalog(meta: dict) -> Catalog:
     return entries
 
 
+def hemicycle_order(names: list, parties: Catalog) -> list:
+    """
+    Party names in the order of the hemicycle: by block (``HEMICYCLE_BLOCKS``, unknown blocks last) and, within a
+    block, by the order of the catalogue (``Catalog.order`` of ``catalog.js`` does the same in the browser).
+
+    Parameters
+    ----------
+    names : list of str
+        Party names.
+    parties : Catalog
+        Party catalogue of the run (its insertion order is the catalogue order).
+
+    Returns
+    -------
+    list of str
+        The names, sorted.
+    """
+    positions = {name: index for index, name in enumerate(parties)}
+
+    def rank(name):
+        block = parties[name]['block']
+        block_rank = HEMICYCLE_BLOCKS.index(block) if block in HEMICYCLE_BLOCKS else len(HEMICYCLE_BLOCKS)
+        return block_rank, positions.get(name, len(positions))
+
+    return sorted(names, key=rank)
+
+
 def block_color(block: str, meta: dict, parties: Catalog) -> str:
     """
     Colour of a block: that of its first party in ``bmaps.vs``, then in ``bmaps.blocks``.
@@ -719,14 +848,15 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     Returns
     -------
     dict
-        ``site_title``, ``site_tagline``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
+        ``site_title``, ``site_tagline``, ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
         ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
         on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
         ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
         (``event_info``, or ``None`` on a global page), ``manifest``, ``meta``, ``catalog``,
         ``freeze`` (the manifest switch),
-        ``frozen`` (whether it is active) and ``title_suffix`` (``title_of``).
+        ``frozen`` (whether it is active), ``title_suffix`` (``title_of``) and ``tabbar`` (``tabbar``, the
+        bottom bar of the phones).
 
     Raises
     ------
@@ -751,6 +881,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     return {
         'site_title': SITE_TITLE,
         'site_tagline': SITE_TAGLINE,
+        'author_handle': AUTHOR_HANDLE,
+        'author_url': AUTHOR_URL,
         'pages': [dict(page, active=page['href'] == active) for page in PAGES],
         'state': full,
         'query': event_query(full) if event else scope_query(scope),
@@ -766,6 +898,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'meta': meta,
         'catalog': catalog(meta),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
+        'tabbar': tabbar(scope, active, active_suffix, event, event_query(full) if event else ''),
     }
 
 
