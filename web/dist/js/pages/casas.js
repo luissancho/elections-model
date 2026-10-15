@@ -7,7 +7,7 @@ import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHeatmap} from '../charts/heatmap.js';
 import {renderLine} from '../charts/line.js';
-import {mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
+import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 
 // The bullseye of a profile: general elections in the accent, regional ones in a contrasting tone; a point fades
 // with the age of its election down to this opacity.
@@ -90,9 +90,32 @@ function wireBullseye(bullseye, blocks) {
   draw(bullseye);
 }
 
+/**
+ * Wire the switch of the house effects of a profile: the deviation from the result or from the consensus of the
+ * cycle, each in its own table (the server renders both, the second hidden).
+ */
+function wireEffectsView() {
+  const fieldset = document.getElementById('effects-view');
+  const wraps = {resultado: document.getElementById('profile-effects-wrap'), ciclo: document.getElementById('profile-effects-cycle-wrap')};
+  if (!fieldset || !wraps.resultado || !wraps.ciclo) {
+    return;
+  }
+  fieldset.hidden = false;
+  markSegments(fieldset);
+  fieldset.addEventListener('change', (event) => {
+    if (event.target.matches('input[name=eview]') && wraps[event.target.value]) {
+      for (const [view, wrap] of Object.entries(wraps)) {
+        wrap.hidden = view !== event.target.value;
+      }
+      markSegments(fieldset);
+    }
+  });
+}
+
 /** Wire the "Cargar más" of the ranking and draw the charts whose container is present and has data. */
 function paint() {
   wireMore('ranking-more', 'ranking-table');
+  wireEffectsView();
   const {grid = null, path = [], bullseye = [], blocks = []} = readInitial();
 
   const heatmap = document.getElementById('effects-heatmap');

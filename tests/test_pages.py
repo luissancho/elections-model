@@ -2480,3 +2480,22 @@ def test_polls_csv_link_survives_a_single_page_and_the_legend_is_accessible(api)
     assert '.card .lead-strip { max-width: none; }' in css  # beats `.card p { max-width: 72ch }`
     for gone in ('.event-title', '.brand-tagline', '.event-run,'):
         assert gone not in css, gone
+
+
+def test_profile_effects_switch_between_result_and_cycle_deviations(houses):
+    """El perfil enseña la desviación frente al resultado (solo las elecciones con tres sondeos en los 90 días
+    previos) y, con el conmutador, la desviación frente al consenso del ciclo (todas); el "Cómo leerlo" lo explica."""
+    page = html(call(houses, '/casas', query='scope=es&id=2')[2])
+    card = page[page.index('id="effects"'):page.index('id="herding"')]
+    assert '<fieldset id="effects-view" class="seg" hidden>' in card
+    assert 'name="eview" value="resultado" checked' in card and 'name="eview" value="ciclo"' in card
+    result = re.search(r'<table id="profile-effects">(.*?)</table>', card, re.S).group(1)
+    cycle = re.search(r'<table id="profile-effects-cycle">(.*?)</table>', card, re.S).group(1)
+    assert result.count('<tr>') == 1 + 2 and cycle.count('<tr>') == 1 + 3  # la cabecera y las filas
+    assert '0,7' in cycle and '0,7' not in result  # 2026 solo tiene la desviación frente al consenso
+    assert '<div class="table-wrap" id="profile-effects-cycle-wrap" hidden>' in card
+    assert 'tres sondeos' in card and '90 días' in card and 'consenso' in card
+    records = [{'event_date': '2023-07-23', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': None, 'dev_cycle': 1.5},
+               {'event_date': '2019-11-10', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': 0.4, 'dev_cycle': None}]
+    assert [row['event_date'] for row in pages.effects_table(records)['rows']] == ['2019-11-10']
+    assert [row['event_date'] for row in pages.effects_table(records, key='dev_cycle')['rows']] == ['2023-07-23']

@@ -168,27 +168,32 @@ def election_label(scope: str, date: str, names: dict, scope_names: dict) -> str
     return names.get((scope, date)) or '{} · {}'.format(fmt_date(date), scope_names.get(scope, scope))
 
 
-def effects_table(records: list, label: Optional[Callable] = None, order: Sequence[str] = ()) -> dict:
+def effects_table(records: list, label: Optional[Callable] = None, order: Sequence[str] = (),
+                  key: str = 'dev_result_c') -> dict:
     """
     House effects of a pollster by election and party.
 
     Parameters
     ----------
     records : list of dict
-        Its rows of the house effects table (``event_scope``, ``event_date``, ``party``, ``dev_result_c``...);
-        a row without ``event_scope`` belongs to ``RATING_SCOPE``.
+        Its rows of the house effects table (``event_scope``, ``event_date``, ``party``, ``dev_result_c``,
+        ``dev_cycle``...); a row without ``event_scope`` belongs to ``RATING_SCOPE``.
     label : callable, optional
         ``(scope, date) -> str``, the name of each election; its date by default.
     order : sequence of str, optional
         Party names that go first, in this order (the catalogue of the run); the rest follow by first
         appearance.
+    key : str, optional
+        Column shown: ``dev_result_c`` (the deviation from the result, centred; only the elections where the
+        pollster had enough polls in the final window) or ``dev_cycle`` (the deviation from the consensus of the
+        whole cycle).
 
     Returns
     -------
     dict
         ``{'columns': parties, 'rows': [{'scope', 'event_date', 'label', 'cells'}]}``: one row per election by
-        date (ties in catalogue order of the records) with the ``dev_result_c`` of each party (``None`` when
-        missing). An election without any value (the next one, which has no result yet) has no row.
+        date (ties in catalogue order of the records) with the ``key`` of each party (``None`` when missing). An
+        election without any value (the next one, which has no result yet) has no row.
     """
     seen = []
     values = {}
@@ -199,8 +204,8 @@ def effects_table(records: list, label: Optional[Callable] = None, order: Sequen
         if party not in seen:
             seen.append(party)
 
-        key = (record.get('event_scope') or RATING_SCOPE, record.get('event_date'))
-        values.setdefault(key, {})[party] = record.get('dev_result_c')
+        election = (record.get('event_scope') or RATING_SCOPE, record.get('event_date'))
+        values.setdefault(election, {})[party] = record.get(key)
 
     columns = [name for name in order if name in seen] + [name for name in seen if name not in order]
     rows = [
@@ -333,7 +338,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``kpis`` (``profile_kpis``), ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
+        The common context plus ``kpis`` (``profile_kpis``), ``cycle_table`` (``effects_table`` of ``dev_cycle``), ``profile`` (``webapi.query_pollster`` of every scope), ``mtype`` (the type of
         the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None`` when missing), ``current``
         (the ``rating`` and ``quality`` of its last national ratings row, the next general election; both
         ``None`` without ratings), ``path`` (its national ratings by election, ``PATH_KEYS``),
@@ -385,6 +390,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas') -> dict:
     context['kpis'] = profile_kpis(context['current'], context['mtype'])
     context['path'] = path
     context['effects_table'] = effects_table(profile['house_effects'], label, order=list(context['catalog']))
+    context['cycle_table'] = effects_table(profile['house_effects'], label, order=list(context['catalog']), key='dev_cycle')
     context['herding_table'] = [dict(row, label=label(row.get('event_scope') or RATING_SCOPE, row['event_date']))
                                 for row in profile_rows(profile['herding'], HERDING_KEYS)]
     context['bullseye'] = bullseye
