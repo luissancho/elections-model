@@ -241,6 +241,34 @@ def test_export_fan_house_effects_and_dispersion():
     assert list(publish.export_dispersion(sim.model)[1].columns) == publish.DISP_COLUMNS
 
 
+def test_export_weights_reads_the_as_of_day_and_writes_the_long_csv():
+    sim = synthetic_simulator()
+    data, frame = publish.export_weights(sim.model, NAMES, sim.as_of)
+    data = valid('weights', data, mode=None)
+    assert data['date'] == '2026-10-05' and data['parties'] == NAMES
+    assert list(frame.columns) == publish.WEIGHTS_COLUMNS and len(frame) == 6 + 6 + 5
+    row = data['rows'][0]
+    assert row['name'] == 'PP' and row['date'] == '2026-09-05' and row['sponsor'] is None and row['pct'] == 41.0
+    assert row['pct_adj'] == 40.7 and row['weight'] == round(0.4 * 1.2, 3) and row['weight_kernel'] == 0.4
+    assert data['rows'][6]['name'] == 'PSOE' and {r['name'] for r in data['rows']} == set(NAMES)
+    line = data['line']['PP']
+    assert line['dates'][0] == '2026-09-05' and line['dates'][-1] == '2026-10-05' and len(line['dates']) == 31
+    assert line['mean'][0] == 40.0 and line['lo'][0] == 38.0 and line['hi'][0] == 42.0
+    kernel = data['kernel']['PP']
+    assert kernel['dates'] == line['dates'] and kernel['values'][-1] == 1.0 and kernel['values'][0] < 1.0
+    assert data['stats']['PP'] == {'date': '2026-10-05', 'mean': 40.0, 'lo': 38.0, 'hi': 42.0, 'err': 1.0, 'nobs': 6,
+                                   'neff': 4.8, 'bandwidth': 30.0}
+    assert data['stats']['VOX']['nobs'] == 5
+
+
+def test_export_weights_skips_a_party_without_fit():
+    sim = synthetic_simulator()
+    original = sim.model.weights_at
+    sim.model.weights_at = lambda name, date=None: None if name == 'VOX' else original(name, date)
+    data, frame = publish.export_weights(sim.model, NAMES, sim.as_of)
+    assert data['parties'] == ['PP', 'PSOE'] and set(data['stats']) == {'PP', 'PSOE'} and len(frame) == 12
+
+
 def test_provenance_reads_git_or_the_image_env(monkeypatch):
     outputs = iter([b'abc1234\n', b' M mtpy/lib/publish.py\n'])
     monkeypatch.setattr(publish.common.subprocess, 'check_output', lambda *a, **k: next(outputs))
@@ -385,6 +413,8 @@ def test_publish_forecast_backfill_freezes_the_polls_and_stamps_the_day(tmp_path
     meta = writer.read_json(bundle.path_part('es', '20261005-120000', 'meta'))['data']
     head = writer.read_json(bundle.path_part('es', '20261005-120000', 'headline'))['data']
     assert meta['limit_date'] == '2026-10-05' and meta['run_at'] == '2026-10-05T12:00:00Z'
+    weights = writer.read_json(bundle.path_part('es', '20261005-120000', 'weights'))['data']
+    assert weights['date'] == head['as_of'] == '2026-10-05'
     assert head['backfill'] is True and out['entry']['run_at'] == '2026-10-05T12:00:00Z'
     normal = publish.publish_forecast('es', writer, RUN, '2026-11-29', n_sim=50, simulator=factory, stats=fake_stats, prov=fake_prov)
     assert 'limit_date' not in [c for c in factory.calls if c[0] == 'init'][-1][3]

@@ -56,10 +56,33 @@ def synthetic_forecaster(date_last='2026-10-01', date_fit_last='2026-10-05'):
         'pollster': ['CIS', 'GAD3', '40dB'], 'n': [3, 2, 1], 'ss_obs': [1.1, 0.8, np.nan], 'ss_exp': [1.0, 1.0, np.nan],
         'ratio_raw': [1.1, 0.8, np.nan], 'ratio': [1.05, 0.9, 1.], 'factor': [0.95, 1., 1.], 'herd_ratio': [np.nan, 0.85, np.nan],
     }, index=pd.Index([1, 2, 3], name='pollster_id'))
+    def weights_at(name, date=None):
+        """Pesos sintéticos: kernel creciente con la fecha, recta plana en el promedio y campana de 30 días."""
+        if name not in NAMES:
+            return None
+        when = pd.Timestamp(date) if date is not None else pd.Timestamp(date_fit_last)
+        frame = polls[polls[name].notnull()]
+        out = pd.DataFrame({
+            'pollster_id': frame['pollster_id'], 'pollster': frame['pollster'], 'sponsor': frame['sponsor'],
+            'sample_size': frame['sample_size'], 'pct': frame[name], 'pct_adj': frame[name] - 0.3,
+            'weight_kernel': np.linspace(0.4, 1., len(frame)), 'weight_over': 1., 'weight_sample': frame['weight'],
+            'weight_rating': 1.,
+        }, index=frame.index)
+        out['weight'] = out['weight_kernel'] * out['weight_over'] * out['weight_sample'] * out['weight_rating']
+        out = out[['pollster_id', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight', 'weight_kernel',
+                   'weight_over', 'weight_sample', 'weight_rating']]
+        days = pd.date_range(frame.index.min(), max(frame.index.max(), when), freq='D')
+        mean = float(forecast[name].dropna().iloc[0])
+        line = pd.DataFrame({'mean': mean, 'cmin': mean - 2., 'cmax': mean + 2., 'err': 1.}, index=days)
+        kernel = pd.Series(np.exp(-np.square((days - when).days / 30.) / 2), index=days)
+        stats = {'date': when, 'mean': mean, 'cmin': mean - 2., 'cmax': mean + 2., 'err': 1., 'nobs': len(frame),
+                 'neff': 0.8 * len(frame), 'bandwidth': 30.}
+        return {'polls': out, 'line': line, 'kernel': kernel, 'stats': stats}
+
     return types.SimpleNamespace(
         forecast=forecast, fc_stat=fc_stat, fc_series_raw=polls, nfc_series=results, house_effects=house_effects,
         dispersion=dispersion, date_last=pd.Timestamp(date_last), date_fit_last=pd.Timestamp(date_fit_last),
-        bmaps=BMAPS, colors=COLORS, names=NAMES,
+        bmaps=BMAPS, colors=COLORS, names=NAMES, weights_at=weights_at,
     )
 
 

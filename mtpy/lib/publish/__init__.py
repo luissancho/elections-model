@@ -40,7 +40,7 @@ from .events import (
     publish_event
 )
 from .forecast import (
-    backfill_days, backfill_run_at, backfill_run_id, DEFAULT_CORRECTORS, DISP_COLUMNS, export_dispersion,
+    backfill_days, backfill_run_at, backfill_run_id, DEFAULT_CORRECTORS, DISP_COLUMNS, WEIGHTS_COLUMNS, export_dispersion, export_weights,
     export_dist, export_districts, export_fan, export_headline, export_house_effects, export_meta, export_poll_rows,
     export_polls, poll_seats,
     export_projection, export_scenario, export_series, export_summary, export_vote, HE_COLUMNS, headline_mode,

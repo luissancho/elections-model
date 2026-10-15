@@ -35,6 +35,8 @@ HE_COLUMNS = ['pollster_id', 'name', 'pollster', 'n', 'w', 'level', 'dev', 'dev_
 
 
 DISP_COLUMNS = ['pollster_id', 'pollster', 'n', 'ss_obs', 'ss_exp', 'ratio_raw', 'ratio', 'herd_ratio', 'factor']
+WEIGHTS_COLUMNS = ['name', 'date', 'pollster_id', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight',
+                   'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating']
 
 
 DEFAULT_CORRECTORS = {'house_effects': True, 'dispersion': True, 'regional_noise': True, 'industry_bias': False,
@@ -417,6 +419,58 @@ def export_dispersion(fc):
     return {'rows': table.to_dict(orient='records')}, table
 
 
+def export_weights(fc, names, date):
+    """Export the polls that weigh on the average of each party on ``date`` and the local line of that day.
+
+    Parameters
+    ----------
+    fc : Forecaster
+        Fitted forecaster (``sim.model``), with ``weights_at``.
+    names : list of str
+        Party names to export; a party ``weights_at`` cannot fit (fewer than three usable polls, or no poll
+        before ``date``) is left out of ``parties``.
+    date : str or Timestamp
+        Day on which the average is read: ``sim.as_of``, the day of the published vote.
+
+    Returns
+    -------
+    tuple of (dict, pandas.DataFrame)
+        Data for the ``weights`` schema (``date``, ``parties``, ``rows`` in long format with
+        ``WEIGHTS_COLUMNS``, ``line`` and ``kernel`` per party over the window and ``stats`` per party) and the
+        rows as its CSV twin.
+    """
+    def pct(values):
+        return [None if pd.isnull(v) else round(float(v), PCT_DECIMALS) for v in values]
+
+    def isodates(index):
+        return [d.strftime('%Y-%m-%d') for d in index]
+
+    rows, line, kernel, stats = [], {}, {}, {}
+    for name in names:
+        out = fc.weights_at(name, date=date)
+        if out is None:
+            continue
+        polls = out['polls'].reset_index()
+        polls.insert(0, 'name', name)
+        polls['date'] = isodates(polls['date'])
+        polls['sample_size'] = pd.array(polls['sample_size'], dtype='Int64')
+        polls = round_cols(polls, pct=('pct', 'pct_adj'),
+                           prob=('weight', 'weight_kernel', 'weight_over', 'weight_sample', 'weight_rating'))
+        rows.extend(polls[WEIGHTS_COLUMNS].to_dict(orient='records'))
+        line[name] = {'dates': isodates(out['line'].index), 'mean': pct(out['line']['mean']),
+                      'lo': pct(out['line']['cmin']), 'hi': pct(out['line']['cmax'])}
+        kernel[name] = {'dates': isodates(out['kernel'].index),
+                        'values': [round(float(v), PROB_DECIMALS) for v in out['kernel']]}
+        st = out['stats']
+        stats[name] = {'date': pd.Timestamp(st['date']).strftime('%Y-%m-%d'), 'mean': round(float(st['mean']), PCT_DECIMALS),
+                       'lo': round(float(st['cmin']), PCT_DECIMALS), 'hi': round(float(st['cmax']), PCT_DECIMALS),
+                       'err': round(float(st['err']), PCT_DECIMALS), 'nobs': int(st['nobs']),
+                       'neff': round(float(st['neff']), 1), 'bandwidth': round(float(st['bandwidth']), 1)}
+    data = {'date': pd.Timestamp(date).strftime('%Y-%m-%d'), 'parties': list(line), 'rows': rows, 'line': line,
+            'kernel': kernel, 'stats': stats}
+    return data, pd.DataFrame(rows, columns=WEIGHTS_COLUMNS)
+
+
 def n_polls(fc):
     """Count the published polls and the distinct pollsters.
 
@@ -765,7 +819,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     fc = sim.model
     cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names, seats=poll_seats(fc))),
              ('fan', export_fan(sim)),
-             ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)))
+             ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)),
+             ('weights', export_weights(fc, names, sim.as_of)))
     for part, (data, frame) in cycle:
         writer.write_json(bundle.path_part(scope, run_id, part), part, data, scope, run_id)
         writer.write_csv(bundle.path_csv(scope, run_id, part), frame)
