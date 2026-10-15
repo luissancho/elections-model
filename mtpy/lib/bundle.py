@@ -57,7 +57,7 @@ PREFIX = 'site/v1'
 DRY_PREFIX = 'site-dry/v1'
 CONTRACT = 1
 MODES = ('nowcast', 'forecast')
-RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion')
+RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion', 'weights')
 MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'projection')
 ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data')
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
@@ -93,6 +93,7 @@ SCHEMAS = {
     'fan': {'horizons': list, 'rows': list},
     'house-effects': {'rows': list},
     'dispersion': {'rows': list},
+    'weights': {'date': str, 'parties': list, 'rows': list, 'line': dict, 'kernel': dict, 'stats': dict},
     'vote': {'horizon': int, 'when': str, 'rows': list},
     'summary': {'n_seats': int, 'majority': int, 'parties': list, 'vs': list, 'blocks': list, 'p_majority': dict,
                 'totals': dict},

@@ -97,6 +97,14 @@ def test_csv_twins(api):
     assert status == 400 and json.loads(body)['message'] == 'invalid format'
 
 
+def test_weights_part_is_served_with_the_run(api):
+    status, headers, body = call(api, '/api/v1/forecast/es/weights')
+    assert status == 200 and headers['cache-control'] == 'public, max-age=60'
+    data = json.loads(body)
+    assert data['schema'] == 'weights@1' and data['data']['parties'] == ['PP'] and data['data']['date'] == '2026-10-08'
+    assert data['data']['stats']['PP']['nobs'] == 3 == len(data['data']['rows'])
+
+
 @pytest.mark.parametrize('path, query, status, message', [
     ('/api/v1/forecast/es-xx', '', 400, 'invalid scope'),
     ('/api/v1/forecast/es-md', '', 404, 'scope not published'),
