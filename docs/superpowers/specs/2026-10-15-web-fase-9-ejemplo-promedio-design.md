@@ -359,3 +359,10 @@ Luis vio el bloque tras publicar un run y pidió:
 6. La fecha que imprimen los textos es la de publicación del run (`headline.run_at`), no el día en que se lee el
    promedio (`as_of`, último sondeo + `max_fc`). El cálculo, la guía del gráfico y el centro de la campana siguen
    en `as_of`, como en Promedios, donde la estimación «de hoy» es el valor de la recta prolongada ese día.
+
+Segunda tanda del mismo día:
+
+7. Al abrir la lista salen todos los sondeos, sin «Cargar más» (se retiran `EXAMPLE_SHOWN`, `example_shown` y
+   `example_hidden`).
+8. Los cuatro F(*) van sin degradado, solo la cifra; «Peso» conserva su barra.
+9. Los ticks del porcentaje van en el eje Y derecho del gráfico (el eje oculto del kernel pasa a la izquierda).

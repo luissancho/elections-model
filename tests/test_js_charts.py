@@ -234,6 +234,7 @@ def test_weights_option_sizes_the_polls_by_weight_and_draws_the_line_the_band_th
     assert [p['itemStyle']['opacity'] for p in points['data']] == [0.625, 1] and points['data'][1]['value'][1:] == [33.1, 1]
     assert kernel['yAxisIndex'] == 1 and kernel['lineStyle']['type'] == 'dashed' and kernel['data'][2][1] == 1.0
     assert option['yAxis'][1]['max'] == 1 and option['yAxis'][1]['show'] is False and option['yAxis'][0]['scale'] is True
+    assert option['yAxis'][0]['position'] == 'right' and option['grid']['right'] == 48 and option['grid']['left'] == 16   # los ticks del % a la derecha
     day = run_js('s.dayTime("2026-10-08")')
     assert marks['markLine']['data'] == [{'xAxis': day}, {'yAxis': 33.1}] and marks['markLine']['label'] == {'show': False}
     assert option['xAxis']['min'] == run_js('s.dayTime("2026-09-24")') and option['xAxis']['max'] == day

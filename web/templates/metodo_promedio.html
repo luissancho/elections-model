@@ -223,33 +223,30 @@
                   <th scope="col" title="Entrevistas del sondeo">Muestra</th>
                   <th scope="col" title="Voto publicado para el partido">Predicción</th>
                   <th scope="col" title="Peso total en la recta: el producto de los cuatro factores (barra de 0 a 3)">Peso</th>
-                  <th scope="col" title="Factor de cercanía al día: la campana del kernel (de 0 a 1)">F(kernel)</th>
-                  <th scope="col" title="Factor de solape: la sobrerrepresentación de la encuestadora (de 0 a 1)">F(solape)</th>
-                  <th scope="col" title="Factor de muestra, con la dispersión de la encuestadora dentro (de 0 a 2)">F(muestra)</th>
-                  <th scope="col" title="Factor del rating de la encuestadora (de 0 a 2)">F(rating)</th>
+                  <th scope="col" title="Factor de cercanía al día: la campana del kernel">F(kernel)</th>
+                  <th scope="col" title="Factor de solape: la sobrerrepresentación de la encuestadora">F(solape)</th>
+                  <th scope="col" title="Factor de muestra, con la dispersión de la encuestadora dentro">F(muestra)</th>
+                  <th scope="col" title="Factor del rating de la encuestadora">F(rating)</th>
                 </tr>
               </thead>
               <tbody>
                 {% for row in example.rows %}
-                <tr{% if loop.index > example_shown %} hidden{% endif %}>
+                <tr>
                   <td class="f l">{{ row.date|date_short }}</td>
                   <td><b>{{ row.pollster }}</b>{% if row.sponsor %} / {{ row.sponsor }}{% endif %}</td>
                   <td>{{ row.sample_size|int }}</td>
                   <td>{{ row.pct|pct }}</td>
                   <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight|bar(0, 3) }}%"></i><span>{{ row.weight|num(2) }}</span></td>
-                  <td class="cell-shade" style="background-color: {{ row.weight_kernel|shade(0, 1, '#1d4f86') }}">{{ row.weight_kernel|num(2) }}</td>
-                  <td class="cell-shade" style="background-color: {{ row.weight_over|shade(0, 1, '#1d4f86') }}">{{ row.weight_over|num(2) }}</td>
-                  <td class="cell-shade" style="background-color: {{ row.weight_sample|shade(0, 2, '#1d4f86') }}">{{ row.weight_sample|num(2) }}</td>
-                  <td class="cell-shade" style="background-color: {{ row.weight_rating|shade(0, 2, '#1d4f86') }}">{{ row.weight_rating|num(2) }}</td>
+                  <td>{{ row.weight_kernel|num(2) }}</td>
+                  <td>{{ row.weight_over|num(2) }}</td>
+                  <td>{{ row.weight_sample|num(2) }}</td>
+                  <td>{{ row.weight_rating|num(2) }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
           <p class="scroll-hint">Desliza para ver más →</p>
-          {% if example_hidden %}
-          <button type="button" class="more" id="weights-more" data-batch="{{ example_shown }}" hidden>Cargar más</button>
-          {% endif %}
         </details>
         {% call m.how() %}
         <p>
@@ -259,13 +256,12 @@
           de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
         </p>
         <p>
-          «Ver los sondeos» despliega la lista, los más recientes primero: la fecha de fin de campo, la encuestadora y
-          el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total (una barra de 0 a 3)
-          y los cuatro factores que lo forman, sombreados de más claro a más oscuro. Tres son los de
-          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación (de 0 a 1); F(muestra), la
-          muestra con la dispersión de la encuestadora, el rebaño, ya dentro (de 0 a 2); y F(rating), el rating (de 0 a 2).
-          El cuarto, F(kernel), es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse (de 0 a 1).
-          {% if example_hidden %}La lista enseña los {{ example_shown }} primeros y «Cargar más» sigue.{% endif %}
+          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
+          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
+          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
+          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
+          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
+          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
         </p>
         <p>
           La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos

@@ -13,8 +13,6 @@ from .filters import _is_missing
 
 # Scope whose figures the method texts quote ("en las generales"): the texts have no scope filter.
 NATIONAL_SCOPE = 'es'
-# Rows of the weights table of the example shown at first; "Cargar más" reveals the rest in batches of this size.
-EXAMPLE_SHOWN = 20
 # Keys of a row of the example that the chart needs (the island carries no more).
 ISLAND_ROW_KEYS = ('date', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight', 'weight_kernel',
                    'weight_over', 'weight_sample', 'weight_rating')
@@ -242,7 +240,6 @@ def metodo_section_context(state: dict, section: str) -> dict:
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
         ``section``. The ``promedio`` subpage adds ``example`` (``weights_example``, ``None`` without one),
-        ``example_shown`` (``EXAMPLE_SHOWN``), ``example_hidden`` (whether rows beyond those are hidden),
         ``example_csv`` (the CSV of the ``weights`` part) and, with an example, the ``initial`` island
         (``state`` and the ``example`` slice the chart draws: ``name``, ``color``, ``date``, ``stats``, ``rows``
         with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``).
@@ -268,8 +265,6 @@ def metodo_section_context(state: dict, section: str) -> dict:
     if section == 'promedio':
         example = weights_example()
         context['example'] = example
-        context['example_shown'] = EXAMPLE_SHOWN
-        context['example_hidden'] = example is not None and example['n_rows'] > EXAMPLE_SHOWN
         context['example_csv'] = api_url(NATIONAL_SCOPE, 'weights', fmt='csv')
 
         if example is not None:

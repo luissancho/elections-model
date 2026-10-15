@@ -101,7 +101,7 @@ export function weightsOption(example) {
   return {
     ...baseOption(),
     legend: {data: [NAMES.polls, NAMES.line, NAMES.band, NAMES.kernel], top: 0},
-    grid: {top: 40, left: 48, right: 16, bottom: 28, containLabel: false},
+    grid: {top: 40, left: 16, right: 48, bottom: 28, containLabel: false},
     tooltip: {trigger: 'item', ...tooltipStyle(), formatter: tooltip},
     xAxis: {
       type: 'time', min: times[0], max: times[times.length - 1],
@@ -110,11 +110,11 @@ export function weightsOption(example) {
     },
     yAxis: [
       {
-        type: 'value', scale: true,
+        type: 'value', scale: true, position: 'right',
         axisLabel: {...axisLabelStyle(), formatter: (value) => fmtPct(value, 0)},
         splitLine: {lineStyle: {color: THEME.gridColor}},
       },
-      {type: 'value', min: 0, max: 1, show: false},
+      {type: 'value', min: 0, max: 1, show: false, position: 'left'},
     ],
     series,
   };

@@ -51,7 +51,7 @@ def test_weights_example_lets_other_errors_through(api, monkeypatch):
 
 def test_promedio_context_carries_the_example_and_its_island(api):
     context = pages.metodo_section_context(STATE, 'promedio')
-    assert context['example']['name'] == 'PP' and context['example_shown'] == 20 and context['example_hidden'] is False
+    assert context['example']['name'] == 'PP' and 'example_shown' not in context and 'example_hidden' not in context
     assert context['example_csv'] == '/api/v1/forecast/es/weights?format=csv'
     assert set(context['initial']) == {'state', 'example'}
     island = context['initial']['example']
@@ -65,7 +65,7 @@ def test_promedio_context_carries_the_example_and_its_island(api):
 def test_promedio_context_without_the_part_has_no_island(api, tmp_path):
     without_weights(tmp_path)
     context = pages.metodo_section_context(STATE, 'promedio')
-    assert context['example'] is None and context['example_hidden'] is False and 'initial' not in context
+    assert context['example'] is None and 'initial' not in context
 
 
 def test_promedio_page_shows_the_example_block(api):
@@ -87,9 +87,9 @@ def test_promedio_page_shows_the_example_block(api):
     assert 'unos 2,6 sondeos de igual peso' in text and 'unos 42 días de anchura' in text and '8 oct 2026' in text
     assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
     assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
-    assert 'class="cell-shade" style="background-color: rgba(29, 79, 134, 0.352)"' in page   # F(kernel) 0,64 sobre 1
-    assert 'class="cell-shade" style="background-color: rgba(29, 79, 134, 0.22)"' in page    # F(muestra) 0,8 sobre 2
-    assert 'class="cell-shade" style="background-color: rgba(29, 79, 134, 0.275)"' in page   # F(rating) 1,0 sobre 2
+    table = page[page.index('id="weights-table"'):page.index('</table>')]
+    assert 'cell-shade' not in table and table.count('class="cell-bar"') == 3       # solo el peso lleva formato
+    assert '<td>0,64</td>' in table and '<td>0,80</td>' in table                      # los factores, a secas
     assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
     data = initial(body)
     assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
@@ -106,10 +106,15 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     assert initial(body)['example']['date'] == '2026-10-08'    # pero el gráfico sigue centrado en ella
 
 
-def test_promedio_page_hides_the_rows_beyond_the_batch_and_offers_more(api, monkeypatch):
-    monkeypatch.setattr(metodo, 'EXAMPLE_SHOWN', 2)
+def test_promedio_page_lists_every_poll_without_a_load_more(api, monkeypatch):
+    weights = fixture_data('weights')
+    row = weights['rows'][0]
+    weights['rows'] = [{**row, 'date': '2026-{:02d}-{:02d}'.format(month, day)} for month in (7, 8, 9) for day in range(1, 10)]
+    weights['stats']['PP']['nobs'] = 27
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: weights if name == 'weights' else fixture_data(name))
     page = html(call(api, '/metodo/promedio')[2])
-    assert page.count('<tr hidden>') == 1 and 'id="weights-more"' in page and 'data-batch="2"' in page
+    assert len(re.findall(r'<tr>\s*<td class="f l">', page)) == 27 and '<tr hidden>' not in page
+    assert 'id="weights-more"' not in page and 'Cargar más' not in page and 'Ver los 27 sondeos' in page
 
 
 def test_promedio_page_without_the_part_renders_as_before(api, tmp_path):

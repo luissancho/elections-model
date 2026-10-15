@@ -4,7 +4,7 @@
 import {fmtNum} from '../format.js';
 import {renderLines} from '../charts/line.js';
 import {renderWeights} from '../charts/weights.js';
-import {mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
+import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
 // Series colours: the model stands out, the baselines are lighter.
 const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev_result: '#009e73'};
@@ -74,5 +74,4 @@ function paint() {
 }
 
 wireControls();
-wireMore('weights-more', 'weights-table');
 mountWhenReady(paint);
