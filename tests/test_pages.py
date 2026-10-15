@@ -2017,15 +2017,15 @@ def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
 
 def test_fonts_are_vendored_and_declared():
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
-    assert 'SourceSerif4-4.005-Semibold.woff2' in css and 'SourceSans3-3.052-Regular.woff2' in css
-    assert 'SourceSans3-3.052-Semibold.woff2' in css and 'font-weight: 600' in css  # negritas reales, también en los lienzos
+    assert 'DMSans.woff2' in css and 'Outfit.woff2' in css and 'Source' not in css
+    assert 'font-weight: 400 700;' in css and 'font-weight: 700 800;' in css  # fuentes variables: negritas reales
     assert "url('/dist/vendor/fonts/" in css and 'font-display: swap' in css
     assert os.path.isfile(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'vendor', 'fonts', 'LICENSE'))
 
 
 def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
-    for token in ('--color-bg: #f4f5f8;', '--color-card: #fff;', '--color-soft: #eceef2;', '--radius: 12px;', '--shadow: 0 2px 8px rgba(0,0,0,.06);', '--color-faint:'):
+    for token in ('--color-bg: #f4f5f8;', '--color-card: #fff;', '--color-soft: #eceef2;', '--radius: 18px;', '--shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);', '--color-faint:'):
         assert token in css, token
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
     assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 100ch' in css and '.pill {' in css
