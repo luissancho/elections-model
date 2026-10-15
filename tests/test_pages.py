@@ -61,7 +61,7 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
 
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards'}
     assert data['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
@@ -510,7 +510,7 @@ def polls_tbody(page):
 def test_promedios_polls_table_is_server_rendered_with_fifteen_rows_and_hidden_controls(api):
     body = call(api, '/es')[2]
     page = html(body).replace('\n', ' ')
-    assert 'Todas las encuestas' in page and 'Sondeos del ciclo' not in page and 'id="polls-more"' not in page
+    assert 'Todas las encuestas' in page and 'id="cycle"' not in page and 'id="polls-more"' not in page
     assert re.search(r'<div class="ctrl-bar" id="polls-controls" hidden>', page)
     assert 'id="polls-from"' in page and 'id="polls-to"' in page
     assert 'Seleccionar todos' in page and 'Seleccionar todas' in page
@@ -799,20 +799,20 @@ def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_orde
                'blocks': [{'name': 'Izquierda', 'pct': 35.4, 'seats': 117, 'p_majority': 0.0},
                           {'name': 'Derecha', 'pct': 52.5, 'seats': 203, 'p_majority': 0.995},
                           {'name': 'Separatista', 'pct': None, 'seats': None, 'p_majority': None}]}
-    assert pages.result_rows(summary) == [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'p_first': 0.95}]
+    assert pages.result_rows(summary) == [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'seats_lo': None, 'seats_hi': None, 'p_first': 0.95}]
     rows = pages.block_result_rows(summary, fixture_data('meta'), pages.Catalog(fixture_data('meta')))
     assert [r['name'] for r in rows] == ['Derecha', 'Izquierda'] and rows[0]['p_majority'] == 0.995 and rows[0]['color'].startswith('#')
     assert pages.result_rows({}) == [] and pages.block_result_rows({}, fixture_data('meta'), pages.Catalog(fixture_data('meta'))) == []
 
 
-def test_promedios_central_block_is_three_cards_without_ranges(api):
+def test_promedios_central_block_is_three_cards_with_ranges(api):
     page = html(call(api, '/es')[2])
     order = [page.index(m) for m in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"', 'id="evolution-card"')]
     assert order == sorted(order)
     heads = re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="parties-table"'):page.index('id="blocks-result-table"')])
-    assert heads == ['Partido', '% Voto', 'Escaños', 'P(primero)']
-    assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'P(mayoría)']
-    for gone in ('id="vote-chart"', 'id="seats-chart"', 'id="majority"', 'id="headline-table"', 'Rango 95'):
+    assert heads == ['Partido', '% Voto', 'Escaños', 'Rango 95 %', 'P(primero)']  # the bar column has a hidden head
+    assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'Rango 95 %', 'P(mayoría)']
+    for gone in ('id="vote-chart"', 'id="seats-chart"', 'id="majority"', 'id="headline-table"'):
         assert gone not in page
 
 
@@ -826,7 +826,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert 'id="pollster-select"' in page and 'href="/metodo' in page
     assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 
@@ -2090,7 +2090,9 @@ def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site)
         assert_public_wording(html(call(events_site, path, query=query)[2]), path + '?' + query)
     for path in ('/es', '/es/escanos', '/'):
         page = html(call(events_site, path)[2])
-        assert 'Partido Popular' not in visible_text(page) and 'title="Partido Popular"' in page, path
+        # the party cards of Promedios show the full name under the initials (phase 8); nothing else does
+        without_cards = re.sub(r'<div class="fl"[^>]*>[^<]*</div>', '', page)
+        assert 'Partido Popular' not in visible_text(without_cards) and 'title="Partido Popular"' in page, path
     # routes, ids and file names keep their names
     page = html(call(events_site, '/elecciones', query='scope=es&date=2023-07-23')[2])
     assert '/casas?id=2' in page
@@ -2345,3 +2347,43 @@ def test_event_bar_names_the_chamber_and_the_publication(api):
 def test_error_page_has_no_tabbar(api):
     status, _, body = call(api, '/nope')
     assert status == 404 and 'class="tabbar"' not in html(body) and '<svg hidden aria-hidden="true"' not in html(body)
+
+
+def test_promedios_opens_with_the_kpis_the_party_cards_and_the_lead_strip(events_site):
+    page = html(call(events_site, '/es')[2])
+    assert page.index('id="kpis"') < page.index('id="pcards"') < page.index('id="series"')
+    kpis = re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', page)
+    assert kpis == ['Primer partido', 'Escaños del líder', 'Mayoría absoluta', 'Sondeos del ciclo', 'Último sondeo']
+    flat = page.replace('\n', '')
+    assert '<div class="v" style="color: #1d84ce">PP<small>33,1 % del voto</small></div>' in flat
+    assert '135<small>de 350</small>' in flat and 'Rango 95 %: 120–150' in page
+    assert '<div class="s">PP: 135 escaños</div>' in page and '41 %<small>Derecha</small>' in flat
+    assert '120<small>de 15 encuestadoras</small>' in flat and '5 oct<small>Sigma Dos</small>' in flat
+    card = re.search(r'<article class="pc" style="--c: #1d84ce" data-name="PP">(.*?)</article>', page, re.S).group(1)
+    assert '<span class="rk">1.º</span>' in card and '<b>135</b><span>33,1 %</span>' in card
+    assert '−25 esc. <i>vs 2023</i>' in card and '+0,0 <i>pt</i>' in card  # 135 − 160; 33,1 − 33,06 = +0,04 → +0,0
+    assert 'class="spark"' in card and 'Último año' in card
+    assert 'Líder: <b>PP</b> · <b>135 escaños</b> · le faltan <b>41</b> para la mayoría · P(primero) <b>62 %</b>' in flat
+
+
+def test_promedios_party_table_draws_the_vote_bar_and_the_seat_range(api):
+    page = html(call(api, '/es')[2])
+    table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
+    assert '<span class="bar"><i style="width: 100.0%; background: #1d84ce"></i></span>' in table
+    assert 'class="rng"' in table and 'left: 34.3%; width: 8.6%' in table and 'calc(38.6% - 1px)' in table and '<u style="left: 50.3%"></u>' in table
+    assert '120–150' in table and '<th scope="col">Rango 95 %</th>' in table
+
+
+def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(api, fresh_app, tmp_path):
+    summary = fixture_data('summary')
+    summary['parties'].append(dict(summary['parties'][0], name='XX', seats=3, pct=1.0, seats_lo=0, seats_hi=5, p_first=0))
+    summary['totals']['XX'] = 3
+    writer = write_bundle(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'summary', 'nowcast'), 'summary', summary, 'es', run_id=RUN, mode='nowcast')
+    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'polls')))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/es')
+    page = html(body)
+    assert status == 200 and '<div class="l">Último sondeo</div>' not in page and 'id="kpis"' in page  # the footer keeps the date
+    assert 'data-name="XX"' not in page  # fuera de bmaps.main
+    assert 'background: #9e9e9e' in re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)

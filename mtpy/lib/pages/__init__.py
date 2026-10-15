@@ -19,17 +19,18 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING
                     ranking_rows)
 from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
                      SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, chamber_text, common_context,
-                     days_left, days_text, default_mode, environment, event_info, event_query, event_title, ink_color,
-                     parse_state, part, published_scopes, resolve_event_scope, resolve_scope, scope_query, tabbar, title_of)
+                     days_left, days_text, default_mode, environment, event_info, event_query, event_title, hemicycle_order,
+                     ink_color, parse_state, part, published_scopes, resolve_event_scope, resolve_scope, scope_query, tabbar,
+                     title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, chart_parties,
                          error_blocks, event_block_rows, history_events, history_rows, history_scopes, eleccion_context,
-                         elecciones_context, error_rows, event_part, last_poll_rows, horizon_tables, majority_of,
+                         elecciones_context, error_rows, event_part, last_poll_rows, last_results, horizon_tables, majority_of,
                          mark_shown, party_blocks, poll_error_parts, published_events, resolve_event, shown_parties,
                          split_sides, with_abs)
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, has_communities, escanos_context,
                       region_rows, resolve_region, seat_rows)
-from .filters import (DASH, MONTHS, bar_sides, bar_width, fmt_date, fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob,
-                      fmt_range, rng_cell, shade)
+from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_text, fmt_date, fmt_date_short, fmt_datetime, fmt_int,
+                      fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade)
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, subpages, thresholds_rows)

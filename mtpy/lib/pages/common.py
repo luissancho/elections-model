@@ -13,8 +13,8 @@ from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
 from ..webapi import check_mode, check_run, check_scope, scope_codes, site
-from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, fmt_date, fmt_datetime, fmt_int, fmt_num,
-                      fmt_pct, fmt_prob, fmt_range, rng_cell, shade)
+from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_text, fmt_date, fmt_date_short,
+                      fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade)
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
@@ -43,6 +43,8 @@ TABBAR = (
 )
 # Entry of the tab bar lit by each global page (``PAGES`` href); the method lights none
 TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking'}
+# Blocks of the hemicycle from left to right (the mirror of ``BLOCK_ORDER`` of ``catalog.js``)
+HEMICYCLE_BLOCKS = ('Izquierda', 'Separatista', 'Regionalista', 'Derecha')
 # Chamber of a scope, for the event bar and the home ("Congreso, 350 escaños")
 CHAMBERS = {'es': 'Congreso'}
 DEFAULT_CHAMBER = 'Parlamento'
@@ -158,6 +160,8 @@ def environment() -> Environment:
             'sides': bar_sides,
             'shade': shade,
             'rng': rng_cell,
+            'date_short': fmt_date_short,
+            'delta': delta_text,
         })
         # imported here: ``metodo`` imports this module
         from .metodo import method_href
@@ -756,6 +760,33 @@ def catalog(meta: dict) -> Catalog:
         }
 
     return entries
+
+
+def hemicycle_order(names: list, parties: Catalog) -> list:
+    """
+    Party names in the order of the hemicycle: by block (``HEMICYCLE_BLOCKS``, unknown blocks last) and, within a
+    block, by the order of the catalogue (``Catalog.order`` of ``catalog.js`` does the same in the browser).
+
+    Parameters
+    ----------
+    names : list of str
+        Party names.
+    parties : Catalog
+        Party catalogue of the run (its insertion order is the catalogue order).
+
+    Returns
+    -------
+    list of str
+        The names, sorted.
+    """
+    positions = {name: index for index, name in enumerate(parties)}
+
+    def rank(name):
+        block = parties[name]['block']
+        block_rank = HEMICYCLE_BLOCKS.index(block) if block in HEMICYCLE_BLOCKS else len(HEMICYCLE_BLOCKS)
+        return block_rank, positions.get(name, len(positions))
+
+    return sorted(names, key=rank)
 
 
 def block_color(block: str, meta: dict, parties: Catalog) -> str:

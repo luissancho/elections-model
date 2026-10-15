@@ -8,6 +8,7 @@ import {renderEvolution} from '../charts/evolution.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
+import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 import {markLegend, renderLegend} from './legend-dom.js';
 import {wirePollsTable} from './polls-wire.js';
@@ -356,10 +357,35 @@ function wireSeries(initial, catalog) {
   }
 }
 
+/** Days of the average the sparkline of a party card covers, and the sampling step. */
+const SPARK_DAYS = 365;
+const SPARK_STEP = 7;
+
+/**
+ * Draw the sparkline of every party card (`article.pc[data-name]`): the mean of the last year of the average,
+ * one point a week.
+ *
+ * @param {object} initial the page's initial data (`series.mean`)
+ */
+function paintCards(initial) {
+  const mean = (initial.series && initial.series.mean) || {};
+  for (const card of document.querySelectorAll('article.pc[data-name]')) {
+    const svg = card.querySelector('svg.spark');
+    const values = mean[card.dataset.name];
+    if (!svg || !values) {
+      continue;
+    }
+    const recent = values.slice(-SPARK_DAYS);
+    const sampled = recent.filter((_, i) => i % SPARK_STEP === 0 || i === recent.length - 1);
+    sparklineSvg(svg, sampled);
+  }
+}
+
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
   const catalog = new Catalog(initial.meta);
+  tryDraw(() => paintCards(initial), 'the party cards');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');

@@ -44,7 +44,7 @@
               {% endfor %}
             </select>
           </label>
-          <span class="bar-end"><span id="polls-count">{{ table_total|int }} {{ 'sondeo' if table_total == 1 else 'sondeos' }}</span> · <a href="{{ csv_href }}">Descargar CSV</a></span>
+          <span class="bar-end"><span id="polls-count">{{ table_total|int }} {{ 'sondeo' if table_total == 1 else 'sondeos' }}</span></span>
         </div>
         <noscript><p class="notice"><a href="{{ csv_href }}">Descargar CSV</a></p></noscript>
         <div class="et-wrap">
@@ -93,7 +93,8 @@
         </div>
         <p class="scroll-hint">Desliza para ver más →</p>
         <div class="pag" id="polls-pag" hidden>
-          <button type="button" data-page="-1">‹ Más recientes</button>
+          <button type="button" class="btn" data-page="-1">‹ Más recientes</button>
           <span id="polls-range"></span>
-          <button type="button" data-page="1">Más antiguos ›</button>
+          <button type="button" class="btn" data-page="1">Más antiguos ›</button>
+          <a class="mut" href="{{ csv_href }}">Descargar CSV</a>
         </div>

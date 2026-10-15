@@ -153,6 +153,34 @@ def published_events(scope: str) -> list:
     return with_abs(events)
 
 
+def last_results(scope: str) -> Optional[dict]:
+    """
+    Official results of the most recent published election of a scope, by party.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict or None
+        ``{'date': ISO date, 'year': int, 'parties': {name: {'seats', 'pct'}}}`` of the newest published election
+        with a ``results`` part; ``None`` without one.
+    """
+    for event in published_events(scope):
+        results = event_part(scope, event['date'], 'results')
+
+        if results and results.get('rows'):
+            return {
+                'date': event['date'],
+                'year': int(event['date'][:4]),
+                'parties': {row['party']: {'seats': row.get('seats'), 'pct': row.get('pct')} for row in results['rows']},
+            }
+
+    return None
+
+
 def error_rows(scope: str, dates: list, errors: Optional[dict] = None) -> Optional[list]:
     """
     Rows of the published ``poll-errors`` analysis of the given elections.

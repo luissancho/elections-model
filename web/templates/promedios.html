@@ -9,6 +9,20 @@
 {% set subtitle = '· ' ~ title_suffix[:1]|lower ~ title_suffix[1:] %}
 {% set projection_label = ' y la proyección' if state.mode == 'forecast' else '' %}
     <div id="content" class="stack">
+      {% if kpis %}
+      <div class="kpis" id="kpis">
+        {% for kpi in kpis %}
+        <div class="kpi"><div class="l">{{ kpi.label }}</div><div class="v"{% if kpi.color %} style="color: {{ kpi.color }}"{% endif %}>{{ kpi.value }}<small>{{ kpi.unit }}</small></div><div class="s{% if kpi.ok %} ok{% endif %}">{{ kpi.support }}</div></div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if cards %}
+      <div class="pcards" id="pcards">
+        {% for card in cards %}
+        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="big"><b>{{ card.seats|int }}</b><span>{{ card.pct|pct }}</span></div><div class="lb"><span>escaños</span><span>voto</span></div>{% if results_year %}<div class="dl">{% if card.new %}<span>nuevo</span>{% else %}<span>{{ card.delta_seats }} esc. <i>vs {{ results_year }}</i></span><span>{{ card.delta_pct }} <i>pt</i></span>{% endif %}</div>{% endif %}<span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+        {% endfor %}
+      </div>
+      {% endif %}
       {{ m.card_start('series', 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección', 'La intención de voto de cada partido a lo largo del ciclo, según el promedio ponderado de los sondeos publicados.', subtitle) }}
         <div class="series-controls">
           {% if blocks %}
@@ -52,6 +66,9 @@
           </div>
           {% endif %}
           <div class="chart hemi" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
+          {% if lead %}
+          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}supera la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}{% if lead.p_first is not none %} · P(primero) <b>{{ lead.p_first|prob(0) }}</b>{% endif %}</p>
+          {% endif %}
           {% call m.how() %}
           <p>
             Cada sector es un partido con los escaños del escenario central; la línea marca la mayoría absoluta.
@@ -68,16 +85,22 @@
                 <tr>
                   <th scope="col">Partido</th>
                   <th scope="col">% Voto</th>
+                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   <th scope="col">Escaños</th>
+                  <th scope="col">Rango 95 %</th>
                   <th scope="col">P(primero)</th>
                 </tr>
               </thead>
               <tbody>
                 {% for row in result_rows %}
+                {% set color = catalog[row.name].color %}
+                {% set r = row.seats_lo|rng(row.seats_hi, row.seats, n_seats, majority) %}
                 <tr>
-                  <td title="{{ catalog[row.name].fullname }}"><span class="dot" style="background-color: {{ catalog[row.name].color }}"></span>{{ row.name }}</td>
+                  <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
+                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, pct_max) }}%; background: {{ color }}"></i></span></td>
                   <td><strong>{{ row.seats|int }}</strong></td>
+                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                   <td>{{ row.p_first|prob }}</td>
                 </tr>
                 {% endfor %}
@@ -99,16 +122,22 @@
                 <tr>
                   <th scope="col">Bloque</th>
                   <th scope="col">% Voto</th>
+                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   <th scope="col">Escaños</th>
+                  <th scope="col">Rango 95 %</th>
                   <th scope="col">P(mayoría)</th>
                 </tr>
               </thead>
               <tbody>
+                {% set block_max = block_result_rows|map(attribute='pct')|reject('none')|max if block_result_rows else 0 %}
                 {% for row in block_result_rows %}
+                {% set r = row.seats_lo|rng(row.seats_hi, row.seats, n_seats, majority) %}
                 <tr>
-                  <td><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</td>
+                  <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
+                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, block_max) }}%; background: {{ row.color }}"></i></span></td>
                   <td><strong>{{ row.seats|int }}</strong></td>
+                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                   <td>{{ row.p_majority|prob }}</td>
                 </tr>
                 {% endfor %}
@@ -173,6 +202,7 @@
         {% endcall %}
       {{ m.card_end() }}
       {% endif %}
+      {% if table_total %}
       {{ m.card_start('polls', 'Todas las encuestas', ('Lo que publicó cada sondeo del ciclo: la estimación de voto (%) y, en las encuestadoras que los dan, los escaños. Sombreado, el partido que va primero. Pulsa una cabecera para ordenar.' if has_seats else 'Estimación de voto (%) de cada sondeo del ciclo, tal como se publicó. Sombreado, el partido más votado. Pulsa una cabecera para ordenar.')) }}
         {% include '_polls_table.html' %}
         {% call m.how() %}
@@ -187,6 +217,7 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
+      {% endif %}
       {{ m.closing('¿Cómo promediamos las encuestas?', method_href('promedio'),
                    'Qué sondeos entran en el promedio, cuánto pesa cada uno y cómo se corrige la tendencia de cada encuestadora. También, qué mide la banda y qué no.',
                    [{'href': '/elecciones' ~ scope_query, 'label': 'Cómo acertaron las encuestas en las elecciones anteriores'},

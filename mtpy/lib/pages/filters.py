@@ -246,6 +246,54 @@ def fmt_date(iso) -> str:
     return '{} {} {}'.format(value.day, MONTHS[value.month - 1], value.year)
 
 
+def fmt_date_short(iso) -> str:
+    """
+    Format a date as ``'3 oct'`` (day and month, no year).
+
+    Parameters
+    ----------
+    iso : str or datetime.date or None
+        ISO date or date-time.
+
+    Returns
+    -------
+    str
+        The formatted date, or ``DASH`` when it is missing or invalid.
+    """
+    value = _parse_datetime(iso)
+
+    if value is None:
+        return DASH
+
+    return '{} {}'.format(value.day, MONTHS[value.month - 1])
+
+
+def delta_text(x, digits: int = 0) -> str:
+    """
+    Format a difference with its sign: ``'+3'``, ``'−14'`` (typographic minus), ``'+0,0'``.
+
+    Parameters
+    ----------
+    x : int or float or None
+        The difference.
+    digits : int, optional
+        Number of decimals.
+
+    Returns
+    -------
+    str
+        The signed number, or ``DASH`` when ``x`` is missing.
+    """
+    text = fmt_num(abs(x), digits) if not (isinstance(x, bool) or _is_missing(x)) else DASH
+
+    if text == DASH:
+        return DASH
+
+    negative = round(x, digits) < 0
+
+    return ('−' if negative else '+') + text
+
+
 def fmt_datetime(iso) -> str:
     """
     Format an instant as ``'8 oct 2026, 20:11'`` in Europe/Madrid time.
