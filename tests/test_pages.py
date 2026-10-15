@@ -1906,60 +1906,10 @@ def test_window_options_run_from_the_whole_cycle_to_three_months(api):
     assert 'value="all" checked' in page.replace('\n', ' ')
 
 
-def test_home_lists_every_catalogue_scope_and_marks_the_unpublished_ones(api):
-    page = html(call(api, '/')[2])
-    assert page.count('card-link') == 1 + 3  # es + las tres secciones globales
-    assert page.count('card-muted') == 17 and 'Pronóstico no publicado todavía' in page
-    assert 'Elecciones autonómicas · Madrid' in page and 'href="/es-md"' not in page
-    assert 'Ver escaños' not in page and 'card-actions' not in page
-    assert page.index('href="/es"') < page.index('Elecciones autonómicas · Andalucía')
 
 
-def test_home_puts_the_published_regional_scope_before_the_unpublished_ones(api, fresh_app):
-    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
-    webapi.site().manifest_cache_clear()
-    page = html(call(api, '/')[2])
-    assert page.count('card-link') == 2 + 3 and page.count('card-muted') == 16
-    assert 'href="/es-md"' in page
-    assert page.index('Elecciones autonómicas · Madrid') < page.index('Elecciones autonómicas · Andalucía')
-    assert page.count('class="tile tile-hero"') == 1
 
 
-def test_home_lists_the_published_events_with_their_headline(api, fresh_app):
-    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
-    webapi.site().manifest_cache_clear()
-    status, headers, body = call(api, '/')
-    page = html(body)
-    assert status == 200 and '<title>Demoscopio · Inicio</title>' in page
-    assert page.index('Elecciones generales') < page.index('Elecciones autonómicas · Madrid')
-    main = page[page.index('<main'):page.index('</main>')]  # the tab bar links the seats; the cards do not
-    assert 'href="/es"' in main and 'href="/es-md"' in main and 'href="/es/escanos"' not in main
-    leader = max(fixture_data('headline')['nowcast']['parties'], key=lambda row: row['pct'])
-    assert leader['name'] in page and 'de probabilidad de mayoría absoluta' in page
-    assert 'id="event-bar"' not in page and 'id="scope-filter"' not in page and 'initial-data' not in page
-
-
-def test_home_tolerates_a_scope_whose_run_has_no_headline(api, fresh_app, tmp_path):
-    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
-    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es-md', '20261009-120000', 'headline')))
-    webapi.site().manifest_cache_clear()
-    status, _, body = call(api, '/')
-    assert status == 200 and 'Elecciones autonómicas · Madrid' in html(body)
-
-
-def test_home_cards_are_links(api):
-    page = html(call(api, '/')[2])
-    assert 'class="card card-link" href="/es"' in page.replace("'", '"')
-    assert page.count('card-link') == 4  # el ámbito + las tres secciones
-    more = page[page.index('id="more"'):page.index('</section>', page.index('id="more"'))]
-    for href in ('/elecciones', '/casas', '/metodo'):
-        assert re.search(r'<a class="card card-link" href="%s"><h3>[^<]+</h3>' % href, more), href
-    assert '<a' not in re.search(r'<a class="card card-link"[^>]*>(.*?)</a>', page, re.S).group(1)
-
-
-def test_home_lists_the_past_elections_with_a_detail_link(events_site):
-    page = html(call(events_site, '/')[2])
-    assert page.index('2023') < page.index('2019') and 'href="/elecciones?scope=es&amp;date=2023-07-23"' in page
 
 
 def test_every_page_uses_the_card_pattern_and_the_fonts(events_site):
@@ -1992,28 +1942,6 @@ def test_every_how_to_read_is_folded(api):
         assert len(hows) > 1 and set(hows) == {''}, path
 
 
-def test_home_cards_follow_the_default_mode_while_frozen(api, fresh_app):
-    headline = fixture_data('headline')
-    headline['forecast']['parties'] = [dict(party, name='PP', pct=41.5, seats=161) for party in headline['forecast']['parties']]
-    writer = write_bundle(fresh_app.fs)
-    writer.write_json(bundle.path_part('es', RUN, 'headline'), 'headline', headline, 'es', run_id=RUN)
-    webapi.site().manifest_cache_clear()
-    page = html(call(api, '/')[2])
-    assert 'Si hoy hubiera elecciones' in page and '33,1' in page and '41,5' not in page
-    publish.update_manifest(writer, {'es': publish.latest_entry(headline | {'run_id': RUN})},
-                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
-    webapi.site().manifest_cache_clear()
-    page = html(call(api, '/')[2])
-    assert 'Pronóstico definitivo' in page and '41,5' in page and '161 escaños' in page and 'Si hoy hubiera' not in page
-
-
-def test_event_cards_of_the_home_are_h3_under_the_section_h2(api):
-    page = html(call(api, '/')[2])
-    events = page[page.index('id="events"'):page.index('</section>', page.index('id="events"'))]
-    assert '<h2>Próximas elecciones</h2>' in events
-    hero = events[events.index('class="tile tile-hero"'):]
-    assert re.search(r'<a class="card card-link" href="/es">\s*<h3>[^<]+</h3>', hero)
-    assert events.count('<h2') == 1 and page.count('<h1') == 1
 
 
 def test_fonts_are_vendored_and_declared():
@@ -2247,7 +2175,7 @@ def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(ap
     cells = re.findall(r'<td>([^<]*%)</td>', table)
     assert cells and all(re.fullmatch(r'(?:[<>] )?\d+,\d %|0 %|100 %', cell) for cell in cells), cells
     home = html(call(api, '/')[2])
-    assert re.search(r'(?:> )?\d+ % de probabilidad de mayoría absoluta', home)
+    assert re.search(r'· Derecha (?:> )?\d+ %</small>', home)  # the majority chip of the hero, without decimals
 
 
 def test_polls_table_offers_the_seats_view_only_when_a_poll_publishes_seats(api, fresh_app):
@@ -2387,3 +2315,106 @@ def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(ap
     assert status == 200 and '<div class="l">Último sondeo</div>' not in page and 'id="kpis"' in page  # the footer keeps the date
     assert 'data-name="XX"' not in page  # fuera de bmaps.main
     assert 'background: #9e9e9e' in re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
+
+
+def test_home_hero_is_the_national_scope_with_its_figures(api):
+    page = html(call(api, '/')[2])
+    flat = page.replace('\n', '')
+    assert '<h1 class="hero-t">' in page and 'un solo <em>promedio</em>.' in page and pages.inicio.INTRO in page
+    assert 'Generales · 29 nov 2026 · ' in page and 'id="hero-card"' in page and 'class="flag"' in page
+    assert 'Congreso de los Diputados · 350 escaños · 29 nov 2026' in page
+    assert '<b style="color: #1d84ce">135</b>' in flat and 'primer partido con el <strong>33,1 %</strong>' in page
+    bar = re.search(r'<div class="seatbar" id="hero-seatbar">(.*?)<div class="chips">', page, re.S).group(1)
+    assert '<i style="width: 38.6%; background: #1d84ce" title="PP 135"></i>' in bar and 'left: 50.3%' in bar
+    assert 'Derecha 135' in bar
+    # con p < 0,5 el chip va en gris: "Sin mayoría clara · Derecha 41 %" (D4); con p >= 0,5, `.chip.ok`
+    assert '<span class="chip">Sin mayoría clara <small>· Derecha 41 %</small></span>' in flat
+    assert 'href="/es">Ver el promedio' in page and 'class="btn" href="/es/escanos">Escaños' in page
+    assert 'Última publicación: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page
+    assert 'id="hemicycle-mini"' in page and '/dist/js/pages/inicio.js' in page
+    data = initial(call(api, '/')[2])
+    assert data == {'hero': {'seats': {'PP': 135}, 'colors': {'PP': '#1d84ce'}, 'fullnames': {'PP': 'Partido Popular'},
+                             'order': ['PP'], 'n_seats': 350, 'majority': 176}}
+    polls = re.search(r'<div class="plist" id="latest-polls">(.*?)</div>\s*</section>', page, re.S).group(1)
+    assert polls.count('class="pr"') == FIXTURE_POLLS and '<b>5</b>oct' in polls and 'Sigma Dos' in polls and '33,1 %' in polls
+
+
+def test_home_lists_the_regional_scopes_as_rows_and_names_the_unpublished_ones(api, fresh_app):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    rows = re.search(r'<div class="card rows" id="auto-rows">(.*?)</div>\s*</div>\s*<aside', page, re.S).group(1)
+    assert rows.count('class="row"') == 1 and 'href="/es-md"' in rows and '<div class="n">Madrid</div>' in rows
+    assert 'PP 33,1 % · 135 esc.' in rows and 'Derecha: <b>41 %</b> de mayoría' in rows
+    assert 'Sin pronóstico todavía: Andalucía, Aragón' in rows and rows.count(',') >= 15 and 'Madrid,' not in rows
+    assert 'card-muted' not in page and 'Pronóstico no publicado todavía' not in page
+    assert page.index('href="/es"') < page.index('href="/es-md"')
+
+
+def test_home_tolerates_a_regional_scope_whose_run_has_no_headline(api, fresh_app, tmp_path):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es-md', '20261009-120000', 'headline')))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/')
+    assert status == 200 and '<div class="n">Madrid</div>' in html(body)
+
+
+def test_home_hero_falls_back_to_the_first_published_scope(api, fresh_app, tmp_path):
+    write_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', manifest=True)
+    path = tmp_path / bundle.PREFIX / bundle.path_manifest()
+    manifest = json.loads(path.read_text())
+    del manifest['data']['scopes']['es']
+    path.write_text(json.dumps(manifest))
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    assert re.search(r'<span class="eyebrow"[^>]*>Madrid · \d+ \w+ \d{4} · ', page)
+    assert 'class="flag"' not in page and 'Parlamento · 350 escaños · ' in page and 'Si hoy hubiera elecciones en Madrid' in page
+    assert 'id="auto-rows"' not in page  # el único ámbito publicado es el hero
+    assert 'href="/es-md/escanos"' in re.search(r'<nav class="tabbar".*?</nav>', page, re.S).group(0)
+
+
+def test_home_without_summary_or_polls_keeps_the_hero_without_the_bar(api, fresh_app, tmp_path):
+    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'polls')))
+    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'summary', 'nowcast')))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/')
+    page = html(body)
+    assert status == 200 and 'id="hero-card"' in page and 'id="hero-seatbar"' not in page
+    assert 'id="latest-polls"' not in page and 'initial-data' not in page
+    assert '<b style="color: #1d84ce">135</b>' in page.replace('\n', '')  # el líder sale del headline
+    assert 'Sin mayoría clara <small>· Derecha 41 %</small>' in page.replace('\n', '')
+
+
+def test_home_hero_segments_read_the_chamber_from_the_summary():
+    """La barra de escaños sale del resumen (`totals` y `n_seats`), no del `meta`, cuyo esquema exige `n_seats`."""
+    catalog = pages.catalog(fixture_data('meta'))
+    assert pages.inicio.hero_segments({'totals': {'PP': 135}, 'n_seats': 350}, catalog) == [
+        {'name': 'PP', 'color': '#1d84ce', 'seats': 135, 'width': 38.6}]
+    assert pages.inicio.hero_segments({'parties': [{'name': 'PP', 'seats': 135}]}, catalog)[0]['width'] == 100.0
+    assert pages.inicio.hero_segments(None, catalog) == [] and pages.inicio.hero_segments({'totals': {}}, catalog) == []
+
+
+def test_home_follows_the_default_mode_while_frozen(api, fresh_app):
+    headline = fixture_data('headline')
+    headline['forecast']['parties'] = [dict(party, name='PP', pct=41.5, seats=161) for party in headline['forecast']['parties']]
+    writer = write_bundle(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'headline'), 'headline', headline, 'es', run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    assert 'Si hoy hubiera elecciones' in page and '33,1' in page and '41,5' not in page
+    publish.update_manifest(writer, {'es': publish.latest_entry(headline | {'run_id': RUN})},
+                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
+    assert 'Pronóstico definitivo' in page and '41,5 %' in page and '>161</b>' in page and 'Si hoy hubiera' not in page
+
+
+def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
+    page = html(call(events_site, '/')[2])
+    more = page[page.index('id="more"'):page.index('id="how"')]
+    for href, icon in (('/elecciones', 'i-target'), ('/casas', 'i-trophy'), ('/metodo', 'i-book')):
+        assert re.search(r'<a class="card card-link" href="%s">\s*<span class="ic"><svg[^>]*><use href="#%s"' % (href, icon), more), href
+    assert page.count('<div class="card step">') == 4 and 'Recoge los sondeos' in page
+    past = page[page.index('id="past"'):]
+    assert 'href="/elecciones?scope=es&amp;date=2023-07-23"' in past and past.index('2023') < past.index('2019')
+    assert 'PP −25 escaños <small>vs 2023</small>' in page.replace('\n', '')  # el chip de delta del hero

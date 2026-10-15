@@ -349,6 +349,10 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 }
 
 .card-head { margin-bottom: 10px; }
+/* A card head with something on the right (a pill, a link) */
+.card-head.split-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
+.card-head .more-link { font-size: 13px; font-weight: 600; text-decoration: none; }
+.card-head .more-link:hover { text-decoration: underline; }
 .card-head h2, .card-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0; }
 .card-head h2::before, .card-head h3::before {
   content: "";
