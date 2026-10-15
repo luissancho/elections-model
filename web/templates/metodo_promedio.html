@@ -202,13 +202,13 @@
         </p>
       {{ m.card_end() }}
       {% if example %}
-      {{ m.card_start('ejemplo', 'Un ejemplo: el promedio del ' ~ example.name ~ ' hoy', 'Los sondeos que pesan en el promedio del ' ~ example.name ~ ' publicado el ' ~ (example.published|date) ~ ' y la recta que se ajusta a ellos: lo que las secciones anteriores explican, con los datos de hoy.') }}
+      {{ m.card_start('ejemplo', 'Un ejemplo: el promedio del ' ~ example.name ~ ' hoy', 'Los sondeos que aportan peso en el promedio del ' ~ example.name ~ ' publicado el ' ~ (example.published|date) ~ ' y la recta que se ajusta a ellos: lo que las secciones anteriores explican, con los datos a día de hoy.') }}
         <p>
-          El {{ example.published|date }} el promedio del {{ example.name }} se leía en {{ example.stats.mean|pct }}, con
-          una banda de {{ example.stats.lo|pct }} a {{ example.stats.hi|pct }}. Entraban en la recta
+          El {{ example.published|date }} el promedio del {{ example.name }} se establece en el {{ example.stats.mean|pct }},
+          con una banda del {{ example.stats.lo|pct }} al {{ example.stats.hi|pct }}. Se calcula a partir de
           {{ example.stats.nobs|int }} sondeos, que por sus pesos equivalen a unos {{ example.stats.neff|num(1) }} sondeos
-          de igual peso, y la campana que los pesaba por su cercanía tenía unos {{ example.stats.bandwidth|num(0) }} días
-          de anchura a cada lado.
+          efectivos en los últimos {{ example.stats.bandwidth|num(0) }} días, penalizando los más antiguos a través del
+          kernel gaussiano aplicado.
         </p>
         <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} publicado el {{ example.published|date }}, con la recta local, su banda y la campana del kernel"></div>
         <details class="weights-list" id="weights-list">

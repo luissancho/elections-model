@@ -83,8 +83,11 @@ def test_promedio_page_shows_the_example_block(api):
     rows = re.findall(r'<tr>\s*<td class="f l">([^<]+)</td>', page)
     assert rows == ['5 oct', '1 oct', '24 sept']                                   # los más nuevos arriba
     text = re.sub(r'\s+', ' ', page)
-    assert 'se leía en 33,1%, con una banda de 32,4% a 33,8%' in text and 'Entraban en la recta 3 sondeos' in text
-    assert 'unos 2,6 sondeos de igual peso' in text and 'unos 42 días de anchura' in text and '8 oct 2026' in text
+    assert ('Los sondeos que aportan peso en el promedio del PP publicado el 8 oct 2026 y la recta que se ajusta a ellos: '
+            'lo que las secciones anteriores explican, con los datos a día de hoy.') in text
+    assert ('El 8 oct 2026 el promedio del PP se establece en el 33,1%, con una banda del 32,4% al 33,8%. Se calcula a partir '
+            'de 3 sondeos, que por sus pesos equivalen a unos 2,6 sondeos efectivos en los últimos 42 días, penalizando los '
+            'más antiguos a través del kernel gaussiano aplicado.') in text
     assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
     assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
     table = page[page.index('id="weights-table"'):page.index('</table>')]
@@ -101,7 +104,7 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     status, _, body = call(api, '/metodo/promedio')
     text = re.sub(r'\s+', ' ', html(body))
     card = text[text.index('id="ejemplo"'):text.index('id="voto-estimado"')]
-    assert status == 200 and 'El 9 oct 2026 el promedio del PP se leía en 33,1%' in card and 'publicado el 9 oct 2026' in card
+    assert status == 200 and 'El 9 oct 2026 el promedio del PP se establece en el 33,1%' in card and 'publicado el 9 oct 2026' in card
     assert '8 oct 2026' not in card                       # la fecha de lectura (as_of) no se imprime en la tarjeta
     assert initial(body)['example']['date'] == '2026-10-08'    # pero el gráfico sigue centrado en ella
 
