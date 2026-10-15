@@ -84,15 +84,16 @@ Diseño y UX quedan para después ("Aplica esto y luego ya hablamos de diseño y
 
 Luis, tras recorrer la primera tanda ("Está muy bien"):
 
-1. **Ranking solo con historial**: "muestra sólo las que tengan al menos 2 encuestas en al menos 2 elecciones", en la
-   tabla y en las barras. Los ratings traen `num_polls`/`num_events` acumulados, no por elección, y la parte
-   `poll-errors` del análisis solo lleva el último sondeo de cada casa por elección (`n_last: 1`), así que el recuento
-   sale de la base: consulta nueva `data.get_poll_counts()` (`elections.polls` agrupado por `pollster_id`,
-   `event_scope` y `event_date`, contando los sondeos con `bias`, los que entran en los ratings; 1.155 filas en la base
-   real), servida por `webapi.query_poll_counts()` (caché de consultas). `pages.eligible_pollsters(counts)` da los ids
-   con al menos `RANKING_MIN_POLLS` (2) sondeos en al menos `RANKING_MIN_EVENTS` (2) elecciones de cualquier ámbito y
-   `ranking_rows` descarta el resto (73 de las 125 encuestadoras con sondeos cumplen). El perfil y los enlaces de los
-   demás paneles no cambian. La leyenda de la tabla y el "Cómo leerlo" lo dicen.
+1. **Ranking sin encuestadoras sin sondeos, 50 filas y "Cargar más", sin barras**. Primero pidió "al menos 2
+   encuestas en al menos 2 elecciones", que se implementó con un recuento por elección en la base
+   (`data.get_poll_counts`); después lo retiró ("olvida la regla esa, vuelve a que se incluyan las que tengan al
+   menos 1 sondeo, quita simplemente los que ponga 0 sondeos. Perdona el malentendido"), así que la consulta y
+   `eligible_pollsters` se eliminaron el mismo día. Regla final: `ranking_rows` descarta las filas sin `num_polls`
+   (una encuestadora sin sondeos tiene por rating su calidad previa, nada que comparar). La tabla pinta todas las
+   filas y esconde las que pasan de `RANKING_SHOWN` (50) tras un botón "Cargar más" (`#ranking-more`, con
+   `data-batch`), que destapa de 50 en 50 (`wireMore` de `pages/common.js`, compartido con el "Ver más" de los
+   resultados de una elección). El gráfico de barras del rating desaparece (redundante con la barra de la tabla) y
+   con él `initial.ranking`.
 2. **Detalle de una elección**: el selector Partidos/Bloques de Promedios en la primera fila (`#results-view` en la
    tarjeta del hemiciclo; cambia el hemiciclo y muestra "Resultados por bloque", `#results-blocks`, oculta por
    defecto, con Bloque, % Voto y Escaños sumados). El bloque de cada partido sale de la primera fuente que lo lista
@@ -108,7 +109,7 @@ Luis, tras recorrer la primera tanda ("Está muy bien"):
    etiqueta de un punto responde al ratón como el punto. Los puntos atenuados (`alphaOf`) llevan su opacidad en la
    serie de puntos y el color de su etiqueta en la gemela.
 
-Comprobación: `tests/test_js_charts.py` (gemelas, nombres de los ejes), `tests/test_pages.py` (ranking filtrado,
-`event_params`, partidos mostrados, bloques, selector y tabla por bloques; la caché de parámetros se vacía por test
-como la de consultas), 761 pruebas; consulta de recuentos ejecutada una vez contra la base real; capturas con Chrome
-sin cabeza de las dos vistas del detalle, del ranking y del perfil, sin errores de consola.
+Comprobación: `tests/test_js_charts.py` (gemelas, nombres de los ejes), `tests/test_pages.py` (ranking sin las
+encuestadoras sin sondeos y paginado de 50, `event_params`, partidos mostrados, bloques, selector y tabla por bloques;
+la caché de parámetros se vacía por test como la de consultas); capturas con Chrome sin cabeza de las dos vistas del
+detalle, del ranking y del perfil, sin errores de consola.

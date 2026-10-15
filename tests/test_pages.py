@@ -418,8 +418,7 @@ def test_bundle_strings_are_escaped_and_the_json_island_stays_safe(api, fresh_ap
         assert '<b>Hostil' not in page and 'url(' not in rest
         data = initial(body)
         assert data['meta']['parties'][0]['fullname'] == HOSTILE
-    casas = initial(call(api, '/casas')[2])
-    assert HOSTILE in [row['pollster'] for row in casas['ranking']]
+    assert HOSTILE in [row['pollster'] for row in pages.casas_context(pages.parse_state({'scope': 'es'}))['ranking']]
     home = html(call(api, '/es')[2])
     assert 'background-color: {}'.format(pages.OTHERS_COLOR) in home
     assert '&lt;b&gt;Hostil&lt;/b&gt;' in home
@@ -868,27 +867,29 @@ def test_pollster_options_and_round_series():
     assert series['mean']['PP'][0] == 33.149  # no muta la parte
 
 
-# Casas: tres casas con ratings en `es` (CIS id 1, GAD3 id 2 y una tercera con `rating` nulo que no entra
-# en el ranking) en dos elecciones pasadas y la próxima, más una cuarta casa del catálogo sin ratings en el
-# ámbito. GAD3 tiene el rating más alto en la próxima elección (2026-11-29); su primer rating es de 2023.
+# Casas: cuatro casas con ratings en `es` (CIS id 1, GAD3 id 2, una tercera con `rating` nulo y una quinta, Cero,
+# con rating pero sin sondeos: ninguna de las dos entra en el ranking) en dos elecciones pasadas y la próxima,
+# más una cuarta casa del catálogo (Nueva) sin ratings en el ámbito. GAD3 tiene el rating más alto en la próxima
+# elección (2026-11-29); su primer rating es de 2023.
 HOUSE_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']
 
 
 def fake_houses(monkeypatch, name='CIS'):
     """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
     pollsters = pd.DataFrame({
-        'id': [1, 2, 3, 4], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva'],
-        'mtype': ['public', 'private', 'private', 'private'], 'quality': [60.0, 80.0, 40.0, 50.0],
-        'rating': [55, 70, None, None],  # rating nacional truncado: distinto del camino del ámbito
+        'id': [1, 2, 3, 4, 5], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero'],
+        'mtype': ['public', 'private', 'private', 'private', 'private'], 'quality': [60.0, 80.0, 40.0, 50.0, 50.0],
+        'rating': [55, 70, None, None, 50],  # rating nacional truncado: distinto del camino del ámbito
     })
     ratings = pd.DataFrame({
-        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29']),
-        'pollster_id': [1, 1, 2, 1, 2, 3], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama'],
-        'quality': [60.0, 60.0, 80.0, 60.0, 80.0, 40.0], 'num_events': [1, 2, 1, 3, 2, 0],
-        'num_polls': [10, 12, 14, 15, 17, 2], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1],
-        'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, 3.0, None],
-        'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None],
-        'rating': [51.0, 53.0, 80.0, 55.0, 82.37, float('nan')],
+        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29',
+                                      '2026-11-29']),
+        'pollster_id': [1, 1, 2, 1, 2, 3, 5], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama', 'Cero'],
+        'quality': [60.0, 60.0, 80.0, 60.0, 80.0, 40.0, 50.0], 'num_events': [1, 2, 1, 3, 2, 0, 0],
+        'num_polls': [10, 12, 14, 15, 17, 2, 0], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1, 0.0],
+        'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, 3.0, None, None],
+        'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None, None],
+        'rating': [51.0, 53.0, 80.0, 55.0, 82.37, float('nan'), 50.0],
     })
     # los lectores de efectos y herding devuelven las filas de todos los ámbitos (`scope=None`, perfil global):
     # GAD3 tiene además una elección de Madrid, con un partido fuera del catálogo del run (MM)
@@ -903,16 +904,8 @@ def fake_houses(monkeypatch, name='CIS'):
         'pollster_id': [2, 2, 2], 'pollster': ['GAD3', 'GAD3', 'GAD3'],
         'n': [14, 17, 9], 'ratio': [0.781, 0.705, 0.912], 'p_value': [0.034, 0.012, 0.21],
     })
-    # sondeos evaluables por elección: CIS y GAD3 tienen dos elecciones con dos o más (entran en el ranking);
-    # Hamalgama, una sola
-    poll_counts = pd.DataFrame({
-        'pollster_id': [1, 1, 2, 2, 3], 'event_scope': ['es', 'es', 'es', 'es-md', 'es'],
-        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2021-05-04', '2023-07-23']),
-        'n': [10, 12, 14, 9, 2],
-    })
     monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
-    monkeypatch.setattr(webapi.queries, 'get_poll_counts', lambda: poll_counts)
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
@@ -944,40 +937,41 @@ def test_casas_lists_the_ranking_effects_and_herding(houses):
     # el selector de ámbito vive en la tarjeta de efectos (el ranking es global), no sobre las tarjetas
     assert page.index('id="ranking"') < page.index('id="house-effects"') < page.index('id="scope-filter"') < page.index('id="herding"')
     assert 'id="effects-heatmap"' in page and 'id="herding-table"' in page
-    # la tabla, al estilo de "Todas las encuestas", antes que las barras del rating
+    # la tabla, al estilo de "Todas las encuestas", sin las barras del rating (redundantes desde el 2026-10-15)
     ranking = page[page.index('id="ranking"'):page.index('id="house-effects"')]
-    assert '<table class="et et-rank" id="ranking-table">' in ranking and ranking.index('id="ranking-table"') < ranking.index('id="rating-chart"')
+    assert '<table class="et et-rank" id="ranking-table">' in ranking and 'id="rating-chart"' not in page
     assert 'Cada fila es una encuestadora con rating para la próxima elección' in page
     assert 'class="headline"' not in page  # sin titular desde 2026-10-15
     assert not re.search(r'\ba el\b', page) and 'al primer bloque' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv"' in page and 'href="/api/v1/ratings?scope=es&amp;format=csv"' in page
     data = initial(body)
-    assert list(data) == ['state', 'meta', 'ranking', 'grid'] and data['ranking'][0]['pollster'] == 'GAD3'
+    assert list(data) == ['state', 'meta', 'grid']  # sin `ranking`: la tabla va pintada y ya no hay barras
 
 
-def test_casas_ranking_needs_two_polls_in_two_elections(houses, monkeypatch):
-    """CIS se queda con un solo sondeo en 2019: una sola elección con dos o más, así que sale del ranking (tabla y
-    barras); sigue enlazada en los demás paneles."""
-    counts = pd.DataFrame({'pollster_id': [1, 1, 2, 2], 'event_scope': ['es', 'es', 'es', 'es-md'],
-                           'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2021-05-04']),
-                           'n': [1, 12, 14, 9]})
-    monkeypatch.setattr(webapi.queries, 'get_poll_counts', lambda: counts)
-    webapi.queries._QUERIES.clear()
-    body = call(houses, '/casas')[2]
-    page = html(body)
+def test_casas_ranking_drops_pollsters_without_polls_and_pages_by_fifty(houses, monkeypatch):
+    """Cero tiene rating pero cero sondeos: no sale en el ranking; con más de 50 encuestadoras, la tabla esconde las
+    que sobran tras "Cargar más" (el servidor las pinta ocultas)."""
+    page = html(call(houses, '/casas')[2])
     ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert 'GAD3' in ranking and 'CIS' not in ranking and ranking.count('<tr>') == 2  # cabecera y GAD3
-    assert [row['pollster'] for row in initial(body)['ranking']] == ['GAD3']
-    assert 'href="/casas?id=1"' in page  # CIS sigue en los efectos de encuestadora
-    assert 'al menos dos sondeos en al menos dos elecciones' in page
-    assert pages.eligible_pollsters(counts) == {2} and pages.eligible_pollsters(None) == set()
-    assert pages.eligible_pollsters(counts, min_polls=1) == {1, 2} and pages.eligible_pollsters(counts, min_events=3) == set()
-    assert pages.eligible_pollsters(pd.DataFrame(columns=['pollster_id', 'n'])) == set()
-    assert pages.RANKING_MIN_POLLS == 2 and pages.RANKING_MIN_EVENTS == 2
-    # sin sondeos evaluables en la base, nadie entra
-    monkeypatch.setattr(webapi.queries, 'get_poll_counts', lambda: pd.DataFrame(columns=['pollster_id', 'event_scope', 'event_date', 'n']))
+    assert 'Cero' not in ranking and ranking.count('<tr>') == 3 and 'id="ranking-more"' not in page
+    assert '2 encuestadoras con rating y algún sondeo' in ranking and 'id="rating-chart"' not in page  # sin barras
+    assert 'La tabla enseña las 50 primeras' in page
+    many = pd.DataFrame({
+        'event_date': pd.to_datetime(['2026-11-29'] * 60), 'pollster_id': list(range(1, 61)),
+        'pollster': [f'P{i:02d}' for i in range(1, 61)], 'quality': [50.0] * 60, 'num_events': [1] * 60,
+        'num_polls': [1] * 60, 'error_avg': [1.0] * 60, 'error_blocks': [0.5] * 60, 'bias_blocks': [0.5] * 60,
+        'rating': [90.0 - i for i in range(60)],
+    })
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: many)
     webapi.queries._QUERIES.clear()
-    assert initial(call(houses, '/casas')[2])['ranking'] == []
+    page = html(call(houses, '/casas')[2])
+    ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert ranking.count('<tr>') == 51 and ranking.count('<tr hidden>') == 10  # cabecera + 50 visibles, 10 ocultas
+    assert ranking.index('P50') < ranking.index('<tr hidden>') < ranking.index('P51')
+    assert '<button type="button" class="more" id="ranking-more" data-batch="50" hidden>Cargar más</button>' in page
+    context = pages.casas_context(pages.parse_state({'scope': 'es'}))
+    assert context['ranking_shown'] == 50 and context['ranking_hidden'] == 10 and pages.RANKING_SHOWN == 50
+    assert [row['pollster'] for row in context['ranking']][:2] == ['P01', 'P02'] and 'ranking' not in context['initial']
 
 
 def test_casas_ranking_is_the_national_one_whatever_the_scope(houses, fresh_app):
@@ -1044,11 +1038,11 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     assert 'style="background-color: rgba(214, 39, 40, 0.386)">1,3</td>' in ranking  # GAD3, 1,3 de 1,85
     assert 'style="background-color: rgba(214, 39, 40, 0.142)">0,74</td>' in ranking  # rebaño de GAD3
     assert 'style="background-color: transparent">–</td>' in ranking  # CIS no tiene rebaño en el análisis
-    assert 'id="rating-chart"' in page and 'id="effects-table"' in page
+    assert 'id="rating-chart"' not in page and 'id="effects-table"' in page
     assert 'href="/api/v1/analysis/es/herding?format=csv&amp;table=events"' in page
     assert 'href="/api/v1/analysis/es/house-effects?format=csv"' in page and 'href="/api/v1/analysis/es/poll-errors?format=csv"' in page
     data = initial(call(houses, '/casas')[2])
-    assert [row['pollster_id'] for row in data['ranking']] == [2, 1]
+    assert [row['pollster_id'] for row in pages.casas_context(pages.parse_state({'scope': 'es'}))['ranking']] == [2, 1]
     assert data['grid']['columns'] == ['PP', 'PSOE', 'VOX', 'Derecha', 'Izquierda']
     assert [row['pollster'] for row in data['grid']['rows']] == ['CIS']  # GAD3 no tiene `cycle`
 

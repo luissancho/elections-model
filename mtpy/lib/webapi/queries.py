@@ -45,7 +45,6 @@ def _reader(name: str) -> Callable:
 get_parties = _reader('get_parties')
 get_pollsters = _reader('get_pollsters')
 get_ratings = _reader('get_ratings')
-get_poll_counts = _reader('get_poll_counts')
 get_poll_series = _reader('get_poll_series')
 get_event_results = _reader('get_event_results')
 get_event_dates = _reader('get_event_dates')
@@ -185,18 +184,6 @@ def _ratings(scope: str) -> pd.DataFrame:
         ``data.get_ratings(scope)``.
     """
     return _query(('ratings', scope), lambda: get_ratings(scope))
-
-
-def query_poll_counts() -> pd.DataFrame:
-    """
-    Evaluable polls of every pollster in every election, of every scope, cached.
-
-    Returns
-    -------
-    pandas.DataFrame
-        ``data.get_poll_counts()``: ``pollster_id``, ``event_scope``, ``event_date`` and ``n``.
-    """
-    return _query(('poll_counts',), lambda: get_poll_counts())
 
 
 def _next_event(scope: str) -> Optional[str]:

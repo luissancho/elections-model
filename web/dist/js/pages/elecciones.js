@@ -19,7 +19,7 @@ import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderTrend} from '../charts/trend.js';
 import {fillComplements, fillFigures, fillSelect, filterEventsTable} from './history-dom.js';
-import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 import {wirePollsTable} from './polls-wire.js';
 
 // Height of the error bars: one row per house plus the axes (and the legend, in the split by block).
@@ -400,25 +400,6 @@ function wirePollHistogram(polls) {
 }
 
 /**
- * "Ver más" of the results table: the server hides the rows beyond the first ones and renders the button hidden
- * (it only works with JavaScript); show it and reveal the rows on click.
- */
-function wireResultsMore() {
-  const button = document.getElementById('results-more');
-  const table = document.getElementById('results-table');
-  if (!button || !table) {
-    return;
-  }
-  button.hidden = false;
-  button.addEventListener('click', () => {
-    for (const row of table.querySelectorAll('tbody tr[hidden]')) {
-      row.hidden = false;
-    }
-    button.hidden = true;
-  });
-}
-
-/**
  * Hemicycle of the official result of an election with its Partidos/Bloques switch (as in Promedios): the seats
  * of each party, ordered by block and catalogue, or of each block; the switch also shows the matching results
  * table and hides the other one. The absolute majority is written in the centre.
@@ -515,7 +496,7 @@ function drawLastErrors(initial) {
  * `#initial-data` island (and no charts), so there is nothing to draw and `readInitial` must not be called.
  */
 function paint() {
-  wireResultsMore();
+  wireMore('results-more', 'results-table');
   if (!document.getElementById('initial-data')) {
     return;
   }

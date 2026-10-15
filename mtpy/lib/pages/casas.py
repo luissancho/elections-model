@@ -4,15 +4,14 @@ Houses page context.
 from typing import Callable, Optional, Sequence
 
 from .. import webapi
-from ..webapi import query_poll_counts, query_pollster, query_ratings, site
+from ..webapi import query_pollster, query_ratings, site
 from .common import analysis_part, api_url, common_context
 from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import fmt_date
 
 RATING_SCOPE = 'es'
-# A pollster enters the ranking with at least this many evaluable polls in at least this many elections.
-RANKING_MIN_POLLS = 2
-RANKING_MIN_EVENTS = 2
+# Rows of the ranking the page shows before "Cargar más".
+RANKING_SHOWN = 50
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
                 'error_blocks', 'bias_blocks')
@@ -27,36 +26,7 @@ ANALYSIS_CSV = (
 
 
 
-def eligible_pollsters(counts, min_polls: int = RANKING_MIN_POLLS, min_events: int = RANKING_MIN_EVENTS) -> set:
-    """
-    Pollsters with enough history for the ranking.
-
-    Parameters
-    ----------
-    counts : pandas.DataFrame or None
-        Evaluable polls of each pollster in each election (``webapi.query_poll_counts``: ``pollster_id``,
-        ``event_scope``, ``event_date`` and ``n``).
-    min_polls : int, optional
-        Polls an election must have to count.
-    min_events : int, optional
-        Elections with that many polls the pollster must have.
-
-    Returns
-    -------
-    set of int
-        Ids of the pollsters with at least ``min_polls`` polls in at least ``min_events`` elections, of any
-        scope; empty without counts.
-    """
-    if counts is None or counts.empty or not {'pollster_id', 'n'} <= set(counts.columns):
-        return set()
-
-    enough = counts.loc[counts['n'] >= min_polls]
-    events = enough.groupby('pollster_id').size()
-
-    return {int(pollster) for pollster, number in events.items() if number >= min_events}
-
-
-def ranking_rows(ratings, herding: Optional[dict], eligible: Optional[set] = None) -> list:
+def ranking_rows(ratings, herding: Optional[dict]) -> list:
     """
     Rows of the pollsters ranking.
 
@@ -66,16 +36,14 @@ def ranking_rows(ratings, herding: Optional[dict], eligible: Optional[set] = Non
         Ratings of one event (``webapi.query_ratings``).
     herding : dict or None
         Data of the ``herding`` analysis part, or ``None`` when it is not published.
-    eligible : set of int, optional
-        Ids of the pollsters that enter the ranking (``eligible_pollsters``); every rated one by default.
 
     Returns
     -------
     list of dict
-        The pollsters with a rating (and in ``eligible``, when given), by ``rating`` descending (ties keep
-        the input order), with the keys of ``RANKING_KEYS`` (``None`` when a column is missing) plus
-        ``herding``, the pooled herding of the analysis for that pollster name or ``None``. ``pollster_id``
-        is an integer, for the profile links.
+        The pollsters with a rating and at least one poll (``num_polls``; a pollster without polls has its
+        prior quality as rating, nothing to rank), by ``rating`` descending (ties keep the input order), with
+        the keys of ``RANKING_KEYS`` (``None`` when a column is missing) plus ``herding``, the pooled herding of
+        the analysis for that pollster name or ``None``. ``pollster_id`` is an integer, for the profile links.
     """
     if ratings.empty or 'rating' not in ratings.columns:
         return []
@@ -84,14 +52,11 @@ def ranking_rows(ratings, herding: Optional[dict], eligible: Optional[set] = Non
     rows = []
 
     for record in webapi.frame_to_records(ratings):
-        if record.get('rating') is None:
+        if record.get('rating') is None or not record.get('num_polls'):
             continue
 
         row = {key: record.get(key) for key in RANKING_KEYS}
         row['pollster_id'] = int(row['pollster_id'])
-
-        if eligible is not None and row['pollster_id'] not in eligible:
-            continue
         row['herding'] = pooled.get(row['pollster'])
         rows.append(row)
 
@@ -253,11 +218,9 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
 
     The ranking is always the national one (``RATING_SCOPE``), whatever the scope: the rating of a
     pollster does not depend on it, and its herding column comes from the national analysis for the same
-    reason. Only the pollsters with at least ``RANKING_MIN_POLLS`` evaluable polls in at least
-    ``RANKING_MIN_EVENTS`` elections of any scope enter it (``eligible_pollsters`` over
-    ``webapi.query_poll_counts``). The ratings come from the database; the house effects and the herding cards
-    from the houses analysis of the scope (chosen in the house-effects card), whose ``meta`` part marks it as
-    complete.
+    reason. The page renders every row and hides those beyond ``RANKING_SHOWN`` behind "Cargar más". The
+    ratings come from the database; the house effects and the herding cards from the houses analysis of the
+    scope (chosen in the house-effects card), whose ``meta`` part marks it as complete.
 
     Parameters
     ----------
@@ -269,13 +232,13 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     Returns
     -------
     dict
-        The common context plus ``ranking`` (``ranking_rows`` of the eligible pollsters), ``error_max`` (the
-        largest ``error_avg`` of the ranking, the fullest shade of that column; 0 without one), ``grid``
-        (``house_effects_grid``
-        or ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``,
-        ``pollster_ids`` (``{name: id}`` of the pollsters rated in the event, for the links),
-        ``ranking_event`` (ISO date of the election the ranking is for, ``None`` without ratings),
-        ``csv_links`` and ``initial`` (``state``, ``meta``, ``ranking`` and ``grid``).
+        The common context plus ``ranking`` (``ranking_rows``), ``ranking_shown`` (``RANKING_SHOWN``) and
+        ``ranking_hidden`` (rows beyond them, behind "Cargar más"), ``error_max`` (the largest ``error_avg`` of
+        the ranking, the fullest shade of that column; 0 without one), ``grid`` (``house_effects_grid`` or
+        ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``, ``pollster_ids``
+        (``{name: id}`` of the pollsters rated in the event, for the links), ``ranking_event`` (ISO date of the
+        election the ranking is for, ``None`` without ratings), ``csv_links`` and ``initial`` (``state``,
+        ``meta`` and ``grid``).
 
     Raises
     ------
@@ -294,7 +257,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         national_herding = herding
     else:
         national_herding = None if analysis_part(RATING_SCOPE, 'meta') is None else analysis_part(RATING_SCOPE, 'herding')
-    ranking = ranking_rows(ratings, national_herding, eligible_pollsters(query_poll_counts()))
+    ranking = ranking_rows(ratings, national_herding)
     grid = house_effects_grid(effects) if effects is not None else None
     links = [{'label': 'Ratings de la próxima elección general', 'href': api_url(RATING_SCOPE, 'ratings', fmt='csv', kind='data')}]
 
@@ -305,6 +268,8 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         ]
 
     context['ranking'] = ranking
+    context['ranking_shown'] = RANKING_SHOWN
+    context['ranking_hidden'] = max(0, len(ranking) - RANKING_SHOWN)
     context['error_max'] = max((row['error_avg'] for row in ranking if row.get('error_avg') is not None), default=0)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
@@ -317,7 +282,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context['ranking_event'] = (
         str(ratings['event_date'].max())[:10] if 'event_date' in ratings.columns and not ratings.empty else None)
     context['csv_links'] = links
-    context['initial'] = {'state': full, 'meta': context['meta'], 'ranking': ranking, 'grid': grid}
+    context['initial'] = {'state': full, 'meta': context['meta'], 'grid': grid}
 
     return context
 

@@ -1,18 +1,13 @@
-// Houses page and pollster profile: rating bars, house-effects heat map, rating path and bullseye, drawn
-// from the data embedded by the server. The bullseye of a profile has a scope and a years filter (no hash: the
-// profile has no other state), which redraws it and its table.
+// Houses page and pollster profile: the "Cargar más" of the ranking, the house-effects heat map, the rating path
+// and the bullseye, drawn from the data embedded by the server. The bullseye of a profile has a scope and a years
+// filter (no hash: the profile has no other state), which redraws it and its table.
 import {fmtDate, fmtNum} from '../format.js';
 import {fadeByDate, filterRows, yearsOf} from '../errors.js';
-import {renderBars} from '../charts/bars.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHeatmap} from '../charts/heatmap.js';
 import {renderLine} from '../charts/line.js';
-import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
-
-// Height of the rating bars: one row per rated house plus the axes.
-const BAR_ROW_HEIGHT = 22;
-const BAR_EXTRA_HEIGHT = 60;
+import {mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 
 // The bullseye of a profile: general elections in the accent, regional ones in a contrasting tone; a point fades
 // with the age of its election down to this opacity.
@@ -95,17 +90,10 @@ function wireBullseye(bullseye, blocks) {
   draw(bullseye);
 }
 
-/** Draw the charts whose container is present and has data. */
+/** Wire the "Cargar más" of the ranking and draw the charts whose container is present and has data. */
 function paint() {
-  const {ranking = [], grid = null, path = [], bullseye = [], blocks = []} = readInitial();
-
-  const bars = document.getElementById('rating-chart');
-  if (bars && ranking.length) {
-    bars.style.height = `${ranking.length * BAR_ROW_HEIGHT + BAR_EXTRA_HEIGHT}px`;
-    tryDraw(() => renderBars(bars, ranking.map((row) => ({name: row.pollster, rating: row.rating})), {
-      value: 'rating', lo: 'lo', hi: 'hi', formatter: (x) => fmtNum(x, 1),
-    }), 'the rating bars');
-  }
+  wireMore('ranking-more', 'ranking-table');
+  const {grid = null, path = [], bullseye = [], blocks = []} = readInitial();
 
   const heatmap = document.getElementById('effects-heatmap');
   if (heatmap && grid && grid.rows.length) {
