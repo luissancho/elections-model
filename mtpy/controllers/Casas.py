@@ -28,6 +28,7 @@ class Casas(Page):
             pollster_id = webapi.check_pollster(pollster)
             context = pages.casa_context(self.state(), pollster_id, active=self.active)
 
-            return self.render('casa.html', **context)
+            # the profile is global: the scope of the ranking page does not change it
+            return self.render('casa.html', canonical=self.canonical_url('scope'), **context)
 
         return self.render('casas.html', **pages.casas_context(self.state(), active=self.active))

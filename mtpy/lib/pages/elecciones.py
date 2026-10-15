@@ -1,12 +1,13 @@
 """
 Past elections page context: the list of published elections and the detail of one.
 """
+from datetime import date, datetime
 from typing import Callable, Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
 from .common import Catalog, analysis_part, api_url, block_color, bundle_part, common_context, published_scopes
-from .filters import fmt_num
+from .filters import _madrid_tz, fmt_num
 from .promedios import BLOCK_ORDER, chart_polls, lead_strip, poll_months, polls_table, pollster_options
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
@@ -344,7 +345,7 @@ def error_blocks(scopes: list, parts: dict) -> list:
     return []
 
 
-def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
+def elecciones_context(state: dict, active: str = '/elecciones', today: Optional[date] = None) -> dict:
     """
     Template context of the list of past elections, of every scope.
 
@@ -362,7 +363,8 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
         The common context with ``scopes`` replaced by ``history_scopes``, plus ``events``
         (``history_events``), ``errors`` (``history_rows``), ``error_blocks`` (``error_blocks``),
         ``filter_events`` (``key`` ``scope:date``, ``date``, ``name``, ``scope`` and ``scope_name``),
-        ``filter_pollsters`` (house names, alphabetical), ``years`` (ascending), ``analysis_missing`` (no scope
+        ``filter_pollsters`` (house names, alphabetical), ``years`` (every year from the first election to
+        ``today``, ascending), ``analysis_missing`` (no scope
         has analysis), ``selected_scope`` (the raw ``scope`` when it has analysis, else ``None``),
         only with events, ``initial`` (``state``, ``scopes``,
         ``events``: ``filter_events``, ``errors``, ``error_blocks``, ``years`` and ``selected_scope``).
@@ -389,7 +391,11 @@ def elecciones_context(state: dict, active: str = '/elecciones') -> dict:
     context['error_blocks'] = error_blocks(scopes, parts)
     context['filter_events'] = filter_events
     context['filter_pollsters'] = sorted({row['pollster'] for row in errors if row.get('pollster')}, key=str.casefold)
-    context['years'] = sorted({row['year'] for row in errors})
+    # every year from the first election analysed to today, so the range filter also offers the years without
+    # elections (Luis, 2026-10-15)
+    years = {row['year'] for row in errors}
+    last = (today or datetime.now(_madrid_tz()).date()).year
+    context['years'] = list(range(min(years), max(max(years), last) + 1)) if years else []
     context['selected_scope'] = raw_scope if raw_scope in with_analysis else None
 
     if events:

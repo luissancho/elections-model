@@ -41,7 +41,7 @@
       </section>
       <section id="preguntas" class="stack" aria-labelledby="preguntas-title">
         <h2 id="preguntas-title">Las preguntas del método</h2>
-        <div class="grid">
+        <div class="grid grid-four">
           {% for page in subpages %}
           {% if page.available %}<a class="card card-link" href="{{ page.href }}" id="indice-{{ page.id }}">{% else %}<article class="card card-link" id="indice-{{ page.id }}">{% endif %}
             <h3>{{ page.title }}{% if not page.available %} <span class="muted">próximamente</span>{% endif %}</h3>

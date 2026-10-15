@@ -12,6 +12,21 @@ const RIGHT = 20;
 const AXIS = 18;
 const GAP = 8;
 
+/** Row heights of the ridges: tall on desktop, so the curves read well, compact on phones (Luis, 2026-10-15). */
+const ROW_HEIGHT_DESKTOP = 110;
+const ROW_HEIGHT_PHONE = 64;
+const PHONE_WIDTH = 720;
+
+/**
+ * Height of each ridge row for a viewport width.
+ *
+ * @param {number} width viewport width, in px
+ * @returns {number} px per row
+ */
+export function ridgeRowHeight(width) {
+  return width < PHONE_WIDTH ? ROW_HEIGHT_PHONE : ROW_HEIGHT_DESKTOP;
+}
+
 /**
  * Height the container needs for `n` rows.
  *

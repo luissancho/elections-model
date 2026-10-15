@@ -3,6 +3,7 @@ arnés ASGI."""
 import json
 import os
 import re
+from datetime import date
 from types import SimpleNamespace
 
 import pandas as pd
@@ -1247,12 +1248,12 @@ def test_eleccion_detail_has_the_error_histogram_and_the_glossary(events_site):
 
 
 def test_elecciones_history_context_filters(history_site):
-    context = pages.elecciones_context(pages.parse_state({'scope': 'es'}))
+    context = pages.elecciones_context(pages.parse_state({'scope': 'es'}), today=date(2026, 10, 15))
     assert not context['analysis_missing'] and len(context['errors']) == 2
     assert context['filter_events'] == [
         {'key': 'es:2023-07-23', 'date': '2023-07-23', 'name': 'Generales 2023', 'scope': 'es', 'scope_name': 'España'},
         {'key': 'es:2019-11-10', 'date': '2019-11-10', 'name': 'Generales 2023', 'scope': 'es', 'scope_name': 'España'}]
-    assert context['years'] == [2023] and context['selected_scope'] == 'es'
+    assert context['years'] == [2023, 2024, 2025, 2026] and context['selected_scope'] == 'es'  # every year up to today
     assert context['filter_pollsters'] == ['GAD3', 'Sigma Dos']
     assert 'headline_text' not in context  # sin titular desde 2026-10-15
     assert all(row['error_blocks_abs'] == abs(row['error_blocks']) for row in context['errors'])
@@ -1302,7 +1303,7 @@ def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     assert {row['scope'] for row in data['errors']} == {'es', 'es-md'} and all(isinstance(row['year'], int) for row in data['errors'])
     assert set(data['errors'][0]) == set(pages.HISTORY_COLUMNS) | set(data['error_blocks'])
     assert [e['scope'] for e in data['events']][:3] == ['es', 'es-md', 'es'] and data['years'] == sorted(data['years'])
-    assert data['years'] == [2021, 2023]
+    assert data['years'] == list(range(2021, date.today().year + 1))  # desde la primera elección hasta hoy
 
 
 def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scopes, fresh_app):
@@ -1959,7 +1960,7 @@ def test_site_css_has_the_grey_tokens_the_fluid_container_and_the_segments():
     for token in ('--color-bg: #f4f5f8;', '--color-card: #fff;', '--color-soft: #eceef2;', '--radius: 18px;', '--shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);', '--color-faint:'):
         assert token in css, token
     assert '--max-width' not in css and 'repeat(auto-fit, minmax(420px, 1fr))' in css
-    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width: 72ch' in css and '.pill {' in css
+    assert '.seg {' in css and '.seg label.is-on' in css and 'max-width' not in css.split('/* Prose spans')[1][:80] and '.pill {' in css
     assert '.geo th:first-child' in css and '.geo tr.total td:first-child { background: var(--color-soft); }' in css
     hemi = css[css.index('.hemi-grid'):css.index('/* Escaños')]
     assert 'align-items: stretch' in css and '.hemi-card { display: flex; flex-direction: column; }' in css
@@ -2477,7 +2478,6 @@ def test_polls_csv_link_survives_a_single_page_and_the_legend_is_accessible(api)
     assert '.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr));' in css
     assert '.kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }' in css
     assert '.mut { color: var(--color-muted); font-size: 12px; }' in css and '.evbar .run small { font-size: 11.5px; color: var(--color-muted); }' in css
-    assert '.card .lead-strip { max-width: none; }' in css  # beats `.card p { max-width: 72ch }`
     for gone in ('.event-title', '.brand-tagline', '.event-run,'):
         assert gone not in css, gone
 
@@ -2518,3 +2518,28 @@ def test_home_wording_of_the_second_walkthrough(api):
     assert 'Modelo y curación: Luis Sancho (<a href="https://x.com/luis_sancho" rel="me">@luis_sancho</a>)' in footer
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert '.seatbar { position: relative; margin: 6px 0 34px; }' in css
+
+
+def test_second_walkthrough_layout_rules_and_the_method_index(api):
+    """Apuntes de Luis (2026-10-15, segunda tanda): filtros de los gráficos en una fila en escritorio, gráficos de
+    series de 600 px, textos a todo el ancho de la tarjeta y las cuatro preguntas del método en una fila."""
+    css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
+    assert '.series-controls { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center;' in css
+    assert '  .series-controls { flex-direction: column; align-items: flex-start; }' in css  # móvil
+    assert '.chart.chart-tall { height: 600px; }' in css and '  .chart.chart-tall { height: 280px; }' in css
+    assert 'max-width: 72ch' not in css and 'max-width: 90ch' not in css
+    assert '.grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }' in css
+    page = html(call(api, '/metodo')[2])
+    assert '<div class="grid grid-four">' in page
+
+
+def test_profile_canonical_drops_the_scope_and_the_detail_is_titled_by_the_election(houses, fresh_app):
+    page = html(call(houses, '/casas', query='scope=es&id=2')[2])
+    assert '<link rel="canonical" href="https://demoscopio.es/casas?id=2">' in page
+    assert '<meta property="og:url" content="https://demoscopio.es/casas?id=2">' in page
+    ranking = html(call(houses, '/casas', query='scope=es')[2])
+    assert '<link rel="canonical" href="https://demoscopio.es/casas?scope=es">' in ranking
+    write_event(fresh_app.fs)
+    detail = html(call(houses, '/elecciones', query='scope=es&date=2023-07-23&mode=forecast')[2])
+    assert '<link rel="canonical" href="https://demoscopio.es/elecciones?scope=es&amp;date=2023-07-23">' in detail
+    assert '<title>Demoscopio · Generales 2023</title>' in detail and 'og:title" content="Demoscopio · Generales 2023"' in detail

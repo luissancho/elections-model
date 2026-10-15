@@ -18,6 +18,7 @@ DIVERGING_JS = pathlib.Path(DIST, 'js', 'charts', 'diverging.js').as_uri()
 HEMICYCLE_JS = pathlib.Path(DIST, 'js', 'charts', 'hemicycle.js').as_uri()
 SERIES_JS = pathlib.Path(DIST, 'js', 'charts', 'series.js').as_uri()
 BASE_JS = pathlib.Path(DIST, 'js', 'charts', 'base.js').as_uri()
+RIDGE_JS = pathlib.Path(DIST, 'js', 'charts', 'ridge.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -37,9 +38,9 @@ def run_js(expr, rows=ROWS):
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
-        'const s = await import("{}"); const base = await import("{}"); const rows = {}; '
+        'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
-    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, json.dumps(rows), expr)
+    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -159,3 +160,8 @@ def test_series_hidden_legend_keeps_the_component_and_the_theme():
     assert shown['legend']['show'] is True and shown['grid']['top'] == 40
     theme = run_js('base.THEME')
     assert theme['fontFamily'].startswith("'DM Sans'") and theme['headFamily'].startswith("'Outfit'") and theme['mutedColor'] == '#5a5f72'
+
+
+def test_ridge_rows_are_taller_on_desktop():
+    assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
+    assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64

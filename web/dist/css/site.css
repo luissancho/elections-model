@@ -315,6 +315,8 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: var(--space-4); }
 .grid > * { min-width: 0; }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+/* The four questions of the method in one row on desktop */
+.grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 /* Page headline: one line outside the cards with the situation in plain words */
 .headline {
@@ -361,11 +363,7 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 }
 .card > h2:first-child, .card > h3:first-child { margin-top: 0; }
 .lead { margin: var(--space-1) 0 0; font-size: 13.5px; color: var(--color-muted); }
-/* Prose keeps a readable measure inside the fluid container */
-.lead { max-width: 90ch; }
-.how-body, .card p, #glosario dd { max-width: 72ch; }
-/* The strip under a hemicycle spans its card (`.card p` would cap it) */
-.card .lead-strip { max-width: none; }
+/* Prose spans its card (Luis, 2026-10-15: no measure cap) */
 
 .how { margin-top: var(--space-3); border-top: 1px solid var(--color-line); }
 
@@ -574,12 +572,13 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Charts: ECharts containers, 340 px high on desktop and 250 px on mobile; the hemicycle keeps a 2 : 1.1 box */
 .chart { width: 100%; height: 340px; }
-.chart.chart-tall { height: 380px; }
+.chart.chart-tall { height: 600px; }
 .chart.chart-small { height: 160px; }
 .chart.hemi { height: auto; aspect-ratio: 2 / 1.1; max-width: 620px; margin: 0 auto; }
 
-/* Promedios: controls of the average chart, one per row (view, window, party or block pills) */
-.series-controls { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); margin: 0 0 var(--space-2); }
+/* Controls of a chart (view, window, a select): one row on desktop, stacked on phones; the party pills of the
+   series charts are a separate legend under them */
+.series-controls { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); }
 .series-controls[hidden], .pills[hidden] { display: none; }
 
 /* Pills of multiple selection (coalition calculator, parties of the bullseye): a group of checkboxes drawn like a
@@ -774,7 +773,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .kpi:nth-child(4)::before { display: none; }
   .pcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hemi-grid, .split { grid-template-columns: 1fr; }
-  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps, .grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rows-2 { grid-template-columns: 1fr; }
   .rows-2 .row:nth-child(2) { border-top: 1px solid var(--color-line); }
   .rows-2 .row:nth-child(even) { border-left: 0; }
@@ -841,7 +840,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .row > :nth-child(4) { grid-area: chev; }
   .sec-h { margin-top: 22px; }
   .sec-h h2 { font-size: 20px; }
-  .grid3, .steps { grid-template-columns: 1fr; gap: var(--space-3); }
+  .grid3, .steps, .grid-four { grid-template-columns: 1fr; gap: var(--space-3); }
+  .series-controls { flex-direction: column; align-items: flex-start; }
 
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi { min-height: 76px; padding: 12px 14px; }

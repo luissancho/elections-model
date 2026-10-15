@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}{{ event.event_date|date }}{% endblock %}
+{% block title %}{{ event.name or event.event_date|date }}{% endblock %}
 {% block description %}Resultado de la elección del {{ event.event_date|date }} y cuánto se equivocaron frente a él los sondeos, cada encuestadora y el modelo.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/elecciones.js"></script>

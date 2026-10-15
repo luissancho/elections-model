@@ -6,7 +6,7 @@ import {THEME} from '../charts/base.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {renderHistogram} from '../charts/histogram.js';
-import {renderRidge} from '../charts/ridge.js';
+import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
 import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
@@ -15,9 +15,6 @@ import {coalitionHash, coalitionSeats, parseCoalition, summarize} from '../seats
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
-/** Height of each ridge row, in px: compact, so the card does not take two screens (phase 8). */
-const RIDGE_ROW_HEIGHT = 64;
-
 /** Shared seat axis of the ridges, as a share of the chamber: parties up to 60%, blocks up to 80% (Luis, 2026-10-14). */
 const PARTY_AXIS_SHARE = 0.6;
 const BLOCK_AXIS_SHARE = 0.8;
@@ -210,7 +207,7 @@ function wireSeats(initial, catalog, colors) {
       cache[view] = cache[view] || chosen.ridges();
       if (cache[view].length) {
         tryDraw(() => renderRidge(ridgeEl, cache[view], {
-          colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: RIDGE_ROW_HEIGHT,
+          colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: ridgeRowHeight(window.innerWidth),
         }), `the ${view} distributions`);
       }
     }
