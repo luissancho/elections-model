@@ -484,6 +484,63 @@ def get_poll_series(
     return series
 
 
+def get_pollster_ratings(pollster_id: int) -> pd.DataFrame:
+    """
+    Ratings of one pollster before every election of every scope, the next ones included.
+
+    Parameters
+    ----------
+    pollster_id : int
+        Id of the pollster.
+
+    Returns
+    -------
+    pd.DataFrame
+        Its rows of the ratings table (``event_scope``, ``event_date``, ``rating``, ``rating_adj``...), by event
+        date and scope.
+    """
+    ratings = PollstersRatings().get_results(query=dict(
+        filters=['pollster_id = {}'.format(int(pollster_id))]
+    ), formatted=True)
+
+    return ratings.sort_values(['event_date', 'event_scope'], ignore_index=True)
+
+
+def get_pollster_events(pollster_id: int) -> pd.DataFrame:
+    """
+    Elections of every scope a pollster published polls for, with how many of its polls enter the ratings.
+
+    Parameters
+    ----------
+    pollster_id : int
+        Id of the pollster.
+
+    Returns
+    -------
+    pd.DataFrame
+        ``event_scope``, ``event_date``, ``n_polls`` (its polls of featured elections with computed errors, the
+        ones the rating algorithm reads), ``error_avg``, ``error_blocks`` and ``bias_dev_adj`` (the plain means
+        of those polls: the error over the main parties and the signed error of the margin between the two
+        blocks, both in points, and the deviation of their bias from the comparable polls, in the bias scale of
+        the rating; null without a value), by event date and scope.
+    """
+    polls = Polls().get_results(query=dict(
+        filters=['pollster_id = {}'.format(int(pollster_id)), 'featured', 'computed']
+    ), formatted=True)
+    # `event_scope` is categorical in the formatted table: only the combinations with polls, as plain strings
+    polls = polls.assign(event_scope=polls['event_scope'].astype(str))
+    measures = ['error_avg', 'error_blocks', 'bias_dev_adj']
+    for column in measures:
+        polls[column] = pd.to_numeric(polls[column], errors='coerce') if column in polls.columns else float('nan')
+    events = polls.groupby(['event_scope', 'event_date'], sort=False, observed=True).agg(
+        n_polls=('event_date', 'size'), **{column: (column, 'mean') for column in measures}
+    ).reset_index()
+    events = events.loc[events['n_polls'] > 0]
+
+    return events.sort_values(['event_date', 'event_scope'], ignore_index=True)[
+        ['event_scope', 'event_date', 'n_polls'] + measures]
+
+
 def get_ratings(
     scope: str,
     event_dates: Optional[list[str] | str] = None

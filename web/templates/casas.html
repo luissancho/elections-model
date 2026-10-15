@@ -9,7 +9,7 @@
 {% set with_herding = true %}
 {% set with_block_error = false %}
     <div id="content" class="stack">
-      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos, así que no depende de ningún ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', ('· elección general del ' ~ ranking_event|date) if ranking_event else None) }}
+      {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos, así que no depende de ningún ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', '· actualizado el ' ~ meta.run_at|date) }}
         {% if not ranking %}
         <p class="notice">Todavía no hay ratings de encuestadoras para la próxima elección general.</p>
         {% endif %}

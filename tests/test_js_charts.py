@@ -19,6 +19,7 @@ HEMICYCLE_JS = pathlib.Path(DIST, 'js', 'charts', 'hemicycle.js').as_uri()
 SERIES_JS = pathlib.Path(DIST, 'js', 'charts', 'series.js').as_uri()
 BASE_JS = pathlib.Path(DIST, 'js', 'charts', 'base.js').as_uri()
 RIDGE_JS = pathlib.Path(DIST, 'js', 'charts', 'ridge.js').as_uri()
+PATH_JS = pathlib.Path(DIST, 'js', 'charts', 'path.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -38,9 +39,11 @@ def run_js(expr, rows=ROWS):
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
-        'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); const rows = {}; '
+        'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); '
+        'const p = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
-    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, json.dumps(rows), expr)
+    ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
+             json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -165,3 +168,40 @@ def test_series_hidden_legend_keeps_the_component_and_the_theme():
 def test_ridge_rows_are_taller_on_desktop():
     assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
     assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64
+
+
+PATH_POINTS = [
+    {'event_date': '2021-05-04', 'scopes': ['es-md'], 'label': '4 may 2021 · Madrid', 'kind': 'regional', 'n_polls': 7, 'rating': 71.0},
+    {'event_date': '2023-07-23', 'scopes': ['es'], 'label': 'Generales 2023', 'kind': 'general', 'n_polls': 14, 'rating': 80.0},
+    {'event_date': '2024-05-12', 'scopes': ['es-ct'], 'label': '12 may 2024 · Cataluña', 'kind': 'regional', 'n_polls': 4, 'rating': None},
+]
+PATH_TODAY = {'event_date': '2026-10-15', 'label': 'Hoy', 'kind': 'today', 'rating': 82.4}
+
+
+def test_rating_path_runs_from_zero_to_a_hundred_with_coloured_points_and_a_dashed_tail_to_today():
+    option = run_js('p.ratingPathOption(rows, {today: %s, colors: {general: "#1d4f86", regional: "#c0672e"}})'
+                    % json.dumps(PATH_TODAY), rows=PATH_POINTS)
+    assert option['xAxis']['type'] == 'time' and option['yAxis']['min'] == 0 and option['yAxis']['max'] == 100
+    names = [s['name'] for s in option['series']]
+    assert names == ['Rating', 'Generales', 'Autonómicas', 'Hoy']
+    line, general, regional, tail = option['series']
+    # la línea une los puntos con rating (el de Cataluña, sin rating, no está) y no lleva símbolos
+    assert line['type'] == 'line' and line['showSymbol'] is False and line['data'] == [['2021-05-04', 71.0], ['2023-07-23', 80.0]]
+    assert general['type'] == 'scatter' and general['color'] == '#1d4f86' and [p['row']['label'] for p in general['data']] == ['Generales 2023']
+    assert regional['type'] == 'scatter' and regional['color'] == '#c0672e' and [p['value'] for p in regional['data']] == [['2021-05-04', 71.0]]
+    # el tramo final: discontinuo desde la última elección hasta hoy, con un punto hueco solo en hoy
+    assert tail['type'] == 'line' and tail['lineStyle']['type'] == 'dashed'
+    assert [p['value'] for p in tail['data']] == [['2023-07-23', 80.0], ['2026-10-15', 82.4]]
+    assert tail['data'][0]['symbol'] == 'none' and tail['data'][1]['symbol'] == 'emptyCircle'
+    assert option['legend']['data'] == ['Generales', 'Autonómicas', 'Hoy'] and option['tooltip']['trigger'] == 'item'
+
+
+def test_rating_path_without_today_or_regional_points_keeps_only_what_it_has():
+    option = run_js('p.ratingPathOption(rows, {colors: {general: "#1d4f86", regional: "#c0672e"}})', rows=PATH_POINTS[1:2])
+    assert [s['name'] for s in option['series']] == ['Rating', 'Generales'] and option['legend']['data'] == ['Generales']
+
+
+def test_rating_path_ticks_show_the_year_on_new_year_and_the_day_otherwise():
+    # ECharts places the ticks of a time axis at local midnight: 1 January must read as the year, not "31 dic"
+    labels = run_js('[p.tickLabel(new Date(2024, 0, 1).getTime()), p.tickLabel(new Date(2024, 4, 12).getTime())]')
+    assert labels == ['2024', '12 may']

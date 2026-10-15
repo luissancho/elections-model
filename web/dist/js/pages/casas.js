@@ -1,16 +1,16 @@
 // Houses page and pollster profile: the "Cargar más" of the ranking, the house-effects heat map, the rating path
-// and the bullseye, drawn from the data embedded by the server. The bullseye of a profile has a scope and a years
+// (every election the house polled, up to today) and the bullseye, drawn from the data embedded by the server. The bullseye of a profile has a scope and a years
 // filter (no hash: the profile has no other state), which redraws it and its table.
 import {fmtDate, fmtNum} from '../format.js';
 import {fadeByDate, filterRows, yearsOf} from '../errors.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHeatmap} from '../charts/heatmap.js';
-import {renderLine} from '../charts/line.js';
+import {renderRatingPath} from '../charts/path.js';
 import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 
-// The bullseye of a profile: general elections in the accent, regional ones in a contrasting tone; a point fades
-// with the age of its election down to this opacity.
+// The bullseye and the rating path of a profile: general elections in the accent, regional ones in a contrasting
+// tone; a point of the bullseye fades with the age of its election down to this opacity.
 const NATIONAL_SCOPE = 'es';
 const KIND_GENERAL = 'Generales';
 const KIND_REGIONAL = 'Autonómicas';
@@ -91,19 +91,24 @@ function wireBullseye(bullseye, blocks) {
 }
 
 /**
- * Wire the switch of the house effects of a profile: the deviation from the result or from the consensus of the
- * cycle, each in its own table (the server renders both, the second hidden).
+ * Wire the switch between the two views of a profile card, each in its own wrap (the server renders both, the
+ * second hidden): the deviation of the last poll from the result or from the consensus, and the house effects
+ * from the result or from the consensus of the cycle.
+ *
+ * @param {string} fieldsetId id of the `.seg` fieldset of radios
+ * @param {string} inputName name of its radios
+ * @param {Object<string, string>} wrapIds id of the wrap of each view, by radio value
  */
-function wireEffectsView() {
-  const fieldset = document.getElementById('effects-view');
-  const wraps = {resultado: document.getElementById('profile-effects-wrap'), ciclo: document.getElementById('profile-effects-cycle-wrap')};
-  if (!fieldset || !wraps.resultado || !wraps.ciclo) {
+function wireViewSwitch(fieldsetId, inputName, wrapIds) {
+  const fieldset = document.getElementById(fieldsetId);
+  const wraps = Object.fromEntries(Object.entries(wrapIds).map(([view, id]) => [view, document.getElementById(id)]));
+  if (!fieldset || Object.values(wraps).some((wrap) => !wrap)) {
     return;
   }
   fieldset.hidden = false;
   markSegments(fieldset);
   fieldset.addEventListener('change', (event) => {
-    if (event.target.matches('input[name=eview]') && wraps[event.target.value]) {
+    if (event.target.matches(`input[name=${inputName}]`) && wraps[event.target.value]) {
       for (const [view, wrap] of Object.entries(wraps)) {
         wrap.hidden = view !== event.target.value;
       }
@@ -115,8 +120,9 @@ function wireEffectsView() {
 /** Wire the "Cargar más" of the ranking and draw the charts whose container is present and has data. */
 function paint() {
   wireMore('ranking-more', 'ranking-table');
-  wireEffectsView();
-  const {grid = null, path = [], bullseye = [], blocks = []} = readInitial();
+  wireViewSwitch('last-view', 'lview', {resultado: 'profile-last-wrap', consenso: 'profile-last-consensus-wrap'});
+  wireViewSwitch('effects-view', 'eview', {resultado: 'profile-effects-wrap', ciclo: 'profile-effects-cycle-wrap'});
+  const {grid = null, path = [], today = null, bullseye = [], blocks = []} = readInitial();
 
   const heatmap = document.getElementById('effects-heatmap');
   if (heatmap && grid && grid.rows.length) {
@@ -124,10 +130,10 @@ function paint() {
   }
 
   const pathEl = document.getElementById('rating-path');
-  const points = path.filter((row) => row.rating !== null && row.rating !== undefined)
-    .map((row) => [row.event_date, row.rating]);
-  if (pathEl && points.length) {
-    tryDraw(() => renderLine(pathEl, points, {formatter: (x) => fmtNum(x, 1), name: 'Rating'}), 'the rating path');
+  if (pathEl && path.length) {
+    const colors = {[KIND_GENERAL]: THEME.accentColor, [KIND_REGIONAL]: REGIONAL_COLOR};
+    tryDraw(() => renderRatingPath(pathEl, path, {today, colors: {general: colors[KIND_GENERAL], regional: colors[KIND_REGIONAL]}}),
+      'the rating path');
   }
 
   wireBullseye(bullseye, blocks);

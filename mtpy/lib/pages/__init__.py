@@ -14,9 +14,9 @@ The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``web
 does not import the model nor ``publish``, so the web workers stay light.
 """
 from .backtest import backtest_context, backtest_part, project
-from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, PATH_KEYS, RANKING_KEYS, RANKING_SHOWN, analysis_part,
-                    casa_context, casas_context, effects_table, herding_rows, house_effects_grid, profile_rows,
-                    ranking_rows)
+from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, RANKING_KEYS, RANKING_SHOWN, analysis_part, casa_context,
+                    casas_context, effects_table, herding_rows, house_effects_grid, last_poll_records, poll_date,
+                    profile_rows, ranking_rows, rating_path)
 from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
                      SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, chamber_text, common_context,
                      days_left, days_text, default_mode, environment, event_info, event_query, event_title, hemicycle_order,

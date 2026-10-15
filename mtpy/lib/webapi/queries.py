@@ -49,6 +49,8 @@ get_poll_series = _reader('get_poll_series')
 get_event_results = _reader('get_event_results')
 get_event_dates = _reader('get_event_dates')
 get_house_effects = _reader('get_house_effects')
+get_pollster_ratings = _reader('get_pollster_ratings')
+get_pollster_events = _reader('get_pollster_events')
 get_herding = _reader('get_herding')
 get_drift = _reader('get_drift')
 get_next_event_date = _reader('get_next_event_date')
@@ -322,6 +324,30 @@ def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> d
         'house_effects': frame_to_records(_rows_of(query_house_effects(tables), 'pollster_id', pollster_id)),
         'herding': frame_to_records(_rows_of(query_herding(tables), 'pollster_id', pollster_id)),
     }
+
+
+def query_pollster_path(pollster_id: int) -> dict:
+    """
+    The path of a pollster's rating: its ratings in every scope and the elections it polled.
+
+    Each table is read once per pollster and cached under the LRU cap (a bounded read: one pollster).
+
+    Parameters
+    ----------
+    pollster_id : int
+        Validated pollster id.
+
+    Returns
+    -------
+    dict
+        ``{'ratings': [...], 'events': [...]}``: the JSON records of ``data.get_pollster_ratings`` (every event of
+        every scope, the next ones included) and of ``data.get_pollster_events`` (``event_scope``, ``event_date``
+        and ``n_polls``).
+    """
+    ratings = _query(('pollster-ratings', pollster_id), lambda: get_pollster_ratings(pollster_id))
+    events = _query(('pollster-events', pollster_id), lambda: get_pollster_events(pollster_id))
+
+    return {'ratings': frame_to_records(ratings), 'events': frame_to_records(events)}
 
 
 def ratings_event(scope: str, event: Optional[str] = None) -> Optional[str]:

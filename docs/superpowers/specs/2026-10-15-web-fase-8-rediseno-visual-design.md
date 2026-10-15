@@ -524,3 +524,68 @@ resto de la query; la canonical y `og:url` de ambas páginas son siempre la URL 
 fecha). Los enlaces del ranking, de los efectos, del detalle, del histórico (el servidor da el `href` de cada
 elección al JavaScript) y de la portada usan las nuevas rutas. Módulo `mtpy/lib/pages/slugs.py`, rutas
 `/casas/{pollster}` y `/elecciones/{country:loc}/{scope}/{date}` antes de `/{scope}`.
+
+### Seguimiento 2026-10-15: perfil de encuestadora, listados de nueva a antigua y último sondeo por elección
+
+Pedido por Luis tras el recorrido: los cuatro listados del perfil (camino al rating, diana, efectos y rebaño) van de
+la elección más nueva a la más antigua (en el camino, la próxima elección es la primera fila; el gráfico conserva el
+orden cronológico), la tarjeta de efectos pasa a llamarse «Efectos de casa por elección» y encima va una tarjeta
+nueva, «Último sondeo por elección»: para cada elección de la diana, cuánto se separó el último sondeo de la casa del
+resultado de cada partido (sondeo menos resultado) y, con el mismo conmutador que los efectos, de la media de los
+últimos sondeos de las demás casas. Los sondeos son los del análisis `poll-errors` (uno por casa, los de la diana y
+del histórico de errores); sus porcentajes se leen de la parte `cycle` de cada elección publicada, localizando el
+sondeo de cada casa por la fecha (`event_date − days`; si publicó varios ese día, el primero de la parte), y el
+resultado, de la parte `results`. Una elección sin `cycle` (publicada antes de que existiera la parte) o cuyo sondeo
+no está en el ciclo no tiene fila; un partido que el sondeo no daba, que no está en el resultado o que ninguna otra
+casa daba lleva guion; un partido sin valor en ninguna elección no tiene columna (`effects_table` las quita, también
+en los efectos de casa) y el fondo de cada celda es más rojo cuanto mayor la desviación en valor absoluto, hasta 8
+puntos (pedido por Luis el mismo día). `pages.last_poll_records` y `pages.poll_date`; contexto `last_table` y
+`last_consensus_table` (la forma de `effects_table`); conmutador `#last-view`, cableado por `wireViewSwitch` en
+`casas.js`, que ahora sirve a las dos tarjetas. Decisiones de Claude: la media del consenso es simple (sin pesos), la
+tarjeta es propia (no una segunda tabla dentro de la de efectos) y las partes `cycle` y `results` se leen por cada
+elección de la diana (dos lecturas más por elección sondeada).
+
+### Seguimiento 2026-10-15: «Camino al rating» rehecho
+
+Luis no entendía el gráfico (seis puntos, uno por elección general más la próxima en el futuro, sobre un eje
+ajustado al rango). Rehecho con su aprobación en chat: el gráfico es el rating con el que la encuestadora llegó a
+cada elección que sondeó, de cualquier ámbito, desde la primera hasta hoy, sobre un eje fijo de 0 a 100. Un punto
+por fecha de elección con sondeos suyos (las del mismo día, fundidas): azul las generales (o una fecha con general y
+autonómicas), naranja las autonómicas, como en la diana; un tramo discontinuo lleva el rating actual desde la última
+elección hasta hoy, con un punto hueco «Hoy» (el rating que entra en el promedio). Tooltip con la elección, la fecha,
+el rating y los sondeos. Replanteado por Luis a media tarde: el gráfico y la tabla cuentan la evolución del rating
+según se van viendo sus resultados evento a evento, cuánto cambia tras cada uno y por qué. Cada fila es una fecha
+con una o varias elecciones que sondeó, de la más nueva a la más antigua (el gráfico, cronológico), con siete
+columnas: Elección, Sondeos (los que publicó para esas elecciones, de los que entran en el rating), Error Medio,
+Sesgo Margen y Diferencial (la media simple de esos sondeos: `error_avg` y `error_blocks` en puntos y
+`bias_dev_adj`, la desviación del sesgo frente a los comparables en la escala del sesgo del modelo, con su signo,
+negativo sube el rating; `bias_blocks` es una escala interna que la web no enseña; una fecha con varios ámbitos
+pondera por sondeos), Rating (el que le quedó tras evaluar esa fecha con todo su historial anterior: la fila de
+ratings del siguiente evento evaluado, de cualquier ámbito, el que se le aplica hasta el siguiente; el de la primera
+fila es el de hoy) y Cambio (ese rating menos el que tenía al llegar: su fila de esa fecha o, sin ella, la última
+anterior). Formatos del ranking: fondo rojo del error medio (0 a 8), barra divergente del diferencial (±2, verde a la
+izquierda, rojo a la derecha) y fondo verde o rojo del cambio (hasta ±20). El gráfico pinta el rating tras cada
+fecha y el tramo discontinuo lleva el último hasta hoy. Fuera el sesgo acumulado del historial, el rating de
+llegada y el rating ajustado que mostraba antes. «Qué mide cada columna» del perfil define justo esas seis medidas
+(`_glosario.html` con `with_rating`; `with_errors` permite quitar las medidas de error en otras páginas; el de las
+demás no cambia).
+
+Datos: `data.get_pollster_ratings` (sus filas de `pollsters_ratings` en todos los ámbitos, las próximas elecciones
+incluidas) y `data.get_pollster_events` (sus sondeos `featured` y `computed` por elección; `event_scope` llega
+categórica y el `groupby` va con `observed=True`), servidos por `webapi.query_pollster_path` (caché por casa);
+`pages.rating_path` funde las fechas, etiqueta (nombre publicado para un ámbito; «fecha · A, B y N más» para
+varios), y da el punto de hoy con la próxima elección nacional o, sin ella, la última fila. Gráfico
+`web/dist/js/charts/path.js` (`ratingPathOption`, probado en node; las marcas del eje en hora local, si no el 1 de
+enero se leía «31 dic»).
+
+Medido con el paquete en S3 por el enlace de Luis: `casa_context` de GAD3 tardaba ~80 s en frío; las lecturas de
+`cycle` y `results` de la tarjeta «Último sondeo» (60 lecturas secuenciales, 27 s) van ahora en un pool de ocho
+hilos. El resto (meta de cada elección publicada en `history_events`, 22 s; `history_scopes`, 14 s) es anterior y
+queda para otra fase, igual que subir `WEB_CACHE_TTL` (60 s por defecto) en producción.
+
+### Seguimiento 2026-10-15: fecha del ranking
+
+Pedido por Luis: la píldora de «Ranking de encuestadoras» ya no dice «elección general del 29 nov 2026» sino
+«actualizado el {fecha}», la fecha del último run del ámbito (`meta.run_at`, la misma que el «Actualizado» del pie
+y de la portada; la tabla de ratings no guarda cuándo se calculó). Luis descartó por el camino la fecha de hoy. El
+ranking sigue siendo el de la próxima elección general y `ranking_event` queda en el contexto.
