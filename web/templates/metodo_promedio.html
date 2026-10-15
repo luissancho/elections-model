@@ -15,6 +15,7 @@
         <a href="#efectos-de-casa">Los efectos de encuestadora</a>
         <a href="#regresion">La regresión local</a>
         <a href="#banda">La banda del promedio</a>
+        {% if example %}<a href="#ejemplo">Un ejemplo: el {{ example.name }} hoy</a>{% endif %}
         <a href="#voto-estimado">De las encuestas al voto estimado</a>
       </nav>
       {{ m.card_start('resumen', 'En resumen', 'El promedio de encuestas en cuatro ideas.') }}
@@ -200,6 +201,81 @@
           Por eso el resultado cae a menudo fuera de la banda sin que sea un fallo.
         </p>
       {{ m.card_end() }}
+      {% if example %}
+      {{ m.card_start('ejemplo', 'Un ejemplo: el promedio del ' ~ example.name ~ ' hoy', 'Los sondeos que pesan en el promedio del ' ~ example.name ~ ' leído el ' ~ (example.date|date) ~ ' y la recta que ese día se ajusta a ellos: lo que las secciones anteriores explican, con los datos de hoy.') }}
+        <p>
+          El {{ example.date|date }} el promedio del {{ example.name }} se leía en {{ example.stats.mean|pct }}, con una
+          banda de {{ example.stats.lo|pct }} a {{ example.stats.hi|pct }}. Entraban en la recta
+          {{ example.stats.nobs|int }} sondeos, que por sus pesos equivalen a unos {{ example.stats.neff|num(1) }} sondeos
+          de igual peso, y la campana que los pesaba por su cercanía tenía unos {{ example.stats.bandwidth|num(0) }} días
+          de anchura a cada lado.
+        </p>
+        <div class="table-wrap">
+          <table class="et" id="weights-table">
+            <caption>Sondeos que entran en la recta del {{ example.date|date }} y sus pesos.</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="f l">Fecha</th>
+                <th scope="col">Encuestadora</th>
+                <th scope="col" title="Entrevistas del sondeo">Muestra</th>
+                <th scope="col" title="Voto publicado">{{ example.name }}</th>
+                <th scope="col" title="Peso total en la recta de ese día">Peso</th>
+                <th scope="col" title="Peso por cercanía al día: la campana del kernel">Cercanía</th>
+                <th scope="col" title="Factor de sobrerrepresentación de la encuestadora">Sobrerrep.</th>
+                <th scope="col" title="Factor de muestra, con la dispersión de la encuestadora dentro">F. muestra</th>
+                <th scope="col" title="Factor del rating de la encuestadora">Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in example.rows %}
+              <tr{% if loop.index > example_shown %} hidden{% endif %}>
+                <td class="f l">{{ row.date|date_short }}</td>
+                <td><b>{{ row.pollster }}</b>{% if row.sponsor %} / {{ row.sponsor }}{% endif %}</td>
+                <td>{{ row.sample_size|int }}</td>
+                <td>{{ row.pct|pct }}</td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight|bar(0, example.weight_max) }}%"></i><span>{{ row.weight|num(2) }}</span></td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_kernel|bar(0, 1) }}%"></i><span>{{ row.weight_kernel|num(2) }}</span></td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_over|bar(0, 1) }}%"></i><span>{{ row.weight_over|num(2) }}</span></td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_sample|bar(0, 2) }}%"></i><span>{{ row.weight_sample|num(2) }}</span></td>
+                <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight_rating|bar(0, 2) }}%"></i><span>{{ row.weight_rating|num(2) }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
+        {% if example_hidden %}
+        <button type="button" class="more" id="weights-more" data-batch="{{ example_shown }}" hidden>Cargar más</button>
+        {% endif %}
+        <div class="chart" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} el {{ example.date|date }}, con la recta local del día, su banda y la campana del kernel"></div>
+        {% call m.how() %}
+        <p>
+          Cada fila es un sondeo que entra en la recta de ese día: la fecha de fin de campo, la encuestadora y el
+          medio, la muestra, el voto que publicó para el {{ example.name }}, su peso total y los cuatro factores que
+          lo forman. Tres son los de <a href="#peso">Cuánto pesa cada sondeo</a>: la sobrerrepresentación, la
+          muestra (con la dispersión de la encuestadora, el rebaño, ya dentro) y el rating. El cuarto es la cercanía
+          al día: la campana del kernel, que vale 1 ese día y baja al alejarse.
+        </p>
+        <p>
+          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
+          ver quién lo hizo, cuándo y con qué peso. La recta es la que ese día se ajusta a los sondeos, con su banda
+          del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía de
+          <a href="#regresion">La regresión local</a>. Las guías marcan el día y el valor leído.
+        </p>
+        <p>
+          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
+          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
+          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
+          puntos.
+        </p>
+        <p>
+          La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
+          promedio</a>). La tabla enseña los {{ example_shown }} primeros sondeos y «Cargar más» sigue.
+        </p>
+        {% endcall %}
+        <p class="notice"><a href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
+      {{ m.card_end() }}
+      {% endif %}
       {{ m.card_start('voto-estimado', 'De las encuestas al voto estimado', 'El voto estimado de cada partido es el promedio corregido leído en la fecha de la estimación; su intervalo suma más errores que la banda.') }}
         <p>
           El promedio se lee en un día, la fecha de la estimación: normalmente el último que alcanza la línea, unos

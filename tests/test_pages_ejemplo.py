@@ -64,3 +64,34 @@ def test_promedio_context_without_the_part_has_no_island(api, tmp_path):
     without_weights(tmp_path)
     context = pages.metodo_section_context(STATE, 'promedio')
     assert context['example'] is None and context['example_hidden'] is False and 'initial' not in context
+
+
+def test_promedio_page_shows_the_example_block(api):
+    status, _, body = call(api, '/metodo/promedio')
+    page = html(body)
+    assert status == 200 and 'id="ejemplo"' in page and 'Un ejemplo: el promedio del PP hoy' in page
+    assert 'href="#ejemplo"' in page and page.index('id="banda"') < page.index('id="ejemplo"') < page.index('id="voto-estimado"')
+    assert 'id="weights-table"' in page and 'id="weights-chart"' in page and 'id="weights-more"' not in page
+    assert len(re.findall(r'<tr>\s*<td class="f l">', page)) == 3 and '<tr hidden>' not in page
+    text = re.sub(r'\s+', ' ', page)
+    assert 'se leía en 33,1%, con una banda de 32,4% a 33,8%' in text and 'Entraban en la recta 3 sondeos' in text
+    assert 'unos 2,6 sondeos de igual peso' in text and 'unos 42 días de anchura' in text and '8 oct 2026' in text
+    assert '<b>GAD3</b> / ABC' in text and '24 sept' in text and '>–<' in page     # muestra ausente → guion
+    assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
+    assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
+    data = initial(body)
+    assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
+
+
+def test_promedio_page_hides_the_rows_beyond_the_batch_and_offers_more(api, monkeypatch):
+    monkeypatch.setattr(metodo, 'EXAMPLE_SHOWN', 2)
+    page = html(call(api, '/metodo/promedio')[2])
+    assert page.count('<tr hidden>') == 1 and 'id="weights-more"' in page and 'data-batch="2"' in page
+
+
+def test_promedio_page_without_the_part_renders_as_before(api, tmp_path):
+    without_weights(tmp_path)
+    status, _, body = call(api, '/metodo/promedio')
+    page = html(body)
+    assert status == 200 and 'id="ejemplo"' not in page and 'href="#ejemplo"' not in page
+    assert 'initial-data' not in page and 'id="voto-estimado"' in page and 'id="banda"' in page
