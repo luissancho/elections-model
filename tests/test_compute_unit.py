@@ -49,7 +49,15 @@ class FakeComputer:
                 return self._phase('herding', save)
 
             def compute_ratings(self, save=False, scopes=None):
-                return self._phase('ratings', save, scopes=scopes)
+                # Como el real: devuelve la tabla de sondeos con sus columnas de rating (índice de `keys`) y deja
+                # la tabla de ratings en `self.ratings` (índice `event_date`/`pollster_id`), donde entra una casa
+                # (2) rateada solo con sondeos de otros ámbitos
+                self._phase('ratings', save, scopes=scopes)
+                self.ratings = pd.DataFrame({'rating': [50., 60.]}, index=pd.MultiIndex.from_tuples(
+                    [('2023-07-23', 1), ('2023-07-23', 2)], names=['event_date', 'pollster_id']))
+                return pd.DataFrame({'rating': [50., 50.], 'weight_rating': [1., 1.]}, index=pd.MultiIndex.from_tuples(
+                    [('2023-07-23', '2023-07-01', 1, 0), ('2023-07-23', '2023-07-10', 1, 0)],
+                    names=['event_date', 'date', 'pollster_id', 'sponsor_id']))
 
         return Comp()
 

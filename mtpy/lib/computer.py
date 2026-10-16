@@ -1630,16 +1630,16 @@ class Computer(Core):
 
         # Compute the weighted mean of each pollster's poll errors
         for col in ['error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias']:
-            dr[col] = df.groupby('pollster', observed=True).apply(
+            dr[col] = df.groupby('pollster', observed=True)[[col, 'weight']].apply(
                 lambda x: np.sum(x[col] * x['weight']) / np.sum(x['weight'])
             ).reindex(dr.index)
 
         # Compute the weighted mean of each pollster's poll deviations
-        dr['bias_dev_adj'] = df.groupby('pollster', observed=True).apply(
+        dr['bias_dev_adj'] = df.groupby('pollster', observed=True)[['weight', 'bias_dev_adj']].apply(
             lambda x: np.sum(x['weight'] * x['bias_dev_adj']) / np.sum(x['weight'])
         ).reindex(dr.index)
         # Compute the weighted standard error of each pollster's poll deviations
-        dr['bias_dev_err'] = df.groupby('pollster', observed=True).apply(
+        dr['bias_dev_err'] = df.groupby('pollster', observed=True)[['weight', 'bias_dev_err']].apply(
             lambda x: np.sqrt(np.sum(np.square(x['weight']) * np.square(x['bias_dev_err'])) / np.square(np.sum(x['weight'])))
         ).reindex(dr.index) * np.sqrt(
             (dr['num_polls_w'] + 1) / dr['num_polls_w']
