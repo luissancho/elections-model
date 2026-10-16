@@ -136,6 +136,11 @@ def save_catalogues() -> dict[str, int]:
     evaluations of the pollsters no longer in the CSV are deleted. Then `pollsters.quality` is derived for
     every pollster (the scale floor for the ones not evaluated).
 
+    The replica `elections.pollsters_quality` holds nothing that is not in the CSV, so it can be dropped and
+    recreated at will (`DROP TABLE elections.pollsters_quality`, then `save_catalogues()`). That is the way to
+    change its column types: `create(replace=False)` only creates a missing table and never alters an
+    existing one.
+
     Returns
     -------
     dict

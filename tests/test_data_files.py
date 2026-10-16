@@ -134,3 +134,17 @@ def test_quality_evaluations_follow_the_rubric():
         assert (frame.loc[points > 0, key + '_source'].str.len() > 0).all(), key
     assert frame['status'].isin(['borrador', 'revisada']).all()
     assert pd.to_datetime(frame['checked_at'], format='%Y-%m-%d').le(pd.Timestamp.today()).all()
+
+
+def test_quality_csv_fits_the_replica_columns():
+    """Every text cell of the CSV fits the VARCHAR length of its replica column (TEXT, length 0, has no limit)."""
+    from mtpy.core.utils.helpers import parse_meta
+    from mtpy.models.elections import PollstersQuality
+
+    frame = pd.read_csv(os.path.join(DATA, 'pollsters-quality.csv'), dtype=str, keep_default_na=False)
+    meta = parse_meta(PollstersQuality.meta)
+    bounded = {col: desc['length'] for col, desc in meta.items()
+               if desc['type'] in ('str', 'cat') and desc['length'] > 0 and col in frame.columns}
+    assert 'pollster' in bounded and 'status' in bounded
+    for col, length in bounded.items():
+        assert frame[col].str.len().max() <= length, (col, length)

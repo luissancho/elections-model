@@ -38,6 +38,8 @@ La calidad es `quality = max(floor, per_point · puntos)`, con `floor = 5` y `pe
 
 `pollsters-quality.csv` es la fuente; la base (`elections.pollsters_quality` y `pollsters.quality`) es una réplica que escribe `save_catalogues()`. `pollster_id` es el `id` de `elections.pollsters`.
 
+La tabla réplica se puede borrar y recrear cuando se quiera (`DROP TABLE elections.pollsters_quality` y después `save_catalogues()`): sus datos salen enteros del CSV, y `create(replace=False)` solo crea la tabla si falta, nunca cambia los tipos de una que ya existe. Las fuentes y las notas son `TEXT`.
+
 Cada punto lleva su fuente en la columna `{criterio}_source`: una URL o una referencia citable. Si la fuente es la propia base, se cita como «base de datos del proyecto, consulta de patrocinadores a {fecha}».
 
 ## Resultados autonómicos
