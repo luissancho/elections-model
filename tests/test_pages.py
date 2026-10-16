@@ -1237,17 +1237,17 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     how = card[card.index('<details class="how"'):]
     assert '<a href="/metodo/rating#calidad-previa">La rúbrica</a> puntúa' in how  # enlace al método también si está evaluada
     glossary = page[page.index('id="glosario"'):]
-    glossary = glossary[glossary.index('<dt>Scoring</dt>'):glossary.index('<dt>Rating</dt>')]
-    assert 'Cada punto vale 8 de scoring, con un mínimo de 5.' in glossary  # la regla de puntos, del catálogo
+    glossary = glossary[glossary.index('<dt>Confianza</dt>'):glossary.index('<dt>Rating</dt>')]
+    assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary  # la regla de puntos, del catálogo
 
 
 def test_glossary_points_rule_needs_the_quality_scale():
-    """La regla de puntos de «Scoring» sale de `quality` (la escala del catálogo) y se omite sin ella."""
+    """La regla de puntos de «Confianza» sale de `quality` (la escala del catálogo) y se omite sin ella."""
     template = pages.environment().get_template('_glosario.html')
     plain = template.render(with_rating=True, with_herding=False)
-    assert '<dt>Scoring</dt>' in plain and 'Cada punto vale' not in plain
+    assert '<dt>Confianza</dt>' in plain and 'Cada punto vale' not in plain
     scaled = template.render(with_rating=True, with_herding=False, quality={'per_point': 9, 'floor': 4})
-    assert 'Cada punto vale 9 de scoring, con un mínimo de 4.' in scaled
+    assert 'Cada punto vale 9 de confianza, con un mínimo de 4.' in scaled
 
 
 def test_casa_profile_quality_card_marks_drafts_and_plain_sources(houses):
@@ -1281,7 +1281,7 @@ def test_casa_profile_quality_card_splits_compound_sources_into_links(houses):
 def test_casa_profile_quality_card_of_an_unrated_house(houses):
     page = html(call(houses, '/casas/nueva')[2])
     card = page[page.index('id="quality"'):page.index('id="path"')]
-    assert 'Sin evaluar' in card and 'scoring mínimo, 5' in card and 'href="/metodo/rating#calidad-previa"' in card
+    assert 'Sin evaluar' in card and 'confianza mínima, 5' in card and 'href="/metodo/rating#calidad-previa"' in card
     assert '<th scope="row">' not in card and 'sin evaluar' in page[page.index('id="profile"'):page.index('id="quality"')]
 
 
@@ -1299,7 +1299,7 @@ def test_casa_profile_quality_card_of_an_evaluated_informative_house(houses):
     assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0'),
                                             ('Identidad', '1'), ('Estándares', '0')]
     assert 'href="https://agregador.example/metodo"' in card and '2 de 10 puntos' in card
-    assert 'el scoring es informativo' in card and 'Sin evaluar' not in card
+    assert 'la confianza es informativa' in card and 'Sin evaluar' not in card
 
 
 def test_pages_package_layout():
@@ -1955,7 +1955,7 @@ def test_metodo_rating_text(api):
     assert '<strong>Diferencial</strong>' in text and 'Sesgo bloques' in text and 'Calidad</strong>' not in text
     assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
     assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text
-    assert 'En las tablas del sitio aparece como «Scoring»' in text and 'es la columna «Scoring»' in text
+    assert 'En las tablas del sitio aparece como «Confianza»' in text and 'es la columna «Confianza»' in text
     assert 'entre 3 y 4' in text and 'en torno al 10' in text
     assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
     assert 'puesta a mano' not in text and 'rúbrica pública' in text
@@ -2129,10 +2129,10 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
     heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Diferencial', 'Scoring', 'Sondeos', 'Elecciones', 'Error medio',
+    assert heads == ['Encuestadora', 'Rating', 'Diferencial', 'Confianza', 'Sondeos', 'Elecciones', 'Error medio',
                      'Sesgo bloques', 'Rebaño']
     assert 'class="help"' not in thead  # sin interrogante: el glosario explica las columnas (2026-10-16)
-    assert 'Calidad' not in thead  # la palabra pública es «Scoring»
+    assert 'Calidad' not in thead  # la palabra pública es «Confianza»
     assert 'Herding' not in page  # la palabra pública es «rebaño» (2026-10-15)
 
 
@@ -2600,7 +2600,7 @@ def test_history_figures_are_a_kpi_row(history_site):
 def test_profile_opens_with_three_kpis_and_keeps_the_path_table(houses):
     page = html(call(houses, '/casas/gad3', query='scope=es')[2])
     profile = page[page.index('id="profile"'):page.index('id="path"')]
-    assert re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', profile) == ['Rating', 'Scoring', 'Tipo']
+    assert re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', profile) == ['Rating', 'Confianza', 'Tipo']
     assert '<div class="v">82,4<small></small></div>' in profile.replace('\n', '') and 'entra así en el promedio' in profile
     assert 'Tipo: ' not in profile and 'id="path-table"' in page and 'id="rating-path"' in page
 
@@ -3046,7 +3046,7 @@ def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_colu
     assert '<td class="cell-bar cell-diverging"><i class="fill pos" style="left: 45.0%; width: 5.0%"></i><span>-0,2</span></td>' in first
     assert '<td class="cell-shade" style="background-color: {}">2,4</td>'.format(shade(2.37, 0, 20, '#2ca02c')) in first
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', card, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo bloques', 'Diferencial', 'Scoring', 'Rating', 'Cambio']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo bloques', 'Diferencial', 'Confianza', 'Rating', 'Cambio']
     assert 'a Derecha' in glossary and 'sube el rating' in glossary and 'Error de bloques' not in card and 'Rebaño' not in card
     assert 'de 0 a 100' in card and 'hasta hoy' in card
     data = initial(body)
@@ -3070,18 +3070,18 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     scoring leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Rating', 'Diferencial', 'Scoring', 'Sondeos', 'Elecciones',
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Rating', 'Diferencial', 'Confianza', 'Sondeos', 'Elecciones',
                                                           'Error medio', 'Sesgo bloques', 'Rebaño']
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
     # la fixture solo trae un bloque en `vs`: el segundo queda sin nombre (y su barra, gris)
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
-    assert 'Cada punto vale 8 de scoring, con un mínimo de 5.' in glossary
+    assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
     assert 'Todas las columnas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
     assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Sondeos', 'Error medio', 'Sesgo bloques',
-                                                                  'Diferencial', 'Scoring', 'Rating', 'Cambio']
+                                                                  'Diferencial', 'Confianza', 'Rating', 'Cambio']
 
 
 def test_casas_ranking_shows_the_differential_and_colours_the_block_bias_by_block(houses):

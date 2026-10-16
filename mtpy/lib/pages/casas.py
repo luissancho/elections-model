@@ -553,7 +553,7 @@ def profile_kpis(current: dict, mtype: Optional[str], quality_support: str) -> l
     return [
         {'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '', 'support': 'entra así en el promedio',
          'ok': False, 'color': None},
-        {'label': 'Scoring', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': quality_support,
+        {'label': 'Confianza', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': quality_support,
          'ok': False, 'color': None},
         {'label': 'Tipo', 'value': mtype or '–', 'unit': '', 'support': '', 'ok': False, 'color': None},
     ]
