@@ -43,6 +43,20 @@ FIXTURE_POLLS = 1  # polls of the `polls` part of tests/fixtures/bundle
 def html(body):
     return body.decode('utf-8')
 
+def header_tooltips(table):
+    """{etiqueta: tooltip} de las cabeceras de una tabla, con los espacios normalizados."""
+    import html as html_mod
+    return {label: re.sub(r'\s+', ' ', html_mod.unescape(title)).strip()
+            for title, label in re.findall(r'<th scope="col"[^>]*title="([^"]*)"[^>]*>([^<]*)</th>', table)}
+
+
+def glossary_entries(glossary):
+    """{término: definición} de un glosario `<dl>`, con los espacios normalizados."""
+    import html as html_mod
+    return {dt: re.sub(r'\s+', ' ', html_mod.unescape(re.sub(r'<[^>]+>', '', dd))).strip()
+            for dt, dd in re.findall(r'<dt>([^<]*)</dt>\s*<dd>(.*?)</dd>', glossary, re.S)}
+
+
 
 def initial(body):
     match = re.search(r'<script type="application/json" id="initial-data">(.*?)</script>', html(body), re.S)
@@ -1079,13 +1093,16 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     ranking = ranking[:ranking.index('</table>')]
     assert 'Hamalgama' not in ranking and ranking.count('<tr>') == 3  # cabecera, GAD3 y CIS
     assert '82,4' in ranking and '0,74' in ranking  # rating (escala 0-100) y herding (análisis) de GAD3
-    # los formatos de `print_ratings`: barra del rating de 0 a 100, barra del sesgo desde el centro (saturada en ±2),
-    # sombreado del error medio (el mayor, CIS, a tope) y del rebaño (más rojo cuanto más por debajo de 1)
+    # los formatos (2026-10-17): barra verde del rating de 0 a 100, barra divergente del sesgo de bloques en ±8 en el color
+    # del bloque al que favorece (la fixture solo trae el primero: el segundo, gris), rojos del error medio de 0 a 8 y
+    # del rebaño (más rojo cuanto más por debajo de 1)
+    from mtpy.lib.pages.filters import bar_sides, shade
     assert '<td class="f l"><a href="/casas/gad3"><b>GAD3</b></a></td>' in ranking
     assert '<td class="cell-bar"><i class="fill pos" style="left: 0; width: 82.4%"></i><span>82,4</span></td>' in ranking
-    assert '<td class="cell-bar cell-diverging"><i class="fill block" style="left: 0.0%; width: 50.0%; background: #9e9e9e"></i><span>-3,0</span></td>' in ranking
-    assert 'style="background-color: rgba(214, 39, 40, 0.55)">1,9</td>' in ranking  # CIS, error medio 1,85
-    assert 'style="background-color: rgba(214, 39, 40, 0.386)">1,3</td>' in ranking  # GAD3, 1,3 de 1,85
+    bias = bar_sides(-3.0, 8)
+    assert '<td class="cell-bar cell-diverging"><i class="fill block" style="left: {}%; width: {}%; background: #9e9e9e"></i><span>-3,0</span></td>'.format(bias['left'], bias['width']) in ranking
+    assert 'style="background-color: {}">1,9</td>'.format(shade(1.85, 0, 8, '#d62728')) in ranking  # CIS, error medio 1,85 de 8
+    assert 'style="background-color: {}">1,3</td>'.format(shade(1.3, 0, 8, '#d62728')) in ranking  # GAD3
     assert 'style="background-color: rgba(214, 39, 40, 0.142)">0,74</td>' in ranking  # rebaño de GAD3
     assert 'style="background-color: transparent">–</td>' in ranking  # CIS no tiene rebaño en el análisis
     assert 'id="rating-chart"' not in page and 'id="effects-table"' in page
@@ -1236,18 +1253,24 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
     how = card[card.index('<details class="how"'):]
     assert '<a href="/metodo/rating#calidad-previa">La rúbrica</a> puntúa' in how  # enlace al método también si está evaluada
-    glossary = page[page.index('id="glosario"'):]
-    glossary = glossary[glossary.index('<dt>Confianza</dt>'):glossary.index('<dt>Rating</dt>')]
-    assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary  # la regla de puntos, del catálogo
+    assert '<dt>Confianza</dt>' not in page  # el glosario del perfil es el del camino al rating (2026-10-17)
 
 
-def test_glossary_points_rule_needs_the_quality_scale():
-    """La regla de puntos de «Confianza» sale de `quality` (la escala del catálogo) y se omite sin ella."""
-    template = pages.environment().get_template('_glosario.html')
-    plain = template.render(with_rating=True, with_herding=False)
-    assert '<dt>Confianza</dt>' in plain and 'Cada punto vale' not in plain
-    scaled = template.render(with_rating=True, with_herding=False, quality={'per_point': 9, 'floor': 4})
-    assert 'Cada punto vale 9 de confianza, con un mínimo de 4.' in scaled
+def test_table_columns_describe_the_two_tables_with_the_scale_and_the_blocks():
+    """Las columnas del ranking y del camino al rating, con su etiqueta y su descripción: la regla de puntos de
+    «Confianza» sale de la escala del catálogo y se omite sin ella; el signo de «Sesgo bloques» nombra los bloques."""
+    plain = {column['key']: column['text'] for column in pages.table_columns('ranking')}
+    assert 'Cada punto vale' not in plain['quality'] and 'al primer bloque del que hubo; negativo, más margen al segundo' in plain['error_blocks']
+    scaled = {column['key']: column['text']
+              for column in pages.table_columns('ranking', ['Derecha', 'Izquierda'], {'per_point': 9, 'floor': 4})}
+    assert scaled['quality'].endswith('Cada punto vale 9 de confianza, con un mínimo de 4.')
+    assert 'más margen a Derecha del que hubo; negativo, más margen a Izquierda.' in scaled['error_blocks']
+    assert [column['label'] for column in pages.table_columns('ranking')] == [
+        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert [column['label'] for column in pages.table_columns('path')] == [
+        'Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
+    path = {column['key']: column['text'] for column in pages.table_columns('path', ['Derecha', 'Izquierda'])}
+    assert 'de esa elección' in path['bias_dev_adj'] and 'de esa elección' in path['error_avg'] and 'quedó tras evaluar esa elección' in path['rating']
 
 
 def test_casa_profile_quality_card_marks_drafts_and_plain_sources(houses):
@@ -2129,7 +2152,7 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
     heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Diferencial', 'Confianza', 'Sondeos', 'Elecciones', 'Error medio',
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio',
                      'Sesgo bloques', 'Rebaño']
     assert 'class="help"' not in thead  # sin interrogante: el glosario explica las columnas (2026-10-16)
     assert 'Calidad' not in thead  # la palabra pública es «Confianza»
@@ -3032,22 +3055,28 @@ def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_colu
     card = page[page.index('id="path"'):page.index('id="bullseye"')]
     table = re.search(r'<table id="path-table">(.*?)</table>', card, re.S).group(1)
     assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', table) == [
-        'Elección', 'Sondeos', 'Error Medio', 'Sesgo bloques', 'Diferencial', 'Rating', 'Cambio']
+        'Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
     cells = lambda row: [re.sub(r'<[^>]+>', '', cell).strip() for cell in re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)]
     trs = re.findall(r'<tr>(.*?)</tr>', table, re.S)[1:]
-    assert [cells(row) for row in trs] == [['Generales 2023', '14', '1,3', '1,5', '-0,2', '82,4', '2,4'],
-                                            ['28 may 2023 · Aragón y Madrid', '5', '2,2', '0,2', '-1,0', '80,0', '1,5'],
-                                            ['4 may 2021 · Madrid', '7', '2,1', '-0,8', '-1,5', '78,5', '7,5']]
-    # los formatos del ranking: rojos del error medio (0 a 8), barra divergente del diferencial (±2, verde a la izquierda
-    # y rojo a la derecha) y rojo o verde del cambio (hasta ±20)
-    from mtpy.lib.pages.filters import shade
+    assert [cells(row) for row in trs] == [['Generales 2023', '14', '-0,2', '1,3', '1,5', '82,4', '2,4'],
+                                            ['28 may 2023 · Aragón y Madrid', '5', '-1,0', '2,2', '0,2', '80,0', '1,5'],
+                                            ['4 may 2021 · Madrid', '7', '-1,5', '2,1', '-0,8', '78,5', '7,5']]
+    # los formatos (2026-10-17): barra divergente del diferencial en ±2 (verde a la izquierda, roja a la derecha), rojos
+    # del error medio de 0 a 8, barra divergente del sesgo de bloques en ±8 en el color del bloque al que favorece (la
+    # fixture solo trae el primero, azul; el segundo, gris) y doble gradiente del cambio (rojo de -10 a 0, verde de 0 a 10)
+    from mtpy.lib.pages.filters import bar_sides, shade
     first = trs[0]
     assert '<td class="cell-shade" style="background-color: {}">1,3</td>'.format(shade(1.3, 0, 8, '#d62728')) in first
     assert '<td class="cell-bar cell-diverging"><i class="fill pos" style="left: 45.0%; width: 5.0%"></i><span>-0,2</span></td>' in first
-    assert '<td class="cell-shade" style="background-color: {}">2,4</td>'.format(shade(2.37, 0, 20, '#2ca02c')) in first
+    bias = bar_sides(1.5, 8)
+    assert '<td class="cell-bar cell-diverging"><i class="fill block" style="left: {}%; width: {}%; background: #1d84ce"></i><span>1,5</span></td>'.format(bias['left'], bias['width']) in first
+    assert '<td class="cell-shade" style="background-color: {}">2,4</td>'.format(shade(2.37, 0, 10, '#2ca02c')) in first
+    bias = bar_sides(-0.8, 8)
+    assert '<i class="fill block" style="left: {}%; width: {}%; background: #9e9e9e"></i><span>-0,8</span>'.format(bias['left'], bias['width']) in trs[2]
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', card, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo bloques', 'Diferencial', 'Confianza', 'Rating', 'Cambio']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
     assert 'a Derecha' in glossary and 'sube el rating' in glossary and 'Error de bloques' not in card and 'Rebaño' not in card
+    assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'de 0 a 100' in card and 'hasta hoy' in card
     data = initial(body)
     assert [(point['event_date'], point['kind'], point['n_polls']) for point in data['path']] == [
@@ -3070,24 +3099,27 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     la confianza leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Rating', 'Diferencial', 'Confianza', 'Sondeos', 'Elecciones',
-                                                          'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos',
+                                                          'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
     # la fixture solo trae un bloque en `vs`: el segundo queda sin nombre (y su barra, gris)
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
     assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
-    assert 'Todas las columnas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
+    assert 'todas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Sondeos', 'Error medio', 'Sesgo bloques',
-                                                                  'Diferencial', 'Confianza', 'Rating', 'Cambio']
+    assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Evento', 'Sondeos', 'Diferencial', 'Error medio',
+                                                                  'Sesgo bloques', 'Rating', 'Cambio']
 
 
-def test_casas_ranking_shows_the_differential_and_colours_the_block_bias_by_block(houses):
-    """Ranking: el diferencial con la barra del perfil (negativo en verde, menos sesgo que las demás) y el sesgo de
-    bloques pintado con el color del bloque al que favorece (positivo, el primero: Derecha; negativo, el segundo, que
-    la fixture no define: gris)."""
+def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):
+    """Ranking: el diferencial con la barra del perfil (negativo en verde, menos sesgo que las demás, en ±2) y el sesgo
+    de bloques con la barra divergente en ±8 pintada con el color del bloque al que favorece (positivo, el primero:
+    Derecha, azul; negativo, el segundo, que la fixture no define: gris)."""
+    from mtpy.lib.pages.filters import bar_sides
     page = html(call(houses, '/casas')[2])
     start = page.index('id="ranking-table"')
     table = page[start:page.index('</table>', start)]
@@ -3096,10 +3128,11 @@ def test_casas_ranking_shows_the_differential_and_colours_the_block_bias_by_bloc
     gad3 = next(row for row in rows if '>GAD3<' in row)
     assert '<i class="fill neg" style="left: 50.0%; width: 5.0%"></i><span>0,2</span>' in cis
     assert '<i class="fill pos" style="left: 25.0%; width: 25.0%"></i><span>-1,0</span>' in gad3
-    assert re.search(r'<i class="fill block" style="left: 50\.0%; width: 50\.0%; background: #1d84ce"></i><span>4,1</span>', cis)
-    assert re.search(r'<i class="fill block" style="left: 0\.0%; width: 50\.0%; background: #9e9e9e"></i><span>-3,0</span>', gad3)
-    how = re.sub(r'\s+', ' ', page[page.index('id="ranking-table"'):])
-    assert 'en el color del bloque al que favorece' in how and 'class="help"' not in page
+    bias = bar_sides(4.1, 8)
+    assert '<i class="fill block" style="left: {}%; width: {}%; background: #1d84ce"></i><span>4,1</span>'.format(bias['left'], bias['width']) in cis
+    bias = bar_sides(-3.0, 8)
+    assert '<i class="fill block" style="left: {}%; width: {}%; background: #9e9e9e"></i><span>-3,0</span>'.format(bias['left'], bias['width']) in gad3
+    assert 'class="help"' not in page
 
 
 def test_block_bar_colors_follow_the_two_blocks_of_the_margin():
