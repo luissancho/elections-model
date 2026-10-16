@@ -875,7 +875,8 @@ def test_pollster_options_and_round_series():
 
 # Casas: cuatro casas con ratings en `es` (CIS id 1, GAD3 id 2, una tercera con `rating` nulo y una quinta, Cero,
 # con rating pero sin sondeos: ninguna de las dos entra en el ranking) en dos elecciones pasadas y la próxima,
-# más una cuarta casa del catálogo (Nueva) sin ratings en el ámbito. GAD3 tiene el rating más alto en la próxima
+# más una cuarta casa del catálogo (Nueva) sin ratings en el ámbito y un agregador evaluado (Agregador) sin
+# ratings. GAD3 tiene el rating más alto en la próxima
 # elección (2026-11-29); su primer rating es de 2023.
 HOUSE_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']
 
@@ -883,9 +884,9 @@ HOUSE_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']
 def fake_houses(monkeypatch, name='CIS'):
     """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
     pollsters = pd.DataFrame({
-        'id': [1, 2, 3, 4, 5], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero'],
-        'mtype': ['public', 'private', 'private', 'private', 'online'], 'quality': [56.0, 80.0, 40.0, 5.0, 5.0],
-        'rating': [55, 70, None, None, 50],  # rating nacional truncado: distinto del camino del ámbito
+        'id': [1, 2, 3, 4, 5, 6], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero', 'Agregador'],
+        'mtype': ['public', 'private', 'private', 'private', 'online', 'aggr'],
+        'quality': [56.0, 80.0, 40.0, 5.0, 5.0, 16.0], 'rating': [55, 70, None, None, 50, None],  # rating nacional truncado: distinto del camino del ámbito
     })
     ratings = pd.DataFrame({
         'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29',
@@ -937,15 +938,19 @@ def fake_houses(monkeypatch, name='CIS'):
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
     quality = pd.DataFrame({
-        'pollster_id': [1, 3], 'pollster': [name, 'Hamalgama'],
-        'fieldwork': [3, 2], 'fieldwork_source': ['https://www.cis.es/es/metodologia', 'Ficha técnica del sondeo de 2026-10-01'],
-        'transparency': [3, 1], 'transparency_source': ['https://www.cis.es/es/microdatos', 'https://hamalgama.example/ficha'],
-        'independence': [0, 1], 'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16'],
-        'identity': [1, 1], 'identity_source': ['https://www.cis.es', 'https://hamalgama.example'],
-        'standards': [0, 0], 'standards_source': ['', ''],
-        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', ''],
-        'status': ['revisada', 'borrador'], 'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16']),
-        'points': [7, 5], 'quality': [56.0, 40.0],
+        'pollster_id': [1, 3, 6], 'pollster': [name, 'Hamalgama', 'Agregador'],
+        'fieldwork': [3, 2, 0],
+        'fieldwork_source': ['https://www.cis.es/es/metodologia',
+                             'https://hamalgama.example/ficha (ficha de 2026-10-01); https://hamalgama.example/metodologia', ''],
+        'transparency': [3, 1, 1],
+        'transparency_source': ['https://www.cis.es/es/microdatos', 'Ficha técnica del sondeo de 2026-10-01',
+                                'https://agregador.example/metodo'],
+        'independence': [0, 1, 0], 'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16', ''],
+        'identity': [1, 1, 1], 'identity_source': ['https://www.cis.es', 'https://hamalgama.example', 'https://agregador.example'],
+        'standards': [0, 0, 0], 'standards_source': ['', '', ''],
+        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', '', ''],
+        'status': ['revisada', 'borrador', 'revisada'], 'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16', '2026-10-01']),
+        'points': [7, 5, 2], 'quality': [56.0, 40.0, 16.0],
     })
     monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: quality)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
@@ -1226,7 +1231,7 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Identidad', 'Estándares']
     assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2'), ('1', '1'), ('0', '1')]
     assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
-    assert 'Comprobado el ' in card and 'Organismo público' in card and 'provisional' not in card
+    assert 'Comprobado el 16 oct 2026.' in card and 'Organismo público' in card and 'provisional' not in card
     assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
 
 
@@ -1236,6 +1241,26 @@ def test_casa_profile_quality_card_marks_drafts_and_plain_sources(houses):
     assert 'Evaluación provisional, pendiente de revisión' in card
     assert 'Ficha técnica del sondeo de 2026-10-01' in card and 'href="Ficha' not in card
     assert 'consulta de patrocinadores a 2026-10-16' in card
+
+
+def test_source_parts_trims_the_punctuation_after_each_url():
+    """Las URL de una fuente pierden el `)`, `;`, `,`, `.` o `:` que cierra la frase (vuelve al texto siguiente)."""
+    from mtpy.lib.pages.casas import source_parts
+    assert source_parts('') == [] and source_parts('base de datos') == [{'text': 'base de datos', 'url': None}]
+    assert source_parts('(PDF https://x.es/a.pdf): CATI; https://y.es/b/.') == [
+        {'text': '(PDF ', 'url': None}, {'text': 'https://x.es/a.pdf', 'url': 'https://x.es/a.pdf'},
+        {'text': '): CATI; ', 'url': None}, {'text': 'https://y.es/b/', 'url': 'https://y.es/b/'}, {'text': '.', 'url': None}]
+    assert source_parts('https://w.org/A_(b)') == [{'text': 'https://w.org/A_(b)', 'url': 'https://w.org/A_(b)'}]
+
+
+def test_casa_profile_quality_card_splits_compound_sources_into_links(houses):
+    """Una fuente con varias URL y texto entre ellas: cada URL es un enlace limpio y el texto queda como texto."""
+    card = html(call(houses, '/casas/hamalgama')[2])
+    card = card[card.index('id="quality"'):card.index('id="path"')]
+    assert ('<a href="https://hamalgama.example/ficha" rel="noopener">https://hamalgama.example/ficha</a>'
+            ' (ficha de 2026-10-01); '
+            '<a href="https://hamalgama.example/metodologia" rel="noopener">https://hamalgama.example/metodologia</a>') in card
+    assert 'href="https://hamalgama.example/ficha (' not in card and '<td>–</td>' in card  # Estándares, sin fuente
 
 
 def test_casa_profile_quality_card_of_an_unrated_house(houses):
@@ -1249,6 +1274,17 @@ def test_casa_profile_quality_card_of_an_informative_house(houses):
     page = html(call(houses, '/casas/cero')[2])
     card = page[page.index('id="quality"'):page.index('id="path"')]
     assert 'no entran en el promedio' in card and 'Sin evaluar' in card
+
+
+def test_casa_profile_quality_card_of_an_evaluated_informative_house(houses):
+    """Un agregador evaluado: la tabla de la rúbrica y la frase de que su calidad es informativa, juntas."""
+    page = html(call(houses, '/casas/agregador')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
+    assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0'),
+                                            ('Identidad', '1'), ('Estándares', '0')]
+    assert 'href="https://agregador.example/metodo"' in card and '2 de 10 puntos' in card
+    assert 'la calidad previa es informativa' in card and 'Sin evaluar' not in card
 
 
 def test_pages_package_layout():

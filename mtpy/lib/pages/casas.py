@@ -1,6 +1,8 @@
 """
 Houses page context.
 """
+import re
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
@@ -19,6 +21,9 @@ MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
                 'error_blocks', 'bias_blocks')
 HERDING_KEYS = ('event_scope', 'event_date', 'n', 'ratio', 'p_value')
+# The links of a quality source cell and the punctuation that may close the sentence after one.
+URL_PATTERN = re.compile(r'(https?://\S+)')
+URL_TRAILING = ').;,:'
 # Threads that read the `cycle` and `results` parts of the bullseye elections at once (one S3 read each).
 PART_READERS = 8
 ANALYSIS_CSV = (
@@ -521,6 +526,41 @@ def profile_kpis(current: dict, mtype: Optional[str], quality_support: str) -> l
     ]
 
 
+def source_parts(source: str) -> list:
+    """
+    Split a source cell of the quality rubric into its text and its links.
+
+    A cell may hold several URLs mixed with text (``https://a/ficha (ficha de 2026-10-01); https://b``). Each URL
+    loses the punctuation that closes the sentence around it (``)``, ``.``, ``;``, ``,`` or ``:``; a ``)`` only
+    when the URL has no matching ``(``), which goes back to the text that follows.
+
+    Parameters
+    ----------
+    source : str
+        The source cell, possibly empty.
+
+    Returns
+    -------
+    list
+        ``{'text': str, 'url': str or None}`` in the order of the cell: ``url`` is set (and equals ``text``) on the
+        links and ``None`` on the plain text; no part has an empty ``text``.
+    """
+    parts = []
+    for token in URL_PATTERN.split(source or ''):
+        if URL_PATTERN.fullmatch(token):
+            url, tail = token, ''
+            while url[-1] in URL_TRAILING and (url[-1] != ')' or url.count('(') < url.count(')')):
+                url, tail = url[:-1], url[-1] + tail
+            parts.append({'text': url, 'url': url})
+            token = tail
+        if token:
+            if parts and parts[-1]['url'] is None:
+                parts[-1]['text'] += token
+            else:
+                parts.append({'text': token, 'url': None})
+    return parts
+
+
 def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict:
     """
     The card of the prior quality of a pollster: its evaluation against the public rubric.
@@ -537,8 +577,9 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
     Returns
     -------
     dict
-        ``evaluated``, ``rows`` (one ``{'key', 'name', 'points', 'max', 'level', 'source', 'is_url'}`` per criterion,
-        in the order of the catalogue; empty when not evaluated), ``points``, ``max_points``, ``quality``,
+        ``evaluated``, ``rows`` (one ``{'key', 'name', 'points', 'max', 'level', 'source', 'parts'}`` per criterion,
+        in the order of the catalogue, ``parts`` being the source split into text and links by ``source_parts``;
+        empty when not evaluated), ``points``, ``max_points``, ``quality``,
         ``status``, ``draft`` (status ``borrador``), ``checked_at`` (ISO string), ``notes``, ``informative``
         (aggregators and online panels, whose polls do not enter the average), ``support`` (the text under the KPI),
         and the ``floor`` and ``per_point`` of the scale.
@@ -552,7 +593,7 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
             points = int(record[key])
             rows.append({'key': key, 'name': criteria['criteria'][key]['name'], 'points': points,
                          'max': criteria['criteria'][key]['max'], 'level': level_text(criteria, key, points),
-                         'source': source, 'is_url': source.startswith(('http://', 'https://'))})
+                         'source': source, 'parts': source_parts(source)})
     points = int(record['points']) if record else None
     status = record.get('status') if record else None
     return {

@@ -33,7 +33,7 @@
                 <th scope="row">{{ row.name }}</th>
                 <td>{{ row.points }} / {{ row.max }}</td>
                 <td>{{ row.level }}</td>
-                <td>{% if row.is_url %}<a href="{{ row.source }}" rel="noopener">{{ row.source }}</a>{% else %}{{ row.source or '–' }}{% endif %}</td>
+                <td>{% for part in row.parts %}{% if part.url %}<a href="{{ part.url }}" rel="noopener">{{ part.url }}</a>{% else %}{{ part.text }}{% endif %}{% else %}–{% endfor %}</td>
               </tr>
               {% endfor %}
             </tbody>
