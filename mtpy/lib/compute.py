@@ -149,18 +149,21 @@ def rate_scope(
     Returns
     -------
     dict
-        ``n_pollsters`` and ``n_events`` of the ratings table and ``seconds`` (``ratings`` and ``total``).
+        ``n_pollsters`` and ``n_events`` of the ratings table (``comp.ratings``) and ``seconds``
+        (``ratings`` and ``total``).
     """
     computer = Computer if computer is None else computer
     seconds = {}
     start = time.perf_counter()
 
     comp = computer(scope=scope, verbose=verbose).build_series()
-    ratings = _phase(RATINGS_STEP, lambda: comp.compute_ratings(save=save, scopes='all'), seconds, progress)
+    # `compute_ratings` returns the polls with their rating columns; the ratings table (indexed by
+    # `event_date` and `pollster_id`) is left in `comp.ratings`
+    _phase(RATINGS_STEP, lambda: comp.compute_ratings(save=save, scopes='all'), seconds, progress)
     seconds['total'] = time.perf_counter() - start
 
     return {
-        'n_pollsters': int(ratings['pollster_id'].nunique()),
-        'n_events': int(ratings['event_date'].nunique()),
+        'n_pollsters': int(comp.ratings.index.get_level_values('pollster_id').nunique()),
+        'n_events': int(comp.ratings.index.get_level_values('event_date').nunique()),
         'seconds': seconds
     }
