@@ -124,16 +124,20 @@ def test_quality_criteria_catalogue_is_complete():
         assert entry['name'] and sorted(entry['levels']) == [str(i) for i in range(entry['max'] + 1)], key
 
 
-def test_quality_evaluations_follow_the_rubric():
-    criteria = json.load(open(os.path.join(DATA, 'pollsters-quality-criteria.json')))['criteria']
-    frame = pd.read_csv(os.path.join(DATA, 'pollsters-quality.csv'), dtype={'notes': str}, keep_default_na=False)
-    assert list(frame.columns)[:2] == ['pollster_id', 'pollster'] and frame['pollster_id'].is_unique
-    for key, entry in criteria.items():
-        points = frame[key].astype(int)
-        assert points.between(0, entry['max']).all(), key
-        assert (frame.loc[points > 0, key + '_source'].str.len() > 0).all(), key
-    assert frame['status'].isin(['borrador', 'revisada']).all()
-    assert pd.to_datetime(frame['checked_at'], format='%Y-%m-%d').le(pd.Timestamp.today()).all()
+def test_quality_evaluations_follow_the_rubric(fresh_app):
+    """The shipped CSV passes the real validation (`read_quality`), exact columns and strict dates included."""
+    from mtpy.core.io import FileSystem
+    from mtpy.lib.quality import COLUMNS, criteria_keys, load_criteria, read_quality
+
+    fresh_app.set('data', FileSystem(DATA))
+    criteria = load_criteria()
+    frame = read_quality(criteria)
+    keys = criteria_keys(criteria)
+    assert keys == ['fieldwork', 'transparency', 'independence', 'identity', 'standards']
+    assert list(frame.columns) == list(COLUMNS) + ['points', 'quality']
+    assert [col for col in frame.columns if col in keys] == keys  # the criteria columns follow the rubric order
+    assert frame.shape[0] > 0 and frame['pollster_id'].is_unique
+    assert (frame['points'] == frame[keys].sum(axis=1)).all()
 
 
 def test_quality_csv_fits_the_replica_columns():
