@@ -196,15 +196,17 @@ def bare_computer():
 
 
 def pool(rows, days=10):
-    """Un sondeo por tupla (ámbito, fecha del evento, casa), `days` días antes del evento."""
+    """Un sondeo por tupla (ámbito, fecha del evento, casa), `days` días antes del evento (un entero para todos
+    o un dict por casa)."""
     ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
     data = []
     for scope, event_date, pollster in rows:
         event_date = pd.Timestamp(event_date)
+        poll_days = days[pollster] if isinstance(days, dict) else days
         dev = .01 if pollster in ('A', 'C') else -.01
         data.append({
-            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=days),
-            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': days,
+            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=poll_days),
+            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': poll_days,
             'weight_over': 1., 'weight_sample': 1.,
             'error_avg': .03, 'error_blocks': .01, 'error_within': .02,
             'bias_avg': .2, 'bias_blocks': .1, 'bias_within': .1, 'bias': .15,
@@ -230,11 +232,14 @@ def test_a_distant_poll_counts_as_much_as_a_close_one():
     """D3: la desviación se mide contra el consenso de la misma fecha, así que la distancia a la elección no
     descuenta evidencia: mismo `num_polls_w`, misma desviación y mismo rating."""
     c = bare_computer()
-    close = c.rate_events(pool(ES19, days=10), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
-    far = c.rate_events(pool(ES19, days=80), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    both_close = c.rate_events(pool(ES19, days=10), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    # B publishes 80 days before the event while A publishes 10 days before it: with a week decay B would weigh
+    # 0.7 ** 10 relative to A
+    mixed = c.rate_events(pool(ES19, days={'A': 10, 'B': 80}), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    assert mixed.loc[2, 'num_polls_w'] == pytest.approx(1.0)
+    assert mixed.loc[1, 'num_polls_w'] == pytest.approx(mixed.loc[2, 'num_polls_w'])
     for col in ('num_polls_w', 'bias_dev_adj', 'rating_adj', 'rating'):
-        assert close[col].tolist() == pytest.approx(far[col].tolist(), nan_ok=True), col
-    assert close.loc[1, 'num_polls_w'] == pytest.approx(1.0)
+        assert mixed[col].tolist() == pytest.approx(both_close[col].tolist(), nan_ok=True), col
 
 
 def test_scope_weight_zero_reproduces_single_scope_ratings():

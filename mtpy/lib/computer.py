@@ -420,7 +420,7 @@ class Computer(Core):
         bias_dev_tau : float, optional
             The standard deviation prior used to compute the bias deviation of each poll.
         min_polls : int, optional
-            Minimum number of polls to compute the rating.
+            Weight `k` of the prior quality in the rating, in weighted polls: `R = (n * R_aj + k * Q) / (n + k)`.
         ratings_margin : float, optional
             The margin to be applied to the ratings around the [0, 1] range.
         error_weights : dict, optional
@@ -1233,41 +1233,23 @@ class Computer(Core):
         Based on FiveThirtyEight's "Predictive Plus-Minus" measure, explained here:
         https://fivethirtyeight.com/methodology/how-our-pollster-ratings-work/
 
-        Three main factors are considered in the rating computation for each pollster:
-            - Quality
-                A scoring value of the pollster's metodology and historical standards.
-                It is set to be a number between 0 and 100, the greater this value, the more reliable the pollster.
-            - Polls published
-                The total number of polls published by each pollster, with weights exponentially decreasing with time,
-                so we give more importance to the most recent polls.
-            - Adjusted deviation
-                The difference between the pollster's average error and the adjusted error, which is a weighted
-                average of the average error of other polls published for the same event/week and the expected error
-                of other polls with similar sample size and weeks before the event.
+        The idea is to rate pollsters by how far their polls stand from the consensus of the other pollsters. Each
+        poll has a deviation (`bias_dev_adj`) measured against the expected bias of the polls published at the same
+        date, so a distant poll informs about the house as much as a close one and the distance to the election
+        is not discounted. For each pollster and event:
 
-        The idea is to rate pollsters based on their historical accuracy compared to other pollsters. In order to find
-        the relative error between pollsters, we compute a deviation from an average. For each poll, we compare
-        its error with all the other polls published for the same event/week. If there are not enough polls to compare,
-        we run a regression to estimate the expected error based on the sample size and the weeks before the event.
-
-        error = poll error (the error in the margin gap between the two main blocks of parties)
-        num_related = number of polls published for the same event/week
-        error_related = average error of the polls published for the same event/week
-        error_expected = expected error based on the sample size and the weeks before the event
-
-        error_adjusted = (num_related * error_related + min_related * error_expected) / (num_related + min_related)
-        dev_adjusted = WAVG(error) - WAVG(error_adjusted)
-
-        Once we have the adjusted deviation of each pollster, we need to account for pollster with few polls published
-        or with a low quality and methodology standards. In order to do so, we use bayesian statistics to estimate
-        a prior mean and revert the adjusted deviation towards it. The lower the quality of the pollster and the fewer
-        the polls published, the more weight we give to this prior mean.
-
-        prior_weight = quality * num_polls / (num_polls + num_polls.mean())
-        prior_mean = np.average(prior_weight, weights=num_polls) - prior_weight
-        dev_reverted = prior_mean + (dev_adjusted - prior_mean) * prior_weight
-
-        The resulting rating is the mean reverted deviation scaled to the range [5-95].
+            1. The deviations of its polls are averaged with the weight of each poll: sample size, over-representation,
+               position (the last poll of the pollster in the event counts the most), year (older events count
+               less) and scope (regional events count less). `n` is the sum of these weights.
+            2. The mean deviation `d` is shrunk towards 0 according to its precision, with a normal prior of standard
+               deviation `tau = bias_dev_tau`.
+            3. `R_aj = Phi(-d / tau)` scales the deviation to the range [0, 1]: 0.5 for a house in line with the
+               consensus, higher for a house that deviates less.
+            4. The rating mixes the evidence with the prior quality `Q` of the pollster (0 to 1):
+               `R = (n * R_aj + k * Q) / (n + k)`, with `k = min_polls`. This is the prior weight of a hierarchical
+               model, `k = sigma^2_house / tau^2`: the poll-to-poll variance of a house beyond its sampling error
+               over the variance between houses, measured at 3-4 on the national polls.
+            5. `weight_rating = log1p(R) / log1p(mean R)` is the weight of the pollster in the polling average.
 
         The rating of an event can also learn from the polls of other scopes (M11): with `scopes`, the polls
         of every election held strictly before the event, in any of those scopes, enter the algorithm with
@@ -1590,7 +1572,7 @@ class Computer(Core):
         `k = min_polls`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house in the
         polling average.
 
-        See `compute_ratings` for more details about the rating algorithm.
+        See `compute_ratings` for the scopes feeding the rating of each event.
 
         Parameters
         ----------
@@ -1639,7 +1621,8 @@ class Computer(Core):
             df['event_key'] = df['event_date']
         dr['num_events'] = df.groupby('pollster', observed=True)['event_key'].nunique().reindex(dr.index).fillna(0)
         dr['num_polls'] = df.groupby('pollster', observed=True)['event_date'].count().reindex(dr.index).fillna(0)
-        # Weighted number of polls: the evidence each pollster contributes (position, year and scope weights)
+        # Weighted number of polls: the evidence each pollster contributes (the product of the sample, over-representation,
+        # position, year and scope weights)
         dr['num_polls_w'] = df.groupby('pollster', observed=True)['weight'].sum().reindex(dr.index).fillna(0)
 
         # Compute the weighted mean of each pollster's poll errors
