@@ -146,7 +146,8 @@
                 <td>{{ row.event_date|date }}</td>
                 <td>{{ row.days|int }}</td>
                 {% for block in blocks %}
-                <td>{{ row[block]|num(1) }}</td>
+                {# double gradient: red the more the poll fell short of the block (negative), green the more it overshot it #}
+                <td class="cell-shade" style="background-color: {{ row[block]|shade(0, -8, '#d62728') if row[block] is not none and row[block] < 0 else row[block]|shade(0, 8, '#2ca02c') }}">{{ row[block]|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -159,7 +160,7 @@
         <p class="notice">Esta encuestadora no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). La tabla da su error en cada bloque. Los filtros de ámbito y años dejan solo esas elecciones en la diana y en la tabla.</p>
+        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan solo esas elecciones en la diana y en la tabla.</p>
         <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
         <p>Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}

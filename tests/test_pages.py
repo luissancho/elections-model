@@ -3148,3 +3148,19 @@ def test_block_bar_colors_follow_the_two_blocks_of_the_margin():
     assert blocks == ['Derecha'] and colors['pos'] == '#1d84ce' and colors['neg'] == pages.OTHERS_COLOR
     assert pages.block_bar_colors({}, pages.catalog(meta)) == ([], {'pos': pages.OTHERS_COLOR, 'neg': pages.OTHERS_COLOR,
                                                                    'zero': pages.OTHERS_COLOR})
+
+
+def test_casa_profile_bullseye_table_shades_the_block_errors(houses):
+    """Diana de errores: las celdas de cada bloque llevan doble gradiente, rojo de -8 a 0 y verde de 0 a 8, sobre el
+    valor publicado (el de la isla de datos)."""
+    from mtpy.lib.pages.filters import fmt_num, shade
+    body = call(houses, '/casas/gad3')[2]
+    table = re.search(r'<table id="bullseye-table">(.*?)</table>', html(body), re.S).group(1)
+    data = initial(body)
+    assert data['bullseye'] and data['blocks']
+    for row in data['bullseye']:
+        for block in data['blocks']:
+            value = row[block]
+            colour = shade(value, 0, -8, '#d62728') if value is not None and value < 0 else shade(value, 0, 8, '#2ca02c')
+            assert '<td class="cell-shade" style="background-color: {}">{}</td>'.format(colour, fmt_num(value, 1)) in table, (block, value)
+    assert 'rojo si se quedó corto y verde si se pasó' in re.sub(r'\s+', ' ', html(body))
