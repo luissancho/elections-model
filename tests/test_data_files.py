@@ -113,3 +113,42 @@ def test_threshold_overrides_are_valid():
     assert params['es-mc']['2015-05-24'] == {'threshold': None, 'threshold_scope': 5}
     assert params['es-cn']['2011-05-22'] == {'threshold': 30, 'threshold_scope': 6}
     assert found >= 8
+
+
+def test_quality_criteria_catalogue_is_complete():
+    criteria = json.load(open(os.path.join(DATA, 'pollsters-quality-criteria.json')))
+    assert list(criteria['criteria']) == ['fieldwork', 'transparency', 'independence', 'identity', 'standards']
+    assert sum(c['max'] for c in criteria['criteria'].values()) == 10
+    assert criteria['scale'] == {'per_point': 8, 'floor': 5}
+    for key, entry in criteria['criteria'].items():
+        assert entry['name'] and sorted(entry['levels']) == [str(i) for i in range(entry['max'] + 1)], key
+
+
+def test_quality_evaluations_follow_the_rubric(fresh_app):
+    """The shipped CSV passes the real validation (`read_quality`), exact columns and strict dates included."""
+    from mtpy.core.io import FileSystem
+    from mtpy.lib.quality import COLUMNS, criteria_keys, load_criteria, read_quality
+
+    fresh_app.set('data', FileSystem(DATA))
+    criteria = load_criteria()
+    frame = read_quality(criteria)
+    keys = criteria_keys(criteria)
+    assert keys == ['fieldwork', 'transparency', 'independence', 'identity', 'standards']
+    assert list(frame.columns) == list(COLUMNS) + ['points', 'quality']
+    assert [col for col in frame.columns if col in keys] == keys  # the criteria columns follow the rubric order
+    assert frame.shape[0] > 0 and frame['pollster_id'].is_unique
+    assert (frame['points'] == frame[keys].sum(axis=1)).all()
+
+
+def test_quality_csv_fits_the_replica_columns():
+    """Every text cell of the CSV fits the VARCHAR length of its replica column (TEXT, length 0, has no limit)."""
+    from mtpy.core.utils.helpers import parse_meta
+    from mtpy.models.elections import PollstersQuality
+
+    frame = pd.read_csv(os.path.join(DATA, 'pollsters-quality.csv'), dtype=str, keep_default_na=False)
+    meta = parse_meta(PollstersQuality.meta)
+    bounded = {col: desc['length'] for col, desc in meta.items()
+               if desc['type'] in ('str', 'cat') and desc['length'] > 0 and col in frame.columns}
+    assert 'pollster' in bounded and 'status' in bounded
+    for col, length in bounded.items():
+        assert frame[col].str.len().max() <= length, (col, length)

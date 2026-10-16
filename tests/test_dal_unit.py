@@ -38,3 +38,14 @@ def test_postgresql_engine_bounds_statements_when_configured(engines):
 def test_other_sql_adapters_pass_no_driver_arguments(engines):
     MySQL({**PARAMS, 'statement_timeout': '10000'}, 'elections')._build_client()
     assert engines[0][1]['connect_args'] == {}
+
+
+def test_insert_values_escape_single_quotes_per_dialect(fresh_app):
+    """PostgreSQL (`standard_conforming_strings`) dobla la comilla; MySQL la escapa con barra. Los dos puntos se
+    escapan para `sqlalchemy.text` en ambos."""
+    import pandas as pd
+    frame = pd.DataFrame({'id': [1], 'name': ["Gabinet d'Estudis"], 'url': ['https://x.y/z']})
+    pg = PostgreSQL({**PARAMS, 'statement_timeout': None}, 'elections').build_insert_query('t', frame)
+    assert "'Gabinet d''Estudis'" in pg and "'https\\://x.y/z'" in pg
+    my = MySQL({**PARAMS, 'statement_timeout': None}, 'elections').build_insert_query('t', frame)
+    assert "'Gabinet d\\'Estudis'" in my and "'https\\://x.y/z'" in my

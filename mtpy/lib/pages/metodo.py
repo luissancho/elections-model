@@ -1,11 +1,13 @@
 """
 Method page contexts: the landing page (``/metodo``) and its subpages (``/metodo/{section}``), with the live
-figures of the general election (simulations and backtest coverage), the thresholds of the scopes catalogue and,
-on the ``promedio`` subpage, the live example of the average (the ``weights`` part of the latest national run).
+figures of the general election (simulations and backtest coverage), the thresholds of the scopes catalogue, on the
+``promedio`` subpage the live example of the average (the ``weights`` part of the latest national run) and, on the
+``rating`` subpage, the public rubric of the prior quality (``data/pollsters-quality-criteria.json``).
 """
 from typing import Optional
 
 from ...core.api import HttpError
+from ..quality import criteria_keys, load_criteria, max_points
 from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
 from .common import api_url, common_context, part
@@ -223,6 +225,36 @@ def metodo_context(state: dict) -> dict:
     return context
 
 
+def quality_rubric() -> dict:
+    """
+    The public rubric of the prior quality, as the ``rating`` subpage shows it.
+
+    Returns
+    -------
+    dict
+        ``rows`` (one ``{'key', 'name', 'max', 'levels'}`` per criterion, in the order of the catalogue, with
+        ``levels`` a list of ``{'points': int, 'text': str}`` from the highest level to 0), ``max_points`` (the sum
+        of the maxima), the ``per_point`` and ``floor`` of the scale and ``cap`` (``per_point · max_points``, the
+        highest prior quality a pollster can get).
+
+    Raises
+    ------
+    ValueError
+        If the catalogue of criteria is not valid (``quality.load_criteria``).
+    """
+    criteria = load_criteria()
+    scale = criteria['scale']
+    rows = []
+    for key in criteria_keys(criteria):
+        entry = criteria['criteria'][key]
+        levels = [{'points': points, 'text': entry['levels'][str(points)]} for points in range(entry['max'], -1, -1)]
+        rows.append({'key': key, 'name': entry['name'], 'max': entry['max'], 'levels': levels})
+    total = max_points(criteria)
+
+    return {'rows': rows, 'max_points': total, 'per_point': scale['per_point'], 'floor': scale['floor'],
+            'cap': scale['per_point'] * total}
+
+
 def metodo_section_context(state: dict, section: str) -> dict:
     """
     Template context of a subpage of the method.
@@ -239,10 +271,10 @@ def metodo_section_context(state: dict, section: str) -> dict:
     dict
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
-        ``section``. The ``promedio`` subpage adds ``example`` (``weights_example``, ``None`` without one),
-        ``example_csv`` (the CSV of the ``weights`` part) and, with an example, the ``initial`` island
-        (``state`` and the ``example`` slice the chart draws: ``name``, ``color``, ``date``, ``stats``, ``rows``
-        with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``).
+        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``promedio`` subpage adds
+        ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part)
+        and, with an example, the ``initial`` island (``state`` and the ``example`` slice the chart draws: ``name``,
+        ``color``, ``date``, ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``).
 
     Raises
     ------
@@ -261,6 +293,9 @@ def metodo_section_context(state: dict, section: str) -> dict:
     context['figures'] = national_figures()
     context['thresholds'] = thresholds_rows()
     context['section'] = section
+
+    if section == 'rating':
+        context['rubric'] = quality_rubric()
 
     if section == 'promedio':
         example = weights_example()

@@ -17,6 +17,7 @@ class PostgreSQL(SQLAdapter):
     driver = 'postgresql+psycopg2'
     default_port = 5432
     quote = '"'
+    quote_escape = "''"  # standard_conforming_strings: a backslash is literal, the quote is doubled
     data_types = {
         'varchar': 'VARCHAR',
         'text': 'TEXT',

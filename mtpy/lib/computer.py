@@ -370,7 +370,6 @@ class Computer(Core):
         ol_max: Optional[int] = 5000,
         wspan: Optional[int] = 4,
         pos_decay: Optional[float] = .5,
-        week_decay: Optional[float] = .7,
         year_decay: Optional[float] = .9,
         bias_dev_tau: Optional[float] = .01,
         min_polls: Optional[int] = 3,
@@ -416,14 +415,12 @@ class Computer(Core):
             Window span (in days) to use in order to prevent too many polls published by a pollster in a short period.
         pos_decay : float, optional
             Position decay.
-        week_decay : float, optional
-            Week decay.
         year_decay : float, optional
             Year decay.
         bias_dev_tau : float, optional
             The standard deviation prior used to compute the bias deviation of each poll.
         min_polls : int, optional
-            Minimum number of polls to compute the rating.
+            Weight `k` of the prior quality in the rating, in weighted polls: `R = (n * R_aj + k * Q) / (n + k)`.
         ratings_margin : float, optional
             The margin to be applied to the ratings around the [0, 1] range.
         error_weights : dict, optional
@@ -449,7 +446,6 @@ class Computer(Core):
         self.ol_max = ol_max
         self.wspan = wspan
         self.pos_decay = pos_decay
-        self.week_decay = week_decay
         self.year_decay = year_decay
         self.bias_dev_tau = bias_dev_tau
         self.min_polls = min_polls
@@ -1006,7 +1002,9 @@ class Computer(Core):
                 The average error over the most important parties for each event (usually predicted by all pollsters).
                 These are defined at the event parameters `main` bmap.
             - error_blocks
-                The error/bias of the poll prediction over the margin gap between the two main blocks of parties.
+                The signed error of the poll prediction over the margin gap between the two main blocks of parties
+                (the first block of the `vs` map minus the second, poll minus result): positive when the poll gave
+                the first block more margin than it got.
                 These are defined at the event parameters `vs` bmap.
             - error_within
                 The part of the error of the parties of the `vs` blocks that only redistributes votes within a
@@ -1237,41 +1235,23 @@ class Computer(Core):
         Based on FiveThirtyEight's "Predictive Plus-Minus" measure, explained here:
         https://fivethirtyeight.com/methodology/how-our-pollster-ratings-work/
 
-        Three main factors are considered in the rating computation for each pollster:
-            - Quality
-                A scoring value of the pollster's metodology and historical standards.
-                It is set to be a number between 0 and 100, the greater this value, the more reliable the pollster.
-            - Polls published
-                The total number of polls published by each pollster, with weights exponentially decreasing with time,
-                so we give more importance to the most recent polls.
-            - Adjusted deviation
-                The difference between the pollster's average error and the adjusted error, which is a weighted
-                average of the average error of other polls published for the same event/week and the expected error
-                of other polls with similar sample size and weeks before the event.
+        The idea is to rate pollsters by how far their polls stand from the consensus of the other pollsters. Each
+        poll has a deviation (`bias_dev_adj`) measured against the expected bias of the polls published at the same
+        date, so a distant poll informs about the house as much as a close one and the distance to the election
+        is not discounted. For each pollster and event:
 
-        The idea is to rate pollsters based on their historical accuracy compared to other pollsters. In order to find
-        the relative error between pollsters, we compute a deviation from an average. For each poll, we compare
-        its error with all the other polls published for the same event/week. If there are not enough polls to compare,
-        we run a regression to estimate the expected error based on the sample size and the weeks before the event.
-
-        error = poll error (the error in the margin gap between the two main blocks of parties)
-        num_related = number of polls published for the same event/week
-        error_related = average error of the polls published for the same event/week
-        error_expected = expected error based on the sample size and the weeks before the event
-
-        error_adjusted = (num_related * error_related + min_related * error_expected) / (num_related + min_related)
-        dev_adjusted = WAVG(error) - WAVG(error_adjusted)
-
-        Once we have the adjusted deviation of each pollster, we need to account for pollster with few polls published
-        or with a low quality and methodology standards. In order to do so, we use bayesian statistics to estimate
-        a prior mean and revert the adjusted deviation towards it. The lower the quality of the pollster and the fewer
-        the polls published, the more weight we give to this prior mean.
-
-        prior_weight = quality * num_polls / (num_polls + num_polls.mean())
-        prior_mean = np.average(prior_weight, weights=num_polls) - prior_weight
-        dev_reverted = prior_mean + (dev_adjusted - prior_mean) * prior_weight
-
-        The resulting rating is the mean reverted deviation scaled to the range [5-95].
+            1. The deviations of its polls are averaged with the weight of each poll: sample size, over-representation,
+               position (the last poll of the pollster in the event counts the most), year (older events count
+               less) and scope (regional events count less). `n` is the sum of these weights.
+            2. The mean deviation `d` is shrunk towards 0 according to its precision, with a normal prior of standard
+               deviation `tau = bias_dev_tau`.
+            3. `R_aj = Phi(-d / tau)` scales the deviation to the range [0, 1]: 0.5 for a house in line with the
+               consensus, higher for a house that deviates less.
+            4. The rating mixes the evidence with the prior quality `Q` of the pollster (0 to 1):
+               `R = (n * R_aj + k * Q) / (n + k)`, with `k = min_polls`. This is the prior weight of a hierarchical
+               model, `k = sigma^2_house / tau^2`: the poll-to-poll variance of a house beyond its sampling error
+               over the variance between houses, measured at 3-4 on the national polls.
+            5. `weight_rating = log1p(R) / log1p(mean R)` is the weight of the pollster in the polling average.
 
         The rating of an event can also learn from the polls of other scopes (M11): with `scopes`, the polls
         of every election held strictly before the event, in any of those scopes, enter the algorithm with
@@ -1543,10 +1523,11 @@ class Computer(Core):
                 events.loc[dt, missing] = np.nan
         
         # In case we are evaluating the error over the margin gap between the two main blocks of parties,
-        # we need to compute the difference between the last and the first block of parties
+        # the gap is the margin of the first block over the last one, so the error is positive when the poll
+        # gave the first block (the right, in the `vs` maps) more margin than it got
         if error_type == 'gap':
-            polls = polls.diff(axis=1).dropna(axis=1, how='all').rename(columns={names[-1]: 'gap'})
-            events = events.diff(axis=1).dropna(axis=1, how='all').rename(columns={names[-1]: 'gap'})
+            polls = (polls[names[0]] - polls[names[-1]]).to_frame('gap')
+            events = (events[names[0]] - events[names[-1]]).to_frame('gap')
             cols = ['gap']
         else:
             cols = names
@@ -1587,7 +1568,14 @@ class Computer(Core):
         """
         Pollster rating algorithm.
 
-        See `compute_ratings` for more details about the rating algorithm.
+        Each poll is weighted by its sample, over-representation, position, year and scope weights. The weighted mean
+        of the deviations of a house is shrunk towards 0 according to its precision (bayesian update with a prior of
+        standard deviation `bias_dev_tau`), then converted into `rating_adj = Phi(-d / tau)` and blended with the
+        prior quality `Q` as `R = (n * R_aj + k * Q) / (n + k)`, with `n` the weighted number of polls and
+        `k = min_polls`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house in the
+        polling average.
+
+        See `compute_ratings` for the scopes feeding the rating of each event.
 
         Parameters
         ----------
@@ -1608,11 +1596,11 @@ class Computer(Core):
         df = polls[polls['bias'].notnull()]
 
         # Compute additional weights of each poll
-        df[['weight_pos', 'weight_week', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df, rating_weights)
+        df[['weight_pos', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df, rating_weights)
 
         # Compute the final weight of each poll by multiplying all the other weights computed
         df['weight'] = df[[
-            'weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year', 'weight_scope'
+            'weight_over', 'weight_sample', 'weight_pos', 'weight_year', 'weight_scope'
         ]].prod(axis=1)
 
         # Remove polls with weight below the threshold
@@ -1636,7 +1624,8 @@ class Computer(Core):
             df['event_key'] = df['event_date']
         dr['num_events'] = df.groupby('pollster', observed=True)['event_key'].nunique().reindex(dr.index).fillna(0)
         dr['num_polls'] = df.groupby('pollster', observed=True)['event_date'].count().reindex(dr.index).fillna(0)
-        # Weighted number of polls, giving more importance to the most recent polls
+        # Weighted number of polls: the evidence each pollster contributes (the product of the sample, over-representation,
+        # position, year and scope weights)
         dr['num_polls_w'] = df.groupby('pollster', observed=True)['weight'].sum().reindex(dr.index).fillna(0)
 
         # Compute the weighted mean of each pollster's poll errors
@@ -1672,18 +1661,19 @@ class Computer(Core):
 
         # Scale the bias deviations to the range [0, 1]
         dr['rating_adj'] = dr['bias_dev_adj'].mul(-1).apply(norm.cdf, scale=self.bias_dev_tau).fillna(dr['quality'])
-        # Compute each pollster's final rating, using a weighted average of the adjusted bias deviations
-        # and the prior quality assigned to the pollster.
-        # The more polls published by the pollster, the more weight is given to the adjusted bias deviations,
-        # while pollsters with a low number of polls are given more weight to the prior quality.
+        # Compute each pollster's final rating as R = (n * R_aj + k * Q) / (n + k), where n is the weighted number
+        # of polls, R_aj the rating of the adjusted deviation, Q the prior quality and k = `min_polls`.
+        # k is the prior weight of a hierarchical model, k = sigma^2_house / tau^2: the poll-to-poll variance of
+        # a house beyond its sampling error over the variance between houses, measured at 3-4 on the national
+        # polls. The more evidence the pollster has, the less its rating depends on the prior quality.
         dr['rating'] = (
             (dr['num_polls_w'] * dr['rating_adj']) + (self.min_polls * dr['quality'])
         ) / (
             dr['num_polls_w'] + self.min_polls
         )
         # Compute the weight that each pollster's predictions will have in the polling average forecaster.
-        # The weight is computed using the logarithm of the rating, which gives more weight to pollsters with a
-        # rating close to 1 and less weight to pollsters with a rating close to 0.
+        # The weight is computed using the logarithm of the rating, which compresses the differences between the
+        # best pollsters while still separating them from the worst ones.
         dr['weight_rating'] = np.log1p(dr['rating']) / np.log1p(dr['rating'].mean())
 
         dr = dr.sort_values('rating', ascending=False)
@@ -1696,8 +1686,10 @@ class Computer(Core):
         rating_weights: Optional[dict[str, float]] = None
     ) -> pd.DataFrame:
         """
-        Compute additional weights needed to compute pollster ratings and an estimation of their relative deviation
-        from the expected bias of polls published by other pollsters in the same event and week.
+        Compute the additional weights needed to compute pollster ratings: the position of the poll among the ones
+        of its pollster in the same event, the age of its event (years) and the weight of its scope. The distance
+        to the election is not discounted: the deviation of a poll is measured against the consensus of its own
+        date, so a distant poll informs about the house as much as a close one.
 
         Parameters
         ----------
@@ -1710,21 +1702,16 @@ class Computer(Core):
         Returns
         -------
         pd.DataFrame
-            The polls data with the new weights and deviations.
+            The weights `weight_pos`, `weight_year` and `weight_scope` of each poll, with the index of `polls`.
         """
         df = polls.reset_index()
         if 'event_scope' not in df.columns:
             df['event_scope'] = self.scope
         rating_weights = rating_weights if rating_weights is not None else {}
 
-        # We use all polls published by each pollster, but give more weight to the ones published closer to the event
+        # We use all polls published by each pollster, but give more weight to the last ones of each event
         df['seq_pos'] = df.groupby(['event_date', 'event_scope', 'pollster_id'], observed=True)['date'].cumcount(ascending=False)
         df['weight_pos'] = df['seq_pos'].apply(lambda x: np.power(self.pos_decay, x))
-
-        # We give more weight to the polls published closer to the event
-        df['event_dlimits'] = df.groupby(['event_date', 'event_scope'], observed=True)['days'].transform('min')
-        df['weeks'] = ((df['days'] - df['event_dlimits'] + 1) // 7).clip(0)
-        df['weight_week'] = np.power(self.week_decay, df['weeks'])
 
         # Compute the weight of each poll based on the number of years between the poll and the most recent event
         df['event_year'] = df['event_date'].dt.strftime('%Y').astype(int)
@@ -1735,7 +1722,7 @@ class Computer(Core):
         df['weight_scope'] = df['event_scope'].map(lambda x: rating_weights.get(x, 1.)).astype(float)
 
         df = df.set_index(list(polls.index.names))[[
-            'weight_pos', 'weight_week', 'weight_year', 'weight_scope'
+            'weight_pos', 'weight_year', 'weight_scope'
         ]].round(2).astype(float)
 
         return df
@@ -3348,11 +3335,11 @@ class Computer(Core):
             df = df[df['pollster'] == pollster]
 
         # Compute additional weights of each poll
-        df[['weight_pos', 'weight_week', 'weight_year']] = self.poll_rating_weights(df)
+        df[['weight_pos', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df)
 
         # Compute the final weight of each poll by multiplying all the other weights computed
         df['weight'] = df[[
-            'weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year'
+            'weight_over', 'weight_sample', 'weight_pos', 'weight_year'
         ]].prod(axis=1).round(2).astype(float)
         df = df[df['weight'] > 0]
 
@@ -3361,7 +3348,7 @@ class Computer(Core):
         df['event_date'] = df['event_date'].dt.strftime('%b-%y')
         df[['days', 'parties', 'proc_sample']] = df[['days', 'parties', 'proc_sample']].astype(int)
 
-        weight_cols = ['weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year']
+        weight_cols = ['weight_over', 'weight_sample', 'weight_pos', 'weight_year']
         df = df.set_index(['event_date', 'days'])[[
             'parties', 'proc_sample', 'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within',
             'bias', 'bias_dev_adj', 'weight'

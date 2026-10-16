@@ -1,12 +1,29 @@
 {#- Glossary of the error measures (spec "Glosario de medidas de error"): one definition for every page that shows
     them. Needs `error_blocks` or `blocks` (the first block names the sign of the margin) and `with_herding` and optionally `with_block_error` (default true) (set them
     before the include: `{% set with_herding = false %}`). `with_errors` (default true) drops the three error
-    measures and `with_rating` (default false) adds the columns of the rating path of a profile. -#}
+    measures; `with_ranking` (default false) adds the columns of the pollsters ranking (today's rating, scoring, polls
+    and elections) and `with_rating` (default false) those of the rating path of a profile; the points rule of
+    «Scoring» reads `quality.per_point` and `quality.floor` (the profile card, or the scale of the ranking page) and is
+    left out without them. -#}
 {%- set glossary_blocks = error_blocks if error_blocks is defined and error_blocks else (blocks if blocks is defined else []) %}
+{%- set diferencial_text %}Cuánto se separó el sesgo de sus sondeos del de los sondeos comparables (misma fecha y tamaño), en la escala del sesgo del modelo, no en puntos: negativo, menos sesgo que los demás, y eso sube el rating; positivo, más. Un 2 ya es una diferencia grande.{% endset %}
+{%- set scoring_text %}Lo que se supone de la encuestadora antes de mirar sus sondeos, de 0 a 100, según una rúbrica pública de cinco criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras tiene pocos sondeos.{% if quality is defined and quality.per_point is defined %} Cada punto vale {{ quality.per_point }} de scoring, con un mínimo de {{ quality.floor }}.{% endif %}{% endset %}
 <details class="how" id="glosario"><summary>Qué mide cada columna</summary><dl>
+  {% if with_ranking is defined and with_ranking %}
+  <dt>Rating</dt>
+  <dd>La nota, de 0 a 100, con la que la encuestadora entra en el promedio de la próxima elección: mezcla el sesgo de sus sondeos pasados, comparado con el de los sondeos de las demás en las mismas fechas, con su scoring, que pesa más cuantos menos sondeos tiene. Cuanto más alto, más pesan sus sondeos.</dd>
+  <dt>Diferencial</dt>
+  <dd>{{ diferencial_text }}</dd>
+  <dt>Scoring</dt>
+  <dd>{{ scoring_text }}</dd>
+  <dt>Sondeos</dt>
+  <dd>Cuántos sondeos suyos entran en el cálculo del rating, de todas las elecciones anteriores y de todos los ámbitos, tras descartar los de peso ínfimo.</dd>
+  <dt>Elecciones</dt>
+  <dd>En cuántas elecciones publicó sondeos, contando cada ámbito y fecha por separado: dos autonómicas del mismo día cuentan dos.</dd>
+  {% endif %}
   {% if with_rating is defined and with_rating %}
   <dt>Sondeos</dt>
-  <dd>Cuántos sondeos publicó para esa elección de los que entran en el modelo; el error medio, el sesgo del margen y el diferencial son la media de esos sondeos.</dd>
+  <dd>Cuántos sondeos publicó para esa elección de los que entran en el modelo; el error medio, el sesgo bloques y el diferencial son la media de esos sondeos.</dd>
   {% endif %}
   {% if with_errors is not defined or with_errors %}
   <dt>Error medio</dt>
@@ -15,14 +32,16 @@
   <dt>Error de bloques</dt>
   <dd>Cuánto se equivocó el sondeo en el margen entre los dos bloques principales, en puntos. Sin signo.</dd>
   {% endif %}
-  <dt>Sesgo del margen</dt>
-  <dd>El mismo error con signo: positivo, el sondeo daba más margen {{ 'a ' ~ glossary_blocks[0] if glossary_blocks else 'al primer bloque' }} del que hubo; negativo, menos.</dd>
+  <dt>Sesgo bloques</dt>
+  <dd>El mismo error con signo: positivo, el sondeo daba más margen {{ 'a ' ~ glossary_blocks[0] if glossary_blocks else 'al primer bloque' }} del que hubo; negativo, más margen {{ 'a ' ~ glossary_blocks[1] if glossary_blocks|length > 1 else 'al segundo' }}.</dd>
   {% endif %}
   {% if with_rating is defined and with_rating %}
   <dt>Diferencial</dt>
   <dd>Cuánto se separó el sesgo de sus sondeos del de los sondeos comparables de esa elección (misma fecha y tamaño), en la escala del sesgo del modelo, no en puntos: negativo, menos sesgo que los demás, y eso sube el rating; positivo, más. Un 2 ya es una diferencia grande.</dd>
+  <dt>Scoring</dt>
+  <dd>{{ scoring_text }}</dd>
   <dt>Rating</dt>
-  <dd>La nota, de 0 a 100, con la que quedó tras evaluar esa elección con todo su historial anterior, mezclada con su calidad previa: la que se le aplica hasta la siguiente. La de la primera fila es la de hoy, la que entra en el promedio.</dd>
+  <dd>La nota, de 0 a 100, con la que quedó tras evaluar esa elección con todo su historial anterior, mezclada con su scoring: la que se le aplica hasta la siguiente. La de la primera fila es la de hoy, la que entra en el promedio.</dd>
   <dt>Cambio</dt>
   <dd>Cuánto subió o bajó el rating tras esa elección frente al que tenía al llegar.</dd>
   {% endif %}

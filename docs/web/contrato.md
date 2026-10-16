@@ -531,7 +531,7 @@ Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en viv
 |---|---|---|---|
 | `/api/v1/parties` | | `{contract, rows}` | `parties.csv` |
 | `/api/v1/pollsters` | | `{contract, rows}` | `pollsters.csv` |
-| `/api/v1/pollsters/{id}` | `scope` (por defecto `es`) | `{contract, scope, pollster, ratings, house_effects, herding}` | no (404 `no csv for this part`) |
+| `/api/v1/pollsters/{id}` | `scope` (por defecto `es`) | `{contract, scope, pollster, ratings, house_effects, herding, quality}` | no (404 `no csv for this part`) |
 | `/api/v1/ratings` | `scope`, `event` (fecha; por defecto el siguiente evento) | `{contract, scope, event, rows}` | `ratings-{scope}[-{event}].csv` |
 | `/api/v1/polls` | `scope`, `event`, `pollster` (id), `limit` (1000 por defecto, máximo 5000) | `{contract, scope, event, pollster, limit, rows}` (un sondeo por fila, una columna por partido, los más recientes primero; sin los sondeos de contexto `wban` —publicados durante la veda— ni `exit`) | `polls-{scope}[-{event}][-{pollster}].csv` |
 | `/api/v1/results/{scope}/{date}` | `region` (0, el ámbito entero, por defecto) | `{contract, scope, date, region, rows}` | `results-{scope}-{date}[-{region}].csv` |
@@ -549,6 +549,7 @@ Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en viv
 - `ratings` y `polls` devuelven en `event` la fecha resuelta: la pedida o, sin `event`, la de la próxima elección
   (`null` si el ámbito no tiene ninguna).
 - `ratings` y `pollster` devuelven `rating` y `quality` en escala 0-100.
+- `pollster.quality` es el registro de `elections.pollsters_quality` de la casa: los cinco criterios de la rúbrica (`fieldwork`, `transparency`, `independence`, `identity`, `standards`) con su fuente (`*_source`), `notes`, `status` (`borrador`/`revisada`), `checked_at` (ISO), `points` y `quality`; `null` si la casa no está evaluada (su `quality` del catálogo es entonces el mínimo, 5). Ver `data/README.md`, «Calidad previa de las encuestadoras».
 - `format=csv` se sirve como `text/csv` con `Content-Disposition: attachment`, igual que en `forecast`.
   `meta` y `pollsters/{id}` no tienen gemelo CSV (404 `no csv for this part`); `table=events` solo vale con
   `part=herding` y `format=csv`, y cualquier otro valor de `table` da el mismo 404.

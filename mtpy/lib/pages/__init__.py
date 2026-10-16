@@ -14,9 +14,9 @@ The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``web
 does not import the model nor ``publish``, so the web workers stay light.
 """
 from .backtest import backtest_context, backtest_part, project
-from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, RANKING_KEYS, RANKING_SHOWN, analysis_part, casa_context,
+from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_LABELS, RANKING_KEYS, RANKING_SHOWN, analysis_part, block_bar_colors, casa_context,
                     casas_context, effects_table, herding_rows, house_effects_grid, last_poll_records, poll_date,
-                    profile_rows, ranking_rows, rating_path)
+                    profile_rows, quality_card, ranking_rows, rating_path)
 from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
                      SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, chamber_text, common_context,
                      days_left, days_text, default_mode, environment, event_info, event_query, event_title, hemicycle_order,
@@ -33,7 +33,7 @@ from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_text, fmt_date, 
                       fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade)
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
-                     national_figures, subpages, thresholds_rows)
+                     national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,
                     resolve_pollster, scope_paths, scope_slug, slugify)
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, block_result_rows, chart_polls, poll_months, poll_name, polls_table,

@@ -82,14 +82,14 @@
           <div class="kpi"><div class="l">Sondeos</div><div class="v" id="figure-polls">—</div></div>
           <div class="kpi"><div class="l">Elecciones</div><div class="v" id="figure-events">—</div></div>
           <div class="kpi"><div class="l" id="figure-mean-label">Error de bloques</div><div class="v" id="figure-mean">—</div></div>
-          <div class="kpi"><div class="l">Sesgo del margen</div><div class="v" id="figure-bias">—</div></div>
+          <div class="kpi"><div class="l">Sesgo bloques</div><div class="v" id="figure-bias">—</div></div>
         </div>
         <ul class="complements" id="complements" aria-live="polite"></ul>
         <noscript><p class="muted">Las cifras necesitan JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
           Sondeos y elecciones son las que pasan los filtros. La tercera cifra es el error medio con la medida elegida,
-          en puntos, y el sesgo del margen, la media con signo del margen entre los dos bloques principales frente al
+          en puntos, y el sesgo bloques, la media con signo del margen entre los dos bloques principales frente al
           resultado: positivo, los sondeos daban más margen al primer bloque del que hubo (el glosario del final lo define).
         </p>
         <p>
@@ -197,7 +197,7 @@
                 <th scope="col">Encuestadoras</th>
                 <th scope="col">Error medio</th>
                 <th scope="col">Error de bloques</th>
-                <th scope="col">Sesgo del margen</th>
+                <th scope="col">Sesgo bloques</th>
                 <th scope="col">Modelo</th>
               </tr>
             </thead>

@@ -166,6 +166,12 @@ def fake_readers(monkeypatch):
     monkeypatch.setattr(webapi.queries, 'get_parties', lambda: pd.DataFrame({'id': [1, 2], 'name': ['PP', 'PSOE']}))
     monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings)
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame({
+            'pollster_id': [3], 'fieldwork': [2], 'fieldwork_source': ['web'], 'transparency': [2],
+            'transparency_source': ['web'], 'independence': [1], 'independence_source': ['web'], 'identity': [1],
+            'identity_source': ['web'], 'standards': [1], 'standards_source': ['web'], 'notes': ['ok'],
+            'status': ['revisada'], 'checked_at': pd.to_datetime(['2026-10-16']), 'points': [7], 'quality': [56.0],
+        }))
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
 
     def poll_series(scope, event, drop_contexts=None):
@@ -234,6 +240,8 @@ def test_pollster_profile(db_api):
     assert status == 200 and data['pollster']['name'] == 'CIS' and data['scope'] == 'es'
     assert [row['rating'] for row in data['ratings']] == [0.6, 0.7] and data['house_effects'][0]['party'] == 'PP'
     assert data['herding'] == [] and headers['cache-control'] == 'public, max-age=60'
+    assert data['quality']['status'] == 'revisada' and data['quality']['quality'] == 56.0
+    assert json.loads(call(db_api, '/api/v1/pollsters/2')[2])['quality'] is None
     status, headers, body = call(db_api, '/api/v1/pollsters/999')
     assert status == 404 and json.loads(body) == {'status': 'error', 'message': 'pollster not found'}
     assert headers['cache-control'] == 'no-store'

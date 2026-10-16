@@ -138,8 +138,8 @@ class Data(Base):
         Returns
         -------
         bytes
-            ``{'contract', 'scope', 'pollster', 'ratings', 'house_effects', 'herding'}`` (see
-            ``webapi.query_pollster``).
+            ``{'contract', 'scope', 'pollster', 'ratings', 'house_effects', 'herding',
+            'quality'}`` (see ``webapi.query_pollster``).
 
         Raises
         ------

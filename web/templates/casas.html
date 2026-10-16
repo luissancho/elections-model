@@ -7,6 +7,7 @@
 {% block content %}
 {% import '_macros.html' as m %}
 {% set with_herding = true %}
+{% set with_ranking = true %}
 {% set with_block_error = false %}
     <div id="content" class="stack">
       {{ m.card_start('ranking', 'Ranking de encuestadoras', 'La valoración de cada encuestadora de cara a la próxima elección general, calculada con sus sondeos de todas las elecciones anteriores, en todos los ámbitos, así que no depende de ningún ámbito: cuanto más alta, más pesan sus sondeos en el promedio.', '· actualizado el ' ~ meta.run_at|date) }}
@@ -17,31 +18,35 @@
           <table class="et et-rank" id="ranking-table">
             <caption>{{ ranking|length }} encuestadoras con rating y algún sondeo, de mayor a menor rating. Pulsa en una encuestadora para ver su perfil.</caption>
             <colgroup>
-              <col class="c-f"><col class="c-bar"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-bar"><col class="c-n">
+              <col class="c-f"><col class="c-bar"><col class="c-bar"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-bar"><col class="c-n">
             </colgroup>
             <thead>
               <tr>
                 <th scope="col" class="f l">Encuestadora</th>
                 <th scope="col">Rating</th>
-                <th scope="col">Calidad</th>
+                <th scope="col">Diferencial</th>
+                <th scope="col">Scoring</th>
                 <th scope="col">Sondeos</th>
                 <th scope="col">Elecciones</th>
                 <th scope="col">Error medio</th>
-                <th scope="col">Sesgo del margen</th>
+                <th scope="col">Sesgo bloques</th>
                 <th scope="col">Rebaño</th>
               </tr>
             </thead>
             <tbody>
               {% for row in ranking %}
               {% set bias = row.error_blocks|sides(2) %}
+              {% set dev = row.bias_dev_adj|sides(2) %}
               <tr{% if loop.index > ranking_shown %} hidden{% endif %}>
                 <td class="f l"><a href="{{ pollster_href(row.pollster, row.pollster_id) }}"><b>{{ row.pollster }}</b></a></td>
                 <td class="cell-bar"><i class="fill pos" style="left: 0; width: {{ row.rating|bar(0, 100) }}%"></i><span>{{ row.rating|num(1) }}</span></td>
+                {# the differential grows to the left in green (less bias than the comparable polls) and to the right in red #}
+                <td class="cell-bar cell-diverging"><i class="fill {{ {'neg': 'pos', 'pos': 'neg'}.get(dev.side, 'zero') }}" style="left: {{ dev.left }}%; width: {{ dev.width }}%"></i><span>{{ row.bias_dev_adj|num(1) }}</span></td>
                 <td>{{ row.quality|num(1) }}</td>
                 <td>{{ row.num_polls|int }}</td>
                 <td>{{ row.num_events|int }}</td>
                 <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, error_max, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
-                <td class="cell-bar cell-diverging"><i class="fill {{ bias.side }}" style="left: {{ bias.left }}%; width: {{ bias.width }}%"></i><span>{{ row.error_blocks|num(1) }}</span></td>
+                <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ block_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
                 <td class="cell-shade" style="background-color: {{ row.herding|shade(1, 0, '#d62728') if row.herding is not none and row.herding < 1 else row.herding|shade(1, 2, '#7f7f7f') }}">{{ row.herding|num(2) }}</td>
               </tr>
               {% endfor %}
@@ -53,8 +58,8 @@
         <button type="button" class="more" id="ranking-more" data-batch="{{ ranking_shown }}" hidden>Cargar más</button>
         {% endif %}
         {% call m.how() %}
-        <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría solo su calidad previa, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con una calidad previa que pesa más cuantos menos sondeos tiene.</p>
-        <p>Cuanto más alto, más pesan sus sondeos en el promedio. La barra del rating va de 0 a 100; la del sesgo del margen crece hacia la izquierda (rojo, negativo) o hacia la derecha (verde, positivo) hasta 2 puntos; el fondo del error medio es más intenso cuanto mayor el error, y el del rebaño, cuanto más por debajo de 1 (en gris, por encima). El error medio, el sesgo del margen y el rebaño se explican en «Qué mide cada columna». La tabla enseña las {{ ranking_shown }} primeras; «Cargar más» sigue. Pulsa en una encuestadora para ver su perfil.</p>
+        <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría solo su scoring, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con su scoring (la calidad previa del método) que pesa más cuantos menos sondeos tiene.</p>
+        <p>Cuanto más alto, más pesan sus sondeos en el promedio. La barra del rating va de 0 a 100; la del diferencial crece hacia la izquierda en verde (menos sesgo que las encuestadoras comparables) o hacia la derecha en rojo, hasta 2; la del sesgo bloques crece hacia el lado del bloque al que favorece, en el color del bloque al que favorece, hasta 2 puntos de margen; el fondo del error medio es más intenso cuanto mayor el error, y el del rebaño, cuanto más por debajo de 1 (en gris, por encima). Todas las columnas se explican en «Qué mide cada columna». La tabla enseña las {{ ranking_shown }} primeras; «Cargar más» sigue. Pulsa en una encuestadora para ver su perfil.</p>
         <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
         {% endcall %}
         {% include '_glosario.html' %}

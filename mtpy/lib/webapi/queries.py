@@ -55,6 +55,7 @@ get_herding = _reader('get_herding')
 get_drift = _reader('get_drift')
 get_next_event_date = _reader('get_next_event_date')
 get_events = _reader('get_events')
+get_pollsters_quality = _reader('get_pollsters_quality')
 
 _QUERIES = TTLCache(DEFAULT_TTL, maxsize=QUERY_CACHE_SIZE)
 
@@ -281,6 +282,18 @@ def query_pollsters() -> pd.DataFrame:
     return _query(('pollsters',), lambda: get_pollsters())
 
 
+def query_pollsters_quality() -> pd.DataFrame:
+    """
+    Replica of the public quality rubric of the pollsters.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``data.get_pollsters_quality()``: one row per evaluated pollster (empty before the replication).
+    """
+    return _query(('pollsters-quality',), lambda: get_pollsters_quality())
+
+
 def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> dict:
     """
     Profile of a pollster, composed from the cached tables.
@@ -298,9 +311,10 @@ def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> d
     Returns
     -------
     dict
-        ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...]}``:
-        the catalogue row of the pollster and its rows of the ratings (every event of the scope, the next
-        one included, by date), house effects and herding tables, as JSON records.
+        ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...],
+        'quality': record or None}``: the catalogue row of the pollster and its rows of the ratings (every
+        event of the scope, the next one included, by date), house effects and herding tables, as JSON
+        records; ``quality`` is its evaluation of the rubric, or ``None`` when it is not evaluated.
 
     Raises
     ------
@@ -317,12 +331,14 @@ def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> d
         ratings = ratings.sort_values('event_date', ignore_index=True)
 
     tables = None if every_scope else scope
+    quality = _rows_of(query_pollsters_quality(), 'pollster_id', pollster_id)
 
     return {
         'pollster': frame_to_records(pollster)[0],
         'ratings': frame_to_records(ratings),
         'house_effects': frame_to_records(_rows_of(query_house_effects(tables), 'pollster_id', pollster_id)),
         'herding': frame_to_records(_rows_of(query_herding(tables), 'pollster_id', pollster_id)),
+        'quality': frame_to_records(quality)[0] if not quality.empty else None,
     }
 
 

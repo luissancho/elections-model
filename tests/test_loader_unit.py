@@ -412,3 +412,16 @@ def test_party_column_with_only_a_logo_uses_its_caption():
     table = html.fromstring(POLLS_TABLE.replace('<th>JUEx</th>', '<th><a href="/wiki/File:Logo_JUEx.svg" title="JUEx"></a></th>'))
     parties, lead = WikipediaLoader.read_header(table)
     assert parties == {4: 'PP_X', 5: 'JUEx'} and lead == 6
+
+
+def test_run_load_compute_phases_delegate_to_the_library(monkeypatch):
+    """Los pasos `compute` y `ratings` del cargador son los de `mtpy.lib.compute` (una sola implementación), con
+    el `verbose` del Computer un nivel por debajo del suyo."""
+    from mtpy.lib import compute
+    calls = []
+    monkeypatch.setattr(compute, 'compute_scope', lambda scope, **kw: calls.append(('compute', scope, kw)) or {})
+    monkeypatch.setattr(compute, 'rate_scope', lambda scope, **kw: calls.append(('ratings', scope, kw)) or {})
+    module = run_load_module()
+    module.compute_scope('es-md', save=False, verbose=2)
+    module.rate_scope('es-md', save=True, verbose=0)
+    assert calls == [('compute', 'es-md', {'save': False, 'verbose': 1}), ('ratings', 'es-md', {'save': True, 'verbose': 0})]

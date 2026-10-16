@@ -189,22 +189,24 @@ def bare_computer():
     c = Computer.__new__(Computer)
     c.scope = 'es'
     c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
-    c.pos_decay, c.week_decay, c.year_decay = .5, .7, .9
+    c.pos_decay, c.year_decay = .5, .9
     c.bias_dev_tau, c.min_polls, c.verbose = .01, 3, 0
     c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
     return c
 
 
-def pool(rows):
-    """Un sondeo por tupla (ámbito, fecha del evento, casa), 10 días antes del evento."""
+def pool(rows, days=10):
+    """Un sondeo por tupla (ámbito, fecha del evento, casa), `days` días antes del evento (un entero para todos
+    o un dict por casa)."""
     ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
     data = []
     for scope, event_date, pollster in rows:
         event_date = pd.Timestamp(event_date)
+        poll_days = days[pollster] if isinstance(days, dict) else days
         dev = .01 if pollster in ('A', 'C') else -.01
         data.append({
-            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=10),
-            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': 10,
+            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=poll_days),
+            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': poll_days,
             'weight_over': 1., 'weight_sample': 1.,
             'error_avg': .03, 'error_blocks': .01, 'error_within': .02,
             'bias_avg': .2, 'bias_blocks': .1, 'bias_within': .1, 'bias': .15,
@@ -217,6 +219,27 @@ ES19 = [('es', '2019-11-10', 'A'), ('es', '2019-11-10', 'B')]
 MD21 = [('es-md', '2021-05-04', 'A'), ('es-md', '2021-05-04', 'C')]
 REG23 = [('es-md', '2023-05-28', 'C'), ('es-cl', '2023-05-28', 'D')]
 JULY23, MAY23 = pd.Timestamp('2023-07-23'), pd.Timestamp('2023-05-28')
+
+
+def test_rating_weights_have_no_week_factor():
+    c = bare_computer()
+    out = c.poll_rating_weights(pool(ES19))
+    assert list(out.columns) == ['weight_pos', 'weight_year', 'weight_scope']
+    assert not hasattr(c, 'week_decay')
+
+
+def test_a_distant_poll_counts_as_much_as_a_close_one():
+    """D3: la desviación se mide contra el consenso de la misma fecha, así que la distancia a la elección no
+    descuenta evidencia: mismo `num_polls_w`, misma desviación y mismo rating."""
+    c = bare_computer()
+    both_close = c.rate_events(pool(ES19, days=10), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    # B publishes 80 days before the event while A publishes 10 days before it: with a week decay B would weigh
+    # 0.7 ** 10 relative to A
+    mixed = c.rate_events(pool(ES19, days={'A': 10, 'B': 80}), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    assert mixed.loc[2, 'num_polls_w'] == pytest.approx(1.0)
+    assert mixed.loc[1, 'num_polls_w'] == pytest.approx(mixed.loc[2, 'num_polls_w'])
+    for col in ('num_polls_w', 'bias_dev_adj', 'rating_adj', 'rating'):
+        assert mixed[col].tolist() == pytest.approx(both_close[col].tolist(), nan_ok=True), col
 
 
 def test_scope_weight_zero_reproduces_single_scope_ratings():
@@ -323,3 +346,21 @@ def test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll():
     assert list(df.index.names) == ['event', 'pollster', 'days'] and len(df) == 2
     assert 'bias_within' in df.columns and df['bias_within'].isna().all()
     assert df['error_within'].tolist() == [0., 0.] and {'Derecha', 'Izquierda'} <= set(df.columns)
+
+
+# --- Sesgo margen: el signo del error del margen entre bloques ---
+
+def test_gap_error_is_positive_when_the_poll_favours_the_first_block():
+    """`error_blocks` es el margen del primer bloque (Derecha) sobre el segundo, sondeo menos resultado: positivo
+    cuando el sondeo dio al primer bloque más margen del que hubo (GAD3, 13-7-2023: 9,3 en el sondeo, 1,4 real)."""
+    c = bare_computer()
+    c.parties = pd.DataFrame({'name': ['PP', 'VOX', 'PSOE', 'SUMAR']})
+    bmap = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'SUMAR']}
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-23'), pd.Timestamp('2023-07-13'), 2, 0)],
+                                      names=['event_date', 'date', 'pollster_id', 'sponsor_id'])
+    polls = pd.DataFrame({'PP': [36.8], 'VOX': [12.3], 'PSOE': [28.5], 'SUMAR': [11.3]}, index=index)
+    events = pd.DataFrame({'PP': [33.06], 'VOX': [12.38], 'PSOE': [31.68], 'SUMAR': [12.33]},
+                          index=pd.Index([pd.Timestamp('2023-07-23')], name='event_date'))
+    out = c.poll_errors(polls, events, error_type='gap', bmap=bmap)
+    assert out[('poll', 'gap')].iloc[0] == pytest.approx(0.093) and out[('event', 'gap')].iloc[0] == pytest.approx(0.0143)
+    assert out[('error', 'gap')].iloc[0] == pytest.approx(0.0787)

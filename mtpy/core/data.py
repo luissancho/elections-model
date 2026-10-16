@@ -360,6 +360,9 @@ class SQLAdapter(DBAdapter):
         Default database port.
     quote : str
         Quote character used for wrapping column and table names in SQL queries.
+    quote_escape : str
+        Replacement of a single quote inside a string literal of an INSERT (`\\'` by default; dialects that
+        follow the SQL standard, like PostgreSQL, double it: `''`).
     sessions : bool
         Whether to use sessions for transactions.
     data_types : dict
@@ -383,6 +386,7 @@ class SQLAdapter(DBAdapter):
     driver = None
     default_port = None
     quote = '"'
+    quote_escape = "\\'"
     sessions = True
     data_types = {
         'varchar': 'VARCHAR',
@@ -1007,7 +1011,7 @@ class SQLAdapter(DBAdapter):
         rows = []
         for _, r in data.iterrows():
             row = "', '".join(
-                r.astype(str, errors='ignore').replace(value_map).replace(r"'", "\\'", regex=True).replace(r':', r'\:', regex=True).values
+                r.astype(str, errors='ignore').replace(value_map).replace(r"'", self.quote_escape, regex=True).replace(r':', r'\:', regex=True).values
             )
             rows.append(f"    ('{row}')".replace("'NULL'", 'NULL').replace("'DEFAULT'", 'DEFAULT'))
 
