@@ -269,6 +269,16 @@ patrocinadores a {fecha}» (o «de muestras»), para que un lector sepa qué se 
 Hasta el paso 1, la tabla `pollsters_quality` no existe: el perfil y la API deben tratar la tabla ausente como «sin
 evaluar» para todas las casas, sin error.
 
+Notas de la revisión final (2026-10-16):
+
+- Ejecutar `save_catalogues()` solo con la corrección de la revisión final integrada (fuentes y notas en `TEXT`); si la
+  tabla ya se había creado, `DROP TABLE elections.pollsters_quality` antes, porque `create(replace=False)` no cambia
+  los tipos de una tabla existente.
+- Ejecutar los pasos 1 y 2 seguidos, para que la columna «Calidad» del ranking (la calidad al calcular, de
+  `pollsters_ratings`) y el KPI del perfil (la calidad de hoy, del catálogo) coincidan.
+- Recorrer `/casas/electopanel`, `/casas/sigma-dos` y `/casas/cis` en escritorio y en móvil (fuentes compuestas,
+  tablas con texto partido en líneas).
+
 ## Decisiones mías (a revisar al leer)
 
 1. **Tope 80 y 8 puntos por punto.** Alternativa descartada: 10 por punto (tope 100, una casa nueva perfecta pesaría
