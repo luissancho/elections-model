@@ -20,7 +20,7 @@
   {% endif %}
   {% if with_rating is defined and with_rating %}
   <dt>Sondeos</dt>
-  <dd>Cuántos sondeos publicó para esa elección de los que entran en el modelo; el error medio, el sesgo del margen y el diferencial son la media de esos sondeos.</dd>
+  <dd>Cuántos sondeos publicó para esa elección de los que entran en el modelo; el error medio, el sesgo margen y el diferencial son la media de esos sondeos.</dd>
   {% endif %}
   {% if with_errors is not defined or with_errors %}
   <dt>Error medio</dt>
@@ -29,7 +29,7 @@
   <dt>Error de bloques</dt>
   <dd>Cuánto se equivocó el sondeo en el margen entre los dos bloques principales, en puntos. Sin signo.</dd>
   {% endif %}
-  <dt>Sesgo del margen</dt>
+  <dt>Sesgo margen</dt>
   <dd>El mismo error con signo: positivo, el sondeo daba más margen {{ 'a ' ~ glossary_blocks[0] if glossary_blocks else 'al primer bloque' }} del que hubo; negativo, menos.</dd>
   {% endif %}
   {% if with_rating is defined and with_rating %}

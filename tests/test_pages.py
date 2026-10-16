@@ -1341,7 +1341,7 @@ def test_elecciones_lists_the_published_events_newest_first(events_site):
     assert 'id="sector-chart"' not in page and 'id="sector"' not in page
     table = re.search(r'<table id="events-table">(.*?)</table>', page, re.S).group(1)
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
-        'Elección', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo del margen', 'Modelo']
+        'Elección', 'Sondeos', 'Encuestadoras', 'Error medio', 'Error de bloques', 'Sesgo margen', 'Modelo']
 
 
 @pytest.fixture
@@ -1512,7 +1512,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
         'Encuestadora', 'Muestra', 'Días antes', 'Error medio', 'Error de bloques', 'Derecha', 'Izquierda']
     assert 'href="/casas/gad3"' in table and 'href="/elecciones?scope=es"' in page
-    assert 'id="pollsters-table"' not in page and 'Sesgo del margen' not in table  # ya no hay tabla de medias por casa
+    assert 'id="pollsters-table"' not in page and 'Sesgo margen' not in table  # ya no hay tabla de medias por casa
     assert 'Cs' in page and pages.OTHERS_COLOR in page  # partido fuera del catálogo del run
     # la tabla enseña los partidos de `parties.event` de data/params.json (PP, PSOE, VOX); Cs queda tras "Ver más"
     results = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
@@ -1741,7 +1741,7 @@ def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last
     page = html(body)
     table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
     assert status == 200 and '3,0' in table and '-3,0' not in table  # el error de bloques de la tabla va sin signo
-    assert 'Error de bloques: 2,5 · Sesgo del margen: -2,5' in page
+    assert 'Error de bloques: 2,5 · Sesgo margen: -2,5' in page
     shown = [re.sub(r'<.*?>', '', cell) for cell in re.findall(r'<tr>\s*<td>(.*?)</td>', table, re.S)]
     assert shown == [names[1], names[2], names[0]]
     data = initial(body)
@@ -2127,7 +2127,7 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
     heads = re.findall(r'<th scope="col"[^>]*>([^<]*?)\s*(?:<span class="help"[^>]*>\?</span>)?</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Scoring', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo del margen',
+    assert heads == ['Encuestadora', 'Rating', 'Scoring', 'Sondeos', 'Elecciones', 'Error medio', 'Sesgo margen',
                      'Rebaño']
     # el interrogante del scoring lleva la explicación corta en su tooltip (2026-10-16)
     help_ = re.search(r'Scoring\s*<span class="help" title="([^"]+)"[^>]*>\?</span>', thead)
@@ -3032,7 +3032,7 @@ def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_colu
     card = page[page.index('id="path"'):page.index('id="bullseye"')]
     table = re.search(r'<table id="path-table">(.*?)</table>', card, re.S).group(1)
     assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', table) == [
-        'Elección', 'Sondeos', 'Error Medio', 'Sesgo Margen', 'Diferencial', 'Rating', 'Cambio']
+        'Elección', 'Sondeos', 'Error Medio', 'Sesgo margen', 'Diferencial', 'Rating', 'Cambio']
     cells = lambda row: [re.sub(r'<[^>]+>', '', cell).strip() for cell in re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)]
     trs = re.findall(r'<tr>(.*?)</tr>', table, re.S)[1:]
     assert [cells(row) for row in trs] == [['Generales 2023', '14', '1,3', '1,5', '-0,2', '82,4', '2,4'],
@@ -3046,7 +3046,7 @@ def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_colu
     assert '<td class="cell-bar cell-diverging"><i class="fill pos" style="left: 45.0%; width: 5.0%"></i><span>-0,2</span></td>' in first
     assert '<td class="cell-shade" style="background-color: {}">2,4</td>'.format(shade(2.37, 0, 20, '#2ca02c')) in first
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', card, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo del margen', 'Diferencial', 'Scoring', 'Rating', 'Cambio']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo margen', 'Diferencial', 'Scoring', 'Rating', 'Cambio']
     assert 'a Derecha' in glossary and 'sube el rating' in glossary and 'Error de bloques' not in card and 'Rebaño' not in card
     assert 'de 0 a 100' in card and 'hasta hoy' in card
     data = initial(body)
@@ -3071,12 +3071,12 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
     assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Rating', 'Scoring', 'Sondeos', 'Elecciones', 'Error medio',
-                                                          'Sesgo del margen', 'Rebaño']
+                                                          'Sesgo margen', 'Rebaño']
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
     assert 'Cada punto vale 8 de scoring, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
     assert 'Todas las columnas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Sondeos', 'Error medio', 'Sesgo del margen',
+    assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Sondeos', 'Error medio', 'Sesgo margen',
                                                                   'Diferencial', 'Scoring', 'Rating', 'Cambio']
