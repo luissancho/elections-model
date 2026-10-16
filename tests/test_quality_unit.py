@@ -27,7 +27,10 @@ def csv_of(rows):
 def patch_data(monkeypatch, fresh_app, files):
     """`files`: {nombre: texto}; los nombres que no estén se leen de `data/`."""
     def read(name):
-        return files[name] if name in files else open(os.path.join(DATA, name), encoding='utf-8').read()
+        if name in files:
+            return files[name]
+        with open(os.path.join(DATA, name), encoding='utf-8') as handle:
+            return handle.read()
     monkeypatch.setattr(fresh_app.data, 'read', read)
 
 
