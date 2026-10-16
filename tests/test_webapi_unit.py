@@ -405,8 +405,15 @@ def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: pd.DataFrame({
         'event_date': pd.to_datetime(['2023-07-23']), 'pollster_id': [2], 'ratio': [0.78],
     }))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame({
+            'pollster_id': [3], 'fieldwork': [2], 'fieldwork_source': ['web'], 'transparency': [2],
+            'transparency_source': ['web'], 'independence': [1], 'independence_source': ['web'], 'identity': [1],
+            'identity_source': ['web'], 'standards': [1], 'standards_source': ['web'], 'notes': ['ok'],
+            'status': ['revisada'], 'checked_at': pd.to_datetime(['2026-10-16']), 'points': [7], 'quality': [56.0],
+        }))
     profile = webapi.query_pollster(3, 'es')
-    assert list(profile) == ['pollster', 'ratings', 'house_effects', 'herding']
+    assert list(profile) == ['pollster', 'ratings', 'house_effects', 'herding', 'quality']
+    assert profile['quality']['points'] == 7 and profile['quality']['checked_at'] == '2026-10-16'
     assert profile['pollster'] == {'id': 3, 'name': 'CIS', 'mtype': 'public', 'quality': 0.8}
     assert [row['event_date'] for row in profile['ratings']] == ['2023-07-23', '2026-11-29']
     assert profile['ratings'][1]['rating'] is None
@@ -427,14 +434,28 @@ def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
     monkeypatch.setattr(webapi.queries, 'get_ratings', counted('ratings', ratings_frame()))
     monkeypatch.setattr(webapi.queries, 'get_house_effects', counted('house_effects', pd.DataFrame({'pollster_id': [3]})))
     monkeypatch.setattr(webapi.queries, 'get_herding', counted('herding', pd.DataFrame({'pollster_id': [2]})))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality',
+                        counted('quality', pd.DataFrame({'pollster_id': [3], 'quality': [56.0]})))
     webapi.query_ratings('es')
     webapi.query_house_effects('es')
     webapi.query_herding('es')
     webapi.query_pollsters()
-    assert sorted(calls) == ['herding', 'house_effects', 'pollsters', 'ratings']
+    webapi.query_pollsters_quality()
+    assert sorted(calls) == ['herding', 'house_effects', 'pollsters', 'quality', 'ratings']
     assert webapi.query_pollster(3, 'es')['house_effects'] == [{'pollster_id': 3}]
     assert webapi.query_pollster(2, 'es')['herding'] == [{'pollster_id': 2}]
-    assert len(calls) == 4  # ninguna lectura más
+    assert len(calls) == 5  # ninguna lectura más
+
+
+def test_query_pollster_without_quality_rows_gives_none(fresh_app, monkeypatch):
+    """Antes de replicar el CSV la tabla está vacía (o no existe): el perfil lleva `quality` a None."""
+    use_database(fresh_app)
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pd.DataFrame({'id': [3], 'name': ['CIS']}))
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame())
+    monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: pd.DataFrame({'pollster_id': []}))
+    monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: pd.DataFrame({'pollster_id': []}))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame(columns=['pollster_id', 'quality']))
+    assert webapi.query_pollster(3, 'es')['quality'] is None
 
 
 def test_query_pollster_of_every_scope_reads_the_tables_without_scope(fresh_app, monkeypatch):
@@ -447,6 +468,7 @@ def test_query_pollster_of_every_scope_reads_the_tables_without_scope(fresh_app,
     monkeypatch.setattr(webapi.queries, 'get_house_effects',
                         lambda scope: scopes.append(('house_effects', scope)) or pd.DataFrame({'pollster_id': [3], 'event_scope': ['es-md']}))
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: scopes.append(('herding', scope)) or pd.DataFrame({'pollster_id': [3]}))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame({'pollster_id': [3]}))
     profile = webapi.query_pollster(3, 'es', every_scope=True)
     assert profile['house_effects'] == [{'pollster_id': 3, 'event_scope': 'es-md'}] and profile['herding'] == [{'pollster_id': 3}]
     assert sorted(scopes) == [('herding', None), ('house_effects', None), ('ratings', 'es')]

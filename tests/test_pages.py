@@ -936,6 +936,7 @@ def fake_houses(monkeypatch, name='CIS'):
                         lambda pollster_id: path_events[path_events.pollster_id == pollster_id].reset_index(drop=True))
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame(columns=['pollster_id', 'quality']))
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
 
 
