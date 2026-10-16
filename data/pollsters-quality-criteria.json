@@ -1,0 +1,25 @@
+{
+  "scale": {"per_point": 8, "floor": 5},
+  "criteria": {
+    "fieldwork": {"name": "Trabajo de campo", "max": 3, "levels": {
+      "0": "Sin trabajo de campo propio (agregadores, estimaciones sobre otros sondeos) o modo no declarado.",
+      "1": "Muestra autoseleccionada (panel voluntario, captación en web o redes) con ponderación.",
+      "2": "Panel con reclutamiento controlado y cuotas, propio o contratado.",
+      "3": "Entrevistas propias con marco probabilístico: teléfono, presencial o mixto con teléfono."}},
+    "transparency": {"name": "Transparencia", "max": 3, "levels": {
+      "0": "No publica ficha técnica.",
+      "1": "Ficha técnica mínima: muestra, fechas, modo y error.",
+      "2": "Ficha técnica completa, con intención directa de voto y método de estimación declarado.",
+      "3": "Publica microdatos o las tablas completas de cada sondeo."}},
+    "independence": {"name": "Independencia", "max": 2, "levels": {
+      "0": "Depende de un gobierno, un partido o un actor político: organismo público, fundación o encuesta de partido.",
+      "1": "Un único cliente, un medio.",
+      "2": "Varios clientes de distinta línea, o autofinanciada, sin vínculo con un actor político."}},
+    "identity": {"name": "Identidad", "max": 1, "levels": {
+      "0": "Marca sin entidad identificable.",
+      "1": "Entidad identificable: razón social o institución, sede, responsables, web."}},
+    "standards": {"name": "Estándares", "max": 1, "levels": {
+      "0": "Ni asociada ni certificada.",
+      "1": "Miembro de Insights+Analytics España o de ESOMAR, o certificada ISO 20252."}}
+  }
+}

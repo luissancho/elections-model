@@ -11,6 +11,8 @@ resuelve en `mtpy.run()` (`app.data`, `app.datapath`); se puede cambiar con la v
 | `es-regions.csv`, `es-regions-ages.csv` | Comunidades autónomas y población por edad | Elaboración propia a partir del INE |
 | `es-scopes.csv` | Catálogo de ámbitos (`scode` ISO 3166-2 en minúsculas; `es` es el nacional): comunidad, código INE, ámbito padre, gentilicio inglés de Wikipedia, umbral legal, peso en el rating y escaños que elige la próxima elección | Curación propia (ver "Ámbitos y circunscripciones") |
 | `es-districts.csv` | Circunscripciones de cada ámbito (`scope`, `region_id`): nombre, código INE de la provincia cuando lo es, comunidad (`reg_code`), población, escaños vigentes y alias en inglés (`\|`) | Elaboración propia a partir del INE y de las leyes electorales |
+| `pollsters-quality-criteria.json` | La rúbrica de la calidad previa de las encuestadoras: cinco criterios con sus niveles y la escala de puntos a calidad | Curación propia |
+| `pollsters-quality.csv` | La evaluación de cada encuestadora según la rúbrica: puntos y fuente por criterio, notas, estado (`borrador`/`revisada`) y fecha de comprobación; `pollster_id` es el `id` de `elections.pollsters` | Curación propia |
 | `wikipedia/wp-urls.json` | Por ámbito y evento, URL de los sondeos (`polls`) y de los resultados (`results`) en la Wikipedia inglesa. En `es` son las páginas "Opinion polling for the … Spanish general election"; en los `es-*`, el artículo de cada elección autonómica, que trae ambas cosas (`python load/run_load.py --what urls` lo reconstruye) | Curación propia |
 | `wikipedia/wp-maps.json` | Alias de partidos, encuestadoras y patrocinadores hacia los nombres canónicos de la base de datos. `scopes` añade alias de partidos por ámbito (el enlace del PP de Madrid es `PP`), que prevalecen sobre los globales; `skip` lista las "casas" y patrocinadores que se dejan fuera a propósito (sondeos internos de los partidos) | Curación propia |
 | `results/{scope}/{fecha}.csv` | Opcional: votos válidos oficiales por circunscripción (`region_id`, `votes`, `blank`) de una elección autonómica; sustituyen al reparto por población y dejan `events_data.estimated` en falso | Fuentes oficiales de cada comunidad |
@@ -19,6 +21,24 @@ resuelve en `mtpy.run()` (`app.data`, `app.datapath`); se puede cambiar con la v
 | `infoelectoral/es/PROV_02_YYYYMM_1.json` | Mapeo manual de cada candidatura del XLSX a la sigla usada en el modelo (`null` = "Otros") | Curación propia |
 
 Las tablas de encuestas de Wikipedia se descargan en vivo con `WikipediaLoader`, y los resultados autonómicos con `WikipediaResultsLoader`; su contenido es CC BY-SA 4.0. `load/run_load.py` hace la carga por lotes de los ámbitos autonómicos y guarda una copia de los artículos en `files/stage/wikipedia/`.
+
+## Calidad previa de las encuestadoras
+
+Mide **cómo trabaja la casa**, no cuánto acierta (eso lo miden el rating y el sesgo de casa). La rúbrica son cinco criterios; los textos de cada nivel están en `pollsters-quality-criteria.json`.
+
+| Criterio | Clave | Puntos |
+|---|---|---|
+| Trabajo de campo | `fieldwork` | 0-3 |
+| Transparencia | `transparency` | 0-3 |
+| Independencia | `independence` | 0-2 |
+| Identidad | `identity` | 0-1 |
+| Estándares | `standards` | 0-1 |
+
+La calidad es `quality = max(floor, per_point · puntos)`, con `floor = 5` y `per_point = 8` (valores actuales de `scale` en el JSON), de modo que el tope, con 10 puntos, es 80. Una encuestadora sin evaluar (sin fila en el CSV) vale `floor`.
+
+`pollsters-quality.csv` es la fuente; la base (`elections.pollsters_quality` y `pollsters.quality`) es una réplica que escribe `save_catalogues()`. `pollster_id` es el `id` de `elections.pollsters`.
+
+Cada punto lleva su fuente en la columna `{criterio}_source`: una URL o una referencia citable. Si la fuente es la propia base, se cita como «base de datos del proyecto, consulta de patrocinadores a {fecha}».
 
 ## Resultados autonómicos
 

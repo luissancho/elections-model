@@ -113,3 +113,24 @@ def test_threshold_overrides_are_valid():
     assert params['es-mc']['2015-05-24'] == {'threshold': None, 'threshold_scope': 5}
     assert params['es-cn']['2011-05-22'] == {'threshold': 30, 'threshold_scope': 6}
     assert found >= 8
+
+
+def test_quality_criteria_catalogue_is_complete():
+    criteria = json.load(open(os.path.join(DATA, 'pollsters-quality-criteria.json')))
+    assert list(criteria['criteria']) == ['fieldwork', 'transparency', 'independence', 'identity', 'standards']
+    assert sum(c['max'] for c in criteria['criteria'].values()) == 10
+    assert criteria['scale'] == {'per_point': 8, 'floor': 5}
+    for key, entry in criteria['criteria'].items():
+        assert entry['name'] and sorted(entry['levels']) == [str(i) for i in range(entry['max'] + 1)], key
+
+
+def test_quality_evaluations_follow_the_rubric():
+    criteria = json.load(open(os.path.join(DATA, 'pollsters-quality-criteria.json')))['criteria']
+    frame = pd.read_csv(os.path.join(DATA, 'pollsters-quality.csv'), dtype={'notes': str}, keep_default_na=False)
+    assert list(frame.columns)[:2] == ['pollster_id', 'pollster'] and frame['pollster_id'].is_unique
+    for key, entry in criteria.items():
+        points = frame[key].astype(int)
+        assert points.between(0, entry['max']).all(), key
+        assert (frame.loc[points > 0, key + '_source'].str.len() > 0).all(), key
+    assert frame['status'].isin(['borrador', 'revisada']).all()
+    assert pd.to_datetime(frame['checked_at'], format='%Y-%m-%d').le(pd.Timestamp.today()).all()
