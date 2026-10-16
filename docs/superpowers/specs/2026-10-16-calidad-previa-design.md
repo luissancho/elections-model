@@ -1,6 +1,6 @@
 # Calidad previa de las encuestadoras: rúbrica pública, evidencia del rating y publicación
 
-Fecha: 2026-10-16. Estado: cerrada el 2026-10-16 en `dev` (plan `docs/superpowers/plans/2026-10-16-calidad-previa.md`, commits desde `9e83989`; 885 tests). Pendiente de Luis: D6 (réplica, recálculo de ratings, publicación, comprobación de la tabla de D3 y revisión de las filas `borrador`). Descripción acordada en el
+Fecha: 2026-10-16. Estado: cerrada el 2026-10-16 en `dev` (plan `docs/superpowers/plans/2026-10-16-calidad-previa.md`, commits desde `9e83989`; 890 tests tras la revisión final). Pendiente de Luis: D6 (réplica, recálculo de ratings, publicación, comprobación de la tabla de D3 y revisión de las filas `borrador`). Descripción acordada en el
 chat del 16 de octubre (rúbrica, almacenamiento completo y cambio del recuento de evidencia del rating: "Ok, procede"). Revisión del
 constructor hecha el mismo día: tres preguntas (cómo se midió k, alcance de la verificación contra la base, origen del
 KPI «Calidad previa»), resueltas como decisiones mías 9-11 e incorporadas a D3, D4, D5 y D6. Esta spec solo describe
