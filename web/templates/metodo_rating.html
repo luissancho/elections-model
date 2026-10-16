@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo calculamos el rating de las encuestadoras?{% endblock %}
-{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa, del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el rebaño se publica aparte.{% endblock %}
+{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa (una rúbrica pública), del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el rebaño se publica aparte.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -32,7 +32,7 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         <ul>
           <li>Cada sondeo pasado se compara con el resultado: en el tamaño de los bloques y en el reparto dentro de cada bloque.</li>
           <li>Ese error se compara con el de los sondeos de la misma elección y las mismas fechas: un fallo de todo el sector no penaliza.</li>
-          <li>Con pocos sondeos manda una calidad previa puesta a mano; con muchos, lo medido. El rating va de 0 a 100.</li>
+          <li>Con pocos sondeos manda una calidad previa según una rúbrica pública; con muchos, lo medido. El rating va de 0 a 100.</li>
           <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el rebaño se publica aparte y solo resta peso.</li>
         </ul>
       {{ m.card_end() }}
@@ -83,11 +83,50 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
           más a la media, en proporción a esa incertidumbre.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('calidad-previa', 'La calidad previa', 'Antes de ver sus sondeos, cada encuestadora tiene una calidad previa de 0 a 100: lo que se supone de ella mientras no hay datos suficientes.') }}
+      {{ m.card_start('calidad-previa', 'La calidad previa', 'Antes de ver sus sondeos, cada encuestadora tiene una calidad previa de 0 a 100: lo que se sabe de cómo trabaja, no de cuánto acierta.') }}
         <p>
-          La calidad previa se asigna a mano al curar los datos (ver <a href="/metodo#datos">Los datos</a>): es
-          una valoración, no un cálculo. Las encuestadoras que se añaden sin historial reciben una calidad baja. En
-          <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a> es la columna «Calidad».
+          La calidad previa se puntúa con una rúbrica pública: unos pocos criterios sobre cómo trabaja la
+          encuestadora, cada uno con sus niveles. No mide el acierto, la coherencia entre sondeos ni la longevidad:
+          eso lo miden los datos, a medida que se acumulan sus sondeos.
+        </p>
+        <div class="table-wrap">
+          <table id="rubric-table">
+            <caption>Los criterios de la rúbrica, los puntos que reparte cada uno y lo que pide cada nivel, de más a menos.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Criterio</th>
+                <th scope="col">Puntos</th>
+                <th scope="col">Niveles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rubric.rows %}
+              <tr>
+                <th scope="row">{{ row.name }}</th>
+                <td>0-{{ row.max }}</td>
+                <td>
+                  <ul>
+                    {% for level in row.levels %}
+                    <li>{{ level.points }}: {{ level.text }}</li>
+                    {% endfor %}
+                  </ul>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p>
+          La calidad es la suma de puntos, hasta {{ rubric.max_points }}: cada punto vale {{ rubric.per_point }} de
+          calidad, con un mínimo de {{ rubric.floor }}; nadie pasa de {{ rubric.cap }} antes de los datos, los últimos
+          se ganan acertando. Lo que no se puede comprobar vale 0 en su criterio, así que una encuestadora de la que no
+          se sabe nada queda cerca del mínimo; una sin evaluar tiene exactamente el mínimo.
+        </p>
+        <p>
+          La evaluación es pública y revisable: cada criterio de cada encuestadora lleva su fuente, en el fichero
+          <code>data/pollsters-quality.csv</code> del repositorio. En
+          <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a> es la columna «Calidad», y el perfil de cada
+          encuestadora muestra el desglose.
         </p>
         <p>
           El rating final <var>R</var> mezcla esa calidad <var>Q</var> con el rating ajustado
@@ -104,9 +143,10 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
           </mrow>
         </math>
         <p>
-          <var>k</var> vale 3: la calidad previa pesa como tres sondeos. Con <var>n</var> = 3, mitad y mitad;
-          con menos, manda la calidad previa; con muchos más, lo medido. Una encuestadora sin sondeos evaluables tiene
-          como rating su calidad previa.
+          <var>k</var> vale 3: la calidad previa pesa como tres sondeos. Es, redondeado, lo que mide la relación
+          entre lo que una encuestadora varía de sondeo a sondeo, más allá de su error muestral, y lo que varían las
+          encuestadoras entre sí: entre 3 y 4. Con <var>n</var> = 3, mitad y mitad; con menos, manda la calidad previa;
+          con muchos más, lo medido. Una encuestadora sin sondeos evaluables tiene como rating su calidad previa.
         </p>
         <p>
           <var>n</var> no es el número bruto de sondeos, sino su suma ponderada. Cada sondeo pesa por su
@@ -114,18 +154,16 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         </p>
         <ul>
           <li><strong>Por su posición:</strong> en cada elección, el último sondeo de la encuestadora pesa 1, el
-            anterior 0,5, el anterior 0,25 y así sucesivamente.</li>
-          <li><strong>Por su cercanía a la votación:</strong> cada semana más lejos multiplica el peso por 0,7.
-            Por este factor, un sondeo de tres meses antes pesa menos de la centésima parte que uno de la última
-            semana, y los sondeos con un peso total por debajo de una centésima se descartan.</li>
+            anterior 0,5, el anterior 0,25 y así sucesivamente. Los sondeos con un peso total por debajo de una
+            centésima se descartan.</li>
           <li><strong>Por su antigüedad:</strong> cada año de distancia con la elección más reciente multiplica
             el peso por 0,9.</li>
           <li><strong>Por su ámbito:</strong> cada sondeo de unas autonómicas {{ regional_weight() }} (ver
             <a href="#ranking-global">Un ranking global</a>).</li>
         </ul>
         <p>
-          Con estos pesos, cada elección aporta pocos sondeos efectivos por encuestadora, así que la calidad previa
-          cuenta mucho hasta que la encuestadora acumula varias elecciones.
+          Con estos pesos, una encuestadora con decenas de sondeos en varias elecciones tiene una calidad previa que
+          pesa en torno al 10% de su rating, y una recién llegada está dominada por ella.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('rating-final', 'Del rating ajustado al rating final', 'Las desviaciones de los sondeos de una encuestadora se resumen en una sola, se convierten en una nota de 0 a 100 y se mezclan con la calidad previa.') }}

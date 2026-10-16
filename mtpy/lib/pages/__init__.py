@@ -33,7 +33,7 @@ from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_text, fmt_date, 
                       fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade)
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
-                     national_figures, subpages, thresholds_rows)
+                     national_figures, quality_rubric, subpages, thresholds_rows)
 from .slugs import (NATIONAL_SLUG, event_href, event_segment, pollster_href, pollster_slugs, resolve_event_path,
                     resolve_pollster, scope_paths, scope_slug, slugify)
 from .promedios import (BLOCK_ORDER, PAGE_SIZE, block_result_rows, chart_polls, poll_months, poll_name, polls_table,

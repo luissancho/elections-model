@@ -1900,6 +1900,19 @@ def test_metodo_rating_text(api):
     assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
     assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
     assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
+    assert 'Trabajo de campo' in text and 'Estándares' in text and '<table id="rubric-table">' in page
+    assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
+    assert 'entre 3 y 4' in text and 'en torno al 10' in text
+    assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
+    assert 'puesta a mano' not in text and 'rúbrica pública' in text
+    assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+
+
+def test_metodo_rating_reads_the_rubric_from_the_catalogue(api, monkeypatch):
+    changed = pages.quality_rubric() | {'per_point': 10, 'floor': 1, 'cap': 100}
+    monkeypatch.setattr(pages.metodo, 'quality_rubric', lambda: changed)
+    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
+    assert 'cada punto vale 10 de calidad, con un mínimo de 1' in text and 'nadie pasa de 100 antes de los datos' in text
 
 
 def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypatch):
