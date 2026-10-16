@@ -33,6 +33,39 @@ class Pollsters(Model):
     }
 
 
+class PollstersQuality(Model):
+    """
+    Replica of `data/pollsters-quality.csv` (see `mtpy.lib.data.save_catalogues`): the evaluation of each
+    pollster with the public rubric of `data/pollsters-quality-criteria.json`, its `points` and the
+    resulting `quality`.
+    """
+
+    table = 'elections.pollsters_quality'
+
+    key = ['pollster_id']
+    sort = ['pollster_id']
+
+    meta = {
+        'pollster_id': ['int', 3],
+        'pollster': ['str', None, False],
+        'fieldwork': ['int', 1],
+        'fieldwork_source': 'str',
+        'transparency': ['int', 1],
+        'transparency_source': 'str',
+        'independence': ['int', 1],
+        'independence_source': 'str',
+        'identity': ['int', 1],
+        'identity_source': 'str',
+        'standards': ['int', 1],
+        'standards_source': 'str',
+        'notes': 'str',
+        'status': ['cat', 10],
+        'checked_at': 'dtd',
+        'points': ['int', 2],
+        'quality': 'num'
+    }
+
+
 class Sponsors(Model):
 
     table = 'elections.sponsors'

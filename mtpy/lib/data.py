@@ -8,8 +8,9 @@ from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
     Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
-    Pollsters, PollstersHerding, PollstersParties, PollstersRatings, Parties, Scopes
+    Pollsters, PollstersHerding, PollstersParties, PollstersQuality, PollstersRatings, Parties, Scopes
 )
+from .quality import load_criteria, pollsters_quality_values, read_quality
 
 
 def get_scopes() -> pd.DataFrame:
@@ -130,13 +131,15 @@ def get_thresholds(
 
 def save_catalogues() -> dict[str, int]:
     """
-    Replicate the versioned catalogues of scopes and districts into the database. The tables are created
-    when missing (never replaced) and their rows upserted by key.
+    Replicate the versioned catalogues into the database: scopes, districts and the pollster quality
+    evaluations. The tables are created when missing (never replaced) and their rows upserted by key; the
+    evaluations of the pollsters no longer in the CSV are deleted. Then `pollsters.quality` is derived for
+    every pollster (the scale floor for the ones not evaluated).
 
     Returns
     -------
     dict
-        Rows written to `scopes` and `districts`.
+        Rows written to `scopes`, `districts` and `quality`, and pollsters updated in `pollsters`.
     """
     out = {}
     for name, model, data in [
@@ -149,6 +152,27 @@ def save_catalogues() -> dict[str, int]:
         df = model.format_data(data, int_type='nullable', bin_type='nullable', sort=True)
         model.upsert(df)
         out[name] = int(df.shape[0])
+
+    criteria = load_criteria()
+    quality = read_quality(criteria)
+    qmodel = PollstersQuality()
+    if not qmodel.table_exists():
+        qmodel.create(replace=False)
+
+    df = qmodel.format_data(quality, int_type='nullable', bin_type='nullable', sort=True)
+    if df.shape[0]:
+        ids = ', '.join(str(int(i)) for i in df['pollster_id'])
+        qmodel.execute('DELETE FROM {} WHERE pollster_id NOT IN ({})'.format(qmodel.table, ids))
+    else:
+        qmodel.execute('DELETE FROM {}'.format(qmodel.table))
+    qmodel.upsert(df)
+    out['quality'] = int(df.shape[0])
+
+    pollsters = get_pollsters()
+    pollsters['quality'] = pollsters_quality_values(pollsters, quality, criteria['scale'])
+    pmodel = Pollsters()
+    pmodel.upsert(pmodel.format_data(pollsters, int_type='nullable', bin_type='nullable', sort=True))
+    out['pollsters'] = int(pollsters.shape[0])
 
     return out
 
@@ -609,6 +633,22 @@ def get_pollsters() -> pd.DataFrame:
     pollsters = Pollsters().get_results(formatted=True)
 
     return pollsters
+
+
+def get_pollsters_quality() -> pd.DataFrame:
+    """
+    Read the replica of the pollster quality evaluations.
+
+    Returns
+    -------
+    pd.DataFrame
+        The formatted table, or an empty frame with the model columns if the table does not exist yet.
+    """
+    model = PollstersQuality()
+    if not model.table_exists():
+        return pd.DataFrame(columns=list(model.meta))
+
+    return model.get_results(formatted=True)
 
 
 def save_model_data(

@@ -77,3 +77,58 @@ def test_get_pollster_ratings_reads_the_rows_of_the_pollster_in_every_scope(monk
     monkeypatch.setattr(data, 'PollstersRatings', Ratings)
     ratings = data.get_pollster_ratings(2)
     assert ratings['rating'].tolist() == [71.0, 80.0] and Ratings.calls[0]['filters'] == ['pollster_id = 2']
+
+
+def test_get_pollsters_quality_without_table_is_empty(monkeypatch):
+    class NoTable(FakeTable):
+        meta = {'pollster_id': 1, 'pollster': 1, 'points': 1, 'quality': 1}
+
+        def table_exists(self):
+            return False
+    monkeypatch.setattr(data, 'PollstersQuality', NoTable)
+    frame = data.get_pollsters_quality()
+    assert frame.empty and list(frame.columns) == ['pollster_id', 'pollster', 'points', 'quality']
+
+
+def test_save_catalogues_replicates_the_csv_and_writes_every_pollster(monkeypatch):
+    """La réplica borra las casas retiradas del CSV, hace upsert de las evaluadas y escribe `pollsters.quality`
+    de todas (el mínimo para las no evaluadas)."""
+    calls = []
+
+    class Table:
+        def __init__(self, name):
+            self.name = name
+            self.table = 'elections.pollsters_quality' if name == 'quality' else 'elections.' + name
+
+        def table_exists(self):
+            return False
+
+        def create(self, replace=True):
+            calls.append((self.name, 'create', replace))
+
+        def format_data(self, df, **kwargs):
+            return df
+
+        def execute(self, sql):
+            calls.append((self.name, 'execute', sql))
+
+        def upsert(self, df):
+            calls.append((self.name, 'upsert', df.copy()))
+            return len(df)
+
+    evaluated = pd.DataFrame({'pollster_id': [1], 'pollster': ['CIS'], 'points': [7], 'quality': [56.0]})
+    monkeypatch.setattr(data, 'Scopes', lambda: Table('scopes'))
+    monkeypatch.setattr(data, 'Districts', lambda: Table('districts'))
+    monkeypatch.setattr(data, 'PollstersQuality', lambda: Table('quality'))
+    monkeypatch.setattr(data, 'Pollsters', lambda: Table('pollsters'))
+    monkeypatch.setattr(data, 'get_scopes', lambda: pd.DataFrame({'name': ['España']}, index=pd.Index(['es'], name='scode')))
+    monkeypatch.setattr(data, 'get_districts', lambda: pd.DataFrame({'scope': ['es'], 'region_id': [0]}))
+    monkeypatch.setattr(data, 'read_quality', lambda criteria=None: evaluated)
+    monkeypatch.setattr(data, 'load_criteria', lambda: {'scale': {'per_point': 8, 'floor': 5}, 'criteria': {}})
+    monkeypatch.setattr(data, 'get_pollsters', lambda: pd.DataFrame({'id': [1, 2], 'name': ['CIS', 'GAD3'], 'quality': [10.0, 76.0], 'rating': [16.0, 73.0]}))
+    out = data.save_catalogues()
+    assert out == {'scopes': 1, 'districts': 1, 'quality': 1, 'pollsters': 2}
+    sql = [c[2] for c in calls if c[0] == 'quality' and c[1] == 'execute']
+    assert len(sql) == 1 and 'DELETE FROM elections.pollsters_quality' in sql[0] and 'NOT IN (1)' in sql[0]
+    written = [c[2] for c in calls if c[0] == 'pollsters' and c[1] == 'upsert'][0]
+    assert written['quality'].tolist() == [56.0, 5.0] and written['rating'].tolist() == [16.0, 73.0]
