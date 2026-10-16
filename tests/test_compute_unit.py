@@ -7,10 +7,10 @@ from mtpy.lib import compute
 
 class FakeComputer:
     """Fábrica con la firma `Computer(scope=..., verbose=...)`: anota cada construcción y cada fase con su `save`
-    (y sus argumentos), y lanza `RuntimeError` en la fase `fail_at`."""
+    (y sus argumentos), y lanza `RuntimeError` en la fase `fail_at` (de todos los ámbitos, o solo de `fail_scope`)."""
 
-    def __init__(self, fail_at=None):
-        self.inits, self.calls, self.fail_at = [], [], fail_at
+    def __init__(self, fail_at=None, fail_scope=None):
+        self.inits, self.calls, self.fail_at, self.fail_scope = [], [], fail_at, fail_scope
 
     def __call__(self, scope, verbose=0, **kwargs):
         self.inits.append((scope, verbose))
@@ -25,7 +25,7 @@ class FakeComputer:
                 return self
 
             def _phase(self, name, save, **kwargs):
-                if factory.fail_at == name:
+                if factory.fail_at == name and factory.fail_scope in (None, scope):
                     raise RuntimeError('boom ' + name)
                 factory.calls.append((name, save) + tuple(sorted(kwargs.items())))
                 return pd.DataFrame({'event_date': ['2023-07-23'] * 2, 'pollster_id': [1, 2]})

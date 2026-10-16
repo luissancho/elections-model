@@ -276,40 +276,22 @@ def load_results(scope: str, event_date: str, save: bool, cache: Optional[str], 
     return out
 
 
-def compute_scope(scope: str, save: bool, verbose: int) -> None:
+def compute_scope(scope: str, save: bool, verbose: int) -> dict:
     """
     Compute the poll series of a scope: weights, featured events, errors, deviations, drift, house effects and
-    herding (the sequence of `notebooks/data-load/PollsCompute.ipynb` without the ratings). The weights are computed
-    twice because `polls.featured` copies the flag of the event, which in turn needs the weights.
+    herding (`mtpy.lib.compute.compute_scope`, the sequence shared with the `compute` job). The `Computer` runs one
+    verbosity level below the loader's.
     """
-    from mtpy.lib.computer import Computer
-    from mtpy.lib.data import update_featured
+    from mtpy.lib import compute
 
-    Computer(scope=scope, verbose=max(verbose - 1, 0)).build_series().compute_weights(save=save, overwrite=True)
-    if save:
-        n = update_featured(scope)
-        if verbose > 0:
-            print('{}: {} featured events'.format(scope, n))
-
-    comp = Computer(scope=scope, verbose=max(verbose - 1, 0)).build_series()
-    comp.compute_weights(save=save, overwrite=True)
-    comp.compute_errors(save=save)
-    comp.compute_deviations(save=save)
-    if not save:
-        return
-
-    # Drift and house effects read the errors stored by the steps above: a fresh series is needed
-    comp = Computer(scope=scope, verbose=max(verbose - 1, 0)).build_series()
-    comp.compute_drift(save=save)
-    comp.compute_house_effects(save=save)
-    comp.compute_herding(save=save)
+    return compute.compute_scope(scope, save=save, verbose=max(verbose - 1, 0))
 
 
-def rate_scope(scope: str, save: bool, verbose: int) -> None:
-    """Compute the cross-scope pollster ratings of the events of a scope (see `Computer.compute_ratings`)."""
-    from mtpy.lib.computer import Computer
+def rate_scope(scope: str, save: bool, verbose: int) -> dict:
+    """Compute the cross-scope pollster ratings of the events of a scope (`mtpy.lib.compute.rate_scope`)."""
+    from mtpy.lib import compute
 
-    Computer(scope=scope, verbose=max(verbose - 1, 0)).build_series().compute_ratings(save=save, scopes='all')
+    return compute.rate_scope(scope, save=save, verbose=max(verbose - 1, 0))
 
 
 def run_load(
