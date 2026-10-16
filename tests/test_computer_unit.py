@@ -189,22 +189,22 @@ def bare_computer():
     c = Computer.__new__(Computer)
     c.scope = 'es'
     c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
-    c.pos_decay, c.week_decay, c.year_decay = .5, .7, .9
+    c.pos_decay, c.year_decay = .5, .9
     c.bias_dev_tau, c.min_polls, c.verbose = .01, 3, 0
     c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
     return c
 
 
-def pool(rows):
-    """Un sondeo por tupla (ámbito, fecha del evento, casa), 10 días antes del evento."""
+def pool(rows, days=10):
+    """Un sondeo por tupla (ámbito, fecha del evento, casa), `days` días antes del evento."""
     ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
     data = []
     for scope, event_date, pollster in rows:
         event_date = pd.Timestamp(event_date)
         dev = .01 if pollster in ('A', 'C') else -.01
         data.append({
-            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=10),
-            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': 10,
+            'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=days),
+            'pollster_id': ids[pollster], 'sponsor_id': 0, 'pollster': pollster, 'days': days,
             'weight_over': 1., 'weight_sample': 1.,
             'error_avg': .03, 'error_blocks': .01, 'error_within': .02,
             'bias_avg': .2, 'bias_blocks': .1, 'bias_within': .1, 'bias': .15,
@@ -217,6 +217,24 @@ ES19 = [('es', '2019-11-10', 'A'), ('es', '2019-11-10', 'B')]
 MD21 = [('es-md', '2021-05-04', 'A'), ('es-md', '2021-05-04', 'C')]
 REG23 = [('es-md', '2023-05-28', 'C'), ('es-cl', '2023-05-28', 'D')]
 JULY23, MAY23 = pd.Timestamp('2023-07-23'), pd.Timestamp('2023-05-28')
+
+
+def test_rating_weights_have_no_week_factor():
+    c = bare_computer()
+    out = c.poll_rating_weights(pool(ES19))
+    assert list(out.columns) == ['weight_pos', 'weight_year', 'weight_scope']
+    assert not hasattr(c, 'week_decay')
+
+
+def test_a_distant_poll_counts_as_much_as_a_close_one():
+    """D3: la desviación se mide contra el consenso de la misma fecha, así que la distancia a la elección no
+    descuenta evidencia: mismo `num_polls_w`, misma desviación y mismo rating."""
+    c = bare_computer()
+    close = c.rate_events(pool(ES19, days=10), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    far = c.rate_events(pool(ES19, days=80), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    for col in ('num_polls_w', 'bias_dev_adj', 'rating_adj', 'rating'):
+        assert close[col].tolist() == pytest.approx(far[col].tolist(), nan_ok=True), col
+    assert close.loc[1, 'num_polls_w'] == pytest.approx(1.0)
 
 
 def test_scope_weight_zero_reproduces_single_scope_ratings():

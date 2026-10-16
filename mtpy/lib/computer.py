@@ -370,7 +370,6 @@ class Computer(Core):
         ol_max: Optional[int] = 5000,
         wspan: Optional[int] = 4,
         pos_decay: Optional[float] = .5,
-        week_decay: Optional[float] = .7,
         year_decay: Optional[float] = .9,
         bias_dev_tau: Optional[float] = .01,
         min_polls: Optional[int] = 3,
@@ -416,8 +415,6 @@ class Computer(Core):
             Window span (in days) to use in order to prevent too many polls published by a pollster in a short period.
         pos_decay : float, optional
             Position decay.
-        week_decay : float, optional
-            Week decay.
         year_decay : float, optional
             Year decay.
         bias_dev_tau : float, optional
@@ -449,7 +446,6 @@ class Computer(Core):
         self.ol_max = ol_max
         self.wspan = wspan
         self.pos_decay = pos_decay
-        self.week_decay = week_decay
         self.year_decay = year_decay
         self.bias_dev_tau = bias_dev_tau
         self.min_polls = min_polls
@@ -1587,6 +1583,13 @@ class Computer(Core):
         """
         Pollster rating algorithm.
 
+        Each poll is weighted by its sample, over-representation, position, year and scope weights. The weighted mean
+        of the deviations of a house is shrunk towards 0 according to its precision (bayesian update with a prior of
+        standard deviation `bias_dev_tau`), then converted into `rating_adj = Phi(-d / tau)` and blended with the
+        prior quality `Q` as `R = (n * R_aj + k * Q) / (n + k)`, with `n` the weighted number of polls and
+        `k = min_polls`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house in the
+        polling average.
+
         See `compute_ratings` for more details about the rating algorithm.
 
         Parameters
@@ -1608,11 +1611,11 @@ class Computer(Core):
         df = polls[polls['bias'].notnull()]
 
         # Compute additional weights of each poll
-        df[['weight_pos', 'weight_week', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df, rating_weights)
+        df[['weight_pos', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df, rating_weights)
 
         # Compute the final weight of each poll by multiplying all the other weights computed
         df['weight'] = df[[
-            'weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year', 'weight_scope'
+            'weight_over', 'weight_sample', 'weight_pos', 'weight_year', 'weight_scope'
         ]].prod(axis=1)
 
         # Remove polls with weight below the threshold
@@ -1636,7 +1639,7 @@ class Computer(Core):
             df['event_key'] = df['event_date']
         dr['num_events'] = df.groupby('pollster', observed=True)['event_key'].nunique().reindex(dr.index).fillna(0)
         dr['num_polls'] = df.groupby('pollster', observed=True)['event_date'].count().reindex(dr.index).fillna(0)
-        # Weighted number of polls, giving more importance to the most recent polls
+        # Weighted number of polls: the evidence each pollster contributes (position, year and scope weights)
         dr['num_polls_w'] = df.groupby('pollster', observed=True)['weight'].sum().reindex(dr.index).fillna(0)
 
         # Compute the weighted mean of each pollster's poll errors
@@ -1672,18 +1675,19 @@ class Computer(Core):
 
         # Scale the bias deviations to the range [0, 1]
         dr['rating_adj'] = dr['bias_dev_adj'].mul(-1).apply(norm.cdf, scale=self.bias_dev_tau).fillna(dr['quality'])
-        # Compute each pollster's final rating, using a weighted average of the adjusted bias deviations
-        # and the prior quality assigned to the pollster.
-        # The more polls published by the pollster, the more weight is given to the adjusted bias deviations,
-        # while pollsters with a low number of polls are given more weight to the prior quality.
+        # Compute each pollster's final rating as R = (n * R_aj + k * Q) / (n + k), where n is the weighted number
+        # of polls, R_aj the rating of the adjusted deviation, Q the prior quality and k = `min_polls`.
+        # k is the prior weight of a hierarchical model, k = sigma^2_house / tau^2: the poll-to-poll variance of
+        # a house beyond its sampling error over the variance between houses, measured at 3-4 on the national
+        # polls. The more evidence the pollster has, the less its rating depends on the prior quality.
         dr['rating'] = (
             (dr['num_polls_w'] * dr['rating_adj']) + (self.min_polls * dr['quality'])
         ) / (
             dr['num_polls_w'] + self.min_polls
         )
         # Compute the weight that each pollster's predictions will have in the polling average forecaster.
-        # The weight is computed using the logarithm of the rating, which gives more weight to pollsters with a
-        # rating close to 1 and less weight to pollsters with a rating close to 0.
+        # The weight is computed using the logarithm of the rating, which compresses the differences between the
+        # best pollsters while still separating them from the worst ones.
         dr['weight_rating'] = np.log1p(dr['rating']) / np.log1p(dr['rating'].mean())
 
         dr = dr.sort_values('rating', ascending=False)
@@ -1696,8 +1700,10 @@ class Computer(Core):
         rating_weights: Optional[dict[str, float]] = None
     ) -> pd.DataFrame:
         """
-        Compute additional weights needed to compute pollster ratings and an estimation of their relative deviation
-        from the expected bias of polls published by other pollsters in the same event and week.
+        Compute the additional weights needed to compute pollster ratings: the position of the poll among the ones
+        of its pollster in the same event, the age of its event (years) and the weight of its scope. The distance
+        to the election is not discounted: the deviation of a poll is measured against the consensus of its own
+        date, so a distant poll informs about the house as much as a close one.
 
         Parameters
         ----------
@@ -1710,21 +1716,16 @@ class Computer(Core):
         Returns
         -------
         pd.DataFrame
-            The polls data with the new weights and deviations.
+            The weights `weight_pos`, `weight_year` and `weight_scope` of each poll, with the index of `polls`.
         """
         df = polls.reset_index()
         if 'event_scope' not in df.columns:
             df['event_scope'] = self.scope
         rating_weights = rating_weights if rating_weights is not None else {}
 
-        # We use all polls published by each pollster, but give more weight to the ones published closer to the event
+        # We use all polls published by each pollster, but give more weight to the last ones of each event
         df['seq_pos'] = df.groupby(['event_date', 'event_scope', 'pollster_id'], observed=True)['date'].cumcount(ascending=False)
         df['weight_pos'] = df['seq_pos'].apply(lambda x: np.power(self.pos_decay, x))
-
-        # We give more weight to the polls published closer to the event
-        df['event_dlimits'] = df.groupby(['event_date', 'event_scope'], observed=True)['days'].transform('min')
-        df['weeks'] = ((df['days'] - df['event_dlimits'] + 1) // 7).clip(0)
-        df['weight_week'] = np.power(self.week_decay, df['weeks'])
 
         # Compute the weight of each poll based on the number of years between the poll and the most recent event
         df['event_year'] = df['event_date'].dt.strftime('%Y').astype(int)
@@ -1735,7 +1736,7 @@ class Computer(Core):
         df['weight_scope'] = df['event_scope'].map(lambda x: rating_weights.get(x, 1.)).astype(float)
 
         df = df.set_index(list(polls.index.names))[[
-            'weight_pos', 'weight_week', 'weight_year', 'weight_scope'
+            'weight_pos', 'weight_year', 'weight_scope'
         ]].round(2).astype(float)
 
         return df
@@ -3348,11 +3349,11 @@ class Computer(Core):
             df = df[df['pollster'] == pollster]
 
         # Compute additional weights of each poll
-        df[['weight_pos', 'weight_week', 'weight_year']] = self.poll_rating_weights(df)
+        df[['weight_pos', 'weight_year', 'weight_scope']] = self.poll_rating_weights(df)
 
         # Compute the final weight of each poll by multiplying all the other weights computed
         df['weight'] = df[[
-            'weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year'
+            'weight_over', 'weight_sample', 'weight_pos', 'weight_year'
         ]].prod(axis=1).round(2).astype(float)
         df = df[df['weight'] > 0]
 
@@ -3361,7 +3362,7 @@ class Computer(Core):
         df['event_date'] = df['event_date'].dt.strftime('%b-%y')
         df[['days', 'parties', 'proc_sample']] = df[['days', 'parties', 'proc_sample']].astype(int)
 
-        weight_cols = ['weight_over', 'weight_sample', 'weight_pos', 'weight_week', 'weight_year']
+        weight_cols = ['weight_over', 'weight_sample', 'weight_pos', 'weight_year']
         df = df.set_index(['event_date', 'days'])[[
             'parties', 'proc_sample', 'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within',
             'bias', 'bias_dev_adj', 'weight'
