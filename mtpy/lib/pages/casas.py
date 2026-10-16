@@ -513,7 +513,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context['error_max'] = max((row['error_avg'] for row in ranking if row.get('error_avg') is not None), default=0)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
-    # the scale of the rubric, for the points rule of «Scoring» in the glossary of the ranking
+    # the scale of the rubric, for the points rule of «Confianza» in the glossary of the ranking
     context['quality'] = load_criteria()['scale']
     # the two blocks of the margin («Sesgo bloques»): their names for the glossary and the colour of each side of
     # the bar (positive favours the first block, negative the second)

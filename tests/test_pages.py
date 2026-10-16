@@ -3067,7 +3067,7 @@ def test_effects_table_drops_the_parties_without_any_value():
 
 def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     """«Qué mide cada columna» del ranking: las siete columnas de la tabla, en su orden, con la regla de puntos del
-    scoring leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
+    la confianza leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
     assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Rating', 'Diferencial', 'Confianza', 'Sondeos', 'Elecciones',
