@@ -1,12 +1,11 @@
 import contextlib
-import logging
 import sys
-import traceback
 import warnings
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from ..core.worker import Job
 from ..lib import bundle, publish
+from .progress import ScopeReporter, counted
 
 
 STEPS = {'init': 'simulador listo', 'fit': 'promedio ajustado', 'nowcast': 'simulación de hoy',
@@ -14,55 +13,7 @@ STEPS = {'init': 'simulador listo', 'fit': 'promedio ajustado', 'nowcast': 'simu
          'meta': 'meta y titular'}
 
 
-def counted(n, one, many):
-    """Return ``n`` with the singular or plural noun (``'1 ámbito'``, ``'2 ámbitos'``)."""
-    return '{} {}'.format(n, one if n == 1 else many)
-
-
-class ScopeProgress:
-    """
-    Live progress lines of one scope (and day, with ``backfill``) of ``publish forecast``.
-
-    Calling the object reports a phase of ``publish.publish_forecast`` (its ``progress``
-    argument); ``start``, ``note`` and ``done`` print the start of the scope, a model warning
-    and its result line. Every line goes through ``say`` with the prefix ``[i/n] scope[ day]`` and
-    its verbosity level: 1 for the start, the warnings and the result, 2 for the phases.
-
-    Parameters
-    ----------
-    say : callable
-        Printer of one progress line, ``say(text, level)`` (``Publish._say``).
-    scope : str
-        Scope being published.
-    index, total : int
-        Position of the scope (from 1) and number of scopes of the run.
-    day : str, optional
-        Day of a retrospective run.
-    """
-
-    def __init__(self, say, scope, index, total, day=None):
-        self.say = say
-        self.position = '[{}/{}]'.format(index, total)
-        self.prefix = '{} {}{}'.format(self.position, scope, '' if day is None else ' ' + day)
-
-    def __call__(self, step, seconds):
-        """Report the end of the phase ``step`` (a key of ``STEPS``) after ``seconds``."""
-        self.say('{}: {} ({:.1f} s)'.format(self.prefix, STEPS.get(step, step), seconds), 2)
-
-    def start(self):
-        """Report that the scope (or day) starts."""
-        self.say('{}: empezando'.format(self.prefix), 1)
-
-    def note(self, text):
-        """Report a model warning of the scope."""
-        self.say('{} · aviso: {}'.format(self.prefix, text), 1)
-
-    def done(self, line):
-        """Report the summary line of the result of the scope (``Publish._line``)."""
-        self.say('{} {}'.format(self.position, line), 1)
-
-
-class Publish(Job):
+class Publish(ScopeReporter, Job):
     """
     Publish the model results to the web bundle (``site/v1``) of the file system.
 
@@ -337,6 +288,10 @@ class Publish(Job):
 
         return results
 
+    def _progress(self, scope, index, total, day=None, steps=None):
+        """Live progress of one scope (and day), with the phase labels of ``forecast`` (`STEPS`)."""
+        return super()._progress(scope, index, total, day, STEPS if steps is None else steps)
+
     def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, national=None, index=1, total=1,
                        **params):
         """
@@ -550,83 +505,6 @@ class Publish(Job):
             warnings.showwarning = show
             yield notes
 
-    def _progress(self, scope, index, total, day=None):
-        """
-        Build the live progress printer of one scope (and day) of ``forecast``.
-
-        Parameters
-        ----------
-        scope : str
-            Scope being published.
-        index, total : int
-            Position of the scope (from 1) and number of scopes of the run.
-        day : str, optional
-            Day of a retrospective run (``backfill``), added to the prefix.
-
-        Returns
-        -------
-        ScopeProgress
-            Callable ``progress(step, seconds)`` of ``publish.publish_forecast``, with ``start``,
-            ``note`` and ``done`` for the other lines of the scope.
-        """
-        return ScopeProgress(self._say, scope, index, total, day)
-
-    def _say(self, text, level=0):
-        """
-        Report one progress line now, once on the console, if the run is verbose enough.
-
-        The app logger, if there is one, gets the bare ``text`` (it adds its own timestamp). The line
-        is also printed to stdout with ``[hh:mm:ss]`` and flushed, unless the logger already writes
-        its ``info`` to the console (``_logger_echoes_console``), so the line never shows twice.
-
-        Parameters
-        ----------
-        text : str
-            Progress line, without time.
-        level : int, default 0
-            Minimum ``verbose`` of the run for the line to be reported (0: always).
-        """
-        if self.verbose < level:
-            return
-        logger = self.app.logger
-        if logger is None or not self._logger_echoes_console(logger):
-            print('[{}] {}'.format(datetime.now().strftime('%H:%M:%S'), text), flush=True)
-        if logger is not None:
-            logger.info(text)
-
-    @staticmethod
-    def _logger_echoes_console(logger):
-        """
-        Tell whether ``logger.info`` already writes to the console.
-
-        Parameters
-        ----------
-        logger : logging.Logger or object
-            A ``logging.Logger`` or the app ``Log`` (its ``loggers['info']`` is checked); anything
-            else never echoes.
-
-        Returns
-        -------
-        bool
-            Whether ``info`` is enabled and some handler of the logger, or of an ancestor reached by
-            propagation, is a ``logging.StreamHandler`` (not a ``FileHandler``) writing to
-            ``sys.stdout`` or ``sys.stderr``.
-        """
-        if not isinstance(logger, logging.Logger):
-            loggers = getattr(logger, 'loggers', None)
-            logger = loggers.get('info') if isinstance(loggers, dict) else None
-        if not isinstance(logger, logging.Logger) or not logger.isEnabledFor(logging.INFO):
-            return False
-        consoles = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
-        current = logger
-        while current is not None:
-            for handler in current.handlers:
-                if (isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)
-                        and handler.stream in consoles):
-                    return True
-            current = current.parent if current.propagate else None
-        return False
-
     def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
         """
         Publish the houses analysis of one scope, converting every outcome into a result dict.
@@ -803,11 +681,6 @@ class Publish(Job):
             self._log_error('manifest')
             failures.append('manifest')
             return 'manifest: failed ({}: {})'.format(type(e).__name__, e)
-
-    def _log_error(self, scope):
-        """Log the traceback being handled through the app logger, if there is one."""
-        if self.app.logger is not None:
-            self.app.logger.error('publish {}: {}'.format(scope, traceback.format_exc()))
 
     @staticmethod
     def _manifest_line(data):
