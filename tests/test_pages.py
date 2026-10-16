@@ -3063,3 +3063,20 @@ def test_effects_table_drops_the_parties_without_any_value():
     assert result['columns'] == ['PP'] and [row['cells'] for row in result['rows']] == [[0.4]]
     cycle = pages.effects_table(records, key='dev_cycle')
     assert cycle['columns'] == ['PP', 'VOX'] and [row['cells'] for row in cycle['rows']] == [[0.1, -0.3]]
+
+
+def test_casas_glossary_explains_every_ranking_column_in_order(houses):
+    """«Qué mide cada columna» del ranking: las siete columnas de la tabla, en su orden, con la regla de puntos del
+    scoring leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
+    page = html(call(houses, '/casas')[2])
+    glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Rating', 'Scoring', 'Sondeos', 'Elecciones', 'Error medio',
+                                                          'Sesgo del margen', 'Rebaño']
+    assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
+    assert 'Cada punto vale 8 de scoring, con un mínimo de 5.' in glossary
+    assert 'cada ámbito y fecha por separado' in glossary  # elecciones
+    assert 'Todas las columnas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
+    profile = html(call(houses, '/casas/gad3')[2])
+    profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
+    assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Sondeos', 'Error medio', 'Sesgo del margen',
+                                                                  'Diferencial', 'Scoring', 'Rating', 'Cambio']

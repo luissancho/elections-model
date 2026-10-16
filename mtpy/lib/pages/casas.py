@@ -485,6 +485,8 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context['error_max'] = max((row['error_avg'] for row in ranking if row.get('error_avg') is not None), default=0)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
+    # the scale of the rubric, for the points rule of «Scoring» in the glossary of the ranking
+    context['quality'] = load_criteria()['scale']
     context['analysis_missing'] = missing
     context['pollster_ids'] = {
         record['pollster']: int(record['pollster_id'])
