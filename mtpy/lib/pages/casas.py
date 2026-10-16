@@ -10,7 +10,7 @@ from typing import Callable, Optional, Sequence
 from .. import webapi
 from ..quality import criteria_keys, level_text, load_criteria, max_points
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
-from .common import analysis_part, api_url, common_context
+from .common import OTHERS_COLOR, analysis_part, api_url, block_color, common_context
 from .elecciones import error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import _madrid_tz, fmt_num, fmt_date
 
@@ -19,7 +19,7 @@ RATING_SCOPE = 'es'
 RANKING_SHOWN = 50
 MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
-                'error_blocks', 'bias_blocks')
+                'error_blocks', 'bias_blocks', 'bias_dev_adj')
 HERDING_KEYS = ('event_scope', 'event_date', 'n', 'ratio', 'p_value')
 # The links of a quality source cell and the punctuation that may close the sentence after one.
 URL_PATTERN = re.compile(r'(https?://\S+)')
@@ -70,6 +70,34 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
         rows.append(row)
 
     return sorted(rows, key=lambda row: row['rating'], reverse=True)
+
+
+def block_bar_colors(meta: dict, parties) -> tuple:
+    """
+    The two blocks of the margin («Sesgo bloques») and the colour of each side of its bar.
+
+    Parameters
+    ----------
+    meta : dict
+        Data of the meta part of the run (``bmaps.vs`` names the blocks, the first one first).
+    parties : Catalog
+        Party catalogue of the run, for the colour of each block (``block_color``).
+
+    Returns
+    -------
+    tuple
+        ``(blocks, colors)``: the names of the first two blocks of ``vs`` (fewer when the map has fewer) and
+        ``{'pos', 'neg', 'zero'}`` with the colour of the first block for a positive bias (the poll favoured it),
+        the colour of the second for a negative one and ``OTHERS_COLOR`` for a missing block or an empty bar.
+    """
+    blocks = list(((meta or {}).get('bmaps') or {}).get('vs') or [])[:2]
+    colors = {
+        'pos': block_color(blocks[0], meta, parties) if blocks else OTHERS_COLOR,
+        'neg': block_color(blocks[1], meta, parties) if len(blocks) > 1 else OTHERS_COLOR,
+        'zero': OTHERS_COLOR,
+    }
+
+    return blocks, colors
 
 
 def house_effects_grid(part: dict) -> dict:
@@ -487,6 +515,9 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context['herding'] = herding_rows(herding) if herding is not None else None
     # the scale of the rubric, for the points rule of «Scoring» in the glossary of the ranking
     context['quality'] = load_criteria()['scale']
+    # the two blocks of the margin («Sesgo bloques»): their names for the glossary and the colour of each side of
+    # the bar (positive favours the first block, negative the second)
+    context['blocks'], context['block_colors'] = block_bar_colors(context['meta'], context['catalog'])
     context['analysis_missing'] = missing
     context['pollster_ids'] = {
         record['pollster']: int(record['pollster_id'])

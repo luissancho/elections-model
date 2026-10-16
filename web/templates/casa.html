@@ -68,7 +68,7 @@
                 <th scope="col">Elección</th>
                 <th scope="col">Sondeos</th>
                 <th scope="col">Error Medio</th>
-                <th scope="col">Sesgo margen</th>
+                <th scope="col">Sesgo bloques</th>
                 <th scope="col">Diferencial</th>
                 <th scope="col">Rating</th>
                 <th scope="col">Cambio</th>
@@ -94,7 +94,7 @@
         </div>
         {% call m.how() %}
         <p>Cada punto es una fecha con una o varias elecciones en las que la encuestadora publicó sondeos, de cualquier ámbito, y el rating con el que se quedó tras evaluarlas con todo su historial anterior: el que se le aplica hasta la siguiente. En azul las generales (o una fecha con general y autonómicas) y en naranja las autonómicas, como en la diana. El eje va de 0 a 100, igual para todas las encuestadoras, y el tramo discontinuo lleva el último rating hasta hoy: es el que entra en el promedio.</p>
-        <p>La tabla cuenta qué tal lo hizo cada fecha, de la más nueva a la más antigua: el error medio, el sesgo margen y el diferencial son la media de sus sondeos de esas elecciones, los mismos que cuenta la columna de sondeos; el diferencial es lo que mueve el rating, y el cambio dice cuánto subió o bajó frente al que tenía al llegar. El fondo del error medio es más rojo cuanto mayor; la barra del diferencial crece hacia la izquierda en verde (menos sesgo que los sondeos comparables) o hacia la derecha en rojo, hasta 2; el fondo del cambio es verde si subió y rojo si bajó. Las columnas se explican en «Qué mide cada columna».</p>
+        <p>La tabla cuenta qué tal lo hizo cada fecha, de la más nueva a la más antigua: el error medio, el sesgo bloques y el diferencial son la media de sus sondeos de esas elecciones, los mismos que cuenta la columna de sondeos; el diferencial es lo que mueve el rating, y el cambio dice cuánto subió o bajó frente al que tenía al llegar. El fondo del error medio es más rojo cuanto mayor; la barra del diferencial crece hacia la izquierda en verde (menos sesgo que los sondeos comparables) o hacia la derecha en rojo, hasta 2; el fondo del cambio es verde si subió y rojo si bajó. Las columnas se explican en «Qué mide cada columna».</p>
         <p>Un rating bajo en una elección no condena a la encuestadora en la siguiente. El scoring que se usó en cada elección fue el de entonces; el del KPI es el de hoy.</p>
         {% endcall %}
         {% include '_glosario.html' %}
