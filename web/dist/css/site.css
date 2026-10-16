@@ -446,6 +446,11 @@ th { font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spac
 tbody tr:hover td { background: var(--color-row-hover); }
 th:first-child, td:first-child { text-align: left; }
 td b, td strong { font-weight: 700; }
+/* Long text columns of the quality rubric (profile «Nivel», «Fuente»; method «Niveles»): they wrap, left-aligned */
+#quality-table :is(th, td):nth-child(n+3),
+#rubric-table :is(th, td):nth-child(3) { white-space: normal; text-align: left; min-width: 18rem; overflow-wrap: anywhere; }
+#rubric-table td ul { margin: 0; padding-left: 1.1em; }
+#rubric-table td li + li { margin-top: 2px; }
 /* Party name with its dot */
 .pn { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
 .pn .dot { margin: 0; }
