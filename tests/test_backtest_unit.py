@@ -179,3 +179,14 @@ def test_run_backtest_passes_min_events_to_every_case(monkeypatch):
         warnings.simplefilter('ignore')
         backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30], min_events=99)
     assert seen == [99, 99]
+
+
+def test_backtest_simulates_a_thousand_times_by_default_like_the_forecast():
+    """El backtest simula 1.000 veces por caso por defecto, como `publish forecast`, en la librería y en el script."""
+    import inspect
+    import os
+    from mtpy.lib import backtest as lib
+    assert inspect.signature(lib.run_case).parameters['n_sim'].default == 1000
+    assert inspect.signature(lib.run_backtest).parameters['n_sim'].default == 1000
+    script = open(os.path.join(os.path.dirname(__file__), '..', 'backtest', 'run_backtest.py'), encoding='utf-8').read()
+    assert "add_argument('--n-sim', type=int, default=1000)" in script and '[--n-sim 1000]' in script

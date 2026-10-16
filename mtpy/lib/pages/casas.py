@@ -72,6 +72,80 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
     return sorted(rows, key=lambda row: row['rating'], reverse=True)
 
 
+# The columns of the two tables of the houses, in order: the ranking (``/casas``) and the rating path of a profile.
+# Each column has a public label and one description, which the table header carries as tooltip and the glossary
+# «Qué mide cada columna» lists (``table_columns``).
+RANKING_COLUMNS = ('pollster', 'rating', 'quality', 'num_events', 'num_polls', 'bias_dev_adj', 'error_avg',
+                   'error_blocks', 'herding')
+PATH_COLUMNS = ('event', 'n_polls', 'bias_dev_adj', 'error_avg', 'error_blocks', 'rating', 'change')
+COLUMN_LABELS = {'pollster': 'Encuestadora', 'rating': 'Rating', 'quality': 'Confianza', 'num_events': 'Elecciones',
+                 'num_polls': 'Sondeos', 'bias_dev_adj': 'Diferencial', 'error_avg': 'Error medio',
+                 'error_blocks': 'Sesgo bloques', 'herding': 'Rebaño', 'event': 'Evento', 'n_polls': 'Sondeos',
+                 'change': 'Cambio'}
+
+
+def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] = None) -> list:
+    """
+    The columns of a table of the houses with their public label and description.
+
+    Parameters
+    ----------
+    kind : str
+        ``'ranking'`` (``RANKING_COLUMNS``) or ``'path'`` (``PATH_COLUMNS``, the rating path of a profile).
+    blocks : sequence of str, optional
+        Names of the two blocks of the margin (first, second), for the sign of «Sesgo bloques»; a missing name
+        is written as «el primer bloque» / «el segundo».
+    scale : dict, optional
+        ``{'per_point', 'floor'}`` of the rubric, for the points rule of «Confianza»; left out without it.
+
+    Returns
+    -------
+    list of dict
+        ``{'key', 'label', 'text'}`` per column, in the order of the table.
+    """
+    first = 'a ' + blocks[0] if len(blocks) > 0 else 'al primer bloque'
+    second = 'a ' + blocks[1] if len(blocks) > 1 else 'al segundo'
+    rule = (' Cada punto vale {} de confianza, con un mínimo de {}.'.format(scale['per_point'], scale['floor'])
+            if scale and 'per_point' in scale else '')
+    that = ' de esa elección' if kind == 'path' else ''
+    texts = {
+        'pollster': 'La encuestadora que firma los sondeos. Pulsa en su nombre para ver su perfil.',
+        'rating': (
+            'La nota, de 0 a 100, con la que quedó tras evaluar esa elección con todo su historial anterior, mezclada '
+            'con su confianza: la que se le aplica hasta la siguiente. La de la primera fila es la de hoy, la que entra '
+            'en el promedio.' if kind == 'path' else
+            'La nota, de 0 a 100, con la que la encuestadora entra en el promedio de la próxima elección: mezcla el '
+            'sesgo de sus sondeos pasados, comparado con el de los sondeos de las demás en las mismas fechas, con su '
+            'confianza, que pesa más cuantos menos sondeos tiene. Cuanto más alto, más pesan sus sondeos.'),
+        'quality': (
+            'Lo que se supone de la encuestadora antes de mirar sus sondeos, de 0 a 100, según una rúbrica pública de '
+            'cinco criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras tiene pocos '
+            'sondeos.' + rule),
+        'num_events': ('En cuántas elecciones publicó sondeos, contando cada ámbito y fecha por separado: dos '
+                       'autonómicas del mismo día cuentan dos.'),
+        'num_polls': ('Cuántos sondeos suyos entran en el cálculo del rating, de todas las elecciones anteriores y de '
+                      'todos los ámbitos, tras descartar los de peso ínfimo.'),
+        'event': 'La elección, o las elecciones del mismo día, en que publicó sondeos; de la más nueva a la más antigua.',
+        'n_polls': ('Cuántos sondeos publicó para esa elección de los que entran en el modelo; el diferencial, el error '
+                    'medio y el sesgo de bloques son la media de esos sondeos.'),
+        'bias_dev_adj': (
+            'Cuánto se separó el sesgo de sus sondeos del de los sondeos comparables{} (misma fecha y tamaño), en la '
+            'escala del sesgo del modelo, no en puntos: negativo, menos sesgo que los demás, y eso sube el rating; '
+            'positivo, más. Un 2 ya es una diferencia grande.'.format(that)),
+        'error_avg': ('Distancia media, en puntos, entre sus sondeos{} y el resultado de cada partido principal. Sin '
+                      'signo: cuanto más rojo, mayor.'.format(that)),
+        'error_blocks': (
+            'Cuánto se equivocaron sus sondeos{} en el margen entre los dos bloques principales, en puntos y con signo: '
+            'positivo, daban más margen {} del que hubo; negativo, más margen {}.'.format(that, first, second)),
+        'herding': ('Cuánto varían sus sondeos frente a lo que permite el azar de sus muestras: por debajo de 1, menos '
+                    'de lo esperable, como si se acercaran a los demás.'),
+        'change': 'Cuánto subió o bajó el rating tras esa elección frente al que tenía al llegar: verde si subió, rojo si bajó.',
+    }
+    keys = PATH_COLUMNS if kind == 'path' else RANKING_COLUMNS
+
+    return [{'key': key, 'label': COLUMN_LABELS[key], 'text': texts[key]} for key in keys]
+
+
 def block_bar_colors(meta: dict, parties) -> tuple:
     """
     The two blocks of the margin («Sesgo bloques») and the colour of each side of its bar.
@@ -473,7 +547,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     -------
     dict
         The common context plus ``ranking`` (``ranking_rows``), ``ranking_shown`` (``RANKING_SHOWN``) and
-        ``ranking_hidden`` (rows beyond them, behind "Cargar más"), ``error_max`` (the largest ``error_avg`` of
+        ``ranking_hidden`` (rows beyond them, behind "Cargar más"), ``ranking_columns`` (``table_columns``), ``block_colors`` (``block_bar_colors``), ``error_max`` (the largest ``error_avg`` of
         the ranking, the fullest shade of that column; 0 without one), ``grid`` (``house_effects_grid`` or
         ``None``), ``herding`` (``herding_rows`` or ``None``), ``analysis_missing``, ``pollster_ids``
         (``{name: id}`` of the pollsters rated in the event, for the links), ``ranking_event`` (ISO date of the
@@ -510,14 +584,13 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     context['ranking'] = ranking
     context['ranking_shown'] = RANKING_SHOWN
     context['ranking_hidden'] = max(0, len(ranking) - RANKING_SHOWN)
-    context['error_max'] = max((row['error_avg'] for row in ranking if row.get('error_avg') is not None), default=0)
     context['grid'] = grid
     context['herding'] = herding_rows(herding) if herding is not None else None
-    # the scale of the rubric, for the points rule of «Scoring» in the glossary of the ranking
-    context['quality'] = load_criteria()['scale']
-    # the two blocks of the margin («Sesgo bloques»): their names for the glossary and the colour of each side of
-    # the bar (positive favours the first block, negative the second)
-    context['blocks'], context['block_colors'] = block_bar_colors(context['meta'], context['catalog'])
+    # the columns of the ranking with their descriptions (header tooltips and glossary): the two blocks of the
+    # margin name the sign of «Sesgo bloques» and colour its bar; the scale of the rubric gives the points rule
+    # of «Confianza»
+    blocks, context['block_colors'] = block_bar_colors(context['meta'], context['catalog'])
+    context['ranking_columns'] = table_columns('ranking', blocks, load_criteria()['scale'])
     context['analysis_missing'] = missing
     context['pollster_ids'] = {
         record['pollster']: int(record['pollster_id'])
@@ -553,7 +626,7 @@ def profile_kpis(current: dict, mtype: Optional[str], quality_support: str) -> l
     return [
         {'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '', 'support': 'entra así en el promedio',
          'ok': False, 'color': None},
-        {'label': 'Scoring', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': quality_support,
+        {'label': 'Confianza', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': quality_support,
          'ok': False, 'color': None},
         {'label': 'Tipo', 'value': mtype or '–', 'unit': '', 'support': '', 'ok': False, 'color': None},
     ]
@@ -743,8 +816,12 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     context['current'] = {'rating': latest[-1]['rating'] if latest else None,
                           'quality': profile['pollster'].get('quality'),
                           'event_date': latest[-1]['event_date'] if latest else None}
-    context['quality'] = quality_card(profile.get('quality'), profile['pollster'], load_criteria())
+    criteria = load_criteria()
+    context['quality'] = quality_card(profile.get('quality'), profile['pollster'], criteria)
     context['kpis'] = profile_kpis(context['current'], context['mtype'], context['quality']['support'])
+    # the columns of the rating path (header tooltips and glossary) and the colours of the bar of «Sesgo bloques»
+    context['path_columns'] = table_columns('path', blocks, criteria['scale'])
+    context['block_colors'] = block_bar_colors(context['meta'], context['catalog'])[1]
     context['path'] = path['points'][::-1]
     context['path_points'] = path['points']
     context['today'] = path['today']
