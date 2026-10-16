@@ -23,7 +23,7 @@
               <tr>
                 <th scope="col" class="f l">Encuestadora</th>
                 <th scope="col">Rating</th>
-                <th scope="col">Calidad</th>
+                <th scope="col">Scoring <span class="help" title="Mide cómo trabaja la encuestadora (campo propio, ficha técnica, independencia, identidad y estándares), de 0 a 100; no cuánto acierta, que es el rating. Pesa en el rating mientras tiene pocos sondeos." aria-label="Qué es el scoring">?</span></th>
                 <th scope="col">Sondeos</th>
                 <th scope="col">Elecciones</th>
                 <th scope="col">Error medio</th>
@@ -53,7 +53,7 @@
         <button type="button" class="more" id="ranking-more" data-batch="{{ ranking_shown }}" hidden>Cargar más</button>
         {% endif %}
         {% call m.how() %}
-        <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría solo su calidad previa, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con una calidad previa que pesa más cuantos menos sondeos tiene.</p>
+        <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría solo su scoring, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con su scoring (la calidad previa del método) que pesa más cuantos menos sondeos tiene.</p>
         <p>Cuanto más alto, más pesan sus sondeos en el promedio. La barra del rating va de 0 a 100; la del sesgo del margen crece hacia la izquierda (rojo, negativo) o hacia la derecha (verde, positivo) hasta 2 puntos; el fondo del error medio es más intenso cuanto mayor el error, y el del rebaño, cuanto más por debajo de 1 (en gris, por encima). El error medio, el sesgo del margen y el rebaño se explican en «Qué mide cada columna». La tabla enseña las {{ ranking_shown }} primeras; «Cargar más» sigue. Pulsa en una encuestadora para ver su perfil.</p>
         <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
         {% endcall %}
