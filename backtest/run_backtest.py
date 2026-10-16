@@ -4,7 +4,7 @@ Run the model backtest on past elections and write the results to `backtest/resu
 
 Usage (from the repository root):
     python backtest/run_backtest.py [--scope es | --scopes es-md es-cl ... | --scopes all]
-                                    [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 500] [--seed 42] [--nowcast-only]
+                                    [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 1000] [--seed 42] [--nowcast-only]
                                     [--no-house-effects] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
@@ -90,7 +90,7 @@ def main():
     group.add_argument('--scopes', nargs='+', default=None, help="several scopes (es-md es-cl ...) or 'all' for every regional one; each writes to its own directory")
     parser.add_argument('--events', nargs='*', default=None)
     parser.add_argument('--horizons', nargs='*', type=int, default=None)
-    parser.add_argument('--n-sim', type=int, default=500)
+    parser.add_argument('--n-sim', type=int, default=1000)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--max-fc', type=int, default=10)
     parser.add_argument('--nowcast-only', action='store_true', help='skip the horizon run of each case (columns `_h`)')
