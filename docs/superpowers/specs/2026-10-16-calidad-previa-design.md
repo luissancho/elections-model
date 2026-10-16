@@ -259,8 +259,11 @@ patrocinadores a {fecha}» (o «de muestras»), para que un lector sepa qué se 
 
 1. `save_catalogues()` (desde el notebook `PollsCompute` o un intérprete), que crea `pollsters_quality` y
    reescribe `pollsters.quality`.
-2. Recalcular los ratings como hoy: `PollsCompute.ipynb` con `compute_ratings(save=True, scopes='all')` para `es` y
-   para cada ámbito autonómico publicado (el cambio de D3 afecta a todos los eventos de `pollsters_ratings`).
+2. Recalcular los ratings de todos los ámbitos con el job `compute` (añadido el 2026-10-16 tras cerrar la spec:
+   `mtpy/jobs/Compute.py`, la secuencia de `PollsCompute.ipynb` con los niveles de `verbose` de `publish`):
+   `python job.py compute '{"what":["ratings"],"scopes":"all"}'` (`all` incluye `es`; el cambio de D3 afecta a todos
+   los eventos de `pollsters_ratings`). `{"what":["compute"]}` recalcula además pesos, errores, desviaciones,
+   deriva, efectos de casa y rebaño; `"dry_run": true` calcula sin escribir.
 3. Publicar como siempre (`python job.py publish …`: `forecast`, `analysis`, `event`) para que el promedio y las
    páginas usen los ratings nuevos; el perfil y la API leen la réplica en vivo y no necesitan publicación.
 4. Comprobar la tabla «Efecto esperado» de D3 contra `pollsters_ratings` recalculada (n, prior y rating ajustado de

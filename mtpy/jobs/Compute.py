@@ -1,7 +1,7 @@
 from ..core.worker import Job
 from ..lib.compute import compute_scope, rate_scope
 from ..lib.publish import resolve_scopes
-from .progress import ScopeReporter, counted
+from .progress import ScopeReporter, collect_warnings, counted, notes_suffix
 
 
 # Labels of the phases reported at verbose 2 (keys of `compute.COMPUTE_STEPS` and `compute.RATINGS_STEP`)
@@ -146,26 +146,32 @@ class Compute(ScopeReporter, Job):
             ``{'status': 'computed', 'action', ...figures}`` or ``{'status': 'failed', 'action', 'reason'}``.
         """
         name = ACTIONS[action]
+        notes = []
         try:
-            if action == 'compute':
-                figures = compute_scope(scope, save=not dry_run, verbose=verbose, progress=progress,
-                                        computer=computer, featured=featured)
-            else:
-                figures = rate_scope(scope, save=not dry_run, verbose=verbose, progress=progress, computer=computer)
+            with collect_warnings(notes, progress.note):
+                if action == 'compute':
+                    figures = compute_scope(scope, save=not dry_run, verbose=verbose, progress=progress,
+                                            computer=computer, featured=featured)
+                else:
+                    figures = rate_scope(scope, save=not dry_run, verbose=verbose, progress=progress,
+                                         computer=computer)
         except Exception as e:
             self._log_error(scope)
-            return {'status': 'failed', 'action': name, 'reason': '{}: {}'.format(type(e).__name__, e)}
+            return {'status': 'failed', 'action': name, 'reason': '{}: {}'.format(type(e).__name__, e),
+                    'warnings': notes}
 
-        return {'status': 'computed', 'action': name, **figures}
+        return {'status': 'computed', 'action': name, **figures, 'warnings': notes}
 
     @staticmethod
     def _line(scope, result):
-        """Format the summary line of one scope result."""
+        """Format the summary line of one scope result, with the count of its model warnings."""
         if result['status'] != 'computed':
-            return '{}: {} {} ({})'.format(scope, result['action'], result['status'], result['reason'])
-        if result['action'] == 'ratings':
-            return '{}: ratings computed ({} pollsters, {} events) in {:.0f} s'.format(
+            line = '{}: {} {} ({})'.format(scope, result['action'], result['status'], result['reason'])
+        elif result['action'] == 'ratings':
+            line = '{}: ratings computed ({} pollsters, {} events) in {:.0f} s'.format(
                 scope, result['n_pollsters'], result['n_events'], result['seconds']['total'])
-        featured = 'dry run' if result['featured'] is None else '{} featured'.format(result['featured'])
-        return '{}: series computed ({} polls, {} events, {}) in {:.0f} s'.format(
-            scope, result['n_polls'], result['n_events'], featured, result['seconds']['total'])
+        else:
+            featured = 'dry run' if result['featured'] is None else '{} featured'.format(result['featured'])
+            line = '{}: series computed ({} polls, {} events, {}) in {:.0f} s'.format(
+                scope, result['n_polls'], result['n_events'], featured, result['seconds']['total'])
+        return line + notes_suffix(result)

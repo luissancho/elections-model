@@ -28,7 +28,7 @@ def test_compute_runs_the_series_of_every_scope_and_then_the_ratings(fresh_app, 
     assert [scope for scope, _ in factory.inits] == ['es'] * 3 + ['es-md'] * 3 + ['es', 'es-md']
     assert featured == ['es', 'es-md']
     assert results['es'] == {'status': 'computed', 'action': 'ratings', 'n_pollsters': 2, 'n_events': 1,
-                             'seconds': results['es']['seconds']}
+                             'seconds': results['es']['seconds'], 'warnings': []}
     out = capsys.readouterr().out
     assert 'compute series: 2 ámbitos' in out and 'compute ratings: 2 ámbitos' in out
     assert 'es: series computed (2 polls, 2 events, 7 featured) in 0 s' in out
@@ -78,3 +78,26 @@ def test_compute_ratings_only_and_unknown_actions(fresh_app, scopes):
     assert results['es-md']['action'] == 'ratings' and results['es-md']['status'] == 'computed'
     with pytest.raises(ValueError, match='compute: unknown what "x"'):
         run(FakeComputer(), what=['x'], scopes=['es'])
+
+
+def test_compute_reports_the_model_warnings_as_notes(fresh_app, scopes, capsys):
+    """Nivel 1: los avisos del modelo salen como `· aviso:` del ámbito, no crudos por stderr, y se cuentan en la
+    línea de resumen y en el resultado, como en `publish`."""
+    import warnings
+
+    class WarningComputer(FakeComputer):
+        def __call__(self, scope, verbose=0, **kwargs):
+            comp = super().__call__(scope, verbose, **kwargs)
+            errors = comp.compute_errors
+
+            def compute_errors(save=False):
+                warnings.warn('serie corta', RuntimeWarning)
+                return errors(save=save)
+            comp.compute_errors = compute_errors
+            return comp
+
+    results, _ = run(WarningComputer(), what='compute', scopes=['es'], verbose=1)
+    out, err = capsys.readouterr()
+    assert '[1/1] es · aviso: serie corta' in out and 'serie corta' not in err
+    assert results['es']['warnings'] == ['serie corta']
+    assert 'es: series computed (2 polls, 2 events, 7 featured) in 0 s · 1 aviso' in out

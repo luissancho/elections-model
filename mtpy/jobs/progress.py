@@ -10,16 +10,59 @@ Verbosity levels (``verbose`` of the job): 0, only the header of each action and
 start, the result line and the warnings of each scope; 2, also the phase lines with their seconds; 3, also the own
 output of the model (which receives ``verbose - 2``).
 """
+import contextlib
 import logging
 import sys
 import traceback
+import warnings
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 
 def counted(n: int, one: str, many: str) -> str:
     """Return ``n`` with the singular or plural noun (``'1 ámbito'``, ``'2 ámbitos'``)."""
     return '{} {}'.format(n, one if n == 1 else many)
+
+
+@contextlib.contextmanager
+def collect_warnings(notes: list, note: Optional[Callable] = None):
+    """
+    Collect every warning raised inside the block instead of letting it reach stderr.
+
+    All categories are recorded (``DeprecationWarning`` included, the filters are set to ``always`` inside the
+    block) and the previous filters and ``showwarning`` are restored on exit, also when the block raises.
+
+    Parameters
+    ----------
+    notes : list of str
+        Destination of the messages: each new message text is appended once, in order of appearance.
+    note : callable, optional
+        Called with the text of each new message as it is raised (live output, `ScopeProgress.note`).
+
+    Yields
+    ------
+    list of str
+        ``notes``.
+    """
+    def show(message, category, filename, lineno, file=None, line=None):
+        text = str(message)
+        if text not in notes:
+            notes.append(text)
+            if note is not None:
+                note(text)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        warnings.showwarning = show
+        yield notes
+
+
+def notes_suffix(result: dict) -> str:
+    """Return the `` · n avisos`` suffix of a result with model ``warnings``, or an empty string."""
+    n = len(result.get('warnings') or ())
+    if n == 0:
+        return ''
+    return ' · {} {}'.format(n, 'aviso' if n == 1 else 'avisos')
 
 
 class ScopeProgress:

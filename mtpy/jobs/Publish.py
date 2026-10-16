@@ -1,11 +1,9 @@
-import contextlib
 import sys
-import warnings
 from datetime import date, timedelta
 
 from ..core.worker import Job
 from ..lib import bundle, publish
-from .progress import ScopeReporter, counted
+from .progress import ScopeReporter, collect_warnings, counted, notes_suffix
 
 
 STEPS = {'init': 'simulador listo', 'fit': 'promedio ajustado', 'nowcast': 'simulación de hoy',
@@ -81,6 +79,8 @@ class Publish(ScopeReporter, Job):
 
     WHAT = ('forecast', 'analysis', 'event', 'backtest', 'manifest', 'point', 'unpublish')
     verbose = 1
+    _collect_warnings = staticmethod(collect_warnings)
+    _notes_suffix = staticmethod(notes_suffix)
     RUN_EXISTS = 'run exists'
     RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
 
@@ -470,41 +470,6 @@ class Publish(ScopeReporter, Job):
         return {'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds'],
                 'warnings': notes}
 
-    @staticmethod
-    @contextlib.contextmanager
-    def _collect_warnings(notes, note=None):
-        """
-        Collect every warning raised inside the block instead of letting it reach stderr.
-
-        All categories are recorded (``DeprecationWarning`` included, the filters are set to
-        ``always`` inside the block) and the previous filters and ``showwarning`` are restored
-        on exit, also when the block raises.
-
-        Parameters
-        ----------
-        notes : list of str
-            Destination of the messages: each new message text is appended once, in order of
-            appearance.
-        note : callable, optional
-            Called with the text of each new message as it is raised (live output).
-
-        Yields
-        ------
-        list of str
-            ``notes``.
-        """
-        def show(message, category, filename, lineno, file=None, line=None):
-            text = str(message)
-            if text not in notes:
-                notes.append(text)
-                if note is not None:
-                    note(text)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter('always')
-            warnings.showwarning = show
-            yield notes
-
     def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
         """
         Publish the houses analysis of one scope, converting every outcome into a result dict.
@@ -730,11 +695,3 @@ class Publish(ScopeReporter, Job):
         else:
             line = '{}: {} ({})'.format(scope, status, result['reason'])
         return line + Publish._notes_suffix(result)
-
-    @staticmethod
-    def _notes_suffix(result):
-        """Return the `` · n avisos`` suffix of a result with model warnings, or an empty string."""
-        n = len(result.get('warnings') or ())
-        if n == 0:
-            return ''
-        return ' · {} {}'.format(n, 'aviso' if n == 1 else 'avisos')
