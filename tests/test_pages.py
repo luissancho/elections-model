@@ -884,7 +884,7 @@ def fake_houses(monkeypatch, name='CIS'):
     """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
     pollsters = pd.DataFrame({
         'id': [1, 2, 3, 4, 5], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero'],
-        'mtype': ['public', 'private', 'private', 'private', 'private'], 'quality': [60.0, 80.0, 40.0, 50.0, 50.0],
+        'mtype': ['public', 'private', 'private', 'private', 'online'], 'quality': [56.0, 80.0, 40.0, 5.0, 5.0],
         'rating': [55, 70, None, None, 50],  # rating nacional truncado: distinto del camino del ámbito
     })
     ratings = pd.DataFrame({
@@ -936,7 +936,18 @@ def fake_houses(monkeypatch, name='CIS'):
                         lambda pollster_id: path_events[path_events.pollster_id == pollster_id].reset_index(drop=True))
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
-    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame(columns=['pollster_id', 'quality']))
+    quality = pd.DataFrame({
+        'pollster_id': [1, 3], 'pollster': [name, 'Hamalgama'],
+        'fieldwork': [3, 2], 'fieldwork_source': ['https://www.cis.es/es/metodologia', 'Ficha técnica del sondeo de 2026-10-01'],
+        'transparency': [3, 1], 'transparency_source': ['https://www.cis.es/es/microdatos', 'https://hamalgama.example/ficha'],
+        'independence': [0, 1], 'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16'],
+        'identity': [1, 1], 'identity_source': ['https://www.cis.es', 'https://hamalgama.example'],
+        'standards': [0, 0], 'standards_source': ['', ''],
+        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', ''],
+        'status': ['revisada', 'borrador'], 'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16']),
+        'points': [7, 5], 'quality': [56.0, 40.0],
+    })
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: quality)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
 
 
@@ -1144,7 +1155,8 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     """Una casa del catálogo sin ratings en el ámbito: perfil con tablas vacías, sin camino ni diana."""
     status, _, body = call(houses, '/casas/nueva')
     page = html(body)
-    assert status == 200 and '<h2>Nueva' in page and page.replace('\n', '').count('<div class="v">–<small></small></div>') >= 2  # rating y calidad sin valor
+    assert status == 200 and '<h2>Nueva' in page and page.replace('\n', '').count('<div class="v">–<small></small></div>') == 1  # solo el rating sin valor
+    assert '<div class="v">5,0<small></small></div>' in page.replace('\n', '') and 'sin evaluar' in page
     assert 'class="headline"' not in page  # el perfil no lleva titular (2026-10-15)
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page and 'id="bullseye-filter"' not in page
     assert 'id="path-table"' in page and 'id="profile-effects"' in page and 'id="profile-herding"' in page
@@ -1203,6 +1215,40 @@ def test_casa_profile_header_uses_the_scope_rating(houses):
     assert '<div class="v">82,4<small></small></div>' in flat and '<div class="v">80,0<small></small></div>' in flat
     assert '<div class="l">Tipo</div><div class="v">privada<small></small></div>' in flat and '>70,' not in flat
     assert '<div class="v">pública<small></small></div>' in html(call(houses, '/casas/cis')[2]).replace('\n', '')  # `mtype` con su etiqueta en castellano
+
+
+def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
+    page = html(call(houses, '/casas/cis')[2])
+    kpis = page[page.index('id="profile"'):page.index('id="quality"')]
+    assert '<div class="v">56,0<small></small></div>' in kpis.replace('\n', '') and '7 de 10 puntos' in kpis
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
+    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Identidad', 'Estándares']
+    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2'), ('1', '1'), ('0', '1')]
+    assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
+    assert 'Comprobado el ' in card and 'Organismo público' in card and 'provisional' not in card
+    assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
+
+
+def test_casa_profile_quality_card_marks_drafts_and_plain_sources(houses):
+    card = html(call(houses, '/casas/hamalgama')[2])
+    card = card[card.index('id="quality"'):card.index('id="path"')]
+    assert 'Evaluación provisional, pendiente de revisión' in card
+    assert 'Ficha técnica del sondeo de 2026-10-01' in card and 'href="Ficha' not in card
+    assert 'consulta de patrocinadores a 2026-10-16' in card
+
+
+def test_casa_profile_quality_card_of_an_unrated_house(houses):
+    page = html(call(houses, '/casas/nueva')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    assert 'Sin evaluar' in card and 'calidad mínima, 5' in card and 'href="/metodo/rating#calidad-previa"' in card
+    assert '<th scope="row">' not in card and 'sin evaluar' in page[page.index('id="profile"'):page.index('id="quality"')]
+
+
+def test_casa_profile_quality_card_of_an_informative_house(houses):
+    page = html(call(houses, '/casas/cero')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    assert 'no entran en el promedio' in card and 'Sin evaluar' in card
 
 
 def test_pages_package_layout():
@@ -2930,7 +2976,7 @@ def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_colu
     assert '<td class="cell-bar cell-diverging"><i class="fill pos" style="left: 45.0%; width: 5.0%"></i><span>-0,2</span></td>' in first
     assert '<td class="cell-shade" style="background-color: {}">2,4</td>'.format(shade(2.37, 0, 20, '#2ca02c')) in first
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', card, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo del margen', 'Diferencial', 'Rating', 'Cambio']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Sondeos', 'Error medio', 'Sesgo del margen', 'Diferencial', 'Calidad previa', 'Rating', 'Cambio']
     assert 'a Derecha' in glossary and 'sube el rating' in glossary and 'Error de bloques' not in card and 'Rebaño' not in card
     assert 'de 0 a 100' in card and 'hasta hoy' in card
     data = initial(body)

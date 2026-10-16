@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
 
 from .. import webapi
+from ..quality import criteria_keys, level_text, load_criteria, max_points
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
 from .common import analysis_part, api_url, common_context
 from .elecciones import error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts
@@ -493,16 +494,18 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     return context
 
 
-def profile_kpis(current: dict, mtype: Optional[str]) -> list:
+def profile_kpis(current: dict, mtype: Optional[str], quality_support: str) -> list:
     """
     The KPI row of a pollster profile: its rating, its prior quality and its type.
 
     Parameters
     ----------
     current : dict
-        The latest rating row (``rating``, ``quality``).
+        The current values of the pollster (``rating``, ``quality``).
     mtype : str or None
         Label of the type of the pollster.
+    quality_support : str
+        Text under the prior quality: the points of its evaluation, or that it is not evaluated.
 
     Returns
     -------
@@ -512,10 +515,54 @@ def profile_kpis(current: dict, mtype: Optional[str]) -> list:
     return [
         {'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '', 'support': 'entra así en el promedio',
          'ok': False, 'color': None},
-        {'label': 'Calidad previa', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': '', 'ok': False,
-         'color': None},
+        {'label': 'Calidad previa', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': quality_support,
+         'ok': False, 'color': None},
         {'label': 'Tipo', 'value': mtype or '–', 'unit': '', 'support': '', 'ok': False, 'color': None},
     ]
+
+
+def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict:
+    """
+    The card of the prior quality of a pollster: its evaluation against the public rubric.
+
+    Parameters
+    ----------
+    record : dict or None
+        The evaluation of the pollster (``webapi.query_pollster()['quality']``); ``None`` when it is not evaluated.
+    pollster : dict
+        The catalogue row of the pollster (``mtype`` is read).
+    criteria : dict
+        The catalogue of criteria (``quality.load_criteria``).
+
+    Returns
+    -------
+    dict
+        ``evaluated``, ``rows`` (one ``{'key', 'name', 'points', 'max', 'level', 'source', 'is_url'}`` per criterion,
+        in the order of the catalogue; empty when not evaluated), ``points``, ``max_points``, ``quality``,
+        ``status``, ``draft`` (status ``borrador``), ``checked_at`` (ISO string), ``notes``, ``informative``
+        (aggregators and online panels, whose polls do not enter the average), ``support`` (the text under the KPI),
+        and the ``floor`` and ``per_point`` of the scale.
+    """
+    total = max_points(criteria)
+    scale = criteria['scale']
+    rows = []
+    if record:
+        for key in criteria_keys(criteria):
+            source = record.get(f'{key}_source') or ''
+            points = int(record[key])
+            rows.append({'key': key, 'name': criteria['criteria'][key]['name'], 'points': points,
+                         'max': criteria['criteria'][key]['max'], 'level': level_text(criteria, key, points),
+                         'source': source, 'is_url': source.startswith(('http://', 'https://'))})
+    points = int(record['points']) if record else None
+    status = record.get('status') if record else None
+    return {
+        'evaluated': bool(record), 'rows': rows, 'points': points, 'max_points': total,
+        'quality': record.get('quality') if record else None, 'status': status, 'draft': status == 'borrador',
+        'checked_at': record.get('checked_at') if record else None, 'notes': (record.get('notes') or None) if record else None,
+        'informative': pollster.get('mtype') in ('aggr', 'online'),
+        'support': f'{points} de {total} puntos' if record else 'sin evaluar',
+        'floor': scale['floor'], 'per_point': scale['per_point'],
+    }
 
 
 def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: Optional[date] = None) -> dict:
@@ -544,8 +591,8 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     dict
         The common context plus ``kpis`` (``profile_kpis``), ``profile`` (``webapi.query_pollster`` of every
         scope), ``mtype`` (the type of the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None``
-        when missing), ``current`` (the ``rating`` and ``quality`` of its last national ratings row, the next
-        general election; both ``None`` without ratings), ``path`` (the rows of the rating path table: the
+        when missing), ``current`` (the ``rating`` of its last national ratings row, the next general election,
+        ``None`` without ratings; and its ``quality`` of today, the catalogue one), ``quality`` (``quality_card``), ``path`` (the rows of the rating path table: the
         ``points`` of ``rating_path`` from the newest), ``path_points`` (the points, ascending, for the chart),
         ``today`` (``rating_path``, the end of the chart), ``last_table`` and
         ``last_consensus_table`` (``effects_table`` of the ``result`` and ``consensus`` of ``last_poll_records``:
@@ -619,8 +666,11 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
 
     context['profile'] = profile
     context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
-    context['current'] = latest[-1] if latest else {'rating': None, 'quality': None, 'event_date': None}
-    context['kpis'] = profile_kpis(context['current'], context['mtype'])
+    context['current'] = {'rating': latest[-1]['rating'] if latest else None,
+                          'quality': profile['pollster'].get('quality'),
+                          'event_date': latest[-1]['event_date'] if latest else None}
+    context['quality'] = quality_card(profile.get('quality'), profile['pollster'], load_criteria())
+    context['kpis'] = profile_kpis(context['current'], context['mtype'], context['quality']['support'])
     context['path'] = path['points'][::-1]
     context['path_points'] = path['points']
     context['today'] = path['today']

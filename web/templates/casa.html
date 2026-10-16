@@ -14,6 +14,46 @@
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su calidad previa y el rating con el que entra en el promedio, el mismo en todos los ámbitos. Debajo, su historial en las elecciones de todos los ámbitos.') }}
         {{ m.kpis(kpis) }}
       {{ m.card_end() }}
+      {{ m.card_start('quality', 'Calidad previa', 'Lo que se sabe de cómo trabaja la encuestadora antes de mirar si acierta: cinco criterios comprobables, con su fuente.') }}
+        {% if quality.evaluated %}
+        <div class="table-wrap">
+          <table id="quality-table">
+            <caption>Los cinco criterios de la rúbrica pública, los puntos de la encuestadora en cada uno y de dónde sale.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Criterio</th>
+                <th scope="col">Puntos</th>
+                <th scope="col">Nivel</th>
+                <th scope="col">Fuente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in quality.rows %}
+              <tr>
+                <th scope="row">{{ row.name }}</th>
+                <td>{{ row.points }} / {{ row.max }}</td>
+                <td>{{ row.level }}</td>
+                <td>{% if row.is_url %}<a href="{{ row.source }}" rel="noopener">{{ row.source }}</a>{% else %}{{ row.source or '–' }}{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">{{ quality.points }} de {{ quality.max_points }} puntos: calidad previa {{ quality.quality|num(1) }}. Comprobado el {{ quality.checked_at|date }}.{% if quality.notes %} {{ quality.notes }}{% endif %}</p>
+        {% if quality.draft %}
+        <p class="notice">Evaluación provisional, pendiente de revisión.</p>
+        {% endif %}
+        {% else %}
+        <p class="notice">Sin evaluar: tiene la calidad mínima, {{ quality.floor }}, hasta que alguien compruebe cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>.</p>
+        {% endif %}
+        {% if quality.informative %}
+        <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores y paneles en línea quedan fuera): la calidad previa es informativa.</p>
+        {% endif %}
+        {% call m.how() %}
+        <p>La rúbrica puntúa cómo trabaja la encuestadora, no cuánto acierta: eso lo cuenta el rating; cada punto vale {{ quality.per_point }} de calidad, con un mínimo de {{ quality.floor }}.</p>
+        <p>La calidad del recuadro de arriba es la de hoy; la que usó cada rating pasado está en «Camino al rating».</p>
+        {% endcall %}
+      {{ m.card_end() }}
       {{ m.card_start('path', 'Camino al rating', 'Cómo ha ido cambiando el rating de la encuestadora según se veían sus resultados, elección a elección y de cualquier ámbito, hasta hoy: qué tal lo hizo cada vez y con qué rating se quedó.') }}
         {% if path_points %}
         <div class="chart" id="rating-path" role="img" aria-label="Rating de {{ profile.pollster.name }} en cada elección que sondeó, hasta hoy"></div>
@@ -55,7 +95,7 @@
         {% call m.how() %}
         <p>Cada punto es una fecha con una o varias elecciones en las que la encuestadora publicó sondeos, de cualquier ámbito, y el rating con el que se quedó tras evaluarlas con todo su historial anterior: el que se le aplica hasta la siguiente. En azul las generales (o una fecha con general y autonómicas) y en naranja las autonómicas, como en la diana. El eje va de 0 a 100, igual para todas las encuestadoras, y el tramo discontinuo lleva el último rating hasta hoy: es el que entra en el promedio.</p>
         <p>La tabla cuenta qué tal lo hizo cada fecha, de la más nueva a la más antigua: el error medio, el sesgo del margen y el diferencial son la media de sus sondeos de esas elecciones, los mismos que cuenta la columna de sondeos; el diferencial es lo que mueve el rating, y el cambio dice cuánto subió o bajó frente al que tenía al llegar. El fondo del error medio es más rojo cuanto mayor; la barra del diferencial crece hacia la izquierda en verde (menos sesgo que los sondeos comparables) o hacia la derecha en rojo, hasta 2; el fondo del cambio es verde si subió y rojo si bajó. Las columnas se explican en «Qué mide cada columna».</p>
-        <p>Un rating bajo en una elección no condena a la encuestadora en la siguiente.</p>
+        <p>Un rating bajo en una elección no condena a la encuestadora en la siguiente. La calidad previa que se usó en cada elección fue la de entonces; la del KPI es la de hoy.</p>
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
