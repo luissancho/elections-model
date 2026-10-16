@@ -346,3 +346,21 @@ def test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll():
     assert list(df.index.names) == ['event', 'pollster', 'days'] and len(df) == 2
     assert 'bias_within' in df.columns and df['bias_within'].isna().all()
     assert df['error_within'].tolist() == [0., 0.] and {'Derecha', 'Izquierda'} <= set(df.columns)
+
+
+# --- Sesgo margen: el signo del error del margen entre bloques ---
+
+def test_gap_error_is_positive_when_the_poll_favours_the_first_block():
+    """`error_blocks` es el margen del primer bloque (Derecha) sobre el segundo, sondeo menos resultado: positivo
+    cuando el sondeo dio al primer bloque más margen del que hubo (GAD3, 13-7-2023: 9,3 en el sondeo, 1,4 real)."""
+    c = bare_computer()
+    c.parties = pd.DataFrame({'name': ['PP', 'VOX', 'PSOE', 'SUMAR']})
+    bmap = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'SUMAR']}
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-23'), pd.Timestamp('2023-07-13'), 2, 0)],
+                                      names=['event_date', 'date', 'pollster_id', 'sponsor_id'])
+    polls = pd.DataFrame({'PP': [36.8], 'VOX': [12.3], 'PSOE': [28.5], 'SUMAR': [11.3]}, index=index)
+    events = pd.DataFrame({'PP': [33.06], 'VOX': [12.38], 'PSOE': [31.68], 'SUMAR': [12.33]},
+                          index=pd.Index([pd.Timestamp('2023-07-23')], name='event_date'))
+    out = c.poll_errors(polls, events, error_type='gap', bmap=bmap)
+    assert out[('poll', 'gap')].iloc[0] == pytest.approx(0.093) and out[('event', 'gap')].iloc[0] == pytest.approx(0.0143)
+    assert out[('error', 'gap')].iloc[0] == pytest.approx(0.0787)

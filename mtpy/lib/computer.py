@@ -1002,7 +1002,9 @@ class Computer(Core):
                 The average error over the most important parties for each event (usually predicted by all pollsters).
                 These are defined at the event parameters `main` bmap.
             - error_blocks
-                The error/bias of the poll prediction over the margin gap between the two main blocks of parties.
+                The signed error of the poll prediction over the margin gap between the two main blocks of parties
+                (the first block of the `vs` map minus the second, poll minus result): positive when the poll gave
+                the first block more margin than it got.
                 These are defined at the event parameters `vs` bmap.
             - error_within
                 The part of the error of the parties of the `vs` blocks that only redistributes votes within a
@@ -1521,10 +1523,11 @@ class Computer(Core):
                 events.loc[dt, missing] = np.nan
         
         # In case we are evaluating the error over the margin gap between the two main blocks of parties,
-        # we need to compute the difference between the last and the first block of parties
+        # the gap is the margin of the first block over the last one, so the error is positive when the poll
+        # gave the first block (the right, in the `vs` maps) more margin than it got
         if error_type == 'gap':
-            polls = polls.diff(axis=1).dropna(axis=1, how='all').rename(columns={names[-1]: 'gap'})
-            events = events.diff(axis=1).dropna(axis=1, how='all').rename(columns={names[-1]: 'gap'})
+            polls = (polls[names[0]] - polls[names[-1]]).to_frame('gap')
+            events = (events[names[0]] - events[names[-1]]).to_frame('gap')
             cols = ['gap']
         else:
             cols = names
