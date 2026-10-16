@@ -9,6 +9,7 @@ class Redshift(SQLAdapter):
     driver = 'redshift+psycopg2'
     default_port = 5439
     quote = '"'
+    quote_escape = "''"  # PostgreSQL dialect: the quote is doubled inside string literals
     data_types = {
         'varchar': 'VARCHAR',
         'text': 'TEXT',
