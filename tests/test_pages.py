@@ -1233,6 +1233,20 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
     assert 'Comprobado el 16 oct 2026.' in card and 'Organismo público' in card and 'provisional' not in card
     assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
+    how = card[card.index('<details class="how"'):]
+    assert '<a href="/metodo/rating#calidad-previa">La rúbrica</a> puntúa' in how  # enlace al método también si está evaluada
+    glossary = page[page.index('id="glosario"'):]
+    glossary = glossary[glossary.index('<dt>Calidad previa</dt>'):glossary.index('<dt>Rating</dt>')]
+    assert 'Cada punto vale 8 de calidad, con un mínimo de 5.' in glossary  # la regla de puntos, del catálogo
+
+
+def test_glossary_points_rule_needs_the_quality_scale():
+    """La regla de puntos de «Calidad previa» sale de `quality` (la escala del catálogo) y se omite sin ella."""
+    template = pages.environment().get_template('_glosario.html')
+    plain = template.render(with_rating=True, with_herding=False)
+    assert '<dt>Calidad previa</dt>' in plain and 'Cada punto vale' not in plain
+    scaled = template.render(with_rating=True, with_herding=False, quality={'per_point': 9, 'floor': 4})
+    assert 'Cada punto vale 9 de calidad, con un mínimo de 4.' in scaled
 
 
 def test_casa_profile_quality_card_marks_drafts_and_plain_sources(houses):
@@ -1938,6 +1952,7 @@ def test_metodo_rating_text(api):
     assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
     assert 'Trabajo de campo' in text and 'Estándares' in text and '<table id="rubric-table">' in page
     assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
+    assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text
     assert 'entre 3 y 4' in text and 'en torno al 10' in text
     assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
     assert 'puesta a mano' not in text and 'rúbrica pública' in text

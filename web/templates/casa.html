@@ -50,7 +50,7 @@
         <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores y paneles en línea quedan fuera): la calidad previa es informativa.</p>
         {% endif %}
         {% call m.how() %}
-        <p>La rúbrica puntúa cómo trabaja la encuestadora, no cuánto acierta: eso lo cuenta el rating; cada punto vale {{ quality.per_point }} de calidad, con un mínimo de {{ quality.floor }}.</p>
+        <p><a href="/metodo/rating#calidad-previa">La rúbrica</a> puntúa cómo trabaja la encuestadora, no cuánto acierta: eso lo cuenta el rating; cada punto vale {{ quality.per_point }} de calidad, con un mínimo de {{ quality.floor }}.</p>
         <p>La calidad del recuadro de arriba es la de hoy; la que usó cada rating pasado está en «Camino al rating».</p>
         {% endcall %}
       {{ m.card_end() }}
