@@ -11,13 +11,17 @@ from .. import webapi
 from ..quality import criteria_keys, level_text, load_criteria, max_points
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
 from .common import OTHERS_COLOR, analysis_part, api_url, block_color, common_context
-from .elecciones import error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts
+from .elecciones import (error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts,
+                         table_blocks, year_range)
 from .filters import _madrid_tz, fmt_num, fmt_date
 
 RATING_SCOPE = 'es'
 # Rows of the ranking the page shows before "Cargar más".
 RANKING_SHOWN = 50
-MTYPE_LABELS = {'public': 'pública', 'private': 'privada'}
+# The type of a pollster in the catalogue (``mtype``) and its public label; a pollster without one (null, or ``-`` as
+# the catalogue prints it) is an ordinary private house (``MTYPE_DEFAULT``).
+MTYPE_LABELS = {'state': 'Pública', 'aggr': 'Agregador', 'online': 'Panel Online'}
+MTYPE_DEFAULT = 'Privada'
 RANKING_KEYS = ('pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
                 'error_blocks', 'bias_blocks', 'bias_dev_adj')
 HERDING_KEYS = ('event_scope', 'event_date', 'n', 'ratio', 'p_value')
@@ -33,6 +37,27 @@ ANALYSIS_CSV = (
     ('poll-errors', None, 'Error de los sondeos en cada elección'),
 )
 
+
+
+def mtype_label(mtype) -> str:
+    """
+    Public label of the type of a pollster.
+
+    Parameters
+    ----------
+    mtype : str or None
+        The ``mtype`` of the catalogue (``'state'``, ``'aggr'``, ``'online'``); ``None``, NaN, ``''`` or ``'-'`` when
+        it has none.
+
+    Returns
+    -------
+    str
+        The label of ``MTYPE_LABELS``; ``MTYPE_DEFAULT`` without a type; an unknown value as it comes.
+    """
+    if mtype is None or (isinstance(mtype, float) and mtype != mtype) or mtype in ('', '-'):
+        return MTYPE_DEFAULT
+
+    return MTYPE_LABELS.get(mtype, mtype)
 
 
 def ranking_rows(ratings, herding: Optional[dict]) -> list:
@@ -737,9 +762,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     -------
     dict
         The common context plus ``kpis`` (``profile_kpis``), ``profile`` (``webapi.query_pollster`` of every
-        scope), ``mtype`` (the type of the pollster through ``MTYPE_LABELS``: the raw value when unknown, ``None``
-        when missing), ``current`` (the ``rating`` of its last national ratings row, the next general election,
-        ``None`` without ratings; and its ``quality`` of today, the catalogue one), ``quality`` (``quality_card``), ``path`` (the rows of the rating path table: the
+        scope), ``mtype`` (the public label of the type of the pollster, ``mtype_label``), ``current`` (the
+        ``rating`` of its last national ratings row, the next general election, ``None`` without ratings; and its
+        ``quality`` of today, the catalogue one), ``quality`` (``quality_card``), ``path`` (the rows of the rating
+        path table: the
         ``points`` of ``rating_path`` from the newest), ``path_points`` (the points, ascending, for the chart),
         ``today`` (``rating_path``, the end of the chart), ``last_table`` and
         ``last_consensus_table`` (``effects_table`` of the ``result`` and ``consensus`` of ``last_poll_records``:
@@ -749,8 +775,10 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
         (its herding by cycle, ``HERDING_KEYS`` plus ``label``), ``bullseye`` (its rows of the ``poll-errors``
         parts of the published elections: ``event``, ``event_date``, ``year``, ``days``, ``scope``, ``name`` and
         the error of each block; empty without analysis), ``bullseye_scopes`` (``{code, name}`` of the scopes
-        with a bullseye row, in catalogue order) and ``bullseye_years`` (the years of the rows, ascending), the
-        options of the bullseye filters, ``blocks`` (the pair of ``error_blocks``), ``analysis_missing`` (no scope
+        with a bullseye row, in catalogue order) and ``bullseye_years`` (every year from the first row to today,
+        ``year_range``), the options of the bullseye filters, ``blocks`` (the pair of ``error_blocks``, the axes of
+        the bullseye), ``table_blocks`` (the same pair in the order of the table columns, ``table_blocks``),
+        ``analysis_missing`` (no scope
         has a published analysis) and ``initial`` (``state``, ``meta``, ``path`` = ``path_points``, ``today``,
         ``bullseye``, ``blocks`` and ``scopes`` = ``bullseye_scopes``). Every table runs from the newest election
         to the oldest.
@@ -803,16 +831,16 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
 
     polled = {row['scope'] for row in bullseye}
     bullseye_scopes = [{'code': scope['code'], 'name': scope['name']} for scope in scopes if scope['code'] in polled]
-    bullseye_years = sorted({row['year'] for row in bullseye if row.get('year') is not None})
+    day = today or datetime.now(_madrid_tz()).date()
+    bullseye_years = year_range({row['year'] for row in bullseye if row.get('year') is not None}, day)
     path_data = query_pollster_path(pollster_id)
-    path = rating_path(path_data['ratings'], path_data['events'], label, scope_names, [row['code'] for row in catalogue],
-                       today or datetime.now(_madrid_tz()).date())
+    path = rating_path(path_data['ratings'], path_data['events'], label, scope_names, [row['code'] for row in catalogue], day)
     latest = profile_rows(profile['ratings'], ('rating', 'quality', 'event_date'))
     mtype = profile['pollster'].get('mtype')
     order = list(context['catalog'])
 
     context['profile'] = profile
-    context['mtype'] = MTYPE_LABELS.get(mtype, mtype) if mtype not in (None, '') else None
+    context['mtype'] = mtype_label(mtype)
     context['current'] = {'rating': latest[-1]['rating'] if latest else None,
                           'quality': profile['pollster'].get('quality'),
                           'event_date': latest[-1]['event_date'] if latest else None}
@@ -835,6 +863,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     context['bullseye_scopes'] = bullseye_scopes
     context['bullseye_years'] = bullseye_years
     context['blocks'] = blocks
+    context['table_blocks'] = table_blocks(blocks)
     context['analysis_missing'] = not any(scope['analysis'] for scope in scopes)
     context['initial'] = {'state': full, 'meta': context['meta'], 'path': path['points'], 'today': path['today'],
                           'bullseye': bullseye, 'blocks': blocks, 'scopes': bullseye_scopes}

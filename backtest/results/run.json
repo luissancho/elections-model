@@ -1,8 +1,8 @@
 {
- "run_at": "2026-10-07T13:35:53",
- "commit": "a59059f",
+ "run_at": "2026-10-17T01:12:50",
+ "commit": "458a4d2",
  "scope": "es",
- "n_sim": 500,
+ "n_sim": 1000,
  "seed": 42,
  "max_fc": 10,
  "nowcast_only": false,
@@ -28,7 +28,6 @@
   90,
   180
  ],
- "db_polls": 3836,
- "db_last_poll": "2026-10-03",
- "note": "Run per event in parallel (one process per election, identical parameters) and merged; cases are independent and seeded per case."
+ "db_polls": 3848,
+ "db_last_poll": "2026-10-11"
 }

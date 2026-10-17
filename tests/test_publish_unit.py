@@ -1,6 +1,7 @@
 """Tests de `mtpy/lib/publish/` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
 import math
 import os
+import warnings
 import zoneinfo
 from datetime import date, datetime, timedelta, timezone
 
@@ -195,6 +196,23 @@ def test_export_polls_carries_the_pollsters_seat_projections():
     assert publish.poll_seats(sim.model) == {}
     sim.model.load_poll_seats = lambda: seats
     assert publish.poll_seats(sim.model) is seats
+
+
+def test_export_poll_rows_builds_the_table_at_once_without_fragmenting_it():
+    """Con más de cien partidos la tabla se monta de una vez (cuotas y escaños por `concat`), sin el
+    `PerformanceWarning` de pandas por insertar columna a columna, y con el orden de columnas del contrato."""
+    names = ['P%d' % i for i in range(120)]
+    polls = pd.DataFrame({'date': pd.to_datetime(['2026-10-01', '2026-10-02']), 'pollster_id': [1, 2],
+                          'sponsor_id': [None, 3], 'weight': [0.5, 0.25], **{n: [10.123, 20.456] for n in names}})
+    seats = {('2026-10-01', 1, 0): {'P0': [1, 2]}, ('2026-10-02', 2, 3): {'P119': [5, 7]}}
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', pd.errors.PerformanceWarning)
+        records, frame = publish.forecast.export_poll_rows(polls, names, seats=seats)
+    assert records[0]['seats'] == {'P0': [1, 2]} and records[1]['seats'] == {'P119': [5, 7]}
+    assert records[0]['P0'] == 10.12 and records[0]['sponsor'] is None
+    assert list(frame.columns) == publish.POLL_COLUMNS + names + [c + n for n in names for c in ('seats_min_', 'seats_max_')]
+    assert frame.loc[0, 'seats_max_P0'] == 2 and frame.loc[1, 'seats_min_P119'] == 5 and pd.isna(frame.loc[1, 'seats_min_P0'])
+    assert str(frame['seats_min_P0'].dtype) == 'Int64' and frame.loc[1, 'weight'] == 0.25
 
 
 def test_forecaster_load_poll_seats_pairs_min_and_max_by_poll(monkeypatch):

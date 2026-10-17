@@ -15,7 +15,7 @@
       {% if cards %}
       <div class="pcards" id="pcards">
         {% for card in cards %}
-        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="big"><b>{{ card.seats|int }}</b><span>{{ card.pct|pct }}</span></div><div class="lb"><span>escaños</span><span>voto</span></div>{% if results_year %}<div class="dl">{% if card.new %}<span>nuevo</span>{% else %}<span>{{ card.delta_seats }} esc. <i>vs {{ results_year }}</i></span><span>{{ card.delta_pct }} <i>pt</i></span>{% endif %}</div>{% endif %}<span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado del {{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
         {% endfor %}
       </div>
       {% endif %}
@@ -71,20 +71,22 @@
             En cada simulación el reparto cambia: la pestaña Escaños enseña cuánto.
           </p>
           <p>Con la vista Bloques, cada sector es un bloque y la tabla de al lado pasa a los bloques.</p>
+          {% if results_year %}<p>Junto a los escaños de cada sector, la flecha dice cuánto cambia frente a {{ results_year }}.</p>{% endif %}
           {% endcall %}
         {{ m.card_end() }}
-        {{ m.card_start('parties-card', 'Resultados por partido', 'Voto y escaños previstos de cada partido y su probabilidad de quedar primero.', subtitle) }}
+        {{ m.card_start('parties-card', 'Resultados por partido', 'Voto y escaños previstos de cada partido' ~ (' y cuánto cambian frente a ' ~ results_year if results_year else '') ~ '.', subtitle) }}
           <div class="table-wrap">
             <table id="parties-table">
-              <caption class="sr-only">Voto, escaños y probabilidad de quedar primero de cada partido.</caption>
+              <caption class="sr-only">Voto y escaños previstos de cada partido.</caption>
               <thead>
                 <tr>
                   <th scope="col">Partido</th>
                   <th scope="col">% Voto</th>
                   <th scope="col"><span class="sr-only">Barra del voto</span></th>
+                  {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
+                  {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Rango 95%</th>
-                  <th scope="col">P(primero)</th>
                 </tr>
               </thead>
               <tbody>
@@ -95,9 +97,10 @@
                   <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
                   <td><span class="bar"><i style="width: {{ row.pct|bar(0, pct_max) }}%; background: {{ color }}"></i></span></td>
+                  {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
+                  {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
                   <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
-                  <td>{{ row.p_first|prob }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -105,23 +108,31 @@
           </div>
           {% call m.how() %}
           <p>
-            Primero es la probabilidad de sacar más escaños que nadie, no la de gobernar. Los rangos de cada
-            partido están en la pestaña Escaños.
+            Los escaños son el reparto central de las simulaciones y el rango, donde cae el 95% de ellas. La
+            probabilidad de quedar primero y el detalle de cada partido están en la pestaña Escaños.
           </p>
+          {% if results_year %}
+          <p>
+            Las columnas «vs {{ results_year }}» comparan con el resultado oficial del {{ results_date|date }}, en puntos
+            y en escaños: flecha verde si sube y roja si baja; un guion, sin cambio apreciable o un partido que no
+            concurrió entonces. Las tarjetas de arriba llevan las mismas flechas bajo sus cifras.
+          </p>
+          {% endif %}
           {% endcall %}
         {{ m.card_end() }}
-        {{ m.card_start('blocks-card', 'Resultados por bloque', 'Voto y escaños de cada bloque y su probabilidad de mayoría absoluta.', subtitle, hidden=True) }}
+        {{ m.card_start('blocks-card', 'Resultados por bloque', 'Voto y escaños previstos de cada bloque' ~ (' y cuánto cambian frente a ' ~ results_year if results_year else '') ~ '.', subtitle, hidden=True) }}
           <div class="table-wrap">
             <table id="blocks-result-table">
-              <caption class="sr-only">Voto, escaños y probabilidad de mayoría absoluta de cada bloque.</caption>
+              <caption class="sr-only">Voto y escaños previstos de cada bloque.</caption>
               <thead>
                 <tr>
                   <th scope="col">Bloque</th>
                   <th scope="col">% Voto</th>
                   <th scope="col"><span class="sr-only">Barra del voto</span></th>
+                  {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
+                  {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Rango 95%</th>
-                  <th scope="col">P(mayoría)</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,9 +143,10 @@
                   <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
                   <td><span class="bar"><i style="width: {{ row.pct|bar(0, block_max) }}%; background: {{ row.color }}"></i></span></td>
+                  {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
+                  {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
                   <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
-                  <td>{{ row.p_majority|prob }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -142,10 +154,17 @@
           </div>
           {% call m.how() %}
           <p>
-            La probabilidad mide la fracción de simulaciones en que los partidos del bloque suman la mayoría
-            absoluta. Los pactos entre bloques no cuentan aquí: la calculadora de coaliciones de la pestaña
-            Escaños los prueba.
+            Cada bloque suma el voto y los escaños de sus partidos; los pactos entre bloques no cuentan aquí. La
+            probabilidad de mayoría absoluta de cada bloque y la calculadora de coaliciones están en la pestaña
+            Escaños.
           </p>
+          {% if results_year %}
+          <p>
+            Las columnas «vs {{ results_year }}» comparan con el resultado oficial del {{ results_date|date }}, sumando en
+            cada bloque los partidos de entonces, también los que ya no existen: flecha verde si el bloque sube y roja
+            si baja.
+          </p>
+          {% endif %}
           {% endcall %}
         {{ m.card_end() }}
       </div>

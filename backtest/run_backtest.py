@@ -9,78 +9,18 @@ Usage (from the repository root):
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
 Without `--events`, a regional scope evaluates its featured elections held since 2019.
+
+This script is a thin wrapper of the `backtest` job (`python job.py backtest '{...}'`, `mtpy/jobs/Backtest.py`),
+which does the work through `mtpy.lib.backtest.backtest_scope`; it only translates the command line options. Note
+that `--scopes all` here means every regional scope (not `es`), while `"scopes": "all"` in the job means `es` and
+every regional scope.
 """
 import argparse
-import json
 import os
-import subprocess
 import sys
-from datetime import datetime
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, ROOT)
-
-
-def results_dir(root: str, scope: str) -> str:
-    """
-    Output directory of the backtest of a scope: `root` for the national one (`es`), a subdirectory named
-    after the scope for the others.
-    """
-    return root if scope == 'es' else os.path.join(root, scope)
-
-
-def run_scope(args: argparse.Namespace, scope: str, composition) -> bool:
-    """
-    Run the backtest of one scope and write its tables and `run.json` to its output directory.
-
-    Returns
-    -------
-    bool
-        `False` when the scope has no election to evaluate (nothing is written).
-    """
-    from mtpy.lib.backtest import default_events, run_backtest
-    from mtpy.models import elections as models
-
-    events = args.events or default_events(scope)
-    if len(events) == 0:
-        print('{}: no elections to evaluate, skipped'.format(scope))
-        return False
-
-    results = run_backtest(
-        scope=scope, events=events, horizons=args.horizons,
-        n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc, nowcast_only=args.nowcast_only,
-        house_effects=args.house_effects, industry_bias=args.industry_bias, dispersion=args.dispersion, herding=args.herding, composition=composition,
-        regional_noise=args.regional_noise, min_events=args.min_events, verbose=1
-    )
-    if results['metrics'].shape[0] == 0:
-        print('{}: no case could be evaluated, skipped'.format(scope))
-        return False
-
-    out = results_dir(args.out, scope)
-    os.makedirs(out, exist_ok=True)
-    for key, df in results.items():
-        df.to_csv(os.path.join(out, '{}.csv'.format(key)), index=False)
-
-    polls = models.Polls().get_results(query=dict(filters=["event_scope = '{}'".format(scope)]), formatted=True)
-    try:
-        commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT).decode().strip()
-    except Exception:
-        commit = None
-    meta = {
-        'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': commit, 'scope': scope,
-        'n_sim': args.n_sim, 'seed': args.seed, 'max_fc': args.max_fc, 'nowcast_only': args.nowcast_only,
-        'house_effects': args.house_effects, 'industry_bias': args.industry_bias, 'dispersion': args.dispersion, 'herding': args.herding, 'composition': composition,
-        'regional_noise': args.regional_noise, 'min_events': args.min_events,
-        'events': results['metrics']['event_date'].unique().tolist(), 'horizons': sorted(results['metrics']['horizon'].unique().tolist()),
-        'db_polls': int(polls.shape[0]), 'db_last_poll': str(polls['date'].max().date())
-    }
-    with open(os.path.join(out, 'run.json'), 'w') as fh:
-        json.dump(meta, fh, indent=1)
-
-    print(scope)
-    print(results['by_horizon'].round(3).to_string(index=False))
-
-    return True
 
 
 def main():
@@ -107,20 +47,24 @@ def main():
     from mtpy import mtpy
     mtpy.run()
 
-    from mtpy.lib.data import get_scopes
-
-    composition = None if args.composition is None else (args.composition if args.composition == 'auto' else float(args.composition))
+    from mtpy.jobs.Backtest import Backtest
 
     if args.scopes is None:
         scopes = [args.scope]
     elif args.scopes == ['all']:
+        from mtpy.lib.data import get_scopes
+
         catalogue = get_scopes()
         scopes = catalogue.loc[catalogue['parent'].notnull()].index.tolist()
     else:
         scopes = args.scopes
 
-    for scope in scopes:
-        run_scope(args, scope, composition)
+    Backtest().run(
+        scopes=scopes, events=args.events, horizons=args.horizons, n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc,
+        nowcast_only=args.nowcast_only, house_effects=args.house_effects, industry_bias=args.industry_bias,
+        dispersion=args.dispersion, herding=args.herding, composition=args.composition,
+        regional_noise=args.regional_noise, min_events=args.min_events, out=args.out
+    )
 
 
 if __name__ == '__main__':

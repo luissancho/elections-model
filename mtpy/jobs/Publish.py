@@ -36,7 +36,7 @@ class Publish(ScopeReporter, Job):
     (``publish.NothingToPublish``) or ``failed``.
 
     ``backtest`` converts the model backtest tables (``backtest/results[/{scope}]/``, written by
-    ``backtest/run_backtest.py``) into ``backtest/{scope}/`` and overwrites it. It reads files, not the
+    the ``backtest`` job) into ``backtest/{scope}/`` and overwrites it. It reads files, not the
     database, has no LOREG guard, never touches the manifest and, with ``dry_run``, writes under
     ``site-dry/v1/backtest/``. Each scope ends ``published``, ``skipped`` (no results for the scope)
     or ``failed``.
@@ -52,10 +52,13 @@ class Publish(ScopeReporter, Job):
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
     its noon, and ``backfill`` set in its headline. A day whose run already exists is
     ``skipped``, or ``failed`` when that run is incomplete (it has no ``headline.json``; remove
-    it with ``unpublish`` and retry). Every backfill rebuilds the history of the scope, also when
-    all its days already existed, so a retry repairs a history or manifest left behind. A
-    backfill only moves the manifest ``latest`` forward (to its newest run, when that is newer
-    than the current one), so it never moves ``latest`` back nor undoes a ``point``.
+    it with ``unpublish`` and retry), unless ``backfill`` carries ``replace``: then the existing
+    run, complete or not, is removed first as ``unpublish`` does (after the LOREG guard, so a
+    refused day keeps its run) and the day is computed again, ``replaced`` in its result. Every
+    backfill rebuilds the history of the scope, also when all its days already existed, so a
+    retry repairs a history or manifest left behind. A backfill only moves the manifest
+    ``latest`` forward (to its newest run, when that is newer than the current one), so it never
+    moves ``latest`` back nor undoes a ``point``.
 
     Examples
     --------
@@ -71,6 +74,7 @@ class Publish(ScopeReporter, Job):
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-01","to":"2026-10-07"}}'
+        python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-01","to":"2026-10-07","replace":true}}'
 
     In Docker (JSON without spaces)::
 
@@ -131,7 +135,9 @@ class Publish(ScopeReporter, Job):
         backfill : dict, optional
             Range ``{'from': 'YYYY-MM-DD', 'to': 'YYYY-MM-DD'}`` (``to`` defaults to ``from``
             and must be before today) of retrospective ``forecast`` runs, one per day; see
-            ``publish.backfill_days``. Requires ``forecast`` in ``what``.
+            ``publish.backfill_days``. Requires ``forecast`` in ``what``. With ``'replace': True``,
+            a day whose run already exists is removed first (``publish.unpublish``; in a dry run,
+            only its folder) and computed again instead of being skipped or failed.
         source : str, optional
             Results folder of ``backtest`` and of the model slice of ``event`` (default ``backtest/results`` of
             the repository).
@@ -149,14 +155,15 @@ class Publish(ScopeReporter, Job):
             Result of each scope (of the last action that ran on it), with a ``status`` of
             ``published``, ``skipped``, ``refused`` or ``failed``; with ``backfill``, the
             ``forecast`` result of a scope is the list of the results of its days, each with
-            its ``day``, and the ``event`` result is the list of the results of its dates, each with its
-            ``event_date``.
+            its ``day`` and ``replaced`` (whether an existing run was removed first), and the
+            ``event`` result is the list of the results of its dates, each with its ``event_date``.
 
         Raises
         ------
         ValueError
             If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``), ``event`` is
-            combined with ``forecast``, or ``backfill`` is given without ``forecast`` in ``what`` or its range is invalid.
+            combined with ``forecast``, or ``backfill`` is given without ``forecast`` in ``what``, its range is
+            invalid or its ``replace`` is not a boolean.
         RuntimeError
             If no file system is configured, or any scope failed (raised after the
             manifest, the summary and the alert).
@@ -176,6 +183,9 @@ class Publish(ScopeReporter, Job):
         if backfill is not None and 'forecast' not in whats:
             raise ValueError('publish: "backfill" needs "forecast" in what')
         days = None if backfill is None else publish.backfill_days(backfill, today)
+        replace = False if backfill is None else backfill.get('replace', False)
+        if not isinstance(replace, bool):
+            raise ValueError('publish: backfill "replace" must be true or false')
 
         fs = fs if fs is not None else self.app.fs
         if fs is None:
@@ -213,7 +223,8 @@ class Publish(ScopeReporter, Job):
                     n_scopes, days[0], days[-1], counted(len(days), 'día', 'días')))
             for index, scope in enumerate(targets, 1):
                 outcomes, entry = self._forecast_runs(scope, writer, plan, event_date, today, force, dry_run,
-                                                      national=national, index=index, total=len(targets), **params)
+                                                      national=national, index=index, total=len(targets),
+                                                      replace=replace, **params)
                 results[scope] = outcomes if days is not None else outcomes[0]
                 if any(result['status'] == 'failed' for result in outcomes):
                     failures.append('{} ({})'.format(scope, 'forecast'))
@@ -293,13 +304,14 @@ class Publish(ScopeReporter, Job):
         return super()._progress(scope, index, total, day, STEPS if steps is None else steps)
 
     def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, national=None, index=1, total=1,
-                       **params):
+                       replace=False, **params):
         """
         Publish the runs of one scope and rebuild its history.
 
         The history is rebuilt and the manifest entry chosen when some run was published or,
-        with ``backfill``, some day was skipped because its run exists, so a retry repairs the
-        pointers of a backfill whose history or manifest write failed.
+        with ``backfill``, some day was skipped because its run exists (so a retry repairs the
+        pointers of a backfill whose history or manifest write failed) or had its run removed to
+        be replaced (also when computing it again failed, so the history never lists it).
 
         Parameters
         ----------
@@ -324,6 +336,9 @@ class Publish(ScopeReporter, Job):
         index, total : int, default 1
             Position of the scope (from 1) and number of scopes, for the live progress lines
             (``_progress``): the start, the phases and the result of each run print as they happen.
+        replace : bool, default False
+            Remove the existing run of each retrospective day before computing it again; see
+            ``_forecast_scope``.
         **params
             Forecast parameters.
 
@@ -342,12 +357,13 @@ class Publish(ScopeReporter, Job):
             progress = self._progress(scope, index, total, day)
             progress.start()
             result = self._forecast_scope(scope, writer, rid, event_date, today, force, skip_existing=day is not None,
-                                          national=national, progress=progress, **params, **extra)
+                                          replace=replace and day is not None, dry_run=dry_run, national=national,
+                                          progress=progress, **params, **extra)
             progress.done(self._line(scope, result if day is None else {'day': day, **result}))
             outcomes.append(result)
         entry = None
         run_ids = [rid for _, rid, _ in plan]
-        involved = [i for i, result in enumerate(outcomes) if result['status'] == 'published'
+        involved = [i for i, result in enumerate(outcomes) if result['status'] == 'published' or result.get('replaced')
                     or (result['status'] == 'skipped' and result.get('reason') == self.RUN_EXISTS)]
         if involved and not dry_run:
             try:
@@ -401,8 +417,8 @@ class Publish(ScopeReporter, Job):
             return newest['entry']
         return None
 
-    def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, national=None,
-                        progress=None, **params):
+    def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, replace=False,
+                        dry_run=False, national=None, progress=None, **params):
         """
         Publish the forecast of one scope, converting every outcome into a result dict.
 
@@ -426,6 +442,14 @@ class Publish(ScopeReporter, Job):
             (``run exists``) and an incomplete one is ``failed`` (``incomplete run exists;
             unpublish it first``), after the event and the LOREG guard are resolved and without
             running the model. Without it, an existing run (``FileExistsError``) is ``failed``.
+        replace : bool, default False
+            With ``skip_existing``, remove an existing run (complete or not) and run the model
+            instead: ``publish.unpublish`` rebuilds the history and repoints ``latest`` when it was
+            that run, so the pointers stay consistent even if the new run fails; in a dry run only
+            the folder is removed. It happens after the event and the LOREG guard are resolved, so
+            a refused day keeps its run.
+        dry_run : bool, default False
+            Whether the bundle is the dry one (``replace`` then removes the folder alone).
         national : str or None
             Date of the next election of ``es``, for the LOREG guard of every scope.
         progress : ScopeProgress, optional
@@ -442,33 +466,65 @@ class Publish(ScopeReporter, Job):
             ``refused`` for the LOREG guard and ``failed`` for an incomplete existing run (with
             ``skip_existing``) or any other exception. Every result carries the ``warnings``
             emitted while the model ran (unique messages, in order of appearance), which never
-            reach stderr; each one is also printed live as a progress line (level 1).
+            reach stderr; each one is also printed live as a progress line (level 1). With
+            ``skip_existing``, every result also carries ``replaced``: whether an existing run was
+            removed first.
         """
         notes = []
+        replaced = False
         note = progress.note if progress is not None else None
+
+        def done(result):
+            return {**result, 'replaced': replaced} if skip_existing else result
+
         try:
             value = event_date or publish.next_event_date(scope)
             if value is None:
-                return {'status': 'skipped', 'reason': 'no upcoming event', 'warnings': notes}
+                return done({'status': 'skipped', 'reason': 'no upcoming event', 'warnings': notes})
             event = date.fromisoformat(value).isoformat()
             in_window = publish.loreg_guard(scope, event, today, force, national)
-            if skip_existing:
-                if writer.exists(bundle.path_part(scope, run_id, 'headline')):
-                    return {'status': 'skipped', 'reason': self.RUN_EXISTS, 'warnings': notes}
-                if writer.exists(bundle.path_run(scope, run_id)):
-                    return {'status': 'failed', 'reason': self.RUN_INCOMPLETE, 'warnings': notes}
+            if skip_existing and writer.exists(bundle.path_run(scope, run_id)):
+                if not replace:
+                    if writer.exists(bundle.path_part(scope, run_id, 'headline')):
+                        return done({'status': 'skipped', 'reason': self.RUN_EXISTS, 'warnings': notes})
+                    return done({'status': 'failed', 'reason': self.RUN_INCOMPLETE, 'warnings': notes})
+                self._remove_run(writer, scope, run_id, dry_run)
+                replaced = True
             with self._collect_warnings(notes, note):
                 out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, progress=progress,
                                                **params)
         except publish.PublishRefused as e:
-            return {'status': 'refused', 'reason': str(e), 'warnings': notes}
+            return done({'status': 'refused', 'reason': str(e), 'warnings': notes})
         except publish.NothingToPublish as e:
-            return {'status': 'skipped', 'reason': str(e), 'warnings': notes}
+            return done({'status': 'skipped', 'reason': str(e), 'warnings': notes})
         except Exception as e:
             self._log_error(scope)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e), 'warnings': notes}
-        return {'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds'],
-                'warnings': notes}
+            return done({'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e), 'warnings': notes})
+        return done({'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds'],
+                     'warnings': notes})
+
+    @staticmethod
+    def _remove_run(writer, scope, run_id, dry_run):
+        """
+        Remove an existing run that is about to be computed again.
+
+        Parameters
+        ----------
+        writer : BundleWriter
+            Bundle writer.
+        scope : str
+            Scope of the run.
+        run_id : str
+            Run to remove.
+        dry_run : bool
+            In a dry run only the folder goes, since the dry bundle has no pointers; otherwise
+            ``publish.unpublish`` also rebuilds the history and repoints ``latest`` when it was
+            this run, so nothing points to a run that no longer exists while the model runs.
+        """
+        if dry_run:
+            writer.remove(bundle.path_run(scope, run_id))
+        else:
+            publish.unpublish(writer, scope, run_id)
 
     def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
         """
@@ -686,7 +742,8 @@ class Publish(ScopeReporter, Job):
             entry = result['entry']
             return '{}: published {} (as_of {}, {} polls{}) in {:.0f} s{}'.format(
                 scope, result['run_id'], entry.get('as_of'), entry.get('n_polls'),
-                '' if day is None else ', backfill {}'.format(day), result['seconds']['total'],
+                '' if day is None else ', backfill {}{}'.format(day, ', replaced' if result.get('replaced') else ''),
+                result['seconds']['total'],
                 Publish._notes_suffix(result))
         if status == 'published':
             return '{}: published {}'.format(scope, result.get('latest') or result.get('removed') or run)

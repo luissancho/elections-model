@@ -166,11 +166,14 @@ function wireSeats(initial, catalog, colors) {
   const blockRows = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
   const blockParties = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : {};
   const blockColors = mapNames(blockRows.map((row) => row.name), (name) => catalog.blockColor(name));
+  // the seat differences against the last published election, written after the seats of each segment of the bar
+  const deltas = initial.deltas || {parties: {}, blocks: {}, year: null};
   const views = {
     partidos: {
       container: 'seats-parties',
       bar: catalog.order(partyNames).map((name) => ({name, seats: partyRows.find((row) => row.name === name).seats})),
       colors,
+      deltas: deltas.parties,
       fullnames: mapNames(partyNames, (name) => catalog.fullname(name)),
       ridges: () => ridgeData(dist, partyNames, {majority, range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)]}),
     },
@@ -179,6 +182,7 @@ function wireSeats(initial, catalog, colors) {
       bar: catalog.orderBlocks(blockRows.map((row) => row.name))
         .map((name) => ({name, seats: blockRows.find((row) => row.name === name).seats})),
       colors: blockColors,
+      deltas: deltas.blocks,
       fullnames: {},
       ridges: () => ridgeBlocks(dist, [...blockRows].sort(bySeats)
         .map((row) => ({name: row.name, parties: blockParties[row.name] || []})),
@@ -200,7 +204,7 @@ function wireSeats(initial, catalog, colors) {
     }
     if (barEl) {
       tryDraw(() => renderStacked(barEl, chosen.bar, {
-        colors: chosen.colors, fullnames: chosen.fullnames, majority, total: nSeats,
+        colors: chosen.colors, fullnames: chosen.fullnames, majority, total: nSeats, deltas: chosen.deltas, year: deltas.year,
       }), `the ${view} bar`);
     }
     if (ridgeEl) {

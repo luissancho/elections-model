@@ -205,6 +205,11 @@ es `drange`, derivado de `<día>` como hace el backtest (el límite inferior sub
 (sin `headline.json`) `failed` ("incomplete run exists; unpublish it first"); todo relleno reconstruye
 `history.json` y la entrada del manifest, y el `latest` del manifest solo avanza.
 
+*Enmienda 2026-10-17:* `backfill` admite `replace` (booleano, por defecto `false`): un día cuyo run ya existe,
+completo o a medias, se borra antes con `publish.unpublish` (tras la guarda LOREG; en `dry_run`, solo la carpeta)
+y se recalcula con el mismo `run_id`; el resultado del día lleva `replaced`. Si el nuevo run falla, el borrado no
+queda en `history.json` ni como `latest`.
+
 Parámetros: `what`, `scopes`, `event_date` (por defecto `get_next_event_date`), `n_sim=1000`, `seed=42`,
 `drange=6`, `max_fc=10`, `alpha=0.05`, `correctors`, `freeze`, `run`, `dry_run`, `force`, `backfill`
 (`{from, to}`, ver arriba), `today` (`YYYY-MM-DD` tomado como hoy por la guarda LOREG y el tope de

@@ -1,8 +1,8 @@
 {
- "run_at": "2026-10-07T16:46:40",
- "commit": "a59059f",
+ "run_at": "2026-10-17T04:28:39",
+ "commit": "458a4d2",
  "scope": "es-mc",
- "n_sim": 500,
+ "n_sim": 1000,
  "seed": 42,
  "max_fc": 10,
  "nowcast_only": false,
@@ -19,7 +19,11 @@
  ],
  "horizons": [
   6,
-  30
+  14,
+  30,
+  60,
+  90,
+  180
  ],
  "db_polls": 123,
  "db_last_poll": "2026-09-17"

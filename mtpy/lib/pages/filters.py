@@ -422,6 +422,66 @@ def shade(x, start, end, color: str, alpha: float = 0.55) -> str:
     return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha * fraction, 3))
 
 
+def delta_badge(x, digits: int = 0) -> dict:
+    """
+    Arrow and direction of a difference, for the small badges of the tables and cards: ``▲ 6``, ``▼ 1,0`` or a dash.
+
+    Parameters
+    ----------
+    x : int or float or None
+        The difference.
+    digits : int, optional
+        Number of decimals of the magnitude.
+
+    Returns
+    -------
+    dict
+        ``{'dir': 'up' | 'down' | 'flat', 'text': '▲ 6' | '▼ 1,0' | DASH}``: the arrow with the magnitude (no sign),
+        rounded like ``fmt_num``; ``flat`` with ``DASH`` when the magnitude rounds to zero or ``x`` is missing.
+    """
+    if isinstance(x, bool) or _is_missing(x):
+        return {'dir': 'flat', 'text': DASH}
+
+    magnitude = fmt_num(abs(x), digits)
+
+    if magnitude == DASH or set(magnitude) <= set('0,.'):
+        return {'dir': 'flat', 'text': DASH}
+
+    return {'dir': 'up' if x > 0 else 'down', 'text': ('▲ ' if x > 0 else '▼ ') + magnitude}
+
+
+def shade_around(x, centre, span, below: str, above: str, alpha: float = 0.55) -> str:
+    """
+    Background of a cell shaded both ways from a centre (the double gradients of the tables): ``below`` grows from
+    ``centre`` (transparent) down to ``centre - span`` and ``above`` from ``centre`` up to ``centre + span``.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    centre : int or float
+        Value of the transparent cell.
+    span : int or float
+        Distance from ``centre`` that gives the fullest cell, either way; it must be positive.
+    below, above : str
+        Hex colours ``#rrggbb`` of the values below and above (or at) the centre.
+    alpha : float, optional
+        Opacity of the fullest cell.
+
+    Returns
+    -------
+    str
+        An ``rgba()`` colour (``shade``), or ``'transparent'`` when ``x`` is missing or ``span`` is not positive.
+    """
+    if isinstance(x, bool) or _is_missing(x) or _is_missing(centre) or _is_missing(span) or span <= 0:
+        return 'transparent'
+
+    if x < centre:
+        return shade(x, centre, centre - span, below, alpha)
+
+    return shade(x, centre, centre + span, above, alpha)
+
+
 def rng_cell(lo, hi, median, total, majority=None) -> Optional[dict]:
     """
     Geometry of the range cell of a seats table: the 95 % interval as a band, the median as a mark and the

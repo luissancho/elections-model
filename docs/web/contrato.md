@@ -61,7 +61,8 @@ Todo JSON es un sobre:
   lexicográficamente y cabe en un alias de ruta (`[0-9a-z_-]+`).
 - Los runs son inmutables: un `run_id` existente no se reescribe. Los punteros (`manifest.json`,
   `history.json`) sí se reescriben. Un relleno retroactivo (`backfill`, solo días anteriores a hoy) salta
-  los `run_id` existentes y solo mueve el `latest` del manifest hacia delante.
+  los `run_id` existentes y solo mueve el `latest` del manifest hacia delante; con `replace` (enmienda
+  2026-10-17) los borra antes como `unpublish` y los vuelve a escribir con el mismo `run_id`.
 - `headline.json` se escribe el último. Un run sin `headline.json` está incompleto y se ignora (no entra
   en `history` ni se puede apuntar a él).
 - Los partidos se identifican por `name`; el catálogo (`id`, `fullname`, `color`, `block`, `regional`) está
@@ -296,7 +297,7 @@ gemelo.
 
 Enmienda 2026-10-11 (fase 5). El backtest del modelo de un ámbito vive en `backtest/{scope}/` (en `site/v1/`, o en
 `site-dry/v1/` con `dry_run`) y lo escribe `python job.py publish '{"what":["backtest"],...}'`, que **convierte** las
-tablas que deja `backtest/run_backtest.py` en `backtest/results/` (`es`) o `backtest/results/{scope}/` (los demás);
+tablas que deja el job `backtest` (antes `backtest/run_backtest.py`) en `backtest/results/` (`es`) o `backtest/results/{scope}/` (los demás);
 no calcula nada ni toca la base. Como el análisis, **se sobrescribe** en cada publicación: sin `run_id`, fuera del
 manifest y de `history.json`. Un ámbito sin `metrics.csv` queda `skipped` (`no backtest results for {scope}`). La fuente
 de verdad en código es `bundle.BACKTEST_PARTS`, `BACKTEST_SCHEMAS` y `BACKTEST_CSV` (`path_backtest`,

@@ -85,7 +85,7 @@
                 <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, 8, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
                 <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ block_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
                 <td>{{ row.rating|num(1) }}</td>
-                <td class="cell-shade" style="background-color: {{ row.change|shade(0, -10, '#d62728') if row.change is not none and row.change < 0 else row.change|shade(0, 10, '#2ca02c') }}">{{ row.change|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ row.change|shade_around(0, 10, '#d62728', '#2ca02c') }}">{{ row.change|num(1) }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -134,7 +134,7 @@
                 <th scope="col">Elección</th>
                 <th scope="col">Fecha</th>
                 <th scope="col">Días antes</th>
-                {% for block in blocks %}
+                {% for block in table_blocks %}
                 <th scope="col">{{ block }}</th>
                 {% endfor %}
               </tr>
@@ -145,9 +145,9 @@
                 <td>{{ row.name }}</td>
                 <td>{{ row.event_date|date }}</td>
                 <td>{{ row.days|int }}</td>
-                {% for block in blocks %}
+                {% for block in table_blocks %}
                 {# double gradient: red the more the poll fell short of the block (negative), green the more it overshot it #}
-                <td class="cell-shade" style="background-color: {{ row[block]|shade(0, -8, '#d62728') if row[block] is not none and row[block] < 0 else row[block]|shade(0, 8, '#2ca02c') }}">{{ row[block]|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ row[block]|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row[block]|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -190,7 +190,7 @@
               <tr>
                 <td>{{ row.label }}</td>
                 {% for value in row.cells %}
-                <td class="cell-shade" style="background-color: {{ (value|abs if value is not none else none)|shade(0, 8, '#d62728') }}">{{ value|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ value|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ value|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -213,7 +213,7 @@
               <tr>
                 <td>{{ row.label }}</td>
                 {% for value in row.cells %}
-                <td class="cell-shade" style="background-color: {{ (value|abs if value is not none else none)|shade(0, 8, '#d62728') }}">{{ value|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ value|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ value|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -228,7 +228,7 @@
         {% call m.how() %}
         <p>Cada fila es el último sondeo de la encuestadora antes de una elección, el mismo que marca la diana, de la más nueva a la más antigua. Frente al resultado: positivo, el sondeo dio al partido más voto que el resultado; negativo, menos.</p>
         <p>Frente al consenso: la media de los últimos sondeos de las demás encuestadoras antes de esa elección, uno por encuestadora, los mismos que entran en el histórico de errores. Positivo: la encuestadora le daba más voto que las demás; negativo, menos.</p>
-        <p>El fondo de cada celda es más rojo cuanto mayor la desviación, en cualquier sentido, hasta 8 puntos. Un guion es un partido que el sondeo no daba o que no concurría; un partido sin valor en ninguna elección no tiene columna. Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
+        <p>El fondo de cada celda es rojo si el sondeo se quedó corto (negativo) y verde si se pasó (positivo), más intenso cuanto mayor la desviación, hasta 8 puntos. Un guion es un partido que el sondeo no daba o que no concurría; un partido sin valor en ninguna elección no tiene columna. Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
       {{ m.card_end() }}
       {{ m.card_start('effects', 'Efectos de casa por elección', 'En cada elección de cualquier ámbito, cuánto se separaron los sondeos de la encuestadora del resultado de cada partido, descontado el error que compartieron todas las encuestadoras; o, con el conmutador, del consenso de las demás encuestadoras a lo largo del ciclo.') }}
@@ -255,7 +255,7 @@
               <tr>
                 <td>{{ row.label }}</td>
                 {% for value in row.cells %}
-                <td>{{ value|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ value|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ value|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -278,7 +278,7 @@
               <tr>
                 <td>{{ row.label }}</td>
                 {% for value in row.cells %}
-                <td>{{ value|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ value|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ value|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -288,7 +288,7 @@
         {% call m.how() %}
         <p>Frente al resultado: cuánto se separaron los sondeos de la encuestadora del resultado de un partido en una elección, una vez descontado el error que compartieron todas las encuestadoras. Solo entran las elecciones en las que la encuestadora publicó al menos tres sondeos en los 90 días previos; una encuestadora que sondea poco en campaña, como el CIS, tiene pocas filas aquí.</p>
         <p>Frente al consenso del ciclo: cuánto se separó, a lo largo de todo el ciclo, del promedio de las demás encuestadoras; entra en todas las elecciones que sondeó, y es la medida que más dice de una encuestadora con pocos sondeos en campaña.</p>
-        <p>Positivo: la encuestadora le daba más voto; negativo, menos. Un guion es un partido que no concurría en esa elección. Las elecciones van de la más nueva a la más antigua.</p>
+        <p>Positivo: la encuestadora le daba más voto; negativo, menos. El fondo de cada celda es rojo si le daba menos voto y verde si le daba más, más intenso cuanto mayor la desviación, hasta 8 puntos. Un guion es un partido que no concurría en esa elección. Las elecciones van de la más nueva a la más antigua.</p>
         <p>Una desviación en una elección no quiere decir que la encuestadora se equivoque siempre hacia el mismo lado.</p>
         {% endcall %}
       {{ m.card_end() }}
@@ -309,7 +309,8 @@
               <tr>
                 <td>{{ row.label }}</td>
                 <td>{{ row.n|int }}</td>
-                <td>{{ row.ratio|num(2) }}</td>
+                {# red the more the polls herded (below 1), grey the more they scattered (above 1), up to 2 #}
+                <td class="cell-shade" style="background-color: {{ row.ratio|shade_around(1, 1, '#d62728', '#7f7f7f') }}">{{ row.ratio|num(2) }}</td>
                 <td>{{ row.p_value|num(3) }}</td>
               </tr>
               {% endfor %}
@@ -318,7 +319,7 @@
         </div>
         {% call m.how() %}
         <p>Cada fila compara la dispersión de los sondeos de la encuestadora en un ciclo con la que cabría esperar por el tamaño de sus muestras. El p-valor mide cómo de improbable es esa dispersión sin rebaño.</p>
-        <p>Por debajo de 1, sus sondeos variaron menos de lo que permite el azar.</p>
+        <p>Por debajo de 1, sus sondeos variaron menos de lo que permite el azar: el fondo es más rojo cuanto más por debajo de 1 y gris por encima, hasta 2.</p>
         <p>Con pocos sondeos en un ciclo, el valor es poco fiable.</p>
         {% endcall %}
       {{ m.card_end() }}

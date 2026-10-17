@@ -6,7 +6,8 @@ from typing import Callable, Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
-from .common import Catalog, analysis_part, api_url, block_color, bundle_part, common_context, published_scopes
+from .common import (OTHERS_COLOR, Catalog, analysis_part, api_url, block_color, bundle_part, common_context,
+                     published_scopes)
 from .filters import _madrid_tz, fmt_num
 from .promedios import BLOCK_ORDER, chart_polls, lead_strip, poll_months, polls_table, pollster_options
 from .slugs import event_href
@@ -155,30 +156,44 @@ def published_events(scope: str) -> list:
     return with_abs(events)
 
 
-def last_results(scope: str) -> Optional[dict]:
+def last_results(scope: str, catalog: Optional[Catalog] = None) -> Optional[dict]:
     """
-    Official results of the most recent published election of a scope, by party.
+    Official results of the most recent published election of a scope, by party and, with a catalogue, by block.
 
     Parameters
     ----------
     scope : str
         Scope code.
+    catalog : Catalog, optional
+        Party catalogue of the run; with it, the results are also summed by block.
 
     Returns
     -------
     dict or None
         ``{'date': ISO date, 'year': int, 'parties': {name: {'seats', 'pct'}}}`` of the newest published election
-        with a ``results`` part; ``None`` without one.
+        with a ``results`` part, plus ``blocks`` (``{name: {'seats', 'pct'}}``, the sums of ``event_block_rows``
+        with each party of that election in the block its parameters, its meta or the catalogue give it,
+        ``party_blocks``) when a catalogue is given; ``None`` without a published election.
     """
     for event in published_events(scope):
         results = event_part(scope, event['date'], 'results')
 
         if results and results.get('rows'):
-            return {
+            rows = results['rows']
+            out = {
                 'date': event['date'],
                 'year': int(event['date'][:4]),
-                'parties': {row['party']: {'seats': row.get('seats'), 'pct': row.get('pct')} for row in results['rows']},
+                'parties': {row['party']: {'seats': row.get('seats'), 'pct': row.get('pct')} for row in rows},
             }
+
+            if catalog is not None:
+                meta = event_part(scope, event['date'], 'meta') or {}
+                blocks_of = party_blocks([row['party'] for row in rows], event_params(scope, event['date']),
+                                         meta.get('blocks'), catalog)
+                out['blocks'] = {row['name']: {'seats': row['seats'], 'pct': row['pct']}
+                                 for row in event_block_rows(rows, blocks_of, lambda block: OTHERS_COLOR)}
+
+            return out
 
     return None
 
@@ -349,6 +364,82 @@ def error_blocks(scopes: list, parts: dict) -> list:
     return []
 
 
+def year_range(years, today: Optional[date] = None) -> list:
+    """
+    Every year from the first of ``years`` to today: the options of a filter of years that also offers the years
+    without elections (Luis, 2026-10-15).
+
+    Parameters
+    ----------
+    years : iterable of int
+        Years with an election.
+    today : datetime.date, optional
+        The day whose year closes the range, unless ``years`` reaches further; today in Madrid by default.
+
+    Returns
+    -------
+    list of int
+        The years, ascending; empty without ``years``.
+    """
+    years = set(years)
+
+    if not years:
+        return []
+
+    last = (today or datetime.now(_madrid_tz()).date()).year
+
+    return list(range(min(years), max(max(years), last) + 1))
+
+
+def table_blocks(blocks: list) -> list:
+    """
+    The blocks in the order of the columns of a table: ``LEFT_BLOCK`` first (``split_sides``), the rest as published.
+    The axes of the bullseye keep the published order.
+
+    Parameters
+    ----------
+    blocks : list of str
+        Blocks of the election, as published.
+
+    Returns
+    -------
+    list of str
+        The first two blocks with the left one first, then the others; a copy of ``blocks`` with fewer than two.
+    """
+    split = split_sides(blocks)
+
+    if split is None:
+        return list(blocks)
+
+    return [split['left'], split['right']] + list(blocks[2:])
+
+
+def bias_colors(blocks: list, meta: dict, parties: Catalog) -> dict:
+    """
+    Colour of each side of the diverging bar of «Sesgo bloques»: a positive bias favours the first block and a
+    negative one the second, so each side takes the colour of its block (``block_color``).
+
+    Parameters
+    ----------
+    blocks : list of str
+        The two blocks of the margin, the first one first (the sign convention of ``error_blocks``).
+    meta : dict
+        Data of the meta part of the run (``bmaps``).
+    parties : Catalog
+        Party catalogue of the run.
+
+    Returns
+    -------
+    dict
+        ``{'pos', 'neg', 'zero'}``; ``OTHERS_COLOR`` for a missing block and for an empty bar.
+    """
+    return {
+        'pos': block_color(blocks[0], meta, parties) if blocks else OTHERS_COLOR,
+        'neg': block_color(blocks[1], meta, parties) if len(blocks) > 1 else OTHERS_COLOR,
+        'zero': OTHERS_COLOR,
+    }
+
+
 def elecciones_context(state: dict, active: str = '/elecciones', today: Optional[date] = None) -> dict:
     """
     Template context of the list of past elections, of every scope.
@@ -365,7 +456,8 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     -------
     dict
         The common context with ``scopes`` replaced by ``history_scopes``, plus ``events``
-        (``history_events``), ``errors`` (``history_rows``), ``error_blocks`` (``error_blocks``),
+        (``history_events``), ``errors`` (``history_rows``), ``error_blocks`` (``error_blocks``), ``bias_colors``
+        (``bias_colors`` of that pair, for the bar of «Sesgo bloques» in the table of elections),
         ``filter_events`` (``key`` ``scope:date``, ``date``, ``name``, ``scope`` and ``scope_name``),
         ``filter_pollsters`` (house names, alphabetical), ``years`` (every year from the first election to
         ``today``, ascending), ``analysis_missing`` (no scope
@@ -398,9 +490,11 @@ def elecciones_context(state: dict, active: str = '/elecciones', today: Optional
     context['filter_pollsters'] = sorted({row['pollster'] for row in errors if row.get('pollster')}, key=str.casefold)
     # every year from the first election analysed to today, so the range filter also offers the years without
     # elections (Luis, 2026-10-15)
-    years = {row['year'] for row in errors}
-    last = (today or datetime.now(_madrid_tz()).date()).year
-    context['years'] = list(range(min(years), max(max(years), last) + 1)) if years else []
+    context['years'] = year_range({row['year'] for row in errors}, today)
+    # the sides of the bar of «Sesgo bloques» take the colours of the pair of blocks of the analysis; without one (no
+    # analysis published yet) those of the two blocks of the run (``bmaps.vs``), which name the same margin
+    pair = context['error_blocks'] or list(((context['meta'] or {}).get('bmaps') or {}).get('vs') or [])[:2]
+    context['bias_colors'] = bias_colors(pair, context['meta'], context['catalog'])
     context['selected_scope'] = raw_scope if raw_scope in with_analysis else None
 
     if events:
@@ -708,7 +802,9 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         (``event_block_rows``: the results by block, ``party_blocks`` from the parameters, the event meta and the
         run catalogue, coloured by ``block_color``; empty when no party has a block), ``n_seats``,
         ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
-        ``poll_rows``, ``blocks``, ``split_blocks`` (``split_sides``: the block of each side of the chart that
+        ``poll_rows``, ``blocks`` (as published: the axes of the bullseye), ``table_blocks`` (``table_blocks``: the
+        columns of the last-poll table, the left block first), ``bias_colors`` (``bias_colors``: the sides of the
+        bar of «Sesgo bloques»), ``split_blocks`` (``split_sides``: the block of each side of the chart that
         splits the error of the last polls, ``None`` without two blocks), ``horizon_tables``, ``has_model``,
         ``csv_links`` (the model ones only with a backtest), the keys of the "Todas las encuestas" table of
         Promedios drawn from the ``cycle`` part (``has_cycle``, ``table``, ``table_parties``, ``table_total``,
@@ -780,6 +876,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['last_rows'] = last_rows
     context['poll_rows'] = poll_rows
     context['blocks'] = blocks
+    context['table_blocks'] = table_blocks(blocks)
+    context['bias_colors'] = bias_colors(blocks, context['meta'], catalog)
     context['split_blocks'] = split
     context['horizon_tables'] = horizon_tables(model) if has_model else []
     context['has_model'] = has_model

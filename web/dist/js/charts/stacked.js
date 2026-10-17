@@ -1,35 +1,42 @@
 // One horizontal bar split into stacked segments (seats per block), with the majority marked.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
-import {fmtInt} from '../format.js';
+import {fmtDelta, fmtInt} from '../format.js';
 
 const LABEL_MIN_SHARE = 0.05;
 
 /**
- * Render `rows` as consecutive segments of a single horizontal bar from 0 to `total`, labelled inside when
- * wide enough, with a dashed mark line at `majority`.
+ * ECharts option of `rows` as consecutive segments of a single horizontal bar from 0 to `total`, labelled inside
+ * when wide enough (name, seats and, when known, the difference against the last election), with a dashed mark
+ * line at `majority`.
  *
- * @param {HTMLElement} el chart container
  * @param {{name: string, seats: number}[]} rows segments, in drawing order
  * @param {object} opts `colors` ({name: colour}), `fullnames` ({name: full name}, tooltip), `majority`,
- *   `total` (seats of the chamber, axis maximum)
- * @returns {object} the ECharts instance
+ *   `total` (seats of the chamber, axis maximum), `deltas` ({name: seats difference against the last election})
+ *   and `year` (of that election, for the tooltip)
+ * @returns {object} the option
  */
-export function renderStacked(el, rows, {colors = {}, fullnames = {}, majority = null, total} = {}) {
-  const segments = rows.map((row) => ({
-    type: 'bar',
-    name: row.name,
-    stack: 'seats',
-    barWidth: '60%',
-    color: colors[row.name] || OTHERS_COLOR,
-    label: {
-      show: total > 0 && row.seats / total >= LABEL_MIN_SHARE,
-      position: 'inside',
-      color: '#fff',
-      formatter: `${row.name} ${fmtInt(row.seats)}`,
-    },
-    data: [row.seats],
-  }));
+export function stackedOption(rows, {colors = {}, fullnames = {}, majority = null, total, deltas = null, year = null} = {}) {
+  const deltaOf = (name) => (deltas && Number.isFinite(deltas[name]) ? deltas[name] : null);
+  const segments = rows.map((row) => {
+    const delta = deltaOf(row.name);
+    return {
+      type: 'bar',
+      name: row.name,
+      stack: 'seats',
+      barWidth: '60%',
+      color: colors[row.name] || OTHERS_COLOR,
+      label: {
+        show: total > 0 && row.seats / total >= LABEL_MIN_SHARE,
+        position: 'inside',
+        color: '#fff',
+        // the name and the seats in bold, the arrow of the difference in regular weight
+        formatter: `{seats|${row.name} ${fmtInt(row.seats)}}${delta === null ? '' : ` {delta|${fmtDelta(delta)}}`}`,
+        rich: {seats: {fontWeight: 700, color: '#fff'}, delta: {fontWeight: 400, color: '#fff'}},
+      },
+      data: [row.seats],
+    };
+  });
   // Mark line on its own empty series, so it never depends on a segment.
   const marks = majority === null || majority === undefined ? [] : [{
     type: 'line',
@@ -61,10 +68,24 @@ export function renderStacked(el, rows, {colors = {}, fullnames = {}, majority =
       trigger: 'item',
       formatter(params) {
         const name = fullnames[params.seriesName] || params.seriesName;
-        return `${params.marker}<strong>${escapeHtml(name)}</strong><br>${escapeHtml(`${fmtInt(params.value)} escaños`)}`;
+        const delta = deltaOf(params.seriesName);
+        const change = delta === null ? '' : ` · ${fmtDelta(delta)}${year ? ` frente a ${year}` : ''}`;
+        return `${params.marker}<strong>${escapeHtml(name)}</strong><br>${escapeHtml(`${fmtInt(params.value)} escaños${change}`)}`;
       },
     },
     series: [...segments, ...marks],
   };
-  return mountChart(el, option);
+  return option;
+}
+
+/**
+ * Render the stacked bar of `rows` in `el` (see `stackedOption`).
+ *
+ * @param {HTMLElement} el chart container
+ * @param {{name: string, seats: number}[]} rows segments, in drawing order
+ * @param {object} opts see `stackedOption`
+ * @returns {object} the ECharts instance
+ */
+export function renderStacked(el, rows, opts = {}) {
+  return mountChart(el, stackedOption(rows, opts));
 }

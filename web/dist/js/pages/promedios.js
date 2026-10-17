@@ -36,10 +36,13 @@ function paintResults(initial, catalog) {
   const nSeats = meta.n_seats ?? summary.n_seats;
   const majority = meta.majority ?? summary.majority;
   const blocks = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  // the seat differences against the last published election, written after the seats of each arc
+  const deltas = initial.deltas || {parties: {}, blocks: {}, year: null};
   const views = {
     partidos: {
       seats: summary.totals ?? Object.fromEntries(current.parties.map((party) => [party.name, party.seats])),
       colors,
+      deltas: deltas.parties,
       order: (list) => catalog.order(list),
       label: 'Hemiciclo con los escaños previstos por partido',
       card: 'parties-card',
@@ -47,6 +50,7 @@ function paintResults(initial, catalog) {
     bloques: {
       seats: Object.fromEntries(blocks.map((row) => [row.name, row.seats])),
       colors: mapNames(blocks.map((row) => row.name), (name) => catalog.blockColor(name)),
+      deltas: deltas.blocks,
       order: (list) => catalog.orderBlocks(list),
       label: 'Hemiciclo con los escaños previstos por bloque',
       card: 'blocks-card',
@@ -59,7 +63,7 @@ function paintResults(initial, catalog) {
     const chosen = views[view];
     el.setAttribute('aria-label', chosen.label);
     tryDraw(() => renderHemicycle(el, chosen.seats, {
-      colors: chosen.colors, order: chosen.order, nSeats, majority,
+      colors: chosen.colors, order: chosen.order, nSeats, majority, deltas: chosen.deltas, year: deltas.year,
     }), 'the hemicycle');
     for (const [name, item] of Object.entries(views)) {
       const card = document.getElementById(item.card);

@@ -26,7 +26,7 @@ BACKTEST_RUN_EXCLUDED = ('run_at', 'commit', 'scope', 'events', 'horizons', 'not
 
 
 def backtest_source(scope: str, root: Optional[str] = None) -> str:
-    """Folder of the backtest tables of a scope, as ``backtest/run_backtest.py`` writes them.
+    """Folder of the backtest tables of a scope, as the ``backtest`` job writes them (``backtest.results_dir``).
 
     Parameters
     ----------
@@ -40,9 +40,9 @@ def backtest_source(scope: str, root: Optional[str] = None) -> str:
     str
         ``root`` for ``es`` and ``root/{scope}`` for the other scopes.
     """
-    root = root or os.path.join(REPO_ROOT, 'backtest', 'results')
+    from ..backtest import results_dir  # lazy: the backtest library loads the simulator
 
-    return root if scope == 'es' else os.path.join(root, scope)
+    return results_dir(root, scope)
 
 
 def export_backtest_table(frame: pd.DataFrame) -> tuple:
