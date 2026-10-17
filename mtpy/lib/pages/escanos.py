@@ -8,7 +8,9 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import check_region, site
 from .common import Catalog, api_url, block_color, common_context, part
+from .elecciones import last_results
 from .filters import DASH, _is_missing, fmt_int, fmt_prob, fmt_range
+from .promedios import seat_deltas
 
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
@@ -316,10 +318,12 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     dict
         The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows``, ``calculator`` (``name``,
         ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
-        (``district_table``, ``regions``, ``region`` and ``region_rows``) and
-        ``territory_levels`` (``has_communities``) and ``initial`` (``state``, ``meta``, ``summary``,
-        ``dist``, ``fan``, ``districts``, ``scenario`` and ``runs``, the data the charts, the calculator and the
-        territory table are drawn from).
+        (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels`` (``has_communities``),
+        ``deltas`` (``seat_deltas`` against the last published election, for the «vs {year}» column of the tables),
+        ``results_year`` and ``results_date`` (of that election; ``None`` without one) and ``initial`` (``state``, ``meta``, ``summary``,
+        ``dist``, ``fan``, ``districts``, ``scenario``, ``runs`` and ``deltas`` (``seat_deltas`` against the last
+        published election, for the seats bar), the data the charts, the calculator and the territory table are
+        drawn from).
 
     Raises
     ------
@@ -339,6 +343,8 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     current = resolve_region(region_id, districts.get('regions') or [])
     checked = default_coalition(meta, summary, names)
     suffix = context['title_suffix']
+    results = last_results(scope, parties)
+    deltas = seat_deltas(summary, meta, parties, results)
 
     context['summary'] = summary
     context['party_rows'] = seat_rows(summary.get('parties') or [])
@@ -355,6 +361,9 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     context['territory_levels'] = has_communities(context['regions'])
     context['region'] = current
     context['region_rows'] = region_rows(districts, current['id']) if current else []
+    context['deltas'] = deltas
+    context['results_year'] = results['year'] if results else None
+    context['results_date'] = results['date'] if results else None
     context['initial'] = {
         'state': full,
         'meta': meta,
@@ -364,6 +373,7 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         'districts': districts,
         'scenario': scenario,
         'runs': bundle.loads(site().history(scope))['data'],
+        'deltas': deltas,
     }
 
     return context

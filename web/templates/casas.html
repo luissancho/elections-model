@@ -43,7 +43,7 @@
                 <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, 8, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
                 {# the block bias grows towards the block it favours, in the colour of that block #}
                 <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ block_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
-                <td class="cell-shade" style="background-color: {{ row.herding|shade(1, 0, '#d62728') if row.herding is not none and row.herding < 1 else row.herding|shade(1, 2, '#7f7f7f') }}">{{ row.herding|num(2) }}</td>
+                <td class="cell-shade" style="background-color: {{ row.herding|shade_around(1, 1, '#d62728', '#7f7f7f') }}">{{ row.herding|num(2) }}</td>
               </tr>
               {% endfor %}
             </tbody>

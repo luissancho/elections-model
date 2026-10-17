@@ -316,22 +316,26 @@ def export_poll_rows(polls, names, seats=None):
         if column not in polls.columns:
             polls[column] = None
     seats = seats or {}
+    names = list(names)
     keys = [
         (pd.Timestamp(d).strftime('%Y-%m-%d'), int(p), int(s) if pd.notnull(s) else 0)
         for d, p, s in zip(polls['date'], polls['pollster_id'], polls['sponsor_id'] if 'sponsor_id' in polls.columns else [None] * len(polls))
     ]
-    polls = polls[POLL_COLUMNS + list(names)]
-    polls[list(names)] = polls[list(names)].round(PCT_DECIMALS)
+    # Both tables are assembled at once with ``concat``: assigning the rounded shares column by column would leave
+    # one block per party and, past a hundred of them, every seat column inserted afterwards would warn about
+    # fragmentation (pandas ``PerformanceWarning``).
+    polls = pd.concat([polls[POLL_COLUMNS], polls[names].round(PCT_DECIMALS)], axis=1)
     polls['weight'] = polls['weight'].astype(float).round(PROB_DECIMALS)
     records = polls.to_dict(orient='records')
     for key, record in zip(keys, records):
         found = {name: seats[key][name] for name in names if name in seats.get(key, {})}
         if found:
             record['seats'] = found
+    projections = {}
     for name in names:
-        polls['seats_min_' + name] = pd.array([seats.get(k, {}).get(name, [None])[0] for k in keys], dtype='Int64')
-        polls['seats_max_' + name] = pd.array([seats.get(k, {}).get(name, [None, None])[-1] for k in keys], dtype='Int64')
-    return records, polls
+        projections['seats_min_' + name] = pd.array([seats.get(k, {}).get(name, [None])[0] for k in keys], dtype='Int64')
+        projections['seats_max_' + name] = pd.array([seats.get(k, {}).get(name, [None, None])[-1] for k in keys], dtype='Int64')
+    return records, pd.concat([polls, pd.DataFrame(projections, index=polls.index)], axis=1)
 
 
 def export_polls(fc, names, seats=None):

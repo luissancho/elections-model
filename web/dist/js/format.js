@@ -102,3 +102,65 @@ export function fmtDateTime(iso) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${dayMonth(date)} ${date.getFullYear()}, ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
+/**
+ * Background of a shaded table cell, the mirror of `shade` of `pages/filters.py`: `color` with an opacity that grows
+ * with the value from `start` (transparent) to `end` (`alpha`); the range may run downwards.
+ *
+ * @param {(number|null|undefined)} x value of the cell
+ * @param {number} start value of the transparent cell
+ * @param {number} end value of the fullest cell
+ * @param {string} color `#rrggbb`
+ * @param {number} [alpha=0.55] opacity of the fullest cell
+ * @returns {string} an `rgba()` colour, or `transparent` when the value is missing, the range is empty or the
+ *   colour is not a six-digit hex colour
+ */
+export function shade(x, start, end, color, alpha = 0.55) {
+  if (isMissing(x) || !Number.isFinite(x) || !Number.isFinite(start) || !Number.isFinite(end) || start === end
+      || typeof color !== 'string' || !HEX_COLOR.test(color)) {
+    return 'transparent';
+  }
+  const fraction = Math.min(1, Math.max(0, (x - start) / (end - start)));
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${Math.round(alpha * fraction * 1000) / 1000})`;
+}
+
+/**
+ * Background of a cell shaded both ways from a centre, the mirror of `shade_around` of `pages/filters.py`: `below`
+ * grows from `centre` (transparent) down to `centre - span` and `above` from `centre` up to `centre + span`.
+ *
+ * @param {(number|null|undefined)} x value of the cell
+ * @param {number} centre value of the transparent cell
+ * @param {number} span distance from the centre of the fullest cell, either way (positive)
+ * @param {string} below `#rrggbb` of the values below the centre
+ * @param {string} above `#rrggbb` of the values above (or at) the centre
+ * @param {number} [alpha=0.55] opacity of the fullest cell
+ * @returns {string} an `rgba()` colour, or `transparent` when the value is missing or the span is not positive
+ */
+export function shadeAround(x, centre, span, below, above, alpha = 0.55) {
+  if (isMissing(x) || !Number.isFinite(x) || !Number.isFinite(centre) || !Number.isFinite(span) || span <= 0) {
+    return 'transparent';
+  }
+  return x < centre ? shade(x, centre, centre - span, below, alpha) : shade(x, centre, centre + span, above, alpha);
+}
+
+/**
+ * Arrow and magnitude of a difference against the last election, the mirror of `delta_badge` of `pages/filters.py`:
+ * '▲ 6', '▼ 1,0', or the dash when the magnitude rounds to zero or the value is missing.
+ *
+ * @param {(number|null|undefined)} x the difference
+ * @param {number} [digits=0] decimals of the magnitude
+ * @returns {string} the text
+ */
+export function fmtDelta(x, digits = 0) {
+  if (isMissing(x) || !Number.isFinite(x)) {
+    return DASH;
+  }
+  const magnitude = fmtNum(Math.abs(x), digits);
+  if (/^[0,.]*$/.test(magnitude)) {
+    return DASH;
+  }
+  return `${x > 0 ? '▲' : '▼'} ${magnitude}`;
+}

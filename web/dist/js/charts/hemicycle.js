@@ -2,7 +2,7 @@
 // total in the centre and the absolute majority marked by a dark wedge and a pill above the arc.
 import {baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
-import {fmtPct} from '../format.js';
+import {fmtDelta, fmtPct} from '../format.js';
 
 /** Share of the chamber from which an arc carries its label inside (the smaller ones only have the tooltip). */
 const LABEL_SHARE = 0.05;
@@ -12,14 +12,15 @@ const MARK_SEATS = 0.7;
 const SUBTITLE_RADIUS = 190;
 
 /**
- * Pie data of the hemicycle: parties with seats, ordered left to right, labelled when large enough.
+ * Pie data of the hemicycle: parties with seats, ordered left to right, labelled when large enough, each with its
+ * seat difference against the last election when known.
  *
  * @param {object} seats `{name: seats}`
  * @param {object} opts `colors` ({name: colour}), `order` (names → ordered names; object order when
- *   missing), `nSeats` (seats of the chamber, for the label threshold)
- * @returns {object[]} `{name, value, itemStyle, label}` items
+ *   missing), `nSeats` (seats of the chamber, for the label threshold), `deltas` ({name: seats difference})
+ * @returns {object[]} `{name, value, itemStyle, label, delta}` items (`delta` null when unknown)
  */
-export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0} = {}) {
+export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0, deltas = null} = {}) {
   const names = Object.keys(seats).filter((name) => seats[name] > 0);
   const ordered = order ? order(names) : names;
   const total = nSeats || names.reduce((sum, name) => sum + seats[name], 0);
@@ -28,7 +29,21 @@ export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0} = {
     value: seats[name],
     itemStyle: {color: colors[name] || OTHERS_COLOR},
     label: {show: seats[name] >= total * LABEL_SHARE},
+    delta: deltas && Number.isFinite(deltas[name]) ? deltas[name] : null,
   }));
+}
+
+/**
+ * Rich-text label of an arc: the name over the seats and, when the item knows its difference against the last
+ * election, the arrow and magnitude under the seats (`{delta|▼ 25}`).
+ *
+ * @param {object} params ECharts label params (`name`, `value`, `data.delta`)
+ * @returns {string} the formatter text
+ */
+export function hemicycleLabel(params) {
+  const base = `{name|${params.name}}\n{seats|${params.value}}`;
+  const delta = params.data ? params.data.delta : null;
+  return Number.isFinite(delta) ? `${base}\n{delta|${fmtDelta(delta)}}` : base;
 }
 
 /**
@@ -37,13 +52,14 @@ export function hemicycleData(seats, {colors = {}, order = null, nSeats = 0} = {
  *
  * @param {object} seats `{name: seats}`
  * @param {object} opts `colors`, `order`, `nSeats`, `majority` (null for none), `fullnames` ({name: full name},
- *   tooltip), `width` and `height` of the container
+ *   tooltip), `deltas` ({name: seats difference against the last election, written after the seats) and `year`
+ *   (of that election, for the tooltip), `width` and `height` of the container
  * @returns {object} the option
  */
 export function hemicycleOption(seats, {
-  colors = {}, order = null, nSeats = 0, majority = null, fullnames = {}, width = 600, height = 330,
+  colors = {}, order = null, nSeats = 0, majority = null, fullnames = {}, deltas = null, year = null, width = 600, height = 330,
 } = {}) {
-  const data = hemicycleData(seats, {colors, order, nSeats});
+  const data = hemicycleData(seats, {colors, order, nSeats, deltas});
   const total = nSeats || data.reduce((sum, item) => sum + item.value, 0);
   const radius = Math.max(40, Math.min(width / 2 - 10, height - 36));
   const center = [width / 2, height - 12];
@@ -57,10 +73,12 @@ export function hemicycleOption(seats, {
     avoidLabelOverlap: false,
     label: {
       position: 'inside',
-      formatter: '{name|{b}}\n{seats|{c}}',
+      formatter: hemicycleLabel,
       rich: {
         name: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 15, color: '#fff', align: 'center'},
         seats: {fontFamily: THEME.headFamily, fontWeight: 800, fontSize: 24, color: '#fff', align: 'center'},
+        // a little air between the seats and the arrow under them
+        delta: {fontFamily: THEME.headFamily, fontWeight: 700, fontSize: 12, color: '#fff', align: 'center', padding: [3, 0, 0, 0]},
       },
     },
     labelLine: {show: false},
@@ -121,7 +139,9 @@ export function hemicycleOption(seats, {
       formatter(params) {
         const share = total ? fmtPct((params.value / total) * 100) : '';
         const name = fullnames[params.name] || params.name;
-        return escapeHtml(`${name}: ${params.value} escaños (${share})`);
+        const delta = params.data ? params.data.delta : null;
+        const change = Number.isFinite(delta) ? ` · ${fmtDelta(delta)}${year ? ` frente a ${year}` : ''}` : '';
+        return escapeHtml(`${name}: ${params.value} escaños (${share})${change}`);
       },
     },
     graphic,
@@ -135,7 +155,7 @@ export function hemicycleOption(seats, {
  *
  * @param {HTMLElement} el chart container
  * @param {object} seats `{name: seats}`
- * @param {object} opts `colors`, `order`, `nSeats`, `majority`, `fullnames` (see `hemicycleOption`)
+ * @param {object} opts `colors`, `order`, `nSeats`, `majority`, `fullnames`, `deltas`, `year` (see `hemicycleOption`)
  * @returns {object} the ECharts instance
  */
 export function renderHemicycle(el, seats, opts = {}) {

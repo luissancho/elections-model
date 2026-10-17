@@ -231,7 +231,8 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
         headline of the mode), ``rows`` (the parties of the headline), ``segments`` (``hero_segments``),
         ``majority_pct``, ``ends`` (seats of the ``vs`` blocks, Izquierda first), ``chip`` (``majority_chip``),
         ``deltas`` (the two parties with most seats present in the last results, ``{'name', 'text'}``),
-        ``results_year``, ``lead`` (``lead_strip``), ``run_at``, ``as_of``, ``estimated`` (the date of the estimate
+        ``seat_deltas`` (``{name: seats difference}`` of every party of the headline present in the last results,
+        for the hemicycle), ``results_year``, ``lead`` (``lead_strip``), ``run_at``, ``as_of``, ``estimated`` (the date of the estimate
         shown: today for a live nowcast, the publication date otherwise), ``n_polls``, ``n_pollsters``, ``top``
         (the names of the ``TOP_PARTIES`` parties by vote), ``top_seats`` (the four parties with most seats, for
         the legend of the small hemicycle), ``others`` (the seats of the rest) and ``catalog``.
@@ -286,6 +287,8 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
                        key=lambda row: row['name'] != 'Izquierda'),
         'chip': majority_chip(probs, summary),
         'deltas': deltas,
+        'seat_deltas': {row['name']: (row.get('seats') or 0) - (previous[row['name']].get('seats') or 0)
+                        for row in rows if row['name'] in previous},
         'results_year': results['year'] if results else None,
         'lead': lead_strip(rows, majority),
         'run_at': card['run_at'],
@@ -391,6 +394,8 @@ def inicio_context(state: dict) -> dict:
             'order': [segment['name'] for segment in hero['segments']],
             'n_seats': hero['n_seats'],
             'majority': hero['majority'],
+            'deltas': hero['seat_deltas'],
+            'results_year': hero['results_year'],
         }}
 
     return context

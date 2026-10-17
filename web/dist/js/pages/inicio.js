@@ -15,6 +15,8 @@ function paint() {
     nSeats: hero.n_seats,
     majority: hero.majority,
     fullnames: hero.fullnames,
+    deltas: hero.deltas,  // seat differences against the last election, after the seats of each arc
+    year: hero.results_year,
   }), 'the hemicycle of the home');
 }
 

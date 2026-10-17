@@ -21,6 +21,7 @@ BASE_JS = pathlib.Path(DIST, 'js', 'charts', 'base.js').as_uri()
 RIDGE_JS = pathlib.Path(DIST, 'js', 'charts', 'ridge.js').as_uri()
 PATH_JS = pathlib.Path(DIST, 'js', 'charts', 'path.js').as_uri()
 WEIGHTS_JS = pathlib.Path(DIST, 'js', 'charts', 'weights.js').as_uri()
+STACKED_JS = pathlib.Path(DIST, 'js', 'charts', 'stacked.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -41,10 +42,10 @@ def run_js(expr, rows=ROWS):
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
         'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); '
-        'const p = await import("{}"); const w = await import("{}"); const rows = {}; '
+        'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
-             WEIGHTS_JS, json.dumps(rows), expr)
+             WEIGHTS_JS, STACKED_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -136,6 +137,34 @@ def test_hemicycle_puts_the_labels_inside_and_marks_the_majority():
     assert [g for g in option['graphic'] if g['type'] == 'rect'][0]['shape'] == {'x': 284, 'y': 4, 'width': 32, 'height': 16, 'r': 8}
     assert pies[0]['data'][0]['itemStyle']['color'] == '#1d84ce' and pies[0]['data'][3]['itemStyle']['color'] == '#9e9e9e'
     assert option['tooltip']['borderRadius'] == 10
+
+
+def test_hemicycle_writes_the_seat_delta_under_the_seats():
+    """Con `deltas`, cada sector lleva su diferencia frente a la última elección bajo los escaños (flecha y magnitud, en
+    el blanco de la etiqueta) y el tooltip la repite con el año; sin ella, la etiqueta de siempre."""
+    data = run_js('h.hemicycleData({PP: 140, PSOE: 107}, {nSeats: 350, deltas: {PP: -25}})')
+    assert [(d['name'], d['value'], d['delta']) for d in data] == [('PP', 140, -25), ('PSOE', 107, None)]
+    assert run_js('h.hemicycleLabel({name: "PP", value: 140, data: {delta: -25}})') == '{name|PP}\n{seats|140}\n{delta|▼ 25}'
+    assert run_js('h.hemicycleLabel({name: "PSOE", value: 107, data: {delta: null}})') == '{name|PSOE}\n{seats|107}'
+    assert run_js('h.hemicycleLabel({name: "VOX", value: 33, data: {}})') == '{name|VOX}\n{seats|33}'
+    option = run_js('h.hemicycleOption({PP: 140, PSOE: 107}, {nSeats: 350, majority: 176, width: 600, height: 330, deltas: {PP: -25}, year: 2023})')
+    pie = [s for s in option['series'] if s['type'] == 'pie'][0]
+    # un poco de aire sobre la flecha, bajo la cifra de escaños (Luis, 2026-10-17)
+    assert pie['label']['rich']['delta'] == {'fontFamily': pie['label']['rich']['seats']['fontFamily'], 'fontWeight': 700, 'fontSize': 12, 'color': '#fff',
+                                             'align': 'center', 'padding': [3, 0, 0, 0]}
+    assert pie['data'][0]['delta'] == -25 and 'formatter' not in pie['label']  # la función no sobrevive al JSON
+
+
+def test_stacked_bar_labels_each_segment_with_its_seats_and_delta():
+    option = run_js('st.stackedOption([{name: "PP", seats: 140}, {name: "PSOE", seats: 107}, {name: "BNG", seats: 2}], {total: 350, majority: 176, deltas: {PP: -25, PSOE: 0}})')
+    bars = [s for s in option['series'] if s['type'] == 'bar']
+    # el nombre y los escaños en negrita y la flecha en peso normal (Luis, 2026-10-17); sin delta, solo los escaños
+    assert [s['label']['formatter'] for s in bars] == ['{seats|PP 140} {delta|▼ 25}', '{seats|PSOE 107} {delta|–}', '{seats|BNG 2}']
+    assert all(s['label']['rich'] == {'seats': {'fontWeight': 700, 'color': '#fff'}, 'delta': {'fontWeight': 400, 'color': '#fff'}} for s in bars)
+    assert [s['label']['show'] for s in bars] == [True, True, False] and option['xAxis']['max'] == 350
+    assert [s['type'] for s in option['series']] == ['bar', 'bar', 'bar', 'line']
+    plain = run_js('st.stackedOption([{name: "PP", seats: 140}], {total: 350})')
+    assert plain['series'][0]['label']['formatter'] == '{seats|PP 140}' and len(plain['series']) == 1
 
 
 def test_hemicycle_shortens_the_centre_text_when_small():

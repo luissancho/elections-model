@@ -41,6 +41,8 @@ Los casos con menos de 5 encuestas útiles se omiten (`meta.csv` registra el mot
 ## Ejecutar
 
 ```
+python job.py backtest                                   # todo (es); el script de abajo es su envoltorio
+python job.py backtest '{"scopes":"all","horizons":[6,30]}'   # es y todos los autonómicos, cada uno en su carpeta
 python backtest/run_backtest.py                          # todo (unos 15 minutos con la base de datos local)
 python backtest/run_backtest.py --events 2023-07-23 --horizons 6 30 --n-sim 200
 python backtest/run_backtest.py --nowcast-only           # sin la ejecución a horizonte (la mitad de tiempo)
@@ -52,8 +54,13 @@ python backtest/run_backtest.py --scopes all --horizons 6 30                    
 python backtest/run_backtest.py --scopes all --min-events 1 --out files/backtest/own       # estimadores propios de cada ámbito en todos los casos
 ```
 
+Desde 2026-10-17 el trabajo lo hace el job `backtest` (`mtpy/jobs/Backtest.py`; parámetros y salida en
+`deploy/README.md`, "Backtest del modelo"), con las mismas opciones en JSON y los ámbitos aislados (uno que falla no
+detiene a los demás); `backtest/run_backtest.py` solo traduce sus opciones al job. Ojo: en el job `"scopes": "all"`
+incluye `es`; en el script `--scopes all` son solo los autonómicos.
+
 Desde el método 11 el backtest vale para cualquier ámbito del catálogo (`data/es-scopes.csv`). En un ámbito autonómico los estimadores (error de sondeo, deriva) se ajustan con las elecciones de `es`; con `--min-events k` se ajustan con las propias en los casos con al menos `k` elecciones `featured` anteriores (la validación del método 11 no encontró ventaja en los propios). `meta.csv` registra el ámbito usado (`est_scope`) y el recuento (`n_featured`); `--min-events 1` fuerza los propios en todos los casos, lo que permite comparar las dos variantes caso a caso. `--scope es` (por defecto) escribe en `backtest/results/`, como siempre; cada ámbito autonómico escribe en `backtest/results/{scope}/` y, sin `--events`, evalúa sus elecciones `featured` (resultado oficial y al menos 10 sondeos útiles) celebradas desde 2019. Un ámbito sin elecciones evaluables se anuncia y se salta. En los ámbitos autonómicos las "provincias" de `provinces.csv` son sus circunscripciones (provincias, islas o zonas), y la cuota oficial por circunscripción de las candidaturas sin escaño es una estimación plana (ver `metodo-11-ambitos-autonomicos.md`).
 
 La deriva se lee de la tabla `elections.drift`; si está vacía, cada `Simulator` la calcula al vuelo (más lento). Se rellena con `Computer.compute_drift(save=True)` (notebook `data-load/PollsCompute`).
 
-Escribe en `backtest/results/`: `shares.csv`, `seats.csv`, `blocks.csv` (una fila por partido o bloque y caso), `provinces.csv` (una fila por provincia, partido y caso), `meta.csv` (cortes, encuestas usadas, tiempos), `metrics.csv` (una fila por caso), `by_horizon.csv` y `run.json` (commit, fecha, estado de la base de datos). La lógica está en `mtpy/lib/backtest.py` (`run_case`, `summarize_case`, `run_backtest`), reutilizable desde los notebooks.
+Escribe en `backtest/results/`: `shares.csv`, `seats.csv`, `blocks.csv` (una fila por partido o bloque y caso), `provinces.csv` (una fila por provincia, partido y caso), `meta.csv` (cortes, encuestas usadas, tiempos), `metrics.csv` (una fila por caso), `by_horizon.csv` y `run.json` (commit, fecha, estado de la base de datos). La lógica está en `mtpy/lib/backtest.py` (`run_case`, `summarize_case`, `run_backtest` y `backtest_scope`, que ejecuta un ámbito y escribe su carpeta), reutilizable desde los notebooks.

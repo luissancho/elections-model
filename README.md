@@ -59,6 +59,19 @@ python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
 ```
 
+### `backtest`: el backtest del modelo
+
+Ejecuta el backtest del modelo sobre las elecciones pasadas y escribe sus tablas en `backtest/results/` (`es`) o
+`backtest/results/{ámbito}/` (los demás), que después convierte `publish backtest`. Los mismos parámetros que
+`backtest/run_backtest.py` (hoy un envoltorio del job), en JSON; `"scopes": "all"` es `es` y todos los autonómicos y
+los ámbitos están aislados como en `compute`. Protocolo y métricas en `backtest/README.md`; parámetros y salida en
+`deploy/README.md` ("Backtest del modelo").
+
+```bash
+python job.py backtest
+python job.py backtest '{"scopes":"all","horizons":[6,30]}'
+```
+
 ### Carga de los ámbitos autonómicos
 
 `load/run_load.py` descarga de Wikipedia los sondeos y resultados de las elecciones autonómicas y los carga en la

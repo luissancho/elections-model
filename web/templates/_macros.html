@@ -42,6 +42,10 @@
 
 {#- KPI row (spec of phase 8, D3.5): one card split in columns, each `{'label', 'value', 'unit', 'support', 'ok',
     'color'}`. `id` and `hidden` for the rows the browser fills (the figures of the error history). -#}
+{#- Small badge of a difference against the last election: an arrow with the magnitude (`▲ 6`, `▼ 1,0`) in green or red,
+    or a dash when there is no change or no value (`delta_badge`). -#}
+{% macro badge(x, digits=0, title=None) -%}{% set b = x|badge(digits) %}<span class="dlt {{ b.dir }}"{% if title %} title="{{ title }}"{% endif %}>{{ b.text }}</span>{%- endmacro %}
+
 {% macro kpis(rows, id='', hidden=False) -%}
 <div class="kpis"{% if id %} id="{{ id }}"{% endif %}{% if hidden %} hidden{% endif %}>
   {% for kpi in rows %}

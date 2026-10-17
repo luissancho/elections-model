@@ -430,6 +430,102 @@ def test_backfill_retry_repairs_the_history_and_the_manifest(fresh_app, tmp_path
     assert entry['latest'] == '20261006-120000' and entry['run_at'] == '2026-10-06T12:00:00Z'
 
 
+def test_backfill_replace_recomputes_the_existing_days(fresh_app, tmp_path, patched, capsys):
+    """Con `replace`, un día cuyo run ya existe (completo o a medias) se borra y se recalcula en vez de saltarse;
+    un día nuevo se publica como siempre."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    stale = tmp_path / bundle.PREFIX / bundle.path_run('es', '20261005-120000') / 'stale.txt'
+    stale.write_text('old')
+    writer.remove(bundle.path_part('es', '20261006-120000', 'headline'))
+    span = {'from': '2026-10-05', 'to': '2026-10-07', 'replace': True}
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    assert [r['status'] for r in result['es']] == ['published', 'published', 'published']
+    assert [r['replaced'] for r in result['es']] == [True, True, False]
+    assert not stale.exists()
+    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000', '20261007-120000']
+    history = writer.read_json(bundle.path_history('es'))['data']['runs']
+    assert [r['run_id'] for r in history] == ['20261005-120000', '20261006-120000', '20261007-120000']
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261007-120000'
+    out = capsys.readouterr().out
+    assert 'es: published 20261005-120000 (as_of 2026-10-05, 6 polls, backfill 2026-10-05, replaced)' in out
+    assert 'backfill 2026-10-07)' in out
+
+
+def test_backfill_replace_keeps_the_pointers_consistent_when_the_new_run_fails(fresh_app, tmp_path, patched, monkeypatch, capsys):
+    """Si el run que sustituye a un día falla, el borrado ya no figura en `history.json` ni como `latest`,
+    y el reintento con `replace` recalcula el run a medias que dejó."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261006-120000'
+    real_meta = publish.export_meta
+
+    def export_meta(sim, run_id, *args, **kwargs):
+        if run_id == '20261006-120000':
+            raise OSError('s3 down')
+        return real_meta(sim, run_id, *args, **kwargs)
+
+    monkeypatch.setattr(publish.forecast, 'export_meta', export_meta)
+    span = {'from': '2026-10-06', 'replace': True}
+    with pytest.raises(RuntimeError, match='es'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    assert 'es: failed 2026-10-06 (OSError: s3 down)' in capsys.readouterr().out
+    assert writer.exists(bundle.path_run('es', '20261006-120000'))
+    assert writer.list_runs('es') == ['20261005-120000']
+    history = writer.read_json(bundle.path_history('es'))['data']['runs']
+    assert [r['run_id'] for r in history] == ['20261005-120000']
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261005-120000'
+    monkeypatch.setattr(publish.forecast, 'export_meta', real_meta)
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
+    assert [(r['status'], r['replaced']) for r in result['es']] == [('published', True)]
+    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000']
+    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261006-120000'
+
+
+def test_backfill_replace_leaves_a_refused_day_in_place(fresh_app, tmp_path, patched):
+    """En la ventana LOREG el relleno se rechaza antes de borrar nada, también con `replace`."""
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05'}, today='2026-10-09')
+    head = writer.read_json(bundle.path_part('es', '20261005-120000', 'headline'))
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'replace': True},
+                           today='2026-11-27')
+    assert result['es'][0]['status'] == 'refused'
+    assert writer.list_runs('es') == ['20261005-120000']
+    assert writer.read_json(bundle.path_part('es', '20261005-120000', 'headline')) == head
+
+
+def test_backfill_replace_in_a_dry_run_rewrites_the_dry_run_without_pointers(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    dry = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX)
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05'}, today='2026-10-09', dry_run=True)
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'replace': True},
+                           today='2026-10-09', dry_run=True)
+    assert [(r['status'], r['replaced']) for r in result['es']] == [('published', True)]
+    assert dry.list_runs('es') == ['20261005-120000']
+    assert not dry.exists(bundle.path_history('es')) and not dry.exists(bundle.path_manifest())
+    assert not (tmp_path / 'site').exists()
+
+
+def test_backfill_replace_must_be_a_boolean(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+
+    with pytest.raises(ValueError, match='publish: backfill "replace" must be true or false'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)),
+                      backfill={'from': '2026-10-05', 'replace': 'yes'}, today='2026-10-09')
+    assert patched == [] and not (tmp_path / 'site').exists()
+
+
 def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
     fixed_prov(monkeypatch)

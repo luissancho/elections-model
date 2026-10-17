@@ -26,6 +26,7 @@
               <tr>
                 <th scope="col">Partido</th>
                 <th scope="col">Escaños</th>
+                {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                 <th scope="col">Rango 95%</th>
                 <th scope="col">P(escaño)</th>
                 <th scope="col">P(primero)</th>
@@ -39,6 +40,7 @@
               <tr>
                 <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                 <td><strong>{{ row.seats|int }}</strong></td>
+                {% if results_year %}<td>{{ m.badge(deltas.parties.get(row.name)) }}</td>{% endif %}
                 <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_seats|prob }}</td>
                 <td>{{ row.p_first|prob }}</td>
@@ -57,6 +59,7 @@
               <tr>
                 <th scope="col">Bloque</th>
                 <th scope="col">Escaños</th>
+                {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                 <th scope="col">Rango 95%</th>
                 <th scope="col">P(mayoría)</th>
               </tr>
@@ -67,6 +70,7 @@
               <tr>
                 <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                 <td><strong>{{ row.seats|int }}</strong></td>
+                {% if results_year %}<td>{{ m.badge(deltas.blocks.get(row.name)) }}</td>{% endif %}
                 <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_majority|prob }}</td>
               </tr>
@@ -77,6 +81,12 @@
         </div>
         <div class="chart" id="ridge-chart" role="img" aria-label="Distribución de escaños en las simulaciones, una fila por partido o bloque"></div>
         {% call m.how() %}
+        {% if results_year %}
+        <p>
+          La flecha junto a los escaños, en la barra y en la columna «vs {{ results_year }}», dice cuánto cambian frente al
+          resultado oficial del {{ results_date|date }}; un guion, sin cambio o un partido que no concurrió entonces.
+        </p>
+        {% endif %}
         <p>
           La barra reparte los escaños del escenario central y marca la mayoría absoluta, que está en
           {{ summary.majority|int }} de {{ summary.n_seats|int }}. En la tabla, la cifra de escaños es el

@@ -1,8 +1,9 @@
 // Houses page and pollster profile: the "Cargar más" of the ranking, the house-effects heat map, the rating path
-// (every election the house polled, up to today) and the bullseye, drawn from the data embedded by the server. The bullseye of a profile has a scope and a years
-// filter (no hash: the profile has no other state), which redraws it and its table.
-import {fmtDate, fmtNum} from '../format.js';
-import {fadeByDate, filterRows, yearsOf} from '../errors.js';
+// (every election the house polled, up to today) and the bullseye, drawn from the data embedded by the server. The
+// bullseye of a profile has a scope and a years filter (no hash: the profile has no other state), which redraws it
+// and its table.
+import {fmtDate, fmtNum, shadeAround} from '../format.js';
+import {fadeByDate, filterRows} from '../errors.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderHeatmap} from '../charts/heatmap.js';
@@ -16,27 +17,42 @@ const KIND_GENERAL = 'Generales';
 const KIND_REGIONAL = 'Autonómicas';
 const REGIONAL_COLOR = '#c0672e';
 const OLDEST_ALPHA = 0.3;
+// The double gradient of the block errors of the bullseye table, the same the server paints (`casa.html`): red the
+// more the poll fell short of the block, green the more it overshot it, fullest at this many points.
+const SHORT_COLOR = '#d62728';
+const OVER_COLOR = '#2ca02c';
+const ERROR_SPAN = 8;
+// Leading columns of the bullseye table before the block columns (election, date, days).
+const BULLSEYE_FIXED_COLUMNS = 3;
 
 /**
- * Rebuild the body of the bullseye table with the rows shown.
+ * Rebuild the body of the bullseye table with the rows shown. The block columns come from the table header, in its
+ * order (the server puts the left block first, which may differ from the order of the axes of the bullseye), and
+ * their cells carry the same double gradient the server paints.
  *
  * @param {HTMLTableElement|null} table the `#bullseye-table`
  * @param {object[]} rows bullseye rows (`name`, `event_date`, `days` and the error of each block)
- * @param {string[]} blocks the block columns
  */
-function fillBullseyeTable(table, rows, blocks) {
+function fillBullseyeTable(table, rows) {
   if (!table) {
     return;
   }
+  const blocks = [...table.tHead.rows[0].cells].slice(BULLSEYE_FIXED_COLUMNS).map((th) => th.textContent.trim());
   const cell = (text) => {
     const td = document.createElement('td');
     td.textContent = text;
     return td;
   };
+  const shaded = (value) => {
+    const td = cell(fmtNum(value, 1));
+    td.className = 'cell-shade';
+    td.style.backgroundColor = shadeAround(value, 0, ERROR_SPAN, SHORT_COLOR, OVER_COLOR);
+    return td;
+  };
   table.tBodies[0].replaceChildren(...rows.map((row) => {
     const tr = document.createElement('tr');
     tr.append(cell(row.name || row.event), cell(fmtDate(row.event_date)), cell(fmtNum(row.days)),
-      ...blocks.map((block) => cell(fmtNum(row[block], 1))));
+      ...blocks.map((block) => shaded(row[block])));
     return tr;
   }));
 }
@@ -56,7 +72,6 @@ function wireBullseye(bullseye, blocks) {
   const form = document.getElementById('bullseye-filter');
   const table = document.getElementById('bullseye-table');
   const count = document.getElementById('bullseye-count');
-  const years = yearsOf(bullseye);
   // The fading is fixed over every election of the house, so a filter does not change the tone of a point.
   const alphas = new Map(fadeByDate(bullseye, {min: OLDEST_ALPHA}).map((alpha, i) => [bullseye[i], alpha]));
   const options = {
@@ -70,19 +85,24 @@ function wireBullseye(bullseye, blocks) {
   };
   const draw = (rows) => {
     tryDraw(() => renderBullseye(target, rows, options), 'the bullseye');
-    fillBullseyeTable(table, rows, blocks);
+    fillBullseyeTable(table, rows);
     if (count) {
       count.textContent = `${rows.length} ${rows.length === 1 ? 'elección' : 'elecciones'}`;
     }
   };
   if (form) {
     form.addEventListener('submit', (event) => event.preventDefault());
+    // The years offered run from the first election of the house to today (the server fills both selects with the
+    // same list); an extreme chosen is an open bound.
+    const {desde, hasta} = form.elements;
+    const first = Number(desde.options[0]?.value);
+    const last = Number(hasta.options[hasta.options.length - 1]?.value);
     form.addEventListener('change', () => {
-      const {ambito, desde, hasta} = form.elements;
+      const {ambito} = form.elements;
       draw(filterRows(bullseye, {
         scope: ambito.value || null,
-        from: Number(desde.value) === years[0] ? null : Number(desde.value),
-        to: Number(hasta.value) === years[years.length - 1] ? null : Number(hasta.value),
+        from: Number(desde.value) === first ? null : Number(desde.value),
+        to: Number(hasta.value) === last ? null : Number(hasta.value),
       }));
     });
     form.hidden = false;

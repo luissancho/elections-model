@@ -11,9 +11,12 @@ probabilities. Each case is simulated twice: as a nowcast (the election held at 
 only the polling error) and at the true horizon (adding the drift of the opinion up to the election, columns
 with the suffix `_h`).
 """
+import json
+import os
 import time
 import warnings
 
+from datetime import datetime
 from typing import Any, Optional
 
 import numpy as np
@@ -25,6 +28,9 @@ from .simulator import Simulator
 DEFAULT_EVENTS = ['2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10', '2023-07-23']
 DEFAULT_HORIZONS = [6, 14, 30, 60, 90, 180]
 LEVELS = [0.5, 0.8, 0.95]
+# Results folder by default: `backtest/results` of the repository (`es` at its root, the other scopes in a
+# subdirectory each; see `results_dir`)
+RESULTS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backtest', 'results'))
 
 
 # --- Metrics ----------------------------------------------------------------------------------------
@@ -479,3 +485,142 @@ def run_backtest(
     out['by_horizon'] = by_horizon.reset_index()
 
     return out
+
+
+class NothingToEvaluate(Exception):
+    """A scope with no election to evaluate, or none of whose cases could be evaluated: nothing is written."""
+
+
+def results_dir(root: Optional[str], scope: str) -> str:
+    """
+    Output directory of the backtest of a scope.
+
+    Parameters
+    ----------
+    root : str or None
+        Results folder; `RESULTS_ROOT` (`backtest/results` of the repository) when `None`.
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    str
+        `root` for the national scope (`es`), a subdirectory named after the scope for the others.
+    """
+    root = root or RESULTS_ROOT
+
+    return root if scope == 'es' else os.path.join(root, scope)
+
+
+def poll_stats(scope: str) -> dict:
+    """
+    State of the polls of a scope in the database, recorded in `run.json`.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    dict
+        `db_polls` (number of polls of the scope) and `db_last_poll` (`YYYY-MM-DD` of the latest one, `None`
+        without polls).
+    """
+    from ..models import elections as models
+
+    polls = models.Polls().get_results(query=dict(filters=["event_scope = '{}'".format(scope)]), formatted=True)
+    last = None if polls.shape[0] == 0 else str(polls['date'].max().date())
+
+    return {'db_polls': int(polls.shape[0]), 'db_last_poll': last}
+
+
+def backtest_scope(
+    scope: str,
+    out: Optional[str] = None,
+    events: Optional[list[str]] = None,
+    horizons: Optional[list[int]] = None,
+    n_sim: int = 1000,
+    seed: int = 42,
+    max_fc: int = 10,
+    nowcast_only: bool = False,
+    house_effects: bool = True,
+    industry_bias: bool = False,
+    dispersion: bool = True,
+    herding: bool = True,
+    composition: Optional[float | str] = None,
+    regional_noise: bool = True,
+    min_events: Optional[int] = None,
+    verbose: int = 0,
+    runner=None,
+    stats=None,
+    prov=None
+) -> dict:
+    """
+    Run the backtest of one scope and write its tables and `run.json` to `results_dir(out, scope)`.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    out : str, optional
+        Results folder (`RESULTS_ROOT` by default): the national scope writes at its root, the others in
+        `out/{scope}`.
+    events : list of str, optional
+        Elections to evaluate; by default `default_events(scope)` (`DEFAULT_EVENTS` for `es`, the featured
+        elections held since 2019 for a regional scope).
+    horizons : list of int, optional
+        Horizons in days; `DEFAULT_HORIZONS` by default.
+    n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, min_events
+        Parameters of `run_backtest`, recorded in `run.json`.
+    verbose : int, default 0
+        Verbosity of `run_backtest` (1 prints one line per case).
+    runner : callable, optional
+        Replacement of `run_backtest`, with its signature (for tests).
+    stats : callable, optional
+        Replacement of `poll_stats` (for tests).
+    prov : callable, optional
+        Replacement of `publish.provenance`, whose `commit` goes to `run.json` (for tests).
+
+    Returns
+    -------
+    dict
+        `n_cases`, `n_events` and `n_horizons` evaluated, `events` and `horizons` (as written in `run.json`),
+        `folder` written, `by_horizon` (the table, to print) and `seconds` (`run`, `write` and `total`).
+
+    Raises
+    ------
+    NothingToEvaluate
+        The scope has no election to evaluate or no case could be evaluated; nothing is written.
+    """
+    start = time.perf_counter()
+    events = events or default_events(scope)
+    if len(events) == 0:
+        raise NothingToEvaluate('no elections to evaluate')
+
+    params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
+                  industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
+                  regional_noise=regional_noise, min_events=min_events)
+    results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose, **params)
+    if results['metrics'].shape[0] == 0:
+        raise NothingToEvaluate('no case could be evaluated')
+    seconds = {'run': time.perf_counter() - start}
+
+    folder = results_dir(out, scope)
+    os.makedirs(folder, exist_ok=True)
+    for key, frame in results.items():
+        frame.to_csv(os.path.join(folder, '{}.csv'.format(key)), index=False)
+    if prov is None:
+        from .publish.common import provenance as prov
+    evaluated = results['metrics']['event_date'].unique().tolist()
+    spans = sorted(results['metrics']['horizon'].unique().tolist())
+    record = {'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': prov()['commit'], 'scope': scope,
+              **params, 'events': evaluated, 'horizons': spans, **(stats or poll_stats)(scope)}
+    with open(os.path.join(folder, 'run.json'), 'w', encoding='utf-8') as fh:
+        json.dump(record, fh, indent=1)
+    seconds['write'] = time.perf_counter() - start - seconds['run']
+    seconds['total'] = time.perf_counter() - start
+
+    return {'n_cases': int(results['metrics'].shape[0]), 'n_events': len(evaluated), 'n_horizons': len(spans),
+            'events': evaluated, 'horizons': spans, 'folder': folder, 'by_horizon': results['by_horizon'],
+            'seconds': seconds}

@@ -135,16 +135,107 @@ def test_summarize_case_provincial_metrics_skip_cells_without_projection():
     assert np.isnan(m['cov_prov_shares50']) and np.isnan(m['mae_prov_shares']) and np.isnan(m['n_prov_cells'])
 
 
+def fake_results():
+    """Lo que devuelve `run_backtest`: las tablas sintéticas (2 elecciones x 2 horizontes) y `provinces` y `meta` vacías."""
+    import pandas as pd
+    from tests.fakes import synthetic_backtest
+    tables = synthetic_backtest()
+    return {'shares': tables.shares, 'seats': tables.seats, 'blocks': tables.blocks, 'provinces': pd.DataFrame(),
+            'meta': pd.DataFrame(), 'metrics': tables.metrics, 'by_horizon': tables.by_horizon}
+
+
 def test_results_dir_keeps_es_at_the_root():
-    """M11: los resultados de `es` siguen en la raíz; cada ámbito autonómico tiene su carpeta."""
-    import importlib.util
+    """M11: los resultados de `es` siguen en la raíz (`backtest/results` del repositorio por defecto); cada ámbito
+    autonómico tiene su carpeta. `publish` lee de donde escribe el backtest."""
     import os
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert module.results_dir('backtest/results', 'es') == 'backtest/results'
-    assert module.results_dir('backtest/results', 'es-md') == os.path.join('backtest/results', 'es-md')
+    from mtpy.lib import backtest, publish
+    assert backtest.results_dir('backtest/results', 'es') == 'backtest/results'
+    assert backtest.results_dir('backtest/results', 'es-md') == os.path.join('backtest/results', 'es-md')
+    assert backtest.results_dir(None, 'es') == backtest.RESULTS_ROOT
+    assert backtest.RESULTS_ROOT.endswith(os.path.join('backtest', 'results')) and os.path.isabs(backtest.RESULTS_ROOT)
+    assert publish.backtest_source('es-md', 'x') == backtest.results_dir('x', 'es-md')
+    assert publish.backtest_source('es') == backtest.results_dir(None, 'es')
+
+
+def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
+    """`backtest_scope` ejecuta el backtest de un ámbito, escribe sus siete tablas y `run.json` (con los parámetros,
+    las elecciones evaluadas, los horizontes ordenados, el commit y el estado de la base) y devuelve las cifras."""
+    import json
+    import pandas as pd
+    from mtpy.lib import backtest
+    seen = {}
+
+    def runner(**kwargs):
+        seen.update(kwargs)
+        return fake_results()
+
+    figures = backtest.backtest_scope(
+        'es-md', out=str(tmp_path), events=['2019-11-10', '2023-07-23'], horizons=[30, 6], n_sim=20, composition=0.25,
+        min_events=1, verbose=1, runner=runner, stats=lambda scope: {'db_polls': 12, 'db_last_poll': '2026-10-03'},
+        prov=lambda: {'commit': 'abc1234', 'dirty': True, 'versions': {}})
+    folder = tmp_path / 'es-md'
+    assert sorted(p.name for p in folder.iterdir()) == ['blocks.csv', 'by_horizon.csv', 'meta.csv', 'metrics.csv',
+                                                        'provinces.csv', 'run.json', 'seats.csv', 'shares.csv']
+    assert pd.read_csv(folder / 'metrics.csv').shape[0] == 4 and pd.read_csv(folder / 'by_horizon.csv').shape[0] == 2
+    run = json.load(open(folder / 'run.json', encoding='utf-8'))
+    assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
+                        'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
+                        'events', 'horizons', 'db_polls', 'db_last_poll'}
+    assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
+    assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
+    assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
+    assert run['db_polls'] == 12 and run['db_last_poll'] == '2026-10-03'
+    assert seen['scope'] == 'es-md' and seen['events'] == ['2019-11-10', '2023-07-23'] and seen['horizons'] == [30, 6]
+    assert seen['n_sim'] == 20 and seen['verbose'] == 1 and seen['composition'] == 0.25 and seen['min_events'] == 1
+    assert figures['n_cases'] == 4 and figures['n_events'] == 2 and figures['n_horizons'] == 2
+    assert figures['folder'] == str(folder) and figures['by_horizon'].shape[0] == 2 and figures['seconds']['total'] >= 0
+
+
+def test_backtest_scope_evaluates_the_default_elections_of_es_at_the_root(tmp_path):
+    """Sin `events`, `es` evalúa `DEFAULT_EVENTS` (sin base) y escribe en la raíz de `out`."""
+    from mtpy.lib import backtest
+    seen = {}
+
+    def runner(**kwargs):
+        seen.update(kwargs)
+        return fake_results()
+
+    backtest.backtest_scope('es', out=str(tmp_path), runner=runner, stats=lambda scope: {'db_polls': 1, 'db_last_poll': None},
+                            prov=lambda: {'commit': None, 'dirty': False, 'versions': {}})
+    assert seen['events'] == backtest.DEFAULT_EVENTS and seen['horizons'] is None and seen['n_sim'] == 1000
+    assert (tmp_path / 'run.json').exists() and (tmp_path / 'metrics.csv').exists()
+
+
+def test_backtest_scope_skips_a_scope_without_elections_or_cases(tmp_path, monkeypatch):
+    """Un ámbito sin elecciones evaluables o sin ningún caso evaluado lanza `NothingToEvaluate` y no escribe nada."""
+    import pandas as pd
+    import pytest
+    from mtpy.lib import backtest
+    monkeypatch.setattr(backtest, 'default_events', lambda scope, since='2019-01-01': [])
+    with pytest.raises(backtest.NothingToEvaluate, match='no elections to evaluate'):
+        backtest.backtest_scope('es-xx', out=str(tmp_path), runner=lambda **kwargs: fake_results())
+    empty = {**fake_results(), 'metrics': pd.DataFrame(), 'by_horizon': pd.DataFrame()}
+    with pytest.raises(backtest.NothingToEvaluate, match='no case could be evaluated'):
+        backtest.backtest_scope('es-xx', out=str(tmp_path), events=['2023-05-28'], runner=lambda **kwargs: empty)
+    assert not (tmp_path / 'es-xx').exists()
+
+
+def test_poll_stats_counts_the_polls_of_the_scope(monkeypatch):
+    """`poll_stats` registra cuántos sondeos del ámbito hay en la base y la fecha del último (`None` sin sondeos)."""
+    import pandas as pd
+    from mtpy.lib import backtest
+    from mtpy.models import elections
+
+    class FakePolls:
+        def get_results(self, query=None, formatted=False):
+            assert formatted and len(query['filters']) == 1
+            if "event_scope = 'es-xx'" in query['filters'][0]:
+                return pd.DataFrame({'date': pd.to_datetime([])})
+            return pd.DataFrame({'date': pd.to_datetime(['2026-10-01', '2026-10-03'])})
+
+    monkeypatch.setattr(elections, 'Polls', FakePolls)
+    assert backtest.poll_stats('es') == {'db_polls': 2, 'db_last_poll': '2026-10-03'}
+    assert backtest.poll_stats('es-xx') == {'db_polls': 0, 'db_last_poll': None}
 
 
 def test_run_backtest_survives_when_every_case_is_skipped(monkeypatch):
@@ -179,6 +270,29 @@ def test_run_backtest_passes_min_events_to_every_case(monkeypatch):
         warnings.simplefilter('ignore')
         backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30], min_events=99)
     assert seen == [99, 99]
+
+
+def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch):
+    """`backtest/run_backtest.py` es un envoltorio: traduce sus opciones a `Backtest.run` (la composición la normaliza
+    el job) y `--scopes` sin `all` pasa tal cual."""
+    import importlib.util
+    import os
+    import sys
+    from mtpy import mtpy as app
+    from mtpy.jobs import Backtest as job_module
+    seen = {}
+    monkeypatch.setattr(app, 'run', lambda *args, **kwargs: None)
+    monkeypatch.setattr(job_module.Backtest, 'run', lambda self, **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(sys, 'argv', ['run_backtest.py', '--scopes', 'es-md', 'es-cl', '--horizons', '6', '30',
+                                      '--n-sim', '20', '--composition', 'auto', '--no-herding', '--out', 'x'])
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    script.main()
+    assert seen == {'scopes': ['es-md', 'es-cl'], 'events': None, 'horizons': [6, 30], 'n_sim': 20, 'seed': 42, 'max_fc': 10,
+                    'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
+                    'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None, 'out': 'x'}
 
 
 def test_backtest_simulates_a_thousand_times_by_default_like_the_forecast():

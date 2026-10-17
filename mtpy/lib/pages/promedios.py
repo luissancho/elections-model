@@ -17,7 +17,36 @@ MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 BLOCK_ORDER = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
 
 
-def result_rows(summary: dict) -> list:
+def _deltas(row: dict, before: Optional[dict]) -> dict:
+    """
+    The values of the last election and the differences of a row of the results tables against them.
+
+    Parameters
+    ----------
+    row : dict
+        Row of the summary (``pct``, ``seats``).
+    before : dict or None
+        ``{'pct', 'seats'}`` of the same party or block in the last election; ``None`` when it was not there.
+
+    Returns
+    -------
+    dict
+        ``{'prev_pct', 'prev_seats', 'delta_pct', 'delta_seats'}``: a difference is ``None`` when either value is
+        missing; the vote difference keeps two decimals.
+    """
+    prev_pct = before.get('pct') if before else None
+    prev_seats = before.get('seats') if before else None
+    pct, seats = row.get('pct'), row.get('seats')
+
+    return {
+        'prev_pct': prev_pct,
+        'prev_seats': prev_seats,
+        'delta_pct': None if pct is None or prev_pct is None else round(pct - prev_pct, 2),
+        'delta_seats': None if seats is None or prev_seats is None else seats - prev_seats,
+    }
+
+
+def result_rows(summary: dict, results: Optional[dict] = None) -> list:
     """
     Rows of the table of results by party.
 
@@ -25,20 +54,26 @@ def result_rows(summary: dict) -> list:
     ----------
     summary : dict
         Data of the summary part (``parties``).
+    results : dict, optional
+        ``last_results`` of the scope, for the differences against the last election.
 
     Returns
     -------
     list of dict
         ``{'name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_first'}`` per party of the summary, in its order
-        and unformatted.
+        and unformatted, plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``:
+        ``None`` without results or for a party that was not in them).
     """
+    previous = (results or {}).get('parties') or {}
+
     return [
         {key: row.get(key) for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_first')}
+        | _deltas(row, previous.get(row.get('name')))
         for row in (summary or {}).get('parties') or []
     ]
 
 
-def block_result_rows(summary: dict, meta: dict, parties: Catalog) -> list:
+def block_result_rows(summary: dict, meta: dict, parties: Catalog, results: Optional[dict] = None) -> list:
     """
     Rows of the table of results by block.
 
@@ -50,22 +85,57 @@ def block_result_rows(summary: dict, meta: dict, parties: Catalog) -> list:
         Data of the meta part.
     parties : Catalog
         Party catalogue of the run.
+    results : dict, optional
+        ``last_results`` of the scope with its ``blocks``, for the differences against the last election.
 
     Returns
     -------
     list of dict
         ``{'name', 'pct', 'seats', 'p_majority', 'color'}`` per block with parties (``seats`` not ``None``),
         unformatted: the blocks of ``BLOCK_ORDER`` first, in that order, and then the others in the order of
-        the summary.
+        the summary; plus ``prev_pct``, ``prev_seats``, ``delta_pct`` and ``delta_seats`` (``_deltas``: ``None``
+        without results or for a block that had no party then).
     """
     blocks = [row for row in (summary or {}).get('blocks') or [] if row.get('seats') is not None]
     blocks.sort(key=lambda row: BLOCK_ORDER.index(row['name']) if row['name'] in BLOCK_ORDER else len(BLOCK_ORDER))
+    previous = (results or {}).get('blocks') or {}
 
     return [
         {key: row.get(key) for key in ('name', 'pct', 'seats', 'seats_lo', 'seats_hi', 'p_majority')}
         | {'color': block_color(row['name'], meta, parties)}
+        | _deltas(row, previous.get(row['name']))
         for row in blocks
     ]
+
+
+def seat_deltas(summary: dict, meta: dict, parties: Catalog, results: Optional[dict]) -> dict:
+    """
+    The seat differences against the last election that the hemicycles and the seats bar write next to each seat count.
+
+    Parameters
+    ----------
+    summary : dict
+        Data of the summary part of the mode shown.
+    meta : dict
+        Data of the meta part.
+    parties : Catalog
+        Party catalogue of the run.
+    results : dict or None
+        ``last_results`` of the scope with its ``blocks``, or ``None`` without a published election.
+
+    Returns
+    -------
+    dict
+        ``{'parties': {name: seats difference}, 'blocks': {name: seats difference}, 'year'}``: only the parties and
+        blocks that have one (``result_rows``, ``block_result_rows``), and the year of that election (``None``
+        without one).
+    """
+    return {
+        'parties': {row['name']: row['delta_seats'] for row in result_rows(summary, results) if row['delta_seats'] is not None},
+        'blocks': {row['name']: row['delta_seats']
+                   for row in block_result_rows(summary, meta, parties, results) if row['delta_seats'] is not None},
+        'year': results.get('year') if results else None,
+    }
 
 
 def poll_name(poll: dict) -> str:
@@ -422,7 +492,8 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
     list of dict
         One card per party of ``bmaps.main`` present in the summary (the six with most seats without the map):
         ``name``, ``fullname``, ``color``, ``rank`` (by seats, ties by vote), ``seats``, ``pct``, ``delta_seats``
-        (``'−25'``), ``delta_pct`` (``'+0,0'``), both ``None`` without results, and ``new`` (not in the results).
+        and ``delta_pct`` (``_deltas``: the differences against the last election, ``None`` without results or for
+        a party that was not in them).
     """
     rows = summary.get('parties') or []
     by_name = {row['name']: row for row in rows}
@@ -435,7 +506,7 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
 
     for name in names:
         row = by_name[name]
-        before = previous.get(name)
+        deltas = _deltas(row, previous.get(name))
         cards.append({
             'name': name,
             'fullname': parties[name]['fullname'],
@@ -443,9 +514,8 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
             'rank': ranks[name],
             'seats': row.get('seats'),
             'pct': row.get('pct'),
-            'delta_seats': delta_text((row.get('seats') or 0) - (before.get('seats') or 0)) if before and results else None,
-            'delta_pct': delta_text((row.get('pct') or 0) - (before.get('pct') or 0), 1) if before and results else None,
-            'new': bool(results) and before is None,
+            'delta_seats': deltas['delta_seats'],
+            'delta_pct': deltas['delta_pct'],
         })
 
     return cards
@@ -500,16 +570,16 @@ def promedios_context(state: dict) -> dict:
     -------
     dict
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``result_rows``
-        and ``block_result_rows`` (the tables of results of the summary), ``pct_max`` (the widest vote bar),
-        ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` (of the
-        last election with results, for the deltas), ``lead`` (``lead_strip``), ``table_parties`` (every party of the
+        and ``block_result_rows`` (the tables of results of the summary, with their differences against the last
+        election), ``pct_max`` (the widest vote bar), ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and ``results_date`` (of the last
+        election with results, for the deltas; ``None`` without one), ``lead`` (``lead_strip``), ``table_parties`` (every party of the
         polls part), ``table`` (``polls_table``, the ``PAGE_SIZE`` most recent polls the server renders),
         ``table_total`` (the polls of the polls part), ``months`` (``poll_months``), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them) and ``initial`` (``state``, ``meta``, ``headline``,
         ``series`` (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered,
         sorted and paginated in the browser), ``projection``, ``vote``, ``summary``, ``runs``, ``cards`` (name
-        and colour of the party cards, for the sparklines) and ``inks`` (the ink over the colour of every party
+        and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``, for the hemicycle) and ``inks`` (the ink over the colour of every party
         and block, for the pills of the legend)).
 
     Raises
@@ -533,15 +603,16 @@ def promedios_context(state: dict) -> dict:
     summary = part(scope, run, 'summary', mode=mode)
     # imported here: ``elecciones`` imports this module
     from .elecciones import last_results
-    results = last_results(scope)
-    context['result_rows'] = result_rows(summary)
-    context['block_result_rows'] = block_result_rows(summary, meta, parties)
+    results = last_results(scope, parties)
+    context['result_rows'] = result_rows(summary, results)
+    context['block_result_rows'] = block_result_rows(summary, meta, parties, results)
     context['pct_max'] = max((row['pct'] for row in context['result_rows'] if row.get('pct') is not None), default=0)
     context['n_seats'] = summary.get('n_seats') or meta.get('n_seats')
     context['majority'] = summary.get('majority') or meta.get('majority')
     context['kpis'] = kpi_rows(summary, meta, parties, poll_rows)
     context['cards'] = party_cards(summary, meta, parties, results)
     context['results_year'] = results['year'] if results else None
+    context['results_date'] = results['date'] if results else None
     context['lead'] = lead_strip(summary.get('parties') or [], context['majority'])
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
@@ -563,6 +634,7 @@ def promedios_context(state: dict) -> dict:
         'summary': summary,
         'runs': bundle.loads(site().history(scope))['data'],
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
+        'deltas': seat_deltas(summary, meta, parties, results),
         # ink of every party and block of the series charts, for the pills of the legend when they are on
         'inks': {**{name: ink_color(parties[name]['color']) for name in series.get('parties') or []},
                  **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},

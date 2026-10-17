@@ -179,29 +179,32 @@
       {{ m.card_start('last', 'Último sondeo de cada encuestadora', 'La muestra, los días de antelación y los errores del último sondeo de cada encuestadora.') }}
         <div class="table-wrap">
           <table id="last-table">
-            <caption>Último sondeo de cada encuestadora, de menor a mayor error de bloques; errores en puntos (sondeo menos resultado).</caption>
+            <caption>Último sondeo de cada encuestadora, de menor a mayor error de bloques (sin signo); errores en puntos (sondeo menos resultado).</caption>
             <thead>
               <tr>
                 <th scope="col">Encuestadora</th>
                 <th scope="col">Muestra</th>
                 <th scope="col">Días antes</th>
                 <th scope="col">Error medio</th>
-                <th scope="col">Error de bloques</th>
-                {% for block in blocks %}
+                <th scope="col">Sesgo bloques</th>
+                {% for block in table_blocks %}
                 <th scope="col">{{ block }}</th>
                 {% endfor %}
               </tr>
             </thead>
             <tbody>
               {% for row in last_rows %}
+              {# the block bias grows towards the block the poll favoured, in the colour of that block; a block column is
+                 red the more the poll fell short of the block and green the more it overshot it #}
+              {% set bias = row.error_blocks|sides(8) %}
               <tr>
                 <td>{% if row.pollster_id %}<a href="{{ pollster_href(row.pollster, row.pollster_id) }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 <td>{{ row.sample_size|int }}</td>
                 <td>{{ row.days|int }}</td>
-                <td>{{ row.error_avg|num(1) }}</td>
-                <td>{{ row.error_blocks_abs|num(1) }}</td>
-                {% for block in blocks %}
-                <td>{{ row[block]|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, 8, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
+                <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ bias_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
+                {% for block in table_blocks %}
+                <td class="cell-shade" style="background-color: {{ row[block]|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row[block]|num(1) }}</td>
                 {% endfor %}
               </tr>
               {% endfor %}
@@ -211,7 +214,10 @@
         {% call m.how() %}
         <p>
           Cada fila es el último sondeo de una encuestadora: su muestra, cuántos días antes de votar se publicó y sus
-          errores. Las columnas de bloque llevan signo: positivo, el sondeo daba al bloque más voto que el resultado.
+          errores. El fondo del error medio es más rojo cuanto mayor, de 0 a 8 puntos; la barra del sesgo bloques crece
+          hacia el lado del bloque al que favoreció el sondeo y en su color, hasta 8 puntos de margen. Las columnas de
+          bloque llevan signo: positivo, el sondeo daba al bloque más voto que el resultado, con el fondo en rojo si se
+          quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos.
         </p>
         <p>Las encuestadoras van de menor a mayor error de bloques, como las barras y la diana.</p>
         <p>El último sondeo puede ser de semanas antes de votar: no recoge lo que cambió después. Los demás sondeos están en el CSV.</p>

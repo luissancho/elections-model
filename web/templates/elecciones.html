@@ -186,7 +186,7 @@
         {% endcall %}
         {% endif %}
       {{ m.card_end() }}
-      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada, de todos los ámbitos, y si el modelo tiene backtest en ella.') }}
+      {{ m.card_start('events', 'Elecciones publicadas', 'Cuánto se equivocaron los sondeos en cada elección pasada, de todos los ámbitos.') }}
         <div class="table-wrap">
           <table id="events-table">
             <caption>Elecciones pasadas, de la más reciente a la más antigua. Pulsa en una para ver su detalle.</caption>
@@ -196,21 +196,19 @@
                 <th scope="col">Sondeos</th>
                 <th scope="col">Encuestadoras</th>
                 <th scope="col">Error medio</th>
-                <th scope="col">Error de bloques</th>
                 <th scope="col">Sesgo bloques</th>
-                <th scope="col">Modelo</th>
               </tr>
             </thead>
             <tbody>
               {% for event in events %}
+              {# the block bias grows towards the block the polls favoured, in the colour of that block #}
+              {% set bias = event.error_blocks|sides(8) %}
               <tr data-scope="{{ event.scope }}" data-date="{{ event.date }}" data-year="{{ event.date[:4] }}">
                 <td>{% if event.href %}<a href="{{ event.href }}">{% endif %}{{ event.date|date }}{% if event.name %} · {{ event.name }}{% endif %}{% if event.href %}</a>{% endif %}</td>
                 <td>{{ event.n_polls|int }}</td>
                 <td>{{ event.n_pollsters|int }}</td>
-                <td>{{ event.error_avg|num(1) }}</td>
-                <td>{{ event.error_blocks_abs|num(1) }}</td>
-                <td>{{ event.error_blocks|num(1) }}</td>
-                <td>{{ 'sí' if event.has_model else '—' }}</td>
+                <td class="cell-shade" style="background-color: {{ event.error_avg|shade(0, 8, '#d62728') }}">{{ event.error_avg|num(1) }}</td>
+                <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ bias_colors[bias.side] }}"></i><span>{{ event.error_blocks|num(1) }}</span></td>
               </tr>
               {% endfor %}
             </tbody>
@@ -219,8 +217,9 @@
         <p class="muted" id="events-count">{{ events|length }} elecciones</p>
         {% call m.how() %}
         <p>
-          Cada fila es una elección: cuántos sondeos y encuestadoras hubo, sus errores frente al resultado y si el modelo
-          tiene backtest en ella. Las medidas se definen justo debajo.
+          Cada fila es una elección: cuántos sondeos y encuestadoras hubo y sus errores frente al resultado. El fondo del
+          error medio es más rojo cuanto mayor, de 0 a 8 puntos; la barra del sesgo bloques crece hacia el lado del bloque
+          al que favorecieron los sondeos y en su color, hasta 8 puntos de margen. Las medidas se definen justo debajo.
         </p>
         <p>Pulsa una elección para ver su resultado, el error de cada encuestadora y lo que habría dicho el modelo.</p>
         <p>Que los sondeos acertaran en una elección no garantiza que acierten en la siguiente.</p>
