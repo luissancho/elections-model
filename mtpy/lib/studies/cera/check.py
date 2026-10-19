@@ -8,7 +8,8 @@ then judges a prediction of the seats the new CERA electors would move against t
 import pandas as pd
 
 from .data import Results
-from .seats import OTHER_BLOCK, _sigla_seats, allocate_results, block_seats, last_seat, peninsular_results
+from .seats import OTHER_BLOCK, _sigla_seats, allocate_results, block_seats, last_seat
+from .stress import peninsular_results
 
 ROW_COLUMNS = [
     'region_id', 'name', 'magnitude', 'winner_with', 'winner_without', 'gap', 'voters_cera', 'over_gap', 'decided',

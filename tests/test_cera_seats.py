@@ -26,18 +26,20 @@ from mtpy.lib.studies.cera.seats import (
     allocate_results,
     block_seats,
     check_official,
-    exterior_grid,
     increment_model,
     increment_votes,
     last_seat,
     litigation_census,
     net_effect,
     new_electors,
-    optimal_placement,
     participation_history,
+    projected_census
+)
+from mtpy.lib.studies.cera.stress import (
+    exterior_grid,
+    optimal_placement,
     peninsular_results,
     placement_pool,
-    projected_census,
     report_replication,
     scenario_table
 )
