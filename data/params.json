@@ -3,40 +3,47 @@
         "2026-11-29": {
             "parties": {
                 "event": [
-                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF",
-                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "UPN"
+                    "PP", "PSOE", "VOX", "FA", "UP", "SALF",
+                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "COMPROMIS"
                 ],
                 "polls": [
-                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF",
-                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "UPN"
+                    "PP", "PSOE", "VOX", "FA", "UP", "SALF",
+                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "COMPROMIS",
+                    "SUMAR", "UPN"
                 ]
             },
             "bmaps": {
                 "max": [
-                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF"
+                    "PP", "PSOE", "VOX", "FA", "UP", "SALF"
                 ],
                 "min": {
                     "PP": "PP",
                     "PSOE": "PSOE",
                     "VOX+SALF": ["VOX", "SALF"],
-                    "SUMAR+UP": ["SUMAR", "UP"]
+                    "FA+UP": ["FA", "UP"]
                 },
                 "main": [
-                    "PP", "PSOE", "VOX", "SUMAR", "UP", "SALF"
+                    "PP", "PSOE", "VOX", "FA", "UP", "SALF"
                 ],
                 "blocks": {
                     "Derecha": ["PP", "VOX", "SALF"],
-                    "Izquierda": ["PSOE", "UP", "SUMAR"],
-                    "Regionalista": ["PNV", "CC", "BNG", "UPN"],
+                    "Izquierda": ["PSOE", "UP", "FA"],
+                    "Regionalista": ["PNV", "CC", "BNG", "COMPROMIS"],
                     "Separatista": ["ERC", "JxCat", "EHB"]
                 },
                 "vs": {
                     "Derecha": ["PP", "VOX", "SALF"],
-                    "Izquierda": ["PSOE", "SUMAR", "UP"]
+                    "Izquierda": ["PSOE", "FA", "UP"]
                 }
             },
             "smap": {
-                "UP": {"type": "sub", "names": ["SUMAR"]},
+                "FA": [
+                    {"type": "agg", "names": ["SUMAR"]},
+                    {"type": "agg", "names": [], "regions": {"exclude": ["3", "12", "46"]}}
+                ],
+                "UP": {"type": "sub", "names": ["FA"]},
+                "COMPROMIS": {"type": "agg", "names": ["SUMAR"], "regions": ["3", "12", "46"]},
+                "PP": {"type": "agg", "names": ["UPN"]},
                 "SALF": {"type": "sub", "names": ["VOX"]}
             }
         },

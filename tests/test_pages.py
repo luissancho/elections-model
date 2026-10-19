@@ -455,9 +455,10 @@ def test_promedios_initial_polls_carry_the_chart_and_table_columns(api):
     parties = set(data['polls']['parties'])
     assert set(data['polls']) == {'parties', 'polls'}
     for poll in data['polls']['polls']:
-        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | parties <= set(poll)
-        extra = {'sponsor', 'start_date', 'end_date', 'seats'}
-        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size'} | extra | parties
+        assert {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | parties <= set(poll)
+        extra = {'sponsor', 'start_date', 'end_date', 'seats', 'rating'}
+        assert set(poll) <= {'date', 'pollster_id', 'pollster', 'name', 'sample_size', 'href'} | extra | parties
+        assert poll['href'] == pages.pollster_href(poll['pollster'], poll['pollster_id'])
 
 
 def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, tmp_path):
@@ -3462,3 +3463,87 @@ def test_escanos_tables_compare_the_seats_with_the_previous_election(events_site
 def test_escanos_tables_without_a_published_election_have_no_comparison(api):
     plain = html(call(api, '/es/escanos')[2])
     assert 'vs 2023' not in plain and 'class="dlt' not in plain and initial(call(api, '/es/escanos')[2])['deltas'] == {'parties': {}, 'blocks': {}, 'year': None}
+
+
+# Seguimiento 2026-10-19: el rating de la encuestadora en «Todas las encuestas» (Promedios y detalle de una elección),
+# como badge en degradado rojo (0) - gris (50) - verde (100) entre la encuestadora y la fecha; el nombre enlaza al perfil.
+
+def test_gradient_filter_mixes_the_stops_spread_over_the_range():
+    """`gradient`: el color de un valor en una escala de varios tramos, los colores repartidos por igual entre los
+    extremos; recortado en los extremos; transparente sin valor, sin rango o sin dos colores hexadecimales."""
+    from mtpy.lib.pages.filters import gradient
+    stops = ['#d62728', '#7f7f7f', '#2ca02c']
+    assert gradient(0, 0, 100, stops) == '#d62728' and gradient(50, 0, 100, stops) == '#7f7f7f'
+    assert gradient(100, 0, 100, stops) == '#2ca02c'
+    assert gradient(25, 0, 100, stops) == '#ab5354' and gradient(75, 0, 100, stops) == '#569056'
+    assert gradient(5, 0, 100, stops) == '#cd3031'
+    assert gradient(-10, 0, 100, stops) == '#d62728' and gradient(140, 0, 100, stops) == '#2ca02c'  # recortado
+    assert gradient(75, 100, 0, stops) == '#ab5354'  # el rango puede ir hacia abajo
+    assert gradient(0.5, 0, 1, ['#000000', '#ffffff']) == '#808080'  # el medio redondea hacia arriba, como en JS
+    for value, start, end, colors in ((None, 0, 100, stops), (float('nan'), 0, 100, stops), (True, 0, 100, stops),
+                                      (3, 1, 1, stops), (3, 0, 100, ['#d62728']), (3, 0, 100, ['red', '#7f7f7f']),
+                                      (3, 0, 100, [])):
+        assert gradient(value, start, end, colors) == 'transparent', (value, start, end, colors)
+    assert pages.RATING_COLORS == ('#d62728', '#7f7f7f', '#2ca02c')
+    assert pages.environment().filters['gradient'] is pages.gradient
+
+
+def test_polls_table_rows_carry_the_rating_badge_and_the_profile_link():
+    polls = [
+        {'date': '2026-10-01', 'pollster': 'Sigma Dos', 'pollster_id': 7, 'rating': 73.08, 'PP': 31.1},
+        {'date': '2026-09-04', 'pollster': 'Ateneo del Dato', 'pollster_id': 9, 'rating': 5, 'PP': 25.5},
+        {'date': '2026-09-02', 'pollster': 'CIS', 'PP': 30.0},
+    ]
+    rows = pages.polls_table(polls, ['PP'], {})['rows']
+    assert [(row['rating'], row['rating_color']) for row in rows] == [
+        ('73,1', pages.gradient(73.08, 0, 100, pages.RATING_COLORS)), ('5,0', '#cd3031'), ('–', None)]
+    assert [row['href'] for row in rows] == ['/casas/sigma-dos', '/casas/ateneo-del-dato', None]
+
+
+def test_chart_polls_keep_the_rating_and_add_the_profile_link():
+    polls = {'parties': ['PP'], 'polls': [
+        {'date': '2026-10-01', 'pollster': 'Sigma Dos', 'pollster_id': 7, 'rating': 73.08, 'PP': 31.1},
+        {'date': '2026-09-02', 'pollster': 'CIS', 'PP': 30.0},
+    ]}
+    out = pages.chart_polls(polls)['polls']
+    assert out[0]['rating'] == 73.08 and out[0]['href'] == '/casas/sigma-dos'
+    assert 'rating' not in out[1] and out[1]['href'] is None
+
+
+def test_promedios_polls_table_shows_the_rating_badge_between_the_house_and_the_date_and_links_the_profile(api, fresh_app):
+    polls = fixture_data('polls')
+    base = polls['polls'][0]
+    polls['polls'] = [base | {'date': '2026-10-01', 'rating': 73.08},
+                      base | {'date': '2026-09-01', 'pollster': 'Ateneo del Dato', 'pollster_id': 9, 'rating': 5.0},
+                      base | {'date': '2026-08-01', 'pollster': 'Sin casa', 'pollster_id': None}]
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'polls'), 'polls', polls, 'es', run_id=RUN)
+    webapi.site().files.clear()
+    body = call(api, '/es')[2]
+    page = html(body).replace('\n', ' ')
+    start = page.index('id="polls-table"')
+    head = page[start:page.index('<tbody>', start)]
+    assert '<col class="c-f"><col class="c-r"><col class="c-d"><col class="c-s">' in head
+    assert head.index('data-key="pollster"') < head.index('data-key="rating"') < head.index('data-key="date"')
+    assert re.search(r'<th scope="col" data-key="rating" title="[^"]+"><button type="button" class="sort">Rating \(0-100\)</button></th>', head)
+    rows = re.findall(r'<tr>(.*?)</tr>', polls_tbody(page))
+    assert len(rows) == 3
+    assert '<a href="/casas/sigma-dos"><b>Sigma Dos</b></a>' in rows[0]
+    assert '<td><span class="rt" style="background: {}">73,1</span></td>'.format(pages.gradient(73.08, 0, 100, pages.RATING_COLORS)) in rows[0]
+    assert rows[0].index('</a>') < rows[0].index('class="rt"') < rows[0].index('01/10/26')
+    assert '<td><span class="rt" style="background: #cd3031">5,0</span></td>' in rows[1]
+    assert '<b>Sin casa</b>' in rows[2] and '<a href' not in rows[2] and '<td class="na">—</td>' in rows[2]
+    foot = page[page.index('<tfoot>', start):page.index('</tfoot>', start)]
+    assert foot.count('<td></td>') == 3  # rating, fecha y muestra vacías bajo la media simple
+    assert 'El rating (0-100)' in page and 'rojo (0)' in page and 'su perfil' in page
+
+
+def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links_its_profile(events_site):
+    body = call(events_site, '/elecciones/es/generales/2023-07')[2]
+    page = html(body).replace('\n', ' ')
+    tbody = polls_tbody(page)
+    assert 'Rating (0-100)' in page and 'llegó a esta elección' in page
+    assert '<a href="/casas/gad3"><b>GAD3</b></a>' in tbody
+    assert '<span class="rt" style="background: {}">0,9</span>'.format(pages.gradient(0.9, 0, 100, pages.RATING_COLORS)) in tbody
+    data = initial(body)['polls']['polls']
+    assert data[0]['rating'] == 0.8 and data[0]['href'] == '/casas/cis'

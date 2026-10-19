@@ -13,7 +13,7 @@ from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
 from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
-from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short,
+from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, gradient,
                       fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around)
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -166,6 +166,7 @@ def environment() -> Environment:
             'sides': bar_sides,
             'shade': shade,
             'shade_around': shade_around,
+            'gradient': gradient,
             'rng': rng_cell,
             'date_short': fmt_date_short,
             'delta': delta_text,

@@ -364,3 +364,33 @@ def test_gap_error_is_positive_when_the_poll_favours_the_first_block():
     out = c.poll_errors(polls, events, error_type='gap', bmap=bmap)
     assert out[('poll', 'gap')].iloc[0] == pytest.approx(0.093) and out[('event', 'gap')].iloc[0] == pytest.approx(0.0143)
     assert out[('error', 'gap')].iloc[0] == pytest.approx(0.0787)
+
+
+# --- 2026-10-19: el rating por sondeo lo copia el cómputo de pesos, no solo la acción `ratings` ---
+
+def test_compute_weights_copies_the_rating_of_the_event_to_each_poll():
+    """Un sondeo cargado después del último `ratings` (la carga llama a `compute_weights`) sale con el rating de su
+    casa para el evento, junto a `weight_rating`; sin fila de ratings, vacío. La serie se actualiza igual."""
+    c = bare_computer()
+    c.drop_mtypes, c.ol_max, c.ol_dev, c.wspan = [], 10000, 3, None
+    c.pollsters = pd.DataFrame({'id': [1, 2], 'name': ['A', 'B'], 'mtype': ['cati', 'online'], 'quality': [60., 60.]})
+    event = pd.Timestamp('2026-11-29')
+    c.ratings = pd.DataFrame({'rating': [62.76], 'weight_rating': [1.94]},
+                             index=pd.MultiIndex.from_tuples([(event, 1)], names=['event_date', 'pollster_id']))
+    # the series: the event row (no pollster) and three polls, the first one already computed
+    c.series = pd.DataFrame({
+        'event_date': event, 'date': pd.to_datetime(['2026-11-29', '2026-10-08', '2026-10-14', '2026-10-10']),
+        'pollster_id': [0, 1, 1, 2], 'sponsor_id': 0, 'pollster': [None, 'A', 'A', 'B'], 'sponsor': None,
+        'start_date': pd.to_datetime([None, '2026-10-01', '2026-10-09', '2026-10-05']),
+        'end_date': pd.to_datetime([None, '2026-10-08', '2026-10-14', '2026-10-10']),
+        'ctype': None, 'sample_size': [np.nan, 2000., 3000., 1000.], 'computed': [True, True, False, False],
+        'featured': False, 'mtype': [None, 'cati', None, None], 'proc_sample': [np.nan, 2000., np.nan, np.nan],
+        'weight_sample': [np.nan, 1., np.nan, np.nan], 'weight_over': [np.nan, 1., np.nan, np.nan],
+        'weight_rating': [np.nan, 1.94, np.nan, np.nan], 'rating': [np.nan, 62.76, np.nan, np.nan],
+    }).set_index(c.keys)
+    out = c.compute_weights(save=False, overwrite=True).reset_index().set_index('date')
+    new, other = pd.Timestamp('2026-10-14'), pd.Timestamp('2026-10-10')
+    assert out.loc[new, 'rating'] == 62.76 and out.loc[new, 'weight_rating'] == 1.94 and out.loc[new, 'computed']
+    assert np.isnan(out.loc[other, 'rating']) and np.isnan(out.loc[other, 'weight_rating'])  # B has no ratings row
+    series = c.series.reset_index().set_index('date')['rating']
+    assert series[[pd.Timestamp('2026-10-08'), new, other]].tolist() == pytest.approx([62.76, 62.76, np.nan], nan_ok=True)

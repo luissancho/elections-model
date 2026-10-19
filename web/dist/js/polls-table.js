@@ -145,7 +145,7 @@ export function filterPolls(polls, {pollsters, from, to, mode = 'pct'}) {
  * Sort polls by a column.
  *
  * @param {Array} polls polls to sort, in publication order (not modified)
- * @param {string} key `date`, `pollster`, `sample_size` or a party name
+ * @param {string} key `date`, `pollster`, `rating`, `sample_size` or a party name
  * @param {boolean} asc ascending order
  * @param {string} [mode='pct'] view of the party columns (see `pollValue`)
  * @returns {Array} a sorted copy: missing values last in both directions; ties by date descending and then by
@@ -157,7 +157,7 @@ export function sortPolls(polls, key, asc, mode = 'pct') {
   const byDate = (a, b) => (b.poll.date || '').localeCompare(a.poll.date || '') || b.index - a.index;
   const indexed = polls.map((poll, index) => ({poll, index}));
   const missing = (value) => value === null || value === undefined || value === '';
-  const fixed = ['date', 'pollster', 'sample_size'].includes(key);
+  const fixed = ['date', 'pollster', 'rating', 'sample_size'].includes(key);
   indexed.sort((a, b) => {
     const x = fixed ? a.poll[key] : pollValue(a.poll, key, mode);
     const y = fixed ? b.poll[key] : pollValue(b.poll, key, mode);

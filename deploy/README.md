@@ -737,6 +737,7 @@ python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-2
 python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
 python job.py publish '{"what":["backtest"],"scopes":"all"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08","replace":true}}'
+python job.py publish '{"what":["forecast", "analysis"],"scopes":["es"], "verbose": 3}'
 ```
 
 1. Publica el pronóstico de `es` (nowcast y forecast, 1000 simulaciones) y actualiza su entrada del manifest.

@@ -10,7 +10,8 @@ from .. import bundle
 from ..webapi import site
 from .common import OTHERS_COLOR, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
-                      fmt_prob, fmt_range)
+                      fmt_prob, fmt_range, gradient)
+from .slugs import pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
@@ -138,6 +139,30 @@ def seat_deltas(summary: dict, meta: dict, parties: Catalog, results: Optional[d
     }
 
 
+# Stops of the rating badge of the polls tables, from 0 to 100: red, grey at 50 and green; mirrored by
+# ``RATING_COLORS`` of ``web/dist/js/pages/polls-dom.js``.
+RATING_COLORS = ('#d62728', '#7f7f7f', '#2ca02c')
+
+
+def poll_href(poll: dict) -> Optional[str]:
+    """
+    Link to the profile of the pollster of a poll.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``pollster``, ``pollster_id``).
+
+    Returns
+    -------
+    str or None
+        ``pollster_href`` of its pollster, or ``None`` without a ``pollster_id``.
+    """
+    pollster_id = poll.get('pollster_id')
+
+    return None if _is_missing(pollster_id) else pollster_href(poll.get('pollster'), int(pollster_id))
+
+
 def poll_name(poll: dict) -> str:
     """
     Name of a poll as the loader builds it: the pollster, plus ``' / '`` and the sponsor when there is one.
@@ -172,19 +197,19 @@ def chart_polls(polls: dict) -> dict:
     -------
     dict
         ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``, ``seats``
-        (the pollster's projections, when it has them),
+        (the pollster's projections, when it has them), ``rating`` (the pollster's rating the run used),
         ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
-        plus ``name`` (``poll_name``) and ``sample_size`` (``None`` when missing): the box of each poll of the
-        charts and the table of all the polls are drawn from them.
+        plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``): the
+        box of each poll of the charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
-    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats'] + parties
+    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats', 'rating'] + parties
 
     return {
         'parties': parties,
         'polls': [
             {key: poll.get(key) for key in keys if key in poll}
-            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size')}
+            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size'), 'href': poll_href(poll)}
             for poll in polls.get('polls') or []
         ],
     }
@@ -264,8 +289,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
     Parameters
     ----------
     polls : list of dict
-        Polls of the polls part (``date``, ``pollster``, ``sponsor``, ``sample_size``, ``start_date``,
-        ``end_date`` and one percentage per party), in publication order.
+        Polls of the polls part (``date``, ``pollster``, ``pollster_id``, ``rating``, ``sponsor``, ``sample_size``,
+        ``start_date``, ``end_date`` and one percentage per party), in publication order.
     parties : list of str
         Parties to show, in column order.
     colors : dict
@@ -277,9 +302,11 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
     -------
     dict
         ``{'rows', 'mean', 'total'}``: ``total`` is ``len(polls)``; each row of the last ``n`` polls by date
-        (ties keep the later published first) is ``{'pollster', 'sponsor', 'date' (dd/mm/aa), 'fieldwork'
-        (``None`` without fieldwork dates), 'sample', 'cells'}`` with a ``{'value', 'leader', 'color'}`` cell
-        per party (``leader``: the highest of the row, every tied one); ``mean`` is ``{'n', 'cells'}``, the
+        (ties keep the later published first) is ``{'pollster', 'href' (``poll_href``), 'rating' (at one decimal,
+        or the dash), 'rating_color' (``gradient`` over ``RATING_COLORS``, ``None`` without rating), 'sponsor',
+        'date' (dd/mm/aa), 'fieldwork' (``None`` without fieldwork dates), 'sample', 'cells'}`` with a
+        ``{'value', 'leader', 'color'}`` cell per party (``leader``: the highest of the row, every tied one);
+        ``mean`` is ``{'n', 'cells'}``, the
         unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
         browser shows before any filter.
     """
@@ -294,8 +321,12 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
             fieldwork = 'Trabajo de campo: {} – {}'.format(fmt_date(start or end), fmt_date(end or start))
 
         values = [poll.get(name) for name in parties]
+        color = gradient(poll.get('rating'), 0, 100, RATING_COLORS)
         rows.append({
             'pollster': poll.get('pollster') or DASH,
+            'href': poll_href(poll),
+            'rating': fmt_num(poll.get('rating'), 1),
+            'rating_color': None if color == 'transparent' else color,
             'sponsor': poll.get('sponsor') or None,
             'date': short_date(poll.get('date')),
             'fieldwork': fieldwork,

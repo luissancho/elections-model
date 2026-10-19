@@ -41,7 +41,7 @@ export function wireDropdown(dd, onChange) {
 }
 
 /** Sort keys of the fixed columns of the polls table; any other key is a party. */
-const FIXED_KEYS = ['pollster', 'date', 'sample_size'];
+const FIXED_KEYS = ['pollster', 'rating', 'date', 'sample_size'];
 
 /**
  * Wire the "Todas las encuestas" table: party and pollster dropdowns, month range, sortable headers and pages of

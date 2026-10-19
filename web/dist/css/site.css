@@ -654,10 +654,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 #district-form { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; margin-top: var(--space-3); }
 
 /* Casas and elections: bullseye and the house-effects table */
-#bullseye-chart, #errors-bullseye { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
-/* The bullseyes of the history, of an election and of a pollster profile are the main chart of their card:
-   larger and centred */
-#errors-bullseye, #bullseye-chart.big { max-width: 720px; margin: 0 auto; }
+#bullseye-chart, #errors-bullseye, #house-chart { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
+/* The bullseyes of the history, of an election, of a pollster profile and of the house effects example of the
+   method are the main chart of their card: larger and centred */
+#errors-bullseye, #bullseye-chart.big, #house-chart.big { max-width: 720px; margin: 0 auto; }
 /* Election detail: the last-poll error bars and their table side by side, and "Ver más" under the results */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
 .split > * { min-width: 0; }
@@ -726,6 +726,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et-wrap { overflow-x: auto; margin-top: var(--space-2); }
 .et { table-layout: fixed; min-width: 980px; }
 .et col.c-f { width: 200px; }
+.et col.c-r { width: 92px; }
 .et col.c-d { width: 80px; }
 .et col.c-s { width: 80px; }
 .et col.c-p { width: 72px; }
@@ -741,6 +742,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et tbody tr:hover td.f { background: var(--color-row-hover); }
 .et td.f b, .et td.f small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .et td.f small { color: var(--color-muted); font-size: 11.5px; }
+.et td.f a { color: inherit; text-decoration: none; }
+.et td.f a:hover { color: var(--color-accent); text-decoration: underline; }
+/* Rating badge of "Todas las encuestas": the figure on a solid colour from red (0) through grey (50) to green (100),
+   `gradient` over `RATING_COLORS` in the server and the browser alike */
+.et .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }
 .et td.empty { text-align: center; color: var(--color-muted); }
@@ -752,8 +758,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et-rank { min-width: 820px; }
 .et-rank col.c-bar { width: 150px; }
 .et-rank col.c-n { width: 90px; }
-.et-rank td.f a { color: inherit; text-decoration: none; }
-.et-rank td.f a:hover { color: var(--color-accent); text-decoration: underline; }
 .cell-bar { position: relative; min-width: 120px; }  /* room for the bar in a table without fixed columns */
 .cell-bar .fill { position: absolute; top: 5px; bottom: 5px; border-radius: 3px; }
 .cell-bar .fill.pos { background: rgba(44, 160, 44, 0.4); }

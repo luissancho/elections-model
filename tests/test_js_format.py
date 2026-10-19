@@ -55,3 +55,18 @@ def test_fmt_delta_follows_the_badge_filter():
     for x, digits in ((6, 0), (-1, 0), (0, 0), (0.04, 1), (-12.38, 1), (1.0, 1), (-0.05, 1), (-25, 0)):
         assert run_js(f'f.fmtDelta({x}, {digits})') == pages.delta_badge(x, digits)['text'], (x, digits)
     assert run_js('f.fmtDelta(null)') == run_js('f.fmtDelta(undefined)') == run_js('f.fmtDelta(NaN)') == '–'
+
+
+def test_gradient_follows_the_python_filter():
+    """`gradient` mezcla los colores de una escala de varios tramos como el filtro `gradient` de Python (el badge del
+    rating de «Todas las encuestas»)."""
+    stops = '["#d62728", "#7f7f7f", "#2ca02c"]'
+    for x in (0, 5, 25, 50, 73.08, 75, 100, -10, 140, 0.9, 49.999):
+        assert run_js(f'f.gradient({x}, 0, 100, {stops})') == pages.gradient(x, 0, 100, pages.RATING_COLORS), x
+    assert run_js(f'f.gradient(75, 100, 0, {stops})') == pages.gradient(75, 100, 0, pages.RATING_COLORS) == '#ab5354'
+    assert run_js('f.gradient(0.5, 0, 1, ["#000000", "#ffffff"])') == '#808080'
+    for expr in (f'f.gradient(null, 0, 100, {stops})', f'f.gradient(undefined, 0, 100, {stops})',
+                 f'f.gradient(NaN, 0, 100, {stops})', f'f.gradient(3, 1, 1, {stops})',
+                 'f.gradient(3, 0, 100, ["#d62728"])', 'f.gradient(3, 0, 100, ["red", "#7f7f7f"])',
+                 'f.gradient(3, 0, 100, [])', 'f.gradient(3, 0, 100, "#d62728")'):
+        assert run_js(expr) == 'transparent', expr

@@ -224,9 +224,15 @@
         {% include '_polls_table.html' %}
         {% call m.how() %}
         <p>
-          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, la fecha de publicación, la muestra y
-          el voto de cada partido, sin ninguna corrección del modelo. La media simple del pie es la de los sondeos
-          filtrados, todos con el mismo peso: no es el promedio del modelo, que pondera por calidad, muestra y fecha.
+          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, su rating, la fecha de publicación,
+          la muestra y el voto de cada partido, sin ninguna corrección del modelo. La media simple del pie es la de
+          los sondeos filtrados, todos con el mismo peso: no es el promedio del modelo, que pondera por calidad,
+          muestra y fecha.
+        </p>
+        <p>
+          El rating (0-100) es la nota de la encuestadora al calcular este promedio, la misma en todos sus sondeos
+          del ciclo: cuanto más alto, más pesan. El color va del rojo (0) al verde (100) pasando por el gris (50);
+          «—», sin rating. Pulsa en la encuestadora para ver su perfil, con el camino de su rating.
         </p>
         <p>
           En la vista Escaños solo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra

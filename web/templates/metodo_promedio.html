@@ -13,6 +13,7 @@
         <a href="#que-entra">Qué sondeos entran</a>
         <a href="#peso">Cuánto pesa cada sondeo</a>
         <a href="#efectos-de-casa">Los efectos de encuestadora</a>
+        {% if house_example %}<a href="#ejemplo-cis">Un ejemplo: el {{ house_example.pollster }} desde {{ house_example.since[:4] }}</a>{% endif %}
         <a href="#regresion">La regresión local</a>
         <a href="#banda">La banda del promedio</a>
         {% if example %}<a href="#ejemplo">Un ejemplo: el {{ example.name }} hoy</a>{% endif %}
@@ -137,17 +138,104 @@
           desactivado.
         </p>
         <p>
-          Los gráficos muestran siempre los sondeos tal como se publicaron: la corrección solo entra en la línea.
+          Los gráficos muestran siempre los sondeos tal como se publicaron: la corrección solo entra en el promedio.
         </p>
       {{ m.card_end() }}
+      {% if house_example %}
+      {% set h = house_example %}
+      {{ m.card_start('ejemplo-cis', 'Un ejemplo: el ' ~ h.pollster ~ ' desde ' ~ h.since[:4], 'El último sondeo del ' ~ h.pollster ~ ' antes de cada elección analizada desde septiembre de 2018, frente al resultado y por bloques: un efecto de encuestadora sostenido, visto desde fuera.') }}
+        <p>
+          En junio de 2018 José Félix Tezanos llegó a la presidencia del CIS y, desde el barómetro de septiembre, el
+          CIS cambió su estimación de voto: dejó de aplicar su modelo tradicional de ajuste (la «cocina») y pasó a
+          publicar una estimación basada en el voto directo más la simpatía por cada partido. Sus cifras se
+          separaron de las demás encuestadoras siempre hacia el mismo lado, más voto para el PSOE y la izquierda y
+          menos para el PP, y sus escaños pasaron a darse en horquillas muy anchas: para las generales del 28 de
+          abril de 2019 dio al PSOE entre 123 y 138 escaños y al PP entre 66 y 76.
+        </p>
+        <p>
+          Desde entonces el {{ h.pollster }} ha publicado sondeos en {{ h.n }} elecciones analizadas, generales y
+          autonómicas, de cualquier ámbito. En {{ h.over[h.left] }} de ellas su último sondeo dio a la
+          {{ h.left }} más voto que el resultado, y en {{ h.under[h.right] }}, menos a la {{ h.right }}. Una
+          encuestadora sin inclinación se pasaría unas veces y se quedaría corta otras; un error casi siempre del
+          mismo lado es un efecto de encuestadora.
+        </p>
+        <div class="chart big" id="house-chart" role="img" aria-label="Error del último sondeo del {{ h.pollster }} antes de cada elección analizada desde {{ h.since[:4] }}, por bloque"></div>
+        <details class="weights-list" id="house-list">
+          <summary>Ver las {{ h.n }} elecciones</summary>
+          <div class="table-wrap">
+            <table class="et" id="house-table">
+              <caption>Error del último sondeo del {{ h.pollster }} antes de cada elección analizada desde septiembre de {{ h.since[:4] }} (sondeo menos resultado), las más recientes primero.</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="f l">Elección</th>
+                  <th scope="col">Fecha</th>
+                  <th scope="col" title="Días entre el fin del trabajo de campo del sondeo y la votación">Días antes</th>
+                  <th scope="col" title="Error en el bloque: positivo si el sondeo le dio más voto que el resultado, negativo si menos">{{ h.left }}</th>
+                  <th scope="col" title="Error en el bloque: positivo si el sondeo le dio más voto que el resultado, negativo si menos">{{ h.right }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in h.rows %}
+                <tr>
+                  <td class="f l">{{ row.name }}</td>
+                  <td>{{ row.event_date|date }}</td>
+                  <td>{{ row.days|int }}</td>
+                  {# double gradient, as the profile: red the more the poll fell short of the block, green the more it overshot it #}
+                  <td class="cell-shade" style="background-color: {{ row[h.left]|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row[h.left]|num(1) }}</td>
+                  <td class="cell-shade" style="background-color: {{ row[h.right]|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row[h.right]|num(1) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <p>
+          En la diana, cada punto es el último sondeo del {{ h.pollster }} antes de una elección: en azul las
+          generales y en naranja las autonómicas, con la etiqueta de la elección y su ámbito (2023-23J-es). A la
+          derecha del centro, el sondeo dio a la {{ h.right }} más voto que el resultado; hacia arriba, más a la
+          {{ h.left }}. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos. Casi todos los puntos
+          caen en el mismo cuadrante, arriba a la izquierda: más {{ h.left }} y menos {{ h.right }} de las que hubo.
+        </p>
+        <p>
+          El modelo no espera a la elección para verlo: el efecto se estima frente al consenso de las demás
+          encuestadoras a lo largo del ciclo y se resta de cada sondeo antes de promediar.
+          {% if h.cycle and h.left in h.cycle and h.right in h.cycle %}
+          En el ciclo actual de las generales, con {{ h.n_cycle|int }} sondeos del {{ h.pollster }}, su efecto es de
+          {{ h.cycle[h.left]|delta(1) }} puntos en la {{ h.left }} y {{ h.cycle[h.right]|delta(1) }} en la
+          {{ h.right }}{% if 'PSOE' in h.cycle and 'PP' in h.cycle %} ({{ h.cycle.PSOE|delta(1) }} en el PSOE y
+          {{ h.cycle.PP|delta(1) }} en el PP){% endif %}: eso es lo que se descuenta hoy a cada uno de sus sondeos.
+          {% endif %}
+          El detalle, elección a elección y partido a partido, está en <a href="{{ h.href }}">su perfil</a>.
+        </p>
+      {{ m.card_end() }}
+      {% endif %}
       {{ m.card_start('regresion', 'La regresión local', 'Para cada día, el promedio ajusta una recta a los sondeos cercanos en el tiempo y toma el valor de esa recta en ese día.') }}
         <p>
-          Una media de las últimas semanas llega tarde a los cambios. El modelo usa una regresión local
-          ponderada: para cada día
-          <var>t</var>, cada sondeo <var>i</var> recibe un peso ω<sub><var>i</var></sub> que combina su peso
-          <var>w</var><sub><var>i</var></sub> con su cercanía a ese día, a través de una campana de Gauss de
-          anchura <var>h</var><sub><var>t</var></sub>; se busca la recta que mejor pasa por los sondeos con esos
-          pesos, y el promedio del día es su valor en <var>t</var>, el término <var>a</var>:
+          <strong>El problema.</strong> Los sondeos llegan a saltos, cada uno con su error, y hay que sacar de
+          ellos una cifra para cada día. Una media de los últimos sondeos no basta: se centra en el medio del
+          tramo que abarca y, cuando el voto se mueve, llega tarde. Y en el último día, hoy, solo hay sondeos a un
+          lado.
+        </p>
+        <p>
+          <strong>La idea.</strong> Se elige un día y se miran los sondeos a través de una ventana en forma de
+          campana centrada en él: los de esa semana cuentan casi enteros, los de hace un mes cuentan poco y los de
+          hace tres, casi nada. Sobre esos puntos, cada uno con su peso, se traza la recta que mejor los sigue,
+          como una regla apoyada en la nube de puntos, y el promedio del día es la altura de la recta justo en ese
+          día. Al día siguiente se desplaza la campana un día y se repite. La línea que publica el modelo une esas
+          lecturas, una por día.
+        </p>
+        <p>
+          <strong>Por qué una recta y no una media.</strong> Una recta tiene pendiente: si los sondeos van
+          subiendo, la recta sube y su lectura en el último día va por delante de la media. Por eso la regresión
+          local sigue la tendencia hasta el final de la serie, donde no hay sondeos posteriores que tiren de ella.
+        </p>
+        <p>
+          <strong>En fórmula.</strong> Para cada día <var>t</var>, cada sondeo <var>i</var> recibe un peso
+          ω<sub><var>i</var></sub>: su peso <var>w</var><sub><var>i</var></sub> (el de
+          <a href="#peso">Cuánto pesa cada sondeo</a>) multiplicado por su cercanía a <var>t</var>, la campana de
+          Gauss de anchura <var>h</var><sub><var>t</var></sub>. Se buscan la altura <var>a</var> y la pendiente
+          <var>b</var> de la recta que menos se separa de los sondeos, contados con esos pesos, y el promedio del
+          día es <var>a</var>:
         </p>
         <math display="block" aria-label="minimizar en a y b la suma de omega sub i por y sub i menos a menos b por t sub i menos t, al cuadrado">
           <mrow>
@@ -161,20 +249,23 @@
           </mrow>
         </math>
         <p>
-          <var>y</var><sub><var>i</var></sub> es el voto del partido en el sondeo, ya sin su efecto de encuestadora, y
-          <var>t</var><sub><var>i</var></sub>, su fecha de fin de campo. Una recta, y no una media, es lo que
-          permite seguir la tendencia hasta el último día, donde no hay sondeos posteriores.
+          <var>y</var><sub><var>i</var></sub> es el voto del partido en el sondeo, ya sin su efecto de encuestadora
+          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), y <var>t</var><sub><var>i</var></sub>, su
+          fecha de fin de campo.
         </p>
         <p>
-          La anchura de la ventana no es fija: una anchura de partida se elige con los propios datos, con un
-          método automático (el de Sheather y Jones en la versión de Botev), y se adapta a la densidad de
-          sondeos: más estrecha donde hay muchos y más ancha donde escasean, como en el último día, que solo los
-          tiene a un lado.
+          <strong>La anchura de la campana.</strong> No es fija ni se elige a mano. Una anchura de partida sale de
+          los propios datos, con un método automático (el de Sheather y Jones, en la versión de Botev), y luego se
+          adapta día a día a cuántos sondeos hay cerca: se estrecha donde abundan, para seguir mejor los cambios,
+          y se ensancha donde escasean, para no fiarlo todo a dos o tres sondeos. En el último día, con sondeos
+          solo a un lado, la campana es más ancha.
+          {% if example %}<a href="#ejemplo">El ejemplo de más abajo</a> dibuja la campana y la recta de un día con los datos de hoy.{% endif %}
         </p>
         <p>
-          La campana mira a los dos lados, así que la línea de días pasados puede moverse cuando llegan sondeos
-          nuevos. Cada partido se promedia por separado, con los sondeos que lo listan, si son al menos tres.
-          Tras el último sondeo, la recta se prolonga unos días y luego el valor se mantiene.
+          <strong>Lo que se sigue de ahí.</strong> La campana mira a los dos lados, así que la línea de los días
+          pasados puede moverse un poco cuando llegan sondeos nuevos: el promedio de hace dos semanas se afina con
+          lo publicado después. Cada partido se promedia por separado, con los sondeos que lo listan, si son al
+          menos tres. Y tras el último sondeo la recta se prolonga unos días y luego el valor se mantiene.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('banda', 'La banda del promedio', 'La banda que acompaña a la línea es su intervalo de confianza del 95%: la incertidumbre de la propia estimación del promedio.') }}
@@ -211,6 +302,27 @@
           {{ example.stats.bandwidth|num(0) }} días.
         </p>
         <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} publicado el {{ example.published|date }}, con la recta local, su banda y la campana del kernel"></div>
+        <p>
+          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
+          ver quién lo hizo, cuándo y con qué peso. La recta es la que se ajusta a los sondeos el día en que se lee
+          el promedio, con su banda del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía
+          de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
+        </p>
+        <p>
+          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
+          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
+          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
+          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
+          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
+          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
+        </p>
+        <p>
+          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
+          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
+          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
+          puntos. La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
+          promedio</a>).
+        </p>
         <details class="weights-list" id="weights-list">
           <summary>Ver los {{ example.n_rows }} sondeos</summary>
           <div class="table-wrap">
@@ -248,29 +360,6 @@
           </div>
           <p class="scroll-hint">Desliza para ver más →</p>
         </details>
-        {% call m.how() %}
-        <p>
-          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
-          ver quién lo hizo, cuándo y con qué peso. La recta es la que se ajusta a los sondeos el día en que se lee
-          el promedio, con su banda del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía
-          de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
-        </p>
-        <p>
-          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
-          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
-          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
-          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
-          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
-          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
-        </p>
-        <p>
-          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
-          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
-          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
-          puntos. La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
-          promedio</a>).
-        </p>
-        {% endcall %}
         <p class="notice"><a href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
       {{ m.card_end() }}
       {% endif %}

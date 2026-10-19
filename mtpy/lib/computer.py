@@ -865,6 +865,9 @@ class Computer(Core):
                 The weight of the poll based on the pollster's rating.
                 We try to give more weight to the polls from pollsters with a higher rating.
                 To see how the rating and its associated weights are computed, check `compute_ratings`.
+            - rating
+                The rating of the pollster for the event, copied next to its weight so that a poll loaded after
+                the last `compute_ratings` carries it too (the loader and the compute job call this method).
 
         Parameters
         ----------
@@ -879,7 +882,7 @@ class Computer(Core):
             A table containing the computed values of each poll.
         """
         columns = [
-            'mtype', 'proc_sample', 'weight_sample', 'weight_over', 'weight_rating'
+            'mtype', 'proc_sample', 'weight_sample', 'weight_over', 'weight_rating', 'rating'
         ]
         df = self.polls.sort_index().reset_index().drop(columns=columns)
 
@@ -957,9 +960,9 @@ class Computer(Core):
         if self.verbose > 0:
             print('Merge ratings...')
 
-        # Set the weight based on the pollster's rating
+        # Set the weight based on the pollster's rating, and the rating itself
         df = df.merge(
-            self.ratings['weight_rating'].round(2).astype(float),
+            self.ratings[['weight_rating', 'rating']].round(2).astype(float),
             left_on=['event_date', 'pollster_id'],
             right_index=True,
             how='left'

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta v4 · /analisis/voto-cera</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<style>
+html, body { margin: 0; }
+body { background: #d9dce3; font-family: 'DM Sans', system-ui, sans-serif; }
+#bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 8px 16px; background: #1a1c22; color: #fff; font-size: 13px; }
+#bar strong { font-family: Outfit, sans-serif; font-weight: 800; font-size: 15px; }
+#bar .grp { display: flex; gap: 2px; background: rgba(255,255,255,.12); padding: 3px; border-radius: 999px; }
+#bar button { font: 600 12px 'DM Sans', sans-serif; padding: 5px 12px; border-radius: 999px; border: 0; background: transparent; color: #cfd3dc; cursor: pointer; }
+#bar button.on { background: #fff; color: #1a1c22; }
+#bar .note { margin-left: auto; color: #9298ac; font-size: 12px; }
+.q { max-width: 1100px; margin: 18px auto 0; padding: 0 16px; font-size: 13.5px; color: #3a3f4f; }
+.q b { color: #1a1c22; }
+#stage { padding: 12px 0 60px; }
+
+.page {
+  --bg: #f4f5f8; --card: #fff; --soft: #eceef2; --soft2: #e3e6ec;
+  --line: rgba(0,0,0,.08); --line2: rgba(0,0,0,.15);
+  --ink: #1a1c22; --text2: #5a5f72; --text3: #9298ac;
+  --brand: #1d4f86; --brand-soft: #e7eef8; --hover: #eff4ff;
+  --green: #2e9e5b; --green-soft: #ecfdf3; --red: #ce3b3b; --red-soft: #fef2f2; --amber: #e8912b; --amber-soft: #fff7ed;
+  --r: 18px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --pad: 32px;
+  position: relative; background: var(--bg); color: var(--ink); max-width: 1180px; margin: 0 auto;
+  font: 15px/1.5 'DM Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+}
+.page * { box-sizing: border-box; }
+.page a { color: inherit; text-decoration: none; }
+.page h1, .page h2, .page h3, .page h4 { font-family: Outfit, sans-serif; margin: 0; line-height: 1.15; }
+.hdr { position: sticky; top: 41px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 var(--pad); background: var(--card); border-bottom: 1px solid var(--line); }
+.wm { font: 800 24px/1 Outfit, sans-serif; letter-spacing: -.02em; }
+.wm i { display: inline-block; width: 16px; height: 16px; border: 3px solid var(--brand); border-radius: 50%; margin-left: 3px; vertical-align: -1px; }
+.hdr nav { display: flex; gap: 4px; }
+.hdr nav a { display: inline-flex; align-items: center; height: 56px; padding: 0 12px; font-size: 13.5px; font-weight: 500; color: var(--text2); }
+.hdr nav a.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--brand); }
+.hdr .help { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--line2); display: grid; place-items: center; font-weight: 700; color: var(--text2); }
+.main { padding: 24px var(--pad) 48px; }
+.stack > * + * { margin-top: 16px; }
+.hero { padding: 6px 0 4px; }
+.hero .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.hero h1 { font: 800 36px/1.12 Outfit, sans-serif; letter-spacing: -.02em; max-width: 30ch; margin: 0 0 12px; }
+.hero h1 em { font-style: normal; color: var(--brand); }
+.hero p { margin: 0; font: 500 18px/1.4 Outfit, sans-serif; color: var(--text2); max-width: 70ch; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.toc a { padding: 5px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--line2); font-size: 12.5px; font-weight: 600; color: var(--text2); }
+.toc a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.toc a.g { border-color: var(--green); color: var(--green); } .toc a.o { border-color: var(--amber); color: #c2410c; } .toc a.r { border-color: var(--red); color: var(--red); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; }
+.card-t { display: flex; align-items: center; gap: 9px; font: 700 16px/1.2 Outfit, sans-serif; }
+.card-t::before { content: ""; width: 4px; height: 18px; border-radius: 3px; background: var(--brand); }
+.lead { margin: 0 0 12px; font-size: 13.5px; color: var(--text2); max-width: 100ch; }
+.how { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.how::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--brand-soft); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill.ok { background: var(--green-soft); color: #15803d; }
+.pill.warn { background: var(--amber-soft); color: #c2410c; }
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+.pill.bad { background: var(--red-soft); color: #b91c1c; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); }
+.seg span { padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; }
+.seg span.on { background: var(--ink); color: #fff; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.kpi { padding: 14px 16px; border-right: 1px solid var(--line); }
+.kpi:last-child { border-right: 0; }
+.kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.kpi .v { font: 800 26px/1.1 Outfit, sans-serif; margin: 4px 0 2px; letter-spacing: -.01em; }
+.kpi .s { font-size: 12.5px; color: var(--text2); }
+.dlt { font-weight: 700; white-space: nowrap; }
+.dlt.up { color: #2ca02c; } .dlt.down { color: #d62728; } .dlt.flat { color: var(--text2); }
+.tw { overflow-x: auto; }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { padding: 6px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line2); }
+.t td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t th:first-child, .t td:first-child { text-align: left; }
+.t tbody tr:hover td { background: var(--hover); }
+.t .b { font-weight: 700; } .t .mut { color: var(--text3); }
+.t .pos { color: var(--green); font-weight: 600; } .t .neg { color: var(--red); font-weight: 600; }
+.t td.g1 { background: #ecfdf3; } .t td.g2 { background: #bbf7d0; } .t td.g3 { background: #4ade80; color: #fff; } .t td.g4 { background: #15803d; color: #fff; }
+.t td.z { background: #f4f5f8; color: var(--text3); }
+.chart { height: 320px; }
+.chart.short { height: 250px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+
+/* Tarjeta-pregunta (el formato de la infografía) */
+.qcard { position: relative; border-left: 8px solid var(--qc); padding-left: 22px; }
+.qcard .qh { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.qcard .qn { width: 36px; height: 36px; border-radius: 999px; background: var(--qc); color: #fff; display: grid; place-items: center; font: 800 18px Outfit, sans-serif; flex: none; }
+.qcard .qt { font: 800 22px/1.15 Outfit, sans-serif; letter-spacing: -.01em; flex: 1; }
+.qcard .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px Outfit, sans-serif; }
+.qcard .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.qcard .band { padding: 10px 12px; border-radius: 10px; background: #f3f1ec; border: 1px solid #e2ded5; font-size: 13.5px; margin: 12px 0; }
+.qcard .sum { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.qcard .sum b { font-weight: 800; }
+.q1 { --qc: #2e9e5b; } .q2 { --qc: #e8912b; } .q3 { --qc: #ce3b3b; }
+.ctitle { font: 600 13px/1.3 Outfit, sans-serif; margin: 0 0 2px; }
+.csub { font-size: 11.5px; color: var(--text2); margin: 0 0 4px; }
+
+.claim { border: 1px solid var(--line2); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.claim h4 { font-size: 15px; margin-bottom: 4px; }
+.claim .src { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+.claim dl { margin: 0; font-size: 13px; }
+.claim dt { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); margin-top: 8px; }
+.claim dd { margin: 2px 0 0; }
+.claim .verd { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--card); font-weight: 600; font-size: 13px; border-left: 3px solid var(--red); }
+.claim .verd.ok { border-left-color: var(--green); }
+.claim .verd.amb { border-left-color: var(--amber); }
+.timeline { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.tl { border-top: 3px solid var(--line2); padding-top: 8px; font-size: 12.5px; }
+.tl b { display: block; font-family: Outfit, sans-serif; font-size: 13px; }
+.tl.done { border-color: var(--brand); } .tl.next { border-color: var(--amber); } .tl.wait { border-color: var(--line2); color: var(--text2); }
+.note { padding: 10px 12px; border-radius: 10px; background: var(--amber-soft); font-size: 13px; }
+.note.blue { background: var(--brand-soft); } .note.ok { background: var(--green-soft); }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.three a { display: block; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line2); border-top: 5px solid var(--qc); background: var(--bg); }
+.three .k { font: 800 12px Outfit, sans-serif; letter-spacing: .04em; color: var(--qc); }
+.three .tt { font: 700 15px/1.25 Outfit, sans-serif; margin: 4px 0 6px; }
+.three .vv { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px Outfit, sans-serif; margin-bottom: 6px; }
+.three p { margin: 0; font-size: 13px; color: var(--text2); }
+.foot { padding: 20px var(--pad) 28px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text2); }
+.src-list { font-size: 13px; } .src-list li { margin-bottom: 4px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>Maqueta v4 · /analisis/voto-cera</strong>
+  <div class="grp">
+    <button class="on" onclick="setState('pre', this)">Antes del 29-N</button>
+    <button onclick="setState('post', this)">Tras el escrutinio CERA</button>
+  </div>
+  <span class="note">v4: titular y subtítulo de la infografía</span>
+</div>
+<p class="q">Cambios de la v3: <b>tres cifras</b> arriba (fuera «0 escaños» y «último escaño»), <b>sin la tarjeta «Qué ha pasado»</b> (el artículo solo aparece al final, en Datos y método), <b>titular grande</b> con aire respecto a las etiquetas, y <b>arreglados los solapes</b> de los gráficos de canibalización y de brecha. El contexto del Supremo y de la convocatoria queda en la cifra «inscripciones en litigio» y en la nota de la pregunta 3.</p>
+
+<div id="stage">
+<div class="page">
+  <header class="hdr">
+    <a class="wm" href="#">Demoscopio<i></i></a>
+    <nav><a>Inicio</a><a>Histórico Errores</a><a>Ranking Encuestadoras</a><a class="on">Análisis</a><a>Método</a></nav>
+    <span class="help">?</span>
+  </header>
+
+  <main class="main stack">
+    <div class="hero">
+      <div class="tags">
+        <span class="pill brand">Análisis</span>
+        <span class="pill">Generales del 29 de noviembre de 2026</span>
+        <span class="pill warn" data-pre>Predicción registrada · se comprueba tras el escrutinio CERA</span>
+        <span class="pill ok" data-post hidden>Comprobada con el escrutinio del 3-12-2026</span>
+      </div>
+      <h1>El voto CERA en España y el efecto de la «Ley de Nietos»</h1>
+      <p>¿Es posible orquestar con éxito un fraude electoral significativo a través del censo exterior?</p>
+    </div>
+
+    <nav class="toc">
+      <a class="on">Resumen</a><a class="g">1 · ¿Se dispara el censo?</a><a class="o">2 · ¿Sesgo o colocación?</a><a class="r">3 · ¿Mueven escaños?</a><a>Lo que dice el debate</a><a>Comprobación</a><a>Datos y método</a>
+    </nav>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Censo CERA 29-N</div><div class="v">2.769.645</div><div class="s"><span class="dlt up">▲ +19 %</span> frente a 2023 (2.328.261)</div></div>
+      <div class="kpi"><div class="l">Inscripciones en litigio</div><div class="v">~163.000</div><div class="s">suspendidas por el Supremo el 10-09 (mantenido el 12-10) · censo vigente: cerrado el 1-8-2026</div></div>
+      <div class="kpi"><div class="l">Votos CERA esperados</div><div class="v">~245.000</div><div class="s">~5 % Latam · ~10 % resto · 2023: 233.688</div></div>
+    </div>
+
+    <section class="card" id="resumen">
+      <div class="card-h"><h2 class="card-t">Tres preguntas, tres respuestas</h2></div>
+      <p class="lead">La acusación de fraude, despojada de ruido, son tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.</p>
+      <div class="three">
+        <a class="q1"><div class="k">PREGUNTA 1</div><div class="tt">¿Se dispara el censo de los españoles en el exterior?</div><div class="vv">SÍ</div><p>El ritmo de altas se duplica (×2,2) tras la ley. Quien lo denuncia tiene razón: el efecto sobre el tamaño del censo es real y medible.</p></a>
+        <a class="q2"><div class="k">PREGUNTA 2</div><div class="tt">¿Sesgo de izquierdas o reparto en provincias «estratégicas»?</div><div class="vv">SIN EVIDENCIA</div><p>Las nuevas altas votan la mitad, el voto exterior se derechiza como el interior y las provincias sensibles reciben menos altas que su peso.</p></a>
+        <a class="q3"><div class="k">PREGUNTA 3</div><div class="tt">¿Pueden alterar el reparto de escaños el 29-N?</div><div class="vv">NO</div><p>Con el censo real, la participación real y el reparto real: cero escaños. Solo apilando supuestos extremos a la vez aparece un efecto.</p></a>
+      </div>
+      <p class="note blue" style="margin-top:12px">El censo exterior crece y merece escrutinio, y una sospecha razonable sobre cualquier reforma es legítima. Pero los datos no sostienen un fraude capaz de regalar escaños. Una sospecha no es una prueba: los datos por encima de bandos y consignas.</p>
+    </section>
+
+    <!-- PREGUNTA 1 -->
+    <section class="card qcard q1" id="p1">
+      <div class="qh"><div class="qn">1</div><h2 class="qt">¿Se dispara el censo de los españoles en el exterior?</h2><span class="verdict">SÍ <i></i></span></div>
+      <p class="lead">Serie mensual del INE hasta el último cierre y altas netas en dos periodos de igual duración (43 meses), antes y después de la ley.</p>
+      <div class="grid2">
+        <div><p class="ctitle">Evolución del censo CERA, 2006 → 29-N</p><p class="csub">Con la ley, las generales de 2023, el fin del plazo y el censo de la convocatoria marcados</p><div class="chart short" id="c-serie"></div></div>
+        <div><p class="ctitle">El ritmo de altas se duplica con la Ley de Nietos</p><p class="csub">Altas netas por origen en los 43 meses anteriores y posteriores a la ley</p><div class="chart short" id="c-altas"></div></div>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <div class="tw"><table class="t">
+          <thead><tr><th>País</th><th>Altas antes</th><th>Altas después</th><th>Ritmo</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Argentina</td><td>14.559</td><td class="b">73.855</td><td class="pos">×5,1</td></tr>
+            <tr><td class="b">México</td><td>12.983</td><td class="b">54.954</td><td class="pos">×4,2</td></tr>
+            <tr><td class="b">Estados Unidos</td><td>30.000</td><td>49.521</td><td>×1,6</td></tr>
+            <tr><td class="b">Francia</td><td>18.000</td><td>29.698</td><td>×1,6</td></tr>
+            <tr><td class="b">Reino Unido</td><td>28.000</td><td>19.953</td><td class="neg">×0,7</td></tr>
+            <tr><td class="b">Cuba</td><td>15.000</td><td>16.463</td><td>×1,1</td></tr>
+          </tbody></table></div>
+        <div class="tw"><table class="t">
+          <thead><tr><th>Provincia</th><th>Censo 10-2022</th><th>Censo 29-N</th><th>Altas</th><th>%</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Madrid</td><td>362.028</td><td>494.799</td><td class="b">+132.771</td><td>+37 %</td></tr>
+            <tr><td class="b">Barcelona</td><td>211.900</td><td>262.238</td><td>+50.338</td><td>+24 %</td></tr>
+            <tr><td class="b">Asturias</td><td>122.528</td><td>142.710</td><td>+20.182</td><td>+16 %</td></tr>
+            <tr><td class="b">S. C. de Tenerife</td><td>105.783</td><td>124.555</td><td>+18.772</td><td>+18 %</td></tr>
+            <tr><td class="b">A Coruña</td><td>162.477</td><td>177.695</td><td>+15.218</td><td>+9 %</td></tr>
+            <tr><td class="mut" colspan="5">Ver las 52 provincias ›</td></tr>
+          </tbody></table></div>
+      </div>
+      <div class="sum"><b>Sí, y no tiene sentido negarlo.</b> El ritmo de altas se duplica (189.000 → 422.000) y el censo exterior suma 441.000 electores desde las generales de 2023 (+19 %). El crecimiento es latinoamericano (Argentina ×5, México ×4), pero Cuba, el país símbolo del exilio, apenas se mueve (×1,1).</div>
+      <a class="how">Cómo leerlo</a>
+    </section>
+
+    <!-- PREGUNTA 2 -->
+    <section class="card qcard q2" id="p2">
+      <div class="qh"><div class="qn">2</div><h2 class="qt">¿Sesgo de izquierdas o reparto en provincias «estratégicas»?</h2><span class="verdict">SIN EVIDENCIA <i></i></span></div>
+      <p class="lead">Primer dato: casi no votan. Segundo: los que votan no se escoran a la izquierda. Tercero: las altas siguen los lazos familiares, no la aritmética electoral.</p>
+      <div class="grid2">
+        <div><p class="ctitle">Las nuevas altas participan la mitad</p><p class="csub">Participación CERA por origen donde se publica por consulado</p><div class="chart short" id="c-part"></div></div>
+        <div><p class="ctitle">A más censo latinoamericano, menos voto a la izquierda</p><p class="csub">43 provincias, generales 2023 · r = −0,77</p><div class="chart short" id="c-eco"></div></div>
+      </div>
+      <div class="band">«¿Y la ventaja de la izquierda fuera no ha crecido en las últimas autonómicas?» <b>No.</b> El voto exterior se derechiza igual que el interior (el margen izquierda−derecha del CERA cae en las tres comunidades) y la «prima» del PSOE solo sube porque absorbe a SUMAR/Podemos, no porque entren nuevos votantes de izquierda.</div>
+      <div class="grid2">
+        <div><p class="ctitle">El voto exterior también se derechiza</p><p class="csub">Margen izquierda − derecha del CERA, comicio anterior → 2026</p><div class="chart short" id="c-prima"></div></div>
+        <div><p class="ctitle">El PSOE no capta votos nuevos fuera: absorbe a SUMAR/Podemos</p><p class="csub">Cambio en la cuota del CERA de 2022 a 2026, en puntos · el bloque de izquierda apenas se mueve: −2,1 · +0,4 · −0,3</p><div class="chart short" id="c-canib"></div></div>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <div><p class="ctitle">Las provincias sensibles reciben menos altas que el peso que ya tenían</p><p class="csub">Cuota de las provincias de 5 escaños o menos</p><div class="chart short" id="c-sens"></div></div>
+        <div class="tw"><p class="ctitle">El «imán» de Madrid existía antes de la ley</p><p class="csub">Cuota de Madrid en las altas de Argentina, México, Cuba, Venezuela, Uruguay y Chile</p>
+          <table class="t">
+          <thead><tr><th></th><th>Stock 2022</th><th>Altas 2019–22</th><th>Altas 2022–26</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Madrid, seis países</td><td>9,7 %</td><td>37 %</td><td>28 %</td></tr>
+            <tr><td class="b">Madrid, México</td><td>—</td><td>60 %</td><td>58 %</td></tr>
+            <tr><td class="b">Madrid, Venezuela</td><td>—</td><td>—</td><td>44 %</td></tr>
+          </tbody></table>
+          <p style="font-size:12.5px;color:#5a5f72;margin:8px 0 0">La adscripción de quien nunca vivió en España es el punto legítimo del debate, y es lo que revisa el Supremo. Pero Madrid, con 37 escaños, es el sitio más caro de España para colocar un voto, y allí el neto favorece al PP.</p>
+        </div>
+      </div>
+      <div class="sum"><b>Ni concentración estratégica ni giro a la izquierda.</b> Las nuevas altas participan al ~5 % (la mitad que las europeas), la cuota de izquierda del CERA baja en todos los procesos desde 2022 y las provincias sensibles pasan del 24 % del censo al 17 % de las altas. Tres años y medio de ley y cuatro escrutinios: cero rastro del plan.</div>
+      <a class="how">Cómo leerlo</a>
+    </section>
+
+    <!-- PREGUNTA 3 -->
+    <section class="card qcard q3" id="p3">
+      <div class="qh"><div class="qn">3</div><h2 class="qt">¿Pueden alterar el reparto de escaños el 29-N?</h2><span class="verdict">NO <i></i></span></div>
+      <div class="card-h"><p class="lead" style="margin:0">A los resultados de 2023 se suma solo el voto que aporta el censo nuevo del 29-N, con la participación observada por origen y el reparto del escrutinio CERA de 2023 de cada provincia, y se recalcula D'Hondt provincia a provincia.</p>
+        <span class="seg"><span class="on">Censo de la convocatoria</span><span>Sin las inscripciones en litigio</span></span></div>
+      <div class="grid2">
+        <div class="tw"><table class="t">
+          <thead><tr><th></th><th>2023</th><th>29-N (proyección)</th><th>Cambio</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Censo CERA</td><td>2.328.261</td><td>2.769.645</td><td class="dlt up">+441.384</td></tr>
+            <tr><td class="b">Votos CERA escrutados</td><td>203.115</td><td>~244.000</td><td class="dlt up">+41.000</td></tr>
+            <tr><td class="b">Escaños izquierda (PSOE + SUMAR)</td><td>152</td><td>152</td><td class="dlt flat">0</td></tr>
+            <tr><td class="b">Escaños derecha (PP + VOX)</td><td>170</td><td>170</td><td class="dlt flat">0</td></tr>
+            <tr><td class="b">Otros</td><td>28</td><td>28</td><td class="dlt flat">0</td></tr>
+          </tbody></table>
+          <p class="note ok" style="margin-top:12px"><b>Sin las ~163.000 inscripciones en litigio</b> (repartidas por provincia como el crecimiento latinoamericano desde la ley): ~8.000 votos menos y, también, cero cambios. El litigio importa para los derechos de esas personas, no para el reparto.</p>
+        </div>
+        <div><p class="ctitle">Brecha al último escaño (2023) frente al efecto neto del CERA del 29-N</p><p class="csub">Las 10 circunscripciones más ajustadas; el neto es lo que gana el aspirante menos lo que gana quien defiende el escaño</p><div class="chart" id="c-brecha" style="height:360px"></div></div>
+      </div>
+
+      <h3 style="margin:18px 0 4px;font-size:16px">¿Qué haría falta para que importara?</h3>
+      <p class="lead">Las tres palancas tendrían que dispararse a la vez y al máximo; basta relajar una para que el efecto se desplome.</p>
+      <div class="grid2">
+        <div><p class="ctitle">Realidad hoy frente a «todo al máximo»</p><p class="csub">Participación, voto a la izquierda y colocación dirigida</p><div class="chart short" id="c-radar"></div></div>
+        <div class="tw"><p class="ctitle">Cambio neto de escaños de la izquierda</p><p class="csub">Según participación CERA y porcentaje del voto exterior a la izquierda, censo del 29-N</p>
+          <table class="t">
+          <thead><tr><th>Participación \ voto a la izq.</th><th>50 %</th><th>60 %</th><th>70 %</th><th>80 %</th></tr></thead>
+          <tbody>
+            <tr><td class="b">9 % (observada)</td><td class="g1">+1*</td><td class="g1">+1</td><td class="g1">+1</td><td class="g2">+4</td></tr>
+            <tr><td class="b">20 %</td><td class="g1">+2</td><td class="g2">+5</td><td class="g3">+8</td><td class="g3">+9</td></tr>
+            <tr><td class="b">30 %</td><td class="g1">+3</td><td class="g3">+7</td><td class="g3">+8</td><td class="g4">+12</td></tr>
+            <tr><td class="b">50 %</td><td class="g2">+6</td><td class="g3">+9</td><td class="g4">+10</td><td class="g4">+12</td></tr>
+            <tr><td class="b">70 %</td><td class="g3">+7</td><td class="g3">+9</td><td class="g4">+11</td><td class="g4">+12</td></tr>
+          </tbody></table>
+          <p style="font-size:12px;color:#5a5f72;margin:8px 0 0">* Reparto uniforme forzado; con el reparto real por provincia la celda observada da 0. Ni con el 50 % de participación y el 80 % a la izquierda se llega a 15.</p>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <div class="tw"><p class="ctitle">Las tres dimensiones a la vez</p><p class="csub">Censo × participación × sesgo → escaños izquierda / derecha</p>
+          <table class="t">
+          <thead><tr><th>Escenario</th><th>Censo</th><th>Participación</th><th>Sesgo</th><th>Izq.</th><th>Der.</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Central (29-N)</td><td>×1,19</td><td>observada</td><td>empírico</td><td class="z">0</td><td class="z">0</td></tr>
+            <tr><td class="b">Participación ×2</td><td>×1,19</td><td>×2</td><td>empírico</td><td class="z">0</td><td class="z">0</td></tr>
+            <tr><td class="b">Sesgo 90 %</td><td>×1,19</td><td>observada</td><td>90 %</td><td class="z">0</td><td class="z">0</td></tr>
+            <tr><td class="b">Part. ×3 + 90 %</td><td>×1,23</td><td>×3</td><td>90 %</td><td class="g1">+1</td><td class="neg">−1</td></tr>
+            <tr><td class="b">Censo ×1,5, part. ×2, 90 %</td><td>×1,5</td><td>×2</td><td>90 %</td><td class="g2">+3</td><td class="neg">−3</td></tr>
+            <tr><td class="b">Censo ×2, part. ×3, 90 %</td><td>×2,0</td><td>×3</td><td>90 %</td><td class="g3">+7</td><td class="neg">−6</td></tr>
+          </tbody></table></div>
+        <div class="tw"><p class="ctitle">El absurdo: colocación óptima</p><p class="csub">Las ~63.000 altas proyectadas de Cuba, Venezuela, Argentina y México colocadas una a una donde el escaño sale más barato · escaños que arrancaría el PSOE</p>
+          <table class="t">
+          <thead><tr><th>Participación \ voto al PSOE</th><th>50 %</th><th>60 %</th><th>70 %</th><th>80 %</th><th>100 %</th></tr></thead>
+          <tbody>
+            <tr><td class="b">9 % (observada)</td><td class="z">0</td><td class="z">0</td><td class="z">0</td><td class="z">0</td><td class="g1">+2</td></tr>
+            <tr><td class="b">20 %</td><td class="z">0</td><td class="z">0</td><td class="z">0</td><td class="z">0</td><td class="g1">+3</td></tr>
+            <tr><td class="b">50 %</td><td class="g1">+1</td><td class="g1">+1</td><td class="g1">+1</td><td class="g1">+1</td><td class="g2">+6</td></tr>
+            <tr><td class="b">100 %</td><td class="g1">+2</td><td class="g1">+2</td><td class="g2">+4</td><td class="g2">+6</td><td class="g4">+15</td></tr>
+          </tbody></table>
+          <p style="font-size:12px;color:#5a5f72;margin:8px 0 0">Sin colocación dirigida, con el reparto real: 0. Las cifras de las celdas son orientativas en la maqueta; en la web saldrán del cálculo.</p>
+        </div>
+      </div>
+      <div class="sum"><b>Con datos reales, cero escaños.</b> Ningún escaño cambia, ni por partido ni por bloque, y el voto CERA adicional no cierra la brecha del último escaño en ninguna de las 52 provincias. Arrancar un número significativo exigiría que participación, voto a la izquierda y colocación se dispararan a la vez y al máximo. El efecto realista se mueve entre 0 y 1-2 escaños.</div>
+      <a class="how">Cómo leerlo</a>
+    </section>
+
+    <!-- DEBATE -->
+    <section class="card" id="debate">
+      <div class="card-h"><h2 class="card-t">Lo que dice el debate, y por qué no se sostiene</h2><span class="pill bad">Las cifras que circulan, replicadas con los mismos datos oficiales</span></div>
+      <p class="lead">Cada cifra mide algo; ninguna mide escaños. Qué calcula cada una, qué le falta y qué sale al hacer el cálculo completo.</p>
+      <div class="grid2">
+        <div class="claim">
+          <h4>«Hasta 23 escaños»</h4>
+          <div class="src">Informe «Evolución del censo CER y CERA en España», De Madrid a Europa · The Objective, 4-9-2026</div>
+          <dl>
+            <dt>Qué calcula</dt><dd>Censo CERA de julio (2,74 M) × participación histórica (media desde 1986, ~19 %, o máxima provincial, ~40 %) y cuenta las provincias donde esos votos superan la brecha del último escaño de 2023: 16 y 23. Replicado: 510.000 y 1.086.000 votos; 19 y 27 provincias.</dd>
+            <dt>Problema 1 · no reparte entre partidos</dt><dd>Compara el voto exterior en bruto con la brecha, como si fuera todo para el aspirante. Lo que mueve un escaño es la diferencia entre lo que gana quien aspira y lo que gana quien lo defiende.</dd>
+            <dt>Problema 2 · cuenta dos veces</dt><dd>La brecha de 2023 ya incluye el voto CERA de 2023. Lo correcto es añadir solo el incremento.</dd>
+            <dt>Problema 3 · participación de otro censo</dt><dd>El 20-36 % de 1986-2008 era de un censo de 0,5-1,2 millones de emigrantes europeos. El máximo histórico fueron 383.000 votantes (2008); el escenario «máximo» supone 1,1 millones con un censo que hoy domina el segmento que vota al 5 %.</dd>
+          </dl>
+          <div class="verd">Con su propio criterio, en 2023 había 9 provincias «en juego». No se movió ninguna (tabla de al lado). Hecho bien: 0 escaños.</div>
+        </div>
+        <div>
+          <p class="ctitle">2023 ya pasó la prueba: el voto CERA real superó la brecha en 9 provincias y no cambió ningún escaño</p>
+          <p class="csub">Votantes CERA de 2023 frente a la brecha del último escaño de ese año</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th>Provincia</th><th>Último escaño</th><th>Aspirante</th><th>Brecha</th><th>Votos CERA 2023</th><th>¿Cambió?</th></tr></thead>
+            <tbody>
+              <tr><td class="b">Madrid</td><td>PP</td><td>PSOE</td><td>1.339</td><td class="b">44.807</td><td class="mut">No</td></tr>
+              <tr><td class="b">Girona</td><td>Junts</td><td>PP</td><td>284</td><td class="b">2.335</td><td class="mut">No</td></tr>
+              <tr><td class="b">Cantabria</td><td>VOX</td><td>PP</td><td>403</td><td class="b">3.463</td><td class="mut">No</td></tr>
+              <tr><td class="b">Tarragona</td><td>Junts</td><td>PSOE</td><td>1.247</td><td class="b">1.992</td><td class="mut">No</td></tr>
+              <tr><td class="b">Salamanca</td><td>PP</td><td>PSOE</td><td>1.494</td><td class="b">2.522</td><td class="mut">No</td></tr>
+              <tr><td class="b">S. C. de Tenerife</td><td>PSOE</td><td>SUMAR</td><td>1.565</td><td class="b">4.658</td><td class="mut">No</td></tr>
+              <tr><td class="b">Málaga</td><td>PP</td><td>PSOE</td><td>2.428</td><td class="b">5.615</td><td class="mut">No</td></tr>
+              <tr><td class="b">Gipuzkoa</td><td>PNV</td><td>SUMAR</td><td>2.432</td><td class="b">4.337</td><td class="mut">No</td></tr>
+              <tr><td class="b">Asturias</td><td>PP</td><td>PSOE</td><td>3.900</td><td class="b">8.766</td><td class="mut">No</td></tr>
+            </tbody></table></div>
+          <p style="font-size:12.5px;color:#5a5f72;margin:8px 0 0">Porque se repartió entre partidos, igual que el voto interior. Esta misma tabla se rellenará con el escrutinio del 29-N (tarjeta «Comprobación»).</p>
+        </div>
+      </div>
+      <div class="grid3" style="margin-top:12px">
+        <div class="claim">
+          <h4>«16 provincias decisivas»</h4>
+          <div class="src">El Español, 12-7-2026 · «el último escaño se decide por menos del 3 % de los votos»</div>
+          <dl>
+            <dt>Qué calcula</dt><dd>No es un modelo, es un umbral: cuenta provincias con brecha estrecha y las cruza con el crecimiento bruto del censo.</dd>
+            <dt>Qué le falta</dt><dd>Por ese criterio hay 27 provincias, no 16. El voto CERA solo supera el 1 % del voto provincial en 12 (el 3 % únicamente en Ourense). Una brecha estrecha no dice si el voto exterior puede cerrarla, ni en qué dirección.</dd>
+          </dl>
+          <div class="verd">«El censo no son papeletas», lo admite el propio texto. Con participación y reparto reales: 0.</div>
+        </div>
+        <div class="claim">
+          <h4>«162 pueblos con más electores fuera que dentro»</h4>
+          <div class="src">The Objective, septiembre de 2026</div>
+          <dl>
+            <dt>Qué dice</dt><dd>Cierto, y llama la atención. Pero dos cosas que el artículo no dice.</dd>
+            <dt>Qué le falta</dt><dd>Los electores CERA no votan en municipales desde 2011: en esos pueblos no deciden nada. Y en generales la circunscripción es la provincia: los 58 electores CERA de Madarcos son parte de los 486.000 de Madrid.</dd>
+          </dl>
+          <div class="verd amb">El nivel municipal no añade nada al reparto de escaños.</div>
+        </div>
+        <div class="claim">
+          <h4>«Un censo fabricado para la izquierda»</h4>
+          <div class="src">El relato de fondo del litigio en el Supremo</div>
+          <dl>
+            <dt>Qué afirma</dt><dd>Que los nuevos nacionalizados votan a la izquierda y se inscriben en provincias sensibles.</dd>
+            <dt>Qué dicen los datos</dt><dd>Cuatro escrutinios desde la ley: la cuota de izquierda del CERA baja en todos. Las altas siguen los lazos familiares (r = 0,69 con el tamaño de la provincia) y las sensibles reciben el 17 % frente al 24 % que tenían.</dd>
+          </dl>
+          <div class="verd ok">El punto legítimo es otro: cómo se adscribe provincia a quien nunca vivió en España. Eso es lo que revisa el Supremo, y no mueve escaños.</div>
+        </div>
+      </div>
+      <a class="how">Cómo leerlo</a>
+    </section>
+
+    <!-- COMPROBACIÓN -->
+    <section class="card" id="comprobacion">
+      <div class="card-h"><h2 class="card-t">Comprobación: ¿decidió el voto CERA algún escaño?</h2>
+        <span class="pill warn" data-pre>Pendiente del escrutinio CERA (~3 de diciembre)</span>
+        <span class="pill ok" data-post hidden>Escrutinio del 3-12-2026 cargado</span></div>
+      <p class="lead">La prueba definitiva no es un modelo: con el escrutinio real se reparte D'Hondt con y sin los votos CERA en cada provincia. La misma prueba, hacia atrás, para 2019 y 2023.</p>
+      <div data-pre>
+        <div class="tw"><table class="t">
+          <thead><tr><th>Elección</th><th>Votos CERA</th><th>Participación</th><th>Provincias donde el CERA superó la brecha</th><th>Escaños que decidió</th><th>Dónde</th><th>Bloques</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Generales 2019</td><td>134.000</td><td>6,3 %</td><td>—</td><td class="b">1</td><td>Bizkaia: PP se lo quita al PNV</td><td class="mut">sin cambio izq/der</td></tr>
+            <tr><td class="b">Generales 2023</td><td>233.688</td><td>10,0 %</td><td>9</td><td class="b">1</td><td>Madrid: PP se lo quita al PSOE</td><td class="dlt down">derecha +1</td></tr>
+            <tr><td class="b">Generales 29-N-2026</td><td class="mut">—</td><td class="mut">—</td><td class="mut">predicción: 8–10</td><td class="mut">predicción: 0 por bloque</td><td class="mut">pendiente</td><td class="mut">pendiente</td></tr>
+          </tbody></table></div>
+        <p class="note" style="margin-top:12px">Lo que se registra hoy: <b>cero cambios por bloque</b> con el censo de la convocatoria; la única provincia con un último escaño al alcance del voto exterior es Cantabria (VOX frente a PP, dentro del mismo bloque), y solo si la participación se duplicara. Las cifras de 2019 y 2023 de esta tabla se calcularán en la web con el mismo criterio; las de la maqueta son orientativas.</p>
+      </div>
+      <div data-post hidden>
+        <div class="tw"><table class="t">
+          <thead><tr><th>Provincia</th><th>Último escaño sin CERA</th><th>Con CERA</th><th>Brecha</th><th>Votos CERA</th><th>¿Decidió?</th></tr></thead>
+          <tbody>
+            <tr><td class="b">Cantabria</td><td>VOX</td><td>PP</td><td>312</td><td>3.900</td><td class="pos">Sí · mismo bloque</td></tr>
+            <tr><td class="b">Madrid</td><td>PP</td><td>PP</td><td>2.140</td><td>44.000</td><td class="mut">No</td></tr>
+            <tr><td class="b">Girona</td><td>Junts</td><td>Junts</td><td>510</td><td>1.900</td><td class="mut">No</td></tr>
+            <tr><td class="mut" colspan="6">… las 52 circunscripciones, ordenadas por brecha · «Ver más»</td></tr>
+          </tbody></table></div>
+        <p class="note ok" style="margin-top:12px"><b>Predicción registrada el 6-11-2026: 0 cambios por bloque. Resultado: 0 cambios por bloque</b>, 1 último escaño decidido por el CERA dentro del mismo bloque. Cifras inventadas para la maqueta.</p>
+      </div>
+      <a class="how">Cómo leerlo</a>
+    </section>
+
+    <section class="card" id="datos">
+      <div class="card-h"><h2 class="card-t">Datos y método</h2></div>
+      <p class="lead">Todo sale de fuentes oficiales y se puede descargar. El artículo completo, con el detalle metodológico, está en Medium.</p>
+      <ul class="src-list">
+        <li><b>Serie mensual del CERA</b> por provincia y país de residencia (Oficina del Censo Electoral, INE), 2006 a hoy; se vuelve a descargar en cada publicación.</li>
+        <li><b>Censo de la convocatoria del 29-N</b> por provincia y país (INE, tablas del censo de consulta).</li>
+        <li><b>Escrutinio del voto CERA</b> por provincia y partido (Ministerio del Interior): generales 2019 y 2023; el del 29-N cuando se publique.</li>
+        <li><b>Autonómicas</b> con escrutinio CERA por partido: Castilla y León (2022, 2026), Andalucía (2022, 2026), Aragón (2023, 2026); participación por consulado: Extremadura (2023, 2025), Castilla y León y Aragón (2026).</li>
+        <li><b>Resultados provinciales de 2023</b> (Infoelectoral) y el reparto D'Hondt del modelo, validado: reproduce los 350 escaños de 2023 sin desajustes.</li>
+      </ul>
+      <p style="margin:10px 0 0"><span class="pill brand">CSV: serie mensual</span> <span class="pill brand">CSV: escrutinio CERA 2019–2026</span> <span class="pill brand">CSV: último escaño por provincia</span> <span class="pill brand">CSV: sensibilidad</span> <span class="pill">Artículo completo en Medium ›</span></p>
+    </section>
+  </main>
+  <footer class="foot">Actualizado: 2026-10-19 · Fuente del censo: Oficina del Censo Electoral (INE) · Fuente de resultados: Ministerio del Interior · Los datos por encima de bandos y consignas · @luis_sancho</footer>
+</div>
+</div>
+
+<script>
+function setState(s, btn) {
+  document.querySelectorAll('#bar button').forEach(b => b.classList.toggle('on', b === btn));
+  document.querySelectorAll('[data-pre]').forEach(e => e.hidden = s !== 'pre');
+  document.querySelectorAll('[data-post]').forEach(e => e.hidden = s !== 'post');
+  window.dispatchEvent(new Event('resize'));
+}
+const INK = '#1a1c22', MUTED = '#5a5f72', BRAND = '#1d4f86', LINE = 'rgba(0,0,0,.08)', GREEN = '#2e9e5b', AMBER = '#e8912b', RED = '#ce3b3b', GREY = '#c7cdd8';
+const base = () => ({ textStyle: { fontFamily: 'DM Sans, system-ui, sans-serif', color: INK }, animation: false, grid: { left: 8, right: 16, top: 30, bottom: 24, containLabel: true } });
+const charts = [];
+function mk(id, opt) { const c = echarts.init(document.getElementById(id)); c.setOption(opt); charts.push(c); }
+
+const SERIES = [["2006-01",2284668],["2006-07",2307832],["2007-01",2324782],["2007-07",2352476],["2008-01",2402866],["2008-07",2452350],["2009-01",2475664],["2009-07",2546582],["2010-01",2625292],["2010-07",2725660],["2011-01",2833532],["2011-07",2926946],["2012-01",3033292],["2012-07",3117702],["2013-01",3219978],["2013-07",3317902],["2014-01",3419802],["2014-07",3511992],["2015-01",3615284],["2015-07",3713394],["2016-01",3797338],["2016-07",3879198],["2017-01",3957968],["2017-07",4023906],["2018-01",4073852],["2018-07",4124536],["2019-01",4168958],["2019-07",4222404],["2020-01",4284674],["2020-07",4324638],["2021-01",4365724],["2021-07",4435770],["2022-01",4497304],["2022-07",4546170],["2022-10",4571660],["2023-01",4593332],["2023-07",4666112],["2024-01",4800416],["2024-07",4929290],["2025-01",5051920],["2025-07",5206450],["2026-01",5329796],["2026-05",5416166],["2026-08",5495376],["2026-09",5525658]].map(([d, v]) => [d + '-01', Math.round(v / 2)]);
+mk('c-serie', { ...base(), tooltip: { trigger: 'axis', valueFormatter: v => v.toLocaleString('es-ES') },
+  xAxis: { type: 'time', axisLabel: { color: MUTED } },
+  yAxis: { type: 'value', min: 1000000, axisLabel: { color: MUTED, formatter: v => (v / 1e6).toFixed(2).replace('.', ',') + ' M' }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'line', data: SERIES, showSymbol: false, lineStyle: { width: 2.5, color: BRAND }, areaStyle: { color: 'rgba(29,79,134,.08)' },
+    markLine: { symbol: 'none', lineStyle: { type: 'dashed', color: RED }, label: { color: RED, fontSize: 10, formatter: p => p.name, rotate: 90, position: 'insideEndTop' },
+      data: [{ xAxis: '2022-10-21', name: 'Ley 20/2022' }, { xAxis: '2023-07-23', name: '23-J' }, { xAxis: '2025-10-22', name: 'Fin del plazo' }, { xAxis: '2026-08-01', name: 'Censo 29-N' }] } }] });
+
+mk('c-altas', { ...base(), legend: { top: 0, textStyle: { color: MUTED, fontSize: 12 } }, tooltip: { trigger: 'axis', valueFormatter: v => v.toLocaleString('es-ES') },
+  xAxis: { type: 'category', data: ['43 meses antes\n(mar 2019 – oct 2022)', '43 meses después\n(oct 2022 – may 2026)'], axisLabel: { color: INK, fontSize: 11.5 } },
+  yAxis: { type: 'value', axisLabel: { color: MUTED, formatter: v => (v / 1000) + ' k' }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'bar', name: 'Latinoamérica', stack: 'a', data: [62000, 250000], itemStyle: { color: RED }, barWidth: 110, label: { show: true, color: '#fff', formatter: p => p.dataIndex ? '59 %' : '33 %' } },
+           { type: 'bar', name: 'Resto', stack: 'a', data: [127000, 172000], itemStyle: { color: '#e9d9c3' }, label: { show: true, position: 'top', color: INK, fontWeight: 700, formatter: p => p.dataIndex ? '+422.000  ×2,2' : '+189.000' } }] });
+
+mk('c-part', { ...base(), legend: { top: 0, right: 0, textStyle: { color: MUTED, fontSize: 11.5 } }, tooltip: { trigger: 'axis', valueFormatter: v => v.toFixed(1).replace('.', ',') + ' %' },
+  xAxis: { type: 'category', data: ['Europa', 'EE. UU. y Canadá', 'Latinoamérica'], axisLabel: { color: INK } },
+  yAxis: { type: 'value', axisLabel: { color: MUTED, formatter: '{value} %' }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'bar', name: 'Castilla y León 2026', data: [11.5, 7.6, 5.0], itemStyle: { color: AMBER } },
+           { type: 'bar', name: 'Aragón 2026', data: [11.1, 5.5, 4.7], itemStyle: { color: '#f2c38a' } },
+           { type: 'bar', name: 'Extremadura 2025', data: [8.8, 5.2, 3.2], itemStyle: { color: GREY } }] });
+
+const ECO = [[0.268,58.6,"Albacete"],[0.306,55.6,"Alicante"],[0.667,54.7,"Almería"],[0.468,60.6,"Álava"],[0.709,46.3,"Asturias"],[0.44,55.1,"Ávila"],[0.203,57.1,"Badajoz"],[0.414,65.5,"Barcelona"],[0.549,53.0,"Bizkaia"],[0.628,50.1,"Burgos"],[0.339,56.7,"Cáceres"],[0.249,53.2,"Cádiz"],[0.671,45.0,"Cantabria"],[0.206,66.1,"Castellón"],[0.28,54.7,"Ciudad Real"],[0.228,60.7,"Córdoba"],[0.331,61.0,"Cuenca"],[0.417,65.0,"Gipuzkoa"],[0.23,69.6,"Girona"],[0.572,52.0,"Granada"],[0.359,56.3,"Guadalajara"],[0.205,59.7,"Huelva"],[0.402,64.8,"Huesca"],[0.337,56.3,"Jaén"],[0.629,50.3,"León"],[0.321,65.6,"Lleida"],[0.822,39.3,"Lugo"],[0.388,51.1,"Málaga"],[0.74,29.7,"Ourense"],[0.556,50.4,"Palencia"],[0.739,39.4,"Pontevedra"],[0.517,51.3,"Salamanca"],[0.822,46.7,"S. C. Tenerife"],[0.342,53.3,"Segovia"],[0.284,56.2,"Sevilla"],[0.772,40.2,"Soria"],[0.264,66.1,"Tarragona"],[0.477,64.8,"Teruel"],[0.316,55.4,"Toledo"],[0.328,59.9,"Valencia"],[0.431,54.2,"Valladolid"],[0.697,45.7,"Zamora"],[0.381,53.9,"Zaragoza"]];
+mk('c-eco', { ...base(), tooltip: { formatter: p => p.data[2] ? `<b>${p.data[2]}</b><br>Latam ${(p.data[0] * 100).toFixed(0)} % · izquierda ${p.data[1].toFixed(1).replace('.', ',')} %` : '' },
+  grid: { left: 8, right: 16, top: 12, bottom: 30, containLabel: true },
+  xAxis: { type: 'value', min: 0.15, max: 0.9, name: '% del censo CERA de origen latinoamericano', nameLocation: 'middle', nameGap: 24, nameTextStyle: { color: MUTED, fontSize: 11 }, axisLabel: { color: MUTED, formatter: v => Math.round(v * 100) + ' %' }, splitLine: { lineStyle: { color: LINE } } },
+  yAxis: { type: 'value', min: 25, max: 75, axisLabel: { color: MUTED, formatter: '{value} %' }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'scatter', data: ECO, symbolSize: 9, itemStyle: { color: BRAND, opacity: .7 }, label: { show: true, formatter: p => ['Ourense', 'Lugo', 'Pontevedra', 'Girona', 'Soria', 'S. C. Tenerife', 'Barcelona'].includes(p.data[2]) ? p.data[2] : '', position: 'right', fontSize: 10, color: MUTED } },
+           { type: 'line', data: [[0.2, 66], [0.85, 44]], showSymbol: false, lineStyle: { color: RED, width: 1.5, type: 'dashed' }, tooltip: { show: false } }] });
+
+mk('c-prima', { ...base(), tooltip: { trigger: 'axis', valueFormatter: v => (v > 0 ? '+' : '') + v.toFixed(1).replace('.', ',') }, legend: { top: 0, textStyle: { color: MUTED, fontSize: 11.5 } },
+  xAxis: { type: 'category', data: ['Comicio anterior (2022 / 2023)', 'Comicio de 2026'], axisLabel: { color: INK, fontSize: 11.5 }, boundaryGap: true },
+  yAxis: { type: 'value', min: -3, max: 13, axisLabel: { color: MUTED, formatter: v => (v > 0 ? '+' : '') + v }, splitLine: { lineStyle: { color: LINE } } },
+  series: [
+    { type: 'line', name: 'Aragón', data: [10.8, 9.2], lineStyle: { width: 3, color: AMBER }, itemStyle: { color: AMBER }, symbolSize: 9, label: { show: true, position: 'right', formatter: p => (p.value > 0 ? '+' : '') + p.value.toFixed(1).replace('.', ','), color: AMBER, fontWeight: 700 } },
+    { type: 'line', name: 'Castilla y León', data: [8.9, -0.9], lineStyle: { width: 3, color: BRAND }, itemStyle: { color: BRAND }, symbolSize: 9, label: { show: true, position: 'right', formatter: p => (p.value > 0 ? '+' : '') + p.value.toFixed(1).replace('.', ','), color: BRAND, fontWeight: 700 } },
+    { type: 'line', name: 'Andalucía', data: [7.3, 4.9], lineStyle: { width: 3, color: GREEN }, itemStyle: { color: GREEN }, symbolSize: 9, label: { show: true, position: 'right', formatter: p => (p.value > 0 ? '+' : '') + p.value.toFixed(1).replace('.', ','), color: GREEN, fontWeight: 700 },
+      markLine: { symbol: 'none', silent: true, lineStyle: { color: MUTED, type: 'dashed' }, label: { show: false }, data: [{ yAxis: 0 }] }, markArea: { silent: true, itemStyle: { color: 'rgba(206,59,59,.08)' }, data: [[{ yAxis: -3 }, { yAxis: 0 }]] } }] });
+
+mk('c-canib', { ...base(), grid: { left: 8, right: 16, top: 36, bottom: 24, containLabel: true }, legend: { top: 0, textStyle: { color: MUTED, fontSize: 11.5 } }, tooltip: { trigger: 'axis', valueFormatter: v => (v > 0 ? '+' : '') + v.toFixed(1).replace('.', ',') },
+  xAxis: { type: 'category', data: ['Castilla y León', 'Andalucía', 'Aragón'], axisLabel: { color: INK } },
+  yAxis: { type: 'value', axisLabel: { color: MUTED, formatter: v => (v > 0 ? '+' : '') + v }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'bar', name: 'PSOE', data: [6.2, 7.1, 4.3], itemStyle: { color: RED }, label: { show: true, position: 'top', formatter: p => '+' + p.value.toFixed(1).replace('.', ','), fontWeight: 700 } },
+           { type: 'bar', name: 'Otras izquierdas (SUMAR, Podemos…)', data: [-8.3, -6.7, -4.6], itemStyle: { color: '#7b3fa0' }, label: { show: true, position: 'bottom', formatter: p => p.value.toFixed(1).replace('.', ','), fontWeight: 700 } }] });
+
+mk('c-sens', { ...base(), tooltip: { trigger: 'axis', valueFormatter: v => v.toFixed(1).replace('.', ',') + ' %' }, legend: { top: 0, textStyle: { color: MUTED, fontSize: 11.5 } },
+  xAxis: { type: 'category', data: ['Censo antes de la ley (oct 2022)', 'Nuevas altas tras la ley'], axisLabel: { color: INK, fontSize: 11.5 } },
+  yAxis: { type: 'value', max: 100, axisLabel: { color: MUTED, formatter: '{value} %' }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'bar', name: 'Provincias sensibles (≤ 5 escaños)', stack: 'a', data: [24.0, 17.3], itemStyle: { color: RED }, barWidth: 110, label: { show: true, color: '#fff', fontWeight: 700, formatter: p => p.value.toFixed(1).replace('.', ',') + ' %' } },
+           { type: 'bar', name: 'Resto de provincias', stack: 'a', data: [76.0, 82.7], itemStyle: { color: GREY }, label: { show: true, color: INK, formatter: p => p.value.toFixed(1).replace('.', ',') + ' %' } }] });
+
+mk('c-brecha', { ...base(), legend: { bottom: 0, textStyle: { color: MUTED, fontSize: 11.5 } }, tooltip: { trigger: 'axis', valueFormatter: v => v.toLocaleString('es-ES') + ' votos' },
+  grid: { left: 8, right: 24, top: 8, bottom: 36, containLabel: true },
+  xAxis: { type: 'value', axisLabel: { color: MUTED }, splitLine: { lineStyle: { color: LINE } } },
+  yAxis: { type: 'category', inverse: true, data: ['Girona (Junts/PP)', 'Cantabria (VOX/PP)', 'Tarragona (Junts/PSOE)', 'Madrid (PP/PSOE)', 'Albacete (PSOE/VOX)', 'Salamanca (PP/PSOE)', 'S. C. Tenerife (PSOE/SUMAR)', 'Ceuta (PP/PSOE)', 'Teruel (PP/Existe)', 'Málaga (PP/PSOE)'], axisLabel: { color: INK, fontSize: 11 } },
+  series: [{ type: 'bar', name: 'Brecha del último escaño', data: [284, 403, 1247, 1339, 1411, 1494, 1565, 1586, 1945, 2428], itemStyle: { color: GREY } },
+           { type: 'bar', name: 'Efecto neto del CERA (a favor del aspirante)', data: [-15, 206, 111, -2046, -54, 15, -185, 0, -26, -16].map(v => ({ value: v, itemStyle: { color: v > 0 ? BRAND : RED } })) }] });
+
+mk('c-radar', { ...base(), legend: { bottom: 0, textStyle: { color: MUTED, fontSize: 11.5 } }, tooltip: {},
+  radar: { indicator: [{ name: 'Participación CERA', max: 100 }, { name: 'Colocación dirigida en provincias sensibles', max: 100 }, { name: 'Voto a la izquierda', max: 100 }], radius: '62%', center: ['50%', '48%'], axisName: { color: INK, fontSize: 11 }, splitArea: { areaStyle: { color: ['#fff', '#f7f7f9'] } }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'radar', data: [
+    { name: 'Realidad hoy → 0 escaños', value: [9, 0, 45], lineStyle: { color: BRAND, width: 2.5 }, itemStyle: { color: BRAND }, areaStyle: { color: 'rgba(29,79,134,.25)' }, label: { show: true, formatter: p => p.value + ' %', fontSize: 10, color: BRAND } },
+    { name: 'Todo al máximo → 15 escaños', value: [100, 100, 100], lineStyle: { color: RED, width: 2 }, itemStyle: { color: RED }, areaStyle: { color: 'rgba(206,59,59,.06)' } }] }] });
+
+window.addEventListener('resize', () => charts.forEach(c => c.resize()));
+</script>
+</body>
+</html>

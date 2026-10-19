@@ -482,6 +482,44 @@ def shade_around(x, centre, span, below: str, above: str, alpha: float = 0.55) -
     return shade(x, centre, centre + span, above, alpha)
 
 
+def gradient(x, start, end, colors) -> str:
+    """
+    Colour of a value on a scale of several stops (the rating badge of the polls tables): ``colors`` are spread
+    evenly from ``start`` to ``end`` and the value takes the mix of the two stops it falls between.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value to colour.
+    start, end : int or float
+        Values of the first and the last colour; the range may run downwards (``start > end``) and a value
+        outside it takes the colour of the nearest end.
+    colors : sequence of str
+        Two or more hex colours ``#rrggbb``, in order from ``start`` to ``end``.
+
+    Returns
+    -------
+    str
+        A hex colour ``#rrggbb`` (each channel rounded half up, as the mirror of ``format.js`` does), or
+        ``'transparent'`` when ``x`` is missing, the range is empty or there are not two valid colours.
+    """
+    fraction = _fraction(x, start, end)
+    stops = list(colors) if isinstance(colors, (list, tuple)) else []
+
+    valid = all(isinstance(c, str) and re.fullmatch(r'#[0-9A-Fa-f]{6}', c) for c in stops)
+
+    if fraction is None or len(stops) < 2 or not valid:
+        return 'transparent'
+
+    position = fraction * (len(stops) - 1)
+    index = min(int(position), len(stops) - 2)
+    t = position - index
+    lo = [int(stops[index][i:i + 2], 16) for i in (1, 3, 5)]
+    hi = [int(stops[index + 1][i:i + 2], 16) for i in (1, 3, 5)]
+
+    return '#' + ''.join('{:02x}'.format(math.floor(a + (b - a) * t + 0.5)) for a, b in zip(lo, hi))
+
+
 def rng_cell(lo, hi, median, total, majority=None) -> Optional[dict]:
     """
     Geometry of the range cell of a seats table: the 95 % interval as a band, the median as a mark and the
