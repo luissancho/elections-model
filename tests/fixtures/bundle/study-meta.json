@@ -1,0 +1,27 @@
+{
+  "schema": "study-meta@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-19T12:00:00Z",
+  "data": {
+    "study": "voto-cera",
+    "title": "x",
+    "subtitle": "x",
+    "election": {},
+    "registered_at": null,
+    "registered_commit": null,
+    "registered": null,
+    "registered_changed_at": null,
+    "checked_at": null,
+    "params": {},
+    "sources": [],
+    "series_last": "2026-09",
+    "regression": {},
+    "commit": null,
+    "dirty": false,
+    "versions": {},
+    "seconds": {}
+  }
+}

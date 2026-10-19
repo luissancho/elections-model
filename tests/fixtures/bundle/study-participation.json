@@ -1,0 +1,13 @@
+{
+  "schema": "study-participation@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-19T12:00:00Z",
+  "data": {
+    "origin": [],
+    "generales": [],
+    "autonomicas": []
+  }
+}

@@ -81,6 +81,38 @@ def test_analysis_exists_needs_the_meta(tmp_path):
     assert writer.analysis_exists('es') and not writer.analysis_exists('es-md')
 
 
+def test_study_paths_follow_the_published_layout_and_reject_bad_input():
+    assert bundle.STUDIES == ('voto-cera',)
+    assert bundle.STUDY_PARTS == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
+    assert bundle.STUDY_SCHEMAS == {part: 'study-' + part for part in bundle.STUDY_PARTS}
+    assert all(name in bundle.SCHEMAS for name in bundle.STUDY_SCHEMAS.values())
+    assert bundle.path_study('voto-cera', 'meta') == 'studies/voto-cera/meta.json'
+    assert bundle.path_study_csv('voto-cera', 'last-seat') == 'studies/voto-cera/csv/last-seat.csv'
+    for call in (lambda: bundle.path_study('nope', 'meta'), lambda: bundle.path_study('voto-cera', 'nope'),
+                 lambda: bundle.path_study('voto-cera/..', 'meta'), lambda: bundle.path_study('Voto-Cera', 'meta'),
+                 lambda: bundle.path_study_csv('nope', 'check'), lambda: bundle.path_study_csv('voto-cera', 'meta'),
+                 lambda: bundle.path_study_csv('voto-cera\n', 'check')):
+        with pytest.raises(ValueError):
+            call()
+    listed = [name for names in bundle.STUDY_CSV_OF.values() for name in names]
+    assert sorted(listed) == sorted(bundle.STUDY_CSV) and set(bundle.STUDY_CSV_OF) <= set(bundle.STUDY_PARTS)
+
+
+def test_study_exists_needs_the_meta(tmp_path):
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
+    assert not writer.study_exists('voto-cera')
+    writer.write_json(bundle.path_study('voto-cera', 'census'), 'study-census', {
+        'series': {}, 'marks': [], 'periods': {}, 'provinces': [], 'countries': [], 'origins': [], 'exposure': [],
+        'election_provinces': [], 'election_countries': []}, None)
+    assert not writer.study_exists('voto-cera')
+    writer.write_json(bundle.path_study('voto-cera', 'meta'), 'study-meta', {
+        'study': 'voto-cera', 'title': 't', 'subtitle': 's', 'election': {}, 'registered_at': None,
+        'registered_commit': None, 'registered': None, 'registered_changed_at': None, 'checked_at': None,
+        'params': {}, 'sources': [], 'series_last': '2026-09', 'regression': {}, 'commit': None, 'dirty': False,
+        'versions': {}, 'seconds': {}}, None)
+    assert writer.study_exists('voto-cera')
+
+
 def test_event_paths_follow_the_published_layout_and_reject_bad_input():
     assert bundle.EVENT_PARTS == ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model')
     assert all(schema in bundle.SCHEMAS for schema in bundle.EVENT_SCHEMAS.values())

@@ -379,6 +379,52 @@ republica):
 que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están);
 `meta` no tiene gemelo.
 
+## Estudios
+
+Enmienda 2026-10-19 (estudio del voto CERA). Un estudio vive en `studies/{study}/` (en `site/v1/`, o en `site-dry/v1/` con
+`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay uno: `voto-cera`.
+Como el análisis, **se sobrescribe** en cada publicación: sin `run_id` y fuera de `history.json`. Su única huella en
+el manifest es su entrada en `manifest.studies` (ver «Punteros»).
+
+```
+studies/{study}/{parte}.json
+studies/{study}/csv/{nombre}.csv
+```
+
+La fuente de verdad en código es `bundle.STUDIES`, `STUDY_PARTS`, `STUDY_SCHEMAS`, `STUDY_CSV`, `STUDY_CSV_OF`
+(`path_study`, `path_study_csv`, `BundleReader.study_exists`) y `publish.publish_study`.
+
+Mismo sobre que el resto, con `scope` y `run_id` a `null` (y `mode` a `null`) y `schema` `study-{parte}@1`. Ocho partes:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `study-meta@1` | `study`, `title`, `subtitle`, `election` (dict), `registered_at`, `registered_commit`, `registered` (dict o `null`), `registered_changed_at`, `checked_at`, `params` (dict), `sources` (lista), `series_last`, `regression` (dict), `commit`, `dirty`, `versions` (dict), `seconds` (dict) |
+| `census` | `study-census@1` | `series` (dict), `marks`, `periods` (dict), `provinces`, `countries`, `origins`, `exposure`, `election_provinces`, `election_countries` |
+| `participation` | `study-participation@1` | `origin`, `generales`, `autonomicas` |
+| `vote` | `study-vote@1` | `processes`, `ratios`, `ecological` (dict) |
+| `placement` | `study-placement@1` | `sensitive` (dict), `acceleration`, `correlations` (dict), `madrid` |
+| `prediction` | `study-prediction@1` | `scenarios` (dict), `last_seat`, `report` (dict) |
+| `sensitivity` | `study-sensitivity@1` | `grid` (dict), `scenarios`, `placement` (dict) |
+| `check` | `study-check@1` | `elections`, `rows`, `verdict` (texto o `null`) |
+
+Los valores sin tipo son listas. `registered_at`, `registered_commit`, `registered_changed_at`, `checked_at` y `commit`
+son texto o `null`.
+
+Gemelos CSV (`studies/{study}/csv/{nombre}.csv`); el primero de cada parte es el CSV por defecto:
+
+| Parte | CSV |
+|---|---|
+| `census` | `census-series`, `census-provinces`, `census-countries` |
+| `participation` | `participation` |
+| `vote` | `vote`, `ecological` |
+| `prediction` | `last-seat` |
+| `sensitivity` | `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` |
+| `check` | `check` |
+
+`meta`, `placement` no tienen gemelo. `meta.json` se escribe **el último**: un estudio sin él cuenta como «no
+publicado» (`study_exists` es falso y la API da 404 `study not published`), de modo que una publicación a medias
+nunca se ve.
+
 ## Punteros
 
 ### `history.json`
@@ -400,6 +446,9 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
 - `contract` (1) y `updated_at` (instante de la última escritura).
 - `scopes`: `{ámbito: entrada}`, con la entrada `{latest, run_at, event_date, as_of, date_last, n_polls}`
   (el `run_id` publicado y los datos de su `headline`). Un ámbito fallido conserva su entrada anterior.
+- `studies`: `{estudio: {published_at, registered_at, checked}}` (instante de publicación, instante del registro
+  previo del estudio y si pasó la comprobación); `{}` si no hay ninguno, y un manifest anterior sin la clave se lee
+  con `{}`.
 - `freeze`: `{active, message, since}`; interruptor editorial que fija el job con `what: ["manifest"]`. `since`
   es la fecha ISO (Europe/Madrid) en que pasó de inactivo a activo, se conserva mientras siga activo y es `null`
   al desactivarlo; un manifest anterior sin la clave se lee con `since: null`.

@@ -1,4 +1,5 @@
 """Tests de `mtpy/lib/publish/` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
+import json
 import math
 import os
 import warnings
@@ -470,6 +471,23 @@ def test_manifest_merges_scopes_and_freeze(tmp_path):
     bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
 
 
+def test_update_manifest_merges_studies(tmp_path):
+    writer = make_writer(tmp_path)
+    assert publish.read_manifest(writer)['studies'] == {}
+    publish.update_manifest(writer, {'es': {'latest': RUN}})
+    entry = {'published_at': '2026-10-19T12:00:00Z', 'registered_at': None, 'checked': False}
+    data = publish.update_manifest(writer, studies={'voto-cera': entry})
+    assert data['scopes'] == {'es': {'latest': RUN}} and data['studies'] == {'voto-cera': entry}
+    data = publish.update_manifest(writer, studies={'otro': {'checked': True}})
+    assert data['studies'] == {'voto-cera': entry, 'otro': {'checked': True}}
+    bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
+    path = tmp_path / 'site' / 'v1' / 'manifest.json'
+    raw = json.loads(path.read_text())
+    del raw['data']['studies']
+    path.write_text(json.dumps(raw))
+    assert publish.read_manifest(writer)['studies'] == {}
+
+
 def test_loreg_guard_covers_the_national_window_for_every_scope():
     with pytest.raises(publish.PublishRefused, match=r'es-md 2027-05-23: inside the LOREG window \(art\. 69\.7\) of es 2026-11-29'):
         publish.loreg_guard('es-md', '2027-05-23', today='2026-11-25', national='2026-11-29')
@@ -494,7 +512,8 @@ def test_update_manifest_stamps_since_on_activation(tmp_path):
 def test_read_manifest_adds_since_to_an_old_manifest(tmp_path):
     writer = make_writer(tmp_path)
     writer.write_json(bundle.path_manifest(), 'manifest', {
-        'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {}, 'freeze': {'active': True, 'message': 'x'},
+        'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {}, 'studies': {},
+        'freeze': {'active': True, 'message': 'x'},
         'attribution': dict(publish.ATTRIBUTION)}, scope=None)
     assert publish.read_manifest(writer)['freeze'] == {'active': True, 'message': 'x', 'since': None}
 
