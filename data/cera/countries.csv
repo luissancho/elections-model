@@ -1,0 +1,196 @@
+code,name,region,exposure
+101,ALBANIA,europe,baja
+102,AUSTRIA,europe,baja
+103,BÉLGICA,europe,baja
+104,BULGARIA,europe,baja
+106,CHIPRE,europe,baja
+107,DINAMARCA,europe,baja
+109,FINLANDIA,europe,baja
+110,FRANCIA,europe,baja
+111,GRECIA,europe,baja
+112,HUNGRÍA,europe,baja
+113,IRLANDA,europe,baja
+114,ISLANDIA,europe,baja
+115,ITALIA,europe,baja
+116,LIECHTENSTEIN,europe,baja
+117,LUXEMBURGO,europe,baja
+118,MALTA,europe,baja
+119,MÓNACO,europe,baja
+120,NORUEGA,europe,baja
+121,PAÍSES BAJOS,europe,baja
+122,POLONIA,europe,baja
+123,PORTUGAL,europe,baja
+124,ANDORRA,europe,baja
+125,REINO UNIDO,europe,baja
+126,ALEMANIA,europe,baja
+128,RUMANÍA,europe,baja
+129,SAN MARINO,europe,baja
+130,SANTA SEDE,europe,baja
+131,SUECIA,europe,baja
+132,SUIZA,europe,baja
+135,UCRANIA,europe,baja
+136,LETONIA,europe,baja
+137,MOLDAVIA,europe,baja
+138,BELARÚS,europe,baja
+139,GEORGIA,europe,baja
+141,ESTONIA,europe,baja
+142,LITUANIA,europe,baja
+143,REPÚBLICA CHECA,europe,baja
+144,REPÚBLICA ESLOVACA,europe,baja
+145,BOSNIA Y HERZEGOVINA,europe,baja
+146,CROACIA,europe,baja
+147,ESLOVENIA,europe,baja
+148,ARMENIA,europe,baja
+154,RUSIA,europe,baja
+155,SERBIA (155),europe,baja
+156,MACEDONIA DEL NORTE,europe,baja
+157,SERBIA,europe,baja
+158,MONTENEGRO,europe,baja
+201,BURKINA FASO,other,baja
+202,ANGOLA,other,baja
+203,ARGELIA,other,baja
+204,BENIN,other,baja
+205,BOTSWANA,other,baja
+206,BURUNDI,other,baja
+207,CABO VERDE,other,baja
+208,CAMERÚN,other,baja
+210,CONGO,other,baja
+211,COSTA DE MARFIL,other,baja
+212,DJIBOUTI,other,baja
+213,EGIPTO,other,baja
+214,ETIOPÍA,other,baja
+215,GABÓN,other,baja
+216,GAMBIA,other,baja
+217,GHANA,other,baja
+218,GUINEA,other,baja
+219,GUINEA-BISSAU,other,baja
+220,GUINEA ECUATORIAL,other,baja
+221,KENIA,other,baja
+222,LESOTHO,other,baja
+223,LIBERIA,other,baja
+224,LIBIA,other,baja
+225,MADAGASCAR,other,baja
+226,MALAWI,other,baja
+227,MALI,other,baja
+228,MARRUECOS,other,baja
+229,MAURICIO,other,baja
+230,MAURITANIA,other,baja
+231,MOZAMBIQUE,other,baja
+232,NAMIBIA,other,baja
+233,NÍGER,other,baja
+234,NIGERIA,other,baja
+235,REPÚBLICA CENTROAFRICANA,other,baja
+236,SUDÁFRICA,other,baja
+237,RUANDA,other,baja
+238,SANTO TOMÉ Y PRÍNCIPE,other,baja
+239,SENEGAL,other,baja
+240,SEYCHELLES,other,baja
+241,SIERRA LEONA,other,baja
+242,SOMALIA,other,baja
+243,SUDÁN,other,baja
+244,REINO DE ESUATINI,other,baja
+245,TANZANIA,other,baja
+246,CHAD,other,baja
+247,TOGO,other,baja
+248,TÚNEZ,other,baja
+249,UGANDA,other,baja
+250,REP.DEMOCRÁTICA DEL CONGO,other,baja
+251,ZAMBIA,other,baja
+252,ZIMBABWE,other,baja
+253,ERITREA,other,baja
+254,SUDÁN DEL SUR,other,baja
+301,CANADÁ,usa_canada,baja
+302,ESTADOS UNIDOS DE AMÉRICA,usa_canada,media
+303,MÉXICO,latam,alta
+310,ANTIGUA Y BARBUDA,other,media
+311,BAHAMAS,other,media
+312,BARBADOS,other,media
+313,BELICE,other,media
+314,COSTA RICA,latam,media
+315,CUBA,latam,alta
+316,DOMINICA,other,media
+317,EL SALVADOR,latam,media
+318,GRANADA,other,media
+319,GUATEMALA,latam,media
+320,HAITÍ,latam,media
+321,HONDURAS,latam,media
+322,JAMAICA,other,media
+323,NICARAGUA,latam,media
+324,PANAMÁ,latam,media
+325,SAN VICENTE Y GRANADINAS,other,media
+326,REPÚBLICA DOMINICANA,latam,media
+327,TRINIDAD Y TOBAGO,other,media
+328,SANTA LUCÍA,other,media
+329,SAN CRISTÓBAL Y NIEVES,other,media
+340,ARGENTINA,latam,alta
+341,BOLIVIA,latam,media
+342,BRASIL,latam,media
+343,COLOMBIA,latam,media
+344,CHILE,latam,alta
+345,ECUADOR,latam,media
+346,GUYANA,other,media
+347,PARAGUAY,latam,media
+348,PERÚ,latam,media
+349,SURINAM,other,media
+350,URUGUAY,latam,alta
+351,VENEZUELA,latam,alta
+390,PUERTO RICO (EEUU),latam,media
+391,ARUBA (PAÍSES BAJOS),other,media
+392,ANTILLAS NEERLANDESAS (PAÍSES BAJOS),other,media
+401,AFGANISTÁN,other,baja
+402,ARABIA SAUDÍ,other,baja
+403,BAHRÉIN,other,baja
+404,BANGLADESH,other,baja
+405,MYANMAR,other,baja
+407,CHINA,other,baja
+408,EMIRATOS ÁRABES UNIDOS,other,baja
+409,FILIPINAS,other,baja
+410,INDIA,other,baja
+411,INDONESIA,other,baja
+412,IRAK,other,baja
+413,IRÁN,other,baja
+414,ISRAEL,other,baja
+415,JAPÓN,other,baja
+416,JORDANIA,other,baja
+417,CAMBOYA,other,baja
+418,KUWAIT,other,baja
+419,LAOS,other,baja
+420,LÍBANO,other,baja
+421,MALASIA,other,baja
+422,MALDIVAS,other,baja
+423,MONGOLIA,other,baja
+424,NEPAL,other,baja
+425,OMÁN,other,baja
+426,PAKISTÁN,other,baja
+427,QATAR,other,baja
+430,COREA,other,baja
+431,COREA DEL NORTE,other,baja
+432,SINGAPUR,other,baja
+433,SIRIA,other,baja
+434,SRI-LANKA,other,baja
+435,TAILANDIA,other,baja
+436,TURQUÍA,europe,baja
+437,VIETNAM,other,baja
+438,TAIWÁN,other,baja
+439,BRUNEI,other,baja
+441,YEMEN,other,baja
+442,AZERBAIYÁN,other,baja
+443,KAZAJSTÁN,other,baja
+444,KIRGUISTÁN,other,baja
+445,TAYIKISTÁN,other,baja
+446,TURKMENISTÁN,other,baja
+447,UZBEKISTÁN,other,baja
+449,PALESTINA,other,baja
+499,OTROS PAÍSES DE ASIA,other,baja
+501,AUSTRALIA,other,baja
+502,FIJI,other,baja
+504,NUEVA ZELANDA,other,baja
+505,PAPÚA NUEVA GUINEA,other,baja
+506,ISLAS SALOMÓN,other,baja
+507,SAMOA,other,baja
+508,TONGA,other,baja
+509,VANUATU,other,baja
+511,MICRONESIA,other,baja
+513,ISLAS COOK,other,baja
+516,PALAOS,other,baja
+517,TIMOR ORIENTAL,other,baja

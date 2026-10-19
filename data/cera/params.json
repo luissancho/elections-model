@@ -1,0 +1,35 @@
+{
+  "election": {
+    "scope": "es",
+    "date": "2026-11-29",
+    "census_closed": "2026-08-01",
+    "census_tables": ["ine/elecgen2026_tab6.xlsx", "ine/elecgen2026_tab7.xlsx", "ine/elecgen2026_tab8.xlsx"],
+    "baseline": "2023-07-23"
+  },
+  "litigation": {
+    "count": 163020,
+    "as_of": "2026-10-12",
+    "source": "EFE, vía Maldita.es 13-10-2026",
+    "note": "Inscripciones con efectos electorales suspendidos por los autos del TS de 10-09 y 12-10-2026"
+  },
+  "participation": {
+    "latam": 0.05,
+    "rest": 0.10,
+    "valid": 0.99,
+    "derived_from": ["consulados/cyl-2026.csv", "consulados/extremadura-2025.csv", "consulados/aragon-2026.csv"]
+  },
+  "periods": {"article": [["2019-03-01", "2022-10-01"], ["2022-10-01", "2026-05-01"]]},
+  "sensitive_magnitude": 5,
+  "ecological_min_census": 2000,
+  "check": {"max_gain": 1},
+  "placement_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA"],
+  "madrid_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA", "URUGUAY", "CHILE"],
+  "blocks": {
+    "Izquierda": ["PSOE", "SUMAR", "UP", "MP"],
+    "Derecha": ["PP", "VOX", "Cs"],
+    "Separatista": ["ERC", "JxCat", "EHB", "CUP"],
+    "Regionalista": ["PNV", "CC", "BNG", "UPN", "NA+"]
+  },
+  "baseline_scrutiny": "2023-07-23",
+  "split_source": "2023-07-23"
+}
