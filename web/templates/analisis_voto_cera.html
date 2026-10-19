@@ -557,6 +557,15 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           reparte esos votos como el voto CERA de {{ split_year }} de la provincia. Después recalcula D'Hondt provincia a
           provincia. La tabla separa los votantes (las papeletas recibidas) de los votos a candidaturas (los que entran
           en D'Hondt).
+          {%- if figures.electors_2023 is not none %} El censo de {{ figures.baseline_year }} que se resta
+          ({{ figures.electors_2023|int }}) es el cierre mensual del INE
+          {%- if figures.baseline_date %} del {{ figures.baseline_date|date }}{% endif %}, la base del incremento,
+          porque da el desglose por provincia y país que el modelo necesita
+          {%- if figures.electors_gap is not none %}; no es el censo CERA oficial de esas generales en Infoelectoral,
+          {{ figures.electors_official|int }} electores
+          {%- if figures.electors_gap > 0 %}, {{ figures.electors_gap|int }} más
+          {%- elif figures.electors_gap < 0 %}, {{ (-figures.electors_gap)|int }} menos{% endif %}{% endif %}.
+          {%- endif %}
         </p>
         <p>
           Hay dos censos. El de la convocatoria es el que el INE cerró el
@@ -865,6 +874,12 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         </p>
         {% endif %}
         {% call m.how() %}
+        <p>
+          Los votantes CERA de la tabla son el «Total votantes CERA» de los resultados por provincia de Infoelectoral
+          {%- if cc.received %}: {{ cc.received.voters|int }} en {{ cc.received.year }}. La Oficina del Censo
+          Electoral da {{ cc.received.received|int }} para esas generales, pero cuenta otra cosa: los sobres de voto
+          recibidos, no los votantes del escrutinio{% endif %}.
+        </p>
         <p>
           Con y sin CERA: en cada provincia se reparte D'Hondt con el escrutinio completo y con el escrutinio sin los
           votos CERA. El voto CERA decide un escaño cuando el reparto cambia; el saldo de un partido o de un bloque es

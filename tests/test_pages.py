@@ -3652,6 +3652,9 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert figures['net_psoe_2023'] == previous['net_psoe']
     assert figures['census_total'] == 2769645 == meta['election']['census_total']
     assert figures['electors_2023'] == scenario['census'] - scenario['new_electors']
+    # the base of the increment (the monthly close) and Infoelectoral's census of 2023, both from the parts
+    assert figures['baseline_date'] == meta['election']['baseline_date'] == '2023-06-01'
+    assert figures['electors_official'] == 2328260 and figures['electors_gap'] == 2328260 - 2327388
     assert figures['growth_abs'] == scenario['new_electors']
     assert figures['growth_pct'] == pytest.approx(100 * scenario['new_electors'] / figures['electors_2023'])
     assert figures['voters_projected'] == scenario['voters_projected']
@@ -3928,6 +3931,9 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     summary = summary[:summary.index('</div>')]
     assert '<b>Con datos reales, cero escaños.</b>' in summary and 'ninguna de las 3 provincias' in summary
     assert 'class="how"' in p3 and '163.020' in p3[p3.index('class="how"'):]
+    assert ('El censo de 2023 que se resta (2.327.388) es el cierre mensual del INE del 1 jun 2023, la base del '
+            'incremento, porque da el desglose por provincia y país que el modelo necesita; no es el censo CERA '
+            'oficial de esas generales en Infoelectoral, 2.328.260 electores, 872 más.') in p3
     assert 'medium.com' not in page[:page.index('id="datos"')]
     # richer parts: the gated sentences follow the data (margins that fall, a null cell, a scenario that changes)
     vote = fixture_data('study-vote')
@@ -4067,6 +4073,9 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert 'Lo que se registra: el saldo neto del PSOE y de la izquierda por el voto CERA no mayor que 1 escaño;' in note
     assert 'Madrid (PSOE frente a PP)' in note and 'se multiplicara por 1,5' in note
     assert 'class="how"' in check
+    assert ('Los votantes CERA de la tabla son el «Total votantes CERA» de los resultados por provincia de '
+            'Infoelectoral: 208.431 en 2023. La Oficina del Censo Electoral da 233.688 para esas generales, pero '
+            'cuenta otra cosa: los sobres de voto recibidos, no los votantes del escrutinio.') in check
     # data and method: the sources, the CSV and, last, the article
     datos = cera_section(page, 'datos')
     assert '<ul class="src-list">' in datos and '<a href="https://infoelectoral.interior.gob.es/">' in datos

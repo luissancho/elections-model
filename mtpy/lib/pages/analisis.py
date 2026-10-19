@@ -296,7 +296,10 @@ def _figures(parts: dict) -> dict:
     Returns
     -------
     dict
-        ``census_total``, ``electors_2023``, ``growth_abs``, ``growth_pct``, ``baseline_year``, ``net_before``,
+        ``census_total``, ``electors_2023`` (the monthly close of ``baseline_date``, the base of the increment),
+        ``electors_official`` (the CERA electors of the baseline election in ``participation.generales``, from
+        Infoelectoral) and ``electors_gap`` (``electors_official - electors_2023``), ``baseline_date``,
+        ``growth_abs``, ``growth_pct``, ``baseline_year``, ``net_before``,
         ``net_after``, ``g1``, ``g2`` and ``ratio`` (the additions of the two periods the page shows and their
         pace: ``periods_version`` says which, ``now`` or, when the part lacks it, ``article``), ``g1_article``,
         ``g2_article``, ``ratio_article`` (the replication of the article with its window), ``latam_rate``,
@@ -328,10 +331,16 @@ def _figures(parts: dict) -> dict:
     voters = scenario.get('voters_projected')
     max_gain = _get(params, 'check', 'max_gain')
     report = prediction.get('report') or {}
+    baseline = _get(params, 'election', 'baseline') or previous.get('date')
+    official = next((row.get('electors') for row in parts['participation'].get('generales') or []
+                     if baseline and row.get('date') == baseline), None)
 
     return {
         'census_total': _get(meta, 'election', 'census_total'),
         'electors_2023': electors_2023,
+        'electors_official': official,
+        'electors_gap': official - electors_2023 if official is not None and electors_2023 is not None else None,
+        'baseline_date': _get(meta, 'election', 'baseline_date'),
         'growth_abs': new_electors,
         'growth_pct': 100 * new_electors / electors_2023 if electors_2023 else None,
         'baseline_year': (_get(params, 'election', 'baseline') or previous.get('date') or '')[:4] or None,

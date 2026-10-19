@@ -41,6 +41,9 @@ BLOCK_LABELS = {LEFT: 'Escaños izquierda (PSOE + SUMAR)', RIGHT: 'Escaños dere
 # participation the report of the 23 seats uses) and the provinces of the table of the check shown before «Ver más»
 BEFORE_ROGADO = 'antes'
 CHECK_SHOWN = 20
+# The CERA vote envelopes the Oficina del Censo Electoral counts as received in a general election: a fact of the
+# context, not of the parts (they carry Infoelectoral's «Total votantes CERA»), quoted by «Cómo leerlo» of the check
+OCE_RECEIVED = {'2023-07-23': 233688}
 # The candidature columns of the rows of the check (with and without the CERA vote), printed by their sigla
 WINNERS = ('winner_with', 'winner_without')
 # The two versions of the periods in the parts: ``now``, the article's periods recalculated up to the last monthly
@@ -1054,6 +1057,9 @@ def _check(parts: dict) -> dict:
         - ``rows``: ``check.rows`` by gap, the winners by their siglas, with ``shown`` (the first ``CHECK_SHOWN``);
           ``hidden`` counts the rest.
         - ``reach``: ``_within_reach`` of ``prediction.last_seat``.
+        - ``received``: ``None`` without an election of ``OCE_RECEIVED`` in ``elections``, else ``{'year',
+          'voters', 'received'}`` of the latest one: its CERA voters (Infoelectoral) and the envelopes the Oficina del
+          Censo Electoral counts as received.
     """
     check = parts['check']
     day = _get(parts['meta'], 'election', 'date')
@@ -1070,6 +1076,9 @@ def _check(parts: dict) -> dict:
         })
 
     result = next((row for row in elections if row['date'] == day), None)
+    oce = [row for row in elections if row['date'] in OCE_RECEIVED and row['voters'] is not None]
+    received = {'year': oce[-1]['year'], 'voters': oce[-1]['voters'], 'received': OCE_RECEIVED[oce[-1]['date']]} \
+        if oce else None
     rows = [dict(_with_siglas(row, *WINNERS), shown=index < CHECK_SHOWN)
             for index, row in enumerate(_by_gap(check.get('rows') or []))]
 
@@ -1082,4 +1091,5 @@ def _check(parts: dict) -> dict:
         'rows': rows,
         'hidden': max(len(rows) - CHECK_SHOWN, 0),
         'reach': _within_reach(parts['prediction'].get('last_seat') or []),
+        'received': received,
     }

@@ -14,7 +14,8 @@
       "date": "2026-11-29",
       "census_closed": "2026-10-01",
       "census_total": 2769645,
-      "census_source": "INE, Oficina del Censo Electoral: elecgen2026_tab8.xlsx"
+      "census_source": "INE, Oficina del Censo Electoral: elecgen2026_tab8.xlsx",
+      "baseline_date": "2023-06-01"
     },
     "registered_at": "2026-10-18",
     "registered_commit": "abc1234",

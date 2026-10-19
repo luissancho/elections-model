@@ -80,6 +80,7 @@ def test_export_study_figures(study):
 
     meta = valid('study-meta', publish.export_study_meta(study)[0])
     assert meta['election']['census_total'] == 2769645
+    assert meta['election']['baseline_date'] == study.baseline_date.strftime('%Y-%m-%d') == '2023-06-01'
     assert meta['series_last'] == study.series_last.strftime('%Y-%m-%d') >= '2026-09-01'
     assert meta['regression']['p_slope'] < 0.001 < meta['regression']['p_level']
 

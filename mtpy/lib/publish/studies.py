@@ -522,7 +522,8 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
     -------
     tuple
         ``(data, {})``: ``data`` for ``study-meta`` with ``study``, ``title``, ``subtitle``, ``election``
-        (``scope``, ``date``, ``census_closed``, ``census_total``, ``census_source``), the registration keys,
+        (``scope``, ``date``, ``census_closed``, ``census_total``, ``census_source`` and ``baseline_date``, the
+        monthly close of the census of the baseline election, the base of the increment), the registration keys,
         ``checked_at``, ``params``, ``sources``, ``series_last`` (``YYYY-MM-DD``), ``regression`` (``p_slope``
         and ``p_level`` with three significant digits, the slopes and mean net additions with two decimals),
         ``commit``, ``dirty``, ``versions`` and ``seconds``. No CSV twin.
@@ -537,7 +538,8 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
         'study': study_id, 'title': title, 'subtitle': subtitle,
         'election': {'scope': election['scope'], 'date': election['date'], 'census_closed': election['census_closed'],
                      'census_total': int(study.census['electors'].sum()),
-                     'census_source': f'INE, Oficina del Censo Electoral: {os.path.basename(table)}'},
+                     'census_source': f'INE, Oficina del Censo Electoral: {os.path.basename(table)}',
+                     'baseline_date': _iso(study.baseline_date)},
         **{key: (registration or {}).get(key) for key in REGISTRATION_KEYS},
         'checked_at': checked_at, 'params': study.params, 'sources': study_sources(study),
         'series_last': _iso(study.series_last), 'regression': regression,

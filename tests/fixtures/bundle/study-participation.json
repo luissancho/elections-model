@@ -25,17 +25,17 @@
     "generales": [
       {
         "date": "2019-11-10",
-        "electors": 34800000,
-        "voters": 24000000,
-        "rate": 66.2,
+        "electors": 2130754,
+        "voters": 145908,
+        "rate": 6.85,
         "period": "rogado"
       },
       {
         "date": "2023-07-23",
-        "electors": 37000000,
-        "voters": 24500000,
-        "rate": 66.0,
-        "period": "rogado"
+        "electors": 2328260,
+        "voters": 208431,
+        "rate": 8.95,
+        "period": "sin_rogado"
       }
     ],
     "autonomicas": [
