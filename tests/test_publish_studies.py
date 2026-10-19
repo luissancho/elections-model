@@ -49,7 +49,8 @@ def test_export_study_parts_validate(study):
 
 def test_export_study_figures(study):
     census = valid('study-census', publish.export_study_census(study)[0])
-    assert census['series']['values'][-1] == 2762829 and census['series']['dates'][-1] == '2026-09-01'
+    assert census['series']['values'][-1] == int(study.series.iloc[-1]) > 2700000   # el último cierre cambia cada mes
+    assert census['series']['dates'][-1] == study.series_last.strftime('%Y-%m-%d') >= '2026-09-01'
     assert census['periods']['article'] == [['2019-03-01', '2022-10-01'], ['2022-10-01', '2026-05-01']]
     assert sum(row['g2'] for row in census['provinces']) == 422253
     assert {'g1', 'g2', 'ratio', 'g1_now', 'g2_now', 'ratio_now'} <= set(census['provinces'][0])
@@ -70,7 +71,8 @@ def test_export_study_figures(study):
     assert [row['gap'] for row in check['rows']] == sorted(row['gap'] for row in check['rows'])
 
     meta = valid('study-meta', publish.export_study_meta(study)[0])
-    assert meta['election']['census_total'] == 2769645 and meta['series_last'] == '2026-09-01'
+    assert meta['election']['census_total'] == 2769645
+    assert meta['series_last'] == study.series_last.strftime('%Y-%m-%d') >= '2026-09-01'
     assert meta['regression']['p_slope'] < 0.001 < meta['regression']['p_level']
 
     sensitivity = valid('study-sensitivity', publish.export_study_sensitivity(study)[0])

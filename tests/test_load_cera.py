@@ -8,6 +8,7 @@ import pytest
 
 from load.cera import ELECTION_URLS, MONTHLY_URL, fetch_cera
 from mtpy.core.io import FileSystem
+from mtpy.lib.studies.cera.data import read_monthly_workbook, read_provinces
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -38,7 +39,7 @@ def make_data(tmp_path):
     workbook = openpyxl.load_workbook(os.path.join(INE, 'cerapropais_26.xlsx'))
     try:
         sheet = workbook.worksheets[0]
-        assert 'sep-2026' in sheet.cell(row=5, column=4).value
+        assert sheet.cell(row=5, column=4).value.startswith('Censo cerrado a 1-')   # el último cierre, el más nuevo
         sheet.delete_cols(4)
         workbook.save(str(tmp_path / 'cera' / 'ine' / 'cerapropais_26.xlsx'))
     finally:
@@ -54,7 +55,9 @@ def test_fetch_cera_writes_the_files_and_reports_new_months(tmp_path):
     assert sorted(result['files']) == sorted(
         ['cera/ine/cerapropais_26.xlsx'] + ['cera/ine/' + name for name in ELECTION_URLS]
     )
-    assert result['months_new'] == ['2026-09-01']
+    provinces = read_provinces(FileSystem(os.path.join(ROOT, 'data')))
+    newest = read_monthly_workbook(os.path.join(INE, 'cerapropais_26.xlsx'), provinces)
+    assert result['months_new'] == [newest['date'].max().strftime('%Y-%m-%d')]   # el mes recortado, sea cual sea
     for name in result['files']:
         assert os.path.exists(str(tmp_path / name))
     assert (tmp_path / 'cera' / 'ine' / 'cerapropais_26.xlsx').read_bytes() == real_bytes('cerapropais_26.xlsx')

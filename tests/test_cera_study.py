@@ -23,7 +23,7 @@ def study(data_fs):
 
 def test_compute_cera_runs_end_to_end(study):
     assert isinstance(study, CeraStudy) and study.params['election']['date'] == '2026-11-29'
-    assert study.series_last == pd.Timestamp('2026-09-01')
+    assert study.series_last == study.long['date'].max() and study.series_last >= pd.Timestamp('2026-09-01')
     assert set(study.scenarios) == {'convocatoria', 'sin_litigio'}
     assert study.scenarios['convocatoria']['model']['changed'] == []
     assert sorted(study.checks) == ['2019-11-10', '2023-07-23']
@@ -35,10 +35,9 @@ def test_compute_cera_census_block(study):
     assert study.baseline_date == pd.Timestamp('2023-06-01') and study.series.index[-1] == study.series_last
     assert len(study.province_names) == 52 and study.province_names[28] == 'Madrid'
     assert [date for date, _ in study.marks] == ['2022-10-21', '2023-07-23', '2025-10-22', '2026-08-01']
-    assert study.periods_now == [
-        (pd.Timestamp('2018-11-01'), pd.Timestamp('2022-10-01')),
-        (pd.Timestamp('2022-10-01'), pd.Timestamp('2026-09-01'))
-    ]
+    (start_1, end_1), (start_2, end_2) = study.periods_now   # el segundo periodo acaba en el último cierre
+    assert end_1 == start_2 == pd.Timestamp('2022-10-01') and end_2 == study.series_last
+    assert start_1 + pd.DateOffset(months=(end_2.year - start_2.year) * 12 + end_2.month - start_2.month) == end_1
     assert set(study.growth) == {'provinces', 'countries', 'origins', 'exposure'}
     assert all(set(by_period) == {'article', 'now'} for by_period in study.growth.values())
     assert study.growth['provinces']['article']['g2'].sum() == 422253 and len(study.growth['provinces']['now']) == 52
