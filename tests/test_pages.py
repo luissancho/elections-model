@@ -15,7 +15,8 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
-    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event
+    PARTIES, ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event,
+    write_parties
 )
 
 
@@ -81,7 +82,8 @@ def test_promedios_is_rendered_html_with_cache_headers(api):
 
 def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks', 'deltas'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
+    assert data['catalog'] == {'parties': [dict(pages.catalog(data['meta'])['PP'], name='PP')], 'bmaps': data['meta']['bmaps']}
     assert data['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
@@ -848,7 +850,7 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
     assert 'id="pollster-select"' in page and 'href="/metodo' in page
     assert re.search(r'<div class="series-controls" id="pollster-controls" hidden>.*?<label>Encuestadora', page, re.S)
     data = initial(call(api, '/es')[2])
-    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks', 'deltas'}
+    assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
     assert all(abs(v * 10 - round(v * 10)) < 1e-9 for v in data['series']['mean']['PP'] if v is not None)
     assert 'pollster_id' in data['polls']['polls'][0]
 
@@ -1574,6 +1576,50 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
         < page.index('class="split"') < page.index('id="last-errors"') < page.index('id="last-split"') < page.index('id="bullseye"') \
         < page.index('id="last"') < page.index('id="glosario"') < page.index('id="poll-histogram"') < page.index('id="polls"') \
         < page.index('id="model"') < page.index('id="downloads"')
+
+
+def test_catalog_adds_the_published_parties_behind_the_run():
+    """El catálogo del run manda y conserva su orden; detrás van los partidos publicados que falten, con el gris de
+    «otros» para un color malformado; un nombre ausente de ambos sigue cayendo en `__missing__`."""
+    meta = {'parties': [{'name': 'PP', 'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha'}]}
+    rows = [{'id': 2, 'name': 'PP', 'fullname': 'PP (tabla)', 'color': '#000000', 'block': 'Otros'},
+            {'id': 12, 'name': 'CUP', 'fullname': "Candidatura d'Unitat Popular", 'color': '#ffed00', 'block': 'Separatista'},
+            {'id': 99, 'name': 'XX', 'fullname': None, 'color': 'amarillo', 'block': None}]
+    catalog = pages.catalog(meta, rows)
+    assert list(catalog) == ['PP', 'CUP', 'XX']
+    assert catalog['PP'] == {'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha'}
+    assert catalog['CUP'] == {'fullname': "Candidatura d'Unitat Popular", 'color': '#ffed00', 'block': 'Separatista'}
+    assert catalog['XX'] == {'fullname': 'XX', 'color': pages.OTHERS_COLOR, 'block': None}
+    assert catalog['ZZ'] == {'fullname': 'ZZ', 'color': pages.OTHERS_COLOR, 'block': None} and 'ZZ' not in catalog
+    assert pages.catalog(meta) == pages.catalog(meta, None) == pages.catalog(meta, []) == {'PP': catalog['PP']}
+
+
+def test_eleccion_detail_colours_the_parties_outside_the_run_from_the_published_catalogue(events_site, fresh_app):
+    """Con `parties.json` publicado, los partidos de la elección que el run no simula (PSOE, VOX, Cs) salen con su
+    color, su nombre completo y su bloque, en la página y en el catálogo del navegador; el run sigue primero."""
+    write_parties(fresh_app.fs)
+    status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
+    page = html(body)
+    assert status == 200 and 'Ciudadanos' in page and '#eb6109' in page and 'Partido Socialista Obrero Español' in page
+    data = initial(body)
+    assert [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX', 'Cs']
+    assert data['catalog']['parties'][0]['color'] == fixture_data('meta')['parties'][0]['color']
+    assert data['catalog']['parties'][1] == {'name': 'PSOE', 'fullname': 'Partido Socialista Obrero Español', 'color': '#ef1c27', 'block': 'Izquierda'}
+    assert data['catalog']['parties'][3] == {'name': 'Cs', 'fullname': 'Ciudadanos', 'color': '#eb6109', 'block': 'Derecha'}
+    context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
+    assert [row['color'] for row in context['results_rows']] == [fixture_data('meta')['parties'][0]['color'], '#ef1c27', '#63be21', '#eb6109']
+    assert 'CUP' in context['catalog'] and 'CUP' not in [party['name'] for party in data['catalog']['parties']]
+
+
+def test_promedios_browser_catalogue_covers_the_table_and_the_last_results(events_site, fresh_app):
+    """El catálogo que Promedios manda al navegador lleva los partidos del run, los de la tabla de sondeos y los del
+    último resultado, con el color del catálogo publicado para los que el run no simula, y los `bmaps` del run."""
+    write_parties(fresh_app.fs)
+    data = initial(call(events_site, '/es')[2])
+    assert [party['name'] for party in data['catalog']['parties']] == ['PP', 'PSOE', 'VOX', 'Cs']
+    assert data['catalog']['parties'][3] == {'name': 'Cs', 'fullname': 'Ciudadanos', 'color': '#eb6109', 'block': 'Derecha'}
+    assert data['catalog']['bmaps'] == fixture_data('meta')['bmaps']
+    assert [card['color'] for card in data['cards']] == [fixture_data('meta')['parties'][0]['color']]
 
 
 def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):

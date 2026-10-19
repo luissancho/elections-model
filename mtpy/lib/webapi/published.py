@@ -136,6 +136,22 @@ class Site:
         """
         return self.manifest_data()['freeze']
 
+    def parties(self) -> bytes:
+        """
+        Bytes of ``parties.json``, the party catalogue published next to the manifest.
+
+        Returns
+        -------
+        bytes
+            The file content, cached under the TTL like the other overwritable files.
+
+        Raises
+        ------
+        HttpError
+            404 when no catalogue has been published yet.
+        """
+        return self._mutable_bytes('parties', bundle.path_parties(), 'parties not published')
+
     def latest_run(self, scope: str) -> str:
         """
         Run id of the latest published run of a scope.

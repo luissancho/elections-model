@@ -745,32 +745,57 @@ class Catalog(dict):
         return {'fullname': name, 'color': OTHERS_COLOR, 'block': None}
 
 
-def catalog(meta: dict) -> Catalog:
+def catalog(meta: dict, parties: Optional[list] = None) -> Catalog:
     """
-    Party catalogue of a run.
+    Party catalogue of a run, completed with the published party catalogue.
 
     Parameters
     ----------
     meta : dict
         Data of the meta part.
+    parties : list of dict, optional
+        Rows of the published catalogue (``parties.json``, ``parties_catalogue``): the parties missing from
+        the run go behind its own, in their order, so a page can colour and name a party the run does not
+        simulate (one of a past election, or a poll column folded into another party).
 
     Returns
     -------
     Catalog
-        Entries from ``meta['parties']``; a missing full name falls back to the name and a
-        missing or malformed colour to ``OTHERS_COLOR``.
+        Entries from ``meta['parties']`` first, then those of ``parties`` not already there; a missing full
+        name falls back to the name and a missing or malformed colour to ``OTHERS_COLOR``.
     """
     entries = Catalog()
 
-    for party in meta.get('parties') or []:
+    for party in list(meta.get('parties') or []) + list(parties or []):
+        name = party['name']
+
+        if name in entries:
+            continue
+
         color = party.get('color')
-        entries[party['name']] = {
-            'fullname': party.get('fullname') or party['name'],
+        entries[name] = {
+            'fullname': party.get('fullname') or name,
             'color': color if isinstance(color, str) and _COLOR_RE.fullmatch(color) else OTHERS_COLOR,
             'block': party.get('block'),
         }
 
     return entries
+
+
+def parties_catalogue() -> list:
+    """
+    Rows of the published party catalogue (``parties.json``, ``publish parties``).
+
+    Returns
+    -------
+    list of dict
+        ``{'id', 'name', 'fullname', 'parent_id', 'color', 'block', 'regional'}`` per party, in the order of the
+        table; empty when the catalogue is not published, so the pages work without it (every party outside the
+        run then gets the grey of the others).
+    """
+    data = bundle_part(site().parties)
+
+    return list((data or {}).get('rows') or [])
 
 
 def hemicycle_order(names: list, parties: Catalog) -> list:
@@ -901,7 +926,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'freeze': freeze,
         'frozen': frozen,
         'meta': meta,
-        'catalog': catalog(meta),
+        'catalog': catalog(meta, parties_catalogue()),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
         'tabbar': tabbar(scope, active, active_suffix, event, event_query(full) if event else ''),
     }

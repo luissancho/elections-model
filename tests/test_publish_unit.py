@@ -1046,7 +1046,7 @@ def test_publish_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
-    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'pointers', 'studies']
+    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'parties', 'pointers', 'studies']
     for name in names:
         assert inspect.ismodule(getattr(publish, name)), name
     assert publish.loreg_guard.__module__ == 'mtpy.lib.publish.common'
@@ -1054,6 +1054,7 @@ def test_publish_package_layout():
     assert publish.publish_analysis.__module__ == 'mtpy.lib.publish.analysis'
     assert publish.publish_backtest.__module__ == 'mtpy.lib.publish.backtest'
     assert publish.publish_event.__module__ == 'mtpy.lib.publish.events'
+    assert publish.publish_parties.__module__ == 'mtpy.lib.publish.parties'
     assert publish.update_manifest.__module__ == 'mtpy.lib.publish.pointers'
     assert publish.publish_study.__module__ == 'mtpy.lib.publish.studies'
 
@@ -1072,3 +1073,33 @@ def test_publish_forecast_reports_each_phase_as_it_ends(tmp_path):
     assert set(result['seconds']) == {'init', 'fit', 'nowcast', 'forecast', 'export', 'total'}
     exports = dict((s[0], s[1]) for s in steps)
     assert result['seconds']['export'] == round(exports['export-nowcast'] + exports['export'], 1)
+
+
+def test_export_parties_rows_are_plain_and_in_table_order():
+    """Las filas del catálogo salen limpias (enteros, nulos, booleanos) y en el orden de la tabla."""
+    frame = pd.DataFrame({
+        'id': [2, 5, 528], 'name': ['PP', 'SUMAR', 'FA'], 'fullname': ['Partido Popular', 'Sumar', np.nan],
+        'parent_id': [np.nan, np.nan, 5.0], 'color': ['#1d84ce', '#ef4b91', None],
+        'block': pd.Categorical(['Derecha', 'Izquierda', None]), 'regional': [False, False, np.nan],
+    })
+    data = publish.export_parties(frame)
+    env = bundle.envelope('parties', data, None, generated_at='2026-10-19T12:00:00Z')
+    rows = bundle.validate('parties', bundle.jsonable(env))['data']['rows']
+    assert [row['name'] for row in rows] == ['PP', 'SUMAR', 'FA']
+    assert rows[0] == {'id': 2, 'name': 'PP', 'fullname': 'Partido Popular', 'parent_id': None, 'color': '#1d84ce',
+                       'block': 'Derecha', 'regional': False}
+    assert rows[2] == {'id': 528, 'name': 'FA', 'fullname': None, 'parent_id': 5, 'color': None, 'block': None,
+                       'regional': None}
+    assert all(type(row['id']) is int for row in rows) and type(rows[2]['parent_id']) is int
+
+
+def test_publish_parties_writes_the_global_catalogue_without_run(tmp_path):
+    writer = make_writer(tmp_path)
+    frame = pd.DataFrame({'id': [2, 5], 'name': ['PP', 'SUMAR'], 'fullname': ['Partido Popular', 'Sumar'],
+                          'parent_id': [None, None], 'color': ['#1d84ce', '#ef4b91'], 'block': ['Derecha', 'Izquierda'],
+                          'regional': [False, False]})
+    assert publish.publish_parties(writer, parties=lambda: frame) == {'n_parties': 2}
+    assert (tmp_path / 'site' / 'v1' / 'parties.json').exists()
+    env = writer.read_json(bundle.path_parties())
+    assert env['schema'] == 'parties@1' and env['scope'] is None and env['run_id'] is None and env['mode'] is None
+    assert [row['name'] for row in env['data']['rows']] == ['PP', 'SUMAR']

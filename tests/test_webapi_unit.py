@@ -97,6 +97,21 @@ def write_backtest(fs, scope='es', meta=None):
     return writer
 
 
+PARTIES = pd.DataFrame({
+    'id': [2, 3, 4, 6, 12], 'name': ['PP', 'PSOE', 'VOX', 'Cs', 'CUP'],
+    'fullname': ['Partido Popular', 'Partido Socialista Obrero Español', 'Vox', 'Ciudadanos', "Candidatura d'Unitat Popular"],
+    'parent_id': [None] * 5, 'color': ['#1d84ce', '#ef1c27', '#63be21', '#eb6109', '#ffed00'],
+    'block': ['Derecha', 'Izquierda', 'Derecha', 'Derecha', 'Separatista'], 'regional': [False] * 5,
+})
+
+
+def write_parties(fs, frame=None):
+    """Catálogo de partidos publicado (`parties.json`, junto al manifest) a partir de `PARTIES` o de `frame`."""
+    writer = bundle.BundleWriter(fs)
+    publish.publish_parties(writer, parties=lambda: PARTIES if frame is None else frame)
+    return writer
+
+
 @pytest.fixture(autouse=True)
 def clear_queries():
     """Las cachés de consultas a base y de los parámetros de las elecciones son del módulo: se vacían antes de cada
@@ -600,6 +615,17 @@ def test_site_analysis_reads_the_published_files(site_app):
     write_analysis(site_app.fs)
     assert bundle.loads(site.analysis('es', 'herding'))['schema'] == 'analysis-herding@1'
     assert site.analysis_csv('es', 'herding-events').startswith(b'event_date,pollster,ratio\n')
+
+
+def test_site_parties_reads_the_published_catalogue(site_app):
+    site = webapi.site()
+    with pytest.raises(HttpError) as err:
+        site.parties()
+    assert err.value.status == 404 and err.value.message == 'parties not published'
+    write_parties(site_app.fs)
+    env = bundle.loads(site.parties())
+    assert env['schema'] == 'parties@1' and env['scope'] is None
+    assert [row['name'] for row in env['data']['rows']] == ['PP', 'PSOE', 'VOX', 'Cs', 'CUP']
 
 
 def test_webapi_package_layout():

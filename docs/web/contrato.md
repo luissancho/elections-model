@@ -15,6 +15,7 @@ producción). Los ensayos (`dry_run`) escriben bajo `site-dry/v1/` con la misma 
 ```
 site/v1/
     manifest.json                               último run de cada ámbito
+    parties.json                                catálogo de partidos de la base (enmienda 2026-10-19; ver "Catálogo de partidos")
     analysis/{scope}/                           análisis de casas (enmienda 2026-10-10; ver "Análisis")
         meta.json house-effects.json herding.json poll-errors.json error-data.json
         csv/ house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
@@ -424,6 +425,24 @@ Gemelos CSV (`studies/{study}/csv/{nombre}.csv`); el primero de cada parte es el
 `meta`, `placement` no tienen gemelo. `meta.json` se escribe **el último**: un estudio sin él cuenta como «no
 publicado» (`study_exists` es falso y la API da 404 `study not published`), de modo que una publicación a medias
 nunca se ve.
+
+## Catálogo de partidos
+
+Enmienda 2026-10-19. `parties.json` vive junto al manifest (en `site/v1/`, o en `site-dry/v1/` con `dry_run`) y lo
+escribe `publish.publish_parties` (acción `parties` del job `publish`; `forecast` y `analysis` lo reescriben también,
+una vez por ejecución). Como el análisis, **se sobrescribe** en cada publicación: sin `scope`, sin `run_id` y fuera
+de `history.json` y del manifest. Es la tabla `elections.parties` completa, en su orden.
+
+Mismo sobre que el resto, con `scope`, `run_id` y `mode` a `null` y `schema` `parties@1`. `data` tiene una clave:
+
+| Clave | Contenido |
+|---|---|
+| `rows` | Una fila por partido: `id` (entero), `name`, `fullname` (texto o `null`), `parent_id` (entero o `null`), `color` (texto o `null`), `block` (texto o `null`) y `regional` (booleano o `null`) |
+
+Las páginas lo leen (`webapi.Site.parties`, caché TTL como el análisis) para completar el catálogo del run
+(`meta.parties`): un partido que el run no simula (uno de una elección pasada, o una columna de sondeo que se pliega
+en otro partido) toma de aquí su color, su nombre completo y su bloque; sin el fichero, esos partidos salen con el
+gris de «otros», como antes de la enmienda. No tiene ruta en la API.
 
 ## Punteros
 

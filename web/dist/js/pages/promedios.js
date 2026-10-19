@@ -396,7 +396,9 @@ function paintCards(initial) {
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
-  const catalog = new Catalog(initial.meta);
+  // the catalogue the server builds for the page (the run's parties, those of the polls table and those of the
+  // last election, named and coloured by the published catalogue), with the bmaps of the run
+  const catalog = new Catalog(initial.catalog || initial.meta);
   tryDraw(() => paintCards(initial), 'the party cards');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);

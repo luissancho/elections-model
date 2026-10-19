@@ -87,6 +87,7 @@ SCHEMAS = {
     'manifest': {'contract': int, 'updated_at': NULLABLE_STR, 'scopes': dict, 'studies': dict, 'freeze': dict,
                  'attribution': dict},
     'history': {'scope': str, 'runs': list},
+    'parties': {'rows': list},
     'meta': {
         'run_id': str, 'run_at': str, 'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'scope': str,
         'event_date': str, 'as_of': str, 'date_last': str, 'date_fit_last': NULLABLE_STR, 'horizon_max': int,
@@ -317,6 +318,18 @@ def path_manifest() -> str:
         ``'manifest.json'``.
     """
     return 'manifest.json'
+
+
+def path_parties() -> str:
+    """
+    Path of the party catalogue, relative to the bundle prefix.
+
+    Returns
+    -------
+    str
+        ``'parties.json'``.
+    """
+    return 'parties.json'
 
 
 def path_runs(scope: str) -> str:

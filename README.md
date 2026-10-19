@@ -49,8 +49,9 @@ python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"ve
 
 Publica los resultados del modelo en el paquete que leen la API y el sitio (`site/v1`): `forecast` (el pronóstico de
 cada ámbito, un run inmutable), `analysis` (el análisis de encuestadoras), `event` (las elecciones pasadas),
-`backtest`, y las acciones de punteros `manifest`, `point` y `unpublish`. Las acciones se ejecutan siempre en ese
-orden, sea cual sea el de la lista. Mismos niveles de `verbose` que `compute`; `dry_run` escribe bajo `site-dry/v1`.
+`backtest`, `parties` (el catálogo de partidos de la base, `parties.json` junto al manifest; `forecast` y `analysis`
+lo reescriben también), y las acciones de punteros `manifest`, `point` y `unpublish`. Las acciones se ejecutan
+siempre en ese orden, sea cual sea el de la lista. Mismos niveles de `verbose` que `compute`; `dry_run` escribe bajo `site-dry/v1`.
 El detalle de cada acción y del paquete está en `docs/web/contrato.md` y en la docstring de `mtpy/jobs/Publish.py`.
 
 ```bash
