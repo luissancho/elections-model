@@ -1,8 +1,9 @@
 # Web: el promedio de sondeos y el modelo en el detalle de una elección
 
 Fecha: 2026-10-19. Estado: cerrada el 2026-10-19 en `dev` (plan
-`docs/superpowers/plans/2026-10-19-web-eleccion-promedio-modelo.md`, nueve commits desde `df957d6`; 1086 tests en
-verde más 75 saltados, con el fallo previo y ajeno de `tests/test_pages_ejemplo.py`). Aprobada por Luis el mismo día
+`docs/superpowers/plans/2026-10-19-web-eleccion-promedio-modelo.md`, once commits desde `df957d6`, el último tras la
+revisión final: los bloques de la curva se pintan como el hemiciclo; 1087 tests en verde más 75 saltados, con el
+fallo previo y ajeno de `tests/test_pages_ejemplo.py`). Aprobada por Luis el mismo día
 ("Ok, adelante") tras la revisión del constructor; las tres preguntas del final quedaron resueltas como se proponen
 (serie fuera de git, tarjetas tras los resultados, cifras de la ejecución a horizonte). Sigue a las fases 7e y 7f
 (detalle de una elección) y a la 8 (rediseño visual). Esta spec solo describe lo que cambia respecto de lo que hay en `dev`
