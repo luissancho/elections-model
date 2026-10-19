@@ -29,6 +29,7 @@ PAGES = (
     {'href': '/', 'label': 'Inicio'},
     {'href': '/elecciones', 'label': 'Histórico Errores'},
     {'href': '/casas', 'label': 'Ranking Encuestadoras'},
+    {'href': '/analisis', 'label': 'Análisis'},
     {'href': '/metodo', 'label': 'Método'},
 )
 EVENT_TABS = (
@@ -44,7 +45,7 @@ TABBAR = (
     {'key': 'historico', 'label': 'Histórico', 'icon': 'target'},
     {'key': 'ranking', 'label': 'Ranking', 'icon': 'trophy'},
 )
-# Entry of the tab bar lit by each global page (``PAGES`` href); the method lights none
+# Entry of the tab bar lit by each global page (``PAGES`` href); the method and the Análisis pages light none
 TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking'}
 # Blocks of the hemicycle from left to right (the mirror of ``BLOCK_ORDER`` of ``catalog.js``)
 HEMICYCLE_BLOCKS = ('Izquierda', 'Separatista', 'Regionalista', 'Derecha')
@@ -62,6 +63,9 @@ ROUTES = [
     ('/elecciones/{country:loc}/{scope}/{date}', 'elecciones', 'detail', ['GET']),
     ('/metodo', 'metodo', 'index', ['GET']),
     ('/metodo/{section:str}', 'metodo', 'section', ['GET']),
+    ('/analisis', 'analisis', 'index', ['GET']),
+    # the default alias (``[0-9a-z_\-]+``): ``:str`` is only ``[a-z]+`` and the slugs have hyphens (``voto-cera``)
+    ('/analisis/{study}', 'analisis', 'study', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
     ('/{scope}/escanos', 'escanos', 'index', ['GET']),
 ]
@@ -85,6 +89,7 @@ MESSAGES = {
     'backtest not published': 'Backtest no publicado.',
     'unknown scope': 'Ámbito desconocido.',
     'section not found': 'Página del método no encontrada.',
+    'study not found': 'Ese análisis no existe o no está publicado.',
 }
 OTHERS_COLOR = '#9e9e9e'
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
@@ -660,7 +665,7 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     Parameters
     ----------
     scope : str
-        Scope code.
+        Scope code; the slug of the study for ``kind='study'``.
     part : str
         Part name; ``'meta'`` is the scope route itself in the forecast routes; the table name
         (``'ratings'``...) in the database routes.
@@ -673,10 +678,10 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     kind : str, optional
         ``'forecast'`` (the default), ``'analysis'`` (the houses analysis), ``'data'`` (the
         tables of the database), ``'events'`` (the list of elections of a scope), ``'event'``
-        (a part of a past election, needs ``date``) or ``'backtest'``.
+        (a part of a past election, needs ``date``), ``'backtest'`` or ``'study'`` (a part of a study).
     table : str, optional
-        CSV table of an analysis part (``'events'`` for the herding by cycle) or of the model of
-        an event (``'shares'``, ``'seats'`` or ``'blocks'``).
+        CSV table of an analysis part (``'events'`` for the herding by cycle), of the model of
+        an event (``'shares'``, ``'seats'`` or ``'blocks'``) or of a study part (``'last-seat'``...).
     date : str, optional
         Election date, for ``kind='event'``.
 
@@ -686,8 +691,9 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
         ``'/api/v1/forecast/{scope}[/{mode}]/{part}[?run=...&format=...]'``,
         ``'/api/v1/analysis/{scope}/{part}[?format=...&table=...]'``,
         ``'/api/v1/{part}?scope={scope}[&format=...]'``, ``'/api/v1/events/{scope}[?format=...]'``,
-        ``'/api/v1/events/{scope}/{date}/{part}[?format=...&table=...]'`` or
-        ``'/api/v1/backtest/{scope}/{part}[?format=...]'``.
+        ``'/api/v1/events/{scope}/{date}/{part}[?format=...&table=...]'``,
+        ``'/api/v1/backtest/{scope}/{part}[?format=...]'`` or
+        ``'/api/v1/studies/{scope}/{part}[?format=...&table=...]'``.
     """
     if kind == 'analysis':
         url = '/api/v1/analysis/{}/{}'.format(scope, part)
@@ -701,6 +707,9 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     elif kind == 'backtest':
         url = '/api/v1/backtest/{}/{}'.format(scope, part)
         params = (('format', fmt),)
+    elif kind == 'study':
+        url = '/api/v1/studies/{}/{}'.format(scope, part)
+        params = (('format', fmt), ('table', table))
     elif kind == 'data':
         url = '/api/v1/' + part
         params = (('scope', scope), ('format', fmt))
@@ -915,7 +924,7 @@ def bundle_part(read, *args) -> Optional[dict]:
     ----------
     read : callable
         Reader of the site that returns the bytes of the part envelope (``site().analysis``,
-        ``site().event`` or ``site().backtest``).
+        ``site().event``, ``site().backtest`` or ``site().study``).
     *args
         Arguments of the reader.
 

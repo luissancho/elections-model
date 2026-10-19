@@ -61,3 +61,15 @@
   {% endfor %}
 </div>
 {%- endmacro %}
+{#- Card-link of a published study (`study_cards`), for the band of the home and the index of the Análisis: title,
+    subtitle and the verdict of each question as a coloured pill; with `dates`, the dates of the registration of the
+    prediction and of its check. -#}
+{% macro study_card(study, dates=False) -%}
+<a class="card card-link" href="{{ study.href }}">
+  <h3>{{ study.title }}</h3>
+  <p>{{ study.subtitle }}</p>
+  <span class="study-verdicts">{% for verdict in study.verdicts %}<span class="pill {{ verdict.tone }}" title="{{ verdict.question }}">{{ verdict.label }}</span>{% endfor %}</span>
+  {% if dates and study.registered_at %}<small class="study-date">Predicción registrada el {{ study.registered_at|date }}</small>{% endif %}
+  {% if dates and study.checked_at %}<small class="study-date">Comprobada el {{ study.checked_at|date }}</small>{% endif %}
+</a>
+{%- endmacro %}

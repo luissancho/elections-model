@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}El voto CERA en España y el efecto de la «Ley de Nietos»{% endblock %}
+{% block description %}¿Es posible orquestar con éxito un fraude electoral significativo a través del censo exterior?{% endblock %}
+{% block scripts %}
+  {#- the module of the page (`pages/analisis-cera.js`) arrives with the charts (task 18) -#}
+  <script type="module" src="/dist/js/pages/common.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+    <div id="content" class="stack">
+      <header id="study-head">
+        {#- the pills of the state of the study (task 15) -#}
+        <h1 class="study-title">El voto CERA en España y el efecto de la «Ley de Nietos»</h1>
+        <p class="study-subtitle">¿Es posible orquestar con éxito un fraude electoral significativo a través del censo exterior?</p>
+      </header>
+      {#- nav.section-nav.toc (task 15) -#}
+      {{ m.kpis(kpis) }}
+      {#- #resumen and #p1 (task 15) -#}
+      {#- #p2 and #p3 (task 16) -#}
+      {#- #debate, #comprobacion, #datos and the glossary (task 17) -#}
+    </div>
+{% endblock %}

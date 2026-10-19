@@ -2,8 +2,8 @@
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
-``backtest``), plus ``common`` (routes, messages, environment and shared context) and ``filters`` (formatting
-filters). This facade re-exports every public name, so callers use ``pages.<name>``.
+``backtest``, ``analisis``), plus ``common`` (routes, messages, environment and shared context) and ``filters``
+(formatting filters). This facade re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
 from the templates of ``web/templates``. Every context is built from the published bundle through
@@ -13,6 +13,8 @@ of the scope, which is not tied to a run and is read as published.
 The formatting filters follow the rules of ``web/dist/js/format.js``. Like ``webapi``, this module
 does not import the model nor ``publish``, so the web workers stay light.
 """
+from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, cera_context,
+                       study_cards, study_context, study_part, verdict_rows)
 from .backtest import backtest_context, backtest_part, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PATH_COLUMNS, RANKING_COLUMNS, RANKING_KEYS,
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,

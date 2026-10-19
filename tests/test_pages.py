@@ -15,7 +15,8 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, pages, publish, webapi
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
-    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event,
+    write_study
 )
 
 
@@ -1333,12 +1334,14 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'inicio', 'metodo', 'promedios', 'slugs']
+    assert names == ['analisis', 'backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'inicio', 'metodo',
+                     'promedios', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
     assert pages.common_context.__module__ == 'mtpy.lib.pages.common'
     assert pages.casas_context.__module__ == 'mtpy.lib.pages.casas'
+    assert pages.cera_context.__module__ == 'mtpy.lib.pages.analisis'
     assert pages.TEMPLATES_DIR.endswith(os.path.join('web', 'templates')) and os.path.isdir(pages.TEMPLATES_DIR)
 
 
@@ -2231,7 +2234,7 @@ def test_menu_labels_and_titles(api):
     assert '>Histórico Errores</a>' in page and '>Ranking Encuestadoras</a>' in page
     assert '<title>Demoscopio · Histórico Errores</title>' in page
     assert [entry['label'] for entry in pages.PAGES] == ['Inicio', 'Histórico Errores', 'Ranking Encuestadoras',
-                                                          'Método']
+                                                          'Análisis', 'Método']
 
 
 def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app):
@@ -3547,3 +3550,144 @@ def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links
     assert '<span class="rt" style="background: {}">0,9</span>'.format(pages.gradient(0.9, 0, 100, pages.RATING_COLORS)) in tbody
     data = initial(body)['polls']['polls']
     assert data[0]['rating'] == 0.8 and data[0]['href'] == '/casas/cis'
+
+
+# --- Análisis ------------------------------------------------------------------------------------------------------
+
+STUDY_VERDICTS = [('q1', 'SÍ'), ('q2', 'SIN EVIDENCIA'), ('q3', 'NO')]
+
+
+def publish_study(fs, meta=None):
+    """Publica el estudio de los fixtures y vacía las cachés del sitio."""
+    write_study(fs, meta=meta)
+    webapi.site().manifest_cache_clear()
+
+
+def verdict_pills(page):
+    """`(tono, etiqueta)` de las píldoras de veredicto de una página, en orden."""
+    return re.findall(r'<span class="pill (q[123])"[^>]*>([^<]+)</span>', page)
+
+
+def test_menu_has_analisis_between_ranking_and_metodo(api):
+    page = html(call(api, '/metodo')[2])
+    nav = page[page.index('<nav aria-label="Secciones">'):]
+    nav = nav[:nav.index('</nav>')]
+    assert re.findall(r'href="([^"]+)"', nav) == ['/', '/elecciones', '/casas', '/analisis', '/metodo']
+    assert '>Análisis</a>' in nav and 'aria-current' not in nav.split('/analisis')[1].split('</a>')[0]
+    # the tab bar of the phones keeps its five entries: the Análisis pages light none
+    assert [row['key'] for row in pages.TABBAR] == ['inicio', 'promedios', 'escanos', 'historico', 'ranking']
+    assert '/analisis' not in pages.common.TABBAR_ACTIVE
+    page = html(call(api, '/analisis')[2])
+    tabbar = page[page.index('class="tabbar'):]
+    assert 'aria-current' not in tabbar[:tabbar.index('</nav>')]
+
+
+def test_analisis_index_lists_the_study_or_says_none(api, fresh_app):
+    status, _, body = call(api, '/analisis')
+    page = html(body)
+    assert status == 200 and '<title>Demoscopio · Análisis</title>' in page
+    assert 'href="/analisis" aria-current="page">Análisis</a>' in page
+    assert 'Preguntas del debate electoral contestadas con datos oficiales, comprobables después de cada elección' in page
+    assert 'Todavía no hay ningún análisis publicado.' in page and 'href="/analisis/voto-cera"' not in page
+    publish_study(fresh_app.fs)
+    page = html(call(api, '/analisis')[2])
+    meta = fixture_data('study-meta')
+    assert 'Todavía no hay ningún análisis publicado.' not in page
+    assert meta['title'] in page and meta['subtitle'] in page and 'href="/analisis/voto-cera"' in page
+    assert verdict_pills(page) == STUDY_VERDICTS
+    assert 'Predicción registrada el 18 oct 2026' in page and 'Comprobada el' not in page
+    publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'})
+    assert 'Comprobada el 3 dic 2026' in html(call(api, '/analisis')[2])
+
+
+def test_analisis_unknown_study_is_404(api, fresh_app):
+    for path in ('/analisis/nope', '/analisis/voto-cera'):
+        status, headers, body = call(api, path)
+        assert status == 404 and headers['cache-control'] == 'no-store', path
+        assert 'Ese análisis no existe o no está publicado.' in html(body), path
+    publish_study(fresh_app.fs)
+    assert call(api, '/analisis/nope')[0] == 404
+    status, _, body = call(api, '/analisis/voto-cera')
+    page = html(body)
+    assert status == 200
+    assert '<title>Demoscopio · El voto CERA en España y el efecto de la «Ley de Nietos»</title>' in page
+    assert '¿Es posible orquestar con éxito un fraude electoral significativo a través del censo exterior?' in page
+    assert 'href="/analisis" aria-current="page">Análisis</a>' in page
+    assert 'class="kpis"' in page and '2.769.645' in page
+    assert '<span class="dlt up">▲ 19%</span> frente a 2023 (2.327.388)' in page  # the arrow is not escaped
+    assert set(initial(body)) == {'state', 'census', 'origins', 'participation', 'ecological', 'slope', 'cannibal',
+                                  'sensitive', 'gap', 'radar'}
+
+
+def test_inicio_shows_the_studies_band_only_with_a_study(api, fresh_app):
+    write_event(fresh_app.fs)  # a past election, so the band goes after «Elecciones pasadas»
+    page = html(call(api, '/')[2])
+    assert 'id="analisis"' not in page and 'href="/analisis/voto-cera"' not in page
+    publish_study(fresh_app.fs)
+    page = html(call(api, '/')[2])
+    assert '<div class="sec-h" id="analisis"><h2>Análisis</h2><a href="/analisis">Ver los análisis ›</a></div>' in page
+    band = page[page.index('id="analisis"'):]
+    assert page.index('id="past"') < page.index('id="analisis"')
+    meta = fixture_data('study-meta')
+    assert 'class="card card-link" href="/analisis/voto-cera"' in band
+    assert '<h3>{}</h3>'.format(meta['title']) in band and meta['subtitle'] in band
+    assert verdict_pills(band) == STUDY_VERDICTS
+
+
+def test_api_url_study():
+    assert pages.api_url('voto-cera', 'prediction', kind='study', fmt='csv', table='last-seat') == \
+        '/api/v1/studies/voto-cera/prediction?format=csv&table=last-seat'
+    assert pages.api_url('voto-cera', 'meta', kind='study') == '/api/v1/studies/voto-cera/meta'
+
+
+def test_cera_context_figures_come_from_the_parts(api, fresh_app):
+    publish_study(fresh_app.fs)
+    context = pages.cera_context(pages.parse_state({}))
+    meta, check = fixture_data('study-meta'), fixture_data('study-check')
+    scenario = fixture_data('study-prediction')['scenarios']['convocatoria']
+    previous = next(row for row in check['elections'] if row['date'] == '2023-07-23')
+    figures = context['figures']
+    assert figures['n_over_gap_2023'] == previous['n_over_gap']
+    assert figures['decided_2023'] == [row['name'] for row in previous['decided']]
+    assert figures['net_psoe_2023'] == previous['net_psoe']
+    assert figures['census_total'] == 2769645 == meta['election']['census_total']
+    assert figures['electors_2023'] == scenario['census'] - scenario['new_electors']
+    assert figures['growth_abs'] == scenario['new_electors']
+    assert figures['growth_pct'] == pytest.approx(100 * scenario['new_electors'] / figures['electors_2023'])
+    assert figures['voters_projected'] == scenario['voters_projected']
+    assert figures['votes_projected'] == scenario['votes_projected']
+    assert figures['voters_2023'] == scenario['voters_2023'] and figures['changed'] is False
+    assert figures['net_before'] == meta['regression']['net_before']
+    assert figures['p_slope'] == meta['regression']['p_slope']
+    assert figures['ratio_article'] == 2.0 and figures['r'] == -0.743 and figures['n_ecological'] == 3
+    assert figures['max_gain'] == 1 and figures['pool'] == 181032 and figures['grid_observed'] == 0
+    assert figures['report']['n_max'] == 3 and figures['sensitive_all'] == {'stock_share': 24.1, 'growth_share': 17.39}
+    # the fixture meta has neither the litigation nor the participation rates: no error, `None`
+    assert figures['litigation'] is None and figures['latam_rate'] is None and figures['rest_rate'] is None
+    assert context['registered'] == {'at': '2026-10-18', 'claim': meta['registered']['claim']}
+    assert context['checked'] is False and context['sources'] == meta['sources']
+    assert [verdict['label'] for verdict in context['verdicts']] == ['SÍ', 'SIN EVIDENCIA', 'NO']
+    assert [kpi['label'] for kpi in context['kpis']] == ['Censo CERA 29-N', 'Inscripciones en litigio',
+                                                         'Votantes CERA esperados']
+    assert context['kpis'][0]['value'] == '2.769.645' and context['kpis'][2]['value'] == '239.221'
+    assert len(context['csv_links']) == 11
+    assert {'label': 'Último escaño por provincia',
+            'href': '/api/v1/studies/voto-cera/prediction?format=csv&table=last-seat'} in context['csv_links']
+    assert context['article']['date'] == '2026-06-30' and context['article']['url'].startswith('https://medium.com/')
+    assert [page['href'] for page in context['pages'] if page['active']] == ['/analisis']
+    gap = context['initial']['gap']
+    assert set(gap) == {'convocatoria', 'sin_litigio'} and gap['sin_litigio'][0]['net'] == 6.9
+    assert context['initial']['radar']['max'] == [100, 100, 100]
+    # with the litigation and the rates of `params`, the KPI rows quote them
+    params = meta['params'] | {'litigation': {'count': 163020, 'as_of': '2026-10-12'},
+                               'participation': {'latam': 0.05, 'rest': 0.1}}
+    publish_study(fresh_app.fs, meta={'params': params, 'registered_at': None, 'registered': None})
+    context = pages.cera_context(pages.parse_state({}))
+    assert context['registered'] is None and context['figures']['litigation'] == 163020
+    assert context['figures']['latam_rate'] == 5 and context['figures']['rest_rate'] == 10
+    kpis = context['kpis']
+    assert '<span class="dlt up">▲ 19%</span> frente a 2023 (2.327.388)' in str(kpis[0]['support'])
+    assert kpis[1]['value'] == '163.020'
+    assert kpis[1]['support'] == ('suspendidas por el Supremo el 10-09, mantenido el 12-10 · '
+                                  'censo vigente: cerrado el 1-10-2026')
+    assert kpis[2]['support'] == '~5% Latam · ~10% resto · 2023: 208.431'
