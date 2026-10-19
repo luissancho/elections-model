@@ -185,7 +185,7 @@ XLSX de `data/`), con docstrings al estilo del repo. Lo que calcula, en el orden
   nacional (SUMAR 120 %, PP 99 %, PSOE 92 %, VOX 90 %).
 - Inferencia ecológica: por provincia, peso latinoamericano del censo CERA (cruce provincia × país del cierre de
   julio de 2023) frente a cuota de izquierda del voto CERA provincial de 2023, sobre **todas las provincias con un
-  censo CERA mínimo** (`params.ecological_min_census`, fijado para que solo queden fuera Ceuta y Melilla): `r`,
+  mínimo de votantes CERA** (`params.ecological_min_voters` = 200, que solo deja fuera Ceuta y Melilla): `r`,
   pendiente y cuartiles, los que salgan. El artículo daba −0,77 sobre 43 provincias, pero las nueve excluidas
   (Ceuta, Melilla, La Rioja, Navarra, Baleares, Murcia, Las Palmas, A Coruña y Madrid) no responden a ningún umbral
   sino, con toda probabilidad, a un fallo de casado de nombres en el cálculo original (decisión de Luis: calcular
@@ -455,7 +455,7 @@ octubre o uno nuevo `shade_scale` de 0 al máximo, en verde); no son mapas de ca
                     "derived_from": ["consulados/cyl-2026.csv", "consulados/extremadura-2025.csv", "consulados/aragon-2026.csv"]},
   "periods": {"article": [["2019-03-01", "2022-10-01"], ["2022-10-01", "2026-05-01"]]},
   "sensitive_magnitude": 5,
-  "ecological_min_census": <el umbral que deja fuera solo Ceuta y Melilla>,
+  "ecological_min_voters": 200,
   "check": {"max_gain": 1},
   "placement_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA"],
   "madrid_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA", "URUGUAY", "CHILE"]
@@ -607,7 +607,15 @@ calculado.
   cierre mensual, no hasta el 1 de agosto. La serie mensual es la única fuente provincia × país, y la diferencia
   es de un mes.
 - **Periodos actualizados.** Tienen la misma longitud (47 + 47 meses: 2018-11 → 2022-10 → 2026-09). Avanzan con
-  cada cierre: el segundo acaba en el último y el primero gana meses por el principio.
+  cada cierre: el segundo acaba en el último y el primero gana meses por el principio. La página enseña estos
+  (`now`) en las preguntas 1 y 2 y en la correlación del debate; la réplica del artículo con su ventana (marzo 2019
+  – octubre 2022 – mayo 2026: ×2,2, 422.253, 24,1 → 17,4) queda en «Cómo leerlo». Una parte sin `now` cae a la
+  del artículo y «Cómo leerlo» lo dice.
+- **Siglas.** Las partes llevan el nombre completo de Infoelectoral y su sigla (`winner_sigla`,
+  `runner_up_sigla`, `winner_with_sigla`, `winner_without_sigla`); la página y la isla solo imprimen la sigla.
+- **Censo de 2023 del incremento.** Es el cierre mensual del 1-6-2023 (`meta.election.baseline_date`), 2.327.388,
+  no el censo oficial de Infoelectoral (2.328.260): «Cómo leerlo» de la pregunta 3 lo dice. La cifra de sobres de
+  la OCE (233.688) no la lleva ninguna parte: es un hecho de contexto en `OCE_RECEIVED` (`pages/cera.py`).
 - **Predicción registrada.** Texto de `registered.claim`: «El voto CERA de las generales del {fecha} no dará al
   PSOE ni a la izquierda un saldo neto de más de {max_gain} escaño(s)». Va con los escaños por bloque de los dos
   escenarios.
@@ -672,11 +680,29 @@ calculado.
 3. **Registrar cuando la dé por buena,** con el árbol limpio:
    `python job.py publish '{"what": "study", "study": "voto-cera", "register": true}'`.
 4. **Tras el escrutinio del 29-N:**
-   - añadir `data/cera/escrutinio/es-2026-11-29.csv` y su entrada en `candidatures.json`;
-   - cargar `PROV_02_202611_1.xlsx` y su `.json` como en cada elección;
+   - añadir `data/cera/escrutinio/es-2026-11-29.csv` y su entrada en `candidatures.json` (sin la entrada, el
+     cálculo para con «cera: no candidatures map for 2026-11-29 in cera/escrutinio/candidatures.json»);
+   - cargar `PROV_02_202611_1.xlsx` y su `.json` a la vez, como en cada elección: el `.json` lleva las siglas, y
+     sin él no hay bloques ni siglas en la página;
+   - antes de publicar la comprobación, cotejar `params.blocks` con las siglas de `PROV_02_202611_1.json`: una
+     sigla de izquierda que no esté en los bloques cae en «Otros» y rebaja `net_left`, que es lo que decide el
+     acierto;
    - publicar otra vez: la comprobación y `checked_at` se rellenan solos.
 
-   Mientras falte el XLSX, la publicación salta el escrutinio del 29-N sin avisar.
+   Mientras falte el XLSX, la publicación deja fuera el escrutinio del 29-N y lo anota en
+   `meta.skipped_scrutinies`.
+
+   Estos tests fijan el estado de antes de la elección y habrá que actualizarlos cuando lleguen los ficheros del
+   29-N (y, el de los libros mensuales, también en enero de 2027, con `cerapropais_27`):
+   - `tests/test_cera_behaviour.py`: los recuentos de ficheros (`test_available_results_lists_every_general_election`,
+     16 y el último 2023-07-23; `test_participation_generales_periods`, 13);
+   - `tests/test_cera_study.py`: `test_compute_cera_runs_end_to_end` (las dos comprobaciones y `verdict_input`
+     nulo), `test_compute_cera_behaviour_block` (13 resultados y las dos generales con escrutinio),
+     `test_compute_cera_seats_block` (la réplica del informe) y
+     `test_read_scrutinies_skips_the_elections_without_results_and_needs_their_candidatures`;
+   - `tests/test_publish_studies.py`: `test_export_study_figures` (las dos fechas de la comprobación y el veredicto
+     nulo) y `test_publish_study_sets_checked_at_when_the_election_has_a_scrutiny` (`checked_at` nulo antes);
+   - `tests/test_cera_data.py`: `test_cera_data_folder_is_complete` (21 libros mensuales; 22 en enero de 2027).
 5. **Cada mes,** `--what cera` y `publish study` para refrescar la serie.
 6. **Integrar.** Fusionar la rama `analisis-voto-cera` en `dev` después de confirmar su trabajo pendiente. Habrá
    conflictos previsibles en `pages/common.py` y en los ficheros de test.

@@ -965,13 +965,15 @@ def _debate(parts: dict, previous: dict) -> dict:
     dict
         - ``report``: ``prediction.report`` (``votes_mean``, ``votes_max``, ``n_mean``, ``n_max``,
           ``participation_mean``, ``participation_max``).
-        - ``history``: ``_history`` of ``participation``.
+        - ``history``: ``_history`` of ``participation``; ``since``: the year of its first general election (where
+          the historical participation of the report of the 23 seats starts), or ``None``.
         - ``verdict``: ``None`` without ``previous``, else ``{'year', 'n', 'm', 'provinces', 'against'}``: its
           provinces over the gap, the seats the CERA vote decided and where, and whether the left lost with it
           (``net_left < 0``).
         - ``passed``: ``{'rows', 'year', 'study', 'changed'}``: the rows of ``check.rows`` whose CERA voters
-          exceeded the gap, by gap, with the winners by their siglas; the year of their election (the latest of ``check.elections``), whether it is
-          the study's and how many provinces of ``check.rows`` the CERA vote decided.
+          exceeded the gap, by gap, with the winners by their siglas; the year of their election (the latest of
+          ``check.elections``), whether it is the study's and how many provinces of ``check.rows`` the CERA vote
+          decided.
         - ``correlation``: the correlation of the additions with the size of the province (``r_size_growth`` of
           the ``now`` periods, or of the article's without them).
         - ``madrid_census``: the CERA census of Madrid in the election of the study.
@@ -983,6 +985,7 @@ def _debate(parts: dict, previous: dict) -> dict:
     latest = elections[-1] if elections else {}
     madrid = next((row for row in _get(parts['census'], 'election_provinces') or []
                    if row.get('region_id') == MADRID), {})
+    dates = [row['date'] for row in parts['participation'].get('generales') or [] if row.get('date')]
     verdict = None
 
     if previous:
@@ -994,6 +997,7 @@ def _debate(parts: dict, previous: dict) -> dict:
     return {
         'report': parts['prediction'].get('report') or {},
         'history': _history(parts['participation']),
+        'since': _year(min(dates)) if dates else None,
         'verdict': verdict,
         'passed': {'rows': _by_gap([_with_siglas(row, *WINNERS) for row in rows if row.get('over_gap')]),
                    'year': _year(latest.get('date')),

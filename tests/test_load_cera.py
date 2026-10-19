@@ -94,6 +94,39 @@ def test_fetch_cera_writes_nothing_when_an_election_table_fails(tmp_path):
     assert sorted(os.listdir(str(tmp_path / 'cera' / 'ine'))) == ['cerapropais_26.xlsx']
 
 
+def test_fetch_cera_downloads_only_the_election_tables_it_lacks(tmp_path):
+    data = make_data(tmp_path)
+    for name in ELECTION_URLS:
+        shutil.copy(os.path.join(INE, name), str(tmp_path / 'cera' / 'ine' / name))
+    os.remove(str(tmp_path / 'cera' / 'ine' / 'elecgen2026_tab6.xlsx'))
+    asked = []
+
+    def logged(url):
+        asked.append(url)
+        return fake_fetch(url)
+
+    result = fetch_cera(data, 2026, fetch=logged)
+    assert sorted(asked) == sorted([MONTHLY_URL.format(yy=26), ELECTION_URLS['elecgen2026_tab6.xlsx']])
+    assert sorted(result['files']) == ['cera/ine/cerapropais_26.xlsx', 'cera/ine/elecgen2026_tab6.xlsx']
+    assert (tmp_path / 'cera' / 'ine' / 'elecgen2026_tab6.xlsx').read_bytes() == real_bytes('elecgen2026_tab6.xlsx')
+
+
+def test_fetch_cera_refreshes_the_workbook_when_the_election_tables_are_down(tmp_path):
+    """With the three tables in place, a failing table URL does not block the monthly refresh."""
+    data = make_data(tmp_path)
+    for name in ELECTION_URLS:
+        shutil.copy(os.path.join(INE, name), str(tmp_path / 'cera' / 'ine' / name))
+
+    def tables_down(url):
+        if url in ELECTION_URLS.values():
+            raise RuntimeError('HTTP 404')
+        return fake_fetch(url)
+
+    result = fetch_cera(data, 2026, fetch=tables_down)
+    assert result['files'] == ['cera/ine/cerapropais_26.xlsx'] and len(result['months_new']) == 1
+    assert (tmp_path / 'cera' / 'ine' / 'cerapropais_26.xlsx').read_bytes() == real_bytes('cerapropais_26.xlsx')
+
+
 def test_run_load_accepts_the_cera_step():
     spec = importlib.util.spec_from_file_location('run_load', os.path.join(ROOT, 'load', 'run_load.py'))
     module = importlib.util.module_from_spec(spec)

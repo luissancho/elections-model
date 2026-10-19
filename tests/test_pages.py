@@ -4030,6 +4030,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     claim = debate[debate.index('<article class="claim">'):]
     claim = claim[:claim.index('</article>')]
     assert '<h3>«Hasta 23 escaños»</h3>' in claim and 'The Objective, 4-9-2026' in claim
+    assert 'la media desde 2019 o la máxima provincial' in claim  # the first general election of the parts
     assert 'con el 0,3% de participación, 12 votos y 1 provincia;' in claim  # n_mean 1,2: one province
     assert 'con el 0,9%, 40 votos y 3 provincias.' in claim
     assert '<dt>Problema 1 · no reparte entre partidos</dt>' in claim
@@ -4099,6 +4100,12 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     page = cera_page(api)
     table = cera_table(cera_section(page, 'comprobacion'), 'check-table')
     assert 'borrador: predicción sin registrar' in table and 'registrada el' not in table
+    assert 'la media desde 2019 o' in page
+    publish_study(fresh_app.fs, parts={'participation': {'generales': []}})
+    assert 'la media desde 1986 o' in cera_page(api)  # no general election in the parts: the typed fallback
+    publish_study(fresh_app.fs, meta={'registered_at': None, 'registered': None},
+                  parts={'check': {'elections': base['elections'][:-1] + [one]}})
+    page = cera_page(api)
     assert ('<div class="verd">Con el criterio del informe, en 2023 había 1 escaño en juego; no cambió '
             'ninguno.</div>') in page
     assert not re.search(r'(?<![\d.,])1 (escaños|provincias)\b', page)

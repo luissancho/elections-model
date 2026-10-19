@@ -13,9 +13,9 @@ The report is saved to `files/stage/load_report.csv` and the downloaded articles
 `files/stage/wikipedia/`. A dry run reads the cache (the curation of aliases is iterative); with `--save` the
 articles are downloaded again unless `--cached` is given. Only regional scopes are accepted.
 
-The `cera` step does not load scopes: it downloads the INE census workbook of the current year and the election
-tables into `data/cera/ine/` (the files are written even without `--save`). It ignores `--scopes`, so
-`--scopes es --what cera` is enough.
+The `cera` step does not load scopes: it downloads the INE census workbook of the current year, and the election
+tables that are not there yet, into `data/cera/ine/` (the files are written even without `--save`). It ignores
+`--scopes`, so `--scopes es --what cera` is enough.
 """
 import argparse
 import json

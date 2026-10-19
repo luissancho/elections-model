@@ -154,6 +154,9 @@ class CeraStudy:
     scrutinies : dict[str, pd.DataFrame]
         Election date to its CERA scrutiny (`data.read_scrutiny`), for the elections with a scrutiny file and
         Infoelectoral results.
+    skipped_scrutinies : list[str]
+        The dates of the scrutiny files left out because their Infoelectoral results (`PROV_02` XLSX) are not
+        loaded yet, ascending (`_read_scrutinies`).
     cera : dict[str, pd.DataFrame]
         Election date to its CERA votes by `region_id` and candidature full name (`data.scrutiny_votes`), same keys.
     voters : dict[str, pd.Series]
@@ -213,6 +216,7 @@ class CeraStudy:
     madrid: dict
     results: dict
     scrutinies: dict
+    skipped_scrutinies: list
     cera: dict
     voters: dict
     blocks: dict
@@ -258,6 +262,46 @@ def _read_all_results(data: FileSystem) -> dict[str, Results]:
     return results
 
 
+def _read_scrutinies(data: FileSystem, results: dict, candidatures: dict) -> tuple[dict, list]:
+    """
+    Read the CERA scrutinies of `cera/escrutinio/` whose election has Infoelectoral results.
+
+    Parameters
+    ----------
+    data : FileSystem
+        The file system rooted at `data/`.
+    results : dict
+        Election date to its results (`_read_all_results`).
+    candidatures : dict
+        The candidatures map (`data.read_candidatures_map`).
+
+    Returns
+    -------
+    tuple
+        `(scrutinies, skipped)`: election date to its scrutiny (`data.read_scrutiny`), sorted by date, and the
+        dates of the scrutiny files left out because their election has no results loaded, ascending.
+
+    Raises
+    ------
+    ValueError
+        If a scrutiny with results has no entry in `cera/escrutinio/candidatures.json`.
+    """
+    scrutinies, skipped = {}, []
+    for name in data.glob('cera/escrutinio/es-*.csv'):
+        match = SCRUTINY.search(name)
+        if not match:
+            continue
+        date = match.group(1)
+        if date not in results:
+            skipped.append(date)
+            continue
+        if date not in candidatures:
+            raise ValueError(f'cera: no candidatures map for {date} in cera/escrutinio/candidatures.json')
+        scrutinies[date] = read_scrutiny(data.get_path(name))
+
+    return dict(sorted(scrutinies.items())), sorted(skipped)
+
+
 def _read_inputs(data: FileSystem, params: dict) -> dict:
     """
     Read the census, the results and the CERA scrutinies of the study.
@@ -273,7 +317,12 @@ def _read_inputs(data: FileSystem, params: dict) -> dict:
     -------
     dict
         The fields `countries`, `province_names`, `long`, `series`, `series_last`, `census`, `census_by_province`,
-        `results`, `scrutinies`, `cera`, `voters` and `blocks` of `CeraStudy`.
+        `results`, `scrutinies`, `skipped_scrutinies`, `cera`, `voters` and `blocks` of `CeraStudy`.
+
+    Raises
+    ------
+    ValueError
+        If a scrutiny with results has no entry in the candidatures map (`_read_scrutinies`).
     """
     provinces = read_provinces(data)
     long = read_monthly(data, provinces)
@@ -283,12 +332,7 @@ def _read_inputs(data: FileSystem, params: dict) -> dict:
     results = _read_all_results(data)
 
     candidatures = read_candidatures_map(data)
-    scrutinies = {}
-    for name in data.glob('cera/escrutinio/es-*.csv'):
-        match = SCRUTINY.search(name)
-        if match and match.group(1) in results:
-            scrutinies[match.group(1)] = read_scrutiny(data.get_path(name))
-    scrutinies = dict(sorted(scrutinies.items()))
+    scrutinies, skipped = _read_scrutinies(data, results, candidatures)
 
     return {
         'countries': read_countries(data.get_path(COUNTRIES)),
@@ -300,6 +344,7 @@ def _read_inputs(data: FileSystem, params: dict) -> dict:
         'census_by_province': census.groupby('region_id')['electors'].sum(),
         'results': results,
         'scrutinies': scrutinies,
+        'skipped_scrutinies': skipped,
         'cera': {date: scrutiny_votes(scrutiny, candidatures[date]) for date, scrutiny in scrutinies.items()},
         'voters': {date: scrutiny['voters'] for date, scrutiny in scrutinies.items()},
         'blocks': params['blocks']

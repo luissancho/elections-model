@@ -101,10 +101,12 @@ def _new_months(old_path: str, new_bytes: bytes, provinces: dict) -> list:
 
 def fetch_cera(data: FileSystem, year: int, fetch: Callable[[str], bytes] = _download) -> dict:
     """
-    Download the INE monthly workbook of a year and the election census tables into `cera/ine/`.
+    Download the INE monthly workbook of a year, and the election census tables missing in `cera/ine/`.
 
-    Everything is downloaded first and written only if every download succeeded, so a failure leaves the
-    previous files untouched.
+    The workbook is downloaded every time (it gains a month with each close); the election tables are fixed once
+    the census of the convocation is closed, so only the ones without a local copy are downloaded, and a failure
+    to download them cannot block the monthly refresh once they are in place. What is downloaded is downloaded
+    first and written only if every download succeeded, so a failure leaves the previous files untouched.
 
     Parameters
     ----------
@@ -122,7 +124,9 @@ def fetch_cera(data: FileSystem, year: int, fetch: Callable[[str], bytes] = _dow
         workbook has and the previous copy did not.
     """
     monthly_name = 'cerapropais_{:02d}.xlsx'.format(year % 100)
-    urls = {monthly_name: MONTHLY_URL.format(yy=year % 100), **ELECTION_URLS}
+    missing = {name: url for name, url in ELECTION_URLS.items()
+               if not data.exists('{}/{}'.format(INE_FOLDER, name))}
+    urls = {monthly_name: MONTHLY_URL.format(yy=year % 100), **missing}
     contents = {name: fetch(url) for name, url in urls.items()}
 
     months_new = _new_months(

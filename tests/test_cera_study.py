@@ -98,3 +98,22 @@ def test_read_all_results_skips_only_the_files_without_cera_columns(data_fs, mon
     monkeypatch.setattr(study_module, 'read_results', broken)
     with pytest.raises(ValueError, match='Diputados'):
         study_module._read_all_results(data_fs)
+
+
+def test_read_scrutinies_skips_the_elections_without_results_and_needs_their_candidatures(data_fs):
+    candidatures = study_module.read_candidatures_map(data_fs)
+    results = {'2019-11-10': object(), '2023-07-23': object()}
+    scrutinies, skipped = study_module._read_scrutinies(data_fs, results, candidatures)
+    assert sorted(scrutinies) == ['2019-11-10', '2023-07-23'] and skipped == []
+    # the 29-N scrutiny lands before its PROV_02 XLSX: left out, and said so
+    scrutinies, skipped = study_module._read_scrutinies(data_fs, {'2023-07-23': object()}, candidatures)
+    assert sorted(scrutinies) == ['2023-07-23'] and skipped == ['2019-11-10']
+    # a scrutiny with results and no entry in candidatures.json is an error, not a silent KeyError
+    without = {date: mapping for date, mapping in candidatures.items() if date != '2023-07-23'}
+    with pytest.raises(ValueError, match=r'cera: no candidatures map for 2023-07-23 in '
+                                         r'cera/escrutinio/candidatures\.json'):
+        study_module._read_scrutinies(data_fs, results, without)
+
+
+def test_compute_cera_records_the_skipped_scrutinies(study):
+    assert study.skipped_scrutinies == []

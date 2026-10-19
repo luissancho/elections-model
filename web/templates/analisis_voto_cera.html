@@ -614,8 +614,9 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
             <dl>
               <dt>Qué calcula</dt>
               <dd>
-                Censo CERA × participación histórica (la media desde 1986 o la máxima provincial), y cuenta las
-                provincias donde esos votos superan la brecha del último escaño de {{ baseline }}.
+                Censo CERA × participación histórica (la media desde {{ debate.since or '1986' }} o la máxima
+                provincial), y cuenta las provincias donde esos votos superan la brecha del último escaño de
+                {{ baseline }}.
                 {%- if report.get('votes_mean') is not none and report.get('votes_max') is not none %} Replicado con los
                 mismos datos: con el {{ report.participation_mean|pct(1) }} de participación, {{ report.votes_mean|int }}
                 votos y {{ many(report.n_mean, 'provincia', 'provincias') }}; con el {{ report.participation_max|pct(1) }},

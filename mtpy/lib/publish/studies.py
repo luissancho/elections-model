@@ -524,7 +524,8 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
         ``(data, {})``: ``data`` for ``study-meta`` with ``study``, ``title``, ``subtitle``, ``election``
         (``scope``, ``date``, ``census_closed``, ``census_total``, ``census_source`` and ``baseline_date``, the
         monthly close of the census of the baseline election, the base of the increment), the registration keys,
-        ``checked_at``, ``params``, ``sources``, ``series_last`` (``YYYY-MM-DD``), ``regression`` (``p_slope``
+        ``checked_at``, ``params``, ``sources``, ``series_last`` (``YYYY-MM-DD``), ``skipped_scrutinies`` (the
+        dates of the CERA scrutinies left out for lack of their Infoelectoral results), ``regression`` (``p_slope``
         and ``p_level`` with three significant digits, the slopes and mean net additions with two decimals),
         ``commit``, ``dirty``, ``versions`` and ``seconds``. No CSV twin.
     """
@@ -542,7 +543,8 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
                      'baseline_date': _iso(study.baseline_date)},
         **{key: (registration or {}).get(key) for key in REGISTRATION_KEYS},
         'checked_at': checked_at, 'params': study.params, 'sources': study_sources(study),
-        'series_last': _iso(study.series_last), 'regression': regression,
+        'series_last': _iso(study.series_last), 'skipped_scrutinies': list(study.skipped_scrutinies),
+        'regression': regression,
         'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'], 'seconds': seconds or {},
     }
     return data, {}
