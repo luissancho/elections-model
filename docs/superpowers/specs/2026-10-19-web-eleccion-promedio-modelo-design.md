@@ -1,9 +1,11 @@
 # Web: el promedio de sondeos y el modelo en el detalle de una elección
 
-Fecha: 2026-10-19. Estado: aprobada por Luis el 2026-10-19 ("Ok, adelante") tras la revisión del constructor; las
-tres preguntas del final quedan resueltas como se proponen (serie fuera de git, tarjetas tras los resultados,
-cifras de la ejecución a horizonte). Sigue a las fases 7e y 7f (detalle de una elección) y a la 8 (rediseño
-visual). Esta spec solo describe lo que cambia respecto de lo que hay en `dev`
+Fecha: 2026-10-19. Estado: cerrada el 2026-10-19 en `dev` (plan
+`docs/superpowers/plans/2026-10-19-web-eleccion-promedio-modelo.md`, nueve commits desde `df957d6`; 1086 tests en
+verde más 75 saltados, con el fallo previo y ajeno de `tests/test_pages_ejemplo.py`). Aprobada por Luis el mismo día
+("Ok, adelante") tras la revisión del constructor; las tres preguntas del final quedaron resueltas como se proponen
+(serie fuera de git, tarjetas tras los resultados, cifras de la ejecución a horizonte). Sigue a las fases 7e y 7f
+(detalle de una elección) y a la 8 (rediseño visual). Esta spec solo describe lo que cambia respecto de lo que hay en `dev`
 (`3c3aacd`).
 
 ## Intención
@@ -244,3 +246,14 @@ como decisiones mías, sin cambiar lo que se construye:
 - P2. La posición de las dos tarjetas, justo después de los resultados (P1, P2). ¿De acuerdo?
 - P3. Escaños y mayoría de la ejecución a horizonte en la tarjeta del modelo y en la fila fija (P2): cambia las
   cifras que hoy enseña "El modelo a cada horizonte". ¿De acuerdo?
+
+## Pendiente de Luis
+
+1. Correr el backtest para que escriba `series.csv` (fuera de git): `python job.py backtest '{"scopes":"all"}'`.
+2. Volver a publicar las elecciones: `python job.py publish '{"what":["event"],"scopes":"all","event_date":"all"}'`.
+   Hasta entonces la tarjeta «Promedio de sondeos» avisa de que la serie no está publicada; «Lo que dijo el modelo»
+   y las filas fijas ya funcionan con la parte `model`.
+3. Desplegar (plantillas y JS de `web/dist`); la ruta nueva `/api/v1/events/{ámbito}/{fecha}/series` entra en
+   `deploy/check-api.sh`.
+4. El test de integración `tests/integration/test_backtest.py::test_run_case_2023_30_days` contra la base comprueba
+   la serie de un caso real.
