@@ -1,5 +1,6 @@
 """
-View models of the cards of the CERA study page (``/analisis/voto-cera``), one per question, and their helpers.
+View models of the cards of the CERA study page (``/analisis/voto-cera``), one per question plus the debate and
+the check, and their helpers.
 
 ``analisis.cera_context`` assembles them; each takes the data of the parts it reads and returns what its card
 renders, with ``None`` for what the parts do not have (the templates guard it), never an error.
@@ -36,6 +37,10 @@ SCENARIOS = tuple(SCENARIO_LABELS)
 PREDICTION_ROWS = (('Votantes CERA', 'voters_2023', 'voters_projected'),
                    ('Votos a candidaturas', 'votes_2023', 'votes_projected'))
 BLOCK_LABELS = {LEFT: 'Escaños izquierda (PSOE + SUMAR)', RIGHT: 'Escaños derecha (PP + VOX)'}
+# The debate and the check: the period of ``participation.generales`` before the voto rogado (the historical
+# participation the report of the 23 seats uses) and the provinces of the table of the check shown before «Ver más»
+BEFORE_ROGADO = 'antes'
+CHECK_SHOWN = 20
 
 
 def _get(data: Optional[dict], *keys):
@@ -708,4 +713,190 @@ def _question_3(parts: dict, figures: dict, gap: list, last_seat_csv: Optional[s
         'placement_countries': [_country_name(name) for name in params.get('placement_countries') or []],
         'three': _scenario_rows(sensitivity, figures),
         'uniform': _pct_label(UNIFORM_SPLIT),
+    }
+
+
+def _by_gap(rows: list) -> list:
+    """
+    Rows sorted by the gap of their last seat, the tightest first and the ones without a gap last.
+
+    Parameters
+    ----------
+    rows : list of dict
+        Rows with ``gap``.
+
+    Returns
+    -------
+    list of dict
+        The rows, sorted (stable).
+    """
+    return sorted(rows, key=lambda row: (row.get('gap') is None, row.get('gap') or 0))
+
+
+def _history(participation: dict) -> Optional[dict]:
+    """
+    The CERA participation in the general elections before the voto rogado and the historical maximum of voters,
+    for the third problem of the claim of the 23 seats.
+
+    Parameters
+    ----------
+    participation : dict
+        Data of the ``participation`` part (``generales``, with ``period``).
+
+    Returns
+    -------
+    dict or None
+        ``None`` without a general election of ``BEFORE_ROGADO``, else ``{'from', 'to'}`` (the years of those
+        elections), ``rate_lo``, ``rate_hi``, ``electors_lo`` and ``electors_hi`` (their range) and ``max_voters``
+        and ``max_year`` (the election of the series with the most CERA voters).
+    """
+    rows = [row for row in participation.get('generales') or [] if row.get('date')]
+    before = [row for row in rows if row.get('period') == BEFORE_ROGADO]
+    voted = [row for row in rows if row.get('voters') is not None]
+
+    if not before or not voted:
+        return None
+
+    rates = [row['rate'] for row in before if row.get('rate') is not None]
+    electors = [row['electors'] for row in before if row.get('electors') is not None]
+    top = max(voted, key=lambda row: row['voters'])
+
+    return {'from': _year(min(row['date'] for row in before)), 'to': _year(max(row['date'] for row in before)),
+            'rate_lo': min(rates) if rates else None, 'rate_hi': max(rates) if rates else None,
+            'electors_lo': min(electors) if electors else None, 'electors_hi': max(electors) if electors else None,
+            'max_voters': top['voters'], 'max_year': _year(top['date'])}
+
+
+def _debate(parts: dict, previous: dict) -> dict:
+    """
+    View model of the card of the debate (``#debate``): the replication of the report of the 23 seats, its
+    verdict, the table «2023 ya pasó la prueba» and the facts of the other claims.
+
+    Parameters
+    ----------
+    parts : dict
+        The data of every part by name (``{}`` for a missing one).
+    previous : dict
+        The entry of ``check.elections`` of the last general election before the study's (``{}`` without one).
+
+    Returns
+    -------
+    dict
+        - ``report``: ``prediction.report`` (``votes_mean``, ``votes_max``, ``n_mean``, ``n_max``,
+          ``participation_mean``, ``participation_max``).
+        - ``history``: ``_history`` of ``participation``.
+        - ``verdict``: ``None`` without ``previous``, else ``{'year', 'n', 'm', 'provinces', 'against'}``: its
+          provinces over the gap, the seats the CERA vote decided and where, and whether the left lost with it
+          (``net_left < 0``).
+        - ``passed``: ``{'rows', 'year', 'study', 'changed'}``: the rows of ``check.rows`` whose CERA voters
+          exceeded the gap, by gap; the year of their election (the latest of ``check.elections``), whether it is
+          the study's and how many provinces of ``check.rows`` the CERA vote decided.
+        - ``correlation``: the correlation of the additions with the size of the province (``r_size_growth`` of
+          the article periods).
+        - ``madrid_census``: the CERA census of Madrid in the election of the study.
+    """
+    check, meta = parts['check'], parts['meta']
+    rows = check.get('rows') or []
+    elections = sorted((row for row in check.get('elections') or [] if row.get('date')), key=lambda row: row['date'])
+    latest = elections[-1] if elections else {}
+    madrid = next((row for row in _get(parts['census'], 'election_provinces') or []
+                   if row.get('region_id') == MADRID), {})
+    verdict = None
+
+    if previous:
+        verdict = {'year': _year(previous.get('date')), 'n': previous.get('n_over_gap'),
+                   'm': previous.get('n_decided'),
+                   'provinces': [row.get('name') for row in previous.get('decided') or []],
+                   'against': previous.get('net_left') is not None and previous['net_left'] < 0}
+
+    return {
+        'report': parts['prediction'].get('report') or {},
+        'history': _history(parts['participation']),
+        'verdict': verdict,
+        'passed': {'rows': _by_gap([row for row in rows if row.get('over_gap')]), 'year': _year(latest.get('date')),
+                   'study': bool(latest) and latest.get('date') == _get(meta, 'election', 'date'),
+                   'changed': sum(1 for row in rows if row.get('decided'))},
+        'correlation': _get(parts['placement'], 'correlations', 'article', 'r_size_growth'),
+        'madrid_census': madrid.get('election'),
+    }
+
+
+def _within_reach(last_seat: list) -> Optional[dict]:
+    """
+    The province whose last seat the new CERA vote is closest to taking: the smallest factor of participation that
+    would make its net effect reach its gap.
+
+    Parameters
+    ----------
+    last_seat : list of dict
+        ``prediction.last_seat``.
+
+    Returns
+    -------
+    dict or None
+        ``None`` when no province has a positive net effect, else ``{'name', 'winner', 'runner_up', 'factor',
+        'only'}``: ``factor`` the ``participation_needed`` without the sign ``×`` and ``only`` whether it is the
+        only province with a positive net effect.
+    """
+    rows = [row for row in last_seat if row.get('participation_needed') is not None
+            and row.get('net') is not None and row['net'] > 0]
+
+    if not rows:
+        return None
+
+    row = min(rows, key=lambda row: (row['participation_needed'], row.get('gap') or 0))
+
+    return {'name': row.get('name'), 'winner': row.get('winner'), 'runner_up': row.get('runner_up'),
+            'factor': _times(row['participation_needed'])[1:], 'only': len(rows) == 1}
+
+
+def _check(parts: dict) -> dict:
+    """
+    View model of the card of the check (``#comprobacion``): one row per election with a CERA scrutiny, the row of
+    the study's election while it has none, the province of the registration note and, after the scrutiny, the
+    provinces and the result.
+
+    Parameters
+    ----------
+    parts : dict
+        The data of every part by name (``{}`` for a missing one).
+
+    Returns
+    -------
+    dict
+        - ``elections``: per entry of ``check.elections``, by date, ``{'label', 'date', 'year', 'voters', 'rate',
+          'n_over_gap', 'n_decided', 'where', 'net_psoe', 'net_left'}``; ``where`` the decided provinces
+          (``{'name', 'without', 'with', 'crosses_block'}``: the last seat without and with the CERA vote).
+        - ``day``: the date of the study's election; ``pending`` whether ``elections`` does not have it yet.
+        - ``result``: the row of ``elections`` of the study's election, or ``None``.
+        - ``precedents``: the rows of ``elections`` before it.
+        - ``rows``: ``check.rows`` by gap, with ``shown`` (the first ``CHECK_SHOWN``); ``hidden`` counts the rest.
+        - ``reach``: ``_within_reach`` of ``prediction.last_seat``.
+    """
+    check = parts['check']
+    day = _get(parts['meta'], 'election', 'date')
+    elections = []
+
+    for row in sorted((row for row in check.get('elections') or [] if row.get('date')), key=lambda row: row['date']):
+        elections.append({
+            'label': 'Generales ' + _year(row['date']), 'date': row['date'], 'year': _year(row['date']),
+            'voters': row.get('voters'), 'rate': row.get('rate'), 'n_over_gap': row.get('n_over_gap'),
+            'n_decided': row.get('n_decided'), 'net_psoe': row.get('net_psoe'), 'net_left': row.get('net_left'),
+            'where': [{'name': seat.get('name'), 'without': seat.get('winner_without'),
+                       'with': seat.get('winner_with'), 'crosses_block': seat.get('crosses_block')}
+                      for seat in row.get('decided') or []],
+        })
+
+    result = next((row for row in elections if row['date'] == day), None)
+    rows = [dict(row, shown=index < CHECK_SHOWN) for index, row in enumerate(_by_gap(check.get('rows') or []))]
+
+    return {
+        'elections': elections,
+        'day': day,
+        'pending': day is not None and result is None,
+        'result': result,
+        'precedents': [row for row in elections if day is None or row['date'] < day],
+        'rows': rows,
+        'hidden': max(len(rows) - CHECK_SHOWN, 0),
+        'reach': _within_reach(parts['prediction'].get('last_seat') or []),
     }

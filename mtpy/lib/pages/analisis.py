@@ -14,7 +14,7 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import site
 from .common import api_url, bundle_part, common_context
-from .cera import SCENARIOS, UNIFORM_SPLIT, _get, _question_1, _question_2, _question_3
+from .cera import SCENARIOS, UNIFORM_SPLIT, _check, _debate, _get, _question_1, _question_2, _question_3
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
@@ -511,8 +511,9 @@ def cera_context(state: dict) -> dict:
         (``_figures``), ``kpis`` (``_kpis``), ``registered`` (``{'at', 'claim'}`` of the registration, or ``None``
         while it is a draft), ``checked`` (whether ``check.verdict`` is set), ``sources`` (``meta.sources``),
         ``csv_links`` (``_csv_links``), ``article`` (``ARTICLE``), ``initial`` (``_island``), ``election_day``
-        (the date of the election in words, ``_long_date``) and the view models of the three questions, ``q1``,
-        ``q2`` and ``q3`` (``cera._question_1``, ``_question_2`` and ``_question_3``).
+        (the date of the election in words, ``_long_date``), the view models of the three questions, ``q1``,
+        ``q2`` and ``q3`` (``cera._question_1``, ``_question_2`` and ``_question_3``), and those of the debate and
+        of the check, ``debate`` (``cera._debate``) and ``comprobacion`` (``cera._check``).
 
     Raises
     ------
@@ -539,6 +540,8 @@ def cera_context(state: dict) -> dict:
         election_day=_long_date(_get(meta, 'election', 'date')),
         q1=_question_1(parts['census'], figures),
         q2=_question_2(parts, figures),
+        debate=_debate(parts, _previous_election(parts['check'], meta)),
+        comprobacion=_check(parts),
     )
     context['q3'] = _question_3(parts, figures, context['initial']['gap'][SCENARIOS[0]],
                                 api_url(CERA, 'prediction', kind='study', fmt='csv', table='last-seat'))

@@ -3759,18 +3759,18 @@ def test_cera_page_head_and_question_1(api, fresh_app):
     assert 'suma 442.257 electores desde las generales de 2023 (+19%)' in summary
     assert '(Argentina ×2,0)' in summary and 'Cuba' not in summary  # no row for Cuba: its clause goes
     assert 'class="how"' in p1 and 'p &lt; 0,001' in p1
-    assert 'medium.com' not in page  # the article appears only in «Datos y método» (task 17)
+    assert 'medium.com' not in page[:page.index('id="datos"')]  # the article appears only in «Datos y método» (task 17)
     # the default fixture has three provinces: no hidden rows and no button; a checked study says so
     publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'}, parts={'check': {'verdict': 'acierto'}})
     page = cera_page(api)
     provinces = page[page.index('id="provinces-table"'):]
     assert 'id="provinces-more"' not in page and ' hidden>' not in provinces[:provinces.index('</table>')]
     assert '<span class="pill ok">Comprobada con el escrutinio del 3 dic 2026</span>' in page
-    assert 'Predicción registrada' not in page
+    assert 'Predicción registrada' not in page[:page.index('class="study-title"')]  # the head: the check's note has it
     publish_study(fresh_app.fs, meta={'registered_at': None, 'registered': None})
     page = cera_page(api)
     assert '<span class="pill">Borrador · predicción sin registrar</span>' in page
-    assert 'Predicción registrada' not in page and 'medium.com' not in page
+    assert 'Predicción registrada' not in page and 'medium.com' not in page[:page.index('id="datos"')]
 
 
 def test_cera_question_1_helpers():
@@ -3828,7 +3828,10 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     assert '<p class="ctitle">A más censo latinoamericano, menos voto a la izquierda</p>' in p2
     assert '3 provincias, generales · r = −0,74' in p2
     assert '<p class="ctitle">Las provincias sensibles reciben menos altas que el peso que ya tenían</p>' in p2
-    assert 'class="band"' not in p2  # no regional election with both steps in the fixture's `vote.processes`
+    band = p2[p2.index('<div class="band">'):]  # the three regional elections of `vote.processes`, both steps
+    band = band[:band.index('</div>')]
+    assert '<b>No.</b>' in band and 'cae en las 3 comunidades' in band
+    assert 'Castilla y León 6,0 → 1,3; Andalucía 5,0 → 2,5; Aragón 4,0 → 2,0' in band
     madrid = cera_table(p2, 'madrid-table')
     assert '<td><b>Madrid, Venezuela</b></td><td>8,0%</td><td>–</td><td>9%</td>' in madrid
     assert '<td><b>Madrid, conjunto</b></td>' in madrid
@@ -3882,7 +3885,7 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     summary = summary[:summary.index('</div>')]
     assert '<b>Con datos reales, cero escaños.</b>' in summary and 'ninguna de las 3 provincias' in summary
     assert 'class="how"' in p3 and '163.020' in p3[p3.index('class="how"'):]
-    assert 'medium.com' not in page
+    assert 'medium.com' not in page[:page.index('id="datos"')]
     # richer parts: the gated sentences follow the data (margins that fall, a null cell, a scenario that changes)
     vote = fixture_data('study-vote')
     processes = (vote['processes'][:1] + regional_vote('Castilla y León', ('2022-02-13', 6.0, 45.0),
@@ -3926,6 +3929,121 @@ def test_cera_page_question_1_copy_fixes(api, fresh_app):
     publish_study(fresh_app.fs, parts={'census': census | {'countries': census['countries'] + [cuba | {'ratio': 2.4}]}})
     p1 = cera_section(cera_page(api), 'p1')
     assert 'apenas se mueve' not in p1 and 'Cuba ×2,4' in p1
+
+
+def cera_rows(table):
+    """`(provincia, celdas)` de cada fila de una tabla de la página del estudio, con `hidden` en las ocultas."""
+    return re.findall(r'<tr( hidden)?>\s*<td><b>([^<]+)</b></td>(.*?)</tr>', table)
+
+
+def check_row(region_id, name, gap, voters, decided=False):
+    """Una fila de `check.rows` (el último escaño con y sin CERA de una provincia)."""
+    return {'region_id': region_id, 'name': name, 'magnitude': 5, 'winner_with': 'PP',
+            'winner_without': 'PSOE' if decided else 'PP', 'gap': gap, 'voters_cera': voters,
+            'over_gap': voters > gap, 'decided': decided, 'crosses_block': decided}
+
+
+def test_cera_page_debate_check_and_sources(api, fresh_app):
+    publish_study(fresh_app.fs)
+    page = cera_page(api)
+    debate = cera_section(page, 'debate')
+    assert page[:page.index('id="debate"')].endswith('<section class="card" ')
+    assert '<h2>Lo que dice el debate, y por qué no se sostiene <span class="pill bad">' in debate
+    assert 'Cada cifra mide algo; ninguna mide escaños.' in debate
+    # the claim of the 23 seats, with the replication of the report from `prediction.report`
+    claim = debate[debate.index('<article class="claim">'):]
+    claim = claim[:claim.index('</article>')]
+    assert '<h3>«Hasta 23 escaños»</h3>' in claim and 'The Objective, 4-9-2026' in claim
+    assert 'con el 0,3% de participación, 12 votos y 1 provincia' in claim
+    assert 'con el 0,9%, 40 votos y 3 provincias' in claim
+    assert '<dt>Problema 1 · no reparte entre partidos</dt>' in claim
+    assert '<dt>Problema 3 · participación de otro censo</dt>' in claim
+    assert 'unos 383.000 votantes (2008)' in claim  # the parts carry no general election before the voto rogado
+    assert ('<div class="verd">Con el criterio del informe, en 2023 había 3 escaños en juego; cambió uno, en Madrid, '
+            'y en contra de la hipótesis.</div>') in claim
+    # 2023 already passed the test: the over-gap rows of `check.rows`, by gap, with the D'Hondt with and without CERA
+    passed = cera_table(debate, 'passed-table')
+    assert ('<p class="ctitle">2023 ya pasó la prueba: el voto CERA real superó la brecha en 3 provincias y cambió 1 '
+            'escaño</p>') in debate
+    rows = cera_rows(passed)
+    assert [name for _, name, _ in rows] == ['Girona', 'Cantabria', 'Madrid']  # Valencia stays under its gap
+    assert ('<td>PP</td><td>PSOE</td><td>1.339</td><td><b>44.807</b></td>'
+            '<td class="pos">Sí, al PP, cruza de bloque</td>') in rows[2][2]
+    assert rows[0][2].rstrip().endswith('<td class="mut">No</td>')
+    assert 'Esta misma tabla se rellenará con el escrutinio del 29-N.' in debate
+    assert debate.count('<article class="claim">') == 4
+    for title in ('«16 provincias decisivas»', '«162 pueblos con más electores fuera que dentro»',
+                  '«Un censo fabricado para la izquierda»'):
+        assert '<h3>{}</h3>'.format(title) in debate, title
+    assert 'la cuota de izquierda del CERA baja en todas' in debate  # the three regional elections of the fixture
+    assert 'r = 0,80 con el tamaño de la provincia' in debate
+    assert 'cómo se adscribe a una provincia a quien nunca vivió en España' in debate
+    assert 'class="how"' in debate
+    # the check, before the scrutiny: the two elections and the registered row of the 29-N
+    check = cera_section(page, 'comprobacion')
+    assert ('<h2>Comprobación: ¿decidió el voto CERA algún escaño, y a favor de quién? '
+            '<span class="pill warn">Pendiente del escrutinio CERA</span></h2>') in check
+    table = cera_table(check, 'check-table')
+    rows = cera_rows(table)
+    assert [name for _, name, _ in rows] == ['Generales 2019', 'Generales 2023', 'Generales 29 nov 2026']
+    assert ('<td>208.431</td><td>0,6%</td><td>3</td><td><b>1</b></td><td>Madrid: PSOE → PP</td><td>−1</td>'
+            '<td>−1</td>') in rows[1][2]
+    assert 'no dará al PSOE ni a la izquierda un saldo neto de más de 1 escaño' in rows[2][2]
+    assert 'registrada el 18 oct 2026' in rows[2][2] and 'borrador' not in table
+    assert 'id="check-rows"' not in page and 'id="check-more"' not in page
+    note = check[check.index('<p class="note">'):]
+    note = note[:note.index('</p>')]
+    assert 'Lo que se registra: el saldo neto del PSOE y de la izquierda por el voto CERA no mayor que 1 escaño' in note
+    assert 'Madrid (PSOE frente a PP)' in note and 'se multiplicara por 1,5' in note
+    assert 'class="how"' in check
+    # data and method: the sources, the CSV and, last, the article
+    datos = cera_section(page, 'datos')
+    assert '<ul class="src-list">' in datos and '<a href="https://infoelectoral.interior.gob.es/">' in datos
+    assert datos.count('class="pill brand" href="/api/v1/studies/voto-cera/') == 11
+    assert page.count('medium.com') == 1 and page.index('medium.com') > page.index('id="datos"')
+    assert datos.rstrip().endswith('El voto CERA en España y el efecto de la «Ley de Nietos»</a>.</p>')
+    assert 'se publicó en Medium el 30 jun 2026' in datos
+    glossary = page[page.index('<details class="how" id="glosario">'):]
+    glossary = glossary[:glossary.index('</details>')]
+    assert page.index('id="glosario"') > page.index('id="datos"')
+    assert '<summary>Glosario</summary>' in glossary and '<dt>Voto rogado</dt>' in glossary
+    assert re.findall(r'<dt>([^<]+)</dt>', glossary) == [
+        'CERA', 'Voto rogado', 'Ley de Nietos', 'Censo de la convocatoria', 'Brecha del último escaño', 'Efecto neto',
+        'Inferencia ecológica', 'Provincias sensibles', 'Colocación óptima']
+    # a draft: the row of the 29-N says so
+    publish_study(fresh_app.fs, meta={'registered_at': None, 'registered': None})
+    table = cera_table(cera_section(cera_page(api), 'comprobacion'), 'check-table')
+    assert 'borrador: predicción sin registrar' in table and 'registrada el' not in table
+    # after the scrutiny: the row of the 29-N filled, the provinces of the 29-N and the verdict from the data
+    base = fixture_data('study-check')
+    rows = [check_row(100 + i, 'Provincia {:02d}'.format(i), 1000 + i, 500) for i in range(21)]
+    rows[0] = check_row(28, 'Madrid', 900, 40000, decided=True)
+    election = base['elections'][-1] | {'date': '2026-11-29', 'voters': 250000, 'rate': 9.0, 'n_over_gap': 1,
+                                         'net_psoe': 0, 'net_left': 0}
+    publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'}, parts={'check': {
+        'elections': base['elections'] + [election], 'rows': rows, 'verdict': 'acierto'}})
+    page = cera_page(api)
+    check = cera_section(page, 'comprobacion')
+    assert '<span class="pill ok">Escrutinio del 3 dic 2026 cargado</span>' in check
+    assert [name for _, name, _ in cera_rows(cera_table(check, 'check-table'))] == [
+        'Generales 2019', 'Generales 2023', 'Generales 2026']
+    provinces = cera_rows(cera_table(check, 'check-rows'))
+    assert len(provinces) == 21 and [hidden for hidden, _, _ in provinces].count(' hidden') == 1
+    assert provinces[0][1] == 'Madrid' and '<td class="pos">Sí, cruza de bloque</td>' in provinces[0][2]
+    assert '<button type="button" class="more" id="check-more" hidden>Ver más</button>' in check
+    note = check[check.index('<p class="note ok">'):]
+    note = note[:note.index('</p>')]
+    assert 'Predicción registrada el 18 oct 2026' in note and 'acierto' in note
+    assert 'Resultado: saldo del PSOE 0, de la izquierda 0' in note
+    debate = cera_section(page, 'debate')
+    assert 'Con el escrutinio del 29-N: el voto CERA real superó la brecha en 1 provincia' in debate
+    assert 'Esta misma tabla se rellenará' not in debate
+    # a failure, the same way
+    publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'}, parts={'check': {
+        'elections': base['elections'] + [election | {'net_psoe': 2, 'net_left': 2}], 'rows': rows,
+        'verdict': 'fallo'}})
+    check = cera_section(cera_page(api), 'comprobacion')
+    assert '<p class="note ok">' not in check and 'fallo' in check and 'saldo del PSOE +2' in check
 
 
 def test_shade_scale_filter_grows_green_from_lo_to_hi():

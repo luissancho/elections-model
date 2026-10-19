@@ -12,7 +12,7 @@
         "voters": 190000,
         "rate": 0.8,
         "n_over_gap": 2,
-        "n_decided": 3,
+        "n_decided": 1,
         "decided": [
           {
             "region_id": 28,
@@ -33,8 +33,8 @@
         "date": "2023-07-23",
         "voters": 208431,
         "rate": 0.6,
-        "n_over_gap": 2,
-        "n_decided": 3,
+        "n_over_gap": 3,
+        "n_decided": 1,
         "decided": [
           {
             "region_id": 28,
@@ -54,31 +54,52 @@
     ],
     "rows": [
       {
-        "date": "2023-07-23",
+        "region_id": 17,
+        "name": "Girona",
+        "magnitude": 6,
+        "winner_with": "Junts",
+        "winner_without": "Junts",
+        "gap": 284.0,
+        "voters_cera": 2335,
+        "over_gap": true,
+        "decided": false,
+        "crosses_block": false
+      },
+      {
+        "region_id": 39,
+        "name": "Cantabria",
+        "magnitude": 5,
+        "winner_with": "VOX",
+        "winner_without": "VOX",
+        "gap": 403.0,
+        "voters_cera": 3463,
+        "over_gap": true,
+        "decided": false,
+        "crosses_block": false
+      },
+      {
         "region_id": 28,
         "name": "Madrid",
-        "magnitude": 3,
-        "gap": 120.5,
-        "votes": 1000,
-        "decided": true
+        "magnitude": 37,
+        "winner_with": "PP",
+        "winner_without": "PSOE",
+        "gap": 1339.0,
+        "voters_cera": 44807,
+        "over_gap": true,
+        "decided": true,
+        "crosses_block": true
       },
       {
-        "date": "2023-07-23",
-        "region_id": 8,
-        "name": "Barcelona",
-        "magnitude": 4,
-        "gap": 121.5,
-        "votes": 2000,
-        "decided": false
-      },
-      {
-        "date": "2023-07-23",
         "region_id": 46,
         "name": "Valencia",
-        "magnitude": 5,
-        "gap": 122.5,
-        "votes": 3000,
-        "decided": false
+        "magnitude": 16,
+        "winner_with": "PP",
+        "winner_without": "PP",
+        "gap": 5120.0,
+        "voters_cera": 3000,
+        "over_gap": false,
+        "decided": false,
+        "crosses_block": false
       }
     ],
     "verdict": null
