@@ -1,15 +1,16 @@
 """
 Past elections page context: the list of published elections and the detail of one.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
 from .common import (OTHERS_COLOR, Catalog, analysis_part, api_url, block_color, bundle_part, common_context,
                      published_scopes)
-from .filters import _madrid_tz, fmt_num
-from .promedios import BLOCK_ORDER, chart_polls, lead_strip, poll_months, polls_table, pollster_options
+from .filters import _madrid_tz, fmt_date, fmt_num
+from .promedios import (BLOCK_ORDER, _leaders, chart_polls, lead_strip, poll_months, polls_table,
+                        pollster_options)
 from .slugs import event_href
 
 SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias')
@@ -17,14 +18,17 @@ SUMMARY_KEYS = ('n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blo
 LEFT_BLOCK = 'Izquierda'
 HISTORY_COLUMNS = ('scope', 'scope_name', 'year', 'event_date', 'event', 'pollster', 'days', 'error_avg',
                    'error_blocks', 'error_blocks_abs', 'bias')
+# CSV links of the detail: part, table of the part (``model`` only), label (``{h}``: the horizon of the series) and
+# what the link needs published (``None``: nothing; ``'model'``: the backtest; ``'series'``: the daily series).
 EVENT_CSV = (
-    ('pollsters', None, 'Encuestadoras en esta elección', False),
-    ('polls', None, 'Sondeos de esta elección, con su error', False),
-    ('cycle', None, 'Sondeos del ciclo, tal como se publicaron', False),
-    ('results', None, 'Resultados oficiales', False),
-    ('model', 'shares', 'Modelo: voto a cada horizonte', True),
-    ('model', 'seats', 'Modelo: escaños a cada horizonte', True),
-    ('model', 'blocks', 'Modelo: bloques a cada horizonte', True),
+    ('pollsters', None, 'Encuestadoras en esta elección', None),
+    ('polls', None, 'Sondeos de esta elección, con su error', None),
+    ('cycle', None, 'Sondeos del ciclo, tal como se publicaron', None),
+    ('results', None, 'Resultados oficiales', None),
+    ('series', None, 'Promedio de sondeos del modelo a {h} días', 'series'),
+    ('model', 'shares', 'Modelo: voto a cada horizonte', 'model'),
+    ('model', 'seats', 'Modelo: escaños a cada horizonte', 'model'),
+    ('model', 'blocks', 'Modelo: bloques a cada horizonte', 'model'),
 )
 # Rows of the results table the detail shows before "Ver más" when the election has no list of parties in
 # ``data/params.json`` (``parties.event``), or when none of its results is in that list.
@@ -734,6 +738,13 @@ def chart_parties(catalog: Catalog, *groups: list) -> list:
     return known + [name for name in wanted if name not in known]
 
 
+def _horizon_value(row: dict, key: str):
+    """Value of ``key`` of a backtest row from the horizon run (``key_h``) when it has one, else the nowcast."""
+    value = row.get(key + '_h')
+
+    return value if value is not None else row.get(key)
+
+
 def horizon_tables(model: dict) -> list:
     """
     Tables of the backtest of an election, one per horizon.
@@ -746,37 +757,119 @@ def horizon_tables(model: dict) -> list:
     Returns
     -------
     list of dict
-        By horizon ascending: ``{'horizon', 'seats_valid', 'shares', 'seats', 'blocks'}``. ``seats_valid``
-        is ``False`` when any seats or blocks row of the horizon has it ``False`` (a case whose seats
-        could not be projected). ``shares`` and ``seats``
-        have the ``main`` parties (``name``, ``official``, ``model``; ``shares`` also
-        ``error = model - official``, rounded to 2 decimals); ``blocks`` the ``block``,
-        ``official_seats``, ``model_seats``, ``p_majority`` and ``majority`` of each block.
+        By horizon ascending: ``{'horizon', 'seats_valid', 'rows', 'blocks'}``. ``seats_valid`` is ``False``
+        when any seats or blocks row of the horizon has it ``False`` (a case whose seats could not be
+        projected). ``rows`` has the ``main`` parties of ``shares``: ``name``, ``official``, ``model``,
+        ``error = model - official`` (2 decimals), ``official_seats`` and ``model_seats`` (the seats row of
+        the party, ``None`` without one); ``blocks`` the ``block``, ``official_seats``, ``model_seats``,
+        ``p_majority`` and ``majority`` of each block. The seats and the probability come from the horizon
+        run (``model_h``, ``model_seats_h``, ``p_majority_h``) when the row has them, else from the nowcast.
     """
     tables = []
 
     for horizon in sorted(model.get('horizons') or []):
-        shares = [
+        seats = {row['party']: row for row in model.get('seats') or [] if row['horizon'] == horizon}
+        rows = [
             {'name': row['party'], 'official': row['official'], 'model': row['model'],
              'error': None if row['official'] is None or row['model'] is None
-             else round(row['model'] - row['official'], 2)}
+             else round(row['model'] - row['official'], 2),
+             'official_seats': seats.get(row['party'], {}).get('official'),
+             'model_seats': _horizon_value(seats.get(row['party'], {}), 'model')}
             for row in model.get('shares') or [] if row['horizon'] == horizon and row.get('main')
         ]
-        seats = [
-            {'name': row['party'], 'official': row['official'], 'model': row['model']}
-            for row in model.get('seats') or [] if row['horizon'] == horizon and row.get('main')
-        ]
         blocks = [
-            {key: row.get(key) for key in ('block', 'official_seats', 'model_seats', 'p_majority', 'majority')}
+            {'block': row.get('block'), 'official_seats': row.get('official_seats'),
+             'model_seats': _horizon_value(row, 'model_seats'), 'p_majority': _horizon_value(row, 'p_majority'),
+             'majority': row.get('majority')}
             for row in model.get('blocks') or [] if row['horizon'] == horizon
         ]
         seats_valid = all(row.get('seats_valid') is not False
                           for part in ('seats', 'blocks') for row in model.get(part) or []
                           if row['horizon'] == horizon)
-        tables.append({'horizon': horizon, 'seats_valid': seats_valid, 'shares': shares, 'seats': seats,
-                       'blocks': blocks})
+        tables.append({'horizon': horizon, 'seats_valid': seats_valid, 'rows': rows, 'blocks': blocks})
 
     return tables
+
+
+def model_last(model: dict, event_date: str) -> Optional[dict]:
+    """
+    What the model said at the shortest horizon of the backtest of an election.
+
+    Parameters
+    ----------
+    model : dict
+        Data of the ``model`` part (``horizons``, ``shares``, ``seats``, ``blocks``).
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    dict or None
+        ``{'horizon', 'date', 'pct', 'seats', 'seats_valid'}`` of the shortest horizon: ``date`` the day the
+        model was frozen (the election minus the horizon, ISO), ``pct`` the vote of every party of ``shares``
+        (``{party: model}``), ``seats`` those of every party of ``seats`` from the horizon run (``model_h``,
+        else ``model``) and ``seats_valid`` whether every seats row of the horizon is valid. ``None`` without
+        horizons.
+    """
+    horizons = sorted(model.get('horizons') or [])
+
+    if not horizons:
+        return None
+
+    horizon = horizons[0]
+    shares = [row for row in model.get('shares') or [] if row['horizon'] == horizon]
+    seats = [row for row in model.get('seats') or [] if row['horizon'] == horizon]
+
+    return {
+        'horizon': horizon,
+        'date': (date.fromisoformat(event_date) - timedelta(days=horizon)).isoformat(),
+        'pct': {row['party']: row.get('model') for row in shares},
+        'seats': {row['party']: _horizon_value(row, 'model') for row in seats},
+        'seats_valid': all(row.get('seats_valid') is not False for row in seats),
+    }
+
+
+def fixed_rows(last: Optional[dict], results_rows: list, parties: list, colors: dict, event_date: str) -> list:
+    """
+    Fixed rows of the footer of the polls table of a past election: the model at its shortest horizon and the
+    official result, in the vote view.
+
+    Parameters
+    ----------
+    last : dict or None
+        ``model_last`` of the election; ``None`` gives no rows.
+    results_rows : list of dict
+        Results rows (``party``, ``pct``).
+    parties : list of str
+        Columns of the table, in order.
+    colors : dict
+        Colour by party name; a party without one gets ``OTHERS_COLOR``.
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    list of dict
+        ``{'label', 'small', 'title', 'cells'}`` per row, the cells as in ``polls_table`` (``value`` at one
+        decimal or the dash, ``leader``, ``color``): «Promedio de sondeos» (``modelo · a {h} días``, with the
+        freeze day as ``title``) and «Resultado» (the election date, no ``title``).
+    """
+    if last is None:
+        return []
+
+    def cells(values):
+        return [{'value': fmt_num(value, 1), 'leader': leader, 'color': colors.get(name, OTHERS_COLOR)}
+                for name, value, leader in zip(parties, values, _leaders(values))]
+
+    pct = {row.get('party'): row.get('pct') for row in results_rows}
+
+    return [
+        {'label': 'Promedio de sondeos', 'small': 'modelo · a {} días'.format(last['horizon']),
+         'title': 'Congelado el {}: solo los sondeos publicados hasta entonces'.format(fmt_date(last['date'])),
+         'cells': cells([last['pct'].get(name) for name in parties])},
+        {'label': 'Resultado', 'small': fmt_date(event_date), 'title': None,
+         'cells': cells([pct.get(name) for name in parties])},
+    ]
 
 
 def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dict:
@@ -852,7 +945,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     block_rows = event_block_rows(results_rows, blocks_of, lambda block: block_color(block, context['meta'], catalog))
     links = [
         {'label': label, 'href': api_url(scope, name, fmt='csv', kind='event', date=date, table=table)}
-        for name, table, label, needs_model in EVENT_CSV if has_model or not needs_model
+        for name, table, label, needs in EVENT_CSV if needs is None or (needs == 'model' and has_model)
     ]
 
     summary = dict(meta.get('summary') or {})

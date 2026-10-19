@@ -1754,8 +1754,8 @@ def test_published_events_and_horizon_tables(events_site):
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
     tables = context['horizon_tables']
     assert [table['horizon'] for table in tables] == [6, 30]
-    pp = tables[0]['shares'][0]
-    assert pp['name'] == 'PP' and pp['error'] == round(32.41 - 33.05, 2)
+    pp = tables[0]['rows'][0]
+    assert pp == {'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 140}
     assert set(tables[0]['blocks'][0]) == {'block', 'official_seats', 'model_seats', 'p_majority', 'majority'}
     assert pages.event_part('es', '2020-01-01', 'meta') is None
     with pytest.raises(HttpError) as missing:
@@ -1775,7 +1775,49 @@ def test_horizon_tables_flag_the_horizons_whose_seats_are_not_valid():
                          'p_majority': 0.4, 'majority': False, 'seats_valid': h == 6} for h in (6, 30)]}
     tables = pages.horizon_tables(model)
     assert [(table['horizon'], table['seats_valid']) for table in tables] == [(6, True), (30, False)]
-    assert tables[1]['shares'][0]['error'] == -1.0  # el voto sigue ahí aunque los escaños no valgan
+    assert tables[1]['rows'][0]['error'] == -1.0  # el voto sigue ahí aunque los escaños no valgan
+
+
+def test_model_last_takes_the_shortest_horizon_and_the_horizon_run_seats():
+    model = {'horizons': [30, 6],
+             'shares': [{'horizon': h, 'party': p, 'main': p != 'Cs', 'official': 33.0, 'model': m}
+                        for h in (6, 30) for p, m in (('PP', 32.4 if h == 6 else 31.0), ('Cs', 1.2))],
+             'seats': [{'horizon': h, 'party': 'PP', 'main': True, 'official': 137, 'model': 140, 'model_h': 142 if h == 6 else None,
+                        'seats_valid': True} for h in (6, 30)],
+             'blocks': []}
+    assert pages.model_last(model, '2023-07-23') == {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.4, 'Cs': 1.2},
+                                                     'seats': {'PP': 142}, 'seats_valid': True}
+    nowcast = {**model, 'horizons': [30]}
+    assert pages.model_last(nowcast, '2023-07-23')['seats'] == {'PP': 140} and pages.model_last(nowcast, '2023-07-23')['horizon'] == 30
+    assert pages.model_last({'horizons': [], 'shares': [], 'seats': [], 'blocks': []}, '2023-07-23') is None
+
+
+def test_fixed_rows_of_the_polls_table_footer():
+    last = {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.4, 'PSOE': 31.0}, 'seats': {'PP': 140}, 'seats_valid': True}
+    results = [{'party': 'PP', 'pct': 33.06, 'seats': 160}, {'party': 'PSOE', 'pct': 31.44, 'seats': 150}]
+    colors = {'PP': '#1d84ce', 'PSOE': '#e4001c'}
+    rows = pages.fixed_rows(last, results, ['PP', 'PSOE', 'VOX'], colors, '2023-07-23')
+    assert [(row['label'], row['small']) for row in rows] == [('Promedio de sondeos', 'modelo · a 6 días'), ('Resultado', '23 jul 2023')]
+    assert rows[0]['title'] == 'Congelado el 17 jul 2023: solo los sondeos publicados hasta entonces' and rows[1]['title'] is None
+    assert [cell['value'] for cell in rows[0]['cells']] == ['32,4', '31,0', '–'] and [cell['leader'] for cell in rows[0]['cells']] == [True, False, False]
+    assert [cell['value'] for cell in rows[1]['cells']] == ['33,1', '31,4', '–'] and rows[1]['cells'][2]['color'] == pages.OTHERS_COLOR
+    assert pages.fixed_rows(None, results, ['PP'], colors, '2023-07-23') == []
+
+
+def test_horizon_tables_merge_vote_and_seats_and_prefer_the_horizon_run():
+    model = {'horizons': [6],
+             'shares': [{'horizon': 6, 'party': 'PP', 'main': True, 'official': 33.05, 'model': 32.41},
+                        {'horizon': 6, 'party': 'Cs', 'main': False, 'official': 1.0, 'model': 1.5}],
+             'seats': [{'horizon': 6, 'party': 'PP', 'main': True, 'official': 137, 'model': 140, 'model_h': 142, 'seats_valid': True}],
+             'blocks': [{'horizon': 6, 'block': 'Derecha', 'official_seats': 169, 'model_seats': 171, 'model_seats_h': 173,
+                         'p_majority': 0.4, 'p_majority_h': 0.45, 'majority': False, 'seats_valid': True}]}
+    [table] = pages.horizon_tables(model)
+    assert table['rows'] == [{'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 142}]
+    assert table['blocks'] == [{'block': 'Derecha', 'official_seats': 169, 'model_seats': 173, 'p_majority': 0.45, 'majority': False}]
+    model['seats'][0]['model_h'] = None
+    del model['blocks'][0]['model_seats_h'], model['blocks'][0]['p_majority_h']
+    [table] = pages.horizon_tables(model)
+    assert table['rows'][0]['model_seats'] == 140 and table['blocks'][0]['model_seats'] == 171 and table['blocks'][0]['p_majority'] == 0.4
 
 
 def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(events_site, monkeypatch):
