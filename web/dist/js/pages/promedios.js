@@ -5,20 +5,21 @@
 import {Catalog} from '../catalog.js';
 import {blockPolls, blockProjection, blockSeries, parseSeriesHash, seriesHash} from '../blocks.js';
 import {renderEvolution} from '../charts/evolution.js';
-import {renderHemicycle} from '../charts/hemicycle.js';
+import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
 import {renderSeries, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
 import {sparklineSvg} from '../sparkline.js';
-import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend, renderLegend} from './legend-dom.js';
 import {wirePollsTable} from './polls-wire.js';
+import {wireDownload} from '../share.js';
 
 const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
 const BLOCKS_VIEW = 'bloques';
 
 /**
- * Draw the hemicycle, wire its Partidos/Bloques switch (which also shows the matching results table) and draw
- * the evolution.
+ * Draw the hemicycle, wire its Partidos/Bloques switch (which also shows the matching results table) and its
+ * download button (the view drawn, as a signed image) and draw the evolution.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
@@ -57,10 +58,12 @@ function paintResults(initial, catalog) {
     },
   };
   const el = document.getElementById('hemicycle');
+  let shown = views.partidos;  // the view drawn, the one the download button exports
 
   /** Draw the hemicycle of `view` and show its results table, hiding the other one. */
   function draw(view) {
     const chosen = views[view];
+    shown = chosen;
     el.setAttribute('aria-label', chosen.label);
     tryDraw(() => renderHemicycle(el, chosen.seats, {
       colors: chosen.colors, order: chosen.order, nSeats, majority, deltas: chosen.deltas, year: deltas.year,
@@ -74,6 +77,10 @@ function paintResults(initial, catalog) {
   }
 
   draw('partidos');
+  wireDownload(document.getElementById('hemicycle-download'), (box) => hemicycleOption(shown.seats, {
+    colors: shown.colors, order: shown.order, nSeats, majority, deltas: shown.deltas, year: deltas.year,
+    width: box.width, height: box.height,
+  }), showError);
   const fieldset = document.getElementById('results-view');
   if (fieldset) {
     fieldset.hidden = false;

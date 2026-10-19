@@ -2354,6 +2354,31 @@ def test_promedios_results_switch_between_parties_and_blocks_from_the_hemicycle_
     assert not re.search(r'<section class="card" id="parties-card" hidden>', page)
 
 
+def test_promedios_hemicycle_card_offers_a_download_button_hidden_without_js(api):
+    """El hemiciclo se descarga como PNG firmado: el botón va en la cabecera de la tarjeta, oculto sin JS, y lleva
+    en sus atributos el título (la elección y su fecha), el subtítulo (el gráfico y la fecha de la estimación), la
+    firma (dominio del sitio y usuario de X del autor) y el nombre del fichero (sitio, gráfico, ámbito y fecha del
+    run)."""
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    hemi = page[page.index('id="hemicycle-card"'):page.index('id="hemicycle"')]
+    button = re.search(r'<header class="card-head"><div class="card-tools"><button type="button" class="tool-btn" '
+                       r'id="hemicycle-download" hidden((?: data-\w+="[^"]*")+)>(.*?)</button></div><h2>Hemiciclo ', hemi)
+    assert button, hemi
+    attrs = dict(re.findall(r'data-(\w+)="([^"]*)"', button.group(1)))
+    assert attrs['title'] == 'Elecciones generales · 29 nov 2026'
+    assert re.fullmatch(r'Hemiciclo · Estimación a \d+ \w+ 2026', attrs['subtitle']), attrs
+    assert attrs['sign'] == 'demoscopio.es · @luis_sancho'
+    assert attrs['file'] == 'demoscopio-hemiciclo-es-2026-10-08.png'
+    assert set(attrs) == {'title', 'subtitle', 'sign', 'file'}
+    assert button.group(2) == '<svg aria-hidden="true"><use href="#i-download"/></svg>Descargar'
+    assert 'id="i-download"' in page  # the icon is in the sprite
+    # the subtitle follows the mode and the file the scope
+    forecast = html(call(api, '/es', query='mode=forecast')[2]).replace('\n', ' ')
+    assert 'data-subtitle="Hemiciclo · Pronóstico para el 29 nov 2026"' in forecast
+    # the other hemicycles (home, election detail) have no button
+    assert 'hemicycle-download' not in html(call(api, '/')[2])
+
+
 def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(api):
     page = html(call(api, '/es/escanos')[2])
     table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]

@@ -51,7 +51,9 @@
         {% endcall %}
       {{ m.card_end() }}
       <div class="hemi-grid">
-        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card') }}
+        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card',
+                        tools=m.download_button('hemicycle-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Hemiciclo · ' ~ title_suffix,
+                                                site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-hemiciclo-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
           {% if block_result_rows %}
           <div class="series-controls">
             <fieldset id="results-view" class="seg" hidden>

@@ -5,14 +5,14 @@ import os
 import re
 from datetime import date, datetime
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
-from ..webapi import check_mode, check_run, check_scope, scope_codes, site
+from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
 from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short,
                       fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around)
 
@@ -850,7 +850,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     Returns
     -------
     dict
-        ``site_title``, ``site_tagline``, ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
+        ``site_title``, ``site_tagline``, ``site_host`` (the host of ``settings()['site_url']``, for the signature of the
+        downloadable images), ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
         ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
         on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
@@ -883,6 +884,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     return {
         'site_title': SITE_TITLE,
         'site_tagline': SITE_TAGLINE,
+        'site_host': urlsplit(settings()['site_url']).hostname or '',
         'author_handle': AUTHOR_HANDLE,
         'author_url': AUTHOR_URL,
         'pages': [dict(page, active=page['href'] == active) for page in PAGES],
