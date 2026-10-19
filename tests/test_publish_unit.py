@@ -957,6 +957,7 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
     model = writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data']
     assert {r['event_date'] for r in model['shares']} == {'2023-07-23'} and model['horizons'] == [6, 30]
     assert bundle.BundleReader(fs).list_events('es') == ['2023-07-23']
+    assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))  # el backtest sintético no trae serie
 
 
 def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
@@ -1008,6 +1009,55 @@ def test_publish_event_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, mo
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at'] == first
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'results'))['generated_at'] == '2030-01-01T00:00:00Z'
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['generated_at'] == first
+
+
+def write_series_source(folder):
+    """Escribe en `folder` un `series.csv` del backtest: 2023-07-23 a 6 días (tres días, PP y PSOE, un hueco en la banda
+    de PSOE el primer día, decimales de sobra el último) y 2019-11-10 a 30 días (un día)."""
+    rows = [
+        ('2023-07-23', 6, '2023-07-15', 'PP', 32.2, 31.1, 33.3), ('2023-07-23', 6, '2023-07-16', 'PP', 32.3, 31.2, 33.4),
+        ('2023-07-23', 6, '2023-07-17', 'PP', 32.41234, 31.31234, 33.51234),
+        ('2023-07-23', 6, '2023-07-15', 'PSOE', 31.1, None, 32.2), ('2023-07-23', 6, '2023-07-16', 'PSOE', 31.0, 29.9, 32.1),
+        ('2023-07-23', 6, '2023-07-17', 'PSOE', 30.98765, 29.88765, 32.08765),
+        ('2019-11-10', 30, '2019-11-04', 'PP', 20.5, 19.4, 21.6),
+    ]
+    pd.DataFrame(rows, columns=['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi']).to_csv(
+        os.path.join(folder, 'series.csv'), index=False)
+
+
+def test_export_event_series_pivots_the_series_of_the_election(tmp_path):
+    write_series_source(str(tmp_path))
+    data, frame = publish.export_event_series(str(tmp_path), '2023-07-23')
+    assert set(data) == set(bundle.SCHEMAS['event-series']) and data['horizon'] == 6
+    assert data['dates'] == ['2023-07-15', '2023-07-16', '2023-07-17'] and data['parties'] == ['PP', 'PSOE']
+    assert data['mean']['PP'] == [32.2, 32.3, 32.41] and data['lo']['PSOE'] == [None, 29.9, 29.89] and data['hi']['PSOE'][-1] == 32.09
+    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 6 and pd.isna(frame['lo'].iloc[3])
+    assert publish.export_event_series(str(tmp_path), '2015-12-20') == (None, None)
+    assert publish.export_event_series(str(tmp_path / 'none'), '2023-07-23') == (None, None)
+    assert publish.export_event_series(None, '2023-07-23') == (None, None)
+
+
+def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_it(tmp_path):
+    ev = synthetic_event()
+    folder = write_backtest_source(str(tmp_path / 'bt'))
+    write_series_source(folder)
+    fs = RecordingFileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(fs)
+    args = dict(computer=FakeComputer(), source=str(tmp_path / 'bt'), prov=fake_prov, **event_readers(ev))
+    out = publish.publish_event('es', '2023-07-23', writer, **args)
+    part = writer.read_json(bundle.path_event('es', '2023-07-23', 'series'))
+    assert out['has_series'] is True and 'series' in out['seconds']
+    assert part['schema'] == 'event-series@1' and part['data']['horizon'] == 6 and part['data']['dates'][-1] == '2023-07-17'
+    assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
+    written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
+    assert written[-1].endswith('/meta.json')
+    assert written.index(next(p for p in written if p.endswith('/series.json'))) > written.index(next(p for p in written if p.endswith('/model.json')))
+    os.remove(os.path.join(folder, 'series.csv'))
+    out = publish.publish_event('es', '2023-07-23', writer, **args)
+    assert out['has_series'] is False
+    assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))
+    assert not writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']['has_model'] is True
 
 
 def test_event_dates_to_publish():

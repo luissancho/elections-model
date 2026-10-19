@@ -41,7 +41,7 @@ from .common import (
 from .events import (
     event_dates_to_publish, EVENT_MODEL_PARTS, EVENT_POLLSTER_COLUMNS, event_summary, export_event_cycle,
     export_event_meta, export_event_model, export_event_polls, export_event_pollsters, export_event_results,
-    publish_event
+    export_event_series, publish_event
 )
 from .forecast import (
     backfill_days, backfill_run_at, backfill_run_id, DEFAULT_CORRECTORS, DISP_COLUMNS, WEIGHTS_COLUMNS, export_dispersion, export_weights,
