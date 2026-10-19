@@ -1535,7 +1535,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
     page = html(body)
     assert status == 200 and 'Generales 2023' in page
-    assert page.count('/api/v1/events/es/2023-07-23/') == 7 + 2  # las descargas y el CSV de la tabla (control y noscript)
+    assert page.count('/api/v1/events/es/2023-07-23/') == 8 + 2  # las descargas (la serie incluida) y el CSV de la tabla (control y noscript)
     table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
     assert table.index('GAD3') < table.index('40dB') < table.index('CIS')  # de menor a mayor error de bloques
     assert [re.sub(r'<.*?>', '', th) for th in re.findall(r'<th scope="col">(.*?)</th>', table)] == [
@@ -1555,14 +1555,16 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert re.findall(r'</span>(\w+)</td>\s*<td>(.*?)</td>\s*<td><strong>(\d+)</strong>', blocks) == [
         ('Derecha', '45,5%', '200'), ('Izquierda', '31,4%', '150')]
     data = initial(body)
-    assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls'}
+    assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls',
+                         'series', 'result', 'model_last', 'inks'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
     assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
     # el hemiciclo del resultado oficial y el reparto del error por bloque (Izquierda a la izquierda)
-    assert data['results'] == {'n_seats': 350, 'majority': 176, 'rows': [
-        {'name': 'PP', 'seats': 160}, {'name': 'PSOE', 'seats': 150}, {'name': 'VOX', 'seats': 40}, {'name': 'Cs', 'seats': 0}],
-        'blocks': [{'name': 'Derecha', 'seats': 200}, {'name': 'Izquierda', 'seats': 150}]}
+    rows = data['results'].pop('rows')
+    assert data['results'] == {'n_seats': 350, 'majority': 176, 'blocks': [{'name': 'Derecha', 'seats': 200}, {'name': 'Izquierda', 'seats': 150}]}
+    assert rows[0] == {'name': 'PP', 'seats': 160, 'pct': 33.06} and all('pct' in row for row in rows)
+    assert [(row['name'], row['seats']) for row in rows] == [('PP', 160), ('PSOE', 150), ('VOX', 40), ('Cs', 0)]
     assert data['split'] == {'left': 'Izquierda', 'right': 'Derecha'}
     assert data['block_colors'] == {'Derecha': fixture_data('meta')['parties'][0]['color'], 'Izquierda': pages.OTHERS_COLOR}
     # primera fila como en Promedios: hemiciclo y tabla de resultados (% Voto y Escaños, sin P(primero))
@@ -1573,9 +1575,9 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     assert 'id="error-chart"' in page and 'id="split-chart"' in page and 'class="chart big" id="bullseye-chart"' in page
     assert 'cuánto falló cada sondeo en Izquierda y a la derecha, en Derecha' in page
     assert page.index('id="event"') < page.index('class="hemi-grid"') < page.index('id="hemicycle-card"') < page.index('id="results"') \
-        < page.index('class="split"') < page.index('id="last-errors"') < page.index('id="last-split"') < page.index('id="bullseye"') \
-        < page.index('id="last"') < page.index('id="glosario"') < page.index('id="poll-histogram"') < page.index('id="polls"') \
-        < page.index('id="model"') < page.index('id="downloads"')
+        < page.index('id="series"') < page.index('id="model"') < page.index('class="split"') < page.index('id="last-errors"') \
+        < page.index('id="last-split"') < page.index('id="bullseye"') < page.index('id="last"') < page.index('id="glosario"') \
+        < page.index('id="poll-histogram"') < page.index('id="polls"') < page.index('id="downloads"')
 
 
 def test_catalog_adds_the_published_parties_behind_the_run():
@@ -1638,6 +1640,50 @@ def test_eleccion_detail_has_the_polls_table_of_the_cycle(events_site):
     assert data['catalog']['parties'][0]['block'] == 'Derecha' and data['catalog']['parties'][3]['block'] is None
     context = pages.eleccion_context(pages.parse_state({'scope': 'es'}), '2023-07-23')
     assert context['has_cycle'] and context['table_total'] == 3 and context['has_seats'] and context['months'][0]['value'] == '2023-07'
+
+
+def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_said(events_site):
+    status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
+    page = html(body).replace('\n', ' ')
+    assert status == 200 and 'congelado a 6 días de la elección' in page
+    assert 'id="series-chart"' in page and 'id="series-window"' in page and 'id="series-legend"' in page and 'name="view"' in page
+    assert 'href="/api/v1/events/es/2023-07-23/series?format=csv"' in page and 'Promedio de sondeos del modelo a 6 días' in page
+    assert 'no está publicado todavía: hace falta' not in page
+    # la tarjeta del modelo: selector de horizonte (6 marcado), una tabla por horizonte (la de 30 oculta) y la de bloques
+    assert '<fieldset id="model-horizon" class="seg" hidden>' in page and '<input type="radio" name="horizon" value="6" checked>' in page
+    assert 'data-horizon="6">' in page and 'data-horizon="30" hidden>' in page
+    table = re.search(r'<table id="model-table-6">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col">(.*?)</th>', table) == ['Partido', 'Promedio (%)', 'Resultado (%)', 'Error', 'Escaños modelo', 'Escaños reales']
+    assert table.index('<td>PP</td>') < table.index('<td>32,4</td>') < table.index('<td><strong>140</strong></td>')
+    assert 'class="cell-shade"' in table and '0,6</td>' in table  # el error, 32,41 − 33,05, en su celda sombreada
+    assert 'id="model-blocks-6"' in page and 'id="model-shares-6"' not in page and 'Lo que dijo el modelo' in page
+    # las dos filas fijas del pie, tras la media simple
+    foot = page[page.index('<tfoot>'):page.index('</tfoot>')]
+    assert foot.index('Media simple') < foot.index('<b>Promedio de sondeos</b><small>modelo · a 6 días</small>') < foot.index('<b>Resultado</b><small>23 jul 2023</small>')
+    assert foot.count('<tr class="fixed"') == 2 and 'Congelado el 17 jul 2023' in foot and '>32,4</td>' in foot  # el líder, sombreado
+    data = initial(body)
+    assert data['series']['horizon'] == 6 and data['series']['dates'][-1] == '2023-07-17' and data['series']['mean']['PP'][-1] == 32.4
+    assert data['result']['date'] == '2023-07-23' and data['result']['values']['PP'] == 33.06
+    assert data['model_last'] == {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.41, 'PSOE': 30.99, 'VOX': 13.01},
+                                  'seats': {'PP': 140, 'PSOE': 118, 'VOX': 30}, 'seats_valid': True}
+    assert data['catalog']['bmaps'] == {'main': ['PP', 'PSOE', 'VOX'], 'blocks': {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE']}}
+    assert set(data['inks']) >= {'PP', 'PSOE', 'VOX', 'Derecha', 'Izquierda'}
+
+
+def test_eleccion_detail_with_model_but_without_series_shows_a_notice(events_site, monkeypatch):
+    real = pages.elecciones.event_part
+    monkeypatch.setattr(pages.elecciones, 'event_part', lambda scope, date, name: None if name == 'series' else real(scope, date, name))
+    status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
+    page = html(body)
+    assert status == 200 and 'El promedio de este ciclo no está publicado todavía' in page
+    assert 'id="series"' in page and 'id="series-chart"' not in page and page.count('/api/v1/events/es/2023-07-23/') == 7 + 2
+    data = initial(body)
+    assert 'series' not in data and data['model_last']['horizon'] == 6 and 'tr class="fixed"' in page
+
+
+def test_promedios_polls_table_has_no_fixed_rows(api):
+    page = html(call(api, '/es')[2])
+    assert 'Media simple' in page and 'tr class="fixed"' not in page
 
 
 def test_eleccion_detail_without_cycle_part_shows_a_notice(events_site, monkeypatch):
@@ -1736,6 +1782,7 @@ def test_eleccion_without_model_shows_a_notice(events_site):
     page = html(body)
     assert status == 200 and 'Sin backtest para esta elección' in page
     assert page.count('/api/v1/events/es/2019-11-10/') == 4 + 2
+    assert 'id="series"' not in page and 'id="model-horizon"' not in page and 'tr class="fixed"' not in page
 
 
 @pytest.mark.parametrize('query, status, text', [('scope=es&date=2023-13-01', 400, 'Fecha no válida.'),
@@ -1833,9 +1880,8 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
     page = html(body)
     assert status == 200 and page.count('Escaños no proyectables en esta elección') == 1
-    assert 'id="model-shares-30"' in page and 'id="model-shares-6"' in page
-    assert 'id="model-seats-6"' in page and 'id="model-blocks-6"' in page
-    assert 'id="model-seats-30"' not in page and 'id="model-blocks-30"' not in page
+    assert 'id="model-table-30"' in page and 'id="model-table-6"' in page and 'id="model-shares-6"' not in page
+    assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' not in page
 
 
 def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):
