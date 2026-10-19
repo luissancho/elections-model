@@ -1851,6 +1851,17 @@ def test_fixed_rows_of_the_polls_table_footer():
     assert pages.fixed_rows(None, results, ['PP'], colors, '2023-07-23') == []
 
 
+def test_curve_block_colors_follow_the_page_then_the_first_party():
+    """Los bloques de la curva van del color que ya usa la página para el bloque (hemiciclo, resultados por bloque) y,
+    si la página no lo tiene, del color de su primer partido: así las tres vistas Bloques cuadran."""
+    catalog = pages.Catalog({'PP': {'fullname': 'PP', 'color': '#1d84ce', 'block': 'Derecha'},
+                             'ERC': {'fullname': 'ERC', 'color': '#ffb232', 'block': 'Separatista'}})
+    blocks_map = {'Derecha': ['PP', 'VOX'], 'Separatista': ['ERC']}
+    colors = pages.curve_block_colors(blocks_map, {'Derecha': '#000080', 'Izquierda': '#e4001c'}, catalog)
+    assert colors == {'Derecha': '#000080', 'Separatista': '#ffb232'}
+    assert pages.curve_block_colors({}, {'Derecha': '#000080'}, catalog) == {}
+
+
 def test_horizon_tables_merge_vote_and_seats_and_prefer_the_horizon_run():
     model = {'horizons': [6],
              'shares': [{'horizon': 6, 'party': 'PP', 'main': True, 'official': 33.05, 'model': 32.41},

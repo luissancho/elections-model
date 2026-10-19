@@ -25,7 +25,8 @@ from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_
                      scope_query, tabbar,
                      title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
-                         chart_parties, error_blocks, event_block_rows, history_events, history_rows, history_scopes,
+                         chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
+                         history_scopes,
                          eleccion_context, elecciones_context, error_rows, event_part, fixed_rows, last_poll_rows,
                          last_results, horizon_tables, majority_of, mark_shown, model_last, party_blocks,
                          poll_error_parts, published_events, resolve_event, shown_parties, split_sides, table_blocks,

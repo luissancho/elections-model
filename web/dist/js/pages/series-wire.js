@@ -15,7 +15,8 @@ export const WINDOWS = [...Object.keys(WINDOW_DAYS), 'all'];
  * computed in the browser (`blocks.js`) with the published block projection.
  *
  * @param {object} initial the page's initial data (`series`, `polls`, `projection` and, in the detail of a past
- *   election, `result`: the official result the chart marks)
+ *   election, `result`, the official result the chart marks, and `block_colors`, the colour of each block as the
+ *   page paints it elsewhere)
  * @param {Catalog} catalog party catalogue of the run
  * @returns {object} `partidos` and `bloques` (null without blocks): `series`, `polls`, `projection`, `result`
  *   (null without one), `parties`, `colors`, `defaults` (names shown by default, null for all) and `toPolls`
@@ -44,7 +45,9 @@ export function seriesViews(initial, catalog) {
       projection: blockProjection(projection),
       result: result ? blockResult(result, blocks) : null,
       parties: names,
-      colors: mapNames(names, (name) => catalog.blockColor(name)),
+      // the colour the page already uses for the block (`block_colors`, the hemicycle of a past election), else
+      // the catalogue's
+      colors: mapNames(names, (name) => (initial.block_colors && initial.block_colors[name]) || catalog.blockColor(name)),
       defaults: null,
       toPolls: (chosen) => blockPolls(chosen, blocks),
     } : null,

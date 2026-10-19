@@ -791,6 +791,28 @@ def horizon_tables(model: dict) -> list:
     return tables
 
 
+def curve_block_colors(blocks_map: dict, block_colors: dict, catalog: Catalog) -> dict:
+    """
+    Colour of each block of the poll-average curve of a past election.
+
+    Parameters
+    ----------
+    blocks_map : dict
+        ``{block: [parties]}`` of the curve (the blocks the page assigns to its parties).
+    block_colors : dict
+        ``{block: colour}`` the page already uses for its blocks (the hemicycle and the results by block).
+    catalog : Catalog
+        Party catalogue of the page.
+
+    Returns
+    -------
+    dict
+        ``{block: colour}``: the colour the page uses for the block when it has one, else the colour of the
+        first party of the block, so the curve, the hemicycle and the results by block agree.
+    """
+    return {block: block_colors.get(block) or catalog[parties[0]]['color'] for block, parties in blocks_map.items()}
+
+
 def model_last(model: dict, event_date: str) -> Optional[dict]:
     """
     What the model said at the shortest horizon of the backtest of an election.
@@ -915,7 +937,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         and block, for the legend pills), ``last`` (``LAST_KEYS`` and the signed error of each block of every
         last poll, for the bars, the split by block and the bullseye), ``blocks``, ``split`` (``split_blocks``),
         ``block_colors`` (``{block: colour}`` of the error blocks and of the result blocks, from the run's
-        ``bmaps``, ``block_color``), ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for
+        ``bmaps``, ``block_color``, plus the blocks of the curve, ``curve_block_colors``, so the curve is painted
+        like the hemicycle), ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for
         the error histogram), ``catalog`` (``parties`` of the table, of the results and of the series,
         ``chart_parties``, plus ``bmaps`` (``main`` of the meta and the ``blocks`` of the curve), for the
         browser's catalogue), with the series, ``series`` (rounded to one decimal, ``round_series``) and, with
@@ -979,6 +1002,10 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     for name in parties:
         if curve_blocks.get(name) is not None:
             blocks_map.setdefault(curve_blocks[name], []).append(name)
+
+    block_colors = {block: block_color(block, context['meta'], catalog) for block in blocks} \
+        | {row['name']: row['color'] for row in block_rows}
+    curve_colors = curve_block_colors(blocks_map, block_colors, catalog)
     context['event'] = dict(meta, summary=summary)
     context['results_rows'] = results_rows
     context['results_hidden'] = sum(1 for row in results_rows if not row['shown'])
@@ -1019,13 +1046,12 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         'result': {'date': date, 'values': {row['party']: row['pct'] for row in results_rows if row.get('pct') is not None}},
         'model_last': last,
         'inks': {name: ink_color(catalog[name]['color']) for name in parties}
-        | {block: ink_color(block_color(block, context['meta'], catalog)) for block in blocks_map},
+        | {block: ink_color(color) for block, color in curve_colors.items()},
         'last': [dict({key: row.get(key) for key in LAST_KEYS}, **{block: row.get(block) for block in blocks})
                  for row in last_rows],
         'blocks': blocks,
         'split': split,
-        'block_colors': {block: block_color(block, context['meta'], catalog) for block in blocks}
-        | {row['name']: row['color'] for row in block_rows},
+        'block_colors': block_colors | curve_colors,
         'poll_errors': [{key: row.get(key) for key in ('error_avg', 'error_blocks_abs')} for row in poll_rows],
         'catalog': {'parties': [dict(catalog[name], name=name) for name in parties],
                     'bmaps': {'main': list(meta.get('main') or []), 'blocks': blocks_map}},

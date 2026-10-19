@@ -234,6 +234,9 @@ def test_series_views_carry_the_result_of_each_view():
     assert views['bloques']['result'] == {'date': '2026-10-08', 'values': {'Derecha': 31, 'Izquierda': 27.5}}
     assert views['bloques']['parties'] == ['Derecha', 'Izquierda'] and views['bloques']['projection'] is None
     assert run_js('sw.seriesViews(%s, new c.Catalog({}))' % json.dumps({**initial, 'result': None}))['partidos']['result'] is None
+    # the colour of a block is the one the page already uses for it (`block_colors`), else that of its first party
+    painted = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps({**initial, 'block_colors': {'Derecha': '#112233'}}), json.dumps(initial)))
+    assert painted['bloques']['colors'] == {'Derecha': '#112233', 'Izquierda': '#000000'}
 
 
 def test_ridge_rows_are_taller_on_desktop():
