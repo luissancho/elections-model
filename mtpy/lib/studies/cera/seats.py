@@ -7,8 +7,6 @@ plain pandas objects or dictionaries. The allocation is the one of the LOREG (ar
 candidatures with at least `THRESHOLD` percent of the valid votes of the province (votes to candidatures plus
 blank votes).
 """
-import math
-
 import pandas as pd
 
 from ...simulator import Simulator
@@ -46,6 +44,9 @@ def allocate_results(results: Results, votes: pd.DataFrame | None = None) -> pd.
     """
     Allocate the seats of every province by D'Hondt with the legal threshold.
 
+    The candidatures go to `Simulator.alloc_seats` ordered by total votes, largest first, so an exact tie of
+    quotients goes to the larger vote total, as the LOREG rules (art. 163.1.c).
+
     Parameters
     ----------
     results : Results
@@ -62,7 +63,8 @@ def allocate_results(results: Results, votes: pd.DataFrame | None = None) -> pd.
     votes, valid = _valid_votes(results, votes)
     rows = {
         region: Simulator.alloc_seats(
-            row.to_dict(), int(results.totals.at[region, 'n_seats']), valid_votes=float(valid.at[region]),
+            row.sort_values(ascending=False, kind='stable').to_dict(), int(results.totals.at[region, 'n_seats']),
+            valid_votes=float(valid.at[region]),
             threshold=THRESHOLD
         )
         for region, row in votes.iterrows()
@@ -101,16 +103,15 @@ def check_official(results: Results) -> list[str]:
 
 def last_seat(results: Results, votes: pd.DataFrame | None = None) -> pd.DataFrame:
     """
-    Find the last seat of every province and the votes its closest contender lacks to take it.
+    Find the last seat of every province and the votes its closest contender lacks to equal it.
 
     The winner holds the smallest allocated D'Hondt quotient (`votes / seats`), `q_min`. The runner-up is the
     candidature, other than the winner, with the largest next quotient (`votes / (seats + 1)`) among those that
-    pass the threshold. The gap is the fewest votes it has to add to strictly exceed `q_min` with its next
-    quotient: `floor(q_min · (s_r + 1) − v_r) + 1`, at least 1, with `s_r` the runner-up's seats and `v_r` its
-    votes. Reaching `q_min` exactly is not always enough (the LOREG gives that tie to the larger vote total and
-    an equal total to a draw); the strict excess takes the seat whatever the totals. The article's table 10
-    rounds `q_min · (s_r + 1) − v_r` instead (the votes to equal the quotient), so its figures are one less
-    wherever that deficit has a fraction of one half or less.
+    pass the threshold. The gap follows the article's table 10: the votes the runner-up needs for its next
+    quotient to equal `q_min`, `round(q_min · (s_r + 1) − v_r)` (Python's rounding, half to even), at least 1,
+    with `s_r` the runner-up's seats and `v_r` its votes. Equalling is enough in practice: the LOREG gives a tie
+    of quotients to the larger vote total (art. 163.1.c), so equalling takes the seat whenever the runner-up's
+    total is the larger one, and strictly exceeding the quotient never takes more than one vote more.
 
     Parameters
     ----------
@@ -139,7 +140,7 @@ def last_seat(results: Results, votes: pd.DataFrame | None = None) -> pd.DataFra
         runner_up, gap = None, None
         if len(passing) > 0:
             runner_up = (passing / (won[passing.index] + 1)).idxmax()
-            needed = math.floor(row[winner] * (won[runner_up] + 1) / won[winner] - row[runner_up]) + 1
+            needed = round(row[winner] * (won[runner_up] + 1) / won[winner] - row[runner_up])
             gap = int(max(needed, 1))
 
         rows.append([

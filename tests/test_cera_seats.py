@@ -3,11 +3,13 @@ import os
 
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib.studies.cera.census import baseline_date
 from mtpy.lib.studies.cera.data import (
+    Results,
     load_params,
     national_series,
     read_candidatures_map,
@@ -139,13 +141,21 @@ def test_allocate_results_recomputes_the_threshold_with_other_votes(results_2023
     assert allocate_results(results_2023, votes).loc[28, 'PARTIDO POPULAR'] == results_2023.totals.loc[28, 'n_seats']
 
 
+def test_allocate_results_breaks_a_quotient_tie_by_the_larger_total():
+    # 2 seats: B takes the first (200); A's 100 ties B's second quotient (200 / 2) and the larger total wins.
+    votes = pd.DataFrame({'A': [100], 'B': [200]}, index=pd.Index([1], name='region_id'))
+    totals = pd.DataFrame({'candidates': [300], 'blank': [0], 'n_seats': [2]}, index=votes.index)
+    results = Results(
+        date='2000-01-01', votes=votes, seats=votes * 0, totals=totals, names=pd.Series({1: 'X'}), siglas={}
+    )
+    assert allocate_results(results).loc[1].to_dict() == {'A': 0, 'B': 2}
+
+
 def test_last_seat_gaps_match_table_10(results_2023):
-    # The article rounds the deficit to equal the last quotient (Girona 284, Cantabria 403, Tarragona 1247,
-    # Madrid 1339, S. C. de Tenerife 1565, Ceuta 1586, Málaga 2428); the gap is the votes to strictly exceed it.
     last = last_seat(results_2023).set_index('name')
-    assert last.loc['Girona', 'gap'] == 285 and last.loc['Cantabria', 'gap'] == 404
-    assert last.loc['Tarragona', 'gap'] == 1248 and last.loc['Santa Cruz de Tenerife', 'gap'] == 1565
-    assert last.loc['Madrid', 'gap'] == 1340 and last.loc['Ceuta', 'gap'] == 1587 and last.loc['Málaga', 'gap'] == 2429
+    assert last.loc['Girona', 'gap'] == 284 and last.loc['Cantabria', 'gap'] == 403
+    assert last.loc['Tarragona', 'gap'] == 1247 and last.loc['Santa Cruz de Tenerife', 'gap'] == 1565
+    assert last.loc['Madrid', 'gap'] == 1339 and last.loc['Ceuta', 'gap'] == 1586 and last.loc['Málaga', 'gap'] == 2428
     assert list(last.sort_values('gap').index[:10]) == [
         'Girona', 'Cantabria', 'Tarragona', 'Madrid', 'Albacete', 'Salamanca', 'Santa Cruz de Tenerife', 'Ceuta',
         'Teruel', 'Málaga'
@@ -165,7 +175,8 @@ def test_block_seats_2023(results_2023, params):
 def test_participation_history_skips_elections_without_cera_columns(results_2019, results_2023):
     hist = participation_history({'2019-11-10': results_2019, '2023-07-23': results_2023}).set_index('region_id')
     rates = [
-        100 * r.totals.loc[28, 'counted_cera'] / r.totals.loc[28, 'registered_cera'] for r in (results_2019, results_2023)
+        100 * r.totals.loc[28, 'counted_cera'] / r.totals.loc[28, 'registered_cera']
+        for r in (results_2019, results_2023)
     ]
     assert hist.loc[28, 'mean'] == pytest.approx(sum(rates) / 2) and hist.loc[28, 'max'] == pytest.approx(max(rates))
     bare = SimpleNamespace(totals=results_2019.totals.drop(columns='counted_cera'))
