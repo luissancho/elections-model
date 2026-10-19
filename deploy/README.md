@@ -595,9 +595,10 @@ la forma job de `backtest/run_backtest.py`, que sigue funcionando como envoltori
 
 - Ámbito a ámbito evalúa fuera de muestra cada caso (elección × horizonte): congela el modelo en la fecha de corte,
   ajusta el promedio, simula el nowcast y la ejecución a horizonte y compara con el resultado oficial. Escribe las
-  siete tablas (`shares`, `seats`, `blocks`, `provinces`, `meta`, `metrics`, `by_horizon`) y `run.json` (parámetros,
-  elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
-  sobrescribiendo la ejecución anterior del ámbito.
+  ocho tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon`) y `run.json`
+  (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
+  sobrescribiendo la ejecución anterior del ámbito. `series.csv` (la serie diaria del promedio del horizonte más corto
+  de cada elección, desde 2026-10-19) no va en git: `publish event` la necesita en la máquina donde corrió el backtest.
 - Cuándo: tras un cambio del método, antes de `publish` con `backtest` y `event` (ver "Publicar", "Tras un cambio
   del modelo"); comparar `by_horizon.csv` con la ejecución anterior es el criterio de aceptación de cada cambio del
   modelo. Necesita la base de datos (sondeos, resultados, ratings, deriva) y es el job más lento: `es` evalúa cinco

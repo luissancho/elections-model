@@ -243,7 +243,7 @@ def _stat_bound(cell, key):
     return round(cell[key], PCT_DECIMALS) if isinstance(cell, dict) else None
 
 
-def export_series(fc, names):
+def export_series(fc, names, end=None):
     """Export the fitted daily series of each party with its confidence bounds.
 
     Parameters
@@ -252,13 +252,18 @@ def export_series(fc, names):
         Fitted forecaster (``sim.model``).
     names : list of str
         Party names to export.
+    end : str or pandas.Timestamp, optional
+        Last day exported, inclusive. By default the last fitted day (``fc.date_fit_last``, or the end of the
+        series without it); an ``end`` beyond it changes nothing, an earlier one cuts the series there (the
+        backtest cuts at the anchor of each case, so the series stops where the model was frozen).
 
     Returns
     -------
     tuple of (dict, pandas.DataFrame)
         Data for the ``series`` schema and its long-format CSV twin.
     """
-    end = fc.date_fit_last if fc.date_fit_last is not None else fc.forecast.index.max()
+    last = fc.date_fit_last if fc.date_fit_last is not None else fc.forecast.index.max()
+    end = last if end is None else min(pd.Timestamp(end), pd.Timestamp(last))
     table = fc.forecast.loc[:end, names].dropna(how='all')
     dates = [d.strftime('%Y-%m-%d') for d in table.index]
     mean, lo, hi = {}, {}, {}

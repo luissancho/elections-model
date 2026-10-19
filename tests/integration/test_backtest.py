@@ -25,6 +25,10 @@ def test_run_case_2023_30_days(app):
     assert np.isfinite(m['mae_shares']) and np.isfinite(m['mae_seats']) and np.isfinite(m['brier_vs'])
     assert 0 <= m['cov_seats95'] <= 1
 
+    series = case['series']
+    assert list(series.columns) == ['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi'] and (series['horizon'] == 30).all()
+    assert series['date'].max() == meta.loc[0, 'as_of'] and set(series['name']) == set(shares['party'])
+
 
 def test_run_case_horizon_run_2023_90_days(app):
     """M5: cada caso se simula también a horizonte (`deadline` = la elección), con columnas `_h`."""

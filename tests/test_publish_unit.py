@@ -170,6 +170,15 @@ def test_export_series_without_statistics_gives_null_bounds():
     assert valid('series', data, mode=None)['lo']['VOX'] == [None] * 35
 
 
+def test_export_series_cuts_at_the_end_given():
+    """`end` corta la serie ese día incluido; un `end` posterior al último día ajustado no cambia nada."""
+    sim = synthetic_simulator()
+    data, frame = publish.export_series(sim.model, NAMES, end='2026-10-03')
+    assert data['dates'][0] == '2026-09-01' and data['dates'][-1] == '2026-10-03' and len(data['dates']) == 33
+    assert frame.shape[0] == 33 * 3 and frame['date'].max() == '2026-10-03'
+    assert publish.export_series(sim.model, NAMES, end=pd.Timestamp('2026-12-31'))[0]['dates'][-1] == '2026-10-05'
+
+
 def test_export_polls_keeps_the_published_figures_and_the_previous_result():
     sim = synthetic_simulator()
     data, frame = publish.export_polls(sim.model, NAMES)

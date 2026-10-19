@@ -1,5 +1,7 @@
 notebooks/build/
 files/
+# la serie diaria del backtest (derivada y pesada; ver backtest/README.md)
+backtest/results/**/series.csv
 log/
 AGENTS.md
 
