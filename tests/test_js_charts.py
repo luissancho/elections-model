@@ -22,6 +22,8 @@ RIDGE_JS = pathlib.Path(DIST, 'js', 'charts', 'ridge.js').as_uri()
 PATH_JS = pathlib.Path(DIST, 'js', 'charts', 'path.js').as_uri()
 WEIGHTS_JS = pathlib.Path(DIST, 'js', 'charts', 'weights.js').as_uri()
 STACKED_JS = pathlib.Path(DIST, 'js', 'charts', 'stacked.js').as_uri()
+SERIES_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'series-wire.js').as_uri()
+CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -34,18 +36,19 @@ ROWS = [
 
 
 def run_js(expr, rows=ROWS):
-    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema) y `rows`
-    definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
-    `JSON.stringify`)."""
+    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
+    cableado compartido del promedio), `c` (el catálogo) y `rows` definidos y devuelve su JSON (las funciones de la
+    opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
         'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); '
-        'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); const rows = {}; '
+        'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); '
+        'const sw = await import("{}"); const c = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
-             WEIGHTS_JS, STACKED_JS, json.dumps(rows), expr)
+             WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -217,6 +220,20 @@ def test_series_result_draws_a_diamond_at_the_election_and_extends_the_axis():
 def test_series_window_of_three_months_keeps_the_result_in_view():
     option = run_js('s.seriesOption(%s)' % RESULT_ARGS.replace("window: 'all'", "window: '3m', anchor: '2026-10-08'"))
     assert option['dataZoom'][0]['endValue'] == run_js('s.dayTime("2026-10-08")')
+
+
+def test_series_views_carry_the_result_of_each_view():
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'VOX', 'PSOE'], 'mean': {'PP': [30], 'VOX': [10], 'PSOE': [28]},
+                          'lo': {'PP': [29], 'VOX': [9], 'PSOE': [27]}, 'hi': {'PP': [31], 'VOX': [11], 'PSOE': [29]}},
+               'polls': {'parties': ['PP', 'VOX', 'PSOE'], 'polls': []}, 'projection': None,
+               'result': {'date': '2026-10-08', 'values': {'PP': 31, 'PSOE': 27.5}},
+               'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'VOX', 'PSOE')],
+                           'bmaps': {'main': ['PP', 'PSOE'], 'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    assert views['partidos']['result'] == initial['result'] and views['partidos']['defaults'] == ['PP', 'PSOE']
+    assert views['bloques']['result'] == {'date': '2026-10-08', 'values': {'Derecha': 31, 'Izquierda': 27.5}}
+    assert views['bloques']['parties'] == ['Derecha', 'Izquierda'] and views['bloques']['projection'] is None
+    assert run_js('sw.seriesViews(%s, new c.Catalog({}))' % json.dumps({**initial, 'result': None}))['partidos']['result'] is None
 
 
 def test_ridge_rows_are_taller_on_desktop():

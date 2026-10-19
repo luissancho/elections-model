@@ -3,8 +3,10 @@
 // selection, the evolution of the error by election, the histogram of the poll errors, the bullseye coloured by
 // election or scope, the table by weeks before the election and the table of elections. The detail of one
 // election has the hemicycle of the official result next to the results table (behind "Ver más"), the error of
-// the last poll of each house (bars, the split by block and the bullseye), the histogram of its polls and the table
-// of every poll of the cycle (`polls-wire.js`).
+// the last poll of each house (bars, the split by block and the bullseye), the histogram of its polls, the poll
+// average of the cycle with the official result (`series-wire.js`, shared with Promedios), the horizon selector of
+// what the model said and the table of every poll of the cycle (`polls-wire.js`).
+import {parseSeriesHash} from '../blocks.js';
 import {Catalog} from '../catalog.js';
 import {fmtDate, fmtNum} from '../format.js';
 import {
@@ -17,10 +19,12 @@ import {renderBullseye} from '../charts/bullseye.js';
 import {renderDiverging} from '../charts/diverging.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderHistogram} from '../charts/histogram.js';
+import {renderSeries} from '../charts/series.js';
 import {renderTrend} from '../charts/trend.js';
 import {fillComplements, fillFigures, fillSelect, filterEventsTable} from './history-dom.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
 import {wirePollsTable} from './polls-wire.js';
+import {WINDOWS, seriesViews, wireAverage} from './series-wire.js';
 
 // Height of the error bars: one row per house plus the axes (and the legend, in the split by block).
 const BAR_ROW_HEIGHT = 22;
@@ -454,6 +458,57 @@ function wireHemicycle(initial, catalog) {
 }
 
 /**
+ * Draw the poll average of the cycle (the series frozen at the shortest horizon of the backtest, the polls as
+ * points and the official result as diamonds at the election) and wire its controls, as Promedios does; nothing
+ * without the series or its card.
+ *
+ * @param {object} initial the page's initial data (`series`, `polls`, `result`, `inks`, `meta`)
+ * @param {Catalog} catalog party catalogue of the page, with the `bmaps` of the curve
+ */
+function wireAverageCard(initial, catalog) {
+  if (!initial.series || !document.getElementById('series-chart')) {
+    return;
+  }
+  const views = seriesViews(initial, catalog);
+  const when = initial.result ? initial.result.date : initial.meta.event_date;
+  const state = parseSeriesHash(window.location.hash, {
+    parties: views.partidos.parties, blocks: views.bloques ? views.bloques.parties : [], windows: WINDOWS,
+  });
+  const render = (el, pollsOfChart, chartState) => {
+    const current = views[chartState.view];
+    const dates = current.series.dates;
+    return renderSeries(el, {
+      series: current.series, polls: pollsOfChart, projection: null, result: current.result,
+      parties: current.parties, selected: chartState.selected ?? current.defaults, colors: current.colors,
+      asOf: dates[dates.length - 1], asOfLabel: `A ${initial.series.horizon} días`, when,
+      window: chartState.window, anchor: when, legend: 'hidden',
+    });
+  };
+  wireAverage(views, state, render, {anchor: when, inks: initial.inks || {}});
+}
+
+/**
+ * Show the horizon selector of «Lo que dijo el modelo» and switch the tables of each horizon with it (the server
+ * renders them all, every one but the first hidden).
+ */
+function wireModelHorizons() {
+  const fieldset = document.getElementById('model-horizon');
+  if (!fieldset) {
+    return;
+  }
+  fieldset.hidden = false;
+  fieldset.addEventListener('change', (event) => {
+    if (!event.target.matches('input[name=horizon]')) {
+      return;
+    }
+    for (const box of document.querySelectorAll('#model .horizon[data-horizon]')) {
+      box.hidden = box.dataset.horizon !== event.target.value;
+    }
+    markSegments(fieldset);
+  });
+}
+
+/**
  * Error of the last poll of each house: the bars of the block error and, next to them, the same houses with the
  * error of each block, one growing to the left and the other to the right (`initial.split` says which).
  *
@@ -499,6 +554,8 @@ function paint() {
   }
 
   wireHemicycle(initial, catalog);
+  tryDraw(() => wireAverageCard(initial, catalog), 'the poll average');
+  wireModelHorizons();
   drawLastErrors(initial);
 
   if (initial.poll_errors) {

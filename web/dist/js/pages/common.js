@@ -85,14 +85,17 @@ export function markSegments(root = document) {
   }
 }
 
-// Every page imports this module: keep the segments marked from the start and after each change.
-markSegments();
-document.addEventListener('change', (event) => {
-  if (event.target.closest && event.target.closest('.seg')) {
-    markSegments();
-  }
-});
-window.addEventListener('pageshow', () => markSegments());
+// Every page imports this module: keep the segments marked from the start and after each change. Guarded so the
+// modules that import this one can load in node (the tests) without a document.
+if (typeof document !== 'undefined') {
+  markSegments();
+  document.addEventListener('change', (event) => {
+    if (event.target.closest && event.target.closest('.seg')) {
+      markSegments();
+    }
+  });
+  window.addEventListener('pageshow', () => markSegments());
+}
 
 /**
  * "Ver más" / "Cargar más" of a table: the server renders every row, hides those beyond the first ones and
