@@ -302,27 +302,6 @@
           {{ example.stats.bandwidth|num(0) }} días.
         </p>
         <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} publicado el {{ example.published|date }}, con la recta local, su banda y la campana del kernel"></div>
-        <p>
-          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
-          ver quién lo hizo, cuándo y con qué peso. La recta es la que se ajusta a los sondeos el día en que se lee
-          el promedio, con su banda del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía
-          de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
-        </p>
-        <p>
-          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
-          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
-          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
-          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
-          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
-          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
-        </p>
-        <p>
-          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
-          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
-          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
-          puntos. La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
-          promedio</a>).
-        </p>
         <details class="weights-list" id="weights-list">
           <summary>Ver los {{ example.n_rows }} sondeos</summary>
           <div class="table-wrap">
@@ -360,6 +339,27 @@
           </div>
           <p class="scroll-hint">Desliza para ver más →</p>
         </details>
+        <p>
+          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
+          ver quién lo hizo, cuándo y con qué peso. La recta es la que se ajusta a los sondeos el día en que se lee
+          el promedio, con su banda del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía
+          de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
+        </p>
+        <p>
+          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
+          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
+          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
+          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
+          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
+          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
+        </p>
+        <p>
+          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
+          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
+          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
+          puntos. La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
+          promedio</a>).
+        </p>
         <p class="notice"><a href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
       {{ m.card_end() }}
       {% endif %}
