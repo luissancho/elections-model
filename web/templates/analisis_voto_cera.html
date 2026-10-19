@@ -7,15 +7,171 @@
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
+{#- A pace of additions as the infographic writes it: «×2,2». -#}
+{% macro pace(x) -%}×{{ x|num(1) }}{%- endmacro %}
+{#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
+{% macro answer(verdict, n) -%}
+<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
+{%- endmacro %}
+{% set v1, v2, v3 = verdicts %}
+{% set sensitive = figures.sensitive_all or {} %}
     <div id="content" class="stack">
       <header id="study-head">
-        {#- the pills of the state of the study (task 15) -#}
+        <div class="tags">
+          <span class="pill brand">Análisis</span>
+          {% if election_day %}<span class="pill">Generales del {{ election_day }}</span>{% endif %}
+          {% if checked %}
+          <span class="pill ok">Comprobada con el escrutinio del {{ study_meta.checked_at|date }}</span>
+          {% elif registered %}
+          <span class="pill warn">Predicción registrada · se comprueba tras el escrutinio CERA</span>
+          {% else %}
+          <span class="pill">Borrador · predicción sin registrar</span>
+          {% endif %}
+        </div>
         <h1 class="study-title">El voto CERA en España y el efecto de la «Ley de Nietos»</h1>
         <p class="study-subtitle">¿Es posible orquestar con éxito un fraude electoral significativo a través del censo exterior?</p>
       </header>
-      {#- nav.section-nav.toc (task 15) -#}
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#resumen">Resumen</a>
+        <a href="#p1" class="q1">1 · ¿Se dispara el censo?</a>
+        <a href="#p2" class="q2">2 · ¿Sesgo o colocación?</a>
+        <a href="#p3" class="q3">3 · ¿Mueven escaños?</a>
+        <a href="#debate">Lo que dice el debate</a>
+        <a href="#comprobacion">Comprobación</a>
+        <a href="#datos">Datos y método</a>
+      </nav>
       {{ m.kpis(kpis) }}
-      {#- #resumen and #p1 (task 15) -#}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'La acusación de fraude, despojada de ruido, son tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.') }}
+        <div class="three">
+          {% call answer(v1, 1) -%}
+            El ritmo de altas se duplica ({{ pace(figures.ratio_article) }}) tras la ley. Quien lo denuncia tiene
+            razón: el efecto sobre el tamaño del censo es real y medible.
+          {%- endcall %}
+          {% call answer(v2, 2) -%}
+            Las nuevas altas votan al ~{{ figures.latam_rate|pct(0) }}, frente al ~{{ figures.rest_rate|pct(0) }}
+            del resto; el voto exterior se derechiza como el interior, y las provincias sensibles reciben el
+            {{ sensitive.get('growth_share')|pct(0) }} de las altas con el {{ sensitive.get('stock_share')|pct(0) }}
+            del censo.
+          {%- endcall %}
+          {% call answer(v3, 3) -%}
+            {% if not figures.changed -%}
+            Con el censo real, la participación real y el reparto real: cero escaños. Solo apilando supuestos
+            extremos a la vez aparece un efecto.
+            {%- else -%}
+            Con el censo real, la participación real y el reparto real cambia el reparto en
+            {{ figures.n_changed|int }} {{ 'provincia' if figures.n_changed == 1 else 'provincias' }}; la tarjeta
+            dice cuáles y a favor de quién.
+            {%- endif %}
+          {%- endcall %}
+        </div>
+        <p class="note blue">El censo exterior crece y merece escrutinio, y una sospecha razonable sobre cualquier reforma es legítima. Pero los datos no sostienen un fraude capaz de regalar escaños. Una sospecha no es una prueba: los datos por encima de bandos y consignas.</p>
+      {{ m.card_end() }}
+      <section class="card qcard q1" id="p1">
+        <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
+        <p class="lead">
+          Serie mensual del INE hasta el último cierre y altas netas en dos periodos
+          {%- if q1.equal %} de igual duración ({{ q1.months[0]|int }} meses){% elif q1.months %} ({{ q1.months|map('int')|join(' y ') }} meses){% endif %},
+          antes y después de la ley.
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Evolución del censo CERA, {{ (q1.series['from'] or '')[:4] }} → 29-N</p>
+            <p class="csub">Con la ley, las generales de {{ figures.baseline_year }}, el fin del plazo y el censo de la convocatoria marcados</p>
+            <div class="chart" id="census-chart" role="img" aria-label="Censo CERA mensual del {{ q1.series['from']|date }} al {{ q1.series.to|date }}: de {{ q1.series.first|int }} a {{ q1.series.last|int }} electores"></div>
+          </div>
+          <div>
+            <p class="ctitle">El ritmo de altas se duplica con la Ley de Nietos</p>
+            <p class="csub">Altas netas por origen en los {% if q1.equal %}{{ q1.months[0]|int }} meses{% else %}periodos{% endif %} anteriores y posteriores a la ley</p>
+            <div class="chart" id="periods-chart" role="img" aria-label="Altas netas: {{ figures.g1_article|int }} antes de la ley y {{ figures.g2_article|int }} después, {{ pace(figures.ratio_article) }}"></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="table-wrap">
+            <table id="countries-table">
+              <caption class="sr-only">Altas netas por país antes y después de la ley, y su ritmo; los {{ q1.countries|length }} países con más altas después.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">País</th>
+                  <th scope="col">Altas antes</th>
+                  <th scope="col">Altas después</th>
+                  <th scope="col">Ritmo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in q1.countries %}
+                <tr>
+                  <td><b>{{ row.name }}</b></td><td>{{ row.g1|int }}</td><td><b>{{ row.g2|int }}</b></td><td{% if row.tone %} class="{{ row.tone }}"{% endif %}>{{ pace(row.ratio) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table id="provinces-table">
+              <caption class="sr-only">Censo CERA por provincia al inicio del periodo de la ley y en la convocatoria, con las altas.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Provincia</th>
+                  <th scope="col">Censo {{ q1.start_label }}</th>
+                  <th scope="col">Censo 29-N</th>
+                  <th scope="col">Altas</th>
+                  <th scope="col">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in q1.provinces %}
+                <tr{% if not row.shown %} hidden{% endif %}>
+                  <td><b>{{ row.name }}</b></td><td>{{ row.start|int }}</td><td>{{ row.election|int }}</td><td><b>{{ row.growth|delta }}</b></td><td>{{ row.pct|delta }}{% if row.pct is not none %}%{% endif %}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% if q1.provinces_hidden %}
+            <button type="button" class="more" id="provinces-more" hidden>Ver las {{ q1.provinces|length }} provincias</button>
+            {% endif %}
+          </div>
+        </div>
+        <div class="sum">
+          <b>Sí, y no tiene sentido negarlo.</b> El ritmo de altas se duplica ({{ pace(figures.ratio_article) }}: de
+          {{ figures.g1_article|int }} a {{ figures.g2_article|int }}) y el censo exterior suma
+          {{ figures.growth_abs|int }} electores desde las generales de {{ figures.baseline_year }}
+          ({{ figures.growth_pct|delta }}%).
+          {%- if q1.latam %} El crecimiento es latinoamericano ({% for row in q1.latam %}{{ row.name }} {{ pace(row.ratio) }}{% if not loop.last %}, {% endif %}{% endfor %})
+          {%- if q1.exile %}, pero {{ q1.exile.name }}, el país símbolo del exilio, apenas se mueve ({{ pace(q1.exile.ratio) }}){% endif %}.
+          {%- endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          {% if q1.periods|length == 2 -%}
+          Las altas netas se cuentan en dos periodos{% if q1.equal %} de {{ q1.months[0]|int }} meses{% endif %}: del
+          {{ q1.periods[0][0]|date }} al {{ q1.periods[0][1]|date }}, antes de la ley, y del
+          {{ q1.periods[1][0]|date }} al {{ q1.periods[1][1]|date }}, después.
+          {%- endif %}
+          El ritmo divide las altas de después entre las de antes: por encima de uno, el censo crece más deprisa con la
+          ley. La versión actualizada de los periodos llega hasta el último cierre publicado, el
+          {{ study_meta.series_last|date }}.
+        </p>
+        <p>
+          La serie es el censo CERA que el INE cierra el primer día de cada mes.
+          {%- if census.marks %} Las líneas verticales marcan
+          {% for mark in census.marks %}{{ mark.label }} ({{ mark.date|date }}){% if loop.revindex == 2 %} y {% elif not loop.last %}, {% endif %}{% endfor %}.
+          {%- endif %}
+        </p>
+        <p>
+          La tabla compara, provincia a provincia y de más a menos altas, el censo del inicio del periodo de la ley
+          con el de la convocatoria del 29-N, cerrado el {{ (study_meta.election or {}).get('census_closed')|date }}
+          {%- if q1.provinces_hidden %}; «Ver las {{ q1.provinces|length }} provincias» destapa el resto{% endif %}.
+        </p>
+        {% if q1.p_slope %}
+        <p>
+          Una regresión de las altas netas mensuales con ruptura en la ley
+          {% if q1.slope_significant %}confirma el cambio de pendiente (p {{ q1.p_slope }}): lo que cambia es el
+          ritmo{% else %}no confirma un cambio de pendiente (p {{ q1.p_slope }}){% endif %}. No se afirma un salto de
+          nivel en el mes de la ley.
+        </p>
+        {% endif %}
+        {% endcall %}
+      {{ m.card_end() }}
       {#- #p2 and #p3 (task 16) -#}
       {#- #debate, #comprobacion, #datos and the glossary (task 17) -#}
     </div>

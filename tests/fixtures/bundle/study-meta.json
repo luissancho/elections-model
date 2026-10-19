@@ -38,6 +38,22 @@
       "election": {
         "scope": "es",
         "date": "2026-11-29"
+      },
+      "litigation": {
+        "count": 163020,
+        "as_of": "2026-10-12",
+        "source": "EFE, vía Maldita.es 13-10-2026",
+        "note": "Inscripciones con efectos electorales suspendidos por los autos del TS de 10-09 y 12-10-2026"
+      },
+      "participation": {
+        "latam": 0.05,
+        "rest": 0.1,
+        "valid": 0.99,
+        "derived_from": [
+          "consulados/cyl-2026.csv",
+          "consulados/extremadura-2025.csv",
+          "consulados/aragon-2026.csv"
+        ]
       }
     },
     "sources": [

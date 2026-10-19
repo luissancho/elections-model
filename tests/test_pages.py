@@ -3557,9 +3557,9 @@ def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links
 STUDY_VERDICTS = [('q1', 'SÍ'), ('q2', 'SIN EVIDENCIA'), ('q3', 'NO')]
 
 
-def publish_study(fs, meta=None):
+def publish_study(fs, meta=None, parts=None):
     """Publica el estudio de los fixtures y vacía las cachés del sitio."""
-    write_study(fs, meta=meta)
+    write_study(fs, meta=meta, parts=parts)
     webapi.site().manifest_cache_clear()
 
 
@@ -3662,8 +3662,8 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert figures['ratio_article'] == 2.0 and figures['r'] == -0.743 and figures['n_ecological'] == 3
     assert figures['max_gain'] == 1 and figures['pool'] == 181032 and figures['grid_observed'] == 0
     assert figures['report']['n_max'] == 3 and figures['sensitive_all'] == {'stock_share': 24.1, 'growth_share': 17.39}
-    # the fixture meta has neither the litigation nor the participation rates: no error, `None`
-    assert figures['litigation'] is None and figures['latam_rate'] is None and figures['rest_rate'] is None
+    # the litigation and the participation rates come from `params`
+    assert figures['litigation'] == 163020 and figures['latam_rate'] == 5 and figures['rest_rate'] == 10
     assert context['registered'] == {'at': '2026-10-18', 'claim': meta['registered']['claim']}
     assert context['checked'] is False and context['sources'] == meta['sources']
     assert [verdict['label'] for verdict in context['verdicts']] == ['SÍ', 'SIN EVIDENCIA', 'NO']
@@ -3678,16 +3678,113 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     gap = context['initial']['gap']
     assert set(gap) == {'convocatoria', 'sin_litigio'} and gap['sin_litigio'][0]['net'] == 6.9
     assert context['initial']['radar']['max'] == [100, 100, 100]
-    # with the litigation and the rates of `params`, the KPI rows quote them
-    params = meta['params'] | {'litigation': {'count': 163020, 'as_of': '2026-10-12'},
-                               'participation': {'latam': 0.05, 'rest': 0.1}}
-    publish_study(fresh_app.fs, meta={'params': params, 'registered_at': None, 'registered': None})
-    context = pages.cera_context(pages.parse_state({}))
-    assert context['registered'] is None and context['figures']['litigation'] == 163020
-    assert context['figures']['latam_rate'] == 5 and context['figures']['rest_rate'] == 10
+    # the KPI rows quote the litigation and the rates of `params`
     kpis = context['kpis']
     assert '<span class="dlt up">▲ 19%</span> frente a 2023 (2.327.388)' in str(kpis[0]['support'])
     assert kpis[1]['value'] == '163.020'
     assert kpis[1]['support'] == ('suspendidas por el Supremo el 10-09, mantenido el 12-10 · '
                                   'censo vigente: cerrado el 1-10-2026')
     assert kpis[2]['support'] == '~5% Latam · ~10% resto · 2023: 208.431'
+    # without them in `params` and without a registration: no error, `None`, and the KPI notes drop their pieces
+    publish_study(fresh_app.fs, meta={'params': {'election': meta['params']['election']}, 'registered_at': None,
+                                      'registered': None})
+    context = pages.cera_context(pages.parse_state({}))
+    assert context['registered'] is None and context['figures']['litigation'] is None
+    assert context['figures']['latam_rate'] is None and context['figures']['rest_rate'] is None
+    assert context['kpis'][1]['support'] == 'censo vigente: cerrado el 1-10-2026'
+    assert context['kpis'][2]['support'] == '2023: 208.431'
+
+
+def cera_census(n):
+    """La parte `census` del fixture con `n` provincias sintéticas (`P01`...): las altas se duplican de un periodo
+    del artículo al otro y crecen con el número de la provincia del inicio del segundo al censo de la convocatoria."""
+    census = fixture_data('study-census')
+    provinces = [{'region_id': i, 'name': 'P{:02d}'.format(i), 'c1_start': 900, 'c1_end': 1000, 'c2_start': 1000,
+                  'c2_end': 1200, 'g1': 100, 'g2': 200, 'ratio': 2.0} for i in range(1, n + 1)]
+    growth = [{'region_id': i, 'name': 'P{:02d}'.format(i), 'baseline': 1100, 'election': 1000 + 10 * i,
+               'growth': 10 * i - 100, 'pct': None} for i in range(1, n + 1)]
+    return census | {'provinces': provinces, 'election_provinces': growth}
+
+
+def cera_page(api):
+    """La página del estudio CERA con los espacios normalizados (las frases de las plantillas cortan líneas)."""
+    return re.sub(r'\s+', ' ', html(call(api, '/analisis/voto-cera')[2]))
+
+
+def test_cera_page_head_and_question_1(api, fresh_app):
+    publish_study(fresh_app.fs, parts={'census': cera_census(12)})
+    page = cera_page(api)
+    assert '<title>Demoscopio · El voto CERA en España y el efecto de la «Ley de Nietos»</title>' in page
+    assert ('<p class="study-subtitle">¿Es posible orquestar con éxito un fraude electoral significativo a través '
+            'del censo exterior?</p>') in page
+    head = page[page.index('id="study-head"'):page.index('class="study-title"')]
+    assert re.findall(r'<span class="(pill[^"]*)">([^<]+)</span>', head) == [
+        ('pill brand', 'Análisis'), ('pill', 'Generales del 29 de noviembre de 2026'),
+        ('pill warn', 'Predicción registrada · se comprueba tras el escrutinio CERA')]
+    toc = page[page.index('<nav class="section-nav toc"'):]
+    toc = toc[:toc.index('</nav>')]
+    assert re.findall(r'href="([^"]+)"', toc) == ['#resumen', '#p1', '#p2', '#p3', '#debate', '#comprobacion', '#datos']
+    assert '<a href="#p1" class="q1">1 · ¿Se dispara el censo?</a>' in toc
+    assert 'class="q2">2 · ¿Sesgo o colocación?</a>' in toc and 'class="q3">3 · ¿Mueven escaños?</a>' in toc
+    assert '2.769.645' in page[page.index('class="kpis"'):page.index('id="resumen"')]
+    resumen = page[page.index('id="resumen"'):page.index('id="p1"')]
+    assert re.findall(r'<div class="vv">([^<]+)</div>', resumen) == ['SÍ', 'SIN EVIDENCIA', 'NO']
+    assert re.findall(r'<a class="(q[123])" href="#(p[123])">', resumen) == [('q1', 'p1'), ('q2', 'p2'), ('q3', 'p3')]
+    assert '(×2,0)' in resumen and '~5%' in resumen and '~10%' in resumen
+    assert 'el 17% de las altas con el 24% del censo' in resumen
+    assert 'Con el censo real, la participación real y el reparto real: cero escaños.' in resumen
+    assert 'class="note blue"' in resumen and 'los datos por encima de bandos y consignas.</p>' in resumen
+    assert page[:page.index('id="p1"')].endswith('<section class="card qcard q1" ')
+    p1 = page[page.index('id="p1"'):]
+    p1 = p1[:p1.index('</section>')]
+    assert '<div class="qn">1</div><h2 class="qt">¿Se dispara el censo de los españoles en el exterior?</h2>' in p1
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p1) == ['SÍ']
+    for chart in ('census-chart', 'periods-chart'):
+        assert re.search(r'<div class="chart" id="{}" role="img" aria-label="[^"]+"></div>'.format(chart), p1)
+    countries = p1[p1.index('id="countries-table"'):]
+    countries = countries[:countries.index('</table>')]
+    assert '<td><b>Venezuela</b></td><td>200</td><td><b>400</b></td><td class="pos">×2,0</td>' in countries
+    assert countries.index('Venezuela') < countries.index('Argentina')  # by the additions after the law
+    provinces = p1[p1.index('id="provinces-table"'):]
+    provinces = provinces[:provinces.index('</table>')]
+    assert '<th scope="col">Censo 01-2023</th>' in provinces  # the start of the second period of the article
+    rows = re.findall(r'<tr( hidden)?>\s*<td><b>(P\d\d)</b></td>', provinces)
+    assert [name for _, name in rows] == ['P{:02d}'.format(i) for i in range(12, 0, -1)]  # by growth
+    assert [bool(hidden) for hidden, _ in rows] == [False] * 8 + [True] * 4
+    assert '<td><b>P12</b></td><td>1.000</td><td>1.120</td><td><b>+120</b></td><td>+12%</td>' in provinces
+    assert '<button type="button" class="more" id="provinces-more" hidden>Ver las 12 provincias</button>' in p1
+    summary = p1[p1.index('class="sum"'):]
+    summary = summary[:summary.index('</div>')]
+    assert '<b>Sí, y no tiene sentido negarlo.</b>' in summary and '(×2,0: de 1.200 a 2.400)' in summary
+    assert 'suma 442.257 electores desde las generales de 2023 (+19%)' in summary
+    assert '(Argentina ×2,0)' in summary and 'Cuba' not in summary  # no row for Cuba: its clause goes
+    assert 'class="how"' in p1 and 'p &lt; 0,001' in p1
+    assert 'medium.com' not in page  # the article appears only in «Datos y método» (task 17)
+    # the default fixture has three provinces: no hidden rows and no button; a checked study says so
+    publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'}, parts={'check': {'verdict': 'acierto'}})
+    page = cera_page(api)
+    provinces = page[page.index('id="provinces-table"'):]
+    assert 'id="provinces-more"' not in page and ' hidden>' not in provinces[:provinces.index('</table>')]
+    assert '<span class="pill ok">Comprobada con el escrutinio del 3 dic 2026</span>' in page
+    assert 'Predicción registrada' not in page
+    publish_study(fresh_app.fs, meta={'registered_at': None, 'registered': None})
+    page = cera_page(api)
+    assert '<span class="pill">Borrador · predicción sin registrar</span>' in page
+    assert 'Predicción registrada' not in page and 'medium.com' not in page
+
+
+def test_cera_question_1_helpers():
+    analisis = pages.analisis
+    assert analisis._long_date('2026-11-29') == '29 de noviembre de 2026' and analisis._long_date(None) is None
+    assert analisis._months('2019-03-01', '2022-10-01') == 43 and analisis._months(None, '2022-10-01') is None
+    assert analisis._country_name('ESTADOS UNIDOS DE AMÉRICA') == 'Estados Unidos de América'
+    assert analisis._country_name('MÉXICO') == 'México' and analisis._country_name('Argentina') == 'Argentina'
+    assert analisis._p_value(0.000415) == '< 0,001' and analisis._p_value(0.0421) == '= 0,042'
+    assert [analisis._pace_tone(x) for x in (5.1, 1.6, 0.7, None)] == ['pos', None, 'neg', None]
+    # a country of the INE in capitals: the summary finds it, the table shows it in the case of the prose
+    census = {'countries': [{'name': 'CUBA', 'g1': 15000, 'g2': 16463, 'ratio': 1.1}], 'periods': {'article': [
+        ['2019-03-01', '2022-10-01'], ['2022-10-01', '2026-05-01']]}}
+    q1 = analisis._question_1(census, {'p_slope': 0.2})
+    assert q1['exile']['name'] == 'Cuba' and q1['latam'] == [] and q1['countries'][0]['name'] == 'Cuba'
+    assert q1['months'] == [43, 43] and q1['equal'] and q1['start_label'] == '10-2022'
+    assert q1['provinces'] == [] and q1['provinces_hidden'] == 0 and q1['slope_significant'] is False
