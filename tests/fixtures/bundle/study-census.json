@@ -6,14 +6,299 @@
   "mode": null,
   "generated_at": "2026-10-19T12:00:00Z",
   "data": {
-    "series": {},
-    "marks": [],
-    "periods": {},
-    "provinces": [],
-    "countries": [],
-    "origins": [],
-    "exposure": [],
-    "election_provinces": [],
-    "election_countries": []
+    "series": {
+      "dates": [
+        "2026-07-01",
+        "2026-08-01",
+        "2026-09-01"
+      ],
+      "values": [
+        2740000,
+        2751000,
+        2762829
+      ]
+    },
+    "marks": [
+      {
+        "date": "2026-07-01",
+        "label": "Convocatoria de Castilla y León"
+      },
+      {
+        "date": "2026-09-01",
+        "label": "Último cierre"
+      }
+    ],
+    "periods": {
+      "article": [
+        [
+          "2022-01-01",
+          "2022-12-01"
+        ],
+        [
+          "2023-01-01",
+          "2023-06-01"
+        ]
+      ],
+      "now": [
+        [
+          "2025-01-01",
+          "2025-12-01"
+        ],
+        [
+          "2026-01-01",
+          "2026-09-01"
+        ]
+      ]
+    },
+    "provinces": [
+      {
+        "region_id": 28,
+        "name": "Madrid",
+        "c1_start": 1000,
+        "c1_end": 1100,
+        "c2_start": 1100,
+        "c2_end": 1300,
+        "g1": 100,
+        "g2": 200,
+        "ratio": 2.0,
+        "c1_start_now": 1000,
+        "c1_end_now": 1100,
+        "c2_start_now": 1100,
+        "c2_end_now": 1250,
+        "g1_now": 100,
+        "g2_now": 150,
+        "ratio_now": 1.5
+      },
+      {
+        "region_id": 8,
+        "name": "Barcelona",
+        "c1_start": 2000,
+        "c1_end": 2200,
+        "c2_start": 2200,
+        "c2_end": 2600,
+        "g1": 200,
+        "g2": 400,
+        "ratio": 2.0,
+        "c1_start_now": 2000,
+        "c1_end_now": 2200,
+        "c2_start_now": 2200,
+        "c2_end_now": 2500,
+        "g1_now": 200,
+        "g2_now": 300,
+        "ratio_now": 1.5
+      },
+      {
+        "region_id": 46,
+        "name": "Valencia",
+        "c1_start": 3000,
+        "c1_end": 3300,
+        "c2_start": 3300,
+        "c2_end": 3900,
+        "g1": 300,
+        "g2": 600,
+        "ratio": 2.0,
+        "c1_start_now": 3000,
+        "c1_end_now": 3300,
+        "c2_start_now": 3300,
+        "c2_end_now": 3750,
+        "g1_now": 300,
+        "g2_now": 450,
+        "ratio_now": 1.5
+      }
+    ],
+    "countries": [
+      {
+        "country_code": "ARG",
+        "name": "Argentina",
+        "c1_start": 1000,
+        "c1_end": 1100,
+        "c2_start": 1100,
+        "c2_end": 1300,
+        "g1": 100,
+        "g2": 200,
+        "ratio": 2.0,
+        "c1_start_now": 1000,
+        "c1_end_now": 1100,
+        "c2_start_now": 1100,
+        "c2_end_now": 1250,
+        "g1_now": 100,
+        "g2_now": 150,
+        "ratio_now": 1.5
+      },
+      {
+        "country_code": "VEN",
+        "name": "Venezuela",
+        "c1_start": 2000,
+        "c1_end": 2200,
+        "c2_start": 2200,
+        "c2_end": 2600,
+        "g1": 200,
+        "g2": 400,
+        "ratio": 2.0,
+        "c1_start_now": 2000,
+        "c1_end_now": 2200,
+        "c2_start_now": 2200,
+        "c2_end_now": 2500,
+        "g1_now": 200,
+        "g2_now": 300,
+        "ratio_now": 1.5
+      }
+    ],
+    "origins": [
+      {
+        "region": "Latinoamérica",
+        "name": "Latinoamérica",
+        "c1_start": 1000,
+        "c1_end": 1100,
+        "c2_start": 1100,
+        "c2_end": 1300,
+        "g1": 100,
+        "g2": 200,
+        "ratio": 2.0,
+        "c1_start_now": 1000,
+        "c1_end_now": 1100,
+        "c2_start_now": 1100,
+        "c2_end_now": 1250,
+        "g1_now": 100,
+        "g2_now": 150,
+        "ratio_now": 1.5
+      },
+      {
+        "region": "Europa",
+        "name": "Europa",
+        "c1_start": 2000,
+        "c1_end": 2200,
+        "c2_start": 2200,
+        "c2_end": 2600,
+        "g1": 200,
+        "g2": 400,
+        "ratio": 2.0,
+        "c1_start_now": 2000,
+        "c1_end_now": 2200,
+        "c2_start_now": 2200,
+        "c2_end_now": 2500,
+        "g1_now": 200,
+        "g2_now": 300,
+        "ratio_now": 1.5
+      },
+      {
+        "region": "Resto",
+        "name": "Resto",
+        "c1_start": 3000,
+        "c1_end": 3300,
+        "c2_start": 3300,
+        "c2_end": 3900,
+        "g1": 300,
+        "g2": 600,
+        "ratio": 2.0,
+        "c1_start_now": 3000,
+        "c1_end_now": 3300,
+        "c2_start_now": 3300,
+        "c2_end_now": 3750,
+        "g1_now": 300,
+        "g2_now": 450,
+        "ratio_now": 1.5
+      }
+    ],
+    "exposure": [
+      {
+        "exposure": "Alta",
+        "name": "Alta",
+        "c1_start": 1000,
+        "c1_end": 1100,
+        "c2_start": 1100,
+        "c2_end": 1300,
+        "g1": 100,
+        "g2": 200,
+        "ratio": 2.0,
+        "c1_start_now": 1000,
+        "c1_end_now": 1100,
+        "c2_start_now": 1100,
+        "c2_end_now": 1250,
+        "g1_now": 100,
+        "g2_now": 150,
+        "ratio_now": 1.5
+      },
+      {
+        "exposure": "Media",
+        "name": "Media",
+        "c1_start": 2000,
+        "c1_end": 2200,
+        "c2_start": 2200,
+        "c2_end": 2600,
+        "g1": 200,
+        "g2": 400,
+        "ratio": 2.0,
+        "c1_start_now": 2000,
+        "c1_end_now": 2200,
+        "c2_start_now": 2200,
+        "c2_end_now": 2500,
+        "g1_now": 200,
+        "g2_now": 300,
+        "ratio_now": 1.5
+      },
+      {
+        "exposure": "Baja",
+        "name": "Baja",
+        "c1_start": 3000,
+        "c1_end": 3300,
+        "c2_start": 3300,
+        "c2_end": 3900,
+        "g1": 300,
+        "g2": 600,
+        "ratio": 2.0,
+        "c1_start_now": 3000,
+        "c1_end_now": 3300,
+        "c2_start_now": 3300,
+        "c2_end_now": 3750,
+        "g1_now": 300,
+        "g2_now": 450,
+        "ratio_now": 1.5
+      }
+    ],
+    "election_provinces": [
+      {
+        "region_id": 28,
+        "name": "Madrid",
+        "baseline": 1300,
+        "election": 1500,
+        "growth": 200,
+        "pct": 15.38
+      },
+      {
+        "region_id": 8,
+        "name": "Barcelona",
+        "baseline": 2600,
+        "election": 3000,
+        "growth": 400,
+        "pct": 15.38
+      },
+      {
+        "region_id": 46,
+        "name": "Valencia",
+        "baseline": 3900,
+        "election": 4500,
+        "growth": 600,
+        "pct": 15.38
+      }
+    ],
+    "election_countries": [
+      {
+        "country_code": "ARG",
+        "name": "Argentina",
+        "baseline": 1300,
+        "election": 1500,
+        "growth": 200,
+        "pct": 15.38
+      },
+      {
+        "country_code": "VEN",
+        "name": "Venezuela",
+        "baseline": 2600,
+        "election": 3000,
+        "growth": 400,
+        "pct": 15.38
+      }
+    ]
   }
 }

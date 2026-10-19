@@ -56,6 +56,21 @@ def write_analysis(fs, scope='es'):
     return writer
 
 
+def write_study(fs, study='voto-cera', meta=None):
+    """Estudio publicado a partir de los fixtures: los once gemelos CSV mínimos y las ocho partes (`meta` la última,
+    como `publish`), con `meta` sustituyendo campos del `meta` del fixture."""
+    writer = bundle.BundleWriter(fs)
+    for name in bundle.STUDY_CSV:
+        writer.write_csv(bundle.path_study_csv(study, name), pd.DataFrame({'name': [name], 'value': [1.5]}))
+    for part in bundle.STUDY_PARTS[1:] + bundle.STUDY_PARTS[:1]:
+        schema = bundle.STUDY_SCHEMAS[part]
+        data = fixture_data(schema)
+        if part == 'meta':
+            data = data | (meta or {})
+        writer.write_json(bundle.path_study(study, part), schema, data, None)
+    return writer
+
+
 def write_event(fs, scope='es', date='2023-07-23', model=True):
     """Elección pasada publicada a partir de los fixtures: las cinco partes (con `scope` y `event_date`
     sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`."""

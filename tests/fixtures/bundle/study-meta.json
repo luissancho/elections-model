@@ -7,21 +7,67 @@
   "generated_at": "2026-10-19T12:00:00Z",
   "data": {
     "study": "voto-cera",
-    "title": "x",
-    "subtitle": "x",
-    "election": {},
-    "registered_at": null,
-    "registered_commit": null,
-    "registered": null,
+    "title": "El voto CERA y las generales de 2026",
+    "subtitle": "Estudio sintético de pruebas",
+    "election": {
+      "scope": "es",
+      "date": "2026-11-29",
+      "census_closed": "2026-10-01",
+      "census_total": 2769645,
+      "census_source": "INE, Oficina del Censo Electoral: elecgen2026_tab8.xlsx"
+    },
+    "registered_at": "2026-10-18",
+    "registered_commit": "abc1234",
+    "registered": {
+      "claim": "El voto CERA de las generales del 29 de noviembre de 2026 no dará al PSOE ni a la izquierda un saldo neto de más de 1 escaño",
+      "max_gain": 1,
+      "seats": {
+        "convocatoria": {
+          "Izquierda": 152,
+          "Derecha": 170
+        },
+        "sin_litigio": {
+          "Izquierda": 152,
+          "Derecha": 170
+        }
+      }
+    },
     "registered_changed_at": null,
     "checked_at": null,
-    "params": {},
-    "sources": [],
-    "series_last": "2026-09",
-    "regression": {},
-    "commit": null,
+    "params": {
+      "election": {
+        "scope": "es",
+        "date": "2026-11-29"
+      }
+    },
+    "sources": [
+      {
+        "label": "INE: censo electoral mensual (cerapropais_26.xlsx)",
+        "url": "https://www.ine.es/"
+      },
+      {
+        "label": "Ministerio del Interior: escrutinio del voto CERA",
+        "url": "https://infoelectoral.interior.gob.es/"
+      }
+    ],
+    "series_last": "2026-09-01",
+    "regression": {
+      "slope_before": 1.5,
+      "slope_after": 9.8,
+      "net_before": 0.4,
+      "net_after": 12.1,
+      "p_slope": 0.000415,
+      "p_level": 0.611
+    },
+    "commit": "abc1234",
     "dirty": false,
-    "versions": {},
-    "seconds": {}
+    "versions": {
+      "python": "3.11.9",
+      "pandas": "2.2.0"
+    },
+    "seconds": {
+      "census": 0.4,
+      "prediction": 1.2
+    }
   }
 }

@@ -660,3 +660,25 @@ Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Contr
 
 `invalid scope`, `invalid date`, `invalid format`, `unknown part`, `no database configured` y `no file system
 configured` valen también aquí.
+
+## Rutas de estudios
+
+Solo `GET`. Sirven los ficheros publicados de cada estudio (controlador `Studies`, `site/v1/studies/{study}/`),
+sin base de datos. Respuestas con `Cache-Control: public, max-age=60` y `ETag`; nunca inmutables, porque se
+sobrescriben en cada publicación.
+
+| Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
+|---|---|---|---|
+| `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`; `part` ∈ `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check` |
+
+- `meta` y `placement` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
+  no pertenece a la parte.
+- Un estudio está publicado cuando tiene `meta.json`; `studies` lista solo los publicados.
+
+| Estado | `message` | Causa |
+|---|---|---|
+| 404 | `unknown study` | `study` no es un estudio conocido |
+| 404 | `study not published` | el fichero pedido no está publicado |
+
+`unknown part`, `no csv for this part` e `invalid format` valen también aquí.

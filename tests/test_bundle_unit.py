@@ -239,3 +239,17 @@ def test_backtest_exists_needs_the_meta(tmp_path):
     assert not writer.backtest_exists('es')
     writer.write_json(bundle.path_backtest('es', 'meta'), 'backtest-meta', load_fixture('backtest-meta')['data'], 'es')
     assert writer.backtest_exists('es') and not writer.backtest_exists('es-md')
+
+
+@pytest.mark.parametrize('part', bundle.STUDY_PARTS)
+def test_study_schemas_validate_the_fixtures(part):
+    obj = load_fixture('study-' + part)
+    assert bundle.validate('study-' + part, obj) is obj and obj['schema'] == f'study-{part}@1'
+    assert obj['scope'] is None and obj['data']
+
+
+def test_study_meta_rejects_a_registration_that_is_not_a_dict():
+    obj = copy.deepcopy(load_fixture('study-meta'))
+    obj['data']['registered'] = 'x'
+    with pytest.raises(ValueError):
+        bundle.validate('study-meta', obj)

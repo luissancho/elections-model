@@ -6,8 +6,81 @@
   "mode": null,
   "generated_at": "2026-10-19T12:00:00Z",
   "data": {
-    "elections": [],
-    "rows": [],
+    "elections": [
+      {
+        "date": "2019-11-10",
+        "voters": 190000,
+        "rate": 0.8,
+        "n_over_gap": 2,
+        "n_decided": 3,
+        "decided": [
+          {
+            "region_id": 28,
+            "name": "Madrid",
+            "winner_with": "PP",
+            "winner_without": "PSOE",
+            "crosses_block": true
+          }
+        ],
+        "net_psoe": -1,
+        "net_left": -1,
+        "net_by_block": {
+          "Izquierda": -1,
+          "Derecha": 1
+        }
+      },
+      {
+        "date": "2023-07-23",
+        "voters": 208431,
+        "rate": 0.6,
+        "n_over_gap": 2,
+        "n_decided": 3,
+        "decided": [
+          {
+            "region_id": 28,
+            "name": "Madrid",
+            "winner_with": "PP",
+            "winner_without": "PSOE",
+            "crosses_block": true
+          }
+        ],
+        "net_psoe": -1,
+        "net_left": -1,
+        "net_by_block": {
+          "Izquierda": -1,
+          "Derecha": 1
+        }
+      }
+    ],
+    "rows": [
+      {
+        "date": "2023-07-23",
+        "region_id": 28,
+        "name": "Madrid",
+        "magnitude": 3,
+        "gap": 120.5,
+        "votes": 1000,
+        "decided": true
+      },
+      {
+        "date": "2023-07-23",
+        "region_id": 8,
+        "name": "Barcelona",
+        "magnitude": 4,
+        "gap": 121.5,
+        "votes": 2000,
+        "decided": false
+      },
+      {
+        "date": "2023-07-23",
+        "region_id": 46,
+        "name": "Valencia",
+        "magnitude": 5,
+        "gap": 122.5,
+        "votes": 3000,
+        "decided": false
+      }
+    ],
     "verdict": null
   }
 }

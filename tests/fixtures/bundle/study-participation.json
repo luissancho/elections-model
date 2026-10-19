@@ -6,8 +6,69 @@
   "mode": null,
   "generated_at": "2026-10-19T12:00:00Z",
   "data": {
-    "origin": [],
-    "generales": [],
-    "autonomicas": []
+    "origin": [
+      {
+        "process": "cyl-2026",
+        "origin": "Latinoamérica",
+        "electors": 50000,
+        "voters": 9000,
+        "rate": 18.0
+      },
+      {
+        "process": "cyl-2026",
+        "origin": "Europa",
+        "electors": 40000,
+        "voters": 7200,
+        "rate": 18.0
+      }
+    ],
+    "generales": [
+      {
+        "date": "2019-11-10",
+        "electors": 34800000,
+        "voters": 24000000,
+        "rate": 66.2,
+        "period": "rogado"
+      },
+      {
+        "date": "2023-07-23",
+        "electors": 37000000,
+        "voters": 24500000,
+        "rate": 66.0,
+        "period": "rogado"
+      }
+    ],
+    "autonomicas": [
+      {
+        "community": "Castilla y León",
+        "previous": {
+          "date": "2022-02-13",
+          "electors": 2000,
+          "voters": 900,
+          "rate": 45.0,
+          "pp_pct": 31.4,
+          "psoe_pct": 30.1,
+          "vox_pct": 17.6,
+          "other_left_pct": 8.2,
+          "left_share": 38.3,
+          "margin": 1.3
+        },
+        "last": {
+          "date": "2026-03-15",
+          "electors": 2000,
+          "voters": 900,
+          "rate": 45.0,
+          "pp_pct": 31.4,
+          "psoe_pct": 30.1,
+          "vox_pct": 17.6,
+          "other_left_pct": 8.2,
+          "left_share": 38.3,
+          "margin": 1.3
+        },
+        "d_psoe": 1.1,
+        "d_other_left": 0.4,
+        "d_block": 1.5
+      }
+    ]
   }
 }
