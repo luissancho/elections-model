@@ -26,18 +26,25 @@ from mtpy.lib.studies.cera.seats import (
     allocate_results,
     block_seats,
     check_official,
+    exterior_grid,
     increment_model,
     increment_votes,
     last_seat,
     litigation_census,
     net_effect,
     new_electors,
+    optimal_placement,
     participation_history,
-    projected_census
+    peninsular_results,
+    placement_pool,
+    projected_census,
+    report_replication,
+    scenario_table
 )
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CERA_CENSUS_2023 = 2328260
+PSOE = 'PARTIDO SOCIALISTA OBRERO ESPAÑOL'
 
 
 def _cera_votes(data_fs, date):
@@ -246,3 +253,65 @@ def test_net_effect_signs(study_inputs):
     assert cantabria['net'] == pytest.approx(cantabria['d_runner'] - cantabria['d_winner'])
     assert cantabria['participation_needed'] == pytest.approx(cantabria['gap'] / cantabria['net'])
     assert net.loc['Madrid', 'participation_needed'] is None
+
+
+def test_peninsular_results_take_the_cera_votes_out(study_inputs):
+    s = study_inputs
+    peninsular = peninsular_results(s.results_2023, s.cera_2023)
+    removed = s.results_2023.votes.values.sum() - peninsular.votes.values.sum()
+    # The 70 Asturias votes of ESPAÑA VACIADA belong to ASTURIAS EXISTE-ESPAÑA VACIADA: that cell floors at 0.
+    assert removed == s.cera_2023.values.sum() - 70 and (peninsular.votes >= 0).all().all()
+    totals = peninsular.totals
+    assert (totals['valid'] == totals['candidates'] + totals['blank']).all()
+    assert (totals['candidates'] == peninsular.votes.sum(axis=1)).all()
+    assert peninsular.seats is s.results_2023.seats and list(peninsular.votes.columns) == list(
+        s.results_2023.votes.columns
+    )
+
+
+def test_exterior_grid_is_monotone_and_zero_at_the_observed_cell_with_real_split(study_inputs):
+    s = study_inputs
+    grid = exterior_grid(
+        s.results_2023, s.cera_2023, s.census_by_province, [0.09, 0.2, 0.3, 0.5, 0.7], [0.5, 0.6, 0.7, 0.8],
+        s.siglas, s.blocks
+    )
+    assert grid.shape == (5, 4) and (grid.diff().fillna(0) >= 0).all().all()
+    assert (grid.T.diff().fillna(0) >= 0).all().all()
+    assert grid.loc[0.09, 0.5] <= 1 and grid.loc[0.7, 0.8] >= 10
+    assert grid.values.tolist() == [[1, 1, 1, 1], [1, 1, 5, 6], [1, 4, 6, 7], [3, 7, 7, 11], [4, 7, 8, 11]]
+
+
+def test_scenario_table_rows(study_inputs):
+    s = study_inputs
+    table = scenario_table(
+        s.results_2023, s.baseline, s.census, s.countries, s.params['participation'], s.split, s.siglas, s.blocks,
+        scenarios=[{'census_x': None, 'part_x': 1, 'bias': 'empirico'}, {'census_x': 2.0, 'part_x': 3, 'bias': 0.9}]
+    )
+    assert list(table.columns) == ['census_x', 'part_x', 'bias', 'd_left', 'd_right']
+    assert table.iloc[0]['census_x'] is None and table.iloc[1]['census_x'] == 2.0
+    assert (table.iloc[1]['d_left'], table.iloc[1]['d_right']) == (6, -6)
+    assert table.iloc[0]['d_left'] == 0 and table.iloc[0]['d_right'] == 0 and table.iloc[1]['d_left'] >= 3
+
+
+def test_optimal_placement_grows_with_the_levers_and_is_zero_without_placement(study_inputs):
+    s = study_inputs
+    pool = placement_pool(s.long, s.census, s.countries, s.params['placement_countries'], '2022-10-01')
+    assert 150_000 <= pool.sum() <= 200_000
+    out = optimal_placement(s.results_2023, pool, [0.09, 0.2, 0.5, 1.0], [0.5, 0.6, 0.7, 0.8, 1.0], PSOE)
+    grid = out['grid']
+    assert grid.shape == (4, 5) and (grid.diff().fillna(0) >= 0).all().all()
+    assert (grid.T.diff().fillna(0) >= 0).all().all()
+    # ~181.000 electors, three times the article's 62.800: 8.065 useful votes at 9 % / 50 % buy the five cheapest
+    # PSOE seats (Tarragona, Madrid, Girona, Salamanca, Ceuta), where the article's pool bought two.
+    assert grid.loc[0.09, 0.5] == 5 and grid.loc[1.0, 1.0] == 24
+    assert grid.loc[1.0, 1.0] >= grid.loc[0.5, 0.8] >= grid.loc[0.09, 0.5] and out['contrast'] == 0
+    article = optimal_placement(s.results_2023, pool * 62_800 / pool.sum(), [0.09], [0.5], PSOE, step=100,
+                                split=s.split)
+    assert article['grid'].loc[0.09, 0.5] == 2 and article['contrast'] == 0
+
+
+def test_report_replication_counts_provinces(study_inputs):
+    out = report_replication(study_inputs.results_2023, study_inputs.census_by_province, study_inputs.hist)
+    assert out['n_max'] >= out['n_mean'] >= 9 and out['votes_max'] > out['votes_mean']
+    # With the 2019 and 2023 rates only; the report's mean since 1986 gives ~523.000 votes and 20 provinces.
+    assert (out['n_mean'], out['n_max']) == (10, 11) and 220_000 <= out['votes_mean'] <= 230_000
