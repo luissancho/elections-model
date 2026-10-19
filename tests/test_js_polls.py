@@ -63,6 +63,12 @@ def table_js(expr):
     return run_js(expr.replace('POLLS', json.dumps(TABLE_POLLS)))
 
 
+def test_result_tooltip_line_names_the_official_result_and_the_date():
+    line = run_js('s.resultTooltipLine("PP", 33.06, "2023-07-23", "#1d84ce")')
+    assert 'Resultado oficial' in line and '23 jul 2023' in line and '#1d84ce' in line and line.index('<br>') < line.index('PP')
+    assert '33,1' in line
+
+
 def test_months_labels_and_short_dates_of_the_polls_table():
     assert table_js('p.monthsOf(POLLS)') == ['2026-09', '2026-10']
     assert table_js('p.monthOf({date: "2026-10-01"})') == '2026-10' and table_js('p.monthOf({})') is None

@@ -195,6 +195,30 @@ def test_series_hidden_legend_keeps_the_component_and_the_theme():
     assert theme['fontFamily'].startswith("'DM Sans'") and theme['headFamily'].startswith("'Outfit'") and theme['mutedColor'] == '#5a5f72'
 
 
+RESULT_ARGS = SERIES_ARGS.replace("legend: %s", "legend: 'hidden', asOfLabel: 'A 6 días', result: {date: '2026-10-08', values: {PP: 31.5}}")
+
+
+def test_series_result_draws_a_diamond_at_the_election_and_extends_the_axis():
+    option = run_js('s.seriesOption(%s)' % RESULT_ARGS)
+    election = run_js('s.dayTime("2026-10-08")')
+    diamonds = [s for s in option['series'] if s['type'] == 'scatter' and s.get('symbol') == 'diamond']
+    assert [(s['name'], s['data'], s['symbolSize'], s['z']) for s in diamonds] == [('PP', [[election, 31.5]], 12, 5)]
+    assert diamonds[0]['itemStyle'] == {'borderColor': '#fff', 'borderWidth': 1.5}
+    marks = option['series'][-1]['markLine']['data']
+    assert [m['label']['formatter'] for m in marks] == ['A 6 días', 'Elección'] and marks[1]['xAxis'] == election
+    assert option['dataZoom'][0]['endValue'] == election
+    plain = run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))
+    assert not [s for s in plain['series'] if s.get('symbol') == 'diamond']
+    assert [m['label']['formatter'] for m in plain['series'][-1]['markLine']['data']] == ['Estimación']
+    assert run_js('s.axisDatesOf({dates: ["2026-10-01", "2026-10-02"]}, null, {date: "2026-10-08", values: {}})') == ['2026-10-01', '2026-10-02', '2026-10-08']
+    assert run_js('s.axisDatesOf({dates: ["2026-10-01", "2026-10-02"]}, null, {date: "2026-10-02", values: {}})') == ['2026-10-01', '2026-10-02']
+
+
+def test_series_window_of_three_months_keeps_the_result_in_view():
+    option = run_js('s.seriesOption(%s)' % RESULT_ARGS.replace("window: 'all'", "window: '3m', anchor: '2026-10-08'"))
+    assert option['dataZoom'][0]['endValue'] == run_js('s.dayTime("2026-10-08")')
+
+
 def test_ridge_rows_are_taller_on_desktop():
     assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
     assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64
