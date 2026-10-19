@@ -14,7 +14,7 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import site
 from .common import api_url, bundle_part, common_context
-from .cera import _get, _question_1
+from .cera import SCENARIOS, UNIFORM_SPLIT, _get, _question_1, _question_2, _question_3
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
@@ -30,9 +30,6 @@ ARTICLE = {'url': 'https://medium.com/@luis_sancho/el-voto-cera-en-espa%C3%B1a-y
 # First auto of the Supreme Court that suspended the inscriptions in litigation: a fact of the context, not of the
 # data (spec D7); the second one is the ``as_of`` of ``params.litigation``
 SUSPENDED_ON = '2026-09-10'
-# Share of the new vote that goes to the left with a uniform split: the observed column of the sensitivity grids
-UNIFORM_SPLIT = 0.5
-SCENARIOS = ('convocatoria', 'sin_litigio')
 # Net effect of each scenario in the rows of ``prediction.last_seat``
 SCENARIO_NET = {'convocatoria': 'net', 'sin_litigio': 'net_b'}
 # Rows of the gap chart: the provinces with the smallest gap of the last seat
@@ -514,7 +511,8 @@ def cera_context(state: dict) -> dict:
         (``_figures``), ``kpis`` (``_kpis``), ``registered`` (``{'at', 'claim'}`` of the registration, or ``None``
         while it is a draft), ``checked`` (whether ``check.verdict`` is set), ``sources`` (``meta.sources``),
         ``csv_links`` (``_csv_links``), ``article`` (``ARTICLE``), ``initial`` (``_island``), ``election_day``
-        (the date of the election in words, ``_long_date``) and ``q1`` (``_question_1``).
+        (the date of the election in words, ``_long_date``) and the view models of the three questions, ``q1``,
+        ``q2`` and ``q3`` (``cera._question_1``, ``_question_2`` and ``_question_3``).
 
     Raises
     ------
@@ -540,7 +538,10 @@ def cera_context(state: dict) -> dict:
         initial=_island(context['state'], parts, figures),
         election_day=_long_date(_get(meta, 'election', 'date')),
         q1=_question_1(parts['census'], figures),
+        q2=_question_2(parts, figures),
     )
+    context['q3'] = _question_3(parts, figures, context['initial']['gap'][SCENARIOS[0]],
+                                api_url(CERA, 'prediction', kind='study', fmt='csv', table='last-seat'))
 
     return context
 

@@ -3788,3 +3788,153 @@ def test_cera_question_1_helpers():
     assert q1['exile']['name'] == 'Cuba' and q1['latam'] == [] and q1['countries'][0]['name'] == 'Cuba'
     assert q1['months'] == [43, 43] and q1['equal'] and q1['start_label'] == '10-2022'
     assert q1['provinces'] == [] and q1['provinces_hidden'] == 0 and q1['slope_significant'] is False
+
+
+def cera_section(page, id):
+    """La tarjeta `<section … id="{id}">` de la página del estudio, hasta su cierre."""
+    section = page[page.index('id="{}"'.format(id)):]
+    return section[:section.index('</section>')]
+
+
+def cera_table(section, id, tables=1):
+    """El bloque con `id` de una tarjeta, hasta el cierre de su tabla (o de la última de sus `tables` tablas)."""
+    block = section[section.index('id="{}"'.format(id)):]
+    end = -1
+    for _ in range(tables):
+        end = block.index('</table>', end + 1)
+    return block[:end + len('</table>')]
+
+
+def regional_vote(community, previous, last, d_psoe, d_other_left, d_block):
+    """Dos filas `autonomicas` de `vote.processes` (comicio anterior y último) con su margen y cuota de izquierda."""
+    base = fixture_data('study-vote')['processes'][1]
+    return [base | {'community': community, 'step': 'previous', 'date': previous[0], 'margin': previous[1],
+                    'left_share': previous[2]},
+            base | {'community': community, 'step': 'last', 'date': last[0], 'margin': last[1], 'left_share': last[2],
+                    'd_psoe': d_psoe, 'd_other_left': d_other_left, 'd_block': d_block}]
+
+
+def test_cera_page_questions_2_and_3(api, fresh_app):
+    publish_study(fresh_app.fs)
+    page = cera_page(api)
+    assert page[:page.index('id="p2"')].endswith('<section class="card qcard q2" ')
+    p2 = cera_section(page, 'p2')
+    assert ('<div class="qn">2</div><h2 class="qt">¿Sesgo de izquierdas o reparto en provincias «estratégicas»?</h2>'
+            in p2)
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p2) == ['SIN EVIDENCIA']
+    for chart in ('origin-chart', 'ecological-chart', 'slope-chart', 'cannibal-chart', 'sensitive-chart'):
+        assert re.search(r'<div class="chart" id="{}" role="img" aria-label="[^"]+"></div>'.format(chart), p2), chart
+    assert '<p class="ctitle">Las nuevas altas participan la mitad</p>' in p2  # ~5% frente a ~10%
+    assert '<p class="ctitle">A más censo latinoamericano, menos voto a la izquierda</p>' in p2
+    assert '3 provincias, generales · r = −0,74' in p2
+    assert '<p class="ctitle">Las provincias sensibles reciben menos altas que el peso que ya tenían</p>' in p2
+    assert 'class="band"' not in p2  # no regional election with both steps in the fixture's `vote.processes`
+    madrid = cera_table(p2, 'madrid-table')
+    assert '<td><b>Madrid, Venezuela</b></td><td>8,0%</td><td>–</td><td>9%</td>' in madrid
+    assert '<td><b>Madrid, conjunto</b></td>' in madrid
+    assert 'La adscripción de quien nunca vivió en España' in p2
+    assert 'Madrid, con 3 escaños,' in p2 and 'el neto del CERA favorece al PSOE' in p2  # region 28 of last_seat
+    assert 'el sitio más caro' not in p2  # Valencia has more seats in the fixture
+    summary = p2[p2.index('class="sum"'):]
+    summary = summary[:summary.index('</div>')]
+    assert '<b>Ni concentración estratégica ni giro a la izquierda.</b>' in summary
+    assert 'Las nuevas altas participan al ~5%, frente al ~10% del resto' in summary
+    assert 'pasan del 24% del censo al 17% de las altas' in summary
+    assert 'las altas de Argentina, Cuba y Venezuela pasan del 30% al 27%' in summary
+    assert 'class="how"' in p2 and 'falacia ecológica' in p2
+    # question 3
+    p3 = cera_section(page, 'p3')
+    assert page[:page.index('id="p3"')].endswith('<section class="card qcard q3" ')
+    assert '<div class="qn">3</div><h2 class="qt">¿Pueden alterar el reparto de escaños el 29-N?</h2>' in p3
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p3) == ['NO']
+    scenario = p3[p3.index('<fieldset class="seg" id="scenario">'):]
+    scenario = scenario[:scenario.index('</fieldset>')]
+    assert '<legend>Escenario</legend>' in scenario
+    assert re.findall(r'<input type="radio" name="scenario" value="(\w+)"( checked)?>', scenario) == [
+        ('convocatoria', ' checked'), ('sin_litigio', '')]
+    prediction = cera_table(p3, 'prediction-table', tables=2)
+    assert re.findall(r'<table data-scenario="(\w+)"( hidden)?>', prediction) == [('convocatoria', ''),
+                                                                                  ('sin_litigio', ' hidden')]
+    first = prediction[:prediction.index('data-scenario="sin_litigio"')]
+    assert '<td>152</td><td>152</td>' in first and '<td>170</td><td>170</td>' in first
+    assert '<td>2.327.388</td><td>2.769.645</td><td><span class="dlt up">▲ 442.257</span></td>' in first
+    assert 'Otros' not in prediction  # the fixture has only the two blocks
+    assert '<b>Sin las 163.020 inscripciones en litigio</b>' in p3
+    assert '8.070 votos menos y, también, cero cambios' in p3
+    for chart in ('gap-chart', 'radar-chart'):
+        assert re.search(r'<div class="chart" id="{}" role="img" aria-label="[^"]+"></div>'.format(chart), p3), chart
+    assert '<h3>¿Qué haría falta para que importara?</h3>' in p3
+    grid = cera_table(p3, 'grid-table')
+    rows = re.findall(r'<tr>\s*<td><b>([^<]+)</b></td>(.*?)</tr>', grid)
+    assert [label for label, _ in rows] == ['9% (observada)', '30%']
+    cells = [re.findall(r'<td[^>]*>', row) for _, row in rows]
+    assert [len(row) for row in cells] == [2, 2] and all('style="background' in td for row in cells for td in row)
+    assert '<td class="cell-shade" style="background-color: rgba(22, 163, 74, 0.55)">+2</td>' in grid  # the max
+    assert '>0*</td>' in grid  # the observed cell, with the uniform split
+    assert 'Reparto uniforme forzado' in p3
+    scenarios = cera_table(p3, 'scenarios-table')
+    assert 'real (×1,19)' in scenarios and 'empírico' in scenarios and '90% izq.' in scenarios
+    assert len(re.findall(r'<tr>\s*<td><b>', scenarios)) == 2
+    placement = cera_table(p3, 'placement-table')
+    assert len(re.findall(r'<tr>\s*<td><b>', placement)) == 2
+    assert 'Sin colocación dirigida, con el reparto real: 0.' in p3 and 'las 181.032 altas' in p3
+    summary = p3[p3.index('class="sum"'):]
+    summary = summary[:summary.index('</div>')]
+    assert '<b>Con datos reales, cero escaños.</b>' in summary and 'ninguna de las 3 provincias' in summary
+    assert 'class="how"' in p3 and '163.020' in p3[p3.index('class="how"'):]
+    assert 'medium.com' not in page
+    # richer parts: the gated sentences follow the data (margins that fall, a null cell, a scenario that changes)
+    vote = fixture_data('study-vote')
+    processes = (vote['processes'][:1] + regional_vote('Castilla y León', ('2022-02-13', 6.0, 45.0),
+                                                       ('2026-03-15', 1.3, 40.0), 2.0, -2.5, -0.5)
+                 + regional_vote('Aragón', ('2023-05-28', 4.0, 44.0), ('2026-02-08', 2.0, 42.0), 1.5, -1.9, -0.4))
+    sensitivity = fixture_data('study-sensitivity')
+    sensitivity['grid']['values'] = [[1, None], [1, 2]]
+    prediction = fixture_data('study-prediction')
+    prediction['scenarios']['sin_litigio']['changed'] = [{'region_id': 28, 'name': 'Madrid'}]
+    params = fixture_data('study-meta')['params'] | {
+        'sensitive_magnitude': 5, 'madrid_countries': ['MÉXICO', 'VENEZUELA'], 'split_source': '2023-07-23',
+        'placement_countries': ['ARGENTINA', 'MÉXICO', 'CUBA', 'VENEZUELA']}
+    publish_study(fresh_app.fs, meta={'params': params}, parts={
+        'vote': {'processes': processes}, 'sensitivity': sensitivity, 'prediction': prediction})
+    page = cera_page(api)
+    p2, p3 = cera_section(page, 'p2'), cera_section(page, 'p3')
+    band = p2[p2.index('class="band"'):]
+    band = band[:band.index('</div>')]
+    assert '¿Y la ventaja de la izquierda fuera no ha crecido en las últimas autonómicas?' in band
+    assert '<b>No.</b>' in band and 'cae en las 2 comunidades' in band
+    assert 'Castilla y León 6,0 → 1,3' in band and 'absorbe a SUMAR/Podemos' in band
+    assert 'el bloque de izquierda apenas se mueve: −0,5 · −0,4' in p2 and 'de 2022 a 2026' in p2
+    assert 'la cuota de izquierda del CERA baja en todos los procesos desde 2022' in p2
+    assert 'Cuota de las provincias de 5 escaños o menos' in p2 and '3 provincias, generales 2023' in p2
+    assert 'Cuota de Madrid en las altas de México y Venezuela' in p2 and 'Madrid, 2 países' in p2
+    assert 'las 181.032 altas de Argentina, México, Cuba y Venezuela' in p3
+    grid = cera_table(p3, 'grid-table')
+    assert '<td class="cell-shade">–</td>' in grid and grid.count('style="background') == 3
+    assert '+1*</td>' in grid and 'la celda observada da +1; con el reparto real por provincia, 0' in p3
+    assert 'cero cambios' not in p3 and 'el reparto cambia en 1 provincia (Madrid)' in p3
+
+
+def test_cera_page_question_1_copy_fixes(api, fresh_app):
+    """Cuba «apenas se mueve» solo bajo `PACE_FAST`; la frase de los periodos dice el último cierre publicado."""
+    census = fixture_data('study-census')
+    cuba = {'country_code': 'CUB', 'name': 'CUBA', 'g1': 100, 'g2': 110, 'ratio': 1.1}
+    publish_study(fresh_app.fs, parts={'census': census | {'countries': census['countries'] + [cuba]}})
+    p1 = cera_section(cera_page(api), 'p1')
+    assert 'pero Cuba, el país símbolo del exilio, apenas se mueve (×1,1)' in p1
+    assert 'Los periodos se actualizan con cada cierre; el último publicado es el 1 sept 2026.' in p1
+    publish_study(fresh_app.fs, parts={'census': census | {'countries': census['countries'] + [cuba | {'ratio': 2.4}]}})
+    p1 = cera_section(cera_page(api), 'p1')
+    assert 'apenas se mueve' not in p1 and 'Cuba ×2,4' in p1
+
+
+def test_shade_scale_filter_grows_green_from_lo_to_hi():
+    """`shade_scale`: nada sin valor; el verde más claro en `lo`, el más intenso en `hi`, recortado a los extremos."""
+    from mtpy.lib.pages.filters import shade_scale
+    assert shade_scale(None, 0, 10) == '' and shade_scale(float('nan'), 0, 10) == '' and shade_scale(True, 0, 10) == ''
+    assert shade_scale(0, 0, 10) == 'rgba(22, 163, 74, 0.08)'
+    assert shade_scale(10, 0, 10) == 'rgba(22, 163, 74, 0.55)'
+    assert shade_scale(5, 0, 10) == 'rgba(22, 163, 74, 0.315)'
+    assert shade_scale(-3, 0, 10) == shade_scale(0, 0, 10) and shade_scale(40, 0, 10) == shade_scale(10, 0, 10)
+    assert shade_scale(0, 0, 0) == shade_scale(0, 0, 10)  # an empty range: the lightest
+    assert pages.environment().filters['shade_scale'] is pages.shade_scale

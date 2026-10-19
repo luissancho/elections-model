@@ -33,7 +33,8 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, has_communities, escanos_context,
                       region_rows, resolve_region, seat_rows)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
-                      fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around)
+                      fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, gradient, rng_cell, shade, shade_around,
+                      shade_scale)
 from .inicio import INTRO, card_headline, event_cards, inicio_context, past_events
 from .metodo import (METODO_SECTIONS, NATIONAL_SCOPE, SECTIONS, method_href, metodo_context, metodo_section_context,
                      national_figures, quality_rubric, subpages, thresholds_rows)

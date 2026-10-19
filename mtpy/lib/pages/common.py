@@ -14,7 +14,8 @@ from ...core.app import App
 from .. import bundle
 from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
 from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, gradient,
-                      fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around)
+                      fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around,
+                      shade_scale)
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
@@ -136,7 +137,8 @@ def environment() -> Environment:
     It loads ``TEMPLATES_DIR`` with autoescape on for ``.html``, ``StrictUndefined``, the
     filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime``, ``ink``, ``rng``
     (``ink_color``), ``bar`` (``bar_width``), ``sides`` (``bar_sides``) and ``shade`` (``shade``: the bars and
-    shades of the cells of the ranking) and the globals ``method_href`` (``metodo.method_href``: link to a
+    shades of the cells of the ranking), ``shade_scale`` (``shade_scale``: the green of the sensitivity grids of the
+    studies) and the globals ``method_href`` (``metodo.method_href``: link to a
     subpage of the method, or to the method itself while the subpage has no text) and ``pollster_href``
     (``slugs.pollster_href``: link to the profile of a pollster). Without a booted App the
     environment is built but not cached.
@@ -171,6 +173,7 @@ def environment() -> Environment:
             'sides': bar_sides,
             'shade': shade,
             'shade_around': shade_around,
+            'shade_scale': shade_scale,
             'gradient': gradient,
             'rng': rng_cell,
             'date_short': fmt_date_short,

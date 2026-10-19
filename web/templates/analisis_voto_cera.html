@@ -9,6 +9,40 @@
 {% import '_macros.html' as m %}
 {#- A pace of additions as the infographic writes it: «×2,2». -#}
 {% macro pace(x) -%}×{{ x|num(1) }}{%- endmacro %}
+{#- A change of seats: «0» without a sign, else «+1» / «−1» (a dash without a value). -#}
+{% macro seats(x) -%}{{ '0' if x == 0 else x|delta }}{%- endmacro %}
+{#- A value with the typographic minus: «−0,74». -#}
+{% macro signed(x, digits=1) -%}{{ x|num(digits)|replace('-', '−') }}{%- endmacro %}
+{#- A list of names in prose: «A, B y C». -#}
+{% macro names(items) -%}{% if items|length > 1 %}{{ items[:-1]|join(', ') }} y {{ items[-1] }}{% else %}{{ items|join('') }}{% endif %}{%- endmacro %}
+{#- A cell of a sensitivity grid, green from `lo` to `hi` (`shade_scale`, no style without a value); `mark` adds the
+    asterisk of the observed cell with the uniform split. -#}
+{% macro grid_cell(x, lo, hi, mark=False) -%}
+{%- set bg = x|shade_scale(lo, hi) -%}
+<td class="cell-shade"{% if bg %} style="background-color: {{ bg }}"{% endif %}>{{ seats(x) }}{% if mark %}*{% endif %}</td>
+{%- endmacro %}
+{#- A sensitivity grid (`cera._grid`) as a table: participations in the rows, shares of the vote in the columns. -#}
+{% macro grid_table(id, grid, cols_label, caption) -%}
+<div class="table-wrap">
+              <table id="{{ id }}">
+                <caption class="sr-only">{{ caption }}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Participación \ {{ cols_label }}</th>
+                    {% for col in grid.cols %}<th scope="col">{{ col }}</th>{% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in grid.rows %}
+                  <tr>
+                    <td><b>{{ row.label }}{% if row.observed %} (observada){% endif %}</b></td>
+                    {%- for cell in row.cells %}{{ grid_cell(cell.value, grid.lo, grid.hi, cell.mark) }}{% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+{%- endmacro %}
 {#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
 {% macro answer(verdict, n) -%}
 <a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
@@ -136,8 +170,9 @@
           {{ figures.g1_article|int }} a {{ figures.g2_article|int }}) y el censo exterior suma
           {{ figures.growth_abs|int }} electores desde las generales de {{ figures.baseline_year }}
           ({{ figures.growth_pct|delta }}%).
-          {%- if q1.latam %} El crecimiento es latinoamericano ({% for row in q1.latam %}{{ row.name }} {{ pace(row.ratio) }}{% if not loop.last %}, {% endif %}{% endfor %})
-          {%- if q1.exile %}, pero {{ q1.exile.name }}, el país símbolo del exilio, apenas se mueve ({{ pace(q1.exile.ratio) }}){% endif %}.
+          {%- set fast = q1.latam + ([q1.exile] if q1.exile and not q1.exile_slow else []) %}
+          {%- if fast %} El crecimiento es latinoamericano ({% for row in fast %}{{ row.name }} {{ pace(row.ratio) }}{% if not loop.last %}, {% endif %}{% endfor %})
+          {%- if q1.exile and q1.exile_slow %}, pero {{ q1.exile.name }}, el país símbolo del exilio, apenas se mueve ({{ pace(q1.exile.ratio) }}){% endif %}.
           {%- endif %}
         </div>
         {% call m.how() %}
@@ -148,7 +183,7 @@
           {{ q1.periods[1][0]|date }} al {{ q1.periods[1][1]|date }}, después.
           {%- endif %}
           El ritmo divide las altas de después entre las de antes: por encima de uno, el censo crece más deprisa con la
-          ley. La versión actualizada de los periodos llega hasta el último cierre publicado, el
+          ley. Los periodos se actualizan con cada cierre; el último publicado es el
           {{ study_meta.series_last|date }}.
         </p>
         <p>
@@ -172,7 +207,367 @@
         {% endif %}
         {% endcall %}
       {{ m.card_end() }}
-      {#- #p2 and #p3 (task 16) -#}
+      {% set eco, sens, mad = q2.ecological, q2.sensitive, q2.madrid %}
+      {% set cs = q2.communities %}
+      {% set moved = cs|rejectattr('d_block', 'none')|list %}
+      {% set params = study_meta.get('params') or {} %}
+      <section class="card qcard q2" id="p2">
+        <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
+        <p class="lead">
+          {% if q2.lower and eco.r is not none and eco.r < 0 and sens.down -%}
+          Primer dato: casi no votan. Segundo: los que votan no se escoran a la izquierda. Tercero: las altas siguen los
+          lazos familiares, no la aritmética electoral.
+          {%- else -%}
+          Tres datos: cuánto votan las nuevas altas, hacia dónde se inclina el voto exterior y dónde se inscriben.
+          {%- endif %}
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">{% if q2.half %}Las nuevas altas participan la mitad{% elif q2.lower %}Las nuevas altas participan menos{% else %}La participación de las nuevas altas{% endif %}</p>
+            <p class="csub">Participación CERA por origen donde se publica por consulado</p>
+            <div class="chart" id="origin-chart" role="img" aria-label="Participación CERA por origen en {{ q2.processes }} {{ 'proceso' if q2.processes == 1 else 'procesos' }} con escrutinio por consulado{% if figures.latam_rate is not none and figures.rest_rate is not none %}: ~{{ figures.latam_rate|pct(0) }} el origen latinoamericano y ~{{ figures.rest_rate|pct(0) }} el resto{% endif %}"></div>
+          </div>
+          <div>
+            <p class="ctitle">{% if eco.r is not none and eco.r < 0 %}A más censo latinoamericano, menos voto a la izquierda{% elif eco.r is not none and eco.r > 0 %}A más censo latinoamericano, más voto a la izquierda{% else %}Censo latinoamericano y voto a la izquierda{% endif %}</p>
+            <p class="csub">{% if eco.n is not none %}{{ eco.n|int }} provincias{% else %}Por provincia{% endif %}, generales{% if eco.year %} {{ eco.year }}{% endif %}{% if eco.r is not none %} · r = {{ signed(eco.r, 2) }}{% endif %}</p>
+            <div class="chart" id="ecological-chart" role="img" aria-label="Cuota latinoamericana del censo CERA frente al voto CERA a la izquierda en {{ eco.n|int }} provincias, r = {{ signed(eco.r, 2) }}"></div>
+          </div>
+        </div>
+        {% if cs %}
+        <div class="band">
+          «¿Y la ventaja de la izquierda fuera no ha crecido en las últimas autonómicas?»
+          {% if q2.margins_fall -%}
+          <b>No.</b> El voto exterior se derechiza: el margen izquierda − derecha del CERA cae en
+          {% if cs|length == 1 %}{{ cs[0].community }}{% else %}las {{ cs|length }} comunidades{% endif %}
+          ({% for c in cs %}{{ c.community }} {{ signed(c.margin_from) }} → {{ signed(c.margin_to) }}{% if not loop.last %}; {% endif %}{% endfor %})
+          {%- else -%}
+          El margen izquierda − derecha del CERA, del comicio anterior al último:
+          {% for c in cs %}{{ c.community }} {{ signed(c.margin_from) }} → {{ signed(c.margin_to) }}{% if not loop.last %}; {% endif %}{% endfor %}
+          {%- endif %}
+          {%- if q2.absorbs and q2.block_steady %}, y la «prima» del PSOE solo sube porque absorbe a SUMAR/Podemos, no
+          porque entren nuevos votantes de izquierda{% endif %}.
+        </div>
+        {% endif %}
+        <div class="grid2">
+          <div>
+            <p class="ctitle">{% if q2.margins_fall %}El voto exterior también se derechiza{% else %}El margen de bloque del voto exterior{% endif %}</p>
+            <p class="csub">Margen izquierda − derecha del CERA, comicio anterior → {{ q2.years[1] if q2.years else 'último' }}</p>
+            <div class="chart" id="slope-chart" role="img" aria-label="Margen izquierda − derecha del CERA del comicio anterior al último{% if cs %}: {% for c in cs %}{{ c.community }} {{ signed(c.margin_from) }} → {{ signed(c.margin_to) }}{% if not loop.last %}; {% endif %}{% endfor %}{% else %} en las autonómicas{% endif %}"></div>
+          </div>
+          <div>
+            <p class="ctitle">{% if q2.absorbs and q2.block_steady %}El PSOE no capta votos nuevos fuera: absorbe a SUMAR/Podemos{% else %}El PSOE y el resto de la izquierda en el voto exterior{% endif %}</p>
+            <p class="csub">Cambio en la cuota del CERA {% if q2.years %}de {{ q2.years[0] }} a {{ q2.years[1] }}{% else %}del comicio anterior al último{% endif %}, en puntos{% if moved %} · el bloque de izquierda{% if q2.block_steady %} apenas se mueve{% endif %}: {% for c in moved %}{{ c.d_block|delta(1) }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}</p>
+            <div class="chart" id="cannibal-chart" role="img" aria-label="Cambio de la cuota del PSOE y del resto de la izquierda en el voto CERA{% if cs %}: {% for c in cs %}{{ c.community }}, PSOE {{ c.d_psoe|delta(1) }} y resto {{ c.d_other_left|delta(1) }}{% if not loop.last %}; {% endif %}{% endfor %}{% endif %}"></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">{% if sens.down %}Las provincias sensibles reciben menos altas que el peso que ya tenían{% else %}Las provincias sensibles en el censo y en las altas{% endif %}</p>
+            <p class="csub">Cuota de las provincias {% if sens.magnitude is not none %}de {{ sens.magnitude|int }} escaños o menos{% else %}sensibles{% endif %}</p>
+            <div class="chart" id="sensitive-chart" role="img" aria-label="Provincias sensibles: el {{ sens.stock|pct(0) }} del censo CERA y el {{ sens.growth|pct(0) }} de las altas"></div>
+          </div>
+          <div>
+            <p class="ctitle">{% if mad.magnet %}El «imán» de Madrid existía antes de la ley{% else %}Madrid en el censo y en las altas{% endif %}</p>
+            <p class="csub">Cuota de Madrid {% if mad.countries %}en las altas de {{ names(mad.countries) }}{% else %}en el censo y en las altas de los países latinoamericanos{% endif %}</p>
+            <div class="table-wrap">
+              <table id="madrid-table">
+                <caption class="sr-only">Cuota de Madrid en el censo al inicio del periodo de la ley y en las altas de cada periodo.</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Grupo</span></th>
+                    <th scope="col">{{ mad.labels.stock }}</th>
+                    <th scope="col">{{ mad.labels.p1 }}</th>
+                    <th scope="col">{{ mad.labels.p2 }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in mad.rows %}
+                  <tr>
+                    <td><b>{{ row.label }}</b></td><td>{{ row.stock|pct(1) }}</td><td>{{ row.p1|pct(0) }}</td><td>{{ row.p2|pct(0) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <p class="tnote">
+              La adscripción de quien nunca vivió en España es el punto legítimo del debate, y es lo que revisa el
+              Supremo.
+              {%- if mad.seat %}
+              {%- set seat = mad.seat %}
+              {%- if seat.largest %} Pero Madrid{% if seat.magnitude is not none %}, con {{ seat.magnitude|int }} escaños,{% endif %} es el sitio más caro de España para colocar un voto{% if seat.favoured %}, y allí el neto del CERA favorece al {{ seat.favoured }}{% endif %}.
+              {%- elif seat.favoured %} En Madrid{% if seat.magnitude is not none %}, con {{ seat.magnitude|int }} escaños,{% endif %} el neto del CERA favorece al {{ seat.favoured }}.
+              {%- endif %}
+              {%- endif %}
+            </p>
+          </div>
+        </div>
+        <div class="sum">
+          <b>Ni concentración estratégica ni giro a la izquierda.</b>
+          {% if figures.latam_rate is not none and figures.rest_rate is not none -%}
+          Las nuevas altas participan al ~{{ figures.latam_rate|pct(0) }}, frente al ~{{ figures.rest_rate|pct(0) }} del resto
+          {%- if q2.left_falls %}, y la cuota de izquierda del CERA baja en todos los procesos desde {{ q2.years[0] }}{% endif %}.
+          {%- elif q2.left_falls -%}
+          La cuota de izquierda del CERA baja en todos los procesos desde {{ q2.years[0] }}.
+          {%- endif %}
+          {% if sens.stock is not none and sens.growth is not none %}
+          Las provincias sensibles pasan del {{ sens.stock|pct(0) }} del censo al {{ sens.growth|pct(0) }} de las altas
+          {%- if sens.stock_countries is not none and sens.growth_countries is not none %}, y las altas de Argentina, Cuba y
+          Venezuela pasan del {{ sens.stock_countries|pct(0) }} al {{ sens.growth_countries|pct(0) }}{% endif %}.
+          {%- endif %}
+          {% if q2.margins_fall and q2.left_falls and sens.down %}
+          Desde la ley, {{ cs|length }} {{ 'autonómica' if cs|length == 1 else 'autonómicas' }} y ningún rastro del plan.
+          {%- endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          La participación por origen sale de las autonómicas que publican el escrutinio CERA por consulado
+          {%- if q2.processes %} ({{ q2.processes }} {{ 'proceso' if q2.processes == 1 else 'procesos' }}){% endif %}: cada consulado toma el origen de
+          su país en la tabla de países del estudio (<code>countries.csv</code>) y la tasa es votantes entre electores
+          de cada origen.
+          {%- if figures.latam_rate is not none and figures.rest_rate is not none %} De ahí salen las tasas que usa la
+          pregunta 3: el {{ figures.latam_rate|pct(0) }} para el origen latinoamericano y el
+          {{ figures.rest_rate|pct(0) }} para el resto.{% endif %}
+        </p>
+        <p>
+          La dispersión es una inferencia ecológica: cada punto es una provincia
+          {%- if eco.min_voters is not none %} con al menos {{ eco.min_voters|int }} votantes CERA{% endif %}, con la
+          cuota latinoamericana de su censo CERA y la de la izquierda sobre izquierda + derecha en su voto CERA. Compara
+          provincias, no personas: deducir de ella cómo vota cada elector sería la falacia ecológica.
+          {%- if eco.r is not none and eco.r < 0 %} Lo que sí dice es que donde más pesa el censo latinoamericano hay
+          menos voto a la izquierda, no más (r = {{ signed(eco.r, 2) }}, la correlación de Pearson).
+          {%- elif eco.r is not none %} r = {{ signed(eco.r, 2) }} es la correlación de Pearson.{% endif %}
+        </p>
+        <p>
+          El margen es la cuota de la izquierda menos la de la derecha en el voto CERA, en puntos: sobre los votantes
+          en las autonómicas y sobre el voto de izquierda + derecha en las generales. La «prima» del PSOE es cuánto
+          supera su ventaja sobre el PP en el voto CERA a la del conjunto del electorado. La gráfica de la derecha da
+          el cambio de la cuota del PSOE y del resto de la izquierda en el voto CERA, del comicio anterior al último de
+          cada comunidad; el del bloque de izquierda es la suma de los dos.
+        </p>
+        <p>
+          Las provincias sensibles son las de
+          {% if sens.magnitude is not none %}{{ sens.magnitude|int }} escaños o menos{% else %}pocos escaños{% endif %},
+          donde pocos votos bastan para mover un escaño. La gráfica compara su cuota del censo CERA
+          {%- if sens.period %} del {{ sens.period[0]|date }} con su cuota de las altas hasta el {{ sens.period[1]|date }}{% else %} con su cuota de las altas{% endif %},
+          con las altas de todos los países. La tabla de Madrid da su cuota del censo de
+          {% if mad.countries %}{{ names(mad.countries) }}{% else %}los países latinoamericanos{% endif %} al inicio
+          del periodo de la ley y de sus altas en cada periodo; «–» marca un periodo en el que el país perdió
+          electores, en el que la cuota de las altas no tiene sentido.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {% set c1, c2 = q3.scenarios %}
+      {% set litigation = params.get('litigation') or {} %}
+      {% set rates = params.get('participation') or {} %}
+      {% set split_year = (params.get('split_source') or '')[:4] or figures.baseline_year %}
+      <section class="card qcard q3" id="p3">
+        <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
+        <div class="card-h">
+          <p class="lead">
+            A los resultados de {{ figures.baseline_year }} se suma solo el voto que aporta el censo nuevo del 29-N, con
+            la participación observada por origen y el reparto del escrutinio CERA de {{ split_year }} de cada
+            provincia, y se recalcula D'Hondt provincia a provincia.
+          </p>
+          <fieldset class="seg" id="scenario">
+            <legend>Escenario</legend>
+            {% for s in q3.scenarios %}
+            <label><input type="radio" name="scenario" value="{{ s.key }}"{% if loop.first %} checked{% endif %}> {{ s.label }}</label>
+            {% endfor %}
+          </fieldset>
+        </div>
+        <div class="grid2">
+          <div>
+            <div class="table-wrap" id="prediction-table">
+              {% for s in q3.scenarios %}
+              <table data-scenario="{{ s.key }}"{% if not loop.first %} hidden{% endif %}>
+                <caption class="sr-only">{{ s.label }}: el voto CERA y los escaños de {{ figures.baseline_year }} y su proyección al 29-N.</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Magnitud</span></th>
+                    <th scope="col">{{ figures.baseline_year }}</th>
+                    <th scope="col">29-N (proyección)</th>
+                    <th scope="col">Cambio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in s.rows %}
+                  <tr>
+                    <td><b>{{ row.label }}</b></td><td>{{ row.before|int }}</td><td>{{ row.after|int }}</td><td>{{ m.badge(row.change) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% endfor %}
+            </div>
+            {% if figures.litigation is not none %}
+            <p class="note{% if c2.unchanged %} ok{% endif %}">
+              <b>Sin las {{ figures.litigation|int }} inscripciones en litigio</b> (repartidas por provincia como el
+              crecimiento latinoamericano desde la ley)
+              {%- if q3.votes_less is not none %}: {{ q3.votes_less|int }} votos menos{% endif %}
+              {%- if c2.unchanged %} y, {% if c1.unchanged %}también, {% endif %}cero cambios. El litigio importa para
+              los derechos de esas personas, no para el reparto.
+              {%- elif c2.changed %}; el reparto cambia en {{ c2.changed|length }}
+              {{ 'provincia' if c2.changed|length == 1 else 'provincias' }} ({{ names(c2.changed) }}).
+              {%- else %}.{% endif %}
+            </p>
+            {% endif %}
+          </div>
+          <div>
+            <p class="ctitle">Brecha al último escaño ({{ figures.baseline_year }}) frente al efecto neto del CERA del 29-N</p>
+            <p class="csub">{% if q3.gap.shown %}Las {{ q3.gap.shown }} circunscripciones más ajustadas; el neto{% else %}El neto{% endif %} es lo que gana el aspirante menos lo que gana quien defiende el escaño</p>
+            <div class="chart" id="gap-chart" role="img" aria-label="Brecha al último escaño y efecto neto del CERA en las {{ q3.gap.shown }} provincias más ajustadas{% if q3.gap.min_gap is not none and q3.gap.max_net is not none %}: la brecha más pequeña es de {{ q3.gap.min_gap|int }} votos y el mayor efecto neto, de {{ q3.gap.max_net|num(1) }}{% endif %}"></div>
+            {% if q3.gap.csv and q3.gap.total > q3.gap.shown %}
+            <p class="mut"><a href="{{ q3.gap.csv }}">Ver las {{ q3.gap.total }} provincias (CSV)</a></p>
+            {% endif %}
+          </div>
+        </div>
+        <h3>¿Qué haría falta para que importara?</h3>
+        <p class="lead">
+          {% if c1.unchanged -%}
+          Las tres palancas tendrían que dispararse a la vez y al máximo; basta relajar una para que el efecto se desplome.
+          {%- else -%}
+          Las tres palancas: la participación, el voto a la izquierda y la colocación dirigida.
+          {%- endif %}
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Realidad hoy frente a «todo al máximo»</p>
+            <p class="csub">Participación, voto a la izquierda y colocación dirigida</p>
+            <div class="chart" id="radar-chart" role="img" aria-label="Hoy: participación del {{ figures.participation_projected|pct(1) }}, voto a la izquierda del {{ figures.left_share|pct(1) }} y ninguna colocación dirigida, frente a todo al máximo en cada eje"></div>
+          </div>
+          <div>
+            <p class="ctitle">Cambio neto de escaños de la izquierda</p>
+            <p class="csub">Según participación CERA y porcentaje del voto exterior a la izquierda, censo del 29-N</p>
+            {% if q3.grid %}
+            {{ grid_table('grid-table', q3.grid, 'voto a la izq.', 'Cambio neto de escaños de la izquierda según la participación CERA (filas) y el porcentaje del voto exterior a la izquierda (columnas).') }}
+            <p class="tnote">
+              {% if figures.grid_observed is not none -%}
+              * Reparto uniforme forzado: la celda observada da {{ seats(figures.grid_observed) }}
+              {%- if q3.real_left is not none %}; con el reparto real por provincia, {{ seats(q3.real_left) }}{% endif %}.
+              {%- endif %}
+              {% if q3.grid.max %}
+              El máximo de la rejilla, {{ seats(q3.grid.max.value) }}, pide el {{ q3.grid.max.participation }} de
+              participación y el {{ q3.grid.max.frac }} del voto a la izquierda.
+              {%- endif %}
+            </p>
+            {% endif %}
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Las tres dimensiones a la vez</p>
+            <p class="csub">Censo × participación × sesgo → escaños izquierda / derecha</p>
+            <div class="table-wrap">
+              <table id="scenarios-table">
+                <caption class="sr-only">Cambio de los escaños de la izquierda y de la derecha al multiplicar el censo, la participación o fijar el voto a la izquierda.</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Escenario</th>
+                    <th scope="col">Censo</th>
+                    <th scope="col">Participación</th>
+                    <th scope="col">Sesgo</th>
+                    <th scope="col">Izq.</th>
+                    <th scope="col">Der.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in q3.three.rows %}
+                  <tr>
+                    <td><b>{{ row.name }}</b></td><td>{{ row.census }}</td><td>{{ row.participation }}</td><td>{{ row.bias }}</td>
+                    {%- for x in (row.d_left, row.d_right) %}<td class="cell-shade" style="background-color: {{ x|shade_around(0, q3.three.span, '#d62728', '#2ca02c') }}">{{ seats(x) }}</td>{% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <p class="ctitle">El absurdo: colocación óptima</p>
+            <p class="csub">
+              Escaños que arrancaría el PSOE colocando una a una
+              {%- if q3.pool is not none %} las {{ q3.pool|int }} altas{% if q3.placement_countries %} de {{ names(q3.placement_countries) }}{% endif %} desde la ley{% else %} las altas desde la ley{% endif %}
+              donde el escaño sale más barato
+            </p>
+            {% if q3.placement %}
+            {{ grid_table('placement-table', q3.placement, 'voto al PSOE', 'Escaños que ganaría el PSOE con la colocación óptima según la participación (filas) y su porcentaje del voto (columnas).') }}
+            {% endif %}
+            <p class="tnote">
+              {% if q3.contrast is not none %}Sin colocación dirigida, con el reparto real: {{ seats(q3.contrast) }}.{% endif %}
+              Es un límite, no una previsión: nadie puede dirigir cada inscripción ni cada voto.
+            </p>
+          </div>
+        </div>
+        <div class="sum">
+          {% if c1.unchanged -%}
+          <b>Con datos reales, cero escaños.</b>
+          {%- if q3.seats_unchanged %} Ningún escaño cambia, ni por partido ni por bloque
+          {%- if q3.gap.total and not q3.gap.flipped %}, y el voto CERA adicional no cierra la brecha del último escaño en
+          ninguna de las {{ q3.gap.total }} provincias{% endif %}.{% endif %}
+          Arrancar un número significativo exigiría que participación, voto a la izquierda y colocación se dispararan a
+          la vez y al máximo.
+          {%- elif figures.changed -%}
+          <b>Con datos reales, cambia el reparto en {{ figures.n_changed }}
+          {{ 'provincia' if figures.n_changed == 1 else 'provincias' }}.</b>
+          {%- endif %}
+          {% if q3.real_left is not none and figures.grid_observed is not none %}
+          {% set ends = [q3.real_left, figures.grid_observed] %}
+          {% if ends|min == ends|max %}
+          El efecto realista es de {{ seats(ends|min) }} escaños.
+          {% else %}
+          El efecto realista se mueve entre {{ seats(ends|min) }} y {{ seats(ends|max) }} escaños.
+          {% endif %}
+          {% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          El modelo de incremento parte del escrutinio de {{ figures.baseline_year }}. A cada provincia le suma solo
+          los electores nuevos del 29-N (el censo de la convocatoria menos el de {{ figures.baseline_year }}), cada uno
+          con la participación de su origen
+          {%- if figures.latam_rate is not none and figures.rest_rate is not none %} ({{ figures.latam_rate|pct(0) }}
+          el latinoamericano y {{ figures.rest_rate|pct(0) }} el resto{% if rates.get('derived_from') %}, medidas en
+          {{ rates.derived_from|length }} autonómicas con escrutinio por consulado{% endif %}){% endif %}
+          {%- if rates.get('valid') is not none %}, con el {{ (100 * rates.valid)|pct(0) }} de votos válidos{% endif %}, y
+          reparte esos votos como el voto CERA de {{ split_year }} de la provincia. Después recalcula D'Hondt provincia a
+          provincia. La tabla separa los votantes (las papeletas recibidas) de los votos a candidaturas (los que entran
+          en D'Hondt).
+        </p>
+        <p>
+          Hay dos censos. El de la convocatoria es el que el INE cerró el
+          {{ (study_meta.election or {}).get('census_closed')|date }}{% if figures.census_total is not none %}
+          ({{ figures.census_total|int }} electores){% endif %}.
+          {%- if figures.litigation is not none %} El otro resta las {{ figures.litigation|int }} inscripciones en
+          litigio{% if litigation.get('as_of') %} (la cifra al {{ litigation.as_of|date }}{% if litigation.get('source') %},
+          {{ litigation.source }}{% endif %}){% endif %}: nadie publica dónde están, así que se quitan de las filas
+          latinoamericanas, por provincia en proporción a su crecimiento latinoamericano desde la ley y, dentro de cada
+          provincia, por país.{% endif %}
+        </p>
+        <p>
+          La brecha es lo que le falta, en votos, al aspirante al último escaño de cada provincia en
+          {{ figures.baseline_year }} para igualar el cociente de quien lo ganó. El efecto neto es lo que el voto CERA
+          nuevo da al aspirante menos lo que da a quien defiende el escaño: el escaño solo cambia si el neto supera la
+          brecha.
+        </p>
+        <p>
+          La rejilla reparte todo el voto exterior igual en cada provincia: en la columna observada, el
+          {{ q3.uniform }} de izquierda + derecha va a la izquierda, y los separatistas, regionalistas y otros conservan
+          su cuota del CERA de {{ split_year }}. Ese reparto uniforme no es el real
+          {%- if figures.grid_observed is not none and q3.real_left is not none %}
+          {%- if figures.grid_observed > q3.real_left %}: da voto de izquierda a provincias cuyo CERA vota a la derecha,
+          y por eso la celda observada da {{ seats(figures.grid_observed) }} y el cálculo con el reparto real de cada
+          provincia, {{ seats(q3.real_left) }}{% else %}; aquí la celda observada da {{ seats(figures.grid_observed) }} y
+          el cálculo con el reparto real, {{ seats(q3.real_left) }}{% endif %}
+          {%- endif %}. Las tres dimensiones multiplican el censo de {{ figures.baseline_year }} («real» es el del 29-N)
+          y la participación por origen, o fijan la parte de izquierda + derecha que va a la izquierda.
+        </p>
+        <p>
+          La colocación óptima lleva los votos útiles de las altas de la tabla, poco a poco, a la provincia donde el siguiente
+          escaño del PSOE cuesta menos votos, como si alguien pudiera dirigir cada inscripción y cada voto: es un límite
+          superior, no una previsión.
+          {%- if q3.contrast is not none %} Con las mismas altas en sus provincias reales y el reparto real, da
+          {{ seats(q3.contrast) }}.{% endif %}
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
       {#- #debate, #comprobacion, #datos and the glossary (task 17) -#}
     </div>
 {% endblock %}
