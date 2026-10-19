@@ -1046,7 +1046,7 @@ def test_publish_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
-    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'pointers']
+    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'pointers', 'studies']
     for name in names:
         assert inspect.ismodule(getattr(publish, name)), name
     assert publish.loreg_guard.__module__ == 'mtpy.lib.publish.common'
@@ -1055,6 +1055,7 @@ def test_publish_package_layout():
     assert publish.publish_backtest.__module__ == 'mtpy.lib.publish.backtest'
     assert publish.publish_event.__module__ == 'mtpy.lib.publish.events'
     assert publish.update_manifest.__module__ == 'mtpy.lib.publish.pointers'
+    assert publish.publish_study.__module__ == 'mtpy.lib.publish.studies'
 
 
 def test_publish_forecast_reports_each_phase_as_it_ends(tmp_path):

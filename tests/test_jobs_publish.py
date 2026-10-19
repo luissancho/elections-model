@@ -880,3 +880,37 @@ def test_publish_class_docstring_survives_and_mentions_the_levels():
     from mtpy.jobs.Publish import Publish
 
     assert Publish.__doc__ is not None and 'four levels' in Publish.__doc__
+
+
+def test_publish_study_runs_the_study_action(fresh_app, tmp_path, monkeypatch, capsys):
+    """`study` publica el estudio por su slug (con `register` y `force` del job), sin guardia LOREG; un registro
+    rechazado queda `refused` y cualquier otro error, `failed`, que hace fallar el job."""
+    from mtpy.jobs.Publish import Publish
+
+    calls = []
+
+    def fake_study(study, writer, register=False, force=False, **kwargs):
+        calls.append((study, register, force))
+        if register and not force:
+            raise publish.PublishRefused('study: already registered on 2026-10-08')
+        return {'study': study, 'registered_at': '2026-10-08' if register else None, 'checked': False,
+                'seconds': {'total': 12.3}}
+
+    monkeypatch.setattr(publish, 'publish_study', fake_study)
+    fs = FileSystem(str(tmp_path))
+    with pytest.raises(ValueError, match='"study" is required for study'):
+        Publish().run(what='study', fs=fs)
+    result = Publish().run(what='study', study='voto-cera', fs=fs, today='2026-11-27')
+    assert result['voto-cera'] == {'status': 'published', 'registered_at': None, 'checked': False,
+                                   'seconds': {'total': 12.3}}
+    assert 'voto-cera: study published (sin registro, sin comprobar) in 12 s' in capsys.readouterr().out
+    result = Publish().run(what=['study'], study='voto-cera', register=True, fs=fs)
+    assert result['voto-cera'] == {'status': 'refused', 'reason': 'study: already registered on 2026-10-08'}
+    result = Publish().run(what=['study'], study='voto-cera', register=True, force=True, fs=fs)
+    assert result['voto-cera']['registered_at'] == '2026-10-08'
+    assert 'voto-cera: study published (registrado el 2026-10-08, sin comprobar)' in capsys.readouterr().out
+    assert calls == [('voto-cera', False, False), ('voto-cera', True, False), ('voto-cera', True, True)]
+    monkeypatch.setattr(publish, 'publish_study', lambda study, writer, **kwargs: {}['x'])
+    with pytest.raises(RuntimeError, match='voto-cera'):
+        Publish().run(what=['study'], study='voto-cera', fs=fs)
+    assert 'voto-cera: study failed' in capsys.readouterr().out

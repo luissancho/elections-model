@@ -8,7 +8,6 @@ middle of the series.
 """
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
 MARKS = [
     ('2022-10-21', 'Ley 20/2022'),
@@ -357,6 +356,8 @@ def trend_break(series: pd.Series, break_date: str = '2022-10-01') -> dict:
         break), `p_slope` (change of slope) and `p_level` (jump at the break), and `net_before` and `net_after`,
         the mean monthly net additions from November 2019 to July 2023 and from July 2023 to the last close.
     """
+    import statsmodels.api as sm
+
     net = series.diff().dropna().astype(float)
     trend = np.arange(len(net), dtype=float)
     after = (net.index >= pd.Timestamp(break_date)).astype(float)

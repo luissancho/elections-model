@@ -11,14 +11,17 @@ Two layers live here:
 - Orchestration. ``publish_forecast`` runs the model of a scope and writes an immutable run through a
   ``BundleWriter``; ``publish_analysis`` computes the houses analysis of a scope and overwrites it;
   ``publish_backtest`` converts the CSV tables of the model backtest of a scope and overwrites them;
+  ``publish_study`` computes a study (``export_study_*`` exporters) and overwrites it, registering its prediction
+  only when asked;
   ``rebuild_history``, ``update_manifest``, ``point`` and ``unpublish`` move the
   pointers; ``loreg_guard`` and ``resolve_scopes`` decide what may be published. This layer reads and
   writes the bundle, queries the database (``db_stats``, ``next_event_date``, ``resolve_scopes``) and
   runs git for the provenance of each run (``provenance``).
 
-The package has six submodules: ``common`` (constants, provenance, the publication guards and the scope helpers),
-``forecast`` (the exporters of a run and ``publish_forecast``), ``analysis``, ``backtest``, ``events`` and ``pointers``
-(manifest and run pointers). The public names are re-exported here.
+The package has seven submodules: ``common`` (constants, provenance, the publication guards and the scope helpers),
+``forecast`` (the exporters of a run and ``publish_forecast``), ``analysis``, ``backtest``, ``events``, ``pointers``
+(manifest and run pointers) and ``studies`` (the studies of the bundle, ``publish_study``). The public names are
+re-exported here.
 """
 from .analysis import (
     ANALYSIS_EVENTS_COLUMNS, ANALYSIS_HE_COLUMNS, ANALYSIS_HERDING_COLUMNS, ERROR_DATA_COLUMNS,
@@ -48,3 +51,8 @@ from .forecast import (
     SUMMARY_COLS
 )
 from .pointers import point, read_manifest, rebuild_history, unpublish, update_manifest
+from .studies import (
+    export_study_census, export_study_check, export_study_meta, export_study_participation, export_study_placement,
+    export_study_prediction, export_study_sensitivity, export_study_vote, publish_study, registered_claim,
+    STUDY_EXPORTERS, STUDY_TITLES, study_sources
+)
