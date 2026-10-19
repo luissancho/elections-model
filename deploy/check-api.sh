@@ -182,6 +182,7 @@ check /api/v1/analysis/es-xx/herding 400 none
 check /api/v1/analysis/es/nope 404 none
 check_db_only /api/v1/events/es 200 json
 check_published /api/v1/events/es/2023-07-23/pollsters json
+check_published /api/v1/events/es/2023-07-23/series json
 check /api/v1/events/es/2023-13-01/meta 400 none
 check_published /api/v1/backtest/es/by-horizon json
 check /api/v1/backtest/es/nope 404 none

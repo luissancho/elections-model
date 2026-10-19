@@ -56,9 +56,12 @@ def write_analysis(fs, scope='es'):
     return writer
 
 
-def write_event(fs, scope='es', date='2023-07-23', model=True):
-    """Elección pasada publicada a partir de los fixtures: las cinco partes (con `scope` y `event_date`
-    sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`."""
+def write_event(fs, scope='es', date='2023-07-23', model=True, series=None):
+    """Elección pasada publicada a partir de los fixtures: las seis partes (con `scope` y `event_date`
+    sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`. La
+    serie del promedio (`series`, con su CSV) se escribe cuando `series` es verdadero (por defecto, igual que
+    `model`: una elección publicada con backtest la tiene)."""
+    series = model if series is None else series
     writer = bundle.BundleWriter(fs)
     tables = {
         'pollsters': pd.DataFrame({'pollster': ['GAD3'], 'error_avg': [0.99]}),
@@ -69,9 +72,13 @@ def write_event(fs, scope='es', date='2023-07-23', model=True):
     if model:
         tables |= {f'model-{name}': pd.DataFrame({'event_date': [date], 'horizon': [6]})
                    for name in ('shares', 'seats', 'blocks')}
+    if series:
+        tables['series'] = pd.DataFrame({'date': ['2023-07-17'], 'name': ['PP'], 'mean': [32.41]})
     for name, frame in tables.items():
         writer.write_csv(bundle.path_event_csv(scope, date, name), frame)
     for part in bundle.EVENT_PARTS[1:] + bundle.EVENT_PARTS[:1]:  # `meta` el último, como `publish`
+        if part == 'series' and not series:
+            continue
         schema = bundle.EVENT_SCHEMAS[part]
         data = fixture_data(schema)
         if part == 'meta':
@@ -652,6 +659,11 @@ def test_site_events_and_backtest_read_the_published_files(site_app):
     assert s.events('es') == ['2019-11-10', '2023-07-23'] and s.events('es-cb') == []
     assert json.loads(s.event('es', '2023-07-23', 'pollsters'))['schema'] == 'event-pollsters@1'
     assert s.event_csv('es', '2023-07-23', 'model-seats').startswith(b'event_date')
+    assert json.loads(s.event('es', '2023-07-23', 'series'))['data']['horizon'] == 6
+    assert s.event_csv('es', '2023-07-23', 'series').startswith(b'date')
+    with pytest.raises(HttpError) as missing:
+        s.event('es', '2019-11-10', 'series')
+    assert missing.value.status == 404 and missing.value.message == 'event not published'
     assert json.loads(s.backtest('es', 'by-horizon'))['data']['rows'][0]['horizon'] == 6
     for call, message in ((lambda: s.event('es', '2020-01-01', 'meta'), 'event not published'),
                           (lambda: s.backtest('es-cb', 'metrics'), 'backtest not published')):

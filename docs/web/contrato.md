@@ -351,6 +351,7 @@ republica):
 | `cycle` | `event-cycle@1` | `parties`, `columns`, `polls` |
 | `results` | `event-results@1` | `n_seats`, `rows` |
 | `model` | `event-model@1` | `horizons`, `shares`, `seats`, `blocks` |
+| `series` | `event-series@1` | `horizon`, `dates`, `parties`, `mean`, `lo`, `hi` |
 
 - `meta.summary`: `n_polls`, `n_pollsters`, `error_avg`, `error_blocks`, `bias_blocks` (medias de los sondeos ponderadas
   por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}` (positivo: los
@@ -374,11 +375,17 @@ republica):
 - `model` es el **corte del backtest** (ver "Backtest") a esta elección: `shares`, `seats` y `blocks` son las filas
   (`{columna: valor}`, mismos redondeos) de `shares.csv`, `seats.csv` y `blocks.csv` con ese `event_date`, y
   `horizons` los horizontes que aparecen, ascendentes. Sin backtest, las tres listas y `horizons` van vacías.
+- `series` es la serie diaria del promedio del modelo del horizonte más corto del backtest (`series.csv` de
+  `backtest/results`, normalmente a 6 días), hasta el día en que se congeló el modelo: `horizon` y, con la forma de la
+  parte `series` de un run, `dates`, `parties`, `mean`, `lo` y `hi` (2 decimales, `null` en los huecos de la banda).
+  Solo existe si el backtest guardó la serie: una elección puede tener `model` y no `series` (la publicada antes de
+  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva.
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
-`pollsters`, `polls`, `cycle` y `results` y los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
-que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están);
-`meta` no tiene gemelo.
+`pollsters`, `polls`, `cycle` y `results`, los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
+que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están) y
+`series` (formato largo `date`, `name`, `mean`, `lo`, `hi`; al republicar sin serie se borran `series.json` y
+`series.csv`); `meta` no tiene gemelo.
 
 ## Estudios
 
@@ -655,7 +662,7 @@ Solo `GET`. `events/{scope}` cruza la base de datos con el paquete; las otras do
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/events/{scope}` | | `{contract, scope, rows}`; cada fila `{date, name, featured, has_page}`, por fecha ascendente | `events-{scope}.csv` |
-| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `cycle`, `results`, `model`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `cycle`, `results`, `model-shares`, `model-seats`, `model-blocks` |
+| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `cycle`, `results`, `model`, `series`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `cycle`, `results`, `model-shares`, `model-seats`, `model-blocks`, `series` |
 | `/api/v1/backtest/{scope}/{part}` | `part` ∈ `meta`, `metrics`, `by-horizon`, `blocks`, `shares`, `seats` | el fichero del backtest tal cual (sobre completo) | `{scope}-backtest-{nombre}.csv`, con `nombre` ∈ `metrics`, `by-horizon`, `blocks`, `shares`, `seats` |
 
 - `events/{scope}` lee la tabla de elecciones de la base (caché de consultas de 60 s) y marca `has_page` con las
