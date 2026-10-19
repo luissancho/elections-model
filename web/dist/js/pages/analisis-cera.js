@@ -233,7 +233,8 @@ function drawSensitive(sensitive) {
 
 /**
  * Question 3: the gap to the last seat of the closest provinces against the net effect of the CERA in one
- * scenario, the net in the accent when it favours the runner-up and in red otherwise.
+ * scenario, the net in the accent when it favours the runner-up and in red otherwise. Each row is labelled with
+ * the siglas of the winner and the runner-up that the island carries: «Girona (JxCat/PP)».
  */
 function drawGap(rows) {
   const el = container('gap-chart', rows && rows.length);

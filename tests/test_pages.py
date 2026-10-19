@@ -4069,6 +4069,29 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert '<p class="note ok">' not in check and 'fallo' in check and 'saldo del PSOE +2' in check
 
 
+def test_cera_page_names_the_candidatures_by_their_siglas(api, fresh_app):
+    """The parts carry the full Infoelectoral names and their siglas: the page and its island print only the siglas."""
+    publish_study(fresh_app.fs)
+    body = call(api, '/analisis/voto-cera')[2]
+    page = re.sub(r'\s+', ' ', html(body))
+    for name in ('PARTIDO POPULAR', 'PARTIDO SOCIALISTA OBRERO ESPAÑOL', 'JUNTS PER CATALUNYA'):
+        assert name not in page, name
+    debate, check = cera_section(page, 'debate'), cera_section(page, 'comprobacion')
+    assert '<td>JxCat</td><td>JxCat</td>' in cera_table(debate, 'passed-table')
+    assert '<td class="pos">Sí, al PP, cruza de bloque</td>' in debate
+    assert '<td>Madrid: PSOE → PP</td>' in cera_table(check, 'check-table')
+    assert 'Madrid (PSOE frente a PP)' in check and 'el neto del CERA favorece al PSOE' in cera_section(page, 'p2')
+    gap = initial(body)['gap']['convocatoria'][0]
+    assert (gap['winner'], gap['runner_up']) == ('PP', 'PSOE')
+    # an older part without the siglas: the name it has, as it comes
+    prediction = fixture_data('study-prediction')
+    prediction['last_seat'] = [{key: value for key, value in row.items() if not key.endswith('_sigla')}
+                               for row in prediction['last_seat']]
+    publish_study(fresh_app.fs, parts={'prediction': prediction})
+    gap = initial(call(api, '/analisis/voto-cera')[2])['gap']['convocatoria'][0]
+    assert (gap['winner'], gap['runner_up']) == ('PARTIDO POPULAR', 'PARTIDO SOCIALISTA OBRERO ESPAÑOL')
+
+
 def test_shade_scale_filter_grows_green_from_lo_to_hi():
     """`shade_scale`: nada sin valor; el verde más claro en `lo`, el más intenso en `hi`, recortado a los extremos."""
     from mtpy.lib.pages.filters import shade_scale

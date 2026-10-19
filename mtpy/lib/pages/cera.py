@@ -41,6 +41,8 @@ BLOCK_LABELS = {LEFT: 'Escaños izquierda (PSOE + SUMAR)', RIGHT: 'Escaños dere
 # participation the report of the 23 seats uses) and the provinces of the table of the check shown before «Ver más»
 BEFORE_ROGADO = 'antes'
 CHECK_SHOWN = 20
+# The candidature columns of the rows of the check (with and without the CERA vote), printed by their sigla
+WINNERS = ('winner_with', 'winner_without')
 
 
 def _get(data: Optional[dict], *keys):
@@ -66,6 +68,48 @@ def _get(data: Optional[dict], *keys):
         data = data.get(key)
 
     return data
+
+
+def _sigla(row: Optional[dict], key: str) -> Optional[str]:
+    """
+    Sigla of a candidature of a row of the parts: ``{key}_sigla`` when the part carries it, else the name in ``key``
+    (the full name of Infoelectoral, or the sigla of an older part).
+
+    Parameters
+    ----------
+    row : dict or None
+        A row of ``prediction.last_seat`` or of ``check`` (``rows``, ``elections[*].decided``).
+    key : str
+        The candidature column: ``winner``, ``runner_up``, ``winner_with`` or ``winner_without``.
+
+    Returns
+    -------
+    str or None
+        The sigla, or ``None`` without a candidature.
+    """
+    row = row or {}
+
+    return row.get(key + '_sigla') or row.get(key)
+
+
+def _with_siglas(row: dict, *keys: str) -> dict:
+    """
+    A copy of a row with the candidatures of ``keys`` replaced by their siglas (``_sigla``), so that the templates
+    print «PP» and never «PARTIDO POPULAR».
+
+    Parameters
+    ----------
+    row : dict
+        A row of the parts.
+    *keys : str
+        The candidature columns.
+
+    Returns
+    -------
+    dict
+        The row, with ``key: _sigla(row, key)`` for each of ``keys``.
+    """
+    return dict(row, **{key: _sigla(row, key) for key in keys})
 
 
 def _months(start: Optional[str], end: Optional[str]) -> Optional[int]:
@@ -364,8 +408,8 @@ def _madrid(placement: dict, census: dict, prediction: dict, params: dict) -> di
         with the years of the article periods); ``countries`` (``params.madrid_countries`` in the case of the
         prose); ``magnet`` (whether Madrid took more of the additions before the law than its share of the census);
         ``seat`` (``None`` without Madrid in ``last_seat``, else ``{'magnitude', 'largest', 'favoured'}``: its seats,
-        whether no province has more and the candidature the net CERA effect favours, the runner-up with a positive
-        net and the winner with a negative one).
+        whether no province has more and the sigla of the candidature the net CERA effect favours, the runner-up
+        with a positive net and the winner with a negative one).
     """
     countries = [_country_name(name) for name in params.get('madrid_countries') or []]
     rows = []
@@ -397,8 +441,8 @@ def _madrid(placement: dict, census: dict, prediction: dict, params: dict) -> di
         magnitudes = [other.get('magnitude') for other in last_seat if other.get('magnitude') is not None]
         seat = {'magnitude': row.get('magnitude'),
                 'largest': row.get('magnitude') is not None and row['magnitude'] == max(magnitudes),
-                'favoured': row.get('runner_up') if net is not None and net > 0
-                else row.get('winner') if net is not None and net < 0 else None}
+                'favoured': _sigla(row, 'runner_up') if net is not None and net > 0
+                else _sigla(row, 'winner') if net is not None and net < 0 else None}
 
     return {'rows': rows, 'labels': labels, 'countries': countries, 'seat': seat,
             'magnet': together.get('p1') is not None and together.get('stock') is not None
@@ -789,7 +833,7 @@ def _debate(parts: dict, previous: dict) -> dict:
           provinces over the gap, the seats the CERA vote decided and where, and whether the left lost with it
           (``net_left < 0``).
         - ``passed``: ``{'rows', 'year', 'study', 'changed'}``: the rows of ``check.rows`` whose CERA voters
-          exceeded the gap, by gap; the year of their election (the latest of ``check.elections``), whether it is
+          exceeded the gap, by gap, with the winners by their siglas; the year of their election (the latest of ``check.elections``), whether it is
           the study's and how many provinces of ``check.rows`` the CERA vote decided.
         - ``correlation``: the correlation of the additions with the size of the province (``r_size_growth`` of
           the article periods).
@@ -813,7 +857,8 @@ def _debate(parts: dict, previous: dict) -> dict:
         'report': parts['prediction'].get('report') or {},
         'history': _history(parts['participation']),
         'verdict': verdict,
-        'passed': {'rows': _by_gap([row for row in rows if row.get('over_gap')]), 'year': _year(latest.get('date')),
+        'passed': {'rows': _by_gap([_with_siglas(row, *WINNERS) for row in rows if row.get('over_gap')]),
+                   'year': _year(latest.get('date')),
                    'study': bool(latest) and latest.get('date') == _get(meta, 'election', 'date'),
                    'changed': sum(1 for row in rows if row.get('decided'))},
         'correlation': _get(parts['placement'], 'correlations', 'article', 'r_size_growth'),
@@ -835,8 +880,8 @@ def _within_reach(last_seat: list) -> Optional[dict]:
     -------
     dict or None
         ``None`` when no province has a positive net effect, else ``{'name', 'winner', 'runner_up', 'factor',
-        'only'}``: ``factor`` the ``participation_needed`` without the sign ``×`` and ``only`` whether it is the
-        only province with a positive net effect.
+        'only'}``: ``winner`` and ``runner_up`` by their siglas, ``factor`` the ``participation_needed`` without
+        the sign ``×`` and ``only`` whether it is the only province with a positive net effect.
     """
     rows = [row for row in last_seat if row.get('participation_needed') is not None
             and row.get('net') is not None and row['net'] > 0]
@@ -846,7 +891,7 @@ def _within_reach(last_seat: list) -> Optional[dict]:
 
     row = min(rows, key=lambda row: (row['participation_needed'], row.get('gap') or 0))
 
-    return {'name': row.get('name'), 'winner': row.get('winner'), 'runner_up': row.get('runner_up'),
+    return {'name': row.get('name'), 'winner': _sigla(row, 'winner'), 'runner_up': _sigla(row, 'runner_up'),
             'factor': _times(row['participation_needed'])[1:], 'only': len(rows) == 1}
 
 
@@ -866,11 +911,13 @@ def _check(parts: dict) -> dict:
     dict
         - ``elections``: per entry of ``check.elections``, by date, ``{'label', 'date', 'year', 'voters', 'rate',
           'n_over_gap', 'n_decided', 'where', 'net_psoe', 'net_left'}``; ``where`` the decided provinces
-          (``{'name', 'without', 'with', 'crosses_block'}``: the last seat without and with the CERA vote).
+          (``{'name', 'without', 'with', 'crosses_block'}``: the sigla of the last seat without and with the CERA
+          vote).
         - ``day``: the date of the study's election; ``pending`` whether ``elections`` does not have it yet.
         - ``result``: the row of ``elections`` of the study's election, or ``None``.
         - ``precedents``: the rows of ``elections`` before it.
-        - ``rows``: ``check.rows`` by gap, with ``shown`` (the first ``CHECK_SHOWN``); ``hidden`` counts the rest.
+        - ``rows``: ``check.rows`` by gap, the winners by their siglas, with ``shown`` (the first ``CHECK_SHOWN``);
+          ``hidden`` counts the rest.
         - ``reach``: ``_within_reach`` of ``prediction.last_seat``.
     """
     check = parts['check']
@@ -882,13 +929,14 @@ def _check(parts: dict) -> dict:
             'label': 'Generales ' + _year(row['date']), 'date': row['date'], 'year': _year(row['date']),
             'voters': row.get('voters'), 'rate': row.get('rate'), 'n_over_gap': row.get('n_over_gap'),
             'n_decided': row.get('n_decided'), 'net_psoe': row.get('net_psoe'), 'net_left': row.get('net_left'),
-            'where': [{'name': seat.get('name'), 'without': seat.get('winner_without'),
-                       'with': seat.get('winner_with'), 'crosses_block': seat.get('crosses_block')}
+            'where': [{'name': seat.get('name'), 'without': _sigla(seat, 'winner_without'),
+                       'with': _sigla(seat, 'winner_with'), 'crosses_block': seat.get('crosses_block')}
                       for seat in row.get('decided') or []],
         })
 
     result = next((row for row in elections if row['date'] == day), None)
-    rows = [dict(row, shown=index < CHECK_SHOWN) for index, row in enumerate(_by_gap(check.get('rows') or []))]
+    rows = [dict(_with_siglas(row, *WINNERS), shown=index < CHECK_SHOWN)
+            for index, row in enumerate(_by_gap(check.get('rows') or []))]
 
     return {
         'elections': elections,

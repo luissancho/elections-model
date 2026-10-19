@@ -14,7 +14,7 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import site
 from .common import api_url, bundle_part, common_context
-from .cera import SCENARIOS, UNIFORM_SPLIT, _check, _debate, _get, _question_1, _question_2, _question_3
+from .cera import SCENARIOS, UNIFORM_SPLIT, _check, _debate, _get, _question_1, _question_2, _question_3, _sigla
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
@@ -461,7 +461,8 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
         ``latam_share``, ``left_share``, ``census``, plus ``r`` and ``slope``); ``slope`` (the block margin of each
         regional election, ``community``, ``previous``, ``last``); ``cannibal`` (``community``, ``d_psoe``,
         ``d_other_left``); ``sensitive`` (``placement.sensitive``); ``gap`` (per scenario, the ``GAP_SHOWN``
-        provinces with the smallest gap, ``name``, ``winner``, ``runner_up``, ``gap``, ``net``) and ``radar``
+        provinces with the smallest gap, ``name``, ``winner`` and ``runner_up`` by their siglas, ``gap``, ``net``,
+        for labels like «Girona (JxCat/PP)») and ``radar``
         (``today``: the expected participation, no directed placement and the left share of the last general
         election, in %; ``max``: 100 on every axis).
     """
@@ -488,8 +489,9 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
                    'last': _get(row, 'last', 'margin')} for row in regional],
         'cannibal': [{key: row.get(key) for key in ('community', 'd_psoe', 'd_other_left')} for row in regional],
         'sensitive': parts['placement'].get('sensitive'),
-        'gap': {scenario: [{'name': row.get('name'), 'winner': row.get('winner'), 'runner_up': row.get('runner_up'),
-                            'gap': row.get('gap'), 'net': row.get(SCENARIO_NET[scenario])}
+        'gap': {scenario: [{'name': row.get('name'), 'winner': _sigla(row, 'winner'),
+                            'runner_up': _sigla(row, 'runner_up'), 'gap': row.get('gap'),
+                            'net': row.get(SCENARIO_NET[scenario])}
                            for row in last_seat] for scenario in SCENARIOS},
         'radar': {'today': [figures['participation_projected'], 0, figures['left_share']], 'max': [100, 100, 100]},
     }
