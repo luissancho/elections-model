@@ -140,6 +140,24 @@ def test_seats_view_uses_the_pollsters_projections():
     assert run_js('p.meanOf({}, ["PP"])'.format(js)) == {'PP': 29.9}
 
 
+def test_fixed_rows_of_the_footer_follow_the_mode_and_the_validity_of_the_seats():
+    last = {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.4, 'PSOE': 31.0}, 'seats': {'PP': 140, 'PSOE': 118}, 'seats_valid': True}
+    result = {'date': '2023-07-23', 'values': {'PP': 33.1, 'PSOE': 31.4}}
+    seats = {'PP': 137, 'PSOE': 121}
+    args = '{}, {}, {}, ["PP", "PSOE", "VOX"]'.format(json.dumps(last), json.dumps(result), json.dumps(seats))
+    rows = run_js('p.fixedRows({})'.format(args))
+    assert rows == [
+        {'label': 'Promedio de sondeos', 'small': 'modelo · a 6 días', 'title': 'Congelado el 17 jul 2023: solo los sondeos publicados hasta entonces',
+         'values': {'PP': 32.4, 'PSOE': 31.0, 'VOX': None}, 'texts': None},
+        {'label': 'Resultado', 'small': '23 jul 2023', 'title': None, 'values': {'PP': 33.1, 'PSOE': 31.4, 'VOX': None}, 'texts': None}]
+    esc = run_js('p.fixedRows({}, "esc")'.format(args))
+    assert esc[0]['values'] == {'PP': 140, 'PSOE': 118, 'VOX': None} and {k: v for k, v in esc[0]['texts'].items() if k != 'VOX'} == {'PP': '140', 'PSOE': '118'}
+    assert esc[1]['values'] == {'PP': 137, 'PSOE': 121, 'VOX': None}
+    invalid = run_js('p.fixedRows({}, "esc")'.format(args.replace('"seats_valid": true', '"seats_valid": false')))
+    assert invalid[0]['values'] == {'PP': None, 'PSOE': None, 'VOX': None}
+    assert run_js('p.fixedRows(null, {}, {}, ["PP"])'.format(json.dumps(result), json.dumps(seats))) == []
+
+
 def test_sort_polls_by_rating_puts_the_unrated_last_in_both_directions():
     polls = [{'pollster': 'A', 'date': '2026-10-01', 'rating': 60.0}, {'pollster': 'B', 'date': '2026-09-01'},
              {'pollster': 'C', 'date': '2026-08-01', 'rating': 73.1}]

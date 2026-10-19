@@ -572,7 +572,13 @@ function paint() {
   }
 
   if (initial.polls) {
-    tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
+    // the rows pinned under the mean: what the model said at its shortest horizon and the official result
+    const fixed = initial.model_last ? {
+      modelLast: initial.model_last,
+      result: initial.result,
+      seats: Object.fromEntries(((initial.results && initial.results.rows) || []).map((row) => [row.name, row.seats])),
+    } : null;
+    tryDraw(() => wirePollsTable(initial.polls.polls, catalog, {fixed}), 'the polls table');
   }
 }
 

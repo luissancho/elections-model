@@ -1,4 +1,4 @@
-// DOM builders of the "Todas las encuestas" table of Promedios: header, body and footer, built with
+// DOM builders of the "Todas las encuestas" table (Promedios and the detail of a past election): header, body and footer, built with
 // `createElement`/`textContent` (never HTML with data).
 import {fmtDate, fmtInt, fmtNum, gradient} from '../format.js';
 import {leaderOf, pollsCount, seatsText, shortDate, valuesOf} from '../polls-table.js';
@@ -162,7 +162,8 @@ export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
 }
 
 /**
- * Rebuild the footer with the simple mean of the filtered polls.
+ * Rebuild the footer with the simple mean of the filtered polls and, in the detail of a past election, the rows
+ * pinned under it (`fixedRows`: the model at its shortest horizon and the official result).
  *
  * @param {HTMLTableSectionElement} tfoot footer section
  * @param {number} count polls averaged
@@ -170,12 +171,24 @@ export function renderBody(tbody, polls, parties, catalog, mode = 'pct') {
  * @param {string[]} parties columns shown
  * @param {Catalog} catalog party catalogue
  * @param {string} [mode='pct'] view: shares at one decimal, or `esc` for whole seats
+ * @param {Array<{label: string, small: string, title: (string|null), values: object, texts: (object|null)}>}
+ *   [fixed=[]] the pinned rows, already in the view (`fixedRows`)
  */
-export function renderFoot(tfoot, count, means, parties, catalog, mode = 'pct') {
+export function renderFoot(tfoot, count, means, parties, catalog, mode = 'pct', fixed = []) {
   const first = el('td', '', 'f l');
   first.append(el('b', 'Media simple'), el('small', pollsCount(count) + (mode === 'esc' ? ' con escaños' : '')));
   const tr = el('tr');
   const texts = mode === 'esc' ? Object.fromEntries(parties.map((name) => [name, fmtInt(means[name])])) : null;
   tr.append(first, el('td'), el('td'), el('td'), ...valueCells(means, parties, catalog, texts));
-  tfoot.replaceChildren(tr);
+  const pinned = fixed.map((row) => {
+    const head = el('td', '', 'f l');
+    head.append(el('b', row.label), el('small', row.small));
+    if (row.title) {
+      head.title = row.title;
+    }
+    const line = el('tr', '', 'fixed');
+    line.append(head, el('td'), el('td'), el('td'), ...valueCells(row.values, parties, catalog, row.texts));
+    return line;
+  });
+  tfoot.replaceChildren(tr, ...pinned);
 }
