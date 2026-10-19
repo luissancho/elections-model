@@ -31,6 +31,7 @@ from .behaviour import (
 from .census import MARKS, baseline_date, election_growth, trend_break, two_periods, update_periods
 from .check import with_without
 from .data import (
+    MissingCeraColumns,
     Results,
     load_params,
     national_series,
@@ -46,6 +47,7 @@ from .data import (
 )
 from .seats import (
     check_official,
+    empirical_split,
     increment_model,
     increment_votes,
     last_seat,
@@ -61,7 +63,6 @@ COUNTRIES = 'cera/countries.csv'
 AUTONOMICAS = 'cera/autonomicas.csv'
 CENSUS_TABLE = re.compile(r'_tab8\.xlsx$')
 SCRUTINY = re.compile(r'cera/escrutinio/es-(\d{4}-\d{2}-\d{2})\.csv$')
-NO_CERA_COLUMNS = re.compile(r"'[^']*CERA' is not in list")
 GROWTH_KEYS = {'provinces': 'region_id', 'countries': 'country_code', 'origins': 'region', 'exposure': 'exposure'}
 ELECTION_KEYS = {'provinces': 'region_id', 'countries': 'country_code'}
 RATIO_SIGLAS = ['PP', 'PSOE', 'SUMAR', 'VOX']
@@ -160,7 +161,7 @@ class CeraStudy:
     blocks : dict
         Block name to the list of its siglas (`params['blocks']`).
     split : pd.DataFrame
-        The empirical split of the new votes: the CERA votes of `params['split_source']` over their province totals.
+        The empirical split of the new votes: `seats.empirical_split` of the CERA votes of `params['split_source']`.
     last : pd.DataFrame
         `seats.last_seat` of the baseline election (52 rows).
     scenarios : dict[str, dict]
@@ -178,8 +179,8 @@ class CeraStudy:
     hist : pd.DataFrame
         `seats.participation_history` over `results`: mean and maximum CERA participation by province since 1986.
     report : dict
-        `stress.report_replication` with `hist`, plus `participation_mean` and `participation_max`: the CERA
-        participation those rates give over the whole convocation census (`100 · votes / census`).
+        `stress.report_replication` of the baseline election with `census_by_province` and `hist` (votes, provinces
+        over the gap and the participation those rates give over the whole convocation census).
     checks : dict[str, dict]
         Election date to `check.with_without` with the scrutiny's `voters`, for every election of `cera`.
     verdict_input : dict or None
@@ -245,15 +246,14 @@ def _read_all_results(data: FileSystem) -> dict[str, Results]:
     Raises
     ------
     ValueError
-        As `data.read_results` does, for any reason other than missing CERA columns.
+        As `data.read_results` does, for any reason other than missing CERA columns (`data.MissingCeraColumns`).
     """
     results = {}
     for date in available_results(data):
         try:
             results[date] = read_results(data, date)
-        except ValueError as error:
-            if not NO_CERA_COLUMNS.search(str(error)):
-                raise
+        except MissingCeraColumns:
+            pass
 
     return results
 
@@ -512,7 +512,7 @@ def _seats_block(params: dict, inputs: dict, census: dict, last: pd.DataFrame) -
     convocation, baseline = inputs['census'], census['baseline']
     results = inputs['results'][params['election']['baseline']]
     cera = inputs['cera'][params['split_source']]
-    split = cera.div(cera.sum(axis=1), axis=0)
+    split = empirical_split(cera)
     law = census['periods_article'][1][0]
     no_litigation = litigation_census(convocation, long, countries, params['litigation']['count'], since=law)
     scenario = {CONVOCATION: convocation, NO_LITIGATION: no_litigation}
@@ -521,8 +521,6 @@ def _seats_block(params: dict, inputs: dict, census: dict, last: pd.DataFrame) -
     placement = optimal_placement(results, pool, PLACEMENT_PARTICIPATIONS, PLACEMENT_FRACS, PLACEMENT_CANDIDATURE,
                                   split=split)
     hist = participation_history(inputs['results'])
-    report = report_replication(results, inputs['census_by_province'], hist)
-    electors = inputs['census_by_province'].sum()
 
     return {
         'split': split,
@@ -536,11 +534,7 @@ def _seats_block(params: dict, inputs: dict, census: dict, last: pd.DataFrame) -
                                         results.siglas, blocks, SCENARIO_ROWS),
         'placement': {**placement, 'pool': int(pool.sum())},
         'hist': hist,
-        'report': {
-            **report,
-            'participation_mean': float(100. * report['votes_mean'] / electors),
-            'participation_max': float(100. * report['votes_max'] / electors)
-        }
+        'report': report_replication(results, inputs['census_by_province'], hist)
     }
 
 

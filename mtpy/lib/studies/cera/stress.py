@@ -22,6 +22,7 @@ from .seats import (
     _allocate_row,
     allocate_results,
     block_seats,
+    empirical_split,
     increment_model,
     increment_votes,
     last_seat,
@@ -406,7 +407,7 @@ def optimal_placement(results: Results, pool: pd.Series, participations: list[fl
             grid.loc[participation, frac] = _greedy_seats(results, seats, costs, candidature, useful, step) - official
 
     if split is None:
-        split = results.votes.div(results.votes.sum(axis=1), axis=0)
+        split = empirical_split(results.votes)
     new = pd.DataFrame({'region_id': pool.index, 'origin': LATAM, 'electors': pool.values})
     extra = increment_votes(new, {LATAM: CONTRAST_RATE, REST: CONTRAST_RATE}, split)
     after = increment_model(results, extra, results.siglas, {})['seats_after']
@@ -431,8 +432,10 @@ def report_replication(results: Results, census_by_province: pd.Series, hist: pd
     Returns
     -------
     dict
-        `votes_mean` and `votes_max` (`Σ census_p · rate_p / 100` with the mean and the maximum rates) and
-        `n_mean` and `n_max` (the provinces where those votes exceed the gap of `last_seat`).
+        `votes_mean` and `votes_max` (`Σ census_p · rate_p / 100` with the mean and the maximum rates),
+        `n_mean` and `n_max` (the provinces where those votes exceed the gap of `last_seat`) and
+        `participation_mean` and `participation_max` (the participation those votes give over the whole census,
+        `100 · votes / Σ census_p`).
     """
     last = last_seat(results).set_index('region_id')
     electors = census_by_province.reindex(last.index, fill_value=0)
@@ -444,5 +447,6 @@ def report_replication(results: Results, census_by_province: pd.Series, hist: pd
         votes = electors * rates[column] / 100.
         out[f'votes_{column}'] = float(votes.sum())
         out[f'n_{column}'] = int((votes > gap).sum())
+        out[f'participation_{column}'] = float(100. * votes.sum() / electors.sum())
 
     return out

@@ -420,6 +420,23 @@ def litigation_census(census: pd.DataFrame, long: pd.DataFrame, countries: pd.Da
     return reduced
 
 
+def empirical_split(votes: pd.DataFrame) -> pd.DataFrame:
+    """
+    The share of each candidature in the votes of each province: the empirical split of new votes.
+
+    Parameters
+    ----------
+    votes : pd.DataFrame
+        Votes by `region_id` and candidature full name (the CERA votes of an election, in the study).
+
+    Returns
+    -------
+    pd.DataFrame
+        `votes` divided by its row sums (rows adding up to 1), same index and columns.
+    """
+    return votes.div(votes.sum(axis=1), axis=0)
+
+
 def increment_votes(new: pd.DataFrame, participation: dict, split: pd.DataFrame, valid: float = 0.99) -> pd.DataFrame:
     """
     The votes the new electors would add to each candidature of each province.

@@ -11,6 +11,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib.studies.cera.data import (
     MONTHLY_COLUMNS,
+    MissingCeraColumns,
     national_series,
     normalise_label,
     read_candidatures_map,
@@ -113,6 +114,12 @@ def test_read_results_2023_matches_the_official_totals(data_fs):
     results = read_results(data_fs, '2023-07-23')
     assert results.seats.values.sum() == 350 and results.totals['registered_cera'].sum() == 2328260
     assert results.votes.loc[28, 'PARTIDO POPULAR'] > 1_000_000 and results.siglas['PARTIDO POPULAR'] == 'PP'
+
+
+def test_read_results_raises_missing_cera_columns_on_the_oldest_files(data_fs):
+    with pytest.raises(MissingCeraColumns, match='Censo CERA'):
+        read_results(data_fs, '1977-06-15')
+    assert issubclass(MissingCeraColumns, ValueError)
 
 
 def test_scrutiny_votes_maps_columns_and_rejects_unknown_ones(data_fs):

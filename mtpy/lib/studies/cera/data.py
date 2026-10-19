@@ -39,6 +39,10 @@ NATIONAL_TOTALS = ('', 'NACIONAL', 'GENERAL')
 HEADER_ROWS = 10
 
 
+class MissingCeraColumns(ValueError):
+    """An Infoelectoral results file without the CERA columns (the general elections of 1977 to 1982)."""
+
+
 def normalise_label(text: str) -> str:
     """
     Normalise a territorial label so that the spellings of every source compare equal.
@@ -505,13 +509,20 @@ def read_results(data: FileSystem, date: str) -> Results:
 
     Raises
     ------
+    MissingCeraColumns
+        If the file has no CERA columns (`Censo CERA`, `Total votantes CERA`), as those of 1977 to 1982.
     ValueError
-        If the candidature columns do not come in «Votos» / «Diputados» pairs.
+        If another column of the totals is missing or the candidature columns do not come in «Votos» /
+        «Diputados» pairs.
     """
     name = f'infoelectoral/es/PROV_02_{date[:4]}{date[5:7]}_1'
     raw = pd.read_excel(data.get_path(f'{name}.xlsx'), sheet_name=0, header=None, dtype=object)
     header_row = raw.index[raw[0].map(_cell_text) == 'Nombre de Comunidad'][0]
     headers = [_cell_text(v) for v in raw.iloc[header_row]]
+    missing = [header for header in RESULTS_TOTALS if header not in headers]
+    if missing:
+        error = MissingCeraColumns if all('CERA' in header for header in missing) else ValueError
+        raise error(f'{name}.xlsx: columns not found: {", ".join(missing)}')
 
     first_votes = headers.index('Votos')
     pairs = list(range(first_votes, len(headers), 2))

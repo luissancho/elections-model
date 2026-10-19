@@ -26,6 +26,7 @@ from mtpy.lib.studies.cera.seats import (
     allocate_results,
     block_seats,
     check_official,
+    empirical_split,
     increment_model,
     increment_votes,
     last_seat,
@@ -88,7 +89,7 @@ def study_inputs():
         siglas=results_2023.siglas,
         siglas_2019=results_2019.siglas,
         blocks=params['blocks'],
-        split=cera_2023.div(cera_2023.sum(axis=1), axis=0),
+        split=empirical_split(cera_2023),
         magnitudes=results_2023.totals['n_seats'],
         hist=participation_history({'2019-11-10': results_2019, '2023-07-23': results_2023})
     )
@@ -317,3 +318,6 @@ def test_report_replication_counts_provinces(study_inputs):
     assert out['n_max'] >= out['n_mean'] >= 9 and out['votes_max'] > out['votes_mean']
     # With the 2019 and 2023 rates only; the report's mean since 1986 gives ~523.000 votes and 20 provinces.
     assert (out['n_mean'], out['n_max']) == (10, 11) and 220_000 <= out['votes_mean'] <= 230_000
+    electors = study_inputs.census_by_province.sum()
+    assert out['participation_mean'] == pytest.approx(100 * out['votes_mean'] / electors)
+    assert out['participation_max'] == pytest.approx(100 * out['votes_max'] / electors)

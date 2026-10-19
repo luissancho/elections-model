@@ -19,7 +19,13 @@ from mtpy.lib.studies.cera.behaviour import (
     shares_by_block
 )
 from mtpy.lib.studies.cera.census import two_periods
-from mtpy.lib.studies.cera.data import read_autonomicas, read_consulates, read_results, read_scrutiny
+from mtpy.lib.studies.cera.data import (
+    MissingCeraColumns,
+    read_autonomicas,
+    read_consulates,
+    read_results,
+    read_scrutiny
+)
 from mtpy.lib.studies.cera.seats import last_seat
 from tests.test_cera_seats import study_inputs  # noqa: F401 (the module-scoped fixture shared with the seat tests)
 
@@ -34,7 +40,7 @@ def _results_all(data_fs):
     for date in available_results(data_fs):
         try:
             results[date] = read_results(data_fs, date)
-        except ValueError:
+        except MissingCeraColumns:
             pass
     return results
 
