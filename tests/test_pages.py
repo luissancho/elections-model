@@ -3695,6 +3695,21 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert context['kpis'][2]['support'] == '2023: 208.431'
 
 
+def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(api, fresh_app):
+    publish_study(fresh_app.fs)
+    body = call(api, '/analisis/voto-cera')[2]
+    assert '<script type="module" src="/dist/js/pages/analisis-cera.js"></script>' in html(body)
+    island = initial(body)
+    census = fixture_data('study-census')
+    assert set(island['census']) == {'series', 'marks', 'periods'}
+    assert island['census']['periods'] == census['periods']['article']
+    # the parties of the last seat label the rows of the gap chart
+    for rows in island['gap'].values():
+        assert all(set(row) == {'name', 'winner', 'runner_up', 'gap', 'net'} for row in rows)
+    assert island['gap']['convocatoria'][0] == {'name': 'Madrid', 'winner': 'PP', 'runner_up': 'PSOE', 'gap': 120.5,
+                                                'net': 7.1}
+
+
 def cera_census(n):
     """La parte `census` del fixture con `n` provincias sintéticas (`P01`...): las altas se duplican de un periodo
     del artículo al otro y crecen con el número de la provincia del inicio del segundo al censo de la convocatoria."""

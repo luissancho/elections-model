@@ -455,12 +455,13 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
     Returns
     -------
     dict
-        ``state``; ``census`` (``series`` and ``marks``); ``origins`` (``name``, ``g1``, ``g2``, ``ratio`` of the
-        two article periods per origin); ``participation`` (``process``, ``origin``, ``rate``); ``ecological``
-        (``rows`` with ``name``, ``latam_share``, ``left_share``, ``census``, plus ``r`` and ``slope``); ``slope``
-        (the block margin of each regional election, ``community``, ``previous``, ``last``); ``cannibal``
-        (``community``, ``d_psoe``, ``d_other_left``); ``sensitive`` (``placement.sensitive``); ``gap`` (per
-        scenario, the ``GAP_SHOWN`` provinces with the smallest gap, ``name``, ``gap``, ``net``) and ``radar``
+        ``state``; ``census`` (``series``, ``marks`` and ``periods``, the two ``[start, end]`` periods of the
+        article); ``origins`` (``name``, ``g1``, ``g2``, ``ratio`` of the two article periods per origin);
+        ``participation`` (``process``, ``origin``, ``rate``); ``ecological`` (``rows`` with ``name``,
+        ``latam_share``, ``left_share``, ``census``, plus ``r`` and ``slope``); ``slope`` (the block margin of each
+        regional election, ``community``, ``previous``, ``last``); ``cannibal`` (``community``, ``d_psoe``,
+        ``d_other_left``); ``sensitive`` (``placement.sensitive``); ``gap`` (per scenario, the ``GAP_SHOWN``
+        provinces with the smallest gap, ``name``, ``winner``, ``runner_up``, ``gap``, ``net``) and ``radar``
         (``today``: the expected participation, no directed placement and the left share of the last general
         election, in %; ``max``: 100 on every axis).
     """
@@ -472,7 +473,8 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
 
     return {
         'state': state,
-        'census': {'series': census.get('series'), 'marks': census.get('marks')},
+        'census': {'series': census.get('series'), 'marks': census.get('marks'),
+                   'periods': _get(census, 'periods', 'article')},
         'origins': [{key: row.get(key) for key in ('name', 'g1', 'g2', 'ratio')} for row in census.get('origins') or []],
         'participation': [{key: row.get(key) for key in ('process', 'origin', 'rate')}
                           for row in participation.get('origin') or []],
@@ -486,7 +488,8 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
                    'last': _get(row, 'last', 'margin')} for row in regional],
         'cannibal': [{key: row.get(key) for key in ('community', 'd_psoe', 'd_other_left')} for row in regional],
         'sensitive': parts['placement'].get('sensitive'),
-        'gap': {scenario: [{'name': row.get('name'), 'gap': row.get('gap'), 'net': row.get(SCENARIO_NET[scenario])}
+        'gap': {scenario: [{'name': row.get('name'), 'winner': row.get('winner'), 'runner_up': row.get('runner_up'),
+                            'gap': row.get('gap'), 'net': row.get(SCENARIO_NET[scenario])}
                            for row in last_seat] for scenario in SCENARIOS},
         'radar': {'today': [figures['participation_projected'], 0, figures['left_share']], 'max': [100, 100, 100]},
     }

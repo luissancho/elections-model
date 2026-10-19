@@ -22,6 +22,11 @@ RIDGE_JS = pathlib.Path(DIST, 'js', 'charts', 'ridge.js').as_uri()
 PATH_JS = pathlib.Path(DIST, 'js', 'charts', 'path.js').as_uri()
 WEIGHTS_JS = pathlib.Path(DIST, 'js', 'charts', 'weights.js').as_uri()
 STACKED_JS = pathlib.Path(DIST, 'js', 'charts', 'stacked.js').as_uri()
+CENSUS_JS = pathlib.Path(DIST, 'js', 'charts', 'census.js').as_uri()
+SCATTER_JS = pathlib.Path(DIST, 'js', 'charts', 'scatter.js').as_uri()
+SLOPE_JS = pathlib.Path(DIST, 'js', 'charts', 'slope.js').as_uri()
+RADAR_JS = pathlib.Path(DIST, 'js', 'charts', 'radar.js').as_uri()
+GROUPED_JS = pathlib.Path(DIST, 'js', 'charts', 'grouped.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -34,7 +39,8 @@ ROWS = [
 
 
 def run_js(expr, rows=ROWS):
-    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema) y `rows`
+    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), los gráficos
+    del estudio CERA (`c` censo, `sc` dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas) y `rows`
     definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
     `JSON.stringify`)."""
     script = (
@@ -42,10 +48,12 @@ def run_js(expr, rows=ROWS):
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
         'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); '
-        'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); const rows = {}; '
+        'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); '
+        'const c = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
+        'const ra = await import("{}"); const g = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
-             WEIGHTS_JS, STACKED_JS, json.dumps(rows), expr)
+             WEIGHTS_JS, STACKED_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -288,3 +296,108 @@ def test_weights_option_gives_the_line_and_the_kernel_hover_symbols_for_their_to
 def test_weights_kernel_line_names_the_factor():
     assert run_js('w.kernelLine(0.946)') == 'F(kernel) 0,95'
     assert run_js('w.kernelLine(null)') == 'F(kernel) –'
+
+
+# Gráficos del estudio CERA (`/analisis/voto-cera`)
+
+def test_census_option_marks_every_date():
+    marks = [{'date': '2022-10-21', 'label': 'Ley 20/2022'}, {'date': '2023-07-23', 'label': '23-J'},
+             {'date': '2025-10-22', 'label': 'Fin del plazo'}, {'date': '2026-08-01', 'label': 'Censo 29-N'}]
+    option = run_js('c.censusOption(rows, %s)' % json.dumps(marks),
+                    rows=[['2022-01-01', 2200000], ['2024-01-01', 2400000], ['2026-09-01', 2762829]])
+    assert option['xAxis']['type'] == 'time' and 'axisLabel' in option['yAxis'] and option['yAxis']['scale'] is True
+    [line] = option['series']
+    assert line['type'] == 'line' and line['data'][2] == ['2026-09-01', 2762829] and line['smooth'] is True
+    assert line['color'] == '#1d4f86' and 'areaStyle' in line and line['showSymbol'] is False
+    # una línea vertical discontinua por marca, con su texto girado
+    assert line['markLine']['data'] == [{'xAxis': m['date'], 'name': m['label']} for m in marks]
+    assert line['markLine']['label']['rotate'] == 90 and line['markLine']['lineStyle']['type'] == 'dashed'
+    assert run_js('c.censusOption(rows, [], {color: "#123456"})', rows=[])['series'][0]['color'] == '#123456'
+    assert run_js('c.millions(2750000)') == '2,75 M'
+
+
+def test_scatter_option_labels_only_the_named_provinces_and_draws_the_fit():
+    rows = [{'name': 'Ourense', 'latam_share': 74.0, 'left_share': 29.7},
+            {'name': 'Madrid', 'latam_share': 40.0, 'left_share': 50.0},
+            {'name': 'Girona', 'latam_share': 23.0, 'left_share': 69.6}]
+    option = run_js('sc.scatterOption(rows, {x: "latam_share", y: "left_share", name: "name", '
+                    'labelled: ["Ourense", "Girona"], fit: [[20, 66], [80, 44]]})', rows=rows)
+    points, fit = option['series']
+    assert points['type'] == 'scatter' and points['color'] == '#1d4f86'
+    assert [item['value'] for item in points['data']] == [[74.0, 29.7], [40.0, 50.0], [23.0, 69.6]]
+    assert [item['name'] for item in points['data']] == ['Ourense', 'Madrid', 'Girona']
+    assert [item['label']['show'] for item in points['data']] == [True, False, True]
+    assert fit['type'] == 'line' and fit['data'] == [[20, 66], [80, 44]] and fit['lineStyle']['type'] == 'dashed'
+    assert fit['showSymbol'] is False and fit['silent'] is True
+    # sin recta, solo los puntos; sin `labelled`, ninguna etiqueta
+    option = run_js('sc.scatterOption(rows, {x: "latam_share", y: "left_share", name: "name"})', rows=rows)
+    assert len(option['series']) == 1 and not any(item['label']['show'] for item in option['series'][0]['data'])
+
+
+def test_slope_option_one_line_per_row_with_zero_reference():
+    rows = [{'name': 'Aragón', 'from': 10.8, 'to': 9.2, 'color': '#e8912b'},
+            {'name': 'Castilla y León', 'from': 8.9, 'to': -0.9, 'color': '#1d4f86'},
+            {'name': 'Andalucía', 'from': 7.3, 'to': 4.9, 'color': '#2e9e5b'}]
+    option = run_js('sl.slopeOption(rows, {labels: ["Comicio anterior", "2026"]})', rows=rows)
+    lines = [s for s in option['series'] if s['type'] == 'line']
+    assert len(lines) == 3 and [s['name'] for s in lines] == ['Aragón', 'Castilla y León', 'Andalucía']
+    assert option['xAxis']['type'] == 'category' and option['xAxis']['data'] == ['Comicio anterior', '2026']
+    assert lines[1]['color'] == '#1d4f86' and lines[1]['data'][0] == 8.9 and lines[1]['data'][1]['value'] == -0.9
+    # la etiqueta solo en el valor final
+    assert all(s['data'][1]['label']['show'] is True and not isinstance(s['data'][0], dict) for s in lines)
+    marked = [s for s in lines if 'markLine' in s]
+    assert len(marked) == 1 and marked[0]['markLine']['data'] == [{'yAxis': 0}]
+    low = option['yAxis']['min']
+    assert low < -0.9 and marked[0]['markArea']['data'] == [[{'yAxis': low}, {'yAxis': 0}]]
+    assert option['legend']['data'] == ['Aragón', 'Castilla y León', 'Andalucía']
+    assert run_js('sl.slopeOption(rows)', rows=rows)['xAxis']['data'] == ['Comicio anterior', '2026']
+
+
+def test_radar_option_two_series():
+    indicators = [{'name': 'Participación CERA', 'max': 100}, {'name': 'Colocación dirigida', 'max': 100},
+                  {'name': 'Voto a la izquierda', 'max': 100}]
+    series = [{'name': 'Realidad hoy', 'value': [8.6, 0, 38.3], 'color': '#1d4f86', 'filled': True},
+              {'name': 'Todo al máximo', 'value': [100, 100, 100], 'color': '#ce3b3b', 'filled': False}]
+    option = run_js('ra.radarOption(%s, rows)' % json.dumps(indicators), rows=series)
+    assert option['radar']['indicator'] == indicators
+    [radar] = option['series']
+    assert radar['type'] == 'radar' and len(radar['data']) == 2
+    today, top = radar['data']
+    assert today['name'] == 'Realidad hoy' and today['value'] == [8.6, 0, 38.3] and top['value'] == [100, 100, 100]
+    assert today['lineStyle']['color'] == '#1d4f86' and today['label']['show'] is True and top['label']['show'] is False
+    assert today['areaStyle']['opacity'] > top['areaStyle']['opacity']
+    assert option['legend']['data'] == ['Realidad hoy', 'Todo al máximo'] and option['legend']['bottom'] == 0
+
+
+def test_grouped_option_one_bar_series_per_entry_over_the_categories():
+    series = [{'name': 'PSOE', 'data': [6.2, 7.1], 'color': '#ce3b3b'},
+              {'name': 'Otras izquierdas', 'data': [-8.3, None], 'color': '#7b3fa0'}]
+    option = run_js('g.groupedOption(["Castilla y León", "Andalucía"], rows)', rows=series)
+    assert option['xAxis']['type'] == 'category' and option['xAxis']['data'] == ['Castilla y León', 'Andalucía']
+    assert option['yAxis']['type'] == 'value' and option['legend']['data'] == ['PSOE', 'Otras izquierdas']
+    psoe, other = option['series']
+    assert psoe['type'] == other['type'] == 'bar' and psoe['color'] == '#ce3b3b' and 'stack' not in psoe
+    assert [item['value'] for item in psoe['data']] == [6.2, 7.1] and other['data'][1]['value'] is None
+    # la etiqueta del valor fuera de la barra: encima si es positivo, debajo si es negativo
+    assert [item['label']['position'] for item in psoe['data'] + other['data'][:1]] == ['top', 'top', 'bottom']
+    # en horizontal, las categorías en el eje Y de arriba abajo; los colores por barra y la leyenda abajo
+    series = [{'name': 'Brecha', 'data': [284, 403], 'color': '#c7cdd8'},
+              {'name': 'Neto', 'data': [{'value': -15, 'color': '#ce3b3b'}, {'value': 206, 'color': '#1d4f86'}]}]
+    option = run_js('g.groupedOption(["Girona", "Cantabria"], rows, {horizontal: true, legend: "bottom"})', rows=series)
+    assert option['yAxis']['data'] == ['Girona', 'Cantabria'] and option['yAxis']['inverse'] is True
+    assert option['xAxis']['type'] == 'value' and option['legend']['bottom'] == 0
+    net = option['series'][1]
+    assert [item['itemStyle']['color'] for item in net['data']] == ['#ce3b3b', '#1d4f86']
+    assert [item['label']['position'] for item in net['data']] == ['left', 'right']
+    # apiladas: la misma pila, las etiquetas dentro (el texto propio de cada barra si lo hay) y los totales encima
+    series = [{'name': 'Latinoamérica', 'data': [62000, 250000], 'labels': ['33 %', '59 %']},
+              {'name': 'Resto', 'data': [127000, 172000]}]
+    option = run_js('g.groupedOption(["Antes", "Después"], rows, {stacked: true, max: 100, '
+                    'totals: ["+189.000", "+422.000 ×2,2"]})', rows=series)
+    latam, rest, totals = option['series']
+    assert latam['stack'] == rest['stack'] == totals['stack'] and option['yAxis']['max'] == 100
+    assert [item['label']['formatter'] for item in latam['data']] == ['33 %', '59 %']
+    assert latam['data'][0]['label']['position'] == 'inside' and rest['data'][0]['label']['position'] == 'inside'
+    assert [item['value'] for item in totals['data']] == [0, 0] and totals['silent'] is True
+    assert [item['label']['formatter'] for item in totals['data']] == ['+189.000', '+422.000 ×2,2']
+    assert totals['data'][0]['label']['position'] == 'top' and option['legend']['data'] == ['Latinoamérica', 'Resto']
