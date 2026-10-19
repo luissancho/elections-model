@@ -81,7 +81,7 @@
         "r_gap_growth": 0.1
       },
       "now": {
-        "r_size_growth": 0.8,
+        "r_size_growth": 0.82,
         "r_size_ratio": -0.2,
         "r_gap_growth": 0.1
       }

@@ -3659,9 +3659,14 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert figures['voters_2023'] == scenario['voters_2023'] and figures['changed'] is False
     assert figures['net_before'] == meta['regression']['net_before']
     assert figures['p_slope'] == meta['regression']['p_slope']
-    assert figures['ratio_article'] == 2.0 and figures['r'] == -0.743 and figures['n_ecological'] == 3
+    # the page shows the periods updated to the last close (`now`); the article's window stays for «Cómo leerlo»
+    assert (figures['g1'], figures['g2'], figures['ratio'], figures['periods_version']) == (600, 900, 1.5, 'now')
+    assert (figures['g1_article'], figures['g2_article'], figures['ratio_article']) == (600, 1200, 2.0)
+    assert figures['r'] == -0.743 and figures['n_ecological'] == 3
     assert figures['max_gain'] == 1 and figures['pool'] == 181032 and figures['grid_observed'] == 0
-    assert figures['report']['n_max'] == 3 and figures['sensitive_all'] == {'stock_share': 24.1, 'growth_share': 17.39}
+    assert figures['report']['n_max'] == 3 and figures['sensitive_all'] == {'stock_share': 25.0, 'growth_share': 18.1}
+    assert figures['sensitive_countries'] == {'stock_share': 31.0, 'growth_share': 27.5}
+    assert figures['sensitive_version'] == 'now'
     # the litigation and the participation rates come from `params`
     assert figures['litigation'] == 163020 and figures['latam_rate'] == 5 and figures['rest_rate'] == 10
     assert context['registered'] == {'at': '2026-10-18', 'claim': meta['registered']['claim']}
@@ -3702,7 +3707,9 @@ def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(
     island = initial(body)
     census = fixture_data('study-census')
     assert set(island['census']) == {'series', 'marks', 'periods'}
-    assert island['census']['periods'] == census['periods']['article']
+    assert island['census']['periods'] == census['periods']['now']  # the updated periods, as the page
+    assert island['origins'][0] == {'name': 'Latinoamérica', 'g1': 100, 'g2': 150, 'ratio': 1.5}
+    assert island['sensitive'] == fixture_data('study-placement')['sensitive']['now']
     # the parties of the last seat label the rows of the gap chart
     for rows in island['gap'].values():
         assert all(set(row) == {'name', 'winner', 'runner_up', 'gap', 'net'} for row in rows)
@@ -3712,10 +3719,13 @@ def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(
 
 def cera_census(n):
     """La parte `census` del fixture con `n` provincias sintéticas (`P01`...): las altas se duplican de un periodo
-    del artículo al otro y crecen con el número de la provincia del inicio del segundo al censo de la convocatoria."""
+    del artículo al otro (×1,5 en los periodos actualizados) y crecen con el número de la provincia del inicio del
+    segundo al censo de la convocatoria."""
     census = fixture_data('study-census')
     provinces = [{'region_id': i, 'name': 'P{:02d}'.format(i), 'c1_start': 900, 'c1_end': 1000, 'c2_start': 1000,
-                  'c2_end': 1200, 'g1': 100, 'g2': 200, 'ratio': 2.0} for i in range(1, n + 1)]
+                  'c2_end': 1200, 'g1': 100, 'g2': 200, 'ratio': 2.0, 'c1_start_now': 900, 'c1_end_now': 1000,
+                  'c2_start_now': 1000, 'c2_end_now': 1150, 'g1_now': 100, 'g2_now': 150, 'ratio_now': 1.5}
+                 for i in range(1, n + 1)]
     growth = [{'region_id': i, 'name': 'P{:02d}'.format(i), 'baseline': 1100, 'election': 1000 + 10 * i,
                'growth': 10 * i - 100, 'pct': None} for i in range(1, n + 1)]
     return census | {'provinces': provinces, 'election_provinces': growth}
@@ -3745,8 +3755,8 @@ def test_cera_page_head_and_question_1(api, fresh_app):
     resumen = page[page.index('id="resumen"'):page.index('id="p1"')]
     assert re.findall(r'<div class="vv">([^<]+)</div>', resumen) == ['SÍ', 'SIN EVIDENCIA', 'NO']
     assert re.findall(r'<a class="(q[123])" href="#(p[123])">', resumen) == [('q1', 'p1'), ('q2', 'p2'), ('q3', 'p3')]
-    assert '(×2,0)' in resumen and '~5%' in resumen and '~10%' in resumen
-    assert 'el 17% de las altas con el 24% del censo' in resumen
+    assert '(×1,5)' in resumen and '~5%' in resumen and '~10%' in resumen  # the pace of the updated periods
+    assert 'el 18% de las altas con el 25% del censo' in resumen
     assert 'Con el censo real, la participación real y el reparto real: cero escaños.' in resumen
     assert 'class="note blue"' in resumen and 'los datos por encima de bandos y consignas.</p>' in resumen
     assert page[:page.index('id="p1"')].endswith('<section class="card qcard q1" ')
@@ -3758,11 +3768,11 @@ def test_cera_page_head_and_question_1(api, fresh_app):
         assert re.search(r'<div class="chart" id="{}" role="img" aria-label="[^"]+"></div>'.format(chart), p1)
     countries = p1[p1.index('id="countries-table"'):]
     countries = countries[:countries.index('</table>')]
-    assert '<td><b>Venezuela</b></td><td>200</td><td><b>400</b></td><td class="pos">×2,0</td>' in countries
+    assert '<td><b>Venezuela</b></td><td>200</td><td><b>300</b></td><td>×1,5</td>' in countries
     assert countries.index('Venezuela') < countries.index('Argentina')  # by the additions after the law
     provinces = p1[p1.index('id="provinces-table"'):]
     provinces = provinces[:provinces.index('</table>')]
-    assert '<th scope="col">Censo 01-2023</th>' in provinces  # the start of the second period of the article
+    assert '<th scope="col">Censo 01-2026</th>' in provinces  # the start of the second updated period
     rows = re.findall(r'<tr( hidden)?>\s*<td><b>(P\d\d)</b></td>', provinces)
     assert [name for _, name in rows] == ['P{:02d}'.format(i) for i in range(12, 0, -1)]  # by growth
     assert [bool(hidden) for hidden, _ in rows] == [False] * 8 + [True] * 4
@@ -3770,10 +3780,17 @@ def test_cera_page_head_and_question_1(api, fresh_app):
     assert '<button type="button" class="more" id="provinces-more" hidden>Ver las 12 provincias</button>' in p1
     summary = p1[p1.index('class="sum"'):]
     summary = summary[:summary.index('</div>')]
-    assert '<b>Sí, y no tiene sentido negarlo.</b>' in summary and '(×2,0: de 1.200 a 2.400)' in summary
+    assert '<b>Sí, y no tiene sentido negarlo.</b>' in summary and '(×1,5: de 1.200 a 1.800)' in summary
     assert 'suma 442.257 electores desde las generales de 2023 (+19%)' in summary
-    assert '(Argentina ×2,0)' in summary and 'Cuba' not in summary  # no row for Cuba: its clause goes
+    assert '(Argentina ×1,5)' in summary and 'Cuba' not in summary  # no row for Cuba: its clause goes
     assert 'class="how"' in p1 and 'p &lt; 0,001' in p1
+    how = p1[p1.index('class="how"'):]
+    assert 'del 1 ene 2025 al 1 dic 2025, antes de la ley, y del 1 ene 2026 al 1 sept 2026, después' in how
+    assert 'Los periodos se actualizan con cada cierre; el último publicado es el 1 sept 2026.' in how
+    assert ('En la réplica del artículo con su ventana (enero 2022 – diciembre 2022 y enero 2023 – junio 2023), son '
+            '1.200 altas antes de la ley y 2.400 después (×2,0).') in how
+    assert '×2,0' not in p1[:p1.index('class="how"')]  # the article's pace only in «Cómo leerlo»
+    assert 'aria-label="Altas netas: 1.200 antes de la ley y 1.800 después, ×1,5"></div>' in p1
     assert 'medium.com' not in page[:page.index('id="datos"')]  # the article appears only in «Datos y método» (task 17)
     # the default fixture has three provinces: no hidden rows and no button; a checked study says so
     publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'}, parts={'check': {'verdict': 'acierto'}})
@@ -3803,6 +3820,11 @@ def test_cera_question_1_helpers():
     assert q1['exile']['name'] == 'Cuba' and q1['latam'] == [] and q1['countries'][0]['name'] == 'Cuba'
     assert q1['months'] == [43, 43] and q1['equal'] and q1['start_label'] == '10-2022'
     assert q1['provinces'] == [] and q1['provinces_hidden'] == 0 and q1['slope_significant'] is False
+    assert q1['version'] == 'article' and q1['window'] == 'marzo 2019 – octubre 2022 – mayo 2026'  # no `now`
+    assert cera._window([['2022-01-01', '2022-12-01'], ['2023-01-01', '2023-06-01']]) == (
+        'enero 2022 – diciembre 2022 y enero 2023 – junio 2023')
+    assert cera._window(None) is None and cera._window([['2022-01-01', None], ['2023-01-01', '2023-06-01']]) is None
+    assert cera._version({'article': {'a': 1}, 'now': None}) == 'article' and cera._version({'now': {'a': 1}}) == 'now'
 
 
 def cera_section(page, id):
@@ -3848,7 +3870,7 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     assert '<b>No.</b>' in band and 'cae en las 3 comunidades' in band
     assert 'Castilla y León 6,0 → 1,3; Andalucía 5,0 → 2,5; Aragón 4,0 → 2,0' in band
     madrid = cera_table(p2, 'madrid-table')
-    assert '<td><b>Madrid, Venezuela</b></td><td>8,0%</td><td>–</td><td>9%</td>' in madrid
+    assert '<td><b>Madrid, Venezuela</b></td><td>8,5%</td><td>–</td><td>10%</td>' in madrid  # the `_now` shares
     assert '<td><b>Madrid, conjunto</b></td>' in madrid
     assert 'La adscripción de quien nunca vivió en España' in p2
     assert 'Madrid, con 3 escaños,' in p2 and 'el neto del CERA favorece al PSOE' in p2  # region 28 of last_seat
@@ -3857,9 +3879,15 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     summary = summary[:summary.index('</div>')]
     assert '<b>Ni concentración estratégica ni giro a la izquierda.</b>' in summary
     assert 'Las nuevas altas participan al ~5%, frente al ~10% del resto' in summary
-    assert 'pasan del 24% del censo al 17% de las altas' in summary
-    assert 'las altas de Argentina, Cuba y Venezuela pasan del 30% al 27%' in summary
+    assert 'pasan del 25% del censo al 18% de las altas' in summary  # `sensitive.now`
+    assert 'las altas de Argentina, Cuba y Venezuela pasan del 31% al 28%' in summary
     assert 'class="how"' in p2 and 'falacia ecológica' in p2
+    how = p2[p2.index('class="how"'):]
+    assert 'del 1 ene 2025 con su cuota de las altas hasta el 1 sept 2026' in how
+    assert ('En la réplica del artículo con su ventana (enero 2022 – diciembre 2022 y enero 2023 – junio 2023), su '
+            'cuota pasa del 24,1% del censo al 17,4% de las altas; con Argentina, Cuba y Venezuela, del 30,0% al '
+            '26,7%.') in how
+    assert '17,4%' not in p2[:p2.index('class="how"')]
     # question 3
     p3 = cera_section(page, 'p3')
     assert page[:page.index('id="p3"')].endswith('<section class="card qcard q3" ')
@@ -3936,14 +3964,41 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
 def test_cera_page_question_1_copy_fixes(api, fresh_app):
     """Cuba «apenas se mueve» solo bajo `PACE_FAST`; la frase de los periodos dice el último cierre publicado."""
     census = fixture_data('study-census')
-    cuba = {'country_code': 'CUB', 'name': 'CUBA', 'g1': 100, 'g2': 110, 'ratio': 1.1}
+    cuba = {'country_code': 'CUB', 'name': 'CUBA', 'g1': 100, 'g2': 110, 'ratio': 1.1, 'g1_now': 100, 'g2_now': 110,
+            'ratio_now': 1.1}
     publish_study(fresh_app.fs, parts={'census': census | {'countries': census['countries'] + [cuba]}})
     p1 = cera_section(cera_page(api), 'p1')
     assert 'pero Cuba, el país símbolo del exilio, apenas se mueve (×1,1)' in p1
     assert 'Los periodos se actualizan con cada cierre; el último publicado es el 1 sept 2026.' in p1
-    publish_study(fresh_app.fs, parts={'census': census | {'countries': census['countries'] + [cuba | {'ratio': 2.4}]}})
+    countries = census['countries'] + [cuba | {'ratio_now': 2.4}]
+    publish_study(fresh_app.fs, parts={'census': census | {'countries': countries}})
     p1 = cera_section(cera_page(api), 'p1')
     assert 'apenas se mueve' not in p1 and 'Cuba ×2,4' in p1
+
+
+def test_cera_page_falls_back_to_the_article_periods_and_says_so(api, fresh_app):
+    """A census part without `now` (an older one): the page shows the article's periods and «Cómo leerlo» says so."""
+    census = fixture_data('study-census')
+    old = {key: [{col: value for col, value in row.items() if not col.endswith('_now')} for row in census[key]]
+           for key in ('provinces', 'countries', 'origins', 'exposure')}
+    placement = fixture_data('study-placement')
+    publish_study(fresh_app.fs, parts={
+        'census': census | old | {'periods': {'article': census['periods']['article']}},
+        'placement': placement | {'sensitive': {'article': placement['sensitive']['article']},
+                                  'correlations': {'article': placement['correlations']['article']}}})
+    body = call(api, '/analisis/voto-cera')[2]
+    page = re.sub(r'\s+', ' ', html(body))
+    p1, p2 = cera_section(page, 'p1'), cera_section(page, 'p2')
+    assert '(×2,0)' in page[page.index('id="resumen"'):page.index('id="p1"')]
+    assert 'Los periodos se actualizan' not in p1
+    assert ('Este cierre no trae los periodos actualizados: las cifras son las de la réplica del artículo con su '
+            'ventana (enero 2022 – diciembre 2022 y enero 2023 – junio 2023).') in p1
+    assert 'pasan del 24% del censo al 17% de las altas' in p2
+    assert 'Este cierre no trae los periodos actualizados: las cuotas son las de la réplica del artículo' in p2
+    assert 'r = 0,80 con el tamaño de la provincia' in cera_section(page, 'debate')
+    island = initial(body)
+    assert island['census']['periods'] == census['periods']['article']
+    assert island['sensitive'] == placement['sensitive']['article']
 
 
 def cera_rows(table):
@@ -3992,7 +4047,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
                   '«Un censo fabricado para la izquierda»'):
         assert '<h3>{}</h3>'.format(title) in debate, title
     assert 'la cuota de izquierda del CERA baja en todas' in debate  # the three regional elections of the fixture
-    assert 'r = 0,80 con el tamaño de la provincia' in debate
+    assert 'r = 0,82 con el tamaño de la provincia' in debate  # `correlations.now`
     assert 'cómo se adscribe a una provincia a quien nunca vivió en España' in debate
     assert 'class="how"' in debate
     # the check, before the scrutiny: the two elections and the registered row of the 29-N

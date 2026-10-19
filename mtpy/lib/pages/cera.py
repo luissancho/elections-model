@@ -43,6 +43,12 @@ BEFORE_ROGADO = 'antes'
 CHECK_SHOWN = 20
 # The candidature columns of the rows of the check (with and without the CERA vote), printed by their sigla
 WINNERS = ('winner_with', 'winner_without')
+# The two versions of the periods in the parts: ``now``, the article's periods recalculated up to the last monthly
+# close (what the page shows, spec D2), and ``article``, the replication of the article with its window (what
+# «Cómo leerlo» quotes, and the fallback of a part without ``now``)
+NOW, ARTICLE = 'now', 'article'
+MONTHS_LONG = ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
+               'noviembre', 'diciembre')
 
 
 def _get(data: Optional[dict], *keys):
@@ -68,6 +74,110 @@ def _get(data: Optional[dict], *keys):
         data = data.get(key)
 
     return data
+
+
+def _version(data: Optional[dict]) -> str:
+    """
+    The version of a dict of the parts keyed by version (``periods``, ``sensitive``, ``correlations``) that the page
+    shows.
+
+    Parameters
+    ----------
+    data : dict or None
+        ``{'article': ..., 'now': ...}``.
+
+    Returns
+    -------
+    str
+        ``NOW`` when it has a non-empty ``now``, else ``ARTICLE``.
+    """
+    return NOW if isinstance(data, dict) and data.get(NOW) else ARTICLE
+
+
+def _census_version(census: dict) -> str:
+    """
+    The version of the two periods of the ``census`` part that the page shows.
+
+    Parameters
+    ----------
+    census : dict
+        Data of the ``census`` part.
+
+    Returns
+    -------
+    str
+        ``NOW`` when the part has ``periods.now`` and every row of ``provinces``, ``countries`` and ``origins``
+        carries its ``_now`` columns, else ``ARTICLE``.
+    """
+    rows = [row for group in ('provinces', 'countries', 'origins') for row in census.get(group) or []]
+
+    return NOW if _get(census, 'periods', NOW) and rows and all('g2_now' in row for row in rows) else ARTICLE
+
+
+def _suffix(version: str) -> str:
+    """The suffix of the columns of a version in the rows of the two periods: ``'_now'`` or ``''``."""
+    return '_now' if version == NOW else ''
+
+
+def _two_periods(row: dict, version: str) -> dict:
+    """
+    The figures of a row of the two periods in one version.
+
+    Parameters
+    ----------
+    row : dict
+        A row of ``census.provinces``, ``countries`` or ``origins``.
+    version : str
+        ``NOW`` or ``ARTICLE``.
+
+    Returns
+    -------
+    dict
+        ``{'g1', 'g2', 'ratio', 'c2_start'}`` of the version (``None`` for what the row lacks).
+    """
+    suffix = _suffix(version)
+
+    return {key: row.get(key + suffix) for key in ('g1', 'g2', 'ratio', 'c2_start')}
+
+
+def _month_year(iso: Optional[str]) -> Optional[str]:
+    """``'2019-03-01'`` → ``'marzo 2019'`` (``None`` without a valid date)."""
+    try:
+        year, month = int(iso[:4]), int(iso[5:7])
+    except (TypeError, ValueError):
+        return None
+
+    return '{} {}'.format(MONTHS_LONG[month - 1], year) if 1 <= month <= len(MONTHS_LONG) else None
+
+
+def _window(periods: Optional[list]) -> Optional[str]:
+    """
+    The window of two periods in words: «marzo 2019 – octubre 2022 – mayo 2026» when the second starts where the
+    first ends, else «… – … y … – …».
+
+    Parameters
+    ----------
+    periods : list or None
+        ``[[start, end], [start, end]]`` as ISO dates.
+
+    Returns
+    -------
+    str or None
+        The window, or ``None`` without two valid periods.
+    """
+    if not periods or len(periods) != 2 or any(len(period or []) != 2 for period in periods):
+        return None
+
+    (s1, e1), (s2, e2) = periods
+    months = [_month_year(day) for day in (s1, e1, s2, e2)]
+
+    if None in months:
+        return None
+
+    if e1 == s2:
+        return ' – '.join((months[0], months[1], months[3]))
+
+    return '{} – {} y {} – {}'.format(*months)
 
 
 def _sigla(row: Optional[dict], key: str) -> Optional[str]:
@@ -212,26 +322,33 @@ def _question_1(census: dict, figures: dict) -> dict:
     Returns
     -------
     dict
-        - ``countries``: the ``COUNTRIES_SHOWN`` countries with the most additions in the second period of the
-          article, ``{'name', 'g1', 'g2', 'ratio', 'tone'}`` (``tone`` ``'pos'`` from ``PACE_FAST``, ``'neg'``
-          under ``PACE_SLOW``, else ``None``).
+        The periods are the ``version`` the page shows (``_census_version``: ``now``, the article's periods up to
+        the last monthly close, or ``article`` when the part lacks them).
+
+        - ``countries``: the ``COUNTRIES_SHOWN`` countries with the most additions in the second period,
+          ``{'name', 'g1', 'g2', 'ratio', 'tone'}`` (``tone`` ``'pos'`` from ``PACE_FAST``, ``'neg'`` under
+          ``PACE_SLOW``, else ``None``).
         - ``provinces``: every row of ``election_provinces`` with the census at the start of the second period
           (``c2_start`` of its row of ``provinces``) as ``start``, ``election``, ``growth = election - start``,
           ``pct`` (in % of ``start``) and ``shown`` (the first ``PROVINCES_SHOWN``), sorted by ``growth``, the
           largest first; ``provinces_hidden`` counts the rest.
         - ``start_label``: the month of that start as ``'MM-YYYY'`` (the header of the table).
-        - ``periods``: the two periods of the article (``census.periods.article``), ``months`` the length of each
-          and ``equal`` whether they last the same.
+        - ``periods``: the two periods (``census.periods[version]``), ``months`` the length of each and ``equal``
+          whether they last the same.
         - ``series``: ``{'from', 'to', 'first', 'last'}``, the dates and values at both ends of the monthly series.
         - ``latam``: the rows of ``LATAM_QUOTED`` and ``exile`` the one of ``EXILE_QUOTED`` (or ``None``), among
           all the countries, for the summary; ``exile_slow`` whether the pace of ``exile`` is under ``PACE_FAST``
           (the summary says it «apenas se mueve» only then).
         - ``p_slope``: ``_p_value`` of the change of slope, and ``slope_significant`` whether it is under
           ``SIGNIFICANCE``.
+        - ``version``: ``NOW`` or ``ARTICLE``; ``window``: the article's window in words (``_window``), for the
+          replication that «Cómo leerlo» quotes.
     """
-    countries = [dict(row, name=_country_name(row.get('name'))) for row in census.get('countries') or []]
+    version = _census_version(census)
+    countries = [dict(row, name=_country_name(row.get('name')), **_two_periods(row, version))
+                 for row in census.get('countries') or []]
     by_name = {(row['name'] or '').upper(): row for row in countries}
-    starts = {row.get('region_id'): row.get('c2_start') for row in census.get('provinces') or []}
+    starts = {row.get('region_id'): _two_periods(row, version)['c2_start'] for row in census.get('provinces') or []}
     provinces = []
 
     for row in census.get('election_provinces') or []:
@@ -245,7 +362,7 @@ def _question_1(census: dict, figures: dict) -> dict:
     for index, row in enumerate(provinces):
         row['shown'] = index < PROVINCES_SHOWN
 
-    periods = _get(census, 'periods', 'article') or []
+    periods = _get(census, 'periods', version) or []
     months = [_months(*period) for period in periods if len(period) == 2]
     series = census.get('series') or {}
     dates, values = series.get('dates') or [None], series.get('values') or [None]
@@ -268,6 +385,8 @@ def _question_1(census: dict, figures: dict) -> dict:
                       and by_name[EXILE_QUOTED]['ratio'] < PACE_FAST,
         'p_slope': _p_value(figures.get('p_slope')),
         'slope_significant': figures.get('p_slope') is not None and figures['p_slope'] < SIGNIFICANCE,
+        'version': version,
+        'window': _window(_get(census, 'periods', ARTICLE)),
     }
 
 
@@ -394,7 +513,7 @@ def _madrid(placement: dict, census: dict, prediction: dict, params: dict) -> di
     placement : dict
         Data of the ``placement`` part (``madrid``).
     census : dict
-        Data of the ``census`` part (``periods.article``, for the headers).
+        Data of the ``census`` part (``periods``, for the headers).
     prediction : dict
         Data of the ``prediction`` part (``last_seat``).
     params : dict
@@ -403,27 +522,32 @@ def _madrid(placement: dict, census: dict, prediction: dict, params: dict) -> di
     Returns
     -------
     dict
-        ``rows`` (``{'label', 'stock', 'p1', 'p2'}`` per row of ``placement.madrid``: «Madrid, n países» for the
+        ``rows`` (``{'label', 'stock', 'p1', 'p2'}`` per row of ``placement.madrid``, in the version of the periods
+        the page shows (its ``_now`` columns when the rows and ``census`` have them): «Madrid, n países» for the
         countries together, «Madrid, {country}» for each one); ``labels`` (the headers ``stock``, ``p1`` and ``p2``,
-        with the years of the article periods); ``countries`` (``params.madrid_countries`` in the case of the
+        with the years of those periods); ``countries`` (``params.madrid_countries`` in the case of the
         prose); ``magnet`` (whether Madrid took more of the additions before the law than its share of the census);
         ``seat`` (``None`` without Madrid in ``last_seat``, else ``{'magnitude', 'largest', 'favoured'}``: its seats,
         whether no province has more and the sigla of the candidature the net CERA effect favours, the runner-up
         with a positive net and the winner with a negative one).
     """
     countries = [_country_name(name) for name in params.get('madrid_countries') or []]
+    madrid = placement.get('madrid') or []
+    now = _census_version(census) == NOW and bool(madrid) and all('share_p2_now' in row for row in madrid)
+    version = NOW if now else ARTICLE
+    suffix = _suffix(version)
     rows = []
 
-    for row in placement.get('madrid') or []:
+    for row in madrid:
         if row.get('label') == 'Conjunto':
             label = 'Madrid, {} países'.format(len(countries)) if countries else 'Madrid, conjunto'
         else:
             label = 'Madrid, ' + (_country_name(row.get('label')) or '')
 
-        rows.append({'label': label, 'stock': row.get('stock_share'), 'p1': row.get('share_p1'),
-                     'p2': row.get('share_p2')})
+        rows.append({'label': label, 'stock': row.get('stock_share' + suffix), 'p1': row.get('share_p1' + suffix),
+                     'p2': row.get('share_p2' + suffix)})
 
-    periods = [period for period in _get(census, 'periods', 'article') or [] if len(period) == 2]
+    periods = [period for period in _get(census, 'periods', version) or [] if len(period) == 2]
     labels = {'stock': 'Stock', 'p1': 'Altas antes de la ley', 'p2': 'Altas después'}
 
     if len(periods) == 2:
@@ -475,8 +599,10 @@ def _question_2(parts: dict, figures: dict) -> dict:
           one of them; ``absorbs`` whether in every one the PSOE grows while the rest of the left falls;
           ``block_steady`` whether in every one the left block moves less than the PSOE.
         - ``sensitive``: ``{'magnitude', 'period', 'stock', 'growth', 'stock_countries', 'growth_countries',
-          'down'}`` from ``placement.sensitive.article`` (``down``: the sensitive provinces take a smaller share
-          of the additions than of the census) and ``params.sensitive_magnitude``.
+          'down', 'version', 'article'}`` from ``placement.sensitive`` in its ``version`` (``now``, up to the census
+          closed for the election, or ``article`` when the part lacks it; ``down``: the sensitive provinces take a
+          smaller share of the additions than of the census), ``params.sensitive_magnitude`` and, for «Cómo
+          leerlo», ``article``: the shares of the replication of the article and its ``window``.
         - ``madrid``: ``_madrid``.
     """
     meta, census, vote, placement = parts['meta'], parts['census'], parts['vote'], parts['placement']
@@ -485,9 +611,12 @@ def _question_2(parts: dict, figures: dict) -> dict:
     ecological = vote.get('ecological') or {}
     pairs = _regional_pairs(vote)
     years = [pair[key] for pair in pairs for key in ('from', 'to') if pair[key]]
-    article = _get(placement, 'sensitive', 'article') or {}
-    together, countries = article.get('all') or {}, article.get('countries') or {}
+    sensitive = placement.get('sensitive') or {}
+    version = _version(sensitive)
+    shown = sensitive.get(version) or {}
+    together, countries = shown.get('all') or {}, shown.get('countries') or {}
     stock, growth = together.get('stock_share'), together.get('growth_share')
+    article = sensitive.get(ARTICLE) or {}
 
     return {
         'processes': len({row.get('process') for row in parts['participation'].get('origin') or []}),
@@ -501,10 +630,15 @@ def _question_2(parts: dict, figures: dict) -> dict:
         'left_falls': _every(pairs, lambda before, after: after < before, 'left_from', 'left_to'),
         'absorbs': _every(pairs, lambda psoe, other: psoe > 0 > other, 'd_psoe', 'd_other_left'),
         'block_steady': _every(pairs, lambda block, psoe: abs(block) < abs(psoe), 'd_block', 'd_psoe'),
-        'sensitive': {'magnitude': params.get('sensitive_magnitude'), 'period': article.get('period'),
+        'sensitive': {'magnitude': params.get('sensitive_magnitude'), 'period': shown.get('period'),
                       'stock': stock, 'growth': growth, 'stock_countries': countries.get('stock_share'),
                       'growth_countries': countries.get('growth_share'),
-                      'down': stock is not None and growth is not None and growth < stock},
+                      'down': stock is not None and growth is not None and growth < stock, 'version': version,
+                      'article': {'stock': _get(article, 'all', 'stock_share'),
+                                  'growth': _get(article, 'all', 'growth_share'),
+                                  'stock_countries': _get(article, 'countries', 'stock_share'),
+                                  'growth_countries': _get(article, 'countries', 'growth_share'),
+                                  'window': _window(_get(census, 'periods', ARTICLE))}},
         'madrid': _madrid(placement, census, parts['prediction'], params),
     }
 
@@ -836,10 +970,11 @@ def _debate(parts: dict, previous: dict) -> dict:
           exceeded the gap, by gap, with the winners by their siglas; the year of their election (the latest of ``check.elections``), whether it is
           the study's and how many provinces of ``check.rows`` the CERA vote decided.
         - ``correlation``: the correlation of the additions with the size of the province (``r_size_growth`` of
-          the article periods).
+          the ``now`` periods, or of the article's without them).
         - ``madrid_census``: the CERA census of Madrid in the election of the study.
     """
     check, meta = parts['check'], parts['meta']
+    correlations = parts['placement'].get('correlations')
     rows = check.get('rows') or []
     elections = sorted((row for row in check.get('elections') or [] if row.get('date')), key=lambda row: row['date'])
     latest = elections[-1] if elections else {}
@@ -861,7 +996,7 @@ def _debate(parts: dict, previous: dict) -> dict:
                    'year': _year(latest.get('date')),
                    'study': bool(latest) and latest.get('date') == _get(meta, 'election', 'date'),
                    'changed': sum(1 for row in rows if row.get('decided'))},
-        'correlation': _get(parts['placement'], 'correlations', 'article', 'r_size_growth'),
+        'correlation': _get(correlations, _version(correlations), 'r_size_growth'),
         'madrid_census': madrid.get('election'),
     }
 

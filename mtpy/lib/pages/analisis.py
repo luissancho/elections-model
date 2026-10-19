@@ -14,7 +14,8 @@ from ...core.api import HttpError
 from .. import bundle
 from ..webapi import site
 from .common import api_url, bundle_part, common_context
-from .cera import SCENARIOS, UNIFORM_SPLIT, _check, _debate, _get, _question_1, _question_2, _question_3, _sigla
+from .cera import (MONTHS_LONG, SCENARIOS, UNIFORM_SPLIT, _census_version, _check, _debate, _get, _question_1,
+                   _question_2, _question_3, _sigla, _two_periods, _version)
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
@@ -35,8 +36,6 @@ SCENARIO_NET = {'convocatoria': 'net', 'sin_litigio': 'net_b'}
 # Rows of the gap chart: the provinces with the smallest gap of the last seat
 GAP_SHOWN = 10
 REPORT_KEYS = ('n_mean', 'n_max', 'votes_mean', 'votes_max')
-MONTHS_LONG = ('enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre',
-               'noviembre', 'diciembre')
 CSV_LABELS = {
     'census-series': 'Serie mensual del censo CERA',
     'census-provinces': 'Censo CERA por provincia',
@@ -298,12 +297,16 @@ def _figures(parts: dict) -> dict:
     -------
     dict
         ``census_total``, ``electors_2023``, ``growth_abs``, ``growth_pct``, ``baseline_year``, ``net_before``,
-        ``net_after``, ``g1_article``, ``g2_article``, ``ratio_article``, ``latam_rate``, ``rest_rate``, ``p_slope``,
-        ``r``, ``n_ecological``, ``n_over_gap_2023``, ``decided_2023``, ``net_psoe_2023``, ``voters_projected``,
-        ``votes_projected``, ``voters_2023``, ``participation_projected``, ``left_share``, ``litigation``,
-        ``max_gain``, ``grid_observed``, ``placement_observed``, ``pool``, ``report``, ``sensitive_all``,
-        ``sensitive_countries``, ``changed`` and ``n_changed`` (the provinces whose seats change in the
-        ``convocatoria`` scenario); ``None`` for what the parts do not have.
+        ``net_after``, ``g1``, ``g2`` and ``ratio`` (the additions of the two periods the page shows and their
+        pace: ``periods_version`` says which, ``now`` or, when the part lacks it, ``article``), ``g1_article``,
+        ``g2_article``, ``ratio_article`` (the replication of the article with its window), ``latam_rate``,
+        ``rest_rate``, ``p_slope``, ``r``, ``n_ecological``, ``n_over_gap_2023``, ``decided_2023``,
+        ``net_psoe_2023``, ``voters_projected``, ``votes_projected``, ``voters_2023``, ``participation_projected``,
+        ``left_share``, ``litigation``, ``max_gain``, ``grid_observed``, ``placement_observed``, ``pool``,
+        ``report``, ``sensitive_all`` and ``sensitive_countries`` (the shares of the sensitive provinces in the
+        version of ``placement.sensitive`` the page shows, ``sensitive_version``), ``changed`` and ``n_changed``
+        (the provinces whose seats change in the ``convocatoria`` scenario); ``None`` for what the parts do not
+        have.
     """
     meta, census, vote = parts['meta'], parts['census'], parts['vote']
     placement, prediction, sensitivity = parts['placement'], parts['prediction'], parts['sensitivity']
@@ -312,8 +315,14 @@ def _figures(parts: dict) -> dict:
     census_new, new_electors = scenario.get('census'), scenario.get('new_electors')
     electors_2023 = census_new - new_electors if census_new is not None and new_electors is not None else None
     provinces = census.get('provinces') or []
-    g1 = sum(row.get('g1') or 0 for row in provinces) if provinces else None
-    g2 = sum(row.get('g2') or 0 for row in provinces) if provinces else None
+    version = _census_version(census)
+    shown = [_two_periods(row, version) for row in provinces]
+    g1 = sum(row['g1'] or 0 for row in shown) if provinces else None
+    g2 = sum(row['g2'] or 0 for row in shown) if provinces else None
+    g1_article = sum(row.get('g1') or 0 for row in provinces) if provinces else None
+    g2_article = sum(row.get('g2') or 0 for row in provinces) if provinces else None
+    sensitive = placement.get('sensitive')
+    sensitive_version = _version(sensitive)
     previous = _previous_election(parts['check'], meta)
     rates = params.get('participation') or {}
     voters = scenario.get('voters_projected')
@@ -328,9 +337,13 @@ def _figures(parts: dict) -> dict:
         'baseline_year': (_get(params, 'election', 'baseline') or previous.get('date') or '')[:4] or None,
         'net_before': _get(meta, 'regression', 'net_before'),
         'net_after': _get(meta, 'regression', 'net_after'),
-        'g1_article': g1,
-        'g2_article': g2,
-        'ratio_article': g2 / g1 if g1 else None,
+        'g1': g1,
+        'g2': g2,
+        'ratio': g2 / g1 if g1 else None,
+        'periods_version': version,
+        'g1_article': g1_article,
+        'g2_article': g2_article,
+        'ratio_article': g2_article / g1_article if g1_article else None,
         'latam_rate': round(100 * rates['latam'], 2) if rates.get('latam') is not None else None,
         'rest_rate': round(100 * rates['rest'], 2) if rates.get('rest') is not None else None,
         'p_slope': _get(meta, 'regression', 'p_slope'),
@@ -350,8 +363,9 @@ def _figures(parts: dict) -> dict:
         'placement_observed': _grid_cell(sensitivity.get('placement'), 'participations', 'fracs'),
         'pool': _get(sensitivity, 'placement', 'pool'),
         'report': {key: report.get(key) for key in REPORT_KEYS},
-        'sensitive_all': _get(placement, 'sensitive', 'article', 'all'),
-        'sensitive_countries': _get(placement, 'sensitive', 'article', 'countries'),
+        'sensitive_all': _get(sensitive, sensitive_version, 'all'),
+        'sensitive_countries': _get(sensitive, sensitive_version, 'countries'),
+        'sensitive_version': sensitive_version,
         'changed': bool(scenario.get('changed')) or any(row.get('change') for row in scenario.get('by_block') or []),
         'n_changed': len(scenario.get('changed') or []),
     }
@@ -455,18 +469,22 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
     Returns
     -------
     dict
-        ``state``; ``census`` (``series``, ``marks`` and ``periods``, the two ``[start, end]`` periods of the
-        article); ``origins`` (``name``, ``g1``, ``g2``, ``ratio`` of the two article periods per origin);
+        ``state``; ``census`` (``series``, ``marks`` and ``periods``, the two ``[start, end]`` periods the page
+        shows: ``now``, or the article's when the part lacks them); ``origins`` (``name``, ``g1``, ``g2``,
+        ``ratio`` of those two periods per origin);
         ``participation`` (``process``, ``origin``, ``rate``); ``ecological`` (``rows`` with ``name``,
         ``latam_share``, ``left_share``, ``census``, plus ``r`` and ``slope``); ``slope`` (the block margin of each
         regional election, ``community``, ``previous``, ``last``); ``cannibal`` (``community``, ``d_psoe``,
-        ``d_other_left``); ``sensitive`` (``placement.sensitive``); ``gap`` (per scenario, the ``GAP_SHOWN``
+        ``d_other_left``); ``sensitive`` (the version of ``placement.sensitive`` the page shows: ``period``,
+        ``countries`` and ``all``); ``gap`` (per scenario, the ``GAP_SHOWN``
         provinces with the smallest gap, ``name``, ``winner`` and ``runner_up`` by their siglas, ``gap``, ``net``,
         for labels like «Girona (JxCat/PP)») and ``radar``
         (``today``: the expected participation, no directed placement and the left share of the last general
         election, in %; ``max``: 100 on every axis).
     """
     census, vote, participation = parts['census'], parts['vote'], parts['participation']
+    version = _census_version(census)
+    sensitive = parts['placement'].get('sensitive') or {}
     ecological = vote.get('ecological') or {}
     regional = participation.get('autonomicas') or []
     last_seat = sorted(parts['prediction'].get('last_seat') or [],
@@ -475,8 +493,9 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
     return {
         'state': state,
         'census': {'series': census.get('series'), 'marks': census.get('marks'),
-                   'periods': _get(census, 'periods', 'article')},
-        'origins': [{key: row.get(key) for key in ('name', 'g1', 'g2', 'ratio')} for row in census.get('origins') or []],
+                   'periods': _get(census, 'periods', version)},
+        'origins': [{'name': row.get('name'), **{key: value for key, value in _two_periods(row, version).items()
+                                                 if key != 'c2_start'}} for row in census.get('origins') or []],
         'participation': [{key: row.get(key) for key in ('process', 'origin', 'rate')}
                           for row in participation.get('origin') or []],
         'ecological': {
@@ -488,7 +507,7 @@ def _island(state: dict, parts: dict, figures: dict) -> dict:
         'slope': [{'community': row.get('community'), 'previous': _get(row, 'previous', 'margin'),
                    'last': _get(row, 'last', 'margin')} for row in regional],
         'cannibal': [{key: row.get(key) for key in ('community', 'd_psoe', 'd_other_left')} for row in regional],
-        'sensitive': parts['placement'].get('sensitive'),
+        'sensitive': sensitive.get(_version(sensitive)),
         'gap': {scenario: [{'name': row.get('name'), 'winner': _sigla(row, 'winner'),
                             'runner_up': _sigla(row, 'runner_up'), 'gap': row.get('gap'),
                             'net': row.get(SCENARIO_NET[scenario])}

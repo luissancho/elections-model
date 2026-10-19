@@ -87,7 +87,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
       {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'La acusación de fraude, despojada de ruido, son tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.') }}
         <div class="three">
           {% call answer(v1, 1) -%}
-            El ritmo de altas se duplica ({{ pace(figures.ratio_article) }}) tras la ley. Quien lo denuncia tiene
+            El ritmo de altas se duplica ({{ pace(figures.ratio) }}) tras la ley. Quien lo denuncia tiene
             razón: el efecto sobre el tamaño del censo es real y medible.
           {%- endcall %}
           {% call answer(v2, 2) -%}
@@ -125,7 +125,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           <div>
             <p class="ctitle">El ritmo de altas se duplica con la Ley de Nietos</p>
             <p class="csub">Altas netas por origen en los {% if q1.equal %}{{ q1.months[0]|int }} meses{% else %}periodos{% endif %} anteriores y posteriores a la ley</p>
-            <div class="chart" id="periods-chart" role="img" aria-label="Altas netas: {{ figures.g1_article|int }} antes de la ley y {{ figures.g2_article|int }} después, {{ pace(figures.ratio_article) }}"></div>
+            <div class="chart" id="periods-chart" role="img" aria-label="Altas netas: {{ figures.g1|int }} antes de la ley y {{ figures.g2|int }} después, {{ pace(figures.ratio) }}"></div>
           </div>
         </div>
         <div class="grid2">
@@ -175,8 +175,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           </div>
         </div>
         <div class="sum">
-          <b>Sí, y no tiene sentido negarlo.</b> El ritmo de altas se duplica ({{ pace(figures.ratio_article) }}: de
-          {{ figures.g1_article|int }} a {{ figures.g2_article|int }}) y el censo exterior suma
+          <b>Sí, y no tiene sentido negarlo.</b> El ritmo de altas se duplica ({{ pace(figures.ratio) }}: de
+          {{ figures.g1|int }} a {{ figures.g2|int }}) y el censo exterior suma
           {{ figures.growth_abs|int }} electores desde las generales de {{ figures.baseline_year }}
           ({{ figures.growth_pct|delta }}%).
           {%- set fast = q1.latam + ([q1.exile] if q1.exile and not q1.exile_slow else []) %}
@@ -192,8 +192,15 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           {{ q1.periods[1][0]|date }} al {{ q1.periods[1][1]|date }}, después.
           {%- endif %}
           El ritmo divide las altas de después entre las de antes: por encima de uno, el censo crece más deprisa con la
-          ley. Los periodos se actualizan con cada cierre; el último publicado es el
+          ley.
+          {%- if q1.version == 'now' %} Los periodos se actualizan con cada cierre; el último publicado es el
           {{ study_meta.series_last|date }}.
+          {%- if q1.window and figures.ratio_article is not none %} En la réplica del artículo con su ventana
+          ({{ q1.window }}), son {{ figures.g1_article|int }} altas antes de la ley y {{ figures.g2_article|int }}
+          después ({{ pace(figures.ratio_article) }}).{% endif %}
+          {%- else %} Este cierre no trae los periodos actualizados: las cifras son las de la réplica del artículo
+          {%- if q1.window %} con su ventana ({{ q1.window }}){% endif %}.
+          {%- endif %}
         </p>
         <p>
           La serie es el censo CERA que el INE cierra el primer día de cada mes.
@@ -358,7 +365,18 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           {% if sens.magnitude is not none %}{{ sens.magnitude|int }} escaños o menos{% else %}pocos escaños{% endif %},
           donde pocos votos bastan para mover un escaño. La gráfica compara su cuota del censo CERA
           {%- if sens.period %} del {{ sens.period[0]|date }} con su cuota de las altas hasta el {{ sens.period[1]|date }}{% else %} con su cuota de las altas{% endif %},
-          con las altas de todos los países. La tabla de Madrid da su cuota del censo de
+          con las altas de todos los países.
+          {%- set art = sens.article %}
+          {%- if sens.version == 'now' %}
+          {%- if art.window and art.stock is not none and art.growth is not none %} En la réplica del artículo con su
+          ventana ({{ art.window }}), su cuota pasa del {{ art.stock|pct(1) }} del censo al {{ art.growth|pct(1) }} de
+          las altas
+          {%- if art.stock_countries is not none and art.growth_countries is not none %}; con Argentina, Cuba y
+          Venezuela, del {{ art.stock_countries|pct(1) }} al {{ art.growth_countries|pct(1) }}{% endif %}.
+          {%- endif %}
+          {%- else %} Este cierre no trae los periodos actualizados: las cuotas son las de la réplica del artículo
+          {%- if art.window %} con su ventana ({{ art.window }}){% endif %}.
+          {%- endif %} La tabla de Madrid da su cuota del censo de
           {% if mad.countries %}{{ names(mad.countries) }}{% else %}los países latinoamericanos{% endif %} al inicio
           del periodo de la ley y de sus altas en cada periodo; «–» marca un periodo en el que el país perdió
           electores, en el que la cuota de las altas no tiene sentido.

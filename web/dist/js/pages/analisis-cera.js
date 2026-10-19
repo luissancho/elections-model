@@ -101,8 +101,9 @@ function drawCensus(census) {
 }
 
 /**
- * Question 1: the additions of the two periods of the article, stacked as Latin America and the rest, with the
- * Latin American share inside its segment and the total (and, after the law, the pace) above each stack.
+ * Question 1: the additions of the two periods the page shows (`initial.census.periods`), stacked as Latin
+ * America and the rest, with the Latin American share inside its segment and the total (and, after the law, the
+ * pace) above each stack.
  */
 function drawPeriods(origins, periods) {
   const el = container('periods-chart', origins.length);
@@ -211,16 +212,19 @@ function drawCannibal(cannibal) {
   }
 }
 
-/** Question 2: the share of the sensitive provinces in the census and in the additions after the law (100 %). */
+/**
+ * Question 2: the share of the sensitive provinces in the census and in the additions after the law (100 %), in
+ * the version of the periods the server chose (`initial.sensitive`: the updated one, or the article's without it).
+ */
 function drawSensitive(sensitive) {
-  const article = (sensitive && sensitive.article) || {};
-  const all = article.all || {};
+  const shown = sensitive || {};
+  const all = shown.all || {};
   const {stock_share: stock, growth_share: growth} = all;
   const el = container('sensitive-chart', Number.isFinite(stock) && Number.isFinite(growth));
   if (!el) {
     return;
   }
-  const [start, end] = article.period || [];
+  const [start, end] = shown.period || [];
   const categories = [
     start ? `Censo antes de la ley\n(${monthYear(start)})` : 'Censo antes de la ley',
     end ? `Nuevas altas tras la ley\n(hasta ${monthYear(end)})` : 'Nuevas altas tras la ley',
