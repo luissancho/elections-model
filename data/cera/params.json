@@ -20,7 +20,7 @@
   },
   "periods": {"article": [["2019-03-01", "2022-10-01"], ["2022-10-01", "2026-05-01"]]},
   "sensitive_magnitude": 5,
-  "ecological_min_census": 2000,
+  "ecological_min_voters": 200,
   "check": {"max_gain": 1},
   "placement_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA"],
   "madrid_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA", "URUGUAY", "CHILE"],
