@@ -3954,11 +3954,12 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     claim = debate[debate.index('<article class="claim">'):]
     claim = claim[:claim.index('</article>')]
     assert '<h3>«Hasta 23 escaños»</h3>' in claim and 'The Objective, 4-9-2026' in claim
-    assert 'con el 0,3% de participación, 12 votos y 1 provincia' in claim
-    assert 'con el 0,9%, 40 votos y 3 provincias' in claim
+    assert 'con el 0,3% de participación, 12 votos y 1 provincia;' in claim  # n_mean 1,2: one province
+    assert 'con el 0,9%, 40 votos y 3 provincias.' in claim
     assert '<dt>Problema 1 · no reparte entre partidos</dt>' in claim
     assert '<dt>Problema 3 · participación de otro censo</dt>' in claim
-    assert 'unos 383.000 votantes (2008)' in claim  # the parts carry no general election before the voto rogado
+    # the parts carry no general election before the voto rogado: the qualitative sentence, no figure
+    assert 'sobre todo de emigrantes europeos; el escenario «máximo» supone 40 votantes' in claim
     assert ('<div class="verd">Con el criterio del informe, en 2023 había 3 escaños en juego; cambió uno, en Madrid, '
             'y en contra de la hipótesis.</div>') in claim
     # 2023 already passed the test: the over-gap rows of `check.rows`, by gap, with the D'Hondt with and without CERA
@@ -3993,7 +3994,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert 'id="check-rows"' not in page and 'id="check-more"' not in page
     note = check[check.index('<p class="note">'):]
     note = note[:note.index('</p>')]
-    assert 'Lo que se registra: el saldo neto del PSOE y de la izquierda por el voto CERA no mayor que 1 escaño' in note
+    assert 'Lo que se registra: el saldo neto del PSOE y de la izquierda por el voto CERA no mayor que 1 escaño;' in note
     assert 'Madrid (PSOE frente a PP)' in note and 'se multiplicara por 1,5' in note
     assert 'class="how"' in check
     # data and method: the sources, the CSV and, last, the article
@@ -4010,12 +4011,19 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert re.findall(r'<dt>([^<]+)</dt>', glossary) == [
         'CERA', 'Voto rogado', 'Ley de Nietos', 'Censo de la convocatoria', 'Brecha del último escaño', 'Efecto neto',
         'Inferencia ecológica', 'Provincias sensibles', 'Colocación óptima']
-    # a draft: the row of the 29-N says so
-    publish_study(fresh_app.fs, meta={'registered_at': None, 'registered': None})
-    table = cera_table(cera_section(cera_page(api), 'comprobacion'), 'check-table')
-    assert 'borrador: predicción sin registrar' in table and 'registrada el' not in table
-    # after the scrutiny: the row of the 29-N filled, the provinces of the 29-N and the verdict from the data
+    assert not re.search(r'(?<![\d.,])1 (escaños|provincias)\b', page)  # a real singular everywhere
+    # a draft: the row of the 29-N says so; with one seat at stake in 2023 and none changed, the verdict says it
     base = fixture_data('study-check')
+    one = base['elections'][-1] | {'n_over_gap': 1, 'n_decided': 0, 'decided': []}
+    publish_study(fresh_app.fs, meta={'registered_at': None, 'registered': None},
+                  parts={'check': {'elections': base['elections'][:-1] + [one]}})
+    page = cera_page(api)
+    table = cera_table(cera_section(page, 'comprobacion'), 'check-table')
+    assert 'borrador: predicción sin registrar' in table and 'registrada el' not in table
+    assert ('<div class="verd">Con el criterio del informe, en 2023 había 1 escaño en juego; no cambió '
+            'ninguno.</div>') in page
+    assert not re.search(r'(?<![\d.,])1 (escaños|provincias)\b', page)
+    # after the scrutiny: the row of the 29-N filled, the provinces of the 29-N and the verdict from the data
     rows = [check_row(100 + i, 'Provincia {:02d}'.format(i), 1000 + i, 500) for i in range(21)]
     rows[0] = check_row(28, 'Madrid', 900, 40000, decided=True)
     election = base['elections'][-1] | {'date': '2026-11-29', 'voters': 250000, 'rate': 9.0, 'n_over_gap': 1,
@@ -4036,7 +4044,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     assert 'Predicción registrada el 18 oct 2026' in note and 'acierto' in note
     assert 'Resultado: saldo del PSOE 0, de la izquierda 0' in note
     debate = cera_section(page, 'debate')
-    assert 'Con el escrutinio del 29-N: el voto CERA real superó la brecha en 1 provincia' in debate
+    assert 'Con el escrutinio del 29-N: el voto CERA real superó la brecha en 1 provincia y' in debate
     assert 'Esta misma tabla se rellenará' not in debate
     # a failure, the same way
     publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'}, parts={'check': {

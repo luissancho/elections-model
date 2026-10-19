@@ -15,8 +15,9 @@
 {% macro signed(x, digits=1) -%}{{ x|num(digits)|replace('-', '−') }}{%- endmacro %}
 {#- A list of names in prose: «A, B y C». -#}
 {% macro names(items) -%}{% if items|length > 1 %}{{ items[:-1]|join(', ') }} y {{ items[-1] }}{% else %}{{ items|join('') }}{% endif %}{%- endmacro %}
-{#- A count with its noun in the singular or the plural: «1 provincia», «3 provincias». -#}
-{% macro many(n, one, other) -%}{{ n|int }} {{ one if n|int == '1' else other }}{%- endmacro %}
+{#- A count with its noun in the singular or the plural: «1 provincia», «3 provincias». The singular is decided on
+    the number itself, rounded as `int` prints it (the site's `int` filter returns the formatted text). -#}
+{% macro many(n, one, other) -%}{{ n|int }} {{ one if n is number and n|round == 1 else other }}{%- endmacro %}
 {#- The seats the CERA vote decided in an election of the check, with the last seat without and with it:
     «Madrid: PSOE → PP; Girona: …». -#}
 {% macro decided(where) -%}{% for seat in where %}{{ seat.name }}: {{ seat.without }} → {{ seat.with }}{% if not loop.last %}; {% endif %}{% endfor %}{%- endmacro %}
@@ -615,7 +616,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
                 El máximo histórico fueron {{ history.max_voters|int }} votantes ({{ history.max_year }})
                 {%- else -%}
                 La participación de antes del voto rogado era la de un censo mucho menor, sobre todo de emigrantes
-                europeos. El máximo histórico fueron unos 383.000 votantes (2008)
+                europeos
                 {%- endif %}
                 {%- if report.get('votes_max') is not none %}; el escenario «máximo» supone {{ report.votes_max|int }}
                 votantes{% if figures.latam_rate is not none %}, con un censo en el que las nuevas altas votan al

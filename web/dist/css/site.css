@@ -860,20 +860,19 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* The claims of the debate: what each one computes, what it lacks and the verdict (task 17) */
 .claim { padding: 12px 14px; border: 1px solid var(--color-line-strong); border-radius: 12px; background: var(--color-bg); }
 .claim h3, .claim h4 { margin: 0 0 4px; font-size: 15px; }
-.claim .src { margin-bottom: 8px; font-size: 12px; color: var(--color-muted); }
-.claim dl { margin: 0; font-size: 13px; }
+.claim .src { margin: 0 0 8px; font-size: 12px; color: var(--color-muted); }
+/* the claims stack each term over its definition, not the two columns of the site's `dl` */
+.claim dl { display: block; margin: 0; font-size: 13px; }
 .claim dt { margin-top: 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-muted); }
 .claim dd { margin: 2px 0 0; }
 .claim .verd { margin-top: 10px; padding: 8px 10px; border-left: 3px solid #ce3b3b; border-radius: 8px; background: var(--color-card); font-size: 13px; font-weight: 600; }
 .claim .verd.ok { border-left-color: #2e9e5b; }
 .claim .verd.amb { border-left-color: #e8912b; }
-/* The debate, the check, the data and the glossary: the red pill of the debate, the claims under each other (not
-   the two columns of the site's `dl`), the sources, the CSV downloads as pills and the glossary as a card */
+/* The debate, the check, the data and the glossary: the red pill of the debate, the sources, the CSV downloads as
+   pills and the glossary as a card */
 .pill.bad { background: #fef2f2; color: #b91c1c; }
 #debate .grid2 { align-items: start; }
 #debate .grid3 { margin-top: var(--space-3); }
-.claim .src { margin-top: 0; }
-.claim dl { display: block; }
 .src-list { margin: 0; padding-left: 1.2em; font-size: 13.5px; }
 .src-list li + li { margin-top: var(--space-1); }
 .csv-links { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-3) 0; }
