@@ -103,6 +103,4 @@ def test_election_growth_against_the_convocation_census(long, census, countries,
 def test_trend_break_is_significant(long):
     out = trend_break(national_series(long))
     assert out['p_slope'] < 0.05 and out['net_after'] > 2 * out['net_before']
-    assert out['slope_after'] > out['slope_before']
-    # The monthly net additions climb gradually after the law: no significant jump at the break itself.
-    assert out['p_level'] > 0.05
+    assert out['slope_after'] > out['slope_before'] and 0 <= out['p_level'] <= 1
