@@ -2,8 +2,8 @@
 Server-rendered web pages: routes, the Jinja2 environment, formatting filters and page contexts.
 
 The package has one module per page (``inicio``, ``promedios``, ``escanos``, ``casas``, ``elecciones``, ``metodo``,
-``backtest``, ``analisis``), plus ``common`` (routes, messages, environment and shared context) and ``filters``
-(formatting filters). This facade re-exports every public name, so callers use ``pages.<name>``.
+``backtest``, ``analisis``, with the view models of the CERA study in ``cera``), plus ``common`` (routes, messages,
+environment and shared context) and ``filters`` (formatting filters). This facade re-exports every public name, so callers use ``pages.<name>``.
 
 The pages are rendered by the controllers of ``mtpy/controllers`` (``Page`` and its subclasses)
 from the templates of ``web/templates``. Every context is built from the published bundle through

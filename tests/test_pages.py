@@ -1334,8 +1334,8 @@ def test_pages_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
-    assert names == ['analisis', 'backtest', 'casas', 'common', 'elecciones', 'escanos', 'filters', 'inicio', 'metodo',
-                     'promedios', 'slugs']
+    assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'inicio',
+                     'metodo', 'promedios', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -3774,17 +3774,17 @@ def test_cera_page_head_and_question_1(api, fresh_app):
 
 
 def test_cera_question_1_helpers():
-    analisis = pages.analisis
+    analisis, cera = pages.analisis, pages.cera
     assert analisis._long_date('2026-11-29') == '29 de noviembre de 2026' and analisis._long_date(None) is None
-    assert analisis._months('2019-03-01', '2022-10-01') == 43 and analisis._months(None, '2022-10-01') is None
-    assert analisis._country_name('ESTADOS UNIDOS DE AMÉRICA') == 'Estados Unidos de América'
-    assert analisis._country_name('MÉXICO') == 'México' and analisis._country_name('Argentina') == 'Argentina'
-    assert analisis._p_value(0.000415) == '< 0,001' and analisis._p_value(0.0421) == '= 0,042'
-    assert [analisis._pace_tone(x) for x in (5.1, 1.6, 0.7, None)] == ['pos', None, 'neg', None]
+    assert cera._months('2019-03-01', '2022-10-01') == 43 and cera._months(None, '2022-10-01') is None
+    assert cera._country_name('ESTADOS UNIDOS DE AMÉRICA') == 'Estados Unidos de América'
+    assert cera._country_name('MÉXICO') == 'México' and cera._country_name('Argentina') == 'Argentina'
+    assert cera._p_value(0.000415) == '< 0,001' and cera._p_value(0.0421) == '= 0,042'
+    assert [cera._pace_tone(x) for x in (5.1, 1.6, 0.7, None)] == ['pos', None, 'neg', None]
     # a country of the INE in capitals: the summary finds it, the table shows it in the case of the prose
     census = {'countries': [{'name': 'CUBA', 'g1': 15000, 'g2': 16463, 'ratio': 1.1}], 'periods': {'article': [
         ['2019-03-01', '2022-10-01'], ['2022-10-01', '2026-05-01']]}}
-    q1 = analisis._question_1(census, {'p_slope': 0.2})
+    q1 = cera._question_1(census, {'p_slope': 0.2})
     assert q1['exile']['name'] == 'Cuba' and q1['latam'] == [] and q1['countries'][0]['name'] == 'Cuba'
     assert q1['months'] == [43, 43] and q1['equal'] and q1['start_label'] == '10-2022'
     assert q1['provinces'] == [] and q1['provinces_hidden'] == 0 and q1['slope_significant'] is False
