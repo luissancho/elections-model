@@ -12,6 +12,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
+from mtpy.lib.forecaster import NoPollsError
 from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
                          synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS)
 
@@ -768,6 +769,7 @@ def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, 42), 'n_last': 1})
     meta = writer.read_json(bundle.path_analysis('es', 'meta'))['data']
     assert meta['events'] == ['2019-11-10', '2023-07-23', '2026-11-29'] and meta['scope'] == 'es'
+    assert meta['house_effects'] is True
     assert meta['params'] == {'bmap': 'vs', 'drange': [6, 42], 'n_last': 1, 'main': NAMES,
                               'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}, 'db_polls': 7,
                               'db_last_poll': '2026-10-01'}
@@ -795,13 +797,50 @@ def test_publish_analysis_turns_a_computer_value_error_into_nothing_to_publish(t
     assert not (tmp_path / 'site').exists()
 
 
-def test_publish_analysis_without_polls_in_the_current_event_is_nothing_to_publish(tmp_path):
-    """El `ValueError` de `print_house_effects` (evento en curso sin sondeos) se convierte en `NothingToPublish`
-    y no se escribe nada."""
-    factory = FakeComputer(fail_effects=ValueError('No polls for es-cb 2027-05-23: nothing to forecast'))
-    with pytest.raises(publish.NothingToPublish, match='No polls for es-cb 2027-05-23'):
-        publish.publish_analysis('es-cb', make_writer(tmp_path), computer=factory, stats=fake_stats, prov=fake_prov)
-    assert not (tmp_path / 'site').exists()
+def test_publish_analysis_without_polls_in_the_current_event_publishes_the_past(tmp_path):
+    """El `ValueError` de `print_house_effects` (evento en curso sin sondeos) no impide publicar las elecciones
+    pasadas: rebaño, errores de sondeos y `meta` con `house_effects` falso, sin `house-effects`."""
+    factory = FakeComputer(fail_effects=NoPollsError('No polls for es-cb 2027-05-23: nothing to forecast'))
+    fs = RecordingFileSystem(str(tmp_path))
+    writer = bundle.BundleWriter(fs)
+    out = publish.publish_analysis('es-cb', writer, computer=factory, stats=fake_stats, prov=fake_prov)
+    assert out['scope'] == 'es-cb' and 'house_effects' not in out['seconds']
+    written = [p for p in fs.written if p.startswith('site/v1/analysis/es-cb/')]
+    assert written[-1].endswith('/meta.json')
+    assert sorted(p.rsplit('/', 1)[1] for p in written if p.endswith('.json')) == [
+        'error-data.json', 'herding.json', 'meta.json', 'poll-errors.json']
+    assert not writer.exists(bundle.path_analysis('es-cb', 'house-effects'))
+    assert not writer.exists(bundle.path_analysis_csv('es-cb', 'house-effects'))
+    assert writer.read_json(bundle.path_analysis('es-cb', 'meta'))['data']['house_effects'] is False
+    assert writer.read_json(bundle.path_analysis('es-cb', 'poll-errors'))['data']['rows']
+
+
+def test_publish_analysis_other_value_error_of_house_effects_propagates_and_keeps_the_published_file(tmp_path):
+    """Solo `NoPollsError` significa «sin sondeos»: otro `ValueError` de `print_house_effects` se propaga y no borra
+    los efectos publicados antes."""
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
+    broken = FakeComputer(fail_effects=ValueError('bad parties'))
+    with pytest.raises(ValueError, match='bad parties'):
+        publish.publish_analysis('es', writer, computer=broken, stats=fake_stats, prov=fake_prov)
+    assert writer.exists(bundle.path_analysis('es', 'house-effects'))
+    assert writer.exists(bundle.path_analysis_csv('es', 'house-effects'))
+
+
+def test_publish_analysis_without_cycle_removes_a_stale_house_effects(tmp_path):
+    """Un `house-effects` publicado antes desaparece cuando el ciclo se queda sin sondeos; sin ficheros previos
+    no falla."""
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
+    assert writer.exists(bundle.path_analysis('es', 'house-effects'))
+    assert writer.exists(bundle.path_analysis_csv('es', 'house-effects'))
+    fail = FakeComputer(fail_effects=NoPollsError('No polls'))
+    publish.publish_analysis('es', writer, computer=fail, stats=fake_stats, prov=fake_prov)
+    assert not writer.exists(bundle.path_analysis('es', 'house-effects'))
+    assert not writer.exists(bundle.path_analysis_csv('es', 'house-effects'))
+    assert writer.read_json(bundle.path_analysis('es', 'meta'))['data']['house_effects'] is False
+    publish.publish_analysis('es-xx', writer, computer=FakeComputer(fail_effects=NoPollsError('No polls')),
+                             stats=fake_stats, prov=fake_prov)
 
 
 def test_publish_backtest_writes_the_parts_and_meta_last(tmp_path):

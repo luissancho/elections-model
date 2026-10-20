@@ -432,7 +432,8 @@ def format_data(
     for col in missing:
         df[col] = None
 
-    df = df[list(meta)]
+    # An explicit copy: a subset of the columns would otherwise be flagged as a slice of the caller's frame
+    df = df[list(meta)].copy()
     df.columns = meta
 
     for col, desc in meta.items():

@@ -4,15 +4,17 @@ Computation of the poll series of a scope and of the pollster ratings: the seque
 loader of the regional scopes (`load/run_load.py`).
 
 `compute_scope` runs weights, featured events, errors, deviations, drift, house effects and herding of one scope;
-`rate_scope` the cross-scope pollster ratings of its events. Both report each phase through an optional
-`progress(step, seconds)` callback and return the figures of the run; a failure propagates to the caller, which
-decides how to isolate it.
+`rate_scope` the cross-scope pollster ratings of its events; `replicate_catalogues` the versioned catalogues
+(scopes, districts and the prior quality of the pollsters), once for every scope. The first two report each phase
+through an optional `progress(step, seconds)` callback; the three return the figures of the run, and a failure
+propagates to the caller, which decides how to isolate it.
 """
 import time
 from typing import Callable, Optional
 
 from .computer import Computer
-from .data import update_featured
+from .data import save_catalogues, update_featured
+from .quality import load_criteria, read_quality
 
 # Phases of `compute_scope`, in order; the weights run twice (see `compute_scope`)
 COMPUTE_STEPS = ('weights', 'featured', 'errors', 'deviations', 'drift', 'house_effects', 'herding')
@@ -167,3 +169,30 @@ def rate_scope(
         'n_events': int(comp.ratings.index.get_level_values('event_date').nunique()),
         'seconds': seconds
     }
+
+
+def replicate_catalogues(save: bool = True) -> dict:
+    """
+    Replicate the versioned catalogues into the database (`data.save_catalogues`): scopes, districts and the
+    evaluations of the prior quality, from which `pollsters.quality` is derived. Run it after editing
+    `data/pollsters-quality.csv` or `data/pollsters-quality-criteria.json`, before the ratings.
+
+    Parameters
+    ----------
+    save : bool, default True
+        Whether to write into the database; without it, only the rubric and the evaluations are read and
+        validated (`quality.read_quality`), so a malformed file fails before anything is written.
+
+    Returns
+    -------
+    dict
+        The figures of `save_catalogues` (``scopes``, ``districts``, ``quality`` and ``pollsters``) or, without
+        ``save``, only ``quality`` (the evaluations read); and ``seconds`` (``total``).
+    """
+    start = time.perf_counter()
+    if save:
+        figures = save_catalogues()
+    else:
+        figures = {'quality': int(read_quality(load_criteria()).shape[0])}
+
+    return {**figures, 'seconds': {'total': time.perf_counter() - start}}

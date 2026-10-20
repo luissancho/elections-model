@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.forecaster import Forecaster
+from mtpy.lib.forecaster import Forecaster, NoPollsError
 from mtpy.lib.utils import build_blocks
 
 matplotlib.use('Agg')
@@ -338,7 +338,7 @@ def test_require_polls_names_the_event_without_polls():
     """M11: un evento sin sondeos (una comunidad que acaba de votar) falla con un mensaje claro."""
     polls = pd.DataFrame({'PP': [30.]}, index=pd.to_datetime(['2026-01-01']))
     assert Forecaster.require_polls(polls, 'es-md', '2027-05-23') is polls
-    with pytest.raises(ValueError, match='No polls for es-an 2030-06-16'):
+    with pytest.raises(NoPollsError, match='No polls for es-an 2030-06-16'):
         Forecaster.require_polls(polls.iloc[:0], 'es-an', '2030-06-16')
 
 
@@ -509,3 +509,54 @@ def test_weights_at_window_covers_every_poll_of_the_regression():
     assert polls.index.min() == first[0] and polls['weight_kernel'].min() < 1e-2
     assert line.index[0] <= polls.index.min() and line.index[-1] >= max(polls.index.max(), date)
     assert out['kernel'].index.equals(line.index) and out['stats']['bandwidth'] == 30.
+
+
+# --- Backtest: ratings recalculados en memoria ---
+
+def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
+    """`weight_ratings` sustituye al `weight_rating` guardado en los sondeos de las casas del índice (el de su elección);
+    las ausentes quedan con el relleno por calidad y los resultados oficiales no se tocan."""
+    from mtpy.lib import forecaster as fc_module
+    event_date = pd.Timestamp('2023-07-23')
+    polls = pd.DataFrame({
+        'event_date': event_date, 'date': pd.to_datetime(['2023-07-10', '2023-07-12', '2023-07-14']),
+        'pollster_id': [1, 2, 1], 'sponsor_id': 0, 'pollster': ['A', 'B', 'A'], 'computed': True,
+        'weight_over': [1.0, 1.0, 2.0], 'weight_sample': [0.5, 0.5, 1.5], 'weight_rating': [9.0, 9.0, 9.0],
+        'PP': [33.0, 32.0, 34.0], 'PSOE': [30.0, 31.0, 29.0],
+    }).set_index(['date', 'pollster_id', 'sponsor_id'])
+    events = pd.DataFrame({
+        'date': pd.to_datetime(['2019-11-10', '2023-07-23']), 'pollster_id': np.nan, 'sponsor_id': np.nan,
+        'event_date': pd.to_datetime(['2019-11-10', '2023-07-23']), 'weight_over': 1.0, 'weight_sample': 1.0,
+        'PP': [20.0, 33.0], 'PSOE': [28.0, 30.0], 'votes': [1000, 1000], 'computed': True,
+    }).set_index('date')
+    extra = ['start_date', 'end_date', 'sponsor', 'sample_size', 'parties', 'days', 'mtype', 'proc_sample', 'rating',
+             'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias',
+             'bias_dev_adj', 'bias_dev_err']
+    polls = polls.assign(**{col: np.nan for col in extra})
+    parties = pd.DataFrame({'name': ['PP', 'PSOE'], 'color': ['#00f', '#f00']})
+    pollsters = pd.DataFrame({'id': [1, 2], 'name': ['A', 'B'], 'quality': [80., 40.]})
+    monkeypatch.setattr(fc_module, 'get_parties', lambda: parties)
+    monkeypatch.setattr(fc_module, 'get_pollsters', lambda: pollsters)
+
+    def build(weight_ratings):
+        fc = Forecaster.__new__(Forecaster)
+        fc.scope, fc.event_date, fc.verbose, fc.weight_ratings = 'es', '2023-07-23', 0, weight_ratings
+        fc.date_start, fc.date_end = pd.Timestamp('2019-11-10'), event_date
+        fc.bmap = None
+        fc.load_events = lambda: events
+        fc.load_polls = lambda: polls
+        return fc.build_series()
+
+    index = pd.MultiIndex.from_tuples([(event_date, 1)], names=['event_date', 'pollster_id'])
+    series = build(pd.Series([2.0], index=index)).series_raw
+    house_a = series.loc[series.pollster == 'A']
+    house_b = series.loc[series.pollster == 'B']
+    assert (house_a.weight_rating == 2.0).all()
+    assert np.allclose(house_a.weight, house_a.weight_over * house_a.weight_sample * 2.0)
+    quality = pollsters.set_index('id').quality / 100
+    fill = np.log1p(quality[2]) / np.log1p(quality.mean())
+    assert house_b.weight_rating.iloc[0] == pytest.approx(fill)
+    assert series.loc[series.pollster.isnull(), 'weight_rating'].isnull().all()
+    # Sin la serie, el valor guardado manda
+    stored = build(None).series_raw
+    assert (stored.loc[stored.pollster.notnull(), 'weight_rating'] == 9.0).all()

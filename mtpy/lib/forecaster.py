@@ -89,6 +89,10 @@ def published_seats(
     return out
 
 
+class NoPollsError(ValueError):
+    """The event has no polls, so there is nothing to forecast (a `ValueError`, so existing callers keep working)."""
+
+
 class Forecaster(Core):
 
     def __init__(
@@ -104,6 +108,7 @@ class Forecaster(Core):
         he_params: Optional[dict[str, Any]] = None,
         dispersion: bool = True,
         disp_params: Optional[dict[str, Any]] = None,
+        weight_ratings: Optional[pd.Series] = None,
         verbose: int = 0,
         path: Optional[str] = None
     ) -> None:
@@ -163,6 +168,12 @@ class Forecaster(Core):
             samples allow (herding) also counts less (M13, `disp_params['herding']`). See `fit_dispersion`.
         disp_params : dict, optional
             Parameters of the dispersion measure, see `set_disp_params`.
+        weight_ratings : pd.Series, optional
+            For the backtest: the `weight_rating` of each pollster in each election, indexed by
+            (`event_date`, `pollster_id`), recomputed in memory (`backtest.rating_overrides`). It replaces the
+            `weight_rating` stored with the polls: the rating of each poll is the one of its own `event_date`,
+            computed with previous elections only (it does not look into the future). Polls of a pollster
+            missing from the index keep no rating and fall back to the quality prior, as usual.
         verbose : int, optional
             Level of verbosity.
         path : str, optional
@@ -184,6 +195,7 @@ class Forecaster(Core):
         self.disp_enabled = bool(dispersion)  # Weigh each pollster by its effective sample (M12)
         self.disp_params = self.set_disp_params(disp_params)
 
+        self.weight_ratings = weight_ratings
         self.verbose = verbose
         self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
@@ -402,6 +414,28 @@ class Forecaster(Core):
         return published_seats(self.scope, self.date_end.strftime('%Y-%m-%d'), self.parties.name.tolist(),
                                drange=self.drange, drop_mtypes=self.drop_mtypes)
 
+    def override_weight_rating(self, series: pd.DataFrame) -> np.ndarray:
+        """
+        Look up in `self.weight_ratings` the rating of each poll of `series`.
+
+        Parameters
+        ----------
+        series : pd.DataFrame
+            Polls and results with the columns `event_date`, `pollster_id` and `pollster`.
+
+        Returns
+        -------
+        np.ndarray
+            `weight_rating` of each poll row (those with a `pollster`), NaN when its pollster has no rating
+            in its election.
+        """
+        ratings = self.weight_ratings.rename('weight_rating').reset_index()
+        ratings['event_date'] = pd.to_datetime(ratings['event_date'])
+        polls = series.loc[series.pollster.notnull(), ['event_date', 'pollster_id']].copy()
+        polls['event_date'] = pd.to_datetime(polls['event_date'])
+
+        return polls.merge(ratings, on=['event_date', 'pollster_id'], how='left')['weight_rating'].to_numpy()
+
     def build_series(self) -> Self:
         """
         Build the series of polls, weights and results for the election event.
@@ -455,6 +489,8 @@ class Forecaster(Core):
         # same scale as `weight_rating` (see `Computer.pollster_ratings`)
         quality = self.pollsters.set_index('id').quality.astype(float).div(100)
         weight_quality = np.log1p(quality) / np.log1p(quality.mean())
+        if self.weight_ratings is not None:
+            series.loc[series.pollster.notnull(), 'weight_rating'] = self.override_weight_rating(series)
         series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(weight_quality))
         series['weight'] = series.weight_over * series.weight_sample * series.weight_rating
 
@@ -1177,11 +1213,11 @@ class Forecaster(Core):
         event_date: str
     ) -> pd.DataFrame:
         """
-        Polls of the event, or a `ValueError` naming it when there is none (e.g. the next election of a
+        Polls of the event, or a `NoPollsError` (a `ValueError`) naming it when there is none (e.g. the next election of a
         community that has just voted): nothing can be forecast without polls.
         """
         if polls.shape[0] == 0:
-            raise ValueError('No polls for {} {}: nothing to forecast'.format(scope, event_date))
+            raise NoPollsError('No polls for {} {}: nothing to forecast'.format(scope, event_date))
 
         return polls
 

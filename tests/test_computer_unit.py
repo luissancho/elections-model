@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.stats import norm
 
 from mtpy.lib.computer import Computer
 
@@ -190,19 +191,24 @@ def bare_computer():
     c.scope = 'es'
     c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
     c.pos_decay, c.year_decay = .5, .9
-    c.bias_dev_tau, c.min_polls, c.verbose = .01, 3, 0
+    c.bias_dev_tau, c.bias_dev_sigma, c.verbose = .01, .014, 0
     c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
     return c
 
 
 def pool(rows, days=10):
     """Un sondeo por tupla (ámbito, fecha del evento, casa), `days` días antes del evento (un entero para todos
-    o un dict por casa)."""
+    o un dict por casa). Un cuarto elemento opcional en la tupla son los días antes del evento de ese sondeo, y
+    manda sobre `days`."""
     ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
     data = []
-    for scope, event_date, pollster in rows:
+    for row in rows:
+        scope, event_date, pollster = row[:3]
         event_date = pd.Timestamp(event_date)
-        poll_days = days[pollster] if isinstance(days, dict) else days
+        if len(row) > 3:
+            poll_days = row[3]
+        else:
+            poll_days = days[pollster] if isinstance(days, dict) else days
         dev = .01 if pollster in ('A', 'C') else -.01
         data.append({
             'event_scope': scope, 'event_date': event_date, 'date': event_date - pd.Timedelta(days=poll_days),
@@ -272,6 +278,60 @@ def test_regional_only_pollster_is_rated_and_events_are_scope_date_pairs():
     assert out.loc[3, 'num_events'] == 2 and out.loc[3, 'num_polls'] == 2      # C: Madrid 2021 y 2023
     assert out.loc[1, 'num_events'] == 2                                       # A: es 2019 y Madrid 2021
     assert out.loc[3, 'rating'] != out.loc[3, 'quality']
+
+
+# --- D2 (2026-10-20): la evidencia del rating se cuenta por elecciones, no por sondeos ---
+
+def test_polls_of_one_election_count_as_one_election():
+    """D2: A publica tres sondeos en una sola elección; su evidencia es esa elección, no tres sondeos."""
+    c = bare_computer()
+    rows = [('es', '2019-11-10', 'A', 10), ('es', '2019-11-10', 'A', 40), ('es', '2019-11-10', 'A', 70),
+            ('es', '2019-11-10', 'B', 10)]
+    out = c.rate_events(pool(rows), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    assert out.loc[1, 'num_events_w'] == pytest.approx(1.0)
+    assert out.loc[1, 'num_polls'] == 3
+
+
+def test_rating_follows_the_grouped_formula():
+    c = bare_computer()
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    tau, sigma = .01, .014
+    se = sigma / 1.0                                  # one election: n_eff = 1
+    d_post = .01 * tau ** 2 / (tau ** 2 + se ** 2)    # A deviates +0.01 (worse than the consensus)
+    err_post = (1 / tau ** 2 + 1 / se ** 2) ** -.5    # `bayes_adjust` stores the posterior standard deviation
+    r_adj = norm.cdf(-d_post / tau)
+    k = (sigma / tau) ** 2
+    assert out.loc[1, 'bias_dev_err'] == pytest.approx(err_post)
+    assert out.loc[1, 'bias_dev_adj'] == pytest.approx(d_post)
+    assert out.loc[1, 'rating'] == pytest.approx((1.0 * r_adj + k * .6) / (1.0 + k))
+
+
+def test_more_elections_shrink_the_standard_error():
+    """Tres elecciones del mismo peso: n_eff = 3 y se = sigma / sqrt(3)."""
+    c = bare_computer()
+    rows = [('es-md', '2021-05-04', 'A'), ('es-cl', '2021-05-04', 'A'), ('es-ar', '2021-05-04', 'A')]
+    weights = {'es': 1., 'es-md': 1., 'es-cl': 1., 'es-ar': 1.}
+    out = c.rate_events(pool(rows), [JULY23], weights, c.pollsters).set_index('pollster_id')
+    assert out.loc[1, 'num_events_w'] == pytest.approx(3.0)
+    assert out.loc[1, 'bias_dev_err'] == pytest.approx((1 / .01 ** 2 + 3 / .014 ** 2) ** -.5)
+
+
+def test_measure_event_sigma_matches_the_weighted_spread():
+    """sigma: desviación típica ponderada por `W_e` de `d_e` alrededor de la media de su casa, solo con las casas
+    de al menos 3 elecciones (B, con 2, queda fuera)."""
+    c = bare_computer()
+    rows = [('es-md', '2021-05-04', 'A'), ('es-cl', '2021-05-04', 'A'), ('es-ar', '2021-05-04', 'A'),
+            ('es-md', '2021-05-04', 'B'), ('es-cl', '2021-05-04', 'B')]
+    data = pool(rows)
+    scopes = data.index.get_level_values('event_scope')
+    pollsters = data['pollster'].to_numpy()
+    data.loc[(pollsters == 'A') & (scopes == 'es-md'), 'bias_dev_adj'] = .00
+    data.loc[(pollsters == 'A') & (scopes == 'es-cl'), 'bias_dev_adj'] = .01
+    data.loc[(pollsters == 'A') & (scopes == 'es-ar'), 'bias_dev_adj'] = .02
+    data.loc[(pollsters == 'B') & (scopes == 'es-md'), 'bias_dev_adj'] = -.05
+    data.loc[(pollsters == 'B') & (scopes == 'es-cl'), 'bias_dev_adj'] = .05
+    sigma = c.measure_event_sigma(data, {'es-md': 1., 'es-cl': 1., 'es-ar': 1.})
+    assert sigma == pytest.approx(np.sqrt(np.mean([.01 ** 2, 0., .01 ** 2])))
 
 
 def test_centre_house_results_handles_scopes_without_enough_polls():
@@ -394,3 +454,58 @@ def test_compute_weights_copies_the_rating_of_the_event_to_each_poll():
     assert np.isnan(out.loc[other, 'rating']) and np.isnan(out.loc[other, 'weight_rating'])  # B has no ratings row
     series = c.series.reset_index().set_index('date')['rating']
     assert series[[pd.Timestamp('2026-10-08'), new, other]].tolist() == pytest.approx([62.76, 62.76, np.nan], nan_ok=True)
+
+
+# --- Calidad previa a la fecha de cada elección ---
+
+def test_prior_quality_is_taken_at_the_date_of_each_target():
+    """D3: la calidad de una elección puntuada solo cuenta las generales anteriores a ella."""
+    c = bare_computer()
+
+    def prior(target):
+        later = pd.isnull(target) or pd.Timestamp(target) > pd.Timestamp('2023-07-24')
+        return pd.DataFrame({
+            'quality': [56. if later else 40.] * 4, 'num_national_events': [1 if later else 0] * 4
+        }, index=pd.Index([1, 2, 3, 4], name='pollster_id'))
+
+    out = c.rate_events(
+        pool(ES19), [JULY23, pd.Timestamp('2026-11-29')], {'es': 1.}, c.pollsters, prior=prior
+    ).set_index(['event_date', 'pollster_id'])
+    before, after = out.loc[JULY23], out.loc[pd.Timestamp('2026-11-29')]
+    assert before.loc[3, 'quality'] == pytest.approx(.40) and before.loc[3, 'num_national_events'] == 0
+    assert after.loc[3, 'quality'] == pytest.approx(.56) and after.loc[3, 'num_national_events'] == 1
+    # C has no evidence: its rating is its prior quality on each date
+    assert before.loc[3, 'rating'] == pytest.approx(before.loc[3, 'quality'])
+    assert after.loc[3, 'rating'] == pytest.approx(after.loc[3, 'quality'])
+
+
+def test_without_prior_the_pollsters_quality_is_used_and_num_national_events_is_null():
+    c = bare_computer()
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
+    assert out['quality'].eq(.6).all() and out['num_national_events'].isnull().all()
+
+
+def test_compute_ratings_builds_the_prior_from_the_national_events(monkeypatch):
+    from mtpy.lib import computer
+
+    c = bare_computer()
+    c.rating_pool = lambda scopes: pool(ES19)
+    monkeypatch.setattr(computer, 'get_next_event_date', lambda scope, date_from=None: None)
+    monkeypatch.setattr(computer, 'load_criteria', lambda: {'scale': {'per_point': 8, 'floor': 5}})
+    monkeypatch.setattr(computer, 'read_quality', lambda criteria: pd.DataFrame({
+        'pollster_id': [1], 'fieldwork': [2], 'transparency': [2], 'independence': [1], 'identity': [1],
+        'standards': [1]}))
+    monkeypatch.setattr(computer, 'get_national_events', lambda: pd.DataFrame({
+        'pollster_id': [1, 1], 'event_date': [pd.Timestamp('2023-07-23'), pd.Timestamp('2019-11-10')]}))
+    seen = {}
+
+    def fake_rate_events(pool_, targets, weights, pollsters, prior=None):
+        seen['prior'] = prior
+        raise RuntimeError('stop')
+
+    c.rate_events = fake_rate_events
+    with pytest.raises(RuntimeError):
+        c.compute_ratings()
+    prior = seen['prior']
+    assert prior(pd.Timestamp('2023-07-23')).loc[1, 'num_national_events'] == 1
+    assert prior(pd.NaT).loc[1, 'num_national_events'] == 2

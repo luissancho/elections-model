@@ -452,6 +452,7 @@ def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
         }))
     profile = webapi.query_pollster(3, 'es')
     assert list(profile) == ['pollster', 'ratings', 'house_effects', 'herding', 'quality']
+    assert profile['quality']['implantation'] == 2 and profile['quality']['national'] is True
     assert profile['quality']['points'] == 7 and profile['quality']['checked_at'] == '2026-10-16'
     assert profile['pollster'] == {'id': 3, 'name': 'CIS', 'mtype': 'public', 'quality': 0.8}
     assert [row['event_date'] for row in profile['ratings']] == ['2023-07-23', '2026-11-29']
@@ -460,6 +461,12 @@ def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
     with pytest.raises(HttpError) as err:
         webapi.query_pollster(999, 'es')
     assert err.value.status == 404 and err.value.message == 'pollster not found'
+
+
+def quality_frame():
+    """Evaluation of the CIS with the columns the split of points needs."""
+    return pd.DataFrame({'pollster_id': [3], 'fieldwork': [2], 'transparency': [2], 'independence': [1],
+                         'identity': [1], 'points': [7]})
 
 
 def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
@@ -474,7 +481,7 @@ def test_query_pollster_reuses_the_cached_scope_tables(fresh_app, monkeypatch):
     monkeypatch.setattr(webapi.queries, 'get_house_effects', counted('house_effects', pd.DataFrame({'pollster_id': [3]})))
     monkeypatch.setattr(webapi.queries, 'get_herding', counted('herding', pd.DataFrame({'pollster_id': [2]})))
     monkeypatch.setattr(webapi.queries, 'get_pollsters_quality',
-                        counted('quality', pd.DataFrame({'pollster_id': [3], 'quality': [56.0]})))
+                        counted('quality', quality_frame()))
     webapi.query_ratings('es')
     webapi.query_house_effects('es')
     webapi.query_herding('es')
@@ -507,7 +514,7 @@ def test_query_pollster_of_every_scope_reads_the_tables_without_scope(fresh_app,
     monkeypatch.setattr(webapi.queries, 'get_house_effects',
                         lambda scope: scopes.append(('house_effects', scope)) or pd.DataFrame({'pollster_id': [3], 'event_scope': ['es-md']}))
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: scopes.append(('herding', scope)) or pd.DataFrame({'pollster_id': [3]}))
-    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: pd.DataFrame({'pollster_id': [3]}))
+    monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: quality_frame())
     profile = webapi.query_pollster(3, 'es', every_scope=True)
     assert profile['house_effects'] == [{'pollster_id': 3, 'event_scope': 'es-md'}] and profile['herding'] == [{'pollster_id': 3}]
     assert sorted(scopes) == [('herding', None), ('house_effects', None), ('ratings', 'es')]

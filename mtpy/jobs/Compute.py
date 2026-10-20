@@ -1,5 +1,5 @@
 from ..core.worker import Job
-from ..lib.compute import compute_scope, rate_scope
+from ..lib.compute import compute_scope, rate_scope, replicate_catalogues
 from ..lib.publish import resolve_scopes
 from .progress import ScopeReporter, collect_warnings, counted, notes_suffix
 
@@ -8,7 +8,9 @@ from .progress import ScopeReporter, collect_warnings, counted, notes_suffix
 STEPS = {'weights': 'pesos', 'featured': 'eventos destacados', 'errors': 'errores', 'deviations': 'desviaciones',
          'drift': 'deriva', 'house_effects': 'efectos de casa', 'herding': 'rebaño', 'ratings': 'ratings'}
 # Public name of each action, in the headers and the summary lines
-ACTIONS = {'compute': 'series', 'ratings': 'ratings'}
+ACTIONS = {'catalogues': 'catálogos', 'compute': 'series', 'ratings': 'ratings'}
+# Key of the result of the global `catalogues` action (the others are keyed by scope)
+CATALOGUES = 'catalogues'
 
 
 class Compute(ScopeReporter, Job):
@@ -20,9 +22,12 @@ class Compute(ScopeReporter, Job):
     house effects and the herding (`compute.compute_scope`). ``ratings`` runs, scope by scope, the cross-scope
     pollster ratings of its events (`compute.rate_scope`, with the polls of every scope). When both are requested,
     the series of every scope go first and the ratings of every scope after, because each rating reads the errors
-    of all the scopes. Scopes are isolated: one that fails never stops the others, and the job exits with an error
-    at the end if any failed. With ``dry_run`` nothing is written and the series stop after the deviations (drift,
-    house effects and herding read the stored errors).
+    of all the scopes. ``catalogues`` replicates the versioned catalogues (scopes, districts and the prior quality
+    of the pollsters, `compute.replicate_catalogues`) once, before anything else: run it after editing the
+    rubric or the evaluations of `data/`, so the ratings take the new quality. Scopes are isolated: one that fails
+    never stops the others, and the job exits with an error at the end if any failed. With ``dry_run`` nothing is
+    written, ``catalogues`` only validates the files and the series stop after the deviations (drift, house
+    effects and herding read the stored errors).
 
     The console output has the four levels of ``publish``: 0, the header of each action and the final summary; 1,
     also ``[i/n] scope: empezando`` and the result line of each scope; 2, also one line per phase with its seconds;
@@ -33,6 +38,7 @@ class Compute(ScopeReporter, Job):
     From the command line::
 
         python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'
+        python job.py compute '{"what":["catalogues","ratings"],"scopes":"all"}'
         python job.py compute '{"what":["ratings"],"scopes":["es"]}'
         python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
 
@@ -41,22 +47,23 @@ class Compute(ScopeReporter, Job):
         RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'
     """
 
-    WHAT = ('compute', 'ratings')
+    WHAT = ('catalogues', 'compute', 'ratings')
     verbose = 1
 
     def run(self, what=('compute', 'ratings'), scopes=('es',), dry_run=False, verbose=1, computer=None,
-            featured=None, **kwargs):
+            featured=None, catalogues=None, **kwargs):
         """
         Run the requested computations.
 
         Parameters
         ----------
         what : str or list of str, default ('compute', 'ratings')
-            Actions to run, among ``compute`` and ``ratings``; the series of every scope run before the ratings.
+            Actions to run, among ``catalogues``, ``compute`` and ``ratings``, always in this order: the catalogues
+            once, then the series of every scope, then the ratings of every scope.
         scopes : str or list of str, default ('es',)
             Scopes to compute, or ``'all'`` (``es`` and every regional scope, see ``publish.resolve_scopes``).
         dry_run : bool, default False
-            Compute without writing anything into the database.
+            Compute without writing anything into the database (``catalogues`` only validates the files).
         verbose : int, default 1
             Verbosity of the console output: 0, only the header of each action and the final summary; 1, also
             ``[i/n] scope: empezando`` and the result line of each scope; 2, also the phase lines with their
@@ -66,6 +73,8 @@ class Compute(ScopeReporter, Job):
             (for tests).
         featured : callable, optional
             ``update_featured(scope) -> int``; the real one by default (for tests).
+        catalogues : callable, optional
+            ``replicate_catalogues(save) -> dict``; the real one by default (for tests).
         **kwargs
             Ignored extra job arguments.
 
@@ -74,7 +83,8 @@ class Compute(ScopeReporter, Job):
         dict[str, dict]
             Result of each scope (of the last action that ran on it): ``status`` (``computed`` or ``failed``),
             ``action`` (``series`` or ``ratings``) and, when computed, the figures of `compute.compute_scope` or
-            `compute.rate_scope`; when failed, the ``reason``.
+            `compute.rate_scope`; when failed, the ``reason``. The ``catalogues`` action is keyed ``'catalogues'``,
+            with the figures of `compute.replicate_catalogues`.
 
         Raises
         ------
@@ -99,6 +109,14 @@ class Compute(ScopeReporter, Job):
 
         for action in self.WHAT:
             if action not in whats:
+                continue
+            if action == CATALOGUES:
+                self._say('compute {}{}'.format(ACTIONS[action], suffix))
+                result = self._catalogues(dry_run, catalogues or replicate_catalogues)
+                results[CATALOGUES] = result
+                if result['status'] == 'failed':
+                    failures.append('{} ({})'.format(CATALOGUES, result['action']))
+                lines.append(self._line(CATALOGUES, result))
                 continue
             self._say('compute {}: {}{}'.format(ACTIONS[action], n_scopes, suffix))
             for index, scope in enumerate(targets, 1):
@@ -162,11 +180,43 @@ class Compute(ScopeReporter, Job):
 
         return {'status': 'computed', 'action': name, **figures, 'warnings': notes}
 
+    def _catalogues(self, dry_run, catalogues):
+        """
+        Run the global ``catalogues`` action, converting every outcome into a result dict.
+
+        Parameters
+        ----------
+        dry_run : bool
+            Validate the files without writing.
+        catalogues : callable
+            ``replicate_catalogues(save) -> dict``.
+
+        Returns
+        -------
+        dict
+            ``{'status': 'computed', 'action', ...figures}`` or ``{'status': 'failed', 'action', 'reason'}``.
+        """
+        name = ACTIONS[CATALOGUES]
+        try:
+            figures = catalogues(save=not dry_run)
+        except Exception as e:
+            self._log_error(CATALOGUES)
+            return {'status': 'failed', 'action': name, 'reason': '{}: {}'.format(type(e).__name__, e), 'warnings': []}
+
+        return {'status': 'computed', 'action': name, **figures, 'warnings': []}
+
     @staticmethod
     def _line(scope, result):
         """Format the summary line of one scope result, with the count of its model warnings."""
         if result['status'] != 'computed':
             line = '{}: {} {} ({})'.format(scope, result['action'], result['status'], result['reason'])
+        elif result['action'] == ACTIONS[CATALOGUES] and 'scopes' in result:
+            line = '{}: saved ({} scopes, {} districts, {} quality evaluations, {} pollsters) in {:.0f} s'.format(
+                scope, result['scopes'], result['districts'], result['quality'], result['pollsters'],
+                result['seconds']['total'])
+        elif result['action'] == ACTIONS[CATALOGUES]:
+            line = '{}: checked ({} quality evaluations, dry run) in {:.0f} s'.format(
+                scope, result['quality'], result['seconds']['total'])
         elif result['action'] == 'ratings':
             line = '{}: ratings computed ({} pollsters, {} events) in {:.0f} s'.format(
                 scope, result['n_pollsters'], result['n_events'], result['seconds']['total'])

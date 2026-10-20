@@ -904,15 +904,17 @@ HOUSE_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']
 def fake_houses(monkeypatch, name='CIS'):
     """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
     pollsters = pd.DataFrame({
-        'id': [1, 2, 3, 4, 5, 6], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero', 'Agregador'],
-        'mtype': ['state', None, None, None, 'online', 'aggr'],  # los valores de la base de datos; sin tipo, una casa privada
-        'quality': [56.0, 80.0, 40.0, 5.0, 5.0, 16.0], 'rating': [55, 70, None, None, 50, None],  # rating nacional truncado: distinto del camino del ámbito
+        'id': [1, 2, 3, 4, 5, 6, 7, 8],
+        'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero', 'Agregador', 'Autonomica', 'Anonima'],
+        'mtype': ['state', None, None, None, 'online', 'aggr', None, None],  # los valores de la base de datos; sin tipo, una casa privada
+        'quality': [56.0, 80.0, 40.0, 5.0, 5.0, 16.0, 32.0, 24.0], 'rating': [55, 70, None, None, 50, None, None, None],  # rating nacional truncado: distinto del camino del ámbito
     })
     ratings = pd.DataFrame({
         'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29',
                                       '2026-11-29']),
         'pollster_id': [1, 1, 2, 1, 2, 3, 5], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama', 'Cero'],
         'quality': [60.0, 60.0, 80.0, 60.0, 80.0, 40.0, 50.0], 'num_events': [1, 2, 1, 3, 2, 0, 0],
+        'num_national_events': [1, 1, 1, 2, 3, 0, 0],
         'num_polls': [10, 12, 14, 15, 17, 2, 0], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1, 0.0],
         'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, -3.0, None, None],
         'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None, None],
@@ -959,19 +961,23 @@ def fake_houses(monkeypatch, name='CIS'):
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
     quality = pd.DataFrame({
-        'pollster_id': [1, 3, 6], 'pollster': [name, 'Hamalgama', 'Agregador'],
-        'fieldwork': [3, 2, 0],
+        'pollster_id': [1, 3, 6, 7, 8], 'pollster': [name, 'Hamalgama', 'Agregador', 'Autonomica', 'Anonima'],
+        'fieldwork': [3, 2, 0, 2, 2],
         'fieldwork_source': ['https://www.cis.es/es/metodologia',
-                             'https://hamalgama.example/ficha (ficha de 2026-10-01); https://hamalgama.example/metodologia', ''],
-        'transparency': [3, 1, 1],
+                             'https://hamalgama.example/ficha (ficha de 2026-10-01); https://hamalgama.example/metodologia', '',
+                             'web', 'web'],
+        'transparency': [3, 1, 1, 1, 1],
         'transparency_source': ['https://www.cis.es/es/microdatos', 'Ficha técnica del sondeo de 2026-10-01',
-                                'https://agregador.example/metodo'],
-        'independence': [0, 1, 0], 'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16', ''],
-        'identity': [1, 1, 1], 'identity_source': ['https://www.cis.es', 'https://hamalgama.example', 'https://agregador.example'],
-        'standards': [0, 0, 0], 'standards_source': ['', '', ''],
-        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', '', ''],
-        'status': ['revisada', 'borrador', 'revisada'], 'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16', '2026-10-01']),
-        'points': [7, 5, 2], 'quality': [56.0, 40.0, 16.0],
+                                'https://agregador.example/metodo', 'web', 'web'],
+        'independence': [0, 1, 0, 1, 1],
+        'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16', '', 'web', 'web'],
+        'identity': [1, 1, 1, 1, 0],
+        'identity_source': ['https://www.cis.es', 'https://hamalgama.example', 'https://agregador.example', 'web', ''],
+        'standards': [0, 0, 0, 0, 0], 'standards_source': ['', '', '', '', ''],
+        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', '', '', '', ''],
+        'status': ['revisada', 'borrador', 'revisada', 'revisada', 'revisada'],
+        'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16', '2026-10-01', '2026-10-16', '2026-10-16']),
+        'points': [7, 5, 2, 4, 3], 'quality': [56.0, 40.0, 16.0, 32.0, 24.0],
     })
     monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: quality)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
@@ -1019,7 +1025,7 @@ def test_casas_ranking_drops_pollsters_without_polls_and_pages_by_fifty(houses, 
     que sobran tras "Cargar más" (el servidor las pinta ocultas)."""
     page = html(call(houses, '/casas')[2])
     ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert 'Cero' not in ranking and ranking.count('<tr>') == 3 and 'id="ranking-more"' not in page
+    assert 'Cero' not in ranking and ranking.count('<tr') == 3 and 'id="ranking-more"' not in page
     assert '2 encuestadoras con rating y algún sondeo' in ranking and 'id="rating-chart"' not in page  # sin barras
     assert 'La tabla enseña las 50 primeras' in page
     many = pd.DataFrame({
@@ -1032,8 +1038,8 @@ def test_casas_ranking_drops_pollsters_without_polls_and_pages_by_fifty(houses, 
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert ranking.count('<tr>') == 51 and ranking.count('<tr hidden>') == 10  # cabecera + 50 visibles, 10 ocultas
-    assert ranking.index('P50') < ranking.index('<tr hidden>') < ranking.index('P51')
+    assert ranking.count('<tr') == 61 and ranking.count(' hidden>') == 10  # cabecera + 50 visibles, 10 ocultas
+    assert ranking.index('P50') < ranking.index(' hidden>') < ranking.index('P51')
     assert '<button type="button" class="more" id="ranking-more" data-batch="50" hidden>Cargar más</button>' in page
     context = pages.casas_context(pages.parse_state({'scope': 'es'}))
     assert context['ranking_shown'] == 50 and context['ranking_hidden'] == 10 and pages.RANKING_SHOWN == 50
@@ -1072,6 +1078,20 @@ def test_casas_without_analysis_keeps_the_ranking(houses_without_analysis):
     assert 'id="effects-heatmap"' not in page and 'id="herding-table"' not in page
 
 
+def test_casas_with_analysis_without_house_effects_shows_the_notice(houses, fresh_app):
+    """Un ámbito con análisis (`meta`, rebaño) pero sin `house-effects` (ciclo sin sondeos) da 200 y el aviso de la
+    tarjeta de efectos, sin mapa de calor ni enlace al CSV (que daría 404)."""
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.remove(bundle.path_analysis('es', 'house-effects'))
+    writer.remove(bundle.path_analysis_csv('es', 'house-effects'))
+    status, _, body = call(houses, '/casas', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'Análisis no publicado todavía' in page
+    assert 'id="effects-heatmap"' not in page and 'id="herding-table"' in page
+    assert initial(body)['grid'] is None
+    assert 'Efectos de encuestadora por partido y bloque' not in page and 'Rebaño por encuestadora' in page
+
+
 def test_casas_without_database_is_a_503_page(api):
     status, headers, body = call(api, '/casas')
     assert status == 503 and 'La base de datos no está disponible' in html(body) and headers['cache-control'] == 'no-store'
@@ -1097,7 +1117,7 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     page = html(call(houses, '/casas')[2])
     ranking = page[page.index('id="ranking-table"'):]
     ranking = ranking[:ranking.index('</table>')]
-    assert 'Hamalgama' not in ranking and ranking.count('<tr>') == 3  # cabecera, GAD3 y CIS
+    assert 'Hamalgama' not in ranking and ranking.count('<tr') == 3  # cabecera, GAD3 y CIS
     assert '82,4' in ranking and '0,74' in ranking  # rating (escala 0-100) y herding (análisis) de GAD3
     # los formatos (2026-10-17): barra verde del rating de 0 a 100, barra divergente del sesgo de bloques en ±8 en el color
     # del bloque al que favorece (la fixture solo trae el primero: el segundo, gris), rojos del error medio de 0 a 8 y
@@ -1205,9 +1225,9 @@ def test_ranking_rows_and_herding_rows():
                           'quality': [60.0, 80.0, 40.0], 'num_polls': [15, 17, 2], 'extra': [1, 2, 3]})
     rows = pages.ranking_rows(frame, {'rows': [{'pollster': 'GAD3', 'herding': 0.742}]})
     assert [row['pollster'] for row in rows] == ['GAD3', 'CIS'] and rows[0]['herding'] == 0.742 and rows[1]['herding'] is None
-    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
-                             'error_blocks', 'bias_blocks', 'bias_dev_adj', 'herding']
-    assert rows[0]['num_events'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
+    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'num_national_events',
+                             'error_avg', 'error_blocks', 'bias_blocks', 'bias_dev_adj', 'herding']
+    assert rows[0]['num_events'] is None and rows[0]['num_national_events'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
     part = {'rows': [{'pollster': 'A', 'herding': 0.9}, {'pollster': 'B', 'herding': None}, {'pollster': 'C', 'herding': 0.7}]}
     assert [row['pollster'] for row in pages.herding_rows(part)] == ['C', 'A', 'B']
 
@@ -1253,8 +1273,9 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     assert '<div class="v">56,0<small></small></div>' in kpis.replace('\n', '') and '7 de 10 puntos' in kpis
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
-    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Identidad', 'Estándares']
-    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2'), ('1', '1'), ('0', '1')]
+    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Implantación']
+    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2'), ('1', '2')]
+    assert '<td>–</td>' in card  # Independencia, sin fuente
     assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
     assert 'Comprobado el 16 oct 2026.' in card and 'Organismo público' in card and 'provisional' not in card
     assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
@@ -1267,13 +1288,14 @@ def test_table_columns_describe_the_two_tables_with_the_scale_and_the_blocks():
     """Las columnas del ranking y del camino al rating, con su etiqueta y su descripción: la regla de puntos de
     «Confianza» sale de la escala del catálogo y se omite sin ella; el signo de «Sesgo bloques» nombra los bloques."""
     plain = {column['key']: column['text'] for column in pages.table_columns('ranking')}
+    assert 'rúbrica pública de cuatro criterios' in plain['quality']
     assert 'Cada punto vale' not in plain['quality'] and 'al primer bloque del que hubo; negativo, más margen al segundo' in plain['error_blocks']
     scaled = {column['key']: column['text']
               for column in pages.table_columns('ranking', ['Derecha', 'Izquierda'], {'per_point': 9, 'floor': 4})}
     assert scaled['quality'].endswith('Cada punto vale 9 de confianza, con un mínimo de 4.')
     assert 'más margen a Derecha del que hubo; negativo, más margen a Izquierda.' in scaled['error_blocks']
     assert [column['label'] for column in pages.table_columns('ranking')] == [
-        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
     assert [column['label'] for column in pages.table_columns('path')] == [
         'Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
     path = {column['key']: column['text'] for column in pages.table_columns('path', ['Derecha', 'Izquierda'])}
@@ -1305,7 +1327,7 @@ def test_casa_profile_quality_card_splits_compound_sources_into_links(houses):
     assert ('<a href="https://hamalgama.example/ficha" rel="noopener">https://hamalgama.example/ficha</a>'
             ' (ficha de 2026-10-01); '
             '<a href="https://hamalgama.example/metodologia" rel="noopener">https://hamalgama.example/metodologia</a>') in card
-    assert 'href="https://hamalgama.example/ficha (' not in card and '<td>–</td>' in card  # Estándares, sin fuente
+    assert 'href="https://hamalgama.example/ficha (' not in card
 
 
 def test_casa_profile_quality_card_of_an_unrated_house(houses):
@@ -1313,6 +1335,21 @@ def test_casa_profile_quality_card_of_an_unrated_house(houses):
     card = page[page.index('id="quality"'):page.index('id="path"')]
     assert 'Sin evaluar' in card and 'confianza mínima, 5' in card and 'href="/metodo/rating#calidad-previa"' in card
     assert '<th scope="row">' not in card and 'sin evaluar' in page[page.index('id="profile"'):page.index('id="quality"')]
+
+
+def test_casa_profile_quality_card_of_an_unrated_house_with_national_events(houses, monkeypatch):
+    """Sin evaluar pero con sondeos de generales: el punto de Implantación calculado da 8, no el mínimo 5, y el texto
+    de la tarjeta y el KPI cuentan lo mismo."""
+    pollsters = webapi.queries.get_pollsters().copy()
+    pollsters.loc[pollsters['name'] == 'Nueva', 'quality'] = 8.0
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
+    webapi.queries._QUERIES.clear()
+    page = html(call(houses, '/casas/nueva')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    assert 'Sin evaluar' in card and 'alguna elección general' in card and 'confianza 8' in card
+    assert 'confianza mínima' not in card and '<th scope="row">' not in card
+    kpis = page[page.index('id="profile"'):page.index('id="quality"')]
+    assert '>8,0<' in kpis and 'sin evaluar' in kpis
 
 
 def test_casa_profile_quality_card_of_an_informative_house(houses):
@@ -1327,9 +1364,75 @@ def test_casa_profile_quality_card_of_an_evaluated_informative_house(houses):
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
     assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0'),
-                                            ('Identidad', '1'), ('Estándares', '0')]
+                                            ('Implantación', '1')]
     assert 'href="https://agregador.example/metodo"' in card and '2 de 10 puntos' in card
     assert 'la confianza es informativa' in card and 'Sin evaluar' not in card
+
+
+def test_profile_confidence_card_shows_implantation_with_its_two_parts(houses):
+    """Implantación: las generales se calculan de los sondeos (sin fuente) y los estándares llevan la suya."""
+    from mtpy.lib.pages.casas import quality_card
+    from mtpy.lib.quality import load_criteria
+    page = html(call(houses, '/casas/cis')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    assert 'calculado a partir de los sondeos publicados' in card and 'Ha sondeado al menos una elección general.' in card
+    criteria = load_criteria()
+    record = {'fieldwork': 2, 'fieldwork_source': 'a', 'transparency': 2, 'transparency_source': 'b', 'independence': 1,
+              'independence_source': 'c', 'identity': 1, 'identity_source': 'd', 'standards': 1,
+              'standards_source': 'https://iaespana.example/socios', 'points': 7, 'quality': 56.0, 'status': 'revisada'}
+    full = quality_card(record, {'mtype': 'private'}, criteria)
+    row = full['rows'][-1]
+    assert [r['name'] for r in full['rows']][-1] == 'Implantación' and (row['points'], row['max']) == (2, 2)
+    assert row['national'] is True and row['standards'] is True and row['parts'][0]['url'] == 'https://iaespana.example/socios'
+    none = quality_card(dict(record, points=5, standards_source=''), {'mtype': 'private'}, criteria)
+    row = none['rows'][-1]
+    assert (row['points'], row['national']) == (0, False) and row['level'] == criteria['criteria']['implantation']['levels']['0']
+    assert none['support'] == '5 de 10 puntos'
+
+
+def test_profile_page_card_shows_implantation_0_without_national_events(houses):
+    """Una encuestadora evaluada sin generales: Implantación 0 de 2, con el nivel 0 y sin generales sondeadas."""
+    page = html(call(houses, '/casas/autonomica')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
+    assert rows[-1] == ('Implantación', '0', '2') and 'Solo ha sondeado elecciones autonómicas o locales.' in card
+    assert 'ninguna elección general sondeada.' in card and 'calculado a partir de los sondeos publicados' not in card
+
+
+def test_profile_page_card_voids_transparency_without_identity(houses):
+    """Con identity = 0 y transparencia puntuada, la fila cuenta 0 de 3 y explica la condición."""
+    page = html(call(houses, '/casas/anonima')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
+    assert ('Transparencia', '0', '3') in rows and 'Sin una entidad identificable detrás' in card
+
+
+def test_profile_confidence_card_voids_transparency_without_identity(houses):
+    """Sin entidad identificable la transparencia cuenta 0 y la fila explica la condición."""
+    from mtpy.lib.pages.casas import quality_card
+    from mtpy.lib.quality import load_criteria
+    record = {'fieldwork': 2, 'fieldwork_source': 'a', 'transparency': 1, 'transparency_source': 'b', 'independence': 1,
+              'independence_source': 'c', 'identity': 0, 'identity_source': '', 'standards': 0, 'standards_source': '',
+              'points': 3, 'quality': 24.0, 'status': 'revisada'}
+    rows = {r['key']: r for r in quality_card(record, {'mtype': 'private'}, load_criteria())['rows']}
+    assert (rows['transparency']['points'], rows['transparency']['max'], rows['transparency']['void']) == (0, 3, True)
+    assert rows['transparency']['level'].startswith('Sin una entidad identificable detrás')
+    assert rows['fieldwork']['void'] is False
+
+
+def test_metodo_rubric_lists_four_criteria_and_their_notes(api, fresh_app):
+    """/metodo/rating lista los cuatro criterios del JSON con sus notas, sin «Identidad» ni «Estándares»."""
+    from mtpy.lib.pages.metodo import quality_rubric
+    rubric = quality_rubric()
+    assert [r['name'] for r in rubric['rows']] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Implantación']
+    notes = [r['note'] for r in rubric['rows']]
+    assert notes[0] is None and notes[1].startswith('Sin una entidad identificable') and notes[3].startswith('Las elecciones generales')
+    page = html(call(api, '/metodo/rating')[2])
+    rubric_html = page[page.index('<th scope="col">Criterio</th>'):]
+    assert 'Sin una entidad identificable detrás' in rubric_html and 'Las elecciones generales se cuentan con los sondeos' in rubric_html
+    names = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>0-\d</td>', rubric_html)
+    assert names == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Implantación']
+    assert 'Identidad' not in names and 'Estándares' not in names
 
 
 def test_pages_package_layout():
@@ -2115,7 +2218,7 @@ def test_metodo_escanos_text(api):
 
 def test_metodo_rating_text(api):
     page = html(call(api, '/metodo/rating')[2])
-    for anchor in ('que-se-mide', 'calidad-previa', 'rating-final', 'ranking-global', 'herding'):
+    for anchor in ('que-se-mide', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global', 'herding'):
         assert 'id="' + anchor + '"' in page, anchor
     assert 'la mitad' in page or '50%' in page  # rating_weight 0,5 leído del catálogo
     assert '<math' in page
@@ -2126,15 +2229,44 @@ def test_metodo_rating_text(api):
     assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
     assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
     assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
-    assert 'Trabajo de campo' in text and 'Estándares' in text and '<table id="rubric-table">' in page
+    assert 'Trabajo de campo' in text and 'Implantación' in text and '<table id="rubric-table">' in page
     assert '<strong>Diferencial</strong>' in text and 'Sesgo bloques' in text and 'Calidad</strong>' not in text
     assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
     assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text
     assert 'En las tablas del sitio aparece como «Confianza»' in text and 'es la columna «Confianza»' in text
-    assert 'entre 3 y 4' in text and 'en torno al 10' in text
+    assert 'cuentan como una elección' in text and 'pesa en torno al 10% de su rating' in text
+    assert 'la calidad previa pesa dos tercios del rating' in text and 'entre 3 y 4' not in text
     assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
     assert 'puesta a mano' not in text and 'rúbrica pública' in text
     assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+
+
+def test_metodo_rating_explains_evidence_by_election(api):
+    """/metodo/rating counts the evidence in elections, quotes sigma, tau and k as the code sets them (k ~ 2
+    elections, not 3 polls) and presents the prior quality as a prior of observable criteria."""
+    from inspect import signature
+
+    from mtpy.lib.computer import Computer
+
+    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
+    params = signature(Computer.__init__).parameters
+    sigma, tau = params['bias_dev_sigma'].default, params['bias_dev_tau'].default
+    k = (sigma / tau) ** 2
+    assert 'por elecciones' in text and '<var>k</var>' in text
+    assert '{:.3f}'.format(sigma).replace('.', ',') in text and 'τ es la escala, {}'.format(
+        '{:.2f}'.format(tau).replace('.', ',')) in text
+    assert '{:.2f}'.format(k).replace('.', ',') in text and '2 elecciones' in text
+    assert 'un prior de criterios observables' in text and 'no un predictor validado' in text
+    assert 'id="criteria-test-table"' in text and 'id="difficulty-table"' in text and 'Implantación' in text
+    assert 'la calidad previa pesa como tres sondeos' not in text and 'tres sondeos' not in text
+    # sigma as measured by the rating procedure and with the degrees-of-freedom correction; the 0,006 spread is raw
+    assert 'unos 0,014' in text and '0,0135 con el procedimiento de medida' in text
+    assert 'corrección por grados de libertad' in text and 'de verdad' not in text
+    assert 'menos aún si se descuenta el ruido de cada media' in text
+    # Regionals are not easier, so not discounted further; their lower separation is already in their weight
+    assert 'no hay motivo para descontarlas más' in text and 'ya lo recoge su peso' in text
+    assert 'dos autonómicas cuentan en el rating como unas generales del mismo año' in text
+    assert 'su peso <var>k</var> son unas 2 elecciones de evidencia' in text
 
 
 def test_metodo_rating_reads_the_rubric_from_the_catalogue(api, monkeypatch):
@@ -2146,19 +2278,19 @@ def test_metodo_rating_reads_the_rubric_from_the_catalogue(api, monkeypatch):
 
 def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypatch):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'cada sondeo de unas autonómicas pesa la mitad que uno de unas generales' in page
+    assert 'cada elección autonómica pesa la mitad que unas generales' in page
     assert 'href="/metodo/promedio#peso"' in page and 'href="/casas?scope=es"' in page and 'href="/metodo/backtest"' in page
     assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'En resumen' in page
     changed = webapi.catalogue().copy()
     changed.loc[changed.index != 'es', 'rating_weight'] = 0.25
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa el 25% de uno de unas generales' in page and 'la mitad' not in page
+    assert 'pesa el 25% de unas generales' in page and 'la mitad' not in page
     mixed = changed.copy()
     mixed.loc['es-md', 'rating_weight'] = 0.5
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa menos que uno de unas generales' in page and 'la mitad' not in page
+    assert 'pesa menos que unas generales' in page and 'la mitad' not in page
 
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
@@ -2304,7 +2436,7 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
     heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio',
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio',
                      'Sesgo bloques', 'Rebaño']
     assert 'class="help"' not in thead  # sin interrogante: el glosario explica las columnas (2026-10-16)
     assert 'Calidad' not in thead  # la palabra pública es «Confianza»
@@ -3296,8 +3428,8 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     la confianza leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos',
-                                                          'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales',
+                                                          'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
@@ -3305,11 +3437,58 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
     assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
+    assert ('En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el que se calcula '
+            'el criterio «Implantación» de la confianza.') in glossary
     assert 'todas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
     assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Evento', 'Sondeos', 'Diferencial', 'Error medio',
                                                                   'Sesgo bloques', 'Rating', 'Cambio']
+
+
+def test_casas_ranking_shows_the_generales_column_after_elecciones(houses):
+    page = html(call(houses, '/casas')[2])
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table)
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial',
+                     'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<tr data-national-events="(\d+)"', table) == ['3', '2']  # GAD3, CIS
+
+
+def test_casas_ranking_has_the_generales_filter(houses):
+    page = html(call(houses, '/casas')[2])
+    assert '<input type="checkbox" id="ranking-national-events">' in page and 'Solo con experiencia en generales' in page
+    assert 'id="ranking-national-events" checked' not in page
+
+
+def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
+    """A known count of 0 renders its number (only an unknown count renders «–») and the filter still hides it."""
+    known = pd.DataFrame({
+        'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
+        'num_events': [1], 'num_national_events': [0], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5],
+        'bias_blocks': [0.5], 'rating': [60.0],
+    })
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: known)
+    webapi.queries._QUERIES.clear()
+    page = html(call(houses, '/casas')[2])
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>0</td>' in table
+
+
+def test_casas_ranking_without_num_national_events_shows_a_dash_and_counts_zero(houses, monkeypatch):
+    """Old ratings rows (before the database column exists): «–», `data-national-events="0"` (hidden by the filter)."""
+    old = pd.DataFrame({
+        'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
+        'num_events': [1], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5], 'bias_blocks': [0.5],
+        'rating': [60.0],
+    })
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: old)
+    webapi.queries._QUERIES.clear()
+    page = html(call(houses, '/casas')[2])
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>–</td>' in table
+    # no known count in any row: the filter would hide everything, so the control is not rendered
+    assert 'id="ranking-national-events"' not in page and 'id="ranking-controls"' not in page
 
 
 def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):

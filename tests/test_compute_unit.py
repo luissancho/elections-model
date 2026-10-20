@@ -114,3 +114,18 @@ def test_the_real_computer_and_featured_updater_are_the_defaults(monkeypatch):
     assert compute.compute_scope('es-cl', save=True)['featured'] == 3 and featured == ['es-cl']
     assert compute.rate_scope('es-cl', save=False)['n_events'] == 1
     assert factory.inits[0] == ('es-cl', 0)
+
+
+def test_replicate_catalogues_saves_or_only_checks_the_rubric(monkeypatch):
+    """`catalogues`: con escritura, `save_catalogues()` y sus cifras; en seco, solo valida la rúbrica y el CSV de
+    la calidad previa (`read_quality`) y cuenta las evaluaciones, sin tocar la base."""
+    saved = []
+    monkeypatch.setattr(compute, 'save_catalogues', lambda: saved.append(1) or {'scopes': 18, 'districts': 118,
+                                                                                'quality': 72, 'pollsters': 135})
+    monkeypatch.setattr(compute, 'load_criteria', lambda: {'scale': {}})
+    monkeypatch.setattr(compute, 'read_quality', lambda criteria: pd.DataFrame({'pollster_id': [1, 2, 3]}))
+    out = compute.replicate_catalogues(save=True)
+    assert saved == [1] and out['scopes'] == 18 and out['quality'] == 72 and out['pollsters'] == 135
+    assert set(out['seconds']) == {'total'}
+    out = compute.replicate_catalogues(save=False)
+    assert saved == [1] and out['quality'] == 3 and 'scopes' not in out

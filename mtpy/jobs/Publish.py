@@ -580,11 +580,12 @@ class Publish(ScopeReporter, Job):
         Returns
         -------
         dict
-            Result with a ``status``: ``published`` with ``event_date``, ``n_pollsters`` and
-            ``seconds``, ``skipped`` for ``publish.NothingToPublish``, ``refused`` for the LOREG
+            Result with a ``status``: ``published`` with ``event_date``, ``n_pollsters``,
+            ``seconds`` and ``house_effects`` (whether they were published), ``skipped`` for ``publish.NothingToPublish``, ``refused`` for the LOREG
             guard and ``failed`` for any other exception, all but ``published`` with a ``reason``.
             A scope without an upcoming event is still published (the analysis then works from
-            its last election) and only the national window guards it.
+            its last election) and only the national window guards it. A scope whose current cycle has
+            no polls is published without house effects (``meta.house_effects`` false).
         """
         try:
             publish.loreg_guard(scope, publish.next_event_date(scope), today, force, national)
@@ -597,7 +598,7 @@ class Publish(ScopeReporter, Job):
             self._log_error(scope)
             return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
         return {'status': 'published', 'event_date': out['event_date'], 'n_pollsters': out['n_pollsters'],
-                'seconds': out['seconds']}
+                'seconds': out['seconds'], 'house_effects': out.get('house_effects', True)}
 
     def _event_scope(self, scope, writer, event_date, today, source, verbose):
         """
@@ -802,8 +803,9 @@ class Publish(ScopeReporter, Job):
     def _analysis_line(scope, result):
         """Format the summary line of one scope result of ``analysis``."""
         if result['status'] == 'published':
-            return '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
+            line = '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
                 scope, result['event_date'], result['n_pollsters'], result['seconds']['total'])
+            return line if result.get('house_effects', True) else line + '; sin efectos de encuestadora'
         return '{}: analysis {} ({})'.format(scope, result['status'], result['reason'])
 
     @staticmethod

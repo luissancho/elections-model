@@ -208,6 +208,7 @@ def run_case(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -228,7 +229,8 @@ def run_case(
     them independently. `min_events` is the number of featured elections of the scope before the event from
     which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
     `None`, the default, always takes the parent); `meta` records the scope used (`est_scope`) and the count
-    (`n_featured`).
+    (`n_featured`). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the polls with
+    ratings recomputed in memory.
 
     Returns
     -------
@@ -244,7 +246,8 @@ def run_case(
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
-            disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events
+            disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
+            weight_ratings=weight_ratings
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -490,10 +493,12 @@ def run_backtest(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
+    `weight_ratings` is passed to every case.
 
     Returns
     -------
@@ -516,7 +521,8 @@ def run_backtest(
                 case = run_case(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
-                    herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events
+                    herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
+                    weight_ratings=weight_ratings
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -547,6 +553,29 @@ def run_backtest(
 
 class NothingToEvaluate(Exception):
     """A scope with no election to evaluate, or none of whose cases could be evaluated: nothing is written."""
+
+
+def rating_overrides(scope: str) -> pd.Series:
+    """
+    Recompute the pollster ratings of a scope in memory with the current code, without saving anything.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    pd.Series
+        `weight_rating` of every pollster in every election of the scope, indexed by (`event_date`,
+        `pollster_id`); the input `weight_ratings` of `run_backtest`.
+    """
+    from .computer import Computer
+
+    comp = Computer(scope=scope, verbose=0).build_series()
+    comp.compute_ratings(save=False, scopes='all')
+
+    return comp.ratings['weight_rating']
 
 
 def results_dir(root: Optional[str], scope: str) -> str:
@@ -609,6 +638,7 @@ def backtest_scope(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    recompute_ratings: bool = False,
     verbose: int = 0,
     runner=None,
     stats=None,
@@ -631,6 +661,9 @@ def backtest_scope(
         Horizons in days; `DEFAULT_HORIZONS` by default.
     n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, min_events
         Parameters of `run_backtest`, recorded in `run.json`.
+    recompute_ratings : bool, default False
+        Recompute the ratings of the scope in memory once (`rating_overrides`) and use them in every case
+        instead of the stored ones; recorded in `run.json`.
     verbose : int, default 0
         Verbosity of `run_backtest` (1 prints one line per case).
     runner : callable, optional
@@ -659,7 +692,9 @@ def backtest_scope(
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                   regional_noise=regional_noise, min_events=min_events)
-    results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose, **params)
+    weight_ratings = rating_overrides(scope) if recompute_ratings else None
+    results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose,
+                                       weight_ratings=weight_ratings, **params)
     if results['metrics'].shape[0] == 0:
         raise NothingToEvaluate('no case could be evaluated')
     seconds = {'run': time.perf_counter() - start}
@@ -673,7 +708,7 @@ def backtest_scope(
     evaluated = results['metrics']['event_date'].unique().tolist()
     spans = sorted(results['metrics']['horizon'].unique().tolist())
     record = {'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': prov()['commit'], 'scope': scope,
-              **params, 'events': evaluated, 'horizons': spans, **(stats or poll_stats)(scope)}
+              **params, 'recompute_ratings': recompute_ratings, 'events': evaluated, 'horizons': spans, **(stats or poll_stats)(scope)}
     with open(os.path.join(folder, 'run.json'), 'w', encoding='utf-8') as fh:
         json.dump(record, fh, indent=1)
     seconds['write'] = time.perf_counter() - start - seconds['run']
