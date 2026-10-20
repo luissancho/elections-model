@@ -373,4 +373,196 @@ código real y la deja en Resultados.
 
 ## Resultados
 
-(Lo rellena el constructor: tabla del backtest antes/después, ranking resultante, regresión de `test_model.py`.)
+Rellenado por el constructor el 2026-10-20 (Task 8), con el código final de `dev` y comprobaciones de solo lectura
+contra la base (`compute_ratings(save=False, scopes='all')`, sin escribir en la RDS ni en S3).
+
+### Backtest antes / solo D2 / después
+
+Tres ejecuciones de `backtest/run_backtest.py --scope es --recompute-ratings`, cada una con los ratings recalculados en
+memoria con el código de su momento e inyectados en el `Forecaster` (los ratings de cada caso solo ven elecciones
+anteriores). Salidas en `files/backtest/rating-por-eleccion/{antes,solo-d2,despues}/` (ignorado por git):
+
+- **antes**: el código de `8d760e6` (rating por sondeos, k = 3 sondeos, rúbrica anterior).
+- **solo-d2**: el código de `801ca3b` (D2: evidencia por elecciones, k ≈ 1,96 elecciones; rúbrica anterior).
+- **después**: el código final (D2 y D3: rúbrica con «Implantación» a la fecha de cada elección).
+
+Las tres tienen los mismos 28 casos (5 generales × 6 horizontes, menos 2016-06-26 y 2019-11-10 a 180 días, que no
+tienen sondeos suficientes); a 180 días solo hay 3 casos (2 con escaños), así que esa fila es la más ruidosa.
+
+| Métrica | Horizonte | antes | solo-d2 | después | después − antes |
+|---|---|---|---|---|---|
+| `mae_shares` | 6 | 1,70 | 1,70 | 1,70 | 0,00 |
+| `mae_shares` | 14 | 1,97 | 1,96 | 1,96 | −0,01 |
+| `mae_shares` | 30 | 2,18 | 2,17 | 2,18 | 0,00 |
+| `mae_shares` | 60 | 2,80 | 2,81 | 2,81 | +0,01 |
+| `mae_shares` | 90 | 2,84 | 2,86 | 2,85 | +0,01 |
+| `mae_shares` | 180 | 3,05 | 3,04 | 3,04 | −0,01 |
+| `mae_shares` | media | 2,42 | 2,42 | 2,42 | 0,00 |
+| `mae_seats` | 6 | 6,75 | 6,66 | 6,70 | −0,04 |
+| `mae_seats` | 14 | 7,92 | 7,82 | 7,90 | −0,02 |
+| `mae_seats` | 30 | 8,56 | 8,77 | 8,77 | +0,21 |
+| `mae_seats` | 60 | 12,22 | 12,16 | 12,16 | −0,06 |
+| `mae_seats` | 90 | 12,57 | 12,82 | 12,82 | +0,25 |
+| `mae_seats` | 180 | 12,97 | 12,85 | 12,85 | −0,12 |
+| `mae_seats` | media | 10,17 | 10,18 | 10,20 | +0,04 |
+| `crps_seats` | 6 | 4,78 | 4,79 | 4,79 | +0,01 |
+| `crps_seats` | 14 | 5,49 | 5,50 | 5,51 | +0,02 |
+| `crps_seats` | 30 | 6,09 | 6,15 | 6,16 | +0,08 |
+| `crps_seats` | 60 | 8,51 | 8,56 | 8,57 | +0,05 |
+| `crps_seats` | 90 | 9,03 | 9,14 | 9,13 | +0,10 |
+| `crps_seats` | 180 | 9,46 | 9,49 | 9,48 | +0,02 |
+| `crps_seats` | media | 7,23 | 7,27 | 7,27 | +0,05 |
+| `brier_vs` | 6 | 0,0374 | 0,0386 | 0,0380 | +0,0007 |
+| `brier_vs` | 14 | 0,0413 | 0,0386 | 0,0415 | +0,0002 |
+| `brier_vs` | 30 | 0,0682 | 0,0685 | 0,0681 | −0,0001 |
+| `brier_vs` | 60 | 0,0887 | 0,0907 | 0,0910 | +0,0024 |
+| `brier_vs` | 90 | 0,1015 | 0,1035 | 0,1035 | +0,0020 |
+| `brier_vs` | 180 | 0,1131 | 0,1203 | 0,1210 | +0,0078 |
+| `brier_vs` | media | 0,0750 | 0,0767 | 0,0772 | +0,0022 |
+| `cov_shares95` | 6 | 0,960 | 0,960 | 0,960 | 0,000 |
+| `cov_shares95` | 14 | 0,960 | 0,960 | 0,960 | 0,000 |
+| `cov_shares95` | 30 | 0,870 | 0,870 | 0,870 | 0,000 |
+| `cov_shares95` | 60 | 0,843 | 0,843 | 0,843 | 0,000 |
+| `cov_shares95` | 90 | 0,843 | 0,843 | 0,843 | 0,000 |
+| `cov_shares95` | 180 | 0,800 | 0,867 | 0,867 | +0,067 |
+| `cov_shares95` | media | 0,879 | 0,891 | 0,891 | +0,011 |
+
+Lectura: el cambio apenas mueve el backtest nacional, y casi todo lo que mueve viene de D2 («solo-d2» y «después»
+son casi iguales). En voto, nada (`mae_shares` igual de media, ±0,01 puntos por horizonte). En escaños, mezclado
+(`mae_seats` mejora en 4 de 6 horizontes y empeora 0,04 de media). Las métricas probabilísticas empeoran un poco y
+con el mismo signo en casi todos los horizontes: `crps_seats` en 6 de 6 (+0,05 escaños de media, un 0,7 %) y
+`brier_vs` en 5 de 6 (+0,002 de media, sobre todo a 60-180 días; a 180 días solo hay 3 casos). La cobertura del 95 %
+del voto no cambia salvo a 180 días (0,80 → 0,87, 3 casos). Es un empeoramiento consistente en signo pero muy
+pequeño, dentro de lo que pueden mover 5 elecciones; no es un empeoramiento claro. El cambio no busca mejorar el
+backtest sino corregir lo que cuenta la Intención (CENTRA primera con dos autonómicas); Luis decide con esto delante.
+
+**Solo nacional (decisión R7 del controlador).** No se corrieron los autonómicos: el «antes» tardó 3291 s solo para
+`es`, los 17 ámbitos autonómicos llevarían horas, y el «antes» autonómico necesitaría ya el código de `8d760e6`
+(el algoritmo del rating cambió después en el árbol). Para medirlo, Luis puede ejecutar
+`PYTHONPATH=. python backtest/run_backtest.py --scopes all --recompute-ratings --out <dir>` en un worktree en
+`8d760e6` y en `HEAD`, y comparar los `by_horizon.csv` de cada ámbito.
+
+### Ranking nuevo (2026-11-29, nacional, encuestadoras con `num_polls > 0`)
+
+Con `compute_ratings(save=False, scopes='all')`; 112 encuestadoras, las mismas que en el ranking guardado. «Antes»
+es el ranking guardado hoy en la RDS (el código anterior a este plan).
+
+| Puesto | Encuestadora | Rating | Rating ajustado | Confianza | Diferencial | Elecciones | Generales | W (`num_events_w`) | Antes (puesto, rating) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | GAD3 | 77,1 | 80,0 | 56 | −0,84 | 51 | 6 | 14,48 | 2.ª, 74,9 |
+| 2 | Metroscopia | 70,7 | 74,5 | 56 | −0,66 | 33 | 7 | 7,76 | 3.ª, 74,2 |
+| 3 | CEMOP | 66,9 | 78,8 | 56 | −0,79 | 6 | 2 | 1,80 | 5.ª, 67,1 |
+| 4 | IMOP | 66,3 | 69,3 | 56 | −0,50 | 20 | 4 | 6,76 | 4.ª, 68,4 |
+| 5 | SocioMétrica | 63,2 | 66,3 | 48 | −0,42 | 25 | 3 | 9,48 | 9.ª, 64,0 |
+| 6 | Celeste Tel | 61,8 | 61,5 | 64 | −0,29 | 50 | 8 | 12,34 | 14.ª, 60,0 |
+| 7 | 40dB | 60,7 | 65,2 | 40 | −0,39 | 28 | 5 | 9,07 | 6.ª, 67,0 |
+| 8 | Sigma Dos | 60,6 | 60,2 | 64 | −0,26 | 72 | 13 | 17,10 | 10.ª, 62,8 |
+| 9 | Sondaxe | 60,5 | 66,1 | 48 | −0,41 | 15 | 8 | 4,34 | 8.ª, 64,2 |
+| 10 | Ágora Integral | 60,3 | 70,3 | 48 | −0,53 | 6 | 1 | 2,42 | 7.ª, 64,3 |
+| 11 | CENTRA | 58,4 | 83,1 | 48 | −0,95 | 2 | 0 | 0,83 | 1.ª, 75,3 |
+| 12 | CPS | 54,8 | 51,3 | 56 | −0,03 | 4 | 0 | 0,64 | 13.ª, 61,0 |
+| 13 | Nexo | 54,8 | 77,1 | 48 | −0,74 | 3 | 0 | 0,60 | 12.ª, 61,1 |
+| 14 | Demoscopia | 54,8 | 57,8 | 48 | −0,20 | 18 | 10 | 4,50 | 19.ª, 56,0 |
+| 15 | Opinometre | 54,1 | 87,2 | 24 | −1,13 | 5 | 1 | 1,78 | 23.ª, 53,3 |
+
+- **CENTRA** baja del 1.º al **11.º** puesto (75,3 → 58,4): su rating ajustado es alto (83,1), pero su evidencia es
+  W = 0,83 elecciones frente a k = 1,96, y su Confianza baja de 56 a 48 por no tener generales. La spec esperaba
+  «alrededor del 8.º»; queda 11.º, por debajo de GAD3 (1.º, 6 generales). `num_generals`: CENTRA 0, GAD3 6. Se
+  cumple lo esperado en el plan.
+- **Opina 360** no aparece (`num_polls = 0`); su rating es su Confianza, 64.
+- Otros: Simple Lógica del 17.º al 28.º (57,9 → 45,2), GfK del 11.º al 22.º (62,4 → 50,1), CPS del 13.º al 12.º
+  (61,0 → 54,8), CIS 62.º en los dos (18,8 → 17,2).
+- Peso de la Confianza en el rating, k / (W + k): 10 % para el CIS (W = 16,86), Sigma Dos (17,10) y NC Report
+  (17,56); 12 % para GAD3; mediana del 21 % entre las 24 encuestadoras con 10 o más elecciones y del 41 % entre las
+  41 con 5 o más; 70 % para CENTRA. El texto del método dice «en torno al 10 %» para las de decenas de elecciones
+  («como el CIS o Sigma Dos, W ≈ 17») y «dos tercios» para dos autonómicas del último año (W = 1).
+- Comprobación cruzada: `pollster_ratings` sobre la bolsa de 4088 sondeos reproduce el ranking de `compute_ratings`
+  para 2026-11-29 con una diferencia máxima de 0,005 puntos de rating (redondeo).
+
+### Calidad previa (D3)
+
+Recalculada con el código final (`prior_quality` con las generales hasta hoy): 72 encuestadoras evaluadas, 43 con
+generales, 31 cambian. La tabla coincide exactamente con la de D3; no hay diferencias que anotar.
+
+### σ, τ y la dispersión entre encuestadoras
+
+Bolsa global: 18 ámbitos con `rating_weight > 0`, 4088 sondeos con `bias` evaluable antes de 2026-11-29.
+
+| Estimador de σ | Encuestadoras con ≥ 3 elecciones (62, 872 elecciones) | k = (σ/τ)² | ≥ 5 elecciones (41, 804) | k |
+|---|---|---|---|---|
+| Ponderado por W_e, sin corrección (`measure_event_sigma`, el de la spec) | 0,01350 | 1,82 | 0,01357 | 1,84 |
+| Ponderado por W_e, con corrección de grados de libertad: Σ W_e·r² / Σ_casas (ΣW_e − ΣW_e²/ΣW_e) | 0,01405 | 1,97 | 0,01402 | 1,97 |
+| Mismo peso, sin corrección | 0,01320 | 1,74 | 0,01327 | 1,76 |
+| Mismo peso, con n − 1 | 0,01369 | 1,87 | 0,01362 | 1,86 |
+
+- La spec decía 0,0137; el procedimiento de la spec da hoy 0,01350. Como señaló el revisor de la Task 3, ese
+  estimador mide la dispersión alrededor de la media de cada casa sin corregir los grados de libertad y sale
+  sesgado a la baja. Corregido, el ponderado da 0,0140, justo el valor por defecto (`bias_dev_sigma = 0.014`,
+  k = 1,96). **El código no cambia**: el valor por defecto sigue en 0,014 y `measure_event_sigma` sigue con el
+  procedimiento de la spec. Luis decide si el método de medida pasa al estimador corregido.
+- El texto del método dice «σ … 0,014, medido con las encuestadoras de tres o más elecciones» y «k = 1,96, unas 2
+  elecciones», que valen con los dos estimadores ponderados redondeados a tres decimales.
+- Dispersión de las medias de las casas con ≥ 5 elecciones: 0,0060 (41 casas; 0,00591 sin corrección, 0,00598 con
+  n − 1), como en la spec. Descontado el ruido de cada media (σ²/n_eff, con σ = 0,014), la dispersión real entre
+  casas sería ≈ 0,0034: τ = 0,01 parece ancho, como ya anotan los no objetivos. Sin cambios aquí.
+
+### Tabla de la Intención (autonómicas frente a generales)
+
+Reproducida exactamente con el último sondeo de cada casa a 30 días o menos (65 autonómicas, 14 generales): error
+medio por partido 2,36 / 2,30; margen entre bloques 4,34 / 4,72; error común en el margen 4,46 / 4,09; dispersión
+entre casas 1,28 / 1,68. Correlaciones: 0,04 entre la media autonómica y la general (13 casas con ≥ 3 de cada) y
+0,02 entre mitades de generales (16 casas), con el procedimiento del 20 de octubre. Si una elección sin desviación
+calculable se descarta en lugar de descartar a la casa entera, la primera es 0,09 con 22 casas: la conclusión no
+cambia.
+
+**Bajar el peso de las autonómicas, con el código final.** La Intención decía que pasar de 0,5 a 0,25 subiría sobre
+todo a casas sin generales y con calidad previa alta (GfK, CPS, inPactos, CIES). Eso se midió sin «Implantación».
+Rehecho con el código final, 0,25 sube sobre todo a casas con generales y Confianza alta a las que las autonómicas
+les fueron peor: Simple Lógica +9,6 (28.ª → 13.ª), Ipsos +6,8, CIS +5,4, GESOP +4,0; las casas sin generales bajan
+2,3 puntos de media y las que tienen generales 0,3. El argumento de la Intención ya no vale tal cual. El texto del
+método justifica el 0,5 solo con la tabla de errores (las autonómicas no son más fáciles) y no repite ese argumento.
+Luis decide si revisa el peso con este dato.
+
+### Prueba por criterio con la rúbrica nueva
+
+Desviación de cada casa en cada elección centrada en la media de la elección, escala de sesgo (×100 en log odds
+ratio), bootstrap por casa con 2000 réplicas y semilla 0 (una semilla nueva por comparación). «Generales previas»
+e «Implantación» se calculan a la fecha de cada elección con `get_general_events` (la regla de D3), y la
+transparencia con la condición de identidad. 59 casas evaluadas con elecciones, 775 pares casa-elección.
+
+| Comparación | Diferencia | IC 95 % | Casas |
+|---|---|---|---|
+| Estándares 1 − 0 | −0,31 | [−0,66, +0,07] | 11 / 48 |
+| Generales previas 1 − 0 | −0,01 | [−0,33, +0,32] | 31 / 59 |
+| Implantación 2 − 0 | −0,24 | [−0,50, +0,07] | 9 / 59 |
+| Implantación 1 − 0 | +0,12 | [−0,32, +0,52] | 22 / 59 |
+| Implantación 2 − 1 | −0,36 | [−0,76, +0,13] | 9 / 22 |
+| Independencia alta − baja | −0,34 | [−0,69, +0,12] | 23 / 36 |
+| Transparencia ≥ 2 − < 2 (sin identidad cuenta 0) | +0,72 | [−0,70, +1,02] | 7 / 52 (sin el CIS: +0,05 [−1,07, +0,76], 6 / 52) |
+| Trabajo de campo 3 − < 3 | −0,02 | [−0,40, +0,34] | 29 / 30 |
+
+Las diferencias coinciden con las de la Intención; solo se mueven los extremos de algunos intervalos (por la semilla
+por comparación). Filas nuevas: «Implantación 2 − 1» y «Trabajo de campo». La condición de identidad no cambia la
+transparencia: ninguna casa con transparencia ≥ 2 carece de entidad identificable. El método publica las siete
+filas sin «Implantación 2 − 1».
+
+### Regresión de `tests/integration/test_model.py`
+
+`test_nowcast_regression_seed_42` ya fallaba antes de esta tarea, y no por los ratings: con los ratings guardados
+falla con `KeyError: "['SUMAR'] not in index"` (los partidos de 2026 cambiaron el 2026-10-19: FA en lugar de SUMAR)
+y, con FA, los totales guardados ya son PP 138, PSOE 107, VOX 66, FA 8 (fijados: 141 / 107 / 62 / 8). Con los
+ratings recalculados por el código final (el `weight_rating` de `compute_ratings(save=False, scopes='all')`,
+inyectado como en el backtest) da **PP 139, PSOE 107, VOX 65, FA 8**. No se re-fija: el test lee los ratings
+guardados en la RDS, que no cambian hasta que Luis recalcule. Al recalcular, Luis puede fijar
+`REGRESSION_TOTALS = [139, 107, 65, 8]` con `['PP', 'PSOE', 'VOX', 'FA']` (comprobándolo antes con su base).
+
+### Texto de /metodo/rating
+
+Nueva tarjeta «La evidencia, por elecciones» (`#evidencia`) y tarjeta «La calidad previa» ampliada con «Por qué
+cuentan las generales» (tabla `#difficulty-table`) y «Un prior, no un predictor» (tabla `#criteria-test-table`).
+Cifras del texto: σ 0,014 (código y medida corregida), τ 0,01 (código), k = 1,96 ≈ 2 elecciones (código),
+dispersión 0,006, tabla de errores y tabla por criterio de arriba, 10 % y dos tercios del ejemplo (ranking nuevo).
+El peso de las autonómicas sale del catálogo («cada elección autonómica pesa la mitad que unas generales»). Un test
+(`test_metodo_rating_explains_evidence_by_election`) comprueba σ, τ y k contra los valores por defecto de
+`Computer`. Se corrigió también «pesa más cuantos menos sondeos tiene» en el glosario de /casas y en su texto de
+ayuda («cuantas menos elecciones ha sondeado»).

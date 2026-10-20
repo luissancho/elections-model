@@ -1,29 +1,30 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo calculamos el rating de las encuestadoras?{% endblock %}
-{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa (una rúbrica pública), del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el rebaño se publica aparte.{% endblock %}
+{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa (una rúbrica pública), por qué la evidencia se cuenta por elecciones, del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el rebaño se publica aparte.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
-{#- How much a poll of a regional election weighs in the ratings against one of a general election: the ratio of the
+{#- How much a regional election weighs in the ratings against a general election: the ratio of the
     `rating_weight` of the regional scopes of the catalogue to the national one, in words. -#}
 {% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
 {% set regional_weights = thresholds|rejectattr('code', 'equalto', 'es')|map(attribute='rating_weight')|reject('none')|unique|list %}
 {% macro regional_weight() -%}
 {% if national and national.rating_weight and regional_weights|length == 1 -%}
 {% set ratio = regional_weights[0] / national.rating_weight -%}
-{% if ratio == 0.5%}pesa la mitad que uno de unas generales{% else %}pesa el {{ (ratio * 100)|pct(0) }} de uno de unas generales{% endif %}
+{% if ratio == 0.5%}pesa la mitad que unas generales{% else %}pesa el {{ (ratio * 100)|pct(0) }} de unas generales{% endif %}
 {%- else -%}
-pesa menos que uno de unas generales, según el peso que el catálogo da a su comunidad
+pesa menos que unas generales, según el peso que el catálogo da a su comunidad
 {%- endif %}
 {%- endmacro %}
     {% include '_metodo_nav.html' +%}
     <div id="content" class="stack">
-      {{ m.headline('El rating de una encuestadora mide si sus sondeos se equivocaron más o menos que los demás de la misma elección en las mismas fechas; mientras tiene pocos sondeos, manda una calidad previa.') }}
+      {{ m.headline('El rating de una encuestadora mide si sus sondeos se equivocaron más o menos que los demás de la misma elección en las mismas fechas; mientras ha sondeado pocas elecciones, manda una calidad previa.') }}
       <nav class="section-nav toc" aria-label="Secciones">
         <a href="#que-se-mide">Qué se mide</a>
         <a href="#calidad-previa">La calidad previa</a>
+        <a href="#evidencia">La evidencia, por elecciones</a>
         <a href="#rating-final">Del rating ajustado al rating final</a>
         <a href="#ranking-global">Un ranking global</a>
         <a href="#herding">El rebaño, aparte</a>
@@ -32,7 +33,7 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
         <ul>
           <li>Cada sondeo pasado se compara con el resultado: en el tamaño de los bloques y en el reparto dentro de cada bloque.</li>
           <li>Ese error se compara con el de los sondeos de la misma elección y las mismas fechas: un fallo de todo el sector no penaliza.</li>
-          <li>Con pocos sondeos manda una calidad previa según una rúbrica pública; con muchos, lo medido. El rating va de 0 a 100.</li>
+          <li>Con pocas elecciones sondeadas manda una calidad previa según una rúbrica pública; con muchas, lo medido. La evidencia se cuenta por elecciones, no por sondeos. El rating va de 0 a 100.</li>
           <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el rebaño se publica aparte y solo resta peso.</li>
         </ul>
       {{ m.card_end() }}
@@ -130,48 +131,143 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
           encuestadora muestra el desglose.
         </p>
         <p>
-          El rating final <var>R</var> mezcla esa calidad <var>Q</var> con el rating ajustado
-          <var>R</var><sub>aj</sub>, la nota que sale de los sondeos de la encuestadora (abajo), en proporción a cuántos
-          sondeos la respaldan:
+          <strong>Por qué cuentan las generales.</strong> El criterio «Implantación» tiene dos partes. La de las
+          generales se calcula con los sondeos publicados, a la fecha de cada elección: el rating de una elección
+          pasada no cuenta las generales que vinieron después. La de los estándares (Insights+Analytics España,
+          ESOMAR o la norma ISO 20252) se evalúa a mano, con su fuente, como el resto de la rúbrica.
         </p>
-        <math display="block" aria-label="R igual a n por R ajustado más k por Q, entre n más k">
+        <p>
+          La experiencia en generales entra en la calidad previa, y no rebajando el peso de las autonómicas, porque
+          las autonómicas no son más fáciles de pronosticar. Con el último sondeo de cada encuestadora a 30 días o
+          menos de la votación, en 65 autonómicas y 14 generales:
+        </p>
+        <div class="table-wrap">
+          <table id="difficulty-table">
+            <caption>Error del último sondeo de cada encuestadora a 30 días o menos de la votación, en puntos. La separación entre encuestadoras es la desviación típica de su «Diferencial» en cada elección.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Medida</th>
+                <th scope="col">Autonómicas</th>
+                <th scope="col">Generales</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Error medio por partido</th><td>2,36</td><td>2,30</td></tr>
+              <tr><th scope="row">Error en el margen entre bloques</th><td>4,34</td><td>4,72</td></tr>
+              <tr><th scope="row">Error común de todas las encuestadoras en el margen</th><td>4,46</td><td>4,09</td></tr>
+              <tr><th scope="row">Separación entre encuestadoras en una misma elección</th><td>1,28</td><td>1,68</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Los errores son parecidos. Lo que cambia es que en las autonómicas las encuestadoras se separan menos unas
+          de otras, así que distinguen peor a las que aciertan de las que no. Por eso el peso de las autonómicas no
+          se rebajó más (cada una {{ regional_weight() }}), y la experiencia en generales entra en la calidad previa,
+          que es la que manda cuando hay poca evidencia.
+        </p>
+        <p>
+          <strong>Un prior, no un predictor.</strong> La calidad previa es un prior de criterios observables y
+          documentados, no un predictor validado del acierto. Se ha comprobado con las elecciones pasadas: para cada
+          criterio, si las encuestadoras de un grupo se desviaron menos que las del otro en las mismas elecciones.
+          Con 59 encuestadoras evaluadas, ninguna diferencia es concluyente: todos los intervalos incluyen el cero.
+        </p>
+        <div class="table-wrap">
+          <table id="criteria-test-table">
+            <caption>Diferencia entre la desviación media de las encuestadoras de los dos grupos en las mismas elecciones, en la escala del «Diferencial» (negativa: el primer grupo se equivocó menos), con su intervalo del 95% remuestreando encuestadoras. Una encuestadora puede estar en los dos grupos de «Implantación» o de «Generales previas» en elecciones distintas.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Comparación</th>
+                <th scope="col">Diferencia</th>
+                <th scope="col">Intervalo del 95%</th>
+                <th scope="col">Encuestadoras</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Implantación 2 frente a 0</th><td>−0,24</td><td>−0,50 a +0,07</td><td>9 / 59</td></tr>
+              <tr><th scope="row">Implantación 1 frente a 0</th><td>+0,12</td><td>−0,32 a +0,52</td><td>22 / 59</td></tr>
+              <tr><th scope="row">Generales previas, sí frente a no</th><td>−0,01</td><td>−0,33 a +0,32</td><td>31 / 59</td></tr>
+              <tr><th scope="row">Estándares, sí frente a no</th><td>−0,31</td><td>−0,66 a +0,07</td><td>11 / 48</td></tr>
+              <tr><th scope="row">Independencia 2 frente a menos de 2</th><td>−0,34</td><td>−0,69 a +0,12</td><td>23 / 36</td></tr>
+              <tr><th scope="row">Transparencia 2 o más frente a menos de 2</th><td>+0,72</td><td>−0,70 a +1,02</td><td>7 / 52</td></tr>
+              <tr><th scope="row">Trabajo de campo 3 frente a menos de 3</th><td>−0,02</td><td>−0,40 a +0,34</td><td>29 / 30</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          La diferencia de la transparencia es casi toda del CIS: sin él, +0,05. Por eso la calidad previa pesa poco,
+          unas 2 elecciones de evidencia, y se diluye a medida que la encuestadora acumula elecciones.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('evidencia', 'La evidencia, por elecciones', 'La calidad previa pesa más cuantas menos elecciones ha sondeado la encuestadora. La evidencia se cuenta por elecciones, no por sondeos, porque los sondeos de una misma elección comparten su suerte.') }}
+        <p>
+          El rating final <var>R</var> mezcla la calidad previa <var>Q</var> con el rating ajustado
+          <var>R</var><sub>aj</sub>, la nota que sale de los sondeos de la encuestadora (abajo), en proporción a la
+          evidencia <var>W</var> que la respalda:
+        </p>
+        <math display="block" aria-label="R igual a W por R ajustado más k por Q, entre W más k">
           <mrow>
             <mi>R</mi><mo>=</mo>
             <mfrac>
-              <mrow><mi>n</mi><mo>·</mo><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mo>·</mo><mi>Q</mi></mrow>
-              <mrow><mi>n</mi><mo>+</mo><mi>k</mi></mrow>
+              <mrow><mi>W</mi><mo>·</mo><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mo>·</mo><mi>Q</mi></mrow>
+              <mrow><mi>W</mi><mo>+</mo><mi>k</mi></mrow>
             </mfrac>
           </mrow>
         </math>
         <p>
-          <var>k</var> vale 3: la calidad previa pesa como tres sondeos. Es, redondeado, lo que mide la relación
-          entre lo que una encuestadora varía de sondeo a sondeo, más allá de su error muestral, y lo que varían las
-          encuestadoras entre sí: entre 3 y 4. Con <var>n</var> = 3, mitad y mitad; con menos, manda la calidad previa;
-          con muchos más, lo medido. Una encuestadora sin sondeos evaluables tiene como rating su calidad previa.
-        </p>
-        <p>
-          <var>n</var> no es el número bruto de sondeos, sino su suma ponderada. Cada sondeo pesa por su
-          muestra y su sobrerrepresentación, los dos primeros factores del peso en el promedio, y además:
+          <strong>Por qué por elecciones.</strong> Los sondeos de una encuestadora en una misma elección no son
+          pruebas independientes: si su método acierta o falla con un partido, lo hace en todos sus sondeos de esa
+          elección. Lo que importa es cuánto cambia su desviación de una elección a otra, frente a lo que se
+          diferencian las encuestadoras entre sí. En la escala de los log-odds:
         </p>
         <ul>
-          <li><strong>Por su posición:</strong> en cada elección, el último sondeo de la encuestadora pesa 1, el
-            anterior 0,5, el anterior 0,25 y así sucesivamente. Los sondeos con un peso total por debajo de una
-            centésima se descartan.</li>
+          <li><strong>σ</strong>, lo que varía la desviación de una encuestadora de una elección a otra: 0,014,
+            medido con las encuestadoras de tres o más elecciones.</li>
+          <li><strong>τ</strong>, la escala de las diferencias entre encuestadoras, la misma del rating ajustado:
+            0,01.</li>
+          <li>Lo que se separan de verdad las desviaciones medias de las encuestadoras con cinco o más elecciones:
+            0,006.</li>
+        </ul>
+        <p>
+          El ruido de una sola elección es mayor que la diferencia real entre encuestadoras: un buen resultado en dos
+          elecciones puede ser suerte, aunque sume una docena de sondeos.
+        </p>
+        <p>
+          <var>k</var> es el peso de la calidad previa, contado en elecciones:
+          <var>k</var> = (σ/τ)<sup>2</sup> = (0,014/0,01)<sup>2</sup> = 1,96, unas 2 elecciones. Con
+          <var>W</var> = 2, mitad y mitad; con menos, manda la calidad previa; con muchas más, lo medido. Una
+          encuestadora sin sondeos evaluables tiene como rating su calidad previa.
+        </p>
+        <p>
+          <var>W</var> no es el número bruto de elecciones, sino su suma ponderada:
+        </p>
+        <ul>
           <li><strong>Por su antigüedad:</strong> cada año de distancia con la elección más reciente multiplica
-            el peso por 0,9.</li>
-          <li><strong>Por su ámbito:</strong> cada sondeo de unas autonómicas {{ regional_weight() }} (ver
+            el peso de una elección por 0,9.</li>
+          <li><strong>Por su ámbito:</strong> cada elección autonómica {{ regional_weight() }} (ver
             <a href="#ranking-global">Un ranking global</a>).</li>
         </ul>
         <p>
-          Con estos pesos, una encuestadora con decenas de sondeos en varias elecciones tiene una calidad previa que
-          pesa en torno al 10% de su rating, y una recién llegada está dominada por ella.
+          Dentro de cada elección, los sondeos deciden la desviación de la encuestadora en ella, pero no suman
+          evidencia: veinte sondeos de una misma elección cuentan como una elección. Cada sondeo pesa por su muestra
+          y su sobrerrepresentación, los dos primeros factores del peso en el promedio, y por su posición: el último
+          sondeo de la encuestadora en esa elección pesa 1, el anterior 0,5, el anterior 0,25 y así sucesivamente. Los
+          sondeos con un peso total, contando la antigüedad y el ámbito, por debajo de una centésima se descartan.
+        </p>
+        <p>
+          <strong>Un ejemplo.</strong> Dos autonómicas del último año suman <var>W</var> = 1, la evidencia de unas
+          generales: con <var>k</var> cerca de 2, la calidad previa pesa dos tercios del rating. Una encuestadora con
+          decenas de elecciones, como el CIS o Sigma Dos, suma <var>W</var> ≈ 17, y su calidad previa pesa en torno al
+          10% de su rating.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('rating-final', 'Del rating ajustado al rating final', 'Las desviaciones de los sondeos de una encuestadora se resumen en una sola, se convierten en una nota de 0 a 100 y se mezclan con la calidad previa.') }}
         <p>
-          <strong>La desviación de la encuestadora.</strong> Es la media de las desviaciones de sus sondeos, con los
-          pesos de arriba. Se encoge otra vez hacia cero según su incertidumbre: con pocos sondeos ponderados, la
-          encuestadora se acerca a la media del sector, porque pocos aciertos pueden ser suerte.
+          <strong>La desviación de la encuestadora.</strong> Primero, la de cada elección: la media de las
+          desviaciones de sus sondeos en ella, con los pesos de la sección anterior. Después, la media de sus
+          elecciones, cada una con su peso. Esa media se encoge otra vez hacia cero según su incertidumbre,
+          σ/√<var>n</var>, con <var>n</var> el número efectivo de elecciones (el de elecciones si todas pesan igual,
+          algo menos si pesan distinto): con pocas elecciones, la encuestadora se acerca a la media del sector, porque
+          pocos aciertos pueden ser suerte.
         </p>
         <p>
           <strong>El rating ajustado.</strong> Esa desviación <var>d</var> se convierte en una nota de 0 a 100:
@@ -215,7 +311,7 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
             sí; las generales de julio de 2023 sí ven las autonómicas de mayo.</li>
         </ul>
         <p>
-          Las autonómicas cuentan menos: cada sondeo de unas autonómicas {{ regional_weight() }}. Es el peso que
+          Las autonómicas cuentan menos: cada elección autonómica {{ regional_weight() }}. Es el peso que
           el catálogo de ámbitos da a cada comunidad, y es el mismo en todos los rankings, también en el de la
           propia comunidad.
         </p>
@@ -231,7 +327,8 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
             100.</li>
           <li><strong>Sondeos</strong>: los que entran en el cálculo, tras descartar los de peso ínfimo.
             <strong>Elecciones</strong>: en cuántas publicó, contando cada ámbito y fecha por separado (dos
-            autonómicas del mismo día cuentan dos).</li>
+            autonómicas del mismo día cuentan dos). <strong>Generales</strong>: cuántas elecciones generales ha
+            sondeado antes de la próxima, el dato del criterio «Implantación».</li>
           <li><strong>Error medio</strong>: la distancia media, en puntos, entre sus sondeos y el resultado de
             cada partido principal. <strong>Sesgo bloques</strong>: la media, con signo, de cuánto se
             equivocaron sus sondeos en la diferencia entre los dos bloques principales. Las dos son medias

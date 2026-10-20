@@ -163,11 +163,11 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
             'en el promedio.' if kind == 'path' else
             'La nota, de 0 a 100, con la que la encuestadora entra en el promedio de la próxima elección: mezcla el '
             'sesgo de sus sondeos pasados, comparado con el de los sondeos de las demás en las mismas fechas, con su '
-            'confianza, que pesa más cuantos menos sondeos tiene. Cuanto más alto, más pesan sus sondeos.'),
+            'confianza, que pesa más cuantas menos elecciones ha sondeado. Cuanto más alto, más pesan sus sondeos.'),
         'quality': (
             'Lo que se supone de la encuestadora antes de mirar sus sondeos, de 0 a 100, según una rúbrica pública de '
-            'cuatro criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras tiene pocos '
-            'sondeos.' + rule),
+            'cuatro criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras ha '
+            'sondeado pocas elecciones.' + rule),
         'num_events': ('En cuántas elecciones publicó sondeos, contando cada ámbito y fecha por separado: dos '
                        'autonómicas del mismo día cuentan dos.'),
         'num_generals': ('En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el '

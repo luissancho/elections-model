@@ -2202,7 +2202,7 @@ def test_metodo_escanos_text(api):
 
 def test_metodo_rating_text(api):
     page = html(call(api, '/metodo/rating')[2])
-    for anchor in ('que-se-mide', 'calidad-previa', 'rating-final', 'ranking-global', 'herding'):
+    for anchor in ('que-se-mide', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global', 'herding'):
         assert 'id="' + anchor + '"' in page, anchor
     assert 'la mitad' in page or '50%' in page  # rating_weight 0,5 leído del catálogo
     assert '<math' in page
@@ -2218,10 +2218,31 @@ def test_metodo_rating_text(api):
     assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
     assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text
     assert 'En las tablas del sitio aparece como «Confianza»' in text and 'es la columna «Confianza»' in text
-    assert 'entre 3 y 4' in text and 'en torno al 10' in text
+    assert 'cuentan como una elección' in text and 'pesa en torno al 10% de su rating' in text
+    assert 'la calidad previa pesa dos tercios del rating' in text and 'entre 3 y 4' not in text
     assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
     assert 'puesta a mano' not in text and 'rúbrica pública' in text
     assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+
+
+def test_metodo_rating_explains_evidence_by_election(api):
+    """/metodo/rating counts the evidence in elections, quotes sigma, tau and k as the code sets them (k ~ 2
+    elections, not 3 polls) and presents the prior quality as a prior of observable criteria."""
+    from inspect import signature
+
+    from mtpy.lib.computer import Computer
+
+    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
+    params = signature(Computer.__init__).parameters
+    sigma, tau = params['bias_dev_sigma'].default, params['bias_dev_tau'].default
+    k = (sigma / tau) ** 2
+    assert 'por elecciones' in text and '<var>k</var>' in text
+    assert '{:.3f}'.format(sigma).replace('.', ',') in text and 'τ es la escala, {}'.format(
+        '{:.2f}'.format(tau).replace('.', ',')) in text
+    assert '{:.2f}'.format(k).replace('.', ',') in text and '2 elecciones' in text
+    assert 'un prior de criterios observables' in text and 'no un predictor validado' in text
+    assert 'id="criteria-test-table"' in text and 'id="difficulty-table"' in text and 'Implantación' in text
+    assert 'la calidad previa pesa como tres sondeos' not in text and 'tres sondeos' not in text
 
 
 def test_metodo_rating_reads_the_rubric_from_the_catalogue(api, monkeypatch):
@@ -2233,19 +2254,19 @@ def test_metodo_rating_reads_the_rubric_from_the_catalogue(api, monkeypatch):
 
 def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypatch):
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'cada sondeo de unas autonómicas pesa la mitad que uno de unas generales' in page
+    assert 'cada elección autonómica pesa la mitad que unas generales' in page
     assert 'href="/metodo/promedio#peso"' in page and 'href="/casas?scope=es"' in page and 'href="/metodo/backtest"' in page
     assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'En resumen' in page
     changed = webapi.catalogue().copy()
     changed.loc[changed.index != 'es', 'rating_weight'] = 0.25
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa el 25% de uno de unas generales' in page and 'la mitad' not in page
+    assert 'pesa el 25% de unas generales' in page and 'la mitad' not in page
     mixed = changed.copy()
     mixed.loc['es-md', 'rating_weight'] = 0.5
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa menos que uno de unas generales' in page and 'la mitad' not in page
+    assert 'pesa menos que unas generales' in page and 'la mitad' not in page
 
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
