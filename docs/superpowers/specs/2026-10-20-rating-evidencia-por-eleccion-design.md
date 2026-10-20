@@ -197,7 +197,7 @@ En `Computer.pollster_ratings`. Una «elección» es un par ámbito y fecha (`ev
   `bias_within`, `bias`) siguen ponderadas por sondeo con el peso de hoy: describen sus sondeos, no son el rating.
   Solo cambian `bias_dev_adj` («Diferencial» en el ranking), `bias_dev_err`, `rating_adj`, `rating` y
   `weight_rating`.
-- Se añaden `num_events_w` (W) y `num_generals`: el número de generales con sondeos de la casa celebradas antes de la
+- Se añaden `num_events_w` (W) y `num_national_events`: el número de generales con sondeos de la casa celebradas antes de la
   elección puntuada, con la regla de recuento de D3 (no la bolsa del rating).
 - Luis añade las columnas a mano en la RDS (prefiere hacer él los cambios de esquema). El constructor deja el
   `ALTER TABLE` escrito en la sección de pasos de Luis y actualiza el modelo de la tabla en `mtpy/models` y la réplica
@@ -223,7 +223,7 @@ se comprobarán con un script de verificación contra la base, en modo lectura.
   - Los textos hablan de lo que se comprueba, no del tamaño: GfK, una multinacional, tiene 0 porque en la base solo
     tiene autonómicas.
   - El criterio es mixto: la parte de generales se calcula y la de estándares se evalúa a mano, con su fuente. El JSON
-    lo marca (por ejemplo `"computed": "general"`) para que el validador no busque la columna en el CSV y la web
+    lo marca (por ejemplo `"computed": "national"`) para que el validador no busque la columna en el CSV y la web
     presente cada parte con su origen.
 
 `data/pollsters-quality.csv` no cambia de columnas. `identity`, `identity_source`, `standards` y `standards_source` se
@@ -231,7 +231,7 @@ siguen validando (0-1, con fuente si vale 1), porque son la evidencia de la cond
 
 `mtpy/lib/quality.py`:
 - Puntos manuales = `fieldwork + transparency·[identity = 1] + independence` (0-8).
-- Implantación a la fecha de una elección = `general · (1 + standards)`, donde `general` vale 1 si la casa tiene al
+- Implantación a la fecha de una elección = `national · (1 + standards)`, donde `national` vale 1 si la casa tiene al
   menos una general en el recuento (abajo) celebrada estrictamente antes de esa fecha.
 - Calidad a esa fecha = `max(floor, per_point · (puntos manuales + implantación))`.
 - Las casas sin evaluar tienen 0 puntos manuales y `standards = 0`: valen 5, u 8 si tienen generales.
@@ -274,7 +274,7 @@ código real y la deja en Resultados.
 ### D4. Web
 
 - **Ranking de /casas:**
-  - Columna «Generales» (`num_generals` de la última fila nacional de ratings: el número, no el criterio), justo después de «Elecciones», con su
+  - Columna «Generales» (`num_national_events` de la última fila nacional de ratings: el número, no el criterio), justo después de «Elecciones», con su
     `title` y su entrada en el glosario desde la misma fuente (`pages.casas.table_columns`, `COLUMN_LABELS`).
   - Filtro «Con experiencia en generales» en la barra de filtros del ranking, apagado por defecto, con el mismo
     mecanismo y estilo que los filtros existentes. Si los filtros se guardan en el hash o en la URL, este también.
@@ -296,7 +296,7 @@ código real y la deja en Resultados.
   - Como en fases anteriores, cada cifra y afirmación del texto se comprueba contra el código o los datos.
 - **Rúbrica en el método:** se genera desde el JSON, así que debe salir bien sin tocarla. El constructor lo comprueba
   y añade la frase de la condición de identidad si la plantilla no la muestra.
-- **API** `/api/v1/pollsters/{id}` y la de ratings: incluyen `num_generals` y `num_events_w`, y el desglose de la
+- **API** `/api/v1/pollsters/{id}` y la de ratings: incluyen `num_national_events` y `num_events_w`, y el desglose de la
   calidad incluye `implantation` con sus dos partes.
 - Palabras: «encuestadora» (nunca «casa» en los textos de /casas, `test_houses_pages_use_encuestadora`), «Confianza»
   como nombre público de la calidad previa, «Implantación» para el criterio y «Generales» para la columna.
@@ -342,9 +342,9 @@ código real y la deja en Resultados.
    actual de «cantidad de evidencia ponderada».
 3. **Las casas sin evaluar con generales valen 8, no 5:** la parte de generales es un dato, no una evaluación.
 4. **Recuento de generales:** sin filtrar por `mtype`, sin `wban`/`exit` y por una vía propia, no desde la bolsa del
-   rating. La misma cifra alimenta el criterio, `num_generals` y la columna del ranking, así que no pueden
+   rating. La misma cifra alimenta el criterio, `num_national_events` y la columna del ranking, así que no pueden
    contradecirse. Agregadores como KeyData cuentan sus generales aunque no hagan campo: su campo ya vale 0.
-5. **`num_polls_w` se conserva** como dato informativo. Se añaden `num_events_w` y `num_generals`, en lugar de
+5. **`num_polls_w` se conserva** como dato informativo. Se añaden `num_events_w` y `num_national_events`, en lugar de
    reutilizar columnas con otro significado.
 6. **Directorio del backtest:** `files/backtest/rating-por-eleccion/` (está en `files/`, ignorado por git).
 7. **Opina 360 no necesita arreglo aparte:** el ranking ya deja fuera a las casas sin sondeos evaluables
@@ -365,10 +365,10 @@ código real y la deja en Resultados.
 
 El orden importa; hacerlo en esta secuencia:
 
-1. `ALTER TABLE elections.pollsters_ratings ADD COLUMN num_events_w double precision, ADD COLUMN num_generals integer;`
+1. `ALTER TABLE elections.pollsters_ratings ADD COLUMN num_events_w double precision, ADD COLUMN num_national_events integer;`
    (ajustar al tipo de las demás columnas numéricas de la tabla).
 2. Añadir a `PollstersRatings.meta` (`mtpy/models/elections.py`) las dos líneas exactas, y commitear:
-   `'num_events_w': 'num',` y `'num_generals': ['int', 2],`. El código de esta tarea no las incluye a propósito.
+   `'num_events_w': 'num',` y `'num_national_events': ['int', 2],`. El código de esta tarea no las incluye a propósito.
 3. `save_catalogues()`, para que `pollsters.quality` sea la calidad de hoy con el criterio nuevo.
 4. Recalcular los ratings: `python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'`.
 5. Publicar: `publish analysis` con `scopes: all` (ahora incluye `es-an`, `es-ar`, `es-cl` y `es-ex`), y después los
@@ -477,7 +477,7 @@ es el ranking guardado hoy en la RDS (el código anterior a este plan).
 
 - **CENTRA** baja del 1.º al **11.º** puesto (75,3 → 58,4): su rating ajustado es alto (83,1), pero su evidencia es
   W = 0,83 elecciones frente a k = 1,96, y su Confianza baja de 56 a 48 por no tener generales. La spec esperaba
-  «alrededor del 8.º»; queda 11.º, por debajo de GAD3 (1.º, 6 generales). `num_generals`: CENTRA 0, GAD3 6. Se
+  «alrededor del 8.º»; queda 11.º, por debajo de GAD3 (1.º, 6 generales). `num_national_events`: CENTRA 0, GAD3 6. Se
   cumple lo esperado en el plan.
 - **Opina 360** no aparece (`num_polls = 0`); su rating es su Confianza, 64.
 - Otros: Simple Lógica del 17.º al 28.º (57,9 → 45,2), GfK del 11.º al 22.º (62,4 → 50,1), CPS del 13.º al 12.º
@@ -537,7 +537,7 @@ Luis decide si revisa el peso con este dato.
 
 Desviación de cada casa en cada elección centrada en la media de la elección, escala de sesgo (×100 en log odds
 ratio), bootstrap por casa con 2000 réplicas y semilla 0 (una semilla nueva por comparación). «Generales previas»
-e «Implantación» se calculan a la fecha de cada elección con `get_general_events` (la regla de D3), y la
+e «Implantación» se calculan a la fecha de cada elección con `get_national_events` (la regla de D3), y la
 transparencia con la condición de identidad. 59 casas evaluadas con elecciones, 775 pares casa-elección.
 
 | Comparación | Diferencia | IC 95 % | Casas |

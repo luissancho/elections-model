@@ -4,14 +4,14 @@
 /**
  * Which rows of the ranking are shown, filtered out and still to load.
  *
- * @param {number[]} generals general elections each row's pollster has polled, in the order of the table
- * @param {boolean} onlyGenerals true to drop the rows with no general elections
+ * @param {number[]} nationalEvents general elections each row's pollster has polled, in the order of the table
+ * @param {boolean} onlyNationalEvents true to drop the rows with no general elections
  * @param {number} shown how many unfiltered rows to show (the first ones)
  * @returns {{visible: boolean[], filtered: boolean[], more: boolean}} `filtered[i]`: row excluded by the filter;
  *   `visible[i]`: one of the first `shown` unfiltered rows; `more`: unfiltered rows are left unshown
  */
-export function rankingVisibility(generals, onlyGenerals, shown) {
-  const filtered = generals.map((count) => onlyGenerals && count === 0);
+export function rankingVisibility(nationalEvents, onlyNationalEvents, shown) {
+  const filtered = nationalEvents.map((count) => onlyNationalEvents && count === 0);
   let taken = 0;
   const visible = filtered.map((out) => {
     if (out || taken >= shown) {

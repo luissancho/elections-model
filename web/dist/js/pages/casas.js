@@ -140,11 +140,11 @@ function wireViewSwitch(fieldsetId, inputName, wrapIds) {
 
 /**
  * Wire the "Solo con experiencia en generales" filter of the ranking: on change, show the first batch of the rows
- * with general elections (`data-generals`), mark the others as filtered (so "Cargar más" skips them) and show the
+ * with general elections (`data-national-events`), mark the others as filtered (so "Cargar más" skips them) and show the
  * button only while rows are left. The control works with JavaScript only, so the server renders it hidden.
  */
-function wireGeneralsFilter() {
-  const input = document.getElementById('ranking-generals');
+function wireNationalEventsFilter() {
+  const input = document.getElementById('ranking-national-events');
   const table = document.getElementById('ranking-table');
   if (!input || !table) {
     return;
@@ -152,9 +152,9 @@ function wireGeneralsFilter() {
   const button = document.getElementById('ranking-more');
   const batch = Number(button?.dataset.batch) || Infinity;
   const rows = [...table.querySelectorAll('tbody tr')];
-  const generals = rows.map((row) => Number(row.dataset.generals) || 0);
+  const nationalEvents = rows.map((row) => Number(row.dataset.nationalEvents) || 0);
   const apply = () => {
-    const {visible, filtered, more} = rankingVisibility(generals, input.checked, batch);
+    const {visible, filtered, more} = rankingVisibility(nationalEvents, input.checked, batch);
     rows.forEach((row, i) => {
       row.hidden = !visible[i];
       row.toggleAttribute('data-filtered', filtered[i]);
@@ -173,7 +173,7 @@ function wireGeneralsFilter() {
 /** Wire the "Cargar más" of the ranking and draw the charts whose container is present and has data. */
 function paint() {
   wireMore('ranking-more', 'ranking-table');
-  wireGeneralsFilter();
+  wireNationalEventsFilter();
   wireViewSwitch('last-view', 'lview', {resultado: 'profile-last-wrap', consenso: 'profile-last-consensus-wrap'});
   wireViewSwitch('effects-view', 'eview', {resultado: 'profile-effects-wrap', ciclo: 'profile-effects-cycle-wrap'});
   const {grid = null, path = [], today = null, bullseye = [], blocks = []} = readInitial();

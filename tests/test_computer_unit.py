@@ -465,27 +465,27 @@ def test_prior_quality_is_taken_at_the_date_of_each_target():
     def prior(target):
         later = pd.isnull(target) or pd.Timestamp(target) > pd.Timestamp('2023-07-24')
         return pd.DataFrame({
-            'quality': [56. if later else 40.] * 4, 'num_generals': [1 if later else 0] * 4
+            'quality': [56. if later else 40.] * 4, 'num_national_events': [1 if later else 0] * 4
         }, index=pd.Index([1, 2, 3, 4], name='pollster_id'))
 
     out = c.rate_events(
         pool(ES19), [JULY23, pd.Timestamp('2026-11-29')], {'es': 1.}, c.pollsters, prior=prior
     ).set_index(['event_date', 'pollster_id'])
     before, after = out.loc[JULY23], out.loc[pd.Timestamp('2026-11-29')]
-    assert before.loc[3, 'quality'] == pytest.approx(.40) and before.loc[3, 'num_generals'] == 0
-    assert after.loc[3, 'quality'] == pytest.approx(.56) and after.loc[3, 'num_generals'] == 1
+    assert before.loc[3, 'quality'] == pytest.approx(.40) and before.loc[3, 'num_national_events'] == 0
+    assert after.loc[3, 'quality'] == pytest.approx(.56) and after.loc[3, 'num_national_events'] == 1
     # C has no evidence: its rating is its prior quality on each date
     assert before.loc[3, 'rating'] == pytest.approx(before.loc[3, 'quality'])
     assert after.loc[3, 'rating'] == pytest.approx(after.loc[3, 'quality'])
 
 
-def test_without_prior_the_pollsters_quality_is_used_and_num_generals_is_null():
+def test_without_prior_the_pollsters_quality_is_used_and_num_national_events_is_null():
     c = bare_computer()
     out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
-    assert out['quality'].eq(.6).all() and out['num_generals'].isnull().all()
+    assert out['quality'].eq(.6).all() and out['num_national_events'].isnull().all()
 
 
-def test_compute_ratings_builds_the_prior_from_the_general_events(monkeypatch):
+def test_compute_ratings_builds_the_prior_from_the_national_events(monkeypatch):
     from mtpy.lib import computer
 
     c = bare_computer()
@@ -495,7 +495,7 @@ def test_compute_ratings_builds_the_prior_from_the_general_events(monkeypatch):
     monkeypatch.setattr(computer, 'read_quality', lambda criteria: pd.DataFrame({
         'pollster_id': [1], 'fieldwork': [2], 'transparency': [2], 'independence': [1], 'identity': [1],
         'standards': [1]}))
-    monkeypatch.setattr(computer, 'get_general_events', lambda: pd.DataFrame({
+    monkeypatch.setattr(computer, 'get_national_events', lambda: pd.DataFrame({
         'pollster_id': [1, 1], 'event_date': [pd.Timestamp('2023-07-23'), pd.Timestamp('2019-11-10')]}))
     seen = {}
 
@@ -507,5 +507,5 @@ def test_compute_ratings_builds_the_prior_from_the_general_events(monkeypatch):
     with pytest.raises(RuntimeError):
         c.compute_ratings()
     prior = seen['prior']
-    assert prior(pd.Timestamp('2023-07-23')).loc[1, 'num_generals'] == 1
-    assert prior(pd.NaT).loc[1, 'num_generals'] == 2
+    assert prior(pd.Timestamp('2023-07-23')).loc[1, 'num_national_events'] == 1
+    assert prior(pd.NaT).loc[1, 'num_national_events'] == 2

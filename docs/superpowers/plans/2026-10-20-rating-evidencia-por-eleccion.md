@@ -4,7 +4,7 @@
 
 **Goal:** El rating cuenta la evidencia por elecciones, la calidad previa gana el criterio «Implantación» (generales + estándares) en lugar de «Identidad» y «Estándares», el ranking muestra las generales de cada encuestadora con un filtro, y el análisis de los ámbitos recién votados se publica.
 
-**Architecture:** El rating sigue en `Computer.pollster_ratings`/`rate_events` (`mtpy/lib/computer.py`), ahora agregando por elección antes de promediar y recibiendo la calidad previa de cada elección puntuada desde `mtpy/lib/quality.py`, que pasa a calcularla a una fecha con las generales de cada casa (`data.get_general_events`). La web lee las columnas nuevas (`num_generals`, `num_events_w`) de `pollsters_ratings`. El backtest gana una opción para recalcular los ratings en memoria e inyectar `weight_rating` en el `Forecaster`, sin escribir en la RDS.
+**Architecture:** El rating sigue en `Computer.pollster_ratings`/`rate_events` (`mtpy/lib/computer.py`), ahora agregando por elección antes de promediar y recibiendo la calidad previa de cada elección puntuada desde `mtpy/lib/quality.py`, que pasa a calcularla a una fecha con las generales de cada casa (`data.get_national_events`). La web lee las columnas nuevas (`num_national_events`, `num_events_w`) de `pollsters_ratings`. El backtest gana una opción para recalcular los ratings en memoria e inyectar `weight_rating` en el `Forecaster`, sin escribir en la RDS.
 
 **Tech Stack:** Python 3.11, pandas, numpy, scipy, Jinja2, JS de módulos ES en `web/dist/js` (tests con `node`), pytest.
 
@@ -19,7 +19,7 @@
 - Palabras públicas: «encuestadora» (nunca «casa» en /casas: `test_houses_pages_use_encuestadora`), «Confianza» (nombre público de la calidad previa), «Implantación» (criterio), «Generales» (columna y filtro). Textos en español; código, docstrings y comentarios en inglés, como el código de alrededor.
 - PEP8, docstring numpy en cada función nueva o cambiada, mismo estilo que el fichero (AGENTS.md).
 - Toda la suite (`pytest -q`, 1134 tests hoy) en verde al final de cada tarea.
-- Las columnas nuevas de `elections.pollsters_ratings` (`num_events_w`, `num_generals`) las crea Luis a mano; el código solo las declara en el modelo.
+- Las columnas nuevas de `elections.pollsters_ratings` (`num_events_w`, `num_national_events`) las crea Luis a mano; el código solo las declara en el modelo.
 
 ## Review Focus
 
@@ -227,7 +227,7 @@ Run: `python backtest/run_backtest.py --scope es --recompute-ratings --out files
 **Files:**
 - Modify: `data/pollsters-quality-criteria.json`
 - Modify: `mtpy/lib/quality.py`
-- Modify: `mtpy/lib/data.py` (`get_general_events` nueva, `save_catalogues`)
+- Modify: `mtpy/lib/data.py` (`get_national_events` nueva, `save_catalogues`)
 - Test: `tests/test_quality_unit.py`, `tests/test_data_files.py`, `tests/test_data_unit.py`
 
 **Interfaces:**
@@ -235,13 +235,13 @@ Run: `python backtest/run_backtest.py --scope es --recompute-ratings --out files
   - `EVIDENCE_KEYS = ('identity', 'standards')`: columnas del CSV que no son criterios pero se validan (0-1, fuente si vale 1).
   - `evaluated_keys(criteria) -> list`: criterios sin `computed` (los que el CSV puntúa: `fieldwork`, `transparency`, `independence`).
   - `manual_points(fieldwork, transparency, independence, identity) -> int`: `fieldwork + (transparency if identity == 1 else 0) + independence`; acepta escalares o Series (vectorizado).
-  - `implantation_points(n_generals, standards) -> int`: `(n_generals > 0) * (1 + standards)`; escalares o Series.
-  - `count_generals(general_events: pd.DataFrame, before: Optional[pd.Timestamp] = None) -> pd.Series`: índice `pollster_id`, número de fechas distintas de `general_events` (`pollster_id`, `event_date`) estrictamente anteriores a `before` (todas con `None` o `NaT`).
-  - `prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_generals: pd.Series) -> pd.DataFrame`: índice `pollster_id`, columnas `num_generals`, `manual`, `implantation`, `points`, `quality`; las no evaluadas tienen `manual = 0` y `standards = 0`; `quality = max(floor, per_point * points)`.
+  - `implantation_points(n_national_events, standards) -> int`: `(n_national_events > 0) * (1 + standards)`; escalares o Series.
+  - `count_national_events(national_events: pd.DataFrame, before: Optional[pd.Timestamp] = None) -> pd.Series`: índice `pollster_id`, número de fechas distintas de `national_events` (`pollster_id`, `event_date`) estrictamente anteriores a `before` (todas con `None` o `NaT`).
+  - `prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_national_events: pd.Series) -> pd.DataFrame`: índice `pollster_id`, columnas `num_national_events`, `manual`, `implantation`, `points`, `quality`; las no evaluadas tienen `manual = 0` y `standards = 0`; `quality = max(floor, per_point * points)`.
   - `quality_breakdown(record: Optional[dict], criteria: dict) -> dict`: desglose de una fila de la réplica (`pollsters_quality`, cuyo `points` es el total de hoy): `{'rows': [...], 'manual', 'implantation', 'general': bool, 'transparency_void': bool}`; lo usan el perfil y la API (Task 7).
   - `read_quality` deja de calcular `points`/`quality` y añade `manual` (int).
-  - `pollsters_quality_values(pollsters, quality, scale, n_generals) -> pd.Series` (nuevo argumento obligatorio `n_generals`).
-- Produces (en `mtpy/lib/data.py`): `get_general_events() -> pd.DataFrame` con `pollster_id`, `event_date`, una fila por casa y general (`event_scope = 'es'`) con algún sondeo de `bias` no nulo y `ctype` distinto de `wban` y `exit` (nulo cuenta), sin filtro de `mtype`. Mismo patrón que `get_pollster_events` (`Polls().get_results(query=dict(filters=[...]))`).
+  - `pollsters_quality_values(pollsters, quality, scale, n_national_events) -> pd.Series` (nuevo argumento obligatorio `n_national_events`).
+- Produces (en `mtpy/lib/data.py`): `get_national_events() -> pd.DataFrame` con `pollster_id`, `event_date`, una fila por casa y general (`event_scope = 'es'`) con algún sondeo de `bias` no nulo y `ctype` distinto de `wban` y `exit` (nulo cuenta), sin filtro de `mtype`. Mismo patrón que `get_pollster_events` (`Polls().get_results(query=dict(filters=[...]))`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -249,14 +249,14 @@ Run: `python backtest/run_backtest.py --scope es --recompute-ratings --out files
 - `test_criteria_are_four_and_sum_ten`: claves `['fieldwork', 'transparency', 'independence', 'implantation']`, `max_points == 10`, `implantation` con `max 2`, `computed == 'general'` y niveles 0-2 con los textos de la spec; `evaluated_keys == ['fieldwork', 'transparency', 'independence']`.
 - `test_identity_voids_transparency`: `manual_points(3, 2, 1, identity=0) == 4` y `manual_points(3, 2, 1, identity=1) == 6`.
 - `test_implantation_needs_a_general_and_standards_on_top`: `(0, 1) -> 0`, `(1, 0) -> 1`, `(3, 1) -> 2`.
-- `test_count_generals_ignores_same_day_and_later_elections`: eventos de la casa 1 en 2019-11-10 y 2023-07-23; `before=2023-07-23` → 1; `before=2023-07-24` → 2; `before=None` → 2; casa sin filas → ausente (el llamador rellena 0).
+- `test_count_national_events_ignores_same_day_and_later_elections`: eventos de la casa 1 en 2019-11-10 y 2023-07-23; `before=2023-07-23` → 1; `before=2023-07-24` → 2; `before=None` → 2; casa sin filas → ausente (el llamador rellena 0).
 - `test_prior_quality_values`: CENTRA (7 puntos de la rúbrica vieja: campo 3, transparencia 3, independencia 0, identidad 1, estándares 0) sin generales → 48; con una general → 56; GfK (campo 3, transparencia 1, independencia 2, identidad 1, estándares 1) sin generales → 48, con generales → 64; una no evaluada sin generales → 5, con generales → 8.
 - `test_read_quality_validates_identity_and_standards_as_evidence`: un CSV con `standards = 2` falla con un mensaje que nombra `standards`; con `identity = 1` y fuente vacía falla nombrando `identity_source`.
-- `test_quality_breakdown_splits_implantation`: fila de la réplica con `points` total; devuelve `implantation`, `general` y `transparency_void` correctos.
+- `test_quality_breakdown_splits_implantation`: fila de la réplica con `points` total; devuelve `implantation`, `national` y `transparency_void` correctos.
 
 `tests/test_data_files.py`: si comprueba la estructura del JSON de criterios o las sumas del CSV, actualizarlo a la rúbrica nueva (el CSV no cambia de columnas).
 
-`tests/test_data_unit.py`: `test_get_general_events_filters_scope_bias_and_ctype` con el fake de modelos del fichero: filas `es`/`es-md`, `bias` nulo, `ctype` `wban`/`exit`/nulo y `mtype` `online`; salen solo las de `es`, `bias` no nulo y `ctype` ni `wban` ni `exit`, incluida la `online`, sin duplicados por casa y fecha.
+`tests/test_data_unit.py`: `test_get_national_events_filters_scope_bias_and_ctype` con el fake de modelos del fichero: filas `es`/`es-md`, `bias` nulo, `ctype` `wban`/`exit`/nulo y `mtype` `online`; salen solo las de `es`, `bias` no nulo y `ctype` ni `wban` ni `exit`, incluida la `online`, sin duplicados por casa y fecha.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -271,7 +271,7 @@ Quitar `identity` y `standards`. En `transparency`, niveles 1-3 «…, publicada
 "implantation": {
   "name": "Implantación",
   "max": 2,
-  "computed": "general",
+  "computed": "national",
   "note": "Las elecciones generales se cuentan con los sondeos publicados, a la fecha de cada elección; los estándares se comprueban con fuente.",
   "levels": {
     "0": "Solo ha sondeado elecciones autonómicas o locales.",
@@ -281,11 +281,11 @@ Quitar `identity` y `standards`. En `transparency`, niveles 1-3 «…, publicada
 }
 ```
 
-`load_criteria` acepta `computed` (solo el valor `"general"`) y `note` (texto) opcionales y falla con cualquier otro valor de `computed`.
+`load_criteria` acepta `computed` (solo el valor `"national"`) y `note` (texto) opcionales y falla con cualquier otro valor de `computed`.
 
 - [ ] **Step 4: Implement `quality.py` and `data.py` per Interfaces**
 
-`save_catalogues`: `n_generals = count_generals(get_general_events(), pd.Timestamp(date.today()))`; la réplica guarda en `points` y `quality` los valores de hoy de `prior_quality` (las columnas de la réplica no cambian) y `pollsters.quality` sale de `pollsters_quality_values(..., n_generals)`. El docstring del módulo `quality.py` sigue diciendo que no toca la base: las generales llegan como argumento.
+`save_catalogues`: `n_national_events = count_national_events(get_national_events(), pd.Timestamp(date.today()))`; la réplica guarda en `points` y `quality` los valores de hoy de `prior_quality` (las columnas de la réplica no cambian) y `pollsters.quality` sale de `pollsters_quality_values(..., n_national_events)`. El docstring del módulo `quality.py` sigue diciendo que no toca la base: las generales llegan como argumento.
 
 - [ ] **Step 5: Run the tests, then the whole suite**
 
@@ -294,7 +294,7 @@ Expected: PASS (los tests de páginas que lean `points` del perfil pueden fallar
 
 - [ ] **Step 6: Check the quality table against the spec (read-only)**
 
-Run (scratchpad): `prior_quality` de las 72 evaluadas con `count_generals(get_general_events(), hoy)`.
+Run (scratchpad): `prior_quality` de las 72 evaluadas con `count_national_events(get_national_events(), hoy)`.
 Expected: 43 con generales y exactamente las 31 variaciones de la tabla de D3 de la spec (CENTRA 56 → 48, GfK 64 → 48, ODEC 32 → 16, KeyData y GI Internacional 8 → 16, …). Cualquier diferencia se informa antes de seguir.
 
 - [ ] **Step 7: Commit**
@@ -306,16 +306,16 @@ git commit -m "Calidad previa: criterio Implantación (generales + estándares) 
 
 ---
 
-### Task 5: El rating usa la calidad previa a la fecha de cada elección y guarda `num_generals`
+### Task 5: El rating usa la calidad previa a la fecha de cada elección y guarda `num_national_events`
 
 **Files:**
 - Modify: `mtpy/lib/computer.py` (`compute_ratings`, `rate_events`, `pollster_ratings`)
-- Modify: `mtpy/models/elections.py` (`PollstersRatings.meta`: `'num_generals': ['int', 2]`)
+- Modify: `mtpy/models/elections.py` (`PollstersRatings.meta`: `'num_national_events': ['int', 2]`)
 - Test: `tests/test_computer_unit.py`
 
 **Interfaces:**
-- Consumes: `quality.count_generals`, `quality.prior_quality`, `quality.read_quality`, `quality.load_criteria` (Task 4); `data.get_general_events` (Task 4).
-- Produces: `rate_events(pool, targets, rating_weights, pollsters, prior: Optional[Callable[[pd.Timestamp], pd.DataFrame]] = None)`; `prior(target)` devuelve el `prior_quality` de esa fecha (`NaT` = todas las generales) y `rate_events` lo pasa a `pollster_ratings` como `pollsters` con `quality` y `num_generals` de esa fecha. Sin `prior`, se usa `pollsters['quality']` y `num_generals` sale nulo (los tests M11 existentes no cambian). `rparams` incluye `num_generals` tras `num_events_w`. `compute_ratings` construye `prior` una vez: `get_general_events()`, `read_quality(load_criteria())`, la escala, y una clausura que llama a `prior_quality(pollsters['id'], evaluations, scale, count_generals(events, target))`.
+- Consumes: `quality.count_national_events`, `quality.prior_quality`, `quality.read_quality`, `quality.load_criteria` (Task 4); `data.get_national_events` (Task 4).
+- Produces: `rate_events(pool, targets, rating_weights, pollsters, prior: Optional[Callable[[pd.Timestamp], pd.DataFrame]] = None)`; `prior(target)` devuelve el `prior_quality` de esa fecha (`NaT` = todas las generales) y `rate_events` lo pasa a `pollster_ratings` como `pollsters` con `quality` y `num_national_events` de esa fecha. Sin `prior`, se usa `pollsters['quality']` y `num_national_events` sale nulo (los tests M11 existentes no cambian). `rparams` incluye `num_national_events` tras `num_events_w`. `compute_ratings` construye `prior` una vez: `get_national_events()`, `read_quality(load_criteria())`, la escala, y una clausura que llama a `prior_quality(pollsters['id'], evaluations, scale, count_national_events(events, target))`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -323,12 +323,12 @@ git commit -m "Calidad previa: criterio Implantación (generales + estándares) 
 def test_prior_quality_is_taken_at_the_date_of_each_target():
     """D3: la calidad de una elección puntuada solo cuenta las generales anteriores a ella."""
 ```
-con `prior` falso que devuelve `quality` 0,40 antes de 2023-07-24 y 0,56 después, y `num_generals` 0 / 1: puntuar `[JULY23, pd.Timestamp('2026-11-29')]`; la fila de 2023-07-23 lleva `quality == .40` y `num_generals == 0`, la de 2026-11-29 `.56` y `1`, y la casa sin evidencia tiene `rating == quality` en cada fecha.
+con `prior` falso que devuelve `quality` 0,40 antes de 2023-07-24 y 0,56 después, y `num_national_events` 0 / 1: puntuar `[JULY23, pd.Timestamp('2026-11-29')]`; la fila de 2023-07-23 lleva `quality == .40` y `num_national_events == 0`, la de 2026-11-29 `.56` y `1`, y la casa sin evidencia tiene `rating == quality` en cada fecha.
 
 ```python
-def test_compute_ratings_builds_the_prior_from_the_general_events(monkeypatch):
+def test_compute_ratings_builds_the_prior_from_the_national_events(monkeypatch):
 ```
-con `monkeypatch` de `computer.get_general_events`, `computer.read_quality` y `computer.load_criteria` (fakes mínimos) y `rate_events` interceptado: el `prior` que recibe, llamado con 2023-07-23, no cuenta la general de ese día y llamado con `NaT` cuenta todas.
+con `monkeypatch` de `computer.get_national_events`, `computer.read_quality` y `computer.load_criteria` (fakes mínimos) y `rate_events` interceptado: el `prior` que recibe, llamado con 2023-07-23, no cuenta la general de ese día y llamado con `NaT` cuenta todas.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -337,7 +337,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement per Interfaces**
 
-En `pollster_ratings`, `quality` y `num_generals` salen de las columnas del `pollsters` recibido; `num_generals` se reescala como entero (no entra en las columnas que se multiplican por 100). Docstrings de `compute_ratings` y `rate_events`: la calidad previa es la de la fecha de cada elección puntuada.
+En `pollster_ratings`, `quality` y `num_national_events` salen de las columnas del `pollsters` recibido; `num_national_events` se reescala como entero (no entra en las columnas que se multiplican por 100). Docstrings de `compute_ratings` y `rate_events`: la calidad previa es la de la fecha de cada elección puntuada.
 
 - [ ] **Step 4: Run the tests, then the whole suite**
 
@@ -348,7 +348,7 @@ Expected: PASS.
 
 ```bash
 git add mtpy/lib/computer.py mtpy/models/elections.py tests/test_computer_unit.py
-git commit -m "Rating: calidad previa a la fecha de cada elección y num_generals"
+git commit -m "Rating: calidad previa a la fecha de cada elección y num_national_events"
 ```
 
 ---
@@ -357,25 +357,25 @@ git commit -m "Rating: calidad previa a la fecha de cada elección y num_general
 
 **Files:**
 - Modify: `mtpy/lib/pages/casas.py` (`RANKING_KEYS`, `RANKING_COLUMNS`, `COLUMN_LABELS`, descripciones de `table_columns`, `ranking_rows`)
-- Modify: `web/templates/casas.html` (colgroup, celda, `data-generals`, el control)
+- Modify: `web/templates/casas.html` (colgroup, celda, `data-national-events`, el control)
 - Create: `web/dist/js/ranking.js`
 - Modify: `web/dist/js/pages/common.js` (`wireMore`), `web/dist/js/pages/casas.js`
 - Test: `tests/test_pages.py`, `tests/test_js_ranking.py` (nuevo)
 
 **Interfaces:**
-- Consumes: `num_generals` en las filas de `query_ratings` (columna de `pollsters_ratings`, Task 5).
-- Produces: `ranking.js` exporta `rankingVisibility(generals: number[], onlyGenerals: boolean, shown: number) -> {visible: boolean[], filtered: boolean[], more: boolean}`: `filtered[i]` = fila excluida por el filtro (`onlyGenerals && generals[i] === 0`), `visible` = las primeras `shown` no filtradas, `more` = quedan no filtradas sin mostrar. `wireMore` deja de destapar filas con `data-filtered`.
+- Consumes: `num_national_events` en las filas de `query_ratings` (columna de `pollsters_ratings`, Task 5).
+- Produces: `ranking.js` exporta `rankingVisibility(generals: number[], onlyNationalEvents: boolean, shown: number) -> {visible: boolean[], filtered: boolean[], more: boolean}`: `filtered[i]` = fila excluida por el filtro (`onlyNationalEvents && generals[i] === 0`), `visible` = las primeras `shown` no filtradas, `more` = quedan no filtradas sin mostrar. `wireMore` deja de destapar filas con `data-filtered`.
 
 - [ ] **Step 1: Write the failing tests**
 
 `tests/test_js_ranking.py` (patrón de `tests/test_js_polls.py`, se salta sin `node`):
 - `test_ranking_visibility_without_filter_shows_the_first_rows`: `rankingVisibility([0, 2, 0, 1], false, 2)` → `visible [true, true, false, false]`, `filtered` todo `false`, `more true`.
-- `test_ranking_visibility_with_filter_skips_rows_without_generals`: `rankingVisibility([0, 2, 0, 1, 3], true, 2)` → `filtered [true, false, true, false, false]`, `visible [false, true, false, true, false]`, `more true`.
+- `test_ranking_visibility_with_filter_skips_rows_without_national_events`: `rankingVisibility([0, 2, 0, 1, 3], true, 2)` → `filtered [true, false, true, false, false]`, `visible [false, true, false, true, false]`, `more true`.
 - `test_ranking_visibility_with_filter_and_nothing_left`: `([0, 1], true, 50)` → `more false`.
 
 `tests/test_pages.py`:
-- `test_casas_ranking_shows_the_generales_column_after_elecciones`: el orden de cabeceras del ranking es `Encuestadora, Rating, Confianza, Elecciones, Generales, Sondeos, Diferencial, Error medio, Sesgo bloques, Rebaño` y cada fila lleva `data-generals` con su número (añadir `num_generals` a la fixture `houses`).
-- `test_casas_ranking_has_the_generales_filter`: hay `<input type="checkbox" id="ranking-generals">` con la etiqueta «Solo con experiencia en generales», sin marcar.
+- `test_casas_ranking_shows_the_generales_column_after_elecciones`: el orden de cabeceras del ranking es `Encuestadora, Rating, Confianza, Elecciones, Generales, Sondeos, Diferencial, Error medio, Sesgo bloques, Rebaño` y cada fila lleva `data-national-events` con su número (añadir `num_national_events` a la fixture `houses`).
+- `test_casas_ranking_has_the_generales_filter`: hay `<input type="checkbox" id="ranking-national-events">` con la etiqueta «Solo con experiencia en generales», sin marcar.
 - Ajustar `test_casas_glossary_explains_every_ranking_column_in_order` con la entrada de «Generales»: «En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el que se calcula el criterio «Implantación» de la confianza.».
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -385,7 +385,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement**
 
-Control encima de la tabla, dentro de `<div class="series-controls">` como en `casa.html`: `<label class="check"><input type="checkbox" id="ranking-generals"> Solo con experiencia en generales</label>`, oculto sin JS (`hidden`, lo muestra el JS como hace `wireMore` con su botón). En `casas.js`, al cambiar el control: aplicar `rankingVisibility` con `shown = data-batch` del botón, poner `hidden` y `data-filtered` según el resultado y el `hidden` del botón según `more`. `wireMore` selecciona `tbody tr[hidden]:not([data-filtered])`. El estado del filtro no se guarda (la página no tiene estado de ranking que guardar). Actualizar el párrafo «Cómo leerlo» del ranking con una frase sobre la columna y el filtro.
+Control encima de la tabla, dentro de `<div class="series-controls">` como en `casa.html`: `<label class="check"><input type="checkbox" id="ranking-national-events"> Solo con experiencia en generales</label>`, oculto sin JS (`hidden`, lo muestra el JS como hace `wireMore` con su botón). En `casas.js`, al cambiar el control: aplicar `rankingVisibility` con `shown = data-batch` del botón, poner `hidden` y `data-filtered` según el resultado y el `hidden` del botón según `more`. `wireMore` selecciona `tbody tr[hidden]:not([data-filtered])`. El estado del filtro no se guarda (la página no tiene estado de ranking que guardar). Actualizar el párrafo «Cómo leerlo» del ranking con una frase sobre la columna y el filtro.
 
 - [ ] **Step 4: Run the tests, then the whole suite**
 
@@ -412,7 +412,7 @@ git commit -m "/casas: columna Generales y filtro de experiencia en generales en
 
 **Interfaces:**
 - Consumes: `quality.quality_breakdown`, `quality.evaluated_keys` (Task 4).
-- Produces: `quality_card` con una fila por criterio de la rúbrica nueva; la fila de `implantation` lleva `general: bool` y `parts` de la fuente de estándares; la de `transparency`, `void: bool` cuando `identity = 0`. `query_pollster(...)['quality']` añade `implantation` y `general`.
+- Produces: `quality_card` con una fila por criterio de la rúbrica nueva; la fila de `implantation` lleva `national: bool` y `parts` de la fuente de estándares; la de `transparency`, `void: bool` cuando `identity = 0`. `query_pollster(...)['quality']` añade `implantation` y `general`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -421,7 +421,7 @@ git commit -m "/casas: columna Generales y filtro de experiencia en generales en
 - `test_profile_confidence_card_voids_transparency_without_identity`: con `identity = 0` y `transparency = 1`, la fila «Transparencia 0 de 3» explica «Sin una entidad identificable detrás…».
 - `test_metodo_rubric_lists_four_criteria_and_their_notes`: /metodo/rating muestra Trabajo de campo, Transparencia, Independencia e Implantación, con las dos notas del JSON, y no muestra «Identidad» ni «Estándares» como criterios.
 
-`tests/test_webapi_unit.py` / `tests/test_web_api.py`: `/api/v1/pollsters/{id}` incluye `quality.implantation` y `quality.general` (ajustar el test existente del desglose).
+`tests/test_webapi_unit.py` / `tests/test_web_api.py`: `/api/v1/pollsters/{id}` incluye `quality.implantation` y `quality.national` (ajustar el test existente del desglose).
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -478,8 +478,8 @@ Expected: PASS.
 - [ ] **Step 5: Run the «después» backtest and the read-only checks**
 
 Run: `python backtest/run_backtest.py --scope es --recompute-ratings --out files/backtest/rating-por-eleccion/despues` (y autonómicos si se corrieron antes, con las mismas opciones).
-Run (scratchpad, solo lectura): `Computer(scope='es').build_series().compute_ratings(save=False, scopes='all')`; ranking de la fila de 2026-11-29 de las casas con `num_polls > 0` (posición, rating, `num_events`, `num_generals`, `num_events_w`); repetir la prueba por criterio de la spec (desviación centrada por elección, bootstrap por casa, 2000 réplicas, semilla 0) con la rúbrica nueva.
-Expected: CENTRA fuera del primer puesto y por debajo de GAD3; `num_generals` de CENTRA 0 y de GAD3 ≥ 6.
+Run (scratchpad, solo lectura): `Computer(scope='es').build_series().compute_ratings(save=False, scopes='all')`; ranking de la fila de 2026-11-29 de las casas con `num_polls > 0` (posición, rating, `num_events`, `num_national_events`, `num_events_w`); repetir la prueba por criterio de la spec (desviación centrada por elección, bootstrap por casa, 2000 réplicas, semilla 0) con la rúbrica nueva.
+Expected: CENTRA fuera del primer puesto y por debajo de GAD3; `num_national_events` de CENTRA 0 y de GAD3 ≥ 6.
 
 - [ ] **Step 6: Re-pin the model regression if it moved**
 
@@ -505,4 +505,4 @@ git commit -m "Método del rating por elección, backtest antes/después y resul
 
 ## Pasos de Luis tras la integración
 
-Los de la spec («Pasos de Luis tras la integración»): `ALTER TABLE` de `num_events_w` y `num_generals`, `save_catalogues()`, `compute` de ratings con `scopes: all`, `publish analysis` con `scopes: all` y lo demás, y revisión de /casas, el perfil de CENTRA y /metodo/rating.
+Los de la spec («Pasos de Luis tras la integración»): `ALTER TABLE` de `num_events_w` y `num_national_events`, `save_catalogues()`, `compute` de ratings con `scopes: all`, `publish analysis` con `scopes: all` y lo demás, y revisión de /casas, el perfil de CENTRA y /metodo/rating.

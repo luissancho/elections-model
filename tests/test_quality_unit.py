@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from mtpy.core.io import FileSystem
-from mtpy.lib.quality import (COLUMNS, CRITERIA_FILE, EVIDENCE_KEYS, QUALITY_FILE, count_generals, evaluated_keys,
+from mtpy.lib.quality import (COLUMNS, CRITERIA_FILE, EVIDENCE_KEYS, QUALITY_FILE, count_national_events, evaluated_keys,
                               implantation_points, level_text, load_criteria, manual_points, max_points,
                               pollsters_quality_values, prior_quality, quality_breakdown, quality_from_points,
                               read_quality)
@@ -45,7 +45,7 @@ def test_criteria_are_four_and_sum_ten(fresh_app):
     criteria = load_criteria()
     assert list(criteria['criteria']) == ['fieldwork', 'transparency', 'independence', 'implantation']
     implantation = criteria['criteria']['implantation']
-    assert implantation['max'] == 2 and implantation['computed'] == 'general'
+    assert implantation['max'] == 2 and implantation['computed'] == 'national'
     assert implantation['levels']['0'] == 'Solo ha sondeado elecciones autonómicas o locales.'
     assert implantation['levels']['1'] == 'Ha sondeado al menos una elección general.'
     assert 'ESOMAR' in implantation['levels']['2'] and 'ISO 20252' in implantation['levels']['2']
@@ -105,11 +105,11 @@ def test_pollsters_quality_values_fills_the_floor_and_checks_ids(fresh_app, monk
     criteria = load_criteria()
     evaluated = read_quality(criteria, today=pd.Timestamp('2026-10-16').date())
     pollsters = pd.DataFrame({'id': [1, 2], 'name': ['CIS', 'GAD3'], 'quality': [10.0, 76.0]})
-    generals = pd.Series({1: 2}, name='num_generals')
-    values = pollsters_quality_values(pollsters, evaluated, criteria['scale'], generals)
+    national_events = pd.Series({1: 2}, name='num_national_events')
+    values = pollsters_quality_values(pollsters, evaluated, criteria['scale'], national_events)
     assert values.tolist() == [56.0, 5.0] and values.index.equals(pollsters.index)
     with pytest.raises(ValueError, match='7'):
-        pollsters_quality_values(pollsters, evaluated.assign(pollster_id=7), criteria['scale'], generals)
+        pollsters_quality_values(pollsters, evaluated.assign(pollster_id=7), criteria['scale'], national_events)
 
 
 def test_pollsters_quality_values_warns_on_name_mismatch(fresh_app, monkeypatch):
@@ -135,14 +135,14 @@ def test_implantation_needs_a_general_and_standards_on_top():
     assert implantation_points(pd.Series([0, 2]), pd.Series([1, 1])).tolist() == [0, 2]
 
 
-def test_count_generals_ignores_same_day_and_later_elections():
+def test_count_national_events_ignores_same_day_and_later_elections():
     events = pd.DataFrame({'pollster_id': [1, 1, 1, 2], 'event_date': pd.to_datetime(
         ['2019-11-10', '2023-07-23', '2023-07-23', '2023-07-23'])})
-    assert count_generals(events, pd.Timestamp('2023-07-23')).to_dict() == {1: 1}
-    assert count_generals(events, pd.Timestamp('2023-07-24')).to_dict() == {1: 2, 2: 1}
-    assert count_generals(events).to_dict() == {1: 2, 2: 1}
-    assert count_generals(events, pd.NaT).to_dict() == {1: 2, 2: 1}
-    assert 3 not in count_generals(events).index
+    assert count_national_events(events, pd.Timestamp('2023-07-23')).to_dict() == {1: 1}
+    assert count_national_events(events, pd.Timestamp('2023-07-24')).to_dict() == {1: 2, 2: 1}
+    assert count_national_events(events).to_dict() == {1: 2, 2: 1}
+    assert count_national_events(events, pd.NaT).to_dict() == {1: 2, 2: 1}
+    assert 3 not in count_national_events(events).index
 
 
 def test_prior_quality_values():
@@ -155,7 +155,7 @@ def test_prior_quality_values():
     assert before['quality'].tolist() == [48.0, 48.0, 5.0]
     after = prior_quality([10, 11, 12], evaluations, scale, pd.Series({10: 1, 11: 2, 12: 1}))
     assert after['quality'].tolist() == [56.0, 64.0, 8.0]
-    assert after.loc[11, ['num_generals', 'manual', 'implantation', 'points']].tolist() == [2, 6, 2, 8]
+    assert after.loc[11, ['num_national_events', 'manual', 'implantation', 'points']].tolist() == [2, 6, 2, 8]
     assert after.index.name == 'pollster_id'
 
 
@@ -182,8 +182,8 @@ def test_quality_breakdown_splits_implantation(fresh_app):
     record = GOOD_ROW | {'transparency': 3, 'identity': 1, 'standards': 1, 'points': 8}
     out = quality_breakdown(record, criteria)
     assert [row['key'] for row in out['rows']] == ['fieldwork', 'transparency', 'independence']
-    assert (out['manual'], out['implantation'], out['general'], out['transparency_void']) == (6, 2, True, False)
+    assert (out['manual'], out['implantation'], out['national'], out['transparency_void']) == (6, 2, True, False)
     void = quality_breakdown(GOOD_ROW | {'identity': 0, 'identity_source': '', 'points': 3}, criteria)
-    assert (void['manual'], void['implantation'], void['general'], void['transparency_void']) == (3, 0, False, True)
+    assert (void['manual'], void['implantation'], void['national'], void['transparency_void']) == (3, 0, False, True)
     assert void['rows'][1]['points'] == 0
     assert quality_breakdown(None, criteria)['rows'] == []

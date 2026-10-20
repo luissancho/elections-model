@@ -35,7 +35,7 @@
                 <td>{{ row.level }}</td>
                 {% if row.key == 'implantation' %}
                 <td>
-                  <p>Generales: {% if row.general %}calculado a partir de los sondeos publicados.{% else %}ninguna elección general sondeada.{% endif %}</p>
+                  <p>Generales: {% if row.national %}calculado a partir de los sondeos publicados.{% else %}ninguna elección general sondeada.{% endif %}</p>
                   <p>Estándares: {% for part in row.parts %}{% if part.url %}<a href="{{ part.url }}" rel="noopener">{{ part.url }}</a>{% else %}{{ part.text }}{% endif %}{% else %}–{% endfor %}</p>
                 </td>
                 {% else %}
@@ -51,7 +51,7 @@
         <p class="notice">Evaluación provisional, pendiente de revisión.</p>
         {% endif %}
         {% else %}
-        <p class="notice">Sin evaluar: nadie ha comprobado todavía cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>, así que solo cuenta la parte calculada de la Implantación. {% if quality.generals %}Ha publicado sondeos de alguna elección general, que vale un punto: confianza {{ quality.per_point }}.{% else %}No ha publicado sondeos de ninguna elección general: tiene la confianza mínima, {{ quality.floor }}.{% endif %}</p>
+        <p class="notice">Sin evaluar: nadie ha comprobado todavía cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>, así que solo cuenta la parte calculada de la Implantación. {% if quality.national %}Ha publicado sondeos de alguna elección general, que vale un punto: confianza {{ quality.per_point }}.{% else %}No ha publicado sondeos de ninguna elección general: tiene la confianza mínima, {{ quality.floor }}.{% endif %}</p>
         {% endif %}
         {% if quality.informative %}
         <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores y paneles en línea quedan fuera): la confianza es informativa.</p>

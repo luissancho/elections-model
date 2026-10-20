@@ -914,7 +914,7 @@ def fake_houses(monkeypatch, name='CIS'):
                                       '2026-11-29']),
         'pollster_id': [1, 1, 2, 1, 2, 3, 5], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama', 'Cero'],
         'quality': [60.0, 60.0, 80.0, 60.0, 80.0, 40.0, 50.0], 'num_events': [1, 2, 1, 3, 2, 0, 0],
-        'num_generals': [1, 1, 1, 2, 3, 0, 0],
+        'num_national_events': [1, 1, 1, 2, 3, 0, 0],
         'num_polls': [10, 12, 14, 15, 17, 2, 0], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1, 0.0],
         'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, -3.0, None, None],
         'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None, None],
@@ -1225,9 +1225,9 @@ def test_ranking_rows_and_herding_rows():
                           'quality': [60.0, 80.0, 40.0], 'num_polls': [15, 17, 2], 'extra': [1, 2, 3]})
     rows = pages.ranking_rows(frame, {'rows': [{'pollster': 'GAD3', 'herding': 0.742}]})
     assert [row['pollster'] for row in rows] == ['GAD3', 'CIS'] and rows[0]['herding'] == 0.742 and rows[1]['herding'] is None
-    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'num_generals',
+    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'num_national_events',
                              'error_avg', 'error_blocks', 'bias_blocks', 'bias_dev_adj', 'herding']
-    assert rows[0]['num_events'] is None and rows[0]['num_generals'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
+    assert rows[0]['num_events'] is None and rows[0]['num_national_events'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
     part = {'rows': [{'pollster': 'A', 'herding': 0.9}, {'pollster': 'B', 'herding': None}, {'pollster': 'C', 'herding': 0.7}]}
     assert [row['pollster'] for row in pages.herding_rows(part)] == ['C', 'A', 'B']
 
@@ -1337,7 +1337,7 @@ def test_casa_profile_quality_card_of_an_unrated_house(houses):
     assert '<th scope="row">' not in card and 'sin evaluar' in page[page.index('id="profile"'):page.index('id="quality"')]
 
 
-def test_casa_profile_quality_card_of_an_unrated_house_with_generals(houses, monkeypatch):
+def test_casa_profile_quality_card_of_an_unrated_house_with_national_events(houses, monkeypatch):
     """Sin evaluar pero con sondeos de generales: el punto de Implantación calculado da 8, no el mínimo 5, y el texto
     de la tarjeta y el KPI cuentan lo mismo."""
     pollsters = webapi.queries.get_pollsters().copy()
@@ -1383,14 +1383,14 @@ def test_profile_confidence_card_shows_implantation_with_its_two_parts(houses):
     full = quality_card(record, {'mtype': 'private'}, criteria)
     row = full['rows'][-1]
     assert [r['name'] for r in full['rows']][-1] == 'Implantación' and (row['points'], row['max']) == (2, 2)
-    assert row['general'] is True and row['standards'] is True and row['parts'][0]['url'] == 'https://iaespana.example/socios'
+    assert row['national'] is True and row['standards'] is True and row['parts'][0]['url'] == 'https://iaespana.example/socios'
     none = quality_card(dict(record, points=5, standards_source=''), {'mtype': 'private'}, criteria)
     row = none['rows'][-1]
-    assert (row['points'], row['general']) == (0, False) and row['level'] == criteria['criteria']['implantation']['levels']['0']
+    assert (row['points'], row['national']) == (0, False) and row['level'] == criteria['criteria']['implantation']['levels']['0']
     assert none['support'] == '5 de 10 puntos'
 
 
-def test_profile_page_card_shows_implantation_0_without_generals(houses):
+def test_profile_page_card_shows_implantation_0_without_national_events(houses):
     """Una encuestadora evaluada sin generales: Implantación 0 de 2, con el nivel 0 y sin generales sondeadas."""
     page = html(call(houses, '/casas/autonomica')[2])
     card = page[page.index('id="quality"'):page.index('id="path"')]
@@ -3452,31 +3452,31 @@ def test_casas_ranking_shows_the_generales_column_after_elecciones(houses):
     heads = re.findall(r'<th[^>]*>([^<]*)</th>', table)
     assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial',
                      'Error medio', 'Sesgo bloques', 'Rebaño']
-    assert re.findall(r'<tr data-generals="(\d+)"', table) == ['3', '2']  # GAD3, CIS
+    assert re.findall(r'<tr data-national-events="(\d+)"', table) == ['3', '2']  # GAD3, CIS
 
 
 def test_casas_ranking_has_the_generales_filter(houses):
     page = html(call(houses, '/casas')[2])
-    assert '<input type="checkbox" id="ranking-generals">' in page and 'Solo con experiencia en generales' in page
-    assert 'id="ranking-generals" checked' not in page
+    assert '<input type="checkbox" id="ranking-national-events">' in page and 'Solo con experiencia en generales' in page
+    assert 'id="ranking-national-events" checked' not in page
 
 
 def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
     """A known count of 0 renders its number (only an unknown count renders «–») and the filter still hides it."""
     known = pd.DataFrame({
         'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
-        'num_events': [1], 'num_generals': [0], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5],
+        'num_events': [1], 'num_national_events': [0], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5],
         'bias_blocks': [0.5], 'rating': [60.0],
     })
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: known)
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert '<tr data-generals="0">' in table and '<td>1</td>\n                <td>0</td>' in table
+    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>0</td>' in table
 
 
-def test_casas_ranking_without_num_generals_shows_a_dash_and_counts_zero(houses, monkeypatch):
-    """Old ratings rows (before the database column exists): «–», `data-generals="0"` (hidden by the filter)."""
+def test_casas_ranking_without_num_national_events_shows_a_dash_and_counts_zero(houses, monkeypatch):
+    """Old ratings rows (before the database column exists): «–», `data-national-events="0"` (hidden by the filter)."""
     old = pd.DataFrame({
         'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
         'num_events': [1], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5], 'bias_blocks': [0.5],
@@ -3486,9 +3486,9 @@ def test_casas_ranking_without_num_generals_shows_a_dash_and_counts_zero(houses,
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert '<tr data-generals="0">' in table and '<td>1</td>\n                <td>–</td>' in table
+    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>–</td>' in table
     # no known count in any row: the filter would hide everything, so the control is not rendered
-    assert 'id="ranking-generals"' not in page and 'id="ranking-controls"' not in page
+    assert 'id="ranking-national-events"' not in page and 'id="ranking-controls"' not in page
 
 
 def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):

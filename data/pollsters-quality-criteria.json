@@ -37,7 +37,7 @@
     "implantation": {
       "name": "Implantación",
       "max": 2,
-      "computed": "general",
+      "computed": "national",
       "note": "Las elecciones generales se cuentan con los sondeos publicados, a la fecha de cada elección; los estándares se comprueban con fuente.",
       "levels": {
         "0": "Solo ha sondeado elecciones autonómicas o locales.",

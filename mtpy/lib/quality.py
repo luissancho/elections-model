@@ -20,7 +20,7 @@ from ..core.app import App
 CRITERIA_FILE = 'pollsters-quality-criteria.json'
 QUALITY_FILE = 'pollsters-quality.csv'
 STATUSES = ('borrador', 'revisada')
-COMPUTED = ('general',)
+COMPUTED = ('national',)
 # CSV columns that are not criteria but are validated (0-1, with source if 1): the evidence of the condition of the
 # transparency (identifiable entity) and of the level 2 of the implantation (standards)
 EVIDENCE_KEYS = ('identity', 'standards')
@@ -43,7 +43,7 @@ def load_criteria() -> dict:
     -------
     dict
         `{'scale': {'per_point': int, 'floor': int}, 'criteria': {key: {'name', 'max', 'levels'}}}`, with the
-        criteria in the order of the file. A criterion may carry a `note` (text) and `computed` (`'general'`: not
+        criteria in the order of the file. A criterion may carry a `note` (text) and `computed` (`'national'`: not
         scored in the CSV but derived from the general elections polled).
 
     Raises
@@ -112,13 +112,13 @@ def manual_points(fieldwork, transparency, independence, identity):
     return fieldwork + transparency * (identity == 1) + independence
 
 
-def implantation_points(n_generals, standards):
+def implantation_points(n_national_events, standards):
     """
     Points of the criterion "implantation": 0 without general elections polled, else `1 + standards`.
 
     Parameters
     ----------
-    n_generals : int or pd.Series
+    n_national_events : int or pd.Series
         General elections polled before the date of the quality.
     standards : int or pd.Series
         1 when the pollster is a member of Insights+Analytics España or ESOMAR, or ISO 20252 certified.
@@ -128,17 +128,17 @@ def implantation_points(n_generals, standards):
     int or pd.Series
         From 0 to 2.
     """
-    return (n_generals > 0) * (1 + standards)
+    return (n_national_events > 0) * (1 + standards)
 
 
-def count_generals(general_events: pd.DataFrame, before: Optional[pd.Timestamp] = None) -> pd.Series:
+def count_national_events(national_events: pd.DataFrame, before: Optional[pd.Timestamp] = None) -> pd.Series:
     """
     General elections each pollster polled before a date.
 
     Parameters
     ----------
-    general_events : pd.DataFrame
-        `pollster_id` and `event_date`, one row per pollster and general election (`data.get_general_events()`).
+    national_events : pd.DataFrame
+        `pollster_id` and `event_date`, one row per pollster and general election (`data.get_national_events()`).
     before : pd.Timestamp, optional
         Only the elections strictly before this date count; all of them with `None` or `NaT`.
 
@@ -147,18 +147,18 @@ def count_generals(general_events: pd.DataFrame, before: Optional[pd.Timestamp] 
     pd.Series
         Distinct election dates by `pollster_id`; the pollsters without any are absent (fill with 0).
     """
-    events = general_events[['pollster_id', 'event_date']].drop_duplicates()
+    events = national_events[['pollster_id', 'event_date']].drop_duplicates()
     events['event_date'] = pd.to_datetime(events['event_date'])
     if before is not None and not pd.isna(before):
         events = events.loc[events['event_date'] < pd.Timestamp(before)]
     counts = events.groupby('pollster_id')['event_date'].nunique()
-    counts.name = 'num_generals'
+    counts.name = 'num_national_events'
     return counts
 
 
-def prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_generals: pd.Series) -> pd.DataFrame:
+def prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_national_events: pd.Series) -> pd.DataFrame:
     """
-    Prior quality of each pollster at the date `n_generals` was counted at.
+    Prior quality of each pollster at the date `n_national_events` was counted at.
 
     Parameters
     ----------
@@ -168,13 +168,13 @@ def prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_genera
         `read_quality()` (`pollster_id`, `fieldwork`, `transparency`, `independence`, `identity`, `standards`).
     scale : dict
         The scale of the catalogue.
-    n_generals : pd.Series
-        `count_generals()`; the pollsters it lacks have none.
+    n_national_events : pd.Series
+        `count_national_events()`; the pollsters it lacks have none.
 
     Returns
     -------
     pd.DataFrame
-        By `pollster_id`: `num_generals`, `manual`, `implantation`, `points` (their sum) and `quality`
+        By `pollster_id`: `num_national_events`, `manual`, `implantation`, `points` (their sum) and `quality`
         (`max(floor, per_point * points)`).
     """
     index = pd.Index(list(pollster_ids), name='pollster_id')
@@ -182,10 +182,10 @@ def prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_genera
     columns = ['fieldwork', 'transparency', 'independence', 'identity', 'standards']
     evaluated = evaluated[columns].fillna(0).astype(int)
     out = pd.DataFrame(index=index)
-    out['num_generals'] = n_generals.reindex(index).fillna(0).astype(int)
+    out['num_national_events'] = n_national_events.reindex(index).fillna(0).astype(int)
     out['manual'] = manual_points(evaluated['fieldwork'], evaluated['transparency'], evaluated['independence'],
                                   evaluated['identity']).astype(int)
-    out['implantation'] = implantation_points(out['num_generals'], evaluated['standards']).astype(int)
+    out['implantation'] = implantation_points(out['num_national_events'], evaluated['standards']).astype(int)
     out['points'] = out['manual'] + out['implantation']
     out['quality'] = out['points'].map(lambda points: float(quality_from_points(points, scale)))
     return out
@@ -203,7 +203,7 @@ def split_points(record: dict) -> tuple:
     Returns
     -------
     tuple
-        `(manual, implantation, general)`: the points scored by hand (a void transparency counts 0), the rest, and
+        `(manual, implantation, national)`: the points scored by hand (a void transparency counts 0), the rest, and
         whether the rest is above 0, that is, a general election was polled.
     """
     manual = int(manual_points(int(record['fieldwork']), int(record['transparency']), int(record['independence']),
@@ -228,11 +228,11 @@ def quality_breakdown(record: Optional[dict], criteria: dict) -> dict:
     -------
     dict
         `rows` (one `{'key', 'name', 'points', 'max', 'level', 'source'}` per scored criterion, `points` being the
-        ones that count: 0 for a void transparency), `manual`, `implantation`, `general` (True when the
+        ones that count: 0 for a void transparency), `manual`, `implantation`, `national` (True when the
         implantation is above 0, that is, a general election was polled) and `transparency_void` (transparency
         scored without an identifiable entity, so it counts 0). Empty and 0 without a record.
     """
-    out = {'rows': [], 'manual': 0, 'implantation': 0, 'general': False, 'transparency_void': False}
+    out = {'rows': [], 'manual': 0, 'implantation': 0, 'national': False, 'transparency_void': False}
     if not record:
         return out
     void = int(record['identity']) != 1 and int(record['transparency']) > 0
@@ -243,7 +243,7 @@ def quality_breakdown(record: Optional[dict], criteria: dict) -> dict:
         out['rows'].append({'key': key, 'name': criteria['criteria'][key]['name'], 'points': points,
                             'max': criteria['criteria'][key]['max'], 'level': level_text(criteria, key, int(record[key])),
                             'source': record.get(f'{key}_source') or ''})
-    out['manual'], out['implantation'], out['general'] = split_points(record)
+    out['manual'], out['implantation'], out['national'] = split_points(record)
     out['transparency_void'] = void
     return out
 
@@ -318,10 +318,10 @@ def pollsters_quality_values(
     pollsters: pd.DataFrame,
     quality: pd.DataFrame,
     scale: dict,
-    n_generals: pd.Series
+    n_national_events: pd.Series
 ) -> pd.Series:
     """
-    Quality of every pollster of the catalogue, at the date `n_generals` was counted at.
+    Quality of every pollster of the catalogue, at the date `n_national_events` was counted at.
 
     Parameters
     ----------
@@ -331,8 +331,8 @@ def pollsters_quality_values(
         The evaluations from `read_quality()`.
     scale : dict
         The scale of the catalogue; its `floor` is the quality of the pollsters not evaluated or without points.
-    n_generals : pd.Series
-        `count_generals()`: general elections polled by `pollster_id`.
+    n_national_events : pd.Series
+        `count_national_events()`: general elections polled by `pollster_id`.
 
     Returns
     -------
@@ -357,5 +357,5 @@ def pollsters_quality_values(
         if names[row.pollster_id] != row.pollster:
             warnings.warn(f'{QUALITY_FILE}: pollster {row.pollster_id} is "{row.pollster}" in the file '
                           f'but "{names[row.pollster_id]}" in the database', UserWarning, stacklevel=2)
-    values = prior_quality(pollsters['id'], quality, scale, n_generals)['quality']
+    values = prior_quality(pollsters['id'], quality, scale, n_national_events)['quality']
     return pollsters['id'].map(values).astype(float)

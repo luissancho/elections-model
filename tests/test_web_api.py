@@ -242,7 +242,7 @@ def test_pollster_profile(db_api):
     assert [row['rating'] for row in data['ratings']] == [0.6, 0.7] and data['house_effects'][0]['party'] == 'PP'
     assert data['herding'] == [] and headers['cache-control'] == 'public, max-age=60'
     assert data['quality']['status'] == 'revisada' and data['quality']['quality'] == 56.0
-    assert data['quality']['implantation'] == 2 and data['quality']['general'] is True
+    assert data['quality']['implantation'] == 2 and data['quality']['national'] is True
     assert json.loads(call(db_api, '/api/v1/pollsters/2')[2])['quality'] is None
     status, headers, body = call(db_api, '/api/v1/pollsters/999')
     assert status == 404 and json.loads(body) == {'status': 'error', 'message': 'pollster not found'}

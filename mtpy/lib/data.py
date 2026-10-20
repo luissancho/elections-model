@@ -11,7 +11,7 @@ from ..models.elections import (
     Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
     Pollsters, PollstersHerding, PollstersParties, PollstersQuality, PollstersRatings, Parties, Scopes
 )
-from .quality import count_generals, load_criteria, pollsters_quality_values, prior_quality, read_quality
+from .quality import count_national_events, load_criteria, pollsters_quality_values, prior_quality, read_quality
 
 
 def get_scopes() -> pd.DataFrame:
@@ -161,9 +161,9 @@ def save_catalogues() -> dict[str, int]:
 
     criteria = load_criteria()
     quality = read_quality(criteria)
-    n_generals = count_generals(get_general_events(), pd.Timestamp(date.today()))
+    n_national_events = count_national_events(get_national_events(), pd.Timestamp(date.today()))
     # the replica keeps the points and the quality of today: the implantation counts the generals held until now
-    today = prior_quality(quality['pollster_id'], quality, criteria['scale'], n_generals)
+    today = prior_quality(quality['pollster_id'], quality, criteria['scale'], n_national_events)
     quality = quality.assign(points=today['points'].to_numpy(), quality=today['quality'].to_numpy())
     qmodel = PollstersQuality()
     if not qmodel.table_exists():
@@ -179,7 +179,7 @@ def save_catalogues() -> dict[str, int]:
     out['quality'] = int(df.shape[0])
 
     pollsters = get_pollsters()
-    pollsters['quality'] = pollsters_quality_values(pollsters, quality, criteria['scale'], n_generals)
+    pollsters['quality'] = pollsters_quality_values(pollsters, quality, criteria['scale'], n_national_events)
     pmodel = Pollsters()
     pmodel.upsert(pmodel.format_data(pollsters, int_type='nullable', bin_type='nullable', sort=True))
     out['pollsters'] = int(pollsters.shape[0])
@@ -575,7 +575,7 @@ def get_pollster_events(pollster_id: int) -> pd.DataFrame:
         ['event_scope', 'event_date', 'n_polls'] + measures]
 
 
-def get_general_events() -> pd.DataFrame:
+def get_national_events() -> pd.DataFrame:
     """
     General elections each pollster polled, for the "implantation" criterion of the prior quality.
 

@@ -315,7 +315,7 @@ def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> d
         ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...],
         'quality': record or None}``: the catalogue row of the pollster and its rows of the ratings (every
         event of the scope, the next one included, by date), house effects and herding tables, as JSON
-        records; ``quality`` is its evaluation of the rubric with its ``implantation`` points and ``general``
+        records; ``quality`` is its evaluation of the rubric with its ``implantation`` points and ``national``
         flag, or ``None`` when it is not evaluated.
 
     Raises
@@ -356,14 +356,14 @@ def _quality_record(quality: pd.DataFrame) -> Optional[dict]:
     Returns
     -------
     dict or None
-        The row as a record plus ``implantation`` (points of the computed criterion) and ``general`` (a general
+        The row as a record plus ``implantation`` (points of the computed criterion) and ``national`` (a general
         election was polled), both from ``quality.split_points``; ``None`` when the pollster is not evaluated.
     """
     if quality.empty:
         return None
     record = frame_to_records(quality)[0]
-    _, implantation, general = split_points(record)
-    return dict(record, implantation=implantation, general=general)
+    _, implantation, national = split_points(record)
+    return dict(record, implantation=implantation, national=national)
 
 
 def query_pollster_path(pollster_id: int) -> dict:

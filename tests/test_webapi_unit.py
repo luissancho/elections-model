@@ -452,7 +452,7 @@ def test_query_pollster_profile_and_unknown_pollster(fresh_app, monkeypatch):
         }))
     profile = webapi.query_pollster(3, 'es')
     assert list(profile) == ['pollster', 'ratings', 'house_effects', 'herding', 'quality']
-    assert profile['quality']['implantation'] == 2 and profile['quality']['general'] is True
+    assert profile['quality']['implantation'] == 2 and profile['quality']['national'] is True
     assert profile['quality']['points'] == 7 and profile['quality']['checked_at'] == '2026-10-16'
     assert profile['pollster'] == {'id': 3, 'name': 'CIS', 'mtype': 'public', 'quality': 0.8}
     assert [row['event_date'] for row in profile['ratings']] == ['2023-07-23', '2026-11-29']
