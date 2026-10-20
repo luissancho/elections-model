@@ -3,8 +3,10 @@ import pandas as pd
 import pytest
 
 from mtpy.core.io import FileSystem
-from mtpy.lib.quality import (COLUMNS, CRITERIA_FILE, QUALITY_FILE, criteria_keys, level_text, load_criteria,
-                              max_points, pollsters_quality_values, quality_from_points, read_quality)
+from mtpy.lib.quality import (COLUMNS, CRITERIA_FILE, EVIDENCE_KEYS, QUALITY_FILE, count_generals, evaluated_keys,
+                              implantation_points, level_text, load_criteria, manual_points, max_points,
+                              pollsters_quality_values, prior_quality, quality_breakdown, quality_from_points,
+                              read_quality)
 
 DATA = os.path.join(os.path.dirname(__file__), '..', 'data')
 GOOD_ROW = {'pollster_id': 1, 'pollster': 'CIS', 'fieldwork': 3, 'fieldwork_source': 'https://www.cis.es/ficha',
@@ -39,9 +41,16 @@ def patch_csv(monkeypatch, fresh_app, text):
     patch_data(monkeypatch, fresh_app, {QUALITY_FILE: text})
 
 
-def test_catalogue_has_the_five_criteria_in_order_and_ten_points(fresh_app):
+def test_criteria_are_four_and_sum_ten(fresh_app):
     criteria = load_criteria()
-    assert criteria_keys(criteria) == ['fieldwork', 'transparency', 'independence', 'identity', 'standards']
+    assert list(criteria['criteria']) == ['fieldwork', 'transparency', 'independence', 'implantation']
+    implantation = criteria['criteria']['implantation']
+    assert implantation['max'] == 2 and implantation['computed'] == 'general'
+    assert implantation['levels']['0'] == 'Solo ha sondeado elecciones autonómicas o locales.'
+    assert implantation['levels']['1'] == 'Ha sondeado al menos una elección general.'
+    assert 'ESOMAR' in implantation['levels']['2'] and 'ISO 20252' in implantation['levels']['2']
+    assert evaluated_keys(criteria) == ['fieldwork', 'transparency', 'independence']
+    assert EVIDENCE_KEYS == ('identity', 'standards')
     assert max_points(criteria) == 10 and criteria['scale'] == {'per_point': 8, 'floor': 5}
     assert level_text(criteria, 'independence', 1) == 'Un único cliente, un medio.'
     for key, entry in criteria['criteria'].items():
@@ -53,11 +62,11 @@ def test_quality_from_points_applies_the_floor_and_the_scale(fresh_app):
     assert [quality_from_points(p, scale) for p in (0, 1, 7, 10)] == [5, 8, 56, 80]
 
 
-def test_read_quality_adds_points_and_quality(fresh_app, monkeypatch):
+def test_read_quality_adds_the_manual_points(fresh_app, monkeypatch):
     patch_csv(monkeypatch, fresh_app, csv_of([GOOD_ROW]))
     frame = read_quality(today=pd.Timestamp('2026-10-16').date())
-    assert list(frame.columns) == list(COLUMNS) + ['points', 'quality']
-    assert frame.loc[0, 'points'] == 7 and frame.loc[0, 'quality'] == 56.0
+    assert list(frame.columns) == list(COLUMNS) + ['manual']
+    assert frame.loc[0, 'manual'] == 6
     assert frame.loc[0, 'checked_at'] == pd.Timestamp('2026-10-16')
 
 
@@ -96,10 +105,11 @@ def test_pollsters_quality_values_fills_the_floor_and_checks_ids(fresh_app, monk
     criteria = load_criteria()
     evaluated = read_quality(criteria, today=pd.Timestamp('2026-10-16').date())
     pollsters = pd.DataFrame({'id': [1, 2], 'name': ['CIS', 'GAD3'], 'quality': [10.0, 76.0]})
-    values = pollsters_quality_values(pollsters, evaluated, criteria['scale'])
+    generals = pd.Series({1: 2}, name='num_generals')
+    values = pollsters_quality_values(pollsters, evaluated, criteria['scale'], generals)
     assert values.tolist() == [56.0, 5.0] and values.index.equals(pollsters.index)
     with pytest.raises(ValueError, match='7'):
-        pollsters_quality_values(pollsters, evaluated.assign(pollster_id=7), criteria['scale'])
+        pollsters_quality_values(pollsters, evaluated.assign(pollster_id=7), criteria['scale'], generals)
 
 
 def test_pollsters_quality_values_warns_on_name_mismatch(fresh_app, monkeypatch):
@@ -107,4 +117,73 @@ def test_pollsters_quality_values_warns_on_name_mismatch(fresh_app, monkeypatch)
     criteria = load_criteria()
     evaluated = read_quality(criteria, today=pd.Timestamp('2026-10-16').date())
     with pytest.warns(UserWarning, match='C.I.S.'):
-        pollsters_quality_values(pd.DataFrame({'id': [1], 'name': ['CIS']}), evaluated, criteria['scale'])
+        pollsters_quality_values(pd.DataFrame({'id': [1], 'name': ['CIS']}), evaluated, criteria['scale'],
+                                 pd.Series(dtype=int))
+
+
+def test_identity_voids_transparency():
+    assert manual_points(3, 2, 1, identity=0) == 4
+    assert manual_points(3, 2, 1, identity=1) == 6
+    series = manual_points(pd.Series([3, 3]), pd.Series([2, 2]), pd.Series([1, 1]), pd.Series([0, 1]))
+    assert series.tolist() == [4, 6]
+
+
+def test_implantation_needs_a_general_and_standards_on_top():
+    assert implantation_points(0, 1) == 0
+    assert implantation_points(1, 0) == 1
+    assert implantation_points(3, 1) == 2
+    assert implantation_points(pd.Series([0, 2]), pd.Series([1, 1])).tolist() == [0, 2]
+
+
+def test_count_generals_ignores_same_day_and_later_elections():
+    events = pd.DataFrame({'pollster_id': [1, 1, 1, 2], 'event_date': pd.to_datetime(
+        ['2019-11-10', '2023-07-23', '2023-07-23', '2023-07-23'])})
+    assert count_generals(events, pd.Timestamp('2023-07-23')).to_dict() == {1: 1}
+    assert count_generals(events, pd.Timestamp('2023-07-24')).to_dict() == {1: 2, 2: 1}
+    assert count_generals(events).to_dict() == {1: 2, 2: 1}
+    assert count_generals(events, pd.NaT).to_dict() == {1: 2, 2: 1}
+    assert 3 not in count_generals(events).index
+
+
+def test_prior_quality_values():
+    scale = {'per_point': 8, 'floor': 5}
+    evaluations = pd.DataFrame({
+        'pollster_id': [10, 11], 'fieldwork': [3, 3], 'transparency': [3, 1], 'independence': [0, 2],
+        'identity': [1, 1], 'standards': [0, 1]})  # CENTRA and GfK
+    none = pd.Series(dtype=int)
+    before = prior_quality([10, 11, 12], evaluations, scale, none)
+    assert before['quality'].tolist() == [48.0, 48.0, 5.0]
+    after = prior_quality([10, 11, 12], evaluations, scale, pd.Series({10: 1, 11: 2, 12: 1}))
+    assert after['quality'].tolist() == [56.0, 64.0, 8.0]
+    assert after.loc[11, ['num_generals', 'manual', 'implantation', 'points']].tolist() == [2, 6, 2, 8]
+    assert after.index.name == 'pollster_id'
+
+
+@pytest.mark.parametrize('change, reason', [
+    ({'standards': 2}, 'standards'),
+    ({'identity': 1, 'identity_source': ''}, 'identity_source'),
+])
+def test_read_quality_validates_identity_and_standards_as_evidence(fresh_app, monkeypatch, change, reason):
+    patch_csv(monkeypatch, fresh_app, csv_of([GOOD_ROW | change]))
+    with pytest.raises(ValueError, match=reason):
+        read_quality(today=pd.Timestamp('2026-10-16').date())
+
+
+def test_load_criteria_rejects_an_unknown_computed_value(fresh_app, monkeypatch):
+    broken = ('{"scale": {"per_point": 8, "floor": 5}, "criteria": {"x": {"name": "X", "max": 1, "computed": "other", '
+              '"levels": {"0": "a", "1": "b"}}}}')
+    patch_data(monkeypatch, fresh_app, {CRITERIA_FILE: broken})
+    with pytest.raises(ValueError, match='computed'):
+        load_criteria()
+
+
+def test_quality_breakdown_splits_implantation(fresh_app):
+    criteria = load_criteria()
+    record = GOOD_ROW | {'transparency': 3, 'identity': 1, 'standards': 1, 'points': 8}
+    out = quality_breakdown(record, criteria)
+    assert [row['key'] for row in out['rows']] == ['fieldwork', 'transparency', 'independence']
+    assert (out['manual'], out['implantation'], out['general'], out['transparency_void']) == (6, 2, True, False)
+    void = quality_breakdown(GOOD_ROW | {'identity': 0, 'identity_source': '', 'points': 3}, criteria)
+    assert (void['manual'], void['implantation'], void['general'], void['transparency_void']) == (3, 0, False, True)
+    assert void['rows'][1]['points'] == 0
+    assert quality_breakdown(None, criteria)['rows'] == []

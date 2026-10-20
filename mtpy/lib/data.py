@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import warnings
 
+from datetime import date
 from typing import Any, Literal, Mapping, Optional
 
 from ..core.app import App
@@ -10,7 +11,7 @@ from ..models.elections import (
     Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
     Pollsters, PollstersHerding, PollstersParties, PollstersQuality, PollstersRatings, Parties, Scopes
 )
-from .quality import load_criteria, pollsters_quality_values, read_quality
+from .quality import count_generals, load_criteria, pollsters_quality_values, prior_quality, read_quality
 
 
 def get_scopes() -> pd.DataFrame:
@@ -160,6 +161,10 @@ def save_catalogues() -> dict[str, int]:
 
     criteria = load_criteria()
     quality = read_quality(criteria)
+    n_generals = count_generals(get_general_events(), pd.Timestamp(date.today()))
+    # the replica keeps the points and the quality of today: the implantation counts the generals held until now
+    today = prior_quality(quality['pollster_id'], quality, criteria['scale'], n_generals)
+    quality = quality.assign(points=today['points'].to_numpy(), quality=today['quality'].to_numpy())
     qmodel = PollstersQuality()
     if not qmodel.table_exists():
         qmodel.create(replace=False)
@@ -174,7 +179,7 @@ def save_catalogues() -> dict[str, int]:
     out['quality'] = int(df.shape[0])
 
     pollsters = get_pollsters()
-    pollsters['quality'] = pollsters_quality_values(pollsters, quality, criteria['scale'])
+    pollsters['quality'] = pollsters_quality_values(pollsters, quality, criteria['scale'], n_generals)
     pmodel = Pollsters()
     pmodel.upsert(pmodel.format_data(pollsters, int_type='nullable', bin_type='nullable', sort=True))
     out['pollsters'] = int(pollsters.shape[0])
@@ -568,6 +573,29 @@ def get_pollster_events(pollster_id: int) -> pd.DataFrame:
 
     return events.sort_values(['event_date', 'event_scope'], ignore_index=True)[
         ['event_scope', 'event_date', 'n_polls'] + measures]
+
+
+def get_general_events() -> pd.DataFrame:
+    """
+    General elections each pollster polled, for the "implantation" criterion of the prior quality.
+
+    A pollster counts for a general election (``event_scope = 'es'``) when it has at least one poll with a
+    non-null ``bias`` that is not an exit poll or a ``wban`` (``ctype`` null counts); ``mtype`` is not filtered, so
+    the public figure also holds for online panels and aggregators.
+
+    Returns
+    -------
+    pd.DataFrame
+        ``pollster_id`` and ``event_date``, one row per pollster and general election.
+    """
+    polls = Polls().get_results(query=dict(filters=[
+        "event_scope = 'es'", 'bias IS NOT NULL', "(ctype IS NULL OR ctype NOT IN ('wban', 'exit'))"
+    ]), formatted=True)
+    polls = polls.assign(event_scope=polls['event_scope'].astype(str))
+    polls = polls.loc[(polls['event_scope'] == 'es') & polls['bias'].notna() & ~polls['ctype'].isin(['wban', 'exit'])]
+
+    return polls[['pollster_id', 'event_date']].drop_duplicates().sort_values(
+        ['event_date', 'pollster_id'], ignore_index=True)
 
 
 def get_ratings(

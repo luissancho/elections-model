@@ -1266,8 +1266,8 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     assert '<div class="v">56,0<small></small></div>' in kpis.replace('\n', '') and '7 de 10 puntos' in kpis
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
-    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Identidad', 'Estándares']
-    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2'), ('1', '1'), ('0', '1')]
+    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia']
+    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2')]
     assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
     assert 'Comprobado el 16 oct 2026.' in card and 'Organismo público' in card and 'provisional' not in card
     assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
@@ -1318,7 +1318,7 @@ def test_casa_profile_quality_card_splits_compound_sources_into_links(houses):
     assert ('<a href="https://hamalgama.example/ficha" rel="noopener">https://hamalgama.example/ficha</a>'
             ' (ficha de 2026-10-01); '
             '<a href="https://hamalgama.example/metodologia" rel="noopener">https://hamalgama.example/metodologia</a>') in card
-    assert 'href="https://hamalgama.example/ficha (' not in card and '<td>–</td>' in card  # Estándares, sin fuente
+    assert 'href="https://hamalgama.example/ficha (' not in card
 
 
 def test_casa_profile_quality_card_of_an_unrated_house(houses):
@@ -1339,8 +1339,7 @@ def test_casa_profile_quality_card_of_an_evaluated_informative_house(houses):
     page = html(call(houses, '/casas/agregador')[2])
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
-    assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0'),
-                                            ('Identidad', '1'), ('Estándares', '0')]
+    assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0')]
     assert 'href="https://agregador.example/metodo"' in card and '2 de 10 puntos' in card
     assert 'la confianza es informativa' in card and 'Sin evaluar' not in card
 
@@ -2139,7 +2138,7 @@ def test_metodo_rating_text(api):
     assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
     assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
     assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
-    assert 'Trabajo de campo' in text and 'Estándares' in text and '<table id="rubric-table">' in page
+    assert 'Trabajo de campo' in text and 'Implantación' in text and '<table id="rubric-table">' in page
     assert '<strong>Diferencial</strong>' in text and 'Sesgo bloques' in text and 'Calidad</strong>' not in text
     assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
     assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text

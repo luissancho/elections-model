@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
 
 from .. import webapi
-from ..quality import criteria_keys, level_text, load_criteria, max_points
+from ..quality import evaluated_keys, level_text, load_criteria, max_points
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
 from .common import OTHERS_COLOR, analysis_part, api_url, block_color, common_context
 from .elecciones import (error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts,
@@ -719,7 +719,7 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
     scale = criteria['scale']
     rows = []
     if record:
-        for key in criteria_keys(criteria):
+        for key in evaluated_keys(criteria):
             source = record.get(f'{key}_source') or ''
             points = int(record[key])
             rows.append({'key': key, 'name': criteria['criteria'][key]['name'], 'points': points,
