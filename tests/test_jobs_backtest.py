@@ -126,7 +126,8 @@ def test_backtest_passes_every_parameter_through_and_records_it(fresh_app, patch
     call = runner.calls[0]
     assert call == {'scope': 'es-md', 'events': ['2023-05-28'], 'horizons': [6, 30], 'verbose': 0, 'n_sim': 50, 'seed': 7,
                     'max_fc': 5, 'nowcast_only': True, 'house_effects': False, 'industry_bias': True, 'dispersion': False,
-                    'herding': False, 'composition': None, 'regional_noise': False, 'min_events': 1}
+                    'herding': False, 'composition': None, 'regional_noise': False, 'min_events': 1, 'weight_ratings': None}
     run = json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))
     assert run['seed'] == 7 and run['nowcast_only'] is True and run['house_effects'] is False and run['min_events'] == 1
+    assert run['recompute_ratings'] is False
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]  # lo evaluado, no lo pedido

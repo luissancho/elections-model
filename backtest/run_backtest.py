@@ -5,7 +5,7 @@ Run the model backtest on past elections and write the results to `backtest/resu
 Usage (from the repository root):
     python backtest/run_backtest.py [--scope es | --scopes es-md es-cl ... | --scopes all]
                                     [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 1000] [--seed 42] [--nowcast-only]
-                                    [--no-house-effects] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
+                                    [--no-house-effects] [--recompute-ratings] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
 Without `--events`, a regional scope evaluates its featured elections held since 2019.
@@ -41,6 +41,7 @@ def main():
     parser.add_argument('--composition', default=None, help="joint noise of the national parties (M7): 'auto' or a ratio in (0, 1]; independent draws by default")
     parser.add_argument('--no-regional-noise', dest='regional_noise', action='store_false', help='deterministic proportional swing per province (no M9 shocks)')
     parser.add_argument('--min-events', type=int, default=None, help='featured elections of a regional scope needed to fit the estimators on the scope itself instead of on `es` (M11); by default always `es`, 1 forces the own ones')
+    parser.add_argument('--recompute-ratings', action='store_true', help='recompute the pollster ratings in memory with the current code (nothing is saved) instead of using the stored ones')
     parser.add_argument('--out', default=os.path.join(ROOT, 'backtest', 'results'))
     args = parser.parse_args()
 
@@ -63,7 +64,8 @@ def main():
         scopes=scopes, events=args.events, horizons=args.horizons, n_sim=args.n_sim, seed=args.seed, max_fc=args.max_fc,
         nowcast_only=args.nowcast_only, house_effects=args.house_effects, industry_bias=args.industry_bias,
         dispersion=args.dispersion, herding=args.herding, composition=args.composition,
-        regional_noise=args.regional_noise, min_events=args.min_events, out=args.out
+        regional_noise=args.regional_noise, min_events=args.min_events,
+        recompute_ratings=args.recompute_ratings, out=args.out
     )
 
 

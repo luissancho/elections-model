@@ -55,6 +55,7 @@ class Simulator(Core):
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
         min_events: Optional[int] = None,
+        weight_ratings: Optional[pd.Series] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -142,6 +143,9 @@ class Simulator(Core):
             scope (`es`). `None` (default) always uses the parent: the own estimators of the regional scopes
             did not improve the backtest (M11 validation). A scope without parent always uses its own
             elections. See `estimator_scope`.
+        weight_ratings : pd.Series, optional
+            For the backtest: ratings recomputed in memory, indexed by (`event_date`, `pollster_id`), that
+            replace the stored `weight_rating` of the polls (see `Forecaster`). `None` (default) uses the stored ones.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -167,6 +171,7 @@ class Simulator(Core):
         self.composition = composition
         self.regional_noise = bool(regional_noise)
         self.min_events = None if min_events is None else int(min_events)
+        self.weight_ratings = weight_ratings
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -226,6 +231,7 @@ class Simulator(Core):
             he_params=self.he_params,
             dispersion=self.dispersion,
             disp_params=self.disp_params,
+            weight_ratings=self.weight_ratings,
             verbose=self.verbose,
             path=self.path
         ).build_series()

@@ -201,7 +201,7 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     run = json.load(open(folder / 'run.json', encoding='utf-8'))
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
-                        'events', 'horizons', 'db_polls', 'db_last_poll'}
+                        'recompute_ratings', 'events', 'horizons', 'db_polls', 'db_last_poll'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
@@ -210,6 +210,50 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     assert seen['n_sim'] == 20 and seen['verbose'] == 1 and seen['composition'] == 0.25 and seen['min_events'] == 1
     assert figures['n_cases'] == 4 and figures['n_events'] == 2 and figures['n_horizons'] == 2
     assert figures['folder'] == str(folder) and figures['by_horizon'].shape[0] == 2 and figures['seconds']['total'] >= 0
+
+
+def test_backtest_scope_recomputes_the_ratings_once_and_passes_them_to_every_case(tmp_path, monkeypatch):
+    """`--recompute-ratings`: los ratings se recalculan una vez por ámbito (`rating_overrides`), el ejecutor los recibe
+    como `weight_ratings` (los pasa a cada caso) y `run.json` lo anota; sin la opción no se calcula nada."""
+    import json
+    import pandas as pd
+    from mtpy.lib import backtest
+    fixed = pd.Series([2.0], index=pd.MultiIndex.from_tuples([('2023-07-23', 1)], names=['event_date', 'pollster_id']))
+    calls, seen = [], []
+    monkeypatch.setattr(backtest, 'rating_overrides', lambda scope: calls.append(scope) or fixed)
+
+    def runner(**kwargs):
+        seen.append(kwargs)
+        return fake_results()
+
+    options = dict(runner=runner, stats=lambda scope: {'db_polls': 1, 'db_last_poll': None},
+                   prov=lambda: {'commit': None, 'dirty': False, 'versions': {}})
+    backtest.backtest_scope('es', out=str(tmp_path / 'on'), recompute_ratings=True, **options)
+    assert calls == ['es'] and seen[0]['weight_ratings'] is fixed
+    assert json.load(open(tmp_path / 'on' / 'run.json', encoding='utf-8'))['recompute_ratings'] is True
+    assert 'recompute_ratings' not in seen[0]
+
+    backtest.backtest_scope('es', out=str(tmp_path / 'off'), **options)
+    assert calls == ['es'] and seen[1]['weight_ratings'] is None
+    assert json.load(open(tmp_path / 'off' / 'run.json', encoding='utf-8'))['recompute_ratings'] is False
+
+
+def test_run_backtest_passes_the_ratings_to_every_case(monkeypatch):
+    """`run_backtest` traslada `weight_ratings` a cada caso."""
+    import warnings
+    from mtpy.lib import backtest
+    seen = []
+
+    def failing_case(*args, **kwargs):
+        seen.append(kwargs.get('weight_ratings'))
+        raise ValueError('no usable polls')
+
+    monkeypatch.setattr(backtest, 'run_case', failing_case)
+    marker = pd.Series([1.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        backtest.run_backtest(scope='es', events=['2023-07-23'], horizons=[6, 30], weight_ratings=marker)
+    assert seen == [marker, marker]
 
 
 def test_backtest_scope_evaluates_the_default_elections_of_es_at_the_root(tmp_path):
@@ -339,7 +383,7 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch):
     script.main()
     assert seen == {'scopes': ['es-md', 'es-cl'], 'events': None, 'horizons': [6, 30], 'n_sim': 20, 'seed': 42, 'max_fc': 10,
                     'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
-                    'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None, 'out': 'x'}
+                    'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None, 'recompute_ratings': False, 'out': 'x'}
 
 
 def test_backtest_simulates_a_thousand_times_by_default_like_the_forecast():

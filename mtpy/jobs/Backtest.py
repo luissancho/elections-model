@@ -41,7 +41,7 @@ class Backtest(ScopeReporter, Job):
 
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
-            regional_noise=True, min_events=None, out=None, verbose=1, runner=None, stats=None, **kwargs):
+            regional_noise=True, min_events=None, recompute_ratings=False, out=None, verbose=1, runner=None, stats=None, **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -78,6 +78,9 @@ class Backtest(ScopeReporter, Job):
         min_events : int, optional
             Featured elections a regional scope needs to fit the estimators on itself instead of on ``es``
             (M11); by default always ``es``, 1 forces its own.
+        recompute_ratings : bool, default False
+            Recompute the pollster ratings in memory with the current code (once per scope) and use them in
+            every case instead of the stored ones; nothing is saved to the database.
         out : str, optional
             Results folder; ``backtest/results`` of the repository by default (a relative path is taken from
             the working directory).
@@ -106,7 +109,8 @@ class Backtest(ScopeReporter, Job):
         params = dict(events=events, horizons=horizons, n_sim=n_sim, seed=seed, max_fc=max_fc,
                       nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias,
                       dispersion=dispersion, herding=herding, composition=self._composition(composition),
-                      regional_noise=regional_noise, min_events=min_events, verbose=max(0, verbose - 1),
+                      regional_noise=regional_noise, min_events=min_events, recompute_ratings=recompute_ratings,
+                      verbose=max(0, verbose - 1),
                       runner=runner, stats=stats)
         targets = resolve_scopes(scopes)
         self._say('backtest: {} · {} · {}'.format(counted(len(targets), 'ámbito', 'ámbitos'),
