@@ -125,9 +125,10 @@ export function hemicycleOption(seats, {
     }));
   }
   // Under the total, «ESCAÑOS» and, when the hole of the hemicycle is big enough, a second line with the absolute
-  // majority (the pill above the arc names it anyway); the stack moves up one line to make room for it
+  // majority (the pill above the arc names it anyway), 18 px lower so the two lines breathe; the total and
+  // «ESCAÑOS» move up by as much to make room for it
   const withSubtitle = withMajority && radius >= SUBTITLE_RADIUS;
-  const lift = withSubtitle ? 14 : 0;
+  const lift = withSubtitle ? 18 : 0;
   const small = {fontFamily: THEME.fontFamily, fontWeight: 600, fontSize: 10.5, fill: THEME.mutedColor, letterSpacing: 1};
   graphic.push(text(center[0], center[1] - 30 - lift, String(total), {
     fontFamily: THEME.headFamily, fontWeight: 800, fontSize: 34, fill: THEME.textColor,
