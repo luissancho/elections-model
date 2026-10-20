@@ -3727,6 +3727,12 @@ def verdict_pills(page):
     return re.findall(r'<span class="pill (q[123])"[^>]*>([^<]+)</span>', page)
 
 
+def study_cards_html(page):
+    """El HTML de la rejilla `#studies` de las tarjetas de los estudios (las tarjetas no anidan `div`)."""
+    cards = page[page.index('<div class="studies" id="studies">'):]
+    return cards[:cards.index('</div>')]
+
+
 def test_menu_has_analisis_between_ranking_and_metodo(api):
     page = html(call(api, '/metodo')[2])
     nav = page[page.index('<nav aria-label="Secciones">'):]
@@ -3753,7 +3759,7 @@ def test_analisis_index_lists_the_study_or_says_none(api, fresh_app):
     meta = fixture_data('study-meta')
     assert 'Todavía no hay ningún análisis publicado.' not in page
     # two cards per row on desktop, each with only the title, the subtitle and the link to the study
-    cards = re.search(r'<div class="studies" id="studies">(.*?)</div>\s*</div>', page, re.S).group(1)
+    cards = study_cards_html(page)
     assert meta['title'] in cards and meta['subtitle'] in cards
     assert '<a class="btn pri" href="/analisis/voto-cera">Ver el análisis completo' in cards
     assert verdict_pills(cards) == [] and 'Predicción registrada' not in cards and 'Comprobada el' not in cards
@@ -3787,10 +3793,13 @@ def test_inicio_shows_the_studies_band_only_with_a_study(api, fresh_app):
     assert '<div class="sec-h" id="analisis"><h2>Análisis</h2><a href="/analisis">Ver los análisis ›</a></div>' in page
     band = page[page.index('id="analisis"'):]
     assert page.index('id="past"') < page.index('id="analisis"')
+    # the same card as the index of the Análisis: title, subtitle and the button, no verdicts and no dates
     meta = fixture_data('study-meta')
-    assert 'class="card card-link" href="/analisis/voto-cera"' in band
-    assert '<h3>{}</h3>'.format(meta['title']) in band and meta['subtitle'] in band
-    assert verdict_pills(band) == STUDY_VERDICTS
+    cards = study_cards_html(band)
+    assert '<article class="card study-card">' in cards
+    assert '<h3>{}</h3>'.format(meta['title']) in cards and meta['subtitle'] in cards
+    assert '<a class="btn pri" href="/analisis/voto-cera">Ver el análisis completo' in cards
+    assert verdict_pills(cards) == [] and 'Predicción registrada' not in cards and 'Comprobada el' not in cards
 
 
 def test_api_url_study():

@@ -211,13 +211,6 @@ svg[hidden] { display: none; }
 }
 .pill.ok { background: var(--color-ok-soft); color: #15803d; }
 .pill.brand { background: var(--color-accent-soft); color: var(--color-accent); }
-/* Verdict pills of the study cards (Análisis): the colours of the three questions, white text */
-.pill.q1, .pill.q2, .pill.q3 { color: #fff; }
-.pill.q1 { background: #2e9e5b; }
-.pill.q2 { background: #e8912b; }
-.pill.q3 { background: #ce3b3b; }
-.study-verdicts { display: flex; flex-wrap: wrap; gap: 6px; }
-.card-link .study-date { font-size: 12px; color: var(--color-muted); }
 .pill .dot { width: 8px; height: 8px; margin: 0; }
 h2 .pill, h3 .pill { margin-left: 2px; font-family: var(--font-body); }
 /* Chips: a figure with a secondary label */
@@ -837,7 +830,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px var(--font-head); white-space: nowrap; }
 .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
 .qcard > .lead { margin: 0 0 var(--space-3); }
-/* Index of the studies (/analisis): two cards per row on desktop, title + subtitle + the link to the study */
+/* Cards of the studies (band of the home and /analisis): two per row on desktop, title + subtitle + the button */
 .studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .study-card { display: flex; flex-direction: column; gap: var(--space-2); }
 .study-card h3 { margin: 0; }

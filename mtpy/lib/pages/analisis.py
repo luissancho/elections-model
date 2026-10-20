@@ -91,9 +91,8 @@ def study_cards() -> list:
     Returns
     -------
     list of dict
-        ``{'study', 'href', 'title', 'subtitle', 'verdicts', 'registered_at', 'checked_at'}`` per study of
-        ``site().studies()`` with a published ``meta`` and an entry in ``STUDIES``, in that order; ``title``,
-        ``subtitle`` and the dates come from the ``meta``, ``verdicts`` from ``verdict_rows``.
+        ``{'study', 'href', 'title', 'subtitle'}`` per study of ``site().studies()`` with a published ``meta`` and
+        an entry in ``STUDIES``, in that order; ``title`` and ``subtitle`` come from the ``meta``.
     """
     cards = []
 
@@ -108,9 +107,6 @@ def study_cards() -> list:
             'href': '/analisis/' + study,
             'title': meta.get('title'),
             'subtitle': meta.get('subtitle'),
-            'verdicts': verdict_rows(),
-            'registered_at': meta.get('registered_at'),
-            'checked_at': meta.get('checked_at'),
         })
 
     return cards
