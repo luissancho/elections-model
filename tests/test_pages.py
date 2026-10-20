@@ -860,8 +860,12 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
 def test_promedios_controls_are_hidden_without_js(api):
     """Sin JS los controles no hacen nada y no se muestran."""
     page = html(call(api, '/es')[2]).replace('\n', ' ')
-    for control in ('series-window', 'series-view'):
+    for control in ('series-window', 'series-view', 'series-polls'):
         assert re.search(r'<fieldset id="{}" class="[^"]*" hidden>'.format(control), page), control
+    # «Sondeos»: mostrar u ocultar los puntos de los sondeos del promedio, marcados por defecto
+    polls = page[page.index('id="series-polls"'):]
+    polls = polls[:polls.index('</fieldset>')]
+    assert '<legend>Sondeos</legend>' in polls and 'value="si" checked> Con sondeos' in polls and 'value="no"> Sin sondeos' in polls
     before = page[:page.index('id="polls"')]
     assert 'data-all' not in before and 'data-none' not in before
     assert '<option value="Sigma Dos" selected>Sigma Dos (1)</option>' in page
