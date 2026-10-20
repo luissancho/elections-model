@@ -1072,6 +1072,19 @@ def test_casas_without_analysis_keeps_the_ranking(houses_without_analysis):
     assert 'id="effects-heatmap"' not in page and 'id="herding-table"' not in page
 
 
+def test_casas_with_analysis_without_house_effects_shows_the_notice(houses, fresh_app):
+    """Un ámbito con análisis (`meta`, rebaño) pero sin `house-effects` (ciclo sin sondeos) da 200 y el aviso de la
+    tarjeta de efectos, sin mapa de calor."""
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.remove(bundle.path_analysis('es', 'house-effects'))
+    writer.remove(bundle.path_analysis_csv('es', 'house-effects'))
+    status, _, body = call(houses, '/casas', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'Análisis no publicado todavía' in page
+    assert 'id="effects-heatmap"' not in page and 'id="herding-table"' in page
+    assert initial(body)['grid'] is None
+
+
 def test_casas_without_database_is_a_503_page(api):
     status, headers, body = call(api, '/casas')
     assert status == 503 and 'La base de datos no está disponible' in html(body) and headers['cache-control'] == 'no-store'

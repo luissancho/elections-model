@@ -209,34 +209,33 @@ def test_analysis_action_publishes_each_scope(fresh_app, tmp_path, patched, caps
 
 
 def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, patched, capsys):
-    """Con `dry_run`, el análisis va a `site-dry/v1/analysis/`; un ámbito sin datos se omite, uno que rompe
-    falla sin detener a los demás, y el manifest no se toca."""
+    """Con `dry_run`, el análisis va a `site-dry/v1/analysis/`; un ámbito sin sondeos en el ciclo actual se publica sin
+    efectos de encuestadora, uno que rompe falla sin detener a los demás, y el manifest no se toca."""
     from mtpy.jobs.Publish import Publish
 
     fs = FileSystem(str(tmp_path))
     with pytest.raises(RuntimeError, match=r'es-ar \(analysis\)'):
         Publish().run(what=['analysis'], scopes=['es-cb', 'es-ar', 'es'], fs=fs, dry_run=True)
     out = capsys.readouterr().out
-    assert 'es-cb: analysis skipped (No polls for es-cb 2027-05-23: nothing to forecast)' in out and "es-ar: analysis failed (KeyError: 'x')" in out
+    assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters)' in out and "es-ar: analysis failed (KeyError: 'x')" in out
     assert 'es: analysis published (event 2026-11-29, 3 pollsters) in ' in out and 'manifest' not in out
     assert bundle.BundleReader(fs, prefix=bundle.DRY_PREFIX).analysis_exists('es')
     assert not (tmp_path / 'site').exists()
     assert [c[2] for c in patched] == [{'verbose': 0}] * 3
 
 
-def test_analysis_of_a_scope_without_polls_in_its_current_event_is_skipped(fresh_app, tmp_path, patched, capsys):
-    """Un ámbito cuyo evento en curso aún no tiene sondeos se omite (como en `forecast`) y el job no falla."""
+def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_without_effects(fresh_app, tmp_path, patched, capsys):
+    """Un ámbito cuyo evento en curso aún no tiene sondeos publica el análisis de las elecciones pasadas, sin
+    efectos de encuestadora."""
     from mtpy.jobs.Publish import Publish
 
     fs = FileSystem(str(tmp_path))
     result = Publish().run(what=['analysis'], scopes=['es-cb', 'es'], fs=fs)
-    assert result['es-cb'] == {'status': 'skipped', 'reason': 'No polls for es-cb 2027-05-23: nothing to forecast'}
-    assert result['es']['status'] == 'published'
+    assert result['es-cb']['status'] == 'published' and result['es']['status'] == 'published'
     out = capsys.readouterr().out
-    assert 'es-cb: analysis skipped (No polls for es-cb 2027-05-23: nothing to forecast)' in out
-    assert 'es: analysis published (event 2026-11-29, 3 pollsters)' in out
+    assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters)' in out
     reader = bundle.BundleReader(fs)
-    assert reader.analysis_exists('es') and not reader.exists('analysis/es-cb')
+    assert reader.analysis_exists('es') and reader.analysis_exists('es-cb')
 
 
 def test_failed_forecast_is_not_hidden_by_a_later_successful_action(fresh_app, tmp_path, patched, monkeypatch):

@@ -139,7 +139,7 @@ def export_error_data(frame: pd.DataFrame) -> tuple:
 
 
 def export_analysis_meta(scope: str, event_date: str, events: Sequence[str], n_pollsters: int, params: dict,
-                         prov: dict, seconds: dict) -> dict:
+                         prov: dict, seconds: dict, house_effects: bool = True) -> dict:
     """Build the ``analysis-meta`` document describing how and when the analysis of a scope was produced.
 
     Parameters
@@ -158,6 +158,8 @@ def export_analysis_meta(scope: str, event_date: str, events: Sequence[str], n_p
         Result of ``provenance``.
     seconds : dict
         Seconds spent in each step.
+    house_effects : bool
+        Whether the analysis includes the house effects (false when the current cycle has no polls).
 
     Returns
     -------
@@ -166,7 +168,7 @@ def export_analysis_meta(scope: str, event_date: str, events: Sequence[str], n_p
     """
     return {'scope': scope, 'event_date': event_date, 'events': list(events), 'n_pollsters': int(n_pollsters),
             'params': params, 'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'],
-            'seconds': seconds}
+            'seconds': seconds, 'house_effects': bool(house_effects)}
 
 
 def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callable] = None,
@@ -174,8 +176,10 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     """Compute the houses analysis of a scope and write it into the bundle, overwriting the previous one.
 
     The parts are written in the order ``house-effects``, ``herding``, ``poll-errors`` and ``error-data``
-    (each JSON with its CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json``
-    (and the analysis it describes, partly overwritten) in place. Neither the manifest nor the runs are
+    (each JSON with its CSV twins) and ``meta`` last. When the current event has no polls the house effects
+    cannot be fitted: the other parts, which describe past elections, are still published, a stale
+    ``house-effects`` of the scope is removed and ``meta.house_effects`` is false. A failure halfway leaves
+    the previous ``meta.json`` in place, (and the analysis it describes, partly overwritten). Neither the manifest nor the runs are
     touched.
 
     The current event is the last election of the computer (``event_dates[-1]``, the next event when the
@@ -202,9 +206,9 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     Raises
     ------
     NothingToPublish
-        Building the computer or its series, or ``print_house_effects`` (whose average of the current
-        event needs its polls), raised ``ValueError``; nothing is written then. Any later error,
-        ``ValueError`` included, propagates as is.
+        Building the computer or its series, or reading its events, raised ``ValueError``; nothing is
+        written then. A ``ValueError`` of ``print_house_effects`` (no polls in the current event) is not
+        an error; any later error, ``ValueError`` included, propagates as is.
     """
     start = mark = time.perf_counter()
 
@@ -221,9 +225,12 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
         event_date = comp.event_dates[-1]
         bmaps = comp.event_params[event_date]['bmaps']
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
-        table = comp.print_house_effects()  # fits an average of the current event: no polls is a ValueError
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
+    try:
+        table = comp.print_house_effects()  # fits an average of the current event: no polls is a ValueError
+    except ValueError:
+        table = None
 
     def write(part, data, frames):
         """Write the JSON of a part and its CSV twins (``{csv name: frame}``)."""
@@ -231,9 +238,16 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
         for name, frame in frames.items():
             writer.write_csv(bundle.path_analysis_csv(scope, name), frame)
 
-    effects, frame = export_analysis_house_effects(table, main, list(blocks))
-    write('house-effects', effects, {'house-effects': frame})
-    seconds['house_effects'] = lap()
+    effects = None
+    if table is not None:
+        effects, frame = export_analysis_house_effects(table, main, list(blocks))
+        write('house-effects', effects, {'house-effects': frame})
+        seconds['house_effects'] = lap()
+    else:
+        for stale in (bundle.path_analysis(scope, 'house-effects'), bundle.path_analysis_csv(scope, 'house-effects')):
+            if writer.exists(stale):
+                writer.remove(stale)
+        lap()
     summary = comp.herding_summary()
     herding = comp.herding if comp.herding is not None else comp.load_herding()
     data, rows, cycles = export_analysis_herding(summary, herding)
@@ -249,10 +263,14 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     db_polls, db_last_poll = (stats or db_stats)(scope, event_date)
     params = {**POLL_ERRORS_PARAMS, 'drange': list(POLL_ERRORS_PARAMS['drange']), 'main': main,
               'blocks': dict(blocks), 'db_polls': db_polls, 'db_last_poll': db_last_poll}
-    n_pollsters = len({row['pollster'] for row in effects['rows']} | set(summary.index.astype(str)))
+    pollsters = set(summary.index.astype(str))
+    if effects is not None:
+        pollsters |= {row['pollster'] for row in effects['rows']}
+    n_pollsters = len(pollsters)
     seconds['total'] = time.perf_counter() - start
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    meta = export_analysis_meta(scope, event_date, comp.event_dates, n_pollsters, params, prov(), seconds)
+    meta = export_analysis_meta(scope, event_date, comp.event_dates, n_pollsters, params, prov(), seconds,
+                                 house_effects=effects is not None)
     write('meta', meta, {})
     return {'scope': scope, 'event_date': event_date, 'n_pollsters': n_pollsters, 'seconds': seconds}

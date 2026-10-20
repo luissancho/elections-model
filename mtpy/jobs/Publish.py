@@ -584,7 +584,8 @@ class Publish(ScopeReporter, Job):
             ``seconds``, ``skipped`` for ``publish.NothingToPublish``, ``refused`` for the LOREG
             guard and ``failed`` for any other exception, all but ``published`` with a ``reason``.
             A scope without an upcoming event is still published (the analysis then works from
-            its last election) and only the national window guards it.
+            its last election) and only the national window guards it. A scope whose current cycle has
+            no polls is published without house effects (``meta.house_effects`` false).
         """
         try:
             publish.loreg_guard(scope, publish.next_event_date(scope), today, force, national)
