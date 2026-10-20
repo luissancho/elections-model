@@ -222,6 +222,15 @@ def test_series_window_of_three_months_keeps_the_result_in_view():
     assert option['dataZoom'][0]['endValue'] == run_js('s.dayTime("2026-10-08")')
 
 
+def test_series_axis_follows_the_window_and_the_parties_shown():
+    """El eje vertical no arranca en cero: se ajusta a los datos de la ventana y de los partidos visibles (Luis,
+    2026-10-19), y sus marcas llevan un decimal cuando el tramo es tan estrecho que lo necesitan."""
+    option = run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))
+    assert option['yAxis']['scale'] is True and 'min' not in option['yAxis'] and 'max' not in option['yAxis']
+    assert option['dataZoom'][0]['filterMode'] == 'filter'  # la ventana recorta los datos y el eje se recalcula
+    assert run_js('[s.axisPctLabel(32), s.axisPctLabel(32.2), s.axisPctLabel(0), s.axisPctLabel(32.000000001)]') == ['32%', '32,2%', '0%', '32%']
+
+
 def test_series_views_carry_the_result_of_each_view():
     initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'VOX', 'PSOE'], 'mean': {'PP': [30], 'VOX': [10], 'PSOE': [28]},
                           'lo': {'PP': [29], 'VOX': [9], 'PSOE': [27]}, 'hi': {'PP': [31], 'VOX': [11], 'PSOE': [29]}},

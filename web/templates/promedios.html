@@ -46,6 +46,10 @@
           bloque suma sus partidos. Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
         </p>
         <p>
+          El eje vertical no empieza en cero: se ajusta a la ventana y a los partidos visibles, así que al ocultar
+          partidos se ven mejor las curvas de los demás.
+        </p>
+        <p>
           La banda dice dónde está el consenso de las encuestadoras, no dónde estará el voto el día de la elección.
         </p>
         {% endcall %}
@@ -64,9 +68,6 @@
           </div>
           {% endif %}
           <div class="chart hemi" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
-          {% if lead %}
-          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}supera la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}{% if lead.p_first is not none %} · P(primero) <b>{{ lead.p_first|prob }}</b>{% endif %}</p>
-          {% endif %}
           {% call m.how() %}
           <p>
             Cada sector es un partido con los escaños del escenario central; la línea marca la mayoría absoluta.
@@ -84,7 +85,6 @@
                 <tr>
                   <th scope="col">Partido</th>
                   <th scope="col">% Voto</th>
-                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
@@ -98,7 +98,6 @@
                 <tr>
                   <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
-                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, pct_max) }}%; background: {{ color }}"></i></span></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
@@ -130,7 +129,6 @@
                 <tr>
                   <th scope="col">Bloque</th>
                   <th scope="col">% Voto</th>
-                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
@@ -138,13 +136,11 @@
                 </tr>
               </thead>
               <tbody>
-                {% set block_max = block_result_rows|map(attribute='pct')|reject('none')|max if block_result_rows else 0%}
                 {% for row in block_result_rows %}
                 {% set r = row.seats_lo|rng(row.seats_hi, row.seats, n_seats, majority) %}
                 <tr>
                   <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
-                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, block_max) }}%; background: {{ row.color }}"></i></span></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
@@ -210,7 +206,8 @@
         {% call m.how() %}
         <p>
           Los puntos son solo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
-          Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos.
+          Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos y el eje vertical se
+          ajusta a lo que queda a la vista.
         </p>
         <p>
           Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en el

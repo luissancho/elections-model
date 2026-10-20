@@ -375,9 +375,12 @@ def pollster_options(polls: list) -> list:
     return [{'name': name, 'n': n} for name, n in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
 
 
-def round_series(series: dict, digits: int = 1) -> dict:
+def round_series(series: dict, digits: int = 2) -> dict:
     """
     Series part with the ``mean``, ``lo`` and ``hi`` values rounded, to keep the page light.
+
+    Two decimals by default: with one, the vertical axis of the series chart, which follows the parties shown,
+    drew the average as a staircase of 0.1-point steps once a race filled the height (2026-10-19).
 
     Parameters
     ----------
@@ -602,8 +605,8 @@ def promedios_context(state: dict) -> dict:
     dict
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``result_rows``
         and ``block_result_rows`` (the tables of results of the summary, with their differences against the last
-        election), ``pct_max`` (the widest vote bar), ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and ``results_date`` (of the last
-        election with results, for the deltas; ``None`` without one), ``lead`` (``lead_strip``), ``table_parties`` (every party of the
+        election), ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and ``results_date`` (of the last
+        election with results, for the deltas; ``None`` without one), ``table_parties`` (every party of the
         polls part), ``table`` (``polls_table``, the ``PAGE_SIZE`` most recent polls the server renders),
         ``table_total`` (the polls of the polls part), ``months`` (``poll_months``), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
@@ -639,14 +642,12 @@ def promedios_context(state: dict) -> dict:
     results = last_results(scope, parties)
     context['result_rows'] = result_rows(summary, results)
     context['block_result_rows'] = block_result_rows(summary, meta, parties, results)
-    context['pct_max'] = max((row['pct'] for row in context['result_rows'] if row.get('pct') is not None), default=0)
     context['n_seats'] = summary.get('n_seats') or meta.get('n_seats')
     context['majority'] = summary.get('majority') or meta.get('majority')
     context['kpis'] = kpi_rows(summary, meta, parties, poll_rows)
     context['cards'] = party_cards(summary, meta, parties, results)
     context['results_year'] = results['year'] if results else None
     context['results_date'] = results['date'] if results else None
-    context['lead'] = lead_strip(summary.get('parties') or [], context['majority'])
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
     context['table'] = polls_table(poll_rows, context['table_parties'], colors)

@@ -587,7 +587,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .cta .mut { margin-left: auto; }
 .side .card + .card { margin-top: var(--space-4); }
 
-/* Charts: ECharts containers, 340 px high on desktop and 250 px on mobile; the hemicycle keeps a 2 : 1.1 box */
+/* Charts: ECharts containers, 340 px high on desktop and 250 px on mobile; the hemicycle keeps a 2 : 1.1 box. The
+   tall series charts follow their width (2 : 1) between 480 px and a cap that still fits a laptop screen */
 .chart { width: 100%; height: 340px; }
 /* The folded list of the weights example: its summary looks like the site's buttons */
 .weights-list { margin-top: var(--space-3); }
@@ -595,7 +596,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .weights-list > summary::-webkit-details-marker { display: none; }
 .weights-list > summary:hover { border-color: var(--color-text); }
 .weights-list[open] > summary { margin-bottom: var(--space-2); }
-.chart.chart-tall { height: 600px; }
+.chart.chart-tall { height: auto; aspect-ratio: 2 / 1; min-height: 480px; max-height: min(720px, 72vh); }
 .chart.chart-small { height: 160px; }
 .chart.hemi { height: auto; aspect-ratio: 2 / 1.1; max-width: 620px; margin: 0 auto; }
 
@@ -821,7 +822,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .card { padding: 14px 16px; }
   .headline { font-size: 20px; }
   .chart { height: 250px; }
-  .chart.chart-tall { height: 280px; }
+  .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }
   .chart.hemi { height: auto; }
   table { font-size: 12.5px; }
   dl { grid-template-columns: 1fr; }

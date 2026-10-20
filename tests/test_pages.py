@@ -834,7 +834,7 @@ def test_promedios_central_block_is_three_cards_with_ranges(api):
     order = [page.index(m) for m in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"', 'id="evolution-card"')]
     assert order == sorted(order)
     heads = re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="parties-table"'):page.index('id="blocks-result-table"')])
-    assert heads == ['Partido', '% Voto', 'Escaños', 'Rango 95%']  # the bar column has a hidden head; the probabilities live in Escaños (2026-10-17)
+    assert heads == ['Partido', '% Voto', 'Escaños', 'Rango 95%']  # the probabilities live in Escaños (2026-10-17)
     assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'Rango 95%']
     for gone in ('id="vote-chart"', 'id="seats-chart"', 'id="majority"', 'id="headline-table"'):
         assert gone not in page
@@ -886,8 +886,10 @@ def test_pollster_options_and_round_series():
     series = {'dates': ['2026-01-01', '2026-01-02'], 'parties': ['PP'], 'mean': {'PP': [33.149, None]},
               'lo': {'PP': [31.04, None]}, 'hi': {'PP': [35.26, 36.0]}}
     out = pages.round_series(series)
-    assert out == {'dates': series['dates'], 'parties': ['PP'], 'mean': {'PP': [33.1, None]},
-                   'lo': {'PP': [31.0, None]}, 'hi': {'PP': [35.3, 36.0]}}
+    # dos decimales: con uno, el eje estrecho del gráfico dibujaba la media en escalones (2026-10-19)
+    assert out == {'dates': series['dates'], 'parties': ['PP'], 'mean': {'PP': [33.15, None]},
+                   'lo': {'PP': [31.04, None]}, 'hi': {'PP': [35.26, 36.0]}}
+    assert pages.round_series(series, 1)['mean'] == {'PP': [33.1, None]}
     assert series['mean']['PP'][0] == 33.149  # no muta la parte
 
 
@@ -1662,7 +1664,7 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     assert foot.index('Media simple') < foot.index('<b>Promedio de sondeos</b><small>modelo · a 6 días</small>') < foot.index('<b>Resultado</b><small>23 jul 2023</small>')
     assert foot.count('<tr class="fixed"') == 2 and 'Congelado el 17 jul 2023' in foot and '>32,4</td>' in foot  # el líder, sombreado
     data = initial(body)
-    assert data['series']['horizon'] == 6 and data['series']['dates'][-1] == '2023-07-17' and data['series']['mean']['PP'][-1] == 32.4
+    assert data['series']['horizon'] == 6 and data['series']['dates'][-1] == '2023-07-17' and data['series']['mean']['PP'][-1] == 32.41  # dos decimales
     assert data['result']['date'] == '2023-07-23' and data['result']['values']['PP'] == 33.06
     assert data['model_last'] == {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.41, 'PSOE': 30.99, 'VOX': 13.01},
                                   'seats': {'PP': 140, 'PSOE': 118, 'VOX': 30}, 'seats_valid': True}
@@ -2463,6 +2465,14 @@ def test_promedios_legend_is_the_party_selector_and_the_house_chart_has_its_own_
     assert 'Pulsa un partido de la leyenda' in page and 'Tiene su propia ventana y vista' in page
 
 
+def test_series_charts_say_the_axis_follows_what_is_shown(events_site):
+    """El eje vertical del promedio ya no arranca en cero (Luis, 2026-10-19): lo dicen las tres tarjetas que lo dibujan."""
+    promedios = re.sub(r'\s+', ' ', html(call(events_site, '/es')[2]))
+    detail = re.sub(r'\s+', ' ', html(call(events_site, '/elecciones/es/generales/2023-07')[2]))
+    assert promedios.count('El eje vertical no empieza en cero') == 1 and 'el eje vertical se ajusta a lo que queda a la vista' in promedios
+    assert detail.count('El eje vertical no empieza en cero') == 1
+
+
 def test_poll_name_follows_the_loader_rule():
     assert pages.poll_name({'pollster': 'GAD3', 'sponsor': 'ABC'}) == 'GAD3 / ABC'
     assert pages.poll_name({'pollster': 'GAD3', 'sponsor': None}) == 'GAD3'
@@ -2633,7 +2643,7 @@ def test_error_page_has_no_tabbar(api):
     assert status == 404 and 'class="tabbar"' not in html(body) and '<svg hidden aria-hidden="true"' not in html(body)
 
 
-def test_promedios_opens_with_the_kpis_the_party_cards_and_the_lead_strip(events_site):
+def test_promedios_opens_with_the_kpis_and_the_party_cards(events_site):
     page = html(call(events_site, '/es')[2])
     assert page.index('id="kpis"') < page.index('id="pcards"') < page.index('id="series"')
     kpis = re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', page)
@@ -2655,13 +2665,15 @@ def test_promedios_opens_with_the_kpis_the_party_cards_and_the_lead_strip(events
     assert '.dlt.up { color: #2ca02c; }' in css and '.dlt.down { color: #d62728; }' in css and '.pc .big .dlt {' in css
     assert 'border-radius' not in css[css.index('.dlt {'):css.index('.dlt.flat')]
     assert 'class="spark"' in card and 'Último año' in card
-    assert 'Líder: <b>PP</b> · <b>135 escaños</b> · le faltan <b>41</b> para la mayoría · P(primero) <b>62,0%</b>' in flat
+    # sin la banda gris del líder bajo el hemiciclo (Luis, 2026-10-19): las tarjetas y la tabla ya lo dicen
+    assert 'class="lead-strip"' not in page
 
 
-def test_promedios_party_table_draws_the_vote_bar_and_the_seat_range(api):
+def test_promedios_party_table_draws_the_seat_range_without_a_vote_bar(api):
     page = html(call(api, '/es')[2])
     table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
-    assert '<span class="bar"><i style="width: 100.0%; background: #1d84ce"></i></span>' in table
+    # la barra del voto era redundante con la cifra (Luis, 2026-10-19); tampoco en la tabla de bloques
+    assert 'class="bar"' not in table and 'Barra del voto' not in page
     assert 'class="rng"' in table and 'left: 34.3%; width: 8.6%' in table and 'calc(38.6% - 1px)' in table and '<u style="left: 50.3%"></u>' in table
     assert '120–150' in table and '<th scope="col">Rango 95%</th>' in table
 
@@ -2887,7 +2899,9 @@ def test_second_walkthrough_layout_rules_and_the_method_index(api):
     css = open(os.path.join(pages.REPO_ROOT, 'web', 'dist', 'css', 'site.css'), encoding='utf-8').read()
     assert '.series-controls { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center;' in css
     assert '  .series-controls { flex-direction: column; align-items: flex-start; }' in css  # móvil
-    assert '.chart.chart-tall { height: 600px; }' in css and '  .chart.chart-tall { height: 280px; }' in css
+    # 2026-10-19: la altura sigue al ancho (2 : 1) entre 480 px y un tope que cabe en un portátil; 280 px fijos en móvil
+    assert '.chart.chart-tall { height: auto; aspect-ratio: 2 / 1; min-height: 480px; max-height: min(720px, 72vh); }' in css
+    assert '  .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }' in css
     assert 'max-width: 72ch' not in css and 'max-width: 90ch' not in css
     assert '.grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }' in css
     page = html(call(api, '/metodo')[2])
@@ -3481,17 +3495,18 @@ def test_casa_profile_tables_shade_both_ways_and_the_bullseye_years_run_to_today
 
 
 def test_promedios_result_tables_drop_the_probabilities(api):
-    """Resultados por partido y por bloque: sin P(primero) ni P(mayoría), que la pestaña Escaños detalla; la tira del
-    líder conserva su P(primero)."""
+    """Resultados por partido y por bloque: sin P(primero) ni P(mayoría), que la pestaña Escaños detalla; el KPI
+    «Primer partido» conserva su P(primero)."""
     page = html(call(api, '/es')[2])
     parties = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
     blocks = re.search(r'<table id="blocks-result-table">(.*?)</table>', page, re.S).group(1)
     assert 'P(primero)' not in parties and 'P(mayoría)' not in blocks and '%</td>' in parties
-    assert all(row.count('<td') == 5 for row in re.findall(r'<tr>(.*?)</tr>', parties, re.S)[1:])
-    assert all(row.count('<td') == 5 for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S)[1:])
+    # Partido, % Voto, Escaños y Rango 95%: la barra del voto se fue el 2026-10-19
+    assert all(row.count('<td') == 4 for row in re.findall(r'<tr>(.*?)</tr>', parties, re.S)[1:])
+    assert all(row.count('<td') == 4 for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S)[1:])
     cards = page[page.index('id="parties-card"'):page.index('id="evolution-card"')]
     assert 'probabilidad de quedar primero' not in cards.split('<details')[0]  # the card lead no longer promises it
-    assert 'pestaña Escaños' in cards and 'P(primero) <b>' in page  # the lead strip keeps it
+    assert 'pestaña Escaños' in cards and re.search(r'<div class="s">P\(primero\) [\d,]+%</div>', page)  # the KPI keeps it
 
 
 # 2026-10-17 (segunda petición de Luis): Promedios compara con la última elección publicada del ámbito en las dos tablas

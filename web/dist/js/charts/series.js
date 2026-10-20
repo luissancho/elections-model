@@ -1,5 +1,7 @@
 // Poll average over time: fitted series with its band, published polls, the projection to the event and, in the
-// detail of a past election, the official result marked at the election date.
+// detail of a past election, the official result marked at the election date. The vertical axis follows what is
+// on screen (the window and the parties the legend shows) instead of starting at zero, so the curves keep their
+// shape (Luis, 2026-10-19).
 import {axisLabelStyle, baseOption, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtPct} from '../format.js';
@@ -93,6 +95,17 @@ export function pollPoints(polls, name) {
     .filter(([, value]) => value !== null && value !== undefined);
 }
 
+/**
+ * Label of a tick of the vertical axis: whole percentages without decimals and, when the axis is so tight that
+ * the ticks fall between them, one decimal (`32%`, `32,2%`).
+ *
+ * @param {number} value the tick value
+ * @returns {string} the label
+ */
+export function axisPctLabel(value) {
+  return fmtPct(value, Math.abs(value - Math.round(value)) < 1e-6 ? 0 : 1);
+}
+
 /** Vertical mark line at `time` with a label at the top. */
 function markAt(time, label) {
   return {xAxis: time, label: {formatter: label, position: 'end', color: THEME.markColor}};
@@ -137,6 +150,8 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  * Render the poll average of `parties`: per party the `lo–hi` band, the `mean` line, the published polls
  * and, in forecast, the projected band from `asOf` to `when`, with mark lines at both dates. The initial
  * zoom is the `window` choice (a key of `WINDOW_DAYS`: the last days before `anchor`; `all`: the whole axis).
+ * The window filters the data (`filterMode: 'filter'`) and the vertical axis is scaled to the visible data of
+ * the series the legend shows, without a fixed zero, so a tight race fills the height.
  * The Promedios page also draws the blocks with it, passing the block series, polls and projection as parties.
  * The tooltip follows the item under the pointer: a poll shows its box (`pollTooltipLines`), a day of the
  * average or of the projection its value and band (`meanTooltipLine`), the official result its share
@@ -294,9 +309,9 @@ export function seriesOption({
     },
     yAxis: {
       type: 'value',
-      min: 0,
+      scale: true,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtPct(value, 0)},
+      axisLabel: {...axisLabelStyle(), formatter: axisPctLabel},
     },
     tooltip: {
       ...tooltipStyle(),
@@ -307,7 +322,7 @@ export function seriesOption({
     dataZoom: zoom ? [{
       type: 'slider',
       bottom: 8,
-      filterMode: 'none',
+      filterMode: 'filter',
       startValue: dayTime(zoom.startValue),
       endValue: dayTime(zoom.endValue),
       labelFormatter: (value) => fmtDate(isoDay(value)),

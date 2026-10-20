@@ -941,7 +941,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         like the hemicycle), ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for
         the error histogram), ``catalog`` (``parties`` of the table, of the results and of the series,
         ``chart_parties``, plus ``bmaps`` (``main`` of the meta and the ``blocks`` of the curve), for the
-        browser's catalogue), with the series, ``series`` (rounded to one decimal, ``round_series``) and, with
+        browser's catalogue), with the series, ``series`` (rounded to two decimals, ``round_series``) and, with
         the cycle, ``polls`` (``chart_polls``)).
 
     Raises
