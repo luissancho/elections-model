@@ -13,6 +13,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 MONTHS = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic')
 DASH = '–'
 _DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
+# The green of ``--color-ok`` and its lightest and strongest opacities in ``shade_scale``
+SCALE_COLOR = '#16a34a'
+SCALE_ALPHA = (0.08, 0.55)
 
 
 def _is_missing(x) -> bool:
@@ -420,6 +423,33 @@ def shade(x, start, end, color: str, alpha: float = 0.55) -> str:
     r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
 
     return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha * fraction, 3))
+
+
+def shade_scale(x, lo, hi) -> str:
+    """
+    Background of a cell of a sensitivity grid: the green of ``--color-ok`` (``SCALE_COLOR``) growing from ``lo``
+    (the lightest, ``SCALE_ALPHA[0]``) to ``hi`` (the strongest, ``SCALE_ALPHA[1]``), clipped at both ends.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    lo, hi : int or float
+        Values of the lightest and the strongest cells; with an empty range every value takes the lightest.
+
+    Returns
+    -------
+    str
+        An ``rgba()`` colour, or ``''`` when ``x`` is missing (the cell goes without a style).
+    """
+    if isinstance(x, bool) or _is_missing(x):
+        return ''
+
+    fraction = _fraction(x, lo, hi) or 0.
+    alpha = SCALE_ALPHA[0] + (SCALE_ALPHA[1] - SCALE_ALPHA[0]) * fraction
+    r, g, b = (int(SCALE_COLOR[i:i + 2], 16) for i in (1, 3, 5))
+
+    return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha, 3))
 
 
 def delta_badge(x, digits: int = 0) -> dict:

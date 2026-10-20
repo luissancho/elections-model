@@ -1,7 +1,12 @@
 # Web, Análisis: el voto CERA y la Ley de Nietos, anclado al 29-N
 
-Fecha: 2026-10-19. Estado: aprobada por Luis en el chat el 19 de octubre («Todo OK», con el umbral de acierto en
-más de 1 escaño), tras la revisión del constructor (siete preguntas, sección final). Maqueta aprobada en el chat el 19 de octubre
+Fecha: 2026-10-19. Estado: **construida** el 19 de octubre por desarrollo dirigido por subagentes: tareas 1–11
+en `dev` hasta `fefb3a9`; tareas 12–19 en la rama `analisis-voto-cera`, que sale de `fefb3a9` porque Luis tenía
+trabajo sin confirmar en el mismo checkout. Suite completa: 1.096 tests en verde, 75 omitidos y 1 fallo,
+`tests/test_pages_ejemplo.py::test_promedio_page_shows_the_example_block`, que ya fallaba en `dev` antes de este
+trabajo y no es parte de él. Publicación local sin registro y paseo del HTML servido (sin navegador) hechos;
+falta el paseo de Luis con datos reales (sección final). Antes: aprobada por Luis en el chat el 19 de octubre
+(«Todo OK», con el umbral de acierto en más de 1 escaño), tras la revisión del constructor (siete preguntas, sección final). Maqueta aprobada en el chat el 19 de octubre
 (`docs/superpowers/specs/2026-10-19-web-analisis-voto-cera-mockup.html`, versión 4: tres preguntas con veredicto,
 titular y subtítulo de la infografía, tres cifras, sin tarjeta de contexto). Sigue a la fase 9 y al lote de
 tablas del 17 de octubre; esta spec solo describe lo que cambia respecto de lo que hay en `dev` (`669f909`,
@@ -180,7 +185,7 @@ XLSX de `data/`), con docstrings al estilo del repo. Lo que calcula, en el orden
   nacional (SUMAR 120 %, PP 99 %, PSOE 92 %, VOX 90 %).
 - Inferencia ecológica: por provincia, peso latinoamericano del censo CERA (cruce provincia × país del cierre de
   julio de 2023) frente a cuota de izquierda del voto CERA provincial de 2023, sobre **todas las provincias con un
-  censo CERA mínimo** (`params.ecological_min_census`, fijado para que solo queden fuera Ceuta y Melilla): `r`,
+  mínimo de votantes CERA** (`params.ecological_min_voters` = 200, que solo deja fuera Ceuta y Melilla): `r`,
   pendiente y cuartiles, los que salgan. El artículo daba −0,77 sobre 43 provincias, pero las nueve excluidas
   (Ceuta, Melilla, La Rioja, Navarra, Baleares, Murcia, Las Palmas, A Coruña y Madrid) no responden a ningún umbral
   sino, con toda probabilidad, a un fallo de casado de nombres en el cálculo original (decisión de Luis: calcular
@@ -450,7 +455,7 @@ octubre o uno nuevo `shade_scale` de 0 al máximo, en verde); no son mapas de ca
                     "derived_from": ["consulados/cyl-2026.csv", "consulados/extremadura-2025.csv", "consulados/aragon-2026.csv"]},
   "periods": {"article": [["2019-03-01", "2022-10-01"], ["2022-10-01", "2026-05-01"]]},
   "sensitive_magnitude": 5,
-  "ecological_min_census": <el umbral que deja fuera solo Ceuta y Melilla>,
+  "ecological_min_voters": 200,
   "check": {"max_gain": 1},
   "placement_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA"],
   "madrid_countries": ["ARGENTINA", "MÉXICO", "CUBA", "VENEZUELA", "URUGUAY", "CHILE"]
@@ -541,3 +546,165 @@ respuesta cuando la dé); las otras cuatro se resuelven aquí como decisiones m�
    Europa Occidental; media: el resto de América, Estados Unidos y el resto del mundo), ajusta la lista hasta
    reproducir los tres totales de la tabla 2 si es posible y, si no, deja la regla y anota la diferencia en
    `countries.csv` y aquí.
+
+## Cierre del constructor (2026-10-19)
+
+Construida el 19 de octubre por desarrollo dirigido por subagentes, en 19 tareas: las once primeras en `dev`
+(`2f3c91f`..`fefb3a9`) y las otras ocho en la rama `analisis-voto-cera`, que sale de `fefb3a9` porque Luis tenía
+trabajo sin confirmar en los mismos ficheros. La suite y el paseo local están en el «Estado» de la cabecera. Aquí
+queda lo que el constructor decidió o encontró y la página publica.
+
+### Cifras publicadas que difieren del artículo, y por qué
+
+Donde la cifra del artículo no sale de los datos correctos, mandan los datos: los tests y la página usan el valor
+calculado.
+
+- **Electores y votantes CERA de 2023.** Salen de Infoelectoral (`Censo CERA` y `Total votantes CERA`), la
+  fuente que usa el reparto, no del fichero de Interior, que trae erratas (electores de Albacete, 862 por 8.064;
+  votantes de Barcelona, 19.315 por 21.434; electores de 2019 truncados). Son 2.328.260 electores (la OCE da
+  2.328.261) y 208.431 votantes. La OCE habla de 233.688 papeletas: la página cita 208.431 y «Cómo leerlo»
+  explica la diferencia. Esto corrige la decisión 6 de la revisión, que daba 233.688 como cifra de la página.
+- **Votos a candidaturas de 2023: 203.152** (el artículo da 203.115). Es la suma de las columnas de candidatura
+  según el mapa `escrutinio/candidatures.json`.
+- **Censo de Madrid en la convocatoria: 498.874** (la prensa da 494.799). Sale de `elecgen2026_tab8.xlsx`.
+- **Participación por origen.**
+  - Castilla y León 2026 da 14,4 / 5,0 / 4,8 (el artículo, 11,5 / 7,6 / 5,0): el artículo agrupó los consulados
+    de Estados Unidos con Europa.
+  - Aragón 2026 da 15,8 / 4,0 / 5,1.
+- **Cuota de la izquierda en 2023: 49,7 %** sobre provincias (el artículo, 50,0 %).
+- **Inferencia ecológica: r = −0,743 sobre 50 provincias.** Con la lista de 43 del artículo da −0,767. Las siete
+  provincias de menos que excluía el artículo fueron un fallo al cruzar los nombres, no un criterio. Cuartiles
+  59,8 / 44,3.
+- **Brecha del último escaño.** Son los votos que el segundo necesita para **igualar** el último cociente del
+  ganador, redondeados al entero más cercano, mínimo 1. Es la regla del artículo y reproduce la tabla 10. La regla
+  estricta (superarlo) da un voto más en nueve de las diez provincias.
+- **Colocación óptima.** La bolsa son las altas observadas en los cuatro países desde la ley: 181.032
+  electores. Con ella, la celda observada da 5; con la bolsa de 62.800 del artículo daría 2. La página cita 5.
+- **Rejilla exterior.** Queda hasta 4 escaños por debajo de la tabla 11 en la columna del 50 %. El escenario
+  «censo ×2, participación ×3, sesgo 0,9» da 6 / −6; el artículo daba 7 / −6.
+- **Ruptura de tendencia del censo.** p de la pendiente ≈ 0,0004 y p del nivel ≈ 0,61, sobre la serie completa.
+  La página afirma solo el cambio de pendiente. El p ≈ 0,01 del nivel en el artículo venía de otra
+  especificación.
+- **Provincias sensibles.**
+  - La cuota con todos los países pasa de 24,1 % a 17,4 %. Va en el gráfico, como en la infografía.
+  - Con los tres países (Argentina, Cuba, Venezuela), de 30,0 % a 26,7 %. Va en el texto de la pregunta 2.
+- **Exposición a la Ley de Nietos.** El grupo de cada país se ajustó a la tabla 2 (decisión 7):
+  - baja: Europa Occidental y Canadá, África, Asia y Oceanía;
+  - totales 209.591 / 206.703 / 160.691, a ±3 de los de la tabla 2;
+  - la pertenencia es curación propia, documentada en `countries.csv`, no la regla literal.
+- **Columna de España Vaciada.** Lleva las dos candidaturas con la sigla EV: 70 votos de Asturias son de
+  «Asturias Existe-España Vaciada». El PSC va con el PSOE, como en Infoelectoral (no tiene fila propia).
+- **Litigio.** Se descuentan exactamente las 163.020 inscripciones: 279.237 electores nuevos y 22.412 votos, cero
+  cambios. Con el censo de la convocatoria salen 442.257 electores nuevos y 30.482 votos, cero cambios. Con la
+  proyección del artículo, 539.260 y 37.006, cero cambios.
+
+### Datos y parámetros
+
+- **`ecological_min_voters` = 200 sustituye a `ecological_min_census` (D8).** La exclusión de la ecológica va
+  por votantes CERA: Ceuta tuvo 89 en 2023 y Melilla 177. Por censo no se puede, porque el de Melilla (5.971)
+  supera al de Cuenca.
+- **Reparto del litigio por provincia.** Usa el crecimiento latinoamericano desde el 1-10-2022 hasta el último
+  cierre mensual, no hasta el 1 de agosto. La serie mensual es la única fuente provincia × país, y la diferencia
+  es de un mes.
+- **Periodos actualizados.** Tienen la misma longitud (47 + 47 meses: 2018-11 → 2022-10 → 2026-09). Avanzan con
+  cada cierre: el segundo acaba en el último y el primero gana meses por el principio. La página enseña estos
+  (`now`) en las preguntas 1 y 2 y en la correlación del debate; la réplica del artículo con su ventana (marzo 2019
+  – octubre 2022 – mayo 2026: ×2,2, 422.253, 24,1 → 17,4) queda en «Cómo leerlo». Una parte sin `now` cae a la
+  del artículo y «Cómo leerlo» lo dice.
+- **Siglas.** Las partes llevan el nombre completo de Infoelectoral y su sigla (`winner_sigla`,
+  `runner_up_sigla`, `winner_with_sigla`, `winner_without_sigla`); la página y la isla solo imprimen la sigla.
+- **Censo de 2023 del incremento.** Es el cierre mensual del 1-6-2023 (`meta.election.baseline_date`), 2.327.388,
+  no el censo oficial de Infoelectoral (2.328.260): «Cómo leerlo» de la pregunta 3 lo dice. La cifra de sobres de
+  la OCE (233.688) no la lleva ninguna parte: es un hecho de contexto en `OCE_RECEIVED` (`pages/cera.py`).
+- **Predicción registrada.** Texto de `registered.claim`: «El voto CERA de las generales del {fecha} no dará al
+  PSOE ni a la izquierda un saldo neto de más de {max_gain} escaño(s)». Va con los escaños por bloque de los dos
+  escenarios.
+- **`check.max_gain` = 1**, el umbral que decidió Luis.
+- **Réplica del informe «hasta 23 escaños».**
+  - Lee la participación CERA de todas las generales de Infoelectoral con columnas CERA: 13 ficheros, de 1986 a
+    2023. Los de 1977–1982 no tienen esas columnas.
+  - Media 18,9 %, máxima 40,2 %.
+  - Con ellas, 523 k y 1,114 M votos, y 20 y 27 provincias.
+- **Fechas de las elecciones.** Salen de `data/wikipedia/wp-urls.json`.
+- **Constantes de presentación en `study.py`, no en `params.json`.** Son los ejes de las rejillas, los seis
+  escenarios, los tres países sensibles, el nombre del PSOE y las siglas de los ratios: definen qué enseña la
+  página, no el modelo.
+- **Lectura del INE.**
+  - Las filas de un elector mal archivadas se quedan con su código de provincia (±1 en los totales provinciales
+    de 2010–2011).
+  - Los países que cambiaron de nombre se cruzan por `country_code`.
+  - El duplicado de febrero de 2011 conserva la lectura «(nuevo)», con un salto de método de +7.344.
+- **Desempate del reparto.** `allocate_results` ordena las candidaturas por votos, de más a menos, para que un
+  empate exacto de cocientes vaya a la de más votos, como dice la LOREG. En los datos oficiales no cambia nada.
+
+### Decisiones de estructura
+
+- **Un tipo nuevo de publicación: los estudios.**
+  - En el paquete viven en `studies/{study}/`, con ocho partes y sus CSV, `meta.json` el último y la entrada
+    `manifest.studies`.
+  - En la API, `/api/v1/studies` y `/api/v1/studies/{study}/{part}`.
+  - Los publica `publish.publish_study`, desde `Publish.run(what='study', study=…)`.
+  - Están documentados en `docs/web/contrato.md` («Estudios», «Rutas de estudios»).
+- **Reparto en módulos.**
+  - `seats.py` (reparto, brechas, efecto neto) queda solo.
+  - `stress.py` lleva la rejilla exterior, los escenarios, la colocación óptima y la réplica.
+  - `check.py` lleva la prueba con y sin CERA y el veredicto.
+  - En la web, `pages/analisis.py` tiene la sección (índice, tarjetas, contexto, isla) y `pages/cera.py` los
+    modelos de vista de cada pregunta, del debate y de la comprobación.
+- **`study_meta`.** La plantilla recibe la `meta` del estudio con ese nombre, porque `meta` es la del run, que lee
+  el pie.
+- **Ruta.** Es `/analisis/{study}`, con el alias por defecto: `:str` es `[a-z]+` y no admite el guion de
+  `voto-cera`.
+- **Importaciones perezosas.** `publish/studies.py` importa el estudio dentro de `publish_study`, y `census.py`
+  importa statsmodels dentro de `trend_break`. Así, arrancar la web no carga ni el estudio ni `statsmodels.api`.
+- **Registro explícito.** Solo con `register=True` y el árbol limpio. `force` reescribe y deja
+  `registered_changed_at`.
+- **Gráficos.** `web/dist/js/charts/grouped.js` (barras agrupadas, apiladas y horizontales) se suma a `census`,
+  `scatter`, `slope` y `radar`. El selector de escenario funciona sin JS para las tablas (con `:has()` en CSS);
+  el gráfico de brechas lo redibuja `web/dist/js/pages/analisis-cera.js`.
+
+### Lo que hace Luis ahora
+
+1. **Cargar y publicar contra el RDS/S3,** como con lo demás:
+   `python load/run_load.py --scopes es --what cera`, revisar el diff de `data/cera/ine/` y confirmarlo, y
+   después `python job.py publish '{"what": "study", "study": "voto-cera"}'`. El constructor no bajó nada del
+   INE.
+2. **Pasear las páginas en un navegador,** en escritorio y a 390 px: `/`, `/analisis` y `/analisis/voto-cera`.
+   El constructor solo pudo comprobar el HTML servido, no los gráficos.
+   - Los enlaces de fuente de Interior y de los boletines autonómicos apuntan a portadas
+     (`INFOELECTORAL_URL`, `REGIONAL_SOURCES` en `publish/studies.py`).
+   - En el móvil, la etiqueta de un saldo negativo grande pisa los nombres de provincia en el gráfico de
+     brechas.
+   - Un fichero nuevo en `consulados/` sale con su nombre crudo hasta que se añada a `COMMUNITY_NAMES` en
+     `web/dist/js/pages/analisis-cera.js`.
+3. **Registrar cuando la dé por buena,** con el árbol limpio:
+   `python job.py publish '{"what": "study", "study": "voto-cera", "register": true}'`.
+4. **Tras el escrutinio del 29-N:**
+   - añadir `data/cera/escrutinio/es-2026-11-29.csv` y su entrada en `candidatures.json` (sin la entrada, el
+     cálculo para con «cera: no candidatures map for 2026-11-29 in cera/escrutinio/candidatures.json»);
+   - cargar `PROV_02_202611_1.xlsx` y su `.json` a la vez, como en cada elección: el `.json` lleva las siglas, y
+     sin él no hay bloques ni siglas en la página;
+   - antes de publicar la comprobación, cotejar `params.blocks` con las siglas de `PROV_02_202611_1.json`: una
+     sigla de izquierda que no esté en los bloques cae en «Otros» y rebaja `net_left`, que es lo que decide el
+     acierto;
+   - publicar otra vez: la comprobación y `checked_at` se rellenan solos.
+
+   Mientras falte el XLSX, la publicación deja fuera el escrutinio del 29-N y lo anota en
+   `meta.skipped_scrutinies`.
+
+   Estos tests fijan el estado de antes de la elección y habrá que actualizarlos cuando lleguen los ficheros del
+   29-N (y, el de los libros mensuales, también en enero de 2027, con `cerapropais_27`):
+   - `tests/test_cera_behaviour.py`: los recuentos de ficheros (`test_available_results_lists_every_general_election`,
+     16 y el último 2023-07-23; `test_participation_generales_periods`, 13);
+   - `tests/test_cera_study.py`: `test_compute_cera_runs_end_to_end` (las dos comprobaciones y `verdict_input`
+     nulo), `test_compute_cera_behaviour_block` (13 resultados y las dos generales con escrutinio),
+     `test_compute_cera_seats_block` (la réplica del informe) y
+     `test_read_scrutinies_skips_the_elections_without_results_and_needs_their_candidatures`;
+   - `tests/test_publish_studies.py`: `test_export_study_figures` (las dos fechas de la comprobación y el veredicto
+     nulo) y `test_publish_study_sets_checked_at_when_the_election_has_a_scrutiny` (`checked_at` nulo antes);
+   - `tests/test_cera_data.py`: `test_cera_data_folder_is_complete` (21 libros mensuales; 22 en enero de 2027).
+5. **Cada mes,** `--what cera` y `publish study` para refrescar la serie.
+6. **Integrar.** Fusionar la rama `analisis-voto-cera` en `dev` después de confirmar su trabajo pendiente. Habrá
+   conflictos previsibles en `pages/common.py` y en los ficheros de test.
+7. **Revisión final.** La lista de menores aplazados está en el registro del desarrollo
+   (`.superpowers/sdd/2026-10-19-web-analisis-voto-cera/`).

@@ -56,8 +56,10 @@ def census(data_fs, provinces):
 
 
 def test_series_points_are_iso_dates_and_integers(long):
-    points = series_points(national_series(long))
-    assert points[0] == ['2006-01-01', 1142334] and isinstance(points[-1][1], int) and len(points) == 249
+    series = national_series(long)
+    points = series_points(series)
+    assert points[0] == ['2006-01-01', 1142334] and isinstance(points[-1][1], int) and len(points) >= 249
+    assert points[-1][1] == series.iloc[-1] > 2700000   # el último cierre cambia cada mes
 
 
 def test_two_periods_reproduces_the_article_growth(long, countries, province_names):

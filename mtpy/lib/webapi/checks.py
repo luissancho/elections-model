@@ -19,6 +19,8 @@ FORMATS = ('json', 'csv')
 ANALYSIS_PARTS = bundle.ANALYSIS_PARTS
 BACKTEST_PARTS = bundle.BACKTEST_PARTS
 EVENT_PARTS = bundle.EVENT_PARTS
+STUDIES = bundle.STUDIES
+STUDY_PARTS = bundle.STUDY_PARTS
 CSV_PARTS = bundle.RUN_PARTS[2:]
 MODE_PARTS = bundle.MODE_PARTS
 RUN_PARTS = bundle.RUN_PARTS
@@ -123,6 +125,31 @@ def check_scope(scope: str) -> str:
         raise HttpError(400, 'invalid scope')
 
     return scope
+
+
+def check_study(study: str) -> str:
+    """
+    Validate a study slug.
+
+    Parameters
+    ----------
+    study : str
+        Study slug from the request.
+
+    Returns
+    -------
+    str
+        The same slug.
+
+    Raises
+    ------
+    HttpError
+        404 when it is not in ``STUDIES``.
+    """
+    if study not in STUDIES:
+        raise HttpError(404, 'unknown study')
+
+    return study
 
 
 def check_run(run: Optional[str]) -> Optional[str]:

@@ -8,6 +8,7 @@ from typing import Optional
 from ..webapi import site
 from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context, days_left, days_text, default_mode,
                      event_title, hemicycle_order, published_scopes)
+from .analisis import study_cards
 from .elecciones import last_results, published_events
 from .filters import _madrid_tz, delta_text, fmt_date_short
 from .promedios import lead_strip, leader_of, poll_sample
@@ -363,7 +364,8 @@ def inicio_context(state: dict) -> dict:
         ``common_context`` of the home (default scope) plus ``intro``, ``hero`` (``hero_context`` of the first
         published scope, or ``None``), ``autonomics`` (the other published cards), ``unpublished`` (the names of
         the scopes without a forecast), ``latest_polls``, ``past_shown`` and ``past_more`` (``past_events`` cut at
-        ``PAST_SHOWN``) and, with a seat bar, ``initial`` (the hemicycle data: ``hero.seats``, ``colors``,
+        ``PAST_SHOWN``), ``studies`` (``study_cards``: the band of the Análisis, empty without a published study) and,
+        with a seat bar, ``initial`` (the hemicycle data: ``hero.seats``, ``colors``,
         ``fullnames``, ``order``, ``n_seats``, ``majority``).
 
     Raises
@@ -384,6 +386,7 @@ def inicio_context(state: dict) -> dict:
         latest_polls=latest_polls(featured['code'], featured['run'], hero['catalog'], hero['top']) if hero else [],
         past_shown=past[:PAST_SHOWN],
         past_more=max(0, len(past) - PAST_SHOWN),
+        studies=study_cards(),
     )
 
     if hero and hero['segments']:

@@ -6,8 +6,139 @@
   "mode": null,
   "generated_at": "2026-10-19T12:00:00Z",
   "data": {
-    "scenarios": {},
-    "last_seat": [],
-    "report": {}
+    "scenarios": {
+      "convocatoria": {
+        "census": 2769645,
+        "new_electors": 442257,
+        "voters_2023": 208431,
+        "voters_projected": 239221,
+        "votes_2023": 203152,
+        "votes_projected": 233634,
+        "by_block": [
+          {
+            "block": "Izquierda",
+            "before": 152,
+            "after": 152,
+            "change": 0
+          },
+          {
+            "block": "Derecha",
+            "before": 170,
+            "after": 170,
+            "change": 0
+          }
+        ],
+        "by_sigla": [
+          {
+            "sigla": "PSOE",
+            "before": 121,
+            "after": 121,
+            "change": 0
+          },
+          {
+            "sigla": "PP",
+            "before": 137,
+            "after": 137,
+            "change": 0
+          }
+        ],
+        "changed": []
+      },
+      "sin_litigio": {
+        "census": 2606625,
+        "new_electors": 279237,
+        "voters_2023": 208431,
+        "voters_projected": 231070,
+        "votes_2023": 203152,
+        "votes_projected": 225564,
+        "by_block": [
+          {
+            "block": "Izquierda",
+            "before": 152,
+            "after": 152,
+            "change": 0
+          },
+          {
+            "block": "Derecha",
+            "before": 170,
+            "after": 170,
+            "change": 0
+          }
+        ],
+        "by_sigla": [
+          {
+            "sigla": "PSOE",
+            "before": 121,
+            "after": 121,
+            "change": 0
+          },
+          {
+            "sigla": "PP",
+            "before": 137,
+            "after": 137,
+            "change": 0
+          }
+        ],
+        "changed": []
+      }
+    },
+    "last_seat": [
+      {
+        "region_id": 28,
+        "name": "Madrid",
+        "magnitude": 3,
+        "winner": "PARTIDO POPULAR",
+        "winner_sigla": "PP",
+        "runner_up": "PARTIDO SOCIALISTA OBRERO ESPAÑOL",
+        "runner_up_sigla": "PSOE",
+        "gap": 120.5,
+        "d_runner": 10.2,
+        "d_winner": 3.1,
+        "net": 7.1,
+        "flipped": false,
+        "participation_needed": 1.5,
+        "net_b": 6.9
+      },
+      {
+        "region_id": 8,
+        "name": "Barcelona",
+        "magnitude": 4,
+        "winner": "PARTIDO POPULAR",
+        "winner_sigla": "PP",
+        "runner_up": "PARTIDO SOCIALISTA OBRERO ESPAÑOL",
+        "runner_up_sigla": "PSOE",
+        "gap": 121.5,
+        "d_runner": 10.2,
+        "d_winner": 3.1,
+        "net": 7.1,
+        "flipped": false,
+        "participation_needed": 1.5,
+        "net_b": 6.9
+      },
+      {
+        "region_id": 46,
+        "name": "Valencia",
+        "magnitude": 5,
+        "winner": "PARTIDO POPULAR",
+        "winner_sigla": "PP",
+        "runner_up": "PARTIDO SOCIALISTA OBRERO ESPAÑOL",
+        "runner_up_sigla": "PSOE",
+        "gap": 122.5,
+        "d_runner": 10.2,
+        "d_winner": 3.1,
+        "net": 7.1,
+        "flipped": false,
+        "participation_needed": 1.5,
+        "net_b": 6.9
+      }
+    ],
+    "report": {
+      "votes_mean": 12.3,
+      "votes_max": 40,
+      "n_mean": 1.2,
+      "n_max": 3,
+      "participation_mean": 0.3,
+      "participation_max": 0.9
+    }
   }
 }

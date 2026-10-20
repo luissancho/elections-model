@@ -49,7 +49,8 @@ def test_export_study_parts_validate(study):
 
 def test_export_study_figures(study):
     census = valid('study-census', publish.export_study_census(study)[0])
-    assert census['series']['values'][-1] == 2762829 and census['series']['dates'][-1] == '2026-09-01'
+    assert census['series']['values'][-1] == int(study.series.iloc[-1]) > 2700000   # el último cierre cambia cada mes
+    assert census['series']['dates'][-1] == study.series_last.strftime('%Y-%m-%d') >= '2026-09-01'
     assert census['periods']['article'] == [['2019-03-01', '2022-10-01'], ['2022-10-01', '2026-05-01']]
     assert sum(row['g2'] for row in census['provinces']) == 422253
     assert {'g1', 'g2', 'ratio', 'g1_now', 'g2_now', 'ratio_now'} <= set(census['provinces'][0])
@@ -61,16 +62,29 @@ def test_export_study_figures(study):
     assert convocatoria['census'] == 2769645 and convocatoria['new_electors'] == 442257
     assert convocatoria['voters_2023'] == 208431 and convocatoria['votes_2023'] == 203152
     assert len(prediction['last_seat']) == 52 and 'net_b' in prediction['last_seat'][0]
+    # the candidatures go by their full Infoelectoral name and by their sigla, the one the page prints
+    girona = next(row for row in prediction['last_seat'] if row['name'] == 'Girona')
+    assert girona['winner'] == 'JUNTS PER CATALUNYA - JUNTS' and girona['winner_sigla'] == 'JxCat'
+    assert girona['runner_up'] == 'PARTIDO POPULAR' and girona['runner_up_sigla'] == 'PP'
+    assert all(len(row['winner_sigla']) <= 8 and len(row['runner_up_sigla']) <= 8 for row in prediction['last_seat'])
 
     check = valid('study-check', publish.export_study_check(study)[0])
     assert [e['date'] for e in check['elections']] == ['2019-11-10', '2023-07-23'] and check['verdict'] is None
     last = check['elections'][-1]
     assert (last['net_psoe'], last['net_left'], last['n_over_gap']) == (-1, -1, 9)
     assert [d['region_id'] for d in last['decided']] == [28]
+    assert {key: last['decided'][0][key] for key in ('winner_with', 'winner_with_sigla', 'winner_without_sigla')} == {
+        'winner_with': 'PARTIDO POPULAR', 'winner_with_sigla': 'PP', 'winner_without_sigla': 'PSOE'}
     assert [row['gap'] for row in check['rows']] == sorted(row['gap'] for row in check['rows'])
+    assert check['rows'][0]['name'] == 'Girona' and check['rows'][0]['winner_with_sigla'] == 'JxCat'
 
     meta = valid('study-meta', publish.export_study_meta(study)[0])
-    assert meta['election']['census_total'] == 2769645 and meta['series_last'] == '2026-09-01'
+    assert meta['election']['census_total'] == 2769645
+    assert meta['election']['baseline_date'] == study.baseline_date.strftime('%Y-%m-%d') == '2023-06-01'
+    assert meta['skipped_scrutinies'] == []
+    skipped = publish.export_study_meta(dataclasses.replace(study, skipped_scrutinies=['2026-11-29']))[0]
+    assert skipped['skipped_scrutinies'] == ['2026-11-29']  # the 29-N scrutiny before its Infoelectoral XLSX
+    assert meta['series_last'] == study.series_last.strftime('%Y-%m-%d') >= '2026-09-01'
     assert meta['regression']['p_slope'] < 0.001 < meta['regression']['p_level']
 
     sensitivity = valid('study-sensitivity', publish.export_study_sensitivity(study)[0])
@@ -82,6 +96,17 @@ def test_export_study_figures(study):
 
     placement = valid('study-placement', publish.export_study_placement(study)[0])
     assert placement['sensitive']['article']['all'] == {'stock_share': 24.1, 'growth_share': 17.39}
+
+
+def test_export_study_check_puts_the_rows_without_a_gap_last(study):
+    day = max(study.checks)
+    rows = study.checks[day]['rows'].copy()
+    rows['gap'] = rows['gap'].astype(object)
+    rows.loc[rows.index[0], 'gap'] = None
+    checks = {**study.checks, day: {**study.checks[day], 'rows': rows}}
+    data = publish.export_study_check(dataclasses.replace(study, checks=checks))[0]
+    gaps = [row['gap'] for row in data['rows']]
+    assert gaps[-1] is None and gaps[:-1] == sorted(gaps[:-1]) and len(gaps) == 52
 
 
 def test_publish_study_writes_the_parts_in_order_and_meta_last(study, tmp_path):

@@ -6,8 +6,114 @@
   "mode": null,
   "generated_at": "2026-10-19T12:00:00Z",
   "data": {
-    "elections": [],
-    "rows": [],
+    "elections": [
+      {
+        "date": "2019-11-10",
+        "voters": 190000,
+        "rate": 0.8,
+        "n_over_gap": 2,
+        "n_decided": 1,
+        "decided": [
+          {
+            "region_id": 28,
+            "name": "Madrid",
+            "winner_with": "PARTIDO POPULAR",
+            "winner_with_sigla": "PP",
+            "winner_without": "PARTIDO SOCIALISTA OBRERO ESPAÑOL",
+            "winner_without_sigla": "PSOE",
+            "crosses_block": true
+          }
+        ],
+        "net_psoe": -1,
+        "net_left": -1,
+        "net_by_block": {
+          "Izquierda": -1,
+          "Derecha": 1
+        }
+      },
+      {
+        "date": "2023-07-23",
+        "voters": 208431,
+        "rate": 0.6,
+        "n_over_gap": 3,
+        "n_decided": 1,
+        "decided": [
+          {
+            "region_id": 28,
+            "name": "Madrid",
+            "winner_with": "PARTIDO POPULAR",
+            "winner_with_sigla": "PP",
+            "winner_without": "PARTIDO SOCIALISTA OBRERO ESPAÑOL",
+            "winner_without_sigla": "PSOE",
+            "crosses_block": true
+          }
+        ],
+        "net_psoe": -1,
+        "net_left": -1,
+        "net_by_block": {
+          "Izquierda": -1,
+          "Derecha": 1
+        }
+      }
+    ],
+    "rows": [
+      {
+        "region_id": 17,
+        "name": "Girona",
+        "magnitude": 6,
+        "winner_with": "JUNTS PER CATALUNYA - JUNTS",
+        "winner_with_sigla": "JxCat",
+        "winner_without": "JUNTS PER CATALUNYA - JUNTS",
+        "winner_without_sigla": "JxCat",
+        "gap": 284.0,
+        "voters_cera": 2335,
+        "over_gap": true,
+        "decided": false,
+        "crosses_block": false
+      },
+      {
+        "region_id": 39,
+        "name": "Cantabria",
+        "magnitude": 5,
+        "winner_with": "VOX",
+        "winner_with_sigla": "VOX",
+        "winner_without": "VOX",
+        "winner_without_sigla": "VOX",
+        "gap": 403.0,
+        "voters_cera": 3463,
+        "over_gap": true,
+        "decided": false,
+        "crosses_block": false
+      },
+      {
+        "region_id": 28,
+        "name": "Madrid",
+        "magnitude": 37,
+        "winner_with": "PARTIDO POPULAR",
+        "winner_with_sigla": "PP",
+        "winner_without": "PARTIDO SOCIALISTA OBRERO ESPAÑOL",
+        "winner_without_sigla": "PSOE",
+        "gap": 1339.0,
+        "voters_cera": 44807,
+        "over_gap": true,
+        "decided": true,
+        "crosses_block": true
+      },
+      {
+        "region_id": 46,
+        "name": "Valencia",
+        "magnitude": 16,
+        "winner_with": "PARTIDO POPULAR",
+        "winner_with_sigla": "PP",
+        "winner_without": "PARTIDO POPULAR",
+        "winner_without_sigla": "PP",
+        "gap": 5120.0,
+        "voters_cera": 3000,
+        "over_gap": false,
+        "decided": false,
+        "crosses_block": false
+      }
+    ],
     "verdict": null
   }
 }

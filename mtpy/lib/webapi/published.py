@@ -366,6 +366,73 @@ class Site:
         """
         return self._mutable_bytes('analysis', bundle.path_analysis_csv(scope, name), 'analysis not published')
 
+    def study(self, study: str, part: str) -> bytes:
+        """
+        Bytes of a JSON part of a published study.
+
+        Parameters
+        ----------
+        study : str
+            Validated study slug.
+        part : str
+            Part name, one of ``STUDY_PARTS``.
+
+        Returns
+        -------
+        bytes
+            The JSON file.
+
+        Raises
+        ------
+        HttpError
+            404 when the part is not published.
+        """
+        return self._mutable_bytes('study', bundle.path_study(study, part), 'study not published')
+
+    def study_csv(self, study: str, name: str) -> bytes:
+        """
+        Bytes of a CSV twin of a published study.
+
+        Parameters
+        ----------
+        study : str
+            Validated study slug.
+        name : str
+            CSV name, one of ``bundle.STUDY_CSV``.
+
+        Returns
+        -------
+        bytes
+            The CSV file.
+
+        Raises
+        ------
+        HttpError
+            404 when the CSV is not published.
+        """
+        return self._mutable_bytes('study', bundle.path_study_csv(study, name), 'study not published')
+
+    def studies(self) -> list:
+        """
+        Slugs of the studies that are published, which is when they have their ``meta.json``.
+
+        Returns
+        -------
+        list of str
+            The slugs of ``bundle.STUDIES`` with a published ``meta``, in that order.
+        """
+        found = []
+
+        for study in bundle.STUDIES:
+            try:
+                self.study(study, 'meta')
+            except HttpError:
+                continue
+
+            found.append(study)
+
+        return found
+
     def events(self, scope: str) -> list:
         """
         Dates of the past elections published for a scope.

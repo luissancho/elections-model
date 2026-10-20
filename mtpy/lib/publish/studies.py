@@ -26,6 +26,9 @@ REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'regist
 
 SCENARIOS = ('convocatoria', 'sin_litigio')
 
+# The candidature columns of the check, with and without the CERA vote, that the page names by their sigla
+WINNERS = ('winner_with', 'winner_without')
+
 PROCESS_COLUMNS = ['kind', 'community', 'step', 'date', 'electors', 'voters', 'rate', 'left_share', 'margin',
                    'psoe_pct', 'pp_pct', 'vox_pct', 'other_left_pct', 'd_psoe', 'd_other_left', 'd_block', 'premium',
                    'psoe_pp_cera', 'psoe_pp_total']
@@ -299,6 +302,21 @@ def _scenario(study, name: str) -> dict:
     }
 
 
+def _siglas(study, day: str) -> dict:
+    """The sigla of each candidature full name of an election's Infoelectoral results (``{}`` without results)."""
+    results = study.results.get(day)
+    return dict(results.siglas) if results is not None else {}
+
+
+def _with_siglas(frame: pd.DataFrame, siglas: dict, columns) -> pd.DataFrame:
+    """Add ``{column}_sigla`` after each candidature column: its sigla, or the full name when it has none."""
+    out = frame.copy()
+    for col in [c for c in columns if c in out.columns]:
+        values = [None if pd.isna(name) else (siglas.get(name) or name) for name in out[col]]
+        out.insert(out.columns.get_loc(col) + 1, col + '_sigla', pd.Series(values, index=out.index, dtype=object))
+    return out
+
+
 def export_study_prediction(study) -> tuple:
     """Export the increment model in both census scenarios, the last seat of each province and the replication.
 
@@ -313,12 +331,14 @@ def export_study_prediction(study) -> tuple:
         ``(data, frames)``: ``data`` for ``study-prediction`` with ``scenarios`` (``convocatoria`` and
         ``sin_litigio``: ``census``, ``new_electors``, ``voters_2023``, ``voters_projected``, ``votes_2023``,
         ``votes_projected``, ``by_block``, ``by_sigla`` (the candidatures with seats) and ``changed``),
-        ``last_seat`` (52 rows of ``seats.net_effect`` of ``convocatoria`` plus ``net_b`` of ``sin_litigio``)
+        ``last_seat`` (52 rows of ``seats.net_effect`` of ``convocatoria`` plus ``net_b`` of ``sin_litigio``, with
+        ``winner_sigla`` and ``runner_up_sigla``, the siglas of the baseline results, next to the full names)
         and ``report`` (``votes_mean``, ``votes_max``, ``n_mean``, ``n_max``, ``participation_mean``,
         ``participation_max``); ``frames`` the ``last-seat`` twin.
     """
     other = study.scenarios['sin_litigio']['net'][['region_id', 'net']].rename(columns={'net': 'net_b'})
     last = study.scenarios['convocatoria']['net'].merge(other, on='region_id', how='left')
+    last = _with_siglas(last, _siglas(study, study.params['election']['baseline']), ('winner', 'runner_up'))
     last = _table(last, decimals={'d_runner': 1, 'd_winner': 1, 'net': 1, 'net_b': 1, 'participation_needed': 2},
                   ints=['gap'])
     report = study.report
@@ -372,6 +392,12 @@ def export_study_sensitivity(study) -> tuple:
     return data, frames
 
 
+def _gap_key(gap) -> tuple:
+    """Sort key of a gap of the last seat: the tightest first, a missing one last."""
+    missing = gap is None or pd.isna(gap)
+    return missing, 0 if missing else gap
+
+
 def _election_check(study, day: str) -> dict:
     """The summary of the check with and without the CERA vote of one election."""
     from ..studies.cera.study import VERDICT_BLOCK, VERDICT_SIGLA
@@ -379,6 +405,7 @@ def _election_check(study, day: str) -> dict:
     check, rows = study.checks[day], study.checks[day]['rows']
     voters, electors = int(study.voters[day].sum()), int(study.scrutinies[day]['electors'].sum())
     decided = rows.loc[rows['decided'], ['region_id', 'name', 'winner_with', 'winner_without', 'crosses_block']]
+    decided = _with_siglas(decided, _siglas(study, day), WINNERS)
     return {'date': day, 'voters': voters, 'rate': _value(100. * voters / electors, PCT_DECIMALS),
             'n_over_gap': int(check['n_over_gap']), 'n_decided': int(check['n_decided']), 'decided': _rows(decided),
             'net_psoe': int(check['net_by_sigla'].get(VERDICT_SIGLA, 0)),
@@ -399,15 +426,18 @@ def export_study_check(study) -> tuple:
     tuple
         ``(data, frames)``: ``data`` for ``study-check`` with ``elections`` (by date: ``date``, ``voters``,
         ``rate``, ``n_over_gap``, ``n_decided``, ``decided`` (``region_id``, ``name``, ``winner_with``,
-        ``winner_without``, ``crosses_block``), ``net_psoe``, ``net_left``, ``net_by_block``), ``rows`` (the
-        provinces of the latest election, by ``gap``) and ``verdict`` (``check.verdict`` of the study's
+        ``winner_with_sigla``, ``winner_without``, ``winner_without_sigla``, ``crosses_block``), ``net_psoe``,
+        ``net_left``, ``net_by_block``), ``rows`` (the provinces of the latest election, by ``gap``, the ones
+        without a gap last, with the ``_sigla`` of both winners) and ``verdict`` (``check.verdict`` of the study's
         election, ``'acierto'`` or ``'fallo'``, or ``None`` while it has no scrutiny); ``frames`` the ``check``
         twin (the rows with a ``date`` column).
     """
     from ..studies.cera.check import verdict
 
     days = sorted(study.checks)
-    rows = study.checks[days[-1]]['rows'].sort_values('gap', kind='stable').reset_index(drop=True)
+    rows = study.checks[days[-1]]['rows']
+    rows = rows.iloc[sorted(range(len(rows)), key=lambda i: _gap_key(rows['gap'].iloc[i]))].reset_index(drop=True)
+    rows = _with_siglas(rows, _siglas(study, days[-1]), WINNERS)
     inputs = study.verdict_input
     data = {
         'elections': [_election_check(study, day) for day in days],
@@ -492,8 +522,10 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
     -------
     tuple
         ``(data, {})``: ``data`` for ``study-meta`` with ``study``, ``title``, ``subtitle``, ``election``
-        (``scope``, ``date``, ``census_closed``, ``census_total``, ``census_source``), the registration keys,
-        ``checked_at``, ``params``, ``sources``, ``series_last`` (``YYYY-MM-DD``), ``regression`` (``p_slope``
+        (``scope``, ``date``, ``census_closed``, ``census_total``, ``census_source`` and ``baseline_date``, the
+        monthly close of the census of the baseline election, the base of the increment), the registration keys,
+        ``checked_at``, ``params``, ``sources``, ``series_last`` (``YYYY-MM-DD``), ``skipped_scrutinies`` (the
+        dates of the CERA scrutinies left out for lack of their Infoelectoral results), ``regression`` (``p_slope``
         and ``p_level`` with three significant digits, the slopes and mean net additions with two decimals),
         ``commit``, ``dirty``, ``versions`` and ``seconds``. No CSV twin.
     """
@@ -507,10 +539,12 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
         'study': study_id, 'title': title, 'subtitle': subtitle,
         'election': {'scope': election['scope'], 'date': election['date'], 'census_closed': election['census_closed'],
                      'census_total': int(study.census['electors'].sum()),
-                     'census_source': f'INE, Oficina del Censo Electoral: {os.path.basename(table)}'},
+                     'census_source': f'INE, Oficina del Censo Electoral: {os.path.basename(table)}',
+                     'baseline_date': _iso(study.baseline_date)},
         **{key: (registration or {}).get(key) for key in REGISTRATION_KEYS},
         'checked_at': checked_at, 'params': study.params, 'sources': study_sources(study),
-        'series_last': _iso(study.series_last), 'regression': regression,
+        'series_last': _iso(study.series_last), 'skipped_scrutinies': list(study.skipped_scrutinies),
+        'regression': regression,
         'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'], 'seconds': seconds or {},
     }
     return data, {}

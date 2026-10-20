@@ -31,12 +31,14 @@ def test_cera_data_folder_is_complete():
     root = os.path.join(ROOT, 'data', 'cera')
     assert len(glob.glob(os.path.join(root, 'ine', 'cerapropais_*.xls*'))) == 21
     assert all(os.path.exists(os.path.join(root, 'ine', f'elecgen2026_tab{n}.xlsx')) for n in (6, 7, 8))
-    params = json.load(open(os.path.join(root, 'params.json'), encoding='utf-8'))
+    with open(os.path.join(root, 'params.json'), encoding='utf-8') as fh:
+        params = json.load(fh)
     assert params['election']['date'] == '2026-11-29' and params['check']['max_gain'] == 1
     assert params['participation']['latam'] == 0.05 and params['litigation']['count'] == 163020
     countries = pd.read_csv(os.path.join(root, 'countries.csv'))
     assert set(countries['region']) <= {'latam', 'europe', 'usa_canada', 'other'} and set(countries['exposure']) == {'alta', 'media', 'baja'}
-    provinces = json.load(open(os.path.join(root, 'provinces.json'), encoding='utf-8'))
+    with open(os.path.join(root, 'provinces.json'), encoding='utf-8') as fh:
+        provinces = json.load(fh)
     assert set(provinces.values()) == set(range(1, 53))
     for date in ('2019-11-10', '2023-07-23'):
         frame = pd.read_csv(os.path.join(root, 'escrutinio', f'es-{date}.csv'))
@@ -65,9 +67,11 @@ def test_normalise_label_strips_accents_and_punctuation():
 def test_read_monthly_workbook_reads_both_formats(data_fs, provinces):
     old = read_monthly_workbook(path('cera/ine/cerapropais_06.xls'), provinces)
     new = read_monthly_workbook(path('cera/ine/cerapropais_26.xlsx'), provinces)
-    assert list(old.columns) == MONTHLY_COLUMNS and old['date'].nunique() == 12 and new['date'].nunique() == 9
+    assert list(old.columns) == MONTHLY_COLUMNS and old['date'].nunique() == 12 and new['date'].nunique() >= 9
     assert national_series(old)['2006-12-01'] == 1160209 and national_series(new)['2026-05-01'] == 2708083
-    assert national_series(new)['2026-09-01'] == 2762829 and set(new['region_id']) == set(range(1, 53))
+    # El libro del año en curso gana un mes con cada cierre: solo se fijan cotas del último.
+    assert new['date'].max() >= pd.Timestamp('2026-09-01') and national_series(new).iloc[-1] > 2700000
+    assert set(new['region_id']) == set(range(1, 53))
 
 
 def _albacete_cell(sheet, country, month):
