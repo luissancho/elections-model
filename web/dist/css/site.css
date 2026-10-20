@@ -841,8 +841,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .study-card { display: flex; flex-direction: column; gap: var(--space-2); }
 .study-card h3 { margin: 0; }
-.study-card .lead { margin: 0; }
-.study-card .btn { align-self: flex-start; margin-top: auto; }
+.study-card .lead { margin: 0 0 var(--space-3); }
+.study-card .btn { align-self: flex-end; margin-top: auto; }
 /* Two columns of charts or tables; the title and the subtitle of each chart */
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .grid2 > * { min-width: 0; }
