@@ -15,8 +15,9 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
    parámetros, estados y resumen).
 6. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
 7. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
-   estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, publicar en local, en S3 y desde
-   ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el manifest, retirada de un run y "Guarda LOREG".
+   estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, estudios (el del voto CERA y su
+   registro), publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el
+   manifest, retirada de un run y "Guarda LOREG".
 8. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
 9. "Duraciones medidas": publicación, carga local, arranque de un worker y memoria del job.
 
@@ -676,8 +677,10 @@ En Docker: `RUN_JOB='backtest {"scopes":"all"}'`. Después hay que publicar:
 produce runs: ejecuta el modelo, escribe un run inmutable y mueve los punteros (`history.json` por ámbito y
 `manifest.json`). El análisis de casas, las elecciones pasadas y el backtest (`analysis`, `event`, `backtest`) no son
 runs: sobrescriben su carpeta y no tocan los punteros. `manifest`, `point` y `unpublish` solo mueven punteros.
+Los estudios (`study`, enmienda 2026-10-20: hoy el del voto CERA) tampoco son runs: se calculan desde ficheros de
+`data/cera/`, sobrescriben `studies/{estudio}/` y solo tocan su entrada del manifest (ver "Estudios").
 Contrato de los ficheros: `docs/web/contrato.md`. El código está en el paquete `mtpy/lib/publish/` (`common`,
-`forecast`, `analysis`, `backtest`, `events` y `pointers`); el job lo usa como `publish`.
+`forecast`, `analysis`, `backtest`, `events`, `studies` y `pointers`); el job lo usa como `publish`.
 
 ### Qué hace cada acción y cuándo lanzarla
 
@@ -693,12 +696,13 @@ así que un recálculo de ratings se ve sin publicar nada. Todo lo demás sale d
 | `analysis` | `analysis/{ámbito}/`: efectos de casa del ciclo, herding, errores por sondeo de las elecciones pasadas y datos del estimador de error (tarjetas de `/casas`; histograma, diana y tabla de `/elecciones`) | Con cada `forecast`, en la misma llamada (`"what":["forecast","analysis"]`); también tras un recálculo de ratings y tras cargar los resultados de una elección, porque entra en los errores históricos | Sí | No |
 | `event` | `events/{ámbito}/{fecha}/`: error de cada encuestadora y de cada sondeo frente al resultado, los sondeos del ciclo tal como se publicaron, resultado oficial y lo que el modelo habría dicho a cada horizonte (detalle de `/elecciones?date=`) | Una vez por elección celebrada, con los resultados oficiales cargados (`event_date` obligatorio). De nuevo, con `"event_date":"all"`, si se corrigen sondeos de elecciones pasadas o se rehace el backtest, porque su parte "modelo" sale de `backtest/results` | No | No |
 | `backtest` | `backtest/{ámbito}/`: las tablas de `backtest/results` convertidas al paquete (`/metodo/backtest`) | Tras cada ejecución del job `backtest` (ver "Backtest del modelo"), es decir, cuando cambia el método. No ejecuta el modelo ni lee la base: solo convierte ficheros | No | No |
+| `study` | `studies/{estudio}/`: las ocho partes del estudio con sus gemelos CSV (`meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`), que leen `/analisis`, `/analisis/{estudio}` y la banda de Inicio. Hoy solo `voto-cera` | Cada mes, tras bajar el libro del INE (`run_load --what cera`); una vez, con `register`, para registrar la predicción antes del 29-N; y tras el escrutinio CERA, con los ficheros del 29-N cargados, para que aparezca la comprobación (ver "Estudios") | No | No |
 | `manifest` | Solo `manifest.json` | Congelar y descongelar la web en la veda (`freeze`). `forecast` ya reescribe el manifest, así que sola solo hace falta para eso | No | Sí |
 | `point` | Solo `manifest.json` | Volver a un run anterior sin borrar nada (`latest` nunca retrocede por sí solo) | No | Mueve `latest` al run indicado |
 | `unpublish` | Borra la carpeta del run y reconstruye `history.json` | Retirar un run malo; si era `latest`, vuelve al anterior | No | Sí |
 
-`what` admite las siete acciones y las ejecuta en ese orden; `event` exige `event_date` y no se combina con
-`forecast` (las dos cosas fallan con `ValueError` antes de empezar). `backtest` y `event` pueden ir en la misma
+`what` admite las acciones de la tabla y las ejecuta en ese orden; `event` exige `event_date` y no se combina con
+`forecast`, y `study` exige `study` (las tres cosas fallan con `ValueError` antes de empezar). `backtest` y `event` pueden ir en la misma
 llamada: los dos leen `backtest/results` del disco (o `source`), no el paquete.
 
 Rutina, por situación:
@@ -717,6 +721,10 @@ Rutina, por situación:
 - **Tras recalcular ratings** (`python job.py compute '{"what":["ratings"],"scopes":"all"}'`, `run_load --what
   ratings` o los notebooks de carga): el ranking de `/casas` cambia solo; `forecast` y `analysis` para que el paquete
   use los ratings nuevos.
+- **Estudio del voto CERA**: cada mes, `python load/run_load.py --scopes es --what cera` (baja el libro del INE del
+  año; confirmar el diff de `data/cera/ine/`) y `{"what":["study"],"study":"voto-cera"}`. Una sola vez, antes del
+  29-N y con el árbol limpio, lo mismo con `"register":true` para registrar la predicción. Tras el escrutinio CERA,
+  con los ficheros del 29-N en `data/`, publicar otra vez: la comprobación se rellena sola (ver "Estudios").
 - **Incidencias**: `unpublish` para retirar un run malo o `point` para taparlo con uno anterior (ver "Retirada de
   un run"). `dry_run` ensaya `forecast`, `analysis`, `event` y `backtest` en `site-dry/v1` sin punteros (el manifest
   no se escribe); `backfill` reconstruye días pasados de la evolución (ver "Relleno retroactivo"); `force` salta la
@@ -739,6 +747,8 @@ python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
 python job.py publish '{"what":["backtest"],"scopes":"all"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"backfill":{"from":"2026-10-05","to":"2026-10-08","replace":true}}'
 python job.py publish '{"what":["forecast", "analysis"],"scopes":["es"], "verbose": 3}'
+python job.py publish '{"what":["study"],"study":"voto-cera"}'
+python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
 
 1. Publica el pronóstico de `es` (nowcast y forecast, 1000 simulaciones) y actualiza su entrada del manifest.
@@ -755,6 +765,10 @@ python job.py publish '{"what":["forecast", "analysis"],"scopes":["es"], "verbos
 11. Todas las elecciones `featured` de `es` anteriores a hoy.
 12. El backtest de `es` y de todos los ámbitos autonómicos; los que no tienen resultados quedan `skipped`.
 13. El mismo relleno que el 7 recalculando los días que ya existen (enmienda 2026-10-17; ver "Relleno retroactivo").
+14. Pronóstico de `es` con análisis de casas y toda la salida del modelo por consola.
+15. Calcula y publica el estudio del voto CERA; conserva el registro anterior si lo había (enmienda 2026-10-20;
+    ver "Estudios").
+16. Lo mismo registrando la predicción: exige el árbol limpio y falla si ya estaba registrada (salvo `force`).
 
 ### Parámetros
 
@@ -772,7 +786,9 @@ python job.py publish '{"what":["forecast", "analysis"],"scopes":["es"], "verbos
 | `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` |
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
-| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG |
+| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20) |
+| `study` | `null` | Slug del estudio (hoy solo `voto-cera`). Obligatorio para `study` (enmienda 2026-10-20) |
+| `register` | `false` | Con `study`, registrar la predicción del estudio (`registered_at`, `registered_commit`, `registered`); exige el árbol de git limpio y que no hubiera registro, salvo `force` (enmienda 2026-10-20; ver "Estudios") |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what`. Con `"replace": true` (enmienda 2026-10-17), un día cuyo run ya existe se borra antes (como `unpublish`) y se recalcula en vez de saltarse |
 | `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
@@ -810,9 +826,15 @@ es: backtest published (28 cases, 5 elections) in 0 s                           
 es: event 2023-07-23 published (<n> polls, <n> pollsters) in <s> s                            # event, una línea por fecha
 es: event 2020-01-01 skipped (2020-01-01 is not a featured election of es)
 es: event all skipped (no past featured elections)
+voto-cera: study published (sin registro, sin comprobar) in 4 s                             # study
+voto-cera: study published (registrado el 2026-10-20, comprobado) in 4 s
+voto-cera: study refused (study: register needs a clean tree)
+voto-cera: study refused (study: already registered on 2026-10-20)
 ```
 
-Con `event`, `results[ámbito]` es una lista con un resultado por fecha (`event_date`, `status`, ...).
+Con `event`, `results[ámbito]` es una lista con un resultado por fecha (`event_date`, `status`, ...). Con `study`,
+`results[estudio]` lleva `status`, `registered_at`, `checked` y `seconds`; `refused` es aquí la negativa a registrar
+(árbol sucio o registro previo sin `force`), no la guarda LOREG, y entonces no se escribe nada.
 
 Si algún ámbito falla, el job termina con error (código de salida 1) después de escribir el manifest y
 el resumen; un ámbito fallido conserva su entrada anterior en el manifest.
@@ -938,6 +960,46 @@ Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` 
 S3_BUCKET= python job.py publish '{"what":["backtest"],"scopes":["es"]}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["backtest"],"scopes":"all"}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
+```
+
+### Estudios
+
+Enmienda 2026-10-20 (análisis del voto CERA). `{"what":["study"],"study":"voto-cera"}` calcula el estudio del voto
+CERA (`mtpy/lib/studies/cera/`) desde los ficheros de `data/cera/` (censo mensual y tablas de la convocatoria del
+INE, escrutinios CERA de Interior, autonómicas, consulados y `params.json`; ver `data/README.md`) y lo escribe en
+`studies/voto-cera/` del paquete: las partes `census`, `participation`, `vote`, `placement`, `prediction`,
+`sensitivity` y `check`, cada una con sus gemelos CSV, y `meta` la última (formato en "Estudios" de
+`docs/web/contrato.md`). Lo leen `/analisis`, `/analisis/voto-cera`, la banda "Análisis" de Inicio y
+`/api/v1/studies[/{estudio}/{parte}]`.
+
+- **No necesita base de datos** ni ejecuta el modelo: solo lee ficheros del repositorio y tarda unos segundos.
+- Sobrescribe el estudio anterior y actualiza su entrada `manifest.studies` (`published_at`, `registered_at`,
+  `checked`); no toca runs, análisis ni punteros. Con `dry_run` escribe en `site-dry/v1/studies/`. No pasa por la
+  guarda LOREG porque no publica sondeos.
+- **Antes de publicar**, `python load/run_load.py --scopes es --what cera` baja a `data/cera/ine/` el libro mensual
+  del INE del año en curso y las tablas de la convocatoria que falten (ignora `--scopes`). Los ficheros van en git:
+  revisar el diff y confirmarlo, sobre todo antes de registrar.
+- **Registro de la predicción** (`"register":true`): escribe en `meta` `registered_at` (la fecha del día),
+  `registered_commit` (el commit corto de `HEAD`) y `registered` (la afirmación comprobable con su umbral y los
+  escaños proyectados). Exige el árbol de git limpio (`git status --porcelain` vacío, también sin ficheros nuevos
+  sin seguimiento) y que no hubiera registro; si no, el estudio termina `refused` y no se escribe nada. Con
+  `"force":true` sustituye el registro conservando `registered_at` y anotando `registered_changed_at`. Las
+  publicaciones posteriores sin `register` conservan el registro (leen el `meta` anterior). Sin registro, la página
+  presenta la predicción como borrador.
+- **Comprobación tras el 29-N**: con `data/cera/escrutinio/es-2026-11-29.csv` y su entrada en
+  `candidatures.json` (sin ella el cálculo para), y `infoelectoral/es/PROV_02_202611_1.xlsx` con su `.json`
+  cargados como en cada elección, la siguiente publicación rellena la parte `check` y `checked_at`. Cotejar antes
+  `params.blocks` con las siglas de 2026: una sigla de izquierda fuera de los bloques cae en «Otros» y altera el
+  saldo que decide el acierto. Mientras falte el escrutinio, la publicación lo deja fuera y lo anota en
+  `meta.skipped_scrutinies`.
+- Cada estudio termina `published`, `refused` (solo el registro) o `failed`; el resumen dice si está registrado y
+  comprobado (`voto-cera: study published (registrado el 2026-10-20, sin comprobar) in 4 s`).
+
+Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
+
+```
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-cera"}'
+set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
 
 ### Publicar en local
