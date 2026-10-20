@@ -2069,7 +2069,7 @@ def test_eleccion_detail_scores_the_model_like_the_pollsters(events_site):
     point = data['model_point']
     assert point['pollster'] == 'Modelo (promedio)' and point['days'] == 6 and set(data['blocks']) <= set(point)
     assert all(row['pollster'] != 'Modelo (promedio)' for row in data['last'])
-    assert 'El rombo negro es el modelo' in page
+    assert 'El punto naranja es el modelo' in page
 
 
 def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(events_site, monkeypatch):

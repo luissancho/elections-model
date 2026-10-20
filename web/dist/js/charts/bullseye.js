@@ -10,8 +10,7 @@ const RING_STEPS = 72;
 const POINT_SIZE = 8;
 const POINT_Z = 10;
 const TOP_Z = 12;
-// The highlighted point (the model in the detail of an election): a bigger diamond over every other point
-const HIGHLIGHT_SIZE = 16;
+// The highlighted point (the model in the detail of an election): a point like the others, over all of them
 const HIGHLIGHT_Z = 14;
 
 /**
@@ -204,10 +203,8 @@ export function bullseyeOption(rows, {
   if (marked) {
     // its label always shows (no overlap hiding): it is the point the reader looks for
     option.series.push({
-      type: 'scatter', symbol: 'diamond', symbolSize: HIGHLIGHT_SIZE, z: HIGHLIGHT_Z, color: THEME.textColor,
-      itemStyle: {borderColor: '#fff', borderWidth: 1.5},
-      label: {show: true, position: 'right', formatter: highlight.label, color: THEME.textColor, fontWeight: 700,
-        textBorderColor: '#fff', textBorderWidth: 3},
+      id: 'highlight', type: 'scatter', symbolSize: POINT_SIZE, z: HIGHLIGHT_Z, color: highlight.color || THEME.textColor,
+      label: {show: true, position: 'right', formatter: highlight.label, color: THEME.textColor, fontWeight: 700},
       data: [{value: marked, row: highlight.row}],
     });
   }
@@ -233,8 +230,9 @@ export function bullseyeOption(rows, {
  *   that label, `row.event` by default), `alphaOf` (`row => opacity`, 0 to 1: the point and its label fade;
  *   `null` keeps them opaque) and `onTop` (`group => boolean`: the points of those groups are drawn over the
  *   other groups', e.g. the general elections over the regional ones; `null` keeps the order of the groups) and
- *   `highlight` (`{row, label}`: one more point, a bigger diamond in the colour of the text with its `label`
- *   always shown, over every other point and counted in the extent of the axes; nothing without coordinates)
+ *   `highlight` (`{row, label, color}`: one more point, of the size of the others and in its `color` (the text
+ *   colour by default), with its `label` always shown, over every other point and counted in the extent of the
+ *   axes; nothing without coordinates)
  * @returns {object} the ECharts instance
  */
 export function renderBullseye(el, rows, opts) {
