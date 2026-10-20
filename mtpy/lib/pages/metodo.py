@@ -317,8 +317,8 @@ def quality_rubric() -> dict:
     -------
     dict
         ``rows`` (one ``{'key', 'name', 'max', 'levels', 'note'}`` per criterion, in the order of the catalogue, with
-        ``note`` the text the catalogue adds to the criterion or ``None``, and ``levels`` a list of ``{'points': int, 'text': str}`` from the highest level to 0), ``max_points`` (the sum
-        of the maxima), the ``per_point`` and ``floor`` of the scale and ``cap`` (``per_point · max_points``, the
+        ``note`` the text the catalogue adds to the criterion or ``None``, and ``levels`` a list of
+        ``{'points': int, 'text': str}`` from the highest level to 0), ``max_points`` (the sum of the maxima), the ``per_point`` and ``floor`` of the scale and ``cap`` (``per_point · max_points``, the
         highest prior quality a pollster can get).
 
     Raises

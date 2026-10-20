@@ -904,9 +904,10 @@ HOUSE_EVENTS = ['2019-11-10', '2023-07-23', '2026-11-29']
 def fake_houses(monkeypatch, name='CIS'):
     """Lectores de casas parcheados en `webapi`; `name` es el nombre de la casa 1 (CIS por defecto)."""
     pollsters = pd.DataFrame({
-        'id': [1, 2, 3, 4, 5, 6], 'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero', 'Agregador'],
-        'mtype': ['state', None, None, None, 'online', 'aggr'],  # los valores de la base de datos; sin tipo, una casa privada
-        'quality': [56.0, 80.0, 40.0, 5.0, 5.0, 16.0], 'rating': [55, 70, None, None, 50, None],  # rating nacional truncado: distinto del camino del ámbito
+        'id': [1, 2, 3, 4, 5, 6, 7, 8],
+        'name': [name, 'GAD3', 'Hamalgama', 'Nueva', 'Cero', 'Agregador', 'Autonomica', 'Anonima'],
+        'mtype': ['state', None, None, None, 'online', 'aggr', None, None],  # los valores de la base de datos; sin tipo, una casa privada
+        'quality': [56.0, 80.0, 40.0, 5.0, 5.0, 16.0, 32.0, 24.0], 'rating': [55, 70, None, None, 50, None, None, None],  # rating nacional truncado: distinto del camino del ámbito
     })
     ratings = pd.DataFrame({
         'event_date': pd.to_datetime(['2019-11-10', '2023-07-23', '2023-07-23', '2026-11-29', '2026-11-29', '2026-11-29',
@@ -960,19 +961,23 @@ def fake_houses(monkeypatch, name='CIS'):
     monkeypatch.setattr(webapi.queries, 'get_house_effects', lambda scope: house_effects)
     monkeypatch.setattr(webapi.queries, 'get_herding', lambda scope: herding)
     quality = pd.DataFrame({
-        'pollster_id': [1, 3, 6], 'pollster': [name, 'Hamalgama', 'Agregador'],
-        'fieldwork': [3, 2, 0],
+        'pollster_id': [1, 3, 6, 7, 8], 'pollster': [name, 'Hamalgama', 'Agregador', 'Autonomica', 'Anonima'],
+        'fieldwork': [3, 2, 0, 2, 2],
         'fieldwork_source': ['https://www.cis.es/es/metodologia',
-                             'https://hamalgama.example/ficha (ficha de 2026-10-01); https://hamalgama.example/metodologia', ''],
-        'transparency': [3, 1, 1],
+                             'https://hamalgama.example/ficha (ficha de 2026-10-01); https://hamalgama.example/metodologia', '',
+                             'web', 'web'],
+        'transparency': [3, 1, 1, 1, 1],
         'transparency_source': ['https://www.cis.es/es/microdatos', 'Ficha técnica del sondeo de 2026-10-01',
-                                'https://agregador.example/metodo'],
-        'independence': [0, 1, 0], 'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16', ''],
-        'identity': [1, 1, 1], 'identity_source': ['https://www.cis.es', 'https://hamalgama.example', 'https://agregador.example'],
-        'standards': [0, 0, 0], 'standards_source': ['', '', ''],
-        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', '', ''],
-        'status': ['revisada', 'borrador', 'revisada'], 'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16', '2026-10-01']),
-        'points': [7, 5, 2], 'quality': [56.0, 40.0, 16.0],
+                                'https://agregador.example/metodo', 'web', 'web'],
+        'independence': [0, 1, 0, 1, 1],
+        'independence_source': ['', 'base de datos del proyecto, consulta de patrocinadores a 2026-10-16', '', 'web', 'web'],
+        'identity': [1, 1, 1, 1, 0],
+        'identity_source': ['https://www.cis.es', 'https://hamalgama.example', 'https://agregador.example', 'web', ''],
+        'standards': [0, 0, 0, 0, 0], 'standards_source': ['', '', '', '', ''],
+        'notes': ['Organismo público adscrito al Ministerio de la Presidencia', '', '', '', ''],
+        'status': ['revisada', 'borrador', 'revisada', 'revisada', 'revisada'],
+        'checked_at': pd.to_datetime(['2026-10-16', '2026-10-16', '2026-10-01', '2026-10-16', '2026-10-16']),
+        'points': [7, 5, 2, 4, 3], 'quality': [56.0, 40.0, 16.0, 32.0, 24.0],
     })
     monkeypatch.setattr(webapi.queries, 'get_pollsters_quality', lambda: quality)
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: HOUSE_EVENTS[-1])
@@ -1282,6 +1287,7 @@ def test_table_columns_describe_the_two_tables_with_the_scale_and_the_blocks():
     """Las columnas del ranking y del camino al rating, con su etiqueta y su descripción: la regla de puntos de
     «Confianza» sale de la escala del catálogo y se omite sin ella; el signo de «Sesgo bloques» nombra los bloques."""
     plain = {column['key']: column['text'] for column in pages.table_columns('ranking')}
+    assert 'rúbrica pública de cuatro criterios' in plain['quality']
     assert 'Cada punto vale' not in plain['quality'] and 'al primer bloque del que hubo; negativo, más margen al segundo' in plain['error_blocks']
     scaled = {column['key']: column['text']
               for column in pages.table_columns('ranking', ['Derecha', 'Izquierda'], {'per_point': 9, 'floor': 4})}
@@ -1366,6 +1372,23 @@ def test_profile_confidence_card_shows_implantation_with_its_two_parts(houses):
     row = none['rows'][-1]
     assert (row['points'], row['general']) == (0, False) and row['level'] == criteria['criteria']['implantation']['levels']['0']
     assert none['support'] == '5 de 10 puntos'
+
+
+def test_profile_page_card_shows_implantation_0_without_generals(houses):
+    """Una encuestadora evaluada sin generales: Implantación 0 de 2, con el nivel 0 y sin generales sondeadas."""
+    page = html(call(houses, '/casas/autonomica')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
+    assert rows[-1] == ('Implantación', '0', '2') and 'Solo ha sondeado elecciones autonómicas o locales.' in card
+    assert 'ninguna elección general sondeada.' in card and 'calculado a partir de los sondeos publicados' not in card
+
+
+def test_profile_page_card_voids_transparency_without_identity(houses):
+    """Con identity = 0 y transparencia puntuada, la fila cuenta 0 de 3 y explica la condición."""
+    page = html(call(houses, '/casas/anonima')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
+    assert ('Transparencia', '0', '3') in rows and 'Sin una entidad identificable detrás' in card
 
 
 def test_profile_confidence_card_voids_transparency_without_identity(houses):

@@ -166,7 +166,7 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
             'confianza, que pesa más cuantos menos sondeos tiene. Cuanto más alto, más pesan sus sondeos.'),
         'quality': (
             'Lo que se supone de la encuestadora antes de mirar sus sondeos, de 0 a 100, según una rúbrica pública de '
-            'cinco criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras tiene pocos '
+            'cuatro criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras tiene pocos '
             'sondeos.' + rule),
         'num_events': ('En cuántas elecciones publicó sondeos, contando cada ámbito y fecha por separado: dos '
                        'autonómicas del mismo día cuentan dos.'),
