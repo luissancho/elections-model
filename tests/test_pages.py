@@ -1946,7 +1946,10 @@ def test_published_events_and_horizon_tables(events_site):
     assert [table['horizon'] for table in tables] == [6, 30]
     pp = tables[0]['rows'][0]
     assert pp == {'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 140}
-    assert set(tables[0]['blocks'][0]) == {'block', 'official_seats', 'model_seats', 'p_majority', 'majority'}
+    assert set(tables[0]['blocks'][0]) == {'block', 'official', 'model', 'error', 'official_seats', 'model_seats',
+                                           'p_majority', 'majority'}
+    # las medidas del modelo, con el margen de la elección (Derecha − Izquierda): PP+VOX frente a PSOE
+    assert set(tables[0]) >= {'error_avg', 'error_blocks'} and tables[0]['error_avg'] is not None
     assert pages.event_part('es', '2020-01-01', 'meta') is None
     with pytest.raises(HttpError) as missing:
         pages.resolve_event('es', '2020-01-01')
@@ -2014,11 +2017,53 @@ def test_horizon_tables_merge_vote_and_seats_and_prefer_the_horizon_run():
                          'p_majority': 0.4, 'p_majority_h': 0.45, 'majority': False, 'seats_valid': True}]}
     [table] = pages.horizon_tables(model)
     assert table['rows'] == [{'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 142}]
-    assert table['blocks'] == [{'block': 'Derecha', 'official_seats': 169, 'model_seats': 173, 'p_majority': 0.45, 'majority': False}]
+    assert table['blocks'] == [{'block': 'Derecha', 'official': None, 'model': None, 'error': None, 'official_seats': 169,
+                                'model_seats': 173, 'p_majority': 0.45, 'majority': False}]  # sin `parties`, sin voto
     model['seats'][0]['model_h'] = None
     del model['blocks'][0]['model_seats_h'], model['blocks'][0]['p_majority_h']
     [table] = pages.horizon_tables(model)
     assert table['rows'][0]['model_seats'] == 140 and table['blocks'][0]['model_seats'] == 171 and table['blocks'][0]['p_majority'] == 0.4
+
+
+def test_horizon_tables_sum_the_vote_of_each_block_and_score_the_model():
+    """El voto de cada bloque es la suma de sus partidos (`parties` del backtest), y la tabla lleva las medidas de
+    las encuestadoras para el modelo: error medio (partidos principales, sin signo) y sesgo bloques (margen del
+    primer bloque menos el del segundo, modelo menos resultado)."""
+    shares = [('PP', True, 33.0, 32.0), ('VOX', True, 12.0, 13.0), ('PSOE', True, 31.0, 29.0), ('Cs', False, 1.0, 1.5)]
+    model = {'horizons': [6],
+             'shares': [{'horizon': 6, 'party': p, 'main': m, 'official': o, 'model': v} for p, m, o, v in shares],
+             'seats': [],
+             'blocks': [{'horizon': 6, 'block': 'Derecha', 'parties': 'PP+VOX', 'official_seats': 169, 'model_seats': 171,
+                         'p_majority': 0.4, 'majority': False, 'seats_valid': True},
+                        {'horizon': 6, 'block': 'Izquierda', 'parties': 'PSOE+UP', 'official_seats': 121, 'model_seats': 118,
+                         'p_majority': 0.0, 'majority': False, 'seats_valid': True}]}
+    [table] = pages.horizon_tables(model, ['Derecha', 'Izquierda'])
+    derecha, izquierda = table['blocks']
+    assert (derecha['official'], derecha['model'], derecha['error']) == (45.0, 45.0, 0.0)
+    assert (izquierda['official'], izquierda['model'], izquierda['error']) == (None, None, None)  # UP sin voto: no se suma a medias
+    assert table['error_avg'] == round((1 + 1 + 2) / 3, 2) and table['error_blocks'] is None
+    model['blocks'][1]['parties'] = 'PSOE'
+    [table] = pages.horizon_tables(model, ['Derecha', 'Izquierda'])
+    assert table['error_blocks'] == round((45.0 - 29.0) - (45.0 - 31.0), 2)  # +2: el modelo dio 2 puntos más de margen a la derecha
+    [table] = pages.horizon_tables(model, ['Izquierda', 'Derecha'])
+    assert table['error_blocks'] == -2.0  # el signo sigue el orden del margen de la elección
+    assert pages.horizon_tables(model)[0]['error_blocks'] is None  # sin margen, sin sesgo
+
+
+def test_eleccion_detail_scores_the_model_like_the_pollsters(events_site):
+    """«Lo que dijo el modelo»: su error medio y su sesgo bloques en cada horizonte, la tabla de bloques con los
+    campos de la de partidos más la probabilidad de mayoría, y una fila «Modelo (promedio)» en la tabla de las
+    encuestadoras, con el horizonte más corto (2026-10-21)."""
+    page = html(call(events_site, '/elecciones/es/generales/2023-07')[2])
+    model = page[page.index('id="model"'):page.index('id="last-errors"')]
+    assert re.search(r'<p class="muted model-score">Error medio: [0-9,]+ · Sesgo bloques: -?[0-9,]+</p>', model)
+    blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', model, re.S).group(1)
+    assert re.findall(r'<th scope="col">([^<]*)</th>', blocks) == ['Bloque', 'Promedio (%)', 'Resultado (%)', 'Error',
+                                                                  'Escaños modelo', 'Escaños reales', 'Prob. de mayoría']
+    table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
+    row = re.search(r'<tr class="model-row">(.*?)</tr>', table, re.S).group(1)
+    assert '<a href="/metodo/promedio">Modelo (promedio)</a>' in row and '<td>6</td>' in row and '<td class="na">—</td>' in row
+    assert table.count('<tr class="model-row">') == 1
 
 
 def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(events_site, monkeypatch):
@@ -2035,7 +2080,8 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     page = html(body)
     assert status == 200 and page.count('Escaños no proyectables en esta elección') == 1
     assert 'id="model-table-30"' in page and 'id="model-table-6"' in page and 'id="model-shares-6"' not in page
-    assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' not in page
+    # la tabla de bloques sigue (el voto vale) con los escaños en raya, como la de partidos
+    assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' in page
 
 
 def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):
@@ -2092,7 +2138,8 @@ def test_last_row_without_id_is_plain_text(events_site, monkeypatch):
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
     status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
     table = re.search(r'<table id="last-table">(.*?)</table>', html(body), re.S).group(1)
-    assert status == 200 and 'GAD3' in table and '<a ' not in table
+    houses = re.sub(r'<tr class="model-row">.*?</tr>', '', table, flags=re.S)  # la fila del modelo enlaza al método
+    assert status == 200 and 'GAD3' in houses and '<a ' not in houses
 
 
 def test_eleccion_without_meta_is_a_404(events_site, fresh_app, monkeypatch):

@@ -2,7 +2,7 @@
 Past elections page context: the list of published elections and the detail of one.
 """
 from datetime import date, datetime, timedelta
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
@@ -35,6 +35,8 @@ EVENT_CSV = (
 RESULTS_SHOWN = 15
 # Keys of a last-poll row the detail embeds for its charts (plus the signed error of each block).
 LAST_KEYS = ('pollster', 'pollster_id', 'days', 'sample_size', 'error_avg', 'error_blocks', 'error_blocks_abs')
+# The name of the model in the table of the last polls, where it is scored like a pollster
+MODEL_ROW = 'Modelo (promedio)'
 
 
 def event_part(scope: str, date: str, name: str) -> Optional[dict]:
@@ -125,6 +127,39 @@ def last_poll_rows(rows: list) -> list:
 
     return sorted((dict(row) for row in last.values()),
                   key=lambda row: (row['error_blocks_abs'] is None, row['error_blocks_abs'] or 0.0))
+
+
+def with_model_row(last_rows: list, table: Optional[dict], blocks: Sequence[str]) -> list:
+    """
+    The rows of the table of the last polls with the model among them, scored like a pollster.
+
+    Parameters
+    ----------
+    last_rows : list of dict
+        ``last_poll_rows``, ordered by ``error_blocks_abs``.
+    table : dict or None
+        The ``horizon_tables`` entry the model is compared at (the shortest horizon), ``None`` without a model.
+    blocks : sequence of str
+        The blocks of the columns of the table (``blocks`` of the polls part).
+
+    Returns
+    -------
+    list of dict
+        ``last_rows`` plus, when there is a table, one row with ``model`` true: ``pollster`` «Modelo (promedio)»,
+        ``days`` the horizon, ``sample_size`` ``None``, its ``error_avg``, ``error_blocks`` and ``error_blocks_abs``
+        and the error of each block; in the order of ``last_poll_rows`` (``None`` last).
+    """
+    if table is None:
+        return list(last_rows)
+
+    errors = {row['block']: row.get('error') for row in table.get('blocks') or []}
+    error = table.get('error_blocks')
+    row = {'pollster': MODEL_ROW, 'model': True, 'pollster_id': None, 'days': table['horizon'], 'sample_size': None,
+           'error_avg': table.get('error_avg'), 'error_blocks': error,
+           'error_blocks_abs': None if error is None else abs(error),
+           **{block: errors.get(block) for block in blocks}}
+
+    return sorted(list(last_rows) + [row], key=lambda row: (row['error_blocks_abs'] is None, row['error_blocks_abs'] or 0.0))
 
 
 def published_events(scope: str) -> list:
@@ -771,29 +806,70 @@ def _horizon_value(row: dict, key: str):
     return value if value is not None else row.get(key)
 
 
-def horizon_tables(model: dict) -> list:
+def _difference(model, official) -> Optional[float]:
+    """``model - official`` rounded to 2 decimals, ``None`` when either is missing."""
+    return None if model is None or official is None else round(model - official, 2)
+
+
+def _block_share(parties: Optional[str], shares: dict, key: str) -> Optional[float]:
     """
-    Tables of the backtest of an election, one per horizon.
+    Vote of a block: the sum of the ``key`` share (``official`` or ``model``) of its parties.
+
+    Parameters
+    ----------
+    parties : str or None
+        The parties of the block as the backtest writes them (``PP+VOX``).
+    shares : dict
+        ``{party: shares row}`` of one horizon.
+    key : str
+        ``official`` or ``model``.
+
+    Returns
+    -------
+    float or None
+        The sum, rounded to 2 decimals; ``None`` without parties or when one of them has no value (a partial
+        sum would not be the block).
+    """
+    names = [name for name in (parties or '').split('+') if name]
+    values = [(shares.get(name) or {}).get(key) for name in names]
+
+    if not names or any(value is None for value in values):
+        return None
+
+    return round(sum(values), 2)
+
+
+def horizon_tables(model: dict, margin: Optional[Sequence[str]] = None) -> list:
+    """
+    Tables of the backtest of an election, one per horizon, with the measures of the pollsters for the model.
 
     Parameters
     ----------
     model : dict
         Data of the ``model`` part (``horizons``, ``shares``, ``seats``, ``blocks``).
+    margin : sequence of str, optional
+        The two blocks of the margin of the election, in its order (``blocks`` of the polls part): the sign of
+        ``error_blocks``. Without two, ``error_blocks`` is ``None``.
 
     Returns
     -------
     list of dict
-        By horizon ascending: ``{'horizon', 'seats_valid', 'rows', 'blocks'}``. ``seats_valid`` is ``False``
-        when any seats or blocks row of the horizon has it ``False`` (a case whose seats could not be
-        projected). ``rows`` has the ``main`` parties of ``shares``: ``name``, ``official``, ``model``,
-        ``error = model - official`` (2 decimals), ``official_seats`` and ``model_seats`` (the seats row of
-        the party, ``None`` without one); ``blocks`` the ``block``, ``official_seats``, ``model_seats``,
-        ``p_majority`` and ``majority`` of each block. The seats and the probability come from the horizon
-        run (``model_h``, ``model_seats_h``, ``p_majority_h``) when the row has them, else from the nowcast.
+        By horizon ascending: ``{'horizon', 'seats_valid', 'rows', 'blocks', 'error_avg', 'error_blocks'}``.
+        ``seats_valid`` is ``False`` when any seats or blocks row of the horizon has it ``False`` (a case whose
+        seats could not be projected). ``rows`` has the ``main`` parties of ``shares``: ``name``, ``official``,
+        ``model``, ``error = model - official`` (2 decimals), ``official_seats`` and ``model_seats`` (the seats
+        row of the party, ``None`` without one); ``blocks`` the ``block``, its vote ``official`` and ``model``
+        (the sum of its parties, ``_block_share``) and their ``error``, ``official_seats``, ``model_seats``,
+        ``p_majority`` and ``majority``. The seats and the probability come from the horizon run (``model_h``,
+        ``model_seats_h``, ``p_majority_h``) when the row has them, else from the nowcast. The measures of the
+        pollsters, with their definitions: ``error_avg``, the mean absolute error of the main parties, and
+        ``error_blocks``, the signed error of the margin (first block minus second, model minus result); both
+        rounded to 2 decimals, ``None`` without values.
     """
     tables = []
 
     for horizon in sorted(model.get('horizons') or []):
+        shares = {row['party']: row for row in model.get('shares') or [] if row['horizon'] == horizon}
         seats = {row['party']: row for row in model.get('seats') or [] if row['horizon'] == horizon}
         rows = [
             {'name': row['party'], 'official': row['official'], 'model': row['model'],
@@ -803,16 +879,33 @@ def horizon_tables(model: dict) -> list:
              'model_seats': _horizon_value(seats.get(row['party'], {}), 'model')}
             for row in model.get('shares') or [] if row['horizon'] == horizon and row.get('main')
         ]
-        blocks = [
-            {'block': row.get('block'), 'official_seats': row.get('official_seats'),
-             'model_seats': _horizon_value(row, 'model_seats'), 'p_majority': _horizon_value(row, 'p_majority'),
-             'majority': row.get('majority')}
-            for row in model.get('blocks') or [] if row['horizon'] == horizon
-        ]
+        blocks = []
+
+        for row in model.get('blocks') or []:
+            if row['horizon'] != horizon:
+                continue
+
+            official = _block_share(row.get('parties'), shares, 'official')
+            predicted = _block_share(row.get('parties'), shares, 'model')
+            blocks.append({'block': row.get('block'), 'official': official, 'model': predicted,
+                           'error': _difference(predicted, official), 'official_seats': row.get('official_seats'),
+                           'model_seats': _horizon_value(row, 'model_seats'),
+                           'p_majority': _horizon_value(row, 'p_majority'), 'majority': row.get('majority')})
+
+        errors = [abs(row['error']) for row in rows if row['error'] is not None]
+        by_block = {row['block']: row for row in blocks}
+        pair = [by_block.get(name) or {} for name in list(margin or [])[:2]]
+        error_blocks = None
+
+        if len(pair) == 2 and all(row.get('error') is not None for row in pair):
+            error_blocks = round(pair[0]['error'] - pair[1]['error'], 2)
+
         seats_valid = all(row.get('seats_valid') is not False
                           for part in ('seats', 'blocks') for row in model.get(part) or []
                           if row['horizon'] == horizon)
-        tables.append({'horizon': horizon, 'seats_valid': seats_valid, 'rows': rows, 'blocks': blocks})
+        tables.append({'horizon': horizon, 'seats_valid': seats_valid, 'rows': rows, 'blocks': blocks,
+                       'error_avg': round(sum(errors) / len(errors), 2) if errors else None,
+                       'error_blocks': error_blocks})
 
     return tables
 
@@ -943,10 +1036,13 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         (``event_block_rows``: the results by block, ``party_blocks`` from the parameters, the event meta and the
         run catalogue, coloured by ``block_color``; empty when no party has a block), ``n_seats``,
         ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
+        ``last_table_rows`` (``with_model_row``: the same rows with the model among them, scored at its shortest
+        horizon; the table only, the charts keep ``last_rows``),
         ``poll_rows``, ``blocks`` (as published: the axes of the bullseye), ``table_blocks`` (``table_blocks``: the
         columns of the last-poll table, the left block first), ``bias_colors`` (``bias_colors``: the sides of the
         bar of «Sesgo bloques»), ``split_blocks`` (``split_sides``: the block of each side of the chart that
-        splits the error of the last polls, ``None`` without two blocks), ``horizon_tables``, ``has_model``,
+        splits the error of the last polls, ``None`` without two blocks), ``horizon_tables`` (with the margin of
+        ``blocks``), ``has_model``,
         ``has_series`` (whether the ``series`` part is published), ``series_horizon`` (the horizon of the
         series, else of the shortest horizon of the model), ``series_blocks`` (the blocks of the curve: those
         of ``party_blocks`` over the parties of the series, the table and the results, the same assignment the
@@ -1051,7 +1147,10 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['table_blocks'] = table_blocks(blocks)
     context['bias_colors'] = bias_colors(blocks, colour_meta, catalog)
     context['split_blocks'] = split
-    context['horizon_tables'] = horizon_tables(model) if has_model else []
+    context['horizon_tables'] = horizon_tables(model, blocks) if has_model else []
+    # the model in the table of the last polls, at its shortest horizon: the measures of the pollsters
+    context['last_table_rows'] = with_model_row(
+        last_rows, context['horizon_tables'][0] if context['horizon_tables'] else None, blocks)
     context['has_model'] = has_model
     context['has_series'] = has_series
     context['series_horizon'] = series_horizon

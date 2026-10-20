@@ -176,6 +176,7 @@
         </fieldset>
         {% for table in horizon_tables %}
         <div class="horizon" data-horizon="{{ table.horizon|int }}"{% if not loop.first %} hidden{% endif %}>
+          <p class="muted model-score">Error medio: {{ table.error_avg|num(1) }} · Sesgo bloques: {{ table.error_blocks|num(1) }}</p>
           <div class="table-wrap">
             <table id="model-table-{{ table.horizon|int }}">
               <caption>Voto y escaños del modelo a {{ table.horizon|int }} días de la elección, frente al resultado.</caption>
@@ -208,33 +209,42 @@
               </tbody>
             </table>
           </div>
-          {% if table.seats_valid %}
           <div class="table-wrap">
           <table id="model-blocks-{{ table.horizon|int }}">
-            <caption>Escaños y probabilidad de mayoría de cada bloque a {{ table.horizon|int }} días de la elección.</caption>
+            <caption>Voto y escaños de cada bloque según el modelo a {{ table.horizon|int }} días de la elección, frente al resultado, y su probabilidad de mayoría.</caption>
             <thead>
               <tr>
                 <th scope="col">Bloque</th>
+                <th scope="col">Promedio (%)</th>
+                <th scope="col">Resultado (%)</th>
+                <th scope="col">Error</th>
+                <th scope="col">Escaños modelo</th>
                 <th scope="col">Escaños reales</th>
-                <th scope="col">Escaños del modelo</th>
                 <th scope="col">Prob. de mayoría</th>
-                <th scope="col">Mayoría real</th>
               </tr>
             </thead>
             <tbody>
               {% for row in table.blocks %}
               <tr>
                 <td>{{ row.block }}</td>
+                <td>{{ row.model|num(1) }}</td>
+                <td>{{ row.official|num(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ row.error|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row.error|num(1) }}</td>
+                {% if table.seats_valid %}
+                <td><strong>{{ row.model_seats|int }}</strong></td>
                 <td>{{ row.official_seats|int }}</td>
-                <td>{{ row.model_seats|int }}</td>
                 <td>{{ row.p_majority|prob }}</td>
-                <td>{{ 'sí' if row.majority else 'no' }}</td>
+                {% else %}
+                <td class="na">—</td>
+                <td class="na">—</td>
+                <td class="na">—</td>
+                {% endif %}
               </tr>
               {% endfor %}
             </tbody>
           </table>
           </div>
-          {% else %}
+          {% if not table.seats_valid %}
           <p class="notice">Escaños no proyectables en esta elección: algún partido no tenía resultado anterior ni regla de herencia.</p>
           {% endif %}
         </div>
@@ -243,8 +253,16 @@
         <p>
           Cada fila es un partido principal: el voto del promedio del modelo a esa distancia de la elección y el
           oficial, su diferencia (promedio menos resultado, en puntos: rojo si el modelo se quedó corto y verde si se
-          pasó, más intenso cuanto mayor, hasta 8) y los escaños que proyectaba frente a los reales. Debajo, cada
-          bloque con sus escaños y la probabilidad de mayoría absoluta que le daba el modelo.
+          pasó, más intenso cuanto mayor, hasta 8) y los escaños que proyectaba frente a los reales. Debajo, lo mismo
+          por bloque, con el voto sumado de sus partidos, y la probabilidad de mayoría absoluta que le daba el modelo.
+        </p>
+        <p>
+          Encima de las tablas, el modelo medido como una encuestadora: su error medio (la distancia media, en puntos,
+          entre su voto y el resultado de los partidos principales) y su sesgo bloques (cuánto se equivocó en el margen
+          entre los dos bloques, con signo: positivo, más margen a {{ blocks[0] if blocks else 'el primer bloque' }} del
+          que hubo). Con el horizonte más corto aparece también en la tabla del último sondeo de cada encuestadora, para
+          ver dónde habría quedado. Ojo: a esa distancia el modelo ya ha visto todos los sondeos publicados, así que
+          juega con ventaja frente a cada encuestadora por separado.
         </p>
         <p>
           El selector cambia la distancia: a cada horizonte el modelo se calcula solo con los sondeos publicados
@@ -331,13 +349,19 @@
               </tr>
             </thead>
             <tbody>
-              {% for row in last_rows %}
+              {% for row in last_table_rows %}
               {# the block bias grows towards the block the poll favoured, in the colour of that block; a block column is
-                 red the more the poll fell short of the block and green the more it overshot it #}
+                 red the more the poll fell short of the block and green the more it overshot it; the model, scored like a
+                 pollster at its shortest horizon, has its own row #}
               {% set bias = row.error_blocks|sides(8) %}
-              <tr>
+              <tr{% if row.get('model') %} class="model-row"{% endif %}>
+                {% if row.get('model') %}
+                <td><a href="/metodo/promedio">{{ row.pollster }}</a></td>
+                <td class="na">—</td>
+                {% else %}
                 <td>{% if row.pollster_id %}<a href="{{ pollster_href(row.pollster, row.pollster_id) }}">{{ row.pollster }}</a>{% else %}{{ row.pollster }}{% endif %}</td>
                 <td>{{ row.sample_size|int }}</td>
+                {% endif %}
                 <td>{{ row.days|int }}</td>
                 <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, 8, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
                 <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ bias_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
@@ -358,6 +382,10 @@
           quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos.
         </p>
         <p>Las encuestadoras van de menor a mayor error de bloques, como las barras y la diana.</p>
+        <p>
+          La fila «Modelo (promedio)» es el promedio del modelo en su horizonte más corto, medido igual que un sondeo,
+          para ver dónde habría quedado. Ese día ya había visto todos los sondeos publicados, así que juega con ventaja.
+        </p>
         <p>El último sondeo puede ser de semanas antes de votar: no recoge lo que cambió después. Los demás sondeos están en el CSV.</p>
         {% endcall %}
         {% include '_glosario.html' %}

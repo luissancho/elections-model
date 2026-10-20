@@ -30,9 +30,9 @@ from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESU
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,
                          eleccion_context, elecciones_context, error_rows, event_part, fixed_rows, last_poll_rows,
-                         last_results, horizon_tables, majority_of, mark_shown, model_last, party_blocks,
+                         last_results, horizon_tables, majority_of, mark_shown, model_last, MODEL_ROW, party_blocks,
                          poll_error_parts, published_events, resolve_event, run_less_colours, shown_parties, split_sides,
-                         table_blocks, with_abs, year_range)
+                         table_blocks, with_abs, with_model_row, year_range)
 from .escanos import (CSV_PARTS, block_rows, csv_links, default_coalition, district_table, has_communities, escanos_context,
                       region_rows, resolve_region, seat_rows)
 from .filters import (DASH, MONTHS, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, fmt_datetime,
