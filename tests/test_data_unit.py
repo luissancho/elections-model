@@ -156,4 +156,5 @@ def test_save_catalogues_replicates_the_csv_and_writes_every_pollster(monkeypatc
     sql = [c[2] for c in calls if c[0] == 'quality' and c[1] == 'execute']
     assert len(sql) == 1 and 'DELETE FROM elections.pollsters_quality' in sql[0] and 'NOT IN (1)' in sql[0]
     written = [c[2] for c in calls if c[0] == 'pollsters' and c[1] == 'upsert'][0]
-    assert written['quality'].tolist() == [56.0, 5.0]  # 6 manual + 1 implantation (a general before today) and written['rating'].tolist() == [16.0, 73.0]
+    # 6 manual + 1 implantation (a general before today)
+    assert written['quality'].tolist() == [56.0, 5.0] and written['rating'].tolist() == [16.0, 73.0]

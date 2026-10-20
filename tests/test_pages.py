@@ -1268,6 +1268,7 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
     assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia']
     assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2')]
+    assert '<td>–</td>' in card  # Independencia, sin fuente
     assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
     assert 'Comprobado el 16 oct 2026.' in card and 'Organismo público' in card and 'provisional' not in card
     assert 'cada punto vale 8' in card and 'mínimo de 5' in card  # el «Cómo leerlo» lee la escala del catálogo
