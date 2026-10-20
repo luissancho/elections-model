@@ -158,3 +158,20 @@ def test_save_catalogues_replicates_the_csv_and_writes_every_pollster(monkeypatc
     written = [c[2] for c in calls if c[0] == 'pollsters' and c[1] == 'upsert'][0]
     # 6 manual + 1 implantation (a general before today)
     assert written['quality'].tolist() == [56.0, 5.0] and written['rating'].tolist() == [16.0, 73.0]
+
+
+def test_format_data_with_extra_columns_raises_no_setting_with_copy_warning():
+    """`format_data` recorta el frame a las columnas del modelo; con columnas de más (la evaluación de la calidad
+    trae `manual` o `implantation`, que la réplica no guarda) el recorte no debe dar `SettingWithCopyWarning` al
+    formatear, y el frame del llamador no cambia."""
+    import warnings
+
+    from mtpy.core.utils.helpers import format_data
+
+    meta = {'pollster_id': ['int', 3], 'pollster': ['str', None, False], 'points': ['int', 2]}
+    frame = pd.DataFrame({'pollster_id': [1], 'pollster': ['A'], 'points': [3], 'manual': [2]})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        out = format_data(frame, meta=meta)
+    assert [w for w in caught if type(w.message).__name__ == 'SettingWithCopyWarning'] == []
+    assert list(out.columns) == ['pollster_id', 'pollster', 'points'] and list(frame.columns)[-1] == 'manual'
