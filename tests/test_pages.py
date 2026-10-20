@@ -1221,7 +1221,7 @@ def test_ranking_rows_and_herding_rows():
     assert [row['pollster'] for row in rows] == ['GAD3', 'CIS'] and rows[0]['herding'] == 0.742 and rows[1]['herding'] is None
     assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'num_generals',
                              'error_avg', 'error_blocks', 'bias_blocks', 'bias_dev_adj', 'herding']
-    assert rows[0]['num_events'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
+    assert rows[0]['num_events'] is None and rows[0]['num_generals'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
     part = {'rows': [{'pollster': 'A', 'herding': 0.9}, {'pollster': 'B', 'herding': None}, {'pollster': 'C', 'herding': 0.7}]}
     assert [row['pollster'] for row in pages.herding_rows(part)] == ['C', 'A', 'B']
 
@@ -3341,6 +3341,20 @@ def test_casas_ranking_has_the_generales_filter(houses):
     page = html(call(houses, '/casas')[2])
     assert '<input type="checkbox" id="ranking-generals">' in page and 'Solo con experiencia en generales' in page
     assert 'id="ranking-generals" checked' not in page
+
+
+def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
+    """A known count of 0 renders its number (only an unknown count renders «–») and the filter still hides it."""
+    known = pd.DataFrame({
+        'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
+        'num_events': [1], 'num_generals': [0], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5],
+        'bias_blocks': [0.5], 'rating': [60.0],
+    })
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: known)
+    webapi.queries._QUERIES.clear()
+    page = html(call(houses, '/casas')[2])
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert '<tr data-generals="0">' in table and '<td>1</td>\n                <td>0</td>' in table
 
 
 def test_casas_ranking_without_num_generals_shows_a_dash_and_counts_zero(houses, monkeypatch):

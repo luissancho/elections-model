@@ -603,6 +603,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Controls of a chart (view, window, a select): one row on desktop, stacked on phones; the party pills of the
    series charts are a separate legend under them */
 .series-controls { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); }
+.check { display: inline-flex; align-items: center; gap: var(--space-1); font-size: inherit; }
 .series-controls[hidden], .pills[hidden] { display: none; }
 
 /* Pills of multiple selection (coalition calculator, parties of the bullseye): a group of checkboxes drawn like a

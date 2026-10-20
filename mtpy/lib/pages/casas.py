@@ -60,9 +60,9 @@ def mtype_label(mtype) -> str:
     return MTYPE_LABELS.get(mtype, mtype)
 
 
-def _count_or_zero(value) -> int:
+def _count_or_none(value) -> Optional[int]:
     """
-    A count of a ratings row as an integer, ``0`` when it is missing.
+    A count of a ratings row as an integer, ``None`` when it is unknown.
 
     Parameters
     ----------
@@ -71,11 +71,11 @@ def _count_or_zero(value) -> int:
 
     Returns
     -------
-    int
-        The count, or ``0`` without one.
+    int or None
+        The count (``0`` included), or ``None`` without one.
     """
     if value is None or value != value:
-        return 0
+        return None
 
     return int(value)
 
@@ -96,8 +96,8 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
     list of dict
         The pollsters with a rating and at least one poll (``num_polls``; a pollster without polls has its
         prior quality as rating, nothing to rank), by ``rating`` descending (ties keep the input order), with
-        the keys of ``RANKING_KEYS`` (``None`` when a column is missing, except ``num_generals``, which is ``0``
-        then: old ratings rows without the column) plus ``herding``, the pooled herding of
+        the keys of ``RANKING_KEYS`` (``None`` when a column is missing, ``num_generals`` too: old ratings rows
+        without the column) plus ``herding``, the pooled herding of
         the analysis for that pollster name or ``None``. ``pollster_id`` is an integer, for the profile links.
     """
     if ratings.empty or 'rating' not in ratings.columns:
@@ -112,7 +112,7 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
 
         row = {key: record.get(key) for key in RANKING_KEYS}
         row['pollster_id'] = int(row['pollster_id'])
-        row['num_generals'] = _count_or_zero(row['num_generals'])
+        row['num_generals'] = _count_or_none(row['num_generals'])
         row['herding'] = pooled.get(row['pollster'])
         rows.append(row)
 
@@ -122,13 +122,13 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
 # The columns of the two tables of the houses, in order: the ranking (``/casas``) and the rating path of a profile.
 # Each column has a public label and one description, which the table header carries as tooltip and the glossary
 # «Qué mide cada columna» lists (``table_columns``).
-RANKING_COLUMNS = ('pollster', 'rating', 'quality', 'num_events', 'num_generals', 'num_polls', 'bias_dev_adj', 'error_avg',
-                   'error_blocks', 'herding')
+RANKING_COLUMNS = ('pollster', 'rating', 'quality', 'num_events', 'num_generals', 'num_polls', 'bias_dev_adj',
+                   'error_avg', 'error_blocks', 'herding')
 PATH_COLUMNS = ('event', 'n_polls', 'bias_dev_adj', 'error_avg', 'error_blocks', 'rating', 'change')
 COLUMN_LABELS = {'pollster': 'Encuestadora', 'rating': 'Rating', 'quality': 'Confianza', 'num_events': 'Elecciones',
-                 'num_generals': 'Generales', 'num_polls': 'Sondeos', 'bias_dev_adj': 'Diferencial', 'error_avg': 'Error medio',
-                 'error_blocks': 'Sesgo bloques', 'herding': 'Rebaño', 'event': 'Evento', 'n_polls': 'Sondeos',
-                 'change': 'Cambio'}
+                 'num_generals': 'Generales', 'num_polls': 'Sondeos', 'bias_dev_adj': 'Diferencial',
+                 'error_avg': 'Error medio', 'error_blocks': 'Sesgo bloques', 'herding': 'Rebaño', 'event': 'Evento',
+                 'n_polls': 'Sondeos', 'change': 'Cambio'}
 
 
 def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] = None) -> list:

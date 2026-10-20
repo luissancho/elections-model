@@ -153,7 +153,7 @@ function wireGeneralsFilter() {
   const batch = Number(button?.dataset.batch) || Infinity;
   const rows = [...table.querySelectorAll('tbody tr')];
   const generals = rows.map((row) => Number(row.dataset.generals) || 0);
-  input.addEventListener('change', () => {
+  const apply = () => {
     const {visible, filtered, more} = rankingVisibility(generals, input.checked, batch);
     rows.forEach((row, i) => {
       row.hidden = !visible[i];
@@ -162,7 +162,11 @@ function wireGeneralsFilter() {
     if (button) {
       button.hidden = !more;
     }
-  });
+  };
+  input.addEventListener('change', apply);
+  // The browser may restore the checkbox as checked (back navigation): keep the table in step with it.
+  apply();
+  window.addEventListener('pageshow', apply);
   document.getElementById('ranking-controls').hidden = false;
 }
 
