@@ -2180,6 +2180,50 @@ def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     assert all(row[7] == 'sí' for row in rows if row not in invalid)
 
 
+def test_model_record_scores_the_model_in_every_election_with_a_backtest(history_site):
+    """El modelo como una encuestadora: en cada elección con backtest, su estimación al horizonte más corto, medida
+    con las definiciones de las encuestadoras y frente a sus últimos sondeos; la de 2019 no tiene backtest."""
+    record = pages.model_record()
+    [row] = record['rows']
+    assert row['scope'] == 'es' and row['event_date'] == '2023-07-23' and row['days'] == 6 and row['year'] == 2023
+    assert row['label'] == 'Generales 2023' and row['name'] == row['label']
+    assert row['error_avg'] is not None and set(record['blocks']) <= set(row)
+    assert 0.0 <= row['better_than'] <= 1.0 and row['n_pollsters'] == 3
+    assert {r['party'] for r in row['parties']} >= {'PP'}
+    kpis = {kpi['label']: kpi for kpi in record['kpis']}
+    assert list(kpis) == ['Elecciones', 'Error medio', 'Error de bloques', 'Frente a las encuestadoras']
+    assert kpis['Elecciones']['value'] == '1' and kpis['Frente a las encuestadoras']['unit'] == '%'
+
+
+def test_backtest_page_starts_with_the_model_as_a_pollster(history_site):
+    """/metodo/backtest abre con el modelo medido como una encuestadora: KPIs, camino (Evento, Error medio, Sesgo
+    bloques), diana con filtros y su tabla (Evento y los bloques, la izquierda primero) y su último estimado por
+    partido frente al resultado; después, las tarjetas por ámbito de siempre (2026-10-21)."""
+    status, _, body = call(history_site, '/metodo/backtest', query='scope=es')
+    page = html(body)
+    assert status == 200
+    order = [page.index('id="{}"'.format(card)) for card in ('model-profile', 'model-path', 'bullseye', 'model-last')]
+    assert order == sorted(order) and order[-1] < page.index('id="scope-filter"')
+    assert re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', page)[:4] == [
+        'Elecciones', 'Error medio', 'Error de bloques', 'Frente a las encuestadoras']
+    path = re.search(r'<table id="model-path-table">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', path) == ['Evento', 'Error medio', 'Sesgo bloques']
+    assert '<td>Generales 2023</td>' in path
+    table = re.search(r'<table id="bullseye-table" data-fixed="1">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col">([^<]*)</th>', table) == ['Evento', 'Izquierda', 'Derecha']
+    assert '<form id="bullseye-filter" class="series-controls filters-bar" hidden>' in page
+    last = re.search(r'<table id="model-last-table">(.*?)</table>', page, re.S).group(1)
+    assert 'PP' in last and '<td>Generales 2023</td>' in last
+    data = initial(body)
+    assert [row['event_date'] for row in data['bullseye']] == ['2023-07-23'] and data['bullseye_blocks'] == ['Derecha', 'Izquierda']
+    assert [s['code'] for s in data['bullseye_scopes']] == ['es']
+
+
+def test_backtest_page_without_model_elections_has_no_model_cards(api):
+    page = html(call(api, '/metodo/backtest', query='scope=es')[2])
+    assert 'id="model-profile"' not in page and 'id="bullseye"' not in page
+
+
 def test_backtest_tolerates_a_backtest_without_run_json(api, fresh_app):
     write_backtest(fresh_app.fs, meta={'params': {}, 'commit': None, 'run_at': None})
     status, _, body = call(api, '/metodo/backtest', query='scope=es')

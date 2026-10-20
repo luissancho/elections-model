@@ -15,7 +15,7 @@ does not import the model nor ``publish``, so the web workers stay light.
 """
 from .analisis import (ARTICLE, CSV_LABELS, QUESTIONS, STUDIES, VERDICTS, analisis_context, cera_context,
                        study_cards, study_context, study_part, verdict_rows)
-from .backtest import backtest_context, backtest_part, project
+from .backtest import backtest_context, backtest_part, model_record, project
 from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PATH_COLUMNS, RANKING_COLUMNS, RANKING_KEYS,
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,
                     casas_context, effects_table, herding_rows, house_effects_grid, last_poll_records, mtype_label, poll_date,

@@ -107,60 +107,10 @@
       {{ m.card_end() }}
       {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver solo esas elecciones.') }}
         {% if bullseye %}
-        <form id="bullseye-filter" class="series-controls filters-bar" hidden>
-          <label>Ámbito
-            <select name="ambito">
-              <option value="" selected>Todos</option>
-              {% for scope in bullseye_scopes %}
-              <option value="{{ scope.code }}">{{ scope.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>Desde
-            <select name="desde">
-              {% for year in bullseye_years %}
-              <option value="{{ year }}"{% if loop.first %} selected{% endif %}>{{ year }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>Hasta
-            <select name="hasta">
-              {% for year in bullseye_years %}
-              <option value="{{ year }}"{% if loop.last %} selected{% endif %}>{{ year }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <span class="muted" id="bullseye-count" aria-live="polite"></span>
-        </form>
-        <div class="chart big" id="bullseye-chart" role="img" aria-label="Error de {{ profile.pollster.name }} en cada elección por bloque"></div>
-        <div class="table-wrap">
-          <table id="bullseye-table">
-            <caption>Error de su último sondeo antes de cada elección (sondeo menos resultado).</caption>
-            <thead>
-              <tr>
-                <th scope="col">Elección</th>
-                <th scope="col">Fecha</th>
-                <th scope="col">Días antes</th>
-                {% for block in table_blocks %}
-                <th scope="col">{{ block }}</th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in bullseye %}
-              <tr>
-                <td>{{ row.name }}</td>
-                <td>{{ row.event_date|date }}</td>
-                <td>{{ row.days|int }}</td>
-                {% for block in table_blocks %}
-                {# double gradient: red the more the poll fell short of the block (negative), green the more it overshot it #}
-                <td class="cell-shade" style="background-color: {{ row[block]|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row[block]|num(1) }}</td>
-                {% endfor %}
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+        {% set bv = {'rows': bullseye, 'scopes': bullseye_scopes, 'years': bullseye_years, 'table_blocks': table_blocks,
+                     'aria': 'Error de ' ~ profile.pollster.name ~ ' en cada elección por bloque',
+                     'caption': 'Error de su último sondeo antes de cada elección (sondeo menos resultado).', 'dates': true} %}
+        {% include '_bullseye.html' %}
         {% elif analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}

@@ -7,6 +7,7 @@ import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderLines} from '../charts/line.js';
 import {renderWeights} from '../charts/weights.js';
+import {wireBullseye} from './bullseye-wire.js';
 import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
 // Series colours: the model stands out, the baselines are lighter.
@@ -56,6 +57,11 @@ function paint() {
       labelOf: (row) => `${row.event}-${row.scope}`,
       onTop: (group) => group === KIND_GENERAL,
     }), 'the house effects example');
+  }
+
+  // the model scored like a pollster in the backtest page: its bullseye with the filters of a profile
+  if (data.bullseye && data.bullseye.length) {
+    wireBullseye(data.bullseye, data.bullseye_blocks || []);
   }
 
   const {horizons = [], mae = {}, coverage = {}, seats = {}} = data;
