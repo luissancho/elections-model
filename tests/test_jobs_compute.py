@@ -101,3 +101,37 @@ def test_compute_reports_the_model_warnings_as_notes(fresh_app, scopes, capsys):
     assert '[1/1] es · aviso: serie corta' in out and 'serie corta' not in err
     assert results['es']['warnings'] == ['serie corta']
     assert 'es: series computed (2 polls, 2 events, 7 featured) in 0 s · 1 aviso' in out
+
+
+def test_compute_catalogues_runs_first_once_and_dry_run_only_checks(fresh_app, scopes, capsys):
+    """`catalogues` es global (no por ámbito) y va antes que las series y los ratings, que leen los ámbitos y la
+    calidad que escribe; en seco solo valida."""
+    calls = []
+
+    def catalogues(save):
+        calls.append(('catalogues', save))
+        figures = {'scopes': 18, 'districts': 118, 'quality': 72, 'pollsters': 135} if save else {'quality': 72}
+        return dict(figures, seconds={'total': 0.0})
+
+    factory = FakeComputer()
+    results, _ = run(factory, catalogues=catalogues, what=['ratings', 'catalogues'], scopes=['es'], verbose=0)
+    assert calls == [('catalogues', True)] and [scope for scope, _ in factory.inits] == ['es']
+    assert results['catalogues']['status'] == 'computed' and results['es']['action'] == 'ratings'
+    out = capsys.readouterr().out
+    assert out.index('compute catálogos') < out.index('compute ratings: 1 ámbito')
+    assert 'catalogues: saved (18 scopes, 118 districts, 72 quality evaluations, 135 pollsters) in 0 s' in out
+    run(FakeComputer(), catalogues=catalogues, what='catalogues', scopes=['es'], dry_run=True, verbose=0)
+    assert calls[-1] == ('catalogues', False)
+    assert 'catalogues: checked (72 quality evaluations, dry run) in 0 s' in capsys.readouterr().out
+
+
+def test_compute_catalogues_failure_fails_the_job_at_the_end(fresh_app, scopes, capsys):
+    def catalogues(save):
+        raise ValueError('pollsters-quality.csv: standards must be between 0 and 1')
+
+    factory = FakeComputer()
+    with pytest.raises(RuntimeError, match=r'compute: failed scopes: catalogues \(catálogos\)'):
+        run(factory, catalogues=catalogues, what=['catalogues', 'ratings'], scopes=['es'], verbose=0)
+    out = capsys.readouterr().out
+    assert 'catalogues: catálogos failed (ValueError: pollsters-quality.csv: standards' in out
+    assert 'es: ratings computed' in out  # las acciones siguientes siguen

@@ -369,8 +369,9 @@ El orden importa; hacerlo en esta secuencia:
    (ajustar al tipo de las demás columnas numéricas de la tabla).
 2. Añadir a `PollstersRatings.meta` (`mtpy/models/elections.py`) las dos líneas exactas, y commitear:
    `'num_events_w': 'num',` y `'num_national_events': ['int', 2],`. El código de esta tarea no las incluye a propósito.
-3. `save_catalogues()`, para que `pollsters.quality` sea la calidad de hoy con el criterio nuevo.
-4. Recalcular los ratings: `python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'`.
+3. y 4. Catálogos y ratings en un solo comando (la acción `catalogues` del job `compute`, añadida el 2026-10-20,
+   llama a `save_catalogues()` antes de los ratings, para que `pollsters.quality` sea la calidad de hoy con el
+   criterio nuevo): `python job.py compute '{"what":["catalogues","ratings"],"scopes":"all"}'`.
 5. Publicar: `publish analysis` con `scopes: all` (ahora incluye `es-an`, `es-ar`, `es-cl` y `es-ex`), y después los
    eventos y la previsión, como de costumbre.
 6. Reiniciar o desplegar la web con el código nuevo (también el gunicorn local).

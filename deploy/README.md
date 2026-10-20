@@ -520,17 +520,18 @@ de datos las tablas del modelo de cada ámbito, la secuencia de `notebooks/data-
 entre la carga y `publish`, cuyo pronóstico y análisis leen de ahí los pesos, los errores, la deriva, los efectos de
 casa, el rebaño y los ratings. `load/run_load.py` lo llama en sus pasos `compute` y `ratings` para los autonómicos;
 para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica en `mtpy/lib/compute.py`
-(`compute_scope` y `rate_scope`).
+(`compute_scope`, `rate_scope` y `replicate_catalogues`).
 
 ### Qué hace cada acción y cuándo lanzarla
 
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
+| `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
 | `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa y rebaño. Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (los notebooks de carga de `es` y `run_load` ya lo hacen) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
 
-`what` admite las dos acciones; con las dos, primero la serie de todos los ámbitos y después los ratings de todos,
-porque cada rating lee los errores de todos los ámbitos. Después, `publish` con `forecast` y `analysis` para que el
+`what` admite las tres acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los
+ámbitos y después los ratings de todos, porque cada rating lee los errores de todos los ámbitos y la calidad previa. Después, `publish` con `forecast` y `analysis` para que el
 paquete use las tablas nuevas (ver "Publicar", "Tras recalcular ratings"). Los ámbitos están aislados: uno que falla
 no detiene a los demás ni a la acción siguiente, y el job termina con error al final si alguno falló.
 
@@ -539,27 +540,32 @@ no detiene a los demás ni a la acción siguiente, y el job termina con error al
 ```
 python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'
 python job.py compute '{"what":["ratings"],"scopes":"all"}'
+python job.py compute '{"what":["catalogues","ratings"],"scopes":"all"}'
+python job.py compute '{"what":["catalogues"],"dry_run":true}'
 python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
 ```
 
 1. Series y ratings de `es` y de todos los ámbitos autonómicos: la rutina completa tras una carga.
 2. Solo los ratings, con las series ya calculadas.
-3. Ensayo: la serie de `es-md` sin escribir nada, con una línea por fase.
+3. Tras reevaluar la calidad previa (rúbrica o evaluaciones): los catálogos y después los ratings de todos los
+   ámbitos con la calidad nueva. Luego, `publish` con `analysis`, `event` y `forecast`, y reiniciar la web.
+4. Comprobar que la rúbrica y las evaluaciones son válidas sin escribir nada.
+5. Ensayo: la serie de `es-md` sin escribir nada, con una línea por fase.
 
 ### Parámetros
 
 | Parámetro | Por defecto | Significado |
 | --- | --- | --- |
-| `what` | `["compute", "ratings"]` | Acciones a ejecutar, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
+| `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
-| `dry_run` | `false` | Calcular sin escribir nada: la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
+| `dry_run` | `false` | Calcular sin escribir nada: `catalogues` solo valida los ficheros de la calidad y la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Solo la cabecera de cada acción (`compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `dry_run`, `· dry run`) y el resumen final |
+| 0 | Solo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `dry_run`, `· dry run`) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") |
 | 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño`, `ratings`) |
 | 3 | Lo anterior más la salida propia del `Computer` (que recibe `verbose - 2`) |
@@ -567,9 +573,12 @@ Niveles de `verbose`:
 ### Estados y resumen
 
 Cada ámbito termina `computed` o `failed` en cada acción; `results[ámbito]` es el resultado de la última acción que
-corrió sobre él (`status`, `action`, las cifras y los `warnings`). Las líneas del resumen tienen esta forma:
+corrió sobre él (`status`, `action`, las cifras y los `warnings`); el de los catálogos va en
+`results['catalogues']`. Las líneas del resumen tienen esta forma:
 
 ```
+catalogues: saved (<ámbitos> scopes, <distritos> districts, <evaluaciones> quality evaluations, <encuestadoras> pollsters) in <s> s
+catalogues: checked (<evaluaciones> quality evaluations, dry run) in <s> s
 es: series computed (<sondeos> polls, <elecciones> events, <destacadas> featured) in <s> s
 es: ratings computed (<encuestadoras> pollsters, <elecciones> events) in <s> s
 es-md: series computed (<sondeos> polls, <elecciones> events, dry run) in <s> s
@@ -577,7 +586,8 @@ es-ar: series failed (RuntimeError: ...)
 ```
 
 Un ámbito fallido no detiene a los demás ni a la acción siguiente (sus ratings se calculan igual); al final el job
-termina con `RuntimeError: compute: failed scopes: es-ar (series)`. El resumen va también al logger y al servicio
+termina con `RuntimeError: compute: failed scopes: es-ar (series)` (o `catalogues (catálogos)` si fallan los
+catálogos, por ejemplo con un CSV de la calidad mal formado). El resumen va también al logger y al servicio
 de avisos si está configurado (`alert`), como en `publish`.
 
 En Docker: `RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'`.
