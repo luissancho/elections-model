@@ -6,8 +6,8 @@ from typing import Callable, Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
-from .common import (OTHERS_COLOR, Catalog, analysis_part, api_url, block_color, bundle_part, common_context,
-                     ink_color, published_scopes)
+from .common import (NATIONAL_SCOPE, OTHERS_COLOR, Catalog, analysis_part, api_url, block_color, bundle_part,
+                     common_context, ink_color)
 from .filters import _madrid_tz, fmt_date, fmt_num
 from .promedios import (BLOCK_ORDER, _leaders, chart_polls, lead_strip, poll_months, polls_table,
                         pollster_options, round_series)
@@ -240,15 +240,12 @@ def history_scopes() -> list:
     Returns
     -------
     list of dict
-        ``{'code', 'name', 'analysis', 'linkable'}`` for each catalogue scope with at least one published
-        election; ``analysis`` is whether its houses analysis is published (``meta`` part) and ``linkable``
-        whether the scope has a published run (the detail of its elections exists). A scope with analysis but
-        without elections does not appear.
+        ``{'code', 'name', 'analysis'}`` for each catalogue scope with at least one published election (the
+        detail of each of them exists, with or without a published forecast of the scope); ``analysis`` is
+        whether its houses analysis is published (``meta`` part). A scope with analysis but without elections
+        does not appear.
     """
-    linkable = {row['code'] for row in published_scopes()}
-
-    return [{'code': row['code'], 'name': row['name'], 'analysis': analysis_part(row['code'], 'meta') is not None,
-             'linkable': row['code'] in linkable}
+    return [{'code': row['code'], 'name': row['name'], 'analysis': analysis_part(row['code'], 'meta') is not None}
             for row in site().scopes()['scopes'] if site().events(row['code'])]
 
 
@@ -264,9 +261,8 @@ def history_events(scopes: list) -> list:
     Returns
     -------
     list of dict
-        ``published_events`` of each scope with ``scope``, ``scope_name`` and ``href`` (``event_href``) added (``None``
-        when the scope is not ``linkable``: its detail would be a 404), newest first and, on the same date, in
-        catalogue order.
+        ``published_events`` of each scope with ``scope``, ``scope_name`` and ``href`` (``event_href``) added, newest
+        first and, on the same date, in catalogue order.
     """
     events = []
 
@@ -274,8 +270,7 @@ def history_events(scopes: list) -> list:
         dates = site().events(scope['code'])
 
         for event in published_events(scope['code']):
-            href = event_href(scope['code'], event['date'], dates) if scope.get('linkable') else None
-            event.update(scope=scope['code'], scope_name=scope['name'], href=href)
+            event.update(scope=scope['code'], scope_name=scope['name'], href=event_href(scope['code'], event['date'], dates))
             events.append(event)
 
     order = {scope['code']: index for index, scope in enumerate(scopes)}
@@ -582,6 +577,37 @@ def mark_shown(rows: list, parties: Optional[list], limit: int = RESULTS_SHOWN) 
         return [dict(row, shown=row.get('party') in wanted) for row in rows]
 
     return [dict(row, shown=index < limit) for index, row in enumerate(rows)]
+
+
+def run_less_colours(meta: dict, national: dict, blocks_of: dict) -> dict:
+    """
+    Stand-in for the run meta of a scope without a published forecast, for ``block_color``: the colour of a
+    block is that of its first party in the election.
+
+    Parameters
+    ----------
+    meta : dict
+        Meta part of the election (``blocks``: the parties of the two blocks of its margin).
+    national : dict
+        Meta part of the national run (``bmaps.blocks``: the names of the blocks that have a colour).
+    blocks_of : dict
+        ``party_blocks`` of the results, in the order of the results (largest first).
+
+    Returns
+    -------
+    dict
+        ``{'bmaps': {'vs': ..., 'blocks': ...}}``: ``vs`` the blocks of the margin of the election, ``blocks``
+        the parties of the results of each block of the national map (a block outside it, like the remainder,
+        keeps no colour, as in a scope with its own run).
+    """
+    named = list(((national or {}).get('bmaps') or {}).get('blocks') or {})
+    blocks = {}
+
+    for party, block in blocks_of.items():
+        if block in named:
+            blocks.setdefault(block, []).append(party)
+
+    return {'bmaps': {'vs': dict(meta.get('blocks') or {}), 'blocks': blocks}}
 
 
 def party_blocks(names: list, params: dict, event_blocks: Optional[dict], catalog: Catalog) -> dict:
@@ -948,10 +974,15 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     ------
     HttpError
         400 for an invalid date; 404 for an unpublished election, scope or missing run; 503 without a bundle.
+        A scope without a published forecast (just voted, or with too few polls) still has the detail of its
+        elections: the common part of the page (party catalogue, footer, menus and ``state``) is then the
+        national run's, and each block takes the colour of its first party in the election: the two of its margin
+        (``blocks`` of the meta), and the others of the national map (``Regionalista``…) by the results.
     """
-    context = common_context(state, active)
+    scope = state['scope']
+    has_run = scope in site().manifest_data()['scopes']
+    context = common_context(state if has_run else dict(state, scope=NATIONAL_SCOPE, run=None), active)
     full = context['state']
-    scope = full['scope']
     date = resolve_event(scope, date)
     meta = event_part(scope, date, 'meta')
 
@@ -978,7 +1009,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         for row in results.get('rows') or []
     ], shown_parties(params))
     blocks_of = party_blocks([row['party'] for row in results_rows], params, meta.get('blocks'), catalog)
-    block_rows = event_block_rows(results_rows, blocks_of, lambda block: block_color(block, context['meta'], catalog))
+    colour_meta = context['meta'] if has_run else run_less_colours(meta, context['meta'], blocks_of)
+    block_rows = event_block_rows(results_rows, blocks_of, lambda block: block_color(block, colour_meta, catalog))
     links = [
         {'label': label.format(h=series_horizon), 'href': api_url(scope, name, fmt='csv', kind='event', date=date, table=table)}
         for name, table, label, needs in EVENT_CSV
@@ -1003,7 +1035,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         if curve_blocks.get(name) is not None:
             blocks_map.setdefault(curve_blocks[name], []).append(name)
 
-    block_colors = {block: block_color(block, context['meta'], catalog) for block in blocks} \
+    block_colors = {block: block_color(block, colour_meta, catalog) for block in blocks} \
         | {row['name']: row['color'] for row in block_rows}
     curve_colors = curve_block_colors(blocks_map, block_colors, catalog)
     context['event'] = dict(meta, summary=summary)
@@ -1019,7 +1051,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['poll_rows'] = poll_rows
     context['blocks'] = blocks
     context['table_blocks'] = table_blocks(blocks)
-    context['bias_colors'] = bias_colors(blocks, context['meta'], catalog)
+    context['bias_colors'] = bias_colors(blocks, colour_meta, catalog)
     context['split_blocks'] = split
     context['horizon_tables'] = horizon_tables(model) if has_model else []
     context['has_model'] = has_model

@@ -1580,7 +1580,9 @@ def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     assert data['years'] == list(range(2021, date.today().year + 1))  # desde la primera elección hasta hoy
 
 
-def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scopes, fresh_app):
+def test_elecciones_links_the_elections_of_scopes_without_a_run(history_two_scopes, fresh_app):
+    """Un ámbito con elecciones publicadas pero sin previsión (recién votado, o con pocos sondeos) también enlaza
+    el detalle de sus elecciones (2026-10-20)."""
     write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones y análisis, sin run
     write_analysis(fresh_app.fs, scope='es-an')
     errors = fixture_data('poll-errors')
@@ -1590,13 +1592,35 @@ def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scope
     webapi.site().manifest_cache_clear()
     webapi.site().files.clear()
     scopes = pages.history_scopes()
-    assert {s['code']: s['linkable'] for s in scopes} == {'es': True, 'es-an': False, 'es-md': True}
+    assert [s['code'] for s in scopes] == ['es', 'es-an', 'es-md'] and all('linkable' not in s for s in scopes)
     hrefs = {(e['scope'], e['date']): e['href'] for e in pages.history_events(scopes)}
-    assert hrefs[('es-an', '2022-06-19')] is None and hrefs[('es-md', '2021-05-04')] == '/elecciones/es/madrid/2021-05'
+    assert hrefs[('es-an', '2022-06-19')] == '/elecciones/es/andalucia/2022-06'
+    assert hrefs[('es-md', '2021-05-04')] == '/elecciones/es/madrid/2021-05'
     body = call(history_two_scopes, '/elecciones')[2]
     row = re.search(r'<tr data-scope="es-an"[^>]*>\s*<td>(.*?)</td>', html(body), re.S).group(1)
-    assert '<a' not in row and '2022' in row
-    assert {s['code']: s['linkable'] for s in initial(body)['scopes']}['es-an'] is False
+    assert 'href="/elecciones/es/andalucia/2022-06"' in row
+
+
+def test_election_detail_of_a_scope_without_a_run_uses_the_national_run(history_two_scopes, fresh_app):
+    """El detalle de una elección de un ámbito sin previsión se monta con el run nacional (catálogo, pie y
+    menús); los datos y los bloques son los de la elección."""
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    status, _, body = call(history_two_scopes, '/elecciones/es/andalucia/2022-06')
+    assert status == 200
+    page = html(body)
+    assert re.search(r'<link rel="canonical" href="[^"]*/elecciones/es/andalucia/2022-06">', page)
+    data = initial(body)
+    assert data['meta']['scope'] == 'es-an' and data['meta']['event_date'] == '2022-06-19'
+    assert data['state']['scope'] == 'es'  # la parte común es la nacional
+    # las descargas son las de la elección, y los bloques llevan color aunque el ámbito no tenga run
+    assert 'href="/api/v1/events/es-an/2022-06-19/cycle?format=csv"' in page
+    assert 'href="/api/v1/events/es/' not in page
+    with_run = initial(call(history_two_scopes, '/elecciones/es/madrid/2021-05')[2])
+    assert data['block_colors'] == with_run['block_colors'] and data['block_colors']['Derecha'] != pages.OTHERS_COLOR
+    # una fecha que el ámbito no tiene publicada sigue siendo 404
+    assert call(history_two_scopes, '/elecciones/es/andalucia/2018-12')[0] == 404
 
 
 def test_error_blocks_come_from_the_first_scope_with_two_and_parts_are_read_once(history_two_scopes, fresh_app):
@@ -2937,6 +2961,17 @@ def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
     assert 'PP −25 escaños <small>vs 2023</small>' in page.replace('\n', '')  # el chip de delta del hero
 
 
+def test_home_past_elections_include_scopes_without_a_run(history_two_scopes, fresh_app):
+    """«Elecciones pasadas» de Inicio lista también las elecciones de un ámbito sin previsión publicada (recién
+    votado): su detalle existe (2026-10-20)."""
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    past = html(call(history_two_scopes, '/')[2])
+    past = past[past.index('id="past"'):]
+    assert 'href="/elecciones/es/andalucia/2022-06"' in past and 'href="/elecciones/es/madrid/2021-05"' in past
+
+
 def test_escanos_table_draws_the_seat_range_and_the_ridge_is_compact(api):
     page = html(call(api, '/es/escanos')[2])
     table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
@@ -3109,15 +3144,16 @@ def test_resolve_event_path_finds_the_election_of_a_month_or_of_a_date(history_t
     (('es', 'generales', '2023-07-32'), 400, 'invalid date'),
     (('es', 'generales', '2020-01'), 404, 'event not published'),
     (('es', 'generales', '2023-07-24'), 404, 'event not published'),
-    (('es', 'andalucia', '2022-06'), 404, 'scope not published'),
+    (('es', 'aragon', '2023-05'), 404, 'scope not published'),  # sin elecciones publicadas
 ])
 def test_resolve_event_path_errors(history_two_scopes, fresh_app, segments, status, message):
-    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones sin run: sin detalle
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones sin run: con detalle
     webapi.site().manifest_cache_clear()
     webapi.site().files.clear()
     with pytest.raises(HttpError) as error:
         pages.resolve_event_path(*segments)
     assert error.value.status == status and str(error.value.message) == message
+    assert pages.resolve_event_path('es', 'andalucia', '2022-06') == ('es-an', '2022-06-19')
 
 
 def test_pollster_href_slugs_the_name_and_falls_back_to_the_id():
@@ -4598,3 +4634,20 @@ def test_shade_scale_filter_grows_green_from_lo_to_hi():
     assert shade_scale(-3, 0, 10) == shade_scale(0, 0, 10) and shade_scale(40, 0, 10) == shade_scale(10, 0, 10)
     assert shade_scale(0, 0, 0) == shade_scale(0, 0, 10)  # an empty range: the lightest
     assert pages.environment().filters['shade_scale'] is pages.shade_scale
+
+
+def test_run_less_colours_take_the_first_party_of_each_named_block():
+    """Sin run del ámbito: el margen es el de la elección y los bloques del mapa nacional se colorean con su
+    primer partido en los resultados; un bloque fuera del mapa (el resto) se queda sin color, como con run."""
+    meta = {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}}
+    national = {'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE'], 'Regionalista': ['PNV']}}}
+    blocks_of = {'PP': 'Derecha', 'PSOE': 'Izquierda', 'ADELANTE': 'Regionalista', 'PA': 'Regionalista', 'X': 'Otros',
+                 'Y': None}
+    out = pages.run_less_colours(meta, national, blocks_of)
+    assert out['bmaps']['vs'] == meta['blocks']
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP'], 'Izquierda': ['PSOE'], 'Regionalista': ['ADELANTE', 'PA']}
+    catalog = pages.Catalog({name: {'fullname': name, 'color': color} for name, color in
+                             [('PP', '#1d84ce'), ('PSOE', '#ef1c27'), ('ADELANTE', '#1eca7f'), ('PA', '#00aa00'),
+                              ('X', '#123456')]})
+    assert pages.block_color('Regionalista', out, catalog) == '#1eca7f'
+    assert pages.block_color('Otros', out, catalog) == pages.OTHERS_COLOR

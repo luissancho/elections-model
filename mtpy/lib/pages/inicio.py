@@ -122,12 +122,14 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
 
 def past_events(scopes: list) -> list:
     """
-    Past elections of every published scope, newest first.
+    Past elections of every scope that has some published, newest first (with or without a published forecast
+    of the scope: the detail of an election exists either way).
 
     Parameters
     ----------
     scopes : list of dict
-        Rows of ``published_scopes()``.
+        Rows of the scope catalogue (``site().scopes()['scopes']``); those without published elections add
+        nothing.
 
     Returns
     -------
@@ -377,7 +379,7 @@ def inicio_context(state: dict) -> dict:
     cards = event_cards(site().scopes()['scopes'])
     featured = next((card for card in cards if card['published']), None)
     hero = hero_context(featured) if featured else None
-    past = past_events(context['scopes'])
+    past = past_events(site().scopes()['scopes'])
     context.update(
         intro=INTRO,
         hero=hero,
