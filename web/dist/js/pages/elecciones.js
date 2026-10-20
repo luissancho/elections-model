@@ -546,7 +546,7 @@ function paint() {
   }
 
   const initial = readInitial();
-  const {meta = {}, last = [], blocks = []} = initial;
+  const {meta = {}, last = [], blocks = [], model_point: modelPoint = null} = initial;
   const catalog = new Catalog(initial.catalog || {});
 
   if (initial.errors) {
@@ -567,7 +567,9 @@ function paint() {
     tryDraw(() => renderBullseye(
       target,
       last.map((row) => ({...row, event: row.pollster, event_date: meta.event_date})),
-      {blocks, color: ACCENT},
+      // the model at its shortest horizon, scored like a pollster: the highlighted diamond
+      {blocks, color: ACCENT, highlight: modelPoint
+        ? {row: {...modelPoint, event: modelPoint.pollster, event_date: meta.event_date}, label: 'Modelo'} : null},
     ), 'the bullseye');
   }
 

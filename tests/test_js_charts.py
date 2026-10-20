@@ -458,3 +458,17 @@ def test_grouped_option_one_bar_series_per_entry_over_the_categories():
     assert [item['value'] for item in totals['data']] == [0, 0] and totals['silent'] is True
     assert [item['label']['formatter'] for item in totals['data']] == ['+189.000', '+422.000 ×2,2']
     assert totals['data'][0]['label']['position'] == 'top' and option['legend']['data'] == ['Latinoamérica', 'Resto']
+
+
+def test_bullseye_highlights_one_point_over_the_others():
+    """`highlight`: un punto destacado (el modelo en el detalle de una elección), rombo grande en el color del texto,
+    con su etiqueta siempre visible, por encima de todos y contado en la escala de los ejes; sin coordenadas, nada."""
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], color: "#1d4f86", '
+                    'highlight: {row: {event: "Modelo (promedio)", Derecha: 14.0, Izquierda: -3.0}, label: "Modelo"}})')
+    [model] = [s for s in option['series'] if s.get('symbol') == 'diamond']
+    assert model['type'] == 'scatter' and model['symbolSize'] > 8 and model['z'] > 12 and model['color'] == '#1a1c22'
+    assert model['data'] == [{'value': [14.0, -3.0], 'row': {'event': 'Modelo (promedio)', 'Derecha': 14.0, 'Izquierda': -3.0}}]
+    assert model['label']['show'] is True and model['label']['formatter'] == 'Modelo' and model['label']['fontWeight'] == 700
+    assert option['xAxis']['max'] == 16  # 14 · 1,1 redondeado hacia arriba
+    none = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], highlight: {row: {Derecha: null}, label: "M"}})')
+    assert not [s for s in none['series'] if s.get('symbol') == 'diamond']

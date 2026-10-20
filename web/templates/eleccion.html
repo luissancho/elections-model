@@ -329,6 +329,12 @@
           Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. Puntos juntos lejos del
           centro indican un error común a todas las encuestadoras.
         </p>
+        {% if horizon_tables %}
+        <p>
+          El rombo negro es el modelo en su horizonte más corto, medido igual que un sondeo: dónde habría quedado
+          frente a las encuestadoras. Ese día ya había visto todos los sondeos publicados, así que juega con ventaja.
+        </p>
+        {% endif %}
         <p>El último sondeo puede ser de semanas antes de votar: no recoge lo que cambió después.</p>
         {% endcall %}
       {{ m.card_end() }}

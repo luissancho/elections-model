@@ -1694,7 +1694,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
         ('Derecha', '45,5%', '200'), ('Izquierda', '31,4%', '150')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls',
-                         'series', 'result', 'model_last', 'inks'}
+                         'series', 'result', 'model_last', 'inks', 'model_point'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
     assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
@@ -2064,6 +2064,12 @@ def test_eleccion_detail_scores_the_model_like_the_pollsters(events_site):
     row = re.search(r'<tr class="model-row">(.*?)</tr>', table, re.S).group(1)
     assert '<a href="/metodo/promedio">Modelo (promedio)</a>' in row and '<td>6</td>' in row and '<td class="na">—</td>' in row
     assert table.count('<tr class="model-row">') == 1
+    # y en la diana, resaltado: el punto del modelo va aparte de los de las encuestadoras
+    data = initial(call(events_site, '/elecciones/es/generales/2023-07')[2])
+    point = data['model_point']
+    assert point['pollster'] == 'Modelo (promedio)' and point['days'] == 6 and set(data['blocks']) <= set(point)
+    assert all(row['pollster'] != 'Modelo (promedio)' for row in data['last'])
+    assert 'El rombo negro es el modelo' in page
 
 
 def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(events_site, monkeypatch):

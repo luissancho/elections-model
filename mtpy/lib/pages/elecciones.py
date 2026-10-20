@@ -1057,7 +1057,9 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         hemicycle), ``result`` (``date`` and ``values``, the ``pct`` of every party with one: the official
         result the series chart marks), ``model_last``, ``inks`` (text colour over the colour of each party
         and block, for the legend pills), ``last`` (``LAST_KEYS`` and the signed error of each block of every
-        last poll, for the bars, the split by block and the bullseye), ``blocks``, ``split`` (``split_blocks``),
+        last poll, for the bars, the split by block and the bullseye), ``model_point`` (the model row of
+        ``last_table_rows`` with the same keys, the highlighted point of the bullseye; ``None`` without a model),
+        ``blocks``, ``split`` (``split_blocks``),
         ``block_colors`` (``{block: colour}`` of the error blocks and of the result blocks, from the run's
         ``bmaps``, ``block_color``, plus the blocks of the curve, ``curve_block_colors``, so the curve is painted
         like the hemicycle), ``poll_errors`` (``error_avg`` and ``error_blocks_abs`` of each poll, for
@@ -1178,6 +1180,9 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         | {block: ink_color(color) for block, color in curve_colors.items()},
         'last': [dict({key: row.get(key) for key in LAST_KEYS}, **{block: row.get(block) for block in blocks})
                  for row in last_rows],
+        # the model at its shortest horizon, the highlighted point of the bullseye (``None`` without a model)
+        'model_point': next((dict({key: row.get(key) for key in LAST_KEYS}, **{block: row.get(block) for block in blocks})
+                             for row in context['last_table_rows'] if row.get('model')), None),
         'blocks': blocks,
         'split': split,
         'block_colors': block_colors | curve_colors,
