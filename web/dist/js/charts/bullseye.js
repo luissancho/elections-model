@@ -201,10 +201,10 @@ export function bullseyeOption(rows, {
     series: [...guideSeries(limit), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop})],
   };
   if (marked) {
-    // its label always shows (no overlap hiding): it is the point the reader looks for
+    // no label: the colour and the `z` over every other point (POINT_Z, TOP_Z) are enough; the tooltip names it
     option.series.push({
       id: 'highlight', type: 'scatter', symbolSize: POINT_SIZE, z: HIGHLIGHT_Z, color: highlight.color || THEME.textColor,
-      label: {show: true, position: 'right', formatter: highlight.label, color: THEME.textColor, fontWeight: 700},
+      label: {show: false},
       data: [{value: marked, row: highlight.row}],
     });
   }
@@ -230,9 +230,9 @@ export function bullseyeOption(rows, {
  *   that label, `row.event` by default), `alphaOf` (`row => opacity`, 0 to 1: the point and its label fade;
  *   `null` keeps them opaque) and `onTop` (`group => boolean`: the points of those groups are drawn over the
  *   other groups', e.g. the general elections over the regional ones; `null` keeps the order of the groups) and
- *   `highlight` (`{row, label, color}`: one more point, of the size of the others and in its `color` (the text
- *   colour by default), with its `label` always shown, over every other point and counted in the extent of the
- *   axes; nothing without coordinates)
+ *   `highlight` (`{row, color}`: one more point, of the size of the others and in its `color` (the text colour by
+ *   default), without a label, drawn over every other point and counted in the extent of the axes; its tooltip
+ *   names `row`; nothing without coordinates)
  * @returns {object} the ECharts instance
  */
 export function renderBullseye(el, rows, opts) {

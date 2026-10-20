@@ -571,7 +571,7 @@ function paint() {
       last.map((row) => ({...row, event: row.pollster, event_date: meta.event_date})),
       // the model at its shortest horizon, scored like a pollster: the highlighted point, in orange
       {blocks, color: ACCENT, highlight: modelPoint
-        ? {row: {...modelPoint, event: modelPoint.pollster, event_date: meta.event_date}, label: 'Modelo', color: MODEL_COLOR}
+        ? {row: {...modelPoint, event: modelPoint.pollster, event_date: meta.event_date}, color: MODEL_COLOR}
         : null},
     ), 'the bullseye');
   }
