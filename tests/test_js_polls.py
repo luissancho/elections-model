@@ -63,6 +63,12 @@ def table_js(expr):
     return run_js(expr.replace('POLLS', json.dumps(TABLE_POLLS)))
 
 
+def test_result_tooltip_line_names_the_official_result_and_the_date():
+    line = run_js('s.resultTooltipLine("PP", 33.06, "2023-07-23", "#1d84ce")')
+    assert 'Resultado oficial' in line and '23 jul 2023' in line and '#1d84ce' in line and line.index('<br>') < line.index('PP')
+    assert '33,1' in line
+
+
 def test_months_labels_and_short_dates_of_the_polls_table():
     assert table_js('p.monthsOf(POLLS)') == ['2026-09', '2026-10']
     assert table_js('p.monthOf({date: "2026-10-01"})') == '2026-10' and table_js('p.monthOf({})') is None
@@ -132,6 +138,24 @@ def test_seats_view_uses_the_pollsters_projections():
     assert run_js('p.sortPolls({}, "PP", false, "esc").map((x) => x.pollster)'.format(js)) == ['40dB', 'GAD3', 'CIS']  # sin escaños, al final
     assert run_js('p.meanOf({}, ["PP", "PSOE"], "esc")'.format(js)) == {'PP': 145, 'PSOE': 100}  # puntos medios, enteros
     assert run_js('p.meanOf({}, ["PP"])'.format(js)) == {'PP': 29.9}
+
+
+def test_fixed_rows_of_the_footer_follow_the_mode_and_the_validity_of_the_seats():
+    last = {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.4, 'PSOE': 31.0}, 'seats': {'PP': 140, 'PSOE': 118}, 'seats_valid': True}
+    result = {'date': '2023-07-23', 'values': {'PP': 33.1, 'PSOE': 31.4}}
+    seats = {'PP': 137, 'PSOE': 121}
+    args = '{}, {}, {}, ["PP", "PSOE", "VOX"]'.format(json.dumps(last), json.dumps(result), json.dumps(seats))
+    rows = run_js('p.fixedRows({})'.format(args))
+    assert rows == [
+        {'label': 'Promedio de sondeos', 'small': 'modelo · a 6 días', 'title': 'Congelado el 17 jul 2023: solo los sondeos publicados hasta entonces',
+         'values': {'PP': 32.4, 'PSOE': 31.0, 'VOX': None}, 'texts': None},
+        {'label': 'Resultado', 'small': '23 jul 2023', 'title': None, 'values': {'PP': 33.1, 'PSOE': 31.4, 'VOX': None}, 'texts': None}]
+    esc = run_js('p.fixedRows({}, "esc")'.format(args))
+    assert esc[0]['values'] == {'PP': 140, 'PSOE': 118, 'VOX': None} and {k: v for k, v in esc[0]['texts'].items() if k != 'VOX'} == {'PP': '140', 'PSOE': '118'}
+    assert esc[1]['values'] == {'PP': 137, 'PSOE': 121, 'VOX': None}
+    invalid = run_js('p.fixedRows({}, "esc")'.format(args.replace('"seats_valid": true', '"seats_valid": false')))
+    assert invalid[0]['values'] == {'PP': None, 'PSOE': None, 'VOX': None}
+    assert run_js('p.fixedRows(null, {}, {}, ["PP"])'.format(json.dumps(result), json.dumps(seats))) == []
 
 
 def test_sort_polls_by_rating_puts_the_unrated_last_in_both_directions():

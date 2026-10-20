@@ -595,9 +595,10 @@ la forma job de `backtest/run_backtest.py`, que sigue funcionando como envoltori
 
 - Ámbito a ámbito evalúa fuera de muestra cada caso (elección × horizonte): congela el modelo en la fecha de corte,
   ajusta el promedio, simula el nowcast y la ejecución a horizonte y compara con el resultado oficial. Escribe las
-  siete tablas (`shares`, `seats`, `blocks`, `provinces`, `meta`, `metrics`, `by_horizon`) y `run.json` (parámetros,
-  elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
-  sobrescribiendo la ejecución anterior del ámbito.
+  ocho tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon`) y `run.json`
+  (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
+  sobrescribiendo la ejecución anterior del ámbito. `series.csv` (la serie diaria del promedio del horizonte más corto
+  de cada elección, desde 2026-10-19) no va en git: `publish event` la necesita en la máquina donde corrió el backtest.
 - Cuándo: tras un cambio del método, antes de `publish` con `backtest` y `event` (ver "Publicar", "Tras un cambio
   del modelo"); comparar `by_horizon.csv` con la ejecución anterior es el criterio de aceptación de cada cambio del
   modelo. Necesita la base de datos (sondeos, resultados, ratings, deriva) y es el job más lento: `es` evalúa cinco
@@ -893,7 +894,10 @@ elección pasada que lee `/elecciones?date=` bajo `events/{ámbito}/{fecha}/` de
 `docs/web/contrato.md`): el error de cada casa y de cada sondeo frente al resultado (un `Computer` de esa elección
 sola, como `notebooks/PollstersEvent.ipynb`), los sondeos del ciclo tal como se publicaron, con los escaños de las casas
 que los dan (parte `cycle`, desde 2026-10-14: la tabla "Todas las encuestas" del detalle), el resultado oficial
-(región 0) y el corte del backtest del modelo de esa elección (de `source`; vacío si el backtest no la tiene), con el
+(región 0), el corte del backtest del modelo de esa elección (de `source`; vacío si el backtest no la tiene) y la serie
+diaria del promedio del modelo del horizonte más corto del backtest (parte `series`, desde 2026-10-19: la curva
+"Promedio de sondeos" del detalle), solo si `backtest/results` tiene `series.csv` (fuera de git: publicar desde la
+máquina que corrió el backtest; sin ella la parte no se escribe y se borra la de una publicación anterior), con el
 error del sector en `meta.summary`:
 
 - `event_date` es una fecha, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy).
@@ -908,7 +912,9 @@ error del sector en `meta.summary`:
 - Cuándo relanzar: tras cargar los resultados oficiales de una elección (y tras corregir sus sondeos) y tras un
   nuevo `run_backtest`, porque el corte del modelo sale de los resultados del backtest. Y una vez con
   `"event_date":"all"` en cada ámbito tras desplegar la fase 7e, para que las elecciones ya publicadas tengan la
-  parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados).
+  parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados); y otra vez, tras
+  correr el backtest con la serie (2026-10-19), para que tengan la parte `series` (hasta entonces el detalle avisa de
+  que el promedio del ciclo no está publicado).
 
 ### Backtest
 

@@ -160,6 +160,38 @@ def _collect(sim: Simulator, vs: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def case_series(sim: Simulator, event_date: str, horizon: int) -> pd.DataFrame:
+    """
+    Daily series of the poll average of a backtest case, as the detail of the election draws it.
+
+    The fitted series of the Forecaster of the simulator (`sim.model`, after `fit_forecast`) up to the anchor
+    `sim.as_of` included: the day the model was frozen, so the last day of the series carries the figures of
+    the case. The shape is the one of `publish.export_series` (`date`, `name`, `mean`, `lo`, `hi`), with the
+    election and the horizon in front.
+
+    Parameters
+    ----------
+    sim : Simulator
+        Fitted simulator of the case.
+    event_date : str
+        Election date, `YYYY-MM-DD`.
+    horizon : int
+        Days before the election the model was frozen at.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per day and party: `event_date`, `horizon`, `date`, `name`, `mean`, `lo`, `hi`.
+    """
+    from .publish.forecast import export_series  # lazy: the publish package is not needed to run the model
+
+    _, frame = export_series(sim.model, sim.params['names'], end=sim.as_of)
+    frame.insert(0, 'horizon', int(horizon))
+    frame.insert(0, 'event_date', event_date)
+
+    return frame
+
+
 def run_case(
     scope: str,
     event_date: str,
@@ -203,7 +235,8 @@ def run_case(
     dict
         `shares` (one row per party: forecast, intervals, baselines and official share), `seats` (one row
         per party: headline, intervals, CRPS and official seats), `blocks` (one row per block of the `vs`
-        map: probability of absolute majority and outcome) and `meta` (one row).
+        map: probability of absolute majority and outcome), `provinces` (one row per province and party),
+        `series` (the daily series of the average up to the anchor, `case_series`) and `meta` (one row).
     """
     t0 = time.time()
     with warnings.catch_warnings():
@@ -339,7 +372,8 @@ def run_case(
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1)
     }])
 
-    return {'shares': shares_df, 'seats': seats_df, 'blocks': blocks_df, 'provinces': provinces_df, 'meta': meta}
+    return {'shares': shares_df, 'seats': seats_df, 'blocks': blocks_df, 'provinces': provinces_df,
+            'series': case_series(sim, event_date, horizon), 'meta': meta}
 
 
 # --- Aggregation ------------------------------------------------------------------------------------
@@ -418,6 +452,28 @@ def summarize_case(
     return out
 
 
+def shortest_horizon(series: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rows of the shortest horizon of each election of a `series` table.
+
+    Parameters
+    ----------
+    series : pandas.DataFrame
+        Series rows of several cases, with `event_date` and `horizon` (`case_series`).
+
+    Returns
+    -------
+    pandas.DataFrame
+        The rows whose `horizon` is the minimum of their `event_date`; an empty table keeps its columns.
+    """
+    if series.empty:
+        return series
+
+    shortest = series.groupby('event_date')['horizon'].transform('min')
+
+    return series.loc[series['horizon'] == shortest].reset_index(drop=True)
+
+
 def run_backtest(
     scope: str = 'es',
     events: Optional[list[str]] = None,
@@ -442,13 +498,14 @@ def run_backtest(
     Returns
     -------
     dict
-        `shares`, `seats`, `blocks`, `meta` (concatenated per case), `metrics` (one row per case) and
-        `by_horizon` (means over the events, per horizon).
+        `shares`, `seats`, `blocks`, `provinces`, `meta` (concatenated per case), `series` (the daily series of
+        the average of the shortest horizon that ran of each election, `shortest_horizon`), `metrics` (one row
+        per case) and `by_horizon` (means over the events, per horizon).
     """
     events = events or default_events(scope)
     horizons = horizons or DEFAULT_HORIZONS
 
-    parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'meta': []}
+    parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'series': [], 'meta': []}
     metrics = []
     for event_date in events:
         for horizon in horizons:
@@ -472,6 +529,7 @@ def run_backtest(
             metrics.append({'event_date': event_date, 'horizon': horizon} | summarize_case(case['shares'], case['seats'], case['blocks'], case['provinces']))
 
     out = {key: pd.concat(frames, ignore_index=True) if len(frames) > 0 else pd.DataFrame() for key, frames in parts.items()}
+    out['series'] = shortest_horizon(out['series'])
     out['metrics'] = pd.DataFrame(metrics)
     if len(metrics) == 0:
         # Every case was skipped (recorded in `meta`): nothing to aggregate

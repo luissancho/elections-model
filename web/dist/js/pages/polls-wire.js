@@ -1,7 +1,7 @@
 // Wiring of the "Todas las encuestas" table (Promedios and the detail of a past election): party and pollster
 // dropdowns, month range, the % de voto / Escaños switch, sortable headers and pages of `PAGE_SIZE` rows, all
 // computed in the browser from the polls of the page (`polls-table.js`) and drawn with `polls-dom.js`.
-import {PAGE_SIZE, filterPolls, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
+import {PAGE_SIZE, filterPolls, fixedRows, meanOf, pageLabel, pageOf, pollsCount, sortPolls} from '../polls-table.js';
 import {markSegments} from './common.js';
 import {renderBody, renderFoot, renderHead} from './polls-dom.js';
 
@@ -50,8 +50,10 @@ const FIXED_KEYS = ['pollster', 'rating', 'date', 'sample_size'];
  *
  * @param {object[]} polls polls of the cycle (`chart_polls`: one value per party, `seats` when published)
  * @param {Catalog} catalog party catalogue
+ * @param {object} [options] `fixed` (`{modelLast, result, seats}`, the data of the rows pinned under the mean in
+ *   the detail of a past election, see `fixedRows`; null for none)
  */
-export function wirePollsTable(polls, catalog) {
+export function wirePollsTable(polls, catalog, {fixed = null} = {}) {
   const controls = document.getElementById('polls-controls');
   const table = document.getElementById('polls-table');
   const pag = document.getElementById('polls-pag');
@@ -82,7 +84,8 @@ export function wirePollsTable(polls, catalog) {
     const shown = pageOf(rows, state.page);
     renderHead(table.tHead, parties, catalog, state.sort);
     renderBody(table.tBodies[0], shown, parties, catalog, state.mode);
-    renderFoot(table.tFoot, rows.length, meanOf(rows, parties, state.mode), parties, catalog, state.mode);
+    renderFoot(table.tFoot, rows.length, meanOf(rows, parties, state.mode), parties, catalog, state.mode,
+      fixed ? fixedRows(fixed.modelLast, fixed.result, fixed.seats, parties, state.mode) : []);
     document.getElementById('polls-count').textContent = pollsCount(rows.length) + (state.mode === 'esc' ? ' con escaños' : '');
     const recent = state.sort.key === 'date' && !state.sort.asc;
     prev.textContent = recent ? '‹ Más recientes' : '‹ Anteriores';

@@ -1,5 +1,6 @@
-// Tooltip boxes of the poll average: one poll (name, date, sample and its values in descending order) and one
-// point of the average or of its projection. Pure functions, without ECharts or the DOM, testable in node.
+// Tooltip boxes of the poll average: one poll (name, date, sample and its values in descending order), one
+// point of the average or of its projection and the official result of a past election. Pure functions, without
+// ECharts or the DOM, testable in node.
 import {fmtDate, fmtInt, fmtNum, fmtPct, fmtRange} from './format.js';
 
 const DASH = '–';
@@ -69,4 +70,18 @@ export function pollTooltipLines(poll, parties, colors) {
 export function meanTooltipLine(name, mean, lo, hi, date, color, projected = false) {
   const text = `${name}: ${fmtPct(mean)} (${fmtRange(lo, hi)}) · ${fmtDate(date)}`;
   return `${projected ? 'Proyección<br>' : ''}${tooltipMarker(color)}${escapeText(text)}`;
+}
+
+/**
+ * Box of the official result of a party or block at the election: a first line names it with the date, the
+ * second the name and its share.
+ *
+ * @param {string} name party or block
+ * @param {number|null} value official share
+ * @param {string} date ISO date of the election
+ * @param {string} color colour of the marker
+ * @returns {string} the HTML of the box, escaped
+ */
+export function resultTooltipLine(name, value, date, color) {
+  return `Resultado oficial · ${escapeText(fmtDate(date))}<br>${tooltipMarker(color)}${escapeText(`${name} ${fmtPct(value)}`)}`;
 }

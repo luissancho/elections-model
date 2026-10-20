@@ -119,6 +119,140 @@
         {{ m.card_end() }}
         {% endif %}
       </div>
+      {% if has_model %}
+      {{ m.card_start('series', 'Promedio de sondeos', 'La intención de voto de cada partido a lo largo del ciclo según el promedio ponderado del modelo, congelado a ' ~ series_horizon|int ~ ' días de la elección, y el resultado oficial al final.') }}
+        {% if has_series %}
+        <div class="series-controls">
+          {% if series_blocks %}
+          <fieldset id="series-view" class="seg" hidden>
+            <legend>Vista</legend>
+            <label><input type="radio" name="view" value="partidos" checked> Partidos</label>
+            <label><input type="radio" name="view" value="bloques"> Bloques</label>
+          </fieldset>
+          {% endif %}
+          <fieldset id="series-window" class="seg" hidden>
+            <legend>Ventana</legend>
+            <label><input type="radio" name="window" value="all" checked> Todo el ciclo</label>
+            <label><input type="radio" name="window" value="1a"> 1 año</label>
+            <label><input type="radio" name="window" value="6m"> 6 meses</label>
+            <label><input type="radio" name="window" value="3m"> 3 meses</label>
+          </fieldset>
+        </div>
+        <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
+        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos del ciclo con su banda, los sondeos y el resultado oficial"></div>
+        <noscript><p class="muted">La curva necesita JavaScript; la serie está en el CSV de Descargas.</p></noscript>
+        {% else %}
+        <p class="notice">El promedio de este ciclo no está publicado todavía: hace falta volver a publicar la elección con un backtest que guarde la serie.</p>
+        {% endif %}
+        {% call m.how() %}
+        <p>
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
+          promedio ponderado del modelo y la banda, su intervalo de confianza. El punto marcado del final, en la
+          fecha de la elección, es el resultado oficial de cada partido.
+        </p>
+        <p>
+          El hueco entre el final de la línea y el resultado es la veda: la línea se congeló a {{ series_horizon|int }}
+          días de votar, el último día con sondeos. Pulsa un partido de la leyenda para ocultarlo o mostrarlo; en la
+          vista Bloques, cada bloque suma sus partidos.
+        </p>
+        <p>
+          La banda dice dónde estaba el consenso de las encuestadoras, no la incertidumbre del resultado; y la línea
+          no recoge lo que cambió en la última semana.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {% endif %}
+      {{ m.card_start('model', 'Lo que dijo el modelo', 'El voto y los escaños que el modelo habría publicado a cada distancia de la elección, frente al resultado' ~ ('; de entrada, a ' ~ horizon_tables[0].horizon|int ~ ' días, el último día con sondeos.' if horizon_tables else '.')) }}
+        {% if horizon_tables %}
+        <fieldset id="model-horizon" class="seg" hidden>
+          <legend>Horizonte</legend>
+          {% for table in horizon_tables %}
+          <label><input type="radio" name="horizon" value="{{ table.horizon|int }}"{% if loop.first %} checked{% endif %}> A {{ table.horizon|int }} días</label>
+          {% endfor %}
+        </fieldset>
+        {% for table in horizon_tables %}
+        <div class="horizon" data-horizon="{{ table.horizon|int }}"{% if not loop.first %} hidden{% endif %}>
+          <div class="table-wrap">
+            <table id="model-table-{{ table.horizon|int }}">
+              <caption>Voto y escaños del modelo a {{ table.horizon|int }} días de la elección, frente al resultado.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Partido</th>
+                  <th scope="col">Promedio (%)</th>
+                  <th scope="col">Resultado (%)</th>
+                  <th scope="col">Error</th>
+                  <th scope="col">Escaños modelo</th>
+                  <th scope="col">Escaños reales</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in table.rows %}
+                <tr>
+                  <td>{{ row.name }}</td>
+                  <td>{{ row.model|num(1) }}</td>
+                  <td>{{ row.official|num(1) }}</td>
+                  <td class="cell-shade" style="background-color: {{ row.error|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row.error|num(1) }}</td>
+                  {% if table.seats_valid %}
+                  <td><strong>{{ row.model_seats|int }}</strong></td>
+                  <td>{{ row.official_seats|int }}</td>
+                  {% else %}
+                  <td class="na">—</td>
+                  <td class="na">—</td>
+                  {% endif %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if table.seats_valid %}
+          <div class="table-wrap">
+          <table id="model-blocks-{{ table.horizon|int }}">
+            <caption>Escaños y probabilidad de mayoría de cada bloque a {{ table.horizon|int }} días de la elección.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Bloque</th>
+                <th scope="col">Escaños reales</th>
+                <th scope="col">Escaños del modelo</th>
+                <th scope="col">Prob. de mayoría</th>
+                <th scope="col">Mayoría real</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in table.blocks %}
+              <tr>
+                <td>{{ row.block }}</td>
+                <td>{{ row.official_seats|int }}</td>
+                <td>{{ row.model_seats|int }}</td>
+                <td>{{ row.p_majority|prob }}</td>
+                <td>{{ 'sí' if row.majority else 'no' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          </div>
+          {% else %}
+          <p class="notice">Escaños no proyectables en esta elección: algún partido no tenía resultado anterior ni regla de herencia.</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% call m.how() %}
+        <p>
+          Cada fila es un partido principal: el voto del promedio del modelo a esa distancia de la elección y el
+          oficial, su diferencia (promedio menos resultado, en puntos: rojo si el modelo se quedó corto y verde si se
+          pasó, más intenso cuanto mayor, hasta 8) y los escaños que proyectaba frente a los reales. Debajo, cada
+          bloque con sus escaños y la probabilidad de mayoría absoluta que le daba el modelo.
+        </p>
+        <p>
+          El selector cambia la distancia: a cada horizonte el modelo se calcula solo con los sondeos publicados
+          hasta entonces. Los escaños y la probabilidad son los de la ejecución que proyecta la opinión hasta el día
+          de la elección.
+        </p>
+        <p>Una probabilidad no se acierta ni se falla en una sola elección: una baja que se cumple no es por sí sola un error.</p>
+        {% endcall %}
+        {% else %}
+        <p class="notice">Sin backtest para esta elección.</p>
+        {% endif %}
+      {{ m.card_end() }}
       <div class="split">
       {{ m.card_start('last-errors', 'Error del último sondeo', 'Cuánto se equivocó el último sondeo de cada encuestadora en el margen entre bloques, en puntos.') }}
         {% if last_rows %}
@@ -263,102 +397,16 @@
           como mín–máx y cuenta por su punto medio para ordenar y promediar.
         </p>
         <p>Es lo que dijo cada sondeo, no cuánto se equivocó: el error de cada uno está en el CSV de sondeos de esta elección.</p>
+        {% if fixed_rows %}
+        <p>
+          Las dos últimas filas del pie no son sondeos: «Promedio de sondeos» es lo que el modelo decía a
+          {{ model_last.horizon|int }} días de la elección, el último día con sondeos, y «Resultado», el oficial; los
+          filtros no las tocan. En la vista Escaños, la primera pasa a los escaños que proyectaba el modelo.
+        </p>
+        {% endif %}
         {% endcall %}
         {% else %}
         <p class="notice">Los sondeos de este ciclo no están publicados todavía; sus errores están en el CSV de sondeos de esta elección.</p>
-        {% endif %}
-      {{ m.card_end() }}
-      {{ m.card_start('model', 'El modelo a cada horizonte', 'Lo que el modelo habría dicho con los sondeos disponibles a cada distancia de la elección, frente al resultado.') }}
-        {% if horizon_tables %}
-        {% for table in horizon_tables %}
-        <h3>A {{ table.horizon|int }} días</h3>
-        <div class="table-wrap">
-          <table id="model-shares-{{ table.horizon|int }}">
-            <caption>Voto estimado por el modelo a {{ table.horizon|int }} días de la elección, en porcentaje.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Partido</th>
-                <th scope="col">Resultado</th>
-                <th scope="col">Modelo</th>
-                <th scope="col">Error</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in table.shares %}
-              <tr>
-                <td>{{ row.name }}</td>
-                <td>{{ row.official|num(1) }}</td>
-                <td>{{ row.model|num(1) }}</td>
-                <td>{{ row.error|num(1) }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% if table.seats_valid %}
-        <div class="table-wrap">
-          <table id="model-seats-{{ table.horizon|int }}">
-            <caption>Escaños estimados por el modelo a {{ table.horizon|int }} días de la elección.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Partido</th>
-                <th scope="col">Resultado</th>
-                <th scope="col">Modelo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in table.seats %}
-              <tr>
-                <td>{{ row.name }}</td>
-                <td>{{ row.official|int }}</td>
-                <td>{{ row.model|int }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        <div class="table-wrap">
-          <table id="model-blocks-{{ table.horizon|int }}">
-            <caption>Escaños y probabilidad de mayoría de cada bloque a {{ table.horizon|int }} días de la elección.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Bloque</th>
-                <th scope="col">Escaños reales</th>
-                <th scope="col">Escaños del modelo</th>
-                <th scope="col">Prob. de mayoría</th>
-                <th scope="col">Mayoría real</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in table.blocks %}
-              <tr>
-                <td>{{ row.block }}</td>
-                <td>{{ row.official_seats|int }}</td>
-                <td>{{ row.model_seats|int }}</td>
-                <td>{{ row.p_majority|prob }}</td>
-                <td>{{ 'sí' if row.majority else 'no' }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <p class="notice">Escaños no proyectables en esta elección: algún partido no tenía resultado anterior ni regla de herencia.</p>
-        {% endif %}
-        {% endfor %}
-        {% call m.how() %}
-        <p>
-          Cada horizonte es una distancia a la elección: el modelo se calcula solo con los sondeos publicados hasta
-          entonces. Las tablas dan su voto, sus escaños y la mayoría de cada bloque frente al resultado.
-        </p>
-        <p>
-          El error es el del modelo menos el resultado, en puntos de voto; en los bloques, la probabilidad de mayoría
-          que daba el modelo y si la hubo.
-        </p>
-        <p>Una probabilidad no se acierta ni se falla en una sola elección: una baja que se cumple no es por sí sola un error.</p>
-        {% endcall %}
-        {% else %}
-        <p class="notice">Sin backtest para esta elección.</p>
         {% endif %}
       {{ m.card_end() }}
       {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV.') }}
@@ -370,7 +418,7 @@
         {% call m.how() %}
         <p>
           Cada enlace descarga una tabla en CSV, el formato de las hojas de cálculo: las encuestadoras, los sondeos y el
-          resultado{% if has_model %}, y el modelo a cada horizonte{% endif %}.
+          resultado{% if has_model %}, lo que dijo el modelo{% if has_series %} y el promedio del ciclo{% endif %}{% endif %}.
         </p>
         <p>Los CSV traen todas las columnas publicadas, también algunas que la página no muestra.</p>
         <p>Son solo los de esta elección: cada elección tiene los suyos.</p>

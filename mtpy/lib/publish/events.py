@@ -202,6 +202,51 @@ def export_event_model(source: Optional[str], event_date: str) -> tuple:
     return data, frames
 
 
+def export_event_series(source: Optional[str], event_date: str) -> tuple:
+    """Slice the daily series of the model backtest (``series.csv``) to one election.
+
+    Parameters
+    ----------
+    source : str, optional
+        Folder of the backtest tables (see ``backtest_source``). Without it, without the file or without rows
+        of the election there is nothing to publish.
+    event_date : str
+        Election date, ``YYYY-MM-DD``.
+
+    Returns
+    -------
+    tuple
+        ``(data, frame)``: the data for the ``event-series`` schema (``horizon``, the shortest horizon found,
+        ``dates`` ascending, ``parties`` by first appearance and ``mean``, ``lo`` and ``hi`` by party, aligned
+        to ``dates`` with ``None`` in the gaps, rounded to ``PCT_DECIMALS``) and its long-format CSV twin
+        (``date``, ``name``, ``mean``, ``lo``, ``hi``, by party then date); ``(None, None)`` without a series.
+    """
+    path = os.path.join(source, 'series.csv') if source else None
+    if path is None or not os.path.isfile(path):
+        return None, None
+    table = pd.read_csv(path)
+    table = table.loc[table['event_date'].astype(str) == event_date]
+    if table.empty:
+        return None, None
+
+    horizon = int(table['horizon'].min())
+    table = table.loc[table['horizon'] == horizon, ['date', 'name', 'mean', 'lo', 'hi']]
+    table = round_cols(table.assign(date=table['date'].astype(str)), pct=['mean', 'lo', 'hi'])
+    dates = sorted(table['date'].unique())
+    parties = list(dict.fromkeys(table['name']))
+    frame = pd.concat([table.loc[table['name'] == name].sort_values('date') for name in parties], ignore_index=True)
+
+    def column(name, col):
+        """Values of ``col`` of a party aligned to ``dates`` (``None`` where the party has no row)."""
+        values = frame.loc[frame['name'] == name].set_index('date')[col].reindex(dates)
+        return [None if pd.isna(value) else float(value) for value in values]
+
+    data = {'horizon': horizon, 'dates': dates, 'parties': parties,
+            **{col: {name: column(name, col) for name in parties} for col in ('mean', 'lo', 'hi')}}
+
+    return data, frame
+
+
 def event_summary(frame: pd.DataFrame, blocks: Sequence[str]) -> dict:
     """Summarise the polls of a past election.
 
@@ -307,7 +352,7 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
                   source: Optional[str] = None, prov: Optional[Callable] = None, verbose: int = 0) -> dict:
     """Write one past election of a scope into the bundle, overwriting the previous publication.
 
-    The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``results`` and ``model`` (each JSON
+    The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``results``, ``model`` and ``series`` (each JSON
     with its CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place. The
     polls errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs')``), the
     polls of the cycle as published from the same polls (``filter_polls(featured=True)``, so every poll of the
@@ -339,7 +384,10 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     Returns
     -------
     dict
-        ``{'scope', 'event_date', 'n_polls', 'n_pollsters', 'has_model', 'seconds'}``.
+        ``{'scope', 'event_date', 'n_polls', 'n_pollsters', 'has_model', 'has_series', 'seconds'}``;
+        ``has_series`` is whether the backtest had the daily series of the election (``export_event_series``):
+        without it the part ``series`` and its CSV are not written, and those of a previous publication are
+        removed.
 
     Raises
     ------
@@ -408,6 +456,14 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         if csv_name.startswith('model-') and csv_name not in frames and writer.exists(stale):
             writer.remove(stale)
     seconds['model'] = lap()
+    series_data, series_frame = export_event_series(backtest_source(scope, source), event_date)
+    if series_data is not None:
+        write('series', series_data, {'series': series_frame})
+    else:  # a series of an older backtest would describe another model
+        for stale in (bundle.path_event(scope, event_date, 'series'), bundle.path_event_csv(scope, event_date, 'series')):
+            if writer.exists(stale):
+                writer.remove(stale)
+    seconds['series'] = lap()
 
     summary = event_summary(errors, list(blocks))
     seconds['total'] = time.perf_counter() - start
@@ -417,4 +473,5 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     write('meta', meta, {})
 
     return {'scope': scope, 'event_date': event_date, 'n_polls': summary['n_polls'],
-            'n_pollsters': summary['n_pollsters'], 'has_model': meta['has_model'], 'seconds': seconds}
+            'n_pollsters': summary['n_pollsters'], 'has_model': meta['has_model'],
+            'has_series': series_data is not None, 'seconds': seconds}

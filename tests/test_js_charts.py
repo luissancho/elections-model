@@ -27,6 +27,8 @@ SCATTER_JS = pathlib.Path(DIST, 'js', 'charts', 'scatter.js').as_uri()
 SLOPE_JS = pathlib.Path(DIST, 'js', 'charts', 'slope.js').as_uri()
 RADAR_JS = pathlib.Path(DIST, 'js', 'charts', 'radar.js').as_uri()
 GROUPED_JS = pathlib.Path(DIST, 'js', 'charts', 'grouped.js').as_uri()
+SERIES_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'series-wire.js').as_uri()
+CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -39,21 +41,23 @@ ROWS = [
 
 
 def run_js(expr, rows=ROWS):
-    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), los gráficos
-    del estudio CERA (`c` censo, `sc` dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas) y `rows`
-    definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
-    `JSON.stringify`)."""
+    """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
+    cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
+    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas) y `rows` definidos y devuelve su JSON (las
+    funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const b = await import("{}"); const d = await import("{}"); const h = await import("{}"); '
         'const s = await import("{}"); const base = await import("{}"); const r = await import("{}"); '
         'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); '
-        'const c = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
+        'const sw = await import("{}"); const c = await import("{}"); '
+        'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
         'const ra = await import("{}"); const g = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
-             WEIGHTS_JS, STACKED_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS, json.dumps(rows), expr)
+             WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
+             json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -203,6 +207,47 @@ def test_series_hidden_legend_keeps_the_component_and_the_theme():
     assert theme['fontFamily'].startswith("'DM Sans'") and theme['headFamily'].startswith("'Outfit'") and theme['mutedColor'] == '#5a5f72'
 
 
+RESULT_ARGS = SERIES_ARGS.replace("legend: %s", "legend: 'hidden', asOfLabel: 'A 6 días', result: {date: '2026-10-08', values: {PP: 31.5}}")
+
+
+def test_series_result_draws_a_diamond_at_the_election_and_extends_the_axis():
+    option = run_js('s.seriesOption(%s)' % RESULT_ARGS)
+    election = run_js('s.dayTime("2026-10-08")')
+    diamonds = [s for s in option['series'] if s['type'] == 'scatter' and s.get('symbol') == 'diamond']
+    assert [(s['name'], s['data'], s['symbolSize'], s['z']) for s in diamonds] == [('PP', [[election, 31.5]], 12, 5)]
+    assert diamonds[0]['itemStyle'] == {'borderColor': '#fff', 'borderWidth': 1.5}
+    marks = option['series'][-1]['markLine']['data']
+    assert [m['label']['formatter'] for m in marks] == ['A 6 días', 'Elección'] and marks[1]['xAxis'] == election
+    assert option['dataZoom'][0]['endValue'] == election
+    plain = run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))
+    assert not [s for s in plain['series'] if s.get('symbol') == 'diamond']
+    assert [m['label']['formatter'] for m in plain['series'][-1]['markLine']['data']] == ['Estimación']
+    assert run_js('s.axisDatesOf({dates: ["2026-10-01", "2026-10-02"]}, null, {date: "2026-10-08", values: {}})') == ['2026-10-01', '2026-10-02', '2026-10-08']
+    assert run_js('s.axisDatesOf({dates: ["2026-10-01", "2026-10-02"]}, null, {date: "2026-10-02", values: {}})') == ['2026-10-01', '2026-10-02']
+
+
+def test_series_window_of_three_months_keeps_the_result_in_view():
+    option = run_js('s.seriesOption(%s)' % RESULT_ARGS.replace("window: 'all'", "window: '3m', anchor: '2026-10-08'"))
+    assert option['dataZoom'][0]['endValue'] == run_js('s.dayTime("2026-10-08")')
+
+
+def test_series_views_carry_the_result_of_each_view():
+    initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'VOX', 'PSOE'], 'mean': {'PP': [30], 'VOX': [10], 'PSOE': [28]},
+                          'lo': {'PP': [29], 'VOX': [9], 'PSOE': [27]}, 'hi': {'PP': [31], 'VOX': [11], 'PSOE': [29]}},
+               'polls': {'parties': ['PP', 'VOX', 'PSOE'], 'polls': []}, 'projection': None,
+               'result': {'date': '2026-10-08', 'values': {'PP': 31, 'PSOE': 27.5}},
+               'catalog': {'parties': [{'name': n, 'color': '#000000', 'fullname': n, 'block': None} for n in ('PP', 'VOX', 'PSOE')],
+                           'bmaps': {'main': ['PP', 'PSOE'], 'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}}}}
+    views = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps(initial), json.dumps(initial)))
+    assert views['partidos']['result'] == initial['result'] and views['partidos']['defaults'] == ['PP', 'PSOE']
+    assert views['bloques']['result'] == {'date': '2026-10-08', 'values': {'Derecha': 31, 'Izquierda': 27.5}}
+    assert views['bloques']['parties'] == ['Derecha', 'Izquierda'] and views['bloques']['projection'] is None
+    assert run_js('sw.seriesViews(%s, new c.Catalog({}))' % json.dumps({**initial, 'result': None}))['partidos']['result'] is None
+    # the colour of a block is the one the page already uses for it (`block_colors`), else that of its first party
+    painted = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps({**initial, 'block_colors': {'Derecha': '#112233'}}), json.dumps(initial)))
+    assert painted['bloques']['colors'] == {'Derecha': '#112233', 'Izquierda': '#000000'}
+
+
 def test_ridge_rows_are_taller_on_desktop():
     assert run_js('r.ridgeRowHeight(1440)') == 110 and run_js('r.ridgeRowHeight(720)') == 110
     assert run_js('r.ridgeRowHeight(719)') == 64 and run_js('r.ridgeRowHeight(390)') == 64
@@ -303,7 +348,7 @@ def test_weights_kernel_line_names_the_factor():
 def test_census_option_marks_every_date():
     marks = [{'date': '2022-10-21', 'label': 'Ley 20/2022'}, {'date': '2023-07-23', 'label': '23-J'},
              {'date': '2025-10-22', 'label': 'Fin del plazo'}, {'date': '2026-08-01', 'label': 'Censo 29-N'}]
-    option = run_js('c.censusOption(rows, %s)' % json.dumps(marks),
+    option = run_js('ce.censusOption(rows, %s)' % json.dumps(marks),
                     rows=[['2022-01-01', 2200000], ['2024-01-01', 2400000], ['2026-09-01', 2762829]])
     assert option['xAxis']['type'] == 'time' and 'axisLabel' in option['yAxis'] and option['yAxis']['scale'] is True
     [line] = option['series']
@@ -312,8 +357,8 @@ def test_census_option_marks_every_date():
     # una línea vertical discontinua por marca, con su texto girado
     assert line['markLine']['data'] == [{'xAxis': m['date'], 'name': m['label']} for m in marks]
     assert line['markLine']['label']['rotate'] == 90 and line['markLine']['lineStyle']['type'] == 'dashed'
-    assert run_js('c.censusOption(rows, [], {color: "#123456"})', rows=[])['series'][0]['color'] == '#123456'
-    assert run_js('c.millions(2750000)') == '2,75 M'
+    assert run_js('ce.censusOption(rows, [], {color: "#123456"})', rows=[])['series'][0]['color'] == '#123456'
+    assert run_js('ce.millions(2750000)') == '2,75 M'
 
 
 def test_scatter_option_labels_only_the_named_provinces_and_draws_the_fit():

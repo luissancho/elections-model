@@ -89,7 +89,7 @@ class Publish(ScopeReporter, Job):
         RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'
     """
 
-    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'manifest', 'point', 'unpublish')
+    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point', 'unpublish')
     verbose = 1
     _collect_warnings = staticmethod(collect_warnings)
     _notes_suffix = staticmethod(notes_suffix)
@@ -105,8 +105,11 @@ class Publish(ScopeReporter, Job):
         Parameters
         ----------
         what : str or list of str, default ('forecast',)
-            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``study``, ``manifest``,
-            ``point`` and ``unpublish``. They run in that order when several are given.
+            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``study``, ``parties``,
+            ``manifest``, ``point`` and ``unpublish``. They run in that order when several are given. ``parties``
+            writes the party catalogue of the database next to the manifest (``publish.publish_parties``);
+            ``forecast`` and ``analysis`` rewrite it too, once per run of the job, so the pages always colour and
+            name every party.
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``.
         event_date : str or list of str, optional
@@ -298,6 +301,9 @@ class Publish(ScopeReporter, Job):
                 failures.append('{} ({})'.format(study, 'study'))
             lines.append(self._study_line(study, result))
             progress.done(lines[-1])
+
+        if 'parties' in whats or 'forecast' in whats or 'analysis' in whats:
+            lines.append(self._write_parties(writer, failures))
 
         if 'manifest' in whats:
             if dry_run:
@@ -760,6 +766,31 @@ class Publish(ScopeReporter, Job):
             self._log_error('manifest')
             failures.append('manifest')
             return 'manifest: failed ({}: {})'.format(type(e).__name__, e)
+
+    def _write_parties(self, writer, failures):
+        """
+        Write the party catalogue (``publish.publish_parties``), converting an exception into a failure and a
+        summary line.
+
+        Parameters
+        ----------
+        writer : BundleWriter
+            Bundle writer (under the dry-run prefix in a dry run).
+        failures : list of str
+            Failures of the run; ``parties`` is appended when the write fails.
+
+        Returns
+        -------
+        str
+            Summary line of the catalogue.
+        """
+        try:
+            out = publish.publish_parties(writer)
+        except Exception as e:
+            self._log_error('parties')
+            failures.append('parties')
+            return 'parties: failed ({}: {})'.format(type(e).__name__, e)
+        return 'parties: {}'.format(counted(out['n_parties'], 'partido', 'partidos'))
 
     @staticmethod
     def _manifest_line(data):

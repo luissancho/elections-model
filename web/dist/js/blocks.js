@@ -1,4 +1,4 @@
-// Block view of the poll average and the state of its controls in the URL hash.
+// Block view of the poll average (series, polls, projection and official result) and the state of its controls in the URL hash.
 // Pure functions without DOM nor ECharts, shared by the Promedios page and the parity test.
 import {DEFAULT_WINDOW} from './range.js';
 
@@ -95,6 +95,25 @@ export function blockPolls(polls, blocks) {
 export function blockProjection(projection) {
   const groups = projection && projection.groups && projection.groups.blocks;
   return groups ? {dates: projection.dates, groups: {parties: groups}} : null;
+}
+
+/**
+ * Official result by block: the sum of the shares of the parties of each block present in `values`; a block
+ * with none of them has no key.
+ *
+ * @param {{date: string, values: Object<string, number>}} result the result marked on the series chart
+ * @param {Object<string, string[]>} blocks block → party names
+ * @returns {{date: string, values: Object<string, number>}} the result with the block names as keys
+ */
+export function blockResult(result, blocks) {
+  const values = {};
+  for (const [block, members] of Object.entries(blocks)) {
+    const found = members.map((name) => result.values[name]).filter(present);
+    if (found.length) {
+      values[block] = found.reduce((total, value) => total + value, 0);
+    }
+  }
+  return {date: result.date, values};
 }
 
 /**

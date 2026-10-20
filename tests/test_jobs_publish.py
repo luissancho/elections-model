@@ -6,6 +6,7 @@ import pytest
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
 from tests.fakes import FakeComputer, FakeSimulator, synthetic_event, write_backtest_source
+from tests.test_webapi_unit import PARTIES
 
 
 def entry(scope, run_id):
@@ -20,9 +21,10 @@ def fixed_prov(monkeypatch):
 
 @pytest.fixture
 def patched(monkeypatch):
-    """`resolve_scopes`, `next_event_date`, `publish_forecast` y `publish_analysis` sin base: `es` publica de
-    verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y la procedencia sustituidos, `es-md` no tiene
-    evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete."""
+    """`resolve_scopes`, `next_event_date`, `publish_forecast`, `publish_analysis` y `publish_parties` sin base: `es`
+    publica de verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y la procedencia sustituidos, `es-md` no
+    tiene evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete; el
+    catálogo de partidos sale de `PARTIES`."""
     calls = []
     real_forecast = publish.publish_forecast
     real_analysis = publish.publish_analysis
@@ -56,6 +58,13 @@ def patched(monkeypatch):
                           seats=lambda s, d, names: {},
                           prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
 
+    real_parties = publish.publish_parties
+
+    def fake_parties(writer, **kwargs):
+        # not recorded in `calls`: the tests of the scopes read it by position
+        return real_parties(writer, parties=lambda: PARTIES, **kwargs)
+
+    monkeypatch.setattr(publish, 'publish_parties', fake_parties)
     monkeypatch.setattr(publish, 'publish_event', fake_event)
     monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
     monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
@@ -647,8 +656,9 @@ def test_verbose_0_prints_only_the_header_and_the_summary(fresh_app, tmp_path, p
     warned_forecast(monkeypatch, [NO_POLLS])
     Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), verbose=0)
     lines = capsys.readouterr().out.splitlines()
-    assert len(lines) == 3 and lines[0].startswith('[') and 'publish forecast: 1 ámbito · run ' in lines[0]
+    assert len(lines) == 4 and lines[0].startswith('[') and 'publish forecast: 1 ámbito · run ' in lines[0]
     assert lines[1].startswith('es: published') and lines[1].endswith(' · 1 aviso') and lines[2].startswith('manifest')
+    assert lines[3] == 'parties: 5 partidos'  # el catálogo de partidos se reescribe con cada forecast
     assert not any(text in '\n'.join(lines) for text in ('empezando', 'simulador listo', NO_POLLS))
     assert len(recwarn) == 0
 
@@ -880,6 +890,59 @@ def test_publish_class_docstring_survives_and_mentions_the_levels():
     from mtpy.jobs.Publish import Publish
 
     assert Publish.__doc__ is not None and 'four levels' in Publish.__doc__
+
+
+def test_parties_action_writes_the_catalogue_next_to_the_manifest(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    result = Publish().run(what=['parties'], fs=fs)
+    assert result == {} and (tmp_path / 'site' / 'v1' / 'parties.json').exists()
+    assert not (tmp_path / 'site' / 'v1' / 'manifest.json').exists()
+    assert 'parties: 5 partidos' in capsys.readouterr().out
+    env = bundle.BundleReader(fs).read_json(bundle.path_parties())
+    assert env['schema'] == 'parties@1' and [row['name'] for row in env['data']['rows']][:2] == ['PP', 'PSOE']
+
+
+def test_forecast_and_analysis_refresh_the_catalogue_but_the_pointers_do_not(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    (tmp_path / 'a').mkdir()
+    (tmp_path / 'b').mkdir()
+    fs = FileSystem(str(tmp_path / 'a'))
+    path = tmp_path / 'a' / 'site' / 'v1' / 'parties.json'
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    out = capsys.readouterr().out
+    assert path.exists() and out.count('parties: 5 partidos') == 1 and out.index('es: published') < out.index('parties: 5')
+    path.unlink()
+    Publish().run(what=['analysis'], scopes=['es'], fs=fs)
+    assert path.exists() and 'parties: 5 partidos' in capsys.readouterr().out
+    path.unlink()
+    # las tres acciones juntas (en otro paquete: el run id es el segundo actual) escriben el catálogo una sola vez
+    Publish().run(what=['forecast', 'analysis', 'parties'], scopes=['es'], fs=FileSystem(str(tmp_path / 'b')))
+    assert (tmp_path / 'b' / 'site' / 'v1' / 'parties.json').exists() and capsys.readouterr().out.count('parties: 5 partidos') == 1
+    Publish().run(what=['manifest'], fs=fs)
+    Publish().run(what=['point'], scopes=['es'], run=publish.read_manifest(bundle.BundleReader(fs))['scopes']['es']['latest'], fs=fs)
+    assert not path.exists() and 'parties' not in capsys.readouterr().out
+
+
+def test_parties_dry_run_writes_apart_and_a_failure_fails_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    Publish().run(what=['parties'], fs=fs, dry_run=True)
+    assert (tmp_path / 'site-dry' / 'v1' / 'parties.json').exists() and not (tmp_path / 'site').exists()
+
+    def broken(writer, **kwargs):
+        raise KeyError('color')
+
+    monkeypatch.setattr(publish, 'publish_parties', broken)
+    errors = []
+    fresh_app.set('logger', types.SimpleNamespace(error=errors.append, info=lambda m: None))
+    with pytest.raises(RuntimeError, match='parties'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    out = capsys.readouterr().out
+    assert 'es: published' in out and "parties: failed (KeyError: 'color')" in out and len(errors) == 1
 
 
 def test_publish_study_runs_the_study_action(fresh_app, tmp_path, monkeypatch, capsys):

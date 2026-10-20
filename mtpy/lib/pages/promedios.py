@@ -610,8 +610,10 @@ def promedios_context(state: dict) -> dict:
         them) and ``initial`` (``state``, ``meta``, ``headline``,
         ``series`` (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered,
         sorted and paginated in the browser), ``projection``, ``vote``, ``summary``, ``runs``, ``cards`` (name
-        and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``, for the hemicycle) and ``inks`` (the ink over the colour of every party
-        and block, for the pills of the legend)).
+        and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``, for the hemicycle), ``inks`` (the ink over the colour of every party
+        and block, for the pills of the legend) and ``catalog`` (``parties``: the run's parties, those of the polls
+        table and those of the last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``:
+        those of the run; the browser's ``Catalog``)).
 
     Raises
     ------
@@ -633,7 +635,7 @@ def promedios_context(state: dict) -> dict:
     context['headline'] = current
     summary = part(scope, run, 'summary', mode=mode)
     # imported here: ``elecciones`` imports this module
-    from .elecciones import last_results
+    from .elecciones import chart_parties, last_results
     results = last_results(scope, parties)
     context['result_rows'] = result_rows(summary, results)
     context['block_result_rows'] = block_result_rows(summary, meta, parties, results)
@@ -648,6 +650,7 @@ def promedios_context(state: dict) -> dict:
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
     context['table'] = polls_table(poll_rows, context['table_parties'], colors)
+    context['fixed_rows'] = []  # only the detail of a past election pins the model and the result to the foot
     context['table_total'] = len(poll_rows)
     context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch
     context['months'] = poll_months(poll_rows)
@@ -666,6 +669,11 @@ def promedios_context(state: dict) -> dict:
         'runs': bundle.loads(site().history(scope))['data'],
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
         'deltas': seat_deltas(summary, meta, parties, results),
+        # the browser's catalogue: the run's parties, those of the polls table and those of the last election, with
+        # the colour, name and block of the published catalogue for the ones the run does not simulate
+        'catalog': {'parties': [dict(parties[name], name=name) for name in chart_parties(
+            parties, [party['name'] for party in meta.get('parties') or []], context['table_parties'],
+            list((results or {}).get('parties') or []))], 'bmaps': bmaps},
         # ink of every party and block of the series charts, for the pills of the legend when they are on
         'inks': {**{name: ink_color(parties[name]['color']) for name in series.get('parties') or []},
                  **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},

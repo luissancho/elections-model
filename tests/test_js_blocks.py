@@ -63,6 +63,11 @@ def test_block_polls_and_projection():
     assert run_js('b.blockProjection(null)') is None
 
 
+def test_block_result_sums_the_parties_of_each_block():
+    assert run_js('b.blockResult({date: "2026-01-10", values: {PP: 30, VOX: 10, PSOE: 28}}, blocks)') == {'date': '2026-01-10', 'values': {'Derecha': 40, 'Izquierda': 28}}
+    assert run_js('b.blockResult({date: "2026-01-10", values: {PSOE: 28}}, blocks)') == {'date': '2026-01-10', 'values': {'Izquierda': 28}}
+
+
 def test_series_hash_round_trip_and_fallbacks():
     ctx = '{parties: ["PP", "PSOE"], blocks: ["Derecha"], windows: ["3m", "6m", "1a", "all"]}'
     assert run_js(f'b.parseSeriesHash("#ventana=6m&vista=bloques&sel=Derecha", {ctx})') == {'window': '6m', 'view': 'bloques', 'selected': ['Derecha']}

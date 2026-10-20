@@ -66,9 +66,9 @@ ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'er
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
-EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model')
+EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
-EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks')
+EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
 STUDIES = ('voto-cera',)
 STUDY_PARTS = ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
 STUDY_SCHEMAS = {part: 'study-' + part for part in STUDY_PARTS}
@@ -87,6 +87,7 @@ SCHEMAS = {
     'manifest': {'contract': int, 'updated_at': NULLABLE_STR, 'scopes': dict, 'studies': dict, 'freeze': dict,
                  'attribution': dict},
     'history': {'scope': str, 'runs': list},
+    'parties': {'rows': list},
     'meta': {
         'run_id': str, 'run_at': str, 'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'scope': str,
         'event_date': str, 'as_of': str, 'date_last': str, 'date_fit_last': NULLABLE_STR, 'horizon_max': int,
@@ -128,6 +129,7 @@ SCHEMAS = {
     'event-cycle': {'parties': list, 'columns': list, 'polls': list},
     'event-results': {'n_seats': int, 'rows': list},
     'event-model': {'horizons': list, 'shares': list, 'seats': list, 'blocks': list},
+    'event-series': {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict},
     'study-meta': {'study': str, 'title': str, 'subtitle': str, 'election': dict, 'registered_at': NULLABLE_STR,
                    'registered_commit': NULLABLE_STR, 'registered': (dict, type(None)),
                    'registered_changed_at': NULLABLE_STR, 'checked_at': NULLABLE_STR, 'params': dict, 'sources': list,
@@ -317,6 +319,18 @@ def path_manifest() -> str:
         ``'manifest.json'``.
     """
     return 'manifest.json'
+
+
+def path_parties() -> str:
+    """
+    Path of the party catalogue, relative to the bundle prefix.
+
+    Returns
+    -------
+    str
+        ``'parties.json'``.
+    """
+    return 'parties.json'
 
 
 def path_runs(scope: str) -> str:

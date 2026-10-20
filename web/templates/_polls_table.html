@@ -1,8 +1,10 @@
 {#- "Todas las encuestas": the controls (hidden until the browser wires them), the table the server renders with
     the `PAGE_SIZE` most recent polls (the house linked to its profile, its rating as a badge from red at 0 through
     grey at 50 to green at 100), the scroll hint and the pagination. Shared by Promedios and the detail of a past
-    election; needs `has_seats`, `table_parties`, `catalog`, `pollsters`, `months`, `table_total`, `csv_href` and
-    `table` in the context (`polls_table`), and `wirePollsTable` of `pages/polls-wire.js` in the page module. -#}
+    election; needs `has_seats`, `table_parties`, `catalog`, `pollsters`, `months`, `table_total`, `csv_href`,
+    `table` (`polls_table`) and `fixed_rows` (the rows pinned under the mean: the model and the result in the detail
+    of a past election, `fixed_rows`; empty in Promedios) in the context, and `wirePollsTable` of
+    `pages/polls-wire.js` in the page module. -#}
         <div class="ctrl-bar" id="polls-controls" hidden>
           {% if has_seats %}
           <fieldset id="polls-mode" class="seg">
@@ -92,6 +94,19 @@
                 {% else %}<td class="p">{{ cell.value }}</td>{% endif %}
                 {% endfor %}
               </tr>
+              {% for row in fixed_rows %}
+              <tr class="fixed">
+                <td class="f l"{% if row.title %} title="{{ row.title }}"{% endif %}><b>{{ row.label }}</b><small>{{ row.small }}</small></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                {% for cell in row.cells %}
+                {% if cell.leader %}<td class="p mx" style="background: {{ cell.color }}24">{{ cell.value }}</td>
+                {% elif cell.value == '–' %}<td class="p na">—</td>
+                {% else %}<td class="p">{{ cell.value }}</td>{% endif %}
+                {% endfor %}
+              </tr>
+              {% endfor %}
             </tfoot>
           </table>
         </div>
