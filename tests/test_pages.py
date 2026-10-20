@@ -45,10 +45,12 @@ def html(body):
     return body.decode('utf-8')
 
 def header_tooltips(table):
-    """{etiqueta: tooltip} de las cabeceras de una tabla, con los espacios normalizados."""
+    """{etiqueta: tooltip} de las cabeceras de una tabla, con los espacios normalizados (la etiqueta sin su segunda
+    línea, `th-sub`)."""
     import html as html_mod
     return {label: re.sub(r'\s+', ' ', html_mod.unescape(title)).strip()
-            for title, label in re.findall(r'<th scope="col"[^>]*title="([^"]*)"[^>]*>([^<]*)</th>', table)}
+            for title, label in re.findall(r'<th scope="col"[^>]*title="([^"]*)"[^>]*>([^<]*)(?:<span class="th-sub">[^<]*</span>)?</th>',
+                                           table)}
 
 
 def glossary_entries(glossary):
@@ -1295,7 +1297,8 @@ def test_table_columns_describe_the_two_tables_with_the_scale_and_the_blocks():
     assert scaled['quality'].endswith('Cada punto vale 9 de confianza, con un mínimo de 4.')
     assert 'más margen a Derecha del que hubo; negativo, más margen a Izquierda.' in scaled['error_blocks']
     assert [column['label'] for column in pages.table_columns('ranking')] == [
-        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert [column.get('sub') for column in pages.table_columns('ranking')][3] == '(generales)'
     assert [column['label'] for column in pages.table_columns('path')] == [
         'Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
     path = {column['key']: column['text'] for column in pages.table_columns('path', ['Derecha', 'Izquierda'])}
@@ -2435,8 +2438,8 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
-    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio',
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)', thead)
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio',
                      'Sesgo bloques', 'Rebaño']
     assert 'class="help"' not in thead  # sin interrogante: el glosario explica las columnas (2026-10-16)
     assert 'Calidad' not in thead  # la palabra pública es «Confianza»
@@ -3428,8 +3431,8 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     la confianza leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales',
-                                                          'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos',
+                                                          'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
@@ -3437,8 +3440,8 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
     assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
-    assert ('En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el que se calcula '
-            'el criterio «Implantación» de la confianza.') in glossary
+    assert ('Entre paréntesis, cuántas de ellas fueron elecciones generales: el dato con el que se calcula el criterio '
+            '«Implantación» de la confianza.') in glossary
     assert 'todas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
@@ -3446,23 +3449,22 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
                                                                   'Sesgo bloques', 'Rating', 'Cambio']
 
 
-def test_casas_ranking_shows_the_generales_column_after_elecciones(houses):
+def test_casas_ranking_shows_the_general_elections_in_brackets_in_elecciones(houses):
+    """«Elecciones» lleva entre paréntesis las generales («28 (5)»), con «(generales)» bajo la cabecera; sin
+    columna ni filtro aparte (2026-10-20)."""
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table)
-    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial',
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)', table)
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial',
                      'Error medio', 'Sesgo bloques', 'Rebaño']
-    assert re.findall(r'<tr data-national-events="(\d+)"', table) == ['3', '2']  # GAD3, CIS
+    assert '>Elecciones<span class="th-sub">(generales)</span></th>' in table
+    assert table.count('<col ') == len(heads)
+    assert '<td>2 (3)</td>' in table  # GAD3: 2 elecciones de la fixture, 3 generales
+    assert 'ranking-national-events' not in page and 'data-national-events' not in page and 'Solo con experiencia' not in page
 
 
-def test_casas_ranking_has_the_generales_filter(houses):
-    page = html(call(houses, '/casas')[2])
-    assert '<input type="checkbox" id="ranking-national-events">' in page and 'Solo con experiencia en generales' in page
-    assert 'id="ranking-national-events" checked' not in page
-
-
-def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
-    """A known count of 0 renders its number (only an unknown count renders «–») and the filter still hides it."""
+def test_casas_ranking_with_a_known_zero_shows_zero_in_brackets(houses, monkeypatch):
+    """A known count of 0 shows «(0)»; only an unknown count omits the brackets."""
     known = pd.DataFrame({
         'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
         'num_events': [1], 'num_national_events': [0], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5],
@@ -3472,11 +3474,11 @@ def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>0</td>' in table
+    assert '<td>1 (0)</td>' in table
 
 
-def test_casas_ranking_without_num_national_events_shows_a_dash_and_counts_zero(houses, monkeypatch):
-    """Old ratings rows (before the database column exists): «–», `data-national-events="0"` (hidden by the filter)."""
+def test_casas_ranking_without_num_national_events_shows_only_the_elections(houses, monkeypatch):
+    """Old ratings rows (before the database column exists): the elections without brackets."""
     old = pd.DataFrame({
         'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
         'num_events': [1], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5], 'bias_blocks': [0.5],
@@ -3486,9 +3488,7 @@ def test_casas_ranking_without_num_national_events_shows_a_dash_and_counts_zero(
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>–</td>' in table
-    # no known count in any row: the filter would hide everything, so the control is not rendered
-    assert 'id="ranking-national-events"' not in page and 'id="ranking-controls"' not in page
+    assert '<td>1</td>' in table and '<td>1 (' not in table
 
 
 def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):

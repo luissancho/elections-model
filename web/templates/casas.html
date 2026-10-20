@@ -14,25 +14,17 @@
         {% if not ranking %}
         <p class="notice">Todavía no hay ratings de encuestadoras para la próxima elección general.</p>
         {% endif %}
-        {# the filter works with JavaScript only: it is hidden until the script shows it #}
-        {# without a known «Generales» count in any row (ratings saved before the column exists) the filter would hide everything #}
-        {% set with_national_events = ranking|selectattr('num_national_events', 'ne', none)|list|length > 0 %}
-        {% if with_national_events %}
-        <div class="series-controls" id="ranking-controls" hidden>
-          <label class="check"><input type="checkbox" id="ranking-national-events"> Solo con experiencia en generales</label>
-        </div>
-        {% endif %}
         <div class="et-wrap">
           <table class="et et-rank" id="ranking-table">
             <caption>{{ ranking|length }} encuestadoras con rating y algún sondeo, de mayor a menor rating. Pulsa en una encuestadora para ver su perfil.</caption>
             <colgroup>
-              <col class="c-f"><col class="c-bar"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-bar"><col class="c-n"><col class="c-bar"><col class="c-n">
+              <col class="c-f"><col class="c-bar"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-bar"><col class="c-n"><col class="c-bar"><col class="c-n">
             </colgroup>
             <thead>
               <tr>
                 {# every header carries its description as tooltip: the same text as «Qué mide cada columna» #}
                 {% for column in ranking_columns %}
-                <th scope="col"{% if loop.first %} class="f l"{% endif %} title="{{ column.text }}">{{ column.label }}</th>
+                <th scope="col"{% if loop.first %} class="f l"{% endif %} title="{{ column.text }}">{{ column.label }}{% if column.sub %}<span class="th-sub">{{ column.sub }}</span>{% endif %}</th>
                 {% endfor %}
               </tr>
             </thead>
@@ -40,12 +32,12 @@
               {% for row in ranking %}
               {% set dev = row.bias_dev_adj|sides(2) %}
               {% set bias = row.error_blocks|sides(8) %}
-              <tr data-national-events="{{ row.num_national_events or 0 }}"{% if loop.index > ranking_shown %} hidden{% endif %}>
+              <tr{% if loop.index > ranking_shown %} hidden{% endif %}>
                 <td class="f l"><a href="{{ pollster_href(row.pollster, row.pollster_id) }}"><b>{{ row.pollster }}</b></a></td>
                 <td class="cell-bar"><i class="fill pos" style="left: 0; width: {{ row.rating|bar(0, 100) }}%"></i><span>{{ row.rating|num(1) }}</span></td>
                 <td>{{ row.quality|num(1) }}</td>
-                <td>{{ row.num_events|int }}</td>
-                <td>{% if row.num_national_events is none %}–{% else %}{{ row.num_national_events }}{% endif %}</td>
+                {# the general elections in brackets: none for old ratings rows without the count #}
+                <td>{{ row.num_events|int }}{% if row.num_national_events is not none %} ({{ row.num_national_events }}){% endif %}</td>
                 <td>{{ row.num_polls|int }}</td>
                 {# the differential grows to the left in green (less bias than the comparable polls) and to the right in red #}
                 <td class="cell-bar cell-diverging"><i class="fill {{ {'neg': 'pos', 'pos': 'neg'}.get(dev.side, 'zero') }}" style="left: {{ dev.left }}%; width: {{ dev.width }}%"></i><span>{{ row.bias_dev_adj|num(1) }}</span></td>
@@ -65,7 +57,7 @@
         {% call m.how() %}
         <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría solo su confianza, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con su confianza (la calidad previa del método), que pesa más cuantas menos elecciones ha sondeado.</p>
         <p>Cuanto más alto, más pesan sus sondeos en el promedio. La barra del rating va de 0 a 100; la del diferencial crece hacia la izquierda en verde (menos sesgo que las encuestadoras comparables) o hacia la derecha en rojo, hasta 2; el fondo del error medio es más rojo cuanto mayor, de 0 a 8 puntos; la del sesgo bloques crece hacia el lado del bloque al que favorece y en su color, hasta 8 puntos de margen; el fondo del rebaño es más rojo cuanto más por debajo de 1 y gris por encima, hasta 2. Cada cabecera explica su columna al pasar el ratón, y todas se explican en «Qué mide cada columna». La tabla enseña las {{ ranking_shown }} primeras; «Cargar más» sigue. Pulsa en una encuestadora para ver su perfil.</p>
-        <p>«Generales» cuenta en cuántas elecciones generales ha publicado sondeos la encuestadora{% if with_national_events %}, y «Solo con experiencia en generales» deja en la tabla las que tienen alguna{% endif %}.</p>
+        <p>En «Elecciones», el número entre paréntesis cuenta cuántas de ellas fueron elecciones generales: «28 (5)» son 28 elecciones con sondeos de la encuestadora, 5 de ellas generales.</p>
         <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
         {% endcall %}
         {% include '_glosario.html' %}

@@ -603,7 +603,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Controls of a chart (view, window, a select): one row on desktop, stacked on phones; the party pills of the
    series charts are a separate legend under them */
 .series-controls { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); }
-.check { display: inline-flex; align-items: center; gap: var(--space-1); font-size: inherit; }
 .series-controls[hidden], .pills[hidden] { display: none; }
 
 /* Pills of multiple selection (coalition calculator, parties of the bullseye): a group of checkboxes drawn like a
@@ -738,6 +737,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et th[aria-sort="descending"] .sort::after { content: " ▾"; }
 .et th[aria-sort="ascending"] .sort::after { content: " ▴"; }
 .et th .pd { display: block; width: 10px; height: 10px; margin: 0 0 3px auto; border-radius: 50%; }
+/* A second, smaller line under a header label: «Elecciones» with «(generales)», the count in brackets in its cells */
+.et th .th-sub { display: block; font-size: 0.85em; text-transform: none; letter-spacing: 0; }
 .et th.l, .et td.l { text-align: left; }
 .et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .et td.f { white-space: normal; }

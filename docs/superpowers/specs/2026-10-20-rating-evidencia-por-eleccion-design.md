@@ -109,7 +109,9 @@ el prior que manda justo cuando hay poca evidencia.
 - **D3. Criterio «Implantación» y rúbrica reorganizada.** La rúbrica pasa a ser: trabajo de campo 0-3, transparencia
   0-3 (0 sin entidad identificable), independencia 0-2 e implantación 0-2 (generales y estándares). La parte de
   generales se calcula a la fecha de cada elección.
-- **D4. Web.** Columna «Generales» y filtro en el ranking de /casas. La tarjeta «Confianza» del perfil, el método
+- **D4. Web.** Columna «Generales» y filtro en el ranking de /casas (enmienda de Luis del 2026-10-20, ya integrada:
+  sin filtro y sin columna aparte; las generales van entre paréntesis en «Elecciones», «28 (5)», con «(generales)»
+  en pequeño bajo la cabecera). La tarjeta «Confianza» del perfil, el método
   (/metodo/rating y la explicación de la rúbrica), el glosario y la API reflejan los cambios.
 - **D5. Backtest antes y después**, sin tocar los ratings de producción ni `backtest/results/`.
 
