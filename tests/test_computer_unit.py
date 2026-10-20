@@ -454,3 +454,58 @@ def test_compute_weights_copies_the_rating_of_the_event_to_each_poll():
     assert np.isnan(out.loc[other, 'rating']) and np.isnan(out.loc[other, 'weight_rating'])  # B has no ratings row
     series = c.series.reset_index().set_index('date')['rating']
     assert series[[pd.Timestamp('2026-10-08'), new, other]].tolist() == pytest.approx([62.76, 62.76, np.nan], nan_ok=True)
+
+
+# --- Calidad previa a la fecha de cada elección ---
+
+def test_prior_quality_is_taken_at_the_date_of_each_target():
+    """D3: la calidad de una elección puntuada solo cuenta las generales anteriores a ella."""
+    c = bare_computer()
+
+    def prior(target):
+        later = pd.isnull(target) or pd.Timestamp(target) > pd.Timestamp('2023-07-24')
+        return pd.DataFrame({
+            'quality': [56. if later else 40.] * 4, 'num_generals': [1 if later else 0] * 4
+        }, index=pd.Index([1, 2, 3, 4], name='pollster_id'))
+
+    out = c.rate_events(
+        pool(ES19), [JULY23, pd.Timestamp('2026-11-29')], {'es': 1.}, c.pollsters, prior=prior
+    ).set_index(['event_date', 'pollster_id'])
+    before, after = out.loc[JULY23], out.loc[pd.Timestamp('2026-11-29')]
+    assert before.loc[3, 'quality'] == pytest.approx(.40) and before.loc[3, 'num_generals'] == 0
+    assert after.loc[3, 'quality'] == pytest.approx(.56) and after.loc[3, 'num_generals'] == 1
+    # C has no evidence: its rating is its prior quality on each date
+    assert before.loc[3, 'rating'] == pytest.approx(before.loc[3, 'quality'])
+    assert after.loc[3, 'rating'] == pytest.approx(after.loc[3, 'quality'])
+
+
+def test_without_prior_the_pollsters_quality_is_used_and_num_generals_is_null():
+    c = bare_computer()
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters)
+    assert out['quality'].eq(.6).all() and out['num_generals'].isnull().all()
+
+
+def test_compute_ratings_builds_the_prior_from_the_general_events(monkeypatch):
+    from mtpy.lib import computer
+
+    c = bare_computer()
+    c.rating_pool = lambda scopes: pool(ES19)
+    monkeypatch.setattr(computer, 'get_next_event_date', lambda scope, date_from=None: None)
+    monkeypatch.setattr(computer, 'load_criteria', lambda: {'scale': {'per_point': 8, 'floor': 5}})
+    monkeypatch.setattr(computer, 'read_quality', lambda criteria: pd.DataFrame({
+        'pollster_id': [1], 'fieldwork': [2], 'transparency': [2], 'independence': [1], 'identity': [1],
+        'standards': [1]}))
+    monkeypatch.setattr(computer, 'get_general_events', lambda: pd.DataFrame({
+        'pollster_id': [1, 1], 'event_date': [pd.Timestamp('2023-07-23'), pd.Timestamp('2019-11-10')]}))
+    seen = {}
+
+    def fake_rate_events(pool_, targets, weights, pollsters, prior=None):
+        seen['prior'] = prior
+        raise RuntimeError('stop')
+
+    c.rate_events = fake_rate_events
+    with pytest.raises(RuntimeError):
+        c.compute_ratings()
+    prior = seen['prior']
+    assert prior(pd.Timestamp('2023-07-23')).loc[1, 'num_generals'] == 1
+    assert prior(pd.NaT).loc[1, 'num_generals'] == 2

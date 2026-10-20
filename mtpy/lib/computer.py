@@ -7,7 +7,7 @@ from scipy.stats import norm
 from tqdm import tqdm
 import warnings
 
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 from typing_extensions import Self
 
 from ..core.app import Core
@@ -24,8 +24,9 @@ from .data import (
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
     get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
     get_herding, save_herding_data,
-    get_scope_parent, get_event_data
+    get_scope_parent, get_event_data, get_general_events
 )
+from .quality import count_generals, load_criteria, prior_quality, read_quality
 from .utils import (
     build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
@@ -1258,7 +1259,9 @@ class Computer(Core):
             3. The mean deviation `d` is shrunk towards 0 according to that standard error, with a normal prior of
                standard deviation `tau = bias_dev_tau`, and `R_aj = Phi(-d / tau)` scales it to the range [0, 1]:
                0.5 for a house in line with the consensus, higher for a house that deviates less.
-            4. The rating mixes the evidence with the prior quality `Q` of the pollster (0 to 1):
+            4. The rating mixes the evidence with the prior quality `Q` of the pollster (0 to 1), the one at the
+               date of the rated event (`quality.prior_quality`: the "implantation" criterion only counts the
+               general elections held before it, saved as `num_generals`):
                `R = (W * R_aj + k * Q) / (W + k)`, with `k = (sigma / tau)^2` (about 1.96 elections). This is the
                prior weight of a hierarchical model: the election-to-election variance of a house over the variance
                between houses.
@@ -1287,7 +1290,7 @@ class Computer(Core):
         """
         columns = ['rating', 'weight_rating']
         rparams = [
-            'quality', 'num_events', 'num_polls', 'num_polls_w', 'num_events_w',
+            'quality', 'num_events', 'num_polls', 'num_polls_w', 'num_events_w', 'num_generals',
             'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias',
             'bias_dev_adj', 'bias_dev_err', 'rating_adj', 'rating', 'weight_rating'
         ]
@@ -1321,7 +1324,19 @@ class Computer(Core):
             next_date = get_next_event_date(self.scope, date_from=own[-1])
             targets.append(pd.to_datetime(next_date) if next_date is not None else pd.NaT)
 
-        dr = self.rate_events(pool, targets, weights, pollsters)
+        # Prior quality of each rated event: the one at its date, which only counts the general elections held
+        # before it (the evaluations and the general elections are read once). It is in the scale of the
+        # catalogue (0 to 100), like `pollsters['quality']`; `pollster_ratings` divides it by 100.
+        criteria = load_criteria()
+        evaluations = read_quality(criteria)
+        general_events = get_general_events()
+
+        def prior(target: pd.Timestamp) -> pd.DataFrame:
+            return prior_quality(
+                pollsters['id'], evaluations, criteria['scale'], count_generals(general_events, target)
+            )
+
+        dr = self.rate_events(pool, targets, weights, pollsters, prior=prior)
 
         if self.verbose > 0:
             print('Process data...')
@@ -1425,7 +1440,8 @@ class Computer(Core):
         pool: pd.DataFrame,
         targets: list[pd.Timestamp],
         rating_weights: dict[str, float],
-        pollsters: pd.DataFrame
+        pollsters: pd.DataFrame,
+        prior: Optional[Callable[[pd.Timestamp], pd.DataFrame]] = None
     ) -> pd.DataFrame:
         """
         Pollster ratings before each event of `targets`: the rating algorithm (`pollster_ratings`) over the
@@ -1443,6 +1459,12 @@ class Computer(Core):
             Weight of the polls of each scope.
         pollsters : pd.DataFrame
             Pollsters to rate (`id`, `name`, `quality`).
+        prior : callable, optional
+            Prior quality at the date of an event: `prior(target)` returns a table by pollster id with
+            `quality` (0 to 100) and `num_generals` (`quality.prior_quality`; `NaT` counts every general
+            election). The prior quality of each rated event is the one at its own date, so it only counts the
+            general elections held before it. Without it, `pollsters['quality']` is used for every event and
+            `num_generals` is null.
 
         Returns
         -------
@@ -1451,7 +1473,7 @@ class Computer(Core):
             internal scale. Events without previous polls are skipped.
         """
         rparams = [
-            'quality', 'num_events', 'num_polls', 'num_polls_w', 'num_events_w',
+            'quality', 'num_events', 'num_polls', 'num_polls_w', 'num_events_w', 'num_generals',
             'error_avg', 'error_blocks', 'error_within', 'bias_avg', 'bias_blocks', 'bias_within', 'bias',
             'bias_dev_adj', 'bias_dev_err', 'rating_adj', 'rating', 'weight_rating'
         ]
@@ -1473,7 +1495,17 @@ class Computer(Core):
 
                 continue
 
-            ratings = self.pollster_ratings(iter_polls, rating_weights=rating_weights, pollsters=pollsters).reset_index()
+            target_pollsters = pollsters
+            if prior is not None:
+                at_date = prior(target)
+                target_pollsters = pollsters.assign(
+                    quality=pollsters['id'].map(at_date['quality']),
+                    num_generals=pollsters['id'].map(at_date['num_generals'])
+                )
+
+            ratings = self.pollster_ratings(
+                iter_polls, rating_weights=rating_weights, pollsters=target_pollsters
+            ).reset_index()
             ratings['event_date'] = pd.to_datetime(target) if not pd.isnull(target) else pd.NaT
             ratings['pollster_id'] = ratings['pollster'].map(pollsters.set_index('name')['id'])
             frames.append(ratings[rkeys + rparams])
@@ -1598,7 +1630,8 @@ class Computer(Core):
             Weight of the polls of each scope (`weight_scope`), when `polls` gathers several scopes (index
             level `event_scope`); 1 for every poll by default.
         pollsters : pd.DataFrame, optional
-            Pollsters to rate (`name`, `quality`); those of the series by default.
+            Pollsters to rate (`name`, `quality` from 0 to 100 and, optionally, `num_generals`, the general
+            elections polled before the date of the quality); those of the series by default.
 
         Returns
         -------
@@ -1616,6 +1649,11 @@ class Computer(Core):
         # Get the quality of each pollster, a scoring value of the pollster's metodology and historical standards
         # It is set to be a number between 0 and 100, the greater this value, the more reliable the pollster
         dr['quality'] = pollsters.set_index('name').quality.astype(float).div(100)
+        # General elections polled before the date of the quality (null when the pollsters do not carry them)
+        if 'num_generals' in pollsters.columns:
+            dr['num_generals'] = pollsters.set_index('name')['num_generals'].astype(float)
+        else:
+            dr['num_generals'] = np.nan
 
         # Get the total number of events concurred and polls published by each pollster (an event is a scope
         # and a date: two regional elections held on the same day count twice)
