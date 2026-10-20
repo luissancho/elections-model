@@ -70,3 +70,18 @@ def test_gradient_follows_the_python_filter():
                  'f.gradient(3, 0, 100, ["#d62728"])', 'f.gradient(3, 0, 100, ["red", "#7f7f7f"])',
                  'f.gradient(3, 0, 100, [])', 'f.gradient(3, 0, 100, "#d62728")'):
         assert run_js(expr) == 'transparent', expr
+
+
+def test_axis_date_names_each_tick_by_what_it_is():
+    """Eje temporal de los promedios: el 1 de enero es el año (en negrita, `{year|…}`), el día 1 de otro mes es el
+    mes y cualquier otro día, día y mes; la primera marca redonda (índice 1: ECharts da el 0 al extremo izquierdo,
+    que no dibuja) lleva siempre el año, para que una ventana corta no se quede sin él."""
+    t = lambda iso: f'new Date("{iso}T00:00:00").getTime()'  # noqa: E731
+    assert run_js(f'f.fmtAxisDate({t("2025-01-01")}, 3)') == '{year|2025}'
+    assert run_js(f'f.fmtAxisDate({t("2025-02-01")}, 3)') == 'feb'
+    assert run_js(f'f.fmtAxisDate({t("2025-10-04")}, 3)') == '4 oct'
+    assert run_js(f'f.fmtAxisDate({t("2026-05-01")}, 1)') == 'may {year|2026}'
+    assert run_js(f'f.fmtAxisDate({t("2026-07-17")}, 1)') == '17 jul {year|2026}'
+    assert run_js(f'f.fmtAxisDate({t("2026-07-05")}, 0)') == '5 jul {year|2026}'
+    assert run_js(f'f.fmtAxisDate({t("2026-01-01")}, 1)') == '{year|2026}'
+    assert run_js(f'f.fmtAxisDate({t("2026-08-01")}, 2)') == 'ago'

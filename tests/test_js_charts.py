@@ -475,3 +475,12 @@ def test_bullseye_highlights_one_point_over_the_others():
     assert option['xAxis']['max'] == 16  # 14 · 1,1 redondeado hacia arriba
     none = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], highlight: {row: {Derecha: null}}})')
     assert not [s for s in none['series'] if s.get('id') == 'highlight']
+
+
+def test_series_time_axis_names_ticks_by_what_they_are():
+    """El eje temporal del promedio no rotula siempre día y mes: cada marca dice lo que es (año, mes o día,
+    `format.fmtAxisDate`), con el año en negrita y sin solaparse."""
+    label = run_js('s.seriesOption(%s).xAxis.axisLabel' % (SERIES_ARGS % "'hidden'"))
+    assert label['color'] == '#5a5f72' and label['fontSize'] == 10.5 and label['hideOverlap'] is True
+    assert label['rich']['year'] == {'color': '#1a1c22', 'fontSize': 10.5, 'fontWeight': 700}
+    assert run_js('base.timeAxisLabel().formatter(new Date("2025-01-01T00:00:00").getTime(), 2)') == '{year|2025}'

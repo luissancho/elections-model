@@ -1,5 +1,7 @@
 // Shared ECharts setup. ECharts is a classic UMD script loaded before the page module.
 
+import {fmtAxisDate} from '../format.js';
+
 const echarts = window.echarts;
 
 /** Whether the reader asked the system for less motion: charts then draw without animation. */
@@ -40,6 +42,22 @@ export function tooltipStyle() {
 /** Style of the labels of the axes: small and muted. */
 export function axisLabelStyle() {
   return {color: THEME.mutedColor, fontSize: 10.5};
+}
+
+/**
+ * Labels of a time axis, whatever the span shown: each tick says what it is (the year, a month or a day,
+ * `fmtAxisDate`), with the year in bold, and labels that would overlap are left out.
+ *
+ * @returns {object} the `axisLabel` of the axis
+ */
+export function timeAxisLabel() {
+  const style = axisLabelStyle();
+  return {
+    ...style,
+    hideOverlap: true,
+    formatter: (value, index) => fmtAxisDate(value, index),
+    rich: {year: {color: THEME.textColor, fontSize: style.fontSize, fontWeight: 700}},
+  };
 }
 
 /** Create (or reuse) the chart of `el`, apply `option` and keep it resized. */

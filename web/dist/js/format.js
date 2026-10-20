@@ -81,6 +81,28 @@ function dayMonth(date) {
   return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
 
+/**
+ * Label of a tick of a time axis, whatever the span shown: ECharts puts the ticks on round boundaries for the
+ * span (years, months or days), and each tick says what it is. 1 January is the year, the 1st of another month
+ * its month, any other day its day and month; the first round tick always carries the year, so a short window
+ * that does not cross a new year still dates itself. ECharts gives index 0 to the left end of the axis (a date
+ * that is not round and is not drawn) and 1 to the first round tick, so both carry it. The year goes in the rich
+ * style `year` (bold).
+ *
+ * @param {number} time timestamp of the tick (local midnight)
+ * @param {number} index position of the tick on the axis (0: its left end; 1: the first round tick)
+ * @returns {string} the label, with `{year|YYYY}` rich text
+ */
+export function fmtAxisDate(time, index) {
+  const date = new Date(time);
+  const year = `{year|${date.getFullYear()}}`;
+  if (date.getMonth() === 0 && date.getDate() === 1) {
+    return year;
+  }
+  const text = date.getDate() === 1 ? MONTHS[date.getMonth()] : dayMonth(date);
+  return index <= 1 ? `${text} ${year}` : text;
+}
+
 /** '2026-10-13' → '13 oct 2026' */
 export function fmtDate(iso) {
   const date = parseDate(iso);

@@ -2,9 +2,9 @@
 // detail of a past election, the official result marked at the election date. The vertical axis follows what is
 // on screen (the window and the parties the legend shows) instead of starting at zero, so the curves keep their
 // shape (Luis, 2026-10-19).
-import {axisLabelStyle, baseOption, mountChart, THEME, tooltipStyle} from './base.js';
+import {axisLabelStyle, baseOption, mountChart, THEME, timeAxisLabel, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
-import {fmtDate, fmtDateShort, fmtPct} from '../format.js';
+import {fmtDate, fmtPct} from '../format.js';
 import {meanTooltipLine, pollTooltipLines, resultTooltipLine} from '../polls-tooltip.js';
 import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
 
@@ -304,7 +304,7 @@ export function seriesOption({
       type: 'time',
       minInterval: DAY_MS,
       axisLine: {lineStyle: {color: THEME.axisColor}},
-      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(isoDay(value))},
+      axisLabel: timeAxisLabel(),
       splitLine: {show: false},
     },
     yAxis: {
