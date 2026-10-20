@@ -5,16 +5,17 @@ import os
 import re
 from datetime import date, datetime
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
-from ..webapi import check_mode, check_run, check_scope, scope_codes, site
-from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short,
-                      fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around)
+from ..webapi import check_mode, check_run, check_scope, scope_codes, settings, site
+from .filters import (_madrid_tz, _parse_datetime, bar_sides, bar_width, delta_badge, delta_text, fmt_date, fmt_date_short, gradient,
+                      fmt_datetime, fmt_int, fmt_num, fmt_pct, fmt_prob, fmt_range, rng_cell, shade, shade_around,
+                      shade_scale)
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 TEMPLATES_DIR = os.path.join(REPO_ROOT, 'web', 'templates')
@@ -29,6 +30,7 @@ PAGES = (
     {'href': '/', 'label': 'Inicio'},
     {'href': '/elecciones', 'label': 'Histórico Errores'},
     {'href': '/casas', 'label': 'Ranking Encuestadoras'},
+    {'href': '/analisis', 'label': 'Análisis'},
     {'href': '/metodo', 'label': 'Método'},
 )
 EVENT_TABS = (
@@ -44,7 +46,7 @@ TABBAR = (
     {'key': 'historico', 'label': 'Histórico', 'icon': 'target'},
     {'key': 'ranking', 'label': 'Ranking', 'icon': 'trophy'},
 )
-# Entry of the tab bar lit by each global page (``PAGES`` href); the method lights none
+# Entry of the tab bar lit by each global page (``PAGES`` href); the method and the Análisis pages light none
 TABBAR_ACTIVE = {'/': 'inicio', '/elecciones': 'historico', '/casas': 'ranking'}
 # Blocks of the hemicycle from left to right (the mirror of ``BLOCK_ORDER`` of ``catalog.js``)
 HEMICYCLE_BLOCKS = ('Izquierda', 'Separatista', 'Regionalista', 'Derecha')
@@ -62,6 +64,9 @@ ROUTES = [
     ('/elecciones/{country:loc}/{scope}/{date}', 'elecciones', 'detail', ['GET']),
     ('/metodo', 'metodo', 'index', ['GET']),
     ('/metodo/{section:str}', 'metodo', 'section', ['GET']),
+    ('/analisis', 'analisis', 'index', ['GET']),
+    # the default alias (``[0-9a-z_\-]+``): ``:str`` is only ``[a-z]+`` and the slugs have hyphens (``voto-cera``)
+    ('/analisis/{study}', 'analisis', 'study', ['GET']),
     ('/{scope}', 'promedios', 'index', ['GET']),
     ('/{scope}/escanos', 'escanos', 'index', ['GET']),
 ]
@@ -85,6 +90,7 @@ MESSAGES = {
     'backtest not published': 'Backtest no publicado.',
     'unknown scope': 'Ámbito desconocido.',
     'section not found': 'Página del método no encontrada.',
+    'study not found': 'Ese análisis no existe o no está publicado.',
 }
 OTHERS_COLOR = '#9e9e9e'
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
@@ -131,7 +137,8 @@ def environment() -> Environment:
     It loads ``TEMPLATES_DIR`` with autoescape on for ``.html``, ``StrictUndefined``, the
     filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime``, ``ink``, ``rng``
     (``ink_color``), ``bar`` (``bar_width``), ``sides`` (``bar_sides``) and ``shade`` (``shade``: the bars and
-    shades of the cells of the ranking) and the globals ``method_href`` (``metodo.method_href``: link to a
+    shades of the cells of the ranking), ``shade_scale`` (``shade_scale``: the green of the sensitivity grids of the
+    studies) and the globals ``method_href`` (``metodo.method_href``: link to a
     subpage of the method, or to the method itself while the subpage has no text) and ``pollster_href``
     (``slugs.pollster_href``: link to the profile of a pollster). Without a booted App the
     environment is built but not cached.
@@ -166,6 +173,8 @@ def environment() -> Environment:
             'sides': bar_sides,
             'shade': shade,
             'shade_around': shade_around,
+            'shade_scale': shade_scale,
+            'gradient': gradient,
             'rng': rng_cell,
             'date_short': fmt_date_short,
             'delta': delta_text,
@@ -659,7 +668,7 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     Parameters
     ----------
     scope : str
-        Scope code.
+        Scope code; the slug of the study for ``kind='study'``.
     part : str
         Part name; ``'meta'`` is the scope route itself in the forecast routes; the table name
         (``'ratings'``...) in the database routes.
@@ -672,10 +681,10 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     kind : str, optional
         ``'forecast'`` (the default), ``'analysis'`` (the houses analysis), ``'data'`` (the
         tables of the database), ``'events'`` (the list of elections of a scope), ``'event'``
-        (a part of a past election, needs ``date``) or ``'backtest'``.
+        (a part of a past election, needs ``date``), ``'backtest'`` or ``'study'`` (a part of a study).
     table : str, optional
-        CSV table of an analysis part (``'events'`` for the herding by cycle) or of the model of
-        an event (``'shares'``, ``'seats'`` or ``'blocks'``).
+        CSV table of an analysis part (``'events'`` for the herding by cycle), of the model of
+        an event (``'shares'``, ``'seats'`` or ``'blocks'``) or of a study part (``'last-seat'``...).
     date : str, optional
         Election date, for ``kind='event'``.
 
@@ -685,8 +694,9 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
         ``'/api/v1/forecast/{scope}[/{mode}]/{part}[?run=...&format=...]'``,
         ``'/api/v1/analysis/{scope}/{part}[?format=...&table=...]'``,
         ``'/api/v1/{part}?scope={scope}[&format=...]'``, ``'/api/v1/events/{scope}[?format=...]'``,
-        ``'/api/v1/events/{scope}/{date}/{part}[?format=...&table=...]'`` or
-        ``'/api/v1/backtest/{scope}/{part}[?format=...]'``.
+        ``'/api/v1/events/{scope}/{date}/{part}[?format=...&table=...]'``,
+        ``'/api/v1/backtest/{scope}/{part}[?format=...]'`` or
+        ``'/api/v1/studies/{scope}/{part}[?format=...&table=...]'``.
     """
     if kind == 'analysis':
         url = '/api/v1/analysis/{}/{}'.format(scope, part)
@@ -700,6 +710,9 @@ def api_url(scope: str, part: str, mode: Optional[str] = None, run: Optional[str
     elif kind == 'backtest':
         url = '/api/v1/backtest/{}/{}'.format(scope, part)
         params = (('format', fmt),)
+    elif kind == 'study':
+        url = '/api/v1/studies/{}/{}'.format(scope, part)
+        params = (('format', fmt), ('table', table))
     elif kind == 'data':
         url = '/api/v1/' + part
         params = (('scope', scope), ('format', fmt))
@@ -744,32 +757,57 @@ class Catalog(dict):
         return {'fullname': name, 'color': OTHERS_COLOR, 'block': None}
 
 
-def catalog(meta: dict) -> Catalog:
+def catalog(meta: dict, parties: Optional[list] = None) -> Catalog:
     """
-    Party catalogue of a run.
+    Party catalogue of a run, completed with the published party catalogue.
 
     Parameters
     ----------
     meta : dict
         Data of the meta part.
+    parties : list of dict, optional
+        Rows of the published catalogue (``parties.json``, ``parties_catalogue``): the parties missing from
+        the run go behind its own, in their order, so a page can colour and name a party the run does not
+        simulate (one of a past election, or a poll column folded into another party).
 
     Returns
     -------
     Catalog
-        Entries from ``meta['parties']``; a missing full name falls back to the name and a
-        missing or malformed colour to ``OTHERS_COLOR``.
+        Entries from ``meta['parties']`` first, then those of ``parties`` not already there; a missing full
+        name falls back to the name and a missing or malformed colour to ``OTHERS_COLOR``.
     """
     entries = Catalog()
 
-    for party in meta.get('parties') or []:
+    for party in list(meta.get('parties') or []) + list(parties or []):
+        name = party['name']
+
+        if name in entries:
+            continue
+
         color = party.get('color')
-        entries[party['name']] = {
-            'fullname': party.get('fullname') or party['name'],
+        entries[name] = {
+            'fullname': party.get('fullname') or name,
             'color': color if isinstance(color, str) and _COLOR_RE.fullmatch(color) else OTHERS_COLOR,
             'block': party.get('block'),
         }
 
     return entries
+
+
+def parties_catalogue() -> list:
+    """
+    Rows of the published party catalogue (``parties.json``, ``publish parties``).
+
+    Returns
+    -------
+    list of dict
+        ``{'id', 'name', 'fullname', 'parent_id', 'color', 'block', 'regional'}`` per party, in the order of the
+        table; empty when the catalogue is not published, so the pages work without it (every party outside the
+        run then gets the grey of the others).
+    """
+    data = bundle_part(site().parties)
+
+    return list((data or {}).get('rows') or [])
 
 
 def hemicycle_order(names: list, parties: Catalog) -> list:
@@ -850,7 +888,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     Returns
     -------
     dict
-        ``site_title``, ``site_tagline``, ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
+        ``site_title``, ``site_tagline``, ``site_host`` (the host of ``settings()['site_url']``, for the signature of the
+        downloadable images), ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
         ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
         on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
@@ -883,6 +922,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     return {
         'site_title': SITE_TITLE,
         'site_tagline': SITE_TAGLINE,
+        'site_host': urlsplit(settings()['site_url']).hostname or '',
         'author_handle': AUTHOR_HANDLE,
         'author_url': AUTHOR_URL,
         'pages': [dict(page, active=page['href'] == active) for page in PAGES],
@@ -898,7 +938,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
         'freeze': freeze,
         'frozen': frozen,
         'meta': meta,
-        'catalog': catalog(meta),
+        'catalog': catalog(meta, parties_catalogue()),
         'title_suffix': title_of(mode, meta, frozen, pinned, run == latest),
         'tabbar': tabbar(scope, active, active_suffix, event, event_query(full) if event else ''),
     }
@@ -912,7 +952,7 @@ def bundle_part(read, *args) -> Optional[dict]:
     ----------
     read : callable
         Reader of the site that returns the bytes of the part envelope (``site().analysis``,
-        ``site().event`` or ``site().backtest``).
+        ``site().event``, ``site().backtest`` or ``site().study``).
     *args
         Arguments of the reader.
 

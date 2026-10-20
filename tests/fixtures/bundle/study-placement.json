@@ -1,0 +1,110 @@
+{
+  "schema": "study-placement@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-19T12:00:00Z",
+  "data": {
+    "sensitive": {
+      "article": {
+        "period": [
+          "2022-01-01",
+          "2023-06-01"
+        ],
+        "countries": {
+          "stock_share": 30.03,
+          "growth_share": 26.7
+        },
+        "all": {
+          "stock_share": 24.1,
+          "growth_share": 17.39
+        }
+      },
+      "now": {
+        "period": [
+          "2025-01-01",
+          "2026-09-01"
+        ],
+        "countries": {
+          "stock_share": 31.0,
+          "growth_share": 27.5
+        },
+        "all": {
+          "stock_share": 25.0,
+          "growth_share": 18.1
+        }
+      }
+    },
+    "acceleration": [
+      {
+        "region_id": 28,
+        "name": "Madrid",
+        "g1": 100,
+        "g2": 200,
+        "ratio": 2.0,
+        "magnitude": 10,
+        "gap": 5.5,
+        "g1_now": 100,
+        "g2_now": 150,
+        "ratio_now": 1.5
+      },
+      {
+        "region_id": 8,
+        "name": "Barcelona",
+        "g1": 200,
+        "g2": 400,
+        "ratio": 2.0,
+        "magnitude": 11,
+        "gap": 5.5,
+        "g1_now": 200,
+        "g2_now": 300,
+        "ratio_now": 1.5
+      },
+      {
+        "region_id": 46,
+        "name": "Valencia",
+        "g1": 300,
+        "g2": 600,
+        "ratio": 2.0,
+        "magnitude": 12,
+        "gap": 5.5,
+        "g1_now": 300,
+        "g2_now": 450,
+        "ratio_now": 1.5
+      }
+    ],
+    "correlations": {
+      "article": {
+        "r_size_growth": 0.8,
+        "r_size_ratio": -0.2,
+        "r_gap_growth": 0.1
+      },
+      "now": {
+        "r_size_growth": 0.82,
+        "r_size_ratio": -0.2,
+        "r_gap_growth": 0.1
+      }
+    },
+    "madrid": [
+      {
+        "label": "Conjunto",
+        "stock_share": 20.0,
+        "share_p1": 18.0,
+        "share_p2": 22.0,
+        "stock_share_now": 21.0,
+        "share_p1_now": 19.0,
+        "share_p2_now": 23.0
+      },
+      {
+        "label": "VENEZUELA",
+        "stock_share": 8.0,
+        "share_p1": null,
+        "share_p2": 9.0,
+        "stock_share_now": 8.5,
+        "share_p1_now": null,
+        "share_p2_now": 9.5
+      }
+    ]
+  }
+}

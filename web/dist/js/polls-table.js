@@ -1,5 +1,7 @@
-// Pure logic of the "Todas las encuestas" table of Promedios: months, filtering, sorting, pagination, simple means
-// and leaders. The page script only reads the controls, calls these functions and writes the DOM.
+// Pure logic of the "Todas las encuestas" table of Promedios and of the detail of a past election: months,
+// filtering, sorting, pagination, simple means, leaders and the rows pinned to the foot. The page script only reads
+// the controls, calls these functions and writes the DOM.
+import {fmtDate, fmtInt} from './format.js';
 
 /** Rows per page. */
 export const PAGE_SIZE = 15;
@@ -145,7 +147,7 @@ export function filterPolls(polls, {pollsters, from, to, mode = 'pct'}) {
  * Sort polls by a column.
  *
  * @param {Array} polls polls to sort, in publication order (not modified)
- * @param {string} key `date`, `pollster`, `sample_size` or a party name
+ * @param {string} key `date`, `pollster`, `rating`, `sample_size` or a party name
  * @param {boolean} asc ascending order
  * @param {string} [mode='pct'] view of the party columns (see `pollValue`)
  * @returns {Array} a sorted copy: missing values last in both directions; ties by date descending and then by
@@ -157,7 +159,7 @@ export function sortPolls(polls, key, asc, mode = 'pct') {
   const byDate = (a, b) => (b.poll.date || '').localeCompare(a.poll.date || '') || b.index - a.index;
   const indexed = polls.map((poll, index) => ({poll, index}));
   const missing = (value) => value === null || value === undefined || value === '';
-  const fixed = ['date', 'pollster', 'sample_size'].includes(key);
+  const fixed = ['date', 'pollster', 'rating', 'sample_size'].includes(key);
   indexed.sort((a, b) => {
     const x = fixed ? a.poll[key] : pollValue(a.poll, key, mode);
     const y = fixed ? b.poll[key] : pollValue(b.poll, key, mode);
@@ -233,4 +235,47 @@ export function leaderOf(values) {
   }
   const top = Math.max(...present.map(([, value]) => value));
   return present.filter(([, value]) => value === top).map(([name]) => name);
+}
+
+/**
+ * Rows pinned under the simple mean of the table of a past election: what the model said at its shortest horizon
+ * and the official result, in the view of the table. They never change with the filters.
+ *
+ * @param {object|null} modelLast `model_last` of the page (`horizon`, `date` (the freeze day), `pct`, `seats`,
+ *   `seats_valid`); null gives no rows
+ * @param {{date: string, values: Object<string, number>}} result the official result (`result` of the page)
+ * @param {Object<string, number>} seats official seats by party name
+ * @param {string[]} parties columns shown
+ * @param {string} [mode='pct'] view: shares, or `esc` for seats (the model's only when its seats are valid)
+ * @returns {Array<{label: string, small: string, title: (string|null), values: object, texts: (object|null)}>}
+ *   the two rows: `values` by party (null when missing) and, in the seats view, `texts` with the whole numbers
+ */
+export function fixedRows(modelLast, result, seats, parties, mode = 'pct') {
+  if (!modelLast) {
+    return [];
+  }
+  const esc = mode === 'esc';
+  const pick = (source) => Object.fromEntries(parties.map((name) => {
+    const value = source ? source[name] : null;
+    return [name, typeof value === 'number' && Number.isFinite(value) ? value : null];
+  }));
+  const texts = (values) => (esc ? Object.fromEntries(parties.map((name) => [name, fmtInt(values[name])])) : null);
+  const model = pick(esc ? (modelLast.seats_valid ? modelLast.seats : null) : modelLast.pct);
+  const official = pick(esc ? seats : (result ? result.values : null));
+  return [
+    {
+      label: 'Promedio de sondeos',
+      small: `modelo · a ${modelLast.horizon} días`,
+      title: `Congelado el ${fmtDate(modelLast.date)}: solo los sondeos publicados hasta entonces`,
+      values: model,
+      texts: texts(model),
+    },
+    {
+      label: 'Resultado',
+      small: result ? fmtDate(result.date) : '',
+      title: null,
+      values: official,
+      texts: texts(official),
+    },
+  ];
 }

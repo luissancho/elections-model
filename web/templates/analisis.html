@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Análisis{% endblock %}
+{% block description %}Preguntas del debate electoral contestadas con datos oficiales, comprobables después de cada elección.{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/common.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+    <div id="content" class="stack">
+      <header id="analisis-head">
+        <h1>Análisis</h1>
+        <p class="lead">Preguntas del debate electoral contestadas con datos oficiales, comprobables después de cada elección</p>
+      </header>
+      {% if studies %}
+      <div class="studies" id="studies">
+        {% for study in studies %}
+        {{ m.study_card(study) }}
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="lead">Todavía no hay ningún análisis publicado.</p>
+      {% endif %}
+    </div>
+{% endblock %}

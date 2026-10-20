@@ -11,14 +11,18 @@ Two layers live here:
 - Orchestration. ``publish_forecast`` runs the model of a scope and writes an immutable run through a
   ``BundleWriter``; ``publish_analysis`` computes the houses analysis of a scope and overwrites it;
   ``publish_backtest`` converts the CSV tables of the model backtest of a scope and overwrites them;
+  ``publish_parties`` writes the party catalogue of the database next to the manifest and overwrites it;
+  ``publish_study`` computes a study (``export_study_*`` exporters) and overwrites it, registering its prediction
+  only when asked;
   ``rebuild_history``, ``update_manifest``, ``point`` and ``unpublish`` move the
   pointers; ``loreg_guard`` and ``resolve_scopes`` decide what may be published. This layer reads and
   writes the bundle, queries the database (``db_stats``, ``next_event_date``, ``resolve_scopes``) and
   runs git for the provenance of each run (``provenance``).
 
-The package has six submodules: ``common`` (constants, provenance, the publication guards and the scope helpers),
-``forecast`` (the exporters of a run and ``publish_forecast``), ``analysis``, ``backtest``, ``events`` and ``pointers``
-(manifest and run pointers). The public names are re-exported here.
+The package has eight submodules: ``common`` (constants, provenance, the publication guards and the scope helpers),
+``forecast`` (the exporters of a run and ``publish_forecast``), ``analysis``, ``backtest``, ``events``, ``parties``
+(the party catalogue of the bundle, ``publish_parties``), ``pointers`` (manifest and run pointers) and ``studies``
+(the studies of the bundle, ``publish_study``). The public names are re-exported here.
 """
 from .analysis import (
     ANALYSIS_EVENTS_COLUMNS, ANALYSIS_HE_COLUMNS, ANALYSIS_HERDING_COLUMNS, ERROR_DATA_COLUMNS,
@@ -37,7 +41,7 @@ from .common import (
 from .events import (
     event_dates_to_publish, EVENT_MODEL_PARTS, EVENT_POLLSTER_COLUMNS, event_summary, export_event_cycle,
     export_event_meta, export_event_model, export_event_polls, export_event_pollsters, export_event_results,
-    publish_event
+    export_event_series, publish_event
 )
 from .forecast import (
     backfill_days, backfill_run_at, backfill_run_id, DEFAULT_CORRECTORS, DISP_COLUMNS, WEIGHTS_COLUMNS, export_dispersion, export_weights,
@@ -47,4 +51,10 @@ from .forecast import (
     MODE_EXPORTERS, n_polls, PCT_COLS, POLL_COLUMNS, PROB_COLS, publish_forecast, publish_mode, SEATS_COLS,
     SUMMARY_COLS
 )
+from .parties import export_parties, PARTIES_COLUMNS, publish_parties
 from .pointers import point, read_manifest, rebuild_history, unpublish, update_manifest
+from .studies import (
+    export_study_census, export_study_check, export_study_meta, export_study_participation, export_study_placement,
+    export_study_prediction, export_study_sensitivity, export_study_vote, publish_study, registered_claim,
+    STUDY_EXPORTERS, STUDY_TITLES, study_sources
+)

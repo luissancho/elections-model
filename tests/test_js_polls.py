@@ -8,9 +8,12 @@ import subprocess
 
 import pytest
 
+from mtpy.lib import pages
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 TOOLTIP_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'polls-tooltip.js').as_uri()
 TABLE_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'polls-table.js').as_uri()
+DOM_JS = pathlib.Path(ROOT, 'web', 'dist', 'js', 'pages', 'polls-dom.js').as_uri()
 POLL = {'date': '2026-10-01', 'name': 'GAD3 / ABC', 'sample_size': None, 'PP': 31.2, 'PSOE': 28.9, 'VOX': 12.0}
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
@@ -58,6 +61,12 @@ TABLE_POLLS = [
 
 def table_js(expr):
     return run_js(expr.replace('POLLS', json.dumps(TABLE_POLLS)))
+
+
+def test_result_tooltip_line_names_the_official_result_and_the_date():
+    line = run_js('s.resultTooltipLine("PP", 33.06, "2023-07-23", "#1d84ce")')
+    assert 'Resultado oficial' in line and '23 jul 2023' in line and '#1d84ce' in line and line.index('<br>') < line.index('PP')
+    assert '33,1' in line
 
 
 def test_months_labels_and_short_dates_of_the_polls_table():
@@ -129,3 +138,42 @@ def test_seats_view_uses_the_pollsters_projections():
     assert run_js('p.sortPolls({}, "PP", false, "esc").map((x) => x.pollster)'.format(js)) == ['40dB', 'GAD3', 'CIS']  # sin escaños, al final
     assert run_js('p.meanOf({}, ["PP", "PSOE"], "esc")'.format(js)) == {'PP': 145, 'PSOE': 100}  # puntos medios, enteros
     assert run_js('p.meanOf({}, ["PP"])'.format(js)) == {'PP': 29.9}
+
+
+def test_fixed_rows_of_the_footer_follow_the_mode_and_the_validity_of_the_seats():
+    last = {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.4, 'PSOE': 31.0}, 'seats': {'PP': 140, 'PSOE': 118}, 'seats_valid': True}
+    result = {'date': '2023-07-23', 'values': {'PP': 33.1, 'PSOE': 31.4}}
+    seats = {'PP': 137, 'PSOE': 121}
+    args = '{}, {}, {}, ["PP", "PSOE", "VOX"]'.format(json.dumps(last), json.dumps(result), json.dumps(seats))
+    rows = run_js('p.fixedRows({})'.format(args))
+    assert rows == [
+        {'label': 'Promedio de sondeos', 'small': 'modelo · a 6 días', 'title': 'Congelado el 17 jul 2023: solo los sondeos publicados hasta entonces',
+         'values': {'PP': 32.4, 'PSOE': 31.0, 'VOX': None}, 'texts': None},
+        {'label': 'Resultado', 'small': '23 jul 2023', 'title': None, 'values': {'PP': 33.1, 'PSOE': 31.4, 'VOX': None}, 'texts': None}]
+    esc = run_js('p.fixedRows({}, "esc")'.format(args))
+    assert esc[0]['values'] == {'PP': 140, 'PSOE': 118, 'VOX': None} and {k: v for k, v in esc[0]['texts'].items() if k != 'VOX'} == {'PP': '140', 'PSOE': '118'}
+    assert esc[1]['values'] == {'PP': 137, 'PSOE': 121, 'VOX': None}
+    invalid = run_js('p.fixedRows({}, "esc")'.format(args.replace('"seats_valid": true', '"seats_valid": false')))
+    assert invalid[0]['values'] == {'PP': None, 'PSOE': None, 'VOX': None}
+    assert run_js('p.fixedRows(null, {}, {}, ["PP"])'.format(json.dumps(result), json.dumps(seats))) == []
+
+
+def test_sort_polls_by_rating_puts_the_unrated_last_in_both_directions():
+    polls = [{'pollster': 'A', 'date': '2026-10-01', 'rating': 60.0}, {'pollster': 'B', 'date': '2026-09-01'},
+             {'pollster': 'C', 'date': '2026-08-01', 'rating': 73.1}]
+    expr = 'p.sortPolls({}, "rating", {}).map(x => x.pollster)'
+    assert run_js(expr.format(json.dumps(polls), 'false')) == ['C', 'A', 'B']
+    assert run_js(expr.format(json.dumps(polls), 'true')) == ['A', 'C', 'B']
+    # the rating is a fixed column: the seats view sorts by it too (a party key would read the seat projections)
+    expr = 'p.sortPolls({}, "rating", false, "esc").map(x => x.pollster)'
+    assert run_js(expr.format(json.dumps(polls))) == ['C', 'A', 'B']
+
+
+def test_polls_dom_fixed_columns_and_rating_colours_follow_the_server():
+    """La tabla que redibuja el navegador lleva la columna del rating entre la encuestadora y la fecha, con los
+    colores del degradado del servidor (`pages.RATING_COLORS`)."""
+    script = 'import * as d from "{}"; console.log(JSON.stringify([d.FIXED_COLUMNS, d.RATING_COLORS]));'.format(DOM_JS)
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    fixed, colors = json.loads(out.stdout)
+    assert fixed == [['pollster', 'Encuestadora'], ['rating', 'Rating (0-100)'], ['date', 'Fecha'], ['sample_size', 'Muestra']]
+    assert colors == list(pages.RATING_COLORS)

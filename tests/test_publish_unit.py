@@ -1,4 +1,5 @@
 """Tests de `mtpy/lib/publish/` sin base de datos: exportadores sobre el Simulator sintético de `tests/fakes.py`."""
+import json
 import math
 import os
 import warnings
@@ -167,6 +168,15 @@ def test_export_series_without_statistics_gives_null_bounds():
     sim.model.fc_stat['VOX'] = None
     data, _ = publish.export_series(sim.model, NAMES)
     assert valid('series', data, mode=None)['lo']['VOX'] == [None] * 35
+
+
+def test_export_series_cuts_at_the_end_given():
+    """`end` corta la serie ese día incluido; un `end` posterior al último día ajustado no cambia nada."""
+    sim = synthetic_simulator()
+    data, frame = publish.export_series(sim.model, NAMES, end='2026-10-03')
+    assert data['dates'][0] == '2026-09-01' and data['dates'][-1] == '2026-10-03' and len(data['dates']) == 33
+    assert frame.shape[0] == 33 * 3 and frame['date'].max() == '2026-10-03'
+    assert publish.export_series(sim.model, NAMES, end=pd.Timestamp('2026-12-31'))[0]['dates'][-1] == '2026-10-05'
 
 
 def test_export_polls_keeps_the_published_figures_and_the_previous_result():
@@ -470,6 +480,23 @@ def test_manifest_merges_scopes_and_freeze(tmp_path):
     bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
 
 
+def test_update_manifest_merges_studies(tmp_path):
+    writer = make_writer(tmp_path)
+    assert publish.read_manifest(writer)['studies'] == {}
+    publish.update_manifest(writer, {'es': {'latest': RUN}})
+    entry = {'published_at': '2026-10-19T12:00:00Z', 'registered_at': None, 'checked': False}
+    data = publish.update_manifest(writer, studies={'voto-cera': entry})
+    assert data['scopes'] == {'es': {'latest': RUN}} and data['studies'] == {'voto-cera': entry}
+    data = publish.update_manifest(writer, studies={'otro': {'checked': True}})
+    assert data['studies'] == {'voto-cera': entry, 'otro': {'checked': True}}
+    bundle.validate('manifest', writer.read_json(bundle.path_manifest()))
+    path = tmp_path / 'site' / 'v1' / 'manifest.json'
+    raw = json.loads(path.read_text())
+    del raw['data']['studies']
+    path.write_text(json.dumps(raw))
+    assert publish.read_manifest(writer)['studies'] == {}
+
+
 def test_loreg_guard_covers_the_national_window_for_every_scope():
     with pytest.raises(publish.PublishRefused, match=r'es-md 2027-05-23: inside the LOREG window \(art\. 69\.7\) of es 2026-11-29'):
         publish.loreg_guard('es-md', '2027-05-23', today='2026-11-25', national='2026-11-29')
@@ -494,7 +521,8 @@ def test_update_manifest_stamps_since_on_activation(tmp_path):
 def test_read_manifest_adds_since_to_an_old_manifest(tmp_path):
     writer = make_writer(tmp_path)
     writer.write_json(bundle.path_manifest(), 'manifest', {
-        'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {}, 'freeze': {'active': True, 'message': 'x'},
+        'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {}, 'studies': {},
+        'freeze': {'active': True, 'message': 'x'},
         'attribution': dict(publish.ATTRIBUTION)}, scope=None)
     assert publish.read_manifest(writer)['freeze'] == {'active': True, 'message': 'x', 'since': None}
 
@@ -929,6 +957,7 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
     model = writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data']
     assert {r['event_date'] for r in model['shares']} == {'2023-07-23'} and model['horizons'] == [6, 30]
     assert bundle.BundleReader(fs).list_events('es') == ['2023-07-23']
+    assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))  # el backtest sintético no trae serie
 
 
 def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
@@ -982,6 +1011,55 @@ def test_publish_event_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, mo
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['generated_at'] == first
 
 
+def write_series_source(folder):
+    """Escribe en `folder` un `series.csv` del backtest: 2023-07-23 a 6 días (tres días, PP y PSOE, un hueco en la banda
+    de PSOE el primer día, decimales de sobra el último) y 2019-11-10 a 30 días (un día)."""
+    rows = [
+        ('2023-07-23', 6, '2023-07-15', 'PP', 32.2, 31.1, 33.3), ('2023-07-23', 6, '2023-07-16', 'PP', 32.3, 31.2, 33.4),
+        ('2023-07-23', 6, '2023-07-17', 'PP', 32.41234, 31.31234, 33.51234),
+        ('2023-07-23', 6, '2023-07-15', 'PSOE', 31.1, None, 32.2), ('2023-07-23', 6, '2023-07-16', 'PSOE', 31.0, 29.9, 32.1),
+        ('2023-07-23', 6, '2023-07-17', 'PSOE', 30.98765, 29.88765, 32.08765),
+        ('2019-11-10', 30, '2019-11-04', 'PP', 20.5, 19.4, 21.6),
+    ]
+    pd.DataFrame(rows, columns=['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi']).to_csv(
+        os.path.join(folder, 'series.csv'), index=False)
+
+
+def test_export_event_series_pivots_the_series_of_the_election(tmp_path):
+    write_series_source(str(tmp_path))
+    data, frame = publish.export_event_series(str(tmp_path), '2023-07-23')
+    assert set(data) == set(bundle.SCHEMAS['event-series']) and data['horizon'] == 6
+    assert data['dates'] == ['2023-07-15', '2023-07-16', '2023-07-17'] and data['parties'] == ['PP', 'PSOE']
+    assert data['mean']['PP'] == [32.2, 32.3, 32.41] and data['lo']['PSOE'] == [None, 29.9, 29.89] and data['hi']['PSOE'][-1] == 32.09
+    assert list(frame.columns) == ['date', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 6 and pd.isna(frame['lo'].iloc[3])
+    assert publish.export_event_series(str(tmp_path), '2015-12-20') == (None, None)
+    assert publish.export_event_series(str(tmp_path / 'none'), '2023-07-23') == (None, None)
+    assert publish.export_event_series(None, '2023-07-23') == (None, None)
+
+
+def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_it(tmp_path):
+    ev = synthetic_event()
+    folder = write_backtest_source(str(tmp_path / 'bt'))
+    write_series_source(folder)
+    fs = RecordingFileSystem(str(tmp_path / 'site'))
+    writer = bundle.BundleWriter(fs)
+    args = dict(computer=FakeComputer(), source=str(tmp_path / 'bt'), prov=fake_prov, **event_readers(ev))
+    out = publish.publish_event('es', '2023-07-23', writer, **args)
+    part = writer.read_json(bundle.path_event('es', '2023-07-23', 'series'))
+    assert out['has_series'] is True and 'series' in out['seconds']
+    assert part['schema'] == 'event-series@1' and part['data']['horizon'] == 6 and part['data']['dates'][-1] == '2023-07-17'
+    assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
+    written = [p for p in fs.written if p.startswith('site/v1/events/es/2023-07-23/')]
+    assert written[-1].endswith('/meta.json')
+    assert written.index(next(p for p in written if p.endswith('/series.json'))) > written.index(next(p for p in written if p.endswith('/model.json')))
+    os.remove(os.path.join(folder, 'series.csv'))
+    out = publish.publish_event('es', '2023-07-23', writer, **args)
+    assert out['has_series'] is False
+    assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))
+    assert not writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']['has_model'] is True
+
+
 def test_event_dates_to_publish():
     ev = synthetic_event()
     assert publish.event_dates_to_publish('es', 'all', events=lambda scope: ev.events, today='2026-10-11') == ['2019-11-10', '2023-07-23']
@@ -1027,7 +1105,7 @@ def test_publish_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
-    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'pointers']
+    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'parties', 'pointers', 'studies']
     for name in names:
         assert inspect.ismodule(getattr(publish, name)), name
     assert publish.loreg_guard.__module__ == 'mtpy.lib.publish.common'
@@ -1035,7 +1113,9 @@ def test_publish_package_layout():
     assert publish.publish_analysis.__module__ == 'mtpy.lib.publish.analysis'
     assert publish.publish_backtest.__module__ == 'mtpy.lib.publish.backtest'
     assert publish.publish_event.__module__ == 'mtpy.lib.publish.events'
+    assert publish.publish_parties.__module__ == 'mtpy.lib.publish.parties'
     assert publish.update_manifest.__module__ == 'mtpy.lib.publish.pointers'
+    assert publish.publish_study.__module__ == 'mtpy.lib.publish.studies'
 
 
 def test_publish_forecast_reports_each_phase_as_it_ends(tmp_path):
@@ -1052,3 +1132,33 @@ def test_publish_forecast_reports_each_phase_as_it_ends(tmp_path):
     assert set(result['seconds']) == {'init', 'fit', 'nowcast', 'forecast', 'export', 'total'}
     exports = dict((s[0], s[1]) for s in steps)
     assert result['seconds']['export'] == round(exports['export-nowcast'] + exports['export'], 1)
+
+
+def test_export_parties_rows_are_plain_and_in_table_order():
+    """Las filas del catálogo salen limpias (enteros, nulos, booleanos) y en el orden de la tabla."""
+    frame = pd.DataFrame({
+        'id': [2, 5, 528], 'name': ['PP', 'SUMAR', 'FA'], 'fullname': ['Partido Popular', 'Sumar', np.nan],
+        'parent_id': [np.nan, np.nan, 5.0], 'color': ['#1d84ce', '#ef4b91', None],
+        'block': pd.Categorical(['Derecha', 'Izquierda', None]), 'regional': [False, False, np.nan],
+    })
+    data = publish.export_parties(frame)
+    env = bundle.envelope('parties', data, None, generated_at='2026-10-19T12:00:00Z')
+    rows = bundle.validate('parties', bundle.jsonable(env))['data']['rows']
+    assert [row['name'] for row in rows] == ['PP', 'SUMAR', 'FA']
+    assert rows[0] == {'id': 2, 'name': 'PP', 'fullname': 'Partido Popular', 'parent_id': None, 'color': '#1d84ce',
+                       'block': 'Derecha', 'regional': False}
+    assert rows[2] == {'id': 528, 'name': 'FA', 'fullname': None, 'parent_id': 5, 'color': None, 'block': None,
+                       'regional': None}
+    assert all(type(row['id']) is int for row in rows) and type(rows[2]['parent_id']) is int
+
+
+def test_publish_parties_writes_the_global_catalogue_without_run(tmp_path):
+    writer = make_writer(tmp_path)
+    frame = pd.DataFrame({'id': [2, 5], 'name': ['PP', 'SUMAR'], 'fullname': ['Partido Popular', 'Sumar'],
+                          'parent_id': [None, None], 'color': ['#1d84ce', '#ef4b91'], 'block': ['Derecha', 'Izquierda'],
+                          'regional': [False, False]})
+    assert publish.publish_parties(writer, parties=lambda: frame) == {'n_parties': 2}
+    assert (tmp_path / 'site' / 'v1' / 'parties.json').exists()
+    env = writer.read_json(bundle.path_parties())
+    assert env['schema'] == 'parties@1' and env['scope'] is None and env['run_id'] is None and env['mode'] is None
+    assert [row['name'] for row in env['data']['rows']] == ['PP', 'SUMAR']

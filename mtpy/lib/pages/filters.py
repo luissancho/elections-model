@@ -13,6 +13,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 MONTHS = ('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic')
 DASH = '–'
 _DATE_RE = re.compile(r'\d{4}-\d{2}-\d{2}')
+# The green of ``--color-ok`` and its lightest and strongest opacities in ``shade_scale``
+SCALE_COLOR = '#16a34a'
+SCALE_ALPHA = (0.08, 0.55)
 
 
 def _is_missing(x) -> bool:
@@ -422,6 +425,33 @@ def shade(x, start, end, color: str, alpha: float = 0.55) -> str:
     return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha * fraction, 3))
 
 
+def shade_scale(x, lo, hi) -> str:
+    """
+    Background of a cell of a sensitivity grid: the green of ``--color-ok`` (``SCALE_COLOR``) growing from ``lo``
+    (the lightest, ``SCALE_ALPHA[0]``) to ``hi`` (the strongest, ``SCALE_ALPHA[1]``), clipped at both ends.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value of the cell.
+    lo, hi : int or float
+        Values of the lightest and the strongest cells; with an empty range every value takes the lightest.
+
+    Returns
+    -------
+    str
+        An ``rgba()`` colour, or ``''`` when ``x`` is missing (the cell goes without a style).
+    """
+    if isinstance(x, bool) or _is_missing(x):
+        return ''
+
+    fraction = _fraction(x, lo, hi) or 0.
+    alpha = SCALE_ALPHA[0] + (SCALE_ALPHA[1] - SCALE_ALPHA[0]) * fraction
+    r, g, b = (int(SCALE_COLOR[i:i + 2], 16) for i in (1, 3, 5))
+
+    return 'rgba({}, {}, {}, {})'.format(r, g, b, round(alpha, 3))
+
+
 def delta_badge(x, digits: int = 0) -> dict:
     """
     Arrow and direction of a difference, for the small badges of the tables and cards: ``▲ 6``, ``▼ 1,0`` or a dash.
@@ -480,6 +510,44 @@ def shade_around(x, centre, span, below: str, above: str, alpha: float = 0.55) -
         return shade(x, centre, centre - span, below, alpha)
 
     return shade(x, centre, centre + span, above, alpha)
+
+
+def gradient(x, start, end, colors) -> str:
+    """
+    Colour of a value on a scale of several stops (the rating badge of the polls tables): ``colors`` are spread
+    evenly from ``start`` to ``end`` and the value takes the mix of the two stops it falls between.
+
+    Parameters
+    ----------
+    x : int or float or None
+        Value to colour.
+    start, end : int or float
+        Values of the first and the last colour; the range may run downwards (``start > end``) and a value
+        outside it takes the colour of the nearest end.
+    colors : sequence of str
+        Two or more hex colours ``#rrggbb``, in order from ``start`` to ``end``.
+
+    Returns
+    -------
+    str
+        A hex colour ``#rrggbb`` (each channel rounded half up, as the mirror of ``format.js`` does), or
+        ``'transparent'`` when ``x`` is missing, the range is empty or there are not two valid colours.
+    """
+    fraction = _fraction(x, start, end)
+    stops = list(colors) if isinstance(colors, (list, tuple)) else []
+
+    valid = all(isinstance(c, str) and re.fullmatch(r'#[0-9A-Fa-f]{6}', c) for c in stops)
+
+    if fraction is None or len(stops) < 2 or not valid:
+        return 'transparent'
+
+    position = fraction * (len(stops) - 1)
+    index = min(int(position), len(stops) - 2)
+    t = position - index
+    lo = [int(stops[index][i:i + 2], 16) for i in (1, 3, 5)]
+    hi = [int(stops[index + 1][i:i + 2], 16) for i in (1, 3, 5)]
+
+    return '#' + ''.join('{:02x}'.format(math.floor(a + (b - a) * t + 0.5)) for a, b in zip(lo, hi))
 
 
 def rng_cell(lo, hi, median, total, majority=None) -> Optional[dict]:

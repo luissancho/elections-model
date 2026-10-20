@@ -41,6 +41,12 @@ class Publish(ScopeReporter, Job):
     ``site-dry/v1/backtest/``. Each scope ends ``published``, ``skipped`` (no results for the scope)
     or ``failed``.
 
+    ``study`` computes a study (today ``voto-cera``, the CERA vote study) and overwrites ``studies/{study}/``
+    (``publish.publish_study``), updating its entry of the manifest. It needs ``study``, has no LOREG guard (it
+    publishes no polls) and registers the prediction of the study only with ``register`` (and a clean tree; ``force``
+    replaces an existing registration). With ``dry_run`` it writes under ``site-dry/v1/``. The study ends
+    ``published``, ``refused`` (``publish.PublishRefused``: the registration was refused) or ``failed``.
+
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
     results and the slice of the model backtest of the election), overwriting them. It needs ``event_date`` (a date,
     a list of dates or ``'all'``: the featured elections of the scope before today), cannot be combined with
@@ -70,6 +76,8 @@ class Publish(ScopeReporter, Job):
         python job.py publish '{"what":["backtest"],"scopes":["es"]}'
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
+        python job.py publish '{"what":["study"],"study":"voto-cera"}'
+        python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
         python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
@@ -81,7 +89,7 @@ class Publish(ScopeReporter, Job):
         RUN_JOB='publish {"what":["forecast"],"scopes":["es"]}'
     """
 
-    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'manifest', 'point', 'unpublish')
+    WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point', 'unpublish')
     verbose = 1
     _collect_warnings = staticmethod(collect_warnings)
     _notes_suffix = staticmethod(notes_suffix)
@@ -90,15 +98,18 @@ class Publish(ScopeReporter, Job):
 
     def run(self, what=('forecast',), scopes=('es',), event_date=None, n_sim=1000, seed=42, drange=6, max_fc=10,
             alpha=0.05, correctors=None, freeze=None, run=None, dry_run=False, force=False, fs=None, today=None,
-            backfill=None, source=None, verbose=1, **kwargs):
+            backfill=None, source=None, study=None, register=False, verbose=1, **kwargs):
         """
         Run the requested publication actions.
 
         Parameters
         ----------
         what : str or list of str, default ('forecast',)
-            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``manifest``,
-            ``point`` and ``unpublish``. They run in that order when several are given.
+            Actions to run, among ``forecast``, ``analysis``, ``event``, ``backtest``, ``study``, ``parties``,
+            ``manifest``, ``point`` and ``unpublish``. They run in that order when several are given. ``parties``
+            writes the party catalogue of the database next to the manifest (``publish.publish_parties``);
+            ``forecast`` and ``analysis`` rewrite it too, once per run of the job, so the pages always colour and
+            name every party.
         scopes : str or list of str, default ('es',)
             Scopes to act on, or ``'all'``.
         event_date : str or list of str, optional
@@ -141,6 +152,11 @@ class Publish(ScopeReporter, Job):
         source : str, optional
             Results folder of ``backtest`` and of the model slice of ``event`` (default ``backtest/results`` of
             the repository).
+        study : str, optional
+            Slug of the study (one of ``bundle.STUDIES``). Required by ``study``.
+        register : bool, default False
+            Register the prediction of the study (``publish.publish_study``); with ``force``, replace an existing
+            registration.
         verbose : int, default 1
             Verbosity of the console output: 0, only the header of the action and the final summary; 1, also
             ``[i/n] scope: empezando``, the result line and the model warnings of each scope as they happen;
@@ -161,7 +177,8 @@ class Publish(ScopeReporter, Job):
         Raises
         ------
         ValueError
-            If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``), ``event`` is
+            If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``, or ``study`` for
+            ``study``), ``event`` is
             combined with ``forecast``, or ``backfill`` is given without ``forecast`` in ``what``, its range is
             invalid or its ``replace`` is not a boolean.
         RuntimeError
@@ -178,6 +195,8 @@ class Publish(ScopeReporter, Job):
             raise ValueError('publish: "run" is required')
         if 'event' in whats and not event_date:
             raise ValueError('publish: "event_date" is required for event')
+        if 'study' in whats and not study:
+            raise ValueError('publish: "study" is required for study')
         if 'event' in whats and 'forecast' in whats:
             raise ValueError('publish: "event" cannot be combined with "forecast"')
         if backfill is not None and 'forecast' not in whats:
@@ -272,6 +291,19 @@ class Publish(ScopeReporter, Job):
                     failures.append('{} ({})'.format(scope, 'backtest'))
                 lines.append(self._backtest_line(scope, result))
                 progress.done(lines[-1])
+
+        if 'study' in whats:
+            progress = self._progress(study, 1, 1)
+            progress.start()
+            result = self._study_scope(study, writer, register, force)
+            results[study] = result
+            if result['status'] == 'failed':
+                failures.append('{} ({})'.format(study, 'study'))
+            lines.append(self._study_line(study, result))
+            progress.done(lines[-1])
+
+        if 'parties' in whats or 'forecast' in whats or 'analysis' in whats:
+            lines.append(self._write_parties(writer, failures))
 
         if 'manifest' in whats:
             if dry_run:
@@ -647,6 +679,38 @@ class Publish(ScopeReporter, Job):
         return {'status': 'published', 'n_cases': out['n_cases'], 'n_events': out['n_events'],
                 'seconds': out['seconds']}
 
+    def _study_scope(self, study, writer, register, force):
+        """
+        Publish a study, converting every outcome into a result dict.
+
+        Parameters
+        ----------
+        study : str
+            Slug of the study.
+        writer : BundleWriter
+            Bundle writer.
+        register : bool
+            Register the prediction of the study.
+        force : bool
+            Replace an existing registration.
+
+        Returns
+        -------
+        dict
+            Result with a ``status``: ``published`` with ``registered_at``, ``checked`` and ``seconds``,
+            ``refused`` for ``publish.PublishRefused`` (a registration refused) and ``failed`` for any other
+            exception, both with a ``reason``.
+        """
+        try:
+            out = publish.publish_study(study, writer, register=register, force=force)
+        except publish.PublishRefused as e:
+            return {'status': 'refused', 'reason': str(e)}
+        except Exception as e:
+            self._log_error(study)
+            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
+        return {'status': 'published', 'registered_at': out['registered_at'], 'checked': out['checked'],
+                'seconds': out['seconds']}
+
     def _pointer_scope(self, action, writer, scope, run):
         """
         Point a scope to a run or remove a run, converting the outcome into a result dict.
@@ -703,6 +767,31 @@ class Publish(ScopeReporter, Job):
             failures.append('manifest')
             return 'manifest: failed ({}: {})'.format(type(e).__name__, e)
 
+    def _write_parties(self, writer, failures):
+        """
+        Write the party catalogue (``publish.publish_parties``), converting an exception into a failure and a
+        summary line.
+
+        Parameters
+        ----------
+        writer : BundleWriter
+            Bundle writer (under the dry-run prefix in a dry run).
+        failures : list of str
+            Failures of the run; ``parties`` is appended when the write fails.
+
+        Returns
+        -------
+        str
+            Summary line of the catalogue.
+        """
+        try:
+            out = publish.publish_parties(writer)
+        except Exception as e:
+            self._log_error('parties')
+            failures.append('parties')
+            return 'parties: failed ({}: {})'.format(type(e).__name__, e)
+        return 'parties: {}'.format(counted(out['n_parties'], 'partido', 'partidos'))
+
     @staticmethod
     def _manifest_line(data):
         """Format the summary line of the manifest data."""
@@ -732,6 +821,16 @@ class Publish(ScopeReporter, Job):
             return '{}: backtest published ({} cases, {} elections) in {:.0f} s'.format(
                 scope, result['n_cases'], result['n_events'], result['seconds']['total'])
         return '{}: backtest {} ({})'.format(scope, result['status'], result['reason'])
+
+    @staticmethod
+    def _study_line(study, result):
+        """Format the summary line of the result of ``study``."""
+        if result['status'] == 'published':
+            registered = result['registered_at']
+            registered = 'registrado el {}'.format(registered) if registered else 'sin registro'
+            return '{}: study published ({}, {}) in {:.0f} s'.format(
+                study, registered, 'comprobado' if result['checked'] else 'sin comprobar', result['seconds']['total'])
+        return '{}: study {} ({})'.format(study, result['status'], result['reason'])
 
     @staticmethod
     def _line(scope, result, run=None):

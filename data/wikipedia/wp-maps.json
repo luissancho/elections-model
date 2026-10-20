@@ -24,7 +24,11 @@
             "Unidos_Podemos"
         ],
         "SUMAR": [
-            "Sumar_(electoral_platform)"
+            "Sumar_(electoral_platform)",
+            "Sumar_(electoral_alliance)"
+        ],
+        "FA": [
+            "Broad_Front_(Spain)"
         ],
         "Cs": [
             "Citizens_(Spanish_political_party)"
@@ -86,7 +90,8 @@
             "Animalist_Party_with_the_Environment"
         ],
         "COMPROMIS": [
-            "Coalici%C3%B3_Comprom%C3%ADs"
+            "Coalici%C3%B3_Comprom%C3%ADs",
+            "Valencian_Front"
         ],
         "IU": [
             "Popular_Unity_(Spain)",

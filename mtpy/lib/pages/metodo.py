@@ -1,8 +1,10 @@
 """
 Method page contexts: the landing page (``/metodo``) and its subpages (``/metodo/{section}``), with the live
 figures of the general election (simulations and backtest coverage), the thresholds of the scopes catalogue, on the
-``promedio`` subpage the live example of the average (the ``weights`` part of the latest national run) and, on the
-``rating`` subpage, the public rubric of the prior quality (``data/pollsters-quality-criteria.json``).
+``promedio`` subpage the live examples of the average (the ``weights`` part of the latest national run) and of the
+house effects (the last poll of one pollster before every analysed election since a date, from the ``poll-errors``
+analyses) and, on the ``rating`` subpage, the public rubric of the prior quality
+(``data/pollsters-quality-criteria.json``).
 """
 from typing import Optional
 
@@ -10,14 +12,23 @@ from ...core.api import HttpError
 from ..quality import criteria_keys, load_criteria, max_points
 from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
-from .common import api_url, common_context, part
+from .casas import election_label
+from .common import analysis_part, api_url, common_context, part
+from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import _is_missing
+from .slugs import PROFILE_PATH, slugify
 
 # Scope whose figures the method texts quote ("en las generales"): the texts have no scope filter.
 NATIONAL_SCOPE = 'es'
 # Keys of a row of the example that the chart needs (the island carries no more).
 ISLAND_ROW_KEYS = ('date', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj', 'weight', 'weight_kernel',
                    'weight_over', 'weight_sample', 'weight_rating')
+# The live example of the house effects: the last poll of this pollster before every analysed election since this
+# date (the CIS from September 2018, when its vote estimate changed), against the result, in these two blocks
+# (``left`` is counted as overestimated, ``right`` as underestimated).
+HOUSE_EXAMPLE = {'pollster': 'CIS', 'since': '2018-09-01', 'left': 'Izquierda', 'right': 'Derecha'}
+# Keys of a row of the house effects example that its bullseye needs, plus the two blocks.
+HOUSE_ROW_KEYS = ('event', 'event_date', 'days', 'scope', 'name')
 # Cross-cutting sections of the landing page, which belong to no question of the method.
 SECTIONS = (
     ('datos', 'Los datos'),
@@ -192,6 +203,79 @@ def weights_example() -> Optional[dict]:
     }
 
 
+def house_effects_example() -> Optional[dict]:
+    """
+    The live example of the house effects: the error of the last poll of the pollster of ``HOUSE_EXAMPLE`` before
+    every analysed election of every scope since its ``since`` date, by block (the rows of the bullseye of its
+    profile), and its effects in the current cycle of ``NATIONAL_SCOPE``.
+
+    Returns
+    -------
+    dict or None
+        ``pollster``, ``since``, ``href`` (its profile), ``blocks`` (the pair of the bullseye axes, the first two
+        of ``error_blocks``), ``left`` and ``right`` (the blocks the text counts, ``HOUSE_EXAMPLE``), ``rows``
+        (its ``history_rows`` since the date, newest first and, on the same date, in catalogue order, each with
+        ``name``, the name of its election, ``election_label``), ``n`` (their number), ``over`` and ``under``
+        (``{block: n}`` for ``left`` and ``right``: the elections in which the poll gave the block more, or less,
+        vote than the result), ``first`` and ``last`` (the dates of the oldest and the newest rows), ``cycle``
+        (``{name: effect}``, the ``cycle`` effect of the parties and blocks of the ``house-effects`` analysis of
+        ``NATIONAL_SCOPE``; ``None`` without one or without a row of the pollster) and ``n_cycle`` (its polls in
+        that cycle, ``None`` without ``cycle``). ``None`` without an analysed scope, when the axes are not the two
+        blocks of the example or when the pollster has no row since the date.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than a 404.
+    """
+    scopes = history_scopes()
+    parts = poll_error_parts(scopes)
+    blocks = error_blocks(scopes, parts)[:2]
+    name, since = HOUSE_EXAMPLE['pollster'], HOUSE_EXAMPLE['since']
+    left, right = HOUSE_EXAMPLE['left'], HOUSE_EXAMPLE['right']
+
+    if not parts or set(blocks) != {left, right}:
+        return None
+
+    events = history_events(scopes)
+    names = {(event['scope'], event['date']): event['name'] for event in events if event.get('name')}
+    scope_names = {scope['code']: scope['name'] for scope in scopes}
+    order = {scope['code']: index for index, scope in enumerate(scopes)}
+    rows = [dict(row, name=election_label(row['scope'], row['event_date'], names, scope_names))
+            for row in history_rows(scopes, events, parts)
+            if row.get('pollster') == name and (row.get('event_date') or '') >= since]
+    rows.sort(key=lambda row: order[row['scope']])
+    rows.sort(key=lambda row: row['event_date'], reverse=True)
+
+    if not rows:
+        return None
+
+    def count(block, sign):
+        """Elections in which the poll erred in the direction of `sign` (1 over, -1 under) in `block`."""
+        return sum(1 for row in rows if row.get(block) is not None and sign * row[block] > 0)
+
+    effects = analysis_part(NATIONAL_SCOPE, 'house-effects') or {}
+    mine = [row for row in effects.get('rows') or [] if row.get('pollster') == name]
+    cycle = {row['name']: row.get('cycle') for row in mine} or None
+
+    return {
+        'pollster': name,
+        'since': since,
+        'href': '{}/{}'.format(PROFILE_PATH, slugify(name)),
+        'blocks': blocks,
+        'left': left,
+        'right': right,
+        'rows': rows,
+        'n': len(rows),
+        'over': {block: count(block, 1) for block in (left, right)},
+        'under': {block: count(block, -1) for block in (left, right)},
+        'first': rows[-1]['event_date'],
+        'last': rows[0]['event_date'],
+        'cycle': cycle,
+        'n_cycle': max(row.get('n_cycle') or 0 for row in mine) if cycle else None,
+    }
+
+
 def metodo_context(state: dict) -> dict:
     """
     Template context of the method landing page.
@@ -272,9 +356,11 @@ def metodo_section_context(state: dict, section: str) -> dict:
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
         ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``promedio`` subpage adds
-        ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part)
-        and, with an example, the ``initial`` island (``state`` and the ``example`` slice the chart draws: ``name``,
-        ``color``, ``date``, ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``).
+        ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
+        ``house_example`` (``house_effects_example``, ``None`` without one) and, with either example, the
+        ``initial`` island (``state``, the ``example`` slice the weights chart draws: ``name``, ``color``, ``date``,
+        ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``; and the ``house`` slice its bullseye
+        draws: ``blocks`` and ``rows`` with ``HOUSE_ROW_KEYS`` plus the blocks).
 
     Raises
     ------
@@ -299,18 +385,25 @@ def metodo_section_context(state: dict, section: str) -> dict:
 
     if section == 'promedio':
         example = weights_example()
+        house = house_effects_example()
         context['example'] = example
         context['example_csv'] = api_url(NATIONAL_SCOPE, 'weights', fmt='csv')
+        context['house_example'] = house
+        initial = {'state': context['state']}
 
         if example is not None:
-            context['initial'] = {
-                'state': context['state'],
-                'example': {
-                    'name': example['name'], 'color': example['color'], 'date': example['date'],
-                    'stats': example['stats'],
-                    'rows': [{key: row.get(key) for key in ISLAND_ROW_KEYS} for row in example['rows']],
-                    'line': example['line'], 'kernel': example['kernel'],
-                },
+            initial['example'] = {
+                'name': example['name'], 'color': example['color'], 'date': example['date'],
+                'stats': example['stats'],
+                'rows': [{key: row.get(key) for key in ISLAND_ROW_KEYS} for row in example['rows']],
+                'line': example['line'], 'kernel': example['kernel'],
             }
+
+        if house is not None:
+            keys = HOUSE_ROW_KEYS + tuple(house['blocks'])
+            initial['house'] = {'blocks': house['blocks'], 'rows': [{key: row.get(key) for key in keys} for row in house['rows']]}
+
+        if len(initial) > 1:
+            context['initial'] = initial
 
     return context

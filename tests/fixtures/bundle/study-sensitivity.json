@@ -1,0 +1,71 @@
+{
+  "schema": "study-sensitivity@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-19T12:00:00Z",
+  "data": {
+    "grid": {
+      "participations": [
+        0.09,
+        0.3
+      ],
+      "left_fracs": [
+        0.5,
+        0.7
+      ],
+      "values": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    "scenarios": [
+      {
+        "census_x": null,
+        "part_x": 0.5,
+        "bias": "empirico",
+        "d_left": 0,
+        "d_right": 0
+      },
+      {
+        "census_x": 2.0,
+        "part_x": 1.0,
+        "bias": 0.9,
+        "d_left": 1,
+        "d_right": -1
+      }
+    ],
+    "placement": {
+      "participations": [
+        0.1,
+        0.5
+      ],
+      "fracs": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "values": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "contrast": 0,
+      "pool": 181032
+    }
+  }
+}

@@ -15,7 +15,8 @@ from mtpy.lib import bundle, publish, webapi
 from tests.fakes import synthetic_event
 from tests.test_api_asgi import call
 from tests.test_webapi_unit import (  # noqa: F401
-    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event
+    ROOT, RUN, clear_queries, fixture_data, use_database, write_analysis, write_backtest, write_bundle, write_event,
+    write_study
 )
 
 
@@ -358,6 +359,52 @@ def test_analysis_parts_and_csv(api, fresh_app, tmp_path):
 ])
 def test_analysis_errors(api, fresh_app, path, query, status, message):
     write_analysis(fresh_app.fs)
+    got, headers, body = call(api, path, query=query)
+    assert got == status and json.loads(body) == {'status': 'error', 'message': message}
+    assert headers['cache-control'] == 'no-store'
+
+
+def test_studies_index_and_parts_and_csv(api, fresh_app, tmp_path):
+    status, headers, body = call(api, '/api/v1/studies/voto-cera/prediction')
+    assert status == 404 and json.loads(body) == {'status': 'error', 'message': 'study not published'}
+    assert headers['cache-control'] == 'no-store'
+    status, headers, body = call(api, '/api/v1/studies')
+    assert status == 200 and json.loads(body) == {'contract': bundle.CONTRACT, 'studies': []}
+    write_study(fresh_app.fs)
+    webapi.site().manifest_cache_clear()
+    status, headers, body = call(api, '/api/v1/studies')
+    body = json.loads(body)
+    meta = fixture_data('study-meta')
+    assert status == 200 and body['contract'] == bundle.CONTRACT
+    assert body['studies'] == [{'study': 'voto-cera', 'title': meta['title'], 'subtitle': meta['subtitle'],
+                                'registered_at': '2026-10-18', 'checked_at': None}]
+    assert headers['cache-control'] == 'public, max-age=60' and headers['access-control-allow-origin'] == '*'
+    status, headers, body = call(api, '/api/v1/studies/voto-cera/prediction')
+    assert status == 200
+    assert body == (tmp_path / 'site' / 'v1' / 'studies' / 'voto-cera' / 'prediction.json').read_bytes()
+    assert headers['cache-control'] == 'public, max-age=60' and headers['access-control-allow-origin'] == '*'
+    assert headers['etag'] == '"{}"'.format(hashlib.md5(body).hexdigest())
+    status, headers, body = call(api, '/api/v1/studies/voto-cera/prediction', query='format=csv')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="voto-cera-last-seat.csv"'
+    assert body.startswith(b'name,value\n') and headers['cache-control'] == 'public, max-age=60'
+    status, headers, body = call(api, '/api/v1/studies/voto-cera/census', query='format=csv&table=census-countries')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="voto-cera-census-countries.csv"'
+    status, headers, body = call(api, '/api/v1/studies/voto-cera/census', query='format=csv')
+    assert headers['content-disposition'] == 'attachment; filename="voto-cera-census-series.csv"'
+    status, headers, body = call(api, '/api/v1/studies/voto-cera/meta')
+    assert status == 200 and json.loads(body)['schema'] == 'study-meta@1'
+
+
+@pytest.mark.parametrize('path, query, status, message', [
+    ('/api/v1/studies/voto-cera/meta', 'format=csv', 404, 'no csv for this part'),
+    ('/api/v1/studies/voto-cera/vote', 'format=csv&table=last-seat', 404, 'no csv for this part'),
+    ('/api/v1/studies/voto-cera/placement', 'format=csv', 404, 'no csv for this part'),
+    ('/api/v1/studies/voto-cera/nope', '', 404, 'unknown part'),
+    ('/api/v1/studies/nope/census', '', 404, 'unknown study'),
+    ('/api/v1/studies/voto-cera/census', 'format=xml', 400, 'invalid format'),
+])
+def test_studies_errors(api, fresh_app, path, query, status, message):
+    write_study(fresh_app.fs)
     got, headers, body = call(api, path, query=query)
     assert got == status and json.loads(body) == {'status': 'error', 'message': message}
     assert headers['cache-control'] == 'no-store'

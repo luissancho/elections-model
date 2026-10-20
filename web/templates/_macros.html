@@ -3,9 +3,18 @@
 
 {#- Open a card: `<section class="card">` with its header (title, optional mode subtitle and the lead, the one or
     two sentences that say what the card shows and where it comes from). `level` is the heading level: 2 for a card
-    of the page, 3 for a card inside a section that already has its own h2. Close it with `card_end()`. -#}
-{% macro card_start(id, title, lead, subtitle=None, classes='', level=2, hidden=False) -%}
-<section class="card{% if classes %} {{ classes }}{% endif %}" id="{{ id }}"{% if hidden %} hidden{% endif %}><header class="card-head"><h{{ level }}>{{ title }}{% if subtitle %} <span class="pill">{{ subtitle|replace('· ', '', 1) }}</span>{% endif %}</h{{ level }}><p class="lead">{{ lead }}</p></header>
+    of the page, 3 for a card inside a section that already has its own h2; `tools`, markup for the top right of
+    the head (`download_button`); `subtitle_class`, a class for the pill of the subtitle (`warn`, `ok`, `bad`).
+    Close it with `card_end()`. -#}
+{% macro card_start(id, title, lead, subtitle=None, classes='', level=2, hidden=False, tools=None, subtitle_class='') -%}
+<section class="card{% if classes %} {{ classes }}{% endif %}" id="{{ id }}"{% if hidden %} hidden{% endif %}><header class="card-head">{% if tools %}<div class="card-tools">{{ tools }}</div>{% endif %}<h{{ level }}>{{ title }}{% if subtitle %} <span class="pill{% if subtitle_class %} {{ subtitle_class }}{% endif %}">{{ subtitle|replace('· ', '', 1) }}</span>{% endif %}</h{{ level }}><p class="lead">{{ lead }}</p></header>
+{%- endmacro %}
+
+{#- A tool of a card head: the button that downloads the chart of the card as a signed PNG. Hidden without JS
+    (`share.js` reveals and wires it); the texts of the image (title, subtitle and signature) and the file name
+    travel in its data attributes. -#}
+{% macro download_button(id, title, subtitle, sign, file) -%}
+<button type="button" class="tool-btn" id="{{ id }}" hidden data-title="{{ title }}" data-subtitle="{{ subtitle }}" data-sign="{{ sign }}" data-file="{{ file }}"><svg aria-hidden="true"><use href="#i-download"/></svg>Descargar</button>
 {%- endmacro %}
 
 {% macro card_end() -%}
@@ -52,4 +61,13 @@
   <div class="kpi"><div class="l">{{ kpi.label }}</div><div class="v"{% if kpi.color %} style="color: {{ kpi.color }}"{% endif %}>{{ kpi.value }}<small>{{ kpi.unit }}</small></div>{% if kpi.support is defined and kpi.support %}<div class="s{% if kpi.ok %} ok{% endif %}">{{ kpi.support }}</div>{% endif %}</div>
   {% endfor %}
 </div>
+{%- endmacro %}
+{#- Card of a published study (`study_cards`), the same in the band of the home and in the index of the Análisis:
+    title, subtitle and the button to the study, inside a `.studies` grid (two per row on desktop). -#}
+{% macro study_card(study) -%}
+<article class="card study-card">
+  <h3>{{ study.title }}</h3>
+  <p class="lead">{{ study.subtitle }}</p>
+  <a class="btn pri" href="{{ study.href }}">Ver el análisis completo →</a>
+</article>
 {%- endmacro %}

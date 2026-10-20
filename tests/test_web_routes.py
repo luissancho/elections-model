@@ -143,6 +143,8 @@ def test_fixed_page_routes_win_over_the_scope_route():
     assert page_target('/elecciones') == ('elecciones', 'index')
     assert page_target('/metodo') == ('metodo', 'index')
     assert page_target('/metodo/backtest') == ('metodo', 'section')
+    assert page_target('/analisis') == ('analisis', 'index')
+    assert page_target('/analisis/voto-cera') == ('analisis', 'study')  # the slug has a hyphen
     assert page_target('/es') == ('promedios', 'index')
     assert page_target('/es-md/escanos') == ('escanos', 'index')
     assert page_target('/ES') is None and page_target('/es/') is None and page_target('/es//escanos') is None

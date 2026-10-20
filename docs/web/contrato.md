@@ -15,6 +15,7 @@ producción). Los ensayos (`dry_run`) escriben bajo `site-dry/v1/` con la misma 
 ```
 site/v1/
     manifest.json                               último run de cada ámbito
+    parties.json                                catálogo de partidos de la base (enmienda 2026-10-19; ver "Catálogo de partidos")
     analysis/{scope}/                           análisis de casas (enmienda 2026-10-10; ver "Análisis")
         meta.json house-effects.json herding.json poll-errors.json error-data.json
         csv/ house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
@@ -350,6 +351,7 @@ republica):
 | `cycle` | `event-cycle@1` | `parties`, `columns`, `polls` |
 | `results` | `event-results@1` | `n_seats`, `rows` |
 | `model` | `event-model@1` | `horizons`, `shares`, `seats`, `blocks` |
+| `series` | `event-series@1` | `horizon`, `dates`, `parties`, `mean`, `lo`, `hi` |
 
 - `meta.summary`: `n_polls`, `n_pollsters`, `error_avg`, `error_blocks`, `bias_blocks` (medias de los sondeos ponderadas
   por `weight`, 2 decimales) y `bias` = `{bloque: media ponderada de su desviación con signo}` (positivo: los
@@ -373,11 +375,81 @@ republica):
 - `model` es el **corte del backtest** (ver "Backtest") a esta elección: `shares`, `seats` y `blocks` son las filas
   (`{columna: valor}`, mismos redondeos) de `shares.csv`, `seats.csv` y `blocks.csv` con ese `event_date`, y
   `horizons` los horizontes que aparecen, ascendentes. Sin backtest, las tres listas y `horizons` van vacías.
+- `series` es la serie diaria del promedio del modelo del horizonte más corto del backtest (`series.csv` de
+  `backtest/results`, normalmente a 6 días), hasta el día en que se congeló el modelo: `horizon` y, con la forma de la
+  parte `series` de un run, `dates`, `parties`, `mean`, `lo` y `hi` (2 decimales, `null` en los huecos de la banda).
+  Solo existe si el backtest guardó la serie: una elección puede tener `model` y no `series` (la publicada antes de
+  2026-10-19, o con un backtest anterior), y entonces su detalle avisa en lugar de dibujar la curva.
 
 `meta.json` se escribe el último: una elección sin él está incompleta. Los CSV (`csv/{nombre}.csv`) son los gemelos de
-`pollsters`, `polls`, `cycle` y `results` y los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
-que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están);
-`meta` no tiene gemelo.
+`pollsters`, `polls`, `cycle` y `results`, los tres cortes del modelo (`model-shares`, `model-seats`, `model-blocks`, solo los
+que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` de las tablas que ya no están) y
+`series` (formato largo `date`, `name`, `mean`, `lo`, `hi`; al republicar sin serie se borran `series.json` y
+`series.csv`); `meta` no tiene gemelo.
+
+## Estudios
+
+Enmienda 2026-10-19 (estudio del voto CERA). Un estudio vive en `studies/{study}/` (en `site/v1/`, o en `site-dry/v1/` con
+`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay uno: `voto-cera`.
+Como el análisis, **se sobrescribe** en cada publicación: sin `run_id` y fuera de `history.json`. Su única huella en
+el manifest es su entrada en `manifest.studies` (ver «Punteros»).
+
+```
+studies/{study}/{parte}.json
+studies/{study}/csv/{nombre}.csv
+```
+
+La fuente de verdad en código es `bundle.STUDIES`, `STUDY_PARTS`, `STUDY_SCHEMAS`, `STUDY_CSV`, `STUDY_CSV_OF`
+(`path_study`, `path_study_csv`, `BundleReader.study_exists`) y `publish.publish_study`.
+
+Mismo sobre que el resto, con `scope` y `run_id` a `null` (y `mode` a `null`) y `schema` `study-{parte}@1`. Ocho partes:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `study-meta@1` | `study`, `title`, `subtitle`, `election` (dict), `registered_at`, `registered_commit`, `registered` (dict o `null`), `registered_changed_at`, `checked_at`, `params` (dict), `sources` (lista), `series_last`, `regression` (dict), `commit`, `dirty`, `versions` (dict), `seconds` (dict) |
+| `census` | `study-census@1` | `series` (dict), `marks`, `periods` (dict), `provinces`, `countries`, `origins`, `exposure`, `election_provinces`, `election_countries` |
+| `participation` | `study-participation@1` | `origin`, `generales`, `autonomicas` |
+| `vote` | `study-vote@1` | `processes`, `ratios`, `ecological` (dict) |
+| `placement` | `study-placement@1` | `sensitive` (dict), `acceleration`, `correlations` (dict), `madrid` |
+| `prediction` | `study-prediction@1` | `scenarios` (dict), `last_seat`, `report` (dict) |
+| `sensitivity` | `study-sensitivity@1` | `grid` (dict), `scenarios`, `placement` (dict) |
+| `check` | `study-check@1` | `elections`, `rows`, `verdict` (texto o `null`) |
+
+Los valores sin tipo son listas. `registered_at`, `registered_commit`, `registered_changed_at`, `checked_at` y `commit`
+son texto o `null`.
+
+Gemelos CSV (`studies/{study}/csv/{nombre}.csv`); el primero de cada parte es el CSV por defecto:
+
+| Parte | CSV |
+|---|---|
+| `census` | `census-series`, `census-provinces`, `census-countries` |
+| `participation` | `participation` |
+| `vote` | `vote`, `ecological` |
+| `prediction` | `last-seat` |
+| `sensitivity` | `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` |
+| `check` | `check` |
+
+`meta`, `placement` no tienen gemelo. `meta.json` se escribe **el último**: un estudio sin él cuenta como «no
+publicado» (`study_exists` es falso y la API da 404 `study not published`), de modo que una publicación a medias
+nunca se ve.
+
+## Catálogo de partidos
+
+Enmienda 2026-10-19. `parties.json` vive junto al manifest (en `site/v1/`, o en `site-dry/v1/` con `dry_run`) y lo
+escribe `publish.publish_parties` (acción `parties` del job `publish`; `forecast` y `analysis` lo reescriben también,
+una vez por ejecución). Como el análisis, **se sobrescribe** en cada publicación: sin `scope`, sin `run_id` y fuera
+de `history.json` y del manifest. Es la tabla `elections.parties` completa, en su orden.
+
+Mismo sobre que el resto, con `scope`, `run_id` y `mode` a `null` y `schema` `parties@1`. `data` tiene una clave:
+
+| Clave | Contenido |
+|---|---|
+| `rows` | Una fila por partido: `id` (entero), `name`, `fullname` (texto o `null`), `parent_id` (entero o `null`), `color` (texto o `null`), `block` (texto o `null`) y `regional` (booleano o `null`) |
+
+Las páginas lo leen (`webapi.Site.parties`, caché TTL como el análisis) para completar el catálogo del run
+(`meta.parties`): un partido que el run no simula (uno de una elección pasada, o una columna de sondeo que se pliega
+en otro partido) toma de aquí su color, su nombre completo y su bloque; sin el fichero, esos partidos salen con el
+gris de «otros», como antes de la enmienda. No tiene ruta en la API.
 
 ## Punteros
 
@@ -400,6 +472,9 @@ posteriores a esa hora y, por tanto, normalmente al principio de la lista.
 - `contract` (1) y `updated_at` (instante de la última escritura).
 - `scopes`: `{ámbito: entrada}`, con la entrada `{latest, run_at, event_date, as_of, date_last, n_polls}`
   (el `run_id` publicado y los datos de su `headline`). Un ámbito fallido conserva su entrada anterior.
+- `studies`: `{estudio: {published_at, registered_at, checked}}` (instante de publicación, instante del registro
+  previo del estudio y si pasó la comprobación); `{}` si no hay ninguno, y un manifest anterior sin la clave se lee
+  con `{}`.
 - `freeze`: `{active, message, since}`; interruptor editorial que fija el job con `what: ["manifest"]`. `since`
   es la fecha ISO (Europe/Madrid) en que pasó de inactivo a activo, se conserva mientras siga activo y es `null`
   al desactivarlo; un manifest anterior sin la clave se lee con `since: null`.
@@ -587,7 +662,7 @@ Solo `GET`. `events/{scope}` cruza la base de datos con el paquete; las otras do
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/events/{scope}` | | `{contract, scope, rows}`; cada fila `{date, name, featured, has_page}`, por fecha ascendente | `events-{scope}.csv` |
-| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `cycle`, `results`, `model`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `cycle`, `results`, `model-shares`, `model-seats`, `model-blocks` |
+| `/api/v1/events/{scope}/{date}/{part}` | `part` ∈ `meta`, `pollsters`, `polls`, `cycle`, `results`, `model`, `series`; `table` ∈ `shares`, `seats`, `blocks` (obligatoria en el CSV de `model`) | el fichero de la elección tal cual (sobre completo) | `{scope}-{date}-{nombre}.csv`, con `nombre` ∈ `pollsters`, `polls`, `cycle`, `results`, `model-shares`, `model-seats`, `model-blocks`, `series` |
 | `/api/v1/backtest/{scope}/{part}` | `part` ∈ `meta`, `metrics`, `by-horizon`, `blocks`, `shares`, `seats` | el fichero del backtest tal cual (sobre completo) | `{scope}-backtest-{nombre}.csv`, con `nombre` ∈ `metrics`, `by-horizon`, `blocks`, `shares`, `seats` |
 
 - `events/{scope}` lee la tabla de elecciones de la base (caché de consultas de 60 s) y marca `has_page` con las
@@ -611,3 +686,25 @@ Errores nuevos (mismo cuerpo `{"status":"error","message":"..."}` y `Cache-Contr
 
 `invalid scope`, `invalid date`, `invalid format`, `unknown part`, `no database configured` y `no file system
 configured` valen también aquí.
+
+## Rutas de estudios
+
+Solo `GET`. Sirven los ficheros publicados de cada estudio (controlador `Studies`, `site/v1/studies/{study}/`),
+sin base de datos. Respuestas con `Cache-Control: public, max-age=60` y `ETag`; nunca inmutables, porque se
+sobrescriben en cada publicación.
+
+| Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
+|---|---|---|---|
+| `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`; `part` ∈ `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check` |
+
+- `meta` y `placement` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
+  no pertenece a la parte.
+- Un estudio está publicado cuando tiene `meta.json`; `studies` lista solo los publicados.
+
+| Estado | `message` | Causa |
+|---|---|---|
+| 404 | `unknown study` | `study` no es un estudio conocido |
+| 404 | `study not published` | el fichero pedido no está publicado |
+
+`unknown part`, `no csv for this part` e `invalid format` valen también aquí.

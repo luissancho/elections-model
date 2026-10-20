@@ -147,6 +147,31 @@ export function shadeAround(x, centre, span, below, above, alpha = 0.55) {
 }
 
 /**
+ * Colour of a value on a scale of several stops, the mirror of `gradient` of `pages/filters.py`: the colours are
+ * spread evenly from `start` to `end` and the value takes the mix of the two it falls between (clipped to the ends).
+ *
+ * @param {(number|null|undefined)} x value to colour
+ * @param {number} start value of the first colour
+ * @param {number} end value of the last colour (the range may run downwards)
+ * @param {string[]} colors two or more `#rrggbb` colours, from `start` to `end`
+ * @returns {string} a `#rrggbb` colour (each channel rounded half up), or `transparent` when the value is missing,
+ *   the range is empty or there are not two valid colours
+ */
+export function gradient(x, start, end, colors) {
+  if (isMissing(x) || !Number.isFinite(x) || !Number.isFinite(start) || !Number.isFinite(end) || start === end
+      || !Array.isArray(colors) || colors.length < 2
+      || !colors.every((color) => typeof color === 'string' && HEX_COLOR.test(color))) {
+    return 'transparent';
+  }
+  const position = Math.min(1, Math.max(0, (x - start) / (end - start))) * (colors.length - 1);
+  const index = Math.min(Math.floor(position), colors.length - 2);
+  const t = position - index;
+  const channels = (color) => [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  const [lo, hi] = [channels(colors[index]), channels(colors[index + 1])];
+  return `#${lo.map((a, i) => Math.floor(a + (hi[i] - a) * t + 0.5).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
  * Arrow and magnitude of a difference against the last election, the mirror of `delta_badge` of `pages/filters.py`:
  * '▲ 6', '▼ 1,0', or the dash when the magnitude rounds to zero or the value is missing.
  *

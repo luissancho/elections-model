@@ -1,0 +1,16 @@
+{
+  "schema": "parties@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-19T12:00:00Z",
+  "data": {
+    "rows": [
+      {"id": 2, "name": "PP", "fullname": "Partido Popular", "parent_id": null, "color": "#1d84ce", "block": "Derecha", "regional": false},
+      {"id": 3, "name": "PSOE", "fullname": "Partido Socialista Obrero Español", "parent_id": null, "color": "#ef1c27", "block": "Izquierda", "regional": false},
+      {"id": 6, "name": "Cs", "fullname": "Ciudadanos", "parent_id": null, "color": "#eb6109", "block": "Derecha", "regional": false},
+      {"id": 528, "name": "FA", "fullname": "Frente Amplio", "parent_id": 5, "color": "#F03C00", "block": "Izquierda", "regional": false}
+    ]
+  }
+}

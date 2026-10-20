@@ -66,9 +66,17 @@ ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'er
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
-EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model')
+EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
-EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks')
+EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
+STUDIES = ('voto-cera',)
+STUDY_PARTS = ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
+STUDY_SCHEMAS = {part: 'study-' + part for part in STUDY_PARTS}
+STUDY_CSV = ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
+             'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check')
+STUDY_CSV_OF = {'census': ('census-series', 'census-provinces', 'census-countries'),
+                'participation': ('participation',), 'vote': ('vote', 'ecological'), 'prediction': ('last-seat',),
+                'sensitivity': ('sensitivity-grid', 'sensitivity-scenarios', 'placement-grid'), 'check': ('check',)}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -76,8 +84,10 @@ ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
 NULLABLE_STR = (str, type(None))
 NULLABLE_INT = (int, type(None))
 SCHEMAS = {
-    'manifest': {'contract': int, 'updated_at': NULLABLE_STR, 'scopes': dict, 'freeze': dict, 'attribution': dict},
+    'manifest': {'contract': int, 'updated_at': NULLABLE_STR, 'scopes': dict, 'studies': dict, 'freeze': dict,
+                 'attribution': dict},
     'history': {'scope': str, 'runs': list},
+    'parties': {'rows': list},
     'meta': {
         'run_id': str, 'run_at': str, 'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'scope': str,
         'event_date': str, 'as_of': str, 'date_last': str, 'date_fit_last': NULLABLE_STR, 'horizon_max': int,
@@ -119,6 +129,20 @@ SCHEMAS = {
     'event-cycle': {'parties': list, 'columns': list, 'polls': list},
     'event-results': {'n_seats': int, 'rows': list},
     'event-model': {'horizons': list, 'shares': list, 'seats': list, 'blocks': list},
+    'event-series': {'horizon': int, 'dates': list, 'parties': list, 'mean': dict, 'lo': dict, 'hi': dict},
+    'study-meta': {'study': str, 'title': str, 'subtitle': str, 'election': dict, 'registered_at': NULLABLE_STR,
+                   'registered_commit': NULLABLE_STR, 'registered': (dict, type(None)),
+                   'registered_changed_at': NULLABLE_STR, 'checked_at': NULLABLE_STR, 'params': dict, 'sources': list,
+                   'series_last': str, 'regression': dict, 'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict,
+                   'seconds': dict},
+    'study-census': {'series': dict, 'marks': list, 'periods': dict, 'provinces': list, 'countries': list,
+                     'origins': list, 'exposure': list, 'election_provinces': list, 'election_countries': list},
+    'study-participation': {'origin': list, 'generales': list, 'autonomicas': list},
+    'study-vote': {'processes': list, 'ratios': list, 'ecological': dict},
+    'study-placement': {'sensitive': dict, 'acceleration': list, 'correlations': dict, 'madrid': list},
+    'study-prediction': {'scenarios': dict, 'last_seat': list, 'report': dict},
+    'study-sensitivity': {'grid': dict, 'scenarios': list, 'placement': dict},
+    'study-check': {'elections': list, 'rows': list, 'verdict': NULLABLE_STR},
 }
 
 
@@ -297,6 +321,18 @@ def path_manifest() -> str:
     return 'manifest.json'
 
 
+def path_parties() -> str:
+    """
+    Path of the party catalogue, relative to the bundle prefix.
+
+    Returns
+    -------
+    str
+        ``'parties.json'``.
+    """
+    return 'parties.json'
+
+
 def path_runs(scope: str) -> str:
     """
     Path of the folder with the runs of a scope.
@@ -412,6 +448,12 @@ def _check_file(scope: str, name: str, names: tuple, kind: str) -> None:
         raise ValueError(f'unknown {kind} file {name!r} (expected one of {", ".join(names)})')
 
 
+def _check_study(study: str) -> None:
+    """Check the slug of a study path, raising ``ValueError`` if it is not one of ``STUDIES``."""
+    if not isinstance(study, str) or not ROUTE_ALIAS_RE.fullmatch(study) or study not in STUDIES:
+        raise ValueError(f'unknown study {study!r} (expected one of {", ".join(STUDIES)})')
+
+
 def path_analysis(scope: str, part: str) -> str:
     """
     Path of a JSON file of the analysis of a scope.
@@ -462,6 +504,60 @@ def path_analysis_csv(scope: str, name: str) -> str:
     _check_file(scope, name, ANALYSIS_CSV, 'analysis')
 
     return f'analysis/{scope}/csv/{name}.csv'
+
+
+def path_study(study: str, part: str) -> str:
+    """
+    Path of a JSON file of a study.
+
+    Parameters
+    ----------
+    study : str
+        The study slug (one of ``STUDIES``).
+    part : str
+        The file name without extension (one of ``STUDY_PARTS``).
+
+    Returns
+    -------
+    str
+        ``'studies/{study}/{part}.json'``.
+
+    Raises
+    ------
+    ValueError
+        If the study or the part is invalid.
+    """
+    _check_study(study)
+    _check_file(study, part, STUDY_PARTS, 'study')
+
+    return f'studies/{study}/{part}.json'
+
+
+def path_study_csv(study: str, name: str) -> str:
+    """
+    Path of a CSV file of a study.
+
+    Parameters
+    ----------
+    study : str
+        The study slug (one of ``STUDIES``).
+    name : str
+        The file name without extension (one of ``STUDY_CSV``).
+
+    Returns
+    -------
+    str
+        ``'studies/{study}/csv/{name}.csv'``.
+
+    Raises
+    ------
+    ValueError
+        If the study or the name is invalid.
+    """
+    _check_study(study)
+    _check_file(study, name, STUDY_CSV, 'study')
+
+    return f'studies/{study}/csv/{name}.csv'
 
 
 def path_backtest(scope: str, part: str) -> str:
@@ -751,6 +847,27 @@ class BundleReader:
             If the scope is invalid.
         """
         return self.exists(path_analysis(scope, 'meta'))
+
+    def study_exists(self, study: str) -> bool:
+        """
+        Check whether a study is published, which is when it has its ``meta.json``.
+
+        Parameters
+        ----------
+        study : str
+            The study slug (one of ``STUDIES``).
+
+        Returns
+        -------
+        bool
+            ``True`` if ``studies/{study}/meta.json`` exists.
+
+        Raises
+        ------
+        ValueError
+            If the study is invalid.
+        """
+        return self.exists(path_study(study, 'meta'))
 
     def backtest_exists(self, scope: str) -> bool:
         """

@@ -10,7 +10,8 @@ from .. import bundle
 from ..webapi import site
 from .common import OTHERS_COLOR, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
-                      fmt_prob, fmt_range)
+                      fmt_prob, fmt_range, gradient)
+from .slugs import pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
@@ -31,8 +32,9 @@ def _deltas(row: dict, before: Optional[dict]) -> dict:
     Returns
     -------
     dict
-        ``{'prev_pct', 'prev_seats', 'delta_pct', 'delta_seats'}``: a difference is ``None`` when either value is
-        missing; the vote difference keeps two decimals.
+        ``{'prev_pct', 'prev_seats', 'delta_pct', 'delta_seats', 'prev_from'}``: a difference is ``None`` when either
+        value is missing; the vote difference keeps two decimals; ``prev_from`` lists the parties whose results the
+        comparison sums (``inherited_results``), empty when it is the party's own.
     """
     prev_pct = before.get('pct') if before else None
     prev_seats = before.get('seats') if before else None
@@ -43,7 +45,66 @@ def _deltas(row: dict, before: Optional[dict]) -> dict:
         'prev_seats': prev_seats,
         'delta_pct': None if pct is None or prev_pct is None else round(pct - prev_pct, 2),
         'delta_seats': None if seats is None or prev_seats is None else seats - prev_seats,
+        'prev_from': list(before.get('inherited') or []) if before else [],
     }
+
+
+def inherited_results(results: Optional[dict], meta: dict) -> Optional[dict]:
+    """
+    The last results with the lineage of the run's source map: the previous result of a party that absorbs others
+    (``agg`` rules of ``meta.smap`` without a regional restriction, the lineage of its poll average,
+    ``Simulator.poll_blocks``) is its own plus theirs, so that a successor (FA after Sumar) and a coalition (PP with
+    UPN) compare with what those parties obtained. ``sub`` and regional rules do not count, nor a source the run
+    simulates on its own.
+
+    Parameters
+    ----------
+    results : dict or None
+        ``last_results`` of the scope, or ``None`` without a published election.
+    meta : dict
+        Data of the meta part (``parties``, ``smap``).
+
+    Returns
+    -------
+    dict or None
+        A copy of ``results`` whose ``parties`` has, for every party with sources in the results, ``{'seats', 'pct',
+        'inherited'}``: the sums (``None`` when no part has a value, the vote with two decimals) and the parties
+        summed, the party itself first when it had a result; the other entries untouched. ``None`` without results.
+    """
+    if results is None:
+        return None
+
+    parties = dict(results.get('parties') or {})
+    simulated = {party.get('name') for party in meta.get('parties') or []}
+
+    for name, rules in (meta.get('smap') or {}).items():
+        sources = []
+
+        for rule in rules if isinstance(rules, list) else [rules]:
+            if not isinstance(rule, dict) or rule.get('type') != 'agg' or rule.get('regions') is not None:
+                continue
+
+            for source in rule.get('names') or []:
+                if source != name and source not in simulated and source in parties and source not in sources:
+                    sources.append(source)
+
+        if not sources:
+            continue
+
+        members = ([name] if name in parties else []) + sources
+
+        def total(key, digits=None):
+            values = [parties[member].get(key) for member in members]
+            values = [value for value in values if value is not None]
+
+            if not values:
+                return None
+
+            return sum(values) if digits is None else round(sum(values), digits)
+
+        parties[name] = {'seats': total('seats'), 'pct': total('pct', 2), 'inherited': members}
+
+    return results | {'parties': parties}
 
 
 def result_rows(summary: dict, results: Optional[dict] = None) -> list:
@@ -138,6 +199,30 @@ def seat_deltas(summary: dict, meta: dict, parties: Catalog, results: Optional[d
     }
 
 
+# Stops of the rating badge of the polls tables, from 0 to 100: red, grey at 50 and green; mirrored by
+# ``RATING_COLORS`` of ``web/dist/js/pages/polls-dom.js``.
+RATING_COLORS = ('#d62728', '#7f7f7f', '#2ca02c')
+
+
+def poll_href(poll: dict) -> Optional[str]:
+    """
+    Link to the profile of the pollster of a poll.
+
+    Parameters
+    ----------
+    poll : dict
+        Poll record (``pollster``, ``pollster_id``).
+
+    Returns
+    -------
+    str or None
+        ``pollster_href`` of its pollster, or ``None`` without a ``pollster_id``.
+    """
+    pollster_id = poll.get('pollster_id')
+
+    return None if _is_missing(pollster_id) else pollster_href(poll.get('pollster'), int(pollster_id))
+
+
 def poll_name(poll: dict) -> str:
     """
     Name of a poll as the loader builds it: the pollster, plus ``' / '`` and the sponsor when there is one.
@@ -172,19 +257,19 @@ def chart_polls(polls: dict) -> dict:
     -------
     dict
         ``{'parties': list, 'polls': list of dict}`` where each poll keeps ``date``, ``pollster_id``, ``seats``
-        (the pollster's projections, when it has them),
+        (the pollster's projections, when it has them), ``rating`` (the pollster's rating the run used),
         ``pollster``, ``sponsor``, ``start_date``, ``end_date`` and one value per party (the keys it has),
-        plus ``name`` (``poll_name``) and ``sample_size`` (``None`` when missing): the box of each poll of the
-        charts and the table of all the polls are drawn from them.
+        plus ``name`` (``poll_name``), ``sample_size`` (``None`` when missing) and ``href`` (``poll_href``): the
+        box of each poll of the charts and the table of all the polls are drawn from them.
     """
     parties = list(polls.get('parties') or [])
-    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats'] + parties
+    keys = ['date', 'pollster_id', 'pollster', 'sponsor', 'start_date', 'end_date', 'seats', 'rating'] + parties
 
     return {
         'parties': parties,
         'polls': [
             {key: poll.get(key) for key in keys if key in poll}
-            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size')}
+            | {'name': poll_name(poll), 'sample_size': poll.get('sample_size'), 'href': poll_href(poll)}
             for poll in polls.get('polls') or []
         ],
     }
@@ -264,8 +349,8 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
     Parameters
     ----------
     polls : list of dict
-        Polls of the polls part (``date``, ``pollster``, ``sponsor``, ``sample_size``, ``start_date``,
-        ``end_date`` and one percentage per party), in publication order.
+        Polls of the polls part (``date``, ``pollster``, ``pollster_id``, ``rating``, ``sponsor``, ``sample_size``,
+        ``start_date``, ``end_date`` and one percentage per party), in publication order.
     parties : list of str
         Parties to show, in column order.
     colors : dict
@@ -277,9 +362,11 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
     -------
     dict
         ``{'rows', 'mean', 'total'}``: ``total`` is ``len(polls)``; each row of the last ``n`` polls by date
-        (ties keep the later published first) is ``{'pollster', 'sponsor', 'date' (dd/mm/aa), 'fieldwork'
-        (``None`` without fieldwork dates), 'sample', 'cells'}`` with a ``{'value', 'leader', 'color'}`` cell
-        per party (``leader``: the highest of the row, every tied one); ``mean`` is ``{'n', 'cells'}``, the
+        (ties keep the later published first) is ``{'pollster', 'href' (``poll_href``), 'rating' (at one decimal,
+        or the dash), 'rating_color' (``gradient`` over ``RATING_COLORS``, ``None`` without rating), 'sponsor',
+        'date' (dd/mm/aa), 'fieldwork' (``None`` without fieldwork dates), 'sample', 'cells'}`` with a
+        ``{'value', 'leader', 'color'}`` cell per party (``leader``: the highest of the row, every tied one);
+        ``mean`` is ``{'n', 'cells'}``, the
         unweighted mean of all the polls (``n`` is ``total``) at one decimal in the same cells, the figure the
         browser shows before any filter.
     """
@@ -294,8 +381,12 @@ def polls_table(polls: list, parties: list, colors: dict, n: Optional[int] = PAG
             fieldwork = 'Trabajo de campo: {} – {}'.format(fmt_date(start or end), fmt_date(end or start))
 
         values = [poll.get(name) for name in parties]
+        color = gradient(poll.get('rating'), 0, 100, RATING_COLORS)
         rows.append({
             'pollster': poll.get('pollster') or DASH,
+            'href': poll_href(poll),
+            'rating': fmt_num(poll.get('rating'), 1),
+            'rating_color': None if color == 'transparent' else color,
             'sponsor': poll.get('sponsor') or None,
             'date': short_date(poll.get('date')),
             'fieldwork': fieldwork,
@@ -344,9 +435,12 @@ def pollster_options(polls: list) -> list:
     return [{'name': name, 'n': n} for name, n in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
 
 
-def round_series(series: dict, digits: int = 1) -> dict:
+def round_series(series: dict, digits: int = 2) -> dict:
     """
     Series part with the ``mean``, ``lo`` and ``hi`` values rounded, to keep the page light.
+
+    Two decimals by default: with one, the vertical axis of the series chart, which follows the parties shown,
+    drew the average as a staircase of 0.1-point steps once a race filled the height (2026-10-19).
 
     Parameters
     ----------
@@ -516,6 +610,7 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
             'pct': row.get('pct'),
             'delta_seats': deltas['delta_seats'],
             'delta_pct': deltas['delta_pct'],
+            'prev_from': deltas['prev_from'],
         })
 
     return cards
@@ -571,16 +666,18 @@ def promedios_context(state: dict) -> dict:
     dict
         ``common_context`` of an event page plus ``headline`` (the headline of the mode), ``result_rows``
         and ``block_result_rows`` (the tables of results of the summary, with their differences against the last
-        election), ``pct_max`` (the widest vote bar), ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and ``results_date`` (of the last
-        election with results, for the deltas; ``None`` without one), ``lead`` (``lead_strip``), ``table_parties`` (every party of the
+        election), ``n_seats``, ``majority``, ``kpis`` (``kpi_rows``), ``cards`` (``party_cards``), ``results_year`` and ``results_date`` (of the last
+        election with results, for the deltas; ``None`` without one), ``table_parties`` (every party of the
         polls part), ``table`` (``polls_table``, the ``PAGE_SIZE`` most recent polls the server renders),
         ``table_total`` (the polls of the polls part), ``months`` (``poll_months``), ``csv_href``,
         ``pollsters`` (``pollster_options``), ``blocks`` (the names of ``meta.bmaps.blocks``, empty without
         them) and ``initial`` (``state``, ``meta``, ``headline``,
         ``series`` (``round_series``), ``polls`` (``chart_polls``, which also feeds the whole table, filtered,
         sorted and paginated in the browser), ``projection``, ``vote``, ``summary``, ``runs``, ``cards`` (name
-        and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``, for the hemicycle) and ``inks`` (the ink over the colour of every party
-        and block, for the pills of the legend)).
+        and colour of the party cards, for the sparklines), ``deltas`` (``seat_deltas``, for the hemicycle), ``inks`` (the ink over the colour of every party
+        and block, for the pills of the legend) and ``catalog`` (``parties``: the run's parties, those of the polls
+        table and those of the last election, ``chart_parties``, with the entries of the page catalogue; ``bmaps``:
+        those of the run; the browser's ``Catalog``)).
 
     Raises
     ------
@@ -602,21 +699,22 @@ def promedios_context(state: dict) -> dict:
     context['headline'] = current
     summary = part(scope, run, 'summary', mode=mode)
     # imported here: ``elecciones`` imports this module
-    from .elecciones import last_results
+    from .elecciones import chart_parties, last_results
     results = last_results(scope, parties)
-    context['result_rows'] = result_rows(summary, results)
-    context['block_result_rows'] = block_result_rows(summary, meta, parties, results)
-    context['pct_max'] = max((row['pct'] for row in context['result_rows'] if row.get('pct') is not None), default=0)
+    # the deltas follow the lineage of the smap: a successor compares with the parties it absorbs
+    previous = inherited_results(results, meta)
+    context['result_rows'] = result_rows(summary, previous)
+    context['block_result_rows'] = block_result_rows(summary, meta, parties, previous)
     context['n_seats'] = summary.get('n_seats') or meta.get('n_seats')
     context['majority'] = summary.get('majority') or meta.get('majority')
     context['kpis'] = kpi_rows(summary, meta, parties, poll_rows)
-    context['cards'] = party_cards(summary, meta, parties, results)
+    context['cards'] = party_cards(summary, meta, parties, previous)
     context['results_year'] = results['year'] if results else None
     context['results_date'] = results['date'] if results else None
-    context['lead'] = lead_strip(summary.get('parties') or [], context['majority'])
     context['table_parties'] = list(polls.get('parties') or [])
     colors = {name: parties[name]['color'] for name in context['table_parties']}
     context['table'] = polls_table(poll_rows, context['table_parties'], colors)
+    context['fixed_rows'] = []  # only the detail of a past election pins the model and the result to the foot
     context['table_total'] = len(poll_rows)
     context['has_seats'] = any(poll.get('seats') for poll in poll_rows)  # the % de voto / Escaños switch
     context['months'] = poll_months(poll_rows)
@@ -634,7 +732,12 @@ def promedios_context(state: dict) -> dict:
         'summary': summary,
         'runs': bundle.loads(site().history(scope))['data'],
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
-        'deltas': seat_deltas(summary, meta, parties, results),
+        'deltas': seat_deltas(summary, meta, parties, previous),
+        # the browser's catalogue: the run's parties, those of the polls table and those of the last election, with
+        # the colour, name and block of the published catalogue for the ones the run does not simulate
+        'catalog': {'parties': [dict(parties[name], name=name) for name in chart_parties(
+            parties, [party['name'] for party in meta.get('parties') or []], context['table_parties'],
+            list((results or {}).get('parties') or []))], 'bmaps': bmaps},
         # ink of every party and block of the series charts, for the pills of the legend when they are on
         'inks': {**{name: ink_color(parties[name]['color']) for name in series.get('parties') or []},
                  **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},

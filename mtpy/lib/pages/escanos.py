@@ -10,7 +10,7 @@ from ..webapi import check_region, site
 from .common import Catalog, api_url, block_color, common_context, part
 from .elecciones import last_results
 from .filters import DASH, _is_missing, fmt_int, fmt_prob, fmt_range
-from .promedios import seat_deltas
+from .promedios import inherited_results, seat_deltas
 
 CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
@@ -343,10 +343,14 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     current = resolve_region(region_id, districts.get('regions') or [])
     checked = default_coalition(meta, summary, names)
     suffix = context['title_suffix']
-    results = last_results(scope, parties)
+    results = inherited_results(last_results(scope, parties), meta)
     deltas = seat_deltas(summary, meta, parties, results)
+    # whom each party is compared with, for the tooltip of its arrow (``inherited_results``)
+    inherited = {name: entry['inherited'] for name, entry in ((results or {}).get('parties') or {}).items()
+                 if entry.get('inherited')}
 
     context['summary'] = summary
+    context['inherited'] = inherited
     context['party_rows'] = seat_rows(summary.get('parties') or [])
     context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
     context['calculator'] = [

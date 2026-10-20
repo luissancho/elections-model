@@ -56,9 +56,29 @@ def write_analysis(fs, scope='es'):
     return writer
 
 
-def write_event(fs, scope='es', date='2023-07-23', model=True):
-    """Elección pasada publicada a partir de los fixtures: las cinco partes (con `scope` y `event_date`
-    sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`."""
+def write_study(fs, study='voto-cera', meta=None, parts=None):
+    """Estudio publicado a partir de los fixtures: los once gemelos CSV mínimos y las ocho partes (`meta` la última,
+    como `publish`), con `meta` sustituyendo campos del `meta` del fixture y `parts` (`{parte: campos}`) los de las
+    demás partes."""
+    writer = bundle.BundleWriter(fs)
+    for name in bundle.STUDY_CSV:
+        writer.write_csv(bundle.path_study_csv(study, name), pd.DataFrame({'name': [name], 'value': [1.5]}))
+    for part in bundle.STUDY_PARTS[1:] + bundle.STUDY_PARTS[:1]:
+        schema = bundle.STUDY_SCHEMAS[part]
+        data = fixture_data(schema) | (parts or {}).get(part, {})
+        if part == 'meta':
+            data = data | (meta or {})
+        writer.write_json(bundle.path_study(study, part), schema, data, None)
+    return writer
+
+
+
+def write_event(fs, scope='es', date='2023-07-23', model=True, series=None):
+    """Elección pasada publicada a partir de los fixtures: las seis partes (con `scope` y `event_date`
+    sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`. La
+    serie del promedio (`series`, con su CSV) se escribe cuando `series` es verdadero (por defecto, igual que
+    `model`: una elección publicada con backtest la tiene)."""
+    series = model if series is None else series
     writer = bundle.BundleWriter(fs)
     tables = {
         'pollsters': pd.DataFrame({'pollster': ['GAD3'], 'error_avg': [0.99]}),
@@ -69,9 +89,13 @@ def write_event(fs, scope='es', date='2023-07-23', model=True):
     if model:
         tables |= {f'model-{name}': pd.DataFrame({'event_date': [date], 'horizon': [6]})
                    for name in ('shares', 'seats', 'blocks')}
+    if series:
+        tables['series'] = pd.DataFrame({'date': ['2023-07-17'], 'name': ['PP'], 'mean': [32.41]})
     for name, frame in tables.items():
         writer.write_csv(bundle.path_event_csv(scope, date, name), frame)
     for part in bundle.EVENT_PARTS[1:] + bundle.EVENT_PARTS[:1]:  # `meta` el último, como `publish`
+        if part == 'series' and not series:
+            continue
         schema = bundle.EVENT_SCHEMAS[part]
         data = fixture_data(schema)
         if part == 'meta':
@@ -94,6 +118,21 @@ def write_backtest(fs, scope='es', meta=None):
         if part == 'meta':
             data = data | {'scope': scope} | (meta or {})
         writer.write_json(bundle.path_backtest(scope, part), schema, data, scope)
+    return writer
+
+
+PARTIES = pd.DataFrame({
+    'id': [2, 3, 4, 6, 12], 'name': ['PP', 'PSOE', 'VOX', 'Cs', 'CUP'],
+    'fullname': ['Partido Popular', 'Partido Socialista Obrero Español', 'Vox', 'Ciudadanos', "Candidatura d'Unitat Popular"],
+    'parent_id': [None] * 5, 'color': ['#1d84ce', '#ef1c27', '#63be21', '#eb6109', '#ffed00'],
+    'block': ['Derecha', 'Izquierda', 'Derecha', 'Derecha', 'Separatista'], 'regional': [False] * 5,
+})
+
+
+def write_parties(fs, frame=None):
+    """Catálogo de partidos publicado (`parties.json`, junto al manifest) a partir de `PARTIES` o de `frame`."""
+    writer = bundle.BundleWriter(fs)
+    publish.publish_parties(writer, parties=lambda: PARTIES if frame is None else frame)
     return writer
 
 
@@ -602,6 +641,17 @@ def test_site_analysis_reads_the_published_files(site_app):
     assert site.analysis_csv('es', 'herding-events').startswith(b'event_date,pollster,ratio\n')
 
 
+def test_site_parties_reads_the_published_catalogue(site_app):
+    site = webapi.site()
+    with pytest.raises(HttpError) as err:
+        site.parties()
+    assert err.value.status == 404 and err.value.message == 'parties not published'
+    write_parties(site_app.fs)
+    env = bundle.loads(site.parties())
+    assert env['schema'] == 'parties@1' and env['scope'] is None
+    assert [row['name'] for row in env['data']['rows']] == ['PP', 'PSOE', 'VOX', 'Cs', 'CUP']
+
+
 def test_webapi_package_layout():
     """Un submódulo por papel y ninguno tapado por un nombre exportado por el paquete (D1)."""
     import inspect
@@ -626,6 +676,11 @@ def test_site_events_and_backtest_read_the_published_files(site_app):
     assert s.events('es') == ['2019-11-10', '2023-07-23'] and s.events('es-cb') == []
     assert json.loads(s.event('es', '2023-07-23', 'pollsters'))['schema'] == 'event-pollsters@1'
     assert s.event_csv('es', '2023-07-23', 'model-seats').startswith(b'event_date')
+    assert json.loads(s.event('es', '2023-07-23', 'series'))['data']['horizon'] == 6
+    assert s.event_csv('es', '2023-07-23', 'series').startswith(b'date')
+    with pytest.raises(HttpError) as missing:
+        s.event('es', '2019-11-10', 'series')
+    assert missing.value.status == 404 and missing.value.message == 'event not published'
     assert json.loads(s.backtest('es', 'by-horizon'))['data']['rows'][0]['horizon'] == 6
     for call, message in ((lambda: s.event('es', '2020-01-01', 'meta'), 'event not published'),
                           (lambda: s.backtest('es-cb', 'metrics'), 'backtest not published')):

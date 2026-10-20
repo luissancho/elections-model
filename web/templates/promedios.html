@@ -15,7 +15,7 @@
       {% if cards %}
       <div class="pcards" id="pcards">
         {% for card in cards %}
-        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado del {{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado {% if card.prev_from %}de {{ card.prev_from|join(' + ') }} el {% else %}del {% endif %}{{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
         {% endfor %}
       </div>
       {% endif %}
@@ -46,12 +46,18 @@
           bloque suma sus partidos. Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
         </p>
         <p>
+          El eje vertical no empieza en cero: se ajusta a la ventana y a los partidos visibles, así que al ocultar
+          partidos se ven mejor las curvas de los demás.
+        </p>
+        <p>
           La banda dice dónde está el consenso de las encuestadoras, no dónde estará el voto el día de la elección.
         </p>
         {% endcall %}
       {{ m.card_end() }}
       <div class="hemi-grid">
-        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card') }}
+        {{ m.card_start('hemicycle-card', 'Hemiciclo', 'El reparto central de los escaños ' ~ ('si hoy hubiera elecciones' if state.mode == 'nowcast' else 'en la elección') ~ ', dibujado como la cámara.', subtitle, 'hemi-card',
+                        tools=m.download_button('hemicycle-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Hemiciclo · ' ~ title_suffix,
+                                                site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-hemiciclo-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
           {% if block_result_rows %}
           <div class="series-controls">
             <fieldset id="results-view" class="seg" hidden>
@@ -62,9 +68,6 @@
           </div>
           {% endif %}
           <div class="chart hemi" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños previstos por partido"></div>
-          {% if lead %}
-          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}supera la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}{% if lead.p_first is not none %} · P(primero) <b>{{ lead.p_first|prob }}</b>{% endif %}</p>
-          {% endif %}
           {% call m.how() %}
           <p>
             Cada sector es un partido con los escaños del escenario central; la línea marca la mayoría absoluta.
@@ -82,7 +85,6 @@
                 <tr>
                   <th scope="col">Partido</th>
                   <th scope="col">% Voto</th>
-                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
@@ -96,10 +98,10 @@
                 <tr>
                   <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
-                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, pct_max) }}%; background: {{ color }}"></i></span></td>
-                  {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
+                  {% set whom = ('Frente a ' ~ row.prev_from|join(' + ') ~ ' en ' ~ results_year) if row.prev_from else None %}
+                  {% if results_year %}<td>{{ m.badge(row.delta_pct, 1, whom) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
-                  {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
+                  {% if results_year %}<td>{{ m.badge(row.delta_seats, 0, whom) }}</td>{% endif %}
                   <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 </tr>
                 {% endfor %}
@@ -115,7 +117,9 @@
           <p>
             Las columnas «vs {{ results_year }}» comparan con el resultado oficial del {{ results_date|date }}, en puntos
             y en escaños: flecha verde si sube y roja si baja; un guion, sin cambio apreciable o un partido que no
-            concurrió entonces. Las tarjetas de arriba llevan las mismas flechas bajo sus cifras.
+            concurrió entonces. Las tarjetas de arriba llevan las mismas flechas bajo sus cifras. Cuando un partido
+            recoge en el modelo el voto de otro que ya no concurre, la comparación suma lo que obtuvieron ambos
+            entonces; la flecha lo dice al pasar el ratón.
           </p>
           {% endif %}
           {% endcall %}
@@ -128,7 +132,6 @@
                 <tr>
                   <th scope="col">Bloque</th>
                   <th scope="col">% Voto</th>
-                  <th scope="col"><span class="sr-only">Barra del voto</span></th>
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
@@ -136,13 +139,11 @@
                 </tr>
               </thead>
               <tbody>
-                {% set block_max = block_result_rows|map(attribute='pct')|reject('none')|max if block_result_rows else 0%}
                 {% for row in block_result_rows %}
                 {% set r = row.seats_lo|rng(row.seats_hi, row.seats, n_seats, majority) %}
                 <tr>
                   <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
-                  <td><span class="bar"><i style="width: {{ row.pct|bar(0, block_max) }}%; background: {{ row.color }}"></i></span></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
@@ -208,7 +209,8 @@
         {% call m.how() %}
         <p>
           Los puntos son solo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
-          Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos.
+          Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos y el eje vertical se
+          ajusta a lo que queda a la vista.
         </p>
         <p>
           Separarse del promedio no es equivocarse: el acierto de cada encuestadora se mide con los resultados, en el
@@ -222,9 +224,15 @@
         {% include '_polls_table.html' %}
         {% call m.how() %}
         <p>
-          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, la fecha de publicación, la muestra y
-          el voto de cada partido, sin ninguna corrección del modelo. La media simple del pie es la de los sondeos
-          filtrados, todos con el mismo peso: no es el promedio del modelo, que pondera por calidad, muestra y fecha.
+          Cada fila es un sondeo: la encuestadora y el medio o quien lo encargó, su rating, la fecha de publicación,
+          la muestra y el voto de cada partido, sin ninguna corrección del modelo. La media simple del pie es la de
+          los sondeos filtrados, todos con el mismo peso: no es el promedio del modelo, que pondera por calidad,
+          muestra y fecha.
+        </p>
+        <p>
+          El rating (0-100) es la nota de la encuestadora al calcular este promedio, la misma en todos sus sondeos
+          del ciclo: cuanto más alto, más pesan. El color va del rojo (0) al verde (100) pasando por el gris (50);
+          «—», sin rating. Pulsa en la encuestadora para ver su perfil, con el camino de su rating.
         </p>
         <p>
           En la vista Escaños solo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra

@@ -4,7 +4,7 @@ Batch load of the regional elections (scopes `es-*`) from the English Wikipedia:
 polls, results, computed series and ratings.
 
 Usage (from the repository root):
-    python load/run_load.py --scopes es-md es-cl | all --what urls polls results compute ratings
+    python load/run_load.py --scopes es-md es-cl | all --what urls polls results compute ratings cera
                             [--since 2009] [--save] [--overwrite] [--refresh] [--cached]
 
 Without `--save` nothing is written to the database (dry run): the report lists, per scope and event, what
@@ -12,6 +12,10 @@ was read and the parties, pollsters and sponsors that are not mapped yet in `dat
 The report is saved to `files/stage/load_report.csv` and the downloaded articles are cached in
 `files/stage/wikipedia/`. A dry run reads the cache (the curation of aliases is iterative); with `--save` the
 articles are downloaded again unless `--cached` is given. Only regional scopes are accepted.
+
+The `cera` step does not load scopes: it downloads the INE census workbook of the current year, and the election
+tables that are not there yet, into `data/cera/ine/` (the files are written even without `--save`). It ignores
+`--scopes`, so `--scopes es --what cera` is enough.
 """
 import argparse
 import json
@@ -30,7 +34,7 @@ sys.path.insert(0, ROOT)
 
 WIKI = 'https://en.wikipedia.org/wiki/'
 URLS = os.path.join(ROOT, 'data', 'wikipedia', 'wp-urls.json')
-STEPS = ['urls', 'polls', 'results', 'compute', 'ratings']
+STEPS = ['urls', 'polls', 'results', 'compute', 'ratings', 'cera']
 
 
 def cache_dir() -> str:
@@ -400,6 +404,18 @@ def main() -> None:
 
     from mtpy import mtpy
     app = mtpy.run()
+
+    if 'cera' in args.what:
+        from datetime import date
+
+        from load.cera import fetch_cera
+
+        result = fetch_cera(app.data, date.today().year)
+        print('Written: {}'.format(', '.join(result['files'])))
+        print('New months: {}'.format(', '.join(result['months_new']) or 'none'))
+        args.what = [step for step in args.what if step != 'cera']
+        if len(args.what) == 0:
+            return
 
     from mtpy.lib.data import get_scopes
 

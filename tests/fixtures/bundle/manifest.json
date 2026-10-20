@@ -18,6 +18,7 @@
         "n_polls": 120
       }
     },
+    "studies": {},
     "freeze": {
       "active": false,
       "message": null

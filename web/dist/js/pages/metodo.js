@@ -1,7 +1,10 @@
 // Method pages: the controls; on the backtest subpage, the vote error, the coverage and the seat error of the
-// backtest by horizon; on the average subpage, the live example of the weights of the polls (`charts/weights.js`),
-// all drawn from the data embedded by the server. The landing page has no data and draws nothing.
+// backtest by horizon; on the average subpage, the live examples: the weights of the polls (`charts/weights.js`)
+// and the bullseye of the last polls of one house before every election since a date (`charts/bullseye.js`), all
+// drawn from the data embedded by the server. The landing page has no data and draws nothing.
 import {fmtNum} from '../format.js';
+import {THEME} from '../charts/base.js';
+import {renderBullseye} from '../charts/bullseye.js';
 import {renderLines} from '../charts/line.js';
 import {renderWeights} from '../charts/weights.js';
 import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
@@ -14,6 +17,12 @@ const NAMES = {model: 'Modelo', last_poll: 'Último sondeo', mean_4w: 'Media de 
 const COVERAGE_LEVELS = ['50', '80', '95'];
 // The horizon run (mode Elección) of the seat error: its own colour, dashed.
 const ELECTION_COLOR = '#7f3c8d';
+// The bullseye of the house effects example, as the one of a profile (`casas.js`): general elections in the
+// accent and over the regional ones, which take a contrasting tone; every point labelled with its election.
+const NATIONAL_SCOPE = 'es';
+const KIND_GENERAL = 'Generales';
+const KIND_REGIONAL = 'Autonómicas';
+const REGIONAL_COLOR = '#c0672e';
 
 /** `[horizon, value]` pairs of an aligned list, without the missing values. */
 function pairs(horizons, values) {
@@ -34,6 +43,19 @@ function paint() {
   const weightsEl = document.getElementById('weights-chart');
   if (weightsEl && data.example) {
     tryDraw(() => renderWeights(weightsEl, data.example), 'the weights example');
+  }
+
+  const houseEl = document.getElementById('house-chart');
+  const house = data.house || {};
+  if (houseEl && (house.rows || []).length && (house.blocks || []).length >= 2) {
+    tryDraw(() => renderBullseye(houseEl, house.rows, {
+      blocks: house.blocks,
+      groupOf: (row) => (row.scope === NATIONAL_SCOPE ? KIND_GENERAL : KIND_REGIONAL),
+      colors: {[KIND_GENERAL]: THEME.accentColor, [KIND_REGIONAL]: REGIONAL_COLOR},
+      legend: true,
+      labelOf: (row) => `${row.event}-${row.scope}`,
+      onTop: (group) => group === KIND_GENERAL,
+    }), 'the house effects example');
   }
 
   const {horizons = [], mae = {}, coverage = {}, seats = {}} = data;

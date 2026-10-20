@@ -30,7 +30,9 @@ def test_brier_log_score_and_coverage():
     assert covered(1, 3, 2) and not covered(1, 3, 4) and not covered(np.nan, 3, 2)
 
 
-def test_summarize_case_on_synthetic_frames():
+def summary_frames():
+    """Las tablas `shares`, `seats` y `blocks` de un caso (sin la ejecución a horizonte) con todas las columnas que
+    `summarize_case` lee."""
     shares = pd.DataFrame({
         'party': ['A', 'B', 'C'], 'main': [True, True, False], 'official': [30., 20., 5.],
         'model': [31., 18., 6.], 'last_poll': [33., 17., 5.], 'mean_4w': [32., 19., 5.], 'prev_result': [28., 25., 4.],
@@ -45,6 +47,11 @@ def test_summarize_case_on_synthetic_frames():
         'lo95': [115., 68., 8.], 'hi95': [135., 82., 16.],
     })
     blocks = pd.DataFrame({'block': ['D', 'I'], 'brier': [0.04, 0.01], 'log_score': [0.2, 0.1], 'seats_valid': [True, True]})
+    return shares, seats, blocks
+
+
+def test_summarize_case_on_synthetic_frames():
+    shares, seats, blocks = summary_frames()
 
     m = summarize_case(shares, seats, blocks)
     assert m['mae_shares'] == pytest.approx(1.5)          # sólo A y B (main)
@@ -135,12 +142,26 @@ def test_summarize_case_provincial_metrics_skip_cells_without_projection():
     assert np.isnan(m['cov_prov_shares50']) and np.isnan(m['mae_prov_shares']) and np.isnan(m['n_prov_cells'])
 
 
+def test_case_series_is_the_fitted_series_up_to_the_anchor():
+    """La serie de un caso es la del Forecaster del simulador hasta `as_of` incluido, con la elección y el horizonte delante."""
+    from mtpy.lib import backtest
+    from tests.fakes import NAMES, synthetic_simulator
+    sim = synthetic_simulator()
+    sim.as_of = pd.Timestamp('2026-10-03')
+    frame = backtest.case_series(sim, '2026-11-29', 57)
+    assert list(frame.columns) == ['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi']
+    assert frame.shape[0] == 33 * 3 and frame['date'].max() == '2026-10-03' and set(frame['name']) == set(NAMES)
+    assert (frame['event_date'] == '2026-11-29').all() and (frame['horizon'] == 57).all()
+
+
 def fake_results():
-    """Lo que devuelve `run_backtest`: las tablas sintéticas (2 elecciones x 2 horizontes) y `provinces` y `meta` vacías."""
+    """Lo que devuelve `run_backtest`: las tablas sintéticas (2 elecciones x 2 horizontes) y `provinces`, `series` y `meta`
+    vacías."""
     import pandas as pd
     from tests.fakes import synthetic_backtest
     tables = synthetic_backtest()
     return {'shares': tables.shares, 'seats': tables.seats, 'blocks': tables.blocks, 'provinces': pd.DataFrame(),
+            'series': pd.DataFrame(columns=['event_date', 'horizon', 'date', 'name', 'mean', 'lo', 'hi']),
             'meta': pd.DataFrame(), 'metrics': tables.metrics, 'by_horizon': tables.by_horizon}
 
 
@@ -158,7 +179,7 @@ def test_results_dir_keeps_es_at_the_root():
 
 
 def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
-    """`backtest_scope` ejecuta el backtest de un ámbito, escribe sus siete tablas y `run.json` (con los parámetros,
+    """`backtest_scope` ejecuta el backtest de un ámbito, escribe sus ocho tablas y `run.json` (con los parámetros,
     las elecciones evaluadas, los horizontes ordenados, el commit y el estado de la base) y devuelve las cifras."""
     import json
     import pandas as pd
@@ -175,7 +196,7 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
         prov=lambda: {'commit': 'abc1234', 'dirty': True, 'versions': {}})
     folder = tmp_path / 'es-md'
     assert sorted(p.name for p in folder.iterdir()) == ['blocks.csv', 'by_horizon.csv', 'meta.csv', 'metrics.csv',
-                                                        'provinces.csv', 'run.json', 'seats.csv', 'shares.csv']
+                                                        'provinces.csv', 'run.json', 'seats.csv', 'series.csv', 'shares.csv']
     assert pd.read_csv(folder / 'metrics.csv').shape[0] == 4 and pd.read_csv(folder / 'by_horizon.csv').shape[0] == 2
     run = json.load(open(folder / 'run.json', encoding='utf-8'))
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
@@ -270,6 +291,32 @@ def test_run_backtest_passes_min_events_to_every_case(monkeypatch):
         warnings.simplefilter('ignore')
         backtest.run_backtest(scope='es-xx', events=['2023-05-28'], horizons=[6, 30], min_events=99)
     assert seen == [99, 99]
+
+
+def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(monkeypatch):
+    """De las series de los casos solo queda la del horizonte más corto que corrió en cada elección (el 6, o el 30
+    si el caso a 6 días se omitió); las demás tablas siguen igual."""
+    import warnings
+    from mtpy.lib import backtest
+    from tests.fakes import BACKTEST_EVENTS, BACKTEST_HORIZONS
+
+    def case(scope, event_date, horizon, **kwargs):
+        if (event_date, horizon) == ('2019-11-10', 6):
+            raise ValueError('no usable polls')
+        shares, seats, blocks = (t.assign(event_date=event_date, horizon=horizon) for t in summary_frames())
+        series = pd.DataFrame({'event_date': [event_date] * 2, 'horizon': [horizon] * 2, 'date': ['2023-07-01', '2023-07-02'],
+                               'name': ['PP', 'PP'], 'mean': [30.0, 30.5], 'lo': [29.0, 29.5], 'hi': [31.0, 31.5]})
+        return {'shares': shares, 'seats': seats, 'blocks': blocks, 'provinces': pd.DataFrame(),
+                'meta': pd.DataFrame([{'event_date': event_date, 'horizon': horizon}]), 'series': series}
+
+    monkeypatch.setattr(backtest, 'run_case', case)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        out = backtest.run_backtest(scope='es', events=BACKTEST_EVENTS, horizons=BACKTEST_HORIZONS)
+    kept = out['series'][['event_date', 'horizon']].drop_duplicates()
+    assert sorted(map(tuple, kept.itertuples(index=False))) == [('2019-11-10', 30), ('2023-07-23', 6)]
+    assert out['series'].shape[0] == 4 and out['metrics'].shape[0] == 3
+    assert list(backtest.shortest_horizon(pd.DataFrame(columns=out['series'].columns)).columns) == list(out['series'].columns)
 
 
 def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch):

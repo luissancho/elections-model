@@ -55,8 +55,9 @@ def read_manifest(reader: BundleReader) -> dict:
         data = None
     if data is not None:
         data['freeze'] = {'since': None, **(data.get('freeze') or {})}
+        data['studies'] = data.get('studies') or {}
         return data
-    return {'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {},
+    return {'contract': bundle.CONTRACT, 'updated_at': None, 'scopes': {}, 'studies': {},
             'freeze': {'active': False, 'message': None, 'since': None}, 'attribution': dict(ATTRIBUTION)}
 
 
@@ -70,8 +71,8 @@ def _write_manifest(writer: BundleWriter, data: dict) -> dict:
 
 
 def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze: Optional[dict] = None,
-                    today: Optional[str | date | datetime] = None) -> dict:
-    """Merge scope entries and/or the freeze switch into the manifest and write it.
+                    today: Optional[str | date | datetime] = None, studies: Optional[dict] = None) -> dict:
+    """Merge scope and study entries and/or the freeze switch into the manifest and write it.
 
     Parameters
     ----------
@@ -85,6 +86,9 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
         it is switched off.
     today : str, datetime.date or datetime.datetime, optional
         Date taken as today for ``since``, as in ``loreg_guard``.
+    studies : dict, optional
+        Entries by study slug (``{published_at, registered_at, checked}``); each replaces the existing
+        entry of its study.
 
     Returns
     -------
@@ -100,6 +104,7 @@ def update_manifest(writer: BundleWriter, scopes: Optional[dict] = None, freeze:
         raise ValueError('publish: freeze needs a boolean "active"')
     data = read_manifest(writer)
     data['scopes'].update(scopes or {})
+    data['studies'] = {**data.get('studies', {}), **(studies or {})}
     if freeze is not None:
         previous = data['freeze']
         since = None

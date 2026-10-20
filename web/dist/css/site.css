@@ -357,6 +357,12 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .card-head.split-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
 .card-head .more-link { font-size: 13px; font-weight: 600; text-decoration: none; }
 .card-head .more-link:hover { text-decoration: underline; }
+/* A tool at the top right of a card head: the button that downloads the chart as a signed image (`share.js`) */
+.card-head .card-tools { float: right; margin: -2px 0 var(--space-2) var(--space-3); }
+.tool-btn { min-height: 30px; padding: 0 10px; gap: 6px; font-size: 12px; color: var(--color-muted); }
+.tool-btn:hover { color: var(--color-text); }
+.tool-btn svg { width: 15px; height: 15px; }
+.tool-btn[hidden] { display: none; }
 .card-head h2, .card-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0; }
 .card-head h2::before, .card-head h3::before {
   content: "";
@@ -581,7 +587,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .cta .mut { margin-left: auto; }
 .side .card + .card { margin-top: var(--space-4); }
 
-/* Charts: ECharts containers, 340 px high on desktop and 250 px on mobile; the hemicycle keeps a 2 : 1.1 box */
+/* Charts: ECharts containers, 340 px high on desktop and 250 px on mobile; the hemicycle keeps a 2 : 1.1 box. The
+   tall series charts follow their width (2 : 1) between 480 px and a cap that still fits a laptop screen */
 .chart { width: 100%; height: 340px; }
 /* The folded list of the weights example: its summary looks like the site's buttons */
 .weights-list { margin-top: var(--space-3); }
@@ -589,7 +596,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .weights-list > summary::-webkit-details-marker { display: none; }
 .weights-list > summary:hover { border-color: var(--color-text); }
 .weights-list[open] > summary { margin-bottom: var(--space-2); }
-.chart.chart-tall { height: 600px; }
+.chart.chart-tall { height: auto; aspect-ratio: 2 / 1; min-height: 480px; max-height: min(720px, 72vh); }
 .chart.chart-small { height: 160px; }
 .chart.hemi { height: auto; aspect-ratio: 2 / 1.1; max-width: 620px; margin: 0 auto; }
 
@@ -648,10 +655,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 #district-form { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; margin-top: var(--space-3); }
 
 /* Casas and elections: bullseye and the house-effects table */
-#bullseye-chart, #errors-bullseye { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
-/* The bullseyes of the history, of an election and of a pollster profile are the main chart of their card:
-   larger and centred */
-#errors-bullseye, #bullseye-chart.big { max-width: 720px; margin: 0 auto; }
+#bullseye-chart, #errors-bullseye, #house-chart { aspect-ratio: 1 / 1; height: auto; max-width: 480px; }
+/* The bullseyes of the history, of an election, of a pollster profile and of the house effects example of the
+   method are the main chart of their card: larger and centred */
+#errors-bullseye, #bullseye-chart.big, #house-chart.big { max-width: 720px; margin: 0 auto; }
 /* Election detail: the last-poll error bars and their table side by side, and "Ver más" under the results */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
 .split > * { min-width: 0; }
@@ -720,6 +727,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et-wrap { overflow-x: auto; margin-top: var(--space-2); }
 .et { table-layout: fixed; min-width: 980px; }
 .et col.c-f { width: 200px; }
+.et col.c-r { width: 92px; }
 .et col.c-d { width: 80px; }
 .et col.c-s { width: 80px; }
 .et col.c-p { width: 72px; }
@@ -735,6 +743,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et tbody tr:hover td.f { background: var(--color-row-hover); }
 .et td.f b, .et td.f small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .et td.f small { color: var(--color-muted); font-size: 11.5px; }
+.et td.f a { color: inherit; text-decoration: none; }
+.et td.f a:hover { color: var(--color-accent); text-decoration: underline; }
+/* Rating badge of "Todas las encuestas": the figure on a solid colour from red (0) through grey (50) to green (100),
+   `gradient` over `RATING_COLORS` in the server and the browser alike */
+.et .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }
 .et td.empty { text-align: center; color: var(--color-muted); }
@@ -746,8 +759,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et-rank { min-width: 820px; }
 .et-rank col.c-bar { width: 150px; }
 .et-rank col.c-n { width: 90px; }
-.et-rank td.f a { color: inherit; text-decoration: none; }
-.et-rank td.f a:hover { color: var(--color-accent); text-decoration: underline; }
 .cell-bar { position: relative; min-width: 120px; }  /* room for the bar in a table without fixed columns */
 .cell-bar .fill { position: absolute; top: 5px; bottom: 5px; border-radius: 3px; }
 .cell-bar .fill.pos { background: rgba(44, 160, 44, 0.4); }
@@ -782,6 +793,92 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .filters-bar label { min-width: 0; }
 .filters-bar select { max-width: 100%; }
 
+/* Análisis: the page of a study (the CERA study). `--qc` is the colour of each question, the one of its verdict
+   (the infographic's green, orange and red, only here); `--qc-ink` its darker twin for text on white. */
+.q1 { --qc: #2e9e5b; --qc-ink: #15803d; }
+.q2 { --qc: #e8912b; --qc-ink: #c2410c; }
+.q3 { --qc: #ce3b3b; --qc-ink: #b91c1c; }
+/* The head: the pills (section, election, state of the prediction), the title and the subtitle */
+#study-head .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.pill.warn { background: #fff7ed; color: #c2410c; }
+.study-title { max-width: 30ch; margin: 0 0 12px; font: 800 36px/1.12 var(--font-head); letter-spacing: -.02em; }
+.study-subtitle { max-width: 70ch; margin: 0; font: 500 18px/1.4 var(--font-head); color: var(--color-muted); }
+/* The index of sections as pills, the three questions bordered in their colour */
+#study-head + .toc { gap: 6px; }
+#study-head + .toc a { min-height: 30px; padding: 0 11px; border: 1px solid var(--color-line-strong); border-radius: 999px; background: var(--color-card); font-size: 12.5px; font-weight: 600; color: var(--color-muted); text-decoration: none; }
+#study-head + .toc a:hover { color: var(--color-text); border-color: var(--color-text); }
+#study-head + .toc a.q1, #study-head + .toc a.q2, #study-head + .toc a.q3 { border-color: var(--qc); color: var(--qc-ink); }
+/* The KPI notes of a study are long: they wrap instead of being cut */
+#study-head ~ .kpis .kpi .s { white-space: normal; }
+/* The summary: three card-links, one per question, with the verdict as a pill and one sentence */
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.three a { display: block; padding: 12px 14px; border: 1px solid var(--color-line-strong); border-top: 5px solid var(--qc); border-radius: 12px; background: var(--color-bg); color: inherit; text-decoration: none; transition: box-shadow .15s; }
+.three a:hover, .three a:focus-visible { box-shadow: var(--shadow-up); }
+.three .k { font: 800 12px var(--font-head); letter-spacing: .04em; color: var(--qc-ink); }
+.three .tt { margin: 4px 0 6px; font: 700 15px/1.25 var(--font-head); }
+.three .vv { display: inline-block; margin-bottom: 6px; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px var(--font-head); }
+.three p { margin: 0; font-size: 13px; color: var(--color-muted); }
+/* Notes inside a card: amber by default, blue (the closing note) or green */
+.note { margin: var(--space-3) 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: #fff7ed; font-size: 13px; }
+.note.blue { background: var(--color-accent-soft); }
+.note.ok { background: var(--color-ok-soft); }
+/* The question cards: a rule in the colour of the question, the number, the question and the verdict */
+.qcard { border-left: 8px solid var(--qc); padding-left: 22px; }
+.qh { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.qn { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px var(--font-head); }
+.qt { flex: 1; min-width: 0; margin: 0; font: 800 22px/1.15 var(--font-head); letter-spacing: -.01em; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px var(--font-head); white-space: nowrap; }
+.verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.qcard > .lead { margin: 0 0 var(--space-3); }
+/* Cards of the studies (band of the home and /analisis): two per row on desktop, title + subtitle + the button */
+.studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.study-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.study-card h3 { margin: 0; }
+.study-card .lead { margin: 0 0 var(--space-3); }
+.study-card .btn { align-self: flex-end; margin-top: auto; }
+/* Two columns of charts or tables; the title and the subtitle of each chart */
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.grid2 > * { min-width: 0; }
+.grid2 + .grid2 { margin-top: var(--space-3); }
+.ctitle { margin: 0 0 2px; font: 600 13px/1.3 var(--font-head); }
+.csub { margin: 0 0 4px; font-size: 11.5px; color: var(--color-muted); }
+.qcard .chart { height: 280px; }
+/* A band of text inside a question (an objection and its answer) and the summary sentence of each question */
+.band { margin: var(--space-3) 0; padding: 10px 12px; border: 1px solid #e2ded5; border-radius: var(--radius-sm); background: #f3f1ec; font-size: 13.5px; }
+.sum { margin-top: var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.sum b { font-weight: 800; }
+/* Question 3: the lead beside the scenario selector, the subheading, the notes under the tables and the gap chart
+   with room for ten rows; without JS the selector still swaps the two tables of the prediction */
+.qcard .card-h { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-3); }
+.qcard .card-h .lead { flex: 1 1 32rem; margin: 0; }
+.qcard h3 { margin: 18px 0 4px; font: 700 16px/1.3 var(--font-head); }
+.qcard h3 + .lead { margin: 0 0 var(--space-3); }
+.tnote { margin: 8px 0 0; font-size: 12.5px; color: var(--color-muted); }
+.qcard .chart#gap-chart { height: 360px; }
+#p3:has(#scenario input[value="sin_litigio"]:checked) #prediction-table table[data-scenario="convocatoria"] { display: none; }
+#p3:has(#scenario input[value="sin_litigio"]:checked) #prediction-table table[data-scenario="sin_litigio"][hidden] { display: table; }
+/* The claims of the debate: what each one computes, what it lacks and the verdict (task 17) */
+.claim { padding: 12px 14px; border: 1px solid var(--color-line-strong); border-radius: 12px; background: var(--color-bg); }
+.claim h3, .claim h4 { margin: 0 0 4px; font-size: 15px; }
+.claim .src { margin: 0 0 8px; font-size: 12px; color: var(--color-muted); }
+/* the claims stack each term over its definition, not the two columns of the site's `dl` */
+.claim dl { display: block; margin: 0; font-size: 13px; }
+.claim dt { margin-top: 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-muted); }
+.claim dd { margin: 2px 0 0; }
+.claim .verd { margin-top: 10px; padding: 8px 10px; border-left: 3px solid #ce3b3b; border-radius: 8px; background: var(--color-card); font-size: 13px; font-weight: 600; }
+.claim .verd.ok { border-left-color: #2e9e5b; }
+.claim .verd.amb { border-left-color: #e8912b; }
+/* The debate, the check, the data and the glossary: the red pill of the debate, the sources, the CSV downloads as
+   pills and the glossary as a card */
+.pill.bad { background: #fef2f2; color: #b91c1c; }
+#debate .grid2 { align-items: start; }
+#debate .grid3 { margin-top: var(--space-3); }
+.src-list { margin: 0; padding-left: 1.2em; font-size: 13.5px; }
+.src-list li + li { margin-top: var(--space-1); }
+.csv-links { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-3) 0; }
+.csv-links .pill { white-space: normal; text-decoration: none; }
+.glossary > .how { margin-top: 0; border-top: 0; }
+
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {
   .hero { grid-template-columns: 1fr; gap: var(--space-4); }
@@ -798,7 +895,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .rows-2 .row:nth-child(even) { border-left: 0; }
 }
 @media (max-width: 899px) {
-  .grid3 { grid-template-columns: 1fr; }
+  .grid3, .three, .grid2, .studies { grid-template-columns: 1fr; }
   .side { grid-template-columns: 1fr; }
   .side .card + .card { margin-top: var(--space-4); }
 }
@@ -810,8 +907,14 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .grid, .grid-three { grid-template-columns: 1fr; }
   .card { padding: 14px 16px; }
   .headline { font-size: 20px; }
-  .chart { height: 250px; }
-  .chart.chart-tall { height: 280px; }
+  .study-title { font-size: 26px; }
+  .study-subtitle { font-size: 16px; }
+  .qcard { border-left-width: 6px; padding-left: 14px; }
+  .qh { flex-wrap: wrap; gap: 10px; }
+  .qt { flex-basis: calc(100% - 46px); font-size: 19px; }
+  .verdict { font-size: 15px; }
+  .chart, .qcard .chart { height: 250px; }
+  .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }
   .chart.hemi { height: auto; }
   table { font-size: 12.5px; }
   dl { grid-template-columns: 1fr; }
