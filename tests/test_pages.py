@@ -1785,6 +1785,11 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     page = html(body).replace('\n', ' ')
     assert status == 200 and 'congelado a 6 días de la elección' in page
     assert 'id="series-chart"' in page and 'id="series-window"' in page and 'id="series-legend"' in page and 'name="view"' in page
+    # «Con sondeos / Sin sondeos», como en Promedios (2026-10-21): oculto sin JS, «Con sondeos» marcado
+    polls = page[page.index('id="series-polls"'):]
+    polls = polls[:polls.index('</fieldset>')]
+    assert re.search(r'<fieldset id="series-polls" class="seg" hidden>', page)
+    assert 'value="si" checked> Con sondeos' in polls and 'value="no"> Sin sondeos' in polls
     assert 'href="/api/v1/events/es/2023-07-23/series?format=csv"' in page and 'Promedio de sondeos del modelo a 6 días' in page
     assert 'no está publicado todavía: hace falta' not in page
     # la tarjeta del modelo: selector de horizonte (6 marcado), una tabla por horizonte (la de 30 oculta) y la de bloques
@@ -2997,12 +3002,13 @@ def test_profile_opens_with_three_kpis_and_keeps_the_path_table(houses):
     assert 'Tipo: ' not in profile and 'id="path-table"' in page and 'id="rating-path"' in page
 
 
-def test_election_detail_has_the_lead_strip_without_p_first(events_site):
+def test_election_detail_and_home_have_no_lead_strip(events_site):
+    """Sin la banda gris del líder bajo el hemiciclo, ni en el detalle de una elección ni en Inicio (Luis,
+    2026-10-21; en Promedios ya no estaba desde el 2026-10-19)."""
     page = html(call(events_site, '/elecciones/es/generales/2023-07')[2])
-    strip = re.search(r'<p class="lead-strip">(.*?)</p>', page, re.S).group(1).replace('\n', '')
-    assert 'Líder: <b>PP</b> · <b>160 escaños</b>' in strip and 'P(primero)' not in strip
-    assert 'le faltan <b>16</b> para la mayoría' in strip
-    assert 'class="chart hemi"' in page
+    assert 'lead-strip' not in page and 'Líder:' not in page and 'class="chart hemi"' in page
+    home = html(call(events_site, '/')[2])
+    assert 'lead-strip' not in home and 'Líder:' not in home and 'id="hemicycle-mini"' in home
     table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
     assert '<span class="bar"><i style="width: 100.0%;' in table
 

@@ -616,42 +616,6 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
     return cards
 
 
-def lead_strip(rows: list, majority, with_first: bool = True) -> Optional[dict]:
-    """
-    The strip under a hemicycle: the leading party and its distance to the absolute majority.
-
-    Parameters
-    ----------
-    rows : list of dict
-        Party rows (``name``, ``seats``, ``pct``, ``p_first`` optional).
-    majority : int or None
-        Absolute majority of the chamber.
-    with_first : bool, optional
-        Whether the strip carries ``p_first`` (not in the detail of a past election).
-
-    Returns
-    -------
-    dict or None
-        ``{'name', 'seats', 'short', 'over', 'p_first'}``: ``short`` is the seats missing for the majority (0 when
-        reached), ``over`` whether it is reached, ``p_first`` the probability (``None`` without it or without
-        ``with_first``); ``None`` without rows or majority.
-    """
-    leader = leader_of(rows)
-
-    if leader is None or majority is None:
-        return None
-
-    seats = leader.get('seats') or 0
-
-    return {
-        'name': leader['name'],
-        'seats': seats,
-        'short': max(0, int(majority) - int(seats)),
-        'over': seats >= majority,
-        'p_first': leader.get('p_first') if with_first else None,
-    }
-
-
 def promedios_context(state: dict) -> dict:
     """
     Template context of the Promedios tab of an event.

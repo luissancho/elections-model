@@ -76,9 +76,6 @@
             {% if hero.others %}<span><i class="dot" style="background: #9e9e9e"></i>Otros <small>{{ hero.others|int }}</small></span>{% endif %}
           </div>
           {% endif %}
-          {% if hero.lead %}
-          <p class="lead-strip">Líder: <b>{{ hero.lead.name }}</b> · <b>{{ hero.lead.seats|int }} escaños</b> · {% if hero.lead.over %}supera la mayoría en <b>{{ (hero.lead.seats - hero.majority)|int }}</b>{% else %}le faltan <b>{{ hero.lead.short|int }}</b> para la mayoría{% endif %}{% if hero.lead.p_first is not none %} · P(primero) <b>{{ hero.lead.p_first|prob }}</b>{% endif %}</p>
-          {% endif %}
         </section>
         {% endif %}
         {% if latest_polls %}

@@ -38,9 +38,6 @@
           {% endif %}
           <div class="chart hemi" id="hemicycle" role="img" aria-label="Hemiciclo con los escaños de cada partido en el resultado oficial"></div>
           <noscript><p class="muted">El hemiciclo necesita JavaScript; la tabla de al lado tiene los escaños.</p></noscript>
-          {% if lead %}
-          <p class="lead-strip">Líder: <b>{{ lead.name }}</b> · <b>{{ lead.seats|int }} escaños</b> · {% if lead.over %}superó la mayoría en <b>{{ (lead.seats - majority)|int }}</b>{% else %}le faltan <b>{{ lead.short|int }}</b> para la mayoría{% endif %}</p>
-          {% endif %}
           {% else %}
           <p class="notice">Sin resultado oficial publicado.</p>
           {% endif %}
@@ -137,6 +134,11 @@
             <label><input type="radio" name="window" value="6m"> 6 meses</label>
             <label><input type="radio" name="window" value="3m"> 3 meses</label>
           </fieldset>
+          <fieldset id="series-polls" class="seg" hidden>
+            <legend>Sondeos</legend>
+            <label><input type="radio" name="polls" value="si" checked> Con sondeos</label>
+            <label><input type="radio" name="polls" value="no"> Sin sondeos</label>
+          </fieldset>
         </div>
         <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
         <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos del ciclo con su banda, los sondeos y el resultado oficial"></div>
@@ -146,8 +148,9 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
-          promedio ponderado del modelo y la banda, su intervalo de confianza. El punto marcado del final, en la
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero; «Sin sondeos» los
+          oculta, para leer mejor las líneas en el móvil); la línea es el promedio ponderado del modelo y la banda,
+          su intervalo de confianza. El punto marcado del final, en la
           fecha de la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se
           ajusta a la ventana y a los partidos visibles.
         </p>

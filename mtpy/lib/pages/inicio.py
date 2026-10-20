@@ -11,7 +11,7 @@ from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context
 from .analisis import study_cards
 from .elecciones import last_results, published_events
 from .filters import _madrid_tz, delta_text, fmt_date_short
-from .promedios import inherited_results, lead_strip, leader_of, poll_sample
+from .promedios import inherited_results, leader_of, poll_sample
 from .slugs import event_href
 
 INTRO = ('Demoscopio promedia los sondeos de cada elección, simula el reparto de escaños y puntúa a las encuestadoras '
@@ -235,7 +235,7 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
         ``majority_pct``, ``ends`` (seats of the ``vs`` blocks, Izquierda first), ``chip`` (``majority_chip``),
         ``deltas`` (the two parties with most seats present in the last results, ``{'name', 'text'}``),
         ``seat_deltas`` (``{name: seats difference}`` of every party of the headline present in the last results,
-        for the hemicycle), ``results_year``, ``lead`` (``lead_strip``), ``run_at``, ``as_of``, ``estimated`` (the date of the estimate
+        for the hemicycle), ``results_year``, ``run_at``, ``as_of``, ``estimated`` (the date of the estimate
         shown: today for a live nowcast, the publication date otherwise), ``n_polls``, ``n_pollsters``, ``top``
         (the names of the ``TOP_PARTIES`` parties by vote), ``top_seats`` (the four parties with most seats, for
         the legend of the small hemicycle), ``others`` (the seats of the rest) and ``catalog``.
@@ -293,7 +293,6 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
         'seat_deltas': {row['name']: (row.get('seats') or 0) - (previous[row['name']].get('seats') or 0)
                         for row in rows if row['name'] in previous},
         'results_year': results['year'] if results else None,
-        'lead': lead_strip(rows, majority),
         'run_at': card['run_at'],
         'as_of': headline.get('as_of') or meta.get('as_of'),
         # the date of the estimate shown: today for the live nowcast (as the event bar says), the publication

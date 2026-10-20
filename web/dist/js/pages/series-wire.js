@@ -92,7 +92,7 @@ export function fillLegend(legendEl, current, selected, chart, inks = {}) {
 /**
  * Draw the poll average and wire its controls: view, window and poll-points radios and the pill legend, which
  * selects the parties or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash.
- * Without the poll-points control (`#series-polls`, only in Promedios) the points are always drawn.
+ * Without the poll-points control (`#series-polls`) the points are always drawn.
  *
  * @param {object} views `seriesViews` of the page
  * @param {object} state `{view, window, selected, polls}` parsed from the hash
