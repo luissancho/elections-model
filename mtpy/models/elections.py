@@ -142,6 +142,8 @@ class PollstersRatings(Model):
         'pollster_id': ['int', 3],
         'quality': 'num',
         'num_events': ['int', 2],
+        'num_events_w': 'num',
+        'num_national_events': ['int', 2],
         'num_polls': ['int', 2],
         'num_polls_w': 'num',
         'error_avg': 'num',
