@@ -93,6 +93,8 @@ MESSAGES = {
     'study not found': 'Ese análisis no existe o no está publicado.',
 }
 OTHERS_COLOR = '#9e9e9e'
+# The national scope: its run is the common part of the pages of a scope without a published forecast
+NATIONAL_SCOPE = 'es'
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
 DARK_INK = '#111'
 LIGHT_INK = '#fff'

@@ -33,6 +33,8 @@ const SPLIT_EXTRA_HEIGHT = 80;
 
 // Accent of the national scope (`es`) in the trend and in the bullseye by scope, and of the detail's bullseye.
 const ACCENT = THEME.accentColor;
+// The model among the pollsters in the detail's bullseye: the orange of the site (that of the regional elections)
+const MODEL_COLOR = '#c0672e';
 const NATIONAL_SCOPE = 'es';
 
 // The weeks table lists the elections one by one only up to this many.
@@ -546,7 +548,7 @@ function paint() {
   }
 
   const initial = readInitial();
-  const {meta = {}, last = [], blocks = []} = initial;
+  const {meta = {}, last = [], blocks = [], model_point: modelPoint = null} = initial;
   const catalog = new Catalog(initial.catalog || {});
 
   if (initial.errors) {
@@ -567,7 +569,10 @@ function paint() {
     tryDraw(() => renderBullseye(
       target,
       last.map((row) => ({...row, event: row.pollster, event_date: meta.event_date})),
-      {blocks, color: ACCENT},
+      // the model at its shortest horizon, scored like a pollster: the highlighted point, in orange
+      {blocks, color: ACCENT, highlight: modelPoint
+        ? {row: {...modelPoint, event: modelPoint.pollster, event_date: meta.event_date}, color: MODEL_COLOR}
+        : null},
     ), 'the bullseye');
   }
 

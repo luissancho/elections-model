@@ -7,6 +7,100 @@
 {% block content %}
 {% import '_macros.html' as m %}
     {% include '_metodo_nav.html' +%}
+    {% if model_record.rows %}
+    {% set record = model_record %}
+    <div class="stack" id="model-cards">
+      {{ m.card_start('model-profile', 'El modelo como encuestadora', 'Si el modelo fuera una encuestadora más: su última estimación antes de cada elección, en todos los ámbitos, medida igual que el último sondeo de cada encuestadora.') }}
+        {{ m.kpis(record.kpis) }}
+        {% call m.how() %}
+        <p>
+          Para cada elección pasada con backtest se toma la estimación del modelo a la menor distancia de la elección
+          ({{ record.rows[0].days|int }} días), la que habría publicado ese día, y se mide como el último sondeo de
+          una encuestadora: el error medio es la distancia media, en puntos, entre su voto y el resultado de los
+          partidos principales; el error de bloques, cuánto falló el margen entre los dos bloques principales, sin
+          signo.
+        </p>
+        <p>
+          «Frente a las encuestadoras» dice qué parte de las encuestadoras de cada elección falló el margen más que el
+          modelo (un empate cuenta la mitad), y da la mediana de todas las elecciones. El modelo no tiene rating: el
+          rating mide cuánto se separa una encuestadora del consenso de las demás, y el modelo es ese consenso.
+        </p>
+        <p>Ojo: a esa distancia el modelo ya ha visto todos los sondeos publicados, así que juega con ventaja frente a cada encuestadora por separado.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('model-path', 'Elección a elección', 'Qué tal lo hizo el modelo en cada elección con backtest, de cualquier ámbito, de la más nueva a la más antigua.') }}
+        <div class="table-wrap">
+          <table id="model-path-table">
+            <caption>Error medio y sesgo bloques de la última estimación del modelo antes de cada elección.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Evento</th>
+                <th scope="col">Error medio</th>
+                <th scope="col">Sesgo bloques</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in record.rows %}
+              {# the block bias grows towards the block it favoured, in the colour of that block #}
+              {% set bias = row.error_blocks|sides(8) %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, 8, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
+                <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ model_block_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% call m.how() %}
+        <p>
+          El fondo del error medio es más rojo cuanto mayor, de 0 a 8 puntos. La barra del sesgo bloques crece hacia el
+          lado del bloque al que el modelo dio más margen del que hubo, y en su color, hasta 8 puntos.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló la última estimación del modelo antes de cada elección, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver solo esas elecciones.') }}
+        {% set bv = {'rows': record.rows, 'scopes': record.scopes, 'years': record.years, 'table_blocks': model_table_blocks,
+                     'aria': 'Error del modelo en cada elección por bloque',
+                     'caption': 'Error de la última estimación del modelo antes de cada elección (modelo menos resultado).', 'dates': false} %}
+        {% include '_bullseye.html' %}
+        {% call m.how() %}
+        <p>Cada punto es la última estimación del modelo antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito. La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan solo esas elecciones en la diana y en la tabla.</p>
+        <p>Positivo: el modelo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {{ m.card_start('model-last', 'Última estimación por elección', 'En cada elección con backtest, de cualquier ámbito, cuánto se separó la última estimación del modelo del resultado de cada partido principal.') }}
+        {% if model_last.rows %}
+        <div class="table-wrap">
+          <table id="model-last-table">
+            <caption>Desviación de la última estimación del modelo antes de cada elección frente al resultado, por partido (modelo menos resultado).</caption>
+            <thead>
+              <tr>
+                <th scope="col">Evento</th>
+                {% for name in model_last.columns %}
+                <th scope="col" title="{{ catalog[name].fullname }}">{{ name }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in model_last.rows %}
+              <tr>
+                <td>{{ row.label }}</td>
+                {% for value in row.cells %}
+                <td class="cell-shade" style="background-color: {{ value|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ value|num(1) }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% call m.how() %}
+        <p>Cada fila es la última estimación del modelo antes de una elección, de la más nueva a la más antigua. Positivo: el modelo dio al partido más voto que el resultado; negativo, menos. El fondo es rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Solo entran los partidos principales de cada elección; un guion es un partido que no lo era en esa elección.</p>
+        {% endcall %}
+      {{ m.card_end() }}
+    </div>
+    {% endif %}
     {% include '_scope_filter.html' +%}
     <div id="content" class="stack">
       {% if published %}

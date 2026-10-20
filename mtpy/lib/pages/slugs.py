@@ -10,7 +10,6 @@ from typing import Optional
 
 from ...core.api import HttpError
 from ..webapi import check_date, query_pollsters, site
-from .common import resolve_scope
 
 # Segment of the national scope: the general elections, rather than the name of the country
 NATIONAL_SLUG = 'generales'
@@ -142,9 +141,10 @@ def resolve_event_path(country: str, slug: str, segment: str) -> tuple:
     Raises
     ------
     HttpError
-        404 ``unknown scope`` when no catalogue scope has that path; 404 ``scope not published`` and 503 as
-        ``resolve_scope``; 400 ``invalid date`` for a segment that is not a month or a date; 404 ``event not
-        published`` when no published election matches, or when two fall in the month asked for.
+        404 ``unknown scope`` when no catalogue scope has that path; 404 ``scope not published`` when the scope
+        has no published election (a scope without a published forecast still has the detail of its elections);
+        400 ``invalid date`` for a segment that is not a month or a date; 404 ``event not published`` when no
+        published election matches, or when two fall in the month asked for.
     """
     prefix = '{}/{}/{}'.format(DETAIL_PATH, country, slug)
     codes = [code for code, path in scope_paths().items() if path == prefix]
@@ -152,8 +152,11 @@ def resolve_event_path(country: str, slug: str, segment: str) -> tuple:
     if not codes:
         raise HttpError(404, 'unknown scope')
 
-    scope = resolve_scope(codes[0])
+    scope = codes[0]
     dates = site().events(scope)
+
+    if not dates:
+        raise HttpError(404, 'scope not published')
 
     if _MONTH_RE.fullmatch(segment):
         check_date(segment + '-01')

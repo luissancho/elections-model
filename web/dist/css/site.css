@@ -532,10 +532,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .rows-2 .row:nth-child(even) { border-left: 1px solid var(--color-line); }
 .rows-2 .row-foot { grid-column: 1 / -1; }
 
-/* The strip under a hemicycle: leader, seats and the distance to the majority */
-.lead-strip { max-width: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; margin: var(--space-2) 0 0; padding: 10px 12px; border-radius: 12px; background: var(--color-soft); font-size: 13px; color: var(--color-muted); }
-.lead-strip b { color: var(--color-text); }
-
 /* HTML legend of the series charts: a pill per party, bordered in its colour and filled when on */
 .legend { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 6px 0 4px; }
 .legend[hidden] { display: none; }
@@ -603,7 +599,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* Controls of a chart (view, window, a select): one row on desktop, stacked on phones; the party pills of the
    series charts are a separate legend under them */
 .series-controls { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); }
-.check { display: inline-flex; align-items: center; gap: var(--space-1); font-size: inherit; }
 .series-controls[hidden], .pills[hidden] { display: none; }
 
 /* Pills of multiple selection (coalition calculator, parties of the bullseye): a group of checkboxes drawn like a
@@ -738,6 +733,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et th[aria-sort="descending"] .sort::after { content: " ▾"; }
 .et th[aria-sort="ascending"] .sort::after { content: " ▴"; }
 .et th .pd { display: block; width: 10px; height: 10px; margin: 0 0 3px auto; border-radius: 50%; }
+/* A second, smaller line under a header label: «Elecciones» with «(generales)», the count in brackets in its cells */
+.et th .th-sub { display: block; font-size: 0.85em; text-transform: none; letter-spacing: 0; }
 .et th.l, .et td.l { text-align: left; }
 .et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .et td.f { white-space: normal; }
@@ -751,6 +748,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .et .rt { display: inline-block; min-width: 44px; padding: 2px 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; line-height: 1.35; color: #fff; text-align: center; font-variant-numeric: tabular-nums; }
 .et td.mx { font-weight: 800; }
 .et td.na { color: var(--color-muted); }
+/* The model scored like a pollster in the table of the last polls of an election: a highlighted row */
+tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .et td.empty { text-align: center; color: var(--color-muted); }
 .et tfoot td { background: var(--color-soft); border-top: 2px solid var(--color-line-strong); border-bottom: 0; }
 .et tfoot td.f { background: var(--color-soft); }

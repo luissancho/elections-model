@@ -1,9 +1,9 @@
 // The live example of the average: the polls that weigh on the average of one party on the day of the estimate,
 // sized and shaded by their weight, the straight local line of that day with its band, the Gaussian bell of the
 // kernel on a second axis and two guides at the day and at the value read.
-import {axisLabelStyle, baseOption, mountChart, THEME, tooltipStyle} from './base.js';
-import {bandSeries, dayTime, isoDay} from './series.js';
-import {fmtDateShort, fmtNum, fmtPct} from '../format.js';
+import {axisLabelStyle, baseOption, mountChart, THEME, timeAxisLabel, tooltipStyle} from './base.js';
+import {bandSeries, dayTime} from './series.js';
+import {fmtNum, fmtPct} from '../format.js';
 import {escapeText, meanTooltipLine, pollTooltipLines} from '../polls-tooltip.js';
 
 const BAND_OPACITY = 0.15;
@@ -116,7 +116,7 @@ export function weightsOption(example) {
     tooltip: {trigger: 'item', ...tooltipStyle(), formatter: tooltip},
     xAxis: {
       type: 'time', min: times[0], max: times[times.length - 1],
-      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(isoDay(value))},
+      axisLabel: timeAxisLabel(),
       axisLine: {lineStyle: {color: THEME.axisColor}}, splitLine: {show: false},
     },
     yAxis: [

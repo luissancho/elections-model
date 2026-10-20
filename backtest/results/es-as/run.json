@@ -1,6 +1,6 @@
 {
- "run_at": "2026-10-19T23:05:12",
- "commit": "287d884",
+ "run_at": "2026-10-20T21:50:07",
+ "commit": "19b1c7b",
  "scope": "es-as",
  "n_sim": 1000,
  "seed": 42,
@@ -13,6 +13,7 @@
  "composition": null,
  "regional_noise": true,
  "min_events": null,
+ "recompute_ratings": false,
  "events": [
   "2023-05-28"
  ],

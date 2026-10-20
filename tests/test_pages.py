@@ -45,10 +45,12 @@ def html(body):
     return body.decode('utf-8')
 
 def header_tooltips(table):
-    """{etiqueta: tooltip} de las cabeceras de una tabla, con los espacios normalizados."""
+    """{etiqueta: tooltip} de las cabeceras de una tabla, con los espacios normalizados (la etiqueta sin su segunda
+    línea, `th-sub`)."""
     import html as html_mod
     return {label: re.sub(r'\s+', ' ', html_mod.unescape(title)).strip()
-            for title, label in re.findall(r'<th scope="col"[^>]*title="([^"]*)"[^>]*>([^<]*)</th>', table)}
+            for title, label in re.findall(r'<th scope="col"[^>]*title="([^"]*)"[^>]*>([^<]*)(?:<span class="th-sub">[^<]*</span>)?</th>',
+                                           table)}
 
 
 def glossary_entries(glossary):
@@ -858,8 +860,12 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
 def test_promedios_controls_are_hidden_without_js(api):
     """Sin JS los controles no hacen nada y no se muestran."""
     page = html(call(api, '/es')[2]).replace('\n', ' ')
-    for control in ('series-window', 'series-view'):
+    for control in ('series-window', 'series-view', 'series-polls'):
         assert re.search(r'<fieldset id="{}" class="[^"]*" hidden>'.format(control), page), control
+    # «Sondeos»: mostrar u ocultar los puntos de los sondeos del promedio, marcados por defecto
+    polls = page[page.index('id="series-polls"'):]
+    polls = polls[:polls.index('</fieldset>')]
+    assert '<legend>Sondeos</legend>' in polls and 'value="si" checked> Con sondeos' in polls and 'value="no"> Sin sondeos' in polls
     before = page[:page.index('id="polls"')]
     assert 'data-all' not in before and 'data-none' not in before
     assert '<option value="Sigma Dos" selected>Sigma Dos (1)</option>' in page
@@ -1295,7 +1301,8 @@ def test_table_columns_describe_the_two_tables_with_the_scale_and_the_blocks():
     assert scaled['quality'].endswith('Cada punto vale 9 de confianza, con un mínimo de 4.')
     assert 'más margen a Derecha del que hubo; negativo, más margen a Izquierda.' in scaled['error_blocks']
     assert [column['label'] for column in pages.table_columns('ranking')] == [
-        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert [column.get('sub') for column in pages.table_columns('ranking')][3] == '(generales)'
     assert [column['label'] for column in pages.table_columns('path')] == [
         'Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
     path = {column['key']: column['text'] for column in pages.table_columns('path', ['Derecha', 'Izquierda'])}
@@ -1573,7 +1580,9 @@ def test_elecciones_merges_every_scope_with_analysis(history_two_scopes):
     assert data['years'] == list(range(2021, date.today().year + 1))  # desde la primera elección hasta hoy
 
 
-def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scopes, fresh_app):
+def test_elecciones_links_the_elections_of_scopes_without_a_run(history_two_scopes, fresh_app):
+    """Un ámbito con elecciones publicadas pero sin previsión (recién votado, o con pocos sondeos) también enlaza
+    el detalle de sus elecciones (2026-10-20)."""
     write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones y análisis, sin run
     write_analysis(fresh_app.fs, scope='es-an')
     errors = fixture_data('poll-errors')
@@ -1583,13 +1592,35 @@ def test_elecciones_marks_scopes_without_a_run_as_not_linkable(history_two_scope
     webapi.site().manifest_cache_clear()
     webapi.site().files.clear()
     scopes = pages.history_scopes()
-    assert {s['code']: s['linkable'] for s in scopes} == {'es': True, 'es-an': False, 'es-md': True}
+    assert [s['code'] for s in scopes] == ['es', 'es-an', 'es-md'] and all('linkable' not in s for s in scopes)
     hrefs = {(e['scope'], e['date']): e['href'] for e in pages.history_events(scopes)}
-    assert hrefs[('es-an', '2022-06-19')] is None and hrefs[('es-md', '2021-05-04')] == '/elecciones/es/madrid/2021-05'
+    assert hrefs[('es-an', '2022-06-19')] == '/elecciones/es/andalucia/2022-06'
+    assert hrefs[('es-md', '2021-05-04')] == '/elecciones/es/madrid/2021-05'
     body = call(history_two_scopes, '/elecciones')[2]
     row = re.search(r'<tr data-scope="es-an"[^>]*>\s*<td>(.*?)</td>', html(body), re.S).group(1)
-    assert '<a' not in row and '2022' in row
-    assert {s['code']: s['linkable'] for s in initial(body)['scopes']}['es-an'] is False
+    assert 'href="/elecciones/es/andalucia/2022-06"' in row
+
+
+def test_election_detail_of_a_scope_without_a_run_uses_the_national_run(history_two_scopes, fresh_app):
+    """El detalle de una elección de un ámbito sin previsión se monta con el run nacional (catálogo, pie y
+    menús); los datos y los bloques son los de la elección."""
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    status, _, body = call(history_two_scopes, '/elecciones/es/andalucia/2022-06')
+    assert status == 200
+    page = html(body)
+    assert re.search(r'<link rel="canonical" href="[^"]*/elecciones/es/andalucia/2022-06">', page)
+    data = initial(body)
+    assert data['meta']['scope'] == 'es-an' and data['meta']['event_date'] == '2022-06-19'
+    assert data['state']['scope'] == 'es'  # la parte común es la nacional
+    # las descargas son las de la elección, y los bloques llevan color aunque el ámbito no tenga run
+    assert 'href="/api/v1/events/es-an/2022-06-19/cycle?format=csv"' in page
+    assert 'href="/api/v1/events/es/' not in page
+    with_run = initial(call(history_two_scopes, '/elecciones/es/madrid/2021-05')[2])
+    assert data['block_colors'] == with_run['block_colors'] and data['block_colors']['Derecha'] != pages.OTHERS_COLOR
+    # una fecha que el ámbito no tiene publicada sigue siendo 404
+    assert call(history_two_scopes, '/elecciones/es/andalucia/2018-12')[0] == 404
 
 
 def test_error_blocks_come_from_the_first_scope_with_two_and_parts_are_read_once(history_two_scopes, fresh_app):
@@ -1663,7 +1694,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
         ('Derecha', '45,5%', '200'), ('Izquierda', '31,4%', '150')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls',
-                         'series', 'result', 'model_last', 'inks'}
+                         'series', 'result', 'model_last', 'inks', 'model_point'}
     assert [row['pollster'] for row in data['last']] == ['GAD3', '40dB', 'CIS']
     assert data['last'][0] == {'pollster': 'GAD3', 'pollster_id': 2, 'days': 7, 'sample_size': 3000, 'error_avg': 0.99,
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
@@ -1754,6 +1785,11 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     page = html(body).replace('\n', ' ')
     assert status == 200 and 'congelado a 6 días de la elección' in page
     assert 'id="series-chart"' in page and 'id="series-window"' in page and 'id="series-legend"' in page and 'name="view"' in page
+    # «Con sondeos / Sin sondeos», como en Promedios (2026-10-21): oculto sin JS, «Con sondeos» marcado
+    polls = page[page.index('id="series-polls"'):]
+    polls = polls[:polls.index('</fieldset>')]
+    assert re.search(r'<fieldset id="series-polls" class="seg" hidden>', page)
+    assert 'value="si" checked> Con sondeos' in polls and 'value="no"> Sin sondeos' in polls
     assert 'href="/api/v1/events/es/2023-07-23/series?format=csv"' in page and 'Promedio de sondeos del modelo a 6 días' in page
     assert 'no está publicado todavía: hace falta' not in page
     # la tarjeta del modelo: selector de horizonte (6 marcado), una tabla por horizonte (la de 30 oculta) y la de bloques
@@ -1910,7 +1946,10 @@ def test_published_events_and_horizon_tables(events_site):
     assert [table['horizon'] for table in tables] == [6, 30]
     pp = tables[0]['rows'][0]
     assert pp == {'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 140}
-    assert set(tables[0]['blocks'][0]) == {'block', 'official_seats', 'model_seats', 'p_majority', 'majority'}
+    assert set(tables[0]['blocks'][0]) == {'block', 'official', 'model', 'error', 'official_seats', 'model_seats',
+                                           'p_majority', 'majority'}
+    # las medidas del modelo, con el margen de la elección (Derecha − Izquierda): PP+VOX frente a PSOE
+    assert set(tables[0]) >= {'error_avg', 'error_blocks'} and tables[0]['error_avg'] is not None
     assert pages.event_part('es', '2020-01-01', 'meta') is None
     with pytest.raises(HttpError) as missing:
         pages.resolve_event('es', '2020-01-01')
@@ -1978,11 +2017,59 @@ def test_horizon_tables_merge_vote_and_seats_and_prefer_the_horizon_run():
                          'p_majority': 0.4, 'p_majority_h': 0.45, 'majority': False, 'seats_valid': True}]}
     [table] = pages.horizon_tables(model)
     assert table['rows'] == [{'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 142}]
-    assert table['blocks'] == [{'block': 'Derecha', 'official_seats': 169, 'model_seats': 173, 'p_majority': 0.45, 'majority': False}]
+    assert table['blocks'] == [{'block': 'Derecha', 'official': None, 'model': None, 'error': None, 'official_seats': 169,
+                                'model_seats': 173, 'p_majority': 0.45, 'majority': False}]  # sin `parties`, sin voto
     model['seats'][0]['model_h'] = None
     del model['blocks'][0]['model_seats_h'], model['blocks'][0]['p_majority_h']
     [table] = pages.horizon_tables(model)
     assert table['rows'][0]['model_seats'] == 140 and table['blocks'][0]['model_seats'] == 171 and table['blocks'][0]['p_majority'] == 0.4
+
+
+def test_horizon_tables_sum_the_vote_of_each_block_and_score_the_model():
+    """El voto de cada bloque es la suma de sus partidos (`parties` del backtest), y la tabla lleva las medidas de
+    las encuestadoras para el modelo: error medio (partidos principales, sin signo) y sesgo bloques (margen del
+    primer bloque menos el del segundo, modelo menos resultado)."""
+    shares = [('PP', True, 33.0, 32.0), ('VOX', True, 12.0, 13.0), ('PSOE', True, 31.0, 29.0), ('Cs', False, 1.0, 1.5)]
+    model = {'horizons': [6],
+             'shares': [{'horizon': 6, 'party': p, 'main': m, 'official': o, 'model': v} for p, m, o, v in shares],
+             'seats': [],
+             'blocks': [{'horizon': 6, 'block': 'Derecha', 'parties': 'PP+VOX', 'official_seats': 169, 'model_seats': 171,
+                         'p_majority': 0.4, 'majority': False, 'seats_valid': True},
+                        {'horizon': 6, 'block': 'Izquierda', 'parties': 'PSOE+UP', 'official_seats': 121, 'model_seats': 118,
+                         'p_majority': 0.0, 'majority': False, 'seats_valid': True}]}
+    [table] = pages.horizon_tables(model, ['Derecha', 'Izquierda'])
+    derecha, izquierda = table['blocks']
+    assert (derecha['official'], derecha['model'], derecha['error']) == (45.0, 45.0, 0.0)
+    assert (izquierda['official'], izquierda['model'], izquierda['error']) == (None, None, None)  # UP sin voto: no se suma a medias
+    assert table['error_avg'] == round((1 + 1 + 2) / 3, 2) and table['error_blocks'] is None
+    model['blocks'][1]['parties'] = 'PSOE'
+    [table] = pages.horizon_tables(model, ['Derecha', 'Izquierda'])
+    assert table['error_blocks'] == round((45.0 - 29.0) - (45.0 - 31.0), 2)  # +2: el modelo dio 2 puntos más de margen a la derecha
+    [table] = pages.horizon_tables(model, ['Izquierda', 'Derecha'])
+    assert table['error_blocks'] == -2.0  # el signo sigue el orden del margen de la elección
+    assert pages.horizon_tables(model)[0]['error_blocks'] is None  # sin margen, sin sesgo
+
+
+def test_eleccion_detail_scores_the_model_like_the_pollsters(events_site):
+    """«Lo que dijo el modelo»: su error medio y su sesgo bloques en cada horizonte, la tabla de bloques con los
+    campos de la de partidos más la probabilidad de mayoría, y una fila «Modelo (promedio)» en la tabla de las
+    encuestadoras, con el horizonte más corto (2026-10-21)."""
+    page = html(call(events_site, '/elecciones/es/generales/2023-07')[2])
+    model = page[page.index('id="model"'):page.index('id="last-errors"')]
+    assert re.search(r'<p class="muted model-score">Error medio: [0-9,]+ · Sesgo bloques: -?[0-9,]+</p>', model)
+    blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', model, re.S).group(1)
+    assert re.findall(r'<th scope="col">([^<]*)</th>', blocks) == ['Bloque', 'Promedio (%)', 'Resultado (%)', 'Error',
+                                                                  'Escaños modelo', 'Escaños reales', 'Prob. de mayoría']
+    table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
+    row = re.search(r'<tr class="model-row">(.*?)</tr>', table, re.S).group(1)
+    assert '<a href="/metodo/promedio">Modelo (promedio)</a>' in row and '<td>6</td>' in row and '<td class="na">—</td>' in row
+    assert table.count('<tr class="model-row">') == 1
+    # y en la diana, resaltado: el punto del modelo va aparte de los de las encuestadoras
+    data = initial(call(events_site, '/elecciones/es/generales/2023-07')[2])
+    point = data['model_point']
+    assert point['pollster'] == 'Modelo (promedio)' and point['days'] == 6 and set(data['blocks']) <= set(point)
+    assert all(row['pollster'] != 'Modelo (promedio)' for row in data['last'])
+    assert 'El punto naranja, por encima de los demás, es el modelo' in page
 
 
 def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(events_site, monkeypatch):
@@ -1999,7 +2086,8 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     page = html(body)
     assert status == 200 and page.count('Escaños no proyectables en esta elección') == 1
     assert 'id="model-table-30"' in page and 'id="model-table-6"' in page and 'id="model-shares-6"' not in page
-    assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' not in page
+    # la tabla de bloques sigue (el voto vale) con los escaños en raya, como la de partidos
+    assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' in page
 
 
 def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):
@@ -2056,7 +2144,8 @@ def test_last_row_without_id_is_plain_text(events_site, monkeypatch):
     monkeypatch.setattr(pages.elecciones, 'event_part', part)
     status, _, body = call(events_site, '/elecciones/es/generales/2023-07')
     table = re.search(r'<table id="last-table">(.*?)</table>', html(body), re.S).group(1)
-    assert status == 200 and 'GAD3' in table and '<a ' not in table
+    houses = re.sub(r'<tr class="model-row">.*?</tr>', '', table, flags=re.S)  # la fila del modelo enlaza al método
+    assert status == 200 and 'GAD3' in houses and '<a ' not in houses
 
 
 def test_eleccion_without_meta_is_a_404(events_site, fresh_app, monkeypatch):
@@ -2089,6 +2178,50 @@ def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     assert len(invalid) == 2 and len(rows) == 8
     assert all(row[4:7] == ['—', '—', '—'] and row[7] == 'no' for row in invalid)
     assert all(row[7] == 'sí' for row in rows if row not in invalid)
+
+
+def test_model_record_scores_the_model_in_every_election_with_a_backtest(history_site):
+    """El modelo como una encuestadora: en cada elección con backtest, su estimación al horizonte más corto, medida
+    con las definiciones de las encuestadoras y frente a sus últimos sondeos; la de 2019 no tiene backtest."""
+    record = pages.model_record()
+    [row] = record['rows']
+    assert row['scope'] == 'es' and row['event_date'] == '2023-07-23' and row['days'] == 6 and row['year'] == 2023
+    assert row['label'] == 'Generales 2023' and row['name'] == row['label']
+    assert row['error_avg'] is not None and set(record['blocks']) <= set(row)
+    assert 0.0 <= row['better_than'] <= 1.0 and row['n_pollsters'] == 3
+    assert {r['party'] for r in row['parties']} >= {'PP'}
+    kpis = {kpi['label']: kpi for kpi in record['kpis']}
+    assert list(kpis) == ['Elecciones', 'Error medio', 'Error de bloques', 'Frente a las encuestadoras']
+    assert kpis['Elecciones']['value'] == '1' and kpis['Frente a las encuestadoras']['unit'] == '%'
+
+
+def test_backtest_page_starts_with_the_model_as_a_pollster(history_site):
+    """/metodo/backtest abre con el modelo medido como una encuestadora: KPIs, camino (Evento, Error medio, Sesgo
+    bloques), diana con filtros y su tabla (Evento y los bloques, la izquierda primero) y su último estimado por
+    partido frente al resultado; después, las tarjetas por ámbito de siempre (2026-10-21)."""
+    status, _, body = call(history_site, '/metodo/backtest', query='scope=es')
+    page = html(body)
+    assert status == 200
+    order = [page.index('id="{}"'.format(card)) for card in ('model-profile', 'model-path', 'bullseye', 'model-last')]
+    assert order == sorted(order) and order[-1] < page.index('id="scope-filter"')
+    assert re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', page)[:4] == [
+        'Elecciones', 'Error medio', 'Error de bloques', 'Frente a las encuestadoras']
+    path = re.search(r'<table id="model-path-table">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', path) == ['Evento', 'Error medio', 'Sesgo bloques']
+    assert '<td>Generales 2023</td>' in path
+    table = re.search(r'<table id="bullseye-table" data-fixed="1">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col">([^<]*)</th>', table) == ['Evento', 'Izquierda', 'Derecha']
+    assert '<form id="bullseye-filter" class="series-controls filters-bar" hidden>' in page
+    last = re.search(r'<table id="model-last-table">(.*?)</table>', page, re.S).group(1)
+    assert 'PP' in last and '<td>Generales 2023</td>' in last
+    data = initial(body)
+    assert [row['event_date'] for row in data['bullseye']] == ['2023-07-23'] and data['bullseye_blocks'] == ['Derecha', 'Izquierda']
+    assert [s['code'] for s in data['bullseye_scopes']] == ['es']
+
+
+def test_backtest_page_without_model_elections_has_no_model_cards(api):
+    page = html(call(api, '/metodo/backtest', query='scope=es')[2])
+    assert 'id="model-profile"' not in page and 'id="bullseye"' not in page
 
 
 def test_backtest_tolerates_a_backtest_without_run_json(api, fresh_app):
@@ -2435,8 +2568,8 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     assert '¿Cómo calculamos el rating de las encuestadoras?' in page and 'id="scope-filter"' in page
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
-    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio',
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)', thead)
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio',
                      'Sesgo bloques', 'Rebaño']
     assert 'class="help"' not in thead  # sin interrogante: el glosario explica las columnas (2026-10-16)
     assert 'Calidad' not in thead  # la palabra pública es «Confianza»
@@ -2930,6 +3063,17 @@ def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
     assert 'PP −25 escaños <small>vs 2023</small>' in page.replace('\n', '')  # el chip de delta del hero
 
 
+def test_home_past_elections_include_scopes_without_a_run(history_two_scopes, fresh_app):
+    """«Elecciones pasadas» de Inicio lista también las elecciones de un ámbito sin previsión publicada (recién
+    votado): su detalle existe (2026-10-20)."""
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    past = html(call(history_two_scopes, '/')[2])
+    past = past[past.index('id="past"'):]
+    assert 'href="/elecciones/es/andalucia/2022-06"' in past and 'href="/elecciones/es/madrid/2021-05"' in past
+
+
 def test_escanos_table_draws_the_seat_range_and_the_ridge_is_compact(api):
     page = html(call(api, '/es/escanos')[2])
     table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
@@ -2955,12 +3099,13 @@ def test_profile_opens_with_three_kpis_and_keeps_the_path_table(houses):
     assert 'Tipo: ' not in profile and 'id="path-table"' in page and 'id="rating-path"' in page
 
 
-def test_election_detail_has_the_lead_strip_without_p_first(events_site):
+def test_election_detail_and_home_have_no_lead_strip(events_site):
+    """Sin la banda gris del líder bajo el hemiciclo, ni en el detalle de una elección ni en Inicio (Luis,
+    2026-10-21; en Promedios ya no estaba desde el 2026-10-19)."""
     page = html(call(events_site, '/elecciones/es/generales/2023-07')[2])
-    strip = re.search(r'<p class="lead-strip">(.*?)</p>', page, re.S).group(1).replace('\n', '')
-    assert 'Líder: <b>PP</b> · <b>160 escaños</b>' in strip and 'P(primero)' not in strip
-    assert 'le faltan <b>16</b> para la mayoría' in strip
-    assert 'class="chart hemi"' in page
+    assert 'lead-strip' not in page and 'Líder:' not in page and 'class="chart hemi"' in page
+    home = html(call(events_site, '/')[2])
+    assert 'lead-strip' not in home and 'Líder:' not in home and 'id="hemicycle-mini"' in home
     table = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
     assert '<span class="bar"><i style="width: 100.0%;' in table
 
@@ -3102,15 +3247,16 @@ def test_resolve_event_path_finds_the_election_of_a_month_or_of_a_date(history_t
     (('es', 'generales', '2023-07-32'), 400, 'invalid date'),
     (('es', 'generales', '2020-01'), 404, 'event not published'),
     (('es', 'generales', '2023-07-24'), 404, 'event not published'),
-    (('es', 'andalucia', '2022-06'), 404, 'scope not published'),
+    (('es', 'aragon', '2023-05'), 404, 'scope not published'),  # sin elecciones publicadas
 ])
 def test_resolve_event_path_errors(history_two_scopes, fresh_app, segments, status, message):
-    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones sin run: sin detalle
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)  # elecciones sin run: con detalle
     webapi.site().manifest_cache_clear()
     webapi.site().files.clear()
     with pytest.raises(HttpError) as error:
         pages.resolve_event_path(*segments)
     assert error.value.status == status and str(error.value.message) == message
+    assert pages.resolve_event_path('es', 'andalucia', '2022-06') == ('es-an', '2022-06-19')
 
 
 def test_pollster_href_slugs_the_name_and_falls_back_to_the_id():
@@ -3428,8 +3574,8 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     la confianza leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales',
-                                                          'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos',
+                                                          'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
@@ -3437,8 +3583,8 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
     assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
-    assert ('En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el que se calcula '
-            'el criterio «Implantación» de la confianza.') in glossary
+    assert ('Entre paréntesis, cuántas de ellas fueron elecciones generales: el dato con el que se calcula el criterio '
+            '«Implantación» de la confianza.') in glossary
     assert 'todas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
@@ -3446,23 +3592,22 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
                                                                   'Sesgo bloques', 'Rating', 'Cambio']
 
 
-def test_casas_ranking_shows_the_generales_column_after_elecciones(houses):
+def test_casas_ranking_shows_the_general_elections_in_brackets_in_elecciones(houses):
+    """«Elecciones» lleva entre paréntesis las generales («28 (5)»), con «(generales)» bajo la cabecera; sin
+    columna ni filtro aparte (2026-10-20)."""
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table)
-    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial',
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)', table)
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial',
                      'Error medio', 'Sesgo bloques', 'Rebaño']
-    assert re.findall(r'<tr data-national-events="(\d+)"', table) == ['3', '2']  # GAD3, CIS
+    assert '>Elecciones<span class="th-sub">(generales)</span></th>' in table
+    assert table.count('<col ') == len(heads)
+    assert '<td>2 (3)</td>' in table  # GAD3: 2 elecciones de la fixture, 3 generales
+    assert 'ranking-national-events' not in page and 'data-national-events' not in page and 'Solo con experiencia' not in page
 
 
-def test_casas_ranking_has_the_generales_filter(houses):
-    page = html(call(houses, '/casas')[2])
-    assert '<input type="checkbox" id="ranking-national-events">' in page and 'Solo con experiencia en generales' in page
-    assert 'id="ranking-national-events" checked' not in page
-
-
-def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
-    """A known count of 0 renders its number (only an unknown count renders «–») and the filter still hides it."""
+def test_casas_ranking_with_a_known_zero_shows_zero_in_brackets(houses, monkeypatch):
+    """A known count of 0 shows «(0)»; only an unknown count omits the brackets."""
     known = pd.DataFrame({
         'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
         'num_events': [1], 'num_national_events': [0], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5],
@@ -3472,11 +3617,11 @@ def test_casas_ranking_with_a_known_zero_shows_zero(houses, monkeypatch):
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>0</td>' in table
+    assert '<td>1 (0)</td>' in table
 
 
-def test_casas_ranking_without_num_national_events_shows_a_dash_and_counts_zero(houses, monkeypatch):
-    """Old ratings rows (before the database column exists): «–», `data-national-events="0"` (hidden by the filter)."""
+def test_casas_ranking_without_num_national_events_shows_only_the_elections(houses, monkeypatch):
+    """Old ratings rows (before the database column exists): the elections without brackets."""
     old = pd.DataFrame({
         'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
         'num_events': [1], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5], 'bias_blocks': [0.5],
@@ -3486,9 +3631,7 @@ def test_casas_ranking_without_num_national_events_shows_a_dash_and_counts_zero(
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert '<tr data-national-events="0">' in table and '<td>1</td>\n                <td>–</td>' in table
-    # no known count in any row: the filter would hide everything, so the control is not rendered
-    assert 'id="ranking-national-events"' not in page and 'id="ranking-controls"' not in page
+    assert '<td>1</td>' in table and '<td>1 (' not in table
 
 
 def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):
@@ -4594,3 +4737,20 @@ def test_shade_scale_filter_grows_green_from_lo_to_hi():
     assert shade_scale(-3, 0, 10) == shade_scale(0, 0, 10) and shade_scale(40, 0, 10) == shade_scale(10, 0, 10)
     assert shade_scale(0, 0, 0) == shade_scale(0, 0, 10)  # an empty range: the lightest
     assert pages.environment().filters['shade_scale'] is pages.shade_scale
+
+
+def test_run_less_colours_take_the_first_party_of_each_named_block():
+    """Sin run del ámbito: el margen es el de la elección y los bloques del mapa nacional se colorean con su
+    primer partido en los resultados; un bloque fuera del mapa (el resto) se queda sin color, como con run."""
+    meta = {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}}
+    national = {'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE'], 'Regionalista': ['PNV']}}}
+    blocks_of = {'PP': 'Derecha', 'PSOE': 'Izquierda', 'ADELANTE': 'Regionalista', 'PA': 'Regionalista', 'X': 'Otros',
+                 'Y': None}
+    out = pages.run_less_colours(meta, national, blocks_of)
+    assert out['bmaps']['vs'] == meta['blocks']
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP'], 'Izquierda': ['PSOE'], 'Regionalista': ['ADELANTE', 'PA']}
+    catalog = pages.Catalog({name: {'fullname': name, 'color': color} for name, color in
+                             [('PP', '#1d84ce'), ('PSOE', '#ef1c27'), ('ADELANTE', '#1eca7f'), ('PA', '#00aa00'),
+                              ('X', '#123456')]})
+    assert pages.block_color('Regionalista', out, catalog) == '#1eca7f'
+    assert pages.block_color('Otros', out, catalog) == pages.OTHERS_COLOR

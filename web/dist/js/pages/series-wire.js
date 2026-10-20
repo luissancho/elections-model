@@ -1,6 +1,6 @@
 // Wiring of the poll average shared by Promedios and the detail of a past election: the party and block views
 // of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window and view controls
-// (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
+// and the poll points (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
 import {blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
 import {setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
@@ -90,11 +90,12 @@ export function fillLegend(legendEl, current, selected, chart, inks = {}) {
 }
 
 /**
- * Draw the poll average and wire its controls: view and window radios and the pill legend, which selects the
- * parties or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash.
+ * Draw the poll average and wire its controls: view, window and poll-points radios and the pill legend, which
+ * selects the parties or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash.
+ * Without the poll-points control (`#series-polls`) the points are always drawn.
  *
  * @param {object} views `seriesViews` of the page
- * @param {object} state `{view, window, selected}` parsed from the hash
+ * @param {object} state `{view, window, selected, polls}` parsed from the hash
  * @param {function} render draws a chart: `(el, polls, chartState) => chart`
  * @param {object} options `anchor` (ISO date the window control counts back from) and `inks` (text colour
  *   over the colour of each name, for the pills; `initial.inks`)
@@ -104,6 +105,7 @@ export function wireAverage(views, state, render, {anchor, inks = {}}) {
   const legendEl = document.getElementById('series-legend');
   const windowSet = document.getElementById('series-window');
   const viewSet = document.getElementById('series-view');
+  const pollsSet = document.getElementById('series-polls');
   let chart = null;
 
   /** Write the state of the controls to the URL hash without adding a history entry. */
@@ -114,7 +116,9 @@ export function wireAverage(views, state, render, {anchor, inks = {}}) {
 
   /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
   function draw() {
-    const drawn = render(mainEl, views[state.view].polls, state);
+    const polls = views[state.view].polls;
+    // hidden poll points: the same polls part without polls, so the axis adapts to the lines and bands alone
+    const drawn = render(mainEl, pollsSet && state.polls === false ? {...polls, polls: []} : polls, state);
     if (!chart) {
       chart = drawn;
       chart.on('legendselectchanged', (event) => {
@@ -134,6 +138,9 @@ export function wireAverage(views, state, render, {anchor, inks = {}}) {
   for (const input of document.querySelectorAll('#series-view input[name=view]')) {
     input.checked = input.value === state.view;
   }
+  for (const input of document.querySelectorAll('#series-polls input[name=polls]')) {
+    input.checked = (input.value === 'si') === (state.polls !== false);
+  }
   markSegments();
   tryDraw(draw, 'the poll average');
 
@@ -147,6 +154,16 @@ export function wireAverage(views, state, render, {anchor, inks = {}}) {
         state.window = event.target.value;
         const current = views[state.view];
         setWindow(chart, state.window, {series: current.series, projection: current.projection, anchor, result: current.result});
+        writeHash();
+      }
+    });
+  }
+  if (pollsSet) {
+    pollsSet.hidden = false;
+    pollsSet.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=polls]')) {
+        state.polls = event.target.value === 'si';
+        tryDraw(draw, 'the poll average');
         writeHash();
       }
     });

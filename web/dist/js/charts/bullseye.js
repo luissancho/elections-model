@@ -10,6 +10,8 @@ const RING_STEPS = 72;
 const POINT_SIZE = 8;
 const POINT_Z = 10;
 const TOP_Z = 12;
+// The highlighted point (the model in the detail of an election): a point like the others, over all of them
+const HIGHLIGHT_Z = 14;
 
 /**
  * Closed polygon approximating the circle of the given radius, in axis units.
@@ -138,7 +140,7 @@ function guideSeries(limit) {
  */
 export function bullseyeOption(rows, {
   blocks, groupOf = null, colors = {}, color = null, legend = false, labels = true, groupLabel = (group) => group,
-  labelOf = (row) => row.event, alphaOf = null, onTop = null,
+  labelOf = (row) => row.event, alphaOf = null, onTop = null, highlight = null,
 }) {
   const [xBlock, yBlock] = blocks;
   const styled = (row) => {
@@ -151,7 +153,10 @@ export function bullseyeOption(rows, {
   const points = rows
     .filter((row) => Number.isFinite(row[xBlock]) && Number.isFinite(row[yBlock]))
     .map((row) => ({value: [row[xBlock], row[yBlock]], row, ...styled(row)}));
-  const reach = Math.max(RINGS[RINGS.length - 1], ...points.flatMap((p) => p.value.map(Math.abs)));
+  const marked = highlight && Number.isFinite(highlight.row[xBlock]) && Number.isFinite(highlight.row[yBlock])
+    ? [highlight.row[xBlock], highlight.row[yBlock]] : null;
+  const reach = Math.max(RINGS[RINGS.length - 1], ...points.flatMap((p) => p.value.map(Math.abs)),
+    ...(marked || []).map(Math.abs));
   const limit = Math.ceil(reach * 1.1);
 
   const axis = (name) => ({
@@ -195,6 +200,14 @@ export function bullseyeOption(rows, {
     },
     series: [...guideSeries(limit), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop})],
   };
+  if (marked) {
+    // no label: the colour and the `z` over every other point (POINT_Z, TOP_Z) are enough; the tooltip names it
+    option.series.push({
+      id: 'highlight', type: 'scatter', symbolSize: POINT_SIZE, z: HIGHLIGHT_Z, color: highlight.color || THEME.textColor,
+      label: {show: false},
+      data: [{value: marked, row: highlight.row}],
+    });
+  }
   if (legend && groupOf) {
     // Only the groups are named series, so the rings stay out of the legend.
     option.legend = {type: 'scroll', bottom: 0, data: groupNames(points, groupOf), formatter: groupLabel};
@@ -216,7 +229,10 @@ export function bullseyeOption(rows, {
  *   (`group => text` of the legend), `labels` (write a label next to each point), `labelOf` (`row => text` of
  *   that label, `row.event` by default), `alphaOf` (`row => opacity`, 0 to 1: the point and its label fade;
  *   `null` keeps them opaque) and `onTop` (`group => boolean`: the points of those groups are drawn over the
- *   other groups', e.g. the general elections over the regional ones; `null` keeps the order of the groups)
+ *   other groups', e.g. the general elections over the regional ones; `null` keeps the order of the groups) and
+ *   `highlight` (`{row, color}`: one more point, of the size of the others and in its `color` (the text colour by
+ *   default), without a label, drawn over every other point and counted in the extent of the axes; its tooltip
+ *   names `row`; nothing without coordinates)
  * @returns {object} the ECharts instance
  */
 export function renderBullseye(el, rows, opts) {

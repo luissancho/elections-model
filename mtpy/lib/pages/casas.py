@@ -122,13 +122,15 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
 # The columns of the two tables of the houses, in order: the ranking (``/casas``) and the rating path of a profile.
 # Each column has a public label and one description, which the table header carries as tooltip and the glossary
 # «Qué mide cada columna» lists (``table_columns``).
-RANKING_COLUMNS = ('pollster', 'rating', 'quality', 'num_events', 'num_national_events', 'num_polls', 'bias_dev_adj',
-                   'error_avg', 'error_blocks', 'herding')
+RANKING_COLUMNS = ('pollster', 'rating', 'quality', 'num_events', 'num_polls', 'bias_dev_adj', 'error_avg',
+                   'error_blocks', 'herding')
 PATH_COLUMNS = ('event', 'n_polls', 'bias_dev_adj', 'error_avg', 'error_blocks', 'rating', 'change')
 COLUMN_LABELS = {'pollster': 'Encuestadora', 'rating': 'Rating', 'quality': 'Confianza', 'num_events': 'Elecciones',
-                 'num_national_events': 'Generales', 'num_polls': 'Sondeos', 'bias_dev_adj': 'Diferencial',
+                 'num_polls': 'Sondeos', 'bias_dev_adj': 'Diferencial',
                  'error_avg': 'Error medio', 'error_blocks': 'Sesgo bloques', 'herding': 'Rebaño', 'event': 'Evento',
                  'n_polls': 'Sondeos', 'change': 'Cambio'}
+# A second, smaller line under the label of a column: «Elecciones» carries the general elections in brackets
+COLUMN_SUBLABELS = {'num_events': '(generales)'}
 
 
 def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] = None) -> list:
@@ -148,7 +150,8 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
     Returns
     -------
     list of dict
-        ``{'key', 'label', 'text'}`` per column, in the order of the table.
+        ``{'key', 'label', 'sub', 'text'}`` per column, in the order of the table; ``sub`` is the smaller second
+        line of the header (``COLUMN_SUBLABELS``), ``None`` for most columns.
     """
     first = 'a ' + blocks[0] if len(blocks) > 0 else 'al primer bloque'
     second = 'a ' + blocks[1] if len(blocks) > 1 else 'al segundo'
@@ -169,9 +172,8 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
             'cuatro criterios sobre cómo trabaja (la calidad previa del método); pesa en el rating mientras ha '
             'sondeado pocas elecciones.' + rule),
         'num_events': ('En cuántas elecciones publicó sondeos, contando cada ámbito y fecha por separado: dos '
-                       'autonómicas del mismo día cuentan dos.'),
-        'num_national_events': ('En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el '
-                         'que se calcula el criterio «Implantación» de la confianza.'),
+                       'autonómicas del mismo día cuentan dos. Entre paréntesis, cuántas de ellas fueron elecciones '
+                       'generales: el dato con el que se calcula el criterio «Implantación» de la confianza.'),
         'num_polls': ('Cuántos sondeos suyos entran en el cálculo del rating, de todas las elecciones anteriores y de '
                       'todos los ámbitos, tras descartar los de peso ínfimo.'),
         'event': 'La elección, o las elecciones del mismo día, en que publicó sondeos; de la más nueva a la más antigua.',
@@ -192,7 +194,7 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
     }
     keys = PATH_COLUMNS if kind == 'path' else RANKING_COLUMNS
 
-    return [{'key': key, 'label': COLUMN_LABELS[key], 'text': texts[key]} for key in keys]
+    return [{'key': key, 'label': COLUMN_LABELS[key], 'sub': COLUMN_SUBLABELS.get(key), 'text': texts[key]} for key in keys]
 
 
 def block_bar_colors(meta: dict, parties) -> tuple:

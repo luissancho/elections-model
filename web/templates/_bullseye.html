@@ -1,0 +1,63 @@
+{#- The bullseye of the last polls by election with its scope and years filters and its table, shared by the pollster
+    profile and the model in the backtest page (`pages/bullseye-wire.js` draws it). The page sets `bv`: `rows`
+    (with `name`, `event_date`, `days` and the error of each block), `scopes` and `years` (the options of the
+    filters), `table_blocks` (the block columns, the left block first), `aria` (the label of the chart),
+    `caption` and `dates` (whether the table carries the date and the days before, as in a profile). -#}
+        <form id="bullseye-filter" class="series-controls filters-bar" hidden>
+          <label>Ámbito
+            <select name="ambito">
+              <option value="" selected>Todos</option>
+              {% for scope in bv.scopes %}
+              <option value="{{ scope.code }}">{{ scope.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Desde
+            <select name="desde">
+              {% for year in bv.years %}
+              <option value="{{ year }}"{% if loop.first %} selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Hasta
+            <select name="hasta">
+              {% for year in bv.years %}
+              <option value="{{ year }}"{% if loop.last %} selected{% endif %}>{{ year }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <span class="muted" id="bullseye-count" aria-live="polite"></span>
+        </form>
+        <div class="chart big" id="bullseye-chart" role="img" aria-label="{{ bv.aria }}"></div>
+        <div class="table-wrap">
+          <table id="bullseye-table"{% if not bv.dates %} data-fixed="1"{% endif %}>
+            <caption>{{ bv.caption }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ 'Elección' if bv.dates else 'Evento' }}</th>
+                {% if bv.dates %}
+                <th scope="col">Fecha</th>
+                <th scope="col">Días antes</th>
+                {% endif %}
+                {% for block in bv.table_blocks %}
+                <th scope="col">{{ block }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in bv.rows %}
+              <tr>
+                <td>{{ row.name }}</td>
+                {% if bv.dates %}
+                <td>{{ row.event_date|date }}</td>
+                <td>{{ row.days|int }}</td>
+                {% endif %}
+                {% for block in bv.table_blocks %}
+                {# double gradient: red the more the poll fell short of the block (negative), green the more it overshot it #}
+                <td class="cell-shade" style="background-color: {{ row[block]|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row[block]|num(1) }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>

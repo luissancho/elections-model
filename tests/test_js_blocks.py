@@ -70,10 +70,10 @@ def test_block_result_sums_the_parties_of_each_block():
 
 def test_series_hash_round_trip_and_fallbacks():
     ctx = '{parties: ["PP", "PSOE"], blocks: ["Derecha"], windows: ["3m", "6m", "1a", "all"]}'
-    assert run_js(f'b.parseSeriesHash("#ventana=6m&vista=bloques&sel=Derecha", {ctx})') == {'window': '6m', 'view': 'bloques', 'selected': ['Derecha']}
-    assert run_js(f'b.parseSeriesHash("#ventana=9m&vista=bloques&sel=Nadie", {{parties: ["PP"], blocks: [], windows: ["all"]}})') == {'window': 'all', 'view': 'partidos', 'selected': None}
+    assert run_js(f'b.parseSeriesHash("#ventana=6m&vista=bloques&sel=Derecha", {ctx})') == {'window': '6m', 'view': 'bloques', 'selected': ['Derecha'], 'polls': True}
+    assert run_js(f'b.parseSeriesHash("#ventana=9m&vista=bloques&sel=Nadie", {{parties: ["PP"], blocks: [], windows: ["all"]}})') == {'window': 'all', 'view': 'partidos', 'selected': None, 'polls': True}
     assert run_js('b.seriesHash({window: "1a", view: "partidos", selected: ["PP", "PSOE"]})') == '#ventana=1a&vista=partidos&sel=PP,PSOE'
-    assert run_js(f'b.parseSeriesHash("", {ctx})') == {'window': 'all', 'view': 'partidos', 'selected': None}
+    assert run_js(f'b.parseSeriesHash("", {ctx})') == {'window': 'all', 'view': 'partidos', 'selected': None, 'polls': True}
     # los nombres se leen en el orden de la lista de la vista; los de la otra vista no valen
     assert run_js(f'b.parseSeriesHash("#sel=PSOE,PP,Derecha", {ctx})')['selected'] == ['PP', 'PSOE']
     # los nombres que no son de la vista no llegan a la leyenda
@@ -83,7 +83,7 @@ def test_series_hash_round_trip_and_fallbacks():
     names = '["A,B", "C D"]'
     back = run_js(f'b.parseSeriesHash(b.seriesHash({{window: "3m", view: "partidos", selected: {names}}}), '
                   f'{{parties: {names}, blocks: [], windows: ["3m"]}})')
-    assert back == {'window': '3m', 'view': 'partidos', 'selected': ['A,B', 'C D']}
+    assert back == {'window': '3m', 'view': 'partidos', 'selected': ['A,B', 'C D'], 'polls': True}
     assert run_js(f'b.parseSeriesHash("#sel=%E0%A4%A,PP", {ctx})')['selected'] == ['PP']
     # una selección vacía explícita vuelve vacía; una clave ausente o con nombres desconocidos, `null`
     assert run_js('b.seriesHash({window: "all", view: "partidos", selected: []})') == '#ventana=all&vista=partidos&sel='
@@ -91,3 +91,15 @@ def test_series_hash_round_trip_and_fallbacks():
     assert run_js(f'b.parseSeriesHash("#sel=Nadie", {ctx})')['selected'] is None
     # sin selección explícita el hash no lleva `sel`
     assert run_js('b.seriesHash({window: "all", view: "bloques", selected: null})') == '#ventana=all&vista=bloques'
+
+
+def test_series_hash_keeps_the_polls_toggle_only_when_hidden():
+    """«Sondeos»: se ven por defecto y el hash solo lo lleva cuando se ocultan (`sondeos=0`)."""
+    ctx = '{parties: ["PP", "PSOE"], blocks: ["Derecha"], windows: ["3m", "all"]}'
+    assert run_js(f'b.parseSeriesHash("#ventana=3m&sondeos=0", {ctx})')['polls'] is False
+    assert run_js(f'b.parseSeriesHash("#sondeos=1", {ctx})')['polls'] is True
+    assert run_js(f'b.parseSeriesHash("#ventana=3m", {ctx})')['polls'] is True
+    assert run_js('b.seriesHash({window: "3m", view: "partidos", selected: null, polls: false})') == '#ventana=3m&vista=partidos&sondeos=0'
+    assert run_js('b.seriesHash({window: "3m", view: "partidos", selected: null, polls: true})') == '#ventana=3m&vista=partidos'
+    back = run_js(f'b.parseSeriesHash(b.seriesHash({{window: "3m", view: "bloques", selected: ["Derecha"], polls: false}}), {ctx})')
+    assert back == {'window': '3m', 'view': 'bloques', 'selected': ['Derecha'], 'polls': False}
