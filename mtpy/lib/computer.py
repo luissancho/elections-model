@@ -422,9 +422,10 @@ class Computer(Core):
             The standard deviation prior used to compute the bias deviation of each poll.
         bias_dev_sigma : float, optional
             Standard deviation of the deviation of a pollster from one election to another, in log odds ratio
-            (measured at 0.0137 on 2026-10-20, see `measure_event_sigma`). It sets the standard error of the mean
-            deviation of a pollster, `sigma / sqrt(n_eff)`, and the weight `k = (sigma / tau)^2` of the prior
-            quality in the rating, in weighted elections: `R = (W * R_aj + k * Q) / (W + k)`.
+            (measured on 2026-10-20: 0.0135 with `measure_event_sigma`, 0.014 with a degrees-of-freedom
+            correction). It sets the standard error of the mean deviation of a pollster, `sigma / sqrt(n_eff)`,
+            and the weight `k = (sigma / tau)^2` of the prior quality in the rating, in weighted elections:
+            `R = (W * R_aj + k * Q) / (W + k)`.
         ratings_margin : float, optional
             The margin to be applied to the ratings around the [0, 1] range.
         error_weights : dict, optional
@@ -1255,7 +1256,8 @@ class Computer(Core):
                elections count less) and scope (regional elections count less). `W = sum(W_e)` is the evidence
                (`num_events_w`) and `n_eff = W^2 / sum(W_e^2)` the effective number of elections. The standard
                error of the mean deviation `d` is `sigma / sqrt(n_eff)`, with `sigma = bias_dev_sigma` the spread
-               of the deviation of a house from one election to another (0.0137 measured, 0.014 by default).
+               of the deviation of a house from one election to another (0.0135 measured with
+               `measure_event_sigma`, 0.014 with a degrees-of-freedom correction and by default).
             3. The mean deviation `d` is shrunk towards 0 according to that standard error, with a normal prior of
                standard deviation `tau = bias_dev_tau`, and `R_aj = Phi(-d / tau)` scales it to the range [0, 1]:
                0.5 for a house in line with the consensus, higher for a house that deviates less.
@@ -1703,7 +1705,8 @@ class Computer(Core):
         # Compute each pollster's final rating as R = (W * R_aj + k * Q) / (W + k), where W is the weighted number
         # of elections, R_aj the rating of the adjusted deviation, Q the prior quality and k = (sigma / tau)^2.
         # k is the prior weight of a hierarchical model, counted in elections: the election-to-election variance
-        # of a house (sigma = `bias_dev_sigma`, 0.0137 measured, 0.014 by default) over the variance between houses
+        # of a house (sigma = `bias_dev_sigma`: 0.0135 with `measure_event_sigma`, 0.014 dof-corrected and by
+        # default) over the variance between houses
         # (tau = `bias_dev_tau`), about 1.96. The more evidence the pollster has, the less its rating depends on
         # the prior quality.
         k = np.square(self.bias_dev_sigma / self.bias_dev_tau)

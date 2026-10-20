@@ -2243,6 +2243,14 @@ def test_metodo_rating_explains_evidence_by_election(api):
     assert 'un prior de criterios observables' in text and 'no un predictor validado' in text
     assert 'id="criteria-test-table"' in text and 'id="difficulty-table"' in text and 'Implantación' in text
     assert 'la calidad previa pesa como tres sondeos' not in text and 'tres sondeos' not in text
+    # sigma as measured by the rating procedure and with the degrees-of-freedom correction; the 0,006 spread is raw
+    assert 'unos 0,014' in text and '0,0135 con el procedimiento del rating' in text
+    assert 'corrección por grados de libertad' in text and 'de verdad' not in text
+    assert 'menos aún si se descuenta el ruido de cada media' in text
+    # Regionals are not easier, so not discounted further; their lower separation is already in their weight
+    assert 'no hay motivo para descontarlas más' in text and 'ya lo recoge su peso' in text
+    assert 'dos autonómicas cuentan en el rating como unas generales del mismo año' in text
+    assert 'su peso <var>k</var> son unas 2 elecciones de evidencia' in text
 
 
 def test_metodo_rating_reads_the_rubric_from_the_catalogue(api, monkeypatch):

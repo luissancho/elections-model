@@ -81,6 +81,7 @@ Bajar el peso de las autonómicas (0,5 → 0,25) no da prominencia a las casas c
 acercar a todas a su calidad previa. Las que más suben son las que no tienen generales y tienen una calidad previa
 alta (GfK, CPS, inPactos, CIES). Por eso la experiencia en generales entra como criterio de la calidad previa, que es
 el prior que manda justo cuando hay poca evidencia.
+(Medido con la calidad previa anterior a «Implantación»; con el código final ya no se cumple: ver Resultados.)
 
 ## Decisiones de Luis (2026-10-20)
 
@@ -430,8 +431,8 @@ tienen sondeos suficientes); a 180 días solo hay 3 casos (2 con escaños), así
 Lectura: el cambio apenas mueve el backtest nacional, y casi todo lo que mueve viene de D2 («solo-d2» y «después»
 son casi iguales). En voto, nada (`mae_shares` igual de media, ±0,01 puntos por horizonte). En escaños, mezclado
 (`mae_seats` mejora en 4 de 6 horizontes y empeora 0,04 de media). Las métricas probabilísticas empeoran un poco y
-con el mismo signo en casi todos los horizontes: `crps_seats` en 6 de 6 (+0,05 escaños de media, un 0,7 %) y
-`brier_vs` en 5 de 6 (+0,002 de media, sobre todo a 60-180 días; a 180 días solo hay 3 casos). La cobertura del 95 %
+con el mismo signo en casi todos los horizontes: `crps_seats` en 6 de 6 (+0,05 escaños de media, un 0,6 %) y
+`brier_vs` en 5 de 6 (+0,002 de media, un 2,9 %; +7 % a 180 días, donde solo hay 3 casos). La cobertura del 95 %
 del voto no cambia salvo a 180 días (0,80 → 0,87, 3 casos). Es un empeoramiento consistente en signo pero muy
 pequeño, dentro de lo que pueden mover 5 elecciones; no es un empeoramiento claro. El cambio no busca mejorar el
 backtest sino corregir lo que cuenta la Intención (CENTRA primera con dos autonómicas); Luis decide con esto delante.
@@ -500,8 +501,8 @@ Bolsa global: 18 ámbitos con `rating_weight > 0`, 4088 sondeos con `bias` evalu
   sesgado a la baja. Corregido, el ponderado da 0,0140, justo el valor por defecto (`bias_dev_sigma = 0.014`,
   k = 1,96). **El código no cambia**: el valor por defecto sigue en 0,014 y `measure_event_sigma` sigue con el
   procedimiento de la spec. Luis decide si el método de medida pasa al estimador corregido.
-- El texto del método dice «σ … 0,014, medido con las encuestadoras de tres o más elecciones» y «k = 1,96, unas 2
-  elecciones», que valen con los dos estimadores ponderados redondeados a tres decimales.
+- El texto del método dice «σ … unos 0,014», con 0,0135 con el procedimiento del rating y 0,014 con la corrección
+  por grados de libertad, y «k = 1,96, unas 2 elecciones» (el valor por defecto).
 - Dispersión de las medias de las casas con ≥ 5 elecciones: 0,0060 (41 casas; 0,00591 sin corrección, 0,00598 con
   n − 1), como en la spec. Descontado el ruido de cada media (σ²/n_eff, con σ = 0,014), la dispersión real entre
   casas sería ≈ 0,0034: τ = 0,01 parece ancho, como ya anotan los no objetivos. Sin cambios aquí.

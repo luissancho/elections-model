@@ -143,7 +143,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </p>
         <div class="table-wrap">
           <table id="difficulty-table">
-            <caption>Error del último sondeo de cada encuestadora a 30 días o menos de la votación, en puntos. La separación entre encuestadoras es la desviación típica de su «Diferencial» en cada elección.</caption>
+            <caption>Error del último sondeo de cada encuestadora a 30 días o menos de la votación. Los errores, en puntos; la separación entre encuestadoras, como desviación típica de su «Diferencial» en cada elección, en la escala del sesgo.</caption>
             <thead>
               <tr>
                 <th scope="col">Medida</th>
@@ -155,15 +155,15 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
               <tr><th scope="row">Error medio por partido</th><td>2,36</td><td>2,30</td></tr>
               <tr><th scope="row">Error en el margen entre bloques</th><td>4,34</td><td>4,72</td></tr>
               <tr><th scope="row">Error común de todas las encuestadoras en el margen</th><td>4,46</td><td>4,09</td></tr>
-              <tr><th scope="row">Separación entre encuestadoras en una misma elección</th><td>1,28</td><td>1,68</td></tr>
+              <tr><th scope="row">Separación entre encuestadoras en una misma elección (escala del sesgo)</th><td>1,28</td><td>1,68</td></tr>
             </tbody>
           </table>
         </div>
         <p>
-          Los errores son parecidos. Lo que cambia es que en las autonómicas las encuestadoras se separan menos unas
-          de otras, así que distinguen peor a las que aciertan de las que no. Por eso el peso de las autonómicas no
-          se rebajó más (cada una {{ regional_weight() }}), y la experiencia en generales entra en la calidad previa,
-          que es la que manda cuando hay poca evidencia.
+          Los errores son parecidos: las autonómicas no son más fáciles, así que no hay motivo para descontarlas
+          más. Que en ellas las encuestadoras se separen menos unas de otras ya lo recoge su peso: cada elección
+          autonómica {{ regional_weight() }}. Y la experiencia en generales entra por la calidad previa, con el
+          criterio «Implantación», que es lo que manda cuando hay poca evidencia.
         </p>
         <p>
           <strong>Un prior, no un predictor.</strong> La calidad previa es un prior de criterios observables y
@@ -194,8 +194,9 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           </table>
         </div>
         <p>
-          La diferencia de la transparencia es casi toda del CIS: sin él, +0,05. Por eso la calidad previa pesa poco,
-          unas 2 elecciones de evidencia, y se diluye a medida que la encuestadora acumula elecciones.
+          La diferencia de la transparencia es casi toda del CIS: sin él, +0,05. Por eso conviene que la calidad
+          previa pese poco: su peso <var>k</var> son unas 2 elecciones de evidencia (abajo), y se diluye a medida
+          que la encuestadora acumula elecciones.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('evidencia', 'La evidencia, por elecciones', 'La calidad previa pesa más cuantas menos elecciones ha sondeado la encuestadora. La evidencia se cuenta por elecciones, no por sondeos, porque los sondeos de una misma elección comparten su suerte.') }}
@@ -220,12 +221,13 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           diferencian las encuestadoras entre sí. En la escala de los log-odds:
         </p>
         <ul>
-          <li><strong>σ</strong>, lo que varía la desviación de una encuestadora de una elección a otra: 0,014,
-            medido con las encuestadoras de tres o más elecciones.</li>
+          <li><strong>σ</strong>, lo que varía la desviación de una encuestadora de una elección a otra: unos
+            0,014. Medido con las encuestadoras de tres o más elecciones, da 0,0135 con el procedimiento del
+            rating y 0,014 con la corrección por grados de libertad.</li>
           <li><strong>τ</strong>, la escala de las diferencias entre encuestadoras, la misma del rating ajustado:
             0,01.</li>
-          <li>Lo que se separan de verdad las desviaciones medias de las encuestadoras con cinco o más elecciones:
-            0,006.</li>
+          <li>Lo que se separan las desviaciones medias de las encuestadoras con cinco o más elecciones: 0,006, y
+            menos aún si se descuenta el ruido de cada media.</li>
         </ul>
         <p>
           El ruido de una sola elección es mayor que la diferencia real entre encuestadoras: un buen resultado en dos
@@ -254,8 +256,8 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           sondeos con un peso total, contando la antigüedad y el ámbito, por debajo de una centésima se descartan.
         </p>
         <p>
-          <strong>Un ejemplo.</strong> Dos autonómicas del último año suman <var>W</var> = 1, la evidencia de unas
-          generales: con <var>k</var> cerca de 2, la calidad previa pesa dos tercios del rating. Una encuestadora con
+          <strong>Un ejemplo.</strong> Por cómo se pesan, dos autonómicas cuentan en el rating como unas generales
+          del mismo año. Si son del último año, suman <var>W</var> = 1: con <var>k</var> cerca de 2, la calidad previa pesa dos tercios del rating. Una encuestadora con
           decenas de elecciones, como el CIS o Sigma Dos, suma <var>W</var> ≈ 17, y su calidad previa pesa en torno al
           10% de su rating.
         </p>
