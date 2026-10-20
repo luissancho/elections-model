@@ -14,11 +14,11 @@
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su confianza y el rating con el que entra en el promedio, el mismo en todos los ámbitos. Debajo, su historial en las elecciones de todos los ámbitos.') }}
         {{ m.kpis(kpis) }}
       {{ m.card_end() }}
-      {{ m.card_start('quality', 'Confianza', 'Lo que se sabe de cómo trabaja la encuestadora antes de mirar si acierta: cinco criterios comprobables, con su fuente.') }}
+      {{ m.card_start('quality', 'Confianza', 'Lo que se sabe de cómo trabaja la encuestadora antes de mirar si acierta: cuatro criterios comprobables, con su fuente.') }}
         {% if quality.evaluated %}
         <div class="table-wrap">
           <table id="quality-table">
-            <caption>Los cinco criterios de la rúbrica pública, los puntos de la encuestadora en cada uno y de dónde sale.</caption>
+            <caption>Los cuatro criterios de la rúbrica pública, los puntos de la encuestadora en cada uno y de dónde sale.</caption>
             <thead>
               <tr>
                 <th scope="col">Criterio</th>
@@ -33,7 +33,14 @@
                 <th scope="row">{{ row.name }}</th>
                 <td>{{ row.points }} / {{ row.max }}</td>
                 <td>{{ row.level }}</td>
+                {% if row.key == 'implantation' %}
+                <td>
+                  <p>Generales: {% if row.general %}calculado a partir de los sondeos publicados.{% else %}ninguna elección general sondeada.{% endif %}</p>
+                  <p>Estándares: {% for part in row.parts %}{% if part.url %}<a href="{{ part.url }}" rel="noopener">{{ part.url }}</a>{% else %}{{ part.text }}{% endif %}{% else %}–{% endfor %}</p>
+                </td>
+                {% else %}
                 <td>{% for part in row.parts %}{% if part.url %}<a href="{{ part.url }}" rel="noopener">{{ part.url }}</a>{% else %}{{ part.text }}{% endif %}{% else %}–{% endfor %}</td>
+                {% endif %}
               </tr>
               {% endfor %}
             </tbody>

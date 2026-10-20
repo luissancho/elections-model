@@ -1267,8 +1267,8 @@ def test_casa_profile_quality_card_lists_the_rubric_with_sources(houses):
     assert '<div class="v">56,0<small></small></div>' in kpis.replace('\n', '') and '7 de 10 puntos' in kpis
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
-    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia']
-    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2')]
+    assert [r[0] for r in rows] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Implantación']
+    assert [(r[1], r[2]) for r in rows] == [('3', '3'), ('3', '3'), ('0', '2'), ('1', '2')]
     assert '<td>–</td>' in card  # Independencia, sin fuente
     assert 'Entrevistas propias con marco probabilístico' in card and 'href="https://www.cis.es/es/microdatos"' in card
     assert 'Comprobado el 16 oct 2026.' in card and 'Organismo público' in card and 'provisional' not in card
@@ -1341,9 +1341,59 @@ def test_casa_profile_quality_card_of_an_evaluated_informative_house(houses):
     page = html(call(houses, '/casas/agregador')[2])
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
-    assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0')]
+    assert [(r[0], r[1]) for r in rows] == [('Trabajo de campo', '0'), ('Transparencia', '1'), ('Independencia', '0'),
+                                            ('Implantación', '1')]
     assert 'href="https://agregador.example/metodo"' in card and '2 de 10 puntos' in card
     assert 'la confianza es informativa' in card and 'Sin evaluar' not in card
+
+
+def test_profile_confidence_card_shows_implantation_with_its_two_parts(houses):
+    """Implantación: las generales se calculan de los sondeos (sin fuente) y los estándares llevan la suya."""
+    from mtpy.lib.pages.casas import quality_card
+    from mtpy.lib.quality import load_criteria
+    page = html(call(houses, '/casas/cis')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    assert 'calculado a partir de los sondeos publicados' in card and 'Ha sondeado al menos una elección general.' in card
+    criteria = load_criteria()
+    record = {'fieldwork': 2, 'fieldwork_source': 'a', 'transparency': 2, 'transparency_source': 'b', 'independence': 1,
+              'independence_source': 'c', 'identity': 1, 'identity_source': 'd', 'standards': 1,
+              'standards_source': 'https://iaespana.example/socios', 'points': 7, 'quality': 56.0, 'status': 'revisada'}
+    full = quality_card(record, {'mtype': 'private'}, criteria)
+    row = full['rows'][-1]
+    assert [r['name'] for r in full['rows']][-1] == 'Implantación' and (row['points'], row['max']) == (2, 2)
+    assert row['general'] is True and row['standards'] is True and row['parts'][0]['url'] == 'https://iaespana.example/socios'
+    none = quality_card(dict(record, points=5, standards_source=''), {'mtype': 'private'}, criteria)
+    row = none['rows'][-1]
+    assert (row['points'], row['general']) == (0, False) and row['level'] == criteria['criteria']['implantation']['levels']['0']
+    assert none['support'] == '5 de 10 puntos'
+
+
+def test_profile_confidence_card_voids_transparency_without_identity(houses):
+    """Sin entidad identificable la transparencia cuenta 0 y la fila explica la condición."""
+    from mtpy.lib.pages.casas import quality_card
+    from mtpy.lib.quality import load_criteria
+    record = {'fieldwork': 2, 'fieldwork_source': 'a', 'transparency': 1, 'transparency_source': 'b', 'independence': 1,
+              'independence_source': 'c', 'identity': 0, 'identity_source': '', 'standards': 0, 'standards_source': '',
+              'points': 3, 'quality': 24.0, 'status': 'revisada'}
+    rows = {r['key']: r for r in quality_card(record, {'mtype': 'private'}, load_criteria())['rows']}
+    assert (rows['transparency']['points'], rows['transparency']['max'], rows['transparency']['void']) == (0, 3, True)
+    assert rows['transparency']['level'].startswith('Sin una entidad identificable detrás')
+    assert rows['fieldwork']['void'] is False
+
+
+def test_metodo_rubric_lists_four_criteria_and_their_notes(api, fresh_app):
+    """/metodo/rating lista los cuatro criterios del JSON con sus notas, sin «Identidad» ni «Estándares»."""
+    from mtpy.lib.pages.metodo import quality_rubric
+    rubric = quality_rubric()
+    assert [r['name'] for r in rubric['rows']] == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Implantación']
+    notes = [r['note'] for r in rubric['rows']]
+    assert notes[0] is None and notes[1].startswith('Sin una entidad identificable') and notes[3].startswith('Las elecciones generales')
+    page = html(call(api, '/metodo/rating')[2])
+    rubric_html = page[page.index('<th scope="col">Criterio</th>'):]
+    assert 'Sin una entidad identificable detrás' in rubric_html and 'Las elecciones generales se cuentan con los sondeos' in rubric_html
+    names = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>0-\d</td>', rubric_html)
+    assert names == ['Trabajo de campo', 'Transparencia', 'Independencia', 'Implantación']
+    assert 'Identidad' not in names and 'Estándares' not in names
 
 
 def test_pages_package_layout():

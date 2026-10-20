@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
 
 from .. import webapi
-from ..quality import evaluated_keys, level_text, load_criteria, max_points
+from ..quality import level_text, load_criteria, max_points, quality_breakdown
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
 from .common import OTHERS_COLOR, analysis_part, api_url, block_color, common_context
 from .elecciones import (error_blocks, event_part, history_events, history_rows, history_scopes, poll_error_parts,
@@ -732,9 +732,12 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
     Returns
     -------
     dict
-        ``evaluated``, ``rows`` (one ``{'key', 'name', 'points', 'max', 'level', 'source', 'parts'}`` per criterion,
-        in the order of the catalogue, ``parts`` being the source split into text and links by ``source_parts``;
-        empty when not evaluated), ``points``, ``max_points``, ``quality``,
+        ``evaluated``, ``rows`` (one ``{'key', 'name', 'points', 'max', 'level', 'source', 'parts', 'void', 'general',
+        'standards'}`` per criterion, built from ``quality.quality_breakdown`` and followed by the implantation;
+        ``parts`` is the source split into text and links by ``source_parts``; ``void`` is True on a transparency
+        that counts 0 for lack of an identifiable entity, whose ``level`` then is the note of the criterion;
+        ``general`` and ``standards`` are set on the implantation row only, ``source`` and ``parts`` being those
+        of the standards; empty when not evaluated), ``points``, ``max_points``, ``quality``,
         ``status``, ``draft`` (status ``borrador``), ``checked_at`` (ISO string), ``notes``, ``informative``
         (aggregators and online panels, whose polls do not enter the average), ``support`` (the text under the KPI),
         and the ``floor`` and ``per_point`` of the scale.
@@ -743,12 +746,19 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
     scale = criteria['scale']
     rows = []
     if record:
-        for key in evaluated_keys(criteria):
-            source = record.get(f'{key}_source') or ''
-            points = int(record[key])
-            rows.append({'key': key, 'name': criteria['criteria'][key]['name'], 'points': points,
-                         'max': criteria['criteria'][key]['max'], 'level': level_text(criteria, key, points),
-                         'source': source, 'parts': source_parts(source)})
+        breakdown = quality_breakdown(record, criteria)
+        for row in breakdown['rows']:
+            row = dict(row, parts=source_parts(row['source']), void=False, general=None, standards=None)
+            if row['key'] == 'transparency' and breakdown['transparency_void']:
+                row.update(void=True, level=criteria['criteria']['transparency'].get('note') or row['level'])
+            rows.append(row)
+        standards = record.get('standards_source') or ''
+        implantation = breakdown['implantation']
+        rows.append({'key': 'implantation', 'name': criteria['criteria']['implantation']['name'],
+                     'points': implantation, 'max': criteria['criteria']['implantation']['max'],
+                     'level': level_text(criteria, 'implantation', implantation), 'source': standards,
+                     'parts': source_parts(standards), 'void': False, 'general': breakdown['general'],
+                     'standards': int(record.get('standards') or 0) == 1})
     points = int(record['points']) if record else None
     status = record.get('status') if record else None
     return {

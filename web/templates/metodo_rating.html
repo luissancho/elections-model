@@ -110,6 +110,7 @@ pesa menos que uno de unas generales, según el peso que el catálogo da a su co
                     <li>{{ level.points }}: {{ level.text }}</li>
                     {% endfor %}
                   </ul>
+                  {% if row.note %}<p class="muted">{{ row.note }}</p>{% endif %}
                 </td>
               </tr>
               {% endfor %}

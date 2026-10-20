@@ -191,6 +191,25 @@ def prior_quality(pollster_ids, evaluations: pd.DataFrame, scale: dict, n_genera
     return out
 
 
+def split_points(record: dict) -> tuple:
+    """
+    Split the total points of an evaluation of the replica into the manual and the computed part.
+
+    Parameters
+    ----------
+    record : dict
+        A row of `pollsters_quality` (its `points` is the total, implantation included).
+
+    Returns
+    -------
+    tuple
+        `(manual, implantation)`: the points scored by hand (a void transparency counts 0) and the rest.
+    """
+    manual = int(manual_points(int(record['fieldwork']), int(record['transparency']), int(record['independence']),
+                               int(record['identity'])))
+    return manual, int(record['points']) - manual
+
+
 def quality_breakdown(record: Optional[dict], criteria: dict) -> dict:
     """
     Split an evaluation of the replica into its manual and computed parts.
@@ -222,9 +241,7 @@ def quality_breakdown(record: Optional[dict], criteria: dict) -> dict:
         out['rows'].append({'key': key, 'name': criteria['criteria'][key]['name'], 'points': points,
                             'max': criteria['criteria'][key]['max'], 'level': level_text(criteria, key, int(record[key])),
                             'source': record.get(f'{key}_source') or ''})
-    out['manual'] = int(manual_points(int(record['fieldwork']), int(record['transparency']),
-                                      int(record['independence']), int(record['identity'])))
-    out['implantation'] = int(record['points']) - out['manual']
+    out['manual'], out['implantation'] = split_points(record)
     out['general'] = out['implantation'] > 0
     out['transparency_void'] = void
     return out

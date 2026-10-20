@@ -7,6 +7,7 @@ import pandas as pd
 from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
+from ..quality import split_points
 from .caches import DEFAULT_TTL, TTLCache, settings
 from .checks import DEFAULT_LIMIT
 
@@ -314,7 +315,8 @@ def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> d
         ``{'pollster': record, 'ratings': [...], 'house_effects': [...], 'herding': [...],
         'quality': record or None}``: the catalogue row of the pollster and its rows of the ratings (every
         event of the scope, the next one included, by date), house effects and herding tables, as JSON
-        records; ``quality`` is its evaluation of the rubric, or ``None`` when it is not evaluated.
+        records; ``quality`` is its evaluation of the rubric with its ``implantation`` points and ``general`` flag, or ``None``
+        when it is not evaluated.
 
     Raises
     ------
@@ -338,8 +340,31 @@ def query_pollster(pollster_id: int, scope: str, every_scope: bool = False) -> d
         'ratings': frame_to_records(ratings),
         'house_effects': frame_to_records(_rows_of(query_house_effects(tables), 'pollster_id', pollster_id)),
         'herding': frame_to_records(_rows_of(query_herding(tables), 'pollster_id', pollster_id)),
-        'quality': frame_to_records(quality)[0] if not quality.empty else None,
+        'quality': _quality_record(quality),
     }
+
+
+def _quality_record(quality: pd.DataFrame) -> Optional[dict]:
+    """
+    The evaluation of a pollster of the rubric, with the split of its points.
+
+    Parameters
+    ----------
+    quality : pd.DataFrame
+        The rows of ``query_pollsters_quality()`` of the pollster (at most one).
+
+    Returns
+    -------
+    dict or None
+        The row as a record plus ``implantation`` (points of the computed criterion, from
+        ``quality.split_points``, the split ``quality.quality_breakdown`` uses too) and ``general`` (a general election was polled); ``None`` when the pollster
+        is not evaluated.
+    """
+    if quality.empty:
+        return None
+    record = frame_to_records(quality)[0]
+    implantation = split_points(record)[1]
+    return dict(record, implantation=implantation, general=implantation > 0)
 
 
 def query_pollster_path(pollster_id: int) -> dict:

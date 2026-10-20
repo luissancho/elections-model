@@ -316,8 +316,8 @@ def quality_rubric() -> dict:
     Returns
     -------
     dict
-        ``rows`` (one ``{'key', 'name', 'max', 'levels'}`` per criterion, in the order of the catalogue, with
-        ``levels`` a list of ``{'points': int, 'text': str}`` from the highest level to 0), ``max_points`` (the sum
+        ``rows`` (one ``{'key', 'name', 'max', 'levels', 'note'}`` per criterion, in the order of the catalogue, with
+        ``note`` the text the catalogue adds to the criterion or ``None``, and ``levels`` a list of ``{'points': int, 'text': str}`` from the highest level to 0), ``max_points`` (the sum
         of the maxima), the ``per_point`` and ``floor`` of the scale and ``cap`` (``per_point · max_points``, the
         highest prior quality a pollster can get).
 
@@ -332,7 +332,8 @@ def quality_rubric() -> dict:
     for key in criteria_keys(criteria):
         entry = criteria['criteria'][key]
         levels = [{'points': points, 'text': entry['levels'][str(points)]} for points in range(entry['max'], -1, -1)]
-        rows.append({'key': key, 'name': entry['name'], 'max': entry['max'], 'levels': levels})
+        rows.append({'key': key, 'name': entry['name'], 'max': entry['max'], 'levels': levels,
+                     'note': entry.get('note')})
     total = max_points(criteria)
 
     return {'rows': rows, 'max_points': total, 'per_point': scale['per_point'], 'floor': scale['floor'],
