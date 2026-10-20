@@ -11,7 +11,7 @@ from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context
 from .analisis import study_cards
 from .elecciones import last_results, published_events
 from .filters import _madrid_tz, delta_text, fmt_date_short
-from .promedios import lead_strip, leader_of, poll_sample
+from .promedios import inherited_results, lead_strip, leader_of, poll_sample
 from .slugs import event_href
 
 INTRO = ('Demoscopio promedia los sondeos de cada elección, simula el reparto de escaños y puntúa a las encuestadoras '
@@ -251,7 +251,7 @@ def hero_context(card: dict, today: Optional[date] = None) -> Optional[dict]:
     leader = leader_of(rows)
     n_seats = (summary or {}).get('n_seats') or meta.get('n_seats')
     majority = (summary or {}).get('majority') or meta.get('majority')
-    results = last_results(code)
+    results = inherited_results(last_results(code), meta)  # a successor compares with the parties it absorbs
     previous = (results or {}).get('parties') or {}
     deltas = [{'name': row['name'], 'text': delta_text((row.get('seats') or 0) - (previous[row['name']].get('seats') or 0))}
               for row in sorted(rows, key=lambda row: -(row.get('seats') or 0)) if row['name'] in previous][:2]

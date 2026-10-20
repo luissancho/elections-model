@@ -40,7 +40,7 @@
               <tr>
                 <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                 <td><strong>{{ row.seats|int }}</strong></td>
-                {% if results_year %}<td>{{ m.badge(deltas.parties.get(row.name)) }}</td>{% endif %}
+                {% if results_year %}<td>{{ m.badge(deltas.parties.get(row.name), 0, ('Frente a ' ~ inherited[row.name]|join(' + ') ~ ' en ' ~ results_year) if row.name in inherited else None) }}</td>{% endif %}
                 <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_seats|prob }}</td>
                 <td>{{ row.p_first|prob }}</td>

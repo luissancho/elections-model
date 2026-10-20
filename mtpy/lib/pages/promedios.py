@@ -32,8 +32,9 @@ def _deltas(row: dict, before: Optional[dict]) -> dict:
     Returns
     -------
     dict
-        ``{'prev_pct', 'prev_seats', 'delta_pct', 'delta_seats'}``: a difference is ``None`` when either value is
-        missing; the vote difference keeps two decimals.
+        ``{'prev_pct', 'prev_seats', 'delta_pct', 'delta_seats', 'prev_from'}``: a difference is ``None`` when either
+        value is missing; the vote difference keeps two decimals; ``prev_from`` lists the parties whose results the
+        comparison sums (``inherited_results``), empty when it is the party's own.
     """
     prev_pct = before.get('pct') if before else None
     prev_seats = before.get('seats') if before else None
@@ -44,7 +45,66 @@ def _deltas(row: dict, before: Optional[dict]) -> dict:
         'prev_seats': prev_seats,
         'delta_pct': None if pct is None or prev_pct is None else round(pct - prev_pct, 2),
         'delta_seats': None if seats is None or prev_seats is None else seats - prev_seats,
+        'prev_from': list(before.get('inherited') or []) if before else [],
     }
+
+
+def inherited_results(results: Optional[dict], meta: dict) -> Optional[dict]:
+    """
+    The last results with the lineage of the run's source map: the previous result of a party that absorbs others
+    (``agg`` rules of ``meta.smap`` without a regional restriction, the lineage of its poll average,
+    ``Simulator.poll_blocks``) is its own plus theirs, so that a successor (FA after Sumar) and a coalition (PP with
+    UPN) compare with what those parties obtained. ``sub`` and regional rules do not count, nor a source the run
+    simulates on its own.
+
+    Parameters
+    ----------
+    results : dict or None
+        ``last_results`` of the scope, or ``None`` without a published election.
+    meta : dict
+        Data of the meta part (``parties``, ``smap``).
+
+    Returns
+    -------
+    dict or None
+        A copy of ``results`` whose ``parties`` has, for every party with sources in the results, ``{'seats', 'pct',
+        'inherited'}``: the sums (``None`` when no part has a value, the vote with two decimals) and the parties
+        summed, the party itself first when it had a result; the other entries untouched. ``None`` without results.
+    """
+    if results is None:
+        return None
+
+    parties = dict(results.get('parties') or {})
+    simulated = {party.get('name') for party in meta.get('parties') or []}
+
+    for name, rules in (meta.get('smap') or {}).items():
+        sources = []
+
+        for rule in rules if isinstance(rules, list) else [rules]:
+            if not isinstance(rule, dict) or rule.get('type') != 'agg' or rule.get('regions') is not None:
+                continue
+
+            for source in rule.get('names') or []:
+                if source != name and source not in simulated and source in parties and source not in sources:
+                    sources.append(source)
+
+        if not sources:
+            continue
+
+        members = ([name] if name in parties else []) + sources
+
+        def total(key, digits=None):
+            values = [parties[member].get(key) for member in members]
+            values = [value for value in values if value is not None]
+
+            if not values:
+                return None
+
+            return sum(values) if digits is None else round(sum(values), digits)
+
+        parties[name] = {'seats': total('seats'), 'pct': total('pct', 2), 'inherited': members}
+
+    return results | {'parties': parties}
 
 
 def result_rows(summary: dict, results: Optional[dict] = None) -> list:
@@ -550,6 +610,7 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
             'pct': row.get('pct'),
             'delta_seats': deltas['delta_seats'],
             'delta_pct': deltas['delta_pct'],
+            'prev_from': deltas['prev_from'],
         })
 
     return cards
@@ -640,12 +701,14 @@ def promedios_context(state: dict) -> dict:
     # imported here: ``elecciones`` imports this module
     from .elecciones import chart_parties, last_results
     results = last_results(scope, parties)
-    context['result_rows'] = result_rows(summary, results)
-    context['block_result_rows'] = block_result_rows(summary, meta, parties, results)
+    # the deltas follow the lineage of the smap: a successor compares with the parties it absorbs
+    previous = inherited_results(results, meta)
+    context['result_rows'] = result_rows(summary, previous)
+    context['block_result_rows'] = block_result_rows(summary, meta, parties, previous)
     context['n_seats'] = summary.get('n_seats') or meta.get('n_seats')
     context['majority'] = summary.get('majority') or meta.get('majority')
     context['kpis'] = kpi_rows(summary, meta, parties, poll_rows)
-    context['cards'] = party_cards(summary, meta, parties, results)
+    context['cards'] = party_cards(summary, meta, parties, previous)
     context['results_year'] = results['year'] if results else None
     context['results_date'] = results['date'] if results else None
     context['table_parties'] = list(polls.get('parties') or [])
@@ -669,7 +732,7 @@ def promedios_context(state: dict) -> dict:
         'summary': summary,
         'runs': bundle.loads(site().history(scope))['data'],
         'cards': [{'name': card['name'], 'color': card['color']} for card in context['cards']],
-        'deltas': seat_deltas(summary, meta, parties, results),
+        'deltas': seat_deltas(summary, meta, parties, previous),
         # the browser's catalogue: the run's parties, those of the polls table and those of the last election, with
         # the colour, name and block of the published catalogue for the ones the run does not simulate
         'catalog': {'parties': [dict(parties[name], name=name) for name in chart_parties(

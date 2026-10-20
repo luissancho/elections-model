@@ -15,7 +15,7 @@
       {% if cards %}
       <div class="pcards" id="pcards">
         {% for card in cards %}
-        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado del {{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
+        <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado {% if card.prev_from %}de {{ card.prev_from|join(' + ') }} el {% else %}del {% endif %}{{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
         {% endfor %}
       </div>
       {% endif %}
@@ -98,9 +98,10 @@
                 <tr>
                   <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                   <td>{{ row.pct|pct }}</td>
-                  {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
+                  {% set whom = ('Frente a ' ~ row.prev_from|join(' + ') ~ ' en ' ~ results_year) if row.prev_from else None %}
+                  {% if results_year %}<td>{{ m.badge(row.delta_pct, 1, whom) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
-                  {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
+                  {% if results_year %}<td>{{ m.badge(row.delta_seats, 0, whom) }}</td>{% endif %}
                   <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 </tr>
                 {% endfor %}
@@ -116,7 +117,9 @@
           <p>
             Las columnas «vs {{ results_year }}» comparan con el resultado oficial del {{ results_date|date }}, en puntos
             y en escaños: flecha verde si sube y roja si baja; un guion, sin cambio apreciable o un partido que no
-            concurrió entonces. Las tarjetas de arriba llevan las mismas flechas bajo sus cifras.
+            concurrió entonces. Las tarjetas de arriba llevan las mismas flechas bajo sus cifras. Cuando un partido
+            recoge en el modelo el voto de otro que ya no concurre, la comparación suma lo que obtuvieron ambos
+            entonces; la flecha lo dice al pasar el ratón.
           </p>
           {% endif %}
           {% endcall %}

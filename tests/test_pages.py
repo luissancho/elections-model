@@ -823,7 +823,7 @@ def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_orde
                           {'name': 'Derecha', 'pct': 52.5, 'seats': 203, 'p_majority': 0.995},
                           {'name': 'Separatista', 'pct': None, 'seats': None, 'p_majority': None}]}
     assert pages.result_rows(summary) == [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'seats_lo': None, 'seats_hi': None, 'p_first': 0.95,
-                                           'prev_pct': None, 'prev_seats': None, 'delta_pct': None, 'delta_seats': None}]
+                                           'prev_pct': None, 'prev_seats': None, 'delta_pct': None, 'delta_seats': None, 'prev_from': []}]
     rows = pages.block_result_rows(summary, fixture_data('meta'), pages.Catalog(fixture_data('meta')))
     assert [r['name'] for r in rows] == ['Derecha', 'Izquierda'] and rows[0]['p_majority'] == 0.995 and rows[0]['color'].startswith('#')
     assert pages.result_rows({}) == [] and pages.block_result_rows({}, fixture_data('meta'), pages.Catalog(fixture_data('meta'))) == []
@@ -3625,6 +3625,80 @@ def test_escanos_tables_compare_the_seats_with_the_previous_election(events_site
 def test_escanos_tables_without_a_published_election_have_no_comparison(api):
     plain = html(call(api, '/es/escanos')[2])
     assert 'vs 2023' not in plain and 'class="dlt' not in plain and initial(call(api, '/es/escanos')[2])['deltas'] == {'parties': {}, 'blocks': {}, 'year': None}
+
+
+# Seguimiento 2026-10-20 (Luis): un partido que absorbe a otro en el `smap` del evento (FA a Sumar, PP a UPN) se compara
+# con lo que obtuvieron ambos en la última elección, en vez de salir sin diferencia.
+
+def test_inherited_results_sum_the_parties_a_run_party_absorbs():
+    """`inherited_results`: el resultado previo de un partido es el suyo más el de los que absorbe por reglas `agg`
+    sin regiones (el linaje del promedio de encuestas, `Simulator.poll_blocks`); las reglas `sub`, las regionales y
+    las fuentes que el run simula aparte no cuentan; los resultados originales no se tocan."""
+    results = {'date': '2023-07-23', 'year': 2023,
+               'parties': {'PP': {'seats': 137, 'pct': 33.06}, 'SUMAR': {'seats': 31, 'pct': 12.33},
+                           'UPN': {'seats': 1, 'pct': 0.21}, 'VOX': {'seats': 33, 'pct': 12.38}},
+               'blocks': {'Derecha': {'seats': 171, 'pct': 45.65}}}
+    meta = {'parties': [{'name': name} for name in ('PP', 'VOX', 'FA', 'UP', 'SALF', 'COMPROMIS')],
+            'smap': {'FA': [{'type': 'agg', 'names': ['SUMAR']},
+                            {'type': 'agg', 'names': [], 'regions': {'exclude': ['3', '12', '46']}}],
+                     'UP': [{'type': 'sub', 'names': ['FA']}],
+                     'COMPROMIS': [{'type': 'agg', 'names': ['SUMAR'], 'regions': ['3', '12', '46']}],
+                     'PP': {'type': 'agg', 'names': ['UPN']},  # una regla suelta, sin lista, también vale
+                     'SALF': [{'type': 'agg', 'names': ['VOX']}],  # VOX se simula aparte: conserva su resultado
+                     'VOX': 'VOX'}}  # el formato antiguo del fixture se ignora
+    out = pages.inherited_results(results, meta)
+    assert out['parties']['FA'] == {'seats': 31, 'pct': 12.33, 'inherited': ['SUMAR']}
+    assert out['parties']['PP'] == {'seats': 138, 'pct': 33.27, 'inherited': ['PP', 'UPN']}
+    assert 'UP' not in out['parties'] and 'COMPROMIS' not in out['parties'] and 'SALF' not in out['parties']
+    assert out['parties']['VOX'] == {'seats': 33, 'pct': 12.38} and out['parties']['SUMAR'] == {'seats': 31, 'pct': 12.33}
+    assert out['blocks'] == results['blocks'] and out['year'] == 2023 and out['date'] == '2023-07-23'
+    assert 'FA' not in results['parties'] and results['parties']['PP'] == {'seats': 137, 'pct': 33.06}  # sin tocar
+    assert pages.inherited_results(None, meta) is None
+    assert pages.inherited_results(results, {})['parties'] == results['parties']
+    # sin escaños ni voto en ninguna de las partes, la diferencia queda sin valor
+    bare = pages.inherited_results({'parties': {'SUMAR': {'seats': None, 'pct': None}}}, meta)
+    assert bare['parties']['FA'] == {'seats': None, 'pct': None, 'inherited': ['SUMAR']}
+
+
+def test_result_rows_and_cards_carry_whom_a_party_is_compared_with():
+    """Las filas y las tarjetas de Promedios llevan `prev_from`, los partidos cuyo resultado suma la comparación
+    (vacío cuando es el propio), y las diferencias se calculan sobre esa suma."""
+    summary = fixture_data('summary')  # PP: 135 escaños, 33,1 %
+    meta = fixture_data('meta') | {'smap': {'PP': [{'type': 'agg', 'names': ['PSOE']}]}}
+    results = {'date': '2023-07-23', 'year': 2023, 'blocks': {},
+               'parties': {'PP': {'seats': 160, 'pct': 33.06}, 'PSOE': {'seats': 150, 'pct': 31.44}}}
+    previous = pages.inherited_results(results, meta)
+    row = pages.result_rows(summary, previous)[0]
+    assert (row['prev_pct'], row['prev_seats'], row['delta_pct'], row['delta_seats']) == (64.5, 310, -31.4, -175)
+    assert row['prev_from'] == ['PP', 'PSOE']
+    assert pages.result_rows(summary, results)[0]['prev_from'] == []
+    card = pages.party_cards(summary, meta, pages.Catalog(meta), previous)[0]
+    assert (card['delta_seats'], card['delta_pct'], card['prev_from']) == (-175, -31.4, ['PP', 'PSOE'])
+    assert pages.seat_deltas(summary, meta, pages.Catalog(meta), previous)['parties'] == {'PP': -175}
+
+
+def test_promedios_compares_a_successor_with_the_parties_it_absorbs(events_site, fresh_app):
+    """Con una regla `agg` en el `smap` del run (el PP absorbe al PSOE en el fixture), las columnas «vs 2023», las
+    tarjetas y el hemiciclo de Promedios, las tablas y la barra de Escaños y el hemiciclo de Inicio comparan con la
+    suma de ambos resultados, y la flecha dice con quién al pasar el ratón."""
+    meta = fixture_data('meta') | {'smap': {'PP': [{'type': 'agg', 'names': ['PSOE']}]}}
+    writer = write_bundle(fresh_app.fs)
+    writer.write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    webapi.site().manifest_cache_clear()
+    page = html(call(events_site, '/es')[2])
+    parties = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
+    row = re.findall(r'<tr>(.*?)</tr>', parties, re.S)[1]
+    # PP: 33,1 − (33,06 + 31,44) = −31,4; 135 − (160 + 150) = −175
+    assert re.findall(r'<td><span class="dlt (\w+)" title="([^"]*)">([^<]*)</span></td>', row) == [
+        ('down', 'Frente a PP + PSOE en 2023', '▼ 31,4'), ('down', 'Frente a PP + PSOE en 2023', '▼ 175')]
+    card = re.search(r'<article class="pc"[^>]*data-name="PP">(.*?)</article>', page, re.S).group(1)
+    assert 'title="Flechas: frente al resultado de PP + PSOE el 23 jul 2023"' in card and '▼ 175' in card and '▼ 31,4' in card
+    assert initial(call(events_site, '/es')[2])['deltas']['parties'] == {'PP': -175}
+    assert 'suma lo que obtuvieron ambos' in re.sub(r'\s+', ' ', page)  # «Cómo leerlo» lo explica
+    seats = html(call(events_site, '/es/escanos')[2])
+    assert re.search(r'<td><strong>135</strong></td>\s*<td><span class="dlt down" title="Frente a PP \+ PSOE en 2023">▼ 175</span></td>', seats)
+    assert initial(call(events_site, '/es/escanos')[2])['deltas']['parties'] == {'PP': -175}
+    assert initial(call(events_site, '/')[2])['hero']['deltas'] == {'PP': -175}
 
 
 # Seguimiento 2026-10-19: el rating de la encuestadora en «Todas las encuestas» (Promedios y detalle de una elección),
