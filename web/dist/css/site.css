@@ -837,6 +837,12 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px var(--font-head); white-space: nowrap; }
 .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
 .qcard > .lead { margin: 0 0 var(--space-3); }
+/* Index of the studies (/analisis): two cards per row on desktop, title + subtitle + the link to the study */
+.studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.study-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.study-card h3 { margin: 0; }
+.study-card .lead { margin: 0; }
+.study-card .btn { align-self: flex-start; margin-top: auto; }
 /* Two columns of charts or tables; the title and the subtitle of each chart */
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .grid2 > * { min-width: 0; }
@@ -896,7 +902,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .rows-2 .row:nth-child(even) { border-left: 0; }
 }
 @media (max-width: 899px) {
-  .grid3, .three, .grid2 { grid-template-columns: 1fr; }
+  .grid3, .three, .grid2, .studies { grid-template-columns: 1fr; }
   .side { grid-template-columns: 1fr; }
   .side .card + .card { margin-top: var(--space-4); }
 }

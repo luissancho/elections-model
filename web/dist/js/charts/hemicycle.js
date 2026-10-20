@@ -1,5 +1,6 @@
 // Hemicycle: seats per party as a half doughnut, left to right, with the seats written inside the big arcs, the
-// total in the centre and the absolute majority marked by a dark wedge and a pill above the arc.
+// total in the centre over «ESCAÑOS» and «MAYORÍA ABSOLUTA: n» (two lines, Luis 2026-10-20) and the absolute
+// majority marked by a dark wedge and a pill above the arc.
 import {baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDelta, fmtPct} from '../format.js';
@@ -8,7 +9,7 @@ import {fmtDelta, fmtPct} from '../format.js';
 const LABEL_SHARE = 0.05;
 /** Width of the majority wedge, in seats. */
 const MARK_SEATS = 0.7;
-/** Outer radius from which the hole holds the long subtitle. */
+/** Outer radius from which the hole holds the majority line under «ESCAÑOS». */
 const SUBTITLE_RADIUS = 190;
 
 /**
@@ -123,14 +124,18 @@ export function hemicycleOption(seats, {
       fontFamily: THEME.fontFamily, fontWeight: 700, fontSize: 10, fill: '#fff',
     }));
   }
-  graphic.push(text(center[0], center[1] - 30, String(total), {
+  // Under the total, «ESCAÑOS» and, when the hole of the hemicycle is big enough, a second line with the absolute
+  // majority (the pill above the arc names it anyway); the stack moves up one line to make room for it
+  const withSubtitle = withMajority && radius >= SUBTITLE_RADIUS;
+  const lift = withSubtitle ? 14 : 0;
+  const small = {fontFamily: THEME.fontFamily, fontWeight: 600, fontSize: 10.5, fill: THEME.mutedColor, letterSpacing: 1};
+  graphic.push(text(center[0], center[1] - 30 - lift, String(total), {
     fontFamily: THEME.headFamily, fontWeight: 800, fontSize: 34, fill: THEME.textColor,
   }));
-  // The long subtitle only fits the hole of a big hemicycle; the pill already names the majority
-  const subtitle = withMajority && radius >= SUBTITLE_RADIUS ? `ESCAÑOS · MAYORÍA ABSOLUTA ${majority}` : 'ESCAÑOS';
-  graphic.push(text(center[0], center[1] - 14, subtitle, {
-    fontFamily: THEME.fontFamily, fontWeight: 600, fontSize: 10.5, fill: THEME.mutedColor, letterSpacing: 1,
-  }));
+  graphic.push(text(center[0], center[1] - 14 - lift, 'ESCAÑOS', small));
+  if (withSubtitle) {
+    graphic.push(text(center[0], center[1] - 14, `MAYORÍA ABSOLUTA: ${majority}`, small));
+  }
   return {
     ...baseOption(),
     tooltip: {

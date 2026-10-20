@@ -3752,11 +3752,11 @@ def test_analisis_index_lists_the_study_or_says_none(api, fresh_app):
     page = html(call(api, '/analisis')[2])
     meta = fixture_data('study-meta')
     assert 'Todavía no hay ningún análisis publicado.' not in page
-    assert meta['title'] in page and meta['subtitle'] in page and 'href="/analisis/voto-cera"' in page
-    assert verdict_pills(page) == STUDY_VERDICTS
-    assert 'Predicción registrada el 18 oct 2026' in page and 'Comprobada el' not in page
-    publish_study(fresh_app.fs, meta={'checked_at': '2026-12-03'})
-    assert 'Comprobada el 3 dic 2026' in html(call(api, '/analisis')[2])
+    # two cards per row on desktop, each with only the title, the subtitle and the link to the study
+    cards = re.search(r'<div class="studies" id="studies">(.*?)</div>\s*</div>', page, re.S).group(1)
+    assert meta['title'] in cards and meta['subtitle'] in cards
+    assert '<a class="btn pri" href="/analisis/voto-cera">Ver el análisis completo' in cards
+    assert verdict_pills(cards) == [] and 'Predicción registrada' not in cards and 'Comprobada el' not in cards
 
 
 def test_analisis_unknown_study_is_404(api, fresh_app):

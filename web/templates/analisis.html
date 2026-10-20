@@ -5,16 +5,19 @@
   <script type="module" src="/dist/js/pages/common.js"></script>
 {% endblock %}
 {% block content %}
-{% import '_macros.html' as m %}
     <div id="content" class="stack">
       <header id="analisis-head">
         <h1>Análisis</h1>
         <p class="lead">Preguntas del debate electoral contestadas con datos oficiales, comprobables después de cada elección</p>
       </header>
       {% if studies %}
-      <div class="grid3" id="studies">
+      <div class="studies" id="studies">
         {% for study in studies %}
-        {{ m.study_card(study, dates=True) }}
+        <article class="card study-card">
+          <h3>{{ study.title }}</h3>
+          <p class="lead">{{ study.subtitle }}</p>
+          <a class="btn pri" href="{{ study.href }}">Ver el análisis completo →</a>
+        </article>
         {% endfor %}
       </div>
       {% else %}

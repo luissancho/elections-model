@@ -145,7 +145,9 @@ def test_hemicycle_puts_the_labels_inside_and_marks_the_majority():
     assert pies[0]['label']['rich']['seats']['fontSize'] == 24 and 'Outfit' in pies[0]['label']['rich']['seats']['fontFamily']
     assert pies[1]['silent'] is True and [round(d['value'], 2) for d in pies[1]['data']] == [175.65, 0.7, 173.65]
     texts = [g for g in option['graphic'] if g['type'] == 'text']
-    assert [g['style']['text'] for g in texts] == ['176', '350', 'ESCAÑOS · MAYORÍA ABSOLUTA 176']
+    # dos líneas bajo el total (Luis, 2026-10-20): «ESCAÑOS» y «MAYORÍA ABSOLUTA: 176», la pila subida 14 px
+    assert [g['style']['text'] for g in texts] == ['176', '350', 'ESCAÑOS', 'MAYORÍA ABSOLUTA: 176']
+    assert [g['y'] for g in texts[1:]] == [318 - 44, 318 - 28, 318 - 14] and all(g['x'] == 300 for g in texts)
     assert [g for g in option['graphic'] if g['type'] == 'rect'][0]['shape'] == {'x': 284, 'y': 4, 'width': 32, 'height': 16, 'r': 8}
     assert pies[0]['data'][0]['itemStyle']['color'] == '#1d84ce' and pies[0]['data'][3]['itemStyle']['color'] == '#9e9e9e'
     assert option['tooltip']['borderRadius'] == 10
