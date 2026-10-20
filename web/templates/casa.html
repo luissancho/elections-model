@@ -14,7 +14,7 @@
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su confianza y el rating con el que entra en el promedio, el mismo en todos los ámbitos. Debajo, su historial en las elecciones de todos los ámbitos.') }}
         {{ m.kpis(kpis) }}
       {{ m.card_end() }}
-      {{ m.card_start('quality', 'Confianza', 'Lo que se sabe de cómo trabaja la encuestadora antes de mirar si acierta: cuatro criterios comprobables, con su fuente.') }}
+      {{ m.card_start('quality', 'Confianza', 'Lo que se sabe de cómo trabaja la encuestadora antes de mirar si acierta: cuatro criterios comprobables, con su fuente o calculados con los sondeos publicados.') }}
         {% if quality.evaluated %}
         <div class="table-wrap">
           <table id="quality-table">
@@ -51,7 +51,7 @@
         <p class="notice">Evaluación provisional, pendiente de revisión.</p>
         {% endif %}
         {% else %}
-        <p class="notice">Sin evaluar: tiene la confianza mínima, {{ quality.floor }}, hasta que alguien compruebe cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>.</p>
+        <p class="notice">Sin evaluar: nadie ha comprobado todavía cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>, así que solo cuenta la parte calculada de la Implantación. {% if quality.generals %}Ha publicado sondeos de alguna elección general, que vale un punto: confianza {{ quality.per_point }}.{% else %}No ha publicado sondeos de ninguna elección general: tiene la confianza mínima, {{ quality.floor }}.{% endif %}</p>
         {% endif %}
         {% if quality.informative %}
         <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores y paneles en línea quedan fuera): la confianza es informativa.</p>

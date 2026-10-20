@@ -628,6 +628,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
         links += [
             {'label': label, 'href': api_url(scope, name, fmt='csv', kind='analysis', table=table)}
             for name, table, label in ANALYSIS_CSV
+            if name != 'house-effects' or effects is not None  # not published: the CSV would be a 404
         ]
 
     context['ranking'] = ranking
@@ -740,7 +741,9 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
         of the standards; empty when not evaluated), ``points``, ``max_points``, ``quality``,
         ``status``, ``draft`` (status ``borrador``), ``checked_at`` (ISO string), ``notes``, ``informative``
         (aggregators and online panels, whose polls do not enter the average), ``support`` (the text under the KPI),
-        and the ``floor`` and ``per_point`` of the scale.
+        the ``floor`` and ``per_point`` of the scale and ``generals`` (set when not evaluated only: whether the
+        pollster has polled a general election, computed from the quality of today, which is above the floor only
+        with that implantation point).
     """
     total = max_points(criteria)
     scale = criteria['scale']
@@ -768,6 +771,7 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
         'informative': pollster.get('mtype') in ('aggr', 'online'),
         'support': f'{points} de {total} puntos' if record else 'sin evaluar',
         'floor': scale['floor'], 'per_point': scale['per_point'],
+        'generals': None if record else bool((pollster.get('quality') or 0) > scale['floor']),
     }
 
 

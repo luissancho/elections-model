@@ -1080,7 +1080,7 @@ def test_casas_without_analysis_keeps_the_ranking(houses_without_analysis):
 
 def test_casas_with_analysis_without_house_effects_shows_the_notice(houses, fresh_app):
     """Un ámbito con análisis (`meta`, rebaño) pero sin `house-effects` (ciclo sin sondeos) da 200 y el aviso de la
-    tarjeta de efectos, sin mapa de calor."""
+    tarjeta de efectos, sin mapa de calor ni enlace al CSV (que daría 404)."""
     writer = bundle.BundleWriter(fresh_app.fs)
     writer.remove(bundle.path_analysis('es', 'house-effects'))
     writer.remove(bundle.path_analysis_csv('es', 'house-effects'))
@@ -1089,6 +1089,7 @@ def test_casas_with_analysis_without_house_effects_shows_the_notice(houses, fres
     assert status == 200 and 'Análisis no publicado todavía' in page
     assert 'id="effects-heatmap"' not in page and 'id="herding-table"' in page
     assert initial(body)['grid'] is None
+    assert 'Efectos de encuestadora por partido y bloque' not in page and 'Rebaño por encuestadora' in page
 
 
 def test_casas_without_database_is_a_503_page(api):
@@ -1334,6 +1335,21 @@ def test_casa_profile_quality_card_of_an_unrated_house(houses):
     card = page[page.index('id="quality"'):page.index('id="path"')]
     assert 'Sin evaluar' in card and 'confianza mínima, 5' in card and 'href="/metodo/rating#calidad-previa"' in card
     assert '<th scope="row">' not in card and 'sin evaluar' in page[page.index('id="profile"'):page.index('id="quality"')]
+
+
+def test_casa_profile_quality_card_of_an_unrated_house_with_generals(houses, monkeypatch):
+    """Sin evaluar pero con sondeos de generales: el punto de Implantación calculado da 8, no el mínimo 5, y el texto
+    de la tarjeta y el KPI cuentan lo mismo."""
+    pollsters = webapi.queries.get_pollsters().copy()
+    pollsters.loc[pollsters['name'] == 'Nueva', 'quality'] = 8.0
+    monkeypatch.setattr(webapi.queries, 'get_pollsters', lambda: pollsters)
+    webapi.queries._QUERIES.clear()
+    page = html(call(houses, '/casas/nueva')[2])
+    card = page[page.index('id="quality"'):page.index('id="path"')]
+    assert 'Sin evaluar' in card and 'alguna elección general' in card and 'confianza 8' in card
+    assert 'confianza mínima' not in card and '<th scope="row">' not in card
+    kpis = page[page.index('id="profile"'):page.index('id="quality"')]
+    assert '>8,0<' in kpis and 'sin evaluar' in kpis
 
 
 def test_casa_profile_quality_card_of_an_informative_house(houses):
@@ -2244,7 +2260,7 @@ def test_metodo_rating_explains_evidence_by_election(api):
     assert 'id="criteria-test-table"' in text and 'id="difficulty-table"' in text and 'Implantación' in text
     assert 'la calidad previa pesa como tres sondeos' not in text and 'tres sondeos' not in text
     # sigma as measured by the rating procedure and with the degrees-of-freedom correction; the 0,006 spread is raw
-    assert 'unos 0,014' in text and '0,0135 con el procedimiento del rating' in text
+    assert 'unos 0,014' in text and '0,0135 con el procedimiento de medida' in text
     assert 'corrección por grados de libertad' in text and 'de verdad' not in text
     assert 'menos aún si se descuenta el ruido de cada media' in text
     # Regionals are not easier, so not discounted further; their lower separation is already in their weight
@@ -3471,6 +3487,8 @@ def test_casas_ranking_without_num_generals_shows_a_dash_and_counts_zero(houses,
     page = html(call(houses, '/casas')[2])
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert '<tr data-generals="0">' in table and '<td>1</td>\n                <td>–</td>' in table
+    # no known count in any row: the filter would hide everything, so the control is not rendered
+    assert 'id="ranking-generals"' not in page and 'id="ranking-controls"' not in page
 
 
 def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):

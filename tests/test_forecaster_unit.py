@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.forecaster import Forecaster
+from mtpy.lib.forecaster import Forecaster, NoPollsError
 from mtpy.lib.utils import build_blocks
 
 matplotlib.use('Agg')
@@ -338,7 +338,7 @@ def test_require_polls_names_the_event_without_polls():
     """M11: un evento sin sondeos (una comunidad que acaba de votar) falla con un mensaje claro."""
     polls = pd.DataFrame({'PP': [30.]}, index=pd.to_datetime(['2026-01-01']))
     assert Forecaster.require_polls(polls, 'es-md', '2027-05-23') is polls
-    with pytest.raises(ValueError, match='No polls for es-an 2030-06-16'):
+    with pytest.raises(NoPollsError, match='No polls for es-an 2030-06-16'):
         Forecaster.require_polls(polls.iloc[:0], 'es-an', '2030-06-16')
 
 

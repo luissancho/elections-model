@@ -5,6 +5,7 @@ import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
+from mtpy.lib.forecaster import NoPollsError
 from tests.fakes import FakeComputer, FakeSimulator, synthetic_event, write_backtest_source
 from tests.test_webapi_unit import PARTIES
 
@@ -46,7 +47,7 @@ def patched(monkeypatch):
         calls.append((scope, 'analysis', kwargs))
         if scope == 'es-ar':
             raise KeyError('x')
-        no_polls = ValueError('No polls for es-cb 2027-05-23: nothing to forecast') if scope == 'es-cb' else None
+        no_polls = NoPollsError('No polls for es-cb 2027-05-23: nothing to forecast') if scope == 'es-cb' else None
         return real_analysis(scope, writer, computer=FakeComputer(fail_effects=no_polls),
                              stats=lambda scope, event_date: (7, '2026-10-01'),
                              prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
@@ -165,7 +166,7 @@ def test_analysis_of_a_scope_without_upcoming_event_is_published_unless_in_the_n
     fs = FileSystem(str(tmp_path))
     result = Publish().run(what=['analysis'], scopes=['es-md'], fs=fs, today='2026-10-13')
     assert result['es-md'] == {'status': 'published', 'event_date': '2023-05-28', 'n_pollsters': 4,
-                               'seconds': {'total': 0.1}}
+                               'seconds': {'total': 0.1}, 'house_effects': True}
     assert calls == ['es-md']
     result = Publish().run(what=['analysis'], scopes=['es-md'], fs=fs, today='2026-11-25')
     assert result['es-md']['status'] == 'refused' and 'of es 2026-11-29' in result['es-md']['reason']
@@ -234,6 +235,8 @@ def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_wit
     assert result['es-cb']['status'] == 'published' and result['es']['status'] == 'published'
     out = capsys.readouterr().out
     assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters)' in out
+    assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters) in 0 s; sin efectos de encuestadora' in out
+    assert 'es: analysis published (event 2026-11-29, 3 pollsters) in 0 s\n' in out
     reader = bundle.BundleReader(fs)
     assert reader.analysis_exists('es') and reader.analysis_exists('es-cb')
 

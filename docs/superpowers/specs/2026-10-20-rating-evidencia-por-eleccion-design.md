@@ -363,14 +363,23 @@ código real y la deja en Resultados.
 
 ## Pasos de Luis tras la integración
 
-1. Añadir las columnas en la RDS:
-   `ALTER TABLE elections.pollsters_ratings ADD COLUMN num_events_w double precision, ADD COLUMN num_generals integer;`
+El orden importa; hacerlo en esta secuencia:
+
+1. `ALTER TABLE elections.pollsters_ratings ADD COLUMN num_events_w double precision, ADD COLUMN num_generals integer;`
    (ajustar al tipo de las demás columnas numéricas de la tabla).
-2. `save_catalogues()`, para que `pollsters.quality` sea la calidad de hoy con el criterio nuevo.
-3. Recalcular los ratings: `python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'`.
-4. Publicar: `publish analysis` con `scopes: all` (ahora incluye `es-an`, `es-ar`, `es-cl` y `es-ex`), y después los
+2. Añadir a `PollstersRatings.meta` (`mtpy/models/elections.py`) las dos líneas exactas, y commitear:
+   `'num_events_w': 'num',` y `'num_generals': ['int', 2],`. El código de esta tarea no las incluye a propósito.
+3. `save_catalogues()`, para que `pollsters.quality` sea la calidad de hoy con el criterio nuevo.
+4. Recalcular los ratings: `python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'`.
+5. Publicar: `publish analysis` con `scopes: all` (ahora incluye `es-an`, `es-ar`, `es-cl` y `es-ex`), y después los
    eventos y la previsión, como de costumbre.
-5. Revisar /casas (CENTRA, GfK, CPS, Opina 360), el perfil de CENTRA (con la diana de Andalucía) y /metodo/rating.
+6. Reiniciar o desplegar la web con el código nuevo (también el gunicorn local).
+7. Revisar /casas (CENTRA, GfK, CPS, Opina 360), el perfil de CENTRA (con la diana de Andalucía) y /metodo/rating.
+
+Dos avisos de orden. Nunca desplegar las líneas del paso 2 antes del `ALTER` del paso 1: el modelo pediría columnas que
+no existen (`UndefinedColumn`). Nunca reiniciar la web con el código nuevo antes de `save_catalogues()` (paso 3): la
+réplica `pollsters.quality` seguiría escrita por el código antiguo y `quality.split_points`, que infiere la
+Implantación como `points − manual` de esa réplica, mostraría valores erróneos en los perfiles.
 
 ## Resultados
 

@@ -89,6 +89,10 @@ def published_seats(
     return out
 
 
+class NoPollsError(ValueError):
+    """The event has no polls, so there is nothing to forecast (a `ValueError`, so existing callers keep working)."""
+
+
 class Forecaster(Core):
 
     def __init__(
@@ -1209,11 +1213,11 @@ class Forecaster(Core):
         event_date: str
     ) -> pd.DataFrame:
         """
-        Polls of the event, or a `ValueError` naming it when there is none (e.g. the next election of a
+        Polls of the event, or a `NoPollsError` (a `ValueError`) naming it when there is none (e.g. the next election of a
         community that has just voted): nothing can be forecast without polls.
         """
         if polls.shape[0] == 0:
-            raise ValueError('No polls for {} {}: nothing to forecast'.format(scope, event_date))
+            raise NoPollsError('No polls for {} {}: nothing to forecast'.format(scope, event_date))
 
         return polls
 

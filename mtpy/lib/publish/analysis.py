@@ -7,6 +7,7 @@ import pandas as pd
 from .. import bundle
 from ..bundle import BundleWriter
 from ..computer import Computer
+from ..forecaster import NoPollsError
 from .common import db_stats, NothingToPublish, provenance, REPO_ROOT, round_cols, _iso_dates
 
 
@@ -201,14 +202,15 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     Returns
     -------
     dict
-        ``{'scope', 'event_date', 'n_pollsters', 'seconds'}``.
+        ``{'scope', 'event_date', 'n_pollsters', 'seconds', 'house_effects'}`` (the last, whether the house effects
+        were published).
 
     Raises
     ------
     NothingToPublish
         Building the computer or its series, or reading its events, raised ``ValueError``; nothing is
-        written then. A ``ValueError`` of ``print_house_effects`` (no polls in the current event) is not
-        an error; any later error, ``ValueError`` included, propagates as is.
+        written then. A ``NoPollsError`` of ``print_house_effects`` (no polls in the current event) is not
+        an error; any other error of it and any later error, ``ValueError`` included, propagates as is.
     """
     start = mark = time.perf_counter()
 
@@ -228,8 +230,8 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
     try:
-        table = comp.print_house_effects()  # fits an average of the current event: no polls is a ValueError
-    except ValueError:
+        table = comp.print_house_effects()  # fits an average of the current event: no polls is a NoPollsError
+    except NoPollsError:
         table = None
 
     def write(part, data, frames):
@@ -273,4 +275,5 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     meta = export_analysis_meta(scope, event_date, comp.event_dates, n_pollsters, params, prov(), seconds,
                                  house_effects=effects is not None)
     write('meta', meta, {})
-    return {'scope': scope, 'event_date': event_date, 'n_pollsters': n_pollsters, 'seconds': seconds}
+    return {'scope': scope, 'event_date': event_date, 'n_pollsters': n_pollsters, 'seconds': seconds,
+            'house_effects': effects is not None}

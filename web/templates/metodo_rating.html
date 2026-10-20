@@ -87,8 +87,9 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
       {{ m.card_start('calidad-previa', 'La calidad previa', 'Antes de ver sus sondeos, cada encuestadora tiene una calidad previa de 0 a 100: lo que se sabe de cómo trabaja, no de cuánto acierta. En las tablas del sitio aparece como «Confianza».') }}
         <p>
           La calidad previa se puntúa con una rúbrica pública: unos pocos criterios sobre cómo trabaja la
-          encuestadora, cada uno con sus niveles. No mide el acierto, la coherencia entre sondeos ni la longevidad:
-          eso lo miden los datos, a medida que se acumulan sus sondeos.
+          encuestadora, cada uno con sus niveles. No mide el acierto pasado ni la coherencia entre sondeos: eso lo miden
+          los datos, a medida que se acumulan sus sondeos. De la trayectoria solo recoge, en la Implantación, si la
+          encuestadora ha publicado sondeos de elecciones generales.
         </p>
         <div class="table-wrap">
           <table id="rubric-table">
@@ -122,7 +123,9 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           La calidad es la suma de puntos, hasta {{ rubric.max_points }}: cada punto vale {{ rubric.per_point }} de
           calidad, con un mínimo de {{ rubric.floor }}; nadie pasa de {{ rubric.cap }} antes de los datos, los puntos que
           faltan se ganan acertando. Lo que no se puede comprobar vale 0 en su criterio, así que una encuestadora de la
-          que apenas se sabe nada queda cerca del mínimo; una sin evaluar tiene exactamente el mínimo.
+          que apenas se sabe nada queda cerca del mínimo; una sin evaluar tiene el mínimo, {{ rubric.floor }}, o
+          {{ rubric.per_point }} si ha publicado sondeos de alguna elección general (el punto de Implantación que se calcula
+          solo).
         </p>
         <p>
           La evaluación es pública y revisable: cada criterio de cada encuestadora lleva su fuente, en el fichero
@@ -222,8 +225,8 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </p>
         <ul>
           <li><strong>σ</strong>, lo que varía la desviación de una encuestadora de una elección a otra: unos
-            0,014. Medido con las encuestadoras de tres o más elecciones, da 0,0135 con el procedimiento del
-            rating y 0,014 con la corrección por grados de libertad.</li>
+            0,014. Medido con las encuestadoras de tres o más elecciones, da 0,0135 con el procedimiento de
+            medida y 0,014 con la corrección por grados de libertad.</li>
           <li><strong>τ</strong>, la escala de las diferencias entre encuestadoras, la misma del rating ajustado:
             0,01.</li>
           <li>Lo que se separan las desviaciones medias de las encuestadoras con cinco o más elecciones: 0,006, y
