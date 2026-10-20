@@ -913,6 +913,7 @@ def fake_houses(monkeypatch, name='CIS'):
                                       '2026-11-29']),
         'pollster_id': [1, 1, 2, 1, 2, 3, 5], 'pollster': [name, name, 'GAD3', name, 'GAD3', 'Hamalgama', 'Cero'],
         'quality': [60.0, 60.0, 80.0, 60.0, 80.0, 40.0, 50.0], 'num_events': [1, 2, 1, 3, 2, 0, 0],
+        'num_generals': [1, 1, 1, 2, 3, 0, 0],
         'num_polls': [10, 12, 14, 15, 17, 2, 0], 'num_polls_w': [8.1, 9.5, 11.2, 12.0, 13.3, 1.1, 0.0],
         'error_avg': [1.9, 1.8, 1.32, 1.85, 1.3, None, None], 'error_blocks': [4.2, 4.0, 3.05, 4.1, -3.0, None, None],
         'bias_blocks': [2.5, 2.4, 1.52, 2.45, 1.5, None, None], 'rating_adj': [50.0, 52.0, 80.0, 53.0, 83.1, None, None],
@@ -1019,7 +1020,7 @@ def test_casas_ranking_drops_pollsters_without_polls_and_pages_by_fifty(houses, 
     que sobran tras "Cargar más" (el servidor las pinta ocultas)."""
     page = html(call(houses, '/casas')[2])
     ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert 'Cero' not in ranking and ranking.count('<tr>') == 3 and 'id="ranking-more"' not in page
+    assert 'Cero' not in ranking and ranking.count('<tr') == 3 and 'id="ranking-more"' not in page
     assert '2 encuestadoras con rating y algún sondeo' in ranking and 'id="rating-chart"' not in page  # sin barras
     assert 'La tabla enseña las 50 primeras' in page
     many = pd.DataFrame({
@@ -1032,8 +1033,8 @@ def test_casas_ranking_drops_pollsters_without_polls_and_pages_by_fifty(houses, 
     webapi.queries._QUERIES.clear()
     page = html(call(houses, '/casas')[2])
     ranking = re.search(r'<table[^>]*id="ranking-table">(.*?)</table>', page, re.S).group(1)
-    assert ranking.count('<tr>') == 51 and ranking.count('<tr hidden>') == 10  # cabecera + 50 visibles, 10 ocultas
-    assert ranking.index('P50') < ranking.index('<tr hidden>') < ranking.index('P51')
+    assert ranking.count('<tr') == 61 and ranking.count(' hidden>') == 10  # cabecera + 50 visibles, 10 ocultas
+    assert ranking.index('P50') < ranking.index(' hidden>') < ranking.index('P51')
     assert '<button type="button" class="more" id="ranking-more" data-batch="50" hidden>Cargar más</button>' in page
     context = pages.casas_context(pages.parse_state({'scope': 'es'}))
     assert context['ranking_shown'] == 50 and context['ranking_hidden'] == 10 and pages.RANKING_SHOWN == 50
@@ -1110,7 +1111,7 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     page = html(call(houses, '/casas')[2])
     ranking = page[page.index('id="ranking-table"'):]
     ranking = ranking[:ranking.index('</table>')]
-    assert 'Hamalgama' not in ranking and ranking.count('<tr>') == 3  # cabecera, GAD3 y CIS
+    assert 'Hamalgama' not in ranking and ranking.count('<tr') == 3  # cabecera, GAD3 y CIS
     assert '82,4' in ranking and '0,74' in ranking  # rating (escala 0-100) y herding (análisis) de GAD3
     # los formatos (2026-10-17): barra verde del rating de 0 a 100, barra divergente del sesgo de bloques en ±8 en el color
     # del bloque al que favorece (la fixture solo trae el primero: el segundo, gris), rojos del error medio de 0 a 8 y
@@ -1218,8 +1219,8 @@ def test_ranking_rows_and_herding_rows():
                           'quality': [60.0, 80.0, 40.0], 'num_polls': [15, 17, 2], 'extra': [1, 2, 3]})
     rows = pages.ranking_rows(frame, {'rows': [{'pollster': 'GAD3', 'herding': 0.742}]})
     assert [row['pollster'] for row in rows] == ['GAD3', 'CIS'] and rows[0]['herding'] == 0.742 and rows[1]['herding'] is None
-    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'error_avg',
-                             'error_blocks', 'bias_blocks', 'bias_dev_adj', 'herding']
+    assert list(rows[0]) == ['pollster_id', 'pollster', 'rating', 'quality', 'num_polls', 'num_events', 'num_generals',
+                             'error_avg', 'error_blocks', 'bias_blocks', 'bias_dev_adj', 'herding']
     assert rows[0]['num_events'] is None and pages.ranking_rows(pd.DataFrame(), None) == []
     part = {'rows': [{'pollster': 'A', 'herding': 0.9}, {'pollster': 'B', 'herding': None}, {'pollster': 'C', 'herding': 0.7}]}
     assert [row['pollster'] for row in pages.herding_rows(part)] == ['C', 'A', 'B']
@@ -1287,7 +1288,7 @@ def test_table_columns_describe_the_two_tables_with_the_scale_and_the_blocks():
     assert scaled['quality'].endswith('Cada punto vale 9 de confianza, con un mínimo de 4.')
     assert 'más margen a Derecha del que hubo; negativo, más margen a Izquierda.' in scaled['error_blocks']
     assert [column['label'] for column in pages.table_columns('ranking')] == [
-        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+        'Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
     assert [column['label'] for column in pages.table_columns('path')] == [
         'Evento', 'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rating', 'Cambio']
     path = {column['key']: column['text'] for column in pages.table_columns('path', ['Derecha', 'Izquierda'])}
@@ -2317,7 +2318,7 @@ def test_casas_uses_the_glossary_and_drops_the_block_bias(houses):
     ranking = page[page.index('id="ranking-table"'):]
     thead = ranking[:ranking.index('</thead>')]
     heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', thead)
-    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos', 'Diferencial', 'Error medio',
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial', 'Error medio',
                      'Sesgo bloques', 'Rebaño']
     assert 'class="help"' not in thead  # sin interrogante: el glosario explica las columnas (2026-10-16)
     assert 'Calidad' not in thead  # la palabra pública es «Confianza»
@@ -3309,8 +3310,8 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     la confianza leída del catálogo; el glosario del perfil (camino al rating) no cambia."""
     page = html(call(houses, '/casas')[2])
     glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', page, re.S).group(1)
-    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Sondeos',
-                                                          'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<dt>([^<]*)</dt>', glossary) == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales',
+                                                          'Sondeos', 'Diferencial', 'Error medio', 'Sesgo bloques', 'Rebaño']
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
@@ -3318,11 +3319,42 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
     assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
+    assert ('En cuántas elecciones generales ha publicado sondeos antes de la próxima. Es el dato con el que se calcula '
+            'el criterio «Implantación» de la confianza.') in glossary
     assert 'todas se explican en «Qué mide cada columna»' in re.sub(r'\s+', ' ', page)
     profile = html(call(houses, '/casas/gad3')[2])
     profile_glossary = re.search(r'<details class="how" id="glosario">(.*?)</details>', profile, re.S).group(1)
     assert re.findall(r'<dt>([^<]*)</dt>', profile_glossary) == ['Evento', 'Sondeos', 'Diferencial', 'Error medio',
                                                                   'Sesgo bloques', 'Rating', 'Cambio']
+
+
+def test_casas_ranking_shows_the_generales_column_after_elecciones(houses):
+    page = html(call(houses, '/casas')[2])
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table)
+    assert heads == ['Encuestadora', 'Rating', 'Confianza', 'Elecciones', 'Generales', 'Sondeos', 'Diferencial',
+                     'Error medio', 'Sesgo bloques', 'Rebaño']
+    assert re.findall(r'<tr data-generals="(\d+)"', table) == ['3', '2']  # GAD3, CIS
+
+
+def test_casas_ranking_has_the_generales_filter(houses):
+    page = html(call(houses, '/casas')[2])
+    assert '<input type="checkbox" id="ranking-generals">' in page and 'Solo con experiencia en generales' in page
+    assert 'id="ranking-generals" checked' not in page
+
+
+def test_casas_ranking_without_num_generals_shows_a_dash_and_counts_zero(houses, monkeypatch):
+    """Old ratings rows (before the database column exists): «–», `data-generals="0"` (hidden by the filter)."""
+    old = pd.DataFrame({
+        'event_date': pd.to_datetime(['2026-11-29']), 'pollster_id': [1], 'pollster': ['CIS'], 'quality': [50.0],
+        'num_events': [1], 'num_polls': [3], 'error_avg': [1.0], 'error_blocks': [0.5], 'bias_blocks': [0.5],
+        'rating': [60.0],
+    })
+    monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: old)
+    webapi.queries._QUERIES.clear()
+    page = html(call(houses, '/casas')[2])
+    table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
+    assert '<tr data-generals="0">' in table and '<td>1</td>\n                <td>–</td>' in table
 
 
 def test_casas_ranking_shows_the_differential_and_the_block_bias_with_their_bars(houses):

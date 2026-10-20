@@ -112,7 +112,7 @@ export function wireMore(buttonId, tableId) {
     return;
   }
   const batch = Number(button.dataset.batch) || Infinity;
-  const hidden = () => [...table.querySelectorAll('tbody tr[hidden]')];
+  const hidden = () => [...table.querySelectorAll('tbody tr[hidden]:not([data-filtered])')];
   button.hidden = hidden().length === 0;
   button.addEventListener('click', () => {
     for (const row of hidden().slice(0, batch)) {
