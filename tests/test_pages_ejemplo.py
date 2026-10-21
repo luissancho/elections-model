@@ -170,7 +170,9 @@ def test_promedio_page_lists_every_poll_without_a_load_more(api, monkeypatch):
     weights['stats']['PP']['nobs'] = 27
     monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: weights if name == 'weights' else fixture_data(name))
     page = html(call(api, '/metodo/promedio')[2])
-    assert len(re.findall(r'<tr>\s*<td class="f l">', page)) == 27 and '<tr hidden>' not in page
+    table = page[page.index('id="weights-table"'):]
+    table = table[:table.index('</table>')]
+    assert len(re.findall(r'<tr>\s*<td class="f l">', table)) == 27 and '<tr hidden>' not in page
     assert 'id="weights-more"' not in page and 'Cargar más' not in page and 'Ver los 27 sondeos' in page
 
 
@@ -322,3 +324,34 @@ def test_promedio_page_shows_the_house_example_without_the_weights(house_site, t
     page = html(body)
     assert status == 200 and 'id="ejemplo-cis"' in page and 'id="ejemplo"' not in page
     assert set(initial(body)) == {'state', 'house'}
+
+
+def test_promedio_text_first_half(house_site):
+    page = html(call(house_site, '/metodo/promedio')[2])
+    text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', page[page.index('class="headline"'):page.index('id="regresion"')]))
+    assert ('El promedio es una línea que sigue a las encuestas día a día: cada sondeo pesa según lo que sabe, a cada '
+            'encuestadora le restamos su inclinación y, para cada día, ajustamos una recta a los sondeos cercanos.') in text
+    toc = page[page.index('<nav class="section-nav toc"'):]
+    toc = toc[:toc.index('</nav>')]
+    assert re.findall(r'href="#([a-z-]+)"', toc) == ['que-entra', 'peso', 'efectos-de-casa', 'ejemplo-cis', 'regresion',
+                                                     'banda', 'ejemplo', 'voto-estimado', 'notas']
+    peso = page[page.index('id="peso"'):page.index('id="efectos-de-casa"')]
+    ids = [peso.index('id="{}"'.format(i)) for i in ('muestra', 'dispersion', 'sobrerrepresentacion', 'rating', 'cuentas')]
+    assert ids == sorted(ids)
+    for phrase in ('Por qué una raíz y no otra cosa', 'Cuando falta la muestra', 'de los 2.935 sondeos de generales',
+                   'Por qué el rebaño se mide de otra manera', 'forman un grupo que pesa como un único sondeo',
+                   'Por qué un logaritmo', 'pesa 3,7 veces más que el barómetro del CIS', 'Por qué fiarnos del consenso',
+                   'Por qué los efectos suman cero', 'En las generales de este ciclo entra 1 sondeo de 1 encuestadora.'):
+        assert phrase in text, phrase
+    for phrase in ('El problema.', 'La idea.', 'Los campos', 'Un caso real', 'backtest'):
+        assert phrase not in text, phrase
+    calls = re.findall(r'id="llamada-([a-z]+)"', page)
+    assert calls[:7] == ['tope', 'diseno', 'umbrales', 'ventana', 'suelo', 'comun', 'convenciones']
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page)[:7] == ['1', '2', '3', '4', '5', '6', '7']
+    assert_public_wording(page, '/metodo/promedio')
+
+
+def test_promedio_text_without_a_run_has_no_cycle_figures(api, monkeypatch):
+    monkeypatch.setattr(metodo, 'cycle_counts', lambda: None)
+    status, _, body = call(api, '/metodo/promedio')
+    assert status == 200 and 'En las generales de este ciclo' not in html(body)

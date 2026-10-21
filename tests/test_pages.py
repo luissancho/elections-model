@@ -2334,7 +2334,8 @@ def test_metodo_promedio_text(api):
     for anchor in ('que-entra', 'peso', 'efectos-de-casa', 'regresion', 'banda', 'voto-estimado'):
         assert 'id="' + anchor + '"' in page, anchor
     assert 'id="metodo-nav"' in page and '<math' in page and 'En resumen' in page
-    assert 'ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100)' in page  # el rating del sitio va de 0 a 100
+    rating = page[page.index('id="rating"'):page.index('id="cuentas"')]
+    assert re.search(r'<math display="block" aria-label="[^"]*logaritmo de uno más R sub c entre cien', rating)  # rating de 0 a 100
     assert 'href="/metodo/promedio"' in html(call(api, '/metodo')[2])
 
 
