@@ -31,6 +31,37 @@ def test_weights_example_picks_the_leader_and_its_slice(api):
     assert example['line']['dates'][-1] == '2026-10-08' and len(example['kernel']['values']) == 15
 
 
+def test_weights_example_names_the_heaviest_poll(api):
+    top = metodo.weights_example()['top']
+    assert top == {'pollster': 'Sigma Dos', 'sponsor': top['sponsor'], 'date': '2026-10-01', 'weight': 1.138}
+
+
+def test_cycle_counts_counts_the_polls_and_pollsters_of_the_cycle(api, monkeypatch):
+    assert metodo.cycle_counts() == {'n_polls': 1, 'n_pollsters': 1}
+    polls = {'parties': ['PP'], 'columns': ['date', 'pollster_id', 'pollster', 'weight'], 'results': [], 'polls': [
+        {'date': '2026-10-01', 'pollster_id': 7, 'pollster': 'Sigma Dos', 'weight': 1.0},
+        {'date': '2026-10-02', 'pollster_id': 7, 'pollster': 'Sigma Dos', 'weight': 0.0},   # descartado por solape
+        {'date': '2026-10-03', 'pollster_id': 2, 'pollster': 'GAD3', 'weight': 0.5},
+        {'date': '2023-07-23', 'pollster_id': None, 'pollster': None, 'weight': None}]}
+    read = metodo.part
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: polls if name == 'polls' else read(scope, run, name, mode))
+    assert metodo.cycle_counts() == {'n_polls': 3, 'n_pollsters': 2}
+    assert pages.metodo_section_context(STATE, 'promedio')['cycle'] == {'n_polls': 3, 'n_pollsters': 2}
+
+
+def test_cycle_counts_is_none_without_the_part_and_lets_other_errors_through(api, monkeypatch):
+    def missing(scope, run, name, mode=None):
+        raise HttpError(404, 'not found')
+    monkeypatch.setattr(metodo, 'part', missing)
+    assert metodo.cycle_counts() is None
+
+    def boom(scope, run, name, mode=None):
+        raise HttpError(503, 'bundle unavailable')
+    monkeypatch.setattr(metodo, 'part', boom)
+    with pytest.raises(HttpError):
+        metodo.cycle_counts()
+
+
 def test_weights_example_is_none_without_the_part_or_the_leader(api, tmp_path, monkeypatch):
     weights = fixture_data('weights')
     monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None:
