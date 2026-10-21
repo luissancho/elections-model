@@ -678,115 +678,293 @@
         </p>
       {{ m.card_end() }}
       {% endif %}
-      {{ m.card_start('regresion', 'La regresión local', 'Para cada día, el promedio ajusta una recta a los sondeos cercanos en el tiempo y toma el valor de esa recta en ese día.') }}
+      {{ m.card_start('regresion', 'La regresión local', 'Para cada día, ajustamos una recta a los sondeos cercanos en el tiempo y el promedio es la altura de esa recta en ese día.') }}
         <p>
-          <strong>El problema.</strong> Los sondeos llegan a saltos, cada uno con su error, y hay que sacar de
-          ellos una cifra para cada día. Una media de los últimos sondeos no basta: se centra en el medio del
-          tramo que abarca y, cuando el voto se mueve, llega tarde. Y en el último día, hoy, solo hay sondeos a un
-          lado.
+          Con los sondeos corregidos y cada uno con su peso, queda sacar de ellos una cifra para cada día. Los sondeos
+          llegan a saltos, unos días tres y otros ninguno, cada uno con su error. La solución más simple, la media de los
+          últimos sondeos, tiene un defecto: la media de las últimas cuatro semanas describe el centro de esas cuatro
+          semanas, no el día de hoy. Cuando el voto se mueve, llega tarde.
         </p>
         <p>
-          <strong>La idea.</strong> Se elige un día y se miran los sondeos a través de una ventana en forma de
-          campana centrada en él: los de esa semana cuentan casi enteros, los de hace un mes cuentan poco y los de
-          hace tres, casi nada. Sobre esos puntos, cada uno con su peso, se traza la recta que mejor los sigue,
-          como una regla apoyada en la nube de puntos, y el promedio del día es la altura de la recta justo en ese
-          día. Al día siguiente se desplaza la campana un día y se repite. La línea que publica el modelo une esas
-          lecturas, una por día.
+          Nuestro promedio es una <strong>regresión polinómica local ponderada por kernel</strong> (en inglés,
+          <i lang="en">kernel-weighted local polynomial regression</i>).{{ m.note('referencias', note_keys) }} El nombre es
+          largo, pero cada palabra es una pieza del método. Vamos de la última a la primera.
         </p>
         <p>
-          <strong>Por qué una recta y no una media.</strong> Una recta tiene pendiente: si los sondeos van
-          subiendo, la recta sube y su lectura en el último día va por delante de la media. Por eso la regresión
-          local sigue la tendencia hasta el final de la serie, donde no hay sondeos posteriores que tiren de ella.
+          <strong>Regresión.</strong> Una regresión busca la línea que mejor resume una nube de puntos. Los puntos son los
+          sondeos: en horizontal, la fecha en que terminó su trabajo de campo (<code>date</code>); en vertical, el voto que
+          dan al partido, ya corregido de su efecto de encuestadora. La línea «que mejor resume» es la que hace más pequeña
+          la suma de las distancias al cuadrado entre ella y los puntos: el método de mínimos cuadrados.
         </p>
         <p>
-          <strong>En fórmula.</strong> Para cada día <var>t</var>, cada sondeo <var>i</var> recibe un peso
-          ω<sub><var>i</var></sub>: su peso <var>w</var><sub><var>i</var></sub> (el de
-          <a href="#peso">Cuánto pesa cada sondeo</a>) multiplicado por su cercanía a <var>t</var>, la campana de
-          Gauss de anchura <var>h</var><sub><var>t</var></sub>. Se buscan la altura <var>a</var> y la pendiente
-          <var>b</var> de la recta que menos se separa de los sondeos, contados con esos pesos, y el promedio del
-          día es <var>a</var>:
-        </p>
-        <math display="block" aria-label="minimizar en a y b la suma de omega sub i por y sub i menos a menos b por t sub i menos t, al cuadrado">
-          <mrow>
-            <munder><mo movablelimits="false">min</mo><mrow><mi>a</mi><mo>,</mo><mi>b</mi></mrow></munder>
-            <munder><mo>∑</mo><mi>i</mi></munder>
-            <msub><mi>ω</mi><mi>i</mi></msub>
-            <msup>
-              <mrow><mo>(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><mi>a</mi><mo>−</mo><mi>b</mi><mo>·</mo><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>−</mo><mi>t</mi><mo>)</mo><mo>)</mo></mrow>
-              <mn>2</mn>
-            </msup>
-          </mrow>
-        </math>
-        <p>
-          <var>y</var><sub><var>i</var></sub> es el voto del partido en el sondeo, ya sin su efecto de encuestadora
-          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), y <var>t</var><sub><var>i</var></sub>, su
-          fecha de fin de campo.
+          <strong>Polinómica.</strong> La línea podría ser una recta (un polinomio de grado 1), una parábola (de grado 2) o
+          algo más retorcido. Usamos una recta: una parábola sigue mejor las curvas, pero en el último día, con sondeos
+          solo a un lado, tiende a dispararse; la recta es el grado más bajo que sigue una tendencia.
         </p>
         <p>
-          <strong>La anchura de la campana.</strong> No es fija ni se elige a mano. Una anchura de partida sale de
-          los propios datos, con un método automático (el de Sheather y Jones, en la versión de Botev), y luego se
-          adapta día a día a cuántos sondeos hay cerca: se estrecha donde abundan, para seguir mejor los cambios,
-          y se ensancha donde escasean, para no fiarlo todo a dos o tres sondeos. En el último día, con sondeos
-          solo a un lado, la campana es más ancha.
-          {% if example %}<a href="#ejemplo">El ejemplo de más abajo</a> dibuja la campana y la recta de un día con los datos de hoy.{% endif %}
+          <strong>Local.</strong> No ajustamos una única recta a todo el ciclo (el voto no se mueve en línea recta durante
+          tres años), sino una distinta para cada día, con los sondeos cercanos a ese día, y nos quedamos con su altura
+          justo en él. Al día siguiente, otra. La línea que publicamos une esas alturas, una por día.
         </p>
         <p>
-          <strong>Lo que se sigue de ahí.</strong> La campana mira a los dos lados, así que la línea de los días
-          pasados puede moverse un poco cuando llegan sondeos nuevos: el promedio de hace dos semanas se afina con
-          lo publicado después. Cada partido se promedia por separado, con los sondeos que lo listan, si son al
-          menos tres. Y tras el último sondeo la recta se prolonga unos días y luego el valor se mantiene.
-        </p>
-      {{ m.card_end() }}
-      {{ m.card_start('banda', 'La banda del promedio', 'La banda que acompaña a la línea es su intervalo de confianza del 95%: la incertidumbre de la propia estimación del promedio.') }}
-        <p>
-          La banda sale del error estándar de la recta en cada día. Los sondeos de una misma encuestadora se parecen entre sí, porque comparten método y lo que les quede de
-          inclinación: no son informaciones independientes. El error se calcula agrupándolos por encuestadora (en la
-          jerga, un error estándar robusto con clústeres por encuestadora): las desviaciones de cada encuestadora se suman antes de
-          combinarse, y así no se dan por independientes diez sondeos de una encuestadora que se parecen. La banda usa
-          además una t de Student con, como mucho, tantos grados de libertad como encuestadoras hay en la ventana menos
-          una: con pocas encuestadoras, se ensancha.
+          <strong>Ponderada.</strong> En cada recta, cada sondeo cuenta con un peso ω<sub><var>i</var></sub>, el producto de
+          dos cosas: su peso propio <var>w</var><sub><var>i</var></sub> (el de <a href="#peso">Cuánto pesa cada
+          sondeo</a>) y su cercanía al día que se calcula.
         </p>
         <p>
-          Mide dónde está el consenso de las encuestadoras que publican. No mide:
+          <strong>Por kernel.</strong> La cercanía la da un <i>kernel</i>, un núcleo: una función que vale 1 en el día que
+          se calcula y baja al alejarse. Usamos el kernel gaussiano, la campana de Gauss:
         </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="K de t sub i menos t igual a la exponencial de menos t sub i menos t al cuadrado, entre dos h al cuadrado">
+            <mrow>
+              <mi>K</mi><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>−</mo><mi>t</mi><mo>)</mo><mo>=</mo>
+              <mi>exp</mi><mrow><mo>(</mo><mo>−</mo><mfrac><msup><mrow><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>−</mo><mi>t</mi><mo>)</mo></mrow><mn>2</mn></msup><mrow><mn>2</mn><msup><mi>h</mi><mn>2</mn></msup></mrow></mfrac><mo>)</mo></mrow>
+            </mrow>
+          </math>
+        </div>
+        <p>
+          con <var>t</var> el día que se calcula, <var>t</var><sub><var>i</var></sub> el fin de campo del sondeo y
+          <var>h</var> la <strong>anchura de banda</strong> (<i lang="en">bandwidth</i>), en días, que decide lo ancha que
+          es la campana: un sondeo a <var>h</var> días cuenta el 61 %; a 2<var>h</var>, el 14 %; a 3<var>h</var>, el 1 %.
+          Elegimos la campana de Gauss porque es suave, sin escalones (un sondeo no entra ni sale de golpe del promedio de
+          un día al siguiente), y porque no tiene un corte arbitrario: todos los sondeos cuentan algo, aunque los lejanos
+          casi nada.{{ m.note('corte', note_keys) }}
+        </p>
+        <p>
+          Juntando las piezas, para cada día <var>t</var> buscamos la altura <var>a</var> y la pendiente <var>b</var> de
+          la recta que menos se separa de los sondeos:
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="minimizar en a y b la suma de omega sub i por y sub i menos a menos b por t sub i menos t, al cuadrado, con omega sub i igual a w sub i por K de t sub i menos t">
+            <mrow>
+              <munder><mo movablelimits="false">min</mo><mrow><mi>a</mi><mo>,</mo><mi>b</mi></mrow></munder>
+              <munder><mo>∑</mo><mi>i</mi></munder>
+              <msub><mi>ω</mi><mi>i</mi></msub>
+              <msup>
+                <mrow><mo>(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><mi>a</mi><mo>−</mo><mi>b</mi><mo>·</mo><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>−</mo><mi>t</mi><mo>)</mo><mo>)</mo></mrow>
+                <mn>2</mn>
+              </msup>
+              <mo>,</mo><mspace width="1em"/>
+              <msub><mi>ω</mi><mi>i</mi></msub><mo>=</mo><msub><mi>w</mi><mi>i</mi></msub><mo>·</mo><mi>K</mi><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>−</mo><mi>t</mi><mo>)</mo>
+            </mrow>
+          </math>
+        </div>
+        <p>
+          El promedio del día es <var>a</var>, la altura de la recta en <var>t</var>; la pendiente <var>b</var> dice si el
+          partido sube o baja en ese momento.
+        </p>
+        <h3>Por qué una recta y no una media</h3>
+        <p>La solución de ese problema tiene una forma que lo explica todo:</p>
+        <div class="math-wrap">
+          <math display="block" aria-label="a igual a la media ponderada de los sondeos más b por t menos la media ponderada de sus fechas, el centro de gravedad de la campana">
+            <mrow>
+              <mi>a</mi><mo>=</mo><msub><mover><mi>y</mi><mo>¯</mo></mover><mi>ω</mi></msub><mo>+</mo>
+              <mi>b</mi><mo>·</mo><mo>(</mo><mi>t</mi><mo>−</mo><msub><mover><mi>t</mi><mo>¯</mo></mover><mi>ω</mi></msub><mo>)</mo>
+            </mrow>
+          </math>
+        </div>
+        <p>
+          con <var>ȳ</var><sub>ω</sub> la media ponderada de los sondeos y <var>t̄</var><sub>ω</sub> la de sus fechas, el
+          centro de gravedad de la campana. Un día con sondeos a los dos lados tiene <var>t̄</var><sub>ω</sub> ≈
+          <var>t</var>, y la recta y la media coinciden. Pero hoy, en el último día, todos los sondeos están detrás: el
+          centro de gravedad queda semanas atrás y la media describe aquel momento. La recta corrige ese retraso sumando a
+          la media la pendiente por la distancia hasta hoy: si un partido lleva semanas subiendo, la recta lo lleva hasta
+          hoy, y la media no. Lo hemos medido sobre las generales pasadas: leído seis días antes de votar, el promedio se
+          equivoca de media en 1,70 puntos por partido, frente a 1,74 del último sondeo publicado y 1,86 de la media de
+          las cuatro últimas semanas.
+        </p>
+        <h3 id="anchura">La anchura de la campana</h3>
+        <p>
+          Todo depende de <var>h</var>. Con una campana estrecha, el promedio sigue cada vaivén, también el ruido de cada
+          sondeo; con una ancha, es estable pero tarda en reaccionar a los cambios reales. No hay un valor correcto
+          universal, y no lo elegimos a mano: sale de los datos, en dos pasos.
+        </p>
+        <p>
+          <strong>Una anchura de partida con el método ISJ.</strong> Elegir la anchura de una campana es un problema
+          clásico de la estadística, el de estimar la forma de una distribución a partir de una muestra (la estimación de
+          densidad por kernel). Sheather y Jones (1991) propusieron calcular la anchura óptima con los propios datos, y
+          Botev, Grotowski y Kroese (2010) mejoraron su método: el <i lang="en">Improved Sheather-Jones</i> (ISJ) no
+          presupone que los datos tengan forma de campana, así que funciona también cuando se agrupan en varios montones,
+          como los sondeos, que se acumulan en las campañas y escasean entre ellas. Lo aplicamos al
+          <strong>calendario</strong> de los sondeos de cada partido, a sus fechas con sus pesos, no a sus cifras: la
+          pregunta que responde es qué anchura describe mejor cómo se reparten los sondeos en el
+          tiempo.{{ m.note('isj', note_keys) }}
+        </p>
+        <p>
+          <strong>Una anchura que se adapta a cada día.</strong> Una sola anchura para todo el ciclo sería un mal
+          compromiso: en campaña se publican varios sondeos al día, y en verano, uno por semana. La anchura cambia con la
+          densidad de sondeos alrededor de cada día, siguiendo la idea de la regla de la raíz cuadrada de Abramson
+          (1982):
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="h sub k más uno de t igual a h sub k de t por la raíz de G entre f sub k de t">
+            <mrow>
+              <msub><mi>h</mi><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>(</mo><mi>t</mi><mo>)</mo><mo>=</mo>
+              <msub><mi>h</mi><mi>k</mi></msub><mo>(</mo><mi>t</mi><mo>)</mo><mo>·</mo>
+              <msqrt><mfrac><mi>G</mi><mrow><msub><mi>f</mi><mi>k</mi></msub><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mfrac></msqrt>
+            </mrow>
+          </math>
+        </div>
+        <p>
+          <var>f</var><sub><var>k</var></sub>(<var>t</var>) mide cuántos sondeos hay cerca del día <var>t</var> (la suma de
+          sus pesos por la campana) y <var>G</var> es la media geométrica de <var>f</var><sub><var>k</var></sub> en todos
+          los días, para que la anchura media siga en torno a la de partida. Donde hay el doble de sondeos que de media, la
+          campana se estrecha por √2; donde hay la mitad, se ensancha otro tanto. Repetimos el ajuste tres
+          veces.{{ m.note('abramson', note_keys) }} Al final de la serie, con sondeos solo a un lado, la densidad cae y la
+          campana se ensancha sola: en septiembre, la del PP iba de 61 a 130 días según el momento del ciclo, con una
+          mediana de 70 y 129 en la última fecha.
+        </p>
+        <p>
+          Con la anchura del PP leída el 24 de octubre en el cálculo del 20, 81 días, un sondeo cuenta así según su
+          antigüedad:
+        </p>
+        <div class="table-wrap">
+          <table class="et">
+            <caption>Datos del cálculo del 20 de octubre de 2026.</caption>
+            <thead><tr><th scope="col" class="f l">Antigüedad</th><th scope="col">1 semana</th><th scope="col">1 mes</th><th scope="col">2 meses</th><th scope="col">3 meses</th><th scope="col">6 meses</th></tr></thead>
+            <tbody><tr><td class="f l">Peso de la campana</td><td>100 %</td><td>93 %</td><td>76 %</td><td>54 %</td><td>9 %</td></tr></tbody>
+          </table>
+        </div>
+        <p>
+          Es una campana ancha: hoy no hay campaña ni avalancha de sondeos, y lo que manda es que ningún sondeo suelto mueva
+          la línea. Cada partido tiene la suya: los grandes, con más sondeos, en torno a 80 días; los pequeños, que aparecen
+          en menos, entre 120 y 150.{% if example %} <a href="#ejemplo">El ejemplo de más abajo</a> dibuja la campana y la
+          recta de un día con los datos de hoy.{% endif %}
+        </p>
+        <h3 id="consecuencias">Lo que se sigue de ahí</h3>
         <ul>
-          <li>Dónde estará el voto: el error que comparten todas las encuestadoras frente al resultado no está en la
-            banda, sino en la simulación, como error histórico de los sondeos.</li>
-          <li>La incertidumbre de la anchura de la ventana ni la de los efectos de encuestadora, que el recentrado hace
-            pequeña.</li>
-          <li>Toda la incertidumbre cuando pocas encuestadoras pesan de verdad en la ventana: ahí el error agrupado se
-            queda corto.</li>
+          <li><strong>El pasado se afina.</strong> La campana mira a los dos lados, así que el promedio de hace dos semanas
+            cambia un poco cuando llegan sondeos nuevos: no es una corrección, es más información.</li>
+          <li><strong>Cada partido se promedia por separado</strong>, con los sondeos que lo incluyen, si son al menos tres:
+            una recta necesita tres puntos para que tenga sentido hablar de su error.</li>
+          <li><strong>Tras el último sondeo</strong>, la recta se prolonga diez días y después el valor se mantiene.</li>
+          <li><strong>Los gráficos muestran los sondeos tal como se publicaron</strong>, pero la recta se ajusta a sus cifras
+            corregidas: por eso no siempre pasa «por el medio» de los puntos.</li>
         </ul>
         <p>
-          Por eso el resultado cae a menudo fuera de la banda sin que sea un fallo.
+          La regresión no escribe nada en Polls: su peso por cercanía aparece como <code>weight_kernel</code> en los pesos
+          descargables de cada partido, junto a la cifra corregida, <code>pct_adj</code>.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('banda', 'La banda del promedio', 'La banda que acompaña a la línea es su intervalo de confianza del 95 %: cuánto sabemos del consenso de las encuestadoras ese día.') }}
+        <p>
+          La banda responde a una pregunta concreta: con los sondeos que tenemos, ¿con cuánta precisión conocemos el
+          consenso de las encuestadoras ese día? No dice dónde estará el voto; esa es otra pregunta, y la contestamos más
+          abajo.
+        </p>
+        <p>
+          Sale del error estándar de la altura <var>a</var> de la recta de cada día. La fórmula habitual de ese error supone
+          que cada sondeo es una medición independiente, y en las encuestas españolas no lo es: los sondeos de una misma
+          encuestadora se parecen entre sí, porque comparten método, a menudo panel, y lo que quede de su inclinación. Diez
+          sondeos de una encuestadora que publica cada semana no son diez confirmaciones independientes, sino algo más
+          parecido a una mirada repetida diez veces; tratados como independientes, la banda saldría engañosamente estrecha.
+        </p>
+        <h3>Por qué agrupamos por encuestadora</h3>
+        <p>
+          Calculamos el error agrupando los sondeos por encuestadora (en la jerga, un error estándar robusto con
+          clústeres): las desviaciones de cada encuestadora se suman antes de combinarse con las de las demás, de modo que
+          si se equivocan juntas, cuentan juntas:
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="varianza de a igual a c por el elemento uno uno de X traspuesta omega X inversa, por la suma sobre las encuestadoras g de u sub g por u sub g traspuesto, por X traspuesta omega X inversa; con u sub g igual a la suma sobre los sondeos de g de omega sub i por x sub i por e sub i">
+            <mrow>
+              <mi>Var</mi><mo>(</mo><mi>a</mi><mo>)</mo><mo>=</mo><mi>c</mi><mo>·</mo>
+              <msub>
+                <mrow><mo>[</mo>
+                  <msup><mrow><mo>(</mo><msup><mi>X</mi><mi>T</mi></msup><mi>Ω</mi><mi>X</mi><mo>)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup>
+                  <mrow><mo>(</mo><munder><mo>∑</mo><mi>g</mi></munder><msub><mi>u</mi><mi>g</mi></msub><msubsup><mi>u</mi><mi>g</mi><mi>T</mi></msubsup><mo>)</mo></mrow>
+                  <msup><mrow><mo>(</mo><msup><mi>X</mi><mi>T</mi></msup><mi>Ω</mi><mi>X</mi><mo>)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup>
+                <mo>]</mo></mrow>
+                <mn>11</mn>
+              </msub>
+              <mo>,</mo><mspace width="1em"/>
+              <msub><mi>u</mi><mi>g</mi></msub><mo>=</mo>
+              <munder><mo>∑</mo><mrow><mi>i</mi><mo>∈</mo><mi>g</mi></mrow></munder>
+              <msub><mi>ω</mi><mi>i</mi></msub><msub><mi>x</mi><mi>i</mi></msub><msub><mi>e</mi><mi>i</mi></msub>
+            </mrow>
+          </math>
+        </div>
+        <p>
+          <var>x</var><sub><var>i</var></sub> = (1, <var>t</var><sub><var>i</var></sub> − <var>t</var>) es la fila del
+          sondeo <var>i</var> en la recta; <var>e</var><sub><var>i</var></sub>, lo que se aparta de ella; Ω, los pesos
+          ω<sub><var>i</var></sub>; <var>g</var> recorre las encuestadoras; y <var>c</var> = <var>G</var>/(<var>G</var> −
+          1) · (<var>n</var><sub>ef</sub> − 1)/(<var>n</var><sub>ef</sub> − 2) es la corrección habitual para muestras
+          pequeñas (CR1), con <var>G</var> encuestadoras y <var>n</var><sub>ef</sub> =
+          (Σω<sub><var>i</var></sub>)²/Σω<sub><var>i</var></sub>² sondeos efectivos (el tamaño efectivo de Kish).
+        </p>
+        <h3>Por qué una t de Student</h3>
+        <p>
+          Con pocas encuestadoras, el propio error estándar es incierto, así que la banda usa una <var>t</var> de Student en
+          lugar de una normal:
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="a más menos t de 0,975 con nu grados de libertad, por la raíz de la varianza de a; con nu igual al mínimo entre n efectivo menos dos y G menos uno">
+            <mrow>
+              <mi>a</mi><mo>±</mo><msub><mi>t</mi><mrow><mn>0,975</mn><mo>;</mo><mi>ν</mi></mrow></msub><mo>·</mo>
+              <msqrt><mrow><mi>Var</mi><mo>(</mo><mi>a</mi><mo>)</mo></mrow></msqrt>
+              <mo>,</mo><mspace width="1em"/>
+              <mi>ν</mi><mo>=</mo><mi>min</mi><mo>(</mo><msub><mi>n</mi><mtext>ef</mtext></msub><mo>−</mo><mn>2</mn><mo>,</mo><mi>G</mi><mo>−</mo><mn>1</mn><mo>)</mo>
+            </mrow>
+          </math>
+        </div>
+        <p>
+          Los grados de libertad son, como mucho, las encuestadoras menos una, porque la información independiente la
+          aportan las encuestadoras, no los sondeos. Con veinte encuestadoras en la ventana, <var>t</var> ≈ 2,1; con cinco,
+          <var>t</var> ≈ 2,8, y la banda se ensancha un tercio. En el PP, agrupar por encuestadora sube el error estándar de
+          0,20 a 0,25 puntos y ensancha la banda de ±0,41 a ±0,53.
+        </p>
+        <p>
+          La banda mide dónde está el consenso de las encuestadoras que publican, no dónde estará el voto: el error que
+          cometen todas a la vez frente al resultado es invisible desde dentro del ciclo, y el resultado cae a menudo fuera
+          de ella sin que sea un fallo.{{ m.note('cobertura', note_keys) }} Ese error se suma más abajo, en
+          <a href="#voto-estimado">el intervalo del voto estimado</a>.{{ m.note('limites', note_keys) }} La banda no se
+          guarda en Polls; en los pesos descargables de cada partido están su error estándar, sus límites, los sondeos
+          usados (<code>nobs</code>), los efectivos (<code>neff</code>) y la anchura del día.
         </p>
       {{ m.card_end() }}
       {% if example %}
-      {{ m.card_start('ejemplo', 'Un ejemplo: el promedio del ' ~ example.name ~ ' hoy', 'Los sondeos que aportan peso en el promedio del ' ~ example.name ~ ' publicado el ' ~ (example.published|date) ~ ' y la recta que se ajusta a ellos: lo que las secciones anteriores explican, con los datos a día de hoy.') }}
+      {{ m.card_start('ejemplo', 'Un ejemplo: el promedio del ' ~ example.name ~ ' hoy', 'Los sondeos que pesan en el promedio del ' ~ example.name ~ ' del último cálculo publicado, el del ' ~ (example.published|date) ~ ', y la recta que se ajusta a ellos: todo lo anterior, con los datos de hoy.') }}
         <p>
-          El {{ example.published|date }} el promedio del {{ example.name }} se establece en el {{ example.stats.mean|pct }},
-          con una banda del {{ example.stats.lo|pct }} al {{ example.stats.hi|pct }}. Se calcula a partir de
-          {{ example.stats.nobs|int }} sondeos, que por sus pesos equivalen a unos {{ example.stats.neff|num(1) }} sondeos
-          efectivos, penalizando los más antiguos a través del kernel gaussiano con un ancho de banda de
-          {{ example.stats.bandwidth|num(0) }} días.
+          Todo lo anterior, con los datos de hoy: el partido que encabeza el promedio, por dentro, en un día concreto. Qué
+          sondeos entran, cuánto pesa cada uno y por qué.
         </p>
-        <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} publicado el {{ example.published|date }}, con la recta local, su banda y la campana del kernel"></div>
+        <p>
+          En el último cálculo publicado, el del {{ example.published|date }}, el promedio del {{ example.name }} leído el
+          {{ example.date|date }} es del {{ example.stats.mean|pct }}, con una banda del {{ example.stats.lo|pct }} al
+          {{ example.stats.hi|pct }}.{% if example.date > example.published %} El día de lectura es posterior al del cálculo
+          porque la recta se prolonga diez días tras el último sondeo.{% endif %} Entran {{ example.stats.nobs|int }}
+          sondeos, que por sus pesos equivalen a {{ example.stats.neff|num(1) }} sondeos independientes de igual peso: es
+          el tamaño efectivo de Kish, <var>n</var><sub>ef</sub> = (Σω<sub><var>i</var></sub>)²/Σω<sub><var>i</var></sub>².
+          Cuanto más desiguales son los pesos, más se aleja del número de sondeos: diez sondeos que pesan lo mismo informan
+          como diez, pero si uno pesa por los otros nueve juntos, informan como dos. La campana de ese día tiene
+          {{ example.stats.bandwidth|num(0) }} días de anchura.
+        </p>
+        <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} leído el {{ example.date|date }}, con la recta local, su banda y la campana del kernel"></div>
+        <p>
+          Cada punto es un sondeo, más grande y más intenso cuanto más pesa; al pasar el puntero se ve quién lo hizo, cuándo
+          y con qué peso. La recta es la de ese día, con su banda del 95 %, y la campana, en el eje de la derecha y de 0 a 1,
+          es el peso por cercanía. Las guías marcan el día leído y el valor que da la recta. Los puntos muestran la cifra que
+          publicó cada encuestadora, pero la recta se ajusta a las cifras corregidas de su efecto de encuestadora: por eso
+          no pasa «por el medio» de la nube.
+        </p>
         <details class="weights-list" id="weights-list">
           <summary>Ver los {{ example.n_rows }} sondeos</summary>
           <div class="table-wrap">
             <table class="et" id="weights-table">
-              <caption>Sondeos que entran en la recta del promedio publicado el {{ example.published|date }} y sus pesos, los más recientes primero.</caption>
+              <caption>Sondeos que entran en la recta del promedio leído el {{ example.date|date }} y sus pesos, los más recientes primero.</caption>
               <thead>
                 <tr>
                   <th scope="col" class="f l">Fecha</th>
                   <th scope="col">Casa</th>
-                  <th scope="col" title="Entrevistas del sondeo">Muestra</th>
-                  <th scope="col" title="Voto publicado para el partido">Predicción</th>
-                  <th scope="col" title="Peso total en la recta: el producto de los cuatro factores (barra de 0 a 3)">Peso</th>
-                  <th scope="col" title="Factor de cercanía al día: la campana del kernel">F(kernel)</th>
-                  <th scope="col" title="Factor de solape: la sobrerrepresentación de la encuestadora">F(solape)</th>
-                  <th scope="col" title="Factor de muestra, con la dispersión de la encuestadora dentro">F(muestra)</th>
-                  <th scope="col" title="Factor del rating de la encuestadora">F(rating)</th>
+                  <th scope="col" title="Entrevistas publicadas del sondeo">Entrevistas</th>
+                  <th scope="col" title="Voto que el sondeo publicó para el partido">Publicada</th>
+                  <th scope="col" title="Voto que entra en la recta, sin el efecto de su encuestadora">Corregida</th>
+                  <th scope="col" title="Peso total en la recta: el producto de los factores (barra de 0 a 3)">Peso</th>
+                  <th scope="col" title="La campana: vale 1 el día leído y baja al alejarse">Cercanía</th>
+                  <th scope="col" title="La sobrerrepresentación o: 0 si se solapa con una entrega posterior, 1/N en una racha de N">Solape</th>
+                  <th scope="col" title="La raíz de la muestra entre la mediana, con la dispersión f de la encuestadora dentro">Muestra</th>
+                  <th scope="col" title="El factor del rating de la encuestadora">Rating</th>
                 </tr>
               </thead>
               <tbody>
@@ -796,6 +974,7 @@
                   <td><b>{{ row.pollster }}</b>{% if row.sponsor %} / {{ row.sponsor }}{% endif %}</td>
                   <td>{{ row.sample_size|int }}</td>
                   <td>{{ row.pct|pct }}</td>
+                  <td>{{ row.pct_adj|pct }}</td>
                   <td class="cell-bar"><i class="fill w" style="left: 0; width: {{ row.weight|bar(0, 3) }}%"></i><span>{{ row.weight|num(2) }}</span></td>
                   <td>{{ row.weight_kernel|num(2) }}</td>
                   <td>{{ row.weight_over|num(2) }}</td>
@@ -809,50 +988,107 @@
           <p class="scroll-hint">Desliza para ver más →</p>
         </details>
         <p>
-          En el gráfico, cada punto es un sondeo, más grande y más intenso cuanto más pesa; pasa el puntero para
-          ver quién lo hizo, cuándo y con qué peso. La recta es la que se ajusta a los sondeos el día en que se lee
-          el promedio, con su banda del 95%, y la campana (en el eje de la derecha, de 0 a 1) es el peso por cercanía
-          de <a href="#regresion">La regresión local</a>. Las guías marcan ese día y el valor leído.
-        </p>
-        <p>
-          «Ver los sondeos» despliega la lista completa, los más recientes primero: la fecha de fin de campo, la
-          encuestadora y el medio, la muestra, la predicción que publicó para el {{ example.name }}, su peso total
-          (una barra de 0 a 3) y los cuatro factores que lo forman. Tres son los de
-          <a href="#peso">Cuánto pesa cada sondeo</a>: F(solape), la sobrerrepresentación; F(muestra), la muestra
-          con la dispersión de la encuestadora, el rebaño, ya dentro; y F(rating), el rating. El cuarto, F(kernel),
-          es la cercanía al día: la campana, que vale 1 ese día y baja al alejarse.
-        </p>
-        <p>
-          La recta es solo la de ese día: cada día tiene la suya y el promedio publicado une sus valores. Los puntos
-          muestran la cifra publicada, pero la recta se ajusta a las cifras netas del efecto de encuestadora
-          (<a href="#efectos-de-casa">Los efectos de encuestadora</a>), por lo que no pasa «por el medio» de los
-          puntos. La banda es la del promedio, con el error agrupado por encuestadora (<a href="#banda">La banda del
-          promedio</a>).
+          La tabla lista los sondeos, los más recientes primero: su fecha de fin de campo; la encuestadora y el medio; las
+          entrevistas publicadas; el voto que dio al partido (Publicada) y el que entra en la recta, sin su efecto de
+          encuestadora (Corregida); el peso total, con una barra de 0 a 3; y los factores que lo forman: Cercanía, la
+          campana, que vale 1 el día leído; Solape, la sobrerrepresentación <var>o</var>; Muestra,
+          √(<var>n</var>/<var>ñ</var>) con la dispersión <var>f</var> dentro; y Rating, el factor <var>r</var>.
+          {%- if example.top %} El sondeo que más pesa es el de {{ example.top.pollster }} del
+          {{ example.top.date|date_short }}, con {{ example.top.weight|num(2) }}.{% endif %}
         </p>
         <p class="notice"><a href="{{ example_csv }}">Descargar los pesos de todos los partidos (CSV)</a></p>
       {{ m.card_end() }}
       {% endif %}
-      {{ m.card_start('voto-estimado', 'De las encuestas al voto estimado', 'El voto estimado de cada partido es el promedio corregido leído en la fecha de la estimación; su intervalo suma más errores que la banda.') }}
+      {{ m.card_start('voto-estimado', 'De las encuestas al voto estimado', 'El voto estimado de cada partido es el promedio leído en la fecha de la estimación; su intervalo suma más errores que la banda.') }}
         <p>
-          El promedio se lee en un día, la fecha de la estimación: normalmente el último que alcanza la línea, unos
-          días después del último sondeo. Es la fecha que dan las páginas de cada elección («el promedio de
-          sondeos leído el…»). Lo que falta hasta 100 queda como «otros» (otras candidaturas y voto en blanco).
+          El promedio se lee en un día, la fecha de la estimación: normalmente el último que alcanza la línea, diez días
+          después del último sondeo, y nunca más tarde de seis días antes de la elección. Es la fecha que dan las páginas de
+          cada elección («el promedio de sondeos leído el…»). Lo que falta hasta el 100 % queda como «otros»: otras
+          candidaturas y voto en blanco.
         </p>
         <p>
-          Los modos Hoy y Elección comparten ese voto estimado; solo cambian los intervalos. El del voto de un
-          partido es más ancho que la banda porque suma hasta tres errores:
-          √(<var>s</var><sup>2</sup> + <var>e</var><sup>2</sup> + <var>d</var><sup>2</sup>), con <var>s</var> el
-          del promedio (el de la banda), <var>e</var> el error histórico de los sondeos de la última semana frente
-          al resultado en partidos de ese tamaño y <var>d</var> la deriva de la opinión en los días que faltan,
-          que solo se suma en el modo Elección.
+          Los modos Hoy y Elección comparten ese voto estimado; solo cambia la anchura de su intervalo, mucho mayor que la
+          banda porque suma hasta tres fuentes de incertidumbre:
         </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="sigma del voto igual a la raíz de s al cuadrado más e al cuadrado más d al cuadrado">
+            <mrow>
+              <msub><mi>σ</mi><mtext>voto</mtext></msub><mo>=</mo>
+              <msqrt><mrow><msup><mi>s</mi><mn>2</mn></msup><mo>+</mo><msup><mi>e</mi><mn>2</mn></msup><mo>+</mo><msup><mi>d</mi><mn>2</mn></msup></mrow></msqrt>
+            </mrow>
+          </math>
+        </div>
+        <ul>
+          <li><strong><var>s</var></strong> es el error del promedio, el de su banda: cuánto sabemos del consenso de las
+            encuestadoras.</li>
+          <li><strong><var>e</var></strong> es el error histórico de los sondeos frente al resultado, la pieza que falta en
+            la banda: el error que cometen todas a la vez. Lo estimamos con el último sondeo de cada encuestadora antes de
+            cada elección pasada, con una regresión que lo predice según el tamaño del partido y si es regional. Crece con
+            el tamaño: en las generales, el último sondeo de cada encuestadora se ha equivocado de media en unos 0,4 puntos
+            con los partidos de menos del 5 %, unos 2,3 con los de entre el 10 % y el 20 % y unos 3 con los de más del
+            30 %.</li>
+          <li><strong><var>d</var></strong> es la deriva, cuánto puede moverse la opinión en los días que faltan hasta la
+            elección. Solo se suma en el modo Elección.</li>
+        </ul>
         <p>
           Con ese voto y esos errores, el modelo sortea
-          {% if figures.n_sim %}{{ figures.n_sim|int }} elecciones posibles (en las generales){% else %}muchas elecciones posibles{% endif %}
-          y reparte los escaños de cada una. Cómo, y de dónde salen el error histórico y la deriva, se cuenta en
-          <a href="{{ method_href('escanos') }}">¿Cómo simulamos los escaños?</a>.
+          {% if figures.n_sim %}{{ figures.n_sim|int }} elecciones posibles (en las generales){% else %}muchas elecciones posibles{% endif %},
+          con una <var>t</var> de Student en lugar de una normal para que los errores grandes sean algo más probables que en
+          una campana de Gauss, y reparte los escaños de cada una. Cómo, y de dónde salen el error histórico y la deriva, se
+          cuenta en <a href="{{ method_href('escanos') }}">¿Cómo simulamos los escaños?</a>.{{ m.note('escala', note_keys) }}
         </p>
       {{ m.card_end() }}
+      {% call m.notes_card(note_keys) %}
+        {% call m.note_item('tope') %}Las tres desviaciones típicas son una convención estadística, no un valor medido: no
+          sabemos si 2,5 o 4 funcionarían mejor. Como se calculan con todos los sondeos del ámbito, el tope cambia un poco
+          con cada carga de sondeos: en septiembre de 2026 era de 4.715 entrevistas.{% endcall %}
+        {% call m.note_item('diseno') %}La varianza esperada supone un muestreo aleatorio simple. Las encuestas reales tienen
+          un efecto de diseño que suele multiplicar esa varianza por 1,2 o 1,5: teniéndolo en cuenta, las encuestadoras que
+          oscilan menos de lo esperado quedarían aún más lejos de lo que deberían oscilar, así que la medida del rebaño es
+          conservadora.{% endcall %}
+        {% call m.note_item('umbrales') %}Los umbrales son elecciones razonables que no hemos comparado con otras: el mínimo
+          de cinco sondeos, el encogimiento con cinco, el suelo de 0,1 del factor y los cuatro partidos principales del
+          rebaño.{% endcall %}
+        {% call m.note_item('ventana') %}Es una convención que no hemos medido; FiveThirtyEight usaba una ventana de catorce
+          días.{% endcall %}
+        {% call m.note_item('suelo') %}Para que un puñado de sondeos casi idénticos no dé una certeza desmedida,
+          σ<sub><var>d</var></sub> nunca baja de la cuarta parte de σ<sub><var>h</var></sub>: el ciclo pesa, como mucho, un
+          94 %. En el CIS y el PP actúa: su error del ciclo, 0,42, sube a 0,64.{% endcall %}
+        {% call m.note_item('comun') %}Probamos a restar a todas las encuestadoras su error medio histórico en cada partido.
+          Empeoraba las probabilidades del modelo frente al resultado (la puntuación de Brier) un 21 %.{% endcall %}
+        {% call m.note_item('convenciones') %}Son elecciones razonables que no hemos comparado con alternativas: los 90 días
+          de historia, el mínimo de cinco sondeos en el ciclo, la elección imaginaria de diez sondeos, el 10 % anual, el
+          medio peso de las autonómicas y las tres iteraciones.{% endcall %}
+        {% call m.note_item('referencias') %}W. S. Cleveland (1979), «Robust locally weighted regression and smoothing
+          scatterplots», <i>Journal of the American Statistical Association</i>, 74, 829-836; J. Fan e I. Gijbels (1996),
+          <i>Local Polynomial Modelling and Its Applications</i>, Chapman &amp; Hall; A. Gajewicz-Skretna, S. Kar, M.
+          Piotrowska y J. Leszczynski (2021), «The kernel-weighted local polynomial regression (KwLPR) approach: an
+          efficient, novel tool for development of QSAR/QSAAR toxicity extrapolation models», <i>Journal of
+          Cheminformatics</i>, 13.{% endcall %}
+        {% call m.note_item('corte') %}Los sondeos cuyo peso ω<sub><var>i</var></sub> queda por debajo de 0,01 se dejan
+          fuera del ajuste de ese día, para ahorrar cálculo; su aportación es despreciable.{% endcall %}
+        {% call m.note_item('isj') %}S. J. Sheather y M. C. Jones (1991), «A reliable data-based bandwidth selection method
+          for kernel density estimation», <i>Journal of the Royal Statistical Society, Series B</i>, 53, 683-690; Z. I.
+          Botev, J. F. Grotowski y D. P. Kroese (2010), «Kernel density estimation via diffusion», <i>The Annals of
+          Statistics</i>, 38, 2916-2957. El ISJ resuelve una ecuación de punto fijo sobre un histograma de 256 celdas de las
+          fechas, con una transformada de coseno; si no converge, y como mínimo, la anchura es 2π veces la separación media
+          entre sondeos.{% endcall %}
+        {% call m.note_item('abramson') %}I. S. Abramson (1982), «On bandwidth variation in kernel estimates—a square root
+          law», <i>The Annals of Statistics</i>, 10, 1217-1223. Solo la primera iteración sigue exactamente su regla; en las
+          siguientes la anchura sigue ajustándose a la densidad ya suavizada, y en el final de la serie crece con cada
+          iteración.{% endcall %}
+        {% call m.note_item('cobertura') %}La banda contiene el resultado en un 23 %, un 24 % y un 28 % de los casos leída a
+          6, 14 y 30 días de la elección. El intervalo del voto estimado, que suma el error histórico de los sondeos, lo
+          contiene en un 96 % de los casos a seis días, para un 95 % nominal.{% endcall %}
+        {% call m.note_item('limites') %}Tampoco recoge la incertidumbre de la anchura de la campana ni la de los efectos de
+          encuestadora, y se queda corta cuando pocas encuestadoras pesan de verdad: remuestreando por encuestadoras (un
+          <i lang="en">bootstrap</i> por clústeres), el error del PP sale de 0,38 puntos, frente a los 0,25 de la fórmula
+          agrupada, con unas nueve encuestadoras efectivas.{% endcall %}
+        {% call m.note_item('escala') %}<var>e</var> es el error absoluto medio que predice la regresión, y lo usamos como
+          escala del error del sorteo. La cobertura medida del intervalo, un 96 % para un 95 % nominal (nota
+          {{ note_keys.index('cobertura') + 1 }}), dice que esa escala es adecuada.{% endcall %}
+      {% endcall %}
+      <p class="byline">Por Luis Sancho (<a href="{{ author_url }}" rel="me">{{ author_handle }}</a> en X).</p>
       {{ m.closing('¿Cómo simulamos los escaños?', method_href('escanos'),
                    'Cómo se pasa del voto estimado a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
                    [{'href': '/es', 'label': 'Promedios de las elecciones generales'},

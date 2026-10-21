@@ -109,40 +109,53 @@ def test_promedio_page_shows_the_example_block(api):
     assert page.index('id="weights-chart"') < page.index('id="weights-list"') < page.index('id="weights-table"')
     assert 'class="chart chart-tall"' in page and '<details class="weights-list" id="weights-list">' in page   # plegado
     assert re.search(r'<summary[^>]*>\s*Ver los 3 sondeos', page)
-    assert len(re.findall(r'<tr>\s*<td class="f l">', page)) == 3 and '<tr hidden>' not in page
-    headers = re.findall(r'<th scope="col"[^>]*>([^<]+)</th>', page[page.index('id="weights-table"'):])
-    assert headers == ['Fecha', 'Casa', 'Muestra', 'Predicción', 'Peso', 'F(kernel)', 'F(solape)', 'F(muestra)', 'F(rating)']
-    rows = re.findall(r'<tr>\s*<td class="f l">([^<]+)</td>', page)
+    table = page[page.index('id="weights-table"'):]
+    table = table[:table.index('</table>')]
+    assert len(re.findall(r'<tr>\s*<td class="f l">', table)) == 3 and '<tr hidden>' not in page
+    headers = re.findall(r'<th scope="col"[^>]*>([^<]+)</th>', table)
+    assert headers == ['Fecha', 'Casa', 'Entrevistas', 'Publicada', 'Corregida', 'Peso', 'Cercanía', 'Solape', 'Muestra',
+                       'Rating']
+    rows = re.findall(r'<tr>\s*<td class="f l">([^<]+)</td>', table)
     assert rows == ['5 oct', '1 oct', '24 sept']                                   # los más nuevos arriba
+    assert '<td>32,4%</td>' in table and '<td>32,9%</td>' in table                  # publicada y corregida (GAD3)
     text = re.sub(r'\s+', ' ', page)
-    assert ('Los sondeos que aportan peso en el promedio del PP publicado el 8 oct 2026 y la recta que se ajusta a ellos: '
-            'lo que las secciones anteriores explican, con los datos a día de hoy.') in text
-    assert ('El 8 oct 2026 el promedio del PP se establece en el 33,1%, con una banda del 32,4% al 33,8%. Se calcula a partir '
-            'de 3 sondeos, que por sus pesos equivalen a unos 2,6 sondeos efectivos, penalizando los más antiguos a través '
-            'del kernel gaussiano con un ancho de banda de 42 días.') in text
+    assert ('En el último cálculo publicado, el del 8 oct 2026, el promedio del PP leído el 8 oct 2026 es del 33,1%, con '
+            'una banda del 32,4% al 33,8%.') in text
+    assert 'El día de lectura es posterior al del cálculo' not in text             # mismo día en la fixture
+    assert 'Entran 3 sondeos, que por sus pesos equivalen a 2,6 sondeos independientes de igual peso' in text
+    assert 'La campana de ese día tiene 42 días de anchura.' in text
+    assert 'El sondeo que más pesa es el de Sigma Dos del 1 oct, con 1,14.' in text
     assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
     assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
-    table = page[page.index('id="weights-table"'):page.index('</table>')]
     assert 'cell-shade' not in table and table.count('class="cell-bar"') == 3       # solo el peso lleva formato
     assert '<td>0,64</td>' in table and '<td>0,80</td>' in table                      # los factores, a secas
     assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
     data = initial(body)
     assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
-    # el «Cómo leerlo» va a la vista, como texto normal bajo el gráfico y antes de la lista plegada
+    # el texto va a la vista: la lectura del gráfico entre el gráfico y la lista plegada, la de la tabla después
     card = page[page.index('id="ejemplo"'):page.index('id="voto-estimado"')]
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card
-    assert card.index('id="weights-chart"') < card.index('En el gráfico, cada punto es un sondeo') < card.index('id="weights-list"')
-    assert card.index('«Ver los sondeos» despliega la lista completa') < card.index('La recta es solo la de ese día') < card.index('id="weights-list"')
+    assert card.index('id="weights-chart"') < card.index('Cada punto es un sondeo') < card.index('id="weights-list"')
+    assert card.index('id="weights-list"') < card.index('La tabla lista los sondeos')
+    assert_public_wording(page, '/metodo/promedio')
+
+
+def test_promedio_example_says_why_the_reading_day_is_later(api, monkeypatch):
+    example = metodo.weights_example
+    monkeypatch.setattr(metodo, 'weights_example', lambda: dict(example(), date='2026-10-18'))
+    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/promedio')[2]))
+    assert 'leído el 18 oct 2026' in text and 'El día de lectura es posterior al del cálculo' in text
 
 
 def test_promedio_regression_card_explains_step_by_step(api):
     page = html(call(api, '/metodo/promedio')[2])
     card = re.sub(r'\s+', ' ', page[page.index('id="regresion"'):page.index('id="banda"')])
-    for lead in ('El problema.', 'La idea.', 'Por qué una recta y no una media.', 'En fórmula.',
-                 'La anchura de la campana.', 'Lo que se sigue de ahí.'):
-        assert '<strong>' + lead + '</strong>' in card, lead
-    assert card.index('La idea.') < card.index('<math') < card.index('La anchura de la campana.')
-    assert 'Sheather y Jones' in card and 'href="#peso"' in card and 'href="#efectos-de-casa"' in card
+    # each word of the name of the method, in order, then the titled blocks
+    leads = ['Regresión.', 'Polinómica.', 'Local.', 'Ponderada.', 'Por kernel.']
+    assert [card.index('<strong>' + lead + '</strong>') for lead in leads] == sorted(card.index('<strong>' + lead + '</strong>') for lead in leads)
+    assert card.index('Por kernel.') < card.index('<math') < card.index('Por qué una recta y no una media')
+    assert card.index('Por qué una recta y no una media') < card.index('id="anchura"') < card.index('id="consecuencias"')
+    assert 'Sheather y Jones' in card and 'href="#peso"' in card
     assert '<a href="#ejemplo">El ejemplo de más abajo</a> dibuja la campana y la recta' in card
 
 
@@ -158,9 +171,10 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     status, _, body = call(api, '/metodo/promedio')
     text = re.sub(r'\s+', ' ', html(body))
     card = text[text.index('id="ejemplo"'):text.index('id="voto-estimado"')]
-    assert status == 200 and 'El 9 oct 2026 el promedio del PP se establece en el 33,1%' in card and 'publicado el 9 oct 2026' in card
-    assert '8 oct 2026' not in card                       # la fecha de lectura (as_of) no se imprime en la tarjeta
-    assert initial(body)['example']['date'] == '2026-10-08'    # pero el gráfico sigue centrado en ella
+    # the run and the reading day are two dates: the figure is the one of the reading day
+    assert status == 200 and 'el del 9 oct 2026, el promedio del PP leído el 8 oct 2026 es del 33,1%' in card
+    assert 'El día de lectura es posterior' not in card     # leído antes que el cálculo: nada que explicar
+    assert initial(body)['example']['date'] == '2026-10-08'    # el gráfico sigue centrado en el día leído
 
 
 def test_promedio_page_lists_every_poll_without_a_load_more(api, monkeypatch):
@@ -355,3 +369,30 @@ def test_promedio_text_without_a_run_has_no_cycle_figures(api, monkeypatch):
     monkeypatch.setattr(metodo, 'cycle_counts', lambda: None)
     status, _, body = call(api, '/metodo/promedio')
     assert status == 200 and 'En las generales de este ciclo' not in html(body)
+
+
+
+def test_promedio_text_second_half(house_site):
+    page = html(call(house_site, '/metodo/promedio')[2])
+    regresion = page[page.index('id="regresion"'):page.index('id="banda"')]
+    banda = page[page.index('id="banda"'):page.index('id="voto-estimado"')]
+    assert regresion.index('id="anchura"') < regresion.index('id="consecuencias"')
+    assert regresion.count('<math display="block"') >= 4 and banda.count('<math display="block"') >= 2
+    text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', page[page.index('id="regresion"'):]))
+    for phrase in ('regresión polinómica local ponderada por kernel', 'Por qué una recta y no una media',
+                   '1,70 puntos por partido', 'Por qué agrupamos por encuestadora', 'Por qué una t de Student',
+                   '93 %', '54 %', 'Por Luis Sancho'):
+        assert phrase in text, phrase
+    for phrase in ('El problema.', 'La idea.', 'Los campos', 'Un caso real', 'los de hace tres, casi nada'):
+        assert phrase not in text, phrase
+    keys = ['tope', 'diseno', 'umbrales', 'ventana', 'suelo', 'comun', 'convenciones', 'referencias', 'corte', 'isj',
+            'abramson', 'cobertura', 'limites', 'escala']
+    assert page.index('id="voto-estimado"') < page.index('id="notas"') < page.index('id="closing"')
+    assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 15)]
+    for target in re.findall(r'href="#(nota-[a-z]+)"', page):
+        assert 'id="{}"'.format(target) in page, target
+    sign = page[page.index('id="notas"'):page.index('id="closing"')]
+    assert 'href="https://x.com/luis_sancho"' in sign and 'rel="me"' in sign
+    assert_public_wording(page, '/metodo/promedio')
