@@ -865,7 +865,8 @@ class Computer(Core):
                         In these cases keep only the last results published.
                     - Polls published in a short period of time should be assigned a lower weight.
                         Prevents giving too much weight to pollsters trying to flood the market with their polls.
-                        If N polls are published within a `wspan` days range, a weight of 1/N will be assigned to each poll.
+                        If N polls are published within a `wspan` days range, a weight of 1/N will be assigned to each poll,
+                        so the polls of a group together weigh as much as a single poll.
             - weight_rating
                 The weight of the poll based on the pollster's rating.
                 We try to give more weight to the polls from pollsters with a higher rating.
@@ -1966,14 +1967,15 @@ class Computer(Core):
 
         # Polls published in a short period of time should be assigned a lower weight
         if self.wspan is not None:
-            for i in range(n):
-                if w[sind[i]] > 0:
-                    start, end = sx[i]
-                    # Find the polls within the window span before and after the current poll
-                    n_prev = np.sum((sx[:i, 1] >= end - self.wspan) & (w[sind[:i]] > 0))
-                    n_post = np.sum((sx[i + 1:, 1] <= end + self.wspan) & (sx[i + 1:, 0] > end) & (w[sind[i + 1:]] > 0))
-                    # Assign a weight of 1 / (N + 1) to the current poll
-                    w[sind[i]] = 1 / (n_prev + n_post + 1)
+            # The first remaining poll opens a group with every remaining poll ending within the next `wspan` days,
+            # the first poll left outside opens the next one: each of the N polls of a group weighs 1/N, so every
+            # group weighs as much as a single poll
+            keep = sind[w[sind] > 0]
+            i = 0
+            while i < len(keep):
+                group = keep[i:][x[keep[i:], 1] <= x[keep[i], 1] + self.wspan]
+                w[group] = 1 / len(group)
+                i += len(group)
 
         return w
 

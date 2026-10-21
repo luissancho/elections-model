@@ -509,3 +509,34 @@ def test_compute_ratings_builds_the_prior_from_the_national_events(monkeypatch):
     prior = seen['prior']
     assert prior(pd.Timestamp('2023-07-23')).loc[1, 'num_national_events'] == 1
     assert prior(pd.NaT).loc[1, 'num_national_events'] == 2
+
+
+def overweights(rows, wspan=4):
+    """`poll_overweights` sobre (inicio, fin) en días relativos a la elección."""
+    c = bare_computer()
+    c.wspan = wspan
+    return c.poll_overweights(np.array(rows, dtype=float))
+
+
+def test_overlapping_polls_keep_only_the_last_delivery():
+    # A cumulative tracking: every delivery contains the previous ones
+    assert overweights([(-20, -18), (-20, -17), (-20, -16)]).tolist() == [0, 0, 1]
+
+
+def test_a_burst_of_polls_shares_the_weight_of_one_poll():
+    # Days 0 and 3 fall in the group opened by day 0; day 6 opens a new group
+    assert overweights([(-31, -30), (-28, -27), (-25, -24)]).tolist() == pytest.approx([.5, .5, 1])
+
+
+def test_every_group_of_a_daily_series_sums_one():
+    w = overweights([(d, d) for d in range(-40, -10)])
+    assert w.sum() == pytest.approx(6)
+    assert set(np.round(w, 6)) == {round(1 / 5, 6)}
+
+
+def test_unsorted_input_keeps_its_order():
+    assert overweights([(-25, -24), (-31, -30), (-28, -27)]).tolist() == pytest.approx([1, .5, .5])
+
+
+def test_without_wspan_only_the_overlap_rule_applies():
+    assert overweights([(-31, -30), (-28, -27), (-25, -24)], wspan=None).tolist() == [1, 1, 1]
