@@ -73,11 +73,12 @@ def write_study(fs, study='voto-cera', meta=None, parts=None):
 
 
 
-def write_event(fs, scope='es', date='2023-07-23', model=True, series=None):
+def write_event(fs, scope='es', date='2023-07-23', model=True, series=None, featured=True):
     """Elección pasada publicada a partir de los fixtures: las seis partes (con `scope` y `event_date`
     sustituidos) y sus CSV mínimos; sin `model`, el modelo va vacío, `has_model` falso y sin gemelos `model-*`. La
     serie del promedio (`series`, con su CSV) se escribe cuando `series` es verdadero (por defecto, igual que
-    `model`: una elección publicada con backtest la tiene)."""
+    `model`: una elección publicada con backtest la tiene). `featured` es el de la meta: falso en una elección
+    publicada que no está analizada."""
     series = model if series is None else series
     writer = bundle.BundleWriter(fs)
     tables = {
@@ -99,7 +100,7 @@ def write_event(fs, scope='es', date='2023-07-23', model=True, series=None):
         schema = bundle.EVENT_SCHEMAS[part]
         data = fixture_data(schema)
         if part == 'meta':
-            data = data | {'scope': scope, 'event_date': date, 'has_model': model}
+            data = data | {'scope': scope, 'event_date': date, 'has_model': model, 'featured': featured}
         elif part == 'model' and not model:
             data = {key: [] for key in data}
         writer.write_json(bundle.path_event(scope, date, part), schema, data, scope)

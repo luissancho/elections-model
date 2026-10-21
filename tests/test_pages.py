@@ -1921,6 +1921,29 @@ def test_last_poll_rows_keep_the_closest_poll_of_each_house():
     assert pages.last_poll_rows([]) == []
 
 
+NOT_ANALYSED = ('Esta elección tuvo menos de 10 sondeos útiles, así que no la usamos para el rating de las '
+                'encuestadoras ni para el backtest.')
+
+
+def test_eleccion_not_analysed_says_it_does_not_count_for_the_rating(api, fresh_app):
+    write_event(fresh_app.fs, date='2019-11-10', model=False, featured=False)
+    status, _, body = call(api, '/elecciones/es/generales/2019-11')
+    page = html(body)
+    assert status == 200 and NOT_ANALYSED in page and 'Sin backtest para esta elección' not in page
+
+
+def test_eleccion_meta_without_featured_counts_as_analysed(api, fresh_app, tmp_path):
+    """Una elección publicada antes de que la meta llevara `featured` se lee como analizada."""
+    write_event(fresh_app.fs, date='2019-11-10', model=False)
+    path = tmp_path / bundle.PREFIX / bundle.path_event('es', '2019-11-10', 'meta')
+    meta = json.loads(path.read_text())
+    del meta['data']['featured']
+    path.write_text(json.dumps(meta))
+    status, _, body = call(api, '/elecciones/es/generales/2019-11')
+    page = html(body)
+    assert status == 200 and 'Sin backtest para esta elección' in page and NOT_ANALYSED not in page
+
+
 def test_eleccion_without_model_shows_a_notice(events_site):
     status, _, body = call(events_site, '/elecciones/es/generales/2019-11')
     page = html(body)

@@ -274,6 +274,8 @@
         </p>
         <p>Una probabilidad no se acierta ni se falla en una sola elección: una baja que se cumple no es por sí sola un error.</p>
         {% endcall %}
+        {% elif not analysed %}
+        <p class="notice">Esta elección tuvo menos de 10 sondeos útiles, así que no la usamos para el rating de las encuestadoras ni para el backtest.</p>
         {% else %}
         <p class="notice">Sin backtest para esta elección.</p>
         {% endif %}

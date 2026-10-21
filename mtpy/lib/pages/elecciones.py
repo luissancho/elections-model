@@ -1042,7 +1042,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         columns of the last-poll table, the left block first), ``bias_colors`` (``bias_colors``: the sides of the
         bar of «Sesgo bloques»), ``split_blocks`` (``split_sides``: the block of each side of the chart that
         splits the error of the last polls, ``None`` without two blocks), ``horizon_tables`` (with the margin of
-        ``blocks``), ``has_model``,
+        ``blocks``), ``has_model``, ``analysed`` (``featured`` of the meta: the election feeds the ratings and the
+        backtest; a meta published before it carried the flag counts as analysed),
         ``has_series`` (whether the ``series`` part is published), ``series_horizon`` (the horizon of the
         series, else of the shortest horizon of the model), ``series_blocks`` (the blocks of the curve: those
         of ``party_blocks`` over the parties of the series, the table and the results, the same assignment the
@@ -1154,6 +1155,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['last_table_rows'] = with_model_row(
         last_rows, context['horizon_tables'][0] if context['horizon_tables'] else None, blocks)
     context['has_model'] = has_model
+    context['analysed'] = bool(meta.get('featured', True))
     context['has_series'] = has_series
     context['series_horizon'] = series_horizon
     context['series_blocks'] = list(blocks_map)
