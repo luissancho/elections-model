@@ -107,7 +107,7 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('coalition', 'Calculadora de coaliciones', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle) }}
+      {{ m.card_start('coalition', 'Calculadora de mayorías', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle) }}
         <fieldset class="pills lg" id="coalition-parties">
           <legend class="sr-only">Partidos de la coalición</legend>
           {% for entry in calculator %}
@@ -115,17 +115,29 @@
           {% endfor %}
         </fieldset>
         <p class="chip" id="coalition-result">Marca partidos para calcular su mayoría.</p>
+        <div class="chart" id="coalition-bar" role="img" aria-label="Reparto central de los escaños con los partidos marcados primero, en color, y la mayoría absoluta marcada"></div>
         <div class="chart" id="coalition-chart" role="img" aria-label="Distribución de escaños de la coalición marcada en las simulaciones"></div>
         <noscript><p class="muted">La calculadora necesita JavaScript.</p></noscript>
         {% call m.how() %}
         <p>
-          Cada píldora es un partido. El gráfico cuenta cuántas simulaciones dan cada número de escaños a los
-          marcados juntos y el texto dice en cuántas llegan a la mayoría absoluta.
+          Cada píldora es un partido. La barra es el reparto central de «Reparto de escaños» con los partidos
+          marcados delante, en color, y el resto detrás, en gris: si los de color pasan la línea de la mayoría, la
+          alcanzan en el escenario central. El histograma cuenta cuántas simulaciones dan cada número de escaños a
+          los marcados juntos y el texto dice en cuántas llegan a la mayoría absoluta.
         </p>
         <p>
           La suma se hace en cada simulación: en cada una los escaños suman el total de la cámara, así que lo
           que gana un partido lo pierde otro. Compárala con los {{ summary.majority|int }} escaños de la mayoría
           absoluta.
+        </p>
+        <p>
+          La franja de arriba da los escaños del reparto central, la suma de los de cada partido: la misma cifra que
+          la barra y que los bloques en el resto de la web. Junto al histograma, la mediana de las simulaciones, que
+          es la mediana de la suma en cada una y puede quedar un escaño o dos por debajo o por encima, y su rango del
+          95%, las líneas finas que lo encierran. No es un error que no coincidan: cada partido
+          tiene su propia mediana, ajustada para que entre todos sumen la cámara, y la suma de esas medianas no tiene
+          por qué coincidir con la mediana de la suma. Pasa sobre todo con un partido que a veces saca escaño y a
+          veces no: su mediana puede ser cero aunque en muchas simulaciones aporte alguno.
         </p>
         <p>No dice si esos partidos querrían pactar: solo si les darían los números.</p>
         {% endcall %}

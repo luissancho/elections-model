@@ -7,17 +7,20 @@ import {Catalog} from '../catalog.js';
 import {parseSeriesHash} from '../blocks.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
-import {renderSeries, setWindow} from '../charts/series.js';
+import {chartZoom, renderSeries, seriesImageOption, setWindow} from '../charts/series.js';
 import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend} from './legend-dom.js';
 import {wirePollsTable} from './polls-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, wireAverage} from './series-wire.js';
-import {wireDownload} from '../share.js';
+import {fileSlug, tableImage, wireDownload} from '../share.js';
+
+/** Size of the hemicycle image: landscape, the hemicycle at the left and its results table at the right. */
+const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
 
 /**
  * Draw the hemicycle, wire its Partidos/Bloques switch (which also shows the matching results table) and its
- * download button (the view drawn, as a signed image) and draw the evolution.
+ * download button (the view drawn beside its results table, as a signed image) and draw the evolution.
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
@@ -78,7 +81,7 @@ function paintResults(initial, catalog) {
   wireDownload(document.getElementById('hemicycle-download'), (box) => hemicycleOption(shown.seats, {
     colors: shown.colors, order: shown.order, nSeats, majority, deltas: shown.deltas, year: deltas.year,
     width: box.width, height: box.height,
-  }), showError);
+  }), showError, {...HEMICYCLE_IMAGE, side: () => tableImage(document.querySelector(`#${shown.card} table`))});
   const fieldset = document.getElementById('results-view');
   if (fieldset) {
     fieldset.hidden = false;
@@ -96,15 +99,17 @@ function paintResults(initial, catalog) {
 }
 
 /**
- * Draw the house chart and wire its own controls (view, window, house selector and legend). Its state starts as
- * the average's at load and never touches the URL hash.
+ * Draw the house chart and wire its own controls (view, window, house selector and legend) and its download
+ * button (the chart as shown, its subtitle and file named after the house chosen). Its state starts as the
+ * average's at load and never touches the URL hash.
  *
  * @param {object} initial the page's initial data
  * @param {object} views `seriesViews` of the page
  * @param {object} start `{view, window, selected}` of the average at load
  * @param {function} render draws a chart: `(el, polls, chartState) => chart`
+ * @param {function} imageOf the option of its image: `(polls, chartState, zoom) => option`
  */
-function wireHouse(initial, views, start, render) {
+function wireHouse(initial, views, start, render, imageOf) {
   const {meta, polls} = initial;
   const anchor = meta.date_last || meta.as_of;
   const houseEl = document.getElementById('pollster-chart');
@@ -146,6 +151,12 @@ function wireHouse(initial, views, start, render) {
   }
   markSegments();
   tryDraw(draw, 'the house against the average');
+  wireDownload(document.getElementById('pollster-download'), () => imageOf(housePolls(), state, chartZoom(chart)), showError, {
+    texts: ({subtitle, file}) => {
+      const house = select ? select.value : '';
+      return house ? {subtitle: `${house} ${subtitle}`, file: file.replace(/\.png$/, `-${fileSlug(house)}.png`)} : {};
+    },
+  });
 
   if (controls) {
     controls.hidden = false;
@@ -193,11 +204,11 @@ function wireSeries(initial, catalog) {
   });
   const start = {...state};
 
-  /** Draw the chart `el` with the polls and the `{view, window, selected}` of a chart; the ECharts legend stays
-   * hidden and selectable, driven by the pill legend. */
-  function render(el, pollsOfChart, chartState) {
+  /** Data of a chart (`seriesOption`) with the polls and the `{view, window, selected}` of a chart; the ECharts
+   * legend stays hidden and selectable, driven by the pill legend. */
+  function dataOf(pollsOfChart, chartState) {
     const current = views[chartState.view];
-    return renderSeries(el, {
+    return {
       series: current.series,
       polls: pollsOfChart,
       projection: current.projection,
@@ -209,12 +220,20 @@ function wireSeries(initial, catalog) {
       window: chartState.window,
       anchor,
       legend: 'hidden',
-    });
+    };
   }
 
-  wireAverage(views, state, render, {anchor, inks: initial.inks || {}});
+  /** Draw the chart `el` with the polls and the state of a chart. */
+  function render(el, pollsOfChart, chartState) {
+    return renderSeries(el, dataOf(pollsOfChart, chartState));
+  }
+
+  /** Option of the image of a chart (`seriesImageOption`) with its polls, state and zoom on screen. */
+  const imageOf = (pollsOfChart, chartState, zoom) => seriesImageOption(dataOf(pollsOfChart, chartState), zoom);
+
+  wireAverage(views, state, render, {anchor, inks: initial.inks || {}, imageOf});
   if (document.getElementById('pollster-chart')) {
-    wireHouse(initial, views, start, render);
+    wireHouse(initial, views, start, render, imageOf);
   }
 }
 

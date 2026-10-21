@@ -49,10 +49,10 @@ class Publish(ScopeReporter, Job):
 
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
     results and the slice of the model backtest of the election), overwriting them. It needs ``event_date`` (a date,
-    a list of dates or ``'all'``: the featured elections of the scope before today), cannot be combined with
+    a list of dates or ``'all'``: the elections of the scope with an official result before today), cannot be combined with
     ``forecast``, has no LOREG guard, never touches the manifest and, with ``dry_run``, writes under
-    ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not a featured election of
-    the scope, no official results or no polls: ``publish.NothingToPublish``) or ``failed``.
+    ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not an election of the scope
+    with official results, or no polls: ``publish.NothingToPublish``) or ``failed``.
 
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
@@ -625,7 +625,7 @@ class Publish(ScopeReporter, Job):
             One result per date, each with its ``event_date`` and a ``status``: ``published`` with ``n_polls``,
             ``n_pollsters``, ``has_model`` and ``seconds``, ``skipped`` for ``publish.NothingToPublish`` and
             ``failed`` for any other exception (an invalid date or a failure resolving ``'all'`` included),
-            both with a ``reason``. ``'all'`` with no past featured election gives one ``skipped`` result.
+            both with a ``reason``. ``'all'`` with no past election with official results gives one ``skipped`` result.
         """
         try:
             days = publish.event_dates_to_publish(scope, event_date, today=today)
@@ -633,7 +633,7 @@ class Publish(ScopeReporter, Job):
             self._log_error(scope)
             return [{'status': 'failed', 'event_date': str(event_date), 'reason': '{}: {}'.format(type(e).__name__, e)}]
         if not days:
-            return [{'status': 'skipped', 'event_date': str(event_date), 'reason': 'no past featured elections'}]
+            return [{'status': 'skipped', 'event_date': str(event_date), 'reason': 'no past elections with official results'}]
 
         outcomes = []
         for day in days:

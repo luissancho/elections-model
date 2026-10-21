@@ -6,6 +6,7 @@ house effects (the last poll of one pollster before every analysed election sinc
 analyses) and, on the ``rating`` subpage, the public rubric of the prior quality
 (``data/pollsters-quality-criteria.json``).
 """
+import math
 from typing import Optional
 
 from ...core.api import HttpError
@@ -158,7 +159,9 @@ def weights_example() -> Optional[dict]:
     dict or None
         ``name``, ``fullname``, ``color`` (from ``meta``), ``date`` (the day the average is read, the centre of
         the kernel), ``published`` (the day of the run, ``run_at``, the date the texts show), ``run``, ``stats``
-        (those of the leader), ``rows`` (the rows of the leader, newest first), ``n_rows``, ``line`` and ``kernel``. ``None`` without a national run, when the run
+        (those of the leader), ``rows`` (the rows of the leader, newest first), ``n_rows``, ``line``, ``kernel``
+        and ``top`` (``pollster``, ``sponsor``, ``date`` and ``weight`` of its heaviest poll, the newest on a tie;
+        ``None`` without rows). ``None`` without a national run, when the run
         has no ``weights`` part (published before the part existed), when the headline has no parties or when the
         leader has no fit in the part.
 
@@ -188,6 +191,10 @@ def weights_example() -> Optional[dict]:
     # Newest first: the reader looks for the latest polls
     rows = sorted((row for row in weights['rows'] if row['name'] == leader), key=lambda row: row['date'], reverse=True)
 
+    # The heaviest poll of the leader (the newest on a tie), the one the text names
+    heaviest = max(rows, key=lambda row: (row.get('weight') or 0, row['date']), default=None)
+    top = {key: heaviest.get(key) for key in ('pollster', 'sponsor', 'date', 'weight')} if heaviest else None
+
     return {
         'name': leader,
         'fullname': catalogue.get('fullname'),
@@ -200,7 +207,70 @@ def weights_example() -> Optional[dict]:
         'n_rows': len(rows),
         'line': weights['line'][leader],
         'kernel': weights['kernel'][leader],
+        'top': top,
     }
+
+
+def cycle_counts() -> Optional[dict]:
+    """
+    The polls and pollsters of the current cycle of ``NATIONAL_SCOPE`` that enter the average: the rows of the
+    ``polls`` part of its latest run (the polls that pass the inclusion filters, those that weigh 0 for overlapping
+    with a later delivery included).
+
+    Returns
+    -------
+    dict or None
+        ``n_polls`` (the rows with a pollster) and ``n_pollsters`` (their distinct pollsters). ``None`` without a
+        national run, without the part or without polls.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than a 404.
+    """
+    try:
+        run = site().latest_run(NATIONAL_SCOPE)
+        polls = part(NATIONAL_SCOPE, run, 'polls').get('polls') or []
+    except HttpError as error:
+        if error.status != 404:
+            raise
+
+        return None
+
+    pollsters = [row['pollster_id'] for row in polls if row.get('pollster_id') is not None]
+
+    if not pollsters:
+        return None
+
+    return {'n_polls': len(pollsters), 'n_pollsters': len(set(pollsters))}
+
+
+def sign_chance(n: int, k: int) -> Optional[dict]:
+    """
+    How likely a pollster without lean errs to the same side in ``k`` or more of ``n`` elections: the upper tail of a
+    binomial of a fair coin, as each election is equally likely to be over or under the result.
+
+    Parameters
+    ----------
+    n : int
+        Elections with an error in the block.
+    k : int
+        Elections erring to the side counted.
+
+    Returns
+    -------
+    dict or None
+        ``n``, ``k``, ``p`` (the probability) and ``odds`` (``1 / p`` floored to two significant figures, so "less
+        than one in ``odds``" is true). ``None`` without elections.
+    """
+    if n <= 0:
+        return None
+
+    p = sum(math.comb(n, j) for j in range(k, n + 1)) / 2 ** n
+    odds = 1 / p
+    scale = 10 ** max(0, int(math.log10(odds)) - 1)
+
+    return {'n': n, 'k': k, 'p': p, 'odds': int(odds // scale * scale)}
 
 
 def house_effects_example() -> Optional[dict]:
@@ -217,7 +287,9 @@ def house_effects_example() -> Optional[dict]:
         (its ``history_rows`` since the date, newest first and, on the same date, in catalogue order, each with
         ``name``, the name of its election, ``election_label``), ``n`` (their number), ``over`` and ``under``
         (``{block: n}`` for ``left`` and ``right``: the elections in which the poll gave the block more, or less,
-        vote than the result), ``first`` and ``last`` (the dates of the oldest and the newest rows), ``cycle``
+        vote than the result), ``chance`` (the ``sign_chance`` of ``over`` for ``left`` and of ``under`` for
+        ``right``, ``{block: dict or None}``), ``first`` and ``last`` (the dates of the oldest and the newest rows),
+        ``cycle``
         (``{name: effect}``, the ``cycle`` effect of the parties and blocks of the ``house-effects`` analysis of
         ``NATIONAL_SCOPE``; ``None`` without one or without a row of the pollster) and ``n_cycle`` (its polls in
         that cycle, ``None`` without ``cycle``). ``None`` without an analysed scope, when the axes are not the two
@@ -254,6 +326,10 @@ def house_effects_example() -> Optional[dict]:
         """Elections in which the poll erred in the direction of `sign` (1 over, -1 under) in `block`."""
         return sum(1 for row in rows if row.get(block) is not None and sign * row[block] > 0)
 
+    def chance(block, sign):
+        """`sign_chance` of the elections with an error in `block` erring in the direction of `sign`."""
+        return sign_chance(sum(1 for row in rows if row.get(block) is not None), count(block, sign))
+
     effects = analysis_part(NATIONAL_SCOPE, 'house-effects') or {}
     mine = [row for row in effects.get('rows') or [] if row.get('pollster') == name]
     cycle = {row['name']: row.get('cycle') for row in mine} or None
@@ -269,6 +345,7 @@ def house_effects_example() -> Optional[dict]:
         'n': len(rows),
         'over': {block: count(block, 1) for block in (left, right)},
         'under': {block: count(block, -1) for block in (left, right)},
+        'chance': {left: chance(left, 1), right: chance(right, -1)},
         'first': rows[-1]['event_date'],
         'last': rows[0]['event_date'],
         'cycle': cycle,
@@ -358,7 +435,8 @@ def metodo_section_context(state: dict, section: str) -> dict:
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
         ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
-        ``house_example`` (``house_effects_example``, ``None`` without one) and, with either example, the
+        ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``) and,
+        with either example, the
         ``initial`` island (``state``, the ``example`` slice the weights chart draws: ``name``, ``color``, ``date``,
         ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``; and the ``house`` slice its bullseye
         draws: ``blocks`` and ``rows`` with ``HOUSE_ROW_KEYS`` plus the blocks).
@@ -390,6 +468,7 @@ def metodo_section_context(state: dict, section: str) -> dict:
         context['example'] = example
         context['example_csv'] = api_url(NATIONAL_SCOPE, 'weights', fmt='csv')
         context['house_example'] = house
+        context['cycle'] = cycle_counts()
         initial = {'state': context['state']}
 
         if example is not None:

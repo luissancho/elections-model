@@ -26,6 +26,7 @@ from .data import (
     get_herding, save_herding_data,
     get_scope_parent, get_event_data, get_national_events
 )
+from .mtypes import DROP_MTYPES
 from .quality import count_national_events, load_criteria, prior_quality, read_quality
 from .utils import (
     build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
@@ -361,7 +362,7 @@ class Computer(Core):
         self,
         scope: str,
         event_dates: Optional[list[str]] = None,
-        drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+        drop_mtypes: Optional[list[str]] = list(DROP_MTYPES),
         drop_ctypes: Optional[list[str]] = ['wban', 'exit'],
         drange: Optional[tuple[int, int] | int] = None,
         n_last: Optional[int] = None,
@@ -613,7 +614,7 @@ class Computer(Core):
 
     def filter_polls(
         self,
-        featured: bool = True,
+        featured: bool | Literal['results'] = True,
         **kwargs
     ) -> pd.DataFrame:
         """
@@ -621,8 +622,10 @@ class Computer(Core):
 
         Parameters
         ----------
-        featured : bool, optional
-            Whether to filter the polls in featured events and have been computed.
+        featured : bool or 'results', optional
+            Which elections the polls come from: True, the computed polls of the featured elections (what the
+            estimators use); 'results', the computed polls of every election with an official result and its
+            errors computed (what the web publishes); False, every election.
         **kwargs
             Keyword arguments to overwrite the default filter parameters:
             - drange : tuple of int or int
@@ -661,7 +664,17 @@ class Computer(Core):
             )
         ]
 
-        if featured:
+        if featured == 'results':
+            # An election has an official result when its row carries the votes (`sample_size`, see `load_events`);
+            # its `computed` is its `featured`, so it cannot tell. Its polls only count once their errors are
+            # computed (`compute` after loading the result): before, they would publish empty errors
+            has_results = self.events['sample_size'].notna()
+            polls = self.series.loc[self.series.pollster.notnull()]
+            measured = polls['error_avg'].notna().groupby(level='event_date').any()
+            ready = has_results & measured.reindex(has_results.index, fill_value=False)
+            with_results = df.index.get_level_values('event_date').map(ready).fillna(False).astype(bool)
+            df = df.loc[df['computed'].fillna(False).astype(bool).to_numpy() & np.asarray(with_results)]
+        elif featured:
             df = df.loc[df['featured'] & df['computed']]
 
         if n_last > 0:
@@ -865,7 +878,8 @@ class Computer(Core):
                         In these cases keep only the last results published.
                     - Polls published in a short period of time should be assigned a lower weight.
                         Prevents giving too much weight to pollsters trying to flood the market with their polls.
-                        If N polls are published within a `wspan` days range, a weight of 1/N will be assigned to each poll.
+                        If N polls are published within a `wspan` days range, a weight of 1/N will be assigned to each poll,
+                        so the polls of a group together weigh as much as a single poll.
             - weight_rating
                 The weight of the poll based on the pollster's rating.
                 We try to give more weight to the polls from pollsters with a higher rating.
@@ -933,8 +947,11 @@ class Computer(Core):
         ).data.round().astype(int)
 
         # Compute the weight based on the sample size of the polls, using the square root of the ratio between
-        # each poll's sample size and the median sample size of all the polls published for the same event.
-        sample_medians = df.groupby('event_date')['proc_sample'].median()
+        # each poll's sample size and the median sample size of all the polls published for the same event (those of
+        # the dropped methodology types do not count: a big online panel would lower the weight of every other poll).
+        counted = df.loc[~df['mtype'].isin(self.drop_mtypes)]
+        sample_medians = counted.groupby('event_date')['proc_sample'].median().reindex(df['event_date'].unique())
+        sample_medians = sample_medians.fillna(df.groupby('event_date')['proc_sample'].median())
         df['weight_sample'] = df.apply(
             lambda x: np.sqrt(x['proc_sample'] / sample_medians.loc[x['event_date']]),
             axis=1
@@ -1403,7 +1420,8 @@ class Computer(Core):
         scopes: list[str]
     ) -> pd.DataFrame:
         """
-        Polls that feed the ratings: the filtered polls (`filter_polls`) of each scope, without the party
+        Polls that feed the ratings: the filtered polls (`filter_polls`, the dropped methodology types included,
+        which only get their means) of each scope, without the party
         columns, indexed by `event_scope` plus the keys of the series. The scale of the errors is the internal
         one of the rating algorithm ([0, 1] and log odds ratio).
 
@@ -1428,7 +1446,8 @@ class Computer(Core):
                     n_last=self.n_last, verbose=0, path=self.path
                 ).build_series()
 
-            polls = comp.filter_polls().drop(columns=columns + comp.names + ['-'], errors='ignore')
+            # The polls of the dropped methodology types too: they get their means, but no rating (`pollster_ratings`)
+            polls = comp.filter_polls(drop_mtypes=[]).drop(columns=columns + comp.names + ['-'], errors='ignore')
             # Scale absolute percentage errors to the range [0, 1]
             polls[['error_avg', 'error_blocks', 'error_within']] = polls[['error_avg', 'error_blocks', 'error_within']].div(100)
             # Scale bias deviations to the log odds ratio scale
@@ -1620,7 +1639,9 @@ class Computer(Core):
         (bayesian update with a prior of standard deviation `bias_dev_tau`), converted into
         `rating_adj = Phi(-d / tau)` and blended with the prior quality `Q` as `R = (W * R_aj + k * Q) / (W + k)`,
         with `k = (sigma / tau)^2`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house
-        in the polling average. The descriptive means (`error_*`, `bias_*`) stay weighted by poll.
+        in the polling average. The descriptive means (`error_*`, `bias_*`) stay weighted by poll. The pollsters of a
+        `drop_mtypes` type (aggregators and online panels, whose polls never enter the average) keep their means but
+        get no `rating_adj`, `rating` nor `weight_rating`, and stay out of `mean R`.
 
         See `compute_ratings` for the scopes feeding the rating of each event.
 
@@ -1633,7 +1654,7 @@ class Computer(Core):
             level `event_scope`); 1 for every poll by default.
         pollsters : pd.DataFrame, optional
             Pollsters to rate (`name`, `quality` from 0 to 100 and, optionally, `num_national_events`, the general
-            elections polled before the date of the quality); those of the series by default.
+            elections polled before the date of the quality, and `mtype`); those of the series by default.
 
         Returns
         -------
@@ -1715,6 +1736,11 @@ class Computer(Core):
         ) / (
             dr['num_events_w'] + k
         )
+        # Aggregators and online panels (`drop_mtypes`) keep their means but get no rating: their polls never enter
+        # the average, so they stay out of the mean that normalises the weight of the others too
+        if 'mtype' in pollsters.columns:
+            excluded = pollsters.loc[pollsters['mtype'].isin(self.drop_mtypes or []), 'name']
+            dr.loc[dr.index.isin(excluded), ['rating_adj', 'rating']] = np.nan
         # Compute the weight that each pollster's predictions will have in the polling average forecaster.
         # The weight is computed using the logarithm of the rating, which compresses the differences between the
         # best pollsters while still separating them from the worst ones.
@@ -1966,14 +1992,15 @@ class Computer(Core):
 
         # Polls published in a short period of time should be assigned a lower weight
         if self.wspan is not None:
-            for i in range(n):
-                if w[sind[i]] > 0:
-                    start, end = sx[i]
-                    # Find the polls within the window span before and after the current poll
-                    n_prev = np.sum((sx[:i, 1] >= end - self.wspan) & (w[sind[:i]] > 0))
-                    n_post = np.sum((sx[i + 1:, 1] <= end + self.wspan) & (sx[i + 1:, 0] > end) & (w[sind[i + 1:]] > 0))
-                    # Assign a weight of 1 / (N + 1) to the current poll
-                    w[sind[i]] = 1 / (n_prev + n_post + 1)
+            # The first remaining poll opens a group with every remaining poll ending within the next `wspan` days,
+            # the first poll left outside opens the next one: each of the N polls of a group weighs 1/N, so every
+            # group weighs as much as a single poll
+            keep = sind[w[sind] > 0]
+            i = 0
+            while i < len(keep):
+                group = keep[i:][x[keep[i:], 1] <= x[keep[i], 1] + self.wspan]
+                w[group] = 1 / len(group)
+                i += len(group)
 
         return w
 
@@ -2048,7 +2075,7 @@ class Computer(Core):
         metric: Literal['pct', 'seats', 'error', 'bias'] = 'pct',
         bmap: Optional[list[str] | str] = None,
         pollster: Optional[int | str] = None,
-        featured: bool = True,
+        featured: bool | Literal['results'] = True,
         **kwargs
     ) -> pd.DataFrame:
         """
@@ -2062,8 +2089,8 @@ class Computer(Core):
             The blocks of parties to use to group the data.
         pollster : int or str, optional
             The pollster to use to filter the data.
-        featured : bool, optional
-            Whether to filter the polls in featured events and have been computed.
+        featured : bool or 'results', optional
+            Which elections the polls come from (see `filter_polls`).
         **kwargs
             Keyword arguments to overwrite the default filter parameters:
             - drange : tuple of int or int

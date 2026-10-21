@@ -37,6 +37,7 @@
       }
     },
     "has_model": true,
+    "featured": true,
     "horizons": [
       6,
       30

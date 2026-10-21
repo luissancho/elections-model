@@ -11,7 +11,11 @@
 {% set glossary = path_columns %}
     <div id="content" class="stack">
       <p class="back"><a href="/casas">← Todas las encuestadoras</a></p>
+      {% if quality.informative %}
+      {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo y su confianza. Sus sondeos no entran en el promedio y no tiene rating. Debajo, su historial en las elecciones de todos los ámbitos.') }}
+      {% else %}
       {{ m.card_start('profile', profile.pollster.name, 'El perfil de la encuestadora: su tipo, su confianza y el rating con el que entra en el promedio, el mismo en todos los ámbitos. Debajo, su historial en las elecciones de todos los ámbitos.') }}
+      {% endif %}
         {{ m.kpis(kpis) }}
       {{ m.card_end() }}
       {{ m.card_start('quality', 'Confianza', 'Lo que se sabe de cómo trabaja la encuestadora antes de mirar si acierta: cuatro criterios comprobables, con su fuente o calculados con los sondeos publicados.') }}
@@ -61,15 +65,23 @@
         <p>La confianza del recuadro de arriba es la de hoy; la que usó cada rating pasado está en «Camino al rating».</p>
         {% endcall %}
       {{ m.card_end() }}
+      {% if quality.informative %}
+      {{ m.card_start('path', 'Errores por elección', 'Qué tal lo hizo en cada elección que sondeó, de cualquier ámbito. No tiene rating: sus sondeos no entran en el promedio, pero sus errores se miden igual que los de las demás.') }}
+      {% else %}
       {{ m.card_start('path', 'Camino al rating', 'Cómo ha ido cambiando el rating de la encuestadora según se veían sus resultados, elección a elección y de cualquier ámbito, hasta hoy: qué tal lo hizo cada vez y con qué rating se quedó.') }}
         {% if path_points %}
         <div class="chart" id="rating-path" role="img" aria-label="Rating de {{ profile.pollster.name }} en cada elección que sondeó, hasta hoy"></div>
         {% else %}
         <p class="notice">Esta encuestadora no tiene ratings todavía.</p>
         {% endif %}
+      {% endif %}
         <div class="table-wrap">
           <table id="path-table">
+            {% if quality.informative %}
+            <caption>Qué tal lo hizo en cada elección que sondeó, de la más nueva a la más antigua.</caption>
+            {% else %}
             <caption>Qué tal lo hizo en cada elección que sondeó y con qué rating se quedó, de la más nueva a la más antigua.</caption>
+            {% endif %}
             <thead>
               <tr>
                 {# every header carries its description as tooltip: the same text as «Qué mide cada columna» #}
@@ -91,17 +103,23 @@
                 <td class="cell-bar cell-diverging"><i class="fill {{ {'neg': 'pos', 'pos': 'neg'}.get(dev.side, 'zero') }}" style="left: {{ dev.left }}%; width: {{ dev.width }}%"></i><span>{{ row.bias_dev_adj|num(1) }}</span></td>
                 <td class="cell-shade" style="background-color: {{ row.error_avg|shade(0, 8, '#d62728') }}">{{ row.error_avg|num(1) }}</td>
                 <td class="cell-bar cell-diverging"><i class="fill block" style="left: {{ bias.left }}%; width: {{ bias.width }}%; background: {{ block_colors[bias.side] }}"></i><span>{{ row.error_blocks|num(1) }}</span></td>
+                {% if not quality.informative %}
                 <td>{{ row.rating|num(1) }}</td>
                 <td class="cell-shade" style="background-color: {{ row.change|shade_around(0, 10, '#d62728', '#2ca02c') }}">{{ row.change|num(1) }}</td>
+                {% endif %}
               </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
         {% call m.how() %}
+        {% if quality.informative %}
+        <p>Cada fila es una fecha con una o varias elecciones en las que la encuestadora publicó sondeos, de cualquier ámbito, de la más nueva a la más antigua: el error medio, el sesgo bloques y el diferencial son la media de sus sondeos de esas elecciones, los mismos que cuenta la columna de sondeos. El diferencial compara su sesgo con el de los sondeos comparables de las mismas fechas, como en las demás encuestadoras, pero aquí no mueve ningún rating. La barra del diferencial crece hacia la izquierda en verde (menos sesgo que los sondeos comparables) o hacia la derecha en rojo, hasta 2; el fondo del error medio es más rojo cuanto mayor, de 0 a 8 puntos; la barra del sesgo bloques crece hacia el lado del bloque al que favoreció y en su color, hasta 8 puntos de margen. Cada cabecera explica su columna al pasar el ratón, y todas se explican en «Qué mide cada columna».</p>
+        {% else %}
         <p>Cada punto es una fecha con una o varias elecciones en las que la encuestadora publicó sondeos, de cualquier ámbito, y el rating con el que se quedó tras evaluarlas con todo su historial anterior: el que se le aplica hasta la siguiente. En azul las generales (o una fecha con general y autonómicas) y en naranja las autonómicas, como en la diana. El eje va de 0 a 100, igual para todas las encuestadoras, y el tramo discontinuo lleva el último rating hasta hoy: es el que entra en el promedio.</p>
         <p>La tabla cuenta qué tal lo hizo cada fecha, de la más nueva a la más antigua: el error medio, el sesgo bloques y el diferencial son la media de sus sondeos de esas elecciones, los mismos que cuenta la columna de sondeos; el diferencial es lo que mueve el rating, y el cambio dice cuánto subió o bajó frente al que tenía al llegar. La barra del diferencial crece hacia la izquierda en verde (menos sesgo que los sondeos comparables) o hacia la derecha en rojo, hasta 2; el fondo del error medio es más rojo cuanto mayor, de 0 a 8 puntos; la barra del sesgo bloques crece hacia el lado del bloque al que favoreció y en su color, hasta 8 puntos de margen; el fondo del cambio es verde si subió y rojo si bajó, hasta 10 puntos. Cada cabecera explica su columna al pasar el ratón, y todas se explican en «Qué mide cada columna».</p>
         <p>Un rating bajo en una elección no condena a la encuestadora en la siguiente. La confianza que se usó en cada elección fue la de entonces; la del KPI es la de hoy.</p>
+        {% endif %}
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}

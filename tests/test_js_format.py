@@ -85,3 +85,11 @@ def test_axis_date_names_each_tick_by_what_it_is():
     assert run_js(f'f.fmtAxisDate({t("2026-07-05")}, 0)') == '5 jul {year|2026}'
     assert run_js(f'f.fmtAxisDate({t("2026-01-01")}, 1)') == '{year|2026}'
     assert run_js(f'f.fmtAxisDate({t("2026-08-01")}, 2)') == 'ago'
+
+
+def test_fmt_count_marks_the_thousands_as_the_python_filter():
+    """`fmtCount` agrupa también los millares de cuatro cifras, como `fmt_num`; `fmtInt` no (para que un año no
+    salga con punto)."""
+    for x in (1000, 12000, 999, 0, 1234567, -2500):
+        assert run_js(f'f.fmtCount({x})') == pages.fmt_num(x), x
+    assert run_js('f.fmtInt(2026)') == '2026' and run_js('f.fmtCount(null)') == '–'

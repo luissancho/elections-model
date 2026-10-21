@@ -332,6 +332,41 @@ export function seriesOption({
 }
 
 /**
+ * The current zoom of a rendered series chart: the ends of the time window on screen, after the window control
+ * or a drag of the slider (ECharts keeps them up to date); null without a dataZoom.
+ *
+ * @param {object} chart the ECharts instance returned by `renderSeries`
+ * @returns {{startValue: number, endValue: number}|null} timestamps of the ends
+ */
+export function chartZoom(chart) {
+  const zoom = ((chart && chart.getOption().dataZoom) || [])[0];
+  return zoom ? {startValue: zoom.startValue, endValue: zoom.endValue} : null;
+}
+
+/**
+ * Option of the downloadable image of the poll average (`share.js`): the chart of `seriesOption` with a drawn,
+ * static legend of the names shown only and, instead of the slider, an invisible zoom at `zoom` (`chartZoom` of
+ * the chart on screen), so the image keeps the window, the parties and the vertical axis of the screen.
+ *
+ * @param {object} data the arguments of `seriesOption`
+ * @param {object|null} [zoom=null] the zoom of the chart on screen (null: the `window` of `data`)
+ * @returns {object} the ECharts option
+ */
+export function seriesImageOption(data, zoom = null) {
+  const option = seriesOption({...data, legend: true});
+  const shown = data.selected ? data.parties.filter((name) => data.selected.includes(name)) : data.parties;
+  const [slider] = option.dataZoom;
+  return {
+    ...option,
+    legend: {...option.legend, type: 'plain', selectedMode: false, data: shown},
+    grid: {...option.grid, bottom: 8},
+    dataZoom: slider ? [{type: 'inside', filterMode: 'filter', disabled: true, ...(zoom || {
+      startValue: slider.startValue, endValue: slider.endValue,
+    })}] : [],
+  };
+}
+
+/**
  * Render the poll average in `el` (see `seriesOption` for the data).
  *
  * @param {HTMLElement} el chart container

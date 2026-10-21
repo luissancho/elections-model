@@ -20,6 +20,7 @@ from .data import (
     get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
     get_districts, get_scope_parent
 )
+from .mtypes import DROP_MTYPES
 from .utils import (
     build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
@@ -36,7 +37,7 @@ class Simulator(Core):
         self,
         scope: str,
         event_date: str,
-        drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+        drop_mtypes: Optional[list[str]] = list(DROP_MTYPES),
         drange: Optional[tuple[int, int] | int] = None,
         alpha: float = 0.05,
         limit_date: Optional[str] = None,

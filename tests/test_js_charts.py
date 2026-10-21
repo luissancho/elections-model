@@ -182,6 +182,16 @@ def test_stacked_bar_labels_each_segment_with_its_seats_and_delta():
     assert plain['series'][0]['label']['formatter'] == '{seats|PP 140}' and len(plain['series']) == 1
 
 
+def test_stacked_bar_draws_the_muted_segments_in_grey_with_muted_labels():
+    """La barra de la calculadora de mayorías: lo que no se marca va en gris, con la etiqueta en el gris del texto."""
+    option = run_js('st.stackedOption([{name: "PP", seats: 140}, {name: "PSOE", seats: 107}], '
+                    '{total: 350, colors: {PP: "#1d84ce", PSOE: "#ef1c27"}, muted: ["PSOE"]})')
+    pp, psoe = [s for s in option['series'] if s['type'] == 'bar']
+    assert pp['color'] == '#1d84ce' and pp['label']['color'] == '#fff'
+    assert psoe['color'] == '#d3d7df' and psoe['label']['color'] == '#5a5f72'
+    assert psoe['label']['rich'] == {'seats': {'fontWeight': 700, 'color': '#5a5f72'}, 'delta': {'fontWeight': 400, 'color': '#5a5f72'}}
+
+
 def test_hemicycle_shortens_the_centre_text_when_small():
     option = run_js('h.hemicycleOption({PP: 140, PSOE: 107}, {nSeats: 350, majority: 176, width: 358, height: 197})')
     assert [g['style']['text'] for g in option['graphic'] if g['type'] == 'text'] == ['176', '350', 'ESCAÑOS']
@@ -484,3 +494,65 @@ def test_series_time_axis_names_ticks_by_what_they_are():
     assert label['color'] == '#5a5f72' and label['fontSize'] == 10.5 and label['hideOverlap'] is True
     assert label['rich']['year'] == {'color': '#1a1c22', 'fontSize': 10.5, 'fontWeight': 700}
     assert run_js('base.timeAxisLabel().formatter(new Date("2025-01-01T00:00:00").getTime(), 2)') == '{year|2025}'
+
+
+IMAGE_ARGS = ("{series: {dates: ['2026-07-01', '2026-08-01', '2026-09-01', '2026-10-01'], parties: ['PP', 'VOX'], "
+              "mean: {PP: [30, 31, 32, 33], VOX: [12, 13, 14, 15]}, lo: {PP: [29, 30, 31, 32], VOX: [11, 12, 13, 14]}, "
+              "hi: {PP: [31, 32, 33, 34], VOX: [13, 14, 15, 16]}}, polls: {parties: ['PP', 'VOX'], polls: []}, "
+              "projection: null, parties: ['PP', 'VOX'], selected: %s, colors: {PP: '#1d84ce', VOX: '#63be21'}, "
+              "asOf: '2026-10-01', when: '2026-10-01', window: '3m', anchor: '2026-10-01', legend: 'hidden'}")
+
+
+def test_series_image_draws_a_static_legend_of_the_names_shown_and_no_slider():
+    """La imagen descargable del promedio (Luis, 2026-10-21): la leyenda se dibuja (no hay pastillas en el PNG),
+    estática y solo con lo que se ve; sin deslizador, con un zoom invisible en la ventana de la pantalla."""
+    option = run_js('s.seriesImageOption(%s)' % (IMAGE_ARGS % "['VOX']"))
+    assert option['legend']['show'] is True and option['legend']['selectedMode'] is False
+    assert option['legend']['type'] == 'plain' and option['legend']['data'] == ['VOX']
+    assert option['legend']['selected'] == {'PP': False, 'VOX': True}
+    assert option['grid']['top'] == 40 and option['grid']['bottom'] == 8
+    screen = run_js('s.seriesOption(%s).dataZoom[0]' % (IMAGE_ARGS % "['VOX']"))
+    assert option['dataZoom'] == [{'type': 'inside', 'filterMode': 'filter', 'disabled': True,
+                                   'startValue': screen['startValue'], 'endValue': screen['endValue']}]
+    assert run_js('s.seriesImageOption(%s).legend.data' % (IMAGE_ARGS % 'null')) == ['PP', 'VOX']
+    # the zoom of the screen, when given, replaces the window
+    zoomed = run_js('s.seriesImageOption(%s, {startValue: 5, endValue: 9}).dataZoom[0]' % (IMAGE_ARGS % 'null'))
+    assert zoomed == {'type': 'inside', 'filterMode': 'filter', 'disabled': True, 'startValue': 5, 'endValue': 9}
+
+
+def test_chart_zoom_reads_the_window_given_and_the_drag():
+    """`chartZoom` lee los extremos de la ventana del gráfico en pantalla, también tras arrastrar el deslizador; la
+    imagen hecha con ese zoom enseña el mismo tramo del eje."""
+    script = (
+        "(() => {{ const make = (option) => {{ const chart = window.echarts.init(null, null, {{renderer: 'svg', ssr: true, width: 600, height: 400}}); "
+        "chart.setOption(option); return chart; }}; "
+        "const live = make(s.seriesOption({args})); const first = s.chartZoom(live); "
+        "live.dispatchAction({{type: 'dataZoom', dataZoomIndex: 0, start: 40, end: 90}}); const dragged = s.chartZoom(live); "
+        "const extent = (chart) => chart.getModel().getComponent('xAxis', 0).axis.scale.getExtent(); "
+        "const image = make(s.seriesImageOption({args}, dragged)); "
+        "return {{first, dragged, live: extent(live), same: JSON.stringify(extent(live)) === JSON.stringify(extent(image))}}; }})()"
+    ).format(args=IMAGE_ARGS % 'null')
+    out = run_js(script)
+    assert out['first']['endValue'] == run_js('s.dayTime("2026-10-01")')
+    assert out['dragged'] != out['first'] and [out['dragged']['startValue'], out['dragged']['endValue']] == out['live']
+    assert out['same'] is True
+
+
+def histogram_option(args):
+    """Opción de `renderHistogram` con `args`, leída de un contenedor falso: `mountChart` reutiliza su `__chart`."""
+    uri = pathlib.Path(DIST, 'js', 'charts', 'histogram.js').as_uri()
+    return run_js('await (async () => { const hm = await import("%s"); let got = null; '
+                  'hm.renderHistogram({__chart: {setOption: (o) => { got = o; }}}, [200, 201, 201, 202, 205], %s); '
+                  'return got; })()' % (uri, args))
+
+
+def test_histogram_caption_writes_its_lines_above_the_bars():
+    """Las líneas junto al histograma de la calculadora de mayorías, como en los KDE: arriba a la izquierda, la cifra
+    en negrita, en una franja propia sobre las barras (el margen superior crece 16 px por línea)."""
+    option = histogram_option("{caption: [{label: 'Simulaciones', value: '1.000'}, {label: 'Mediana', value: '201'}]}")
+    [text] = option['graphic']
+    assert text['type'] == 'text' and (text['left'], text['top']) == (8, 4)
+    assert text['style']['text'] == 'Simulaciones: {b|1.000}\nMediana: {b|201}' and text['style']['lineHeight'] == 16
+    assert text['style']['rich']['b']['fontWeight'] == 600 and option['grid']['top'] == 24 + 2 * 16
+    plain = histogram_option('{}')
+    assert plain['graphic'] == [] and plain['grid']['top'] == 24

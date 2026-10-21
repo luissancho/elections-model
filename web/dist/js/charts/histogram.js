@@ -4,6 +4,9 @@ import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle}
 import {fmtInt, fmtPct} from '../format.js';
 import {binWidth, histogram, majorityInRange} from '../seats.js';
 
+/** Line height of the caption written above the bars. */
+const CAPTION_LINE = 16;
+
 /**
  * Index of the bin holding `value`, clamped to the bins.
  *
@@ -29,13 +32,14 @@ function binIndex(starts, width, value) {
  *   median mark and of the tooltip subtitle, replacing `Mediana: …`), `share` (bars as the % of the values,
  *   the default; `false` draws the raw counts, with integer ticks) and `countLabel` (count → tooltip text, used
  *   when `share` is false), `bounds` (thin solid lines at the bins of `lo` and `hi`, and a thicker median
- *   line) and `markLabels` (`false` draws every mark line without a label)
+ *   line), `markLabels` (`false` draws every mark line without a label) and `caption` (`{label, value}` lines
+ *   written at the top left above the bars, the value in bold, as the ridges write theirs)
  * @returns {object} the ECharts instance
  */
 export function renderHistogram(el, values, {
   color = THEME.barColor, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
   unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt, bounds = false,
-  markLabels = true,
+  markLabels = true, caption = null,
 } = {}) {
   const step = width ?? binWidth(values);
   const {starts, counts} = histogram(values, step);
@@ -88,9 +92,26 @@ export function renderHistogram(el, values, {
     }
   }
 
+  // The caption gets its own band above the plot, so it never covers a bar.
+  const lines = caption || [];
+  const graphic = lines.length ? [{
+    type: 'text',
+    left: 8,
+    top: 4,
+    style: {
+      text: lines.map((line) => `${line.label}: {b|${line.value}}`).join('\n'),
+      fill: THEME.textColor,
+      fontSize: 12,
+      fontFamily: THEME.fontFamily,
+      lineHeight: CAPTION_LINE,
+      rich: {b: {fontWeight: 600, fontSize: 12, fontFamily: THEME.fontFamily, fill: THEME.textColor}},
+    },
+  }] : [];
+
   const option = {
     ...baseOption(),
-    grid: {left: 8, right: 16, top: 24, bottom: 8, containLabel: true},
+    grid: {left: 8, right: 16, top: 24 + lines.length * CAPTION_LINE, bottom: 8, containLabel: true},
+    graphic,
     xAxis: {
       type: 'category',
       data: starts.map(String),

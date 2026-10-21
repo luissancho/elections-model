@@ -67,6 +67,26 @@ def test_get_pollster_events_counts_the_rated_polls_of_each_election(monkeypatch
     assert Polls.calls[0]['filters'] == ['pollster_id = 2', 'featured', 'computed']  # los sondeos que entran en el rating
 
 
+def test_get_events_flags_the_elections_with_an_official_result(monkeypatch):
+    """`has_results`: la elección tiene resultado oficial (región 0 con votos); la próxima, no."""
+    class Events(FakeTable):
+        calls = []
+        frame = pd.DataFrame({
+            'date': pd.to_datetime(['2019-05-26', '2023-05-28', '2027-05-23']), 'scope': 'es-ar',
+            'name': [None, None, None], 'featured': [False, True, False],
+        })
+
+    class EventsData(FakeTable):
+        calls = []
+        frame = pd.DataFrame({'date': pd.to_datetime(['2019-05-26', '2023-05-28']), 'region_id': 0,
+                              'votes': [600000, 650000]})
+    monkeypatch.setattr(data, 'Events', Events)
+    monkeypatch.setattr(data, 'EventsData', EventsData)
+    events = data.get_events('es-ar')
+    assert events['has_results'].tolist() == [True, True, False] and events['has_results'].dtype == bool
+    assert {"scope = 'es-ar'", 'region_id = 0', 'votes IS NOT NULL'} <= set(EventsData.calls[0]['filters'])
+
+
 def test_get_national_events_filters_scope_bias_and_ctype(monkeypatch):
     class Polls(FakeTable):
         calls = []

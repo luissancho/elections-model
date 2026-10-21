@@ -71,3 +71,26 @@
   <a class="btn pri" href="{{ study.href }}">Ver el análisis completo →</a>
 </article>
 {%- endmacro %}
+
+{#- A footnote call: a superscript number that links to its note of the «Notas» card (it works without JS;
+    `notes.js` opens a copy of the note under the block that holds the call). `keys` is the ordered list of the note
+    keys of the page: the number is the position of `key` in it, so a key not in the list fails the render. The button
+    semantics (role, `aria-controls`, `aria-expanded`) are set by `notes.js`, so without JS the call is a plain link. -#}
+{% macro note(key, keys) -%}
+<sup class="note-ref"><a id="llamada-{{ key }}" href="#nota-{{ key }}" data-note="{{ key }}">{{ keys.index(key) + 1 }}</a></sup>
+{%- endmacro %}
+
+{#- The «Notas» card: always visible, an ordered list whose items are the `{% call %}` content, one `note_item`
+    per key of `keys`, in the same order. -#}
+{% macro notes_card(keys) -%}
+{{ card_start('notas', 'Notas', 'Detalles técnicos, comprobaciones y referencias para quien quiera ir más allá.') }}
+  <ol class="notes">
+    {{ caller() }}
+  </ol>
+{{ card_end() }}
+{%- endmacro %}
+
+{#- A note of the «Notas» card, with a link back to its call. The body is the `{% call %}` content. -#}
+{% macro note_item(key) -%}
+<li id="nota-{{ key }}">{{ caller() }} <a class="note-back" href="#llamada-{{ key }}" aria-label="Volver al texto">↩</a></li>
+{%- endmacro %}

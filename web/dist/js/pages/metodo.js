@@ -1,12 +1,14 @@
 // Method pages: the controls; on the backtest subpage, the vote error, the coverage and the seat error of the
 // backtest by horizon; on the average subpage, the live examples: the weights of the polls (`charts/weights.js`)
 // and the bullseye of the last polls of one house before every election since a date (`charts/bullseye.js`), all
-// drawn from the data embedded by the server. The landing page has no data and draws nothing.
+// drawn from the data embedded by the server; on every page, the footnotes that unfold in place (`notes.js`). The
+// landing page has no data and draws nothing.
 import {fmtNum} from '../format.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderLines} from '../charts/line.js';
 import {renderWeights} from '../charts/weights.js';
+import {wireNotes} from '../notes.js';
 import {wireBullseye} from './bullseye-wire.js';
 import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
 
@@ -102,4 +104,5 @@ function paint() {
 }
 
 wireControls();
+wireNotes();
 mountWhenReady(paint);

@@ -192,6 +192,7 @@ def bare_computer():
     c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
     c.pos_decay, c.year_decay = .5, .9
     c.bias_dev_tau, c.bias_dev_sigma, c.verbose = .01, .014, 0
+    c.drop_mtypes = []
     c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
     return c
 
@@ -408,6 +409,68 @@ def test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll():
     assert df['error_within'].tolist() == [0., 0.] and {'Derecha', 'Izquierda'} <= set(df.columns)
 
 
+# --- Selección 'results': los sondeos de las elecciones con resultado oficial, sean o no `featured` ---
+
+THREE_EVENTS = ['2015-05-24', '2019-05-26', '2023-05-28']
+
+
+def three_event_computer(featured=(True, False, False)):
+    """Computer sin base de datos con un sondeo en cada una de tres elecciones y la fila de su resultado: 2015 y
+    2019 con votos, 2023 sin ellos (el ciclo en curso); `featured` marca cada elección. Como en `load_events`, el
+    `computed` de una fila de resultado es su `featured` y su `sample_size`, los votos."""
+    c = Computer.__new__(Computer)
+    c.scope, c.verbose = 'es-ar', 0
+    c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
+    c.names = ['PP', 'PSOE']
+    c.event_params = {dt: {'bmaps': {'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}} for dt in THREE_EVENTS}
+    c.drange, c.n_last, c.drop_mtypes, c.drop_ctypes = (0, 60), None, None, None
+    events = pd.to_datetime(THREE_EVENTS)
+    polls = [(ev, ev - pd.Timedelta(days=10), i + 1, 0) for i, ev in enumerate(events)]
+    results = [(ev, ev, np.nan, np.nan) for ev in events]
+    index = pd.MultiIndex.from_tuples(polls + results, names=c.keys)
+    c.series = pd.DataFrame({
+        'pollster': ['A', 'B', 'C', None, None, None], 'mtype': None, 'ctype': None,
+        'featured': list(featured) * 2, 'computed': [True, True, True] + list(featured),
+        'days': [10, 10, 10, 0, 0, 0], 'sample_size': [800, 800, 800, 1000, 900, np.nan],
+        'proc_sample': 800, 'weight_over': [1., 1., 1., np.nan, np.nan, np.nan], 'weight_sample': 1.,
+        'error_avg': 1., 'bias_avg': 1., 'error_blocks': 2., 'bias_blocks': 1., 'error_within': 0.,
+        'bias_within': np.nan, 'bias': 1., 'PP': [45., 44., 43., 44., 43., np.nan],
+        'PSOE': [40., 41., 42., 41., 42., np.nan],
+    }, index=index)
+    c.errors = pd.DataFrame({'PP': [1., 1., np.nan], 'PSOE': [-1., -1., np.nan]}, index=index[:3])
+    return c
+
+
+def event_dates(df):
+    """Fechas ISO de las elecciones de una selección de sondeos."""
+    return sorted(df.index.get_level_values('event_date').strftime('%Y-%m-%d').unique())
+
+
+def test_filter_polls_results_takes_every_election_with_an_official_result():
+    c = three_event_computer()
+    assert event_dates(c.filter_polls('results')) == ['2015-05-24', '2019-05-26']
+    assert event_dates(c.filter_polls(True)) == ['2015-05-24']  # los estimadores no cambian
+    assert event_dates(c.filter_polls(False)) == THREE_EVENTS  # sin filtro de elecciones, como hasta ahora
+
+
+def test_filter_polls_results_equals_featured_when_every_election_with_a_result_is_featured():
+    c = three_event_computer(featured=(True, True, False))
+    pd.testing.assert_frame_equal(c.filter_polls('results'), c.filter_polls(True))
+
+
+def test_filter_polls_results_leaves_out_an_election_whose_errors_are_not_computed():
+    """Recién cargado el resultado y antes de `compute`, los sondeos de la elección no tienen error: la elección no
+    entra en la selección (no se publica con errores vacíos ni con el aviso de no analizada)."""
+    c = three_event_computer()
+    c.series.loc[c.series.index.get_level_values('event_date') == pd.Timestamp('2019-05-26'), 'error_avg'] = np.nan
+    assert event_dates(c.filter_polls('results')) == ['2015-05-24']
+
+
+def test_get_polls_metric_passes_the_results_selection():
+    df = three_event_computer().get_polls_metric('error', bmap='vs', featured='results')
+    assert sorted(df['event_date'].unique()) == ['2015-05-24', '2019-05-26']
+
+
 # --- Sesgo margen: el signo del error del margen entre bloques ---
 
 def test_gap_error_is_positive_when_the_poll_favours_the_first_block():
@@ -509,3 +572,102 @@ def test_compute_ratings_builds_the_prior_from_the_national_events(monkeypatch):
     prior = seen['prior']
     assert prior(pd.Timestamp('2023-07-23')).loc[1, 'num_national_events'] == 1
     assert prior(pd.NaT).loc[1, 'num_national_events'] == 2
+
+
+def overweights(rows, wspan=4):
+    """`poll_overweights` sobre (inicio, fin) en días relativos a la elección."""
+    c = bare_computer()
+    c.wspan = wspan
+    return c.poll_overweights(np.array(rows, dtype=float))
+
+
+def test_overlapping_polls_keep_only_the_last_delivery():
+    # A cumulative tracking: every delivery contains the previous ones
+    assert overweights([(-20, -18), (-20, -17), (-20, -16)]).tolist() == [0, 0, 1]
+
+
+def test_a_burst_of_polls_shares_the_weight_of_one_poll():
+    # Days 0 and 3 fall in the group opened by day 0; day 6 opens a new group
+    assert overweights([(-31, -30), (-28, -27), (-25, -24)]).tolist() == pytest.approx([.5, .5, 1])
+
+
+def test_every_group_of_a_daily_series_sums_one():
+    w = overweights([(d, d) for d in range(-40, -10)])
+    assert w.sum() == pytest.approx(6)
+    assert set(np.round(w, 6)) == {round(1 / 5, 6)}
+
+
+def test_unsorted_input_keeps_its_order():
+    assert overweights([(-25, -24), (-31, -30), (-28, -27)]).tolist() == pytest.approx([1, .5, .5])
+
+
+def test_without_wspan_only_the_overlap_rule_applies():
+    assert overweights([(-31, -30), (-28, -27), (-25, -24)], wspan=None).tolist() == [1, 1, 1]
+
+
+# --- 2026-10-21: agregadores y paneles online (`DROP_MTYPES`): sus medias se miden, sin rating ---
+
+def excluded_computer():
+    """Computer de ratings en el que B es un panel online: no entra en el promedio ni tiene rating."""
+    c = bare_computer()
+    c.drop_mtypes = ['aggr', 'online']
+    c.pollsters = c.pollsters.assign(mtype=[None, 'online', None, None])
+    return c
+
+
+def test_an_excluded_pollster_keeps_its_means_without_a_rating():
+    """B (online) se mide como cualquier casa: sondeos, elecciones, errores y diferencial; pero sin rating ni peso."""
+    c = excluded_computer()
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    b = out.loc[2]
+    assert b['num_polls'] == 1 and b['num_events'] == 1
+    assert b['error_avg'] == pytest.approx(.03) and b['bias'] == pytest.approx(.15)
+    assert b['bias_dev_adj'] < 0  # B se desvía -0.01: menos sesgo que el consenso
+    assert np.isnan(b['rating_adj']) and np.isnan(b['rating']) and np.isnan(b['weight_rating'])
+    assert not np.isnan(out.loc[1, 'rating']) and not np.isnan(out.loc[1, 'weight_rating'])  # A sí lo tiene
+
+
+def test_an_excluded_pollster_does_not_move_the_weights_of_the_others():
+    """La media con la que se normaliza `weight_rating` es la de las casas con rating: sin B, lo mismo."""
+    c = excluded_computer()
+    with_b = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    plain = bare_computer()
+    others = plain.pollsters.loc[plain.pollsters['name'] != 'B']
+    without_b = plain.rate_events(pool(ES19[:1]), [JULY23], {'es': 1.}, others).set_index('pollster_id')
+    for col in ('rating', 'weight_rating'):
+        assert with_b.loc[[1, 3, 4], col].tolist() == pytest.approx(without_b.loc[[1, 3, 4], col].tolist()), col
+
+
+def test_the_rating_pool_keeps_the_polls_of_the_excluded_pollsters():
+    """El pool del rating lleva también los sondeos de las casas excluidas, para medir sus medias."""
+    c = excluded_computer()
+    c.drange, c.n_last, c.drop_ctypes, c.names = None, None, ['wban', 'exit'], ['PP']
+    c.series = pool(ES19).droplevel('event_scope').assign(
+        mtype=[None, 'online'], ctype=None, featured=True, computed=True, PP=[30., 31.], rating=np.nan,
+        weight_rating=np.nan)
+    out = c.rating_pool(['es'])
+    assert out.index.get_level_values('pollster_id').tolist() == [1, 2]
+    assert out.index.get_level_values('event_scope').unique().tolist() == ['es']
+
+
+def test_the_sample_median_of_an_event_ignores_the_excluded_pollsters():
+    """El peso por muestra se mide contra la mediana de las casas que cuentan: un panel enorme no lo mueve."""
+    c = bare_computer()
+    c.drop_mtypes, c.ol_max, c.ol_dev, c.wspan = ['aggr', 'online'], 100000, 3, None
+    c.pollsters = pd.DataFrame({'id': [1, 2], 'name': ['A', 'B'], 'mtype': ['cati', 'online'], 'quality': [60., 60.]})
+    event = pd.Timestamp('2026-11-29')
+    c.ratings = pd.DataFrame({'rating': [], 'weight_rating': []},
+                             index=pd.MultiIndex.from_tuples([], names=['event_date', 'pollster_id']))
+    c.series = pd.DataFrame({
+        'event_date': event, 'date': pd.to_datetime(['2026-11-29', '2026-10-01', '2026-10-08', '2026-10-10']),
+        'pollster_id': [0, 1, 1, 2], 'sponsor_id': 0, 'pollster': [None, 'A', 'A', 'B'], 'sponsor': None,
+        'start_date': pd.to_datetime([None, '2026-09-28', '2026-10-05', '2026-10-07']),
+        'end_date': pd.to_datetime([None, '2026-10-01', '2026-10-08', '2026-10-10']),
+        'ctype': None, 'sample_size': [np.nan, 1000., 2000., 9000.], 'computed': False,
+        'featured': False, 'mtype': None, 'proc_sample': np.nan,
+        'weight_sample': np.nan, 'weight_over': np.nan, 'weight_rating': np.nan, 'rating': np.nan,
+    }).set_index(c.keys)
+    out = c.compute_weights(save=False, overwrite=True).reset_index().set_index('date')
+    # mediana de A: 1500, no 2000 (la de los tres sondeos)
+    assert out.loc[pd.Timestamp('2026-10-01'), 'weight_sample'] == pytest.approx(round(np.sqrt(1000 / 1500), 2))
+    assert out.loc[pd.Timestamp('2026-10-08'), 'weight_sample'] == pytest.approx(round(np.sqrt(2000 / 1500), 2))

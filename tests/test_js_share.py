@@ -62,3 +62,77 @@ def test_image_layout_takes_its_size_from_the_options():
     layout = run_js('s.imageLayout({title: "T", width: 600, chartHeight: 330, scale: 3})')
     assert layout['width'] == 600 and layout['scale'] == 3 and layout['chart'] == {'x': 28, 'y': 68, 'width': 544, 'height': 330}
     assert layout['height'] == 68 + 330
+
+
+SIDE = {'width': 300, 'height': 520, 'items': []}
+
+
+def test_image_layout_leaves_room_for_a_side_panel_and_centres_the_shorter():
+    """Con un panel a la derecha (la tabla del hemiciclo, Luis 2026-10-21) el gráfico se estrecha, el panel se
+    pega al margen derecho y el más bajo de los dos se centra en vertical frente al más alto."""
+    layout = run_js('s.imageLayout({title: "T", subtitle: "S", width: 1200, chartHeight: 360, side: %s})' % json.dumps(SIDE))
+    assert layout['chart'] == {'x': 28, 'y': 88 + 80, 'width': 1200 - 56 - 300 - 32, 'height': 360}
+    assert layout['side'] == {'x': 1200 - 28 - 300, 'y': 88, 'width': 300, 'height': 520, 'items': []}
+    assert layout['height'] == 88 + 520
+    short = run_js('s.imageLayout({width: 1200, chartHeight: 360, side: %s})' % json.dumps({**SIDE, 'height': 160}))
+    assert short['chart']['y'] == 0 and short['side']['y'] == 100 and short['height'] == 360
+    assert run_js('s.imageLayout({}).side') is None
+
+
+TABLE = {
+    'columns': [{'label': 'Partido', 'align': 'left'}, {'label': '% Voto', 'align': 'right'},
+                {'label': 'vs 2023', 'align': 'right'}, {'label': 'Rango 95%', 'align': 'right'}],
+    'rows': [
+        [{'text': 'PP', 'bold': True, 'dot': '#1d84ce'}, {'text': '32,7%', 'bold': False},
+         {'text': '▼ 0,4', 'bold': True, 'color': 'rgb(214, 39, 40)'},
+         {'text': '118–160', 'range': {'left': 30, 'width': 10, 'mark': 40, 'line': 50, 'color': '#1d84ce'}}],
+        [{'text': 'UPN', 'bold': True, 'dot': '#0a5ca8'}, {'text': '0,2%', 'bold': False}, {'text': '–', 'bold': True},
+         {'text': '0–2', 'range': {'left': 0, 'width': 1, 'mark': 0, 'line': None, 'color': '#0a5ca8'}}],
+    ],
+}
+
+
+def table_drawing(table=TABLE):
+    """`tableDrawing` con una medida falsa: 7 px por carácter, sea cual sea la fuente."""
+    return run_js('s.tableDrawing(%s, (text) => 7 * [...text].length)' % json.dumps(table))
+
+
+def test_table_drawing_sizes_the_columns_to_their_widest_cell_and_draws_the_site_rows():
+    drawing = table_drawing()
+    # Partido: dot 9 + gap 7 + 3 chars; % Voto: 6 chars of the header; vs 2023: 7; Rango: bar 110 + 8 + 7 chars
+    widths = [16 + max(7 * 7, 16 + 21), 16 + 42, 16 + 49, 16 + 110 + 8 + 49]
+    assert drawing['width'] == sum(widths) and drawing['height'] == 30 + 2 * 30
+    texts = [item for item in drawing['items'] if item['type'] == 'text']
+    heads = [t for t in texts if t['y'] == 15]
+    assert [t['text'] for t in heads] == ['PARTIDO', '% VOTO', 'VS 2023', 'RANGO 95%']
+    assert heads[0]['align'] == 'left' and heads[1]['align'] == 'right' and heads[1]['x'] == widths[0] + widths[1] - 8
+    assert all(t['baseline'] == 'middle' for t in texts)
+    pp = {t['text']: t for t in texts if t['y'] == 45}
+    assert pp['PP']['x'] == 8 + 9 + 7 and pp['PP']['font'].startswith('700 13px')
+    assert pp['32,7%']['font'].startswith('400 13px') and pp['32,7%']['color'] == '#1a1c22'
+    assert pp['▼ 0,4']['color'] == 'rgb(214, 39, 40)'
+    assert pp['118–160']['align'] == 'right' and pp['118–160']['x'] == sum(widths) - 8
+    circles = [item for item in drawing['items'] if item['type'] == 'circle']
+    assert circles == [{'type': 'circle', 'x': 12.5, 'y': 45, 'r': 4.5, 'color': '#1d84ce'},
+                       {'type': 'circle', 'x': 12.5, 'y': 75, 'r': 4.5, 'color': '#0a5ca8'}]
+    lines = [item for item in drawing['items'] if item['type'] == 'line' and item['dash'] is None]
+    assert [(line['y1'], line['width'], line['color']) for line in lines] == [
+        (30, 1.5, 'rgba(0,0,0,.15)'), (60, 1, 'rgba(0,0,0,.08)'), (90, 1, 'rgba(0,0,0,.08)')]
+
+
+def test_table_drawing_lines_up_the_range_bars_and_draws_the_band_the_mark_and_the_majority():
+    drawing = table_drawing()
+    start = drawing['width'] - (16 + 110 + 8 + 49) + 8
+    rects = [item for item in drawing['items'] if item['type'] == 'rect']
+    tracks = [r for r in rects if r['color'] == '#e3e6ec']
+    assert [(r['x'], r['y'], r['width'], r['height']) for r in tracks] == [(start, 39, 110, 12), (start, 69, 110, 12)]
+    band, mark = [r for r in rects if r['color'] == '#1d84ce']
+    assert (band['x'], band['width'], band['opacity']) == (start + 33, 11, 0.45)
+    assert (mark['x'], mark['y'], mark['width'], mark['height'], mark['opacity']) == (start + 44 - 1, 37, 3, 16, 1)
+    majority = [item for item in drawing['items'] if item['type'] == 'line' and item['dash']]
+    assert len(majority) == 1 and majority[0]['x1'] == start + 55 and majority[0]['color'] == '#9298ac'
+
+
+def test_file_slug_drops_accents_and_joins_words_with_dashes():
+    assert run_js('["Sigma Dos / El Mundo", "40dB", "Céleste-Tel", "  CIS  "].map(s.fileSlug)') == [
+        'sigma-dos-el-mundo', '40db', 'celeste-tel', 'cis']

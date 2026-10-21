@@ -255,7 +255,7 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     data, rows, cycles = export_analysis_herding(summary, herding)
     write('herding', data, {'herding': rows, 'herding-events': cycles})
     seconds['herding'] = lap()
-    data, frame = export_poll_errors(comp.get_polls_metric('error', **POLL_ERRORS_PARAMS), list(blocks))
+    data, frame = export_poll_errors(comp.get_polls_metric('error', featured='results', **POLL_ERRORS_PARAMS), list(blocks))
     write('poll-errors', data, {'poll-errors': frame})
     seconds['poll_errors'] = lap()
     data, frame = export_error_data(comp.get_error_estimator_data())

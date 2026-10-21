@@ -175,7 +175,7 @@ def fake_readers(monkeypatch):
         }))
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
 
-    def poll_series(scope, event, drop_contexts=None):
+    def poll_series(scope, event, drop_mtypes=None, drop_contexts=None):
         seen.append(('polls', scope, event))
         return polls
     monkeypatch.setattr(webapi.queries, 'get_poll_series', poll_series)
@@ -474,7 +474,7 @@ def test_events_and_backtest_errors_are_json_and_not_cached(api, fresh_app, path
 
 def test_polls_route_never_serves_banned_contexts(db_api, fresh_app, monkeypatch):
     seen = []
-    def poll_series(scope, event, drop_contexts=None):
+    def poll_series(scope, event, drop_mtypes=None, drop_contexts=None):
         seen.append(drop_contexts)
         return pd.DataFrame({'date': ['2026-10-01'], 'pollster_id': [1], 'ctype': [None], 'PP': [30.0]})
     monkeypatch.setattr(webapi.queries, 'get_poll_series', poll_series)

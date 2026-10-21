@@ -1,5 +1,6 @@
-// Seat simulations: columns, coalition sums, quantiles, histogram bins and the coalition hash.
-// Pure functions without DOM, shared by the seats page and the parity test.
+// Seat simulations: columns, coalition sums, quantiles, histogram bins, the coalition hash and the text of the
+// majority calculator. Pure functions without DOM, shared by the seats page and the parity test.
+import {fmtCount, fmtInt, fmtProb, fmtRange} from './format.js';
 
 const COALITION_KEY = 'coalition=';
 
@@ -73,6 +74,41 @@ export function summarize(values, majority, alpha = 0.05) {
     max: sorted[n - 1],
     pMajority: reached / n,
   };
+}
+
+/**
+ * Text of the majority calculator: the parties marked, their seats in the central scenario (the sum of their
+ * headline seats, the figure of the bar and of the blocks elsewhere on the site) and the probability that their
+ * sum reaches the absolute majority in the simulations (Luis, 2026-10-21). The median and the range of the sum
+ * go beside the histogram (`coalitionCaption`).
+ *
+ * @param {number} count parties marked
+ * @param {number} central seats of the marked parties in the central scenario
+ * @param {object} stats `summarize` of their sums
+ * @returns {string} the text
+ */
+export function coalitionText(count, central, stats) {
+  return [
+    `${count} ${count === 1 ? 'partido' : 'partidos'}`,
+    `${fmtInt(central)} escaños`,
+    `P(mayoría absoluta): ${fmtProb(stats.pMajority)}`,
+  ].join(' · ');
+}
+
+/**
+ * Lines beside the histogram of the majority calculator, as the ridges of «Reparto de escaños» write theirs: the
+ * simulations, the median of the sum and its 95% range. The median can differ from the seats of the central
+ * scenario: the sum of the parties' medians is not the median of their sum.
+ *
+ * @param {object} stats `summarize` of the sums
+ * @returns {{label: string, value: string}[]} the lines
+ */
+export function coalitionCaption(stats) {
+  return [
+    {label: 'Simulaciones', value: fmtCount(stats.n)},
+    {label: 'Mediana', value: fmtInt(stats.median)},
+    {label: 'Rango 95%', value: fmtRange(stats.lo, stats.hi, 0)},
+  ];
 }
 
 /** Smallest and largest value, without spreading large arrays into `Math.min`. */
