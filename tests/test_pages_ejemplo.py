@@ -371,7 +371,6 @@ def test_promedio_text_without_a_run_has_no_cycle_figures(api, monkeypatch):
     assert status == 200 and 'En las generales de este ciclo' not in html(body)
 
 
-
 def test_promedio_text_second_half(house_site):
     page = html(call(house_site, '/metodo/promedio')[2])
     regresion = page[page.index('id="regresion"'):page.index('id="banda"')]
@@ -396,3 +395,27 @@ def test_promedio_text_second_half(house_site):
     sign = page[page.index('id="notas"'):page.index('id="closing"')]
     assert 'href="https://x.com/luis_sancho"' in sign and 'rel="me"' in sign
     assert_public_wording(page, '/metodo/promedio')
+
+
+def test_promedio_text_dates_the_september_figures_and_gets_kish_right(api):
+    text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', html(call(api, '/metodo/promedio')[2])))
+    assert 'si uno pesa por los otros nueve juntos, informan como menos de cuatro' in text   # 18² / (81 + 9) = 3,6
+    assert 'En el PP, en septiembre, agrupar por encuestadora' in text
+    assert 'en septiembre, remuestreando por encuestadoras' in text
+    assert 'en septiembre, las inclinaciones de las encuestadoras en el voto del PP' in text
+    assert 'En el cálculo del 20 de octubre, solo 6 de los 328 sondeos' in text
+    assert 'del mismo orden que lo que medimos directamente' in text
+    assert 'Vamos de la última a la primera' not in text and 'Las vemos una a una' in text
+
+
+def test_promedio_page_without_a_run_keeps_the_notes_and_drops_the_examples(api, monkeypatch):
+    def missing(*args, **kwargs):
+        raise HttpError(404, 'not found')
+    monkeypatch.setattr(metodo, 'part', missing)
+    status, _, body = call(api, '/metodo/promedio')
+    page = html(body)
+    assert status == 200 and 'id="ejemplo"' not in page and 'En las generales de este ciclo' not in page
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 15)]
+    for target in re.findall(r'href="#((?:nota|llamada)-[a-z]+)"', page):
+        assert 'id="{}"'.format(target) in page, target
+

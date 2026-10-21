@@ -1,7 +1,9 @@
 // Footnotes that unfold in place: a call (`.note-ref a`, from the `note` macro) links to its note of the «Notas» card,
 // which stays visible at the end of the page. With JS, a click opens a copy of the note right after the block that
 // holds the call (its paragraph or list item), with a «×» that closes it; Esc closes it too and gives the focus back
-// to the call. Each note opens and closes on its own. Without JS the link jumps to the note.
+// to the call. Each note opens and closes on its own, and the pops of one block keep the order of their calls. The
+// calls get their button semantics here (role, `aria-controls`, `aria-expanded`, Space): without JS they are plain
+// links that jump to the note.
 
 const NOTE_PREFIX = '#nota-';
 // The blocks a pop can follow, from the call outwards: the first one found holds it.
@@ -89,6 +91,7 @@ function openPop(doc, call, note, key) {
   note.childNodes.forEach((child) => body.append(child.cloneNode(true)));
   body.querySelectorAll('.note-back').forEach((back) => back.remove());
 
+  pop.dataset.note = key;
   pop.append(close, body);
   pop.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -96,7 +99,16 @@ function openPop(doc, call, note, key) {
     }
   });
 
-  block.after(pop);
+  // the pops of one block keep the order of their calls: before the first open pop whose call comes later
+  let after = block;
+  for (let next = block.nextElementSibling; next && next.classList.contains('note-pop'); next = next.nextElementSibling) {
+    const other = doc.getElementById(`llamada-${next.dataset.note}`);
+    if (other && call.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      break;
+    }
+    after = next;
+  }
+  after.after(pop);
   call.setAttribute('aria-expanded', 'true');
 }
 
@@ -114,6 +126,15 @@ export function wireNotes(root = document) {
     }
 
     call.setAttribute('role', 'button');
+    call.setAttribute('aria-controls', `nota-${key}-open`);
+    call.setAttribute('aria-expanded', 'false');
+    // a button opens with Space too (a link only with Enter)
+    call.addEventListener('keydown', (event) => {
+      if (event.key === ' ') {
+        event.preventDefault();
+        call.click();
+      }
+    });
     call.addEventListener('click', (event) => {
       event.preventDefault();
       const open = root.getElementById(`nota-${key}-open`);

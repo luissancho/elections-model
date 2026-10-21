@@ -74,9 +74,10 @@
 
 {#- A footnote call: a superscript number that links to its note of the «Notas» card (it works without JS;
     `notes.js` opens a copy of the note under the block that holds the call). `keys` is the ordered list of the note
-    keys of the page: the number is the position of `key` in it, so a key not in the list fails the render. -#}
+    keys of the page: the number is the position of `key` in it, so a key not in the list fails the render. The button
+    semantics (role, `aria-controls`, `aria-expanded`) are set by `notes.js`, so without JS the call is a plain link. -#}
 {% macro note(key, keys) -%}
-<sup class="note-ref"><a id="llamada-{{ key }}" href="#nota-{{ key }}" aria-controls="nota-{{ key }}-open" aria-expanded="false" data-note="{{ key }}">{{ keys.index(key) + 1 }}</a></sup>
+<sup class="note-ref"><a id="llamada-{{ key }}" href="#nota-{{ key }}" data-note="{{ key }}">{{ keys.index(key) + 1 }}</a></sup>
 {%- endmacro %}
 
 {#- The «Notas» card: always visible, an ordered list whose items are the `{% call %}` content, one `note_item`

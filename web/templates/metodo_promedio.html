@@ -118,7 +118,7 @@
           Tampoco que pesaran en proporción a su muestra. El error de muestreo es solo una parte del error de un sondeo,
           y a menudo la menor: a quién se llama y quién contesta, cómo se pondera por recuerdo de voto y cómo se pasa de
           la intención directa a la estimación (la «cocina») añaden errores que no se reducen por hacer más entrevistas.
-          Lo hemos medido: en este ciclo, las inclinaciones de las encuestadoras en el voto del PP tienen una dispersión
+          Lo hemos medido: en septiembre, las inclinaciones de las encuestadoras en el voto del PP en este ciclo tenían una dispersión
           de 2,4 puntos, muy por encima de lo que explicarían sus muestras; y el CIS, con más de 4.000 entrevistas por
           barómetro, oscila de un mes a otro como lo haría una muestra de 400 a 460.
         </p>
@@ -304,7 +304,7 @@
         <p>
           El CIS de abril, con 4.020 entrevistas, pesaba por su muestra 1,76. Sus cifras oscilan 2,79 veces lo esperado;
           encogido por sus 36 sondeos, 2,57. Su factor es 1/2,57 = 0,39 y su muestra efectiva, 4.020 × 0,39² ≈ 610
-          entrevistas: casi lo mismo que medimos directamente al comparar sus barómetros entre sí, que oscilan como una
+          entrevistas: del mismo orden que lo que medimos directamente al comparar sus barómetros entre sí, que oscilan como una
           muestra de 400 a 460. En el otro extremo, Hamalgama se aparta del promedio menos de la mitad de lo que le
           correspondería por azar: su factor es 0,58, y un sondeo suyo de 1.000 entrevistas cuenta como uno de unas 340.
         </p>
@@ -358,7 +358,7 @@
         <h4>Por qué cuatro días</h4>
         <p>
           Una ventana corta solo actúa en las rachas de campaña y deja en paz el ritmo normal, semanal o mensual, de las
-          encuestadoras españolas.{{ m.note('ventana', note_keys) }} En este ciclo de las generales, solo 6 de los
+          encuestadoras españolas.{{ m.note('ventana', note_keys) }} En el cálculo del 20 de octubre, solo 6 de los
           328 sondeos se descartan por solaparse con otro y ninguno reparte peso por publicar en racha; en el ciclo de
           2023 se descartaron 82 entregas, 72 de ellas en las cuatro semanas finales de la campaña.
         </p>
@@ -688,7 +688,7 @@
         <p>
           Nuestro promedio es una <strong>regresión polinómica local ponderada por kernel</strong> (en inglés,
           <i lang="en">kernel-weighted local polynomial regression</i>).{{ m.note('referencias', note_keys) }} El nombre es
-          largo, pero cada palabra es una pieza del método. Vamos de la última a la primera.
+          largo, pero cada palabra es una pieza del método. Las vemos una a una.
         </p>
         <p>
           <strong>Regresión.</strong> Una regresión busca la línea que mejor resume una nube de puntos. Los puntos son los
@@ -911,7 +911,7 @@
         <p>
           Los grados de libertad son, como mucho, las encuestadoras menos una, porque la información independiente la
           aportan las encuestadoras, no los sondeos. Con veinte encuestadoras en la ventana, <var>t</var> ≈ 2,1; con cinco,
-          <var>t</var> ≈ 2,8, y la banda se ensancha un tercio. En el PP, agrupar por encuestadora sube el error estándar de
+          <var>t</var> ≈ 2,8, y la banda se ensancha un tercio. En el PP, en septiembre, agrupar por encuestadora sube el error estándar de
           0,20 a 0,25 puntos y ensancha la banda de ±0,41 a ±0,53.
         </p>
         <p>
@@ -937,7 +937,7 @@
           sondeos, que por sus pesos equivalen a {{ example.stats.neff|num(1) }} sondeos independientes de igual peso: es
           el tamaño efectivo de Kish, <var>n</var><sub>ef</sub> = (Σω<sub><var>i</var></sub>)²/Σω<sub><var>i</var></sub>².
           Cuanto más desiguales son los pesos, más se aleja del número de sondeos: diez sondeos que pesan lo mismo informan
-          como diez, pero si uno pesa por los otros nueve juntos, informan como dos. La campana de ese día tiene
+          como diez, pero si uno pesa por los otros nueve juntos, informan como menos de cuatro (3,6). La campana de ese día tiene
           {{ example.stats.bandwidth|num(0) }} días de anchura.
         </p>
         <div class="chart chart-tall" id="weights-chart" role="img" aria-label="Sondeos que pesan en el promedio del {{ example.name }} leído el {{ example.date|date }}, con la recta local, su banda y la campana del kernel"></div>
@@ -1081,7 +1081,7 @@
           6, 14 y 30 días de la elección. El intervalo del voto estimado, que suma el error histórico de los sondeos, lo
           contiene en un 96 % de los casos a seis días, para un 95 % nominal.{% endcall %}
         {% call m.note_item('limites') %}Tampoco recoge la incertidumbre de la anchura de la campana ni la de los efectos de
-          encuestadora, y se queda corta cuando pocas encuestadoras pesan de verdad: remuestreando por encuestadoras (un
+          encuestadora, y se queda corta cuando pocas encuestadoras pesan de verdad: en septiembre, remuestreando por encuestadoras (un
           <i lang="en">bootstrap</i> por clústeres), el error del PP sale de 0,38 puntos, frente a los 0,25 de la fórmula
           agrupada, con unas nueve encuestadoras efectivas.{% endcall %}
         {% call m.note_item('escala') %}<var>e</var> es el error absoluto medio que predice la regresión, y lo usamos como

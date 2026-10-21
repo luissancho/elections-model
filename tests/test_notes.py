@@ -17,7 +17,8 @@ def test_note_calls_are_numbered_by_the_order_of_the_keys_and_link_both_ways():
     assert re.findall(r'<a id="llamada-([a-z]+)" href="#nota-\1"[^>]*>(\d+)</a>', page) == [('tope', '1'), ('diseno', '2')]
     assert 'id="nota-tope"' in page and 'href="#llamada-tope"' in page and 'id="nota-diseno"' in page
     assert page.index('id="nota-tope"') < page.index('id="nota-diseno"') and 'id="notas"' in page
-    assert 'aria-controls="nota-tope-open"' in page and 'aria-expanded="false"' in page
+    # without JS the call is a plain link: the button semantics are set by notes.js
+    assert 'aria-expanded' not in page and 'aria-controls' not in page and 'role="button"' not in page
     assert re.search(r'<ol class="notes">\s*<li id="nota-tope">Nota A', page)
 
 
