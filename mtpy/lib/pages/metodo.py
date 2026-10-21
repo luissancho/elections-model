@@ -6,6 +6,7 @@ house effects (the last poll of one pollster before every analysed election sinc
 analyses) and, on the ``rating`` subpage, the public rubric of the prior quality
 (``data/pollsters-quality-criteria.json``).
 """
+import math
 from typing import Optional
 
 from ...core.api import HttpError
@@ -203,6 +204,34 @@ def weights_example() -> Optional[dict]:
     }
 
 
+def sign_chance(n: int, k: int) -> Optional[dict]:
+    """
+    How likely a pollster without lean errs to the same side in ``k`` or more of ``n`` elections: the upper tail of a
+    binomial of a fair coin, as each election is equally likely to be over or under the result.
+
+    Parameters
+    ----------
+    n : int
+        Elections with an error in the block.
+    k : int
+        Elections erring to the side counted.
+
+    Returns
+    -------
+    dict or None
+        ``n``, ``k``, ``p`` (the probability) and ``odds`` (``1 / p`` floored to two significant figures, so "less
+        than one in ``odds``" is true). ``None`` without elections.
+    """
+    if n <= 0:
+        return None
+
+    p = sum(math.comb(n, j) for j in range(k, n + 1)) / 2 ** n
+    odds = 1 / p
+    scale = 10 ** max(0, int(math.log10(odds)) - 1)
+
+    return {'n': n, 'k': k, 'p': p, 'odds': int(odds // scale * scale)}
+
+
 def house_effects_example() -> Optional[dict]:
     """
     The live example of the house effects: the error of the last poll of the pollster of ``HOUSE_EXAMPLE`` before
@@ -217,7 +246,9 @@ def house_effects_example() -> Optional[dict]:
         (its ``history_rows`` since the date, newest first and, on the same date, in catalogue order, each with
         ``name``, the name of its election, ``election_label``), ``n`` (their number), ``over`` and ``under``
         (``{block: n}`` for ``left`` and ``right``: the elections in which the poll gave the block more, or less,
-        vote than the result), ``first`` and ``last`` (the dates of the oldest and the newest rows), ``cycle``
+        vote than the result), ``chance`` (the ``sign_chance`` of ``over`` for ``left`` and of ``under`` for
+        ``right``, ``{block: dict or None}``), ``first`` and ``last`` (the dates of the oldest and the newest rows),
+        ``cycle``
         (``{name: effect}``, the ``cycle`` effect of the parties and blocks of the ``house-effects`` analysis of
         ``NATIONAL_SCOPE``; ``None`` without one or without a row of the pollster) and ``n_cycle`` (its polls in
         that cycle, ``None`` without ``cycle``). ``None`` without an analysed scope, when the axes are not the two
@@ -254,6 +285,10 @@ def house_effects_example() -> Optional[dict]:
         """Elections in which the poll erred in the direction of `sign` (1 over, -1 under) in `block`."""
         return sum(1 for row in rows if row.get(block) is not None and sign * row[block] > 0)
 
+    def chance(block, sign):
+        """`sign_chance` of the elections with an error in `block` erring in the direction of `sign`."""
+        return sign_chance(sum(1 for row in rows if row.get(block) is not None), count(block, sign))
+
     effects = analysis_part(NATIONAL_SCOPE, 'house-effects') or {}
     mine = [row for row in effects.get('rows') or [] if row.get('pollster') == name]
     cycle = {row['name']: row.get('cycle') for row in mine} or None
@@ -269,6 +304,7 @@ def house_effects_example() -> Optional[dict]:
         'n': len(rows),
         'over': {block: count(block, 1) for block in (left, right)},
         'under': {block: count(block, -1) for block in (left, right)},
+        'chance': {left: chance(left, 1), right: chance(right, -1)},
         'first': rows[-1]['event_date'],
         'last': rows[0]['event_date'],
         'cycle': cycle,

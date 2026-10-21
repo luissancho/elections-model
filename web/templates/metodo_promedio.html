@@ -145,20 +145,38 @@
       {% set h = house_example %}
       {{ m.card_start('ejemplo-cis', 'Un ejemplo: el ' ~ h.pollster ~ ' desde ' ~ h.since[:4], 'El último sondeo del ' ~ h.pollster ~ ' antes de cada elección analizada desde septiembre de 2018, frente al resultado y por bloques: un efecto de encuestadora sostenido, visto desde fuera.') }}
         <p>
+          Dentro del ciclo, el modelo ve la inclinación de una encuestadora comparándola con el consenso de las
+          demás. Hay una prueba más dura, que solo llega el día de la elección: compararla con el resultado. El
+          {{ h.pollster }} es el mejor ejemplo de lo que se ve entonces.
+        </p>
+        <p>
           En junio de 2018 José Félix Tezanos llegó a la presidencia del CIS y, desde el barómetro de septiembre, el
           CIS cambió su estimación de voto: dejó de aplicar su modelo tradicional de ajuste (la «cocina») y pasó a
           publicar una estimación basada en el voto directo más la simpatía por cada partido. Sus cifras se
-          separaron de las demás encuestadoras siempre hacia el mismo lado, más voto para el PSOE y la izquierda y
-          menos para el PP, y sus escaños pasaron a darse en horquillas muy anchas: para las generales del 28 de
-          abril de 2019 dio al PSOE entre 123 y 138 escaños y al PP entre 66 y 76.
+          separaron de las de las demás encuestadoras, y siempre hacia el mismo lado: más voto para el PSOE y la
+          izquierda, menos para el PP.
         </p>
         <p>
-          Desde entonces el {{ h.pollster }} ha publicado sondeos en {{ h.n }} elecciones analizadas, generales y
-          autonómicas, de cualquier ámbito. En {{ h.over[h.left] }} de ellas su último sondeo dio a la
-          {{ h.left }} más voto que el resultado, y en {{ h.under[h.right] }}, menos a la {{ h.right }}. Una
-          encuestadora sin inclinación se pasaría unas veces y se quedaría corta otras; un error casi siempre del
-          mismo lado es un efecto de encuestadora.
+          Desde entonces el {{ h.pollster }} ha publicado sondeos antes de {{ h.n }} elecciones que hemos analizado,
+          generales y autonómicas. En {{ h.over[h.left] }} de ellas su último sondeo dio a la {{ h.left }} más voto
+          del que obtuvo, y en {{ h.under[h.right] }}, a la {{ h.right }} menos.
         </p>
+        {% set c = h.chance[h.left] %}
+        {% if c %}
+        <p>
+          {% if c.odds >= 20 %}<strong>Por qué no puede ser casualidad.</strong> {% endif %}Si una encuestadora no
+          tuviera inclinación, cada elección sería como lanzar una moneda: unas veces se pasaría con la
+          {{ h.left }} y otras se quedaría corta. La probabilidad de que una encuestadora sin inclinación se pasara
+          con la {{ h.left }} en {{ c.k }} o más de {{ c.n }} elecciones
+          {% if c.odds >= 20 %}
+          es de menos de una entre {{ c.odds|int }}. Las elecciones no son del todo independientes, porque varias
+          autonómicas se celebran el mismo día y comparten clima político, así que la probabilidad real es algo
+          mayor; aun así, queda muy lejos de lo que el azar explica: es un efecto de casa sostenido.
+          {% else %}
+          es de una entre {{ c.odds|int }}: con tan pocas elecciones, el azar todavía podría explicarlo.
+          {% endif %}
+        </p>
+        {% endif %}
         <div class="chart big" id="house-chart" role="img" aria-label="Error del último sondeo del {{ h.pollster }} antes de cada elección analizada desde {{ h.since[:4] }}, por bloque"></div>
         <details class="weights-list" id="house-list">
           <summary>Ver las {{ h.n }} elecciones</summary>
@@ -190,22 +208,27 @@
           </div>
         </details>
         <p>
-          En la diana, cada punto es el último sondeo del {{ h.pollster }} antes de una elección: en azul las
-          generales y en naranja las autonómicas, con la etiqueta de la elección y su ámbito (2023-23J-es). A la
-          derecha del centro, el sondeo dio a la {{ h.right }} más voto que el resultado; hacia arriba, más a la
-          {{ h.left }}. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos. Casi todos los puntos
-          caen en el mismo cuadrante, arriba a la izquierda: más {{ h.left }} y menos {{ h.right }} de las que hubo.
+          Cada punto de la diana es el último sondeo del {{ h.pollster }} antes de una elección: en azul las
+          generales y en naranja las autonómicas, con la etiqueta de la elección y su ámbito (2023-23J-es). El centro
+          es el acierto exacto y los anillos marcan 2, 5 y 10 puntos de error. Hacia la derecha, el sondeo dio a la
+          {{ h.right }} más voto que el resultado; hacia arriba, más a la {{ h.left }}. Casi todos los puntos caen en
+          el mismo cuadrante, arriba a la izquierda: más {{ h.left }} y menos {{ h.right }} de las que hubo.
         </p>
         <p>
-          El modelo no espera a la elección para verlo: el efecto se estima frente al consenso de las demás
-          encuestadoras a lo largo del ciclo y se resta de cada sondeo antes de promediar.
+          El modelo no espera a la elección: ve la inclinación desde dentro del ciclo, frente al consenso, y la
+          resta de cada sondeo antes de promediar.
           {% if h.cycle and h.left in h.cycle and h.right in h.cycle %}
           En el ciclo actual de las generales, con {{ h.n_cycle|int }} sondeos del {{ h.pollster }}, su efecto es de
           {{ h.cycle[h.left]|delta(1) }} puntos en la {{ h.left }} y {{ h.cycle[h.right]|delta(1) }} en la
           {{ h.right }}{% if 'PSOE' in h.cycle and 'PP' in h.cycle %} ({{ h.cycle.PSOE|delta(1) }} en el PSOE y
           {{ h.cycle.PP|delta(1) }} en el PP){% endif %}: eso es lo que se descuenta hoy a cada uno de sus sondeos.
           {% endif %}
-          El detalle, elección a elección y partido a partido, está en <a href="{{ h.href }}">su perfil</a>.
+        </p>
+        <p>
+          Las dos miradas no miden lo mismo. Frente al consenso solo se ve lo que el {{ h.pollster }} se aparta de
+          las demás encuestadoras; frente al resultado se ve, además, el error que cometen todas a la vez. Por eso el
+          modelo corrige lo primero y deja lo segundo a la simulación. El detalle, elección a elección y partido a
+          partido, está en <a href="{{ h.href }}">su perfil</a>.
         </p>
       {{ m.card_end() }}
       {% endif %}

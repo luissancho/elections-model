@@ -209,10 +209,20 @@ def test_house_example_counts_the_errors_of_the_pollster_since_the_date(house_si
     assert example['n'] == 2 and example['first'] == '2019-11-10' and example['last'] == '2023-07-23'
     assert example['over'] == {'Izquierda': 2, 'Derecha': 0} and example['under'] == {'Izquierda': 0, 'Derecha': 2}
     assert example['cycle'] == {'PP': -5.9, 'PSOE': 4.29, 'Derecha': -6.7, 'Izquierda': 4.24} and example['n_cycle'] == 36
+    # two elections out of two on the same side: a fair coin does it once in four
+    assert example['chance'] == {'Izquierda': {'n': 2, 'k': 2, 'p': .25, 'odds': 4},
+                                 'Derecha': {'n': 2, 'k': 2, 'p': .25, 'odds': 4}}
     monkeypatch.setitem(metodo.HOUSE_EXAMPLE, 'since', '2020-01-01')
     assert [row['event_date'] for row in metodo.house_effects_example()['rows']] == ['2023-07-23']
     monkeypatch.setitem(metodo.HOUSE_EXAMPLE, 'since', '2024-01-01')
     assert metodo.house_effects_example() is None
+
+
+def test_sign_chance_is_the_binomial_tail_of_a_fair_coin():
+    # 21 or more of 23 on the same side: (C(23,21) + C(23,22) + C(23,23)) / 2^23 = 277 / 8388608, one in 30283
+    assert metodo.sign_chance(23, 21) == {'n': 23, 'k': 21, 'p': pytest.approx(277 / 2 ** 23), 'odds': 30000}
+    assert metodo.sign_chance(10, 5)['odds'] == 1 and metodo.sign_chance(20, 15)['odds'] == 48
+    assert metodo.sign_chance(0, 0) is None
 
 
 def test_house_example_without_the_cycle_or_the_blocks(house_site, monkeypatch):
@@ -239,11 +249,13 @@ def test_promedio_page_shows_the_house_example_card(house_site):
     text = re.sub(r'\s+', ' ', card)
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card   # el texto va a la vista, bajo el gráfico
     # la lista plegada va pegada al gráfico; el texto que lo explica, debajo de las dos
-    assert card.index('id="house-chart"') < card.index('id="house-list"') < card.index('En la diana, cada punto es el último sondeo del CIS')
-    assert card.index('En la diana, cada punto') < card.index('El modelo no espera a la elección para verlo')
-    assert 'José Félix Tezanos' in text and 'entre 123 y 138 escaños' in text and 'la «cocina»' in text
-    assert ('Desde entonces el CIS ha publicado sondeos en 2 elecciones analizadas, generales y autonómicas, de cualquier ámbito. '
-            'En 2 de ellas su último sondeo dio a la Izquierda más voto que el resultado, y en 2, menos a la Derecha.') in text
+    assert card.index('id="house-chart"') < card.index('id="house-list"') < card.index('Cada punto de la diana es el último sondeo del CIS')
+    assert card.index('Cada punto de la diana') < card.index('El modelo no espera a la elección')
+    assert 'José Félix Tezanos' in text and 'la «cocina»' in text and 'escaños' not in text
+    assert ('Desde entonces el CIS ha publicado sondeos antes de 2 elecciones que hemos analizado, generales y autonómicas. '
+            'En 2 de ellas su último sondeo dio a la Izquierda más voto del que obtuvo, y en 2, a la Derecha menos.') in text
+    # with two elections chance still explains it: no claim of a house effect
+    assert 'una entre 4' in text and 'no puede ser casualidad' not in text
     assert ('En el ciclo actual de las generales, con 36 sondeos del CIS, su efecto es de +4,2 puntos en la Izquierda y −6,7 en la '
             'Derecha (+4,3 en el PSOE y −5,9 en el PP): eso es lo que se descuenta hoy a cada uno de sus sondeos.') in text
     assert '<a href="/casas/cis">su perfil</a>' in text
@@ -258,6 +270,17 @@ def test_promedio_page_shows_the_house_example_card(house_site):
     assert set(data) == {'state', 'example', 'house'} and data['house']['blocks'] == ['Derecha', 'Izquierda']
     assert [row['event'] for row in data['house']['rows']] == ['2023-23J', '2019-10N']
     assert set(data['house']['rows'][0]) == {'event', 'event_date', 'days', 'scope', 'name', 'Derecha', 'Izquierda'}
+
+
+def test_house_example_claims_the_effect_when_chance_cannot_explain_it(house_site, monkeypatch):
+    house = metodo.house_effects_example
+    monkeypatch.setattr(metodo, 'house_effects_example', lambda: dict(
+        house(), n=23, over={'Izquierda': 21, 'Derecha': 1}, under={'Izquierda': 2, 'Derecha': 20},
+        chance={'Izquierda': metodo.sign_chance(23, 21), 'Derecha': metodo.sign_chance(23, 20)}))
+    text = re.sub(r'\s+', ' ', html(call(house_site, '/metodo/promedio')[2]))
+    assert ('La probabilidad de que una encuestadora sin inclinación se pasara con la Izquierda en 21 o más de 23 elecciones '
+            'es de menos de una entre 30.000.') in text
+    assert 'es un efecto de casa sostenido' in text
 
 
 def test_promedio_page_shows_the_house_example_without_the_weights(house_site, tmp_path):
