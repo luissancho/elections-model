@@ -72,7 +72,7 @@ def export_event_cycle(frame: pd.DataFrame, names: Sequence[str], seats: Optiona
     Parameters
     ----------
     frame : pandas.DataFrame
-        Polls of the election, as ``Computer.filter_polls(featured=True)`` gives them (indexed by
+        Polls of the election, as ``Computer.filter_polls('results')`` gives them (indexed by
         ``event_date``, ``date``, ``pollster_id`` and ``sponsor_id``, with ``pollster``, ``sponsor``,
         ``start_date``, ``end_date``, ``sample_size``, ``mtype``, ``rating``, ``weight_sample``,
         ``weight_over`` and one share per party).
@@ -275,7 +275,7 @@ def event_summary(frame: pd.DataFrame, blocks: Sequence[str]) -> dict:
 
 
 def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: dict, main: Sequence[str],
-                      summary: dict, model: dict, prov: dict, seconds: dict) -> dict:
+                      summary: dict, model: dict, prov: dict, seconds: dict, featured: bool = True) -> dict:
     """Build the ``event-meta`` document describing a published past election.
 
     Parameters
@@ -298,6 +298,9 @@ def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: 
         Result of ``provenance``.
     seconds : dict
         Seconds spent in each step.
+    featured : bool, optional
+        Whether the election is analysed (``featured``: it feeds the model, the ratings and the backtest) or only
+        published (it has an official result but too few useful polls).
 
     Returns
     -------
@@ -306,7 +309,7 @@ def export_event_meta(scope: str, event_date: str, name: Optional[str], blocks: 
     """
     return {'scope': scope, 'event_date': event_date, 'name': name, 'n_polls': summary['n_polls'],
             'n_pollsters': summary['n_pollsters'], 'blocks': {k: list(v) for k, v in blocks.items()},
-            'main': list(main), 'summary': summary, 'has_model': bool(model['horizons']),
+            'main': list(main), 'summary': summary, 'has_model': bool(model['horizons']), 'featured': bool(featured),
             'horizons': list(model['horizons']), 'commit': prov['commit'], 'dirty': bool(prov['dirty']),
             'versions': prov['versions'], 'seconds': seconds}
 
@@ -320,7 +323,7 @@ def event_dates_to_publish(scope: str, event_date, events: Optional[Callable] = 
     scope : str
         Scope code.
     event_date : str or list of str
-        ``'all'`` (the featured elections of the scope before today), one date or a list of dates.
+        ``'all'`` (the elections of the scope with an official result before today), one date or a list of dates.
     events : callable, optional
         Injectable replacement of ``data.get_events``.
     today : str, datetime.date or datetime.datetime, optional
@@ -339,7 +342,7 @@ def event_dates_to_publish(scope: str, event_date, events: Optional[Callable] = 
     if event_date == 'all':
         table = (events or get_events)(scope)
         days = _iso_dates(table['date'])
-        past = table['featured'].astype(bool).to_numpy() & (days < _today(today).isoformat()).to_numpy()
+        past = table['has_results'].astype(bool).to_numpy() & (days < _today(today).isoformat()).to_numpy()
 
         return sorted(days[past].unique())
 
@@ -353,11 +356,13 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     """Write one past election of a scope into the bundle, overwriting the previous publication.
 
     The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``results``, ``model`` and ``series`` (each JSON
-    with its CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place. The
-    polls errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs')``), the
-    polls of the cycle as published from the same polls (``filter_polls(featured=True)``, so every poll of the
-    table has its error) with the seat projections of the loader, the results from the database and the model
-    from the backtest tables (see ``export_event_model``). The manifest and the runs are not touched.
+    with its CSV twins) and ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place. Any
+    election with an official result is published, ``featured`` or not (``meta.featured`` tells which). The polls
+    errors come from a ``Computer`` of the election alone (``get_polls_metric('error', bmap='vs',
+    featured='results')``), the polls of the cycle as published from the same polls (``filter_polls('results')``,
+    so every poll of the table has its error) with the seat projections of the loader, the results from the
+    database and the model from the backtest tables (see ``export_event_model``). The manifest and the runs are
+    not touched.
 
     Parameters
     ----------
@@ -392,7 +397,7 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     Raises
     ------
     NothingToPublish
-        The date is not a featured election of the scope, it has no official results, or the ``Computer`` raised
+        The date is not an election of the scope with official results, or the ``Computer`` raised
         ``ValueError`` or gave no polls; nothing is written then.
     ValueError
         The date is not a real ISO date.
@@ -408,9 +413,10 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
 
     event_date = _iso_day(event_date)
     table = (events or get_events)(scope)
-    row = table.loc[(_iso_dates(table['date']) == event_date).to_numpy() & table['featured'].astype(bool).to_numpy()]
+    row = table.loc[(_iso_dates(table['date']) == event_date).to_numpy() & table['has_results'].astype(bool).to_numpy()]
     if row.empty:
-        raise NothingToPublish(f'{event_date} is not a featured election of {scope}')
+        raise NothingToPublish(f'{event_date} is not an election of {scope} with official results')
+    featured = bool(row['featured'].iloc[0])
     name = row['name'].iloc[0]
     name = None if pd.isna(name) else str(name)
     official = (results or get_event_results)(scope, event_date, 0)
@@ -421,8 +427,8 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         comp = (computer or Computer)(scope=scope, event_dates=[event_date], path='.', verbose=verbose).build_series()
         bmaps = comp.event_params[event_date]['bmaps']
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
-        errors = comp.get_polls_metric('error', bmap='vs')
-        cycle = comp.filter_polls(featured=True)
+        errors = comp.get_polls_metric('error', bmap='vs', featured='results')
+        cycle = comp.filter_polls('results')
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
     if errors.empty:
@@ -469,7 +475,7 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     seconds['total'] = time.perf_counter() - start
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    meta = export_event_meta(scope, event_date, name, blocks, main, summary, model, prov(), seconds)
+    meta = export_event_meta(scope, event_date, name, blocks, main, summary, model, prov(), seconds, featured=featured)
     write('meta', meta, {})
 
     return {'scope': scope, 'event_date': event_date, 'n_polls': summary['n_polls'],

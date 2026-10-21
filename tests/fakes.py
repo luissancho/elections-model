@@ -288,12 +288,13 @@ def write_backtest_source(root, scope='es'):
 
 
 def synthetic_event():
-    """Tablas que lee `publish_event` de la base: `events` (dos elecciones destacadas pasadas y el ciclo en curso,
-    no destacado), `results` (solo `2023-07-23`, región 0: una fila por `NAMES` y `Cs` sin escaños, con `pct` de
+    """Tablas que lee `publish_event` de la base: `events` (dos elecciones destacadas pasadas con resultado
+    oficial según `has_results` y el ciclo en curso, no destacado y sin resultado), `results` (solo `2023-07-23`, región 0: una fila por `NAMES` y `Cs` sin escaños, con `pct` de
     más decimales y 350 escaños) y `pollsters` (`id`/`name` de `HOUSES`: `CIS` 1, `GAD3` 2, `40dB` 3)."""
     events = pd.DataFrame({
         'date': ['2019-11-10', '2023-07-23', '2026-11-29'], 'scope': 'es',
         'name': ['Generales 2019 (noviembre)', 'Generales 2023', None], 'featured': [True, True, False],
+        'has_results': [True, True, False],
     })
     results = pd.DataFrame({
         'date': '2023-07-23', 'scope': 'es', 'region_id': 0, 'region': 'España',

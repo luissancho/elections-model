@@ -766,7 +766,7 @@ def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     writer = make_writer(tmp_path)
     out = publish.publish_analysis('es', writer, computer=factory, stats=fake_stats, prov=fake_prov)
     assert factory.calls[0][:3] == ('init', 'es', '.')
-    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, 42), 'n_last': 1})
+    assert factory.calls[1] == ('get_polls_metric', 'error', 'vs', {'drange': (6, 42), 'n_last': 1, 'featured': 'results'})
     meta = writer.read_json(bundle.path_analysis('es', 'meta'))['data']
     assert meta['events'] == ['2019-11-10', '2023-07-23', '2026-11-29'] and meta['scope'] == 'es'
     assert meta['house_effects'] is True
@@ -974,6 +974,7 @@ def test_publish_event_writes_the_parts_and_meta_last(tmp_path):
     assert written[-1].endswith('/meta.json') and sum(p.endswith('.json') for p in written) == 6 and sum(p.endswith('.csv') for p in written) == 7
     meta = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))
     assert meta['schema'] == 'event-meta@1' and meta['data']['name'] == 'Generales 2023' and meta['data']['horizons'] == [6, 30]
+    assert meta['data']['featured'] is True
     assert set(meta['data']['summary']) == {'n_polls', 'n_pollsters', 'error_avg', 'error_blocks', 'bias_blocks', 'bias'}
     assert list(meta['data']['blocks']) == ['Derecha', 'Izquierda'] and meta['data']['main'] == list(BMAPS['main'])
     houses = writer.read_json(bundle.path_event('es', '2023-07-23', 'pollsters'))['data']['rows']
@@ -1018,13 +1019,26 @@ def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
 
 
 @pytest.mark.parametrize('date, reason', [('2019-11-10', 'no official results for es 2019-11-10'),
-                                          ('2026-11-29', '2026-11-29 is not a featured election of es'),
-                                          ('2020-01-01', '2020-01-01 is not a featured election of es')])
+                                          ('2026-11-29', '2026-11-29 is not an election of es with official results'),
+                                          ('2020-01-01', '2020-01-01 is not an election of es with official results')])
 def test_publish_event_skips_what_cannot_be_published(tmp_path, date, reason):
     with pytest.raises(publish.NothingToPublish, match=reason):
         publish.publish_event('es', date, make_writer(tmp_path), computer=FakeComputer(), prov=fake_prov,
                               **event_readers(synthetic_event()))
     assert not (tmp_path / 'site').exists()
+
+
+def test_publish_event_publishes_an_election_with_results_that_is_not_featured(tmp_path):
+    """Una elección con resultado oficial pero menos de 10 sondeos útiles (no destacada) se publica: sus errores y
+    su ciclo salen de la selección 'results' del Computer y la meta dice que no está analizada."""
+    ev = synthetic_event()
+    ev.events.loc[ev.events['date'] == '2023-07-23', 'featured'] = False
+    factory = FakeComputer()
+    writer = make_writer(tmp_path)
+    publish.publish_event('es', '2023-07-23', writer, computer=factory, prov=fake_prov, **event_readers(ev))
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']['featured'] is False
+    assert ('filter_polls', 'results', {}) in factory.calls
+    assert ('get_polls_metric', 'error', 'vs', {'featured': 'results'}) in factory.calls
 
 
 def test_publish_event_turns_a_computer_value_error_into_nothing_to_publish(tmp_path):
@@ -1106,6 +1120,15 @@ def test_event_dates_to_publish():
     assert publish.event_dates_to_publish('es', ['2023-07-23', '2019-11-10']) == ['2023-07-23', '2019-11-10']
     with pytest.raises(ValueError):
         publish.event_dates_to_publish('es', '2023-13-01')
+
+
+def test_event_dates_to_publish_takes_the_past_elections_with_results():
+    """`all` publica las elecciones pasadas con resultado oficial, destacadas o no; nunca hoy ni el futuro."""
+    events = pd.DataFrame({'date': ['2019-11-10', '2023-07-23', '2026-11-29', '2027-01-01'], 'scope': 'es',
+                           'name': None, 'featured': [False, True, False, False],
+                           'has_results': [True, True, False, True]})
+    assert publish.event_dates_to_publish('es', 'all', events=lambda scope: events, today='2026-10-11') == [
+        '2019-11-10', '2023-07-23']
 
 
 def test_event_summary_weights_by_poll_weight():
