@@ -614,7 +614,7 @@ class Computer(Core):
 
     def filter_polls(
         self,
-        featured: bool = True,
+        featured: bool | Literal['results'] = True,
         **kwargs
     ) -> pd.DataFrame:
         """
@@ -622,8 +622,10 @@ class Computer(Core):
 
         Parameters
         ----------
-        featured : bool, optional
-            Whether to filter the polls in featured events and have been computed.
+        featured : bool or 'results', optional
+            Which elections the polls come from: True, the computed polls of the featured elections (what the
+            estimators use); 'results', the computed polls of every election with an official result (what the
+            web publishes); False, every election.
         **kwargs
             Keyword arguments to overwrite the default filter parameters:
             - drange : tuple of int or int
@@ -662,7 +664,13 @@ class Computer(Core):
             )
         ]
 
-        if featured:
+        if featured == 'results':
+            # An election has an official result when its row carries the votes (`sample_size`, see `load_events`);
+            # its `computed` is its `featured`, so it cannot tell
+            has_results = self.events['sample_size'].notna()
+            with_results = df.index.get_level_values('event_date').map(has_results).fillna(False).astype(bool)
+            df = df.loc[df['computed'].fillna(False).astype(bool).to_numpy() & np.asarray(with_results)]
+        elif featured:
             df = df.loc[df['featured'] & df['computed']]
 
         if n_last > 0:
@@ -2063,7 +2071,7 @@ class Computer(Core):
         metric: Literal['pct', 'seats', 'error', 'bias'] = 'pct',
         bmap: Optional[list[str] | str] = None,
         pollster: Optional[int | str] = None,
-        featured: bool = True,
+        featured: bool | Literal['results'] = True,
         **kwargs
     ) -> pd.DataFrame:
         """
@@ -2077,8 +2085,8 @@ class Computer(Core):
             The blocks of parties to use to group the data.
         pollster : int or str, optional
             The pollster to use to filter the data.
-        featured : bool, optional
-            Whether to filter the polls in featured events and have been computed.
+        featured : bool or 'results', optional
+            Which elections the polls come from (see `filter_polls`).
         **kwargs
             Keyword arguments to overwrite the default filter parameters:
             - drange : tuple of int or int

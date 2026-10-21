@@ -409,6 +409,60 @@ def test_get_polls_metric_keeps_a_metric_that_is_null_for_every_poll():
     assert df['error_within'].tolist() == [0., 0.] and {'Derecha', 'Izquierda'} <= set(df.columns)
 
 
+# --- Selección 'results': los sondeos de las elecciones con resultado oficial, sean o no `featured` ---
+
+THREE_EVENTS = ['2015-05-24', '2019-05-26', '2023-05-28']
+
+
+def three_event_computer(featured=(True, False, False)):
+    """Computer sin base de datos con un sondeo en cada una de tres elecciones y la fila de su resultado: 2015 y
+    2019 con votos, 2023 sin ellos (el ciclo en curso); `featured` marca cada elección. Como en `load_events`, el
+    `computed` de una fila de resultado es su `featured` y su `sample_size`, los votos."""
+    c = Computer.__new__(Computer)
+    c.scope, c.verbose = 'es-ar', 0
+    c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
+    c.names = ['PP', 'PSOE']
+    c.event_params = {dt: {'bmaps': {'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}} for dt in THREE_EVENTS}
+    c.drange, c.n_last, c.drop_mtypes, c.drop_ctypes = (0, 60), None, None, None
+    events = pd.to_datetime(THREE_EVENTS)
+    polls = [(ev, ev - pd.Timedelta(days=10), i + 1, 0) for i, ev in enumerate(events)]
+    results = [(ev, ev, np.nan, np.nan) for ev in events]
+    index = pd.MultiIndex.from_tuples(polls + results, names=c.keys)
+    c.series = pd.DataFrame({
+        'pollster': ['A', 'B', 'C', None, None, None], 'mtype': None, 'ctype': None,
+        'featured': list(featured) * 2, 'computed': [True, True, True] + list(featured),
+        'days': [10, 10, 10, 0, 0, 0], 'sample_size': [800, 800, 800, 1000, 900, np.nan],
+        'proc_sample': 800, 'weight_over': [1., 1., 1., np.nan, np.nan, np.nan], 'weight_sample': 1.,
+        'error_avg': 1., 'bias_avg': 1., 'error_blocks': 2., 'bias_blocks': 1., 'error_within': 0.,
+        'bias_within': np.nan, 'bias': 1., 'PP': [45., 44., 43., 44., 43., np.nan],
+        'PSOE': [40., 41., 42., 41., 42., np.nan],
+    }, index=index)
+    c.errors = pd.DataFrame({'PP': [1., 1., np.nan], 'PSOE': [-1., -1., np.nan]}, index=index[:3])
+    return c
+
+
+def event_dates(df):
+    """Fechas ISO de las elecciones de una selección de sondeos."""
+    return sorted(df.index.get_level_values('event_date').strftime('%Y-%m-%d').unique())
+
+
+def test_filter_polls_results_takes_every_election_with_an_official_result():
+    c = three_event_computer()
+    assert event_dates(c.filter_polls('results')) == ['2015-05-24', '2019-05-26']
+    assert event_dates(c.filter_polls(True)) == ['2015-05-24']  # los estimadores no cambian
+    assert event_dates(c.filter_polls(False)) == THREE_EVENTS  # sin filtro de elecciones, como hasta ahora
+
+
+def test_filter_polls_results_equals_featured_when_every_election_with_a_result_is_featured():
+    c = three_event_computer(featured=(True, True, False))
+    pd.testing.assert_frame_equal(c.filter_polls('results'), c.filter_polls(True))
+
+
+def test_get_polls_metric_passes_the_results_selection():
+    df = three_event_computer().get_polls_metric('error', bmap='vs', featured='results')
+    assert sorted(df['event_date'].unique()) == ['2015-05-24', '2019-05-26']
+
+
 # --- Sesgo margen: el signo del error del margen entre bloques ---
 
 def test_gap_error_is_positive_when_the_poll_favours_the_first_block():
