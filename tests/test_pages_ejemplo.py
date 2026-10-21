@@ -277,10 +277,12 @@ def test_house_example_claims_the_effect_when_chance_cannot_explain_it(house_sit
     monkeypatch.setattr(metodo, 'house_effects_example', lambda: dict(
         house(), n=23, over={'Izquierda': 21, 'Derecha': 1}, under={'Izquierda': 2, 'Derecha': 20},
         chance={'Izquierda': metodo.sign_chance(23, 21), 'Derecha': metodo.sign_chance(23, 20)}))
-    text = re.sub(r'\s+', ' ', html(call(house_site, '/metodo/promedio')[2]))
+    page = html(call(house_site, '/metodo/promedio')[2])
+    text = re.sub(r'\s+', ' ', page)
     assert ('La probabilidad de que una encuestadora sin inclinación se pasara con la Izquierda en 21 o más de 23 elecciones '
             'es de menos de una entre 30.000.') in text
-    assert 'es un efecto de casa sostenido' in text
+    assert 'es un efecto de encuestadora sostenido' in text
+    assert_public_wording(page, '/metodo/promedio')
 
 
 def test_promedio_page_shows_the_house_example_without_the_weights(house_site, tmp_path):
