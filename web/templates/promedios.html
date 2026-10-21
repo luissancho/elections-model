@@ -19,7 +19,10 @@
         {% endfor %}
       </div>
       {% endif %}
-      {{ m.card_start('series', 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección', 'La intención de voto de cada partido a lo largo del ciclo, según el promedio ponderado de los sondeos publicados.', subtitle) }}
+      {% set series_title = 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección' %}
+      {{ m.card_start('series', series_title, 'La intención de voto de cada partido a lo largo del ciclo, según el promedio ponderado de los sondeos publicados.', subtitle,
+                      tools=m.download_button('series-download', event_bar.title ~ ' · ' ~ event_bar.date|date, series_title ~ ' · ' ~ title_suffix,
+                                              site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-promedio-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
         <div class="series-controls">
           {% if blocks %}
           <fieldset id="series-view" class="seg" hidden>
@@ -162,7 +165,7 @@
           {% call m.how() %}
           <p>
             Cada bloque suma el voto y los escaños de sus partidos; los pactos entre bloques no cuentan aquí. La
-            probabilidad de mayoría absoluta de cada bloque y la calculadora de coaliciones están en la pestaña
+            probabilidad de mayoría absoluta de cada bloque y la calculadora de mayorías están en la pestaña
             Escaños.
           </p>
           {% if results_year %}
@@ -186,7 +189,10 @@
         {% endcall %}
       {{ m.card_end() }}
       {% if pollsters %}
-      {{ m.card_start('pollster', 'Una encuestadora frente al promedio', 'Los sondeos de una sola encuestadora frente al promedio de todas, para ver si suele quedar por encima o por debajo.') }}
+      {#- the subtitle and the file of the image get the house chosen in front (`promedios.js`) -#}
+      {{ m.card_start('pollster', 'Una encuestadora frente al promedio', 'Los sondeos de una sola encuestadora frente al promedio de todas, para ver si suele quedar por encima o por debajo.',
+                      tools=m.download_button('pollster-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'frente al promedio · ' ~ title_suffix,
+                                              site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-encuestadora-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
         <div class="series-controls" id="pollster-controls" hidden>
           {% if blocks %}
           <fieldset id="pollster-view" class="seg">

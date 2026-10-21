@@ -19,7 +19,7 @@ import {renderBullseye} from '../charts/bullseye.js';
 import {renderDiverging} from '../charts/diverging.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderHistogram} from '../charts/histogram.js';
-import {renderSeries} from '../charts/series.js';
+import {renderSeries, seriesImageOption} from '../charts/series.js';
 import {renderTrend} from '../charts/trend.js';
 import {fillComplements, fillFigures, fillSelect, filterEventsTable} from './history-dom.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
@@ -461,8 +461,8 @@ function wireHemicycle(initial, catalog) {
 
 /**
  * Draw the poll average of the cycle (the series frozen at the shortest horizon of the backtest, the polls as
- * points and the official result as diamonds at the election) and wire its controls, as Promedios does; nothing
- * without the series or its card.
+ * points and the official result as diamonds at the election) and wire its controls and its download button, as
+ * Promedios does; nothing without the series or its card.
  *
  * @param {object} initial the page's initial data (`series`, `polls`, `result`, `inks`, `meta`)
  * @param {Catalog} catalog party catalogue of the page, with the `bmaps` of the curve
@@ -476,17 +476,19 @@ function wireAverageCard(initial, catalog) {
   const state = parseSeriesHash(window.location.hash, {
     parties: views.partidos.parties, blocks: views.bloques ? views.bloques.parties : [], windows: WINDOWS,
   });
-  const render = (el, pollsOfChart, chartState) => {
+  const dataOf = (pollsOfChart, chartState) => {
     const current = views[chartState.view];
     const dates = current.series.dates;
-    return renderSeries(el, {
+    return {
       series: current.series, polls: pollsOfChart, projection: null, result: current.result,
       parties: current.parties, selected: chartState.selected ?? current.defaults, colors: current.colors,
       asOf: dates[dates.length - 1], asOfLabel: `A ${initial.series.horizon} días`, when,
       window: chartState.window, anchor: when, legend: 'hidden',
-    });
+    };
   };
-  wireAverage(views, state, render, {anchor: when, inks: initial.inks || {}});
+  const render = (el, pollsOfChart, chartState) => renderSeries(el, dataOf(pollsOfChart, chartState));
+  const imageOf = (pollsOfChart, chartState, zoom) => seriesImageOption(dataOf(pollsOfChart, chartState), zoom);
+  wireAverage(views, state, render, {anchor: when, inks: initial.inks || {}, imageOf});
 }
 
 /**

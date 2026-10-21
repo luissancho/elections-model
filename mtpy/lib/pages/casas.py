@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Optional, Sequence
 
 from .. import webapi
+from ..mtypes import DROP_MTYPES
 from ..quality import level_text, load_criteria, max_points, quality_breakdown
 from ..webapi import query_pollster, query_pollster_path, query_ratings, site
 from .common import OTHERS_COLOR, analysis_part, api_url, block_color, common_context
@@ -125,6 +126,8 @@ def ranking_rows(ratings, herding: Optional[dict]) -> list:
 RANKING_COLUMNS = ('pollster', 'rating', 'quality', 'num_events', 'num_polls', 'bias_dev_adj', 'error_avg',
                    'error_blocks', 'herding')
 PATH_COLUMNS = ('event', 'n_polls', 'bias_dev_adj', 'error_avg', 'error_blocks', 'rating', 'change')
+# The columns of the rating path a house without rating (`DROP_MTYPES`) does not show.
+UNRATED_PATH_KEYS = ('rating', 'change')
 COLUMN_LABELS = {'pollster': 'Encuestadora', 'rating': 'Rating', 'quality': 'Confianza', 'num_events': 'Elecciones',
                  'num_polls': 'Sondeos', 'bias_dev_adj': 'Diferencial',
                  'error_avg': 'Error medio', 'error_blocks': 'Sesgo bloques', 'herding': 'Rebaño', 'event': 'Evento',
@@ -133,7 +136,7 @@ COLUMN_LABELS = {'pollster': 'Encuestadora', 'rating': 'Rating', 'quality': 'Con
 COLUMN_SUBLABELS = {'num_events': '(generales)'}
 
 
-def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] = None) -> list:
+def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] = None, rated: bool = True) -> list:
     """
     The columns of a table of the houses with their public label and description.
 
@@ -146,6 +149,9 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
         is written as «el primer bloque» / «el segundo».
     scale : dict, optional
         ``{'per_point', 'floor'}`` of the rubric, for the points rule of «Confianza»; left out without it.
+    rated : bool, optional
+        False for the path of a house without rating (``DROP_MTYPES``): without ``UNRATED_PATH_KEYS`` and with
+        descriptions that do not speak of a rating.
 
     Returns
     -------
@@ -193,6 +199,14 @@ def table_columns(kind: str, blocks: Sequence[str] = (), scale: Optional[dict] =
         'change': 'Cuánto subió o bajó el rating tras esa elección frente al que tenía al llegar: verde si subió, rojo si bajó.',
     }
     keys = PATH_COLUMNS if kind == 'path' else RANKING_COLUMNS
+    if not rated:
+        keys = [key for key in keys if key not in UNRATED_PATH_KEYS]
+        texts['n_polls'] = ('Cuántos sondeos suyos de esa elección se evaluaron frente al resultado; el diferencial, el '
+                            'error medio y el sesgo de bloques son la media de esos sondeos.')
+        texts['bias_dev_adj'] = (
+            'Cuánto se separó el sesgo de sus sondeos{} del de los sondeos comparables (misma fecha y tamaño), en la '
+            'escala del sesgo del modelo, no en puntos: negativo, menos sesgo que los demás; positivo, más. Un 2 ya es '
+            'una diferencia grande.'.format(that))
 
     return [{'key': key, 'label': COLUMN_LABELS[key], 'sub': COLUMN_SUBLABELS.get(key), 'text': texts[key]} for key in keys]
 
@@ -657,7 +671,7 @@ def casas_context(state: dict, active: str = '/casas') -> dict:
     return context
 
 
-def profile_kpis(current: dict, mtype: Optional[str], quality_support: str) -> list:
+def profile_kpis(current: dict, mtype: Optional[str], quality_support: str, rated: bool = True) -> list:
     """
     The KPI row of a pollster profile: its rating, its prior quality and its type.
 
@@ -669,15 +683,18 @@ def profile_kpis(current: dict, mtype: Optional[str], quality_support: str) -> l
         Label of the type of the pollster.
     quality_support : str
         Text under the prior quality: the points of its evaluation, or that it is not evaluated.
+    rated : bool, optional
+        False for the aggregators and online panels (``DROP_MTYPES``), which have no rating: no rating tile.
 
     Returns
     -------
     list of dict
-        Three ``{'label', 'value', 'unit', 'support', 'ok', 'color'}`` rows for ``_macros.kpis``.
+        Three ``{'label', 'value', 'unit', 'support', 'ok', 'color'}`` rows for ``_macros.kpis`` (two without
+        rating).
     """
-    return [
-        {'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '', 'support': 'entra así en el promedio',
-         'ok': False, 'color': None},
+    rating = [{'label': 'Rating', 'value': fmt_num(current.get('rating'), 1), 'unit': '',
+               'support': 'entra así en el promedio', 'ok': False, 'color': None}]
+    return (rating if rated else []) + [
         {'label': 'Confianza', 'value': fmt_num(current.get('quality'), 1), 'unit': '', 'support': quality_support,
          'ok': False, 'color': None},
         {'label': 'Tipo', 'value': mtype or '–', 'unit': '', 'support': '', 'ok': False, 'color': None},
@@ -770,7 +787,7 @@ def quality_card(record: Optional[dict], pollster: dict, criteria: dict) -> dict
         'evaluated': bool(record), 'rows': rows, 'points': points, 'max_points': total,
         'quality': record.get('quality') if record else None, 'status': status, 'draft': status == 'borrador',
         'checked_at': record.get('checked_at') if record else None, 'notes': (record.get('notes') or None) if record else None,
-        'informative': pollster.get('mtype') in ('aggr', 'online'),
+        'informative': pollster.get('mtype') in DROP_MTYPES,
         'support': f'{points} de {total} puntos' if record else 'sin evaluar',
         'floor': scale['floor'], 'per_point': scale['per_point'],
         'national': None if record else bool((pollster.get('quality') or 0) > scale['floor']),
@@ -806,7 +823,8 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
         ``rating`` of its last national ratings row, the next general election, ``None`` without ratings; and its
         ``quality`` of today, the catalogue one), ``quality`` (``quality_card``), ``path`` (the rows of the rating
         path table: the
-        ``points`` of ``rating_path`` from the newest), ``path_points`` (the points, ascending, for the chart),
+        ``points`` of ``rating_path`` from the newest), ``path_points`` (the points, ascending, for the chart; empty
+        for a house without rating, ``DROP_MTYPES``, whose ``path_columns`` lose ``UNRATED_PATH_KEYS``),
         ``today`` (``rating_path``, the end of the chart), ``last_table`` and
         ``last_consensus_table`` (``effects_table`` of the ``result`` and ``consensus`` of ``last_poll_records``:
         the deviations of its last poll in every election of the bullseye, read from the ``cycle`` and
@@ -886,12 +904,14 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
                           'event_date': latest[-1]['event_date'] if latest else None}
     criteria = load_criteria()
     context['quality'] = quality_card(profile.get('quality'), profile['pollster'], criteria)
-    context['kpis'] = profile_kpis(context['current'], context['mtype'], context['quality']['support'])
-    # the columns of the rating path (header tooltips and glossary) and the colours of the bar of «Sesgo bloques»
-    context['path_columns'] = table_columns('path', blocks, criteria['scale'])
+    rated = not context['quality']['informative']
+    context['kpis'] = profile_kpis(context['current'], context['mtype'], context['quality']['support'], rated)
+    # the columns of the rating path (header tooltips and glossary) and the colours of the bar of «Sesgo bloques»; a
+    # house without rating (`DROP_MTYPES`) keeps the table of its errors, without the rating, its change nor the chart
+    context['path_columns'] = table_columns('path', blocks, criteria['scale'], rated)
     context['block_colors'] = block_bar_colors(context['meta'], context['catalog'])[1]
     context['path'] = path['points'][::-1]
-    context['path_points'] = path['points']
+    context['path_points'] = path['points'] if rated else []
     context['today'] = path['today']
     context['last_table'] = effects_table(last_records, label, order=order, key='result')
     context['last_consensus_table'] = effects_table(last_records, label, order=order, key='consensus')
@@ -905,7 +925,7 @@ def casa_context(state: dict, pollster_id: int, active: str = '/casas', today: O
     context['blocks'] = blocks
     context['table_blocks'] = table_blocks(blocks)
     context['analysis_missing'] = not any(scope['analysis'] for scope in scopes)
-    context['initial'] = {'state': full, 'meta': context['meta'], 'path': path['points'], 'today': path['today'],
+    context['initial'] = {'state': full, 'meta': context['meta'], 'path': context['path_points'], 'today': path['today'],
                           'bullseye': bullseye, 'blocks': blocks, 'scopes': bullseye_scopes}
 
     return context

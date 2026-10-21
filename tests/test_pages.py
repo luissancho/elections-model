@@ -1820,6 +1820,7 @@ def test_eleccion_detail_with_model_but_without_series_shows_a_notice(events_sit
     page = html(body)
     assert status == 200 and 'El promedio de este ciclo no está publicado todavía' in page
     assert 'id="series"' in page and 'id="series-chart"' not in page and page.count('/api/v1/events/es/2023-07-23/') == 7 + 2
+    assert 'series-download' not in page  # nothing to download without the series
     data = initial(body)
     assert 'series' not in data and data['model_last']['horizon'] == 6 and 'tr class="fixed"' in page
 
@@ -2802,6 +2803,52 @@ def test_promedios_hemicycle_card_offers_a_download_button_hidden_without_js(api
     assert 'hemicycle-download' not in html(call(api, '/')[2])
 
 
+def test_promedios_series_card_offers_a_download_button_hidden_without_js(api):
+    """El promedio de sondeos se descarga como PNG firmado (Luis, 2026-10-21), con el mismo botón que el hemiciclo:
+    el subtítulo nombra el gráfico (con la proyección en el modo Elección) y el fichero, el promedio."""
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    card = page[page.index('id="series"'):page.index('id="series-chart"')]
+    button = re.search(r'<header class="card-head"><div class="card-tools"><button type="button" class="tool-btn" '
+                       r'id="series-download" hidden((?: data-\w+="[^"]*")+)>(.*?)</button></div><h2>Promedio de sondeos ', card)
+    assert button, card
+    attrs = dict(re.findall(r'data-(\w+)="([^"]*)"', button.group(1)))
+    assert attrs['title'] == 'Elecciones generales · 29 nov 2026'
+    assert re.fullmatch(r'Promedio de sondeos · Estimación a \d+ \w+ 2026', attrs['subtitle']), attrs
+    assert attrs['sign'] == 'demoscopio.es · @luis_sancho'
+    assert attrs['file'] == 'demoscopio-promedio-es-2026-10-08.png'
+    assert button.group(2) == '<svg aria-hidden="true"><use href="#i-download"/></svg>Descargar'
+    forecast = html(call(api, '/es', query='mode=forecast')[2]).replace('\n', ' ')
+    assert 'data-subtitle="Promedio de sondeos y proyección · Pronóstico para el 29 nov 2026"' in forecast
+
+
+def download_attrs(page, button_id, heading):
+    """Atributos `data-*` del botón de descarga `button_id` de una cabecera de tarjeta cuyo título empieza por
+    `heading`, o None si no está."""
+    button = re.search(r'<header class="card-head"><div class="card-tools"><button type="button" class="tool-btn" '
+                       r'id="%s" hidden((?: data-\w+="[^"]*")+)>.*?</button></div><h2>%s' % (button_id, re.escape(heading)), page)
+    return dict(re.findall(r'data-(\w+)="([^"]*)"', button.group(1))) if button else None
+
+
+def test_promedios_pollster_card_offers_a_download_button_named_after_the_house_in_js(events_site):
+    """La encuestadora frente al promedio también se descarga (Luis, 2026-10-21): el servidor deja el subtítulo
+    sin la casa, que el JS antepone con la elegida, y el JS le añade al fichero su nombre."""
+    page = html(call(events_site, '/es')[2]).replace('\n', ' ')
+    attrs = download_attrs(page, 'pollster-download', 'Una encuestadora frente al promedio')
+    assert attrs, page[page.index('id="pollster"'):page.index('id="pollster"') + 800]
+    assert attrs['title'] == 'Elecciones generales · 29 nov 2026'
+    assert re.fullmatch(r'frente al promedio · Estimación a \d+ \w+ 2026', attrs['subtitle']), attrs
+    assert attrs['file'] == 'demoscopio-encuestadora-es-2026-10-08.png' and attrs['sign'] == 'demoscopio.es · @luis_sancho'
+
+
+def test_eleccion_series_card_offers_a_download_button(events_site):
+    """El promedio del detalle de una elección pasada se descarga con el nombre y la fecha de la elección, el
+    horizonte al que se congeló y el resultado (sin serie no hay botón: el test del aviso)."""
+    page = html(call(events_site, '/elecciones/es/generales/2023-07')[2]).replace('\n', ' ')
+    attrs = download_attrs(page, 'series-download', 'Promedio de sondeos')
+    assert attrs == {'title': 'Generales 2023 · 23 jul 2023', 'subtitle': 'Promedio de sondeos a 6 días y resultado oficial',
+                     'sign': 'demoscopio.es · @luis_sancho', 'file': 'demoscopio-promedio-es-2023-07-23.png'}
+
+
 def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(api):
     page = html(call(api, '/es/escanos')[2])
     table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]
@@ -3080,6 +3127,20 @@ def test_escanos_table_draws_the_seat_range_and_the_ridge_is_compact(api):
     assert 'class="rng"' in table and '<u style="left: 50.3%"></u>' in table and '120–150' in table
     assert '<fieldset class="pills lg" id="coalition-parties">' in page
     assert '<p class="chip" id="coalition-result">' in page
+
+
+def test_escanos_majority_calculator_draws_the_bar_above_the_histogram(api):
+    """La calculadora se llama «de mayorías» (Luis, 2026-10-21) y lleva encima del histograma la barra del reparto
+    central, con los partidos marcados delante; Promedios la nombra igual."""
+    page = html(call(api, '/es/escanos')[2]).replace('\n', ' ')
+    card = page[page.index('id="coalition"'):page.index('id="districts"')]
+    assert '<h2>Calculadora de mayorías ' in card and 'coaliciones' not in card
+    assert card.index('id="coalition-result"') < card.index('id="coalition-bar"') < card.index('id="coalition-chart"')
+    assert re.search(r'<div class="chart" id="coalition-bar" role="img" aria-label="[^"]+"></div>', card)
+    assert 'los partidos marcados delante, en color, y el resto detrás, en gris' in re.sub(r'\s+', ' ', card)
+    assert 'la suma de esas medianas no tiene por qué coincidir con la mediana de la suma' in re.sub(r'\s+', ' ', card)
+    promedios = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
+    assert 'la calculadora de mayorías están en la pestaña Escaños' in promedios and 'calculadora de coaliciones' not in promedios
 
 
 def test_history_figures_are_a_kpi_row(history_site):

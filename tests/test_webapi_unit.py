@@ -526,7 +526,7 @@ def test_query_polls_defaults_to_the_next_event_and_truncates(fresh_app, monkeyp
     use_database(fresh_app)
     seen = []
 
-    def fake_series(scope, event_dates, drop_contexts=None):
+    def fake_series(scope, event_dates, drop_mtypes=None, drop_contexts=None):
         seen.append((scope, event_dates))
         return pd.DataFrame({
             'event_date': pd.to_datetime(['2026-11-29'] * 3),
@@ -592,7 +592,7 @@ def test_query_cache_keys_are_bounded_per_scope(fresh_app, monkeypatch):
     use_database(fresh_app)
     monkeypatch.setattr(webapi.queries, 'get_ratings', lambda scope: ratings_frame())
     monkeypatch.setattr(webapi.queries, 'get_next_event_date', lambda scope: '2026-11-29')
-    monkeypatch.setattr(webapi.queries, 'get_poll_series', lambda scope, event, drop_contexts=None: pd.DataFrame({'date': [], 'pollster_id': []}))
+    monkeypatch.setattr(webapi.queries, 'get_poll_series', lambda scope, event, drop_mtypes=None, drop_contexts=None: pd.DataFrame({'date': [], 'pollster_id': []}))
     webapi.query_ratings('es', '2023-07-23')
     webapi.query_polls('es', pollster=2, limit=5)
     webapi.query_polls('es', limit=50)

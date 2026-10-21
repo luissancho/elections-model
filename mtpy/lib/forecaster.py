@@ -22,6 +22,7 @@ from ..core.utils.dataviz import (
     set_title, table_styles
 )
 
+from .mtypes import DROP_MTYPES
 from .utils import normal_update, party_roots
 from .data import (
     get_event_dates, get_event_params, get_event_series, get_poll_series, get_parties, get_pollsters,
@@ -99,7 +100,7 @@ class Forecaster(Core):
         self,
         scope: str,
         event_date: str,
-        drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+        drop_mtypes: Optional[list[str]] = list(DROP_MTYPES),
         drange: Optional[tuple[int, int] | int] = None,
         alpha: float = 0.05,
         bmap: Optional[dict[str, Any] | str] = None,

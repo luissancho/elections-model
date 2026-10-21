@@ -2,9 +2,10 @@
 // of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window and view controls
 // and the poll points (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
 import {blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
-import {setWindow} from '../charts/series.js';
+import {chartZoom, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
-import {mapNames, markSegments, tryDraw} from './common.js';
+import {wireDownload} from '../share.js';
+import {mapNames, markSegments, showError, tryDraw} from './common.js';
 import {markLegend, renderLegend} from './legend-dom.js';
 
 /** Choices of the window control, in the order of `WINDOW_DAYS` plus the whole cycle. */
@@ -92,15 +93,17 @@ export function fillLegend(legendEl, current, selected, chart, inks = {}) {
 /**
  * Draw the poll average and wire its controls: view, window and poll-points radios and the pill legend, which
  * selects the parties or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash.
- * Without the poll-points control (`#series-polls`) the points are always drawn.
+ * Without the poll-points control (`#series-polls`) the points are always drawn. With `imageOf` and a download
+ * button (`#series-download`), the button saves the chart as shown as a signed image (`share.js`).
  *
  * @param {object} views `seriesViews` of the page
  * @param {object} state `{view, window, selected, polls}` parsed from the hash
  * @param {function} render draws a chart: `(el, polls, chartState) => chart`
- * @param {object} options `anchor` (ISO date the window control counts back from) and `inks` (text colour
- *   over the colour of each name, for the pills; `initial.inks`)
+ * @param {object} options `anchor` (ISO date the window control counts back from), `inks` (text colour
+ *   over the colour of each name, for the pills; `initial.inks`) and `imageOf` (the option of the image:
+ *   `(polls, chartState, zoom) => option`, `zoom` being the `chartZoom` of the chart on screen)
  */
-export function wireAverage(views, state, render, {anchor, inks = {}}) {
+export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = null}) {
   const mainEl = document.getElementById('series-chart');
   const legendEl = document.getElementById('series-legend');
   const windowSet = document.getElementById('series-window');
@@ -114,11 +117,16 @@ export function wireAverage(views, state, render, {anchor, inks = {}}) {
     window.history.replaceState(null, '', pathname + search + seriesHash(state));
   }
 
+  /** Polls part of the current view, without polls when the points are hidden (so the axis adapts to the lines
+   * and bands alone). */
+  function shownPolls() {
+    const polls = views[state.view].polls;
+    return pollsSet && state.polls === false ? {...polls, polls: []} : polls;
+  }
+
   /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
   function draw() {
-    const polls = views[state.view].polls;
-    // hidden poll points: the same polls part without polls, so the axis adapts to the lines and bands alone
-    const drawn = render(mainEl, pollsSet && state.polls === false ? {...polls, polls: []} : polls, state);
+    const drawn = render(mainEl, shownPolls(), state);
     if (!chart) {
       chart = drawn;
       chart.on('legendselectchanged', (event) => {
@@ -143,6 +151,9 @@ export function wireAverage(views, state, render, {anchor, inks = {}}) {
   }
   markSegments();
   tryDraw(draw, 'the poll average');
+  if (imageOf) {
+    wireDownload(document.getElementById('series-download'), () => imageOf(shownPolls(), state, chartZoom(chart)), showError);
+  }
 
   // The controls only work with JavaScript, so the server renders them hidden.
   if (windowSet) {

@@ -1,6 +1,6 @@
-// Seats page: the ridge of the party seat distributions, stacked blocks, coalition calculator, vote fan and seat evolution, drawn
+// Seats page: the ridge of the party seat distributions, stacked blocks, majority calculator, vote fan and seat evolution, drawn
 // from the data embedded by the server.
-import {fmtInt, fmtProb, fmtRange} from '../format.js';
+import {fmtInt} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {THEME} from '../charts/base.js';
 import {renderEvolution} from '../charts/evolution.js';
@@ -11,7 +11,7 @@ import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
-import {coalitionHash, coalitionSeats, parseCoalition, summarize} from '../seats.js';
+import {coalitionCaption, coalitionHash, coalitionSeats, coalitionText, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
@@ -19,18 +19,52 @@ const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 const PARTY_AXIS_SHARE = 0.6;
 const BLOCK_AXIS_SHARE = 0.8;
 
+/** Order of the party rows of the seats bar and the ridges: by headline seats, then by mean seats. */
+const bySeats = (a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ?? 0) - (a.seats_mean ?? 0));
+
 /**
- * Wire the coalition calculator: restore the selection of the URL fragment, then recompute the summary
- * and the histogram of the marked parties on load and on every change. Only a change rewrites the
- * fragment, so a link to another section (`#districts`) survives the load.
+ * Data of the party bar of the central scenario, shared by «Reparto de escaños» and the majority calculator: the
+ * parties with seats and a distribution, in the catalogue order, with their colours, full names and seat
+ * differences against the last published election.
+ *
+ * @param {object} initial the page's initial data (`summary`, `dist`, `deltas`)
+ * @param {Catalog} catalog party catalogue of the run
+ * @param {object} colors `{party: colour}`
+ * @returns {object} `names` (by seats), `rows` (`{name, seats}` in the catalogue order), `colors`, `fullnames`,
+ *   `deltas` and `year`
+ */
+function partyBar(initial, catalog, colors) {
+  const {summary, dist} = initial;
+  const partyRows = (summary.parties || []).filter((row) => row.seats !== null && row.seats !== undefined);
+  const names = [...partyRows].sort(bySeats).map((row) => row.name).filter((name) => dist.parties.includes(name));
+  const deltas = initial.deltas || {parties: {}, year: null};
+  return {
+    names,
+    rows: catalog.order(names).map((name) => ({name, seats: partyRows.find((row) => row.name === name).seats})),
+    colors,
+    fullnames: mapNames(names, (name) => catalog.fullname(name)),
+    deltas: deltas.parties,
+    year: deltas.year,
+  };
+}
+
+/**
+ * Wire the majority calculator: restore the selection of the URL fragment, then recompute the text
+ * (`coalitionText`), the bar of the central scenario (the marked parties first, in colour, and the rest after
+ * them in grey) and the histogram of the marked parties with its caption (`coalitionCaption`) on load and on
+ * every change. Only a change rewrites the fragment, so a link to another section (`#districts`) survives the
+ * load.
  *
  * @param {object} dist the dist part
  * @param {number} majority seats of the absolute majority
+ * @param {object} bar `partyBar` of the page
+ * @param {number} nSeats seats of the chamber
  */
-function wireCoalition(dist, majority) {
+function wireCoalition(dist, majority, bar, nSeats) {
   const fieldset = document.getElementById('coalition-parties');
   const result = document.getElementById('coalition-result');
   const chart = document.getElementById('coalition-chart');
+  const barEl = document.getElementById('coalition-bar');
   if (!fieldset || !result || !chart) {
     return;
   }
@@ -47,6 +81,14 @@ function wireCoalition(dist, majority) {
     const names = boxes.filter((box) => box.checked).map((box) => box.value);
     const values = coalitionSeats(dist, names);
     const stats = summarize(values, majority);
+    if (barEl) {
+      const muted = bar.rows.map((row) => row.name).filter((name) => !names.includes(name));
+      tryDraw(() => renderStacked(barEl, [
+        ...bar.rows.filter((row) => names.includes(row.name)), ...bar.rows.filter((row) => muted.includes(row.name)),
+      ], {
+        colors: bar.colors, fullnames: bar.fullnames, majority, total: nSeats, deltas: bar.deltas, year: bar.year, muted,
+      }), 'the majority bar');
+    }
     result.classList.toggle('ok', Boolean(stats) && stats.pMajority >= 0.5);
     if (!stats) {
       result.textContent = EMPTY_COALITION;
@@ -54,16 +96,11 @@ function wireCoalition(dist, majority) {
         chart.__chart.clear();
       }
     } else {
-      const count = `${names.length} ${names.length === 1 ? 'partido' : 'partidos'}`;
-      result.textContent = [
-        count,
-        `mediana ${fmtInt(stats.median)} escaños`,
-        `rango 95% ${fmtRange(stats.lo, stats.hi, 0)}`,
-        `mayoría absoluta (${fmtInt(majority)}): ${fmtProb(stats.pMajority)}`,
-      ].join(' · ');
+      const central = bar.rows.filter((row) => names.includes(row.name)).reduce((sum, row) => sum + row.seats, 0);
+      result.textContent = coalitionText(names.length, central, stats);
       renderHistogram(chart, values, {
         majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.barColor, bounds: true,
-        markLabels: false,
+        markLabels: false, caption: coalitionCaption(stats),
       });
     }
     return names;
@@ -160,9 +197,7 @@ function wireSeats(initial, catalog, colors) {
   const {meta, summary, dist} = initial;
   const majority = meta.majority ?? summary.majority;
   const nSeats = meta.n_seats ?? summary.n_seats;
-  const partyRows = (summary.parties || []).filter((row) => row.seats !== null && row.seats !== undefined);
-  const bySeats = (a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ?? 0) - (a.seats_mean ?? 0));
-  const partyNames = [...partyRows].sort(bySeats).map((row) => row.name).filter((name) => dist.parties.includes(name));
+  const parties = partyBar(initial, catalog, colors);
   const blockRows = (summary.blocks || []).filter((row) => row.seats !== null && row.seats !== undefined);
   const blockParties = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : {};
   const blockColors = mapNames(blockRows.map((row) => row.name), (name) => catalog.blockColor(name));
@@ -171,11 +206,11 @@ function wireSeats(initial, catalog, colors) {
   const views = {
     partidos: {
       container: 'seats-parties',
-      bar: catalog.order(partyNames).map((name) => ({name, seats: partyRows.find((row) => row.name === name).seats})),
+      bar: parties.rows,
       colors,
-      deltas: deltas.parties,
-      fullnames: mapNames(partyNames, (name) => catalog.fullname(name)),
-      ridges: () => ridgeData(dist, partyNames, {majority, range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)]}),
+      deltas: parties.deltas,
+      fullnames: parties.fullnames,
+      ridges: () => ridgeData(dist, parties.names, {majority, range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)]}),
     },
     bloques: {
       container: 'seats-blocks',
@@ -230,7 +265,7 @@ function wireSeats(initial, catalog, colors) {
   }
 }
 
-/** Draw the seats card, the fan and the evolution, and wire the coalition calculator and the territory table. */
+/** Draw the seats card, the fan and the evolution, and wire the majority calculator and the territory table. */
 function paint() {
   const initial = readInitial();
   const {state, meta, summary, dist, fan, runs} = initial;
@@ -245,7 +280,7 @@ function paint() {
 
   tryDraw(() => wireSeats(initial, catalog, colors), 'the seats card');
 
-  tryDraw(() => wireCoalition(dist, majority), 'the coalition calculator');
+  tryDraw(() => wireCoalition(dist, majority, partyBar(initial, catalog, colors), nSeats), 'the majority calculator');
   tryDraw(() => wireTerritory(initial, catalog), 'the territory table');
 
   const main = (catalog.bmaps.main || []).filter((name) => fanNames.includes(name));

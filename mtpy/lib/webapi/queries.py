@@ -7,6 +7,7 @@ import pandas as pd
 from ...core.api import HttpError
 from ...core.app import App
 from .. import bundle
+from ..mtypes import DROP_MTYPES
 from ..quality import split_points
 from .caches import DEFAULT_TTL, TTLCache, settings
 from .checks import DEFAULT_LIMIT
@@ -440,7 +441,8 @@ def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        One row per pollster of the event, with a fresh index; empty when there is none.
+        One row per pollster of the event but those of a ``DROP_MTYPES`` type (aggregators and online panels,
+        which have no rating), with a fresh index; empty when there is none.
 
     Raises
     ------
@@ -453,7 +455,11 @@ def query_ratings(scope: str, event: Optional[str] = None) -> pd.DataFrame:
     if ratings.empty or target is None:
         return ratings
 
-    return ratings.loc[_event_dates(ratings) == pd.Timestamp(target)].reset_index(drop=True)
+    rows = _event_dates(ratings) == pd.Timestamp(target)
+    if 'mtype' in ratings.columns:
+        rows &= ~ratings['mtype'].isin(DROP_MTYPES)
+
+    return ratings.loc[rows].reset_index(drop=True)
 
 
 def polls_event(scope: str, event: Optional[str] = None) -> Optional[str]:
@@ -489,7 +495,8 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     ``pct`` of each party as a column); ``get_poll_results`` returns one row per poll and
     party instead. The polls of the event are cached once; ``pollster`` and ``limit`` are
     applied on that frame. Polls tagged with a ``WEB_DROP_CTYPES`` context (published during
-    the ban, exit polls) are dropped at the source.
+    the ban, exit polls) and those of the ``DROP_MTYPES`` pollsters (aggregators and online
+    panels, out of the average) are dropped at the source.
 
     Parameters
     ----------
@@ -517,7 +524,8 @@ def query_polls(scope: str, event: Optional[str] = None, pollster: Optional[int]
     if date is None:
         return pd.DataFrame()
 
-    polls = _query(('polls', scope, date), lambda: get_poll_series(scope, date, drop_contexts=list(WEB_DROP_CTYPES)))
+    polls = _query(('polls', scope, date), lambda: get_poll_series(
+        scope, date, drop_mtypes=list(DROP_MTYPES), drop_contexts=list(WEB_DROP_CTYPES)))
 
     if pollster is not None:
         polls = _rows_of(polls, 'pollster_id', pollster)

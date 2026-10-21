@@ -192,6 +192,7 @@ def bare_computer():
     c.keys = ['event_date', 'date', 'pollster_id', 'sponsor_id']
     c.pos_decay, c.year_decay = .5, .9
     c.bias_dev_tau, c.bias_dev_sigma, c.verbose = .01, .014, 0
+    c.drop_mtypes = []
     c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [60.] * 4})
     return c
 
@@ -540,3 +541,71 @@ def test_unsorted_input_keeps_its_order():
 
 def test_without_wspan_only_the_overlap_rule_applies():
     assert overweights([(-31, -30), (-28, -27), (-25, -24)], wspan=None).tolist() == [1, 1, 1]
+
+
+# --- 2026-10-21: agregadores y paneles online (`DROP_MTYPES`): sus medias se miden, sin rating ---
+
+def excluded_computer():
+    """Computer de ratings en el que B es un panel online: no entra en el promedio ni tiene rating."""
+    c = bare_computer()
+    c.drop_mtypes = ['aggr', 'online']
+    c.pollsters = c.pollsters.assign(mtype=[None, 'online', None, None])
+    return c
+
+
+def test_an_excluded_pollster_keeps_its_means_without_a_rating():
+    """B (online) se mide como cualquier casa: sondeos, elecciones, errores y diferencial; pero sin rating ni peso."""
+    c = excluded_computer()
+    out = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    b = out.loc[2]
+    assert b['num_polls'] == 1 and b['num_events'] == 1
+    assert b['error_avg'] == pytest.approx(.03) and b['bias'] == pytest.approx(.15)
+    assert b['bias_dev_adj'] < 0  # B se desvía -0.01: menos sesgo que el consenso
+    assert np.isnan(b['rating_adj']) and np.isnan(b['rating']) and np.isnan(b['weight_rating'])
+    assert not np.isnan(out.loc[1, 'rating']) and not np.isnan(out.loc[1, 'weight_rating'])  # A sí lo tiene
+
+
+def test_an_excluded_pollster_does_not_move_the_weights_of_the_others():
+    """La media con la que se normaliza `weight_rating` es la de las casas con rating: sin B, lo mismo."""
+    c = excluded_computer()
+    with_b = c.rate_events(pool(ES19), [JULY23], {'es': 1.}, c.pollsters).set_index('pollster_id')
+    plain = bare_computer()
+    others = plain.pollsters.loc[plain.pollsters['name'] != 'B']
+    without_b = plain.rate_events(pool(ES19[:1]), [JULY23], {'es': 1.}, others).set_index('pollster_id')
+    for col in ('rating', 'weight_rating'):
+        assert with_b.loc[[1, 3, 4], col].tolist() == pytest.approx(without_b.loc[[1, 3, 4], col].tolist()), col
+
+
+def test_the_rating_pool_keeps_the_polls_of_the_excluded_pollsters():
+    """El pool del rating lleva también los sondeos de las casas excluidas, para medir sus medias."""
+    c = excluded_computer()
+    c.drange, c.n_last, c.drop_ctypes, c.names = None, None, ['wban', 'exit'], ['PP']
+    c.series = pool(ES19).droplevel('event_scope').assign(
+        mtype=[None, 'online'], ctype=None, featured=True, computed=True, PP=[30., 31.], rating=np.nan,
+        weight_rating=np.nan)
+    out = c.rating_pool(['es'])
+    assert out.index.get_level_values('pollster_id').tolist() == [1, 2]
+    assert out.index.get_level_values('event_scope').unique().tolist() == ['es']
+
+
+def test_the_sample_median_of_an_event_ignores_the_excluded_pollsters():
+    """El peso por muestra se mide contra la mediana de las casas que cuentan: un panel enorme no lo mueve."""
+    c = bare_computer()
+    c.drop_mtypes, c.ol_max, c.ol_dev, c.wspan = ['aggr', 'online'], 100000, 3, None
+    c.pollsters = pd.DataFrame({'id': [1, 2], 'name': ['A', 'B'], 'mtype': ['cati', 'online'], 'quality': [60., 60.]})
+    event = pd.Timestamp('2026-11-29')
+    c.ratings = pd.DataFrame({'rating': [], 'weight_rating': []},
+                             index=pd.MultiIndex.from_tuples([], names=['event_date', 'pollster_id']))
+    c.series = pd.DataFrame({
+        'event_date': event, 'date': pd.to_datetime(['2026-11-29', '2026-10-01', '2026-10-08', '2026-10-10']),
+        'pollster_id': [0, 1, 1, 2], 'sponsor_id': 0, 'pollster': [None, 'A', 'A', 'B'], 'sponsor': None,
+        'start_date': pd.to_datetime([None, '2026-09-28', '2026-10-05', '2026-10-07']),
+        'end_date': pd.to_datetime([None, '2026-10-01', '2026-10-08', '2026-10-10']),
+        'ctype': None, 'sample_size': [np.nan, 1000., 2000., 9000.], 'computed': False,
+        'featured': False, 'mtype': None, 'proc_sample': np.nan,
+        'weight_sample': np.nan, 'weight_over': np.nan, 'weight_rating': np.nan, 'rating': np.nan,
+    }).set_index(c.keys)
+    out = c.compute_weights(save=False, overwrite=True).reset_index().set_index('date')
+    # mediana de A: 1500, no 2000 (la de los tres sondeos)
+    assert out.loc[pd.Timestamp('2026-10-01'), 'weight_sample'] == pytest.approx(round(np.sqrt(1000 / 1500), 2))
+    assert out.loc[pd.Timestamp('2026-10-08'), 'weight_sample'] == pytest.approx(round(np.sqrt(2000 / 1500), 2))

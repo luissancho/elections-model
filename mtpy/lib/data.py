@@ -11,6 +11,7 @@ from ..models.elections import (
     Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
     Pollsters, PollstersHerding, PollstersParties, PollstersQuality, PollstersRatings, Parties, Scopes
 )
+from .mtypes import DROP_MTYPES
 from .quality import count_national_events, load_criteria, pollsters_quality_values, prior_quality, read_quality
 
 
@@ -625,9 +626,9 @@ def get_ratings(
 
     keys = ['event_date', 'pollster_id']
     ratings = ratings.merge(
-        pollsters[['id', 'name']], left_on='pollster_id', right_on='id', how='left'
+        pollsters[['id', 'name', 'mtype']], left_on='pollster_id', right_on='id', how='left'
     ).rename(columns={'name': 'pollster'})[
-        keys + ['pollster'] + [col for col in ratings.columns if col not in keys]
+        keys + ['pollster', 'mtype'] + [col for col in ratings.columns if col not in keys]
     ].sort_values(keys, ignore_index=True)
 
     if is_single:
@@ -762,7 +763,9 @@ def save_ratings_data(
 
     pmodel = Pollsters()
     dp = get_pollsters()
-    dp['rating'] = dp['id'].map(rlast).fillna(0).astype(int)
+    # aggregators and online panels have no rating (`DROP_MTYPES`): null, not the 0 of a house without evidence
+    dp['rating'] = dp['id'].map(rlast).fillna(0).astype(int).astype('Int64')
+    dp.loc[dp['mtype'].isin(DROP_MTYPES), 'rating'] = pd.NA
 
     # Use the model formatter to get the data in the correct types to be saved
     dp = pmodel.format_data(dp, int_type='nullable', bin_type='nullable', sort=True)
@@ -980,7 +983,7 @@ def save_house_effects_data(
 def update_featured(
     scope: str,
     min_polls: int = 10,
-    drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+    drop_mtypes: Optional[list[str]] = list(DROP_MTYPES),
     drop_ctypes: Optional[list[str]] = ['wban', 'exit']
 ) -> int:
     """

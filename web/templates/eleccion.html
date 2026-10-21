@@ -117,7 +117,10 @@
         {% endif %}
       </div>
       {% if has_model %}
-      {{ m.card_start('series', 'Promedio de sondeos', 'La intención de voto de cada partido a lo largo del ciclo según el promedio ponderado del modelo, congelado a ' ~ series_horizon|int ~ ' días de la elección, y el resultado oficial al final.') }}
+      {{ m.card_start('series', 'Promedio de sondeos', 'La intención de voto de cada partido a lo largo del ciclo según el promedio ponderado del modelo, congelado a ' ~ series_horizon|int ~ ' días de la elección, y el resultado oficial al final.',
+                      tools=m.download_button('series-download', (event.name ~ ' · ' if event.name else '') ~ event.event_date|date,
+                                              'Promedio de sondeos a ' ~ series_horizon|int ~ ' días y resultado oficial', site_host ~ ' · ' ~ author_handle,
+                                              site_title|lower ~ '-promedio-' ~ event.scope ~ '-' ~ event.event_date ~ '.png') if has_series else None) }}
         {% if has_series %}
         <div class="series-controls">
           {% if series_blocks %}

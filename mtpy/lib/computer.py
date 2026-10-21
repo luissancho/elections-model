@@ -26,6 +26,7 @@ from .data import (
     get_herding, save_herding_data,
     get_scope_parent, get_event_data, get_national_events
 )
+from .mtypes import DROP_MTYPES
 from .quality import count_national_events, load_criteria, prior_quality, read_quality
 from .utils import (
     build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
@@ -361,7 +362,7 @@ class Computer(Core):
         self,
         scope: str,
         event_dates: Optional[list[str]] = None,
-        drop_mtypes: Optional[list[str]] = ['aggr', 'online'],
+        drop_mtypes: Optional[list[str]] = list(DROP_MTYPES),
         drop_ctypes: Optional[list[str]] = ['wban', 'exit'],
         drange: Optional[tuple[int, int] | int] = None,
         n_last: Optional[int] = None,
@@ -934,8 +935,11 @@ class Computer(Core):
         ).data.round().astype(int)
 
         # Compute the weight based on the sample size of the polls, using the square root of the ratio between
-        # each poll's sample size and the median sample size of all the polls published for the same event.
-        sample_medians = df.groupby('event_date')['proc_sample'].median()
+        # each poll's sample size and the median sample size of all the polls published for the same event (those of
+        # the dropped methodology types do not count: a big online panel would lower the weight of every other poll).
+        counted = df.loc[~df['mtype'].isin(self.drop_mtypes)]
+        sample_medians = counted.groupby('event_date')['proc_sample'].median().reindex(df['event_date'].unique())
+        sample_medians = sample_medians.fillna(df.groupby('event_date')['proc_sample'].median())
         df['weight_sample'] = df.apply(
             lambda x: np.sqrt(x['proc_sample'] / sample_medians.loc[x['event_date']]),
             axis=1
@@ -1404,7 +1408,8 @@ class Computer(Core):
         scopes: list[str]
     ) -> pd.DataFrame:
         """
-        Polls that feed the ratings: the filtered polls (`filter_polls`) of each scope, without the party
+        Polls that feed the ratings: the filtered polls (`filter_polls`, the dropped methodology types included,
+        which only get their means) of each scope, without the party
         columns, indexed by `event_scope` plus the keys of the series. The scale of the errors is the internal
         one of the rating algorithm ([0, 1] and log odds ratio).
 
@@ -1429,7 +1434,8 @@ class Computer(Core):
                     n_last=self.n_last, verbose=0, path=self.path
                 ).build_series()
 
-            polls = comp.filter_polls().drop(columns=columns + comp.names + ['-'], errors='ignore')
+            # The polls of the dropped methodology types too: they get their means, but no rating (`pollster_ratings`)
+            polls = comp.filter_polls(drop_mtypes=[]).drop(columns=columns + comp.names + ['-'], errors='ignore')
             # Scale absolute percentage errors to the range [0, 1]
             polls[['error_avg', 'error_blocks', 'error_within']] = polls[['error_avg', 'error_blocks', 'error_within']].div(100)
             # Scale bias deviations to the log odds ratio scale
@@ -1621,7 +1627,9 @@ class Computer(Core):
         (bayesian update with a prior of standard deviation `bias_dev_tau`), converted into
         `rating_adj = Phi(-d / tau)` and blended with the prior quality `Q` as `R = (W * R_aj + k * Q) / (W + k)`,
         with `k = (sigma / tau)^2`. Finally, `weight_rating = log1p(R) / log1p(mean R)` is the weight of the house
-        in the polling average. The descriptive means (`error_*`, `bias_*`) stay weighted by poll.
+        in the polling average. The descriptive means (`error_*`, `bias_*`) stay weighted by poll. The pollsters of a
+        `drop_mtypes` type (aggregators and online panels, whose polls never enter the average) keep their means but
+        get no `rating_adj`, `rating` nor `weight_rating`, and stay out of `mean R`.
 
         See `compute_ratings` for the scopes feeding the rating of each event.
 
@@ -1634,7 +1642,7 @@ class Computer(Core):
             level `event_scope`); 1 for every poll by default.
         pollsters : pd.DataFrame, optional
             Pollsters to rate (`name`, `quality` from 0 to 100 and, optionally, `num_national_events`, the general
-            elections polled before the date of the quality); those of the series by default.
+            elections polled before the date of the quality, and `mtype`); those of the series by default.
 
         Returns
         -------
@@ -1716,6 +1724,11 @@ class Computer(Core):
         ) / (
             dr['num_events_w'] + k
         )
+        # Aggregators and online panels (`drop_mtypes`) keep their means but get no rating: their polls never enter
+        # the average, so they stay out of the mean that normalises the weight of the others too
+        if 'mtype' in pollsters.columns:
+            excluded = pollsters.loc[pollsters['mtype'].isin(self.drop_mtypes or []), 'name']
+            dr.loc[dr.index.isin(excluded), ['rating_adj', 'rating']] = np.nan
         # Compute the weight that each pollster's predictions will have in the polling average forecaster.
         # The weight is computed using the logarithm of the rating, which compresses the differences between the
         # best pollsters while still separating them from the worst ones.

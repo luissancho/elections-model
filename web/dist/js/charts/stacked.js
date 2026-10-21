@@ -4,35 +4,42 @@ import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDelta, fmtInt} from '../format.js';
 
 const LABEL_MIN_SHARE = 0.05;
+// The segments left out of a selection (`muted`): grey, labelled in the muted text colour.
+const MUTED_COLOR = '#d3d7df';
 
 /**
  * ECharts option of `rows` as consecutive segments of a single horizontal bar from 0 to `total`, labelled inside
  * when wide enough (name, seats and, when known, the difference against the last election), with a dashed mark
- * line at `majority`.
+ * line at `majority`. The `muted` segments (those a selection leaves out, as in the majority calculator) are
+ * drawn in grey.
  *
  * @param {{name: string, seats: number}[]} rows segments, in drawing order
  * @param {object} opts `colors` ({name: colour}), `fullnames` ({name: full name}, tooltip), `majority`,
  *   `total` (seats of the chamber, axis maximum), `deltas` ({name: seats difference against the last election})
- *   and `year` (of that election, for the tooltip)
+ *   `year` (of that election, for the tooltip) and `muted` (names drawn in grey)
  * @returns {object} the option
  */
-export function stackedOption(rows, {colors = {}, fullnames = {}, majority = null, total, deltas = null, year = null} = {}) {
+export function stackedOption(rows, {
+  colors = {}, fullnames = {}, majority = null, total, deltas = null, year = null, muted = [],
+} = {}) {
   const deltaOf = (name) => (deltas && Number.isFinite(deltas[name]) ? deltas[name] : null);
   const segments = rows.map((row) => {
     const delta = deltaOf(row.name);
+    const grey = muted.includes(row.name);
+    const ink = grey ? THEME.mutedColor : '#fff';
     return {
       type: 'bar',
       name: row.name,
       stack: 'seats',
       barWidth: '60%',
-      color: colors[row.name] || OTHERS_COLOR,
+      color: grey ? MUTED_COLOR : colors[row.name] || OTHERS_COLOR,
       label: {
         show: total > 0 && row.seats / total >= LABEL_MIN_SHARE,
         position: 'inside',
-        color: '#fff',
+        color: ink,
         // the name and the seats in bold, the arrow of the difference in regular weight
         formatter: `{seats|${row.name} ${fmtInt(row.seats)}}${delta === null ? '' : ` {delta|${fmtDelta(delta)}}`}`,
-        rich: {seats: {fontWeight: 700, color: '#fff'}, delta: {fontWeight: 400, color: '#fff'}},
+        rich: {seats: {fontWeight: 700, color: ink}, delta: {fontWeight: 400, color: ink}},
       },
       data: [row.seats],
     };

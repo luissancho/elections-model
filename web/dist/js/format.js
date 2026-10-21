@@ -25,6 +25,18 @@ export function fmtInt(x) {
   return fmtNum(x, 0);
 }
 
+/**
+ * A count with the thousands always marked, also with four digits ('1.000'), as `fmt_num` of `pages/filters.py`
+ * writes it; `fmtInt` follows the es-ES rule of leaving four digits ungrouped ('1000'), which keeps years clean.
+ */
+export function fmtCount(x) {
+  if (isMissing(x)) {
+    return DASH;
+  }
+  const digits = String(Math.round(Math.abs(x))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return x < 0 ? `-${digits}` : digits;
+}
+
 /** Percentage already in the 0-100 scale, the sign attached: '32,7%'. */
 export function fmtPct(x, digits = 1) {
   return isMissing(x) ? DASH : `${numberFormat(digits).format(x)}%`;

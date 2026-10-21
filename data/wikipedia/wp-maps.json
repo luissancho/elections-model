@@ -274,8 +274,9 @@
         "OTR": [
             "OTR-IS"
         ],
-        "EM Analytics": [
-            "EM-Analytics"
+        "ElectoPanel": [
+            "EM-Analytics",
+            "EM Analytics"
         ],
         "Ágora Integral": [
             "Agora Integral"
