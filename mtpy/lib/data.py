@@ -656,11 +656,18 @@ def get_events(scope: str) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        One row per election, with `date`, `scope`, `name` and `featured`.
+        One row per election, with `date`, `scope`, `name`, `featured` and `has_results` (whether it has an
+        official result: a row of the whole scope with votes in `events_data`).
     """
-    return Events().get_results(query={
+    events = Events().get_results(query={
         'filters': ["scope = '{}'".format(scope)]
     }, formatted=True)
+    data = EventsData().get_results(query=dict(
+        filters=["scope = '{}'".format(scope), 'region_id = 0', 'votes IS NOT NULL']
+    ), formatted=True)
+    events['has_results'] = events['date'].isin(data['date'])
+
+    return events
 
 
 def get_pollsters() -> pd.DataFrame:
@@ -1008,11 +1015,7 @@ def update_featured(
         Number of featured events of the scope.
     """
     model = Events()
-    events = model.get_results(query=dict(filters=["scope = '{}'".format(scope)]), formatted=True)
-
-    data = EventsData().get_results(query=dict(
-        filters=["scope = '{}'".format(scope), 'region_id = 0', 'votes IS NOT NULL']
-    ), formatted=True)
+    events = get_events(scope)
 
     polls = Polls().get_results(query=dict(filters=["event_scope = '{}'".format(scope)]), formatted=True)
     useful = polls.loc[
@@ -1020,8 +1023,9 @@ def update_featured(
         & ~polls['mtype'].isin(drop_mtypes or []) & ~polls['ctype'].isin(drop_ctypes or [])
     ].groupby('event_date', observed=True).size()
 
-    events['featured'] = events['date'].isin(data['date']) & (events['date'].map(useful).fillna(0) >= min_polls)
-    model.upsert(model.format_data(events, int_type='nullable', bin_type='nullable', sort=True))
+    events['featured'] = events['has_results'] & (events['date'].map(useful).fillna(0) >= min_polls)
+    model.upsert(model.format_data(events.drop(columns='has_results'), int_type='nullable', bin_type='nullable',
+                                   sort=True))
 
     return int(events['featured'].sum())
 
