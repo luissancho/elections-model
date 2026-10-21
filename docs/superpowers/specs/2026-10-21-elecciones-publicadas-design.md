@@ -1,6 +1,10 @@
 # Elecciones publicadas sin entrar en el modelo
 
-Fecha: 2026-10-21. Estado: aprobada por Luis el 2026-10-21 («Aprobado»). La descripción se acordó en el chat del 21 de
+Fecha: 2026-10-21. Estado: aprobada por Luis el 2026-10-21 («Aprobado») y construida el mismo día en `dev`
+(`89cfed8..bd42744`, plan `docs/superpowers/plans/2026-10-21-elecciones-publicadas.md`, 1242 tests). La revisión
+final añadió una condición a D2: una elección solo entra en la selección cuando los errores de sus sondeos están
+calculados, para que publicar entre la carga del escrutinio y `compute` no deje la ficha con errores vacíos y el
+aviso de «no analizada». La descripción se acordó en el chat del 21 de
 octubre («Haz la 3», «En todos los sitios en los que se muestren los errores de las casas por elección», «Me vale,
 quiero al menos ver los resultados de todas»). Esta spec describe solo lo que cambia respecto de `dev` en `dcd24d1`.
 Revisión del constructor hecha el mismo día contra `ad9eff4`: no quedaron preguntas abiertas, y sus dos
