@@ -458,6 +458,14 @@ def test_filter_polls_results_equals_featured_when_every_election_with_a_result_
     pd.testing.assert_frame_equal(c.filter_polls('results'), c.filter_polls(True))
 
 
+def test_filter_polls_results_leaves_out_an_election_whose_errors_are_not_computed():
+    """Recién cargado el resultado y antes de `compute`, los sondeos de la elección no tienen error: la elección no
+    entra en la selección (no se publica con errores vacíos ni con el aviso de no analizada)."""
+    c = three_event_computer()
+    c.series.loc[c.series.index.get_level_values('event_date') == pd.Timestamp('2019-05-26'), 'error_avg'] = np.nan
+    assert event_dates(c.filter_polls('results')) == ['2015-05-24']
+
+
 def test_get_polls_metric_passes_the_results_selection():
     df = three_event_computer().get_polls_metric('error', bmap='vs', featured='results')
     assert sorted(df['event_date'].unique()) == ['2015-05-24', '2019-05-26']

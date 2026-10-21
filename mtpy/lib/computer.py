@@ -624,8 +624,8 @@ class Computer(Core):
         ----------
         featured : bool or 'results', optional
             Which elections the polls come from: True, the computed polls of the featured elections (what the
-            estimators use); 'results', the computed polls of every election with an official result (what the
-            web publishes); False, every election.
+            estimators use); 'results', the computed polls of every election with an official result and its
+            errors computed (what the web publishes); False, every election.
         **kwargs
             Keyword arguments to overwrite the default filter parameters:
             - drange : tuple of int or int
@@ -666,9 +666,13 @@ class Computer(Core):
 
         if featured == 'results':
             # An election has an official result when its row carries the votes (`sample_size`, see `load_events`);
-            # its `computed` is its `featured`, so it cannot tell
+            # its `computed` is its `featured`, so it cannot tell. Its polls only count once their errors are
+            # computed (`compute` after loading the result): before, they would publish empty errors
             has_results = self.events['sample_size'].notna()
-            with_results = df.index.get_level_values('event_date').map(has_results).fillna(False).astype(bool)
+            polls = self.series.loc[self.series.pollster.notnull()]
+            measured = polls['error_avg'].notna().groupby(level='event_date').any()
+            ready = has_results & measured.reindex(has_results.index, fill_value=False)
+            with_results = df.index.get_level_values('event_date').map(ready).fillna(False).astype(bool)
             df = df.loc[df['computed'].fillna(False).astype(bool).to_numpy() & np.asarray(with_results)]
         elif featured:
             df = df.loc[df['featured'] & df['computed']]
