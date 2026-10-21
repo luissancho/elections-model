@@ -83,7 +83,7 @@
             <mrow>
               <msub><mi>w</mi><mi>i</mi></msub><mo>=</mo>
               <msub><mi>o</mi><mi>i</mi></msub><mo>·</mo>
-              <msqrt><mfrac><msub><mi>n</mi><mi>i</mi></msub><mover><mi>n</mi><mo>~</mo></mover></mfrac></msqrt><mo>·</mo>
+              <msqrt><mfrac><msub><mi>n</mi><mi>i</mi></msub><mover accent="true"><mi>n</mi><mo>~</mo></mover></mfrac></msqrt><mo>·</mo>
               <msub><mi>f</mi><mi>c</mi></msub><mo>·</mo>
               <msub><mi>r</mi><mi>c</mi></msub>
             </mrow>
@@ -130,7 +130,7 @@
           <math display="block" aria-label="factor de muestra igual a la raíz de n sub i entre ñ">
             <mrow>
               <msub><mi>F</mi><mtext>muestra</mtext></msub><mo>=</mo>
-              <msqrt><mfrac><msub><mi>n</mi><mi>i</mi></msub><mover><mi>n</mi><mo>~</mo></mover></mfrac></msqrt>
+              <msqrt><mfrac><msub><mi>n</mi><mi>i</mi></msub><mover accent="true"><mi>n</mi><mo>~</mo></mover></mfrac></msqrt>
             </mrow>
           </math>
         </div>
@@ -204,7 +204,7 @@
             <mrow>
               <msub><mi>SS</mi><mtext>obs</mtext></msub><mo>=</mo>
               <munder><mo>∑</mo><mi>i</mi></munder>
-              <msup><mrow><mo>(</mo><msub><mi>r</mi><mi>i</mi></msub><mo>−</mo><mover><mi>r</mi><mo>¯</mo></mover><mo>)</mo></mrow><mn>2</mn></msup>
+              <msup><mrow><mo>(</mo><msub><mi>r</mi><mi>i</mi></msub><mo>−</mo><mover accent="true"><mi>r</mi><mo>¯</mo></mover><mo>)</mo></mrow><mn>2</mn></msup>
               <mspace width="2em"/>
               <msub><mi>SS</mi><mtext>esp</mtext></msub><mo>=</mo>
               <mrow><mo>(</mo><mn>1</mn><mo>−</mo><mfrac><mn>1</mn><mi>k</mi></mfrac><mo>)</mo></mrow><mo>·</mo>
@@ -231,7 +231,7 @@
         <div class="math-wrap">
           <math display="block" aria-label="R tilde sub c igual a uno más R sub c menos uno, por k entre k más cinco">
             <mrow>
-              <msub><mover><mi>R</mi><mo>~</mo></mover><mi>c</mi></msub><mo>=</mo><mn>1</mn><mo>+</mo>
+              <msub><mover accent="true"><mi>R</mi><mo>~</mo></mover><mi>c</mi></msub><mo>=</mo><mn>1</mn><mo>+</mo>
               <mrow><mo>(</mo><msub><mi>R</mi><mi>c</mi></msub><mo>−</mo><mn>1</mn><mo>)</mo></mrow><mo>·</mo>
               <mfrac><mi>k</mi><mrow><mi>k</mi><mo>+</mo><mn>5</mn></mrow></mfrac>
             </mrow>
@@ -247,15 +247,15 @@
               <msub><mi>f</mi><mi>c</mi></msub><mo>=</mo>
               <mrow><mo>{</mo>
                 <mtable columnalign="left">
-                  <mtr><mtd><mfrac><mn>1</mn><msub><mover><mi>R</mi><mo>~</mo></mover><mi>c</mi></msub></mfrac></mtd><mtd><mtext>si oscila de más</mtext></mtd></mtr>
-                  <mtr><mtd><msub><mover><mi>H</mi><mo>~</mo></mover><mi>c</mi></msub><mtext> (como poco, 0,1)</mtext></mtd><mtd><mtext>si oscila de menos</mtext></mtd></mtr>
+                  <mtr><mtd><mfrac><mn>1</mn><msub><mover accent="true"><mi>R</mi><mo>~</mo></mover><mi>c</mi></msub></mfrac></mtd><mtd><mtext>si oscila de más</mtext></mtd></mtr>
+                  <mtr><mtd><msub><mover accent="true"><mi>H</mi><mo>~</mo></mover><mi>c</mi></msub><mtext>&#160;(como poco, 0,1)</mtext></mtd><mtd><mtext>si oscila de menos</mtext></mtd></mtr>
                 </mtable>
               </mrow>
             </mrow>
           </math>
         </div>
         <p>
-          donde <var>H̃</var><sub><var>c</var></sub> es el mismo cociente medido para el rebaño. Multiplica al factor de
+          donde <math><msub><mover accent="true"><mi>H</mi><mo>~</mo></mover><mi>c</mi></msub></math> es el mismo cociente medido para el rebaño. Multiplica al factor de
           muestra, así que la muestra efectiva de la encuestadora es <var>n</var> · <var>f</var><sup>2</sup>: un sondeo de
           4.000 entrevistas con <var>f</var> = 0,5 pesa como uno de 1.000.{{ m.note('diseno', note_keys) }}
         </p>
@@ -378,7 +378,7 @@
               <msub><mi>r</mi><mi>c</mi></msub><mo>=</mo>
               <mfrac>
                 <mrow><mi>ln</mi><mo>(</mo><mn>1</mn><mo>+</mo><msub><mi>R</mi><mi>c</mi></msub><mo>/</mo><mn>100</mn><mo>)</mo></mrow>
-                <mrow><mi>ln</mi><mo>(</mo><mn>1</mn><mo>+</mo><mover><mi>R</mi><mo>¯</mo></mover><mo>/</mo><mn>100</mn><mo>)</mo></mrow>
+                <mrow><mi>ln</mi><mo>(</mo><mn>1</mn><mo>+</mo><mover accent="true"><mi>R</mi><mo>¯</mo></mover><mo>/</mo><mn>100</mn><mo>)</mo></mrow>
               </mfrac>
             </mrow>
           </math>
@@ -759,8 +759,8 @@
         <div class="math-wrap">
           <math display="block" aria-label="a igual a la media ponderada de los sondeos más b por t menos la media ponderada de sus fechas, el centro de gravedad de la campana">
             <mrow>
-              <mi>a</mi><mo>=</mo><msub><mover><mi>y</mi><mo>¯</mo></mover><mi>ω</mi></msub><mo>+</mo>
-              <mi>b</mi><mo>·</mo><mo>(</mo><mi>t</mi><mo>−</mo><msub><mover><mi>t</mi><mo>¯</mo></mover><mi>ω</mi></msub><mo>)</mo>
+              <mi>a</mi><mo>=</mo><msub><mover accent="true"><mi>y</mi><mo>¯</mo></mover><mi>ω</mi></msub><mo>+</mo>
+              <mi>b</mi><mo>·</mo><mo>(</mo><mi>t</mi><mo>−</mo><msub><mover accent="true"><mi>t</mi><mo>¯</mo></mover><mi>ω</mi></msub><mo>)</mo>
             </mrow>
           </math>
         </div>

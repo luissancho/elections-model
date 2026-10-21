@@ -594,7 +594,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .weights-list[open] > summary { margin-bottom: var(--space-2); }
 /* Footnotes (`notes.js`): the call, the copy of the note unfolded after its block and the «Notas» card. */
 .note-ref { line-height: 0; }
-.note-ref a { display: inline-block; min-width: 24px; padding: 6px 2px; text-align: center; font-weight: 600; font-size: 12px; color: var(--color-accent); text-decoration: none; }
+.note-ref a { display: inline-block; padding: 4px 3px; margin: -4px 0; font-weight: 600; font-size: 12px; color: var(--color-accent); text-decoration: none; }
 .note-ref a:hover, .note-ref a[aria-expanded="true"] { text-decoration: underline; }
 .note-pop { position: relative; margin: var(--space-2) 0 var(--space-3); padding: var(--space-3) calc(var(--space-4) + 28px) var(--space-3) var(--space-4); background: var(--color-soft); border-left: 3px solid var(--color-accent); border-radius: var(--radius-sm); font-size: 14px; list-style: none; }
 .note-close { position: absolute; top: var(--space-1); right: var(--space-1); width: 32px; height: 32px; font-size: 20px; line-height: 1; color: var(--color-muted); background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer; }
