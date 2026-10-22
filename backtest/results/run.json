@@ -1,6 +1,6 @@
 {
- "run_at": "2026-10-20T21:13:30",
- "commit": "19b1c7b",
+ "run_at": "2026-10-21T22:26:44",
+ "commit": "4cadeeb",
  "scope": "es",
  "n_sim": 1000,
  "seed": 42,
@@ -29,6 +29,6 @@
   90,
   180
  ],
- "db_polls": 3851,
+ "db_polls": 3742,
  "db_last_poll": "2026-10-17"
 }
