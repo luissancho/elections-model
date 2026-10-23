@@ -204,7 +204,7 @@ def test_groups_follow_the_rows_dropped_for_missing_values(rng):
 
 def test_local_estimator_passes_the_groups_of_the_window(rng):
     """M10: el estimador local recibe los grupos de las observaciones de su ventana; sin grupos (o con uno
-    solo) cae al `hc1` con aviso, sin romper el ajuste."""
+    sólo) cae al `hc1` con aviso, sin romper el ajuste."""
     x = np.arange(100, dtype=float)
     g = x // 10
     y = 5 + rng.normal(0, 1, size=10)[g.astype(int)] + rng.normal(0, 0.3, size=100)

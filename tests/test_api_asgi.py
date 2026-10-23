@@ -120,7 +120,7 @@ def make_api(app, routes=ROUTES, not_found=()):
 def exchange(path, query='', method='GET', scope_type='http', incoming=None):
     """`scope`, `receive` y `send` de una petición ASGI, y la lista donde `send` acumula los mensajes enviados.
 
-    Los scopes distintos de `http` solo llevan `type` y `headers`, como los que envía uvicorn.
+    Los scopes distintos de `http` sólo llevan `type` y `headers`, como los que envía uvicorn.
     """
     scope = {'type': scope_type, 'headers': []}
     if scope_type == 'http':
@@ -148,7 +148,7 @@ def response_of(sent):
 def call(api, path, query='', method='GET', scope_type='http', incoming=None):
     """Una petición ASGI; devuelve (status, cabeceras, cuerpo) en `http` y los mensajes enviados en otros scopes.
 
-    Los scopes distintos de `http` solo llevan `type` y `headers`, como los que envía uvicorn.
+    Los scopes distintos de `http` sólo llevan `type` y `headers`, como los que envía uvicorn.
     """
     scope, receive, send, sent = exchange(path, query, method, scope_type, incoming)
     asyncio.run(api(scope, receive, send))

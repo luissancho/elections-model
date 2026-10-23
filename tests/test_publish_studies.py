@@ -179,7 +179,7 @@ def test_publish_study_rejects_an_unknown_study(study, tmp_path):
 
 
 def test_importing_publish_does_not_load_the_study_package():
-    """La web importa `publish` (sus constantes): el estudio CERA y su regresión se cargan solo al publicarlo."""
+    """La web importa `publish` (sus constantes): el estudio CERA y su regresión se cargan sólo al publicarlo."""
     import subprocess
     import sys
     code = ("import sys, mtpy.lib.publish; "

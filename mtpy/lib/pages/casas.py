@@ -32,7 +32,7 @@ URL_TRAILING = ').;,:'
 # Threads that read the `cycle` and `results` parts of the bullseye elections at once (one S3 read each).
 PART_READERS = 8
 ANALYSIS_CSV = (
-    ('house-effects', None, 'Efectos de encuestadora por partido y bloque'),
+    ('house-effects', None, 'Efectos de casa por partido y bloque'),
     ('herding', None, 'Rebaño por encuestadora'),
     ('herding', 'events', 'Rebaño por encuestadora y ciclo'),
     ('poll-errors', None, 'Error de los sondeos en cada elección'),

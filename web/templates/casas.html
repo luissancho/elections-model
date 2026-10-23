@@ -55,21 +55,21 @@
         <button type="button" class="more" id="ranking-more" data-batch="{{ ranking_shown }}" hidden>Cargar más</button>
         {% endif %}
         {% call m.how() %}
-        <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría solo su confianza, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con su confianza (la calidad previa del método), que pesa más cuantas menos elecciones ha sondeado.</p>
+        <p>Cada fila es una encuestadora con rating para la próxima elección y con algún sondeo evaluado; una encuestadora sin sondeos tendría sólo su confianza, nada que comparar. El rating, de 0 a 100, mezcla el sesgo de sus sondeos pasados, comparado con el de las demás encuestadoras en las mismas semanas (un fallo de todo el sector no penaliza a una encuestadora), con su confianza (la calidad previa del método), que pesa más cuantas menos elecciones ha sondeado.</p>
         <p>Cuanto más alto, más pesan sus sondeos en el promedio. La barra del rating va de 0 a 100; la del diferencial crece hacia la izquierda en verde (menos sesgo que las encuestadoras comparables) o hacia la derecha en rojo, hasta 2; el fondo del error medio es más rojo cuanto mayor, de 0 a 8 puntos; la del sesgo bloques crece hacia el lado del bloque al que favorece y en su color, hasta 8 puntos de margen; el fondo del rebaño es más rojo cuanto más por debajo de 1 y gris por encima, hasta 2. Cada cabecera explica su columna al pasar el ratón, y todas se explican en «Qué mide cada columna». La tabla enseña las {{ ranking_shown }} primeras; «Cargar más» sigue. Pulsa en una encuestadora para ver su perfil.</p>
         <p>En «Elecciones», el número entre paréntesis cuenta cuántas de ellas fueron elecciones generales: «28 (5)» son 28 elecciones con sondeos de la encuestadora, 5 de ellas generales.</p>
         <p>El rating no es una nota de honestidad ni anticipa el error de la próxima elección.</p>
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('house-effects', 'Efectos de encuestadora', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual del ámbito elegido, por partido y por bloque. El ámbito vale también para el rebaño y las descargas del análisis.', '· ciclo actual') }}
+      {{ m.card_start('house-effects', 'Efectos de casa', 'Cuánto se separa cada encuestadora del promedio de todas en el ciclo actual del ámbito elegido, por partido y por bloque. El ámbito vale también para el rebaño y las descargas del análisis.', '· ciclo actual') }}
         {% include '_scope_filter.html' +%}
         {% if grid is none %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% elif not grid.rows %}
-        <p class="notice">Ninguna encuestadora tiene efectos de encuestadora en el ciclo actual.</p>
+        <p class="notice">Ninguna encuestadora tiene efectos de casa en el ciclo actual.</p>
         {% else %}
-        <div class="chart" id="effects-heatmap" role="img" aria-label="Mapa de calor del efecto de encuestadora del ciclo actual por encuestadora y por partido o bloque"></div>
+        <div class="chart" id="effects-heatmap" role="img" aria-label="Mapa de calor del efecto de casa del ciclo actual por encuestadora y por partido o bloque"></div>
         <div class="table-wrap">
           <table id="effects-table">
             <caption>Desviación del ciclo actual. Pasa el ratón por una celda para ver la historia y la tendencia.</caption>
@@ -96,11 +96,11 @@
         {% endif %}
         {% call m.how() %}
         <p>Cada celda es la desviación de una encuestadora respecto al promedio de todas en el ciclo actual; la historia es su desviación media frente al resultado en elecciones pasadas y la tendencia, cuánto cambia cada año.</p>
-        <p>Positivo: la encuestadora da a ese partido o bloque más voto que el promedio; negativo, menos. Solo aparecen las encuestadoras con sondeos en el ciclo actual.</p>
+        <p>Positivo: la encuestadora da a ese partido o bloque más voto que el promedio; negativo, menos. Sólo aparecen las encuestadoras con sondeos en el ciclo actual.</p>
         <p>Una desviación no indica quién acierta: es una diferencia entre encuestadoras, no un error frente al resultado.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('herding', 'Rebaño', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar solo por el tamaño de sus muestras; del ámbito elegido en Efectos de encuestadora.') }}
+      {{ m.card_start('herding', 'Rebaño', 'La dispersión de los sondeos de cada encuestadora alrededor del promedio, comparada con la que cabría esperar sólo por el tamaño de sus muestras; del ámbito elegido en Efectos de casa.') }}
         {% if herding is none %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}
@@ -133,12 +133,12 @@
         </div>
         {% endif %}
         {% call m.how() %}
-        <p>Cada fila compara la dispersión de los sondeos de una encuestadora con la que cabría esperar solo por el tamaño de sus muestras. El p-valor mide cómo de improbable es la dispersión de su último ciclo si no hubiera rebaño.</p>
+        <p>Cada fila compara la dispersión de los sondeos de una encuestadora con la que cabría esperar sólo por el tamaño de sus muestras. El p-valor mide cómo de improbable es la dispersión de su último ciclo si no hubiera rebaño.</p>
         <p>Un valor cerca de 1 es lo esperable; por debajo de 1, sus sondeos se parecen entre sí más de lo que permite el azar.</p>
         <p>Un valor bajo es una señal, no una prueba de que la encuestadora copie a otras.</p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para el ámbito elegido en Efectos de encuestadora.') }}
+      {{ m.card_start('downloads', 'Descargas', 'Los datos de esta página en CSV: los ratings salen de la base de datos y el resto, del último análisis de encuestadoras publicado para el ámbito elegido en Efectos de casa.') }}
         <p class="muted">Los ficheros conservan los nombres técnicos de las columnas.</p>
         <ul class="link-list">
           {% for link in csv_links %}

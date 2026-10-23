@@ -137,10 +137,11 @@
             <label><input type="radio" name="window" value="6m"> 6 meses</label>
             <label><input type="radio" name="window" value="3m"> 3 meses</label>
           </fieldset>
-          <fieldset id="series-polls" class="seg" hidden>
-            <legend>Sondeos</legend>
-            <label><input type="radio" name="polls" value="si" checked> Con sondeos</label>
-            <label><input type="radio" name="polls" value="no"> Sin sondeos</label>
+          <fieldset id="series-layers" class="seg" hidden>
+            <legend>Mostrar</legend>
+            <label><input type="radio" name="layers" value="sondeos"> Sondeos</label>
+            <label><input type="radio" name="layers" value="promedio"> Promedio</label>
+            <label><input type="radio" name="layers" value="ambos" checked> Ambos</label>
           </fieldset>
         </div>
         <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
@@ -151,10 +152,10 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero; «Sin sondeos» los
-          oculta, para leer mejor las líneas en el móvil); la línea es el promedio ponderado del modelo y la banda,
-          su intervalo de confianza. El punto marcado del final, en la
-          fecha de la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
+          promedio ponderado del modelo y la banda, su intervalo de confianza. El selector Sondeos / Promedio / Ambos
+          deja a la vista sólo los puntos, sólo la línea con su banda, o las dos cosas. El punto marcado del final,
+          en la fecha de la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se
           ajusta a la ventana y a los partidos visibles.
         </p>
         <p>
@@ -268,7 +269,7 @@
           juega con ventaja frente a cada encuestadora por separado.
         </p>
         <p>
-          El selector cambia la distancia: a cada horizonte el modelo se calcula solo con los sondeos publicados
+          El selector cambia la distancia: a cada horizonte el modelo se calcula sólo con los sondeos publicados
           hasta entonces. Los escaños y la probabilidad son los de la ejecución que proyecta la opinión hasta el día
           de la elección.
         </p>
@@ -416,7 +417,7 @@
         </p>
         <p>
           Barras altas a la izquierda son sondeos que acertaron; una cola a la derecha, unos pocos que fallaron
-          mucho. Entran todos los sondeos de la elección, no solo el último de cada encuestadora.
+          mucho. Entran todos los sondeos de la elección, no sólo el último de cada encuestadora.
         </p>
         <p>Las dos medidas van sin signo: no dicen hacia qué lado se equivocó cada sondeo.</p>
         {% endcall %}
@@ -436,7 +437,7 @@
           pasando por el gris (50); «—», sin rating. Pulsa en la encuestadora para ver su perfil.
         </p>
         <p>
-          En la vista Escaños solo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra
+          En la vista Escaños sólo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra
           como mín–máx y cuenta por su punto medio para ordenar y promediar.
         </p>
         <p>Es lo que dijo cada sondeo, no cuánto se equivocó: el error de cada uno está en el CSV de sondeos de esta elección.</p>
@@ -464,7 +465,7 @@
           resultado{% if has_model %}, lo que dijo el modelo{% if has_series %} y el promedio del ciclo{% endif %}{% endif %}.
         </p>
         <p>Los CSV traen todas las columnas publicadas, también algunas que la página no muestra.</p>
-        <p>Son solo los de esta elección: cada elección tiene los suyos.</p>
+        <p>Son sólo los de esta elección: cada elección tiene los suyos.</p>
         {% endcall %}
       {{ m.card_end() }}
     </div>

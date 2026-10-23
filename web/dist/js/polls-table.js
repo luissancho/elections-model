@@ -266,7 +266,7 @@ export function fixedRows(modelLast, result, seats, parties, mode = 'pct') {
     {
       label: 'Promedio de sondeos',
       small: `modelo · a ${modelLast.horizon} días`,
-      title: `Congelado el ${fmtDate(modelLast.date)}: solo los sondeos publicados hasta entonces`,
+      title: `Congelado el ${fmtDate(modelLast.date)}: sólo los sondeos publicados hasta entonces`,
       values: model,
       texts: texts(model),
     },

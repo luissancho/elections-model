@@ -305,7 +305,7 @@ def test_site_requires_a_file_system(fresh_app):
 def test_webapi_import_stays_light():
     """Los workers de la web no deben cargar el modelo ni las librerías de ajuste.
 
-    `webapi` y `pages` solo importan `bundle`; `helpers` carga sklearn y statsmodels dentro de sus funciones.
+    `webapi` y `pages` sólo importan `bundle`; `helpers` carga sklearn y statsmodels dentro de sus funciones.
     scipy queda fuera de la comprobación si otro módulo de `mtpy.core` lo arrastra al importar.
     """
     import subprocess

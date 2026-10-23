@@ -59,13 +59,13 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló la última estimación del modelo antes de cada elección, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver solo esas elecciones.') }}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló la última estimación del modelo antes de cada elección, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver sólo esas elecciones.') }}
         {% set bv = {'rows': record.rows, 'scopes': record.scopes, 'years': record.years, 'table_blocks': model_table_blocks,
                      'aria': 'Error del modelo en cada elección por bloque',
                      'caption': 'Error de la última estimación del modelo antes de cada elección (modelo menos resultado).', 'dates': false} %}
         {% include '_bullseye.html' %}
         {% call m.how() %}
-        <p>Cada punto es la última estimación del modelo antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito. La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan solo esas elecciones en la diana y en la tabla.</p>
+        <p>Cada punto es la última estimación del modelo antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito. La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan sólo esas elecciones en la diana y en la tabla.</p>
         <p>Positivo: el modelo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
         {% endcall %}
       {{ m.card_end() }}
@@ -96,7 +96,7 @@
         </div>
         {% endif %}
         {% call m.how() %}
-        <p>Cada fila es la última estimación del modelo antes de una elección, de la más nueva a la más antigua. Positivo: el modelo dio al partido más voto que el resultado; negativo, menos. El fondo es rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Solo entran los partidos principales de cada elección; un guion es un partido que no lo era en esa elección.</p>
+        <p>Cada fila es la última estimación del modelo antes de una elección, de la más nueva a la más antigua. Positivo: el modelo dio al partido más voto que el resultado; negativo, menos. El fondo es rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Sólo entran los partidos principales de cada elección; un guion es un partido que no lo era en esa elección.</p>
         {% endcall %}
       {{ m.card_end() }}
     </div>
@@ -135,7 +135,7 @@
         </div>
         {% call m.how() %}
         <p>
-          El modelo solo usa los sondeos publicados hasta ese número de días antes de cada elección. Se compara con
+          El modelo sólo usa los sondeos publicados hasta ese número de días antes de cada elección. Se compara con
           tres líneas base: el último sondeo publicado, la media simple de los sondeos de las cuatro semanas
           anteriores y el resultado de la elección anterior. El modelo aporta algo si su error es menor que el de
           las tres.
@@ -224,7 +224,7 @@
           bloque: cuanto más cerca de 0, mejor.
         </p>
         <p>
-          No dice qué partido falla más: es una media de los principales, y solo cuenta las elecciones con escaños
+          No dice qué partido falla más: es una media de los principales, y sólo cuenta las elecciones con escaños
           válidos.
         </p>
         {% endcall %}
@@ -265,7 +265,7 @@
         <p>
           Cada fila es una elección pasada a un horizonte, de la más reciente a la más antigua, con el error del voto
           frente al del último sondeo, el error de escaños, la cobertura y el Brier. Una elección con escaños no
-          válidos solo cuenta para el voto: algún partido no tenía resultado previo con el que proyectar sus
+          válidos sólo cuenta para el voto: algún partido no tenía resultado previo con el que proyectar sus
           escaños.
         </p>
         <p>
@@ -317,15 +317,15 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('about', 'Cómo se hace el backtest', 'El modelo se repite en elecciones ya celebradas viendo solo los sondeos publicados hasta cada fecha, y lo que dijo se compara con el resultado oficial.') }}
+      {{ m.card_start('about', 'Cómo se hace el backtest', 'El modelo se repite en elecciones ya celebradas viendo sólo los sondeos publicados hasta cada fecha, y lo que dijo se compara con el resultado oficial.') }}
         <p>
-          El backtest sigue un protocolo fuera de muestra: en cada elección y a cada horizonte, solo ve los sondeos
+          El backtest sigue un protocolo fuera de muestra: en cada elección y a cada horizonte, sólo ve los sondeos
           publicados hasta ese día, y los parámetros que se estiman con datos (error de sondeo, deriva de la
-          opinión, efectos de encuestadora) se ajustan únicamente con los ciclos anteriores.
+          opinión, efectos de casa) se ajustan únicamente con los ciclos anteriores.
         </p>
         <p>
           Hay dos ejecuciones, las de los dos modos del sitio. El modo Hoy responde a «si las elecciones fueran
-          hoy» y solo está calibrado a horizontes cortos. El modo Elección, las columnas «modo Elección», añade la
+          hoy» y sólo está calibrado a horizontes cortos. El modo Elección, las columnas «modo Elección», añade la
           deriva de la opinión hasta el día de la votación: es la comparación honesta a muchos días de distancia.
         </p>
         <p>

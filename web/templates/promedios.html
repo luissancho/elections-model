@@ -38,21 +38,23 @@
             <label><input type="radio" name="window" value="6m"> 6 meses</label>
             <label><input type="radio" name="window" value="3m"> 3 meses</label>
           </fieldset>
-          <fieldset id="series-polls" class="seg" hidden>
-            <legend>Sondeos</legend>
-            <label><input type="radio" name="polls" value="si" checked> Con sondeos</label>
-            <label><input type="radio" name="polls" value="no"> Sin sondeos</label>
+          <fieldset id="series-layers" class="seg" hidden>
+            <legend>Mostrar</legend>
+            <label><input type="radio" name="layers" value="sondeos"> Sondeos</label>
+            <label><input type="radio" name="layers" value="promedio"> Promedio</label>
+            <label><input type="radio" name="layers" value="ambos" checked> Ambos</label>
           </fieldset>
         </div>
         <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
         <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
-          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero; «Sin sondeos» los
-          oculta, para leer mejor las líneas en el móvil); la línea es el
-          promedio ponderado del modelo y la banda, su intervalo de confianza. En el modo Elección, la línea
-          discontinua proyecta el voto desde la estimación hasta el día de la elección. En la vista Bloques, cada
-          bloque suma sus partidos. Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
+          promedio ponderado del modelo y la banda, su intervalo de confianza. El selector Sondeos / Promedio / Ambos
+          deja a la vista sólo los puntos, sólo la línea con su banda, o las dos cosas, para leer mejor cada una en
+          el móvil. En el modo Elección, la línea discontinua proyecta el voto desde la estimación hasta el día de la
+          elección. En la vista Bloques, cada bloque suma sus partidos. Pulsa un partido de la leyenda para ocultarlo
+          o mostrarlo.
         </p>
         <p>
           El eje vertical no empieza en cero: se ajusta a la ventana y a los partidos visibles, así que al ocultar
@@ -220,7 +222,7 @@
         <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la encuestadora elegida frente al promedio de sondeos{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
-          Los puntos son solo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
+          Los puntos son sólo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
           Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos y el eje vertical se
           ajusta a lo que queda a la vista.
         </p>
@@ -247,7 +249,7 @@
           «—», sin rating. Pulsa en la encuestadora para ver su perfil, con el camino de su rating.
         </p>
         <p>
-          En la vista Escaños solo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra
+          En la vista Escaños sólo aparecen los sondeos cuya encuestadora publica escaños; una horquilla se muestra
           como mín–máx y cuenta por su punto medio para ordenar y promediar.
         </p>
         {% endcall %}

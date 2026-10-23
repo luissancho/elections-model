@@ -1,6 +1,6 @@
 // Wiring of the poll average shared by Promedios and the detail of a past election: the party and block views
-// of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window and view controls
-// and the poll points (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
+// of the series (`seriesViews`), the pill legend that drives the ECharts legend and the window, view and layers
+// controls (`wireAverage`), whose state lives in the URL hash (`blocks.js`).
 import {blockPolls, blockProjection, blockResult, blockSeries, seriesHash} from '../blocks.js';
 import {chartZoom, setWindow} from '../charts/series.js';
 import {WINDOW_DAYS} from '../range.js';
@@ -91,13 +91,13 @@ export function fillLegend(legendEl, current, selected, chart, inks = {}) {
 }
 
 /**
- * Draw the poll average and wire its controls: view, window and poll-points radios and the pill legend, which
- * selects the parties or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash.
- * Without the poll-points control (`#series-polls`) the points are always drawn. With `imageOf` and a download
- * button (`#series-download`), the button saves the chart as shown as a signed image (`share.js`).
+ * Draw the poll average and wire its controls: view, window and layers radios (`#series-layers`: the poll points,
+ * the average or both, which `render` reads from `state.layers`) and the pill legend, which selects the parties
+ * or blocks shown through the (hidden) ECharts legend. Every change rewrites the URL hash. With `imageOf` and a
+ * download button (`#series-download`), the button saves the chart as shown as a signed image (`share.js`).
  *
  * @param {object} views `seriesViews` of the page
- * @param {object} state `{view, window, selected, polls}` parsed from the hash
+ * @param {object} state `{view, window, selected, layers}` parsed from the hash
  * @param {function} render draws a chart: `(el, polls, chartState) => chart`
  * @param {object} options `anchor` (ISO date the window control counts back from), `inks` (text colour
  *   over the colour of each name, for the pills; `initial.inks`) and `imageOf` (the option of the image:
@@ -108,7 +108,7 @@ export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = 
   const legendEl = document.getElementById('series-legend');
   const windowSet = document.getElementById('series-window');
   const viewSet = document.getElementById('series-view');
-  const pollsSet = document.getElementById('series-polls');
+  const layersSet = document.getElementById('series-layers');
   let chart = null;
 
   /** Write the state of the controls to the URL hash without adding a history entry. */
@@ -117,16 +117,9 @@ export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = 
     window.history.replaceState(null, '', pathname + search + seriesHash(state));
   }
 
-  /** Polls part of the current view, without polls when the points are hidden (so the axis adapts to the lines
-   * and bands alone). */
-  function shownPolls() {
-    const polls = views[state.view].polls;
-    return pollsSet && state.polls === false ? {...polls, polls: []} : polls;
-  }
-
   /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
   function draw() {
-    const drawn = render(mainEl, shownPolls(), state);
+    const drawn = render(mainEl, views[state.view].polls, state);
     if (!chart) {
       chart = drawn;
       chart.on('legendselectchanged', (event) => {
@@ -146,13 +139,13 @@ export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = 
   for (const input of document.querySelectorAll('#series-view input[name=view]')) {
     input.checked = input.value === state.view;
   }
-  for (const input of document.querySelectorAll('#series-polls input[name=polls]')) {
-    input.checked = (input.value === 'si') === (state.polls !== false);
+  for (const input of document.querySelectorAll('#series-layers input[name=layers]')) {
+    input.checked = input.value === state.layers;
   }
   markSegments();
   tryDraw(draw, 'the poll average');
   if (imageOf) {
-    wireDownload(document.getElementById('series-download'), () => imageOf(shownPolls(), state, chartZoom(chart)), showError);
+    wireDownload(document.getElementById('series-download'), () => imageOf(views[state.view].polls, state, chartZoom(chart)), showError);
   }
 
   // The controls only work with JavaScript, so the server renders them hidden.
@@ -169,11 +162,11 @@ export function wireAverage(views, state, render, {anchor, inks = {}, imageOf = 
       }
     });
   }
-  if (pollsSet) {
-    pollsSet.hidden = false;
-    pollsSet.addEventListener('change', (event) => {
-      if (event.target.matches('input[name=polls]')) {
-        state.polls = event.target.value === 'si';
+  if (layersSet) {
+    layersSet.hidden = false;
+    layersSet.addEventListener('change', (event) => {
+      if (event.target.matches('input[name=layers]')) {
+        state.layers = event.target.value;
         tryDraw(draw, 'the poll average');
         writeHash();
       }

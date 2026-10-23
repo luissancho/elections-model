@@ -152,3 +152,26 @@ def test_quality_csv_fits_the_replica_columns():
     assert 'pollster' in bounded and 'status' in bounded
     for col, length in bounded.items():
         assert frame[col].str.len().max() <= length, (col, length)
+
+
+def test_poll_fixes_files_are_well_formed():
+    import glob
+    files = glob.glob(os.path.join(DATA, 'polls', '*', '*.csv'))
+    assert files
+    for fname in files:
+        df = pd.read_csv(fname)
+        assert df.columns.tolist() == ['pollster', 'date', 'sponsor', 'party', 'pct', 'seats', 'note'], fname
+        assert pd.to_datetime(df['date'], format='%Y-%m-%d').notnull().all(), fname
+        assert df['party'].notnull().all() and df['pollster'].notnull().all(), fname
+        keys = df[['pollster', 'date', 'sponsor', 'party']].fillna('')
+        assert not keys.duplicated().any(), fname
+
+
+
+def test_params_2026_general_election_line_up():
+    conf = json.load(open(os.path.join(DATA, 'params.json')))['es']['2026-11-29']
+    assert conf['parties']['event'][-1] == 'COMPROMIS'
+    assert conf['bmaps']['blocks']['Regionalista'] == ['PNV', 'CC', 'BNG', 'COMPROMIS']
+    assert conf['smap']['COMPROMIS'] == {'type': 'agg', 'names': ['SUMAR'], 'regions': ['3', '12', '46']}
+    assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
+    assert conf['smap']['FA'][1]['regions'] == {'exclude': ['3', '12', '46']}

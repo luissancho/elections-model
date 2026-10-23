@@ -55,7 +55,7 @@
         <p class="notice">Evaluación provisional, pendiente de revisión.</p>
         {% endif %}
         {% else %}
-        <p class="notice">Sin evaluar: nadie ha comprobado todavía cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>, así que solo cuenta la parte calculada de la Implantación. {% if quality.national %}Ha publicado sondeos de alguna elección general, que vale un punto: confianza {{ quality.per_point }}.{% else %}No ha publicado sondeos de ninguna elección general: tiene la confianza mínima, {{ quality.floor }}.{% endif %}</p>
+        <p class="notice">Sin evaluar: nadie ha comprobado todavía cómo trabaja según <a href="/metodo/rating#calidad-previa">la rúbrica</a>, así que sólo cuenta la parte calculada de la Implantación. {% if quality.national %}Ha publicado sondeos de alguna elección general, que vale un punto: confianza {{ quality.per_point }}.{% else %}No ha publicado sondeos de ninguna elección general: tiene la confianza mínima, {{ quality.floor }}.{% endif %}</p>
         {% endif %}
         {% if quality.informative %}
         <p class="muted">Sus sondeos no entran en el promedio ni en el rating (agregadores y paneles en línea quedan fuera): la confianza es informativa.</p>
@@ -123,7 +123,7 @@
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver solo esas elecciones.') }}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver sólo esas elecciones.') }}
         {% if bullseye %}
         {% set bv = {'rows': bullseye, 'scopes': bullseye_scopes, 'years': bullseye_years, 'table_blocks': table_blocks,
                      'aria': 'Error de ' ~ profile.pollster.name ~ ' en cada elección por bloque',
@@ -135,7 +135,7 @@
         <p class="notice">Esta encuestadora no tiene sondeos en las elecciones analizadas.</p>
         {% endif %}
         {% call m.how() %}
-        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan solo esas elecciones en la diana y en la tabla.</p>
+        <p>Cada punto de la diana es el último sondeo de la encuestadora antes de una elección: en azul las generales y en naranja las autonómicas, más tenue cuanto más antigua, con la etiqueta de la elección y su ámbito (2023-23J-es). La tabla da su error en cada bloque, con el fondo en rojo si se quedó corto y verde si se pasó, más intenso cuanto mayor, hasta 8 puntos. Los filtros de ámbito y años dejan sólo esas elecciones en la diana y en la tabla.</p>
         <p>Positivo: el sondeo dio al bloque más voto que el resultado; negativo, menos. El centro es el acierto exacto y los anillos marcan 2, 5 y 10 puntos.</p>
         <p>Un solo sondeo por elección no basta para hablar de la tendencia de una encuestadora.</p>
         {% endcall %}
@@ -216,7 +216,7 @@
         </div>
         <div class="table-wrap" id="profile-effects-wrap">
           <table id="profile-effects">
-            <caption>Desviación frente al resultado por partido, descontado el error común de todas las encuestadoras; solo las elecciones con al menos tres sondeos de la encuestadora en los 90 días previos.</caption>
+            <caption>Desviación frente al resultado por partido, descontado el error común de todas las encuestadoras; sólo las elecciones con al menos tres sondeos de la encuestadora en los 90 días previos.</caption>
             <thead>
               <tr>
                 <th scope="col">Elección</th>
@@ -261,7 +261,7 @@
           </table>
         </div>
         {% call m.how() %}
-        <p>Frente al resultado: cuánto se separaron los sondeos de la encuestadora del resultado de un partido en una elección, una vez descontado el error que compartieron todas las encuestadoras. Solo entran las elecciones en las que la encuestadora publicó al menos tres sondeos en los 90 días previos; una encuestadora que sondea poco en campaña, como el CIS, tiene pocas filas aquí.</p>
+        <p>Frente al resultado: cuánto se separaron los sondeos de la encuestadora del resultado de un partido en una elección, una vez descontado el error que compartieron todas las encuestadoras. Sólo entran las elecciones en las que la encuestadora publicó al menos tres sondeos en los 90 días previos; una encuestadora que sondea poco en campaña, como el CIS, tiene pocas filas aquí.</p>
         <p>Frente al consenso del ciclo: cuánto se separó, a lo largo de todo el ciclo, del promedio de las demás encuestadoras; entra en todas las elecciones que sondeó, y es la medida que más dice de una encuestadora con pocos sondeos en campaña.</p>
         <p>Positivo: la encuestadora le daba más voto; negativo, menos. El fondo de cada celda es rojo si le daba menos voto y verde si le daba más, más intenso cuanto mayor la desviación, hasta 8 puntos. Un guion es un partido que no concurría en esa elección. Las elecciones van de la más nueva a la más antigua.</p>
         <p>Una desviación en una elección no quiere decir que la encuestadora se equivoque siempre hacia el mismo lado.</p>

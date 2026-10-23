@@ -34,7 +34,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           <li>Cada sondeo pasado se compara con el resultado: en el tamaño de los bloques y en el reparto dentro de cada bloque.</li>
           <li>Ese error se compara con el de los sondeos de la misma elección y las mismas fechas: un fallo de todo el sector no penaliza.</li>
           <li>Con pocas elecciones sondeadas manda una calidad previa según una rúbrica pública; con muchas, lo medido. La evidencia se cuenta por elecciones, no por sondeos. El rating va de 0 a 100.</li>
-          <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el rebaño se publica aparte y solo resta peso.</li>
+          <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el rebaño se publica aparte y sólo resta peso.</li>
         </ul>
       {{ m.card_end() }}
       {{ m.card_start('que-se-mide', 'Qué se mide', 'El rating no premia acertar, sino acertar más que los demás: el error de cada sondeo se compara con el de los sondeos de la misma elección publicados en fechas cercanas.') }}
@@ -88,7 +88,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         <p>
           La calidad previa se puntúa con una rúbrica pública: unos pocos criterios sobre cómo trabaja la
           encuestadora, cada uno con sus niveles. No mide el acierto pasado ni la coherencia entre sondeos: eso lo miden
-          los datos, a medida que se acumulan sus sondeos. De la trayectoria solo recoge, en la Implantación, si la
+          los datos, a medida que se acumulan sus sondeos. De la trayectoria sólo recoge, en la Implantación, si la
           encuestadora ha publicado sondeos de elecciones generales.
         </p>
         <div class="table-wrap">
@@ -125,7 +125,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           faltan se ganan acertando. Lo que no se puede comprobar vale 0 en su criterio, así que una encuestadora de la
           que apenas se sabe nada queda cerca del mínimo; una sin evaluar tiene el mínimo, {{ rubric.floor }}, o
           {{ rubric.per_point }} si ha publicado sondeos de alguna elección general (el punto de Implantación que se calcula
-          solo).
+          sólo).
         </p>
         <p>
           La evaluación es pública y revisable: cada criterio de cada encuestadora lleva su fuente, en el fichero
@@ -295,7 +295,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           «Camino al rating» muestra elección a elección los dos, el ajustado y el final.
         </p>
         <p>
-          <strong>Cómo entra en el promedio.</strong> El rating de cada elección se calcula solo con las
+          <strong>Cómo entra en el promedio.</strong> El rating de cada elección se calcula sólo con las
           elecciones anteriores, y con él se pesan los sondeos de esa elección. Su factor en el peso de un sondeo
           es ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100), con <var>R̄</var> el rating medio de las encuestadoras:
           una encuestadora de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no
@@ -338,7 +338,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
             cada partido principal. <strong>Sesgo bloques</strong>: la media, con signo, de cuánto se
             equivocaron sus sondeos en la diferencia entre los dos bloques principales. Las dos son medias
             ponderadas con los pesos del rating y describen a la encuestadora, pero no entran en la nota: la nota sale
-            solo de la desviación.</li>
+            sólo de la desviación.</li>
           <li><strong>Rebaño</strong>: la medida de la sección siguiente.</li>
         </ul>
       {{ m.card_end() }}
@@ -379,7 +379,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </p>
       {{ m.card_end() }}
       {{ m.closing('¿Cuánto acierta el modelo?', method_href('backtest'),
-                   'El modelo repetido en elecciones ya celebradas, viendo solo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
+                   'El modelo repetido en elecciones ya celebradas, viendo sólo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
                    [{'href': '/casas' ~ scope_query, 'label': 'Ranking Encuestadoras'},
                     {'href': '/elecciones' ~ scope_query, 'label': 'Error de los sondeos en cada elección'}]) }}
     </div>

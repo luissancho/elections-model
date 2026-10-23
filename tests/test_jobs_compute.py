@@ -105,7 +105,7 @@ def test_compute_reports_the_model_warnings_as_notes(fresh_app, scopes, capsys):
 
 def test_compute_catalogues_runs_first_once_and_dry_run_only_checks(fresh_app, scopes, capsys):
     """`catalogues` es global (no por ámbito) y va antes que las series y los ratings, que leen los ámbitos y la
-    calidad que escribe; en seco solo valida."""
+    calidad que escribe; en seco sólo valida."""
     calls = []
 
     def catalogues(save):

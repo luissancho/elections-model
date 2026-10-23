@@ -40,7 +40,7 @@
       "computed": "national",
       "note": "Las elecciones generales se cuentan con los sondeos publicados, a la fecha de cada elección; los estándares se comprueban con fuente.",
       "levels": {
-        "0": "Solo ha sondeado elecciones autonómicas o locales.",
+        "0": "Sólo ha sondeado elecciones autonómicas o locales.",
         "1": "Ha sondeado al menos una elección general.",
         "2": "Ha sondeado al menos una elección general y es miembro de Insights+Analytics España o de ESOMAR, o está certificada ISO 20252."
       }

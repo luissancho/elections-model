@@ -199,7 +199,7 @@ def test_export_polls_carries_the_pollsters_seat_projections():
     seats = {('2026-09-05', 1, 0): {'PP': [140, 142], 'PSOE': [100, 100], 'OTRO': [1, 1]}, ('2026-09-12', 2, 0): {'VOX': [30, 30]}}
     data, frame = publish.export_polls(sim.model, NAMES, seats=seats)
     data = valid('polls', data, mode=None)
-    assert data['polls'][0]['seats'] == {'PP': [140, 142], 'PSOE': [100, 100]}  # solo los partidos exportados
+    assert data['polls'][0]['seats'] == {'PP': [140, 142], 'PSOE': [100, 100]}  # sólo los partidos exportados
     assert data['polls'][1]['seats'] == {'VOX': [30, 30]} and 'seats' not in data['polls'][2]
     assert frame.loc[0, 'seats_min_PP'] == 140 and frame.loc[0, 'seats_max_PP'] == 142 and pd.isna(frame.loc[0, 'seats_min_VOX'])
     assert frame.loc[1, 'seats_min_VOX'] == 30 and str(frame['seats_min_PP'].dtype) == 'Int64'
@@ -438,7 +438,7 @@ def test_publish_forecast_backfill_freezes_the_polls_and_stamps_the_day(tmp_path
     out = publish.publish_forecast('es', writer, '20261005-120000', '2026-11-29', n_sim=50, simulator=factory,
                                    stats=fake_stats, prov=fake_prov, limit_date='2026-10-05', run_at='2026-10-05T12:00:00Z')
     assert factory.calls[0][3]['limit_date'] == '2026-10-05'
-    assert factory.calls[0][3]['drange'] == (55, None)  # 2026-10-05 a 2026-11-29: solo sondeos hasta ese día
+    assert factory.calls[0][3]['drange'] == (55, None)  # 2026-10-05 a 2026-11-29: sólo sondeos hasta ese día
     meta = writer.read_json(bundle.path_part('es', '20261005-120000', 'meta'))['data']
     head = writer.read_json(bundle.path_part('es', '20261005-120000', 'headline'))['data']
     assert meta['limit_date'] == '2026-10-05' and meta['run_at'] == '2026-10-05T12:00:00Z'
@@ -816,7 +816,7 @@ def test_publish_analysis_without_polls_in_the_current_event_publishes_the_past(
 
 
 def test_publish_analysis_other_value_error_of_house_effects_propagates_and_keeps_the_published_file(tmp_path):
-    """Solo `NoPollsError` significa «sin sondeos»: otro `ValueError` de `print_house_effects` se propaga y no borra
+    """Sólo `NoPollsError` significa «sin sondeos»: otro `ValueError` de `print_house_effects` se propaga y no borra
     los efectos publicados antes."""
     writer = make_writer(tmp_path)
     publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)

@@ -110,7 +110,7 @@
             los partidos jóvenes del pasado, que derivaron bastante más que los asentados.</li>
         </ul>
         <p>
-          La deriva no tiene dirección: no mueve el voto estimado, que es el mismo en los dos modos, solo abre
+          La deriva no tiene dirección: no mueve el voto estimado, que es el mismo en los dos modos, sólo abre
           los intervalos. Es lo que dibuja el abanico de voto en la página de escaños: en el horizonte 0 está la
           estimación de hoy, y cuanto más lejos, más ancho.
         </p>
@@ -139,10 +139,10 @@
           <strong>Las oscilaciones.</strong> No todas las circunscripciones se mueven como el conjunto: Andalucía,
           Cataluña o Galicia pueden ir por su lado, y las provincias de una comunidad tienden a moverse juntas.
           Por eso cada simulación añade a cada partido un empujón al azar por comunidad autónoma y otro, menor,
-          por provincia; en las autonómicas, solo el de cada circunscripción. Su tamaño sale de cuánto se
+          por provincia; en las autonómicas, sólo el de cada circunscripción. Su tamaño sale de cuánto se
           apartaron las provincias del swing proporcional entre elecciones generales consecutivas, y es
           relativamente mayor en los partidos pequeños. Los empujones se compensan: el voto del partido en el
-          conjunto no cambia, solo dónde lo saca.
+          conjunto no cambia, sólo dónde lo saca.
         </p>
         <p>
           La participación no se modela: cada circunscripción conserva los votos válidos de la elección
@@ -187,7 +187,7 @@
           recibe escaños, porque no es una candidatura.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('barreras', 'Las barreras', 'Una candidatura solo entra en el reparto si supera un mínimo de votos, la barrera, que fija la ley de cada ámbito.') }}
+      {{ m.card_start('barreras', 'Las barreras', 'Una candidatura sólo entra en el reparto si supera un mínimo de votos, la barrera, que fija la ley de cada ámbito.') }}
         <p>
           La barrera depende del ámbito: en las generales,
           {% if national and national.threshold is not none -%}
@@ -230,7 +230,7 @@
           <li><strong>Canarias</strong> tiene la doble barrera: la de cada isla o la de todo el archipiélago.
             Además de las islas, reparte una lista autonómica que vota todo el archipiélago. Hasta 2015 también
             entraba la lista más votada de cada isla; eso no se modela.</li>
-          <li><strong>Comunidad Valenciana</strong> solo tiene la barrera de toda la comunidad. La ley la calcula
+          <li><strong>Comunidad Valenciana</strong> sólo tiene la barrera de toda la comunidad. La ley la calcula
             sobre los votos emitidos, no sobre los válidos; el modelo usa los válidos.</li>
           <li><strong>Extremadura</strong> admite la barrera de la provincia o la de toda la comunidad, pero esta
             exige presentarse en las dos provincias; el modelo no lo comprueba.</li>
@@ -254,7 +254,7 @@
             mayoría absoluta. Se cuentan simulación a simulación: en cada una, los escaños suman el total de la
             cámara, así que lo que gana un partido lo pierde otro.</li>
           <li><strong>El escenario central</strong> es la simulación real más parecida a las medianas de todos
-            los partidos. Es el reparto por circunscripción que se publica: coherente, pero solo uno entre
+            los partidos. Es el reparto por circunscripción que se publica: coherente, pero sólo uno entre
             muchos posibles.</li>
         </ul>
         <p>

@@ -37,7 +37,7 @@ def patch_data(monkeypatch, fresh_app, files):
 
 
 def patch_csv(monkeypatch, fresh_app, text):
-    """Sustituye solo el CSV de evaluaciones."""
+    """Sustituye sólo el CSV de evaluaciones."""
     patch_data(monkeypatch, fresh_app, {QUALITY_FILE: text})
 
 
@@ -46,7 +46,7 @@ def test_criteria_are_four_and_sum_ten(fresh_app):
     assert list(criteria['criteria']) == ['fieldwork', 'transparency', 'independence', 'implantation']
     implantation = criteria['criteria']['implantation']
     assert implantation['max'] == 2 and implantation['computed'] == 'national'
-    assert implantation['levels']['0'] == 'Solo ha sondeado elecciones autonómicas o locales.'
+    assert implantation['levels']['0'] == 'Sólo ha sondeado elecciones autonómicas o locales.'
     assert implantation['levels']['1'] == 'Ha sondeado al menos una elección general.'
     assert 'ESOMAR' in implantation['levels']['2'] and 'ISO 20252' in implantation['levels']['2']
     assert evaluated_keys(criteria) == ['fieldwork', 'transparency', 'independence']

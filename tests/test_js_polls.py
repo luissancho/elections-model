@@ -147,7 +147,7 @@ def test_fixed_rows_of_the_footer_follow_the_mode_and_the_validity_of_the_seats(
     args = '{}, {}, {}, ["PP", "PSOE", "VOX"]'.format(json.dumps(last), json.dumps(result), json.dumps(seats))
     rows = run_js('p.fixedRows({})'.format(args))
     assert rows == [
-        {'label': 'Promedio de sondeos', 'small': 'modelo · a 6 días', 'title': 'Congelado el 17 jul 2023: solo los sondeos publicados hasta entonces',
+        {'label': 'Promedio de sondeos', 'small': 'modelo · a 6 días', 'title': 'Congelado el 17 jul 2023: sólo los sondeos publicados hasta entonces',
          'values': {'PP': 32.4, 'PSOE': 31.0, 'VOX': None}, 'texts': None},
         {'label': 'Resultado', 'small': '23 jul 2023', 'title': None, 'values': {'PP': 33.1, 'PSOE': 31.4, 'VOX': None}, 'texts': None}]
     esc = run_js('p.fixedRows({}, "esc")'.format(args))

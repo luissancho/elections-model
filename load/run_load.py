@@ -243,6 +243,7 @@ def load_polls(
         return out
 
     loader.build_series()
+    out['fixes_missing'] = top(loader.fixes_missing)
     loader.select_series(overwrite=overwrite)
     out['polls_saved'] = int(loader.polls.shape[0])
     loader.save_polls(overwrite=overwrite).save_results(overwrite=overwrite)

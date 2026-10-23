@@ -98,7 +98,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           {%- endcall %}
           {% call answer(v3, 3) -%}
             {% if not figures.changed -%}
-            Con el censo real, la participación real y el reparto real: cero escaños. Solo apilando supuestos
+            Con el censo real, la participación real y el reparto real: cero escaños. Sólo apilando supuestos
             extremos a la vez aparece un efecto.
             {%- else -%}
             Con el censo real, la participación real y el reparto real cambia el reparto en
@@ -260,7 +260,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           El margen izquierda − derecha del CERA, del comicio anterior al último:
           {% for c in cs %}{{ c.community }} {{ signed(c.margin_from) }} → {{ signed(c.margin_to) }}{% if not loop.last %}; {% endif %}{% endfor %}
           {%- endif %}
-          {%- if q2.absorbs and q2.block_steady %}, y la «prima» del PSOE solo sube porque absorbe a SUMAR/Podemos, no
+          {%- if q2.absorbs and q2.block_steady %}, y la «prima» del PSOE sólo sube porque absorbe a SUMAR/Podemos, no
           porque entren nuevos votantes de izquierda{% endif %}.
         </div>
         {% endif %}
@@ -391,7 +391,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
         <div class="card-h">
           <p class="lead">
-            A los resultados de {{ figures.baseline_year }} se suma solo el voto que aporta el censo nuevo del 29-N, con
+            A los resultados de {{ figures.baseline_year }} se suma sólo el voto que aporta el censo nuevo del 29-N, con
             la participación observada por origen y el reparto del escrutinio CERA de {{ split_year }} de cada
             provincia, y se recalcula D'Hondt provincia a provincia.
           </p>
@@ -547,7 +547,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         </div>
         {% call m.how() %}
         <p>
-          El modelo de incremento parte del escrutinio de {{ figures.baseline_year }}. A cada provincia le suma solo
+          El modelo de incremento parte del escrutinio de {{ figures.baseline_year }}. A cada provincia le suma sólo
           los electores nuevos del 29-N (el censo de la convocatoria menos el de {{ figures.baseline_year }}), cada uno
           con la participación de su origen
           {%- if figures.latam_rate is not none and figures.rest_rate is not none %} ({{ figures.latam_rate|pct(0) }}
@@ -580,7 +580,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         <p>
           La brecha es lo que le falta, en votos, al aspirante al último escaño de cada provincia en
           {{ figures.baseline_year }} para igualar el cociente de quien lo ganó. El efecto neto es lo que el voto CERA
-          nuevo da al aspirante menos lo que da a quien defiende el escaño: el escaño solo cambia si el neto supera la
+          nuevo da al aspirante menos lo que da a quien defiende el escaño: el escaño sólo cambia si el neto supera la
           brecha.
         </p>
         <p>
@@ -630,7 +630,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
               </dd>
               <dt>Problema 2 · cuenta dos veces</dt>
               <dd>
-                La brecha de {{ baseline }} ya incluye el voto CERA de ese año. Lo correcto es añadir solo el
+                La brecha de {{ baseline }} ya incluye el voto CERA de ese año. Lo correcto es añadir sólo el
                 incremento.
               </dd>
               <dt>Problema 3 · participación de otro censo</dt>
@@ -833,7 +833,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           {% set reach = cc.reach %}
           La {{ 'única provincia con un último escaño' if reach.only else 'provincia con el último escaño más' }} al
           alcance del voto exterior es {{ reach.name }} ({{ reach.runner_up }} frente a {{ reach.winner }}): el escaño
-          solo cambiaría si la participación se multiplicara por {{ reach.factor }}.
+          sólo cambiaría si la participación se multiplicara por {{ reach.factor }}.
           {%- endif %}
         </p>
         {% else %}
@@ -930,7 +930,7 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
           <dt>Brecha del último escaño</dt>
           <dd>Los votos que le faltan al aspirante al último escaño de una provincia para igualar el cociente D'Hondt de quien lo ganó.</dd>
           <dt>Efecto neto</dt>
-          <dd>Lo que el voto CERA da al aspirante al último escaño menos lo que da a quien lo defiende. El escaño solo cambia si supera la brecha.</dd>
+          <dd>Lo que el voto CERA da al aspirante al último escaño menos lo que da a quien lo defiende. El escaño sólo cambia si supera la brecha.</dd>
           <dt>Inferencia ecológica</dt>
           <dd>Deducir pautas a partir de datos agregados, aquí por provincia. Sirve para comparar territorios; aplicarla a cada persona es la falacia ecológica.</dd>
           <dt>Provincias sensibles</dt>

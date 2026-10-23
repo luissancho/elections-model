@@ -82,7 +82,7 @@ def test_bullseye_names_the_axes_at_the_edges_and_draws_small_points():
     assert points[0]['label'] == {'show': False} and 'tooltip' not in points[0]
     # la fila sin error en un bloque no se dibuja
     assert [p['row']['event'] for p in points[0]['data']] == ['2023-23J', '2019-10N', '2021-4M']
-    # las etiquetas van en una gemela invisible y silenciosa, sin tooltip: solo los puntos lo abren
+    # las etiquetas van en una gemela invisible y silenciosa, sin tooltip: sólo los puntos lo abren
     assert len(labels) == 1 and labels[0]['itemStyle'] == {'opacity': 0} and labels[0]['tooltip'] == {'show': False}
     assert labels[0]['label']['show'] is True and labels[0]['label']['position'] == 'right' and labels[0]['labelLayout'] == {'hideOverlap': True}
     assert labels[0]['symbolSize'] == 8 and labels[0]['z'] == 10 and [p['row']['event'] for p in labels[0]['data']] == ['2023-23J', '2019-10N', '2021-4M']
@@ -173,7 +173,7 @@ def test_hemicycle_writes_the_seat_delta_under_the_seats():
 def test_stacked_bar_labels_each_segment_with_its_seats_and_delta():
     option = run_js('st.stackedOption([{name: "PP", seats: 140}, {name: "PSOE", seats: 107}, {name: "BNG", seats: 2}], {total: 350, majority: 176, deltas: {PP: -25, PSOE: 0}})')
     bars = [s for s in option['series'] if s['type'] == 'bar']
-    # el nombre y los escaños en negrita y la flecha en peso normal (Luis, 2026-10-17); sin delta, solo los escaños
+    # el nombre y los escaños en negrita y la flecha en peso normal (Luis, 2026-10-17); sin delta, sólo los escaños
     assert [s['label']['formatter'] for s in bars] == ['{seats|PP 140} {delta|▼ 25}', '{seats|PSOE 107} {delta|–}', '{seats|BNG 2}']
     assert all(s['label']['rich'] == {'seats': {'fontWeight': 700, 'color': '#fff'}, 'delta': {'fontWeight': 400, 'color': '#fff'}} for s in bars)
     assert [s['label']['show'] for s in bars] == [True, True, False] and option['xAxis']['max'] == 350
@@ -252,6 +252,47 @@ def test_series_axis_follows_the_window_and_the_parties_shown():
     assert option['dataZoom'][0]['filterMode'] == 'filter'  # la ventana recorta los datos y el eje se recalcula
     assert run_js('[s.axisPctLabel(32), s.axisPctLabel(32.2), s.axisPctLabel(0), s.axisPctLabel(32.000000001)]') == ['32%', '32,2%', '0%', '32%']
 
+LAYER_ARGS = (SERIES_ARGS % "'hidden', projection: {dates: ['2026-10-02', '2026-10-03'], groups: {parties: {mean: {PP: [31, 31.5]}, "
+              "lo: {PP: [30, 30]}, hi: {PP: [32, 33]}}}}, result: {date: '2026-10-08', values: {PP: 31.5}}, layers: %s")
+LAYER_ARGS = LAYER_ARGS.replace("polls: {parties: ['PP'], polls: []}", "polls: {parties: ['PP'], polls: [{date: '2026-10-01', pollster: 'Casa A', PP: 30.5}]}")
+
+
+def series_roles(option):
+    """Papel de cada serie de la opción del promedio, deducido de su forma: `mean`, `band`, `poll`, `projection`,
+    `result` y `marks`, sin repetir y ordenados."""
+    roles = set()
+    for entry in option['series']:
+        if entry['name'] == 'marks':
+            roles.add('marks')
+        elif entry['type'] == 'scatter':
+            roles.add('result' if entry.get('symbol') == 'diamond' else 'poll')
+        elif entry.get('lineStyle', {}).get('opacity') == 0:
+            roles.add('band')
+        elif entry.get('lineStyle', {}).get('type') == 'dashed':
+            roles.add('projection')
+        else:
+            roles.add('mean')
+    return sorted(roles)
+
+
+def test_series_layers_draw_the_polls_the_average_or_both():
+    """«Sondeos / Promedio / Ambos» (Luis, 2026-10-23): la capa elegida decide qué se dibuja. Sólo sondeos: los
+    puntos, el resultado y las marcas, sin líneas, bandas ni proyección; sólo promedio: sin puntos; ambas (por
+    defecto): todo. El tooltip sigue a las series que quedan, y la imagen respeta la capa."""
+    everything = ['band', 'marks', 'mean', 'poll', 'projection', 'result']
+    assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'ambos'"))) == everything
+    assert series_roles(run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))) == ['band', 'marks', 'mean', 'poll']
+    polls_only = run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'sondeos'"))
+    assert series_roles(polls_only) == ['marks', 'poll', 'result']
+    assert [len(entry['data']) for entry in polls_only['series'] if entry['type'] == 'scatter'] == [1, 1]
+    assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'promedio'"))) == ['band', 'marks', 'mean', 'projection', 'result']
+    # the first series is now the poll points: its tooltip is the box of the poll, not a day of the average
+    box = run_js("(() => { const o = s.seriesOption(%s); return o.tooltip.formatter({seriesIndex: 0, seriesName: 'PP', "
+                 "dataIndex: 0, data: o.series[0].data[0]}); })()" % (LAYER_ARGS % "'sondeos'"))
+    assert '<strong>Casa A</strong>' in box and 'PP 30,5' in box
+    image = run_js('s.seriesImageOption(%s)' % (LAYER_ARGS % "'sondeos'"))
+    assert series_roles(image) == ['marks', 'poll', 'result'] and image['legend']['data'] == ['PP']
+
 
 def test_series_views_carry_the_result_of_each_view():
     initial = {'series': {'dates': ['2026-10-01'], 'parties': ['PP', 'VOX', 'PSOE'], 'mean': {'PP': [30], 'VOX': [10], 'PSOE': [28]},
@@ -294,7 +335,7 @@ def test_rating_path_runs_from_zero_to_a_hundred_with_coloured_points_and_a_dash
     assert line['type'] == 'line' and line['showSymbol'] is False and line['data'] == [['2021-05-04', 71.0], ['2023-07-23', 80.0]]
     assert general['type'] == 'scatter' and general['color'] == '#1d4f86' and [p['row']['label'] for p in general['data']] == ['Generales 2023']
     assert regional['type'] == 'scatter' and regional['color'] == '#c0672e' and [p['value'] for p in regional['data']] == [['2021-05-04', 71.0]]
-    # el tramo final: discontinuo desde la última elección hasta hoy, con un punto hueco solo en hoy
+    # el tramo final: discontinuo desde la última elección hasta hoy, con un punto hueco sólo en hoy
     assert tail['type'] == 'line' and tail['lineStyle']['type'] == 'dashed'
     assert [p['value'] for p in tail['data']] == [['2023-07-23', 80.0], ['2026-10-15', 82.4]]
     assert tail['data'][0]['symbol'] == 'none' and tail['data'][1]['symbol'] == 'emptyCircle'
@@ -348,7 +389,7 @@ def test_weights_option_sizes_the_polls_by_weight_and_draws_the_line_the_band_th
 def test_weights_poll_lines_name_the_sponsor_and_the_weight_factors():
     lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][0]))
     assert lines[0] == '<strong>GAD3 / ABC</strong>' and lines[1].endswith('· muestra 1200')   # es-ES: sin separador hasta 5 cifras
-    assert lines[2:] == ['Publicado 32,4% · corregido 32,9%', 'Peso 0,50', 'F(kernel) 0,64 · F(solape) 1,00 · F(muestra) 0,80 · F(rating) 1,00']
+    assert lines[2:] == ['Publicada 32,4% · Corregida 32,9%', 'Peso 0,50', 'F(kernel) 0,64 · F(solape) 1,00 · F(muestra) 0,80 · F(rating) 1,00']
     lines = run_js('w.pollLines(%s, "PP")' % json.dumps(EXAMPLE['rows'][1]))
     assert lines[0] == '<strong>Sigma Dos</strong>' and lines[1].endswith('· muestra –')
 
@@ -363,6 +404,27 @@ def test_weights_option_gives_the_line_and_the_kernel_hover_symbols_for_their_to
 def test_weights_kernel_line_names_the_factor():
     assert run_js('w.kernelLine(0.946)') == 'F(kernel) 0,95'
     assert run_js('w.kernelLine(null)') == 'F(kernel) –'
+
+
+def test_weights_option_can_draw_the_points_with_the_corrected_figure():
+    # the Publicada/Corregida switch of the method page: the published figure by default, the one the line is fitted on
+    option = run_js('w.weightsOption(%s)' % json.dumps(EXAMPLE))
+    assert [p['value'][1] for p in option['series'][3]['data']] == [32.4, 33.1]
+    option = run_js('w.weightsOption(%s, {field: "pct_adj"})' % json.dumps(EXAMPLE))
+    assert [p['value'][1] for p in option['series'][3]['data']] == [32.9, 33.0]
+    assert option['series'][3]['name'] == 'Sondeos' and [p['symbolSize'] for p in option['series'][3]['data']] == [13, 20]
+
+
+def test_weights_value_axis_keeps_the_same_bounds_for_both_figures():
+    # the union of both figures and the band (32.1 .. 33.8), half a point wider, rounded outwards: the axis stays still
+    assert run_js('w.valueRange(%s, %s)' % (json.dumps(EXAMPLE['rows']), json.dumps(EXAMPLE['line']))) == {'min': 31, 'max': 35}
+    for field in ('pct', 'pct_adj'):
+        option = run_js('w.weightsOption(%s, {field: "%s"})' % (json.dumps(EXAMPLE), field))
+        assert (option['yAxis'][0]['min'], option['yAxis'][0]['max']) == (31, 35), field
+    # a corrected figure far from the published one widens the common range
+    rows = [dict(EXAMPLE['rows'][0], pct_adj=38.2), EXAMPLE['rows'][1]]
+    assert run_js('w.valueRange(%s, %s)' % (json.dumps(rows), json.dumps(EXAMPLE['line']))) == {'min': 31, 'max': 39}
+    assert run_js('w.valueRange([], {mean: [], lo: [], hi: []})') == {}
 
 
 # Gráficos del estudio CERA (`/analisis/voto-cera`)
@@ -396,7 +458,7 @@ def test_scatter_option_labels_only_the_named_provinces_and_draws_the_fit():
     assert [item['label']['show'] for item in points['data']] == [True, False, True]
     assert fit['type'] == 'line' and fit['data'] == [[20, 66], [80, 44]] and fit['lineStyle']['type'] == 'dashed'
     assert fit['showSymbol'] is False and fit['silent'] is True
-    # sin recta, solo los puntos; sin `labelled`, ninguna etiqueta
+    # sin recta, sólo los puntos; sin `labelled`, ninguna etiqueta
     option = run_js('sc.scatterOption(rows, {x: "latam_share", y: "left_share", name: "name"})', rows=rows)
     assert len(option['series']) == 1 and not any(item['label']['show'] for item in option['series'][0]['data'])
 
@@ -410,7 +472,7 @@ def test_slope_option_one_line_per_row_with_zero_reference():
     assert len(lines) == 3 and [s['name'] for s in lines] == ['Aragón', 'Castilla y León', 'Andalucía']
     assert option['xAxis']['type'] == 'category' and option['xAxis']['data'] == ['Comicio anterior', '2026']
     assert lines[1]['color'] == '#1d4f86' and lines[1]['data'][0] == 8.9 and lines[1]['data'][1]['value'] == -0.9
-    # la etiqueta solo en el valor final
+    # la etiqueta sólo en el valor final
     assert all(s['data'][1]['label']['show'] is True and not isinstance(s['data'][0], dict) for s in lines)
     marked = [s for s in lines if 'markLine' in s]
     assert len(marked) == 1 and marked[0]['markLine']['data'] == [{'yAxis': 0}]
@@ -505,7 +567,7 @@ IMAGE_ARGS = ("{series: {dates: ['2026-07-01', '2026-08-01', '2026-09-01', '2026
 
 def test_series_image_draws_a_static_legend_of_the_names_shown_and_no_slider():
     """La imagen descargable del promedio (Luis, 2026-10-21): la leyenda se dibuja (no hay pastillas en el PNG),
-    estática y solo con lo que se ve; sin deslizador, con un zoom invisible en la ventana de la pantalla."""
+    estática y sólo con lo que se ve; sin deslizador, con un zoom invisible en la ventana de la pantalla."""
     option = run_js('s.seriesImageOption(%s)' % (IMAGE_ARGS % "['VOX']"))
     assert option['legend']['show'] is True and option['legend']['selectedMode'] is False
     assert option['legend']['type'] == 'plain' and option['legend']['data'] == ['VOX']
