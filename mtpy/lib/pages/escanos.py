@@ -171,7 +171,7 @@ def _sort_name(name: str) -> str:
 
 def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     """
-    Overview table of the central scenario by district and party.
+    Overview table of the central allocation by district and party.
 
     Parameters
     ----------
@@ -183,11 +183,11 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``None`` without districts. Otherwise ``parties`` (names with any seat in the scenario, by
-        scenario total descending; ties in the order of ``districts['parties']``), ``rows`` (``id``,
-        ``name``, ``seats`` and ``cells`` per district) and ``total`` (the scenario row of the
+        ``None`` without districts. Otherwise ``parties`` (names with any seat in the central allocation, by
+        central total descending; ties in the order of ``districts['parties']``), ``rows`` (``id``,
+        ``name``, ``seats`` and ``cells`` per district) and ``total`` (the central row of the
         whole scope, or ``None``). Each cell is ``{'seats': int or None, 'range': str}``: the
-        scenario seats (``None`` when the district is not in the scenario) and the 95 % interval.
+        central seats (``None`` when the district is not in the ``scenario`` part) and the 95 % interval.
     """
     regions = districts.get('regions') or []
 

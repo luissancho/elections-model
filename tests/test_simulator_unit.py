@@ -580,7 +580,7 @@ def test_error_estimator_is_skipped_without_errors_or_past_elections():
     assert sim.fit_error_estimator() is None
 
 
-from tests.fakes import NAMES, REGIONS, synthetic_simulator
+from tests.fakes import NAMES, synthetic_simulator
 
 
 def test_central_result_is_a_dhondt_allocation_of_the_central_vote():
@@ -618,9 +618,10 @@ def test_central_result_is_the_same_in_both_modes_and_cached():
     sim = synthetic_simulator()
     first = sim.central_result()
     assert sim.central_result() is not first and sim.central_result().equals(first)
-    sim.mode = 'forecast'
-    sim.params['horizon'] = 'deadline'
-    assert sim.central_result().equals(first)
+    sim.run(reset=False, n_sim=5)
+    now = sim.central_result()
+    sim.run(reset=False, n_sim=5, horizon='deadline')
+    assert sim.central_result().equals(now)
     sim.set_params(n_sim=7)
     assert sim.central_table is None
 

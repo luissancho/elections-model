@@ -28,7 +28,7 @@
           <li>Cada simulación sortea el voto de cada partido alrededor del promedio, con su error y el histórico de los sondeos.</li>
           <li>El modo Elección suma la deriva de la opinión hasta la votación, mayor en los partidos jóvenes.</li>
           <li>El voto pasa a cada circunscripción con el swing proporcional y oscilaciones por comunidad y provincia.</li>
-          <li>Los escaños se reparten con D'Hondt y la barrera de cada ámbito; las cifras resumen todas las simulaciones.</li>
+          <li>Los escaños se reparten con D'Hondt y la barrera de cada ámbito; el titular es el reparto del voto central y los rangos y probabilidades resumen las simulaciones.</li>
         </ul>
       {{ m.card_end() }}
       {{ m.card_start('sorteo', 'Del promedio al sorteo del voto', 'Cada simulación es una elección posible: el voto de cada partido se sortea alrededor de su voto estimado, con un margen que suma dos errores.') }}
@@ -241,7 +241,7 @@
           el 30% de la isla o el 6% del archipiélago.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('cifras', 'Qué es cada cifra', 'Las cifras publicadas resumen todas las simulaciones de un modo: cuentan en cuántas ocurre cada cosa.') }}
+      {{ m.card_start('cifras', 'Qué es cada cifra', 'El titular es un reparto; las demás cifras resumen todas las simulaciones: cuentan en cuántas ocurre cada cosa.') }}
         <ul>
           <li><strong>Los escaños de cada partido</strong> son su reparto central: proyectamos el promedio de
             sondeos a cada circunscripción con el swing proporcional, sin sorteo, y aplicamos D'Hondt y la barrera.

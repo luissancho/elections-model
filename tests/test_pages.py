@@ -3195,6 +3195,8 @@ def test_metodo_escanos_explains_the_central_allocation(api):
     assert 'el mismo titular en el nowcast y en el forecast' in text
     assert 'a veces saca escaño y a veces no' in text
     assert 'son su mediana' not in text and 'El escenario central' not in text
+    assert 'El titular es un reparto' in text and 'el titular es el reparto del voto central' in text
+    assert 'Las cifras publicadas resumen todas las simulaciones' not in text
 
 
 def test_history_figures_are_a_kpi_row(history_site):

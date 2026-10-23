@@ -356,6 +356,7 @@ class Simulator(Core):
         self.units = None
         self.results = None
         self.central_table = None  # Cache of `central_result`
+        self.forecast = None  # Set by `fit_forecast` or `load_forecast`
 
         if self.verbose > 0:
             print('Set params...')
@@ -851,7 +852,8 @@ class Simulator(Core):
         One deterministic pass `build_frame` -> `build_umat` -> `simulate` with `random` off; the random
         generators are not touched, so the simulations of `run` do not change. Same layout as `result()`
         (one row per region, the total of the scope included, one column per party, integers). Cached in
-        `central_table` until the params change or `run` is called; a copy is returned.
+        `central_table` until the next `run` or `set_params` with arguments; a copy is returned. A refit
+        via `fit_forecast`/`load_forecast` does not clear it: call `run` after refitting.
 
         `None` in the regression modes (`split=False`, there are no provinces to allocate) or without a
         forecast.

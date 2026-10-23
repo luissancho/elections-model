@@ -119,8 +119,8 @@ def _quantile_cols(x: np.ndarray, suffix: str = '') -> dict[str, float]:
 def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: set) -> pd.DataFrame:
     """
     Provincial evaluation of the nowcast run: one row per province and party with the official and simulated
-    share (median, intervals) and seats (central allocation, median, intervals, CRPS), for the cells with an official or simulated
-    share of at least 1 %.
+    share (median, intervals) and seats (central allocation, median, intervals, CRPS), for the cells with an
+    official or simulated share of at least 1 %.
     """
     off_pct, off_seats = official_provinces(scope, event_date)
     names = sim.params['names']
