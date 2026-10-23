@@ -27,9 +27,10 @@
 <details class="how"><summary>Cómo leerlo</summary><div class="how-body">{{ caller() }}</div></details>
 {%- endmacro %}
 
-{#- The page headline: one line, outside any card, with the situation in plain words and live figures. -#}
-{% macro headline(text) -%}
-<p class="headline">{{ text }}</p>
+{#- The page headline: one line, outside any card, with the situation in plain words and live figures; `tag`
+    'h1' makes it the title of the page. -#}
+{% macro headline(text, tag='p') -%}
+<{{ tag }} class="headline">{{ text }}</{{ tag }}>
 {%- endmacro %}
 
 {#- The closing card of a page: the method question as a linked title, a short teaser and the related links
@@ -90,7 +91,7 @@
 {{ card_end() }}
 {%- endmacro %}
 
-{#- A note of the «Notas» card, with a link back to its call. The body is the `{% call %}` content. -#}
+{#- A note of the «Notas» card. The body is the `{% call %}` content. -#}
 {% macro note_item(key) -%}
-<li id="nota-{{ key }}">{{ caller() }} <a class="note-back" href="#llamada-{{ key }}" aria-label="Volver al texto">↩</a></li>
+<li id="nota-{{ key }}">{{ caller() }}</li>
 {%- endmacro %}

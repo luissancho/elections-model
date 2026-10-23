@@ -12,10 +12,11 @@ SOURCE = ("{% import '_macros.html' as m %}<p>Uno{{ m.note('tope', keys) }}</p><
           "{% call m.note_item('diseno') %}Nota B{% endcall %}{% endcall %}")
 
 
-def test_note_calls_are_numbered_by_the_order_of_the_keys_and_link_both_ways():
+def test_note_calls_are_numbered_by_the_order_of_the_keys_and_link_to_their_notes():
     page = pages.environment().from_string(SOURCE).render(keys=KEYS)
     assert re.findall(r'<a id="llamada-([a-z]+)" href="#nota-\1"[^>]*>(\d+)</a>', page) == [('tope', '1'), ('diseno', '2')]
-    assert 'id="nota-tope"' in page and 'href="#llamada-tope"' in page and 'id="nota-diseno"' in page
+    assert 'id="nota-tope"' in page and 'id="nota-diseno"' in page
+    assert 'href="#llamada-' not in page and 'note-back' not in page  # no link back from the notes (2026-10-22)
     assert page.index('id="nota-tope"') < page.index('id="nota-diseno"') and 'id="notas"' in page
     # without JS the call is a plain link: the button semantics are set by notes.js
     assert 'aria-expanded' not in page and 'aria-controls' not in page and 'role="button"' not in page

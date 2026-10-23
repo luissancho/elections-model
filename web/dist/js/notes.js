@@ -89,7 +89,6 @@ function openPop(doc, call, note, key) {
   number.textContent = `${call.textContent}. `;
   body.append(number);
   note.childNodes.forEach((child) => body.append(child.cloneNode(true)));
-  body.querySelectorAll('.note-back').forEach((back) => back.remove());
 
   pop.dataset.note = key;
   pop.append(close, body);
