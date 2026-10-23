@@ -88,7 +88,7 @@
         </p>
         {% endif %}
         <p>
-          La barra reparte los escaños del escenario central y marca la mayoría absoluta, que está en
+          La barra reparte los escaños del reparto central y marca la mayoría absoluta, que está en
           {{ summary.majority|int }} de {{ summary.n_seats|int }}. En la tabla, la cifra de escaños es el
           resultado central y el rango deja fuera las simulaciones más extremas de cada lado; P(escaño) es la
           probabilidad de obtener al menos uno, P(primero), la de ser el partido con más escaños, y P(mayoría),
@@ -96,7 +96,7 @@
         </p>
         <p>
           Las curvas de abajo muestran, fila a fila y cada una con su propio eje, qué resultados salen más en
-          las simulaciones: el punto más alto es el más frecuente, la línea gruesa la mediana, las finas los
+          las simulaciones: el punto más alto es el más frecuente, la línea gruesa el reparto central, las finas los
           extremos del rango y la discontinua la mayoría absoluta cuando cae dentro. Al pasar por encima se ve
           en qué fracción de simulaciones sale cada número de escaños.
         </p>
@@ -122,7 +122,7 @@
         <p>
           Cada píldora es un partido. La barra es el reparto central de «Reparto de escaños» con los partidos
           marcados delante, en color, y el resto detrás, en gris: si los de color pasan la línea de la mayoría, la
-          alcanzan en el escenario central. El histograma cuenta cuántas simulaciones dan cada número de escaños a
+          alcanzan en el reparto central. El histograma cuenta cuántas simulaciones dan cada número de escaños a
           los marcados juntos y el texto dice en cuántas llegan a la mayoría absoluta.
         </p>
         <p>
@@ -131,19 +131,15 @@
           absoluta.
         </p>
         <p>
-          La franja de arriba da los escaños del reparto central, la suma de los de cada partido: la misma cifra que
-          la barra y que los bloques en el resto de la web. Junto al histograma, la mediana de las simulaciones, que
-          es la mediana de la suma en cada una y puede quedar un escaño o dos por debajo o por encima, y su rango del
-          95%, las líneas finas que lo encierran. No es un error que no coincidan: cada partido
-          tiene su propia mediana, ajustada para que entre todos sumen la cámara, y la suma de esas medianas no tiene
-          por qué coincidir con la mediana de la suma. Pasa sobre todo con un partido que a veces saca escaño y a
-          veces no: su mediana puede ser cero aunque en muchas simulaciones aporte alguno.
+          La franja de arriba y la línea del histograma son el reparto central: la suma de los escaños de cada
+          partido, la misma cifra que la barra y que los bloques en el resto de la web. El rango del 95% y la
+          probabilidad de llegar a la mayoría salen de las simulaciones, sumadas una a una.
         </p>
         <p>No dice si esos partidos querrían pactar: sólo si les darían los números.</p>
         {% endcall %}
       {{ m.card_end() }}
       {% if district_table %}
-      {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el escenario central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
+      {{ m.card_start('districts', 'Resultados por territorio', 'El reparto de escaños y el voto de cada circunscripción en el reparto central y, para la que elijas, el detalle con sus intervalos.', subtitle) }}
         <div class="series-controls" id="territory-controls" hidden>
           {% if territory_levels %}
           <fieldset id="territory-level" class="seg">
@@ -160,7 +156,7 @@
         </div>
         <div class="et-wrap">
           <table id="district-table" class="geo">
-            <caption>Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su circunscripción. Pasa el ratón para ver el rango del 95%.</caption>
+            <caption>Reparto central: D'Hondt en cada circunscripción sobre el voto central; cada fila suma sus escaños. Pasa el ratón para ver el rango del 95%.</caption>
             <thead>
               <tr>
                 <th scope="col" data-key="name" aria-sort="ascending">Circunscripción</th>
@@ -238,19 +234,19 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          La tabla reparte los escaños de cada circunscripción en el escenario central, la simulación más
-          parecida a la mediana. Al elegir una circunscripción, el detalle muestra el voto y los escaños
-          previstos de cada partido en ella.
+          La tabla reparte los escaños de cada circunscripción con D'Hondt sobre el voto central: la suma de las
+          circunscripciones es el titular de la página y la de los partidos de cada bloque, la cifra del bloque.
+          Al elegir una circunscripción, el detalle muestra ese reparto con el rango del 95% y la probabilidad de
+          escaño de las simulaciones.
         </p>
         <p>
-          Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto; en las
-          circunscripciones pequeñas, pocos votos cambian un escaño.
+          Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto.
         </p>
         <p>
           En CCAA los escaños son la suma de sus provincias y el voto, la media ponderada por los votos de la
           elección anterior.
         </p>
-        <p>Es un escenario entre muchos posibles, no la predicción de ninguna circunscripción.</p>
+        <p>Es un reparto del voto central, no la predicción cerrada de ninguna circunscripción: en las pequeñas, pocos votos cambian un escaño.</p>
         {% endcall %}
       {{ m.card_end() }}
       {% endif %}
@@ -296,7 +292,7 @@
         {% call m.how() %}
         <p>
           Cada enlace descarga una tabla en CSV, el formato de las hojas de cálculo: el resumen por partido y
-          bloque, los escaños de cada simulación, las circunscripciones, el escenario central y el abanico.
+          bloque, los escaños de cada simulación, las circunscripciones, el reparto central y el abanico.
         </p>
         <p>Los datos son los del run que ves, así que cambian si cambias el modo o fijas otro run.</p>
         <p>No incluyen los sondeos: están en la pestaña Promedios.</p>

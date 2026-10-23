@@ -243,9 +243,10 @@
       {{ m.card_end() }}
       {{ m.card_start('cifras', 'Qué es cada cifra', 'Las cifras publicadas resumen todas las simulaciones de un modo: cuentan en cuántas ocurre cada cosa.') }}
         <ul>
-          <li><strong>Los escaños de cada partido</strong> son su mediana: la mitad de las simulaciones le dan
-            esa cifra o menos, y la otra mitad esa cifra o más. Como las medianas no tienen por qué sumar el total
-            de la cámara, se ajustan en proporción y se redondean para que lo sumen.</li>
+          <li><strong>Los escaños de cada partido</strong> son su reparto central: proyectamos el promedio de
+            sondeos a cada circunscripción con el swing proporcional, sin sorteo, y aplicamos D'Hondt y la barrera.
+            La suma de las circunscripciones es el titular y los bloques suman sus partidos. Es el mismo titular
+            en el nowcast y en el forecast: la deriva sólo abre los rangos.</li>
           <li><strong>El intervalo del 95%</strong> de los escaños deja fuera el 2,5% de las simulaciones más
             bajas y el 2,5% de las más altas. El del voto que acompaña a cada partido se calcula directamente
             con los errores del sorteo, sin pasar por el reparto.</li>
@@ -253,9 +254,8 @@
             partido obtenga al menos un escaño, que sea el que más tiene o que un bloque o una coalición sume la
             mayoría absoluta. Se cuentan simulación a simulación: en cada una, los escaños suman el total de la
             cámara, así que lo que gana un partido lo pierde otro.</li>
-          <li><strong>El escenario central</strong> es la simulación real más parecida a las medianas de todos
-            los partidos. Es el reparto por circunscripción que se publica: coherente, pero sólo uno entre
-            muchos posibles.</li>
+          <li><strong>Dónde cae el reparto</strong> dentro del rango: en un partido que a veces saca escaño y a
+            veces no, el reparto central puede quedar lejos del centro de su rango.</li>
         </ul>
         <p>
           {% if figures.coverage %}{% set first = figures.coverage[0] %}

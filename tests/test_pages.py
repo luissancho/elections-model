@@ -3171,9 +3171,28 @@ def test_escanos_majority_calculator_draws_the_bar_above_the_histogram(api):
     assert card.index('id="coalition-result"') < card.index('id="coalition-bar"') < card.index('id="coalition-chart"')
     assert re.search(r'<div class="chart" id="coalition-bar" role="img" aria-label="[^"]+"></div>', card)
     assert 'los partidos marcados delante, en color, y el resto detrás, en gris' in re.sub(r'\s+', ' ', card)
-    assert 'la suma de esas medianas no tiene por qué coincidir con la mediana de la suma' in re.sub(r'\s+', ' ', card)
+    assert 'La franja de arriba y la línea del histograma son el reparto central' in re.sub(r'\s+', ' ', card)
+    assert 'mediana' not in card.lower()
     promedios = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
     assert 'la calculadora de mayorías están en la pestaña Escaños' in promedios and 'calculadora de coaliciones' not in promedios
+
+
+def test_escanos_texts_call_the_headline_the_central_allocation(api, fresh_app):
+    write_districts(fresh_app.fs)
+    page = re.sub(r'\s+', ' ', html(call(api, '/es/escanos')[2]))
+    assert "Reparto central: D'Hondt en cada circunscripción sobre el voto central; cada fila suma sus escaños." in page
+    assert 'la línea gruesa el reparto central' in page and 'la línea gruesa la mediana' not in page
+    assert 'la simulación más cercana a la mediana' not in page and 'Escenario central' not in page
+    assert 'la suma de las circunscripciones es el titular' in page
+    assert 'Reparto central' in page  # etiqueta del CSV
+
+
+def test_metodo_escanos_explains_the_central_allocation(api):
+    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert '<strong>Los escaños de cada partido</strong> son su reparto central' in text
+    assert 'el mismo titular en el nowcast y en el forecast' in text
+    assert 'a veces saca escaño y a veces no' in text
+    assert 'son su mediana' not in text and 'El escenario central' not in text
 
 
 def test_history_figures_are_a_kpi_row(history_site):
