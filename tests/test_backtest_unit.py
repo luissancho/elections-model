@@ -107,6 +107,18 @@ def test_summarize_case_horizon_columns():
     assert m['log_score_vs_h'] == pytest.approx(0.25)
 
 
+def test_provinces_report_the_central_allocation_and_keep_the_median(monkeypatch):
+    from mtpy.lib import backtest
+    from tests.fakes import NAMES, synthetic_simulator
+    sim = synthetic_simulator()
+    empty = pd.DataFrame(index=pd.Index([], name='region_id'))
+    monkeypatch.setattr(backtest, 'official_provinces', lambda scope, event_date: (empty, empty))
+    rows = backtest._provinces(sim, 'es', '2026-11-29', 30, {'PP'}).set_index(['region', 'party'])
+    assert rows.loc[(28, 'PP'), 'model_seats'] == 3 and rows.loc[(8, 'VOX'), 'model_seats'] == 0
+    medians = pd.DataFrame(sim.results[:, 1, :], columns=NAMES).median()
+    assert rows.loc[(28, 'PSOE'), 'median_seats'] == medians['PSOE']
+
+
 def test_summarize_case_provincial_metrics_skip_cells_without_projection():
     """M9 (revisión): las cuotas provinciales se evalúan sólo donde el modelo proyecta (mediana finita), con el
     mismo denominador en cobertura y error; un caso huérfano (escaños no válidos) no aporta métricas provinciales."""
