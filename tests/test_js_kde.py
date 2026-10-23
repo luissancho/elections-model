@@ -58,6 +58,12 @@ def test_ridge_rows_scale_each_row_to_its_peak_over_its_own_range():
     assert all(np.isfinite(upn['y'])) and upn['pmf'] == {'1': 1.0}
 
 
+def test_ridge_rows_carry_the_central_seats_when_given():
+    """Cada fila lleva sus escaños del reparto central si se dan, y `null` si no."""
+    rows = run_js('k.ridgeData(dist, ["PP", "PSOE"], {central: {PP: 141}})')
+    assert rows[0]['central'] == 141 and rows[1]['central'] is None
+
+
 def test_ridge_blocks_sum_the_parties_of_each_block():
     data = run_js('k.ridgeBlocks(dist, [{name: "Derecha", parties: ["PP", "VOX"]}, {name: "Vacio", parties: ["X"]}], {majority: 176})')
     assert [row['name'] for row in data] == ['Derecha']

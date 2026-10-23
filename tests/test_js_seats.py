@@ -60,8 +60,9 @@ def test_coalition_text_gives_the_central_seats_and_the_probability():
     assert run_js('s.coalitionText(1, 140, {median: 139, lo: 118, hi: 160, pMajority: 0})') == '1 partido · 140 escaños · P(mayoría absoluta): 0,0%'
 
 
-def test_coalition_caption_gives_the_simulations_the_median_and_the_range():
-    """Las tres líneas junto al histograma, como las de los KDE de «Reparto de escaños»; el millar con punto."""
-    caption = run_js('s.coalitionCaption({n: 1000, median: 201, lo: 181, hi: 220.5, pMajority: 0.992})')
-    assert caption == [{'label': 'Simulaciones', 'value': '1.000'}, {'label': 'Mediana', 'value': '201'},
+def test_coalition_caption_gives_the_simulations_the_central_seats_and_the_range():
+    """Las tres líneas junto al histograma, como las de los KDE de «Reparto de escaños»: el reparto central de los
+    partidos marcados (no la mediana de su suma) y el millar con punto."""
+    caption = run_js('s.coalitionCaption({n: 1000, median: 201, lo: 181, hi: 220.5, pMajority: 0.992}, 202)')
+    assert caption == [{'label': 'Simulaciones', 'value': '1.000'}, {'label': 'Reparto central', 'value': '202'},
                        {'label': 'Rango 95%', 'value': '181–221'}]

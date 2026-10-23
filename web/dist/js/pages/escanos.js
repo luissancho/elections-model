@@ -23,9 +23,9 @@ const BLOCK_AXIS_SHARE = 0.8;
 const bySeats = (a, b) => ((b.seats ?? 0) - (a.seats ?? 0)) || ((b.seats_mean ?? 0) - (a.seats_mean ?? 0));
 
 /**
- * Data of the party bar of the central scenario, shared by «Reparto de escaños» and the majority calculator: the
- * parties with seats and a distribution, in the catalogue order, with their colours, full names and seat
- * differences against the last published election.
+ * Data of the party bar of the central allocation (the headline seats), shared by «Reparto de escaños» and the
+ * majority calculator: the parties with seats and a distribution, in the catalogue order, with their colours, full
+ * names and seat differences against the last published election.
  *
  * @param {object} initial the page's initial data (`summary`, `dist`, `deltas`)
  * @param {Catalog} catalog party catalogue of the run
@@ -50,10 +50,10 @@ function partyBar(initial, catalog, colors) {
 
 /**
  * Wire the majority calculator: restore the selection of the URL fragment, then recompute the text
- * (`coalitionText`), the bar of the central scenario (the marked parties first, in colour, and the rest after
- * them in grey) and the histogram of the marked parties with its caption (`coalitionCaption`) on load and on
- * every change. Only a change rewrites the fragment, so a link to another section (`#districts`) survives the
- * load.
+ * (`coalitionText`), the bar of the central allocation (the marked parties first, in colour, and the rest after
+ * them in grey) and the histogram of the marked parties, marked at their central seats, with its caption
+ * (`coalitionCaption`) on load and on every change. Only a change rewrites the fragment, so a link to another
+ * section (`#districts`) survives the load.
  *
  * @param {object} dist the dist part
  * @param {number} majority seats of the absolute majority
@@ -99,8 +99,8 @@ function wireCoalition(dist, majority, bar, nSeats) {
       const central = bar.rows.filter((row) => names.includes(row.name)).reduce((sum, row) => sum + row.seats, 0);
       result.textContent = coalitionText(names.length, central, stats);
       renderHistogram(chart, values, {
-        majority, median: stats.median, lo: stats.lo, hi: stats.hi, color: THEME.barColor, bounds: true,
-        markLabels: false, caption: coalitionCaption(stats),
+        majority, median: central, markLabel: `Reparto central: ${fmtInt(central)}`, lo: stats.lo, hi: stats.hi,
+        color: THEME.barColor, bounds: true, markLabels: false, caption: coalitionCaption(stats, central),
       });
     }
     return names;
@@ -115,15 +115,15 @@ function wireCoalition(dist, majority, bar, nSeats) {
 }
 
 const CAPTION = {
-  esc: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de su '
-    + 'circunscripción. Pasa el ratón para ver el rango del 95%.',
-  ccaa: 'Escenario central: la simulación más cercana a la mediana de escaños; cada fila suma los escaños de las '
-    + 'provincias de la comunidad.',
+  esc: 'Reparto central: D\'Hondt en cada circunscripción sobre el voto central; cada fila suma sus escaños. '
+    + 'Pasa el ratón para ver el rango del 95%.',
+  ccaa: 'Reparto central: D\'Hondt en cada circunscripción sobre el voto central; cada fila suma los escaños de '
+    + 'las provincias de la comunidad.',
   pct: 'Voto estimado en cada territorio; en CCAA, la media ponderada por los votos de la elección anterior.',
 };
 
 /**
- * Wire "Resultados por territorio": rebuild the table of the central scenario from the embedded `districts`,
+ * Wire "Resultados por territorio": rebuild the table of the central allocation from the embedded `districts`,
  * `scenario` and `summary` for the chosen level (CCAA or province) and mode (seats or vote), sortable from its
  * headers. The server draws the province-by-seats table; this replaces it and shows the controls.
  *
@@ -210,7 +210,11 @@ function wireSeats(initial, catalog, colors) {
       colors,
       deltas: parties.deltas,
       fullnames: parties.fullnames,
-      ridges: () => ridgeData(dist, parties.names, {majority, range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)]}),
+      ridges: () => ridgeData(dist, parties.names, {
+        majority,
+        range: [0, Math.round(nSeats * PARTY_AXIS_SHARE)],
+        central: Object.fromEntries(parties.rows.map((row) => [row.name, row.seats])),
+      }),
     },
     bloques: {
       container: 'seats-blocks',
@@ -221,7 +225,11 @@ function wireSeats(initial, catalog, colors) {
       fullnames: {},
       ridges: () => ridgeBlocks(dist, [...blockRows].sort(bySeats)
         .map((row) => ({name: row.name, parties: blockParties[row.name] || []})),
-      {majority, range: [0, Math.round(nSeats * BLOCK_AXIS_SHARE)]}),
+      {
+        majority,
+        range: [0, Math.round(nSeats * BLOCK_AXIS_SHARE)],
+        central: Object.fromEntries(blockRows.map((row) => [row.name, row.seats])),
+      }),
     },
   };
   const barEl = document.getElementById('seats-bar');

@@ -99,12 +99,14 @@ export function seatRange(stats, minWidth = 6) {
  *
  * @param {{name: string, values: number[]}[]} series rows to draw, in order (those without values are skipped)
  * @param {object} opts `majority` (seats of the absolute majority, for `summarize`), `points` (grid points
- *   per row, `GRID_POINTS` by default), `minWidth` (smallest range width, see `seatRange`) and `range`
- *   (`[x0, x1]` shared by every row; without it each row gets its own `seatRange`)
+ *   per row, `GRID_POINTS` by default), `minWidth` (smallest range width, see `seatRange`), `range`
+ *   (`[x0, x1]` shared by every row; without it each row gets its own `seatRange`) and `central` (`{name: seats}`
+ *   of the central allocation, the headline figure the ridge marks)
  * @returns {object[]} per row: `name`, `x0`, `x1`, `grid`, `y` (scaled density per grid point), `peak` (the
- *   raw peak density), `bw`, `median`, `lo`, `hi`, `min`, `max`, `n` and `pmf` (`{seats: share}`)
+ *   raw peak density), `bw`, `median`, `lo`, `hi`, `min`, `max`, `n`, `pmf` (`{seats: share}`) and `central`
+ *   (its seats in `central`, `null` when absent)
  */
-export function ridgeRows(series, {majority = 0, points = GRID_POINTS, minWidth = 6, range = null} = {}) {
+export function ridgeRows(series, {majority = 0, points = GRID_POINTS, minWidth = 6, range = null, central = {}} = {}) {
   const rows = [];
   for (const {name, values} of series) {
     if (!values || !values.length) {
@@ -135,6 +137,7 @@ export function ridgeRows(series, {majority = 0, points = GRID_POINTS, minWidth 
       max: stats.max,
       n: stats.n,
       pmf,
+      central: typeof central[name] === 'number' ? central[name] : null,
     });
   }
   return rows;
