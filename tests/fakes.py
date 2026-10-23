@@ -114,6 +114,12 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.composition_ratio, sim.composition_rho = 1.0, 0.
     sim.house_effects = sim.dispersion = sim.regional_noise = True
     sim.industry_bias, sim.composition, sim.smap = False, None, {'UP': [{'agg': ['UP', 'MP']}]}
+    sim.threshold, sim.threshold_scope = 3.0, None
+    sim.v2swing, sim.rng, sim.rng_swing, sim.region_groups, sim.central_table = None, np.random.default_rng(42), None, {}, None
+    # Resultados previos por región (la fila 0 es la media ponderada por `prev_totals.votes`): la base del swing
+    prev = pd.DataFrame({'PP': [38., 42., 32.], 'PSOE': [32., 28., 38.], 'VOX': [14., 15., 12.]},
+                        index=pd.Index(REGIONS, name='region_id'))
+    sim.prev_results = pd.concat({'votes': prev * 10, 'pct': prev, 'seats': prev * 0}, axis=1)
     sim.parties = pd.DataFrame({'id': [1, 2, 3], 'name': NAMES, 'fullname': ['Partido Popular', 'PSOE', 'Vox'],
                                 'color': [COLORS[n] for n in NAMES], 'block': ['Derecha', 'Izquierda', 'Derecha'],
                                 'regional': [0, 0, 0]})

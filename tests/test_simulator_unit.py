@@ -578,3 +578,75 @@ def test_error_estimator_is_skipped_without_errors_or_past_elections():
     assert sim.fit_error_estimator() is None
     sim.add_errors, sim.computer = True, None
     assert sim.fit_error_estimator() is None
+
+
+from tests.fakes import NAMES, REGIONS, synthetic_simulator
+
+
+def test_central_result_is_a_dhondt_allocation_of_the_central_vote():
+    sim = synthetic_simulator()
+    table = sim.central_result()
+    assert list(table.columns) == NAMES and list(table.index) == ['es', 'Madrid', 'Barcelona']
+    assert table.loc['es'].tolist() == [5, 4, 1]
+    assert table.loc['Madrid'].tolist() == [3, 2, 1] and table.loc['Barcelona'].tolist() == [2, 2, 0]
+    assert table.loc['es'].equals(table.loc[['Madrid', 'Barcelona']].sum())
+    assert table.dtypes.eq(int).all()
+
+
+def test_totals_is_the_central_allocation_and_keeps_the_old_statistics():
+    sim = synthetic_simulator()
+    assert sim.totals().tolist() == [5, 4, 1] and sim.totals().index.tolist() == NAMES
+    assert sim.totals(sort=True).index.tolist() == ['PP', 'PSOE', 'VOX']
+    expanded = Simulator.round_proportional(Simulator.central(sim.dist()), sim.n_seats)
+    assert sim.totals(method='median').tolist() == expanded.loc[NAMES].tolist()
+    assert int(sim.totals(method='mean').sum()) == 10
+    with pytest.raises(ValueError):
+        sim.totals(method='mode')
+
+
+def test_central_result_leaves_the_simulations_and_the_generators_alone():
+    a, b = synthetic_simulator(), synthetic_simulator()
+    a.params['n_sim'] = b.params['n_sim'] = 5
+    a.run(reset=False)
+    b.totals()  # la pasada determinista entre medias no debe mover la secuencia aleatoria
+    b.run(reset=False)
+    assert np.array_equal(a.results, b.results) and b.params['random'] is True and b.rng is not None
+    assert b.central_table is None  # `run` vacía la caché
+
+
+def test_central_result_is_the_same_in_both_modes_and_cached():
+    sim = synthetic_simulator()
+    first = sim.central_result()
+    assert sim.central_result() is not first and sim.central_result().equals(first)
+    sim.mode = 'forecast'
+    sim.params['horizon'] = 'deadline'
+    assert sim.central_result().equals(first)
+    sim.set_params(n_sim=7)
+    assert sim.central_table is None
+
+
+def test_central_result_applies_the_threshold_and_regression_mode_falls_back_to_the_median():
+    sim = synthetic_simulator()
+    sim.threshold = 20.0
+    table = sim.central_result()
+    assert (table['VOX'] == 0).all() and table.loc['es'].sum() == 10 and table.loc['Madrid'].sum() == 6
+    flat = synthetic_simulator()
+    flat.params['split'] = False
+    assert flat.central_result() is None
+    assert flat.totals().tolist() == flat.totals(method='median').tolist()
+
+
+def test_summary_headline_is_the_central_allocation_and_blocks_add_up():
+    sim = synthetic_simulator()
+    parties = sim.summary()
+    assert parties['seats'].tolist() == [5, 4, 1] and 'seats_median' in parties.columns
+    blocks = sim.summary('vs')
+    assert blocks.loc['Derecha', 'seats'] == 6 and blocks.loc['Izquierda', 'seats'] == 4
+
+
+def test_unit_summary_carries_the_central_seats_and_the_median():
+    sim = synthetic_simulator()
+    madrid = sim.unit_summary(28)
+    assert list(madrid.columns) == ['pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats']
+    assert madrid['seats'].tolist() == [3, 2, 1]
+    assert madrid['seats_median'].tolist() == pd.DataFrame(sim.results[:, 1, :], columns=NAMES).median().tolist()

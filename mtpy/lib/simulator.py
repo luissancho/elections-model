@@ -355,6 +355,7 @@ class Simulator(Core):
         self.frames = None
         self.units = None
         self.results = None
+        self.central_table = None  # Cache of `central_result`
 
         if self.verbose > 0:
             print('Set params...')
@@ -366,6 +367,8 @@ class Simulator(Core):
             self.params = self.default_params.copy()
         elif len(kwargs) == 0:
             return self
+
+        self.central_table = None
 
         for k, v in self.params.items():
             self.params[k] = kwargs.get(k, v)
@@ -839,31 +842,77 @@ class Simulator(Core):
             dtype=float
         )[self.params['names']]
 
+    def central_result(self) -> Optional[pd.DataFrame]:
+        """
+        Central allocation: D'Hondt in each province over the central vote (the mean of the forecast
+        projected to the provinces with the proportional swing, without noise or drift). It is the
+        published headline and it is the same in a nowcast and in a forecast.
+
+        One deterministic pass `build_frame` -> `build_umat` -> `simulate` with `random` off; the random
+        generators are not touched, so the simulations of `run` do not change. Same layout as `result()`
+        (one row per region, the total of the scope included, one column per party, integers). Cached in
+        `central_table` until the params change or `run` is called; a copy is returned.
+
+        `None` in the regression modes (`split=False`, there are no provinces to allocate) or without a
+        forecast.
+        """
+        if not self.params['split'] or self.forecast is None:
+            return
+
+        if self.central_table is None:
+            random = self.params['random']
+            self.params['random'] = False
+            try:
+                frame = self.build_frame()
+                umat = self.build_umat(frame)
+                result = self.simulate(frame, umat)
+            finally:
+                self.params['random'] = random
+
+            self.central_table = pd.DataFrame(
+                np.asarray(result, dtype=float).round(),
+                columns=self.params['names'],
+                index=pd.Index([self.region_names.get(r, r) for r in self.params['regions']], name='region')
+            ).astype(int)
+
+        return self.central_table.copy()
+
     def totals(
         self,
         sort: bool = False,
-        method: Literal['median', 'mean'] = 'median'
+        method: Literal['central', 'median', 'mean'] = 'central'
     ) -> pd.Series:
         """
-        Headline seats of each party: the central statistic of the simulated distribution (`median` by
-        default, or `mean`) expanded proportionally to the size of the chamber and rounded by largest
-        remainders (see `round_proportional`). Parties without seats in any simulation stay at 0.
+        Headline seats of each party. By default (`central`) the central allocation of the total of the
+        scope (see `central_result`): a D'Hondt allocation of the central vote, not a statistic of the
+        simulations. With `median` or `mean`, the central statistic of the simulated distribution expanded
+        proportionally to the size of the chamber and rounded by largest remainders (see
+        `round_proportional`); parties without seats in any simulation stay at 0.
 
         With `split=True` every simulation sums the chamber size, so `method='mean'` is an exact rounding
-        and the medians only need a small expansion. In the regression modes (`split=False`) the seats
-        estimator is not constrained and the expansion is large: those headlines are only indicative.
+        and the medians only need a small expansion. In the regression modes (`split=False`) there is no
+        central allocation, `central` falls back to `median`, and the seats estimator is not constrained:
+        the expansion is large and those headlines are only indicative.
 
         Parameters
         ----------
         sort : bool, optional
             Sort by descending seats (stable: ties keep the order of `names`).
-        method : {'median', 'mean'}, optional
-            Central statistic.
+        method : {'central', 'median', 'mean'}, optional
+            Central allocation or central statistic of the simulations.
         """
+        if method not in ('central', 'median', 'mean'):
+            raise ValueError('Method `{}` does not exist (use `central`, `median` or `mean`).'.format(method))
+
         if self.results is None:
             return
 
-        ds = self.round_proportional(self.central(self.dist(), method), self.n_seats)
+        table = self.central_result() if method == 'central' else None
+        if table is not None:
+            ds = table.iloc[self.params['regions'].index(self.default_region)].astype(int)
+        else:
+            stat = 'median' if method == 'central' else method
+            ds = self.round_proportional(self.central(self.dist(), stat), self.n_seats)
 
         if sort:
             return ds.sort_values(ascending=False, kind='stable')
@@ -873,8 +922,9 @@ class Simulator(Core):
     def scenario(self, method: Literal['median', 'mean'] = 'median') -> int:
         """
         Index of the simulation closest to the central statistic of the seats (L1 distance; ties by L2 and
-        then the lowest index). `result(sim.scenario())` is a coherent, publishable province-by-party
-        table: a real simulation whose rows are D'Hondt allocations summing the chamber size.
+        then the lowest index). `result(sim.scenario())` is a coherent province-by-party table: a real
+        simulation whose rows are D'Hondt allocations summing the chamber size. It is no longer published
+        (see `central_result`).
         """
         dist = self._require_dist()
 
@@ -894,7 +944,7 @@ class Simulator(Core):
         self,
         names: Optional[str | dict[str, Any] | list | tuple] = None,
         alpha: Optional[float] = None,
-        method: Literal['median', 'mean'] = 'median'
+        method: Literal['central', 'median', 'mean'] = 'central'
     ) -> pd.DataFrame:
         """
         Summary table of the simulation, by party or by block of parties.
@@ -911,8 +961,8 @@ class Simulator(Core):
             party if `None`.
         alpha : float, optional
             Confidence level of the intervals; the one given to the constructor by default.
-        method : {'median', 'mean'}, optional
-            Central statistic of the headline seats.
+        method : {'central', 'median', 'mean'}, optional
+            Headline seats: the central allocation or a central statistic of the simulations (see `totals`).
         """
         alpha = self.alpha if alpha is None else alpha
         parties = self.params['names']
@@ -929,7 +979,8 @@ class Simulator(Core):
             seats = group_results(seats.to_frame().T, blocks=blocks).iloc[0]
             pct = group_results(pct.to_frame().T, blocks=blocks).iloc[0]
 
-        table = self.summarize_seats(dist, self.n_seats, alpha=alpha, method=method, headline=seats)
+        table = self.summarize_seats(dist, self.n_seats, alpha=alpha,
+                                     method='median' if method == 'central' else method, headline=seats)
         desc = self.describe_dist(shares, alpha=alpha)
 
         return pd.concat([
@@ -1559,8 +1610,8 @@ class Simulator(Core):
         """
         Summary of the simulated seats of each column of `dist` (parties or blocks).
 
-        Columns: `seats` (headline: the central statistic expanded proportionally to `n_seats`, or the
-        `headline` given), `seats_mean`, `seats_median`, `seats_lo`, `seats_hi`, `seats_min`, `seats_max`,
+        Columns: `seats` (headline: the `headline` given or, without it, the central statistic expanded
+        proportionally to `n_seats`), `seats_mean`, `seats_median`, `seats_lo`, `seats_hi`, `seats_min`, `seats_max`,
         `p_seats` (probability of at least one seat), `p_majority` (probability of an absolute majority,
         `n_seats // 2 + 1`) and `p_first` (probability of being the largest; ties go to the first column).
         """
@@ -2069,8 +2120,10 @@ class Simulator(Core):
     ) -> pd.DataFrame:
         """
         Summary of one province over the simulations: median and interval of the share of each party
-        (`pct`, `pct_lo`, `pct_hi`) and of its seats (`seats`, `seats_mean`, `seats_lo`, `seats_hi`) and the
-        probability of at least one seat (`p_seats`).
+        (`pct`, `pct_lo`, `pct_hi`), its headline seats (`seats`: the central allocation of the province, see
+        `central_result`, or the median of the simulations without it), the median, mean and interval of the
+        simulated seats (`seats_median`, `seats_mean`, `seats_lo`, `seats_hi`) and the probability of at least
+        one seat (`p_seats`).
 
         Parameters
         ----------
@@ -2088,10 +2141,13 @@ class Simulator(Core):
         pct = pd.DataFrame(self.units[:, rloc, :, self.cols_unit.index('vpred_pct')], columns=self.categories())[names]
         seats = pd.DataFrame(self.results[:, rloc, :], columns=names)
         lo, hi = alpha / 2, 1 - alpha / 2
+        central = self.central_result()
+        seats_central = central.iloc[rloc] if central is not None else seats.median()
 
         return pd.DataFrame({
             'pct': pct.median(), 'pct_lo': pct.quantile(lo), 'pct_hi': pct.quantile(hi),
-            'seats': seats.median(), 'seats_mean': seats.mean(), 'seats_lo': seats.quantile(lo), 'seats_hi': seats.quantile(hi),
+            'seats': seats_central, 'seats_median': seats.median(), 'seats_mean': seats.mean(),
+            'seats_lo': seats.quantile(lo), 'seats_hi': seats.quantile(hi),
             'p_seats': (seats > 0).mean()
         })
 
@@ -2155,6 +2211,7 @@ class Simulator(Core):
         `'deadline'` in a forecast).
         """
         self.set_params(reset=reset, **kwargs)
+        self.central_table = None
 
         cats = self.categories()
         self.horizons = self.build_horizons()

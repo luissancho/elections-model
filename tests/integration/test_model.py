@@ -147,6 +147,7 @@ def test_totals_sum_to_n_seats_both_methods(sim26):
     sim26.run(split=True, random=True, n_sim=30)
     assert int(sim26.totals().sum()) == 350
     assert int(sim26.totals(method='mean').sum()) == 350
+    assert int(sim26.totals(method='central').sum()) == 350
     assert set(sim26.totals().index) == set(sim26.params['names'])
     sorted_ = sim26.totals(sort=True)
     assert (sorted_.diff().dropna() <= 0).all()
@@ -197,7 +198,7 @@ def test_summary_blocks_and_probabilities(sim26):
 def test_ls_totals_respect_zero_parties(sim26):
     """B2: en el modo de regresión, los partidos sin escaños en ninguna simulación se quedan en 0."""
     sim26.run(split=False, random=False)
-    totals = sim26.totals()
+    totals = sim26.totals(method='median')
     assert int(totals.sum()) == 350
     assert (totals[sim26.dist().max() == 0] == 0).all()
 
@@ -252,7 +253,7 @@ def test_nowcast_regression_seed_42(sim26):
     """La secuencia aleatoria del nowcast no cambia con M5: reproduce la regresión de referencia."""
     sim26.run(split=True, random=True, n_sim=200)
     assert (sim26.horizons == 0).all()
-    assert sim26.totals()[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
     assert (sim26.frame(0)['drift'].drop('-') == 0).all()
 
 
@@ -411,7 +412,7 @@ def test_simulator_without_house_effects_keeps_regression(sim26):
     assert sim26.house_effects is False and sim26.model.house_effects is None
     assert sim26.model.series['PP'].equals(sim26.model.series_raw['PP'])
     sim26.run(split=True, random=True, n_sim=200)
-    assert sim26.totals()[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
 
 
 def test_industry_bias_shifts_the_forecast(app, sim26_he):
