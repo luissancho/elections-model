@@ -554,3 +554,27 @@ def test_source_rules_national_row_ignores_the_regional_list():
     out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
     assert out.loc[0, 'UP'] == pytest.approx(2.0, abs=0.01)
     assert out.loc[0, 'FA'] == pytest.approx(8.0, abs=0.01)
+
+
+# --- Estimador de error de sondeos: ventana terminal fija, independiente del `drange` del run ---
+
+def test_error_estimator_window_ignores_the_run_drange():
+    """Un backfill o un backtest suben el `drange` del run para congelar los sondeos del ciclo, pero el error de
+    sondeos se lee siempre a una semana (`TERMINAL_WEEKS`): el estimador se ajusta con la ventana terminal fija
+    `ERROR_DRANGE`, no con la del run, que lo entrenaba solo con sondeos lejanos y le inflaba la constante."""
+    import types
+    calls = []
+    comp = types.SimpleNamespace(get_error_estimator=lambda **kw: calls.append(kw) or 'estimator')
+    sim = Simulator.__new__(Simulator)
+    sim.drange, sim.n_last, sim.add_errors, sim.computer = (54, None), 1, True, comp
+    assert sim.fit_error_estimator() == 'estimator'
+    assert calls == [{'drange': (6, None), 'n_last': 1}]
+    assert Simulator.ERROR_DRANGE == (7 * Simulator.TERMINAL_WEEKS - 1, None)
+
+
+def test_error_estimator_is_skipped_without_errors_or_past_elections():
+    sim = Simulator.__new__(Simulator)
+    sim.drange, sim.n_last, sim.add_errors, sim.computer = (6, None), 1, False, object()
+    assert sim.fit_error_estimator() is None
+    sim.add_errors, sim.computer = True, None
+    assert sim.fit_error_estimator() is None

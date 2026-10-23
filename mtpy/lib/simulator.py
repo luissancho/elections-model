@@ -30,6 +30,11 @@ class Simulator(Core):
 
     OTHERS = '-'  # Residual category: other candidatures and blank votes (same label as the Forecaster)
     TERMINAL_WEEKS = 1  # The polling error is always the terminal one (last week); the drift is added apart
+    # Window of the past polls that fit the polling-error estimator: the last poll of each pollster published
+    # six or more days before its election (`weeks >= TERMINAL_WEEKS`, the horizon at which the error is read).
+    # Fixed on purpose: the `drange` of the run only cuts the polls of the current cycle (a backfill or a
+    # backtest raises it to freeze them) and must not shrink the training set to the far-out polls
+    ERROR_DRANGE = (7 * TERMINAL_WEEKS - 1, None)
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
     MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
 
@@ -76,7 +81,8 @@ class Simulator(Core):
             Only the polls published within the specified days range before the event will be included.
             If an integer is provided, it will be converted to (`drange`, None), meaning that only polls published
             more than `drange` days before the event will be included.
-            If `None`, all the polls will be included.
+            If `None`, all the polls will be included. It cuts the polls of the current cycle only: the past polls
+            that fit the polling-error estimator keep their own window (`ERROR_DRANGE`, see `fit_error_estimator`).
         alpha : float, optional
             Confidence interval.
         limit_date: str, optional
@@ -272,13 +278,7 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load errors estimator...')
 
-        if self.add_errors and self.computer is not None:
-            self.v2err = self.computer.get_error_estimator(
-                drange=self.drange,
-                n_last=self.n_last
-            )
-        else:
-            self.v2err = None
+        self.v2err = self.fit_error_estimator()
 
         if self.verbose > 0:
             print('Load drift estimator...')
@@ -425,6 +425,22 @@ class Simulator(Core):
             return scope
 
         return parent
+
+    def fit_error_estimator(self):
+        """
+        Fit the polling-error estimator of the run (`Computer.get_error_estimator`) on the past elections of the
+        estimator scope: the last poll of each pollster (`n_last`) published within `ERROR_DRANGE`, the terminal
+        window at which the error is read (`TERMINAL_WEEKS`), whatever the `drange` of the run.
+
+        Returns
+        -------
+        LeastSquaresEstimator or None
+            The fitted estimator; `None` without `add_errors` or without past elections (`computer` is `None`).
+        """
+        if not self.add_errors or self.computer is None:
+            return None
+
+        return self.computer.get_error_estimator(drange=self.ERROR_DRANGE, n_last=self.n_last)
 
     def _past_computer(
         self,
