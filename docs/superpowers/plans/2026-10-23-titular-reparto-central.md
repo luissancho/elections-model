@@ -31,7 +31,7 @@
 
 ---
 
-### Tarea 1: `central_result()` y `totals(method='central')` en el simulador
+### Task 1: `central_result()` y `totals(method='central')` en el simulador
 
 **Files:**
 - Modify: `mtpy/lib/simulator.py` (`__init__` junto a `self.results = None`; `set_params` 364-411; `totals` 826-856; `scenario` 857-866; `summary` 876-925; `summarize_seats` docstring; `unit_summary` 2049-2075; `run` 2144-2180)
@@ -172,7 +172,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Tarea 2: Publicar el reparto en `scenario` y `districts`
+### Task 2: Publicar el reparto en `scenario` y `districts`
 
 **Files:**
 - Modify: `mtpy/lib/publish/forecast.py` (`SUMMARY_COLS` 46; `export_districts` 126-160; `export_scenario` 161-192)
@@ -244,7 +244,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Tarea 3: Resumen provincial del backtest con el reparto
+### Task 3: Resumen provincial del backtest con el reparto
 
 **Files:**
 - Modify: `mtpy/lib/backtest.py:120-153` (`_provinces`)
@@ -295,7 +295,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Tarea 4: Textos públicos de Escaños y Método
+### Task 4: Textos públicos de Escaños y Método
 
 **Files:**
 - Modify: `web/templates/escanos.html` (líneas 91-105 «Cómo leerlo» del reparto; 128-141 «Cómo leerlo» de la calculadora; 163 pie de la tabla; 240-253 «Cómo leerlo» del territorio)
@@ -366,7 +366,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Tarea 5: JS: crestas, calculadora y pies de la tabla marcan el reparto
+### Task 5: JS: crestas, calculadora y pies de la tabla marcan el reparto
 
 **Files:**
 - Modify: `web/dist/js/kde.js:107-141,151-165` (`ridgeRows`, `ridgeData`, `ridgeBlocks`)
@@ -441,7 +441,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Tarea 6: Suite completa, spec cerrada y lista para Luis
+### Task 6: Suite completa, spec cerrada y lista para Luis
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-10-23-titular-reparto-central-design.md` (estado)
