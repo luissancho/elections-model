@@ -3185,6 +3185,8 @@ def test_escanos_texts_call_the_headline_the_central_allocation(api, fresh_app):
     assert 'la simulación más cercana a la mediana' not in page and 'Escenario central' not in page
     assert 'la suma de las circunscripciones es el titular' in page
     assert 'Reparto central' in page  # etiqueta del CSV
+    promedios = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
+    assert 'escaños del reparto central' in promedios and 'escenario central' not in promedios
 
 
 def test_metodo_escanos_explains_the_central_allocation(api):
