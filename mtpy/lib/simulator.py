@@ -1334,6 +1334,112 @@ class Simulator(Core):
 
         return blocks
 
+    @staticmethod
+    def apply_source_rules(
+        prev_pcts: pd.DataFrame,
+        smap: dict[str, Any],
+        frame: pd.DataFrame,
+        default_region: int,
+        reg_votes: pd.Series
+    ) -> pd.DataFrame:
+        """
+        Previous shares of every region after the rules of the source map (`smap`): the base of the
+        proportional swing of `build_umat`.
+
+        Rules, applied in the order of `smap` (a party may carry several): `agg` adds the previous vote of
+        `names` to the party (a successor inherits its predecessors: FA from Sumar); `sub` carves the base of
+        the party out of the previous vote of `names` in proportion to their current forecasts (Podemos out
+        of FA), when all of them have a forecast; `split` shares the previous vote of the party equally among
+        `names`. With `regions` (province codes, a list to keep or `{'exclude': [...]}`) the party keeps its
+        base only in those provinces, a `sub` rule inherits only there (the sources keep their whole base
+        elsewhere) and the national row of the party and of its sources is recomputed from the provinces,
+        weighted by their valid votes, so that the national swing reproduces the forecast within the
+        provinces kept.
+
+        Parameters
+        ----------
+        prev_pcts : pd.DataFrame
+            Previous shares by `region_id` (the scope total included) and party, 0 where none.
+        smap : dict
+            `{party: [{'type': 'agg' | 'sub' | 'split', 'names': [...], 'regions': ...}, ...]}`.
+        frame : pd.DataFrame
+            Current national forecasts, indexed by party, with the column `vpred`.
+        default_region : int
+            `region_id` of the scope total.
+        reg_votes : pd.Series
+            Valid votes of the previous election by `region_id`.
+
+        Returns
+        -------
+        pd.DataFrame
+            A copy of `prev_pcts` with the rules applied.
+        """
+        prev_pcts = prev_pcts.copy()
+        provinces = [r for r in prev_pcts.index if r != default_region]
+
+        def national(col: str) -> float:
+            return np.round(
+                (prev_pcts.loc[provinces, col] * reg_votes.loc[provinces]).sum() / reg_votes.loc[default_region], 2
+            )
+
+        for key, rules in smap.items():
+            for rule in (rules if isinstance(rules, list) else [rules]):
+                type = rule.get('type')
+                names = rule.get('names')
+                regions = rule.get('regions')
+
+                kept = None
+                if regions is not None:
+                    # Regions are province codes (`region_id`), given as strings or ints in params.json
+                    if 'exclude' in regions:
+                        excluded = [int(r) for r in regions['exclude']]
+                        kept = [r == default_region or r not in excluded for r in prev_pcts.index]
+                    else:
+                        included = [int(r) for r in regions]
+                        kept = [r == default_region or r in included for r in prev_pcts.index]
+
+                if names is not None:
+                    if type == 'agg':
+                        prev_pcts[key] = prev_pcts[[key] + names].sum(axis=1)
+                    elif type == 'sub':
+                        if key not in frame.index or any(n not in frame.index for n in names):
+                            # The rule needs forecasts for every party involved: skip it otherwise
+                            continue
+
+                        fc_k = frame.loc[key]['vpred']
+                        fc_v = frame.loc[names]['vpred'].sum()
+                        prev_v = prev_pcts[names].sum(axis=1)
+
+                        # Share of the previous vote of the source parties inherited by the new party,
+                        # in proportion to the current forecasts: prev_v * fc_k / (fc_k + fc_v)
+                        if fc_k + fc_v > 0:
+                            inherited = np.round(prev_v * fc_k / (fc_k + fc_v), 2)
+                        else:
+                            inherited = prev_v * 0.
+                        if kept is not None:
+                            # Only where the new party runs: the sources keep their whole base elsewhere
+                            inherited = inherited.where(kept, 0.)
+
+                        prev_pcts[key] = inherited
+                        prev_pcts[names] = prev_pcts[names].sub(inherited / len(names), axis=0)
+
+                        if kept is not None:
+                            for col in [key] + names:
+                                prev_pcts.loc[default_region, col] = national(col)
+                    elif type == 'split':
+                        prev_k = prev_pcts[key]
+                        for name in names:
+                            prev_pcts[name] += (prev_k / len(names))
+
+                if kept is not None:
+                    prev_pcts[key] = prev_pcts[key].where(kept, .0)
+
+                    # Keep the national share consistent with the provinces kept by the rule, so that the
+                    # proportional swing reproduces the national forecast within those provinces
+                    prev_pcts.loc[default_region, key] = national(key)
+
+        return prev_pcts
+
     # --- Summaries of the simulated distributions (pure functions) ---------------------------------
 
     @staticmethod
@@ -1840,57 +1946,9 @@ class Simulator(Core):
         return df[self.cols_frame]
     
     def build_umat(self, frame: pd.DataFrame) -> pd.DataFrame:
-        prev_pcts = self.prev_results['pct'].fillna(0)
-
-        for key, rules in self.smap.items():
-            for rule in rules:
-                type = rule.get('type')
-                names = rule.get('names')
-                regions = rule.get('regions')
-
-                if names is not None:
-                    if type == 'agg':
-                        prev_pcts[key] = prev_pcts[[key] + names].sum(axis=1)
-                    elif type == 'sub':
-                        if key not in frame.index or any(n not in frame.index for n in names):
-                            # The rule needs forecasts for every party involved: skip it otherwise
-                            continue
-
-                        fc_k = frame.loc[key]['vpred']
-                        fc_v = frame.loc[names]['vpred'].sum()
-                        prev_v = prev_pcts[names].sum(axis=1)
-
-                        # Share of the previous vote of the source parties inherited by the new party,
-                        # in proportion to the current forecasts: prev_v * fc_k / (fc_k + fc_v)
-                        if fc_k + fc_v > 0:
-                            prev_pcts[key] = np.round(prev_v * fc_k / (fc_k + fc_v), 2)
-                        else:
-                            prev_pcts[key] = 0.
-                        unit_factor = prev_pcts[key] / len(names)
-                        prev_pcts[names] = prev_pcts[names].sub(unit_factor, axis=0)
-                    elif type == 'split':
-                        prev_k = prev_pcts[key]
-                        for name in names:
-                            prev_pcts[name] += (prev_k / len(names))
-                
-                if regions is not None:
-                    # Regions are province codes (`region_id`), given as strings or ints in params.json
-                    if 'exclude' in regions:
-                        excluded = [int(r) for r in regions['exclude']]
-                        rix = [r == self.default_region or r not in excluded for r in prev_pcts.index]
-                    else:
-                        included = [int(r) for r in regions]
-                        rix = [r == self.default_region or r in included for r in prev_pcts.index]
-
-                    prev_pcts[key] = prev_pcts[key].where(rix, .0)
-
-                    # Keep the national share consistent with the provinces kept by the rule, so that the
-                    # proportional swing reproduces the national forecast within those provinces
-                    reg_votes = self.prev_totals['votes']
-                    provinces = [r for r in prev_pcts.index if r != self.default_region]
-                    prev_pcts.loc[self.default_region, key] = np.round(
-                        (prev_pcts.loc[provinces, key] * reg_votes.loc[provinces]).sum() / reg_votes.loc[self.default_region], 2
-                    )
+        prev_pcts = self.apply_source_rules(
+            self.prev_results['pct'].fillna(0), self.smap, frame, self.default_region, self.prev_totals['votes']
+        )
 
         names = self.params['names']
         prev_pcts = prev_pcts.where(prev_pcts > 0, np.nan)[names]

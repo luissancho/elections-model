@@ -478,3 +478,65 @@ def test_projection_skips_a_block_without_members_present(mode):
     assert sim.projection({'A': [first], 'C': ['NOEXISTE']}).equals(out)
     empty = sim.projection({'B': []})
     assert empty.empty and len(empty.columns) == 0
+
+
+# --- Reglas del smap sobre las bases provinciales (`Simulator.apply_source_rules`) -----------------------
+
+@pytest.fixture
+def source_rules_case():
+    regions = pd.Index([0, 8, 28, 46], name='region_id')  # total, Barcelona, Madrid, Valencia
+    prev = pd.DataFrame({'SUMAR': [15., 20., 10., 15.], 'FA': 0., 'UP': 0., 'COMPROMIS': 0., 'PP': [30., 25., 35., 30.]}, index=regions)
+    votes = pd.Series([100., 40., 40., 20.], index=regions)
+    frame = pd.DataFrame({'vpred': [6., 3., 1., 30.]}, index=['FA', 'UP', 'COMPROMIS', 'PP'])
+    return prev, votes, frame
+
+
+def test_source_rules_agg_national_sums_the_sources(source_rules_case):
+    prev, votes, frame = source_rules_case
+    out = Simulator.apply_source_rules(prev, {'FA': [{'type': 'agg', 'names': ['SUMAR']}]}, frame, 0, votes)
+    assert out['FA'].tolist() == [15., 20., 10., 15.]
+    assert out['SUMAR'].tolist() == [15., 20., 10., 15.]
+    assert prev['FA'].tolist() == [0., 0., 0., 0.]  # la entrada no se modifica
+
+
+def test_source_rules_agg_regional_keeps_only_the_listed_provinces(source_rules_case):
+    prev, votes, frame = source_rules_case
+    out = Simulator.apply_source_rules(prev, {'COMPROMIS': [{'type': 'agg', 'names': ['SUMAR'], 'regions': ['46']}]}, frame, 0, votes)
+    assert out['COMPROMIS'].tolist() == pytest.approx([3.0, 0., 0., 15.], abs=0.01)
+
+
+def test_source_rules_sub_national_splits_in_proportion_to_the_forecasts(source_rules_case):
+    prev, votes, frame = source_rules_case
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR']}], 'UP': [{'type': 'sub', 'names': ['FA']}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out['UP'].tolist() == pytest.approx([5.0, 6.67, 3.33, 5.0], abs=0.01)
+    assert out['FA'].tolist() == pytest.approx([10.0, 13.33, 6.67, 10.0], abs=0.01)
+
+
+def test_source_rules_sub_regional_inherits_only_where_the_party_runs(source_rules_case):
+    # Podemos no concurre en Barcelona (8): FA conserva allí la base entera y las filas nacionales se
+    # recalculan desde las provincias (ponderadas por votos), no restando en la fila nacional
+    prev, votes, frame = source_rules_case
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR']}],
+            'UP': [{'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8']}}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out['UP'].tolist() == pytest.approx([2.33, 0., 3.33, 5.0], abs=0.01)
+    assert out['FA'].tolist() == pytest.approx([12.67, 20., 6.67, 10.0], abs=0.01)
+    assert (out['FA'] + out['UP']).loc[[8, 28, 46]].tolist() == pytest.approx([20., 10., 15.], abs=0.01)
+
+
+def test_source_rules_sub_regional_with_an_empty_source_province(source_rules_case):
+    # FA excluida de Valencia (46) y Podemos de Barcelona (8): en Valencia no hay nada que heredar
+    prev, votes, frame = source_rules_case
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR']}, {'type': 'agg', 'names': [], 'regions': {'exclude': ['46']}}],
+            'UP': [{'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8']}}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out['UP'].tolist() == pytest.approx([1.33, 0., 3.33, 0.], abs=0.01)
+    assert out['FA'].tolist() == pytest.approx([10.67, 20., 6.67, 0.], abs=0.01)
+
+
+def test_source_rules_split_shares_the_previous_vote_equally(source_rules_case):
+    prev, votes, frame = source_rules_case
+    out = Simulator.apply_source_rules(prev, {'SUMAR': [{'type': 'split', 'names': ['FA', 'UP']}]}, frame, 0, votes)
+    assert out['FA'].tolist() == [7.5, 10., 5., 7.5]
+    assert out['UP'].tolist() == [7.5, 10., 5., 7.5]
