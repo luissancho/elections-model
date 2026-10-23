@@ -165,3 +165,13 @@ def test_poll_fixes_files_are_well_formed():
         assert df['party'].notnull().all() and df['pollster'].notnull().all(), fname
         keys = df[['pollster', 'date', 'sponsor', 'party']].fillna('')
         assert not keys.duplicated().any(), fname
+
+
+
+def test_params_2026_general_election_line_up():
+    conf = json.load(open(os.path.join(DATA, 'params.json')))['es']['2026-11-29']
+    assert conf['parties']['event'][-1] == 'COMPROMIS'
+    assert conf['bmaps']['blocks']['Regionalista'] == ['PNV', 'CC', 'BNG', 'COMPROMIS']
+    assert conf['smap']['COMPROMIS'] == {'type': 'agg', 'names': ['SUMAR'], 'regions': ['3', '12', '46']}
+    assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
+    assert conf['smap']['FA'][1]['regions'] == {'exclude': ['3', '12', '46']}

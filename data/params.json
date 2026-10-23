@@ -4,7 +4,7 @@
             "parties": {
                 "event": [
                     "PP", "PSOE", "VOX", "FA", "UP", "SALF",
-                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC"
+                    "JxCat", "ERC", "EHB", "PNV", "BNG", "CC", "COMPROMIS"
                 ],
                 "polls": [
                     "PP", "PSOE", "VOX", "FA", "UP", "SALF",
@@ -28,7 +28,7 @@
                 "blocks": {
                     "Derecha": ["PP", "VOX", "SALF"],
                     "Izquierda": ["PSOE", "UP", "FA"],
-                    "Regionalista": ["PNV", "CC", "BNG"],
+                    "Regionalista": ["PNV", "CC", "BNG", "COMPROMIS"],
                     "Separatista": ["ERC", "JxCat", "EHB"]
                 },
                 "vs": {
@@ -41,7 +41,8 @@
                     {"type": "agg", "names": ["SUMAR"]},
                     {"type": "agg", "names": [], "regions": {"exclude": ["3", "12", "46"]}}
                 ],
-                "UP": {"type": "sub", "names": ["FA"]},
+                "UP": {"type": "sub", "names": ["FA"], "regions": {"exclude": ["8", "17", "25", "43"]}},
+                "COMPROMIS": {"type": "agg", "names": ["SUMAR"], "regions": ["3", "12", "46"]},
                 "PP": {"type": "agg", "names": ["UPN"]},
                 "SALF": {"type": "sub", "names": ["VOX"]}
             }
