@@ -1,6 +1,8 @@
 # Titular de escaños = reparto central
 
-Fecha: 2026-10-23. Estado: aprobado por Luis el 2026-10-23 (revisión del constructor incorporada).
+Fecha: 2026-10-23. Estado: aprobado por Luis el 2026-10-23 (revisión del constructor incorporada); construido el
+2026-10-24 en `dev` (plan `docs/superpowers/plans/2026-10-23-titular-reparto-central.md`, commits 971893b..d01adf9,
+1 279 tests). Queda la lista de tareas de Luis del final del documento.
 
 ## Intención
 
@@ -233,3 +235,14 @@ con las mismas cifras, UP aparece, TOTAL == hemiciclo, bloques == suma; `/es-md/
 - Dónde alimentar el rótulo de las crestas con el titular (hoy se construye en `escanos.js`).
 - La redacción final de los textos, dentro de las reglas de Luis.
 - Si `scenario()` debe seguir expuesto o pasar a privado (se recomienda dejarlo).
+
+## Tareas de Luis tras la integración (en este orden)
+
+1. Relanzar el backtest y `publish backtest`: los errores de escaños de todas las elecciones pasadas cambian
+   (el titular ya no es la mediana).
+2. Republicar los eventos (`publish event` con `event_date: all`): «Lo que dijo el modelo» se corta del backtest.
+3. Republicar el backfill y un run nuevo del ciclo (y los ámbitos autonómicos publicados), para que la evolución
+   del titular no mezcle medianas con repartos. Los runs antiguos siguen siendo legibles mientras tanto.
+4. Desplegar la web. Con 1-3 hechos antes, no hay ventana en la que un run antiguo se etiquete como reparto.
+5. Fijar las cifras del reparto central en los tests de integración (`tests/integration/test_model.py`,
+   `test_regional_model.py`) la próxima vez que corran contra la RDS; los pins antiguos usan `method='median'`.
