@@ -8,7 +8,9 @@ Podemos sin base ni escaños en las cuatro provincias catalanas; FA con la base 
 (15,22) y 4 escaños allí; FA y Podemos sin base en Alicante, Castellón y Valencia; Compromís con base 16,9
 en Valencia pero sin ajuste (un solo sondeo útil en la base), como preveía el diseño. Previsualización del
 estado tras la recarga, inyectando en memoria las dos cifras del CSV: Compromís ajustado con tres sondeos
-(promedio 0,88), 1 escaño en Alicante y 1 en Valencia, 0 en Castellón; FA 0 allí; Podemos 0 en Cataluña.
+(promedio 0,88), 1 escaño en Alicante y 1 en Valencia, 0 en Castellón; FA 0 allí; Podemos 0 en Cataluña. Comprobación
+definitiva tras la recarga con `overwrite` y el cómputo de Luis (516 sondeos, correcciones aplicadas, IMOP 13-16
+oct cargado): mismos resultados con la base real; promedio nacional FA 6,31, Podemos 3,01, Compromís 0,88.
 
 ## Intención
 
