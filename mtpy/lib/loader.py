@@ -39,6 +39,105 @@ def scope_colmap(maps: dict, scope: str, key: str) -> dict[str, str]:
     return colmap
 
 
+def apply_poll_fixes(
+    polls: pd.DataFrame,
+    results: pd.DataFrame,
+    fixes: pd.DataFrame,
+    parties: dict[str, int],
+    pollsters: dict[str, int],
+    sponsors: dict[str, int]
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """
+    Apply the curated corrections of an event (`data/polls/{scope}/{event_date}.csv`) to the polls read from
+    Wikipedia: e.g. a party given apart in a footnote while its share is folded into another column.
+
+    Each row of `fixes` names a poll (`pollster`, `date` of the end of the fieldwork and `sponsor`, empty
+    without one) and a `party`, by their canonical names, and sets its `pct` (empty: the party is removed
+    from the poll) and, optionally, its `seats` (the same integer in `seats`, `seats_min` and `seats_max`;
+    empty: the seats stay as read). A party the poll did not list is added. `polls['parties']` is
+    recomputed afterwards.
+
+    Parameters
+    ----------
+    polls, results : pd.DataFrame
+        Frames of `WikipediaLoader.build_series`, with the keys of `elections.polls` and `polls_results`.
+    fixes : pd.DataFrame
+        Columns `pollster`, `date`, `sponsor`, `party`, `pct`, `seats` and `note`, as read from the CSV.
+    parties, pollsters, sponsors : dict
+        Canonical names mapped to their ids.
+
+    Returns
+    -------
+    tuple
+        Copies of `polls` and `results` with the fixes applied, plus the polls of `fixes` not among those
+        read (`'{pollster} {date}'`, once each), whose rows are left aside.
+
+    Raises
+    ------
+    ValueError
+        A `party`, `pollster` or `sponsor` not in the catalogues, or two rows for the same poll and party.
+    """
+    polls, results = polls.copy(), results.copy()
+    poll_keys = ['date', 'pollster_id', 'sponsor_id']
+    row_keys = poll_keys + ['party_id']
+
+    fixes = fixes.copy()
+    fixes['date'] = pd.to_datetime(fixes['date'])
+    for column, catalogue in [('party', parties), ('pollster', pollsters), ('sponsor', sponsors)]:
+        unknown = [v for v in fixes[column].dropna().unique() if v not in catalogue]
+        if len(unknown) > 0:
+            raise ValueError('Poll fixes with an unknown {}: {}'.format(column, ', '.join(map(str, unknown))))
+    fixes['pollster_id'] = fixes['pollster'].map(pollsters).astype(int)
+    fixes['sponsor_id'] = fixes['sponsor'].map(sponsors).fillna(0).astype(int)
+    fixes['party_id'] = fixes['party'].map(parties).astype(int)
+
+    duplicated = fixes.duplicated(row_keys, keep=False)
+    if duplicated.any():
+        raise ValueError('Poll fixes with duplicate rows: {}'.format(', '.join(
+            '{} {} {}'.format(r['pollster'], r['date'].strftime('%Y-%m-%d'), r['party'])
+            for _, r in fixes.loc[duplicated].drop_duplicates(row_keys).iterrows()
+        )))
+
+    read = set(polls[poll_keys].itertuples(index=False, name=None))
+    missing = []
+
+    for _, fix in fixes.iterrows():
+        key = (fix['date'], int(fix['pollster_id']), int(fix['sponsor_id']))
+        if key not in read:
+            label = '{} {}'.format(fix['pollster'], fix['date'].strftime('%Y-%m-%d'))
+            if label not in missing:
+                missing.append(label)
+            continue
+
+        in_poll = (results['date'] == key[0]) & (results['pollster_id'] == key[1]) & (results['sponsor_id'] == key[2])
+        mask = in_poll & (results['party_id'] == int(fix['party_id']))
+
+        if pd.isnull(fix['pct']):
+            results = results.loc[~mask].copy()
+            continue
+
+        seats = None if pd.isnull(fix['seats']) else int(fix['seats'])
+        if mask.any():
+            results.loc[mask, 'pct'] = float(fix['pct'])
+            if seats is not None:
+                results.loc[mask, ['seats', 'seats_min', 'seats_max']] = seats
+        else:
+            poll = polls.loc[(polls['date'] == key[0]) & (polls['pollster_id'] == key[1]) & (polls['sponsor_id'] == key[2])].iloc[0]
+            row = {c: None for c in results.columns}
+            row.update({
+                'event_date': poll['event_date'], 'event_scope': poll['event_scope'],
+                'date': key[0], 'pollster_id': key[1], 'sponsor_id': key[2],
+                'party_id': int(fix['party_id']), 'party': fix['party'], 'pct': float(fix['pct']),
+                'seats': seats, 'seats_min': seats, 'seats_max': seats
+            })
+            results.loc[(results.index.max() + 1) if results.shape[0] > 0 else 0] = pd.Series(row)
+
+    counts = results.groupby(poll_keys, observed=True).size()
+    polls['parties'] = [int(counts.get(k, 0)) for k in polls[poll_keys].itertuples(index=False, name=None)]
+
+    return polls, results, missing
+
+
 def fetch_page(
     url: str,
     cache_dir: Optional[str] = None,
@@ -382,6 +481,7 @@ class WikipediaLoader(Core):
         self.sponsors_colmap = self.get_colmap('sponsors')
         self.sponsors_idmap = self.get_idmap('sponsors')
         self.sponsors_missing = []
+        self.fixes_missing = []  # Polls of the curated fixes not read from the article (see `build_series`)
 
     def get_colmap(self, key: str) -> dict[str, str]:
         """
@@ -858,6 +958,18 @@ class WikipediaLoader(Core):
         polls['days'] = (polls['event_date'] - polls['date']).dt.days
 
         results = pd.DataFrame(results)
+
+        # Curated corrections of the event (`data/polls/{scope}/{event_date}.csv`): e.g. a party given apart
+        # in a footnote while its share is folded into another column
+        fname = 'polls/{}/{}.csv'.format(self.scope, self.event_date)
+        self.fixes_missing = []
+        if self.app.data.exists(fname):
+            polls, results, self.fixes_missing = apply_poll_fixes(
+                polls, results, self.app.data.read_csv(fname), self.parties_idmap, self.pollsters_idmap, self.sponsors_idmap
+            )
+            if self.verbose > 0 and len(self.fixes_missing) > 0:
+                print('Poll fixes without a poll read: {}'.format(', '.join(self.fixes_missing)))
+
         results = results.set_index(self.m_results.key[:-1]).loc[polls.set_index(self.m_polls.key).index].reset_index()
 
         self.polls = self.m_polls.format_data(polls, int_type='nullable', bin_type='nullable', sort=True)

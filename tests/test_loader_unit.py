@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from lxml import html
 
-from mtpy.lib.loader import WikipediaLoader
+from mtpy.lib.loader import WikipediaLoader, apply_poll_fixes
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DATA = os.path.join(ROOT, 'data')
@@ -425,3 +425,112 @@ def test_run_load_compute_phases_delegate_to_the_library(monkeypatch):
     module.compute_scope('es-md', save=False, verbose=2)
     module.rate_scope('es-md', save=True, verbose=0)
     assert calls == [('compute', 'es-md', {'save': False, 'verbose': 1}), ('ratings', 'es-md', {'save': True, 'verbose': 0})]
+
+
+# --- Correcciones curadas de sondeos (`apply_poll_fixes`, data/polls/{scope}/{event_date}.csv) ----------
+
+def poll_fix_frames():
+    key = {'event_date': pd.Timestamp('2026-11-29'), 'event_scope': 'es'}
+    celeste = {**key, 'date': pd.Timestamp('2026-09-21'), 'pollster_id': 7, 'sponsor_id': 3}
+    socio = {**key, 'date': pd.Timestamp('2026-10-11'), 'pollster_id': 9, 'sponsor_id': 0}
+    polls = pd.DataFrame([
+        {**celeste, 'pollster': 'Celeste Tel', 'sponsor': 'Onda Cero', 'parties': 2},
+        {**socio, 'pollster': 'SocioMétrica', 'sponsor': None, 'parties': 1},
+    ])
+    empty = {'seats': None, 'seats_min': None, 'seats_max': None}
+    results = pd.DataFrame([
+        {**celeste, 'party_id': 5, 'party': 'SUMAR', 'pct': 6.4, 'seats': 7, 'seats_min': 6, 'seats_max': 8},
+        {**celeste, 'party_id': 1, 'party': 'PP', 'pct': 33.0, **empty},
+        {**socio, 'party_id': 5, 'party': 'SUMAR', 'pct': 5.8, **empty},
+    ])
+    ids = ({'SUMAR': 5, 'COMPROMIS': 401, 'PP': 1}, {'Celeste Tel': 7, 'SocioMétrica': 9}, {'Onda Cero': 3, 'El Español': 4})
+    return polls, results, ids
+
+
+def poll_fixes(rows):
+    return pd.DataFrame(rows, columns=['pollster', 'date', 'sponsor', 'party', 'pct', 'seats', 'note'])
+
+
+def test_poll_fixes_set_and_create_rows():
+    polls, results, ids = poll_fix_frames()
+    fixes = poll_fixes([
+        ['Celeste Tel', '2026-09-21', 'Onda Cero', 'SUMAR', 5.1, None, 'Compromís aparte'],
+        ['Celeste Tel', '2026-09-21', 'Onda Cero', 'COMPROMIS', 1.3, 3, None],
+        ['SocioMétrica', '2026-10-11', None, 'SUMAR', 4.9, None, None],
+        ['SocioMétrica', '2026-10-11', None, 'COMPROMIS', 0.9, 3, None],
+    ])
+    out_polls, out_results, missing = apply_poll_fixes(polls, results, fixes, *ids)
+    assert missing == []
+    rows = out_results.set_index(['pollster_id', 'party'])
+    assert rows.loc[(7, 'SUMAR'), ['pct', 'seats', 'seats_min', 'seats_max']].tolist() == [5.1, 7, 6, 8]
+    assert rows.loc[(7, 'COMPROMIS'), ['pct', 'seats', 'seats_min', 'seats_max', 'party_id']].tolist() == [1.3, 3, 3, 3, 401]
+    assert rows.loc[(7, 'COMPROMIS'), ['event_scope', 'sponsor_id']].tolist() == ['es', 3]
+    assert rows.loc[(9, 'SUMAR'), 'pct'] == 4.9 and rows.loc[(9, 'COMPROMIS'), 'pct'] == 0.9
+    assert out_polls.set_index('pollster_id')['parties'].to_dict() == {7: 3, 9: 2}
+    assert results.shape[0] == 3 and polls['parties'].tolist() == [2, 1]  # entradas intactas
+
+
+def test_poll_fixes_remove_a_party_and_report_unread_polls():
+    polls, results, ids = poll_fix_frames()
+    fixes = poll_fixes([
+        ['Celeste Tel', '2026-09-21', 'Onda Cero', 'PP', None, None, 'fuera'],
+        ['SocioMétrica', '2026-10-11', None, 'COMPROMIS', None, None, 'no estaba: nada que quitar'],
+        ['Celeste Tel', '2026-10-30', 'Onda Cero', 'SUMAR', 5.0, None, 'sondeo no leído'],
+    ])
+    out_polls, out_results, missing = apply_poll_fixes(polls, results, fixes, *ids)
+    assert missing == ['Celeste Tel 2026-10-30']
+    assert out_results['party'].tolist() == ['SUMAR', 'SUMAR']
+    assert out_polls.set_index('pollster_id')['parties'].to_dict() == {7: 1, 9: 1}
+
+
+@pytest.mark.parametrize('row, match', [
+    (['Celeste Tel', '2026-09-21', 'Onda Cero', 'COMPROMÍS', 1.3, 3, None], 'party'),
+    (['Celeste-Tel', '2026-09-21', 'Onda Cero', 'SUMAR', 5.1, None, None], 'pollster'),
+    (['Celeste Tel', '2026-09-21', 'Onda Zero', 'SUMAR', 5.1, None, None], 'sponsor'),
+])
+def test_poll_fixes_reject_unknown_names(row, match):
+    polls, results, ids = poll_fix_frames()
+    with pytest.raises(ValueError, match=match):
+        apply_poll_fixes(polls, results, poll_fixes([row]), *ids)
+
+
+def test_poll_fixes_reject_duplicates():
+    polls, results, ids = poll_fix_frames()
+    fixes = poll_fixes([['Celeste Tel', '2026-09-21', 'Onda Cero', 'SUMAR', 5.1, None, None]] * 2)
+    with pytest.raises(ValueError, match='duplicate'):
+        apply_poll_fixes(polls, results, fixes, *ids)
+
+
+def test_build_series_applies_the_curated_poll_fixes(monkeypatch):
+    import types
+    from mtpy.lib import loader as loader_module
+
+    loader = bare_loader('es')
+    loader.event_date, loader.params, loader.exclude, loader.verbose = '2026-11-29', {}, None, 0
+    loader.pollsters = pd.DataFrame({'id': [7], 'mtype': ['cati']})
+    loader.m_polls = types.SimpleNamespace(key=['event_date', 'event_scope', 'date', 'pollster_id', 'sponsor_id'],
+                                           format_data=lambda df, **kwargs: df)
+    loader.m_results = types.SimpleNamespace(key=loader.m_polls.key + ['party_id'], format_data=lambda df, **kwargs: df)
+    loader.data = [{
+        'pollster_id': 7, 'pollster': 'Celeste Tel', 'sponsor_id': 3, 'sponsor': 'Onda Cero', 'name': 'Celeste Tel / Onda Cero',
+        'date': pd.Timestamp('2026-09-21'), 'start_date': pd.Timestamp('2026-09-16'), 'end_date': pd.Timestamp('2026-09-21'),
+        'sample_size': 1100, 'ctype': None,
+        'results': [{'party_id': 5, 'party': 'SUMAR', 'pct': 6.4, 'seats': None, 'seats_min': None, 'seats_max': None}],
+    }]
+    fixes = pd.DataFrame({'pollster': ['Celeste Tel'], 'date': ['2026-09-21'], 'sponsor': ['Onda Cero'],
+                          'party': ['SUMAR'], 'pct': [5.1], 'seats': [None], 'note': [None]})
+    names = []
+    loader.app = types.SimpleNamespace(data=types.SimpleNamespace(
+        exists=lambda name: names.append(name) or name == 'polls/es/2026-11-29.csv', read_csv=lambda name: fixes))
+    calls = []
+
+    def fake_apply(polls, results, fixes, parties, pollsters, sponsors):
+        calls.append((fixes, parties, pollsters, sponsors))
+        return polls, results, ['Celeste Tel 2026-10-30']
+
+    monkeypatch.setattr(loader_module, 'apply_poll_fixes', fake_apply)
+    loader.build_series()
+
+    assert names == ['polls/es/2026-11-29.csv']
+    assert calls[0][0] is fixes and calls[0][1] is loader.parties_idmap
+    assert loader.fixes_missing == ['Celeste Tel 2026-10-30']

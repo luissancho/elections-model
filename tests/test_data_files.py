@@ -152,3 +152,16 @@ def test_quality_csv_fits_the_replica_columns():
     assert 'pollster' in bounded and 'status' in bounded
     for col, length in bounded.items():
         assert frame[col].str.len().max() <= length, (col, length)
+
+
+def test_poll_fixes_files_are_well_formed():
+    import glob
+    files = glob.glob(os.path.join(DATA, 'polls', '*', '*.csv'))
+    assert files
+    for fname in files:
+        df = pd.read_csv(fname)
+        assert df.columns.tolist() == ['pollster', 'date', 'sponsor', 'party', 'pct', 'seats', 'note'], fname
+        assert pd.to_datetime(df['date'], format='%Y-%m-%d').notnull().all(), fname
+        assert df['party'].notnull().all() and df['pollster'].notnull().all(), fname
+        keys = df[['pollster', 'date', 'sponsor', 'party']].fillna('')
+        assert not keys.duplicated().any(), fname
