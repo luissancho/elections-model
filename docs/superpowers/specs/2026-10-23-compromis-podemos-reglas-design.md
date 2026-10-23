@@ -1,6 +1,14 @@
 # Compromís aparte y Podemos sin Cataluña: reglas del 29-N
 
-Fecha: 2026-10-23. Estado: aprobado por Luis el 2026-10-23.
+Fecha: 2026-10-23. Estado: aprobado por Luis el 2026-10-23; construido el mismo día (plan
+`docs/superpowers/plans/2026-10-23-compromis-podemos-reglas.md`).
+
+Comprobación del 2026-10-23 con una simulación determinista contra la base, antes de la recarga de Luis:
+Podemos sin base ni escaños en las cuatro provincias catalanas; FA con la base entera de Sumar en Barcelona
+(15,22) y 4 escaños allí; FA y Podemos sin base en Alicante, Castellón y Valencia; Compromís con base 16,9
+en Valencia pero sin ajuste (un solo sondeo útil en la base), como preveía el diseño. Previsualización del
+estado tras la recarga, inyectando en memoria las dos cifras del CSV: Compromís ajustado con tres sondeos
+(promedio 0,88), 1 escaño en Alicante y 1 en Valencia, 0 en Castellón; FA 0 allí; Podemos 0 en Cataluña.
 
 ## Intención
 
