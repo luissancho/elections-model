@@ -534,3 +534,15 @@ def test_build_series_applies_the_curated_poll_fixes(monkeypatch):
     assert names == ['polls/es/2026-11-29.csv']
     assert calls[0][0] is fixes and calls[0][1] is loader.parties_idmap
     assert loader.fixes_missing == ['Celeste Tel 2026-10-30']
+
+
+def test_poll_fixes_new_row_without_seats_keeps_the_frame_clean():
+    # Una casa que da cuota a Compromís sin escaños: fila nueva con escaños vacíos, sin avisos de pandas
+    # (pytest.ini convierte FutureWarning en error) y con la columna de escaños utilizable
+    polls, results, ids = poll_fix_frames()
+    fixes = poll_fixes([['Celeste Tel', '2026-09-21', 'Onda Cero', 'COMPROMIS', 1.3, None, None]])
+    out_polls, out_results, missing = apply_poll_fixes(polls, results, fixes, *ids)
+    row = out_results.set_index(['pollster_id', 'party']).loc[(7, 'COMPROMIS')]
+    assert row['pct'] == 1.3 and pd.isnull(row['seats']) and pd.isnull(row['seats_min']) and pd.isnull(row['seats_max'])
+    assert out_results['seats'].dtype == results['seats'].dtype
+    assert out_polls.set_index('pollster_id')['parties'].to_dict() == {7: 3, 9: 1}

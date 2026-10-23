@@ -540,3 +540,17 @@ def test_source_rules_split_shares_the_previous_vote_equally(source_rules_case):
     out = Simulator.apply_source_rules(prev, {'SUMAR': [{'type': 'split', 'names': ['FA', 'UP']}]}, frame, 0, votes)
     assert out['FA'].tolist() == [7.5, 10., 5., 7.5]
     assert out['UP'].tolist() == [7.5, 10., 5., 7.5]
+
+
+def test_source_rules_national_row_ignores_the_regional_list():
+    # Canarias: la lista regional (100) recoge a los mismos votantes que las provincias; la fila nacional
+    # se recalcula solo desde las provincias, si no la base se cuenta dos veces
+    regions = pd.Index([0, 35, 38, 100], name='region_id')
+    prev = pd.DataFrame({'SUMAR': 10., 'FA': 0., 'UP': 0.}, index=regions)
+    votes = pd.Series([100., 60., 40., 100.], index=regions)
+    frame = pd.DataFrame({'vpred': [6., 3.]}, index=['FA', 'UP'])
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR']}],
+            'UP': [{'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['38']}}]}
+    out = Simulator.apply_source_rules(prev, smap, frame, 0, votes)
+    assert out.loc[0, 'UP'] == pytest.approx(2.0, abs=0.01)
+    assert out.loc[0, 'FA'] == pytest.approx(8.0, abs=0.01)

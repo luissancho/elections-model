@@ -1375,7 +1375,8 @@ class Simulator(Core):
             A copy of `prev_pcts` with the rules applied.
         """
         prev_pcts = prev_pcts.copy()
-        provinces = [r for r in prev_pcts.index if r != default_region]
+        # The regional list of the Canary Islands (100) gathers the same voters as its provinces: not a province
+        provinces = [r for r in prev_pcts.index if r not in (default_region, REGIONAL_LIST_ID)]
 
         def national(col: str) -> float:
             return np.round(

@@ -100,6 +100,7 @@ def apply_poll_fixes(
 
     read = set(polls[poll_keys].itertuples(index=False, name=None))
     missing = []
+    new_rows = []
 
     for _, fix in fixes.iterrows():
         key = (fix['date'], int(fix['pollster_id']), int(fix['sponsor_id']))
@@ -130,7 +131,13 @@ def apply_poll_fixes(
                 'party_id': int(fix['party_id']), 'party': fix['party'], 'pct': float(fix['pct']),
                 'seats': seats, 'seats_min': seats, 'seats_max': seats
             })
-            results.loc[(results.index.max() + 1) if results.shape[0] > 0 else 0] = pd.Series(row)
+            new_rows.append(row)
+
+    if len(new_rows) > 0:
+        # Same dtypes as the frame read, so that an all-empty column (seats of a new row) does not change them
+        new = pd.DataFrame(new_rows, columns=results.columns)
+        new = new.astype({c: d for c, d in results.dtypes.items() if d != object}, errors='ignore')
+        results = pd.concat([results, new], ignore_index=True)
 
     counts = results.groupby(poll_keys, observed=True).size()
     polls['parties'] = [int(counts.get(k, 0)) for k in polls[poll_keys].itertuples(index=False, name=None)]
