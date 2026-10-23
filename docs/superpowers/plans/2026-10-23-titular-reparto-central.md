@@ -40,7 +40,7 @@
 - Test: `tests/test_simulator_unit.py`
 
 **Interfaces:**
-- Produces: `Simulator.central_result() -> Optional[pd.DataFrame]` (índice como `result()`: nombres de región, `name='region'`; columnas `params['names']`; enteros; `None` con `split=False` o sin `forecast`). Atributo `self.central` (caché, `None` hasta calcular).
+- Produces: `Simulator.central_result() -> Optional[pd.DataFrame]` (índice como `result()`: nombres de región, `name='region'`; columnas `params['names']`; enteros; `None` con `split=False` o sin `forecast`). Atributo `self.central_table` (caché, `None` hasta calcular; no `self.central`, que es el método estático `Simulator.central`).
 - Produces: `Simulator.totals(sort=False, method='central') -> pd.Series` (índice `params['names']`, enteros; `method` en `('central', 'median', 'mean')`).
 - Produces: `Simulator.summary(names=None, alpha=None, method='central')`; `Simulator.unit_summary(region, alpha=None)` con columnas `['pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats']`.
 - Produces: `tests.fakes.synthetic_simulator` capaz de ejecutar `run()`, `build_umat`, `simulate` y `central_result()` (reparto nacional PP 5, PSOE 4, VOX 1; Madrid 3/2/1; Barcelona 2/2/0).
@@ -51,7 +51,7 @@ En `tests/fakes.py::synthetic_simulator`, tras `sim.industry_bias, sim.compositi
 
 ```python
     sim.threshold, sim.threshold_scope = 3.0, None
-    sim.v2swing, sim.rng, sim.rng_swing, sim.region_groups, sim.central = None, np.random.default_rng(42), None, {}, None
+    sim.v2swing, sim.rng, sim.rng_swing, sim.region_groups, sim.central_table = None, np.random.default_rng(42), None, {}, None
     # Resultados previos por región (la fila 0 es la media ponderada por `prev_totals.votes`): la base del swing
     prev = pd.DataFrame({'PP': [38., 42., 32.], 'PSOE': [32., 28., 38.], 'VOX': [14., 15., 12.]},
                         index=pd.Index(REGIONS, name='region_id'))
@@ -93,7 +93,7 @@ def test_central_result_leaves_the_simulations_and_the_generators_alone():
     b.totals()  # la pasada determinista entre medias no debe mover la secuencia aleatoria
     b.run(reset=False)
     assert np.array_equal(a.results, b.results) and b.params['random'] is True and b.rng is not None
-    assert b.central is None  # `run` vacía la caché
+    assert b.central_table is None  # `run` vacía la caché
 
 
 def test_central_result_is_the_same_in_both_modes_and_cached():
@@ -104,7 +104,7 @@ def test_central_result_is_the_same_in_both_modes_and_cached():
     sim.params['horizon'] = 'deadline'
     assert sim.central_result().equals(first)
     sim.set_params(n_sim=7)
-    assert sim.central is None
+    assert sim.central_table is None
 
 
 def test_central_result_applies_the_threshold_and_regression_mode_falls_back_to_the_median():
@@ -141,10 +141,10 @@ Expected: FAIL (`AttributeError: 'Simulator' object has no attribute 'central_re
 
 - [ ] **Step 4: Implementar en `mtpy/lib/simulator.py`**
 
-- `__init__`: `self.central = None` junto a `self.results = None`.
-- `set_params`: tras el `return self` temprano (sin argumentos y con `params`), poner `self.central = None`.
-- `run`: `self.central = None` justo después de `self.set_params(...)`.
-- `central_result(self) -> Optional[pd.DataFrame]`: si `not self.params['split']` o `self.forecast is None`, `None`; si `self.central is not None`, `self.central.copy()`; si no, guardar `self.params['random']`, ponerlo a `False`, dentro de `try/finally` hacer `frame = self.build_frame()`, `umat = self.build_umat(frame)`, `result = self.simulate(frame, umat)`, restaurar el flag; construir el DataFrame como `result()` (índice de nombres de región, columnas `params['names']`, `dtype=int` tras `round`), guardarlo en `self.central` y devolver una copia. Docstring: «reparto central: D'Hondt en cada circunscripción sobre el voto central (la media del forecast proyectada con el swing proporcional, sin ruido ni deriva); el titular publicado; igual en nowcast y forecast».
+- `__init__`: `self.central_table = None` junto a `self.results = None`.
+- `set_params`: tras el `return self` temprano (sin argumentos y con `params`), poner `self.central_table = None`.
+- `run`: `self.central_table = None` justo después de `self.set_params(...)`.
+- `central_result(self) -> Optional[pd.DataFrame]`: si `not self.params['split']` o `self.forecast is None`, `None`; si `self.central_table is not None`, `self.central_table.copy()`; si no, guardar `self.params['random']`, ponerlo a `False`, dentro de `try/finally` hacer `frame = self.build_frame()`, `umat = self.build_umat(frame)`, `result = self.simulate(frame, umat)`, restaurar el flag; construir el DataFrame como `result()` (índice de nombres de región, columnas `params['names']`, `dtype=int` tras `round`), guardarlo en `self.central_table` y devolver una copia. Dentro de la clase, llamar al método estático como `Simulator.central(...)` sólo si hiciera falta; `self.central(...)` sigue siendo el método. Docstring: «reparto central: D'Hondt en cada circunscripción sobre el voto central (la media del forecast proyectada con el swing proporcional, sin ruido ni deriva); el titular publicado; igual en nowcast y forecast».
 - `totals(self, sort=False, method='central')`: validar `method` en `('central', 'median', 'mean')` (ValueError como `central`); con `'central'`, `table = self.central_result()`; si es `None`, seguir como `'median'`; si no, `ds = table.iloc[self.params['regions'].index(self.default_region)].astype(int)`; el resto (`sort`, `.loc[names]`) igual. Docstring: titular = reparto central; `'median'`/`'mean'` son la central expandida con `round_proportional`.
 - `summary(..., method='central')`: `seats = self.totals(method=method)`; a `summarize_seats` pasar `method='median' if method == 'central' else method` (sólo cuenta sin `headline`).
 - `summarize_seats` docstring: «`seats` (titular: el `headline` dado, o la central expandida sin él)».
