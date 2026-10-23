@@ -1006,7 +1006,7 @@ def fixed_rows(last: Optional[dict], results_rows: list, parties: list, colors: 
 
     return [
         {'label': 'Promedio de sondeos', 'small': 'modelo · a {} días'.format(last['horizon']),
-         'title': 'Congelado el {}: solo los sondeos publicados hasta entonces'.format(fmt_date(last['date'])),
+         'title': 'Congelado el {}: sólo los sondeos publicados hasta entonces'.format(fmt_date(last['date'])),
          'cells': cells([last['pct'].get(name) for name in parties])},
         {'label': 'Resultado', 'small': fmt_date(event_date), 'title': None,
          'cells': cells([pct.get(name) for name in parties])},

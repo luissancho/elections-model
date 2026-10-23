@@ -741,7 +741,7 @@ def test_escanos_region_detail_skips_parties_that_do_not_stand(api, fresh_app):
 def test_escanos_district_form_keeps_the_pinned_run(api, fresh_app):
     write_districts(fresh_app.fs)
     page = html(call(api, '/es/escanos', query='mode=forecast&run=' + RUN)[2])
-    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 1  # solo el formulario de circunscripción
+    assert page.count('type="hidden" name="run" value="{}"'.format(RUN)) == 1  # sólo el formulario de circunscripción
     assert 'href="/es/escanos?mode=forecast&amp;run={}&amp;region=8"'.format(RUN) in page
 
 
@@ -860,12 +860,15 @@ def test_promedios_orders_the_story_and_carries_the_controls(api):
 def test_promedios_controls_are_hidden_without_js(api):
     """Sin JS los controles no hacen nada y no se muestran."""
     page = html(call(api, '/es')[2]).replace('\n', ' ')
-    for control in ('series-window', 'series-view', 'series-polls'):
+    for control in ('series-window', 'series-view', 'series-layers'):
         assert re.search(r'<fieldset id="{}" class="[^"]*" hidden>'.format(control), page), control
-    # «Sondeos»: mostrar u ocultar los puntos de los sondeos del promedio, marcados por defecto
-    polls = page[page.index('id="series-polls"'):]
-    polls = polls[:polls.index('</fieldset>')]
-    assert '<legend>Sondeos</legend>' in polls and 'value="si" checked> Con sondeos' in polls and 'value="no"> Sin sondeos' in polls
+    # «Mostrar»: sólo los sondeos, sólo el promedio o ambos, marcado «Ambos» por defecto (Luis, 2026-10-23)
+    layers = page[page.index('id="series-layers"'):]
+    layers = layers[:layers.index('</fieldset>')]
+    assert '<legend>Mostrar</legend>' in layers
+    assert re.findall(r'<label><input type="radio" name="layers" value="(\w+)"( checked)?> (\w+)</label>', layers) == [
+        ('sondeos', '', 'Sondeos'), ('promedio', '', 'Promedio'), ('ambos', ' checked', 'Ambos')]
+    assert '«Sin sondeos»' not in page and 'Sondeos / Promedio / Ambos' in page
     before = page[:page.index('id="polls"')]
     assert 'data-all' not in before and 'data-none' not in before
     assert '<option value="Sigma Dos" selected>Sigma Dos (1)</option>' in page
@@ -1000,7 +1003,7 @@ def houses_without_analysis(api, fresh_app, monkeypatch):
 @pytest.fixture
 def houses(houses_without_analysis, fresh_app):
     """Como `houses_without_analysis`, con el análisis de casas de `es` y su elección de 2023 publicados
-    (fixtures): la diana del perfil solo cuenta las elecciones publicadas, como el histórico."""
+    (fixtures): la diana del perfil sólo cuenta las elecciones publicadas, como el histórico."""
     write_analysis(fresh_app.fs)
     write_event(fresh_app.fs)
     return houses_without_analysis
@@ -1095,7 +1098,7 @@ def test_casas_with_analysis_without_house_effects_shows_the_notice(houses, fres
     assert status == 200 and 'Análisis no publicado todavía' in page
     assert 'id="effects-heatmap"' not in page and 'id="herding-table"' in page
     assert initial(body)['grid'] is None
-    assert 'Efectos de encuestadora por partido y bloque' not in page and 'Rebaño por encuestadora' in page
+    assert 'Efectos de casa por partido y bloque' not in page and 'Rebaño por encuestadora' in page
 
 
 def test_casas_without_database_is_a_503_page(api):
@@ -1126,7 +1129,7 @@ def test_casas_ranking_excludes_null_ratings_and_links_every_house(houses):
     assert 'Hamalgama' not in ranking and ranking.count('<tr') == 3  # cabecera, GAD3 y CIS
     assert '82,4' in ranking and '0,74' in ranking  # rating (escala 0-100) y herding (análisis) de GAD3
     # los formatos (2026-10-17): barra verde del rating de 0 a 100, barra divergente del sesgo de bloques en ±8 en el color
-    # del bloque al que favorece (la fixture solo trae el primero: el segundo, gris), rojos del error medio de 0 a 8 y
+    # del bloque al que favorece (la fixture sólo trae el primero: el segundo, gris), rojos del error medio de 0 a 8 y
     # del rebaño (más rojo cuanto más por debajo de 1)
     from mtpy.lib.pages.filters import bar_sides, shade
     assert '<td class="f l"><a href="/casas/gad3"><b>GAD3</b></a></td>' in ranking
@@ -1174,7 +1177,7 @@ def test_casa_profile_tables_and_bullseye(houses):
     assert data['bullseye'] == [{'event': '2023-23J', 'event_date': '2023-07-23', 'year': 2023, 'days': 7, 'scope': 'es',
                                  'name': 'Generales 2023', 'Derecha': 2.81, 'Izquierda': -0.24}]
     assert data['blocks'] == ['Derecha', 'Izquierda'] and data['scopes'] == [{'code': 'es', 'name': 'España'}]
-    # los filtros de la diana: ámbito (solo los que tienen sondeos suyos) y años, ocultos hasta que el JS los cablea
+    # los filtros de la diana: ámbito (sólo los que tienen sondeos suyos) y años, ocultos hasta que el JS los cablea
     form = re.search(r'<form id="bullseye-filter"[^>]*hidden>(.*?)</form>', page, re.S).group(1)
     years = [str(year) for year in range(2023, date.today().year + 1)]  # todos los años desde el primer evento hasta hoy (2026-10-17)
     assert re.findall(r'<option value="([^"]*)"', form) == ['', 'es'] + years + years and 'id="bullseye-count"' in form
@@ -1211,7 +1214,7 @@ def test_casa_profile_of_a_house_without_ratings(houses):
     """Una casa del catálogo sin ratings en el ámbito: perfil con tablas vacías, sin camino ni diana."""
     status, _, body = call(houses, '/casas/nueva')
     page = html(body)
-    assert status == 200 and '<h2>Nueva' in page and page.replace('\n', '').count('<div class="v">–<small></small></div>') == 1  # solo el rating sin valor
+    assert status == 200 and '<h2>Nueva' in page and page.replace('\n', '').count('<div class="v">–<small></small></div>') == 1  # sólo el rating sin valor
     assert '<div class="v">5,0<small></small></div>' in page.replace('\n', '') and 'sin evaluar' in page
     assert 'class="headline"' not in page  # el perfil no lleva titular (2026-10-15)
     assert 'id="rating-path"' not in page and 'id="bullseye-chart"' not in page and 'id="bullseye-filter"' not in page
@@ -1402,7 +1405,7 @@ def test_profile_page_card_shows_implantation_0_without_national_events(houses):
     page = html(call(houses, '/casas/autonomica')[2])
     card = page[page.index('id="quality"'):page.index('id="path"')]
     rows = re.findall(r'<tr>\s*<th scope="row">([^<]+)</th>\s*<td>(\d) / (\d)</td>', card)
-    assert rows[-1] == ('Implantación', '0', '2') and 'Solo ha sondeado elecciones autonómicas o locales.' in card
+    assert rows[-1] == ('Implantación', '0', '2') and 'Sólo ha sondeado elecciones autonómicas o locales.' in card
     assert 'ninguna elección general sondeada.' in card and 'calculado a partir de los sondeos publicados' not in card
 
 
@@ -1785,11 +1788,12 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     page = html(body).replace('\n', ' ')
     assert status == 200 and 'congelado a 6 días de la elección' in page
     assert 'id="series-chart"' in page and 'id="series-window"' in page and 'id="series-legend"' in page and 'name="view"' in page
-    # «Con sondeos / Sin sondeos», como en Promedios (2026-10-21): oculto sin JS, «Con sondeos» marcado
-    polls = page[page.index('id="series-polls"'):]
-    polls = polls[:polls.index('</fieldset>')]
-    assert re.search(r'<fieldset id="series-polls" class="seg" hidden>', page)
-    assert 'value="si" checked> Con sondeos' in polls and 'value="no"> Sin sondeos' in polls
+    # «Sondeos / Promedio / Ambos», como en Promedios (2026-10-23): oculto sin JS, «Ambos» marcado
+    layers = page[page.index('id="series-layers"'):]
+    layers = layers[:layers.index('</fieldset>')]
+    assert re.search(r'<fieldset id="series-layers" class="seg" hidden>', page)
+    assert re.findall(r'name="layers" value="(\w+)"( checked)?>', layers) == [('sondeos', ''), ('promedio', ''), ('ambos', ' checked')]
+    assert '«Sin sondeos»' not in page and 'Sondeos / Promedio / Ambos' in page
     assert 'href="/api/v1/events/es/2023-07-23/series?format=csv"' in page and 'Promedio de sondeos del modelo a 6 días' in page
     assert 'no está publicado todavía: hace falta' not in page
     # la tarjeta del modelo: selector de horizonte (6 marcado), una tabla por horizonte (la de 30 oculta) y la de bloques
@@ -2015,7 +2019,7 @@ def test_fixed_rows_of_the_polls_table_footer():
     colors = {'PP': '#1d84ce', 'PSOE': '#e4001c'}
     rows = pages.fixed_rows(last, results, ['PP', 'PSOE', 'VOX'], colors, '2023-07-23')
     assert [(row['label'], row['small']) for row in rows] == [('Promedio de sondeos', 'modelo · a 6 días'), ('Resultado', '23 jul 2023')]
-    assert rows[0]['title'] == 'Congelado el 17 jul 2023: solo los sondeos publicados hasta entonces' and rows[1]['title'] is None
+    assert rows[0]['title'] == 'Congelado el 17 jul 2023: sólo los sondeos publicados hasta entonces' and rows[1]['title'] is None
     assert [cell['value'] for cell in rows[0]['cells']] == ['32,4', '31,0', '–'] and [cell['leader'] for cell in rows[0]['cells']] == [True, False, False]
     assert [cell['value'] for cell in rows[1]['cells']] == ['33,1', '31,4', '–'] and rows[1]['cells'][2]['color'] == pages.OTHERS_COLOR
     assert pages.fixed_rows(None, results, ['PP'], colors, '2023-07-23') == []
@@ -2344,7 +2348,7 @@ def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     assert 'próximamente' not in page  # las cuatro preguntas tienen ya su texto
     assert 'Las preguntas del método' in page and 'Las cuatro preguntas' not in page
     text = re.sub(r'\s+', ' ', page)
-    assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
+    assert 'viendo sólo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
     assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
@@ -2356,9 +2360,11 @@ def test_metodo_promedio_text(api):
     assert status == 200 and '<title>Demoscopio · ¿Cómo promediamos las encuestas?</title>' in page
     for anchor in ('que-entra', 'peso', 'efectos-de-casa', 'regresion', 'banda', 'voto-estimado'):
         assert 'id="' + anchor + '"' in page, anchor
-    assert 'id="metodo-nav"' in page and '<math' in page and 'En resumen' in page
-    rating = page[page.index('id="rating"'):page.index('id="cuentas"')]
-    assert re.search(r'<math display="block" aria-label="[^"]*logaritmo de uno más R sub c entre cien', rating)  # rating de 0 a 100
+    assert 'id="metodo-nav"' in page and '<math' in page and 'id="resumen"' in page
+    assert page.index('id="rating"') < page.index('id="cuentas"')
+    # the formula of the rating factor lives in the note of the weights (rating de 0 a 100)
+    notes = page[page.index('id="notas"'):]
+    assert re.search(r'<math display="block" aria-label="[^"]*logaritmo de uno más Q sub c entre cien', notes)
     assert 'href="/metodo/promedio"' in html(call(api, '/metodo')[2])
 
 
@@ -2386,7 +2392,7 @@ def test_metodo_rating_text(api):
     assert 'la desviación de cada encuestadora apenas cambia' in text and 'no cambia:' not in text
     assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
     assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
-    assert 'viendo solo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
+    assert 'viendo sólo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
     assert 'Trabajo de campo' in text and 'Implantación' in text and '<table id="rubric-table">' in page
     assert '<strong>Diferencial</strong>' in text and 'Sesgo bloques' in text and 'Calidad</strong>' not in text
     assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
@@ -2483,6 +2489,9 @@ def test_thresholds_and_figures_come_from_the_catalogue_and_the_bundle(api, fres
     assert rows['es']['threshold'] == 3 and rows['es-cn']['threshold_scope'] == 4 and rows['es-md']['rating_weight'] == 0.5
     figures = pages.national_figures()
     assert figures['n_sim'] == fixture_data('meta')['n_sim'] and figures['coverage'][0]['horizon'] == min(fixture_data('backtest-meta')['horizons'])
+    # the comparison of the shortest horizon and the years of the evaluated elections, for the method texts (2026-10-23)
+    assert figures['backtest'] == {'horizon': 6, 'n_cases': 2, 'mae': 1.69, 'mae_last_poll': 1.74, 'mae_mean_4w': 1.86, 'cov95': 0.957}
+    assert figures['years'] == ['2019', '2023']
 
 
 def test_backtest_subpage_has_the_seats_chart_and_the_subnav(api, fresh_app):
@@ -2621,19 +2630,19 @@ def visible_text(page):
     return re.sub(r'<[^>]+>', ' ', page)
 
 
-# The one public "casa": the title Luis asked for in the profile (2026-10-15).
-EFFECTS_TITLE = 'Efectos de casa por elección'
-# The other public "casa": the column header Luis asked for in the weights example of the method (2026-10-16).
-WEIGHTS_HOUSE_HEADER = '<th scope="col">Casa</th>'
 
 
 def assert_public_wording(page, label):
-    """Ni "casa/s" ni "patrocinador/es" en el texto visible (salvo el título `EFFECTS_TITLE` del perfil y la cabecera
-    `WEIGHTS_HOUSE_HEADER` del ejemplo del promedio), y ningún "Cómo leerlo" abierto."""
-    text = visible_text(page.replace(WEIGHTS_HOUSE_HEADER, ' ')).replace(EFFECTS_TITLE, ' ')
-    assert not re.search(r'\b[Cc]asas?\b', text), (label, re.findall(r'.{40}\b[Cc]asas?\b.{20}', text)[:3])
+    """Redacción pública (reglas de Luis): ni "patrocinador/es" en el texto visible (se dice «medio»), ningún "Cómo
+    leerlo" abierto y el adverbio «sólo» (solamente) siempre con tilde, su regla de oro. «Casa» está permitida como
+    sinónimo secundario de «encuestadora» desde el 2026-10-23 (antes estaba prohibida); el efecto se llama «efecto de
+    casa»."""
+    text = visible_text(page)
     assert not re.search(r'\b[Pp]atrocinador(es)?\b', text), label
     assert '<details class="how" open' not in page, label
+    # the adjective keeps the accent off («un solo sondeo», «por sí solo»); anything else is the adverb
+    sólo = re.findall(r'(?<![Uu]n )(?<![Ee]l )(?<![Ss]í )\b[Ss]olo\b.{0,25}', text)
+    assert not sólo, (label, sólo[:5])
 
 
 def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site):
@@ -3220,7 +3229,7 @@ def test_polls_csv_link_survives_a_single_page_and_the_legend_is_accessible(api)
 
 
 def test_profile_effects_switch_between_result_and_cycle_deviations(houses):
-    """El perfil enseña la desviación frente al resultado (solo las elecciones con tres sondeos en los 90 días
+    """El perfil enseña la desviación frente al resultado (sólo las elecciones con tres sondeos en los 90 días
     previos) y, con el conmutador, la desviación frente al consenso del ciclo (todas); el "Cómo leerlo" lo explica."""
     page = html(call(houses, '/casas/gad3', query='scope=es')[2])
     card = page[page.index('id="effects"'):page.index('id="herding"')]
@@ -3229,7 +3238,7 @@ def test_profile_effects_switch_between_result_and_cycle_deviations(houses):
     result = re.search(r'<table id="profile-effects">(.*?)</table>', card, re.S).group(1)
     cycle = re.search(r'<table id="profile-effects-cycle">(.*?)</table>', card, re.S).group(1)
     assert result.count('<tr>') == 1 + 2 and cycle.count('<tr>') == 1 + 3  # la cabecera y las filas
-    assert '0,7' in cycle and '0,7' not in result  # 2026 solo tiene la desviación frente al consenso
+    assert '0,7' in cycle and '0,7' not in result  # 2026 sólo tiene la desviación frente al consenso
     assert '<div class="table-wrap" id="profile-effects-cycle-wrap" hidden>' in card
     assert 'tres sondeos' in card and '90 días' in card and 'consenso' in card
     records = [{'event_date': '2023-07-23', 'event_scope': 'es', 'party': 'PP', 'dev_result_c': None, 'dev_cycle': 1.5},
@@ -3418,7 +3427,7 @@ def test_history_and_home_link_the_elections_by_slug(history_two_scopes):
     status, _, body = call(history_two_scopes, '/elecciones')
     page = html(body)
     assert status == 200 and 'href="/elecciones/es/generales/2023-07"' in page and 'href="/elecciones/es/madrid/2021-05"' in page
-    assert '/elecciones?scope=' not in page.replace('/elecciones?scope=es"', '')  # solo queda el enlace al histórico
+    assert '/elecciones?scope=' not in page.replace('/elecciones?scope=es"', '')  # sólo queda el enlace al histórico
     events = {event['key']: event['href'] for event in initial(body)['events']}
     assert events['es:2023-07-23'] == '/elecciones/es/generales/2023-07' and events['es-md:2021-05-04'] == '/elecciones/es/madrid/2021-05'
     home = html(call(history_two_scopes, '/')[2])
@@ -3515,7 +3524,7 @@ def test_casa_profile_shows_the_last_poll_by_election_over_the_house_effects(hou
     data['polls'][1] = dict(data['polls'][1], pollster_id=4, pollster='Sigma Dos', PP=32.1, PSOE=31.3, VOX=12.0)
     bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_event('es', '2023-07-23', 'cycle'), 'event-cycle', data, 'es')
     page = html(call(houses, '/casas/gad3')[2])
-    assert 'Efectos de casa por elección' in page and 'Efectos de encuestadora por elección' not in page
+    assert 'Efectos de casa por elección' in page and 'de encuestadora por elección' not in page
     assert page.index('id="bullseye"') < page.index('id="last"') < page.index('id="effects"') < page.index('id="herding"')
     card = page[page.index('id="last"'):page.index('id="effects"')]
     assert '<h2>Último sondeo por elección</h2>' in card
@@ -3623,7 +3632,7 @@ def test_casa_profile_path_card_lists_every_polled_election_and_defines_its_colu
                                             ['4 may 2021 · Madrid', '7', '-1,5', '2,1', '-0,8', '78,5', '7,5']]
     # los formatos (2026-10-17): barra divergente del diferencial en ±2 (verde a la izquierda, roja a la derecha), rojos
     # del error medio de 0 a 8, barra divergente del sesgo de bloques en ±8 en el color del bloque al que favorece (la
-    # fixture solo trae el primero, azul; el segundo, gris) y doble gradiente del cambio (rojo de -10 a 0, verde de 0 a 10)
+    # fixture sólo trae el primero, azul; el segundo, gris) y doble gradiente del cambio (rojo de -10 a 0, verde de 0 a 10)
     from mtpy.lib.pages.filters import bar_sides, shade
     first = trs[0]
     assert '<td class="cell-shade" style="background-color: {}">1,3</td>'.format(shade(1.3, 0, 8, '#d62728')) in first
@@ -3664,7 +3673,7 @@ def test_casas_glossary_explains_every_ranking_column_in_order(houses):
     table = re.search(r'<table class="et et-rank" id="ranking-table">(.*?)</table>', page, re.S).group(1)
     assert header_tooltips(table) == glossary_entries(glossary)  # el tooltip de cada cabecera es su entrada del glosario
     assert 'entra en el promedio de la próxima elección' in glossary  # el rating del ranking es el de hoy
-    # la fixture solo trae un bloque en `vs`: el segundo queda sin nombre (y su barra, gris)
+    # la fixture sólo trae un bloque en `vs`: el segundo queda sin nombre (y su barra, gris)
     assert 'más margen a Derecha del que hubo; negativo, más margen al segundo' in glossary
     assert 'Cada punto vale 8 de confianza, con un mínimo de 5.' in glossary
     assert 'cada ámbito y fecha por separado' in glossary  # elecciones
@@ -3688,7 +3697,7 @@ def test_casas_ranking_shows_the_general_elections_in_brackets_in_elecciones(hou
     assert '>Elecciones<span class="th-sub">(generales)</span></th>' in table
     assert table.count('<col ') == len(heads)
     assert '<td>2 (3)</td>' in table  # GAD3: 2 elecciones de la fixture, 3 generales
-    assert 'ranking-national-events' not in page and 'data-national-events' not in page and 'Solo con experiencia' not in page
+    assert 'ranking-national-events' not in page and 'data-national-events' not in page and 'Sólo con experiencia' not in page
 
 
 def test_casas_ranking_with_a_known_zero_shows_zero_in_brackets(houses, monkeypatch):
@@ -3948,7 +3957,7 @@ def test_result_rows_carry_the_deltas_against_the_previous_election():
     # sin resultados anteriores, o sin bloques en ellos, las cuatro claves van a None
     assert all(row[key] is None for row in pages.result_rows(summary) for key in ('prev_pct', 'prev_seats', 'delta_pct', 'delta_seats'))
     assert all(row['delta_seats'] is None for row in pages.block_result_rows(summary, meta, pages.Catalog(meta), {'date': '2023-07-23', 'parties': {}}))
-    # las diferencias de escaños que llevan los hemiciclos y la barra de Escaños: solo las que existen, con el año
+    # las diferencias de escaños que llevan los hemiciclos y la barra de Escaños: sólo las que existen, con el año
     assert pages.seat_deltas(summary, meta, pages.Catalog(meta), results) == {'parties': {'PP': -25}, 'blocks': {'Derecha': -22, 'Izquierda': 10}, 'year': 2023}
     assert pages.seat_deltas(summary, meta, pages.Catalog(meta), None) == {'parties': {}, 'blocks': {}, 'year': None}
 
@@ -3982,7 +3991,7 @@ def test_promedios_tables_compare_with_the_previous_election(events_site, fresh_
     cards = re.sub(r'\s+', ' ', page[page.index('id="hemicycle-card"'):page.index('id="evolution-card"')])
     assert 'frente al resultado oficial' in cards and 'un guion' in cards and 'ya no existen' in cards
     assert 'flecha verde si sube y roja si baja' in cards and 'cuánto cambia frente a 2023' in cards  # el hemiciclo también lo dice
-    # el hemiciclo recibe solo las diferencias que existen (XX no concurrió), con el año
+    # el hemiciclo recibe sólo las diferencias que existen (XX no concurrió), con el año
     assert initial(call(events_site, '/es')[2])['deltas'] == {'parties': {'PP': -25}, 'blocks': {'Derecha': -65}, 'year': 2023}
 
 
@@ -4016,7 +4025,7 @@ def test_home_and_seats_pages_embed_the_seat_deltas_for_their_hemicycle_and_bar(
 
 
 def test_escanos_tables_compare_the_seats_with_the_previous_election(events_site):
-    """Las dos tablas de Escaños llevan una columna «vs 2023» tras los escaños con la flecha de la diferencia (solo
+    """Las dos tablas de Escaños llevan una columna «vs 2023» tras los escaños con la flecha de la diferencia (sólo
     escaños: no hay voto en estas tablas); sin elección publicada, no aparece."""
     page = html(call(events_site, '/es/escanos')[2])
     parties = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
@@ -4617,7 +4626,7 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
 
 
 def test_cera_page_question_1_copy_fixes(api, fresh_app):
-    """Cuba «apenas se mueve» solo bajo `PACE_FAST`; la frase de los periodos dice el último cierre publicado."""
+    """Cuba «apenas se mueve» sólo bajo `PACE_FAST`; la frase de los periodos dice el último cierre publicado."""
     census = fixture_data('study-census')
     cuba = {'country_code': 'CUB', 'name': 'CUBA', 'g1': 100, 'g2': 110, 'ratio': 1.1, 'g1_now': 100, 'g2_now': 110,
             'ratio_now': 1.1}

@@ -105,7 +105,8 @@ function paintResults(initial, catalog) {
  *
  * @param {object} initial the page's initial data
  * @param {object} views `seriesViews` of the page
- * @param {object} start `{view, window, selected}` of the average at load
+ * @param {object} start `{view, window, selected, layers}` of the average at load (its layers are not kept: the
+ *   house chart always draws its polls over the average)
  * @param {function} render draws a chart: `(el, polls, chartState) => chart`
  * @param {function} imageOf the option of its image: `(polls, chartState, zoom) => option`
  */
@@ -118,7 +119,7 @@ function wireHouse(initial, views, start, render, imageOf) {
   const controls = document.getElementById('pollster-controls');
   const windowSet = document.getElementById('pollster-window');
   const viewSet = document.getElementById('pollster-view');
-  const state = {...start};
+  const state = {...start, layers: 'ambos'};
   let chart = null;
 
   /** Polls of the chosen house, in the current view. */
@@ -204,8 +205,8 @@ function wireSeries(initial, catalog) {
   });
   const start = {...state};
 
-  /** Data of a chart (`seriesOption`) with the polls and the `{view, window, selected}` of a chart; the ECharts
-   * legend stays hidden and selectable, driven by the pill legend. */
+  /** Data of a chart (`seriesOption`) with the polls and the `{view, window, selected, layers}` of a chart; the
+   * ECharts legend stays hidden and selectable, driven by the pill legend. */
   function dataOf(pollsOfChart, chartState) {
     const current = views[chartState.view];
     return {
@@ -220,6 +221,7 @@ function wireSeries(initial, catalog) {
       window: chartState.window,
       anchor,
       legend: 'hidden',
+      layers: chartState.layers,
     };
   }
 

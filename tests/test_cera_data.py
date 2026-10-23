@@ -69,7 +69,7 @@ def test_read_monthly_workbook_reads_both_formats(data_fs, provinces):
     new = read_monthly_workbook(path('cera/ine/cerapropais_26.xlsx'), provinces)
     assert list(old.columns) == MONTHLY_COLUMNS and old['date'].nunique() == 12 and new['date'].nunique() >= 9
     assert national_series(old)['2006-12-01'] == 1160209 and national_series(new)['2026-05-01'] == 2708083
-    # El libro del año en curso gana un mes con cada cierre: solo se fijan cotas del último.
+    # El libro del año en curso gana un mes con cada cierre: sólo se fijan cotas del último.
     assert new['date'].max() >= pd.Timestamp('2026-09-01') and national_series(new).iloc[-1] > 2700000
     assert set(new['region_id']) == set(range(1, 53))
 

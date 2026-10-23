@@ -11,7 +11,7 @@
   'promedio': 'Qué sondeos entran, cuánto pesa cada uno y cómo se descuenta el sesgo propio de cada encuestadora antes de promediar.',
   'escanos': 'Cómo se pasa del promedio a muchas elecciones simuladas y de cada una a los escaños de cada circunscripción.',
   'rating': 'Cómo se mide el acierto de cada encuestadora en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
-  'backtest': 'El modelo repetido en elecciones ya celebradas, viendo solo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
+  'backtest': 'El modelo repetido en elecciones ya celebradas, viendo sólo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
 } %}
     <div id="content" class="stack">
       {{ m.headline('El modelo tiene dos partes: un promedio de encuestas y una simulación de escaños; estas páginas cuentan cómo funcionan y cuánto aciertan.') }}
@@ -79,7 +79,7 @@
           por la versión del código (commit) con que se hizo. El pie de cada página muestra el identificador y la fecha de
           la publicación; el commit de cada run consta en su <code>meta.json</code>, que sirve la API en <code>/api/v1/forecast/{scope}</code>. Un run
           publicado no se modifica nunca; el siguiente pasa a ser el más reciente. Los runs retrospectivos
-          son reconstrucciones de días pasados con el modelo de hoy y solo los sondeos publicados hasta
+          son reconstrucciones de días pasados con el modelo de hoy y sólo los sondeos publicados hasta
           ese día, y van marcados como tales: en los gráficos de evolución, con puntos huecos.
         </p>
         <p>
@@ -91,7 +91,7 @@
           {% endfor %}
         </p>
         {% elif section.id == 'limitaciones' %}
-        <p>Lo que el modelo no puede hacer, o hace solo en parte:</p>
+        <p>Lo que el modelo no puede hacer, o hace sólo en parte:</p>
         <ul>
           <li>Pocas elecciones para calibrar: el error histórico, la deriva y el backtest se apoyan en un
             puñado de elecciones generales con sondeos abundantes, y en las autonómicas hay aún menos por

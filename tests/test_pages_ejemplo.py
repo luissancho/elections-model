@@ -1,5 +1,5 @@
 """Los ejemplos vivos de `/metodo/promedio`: el del promedio (fase 9: contexto, plantilla e isla de datos) y el de los
-efectos de encuestadora (el CIS desde 2018: el último sondeo del CIS antes de cada elección analizada, por bloques)."""
+efectos de casa (el CIS desde 2018: el último sondeo del CIS antes de cada elección analizada, por bloques)."""
 import os
 import re
 
@@ -103,7 +103,7 @@ def test_promedio_context_without_the_part_has_no_island(api, tmp_path):
 def test_promedio_page_shows_the_example_block(api):
     status, _, body = call(api, '/metodo/promedio')
     page = html(body)
-    assert status == 200 and 'id="ejemplo"' in page and 'Un ejemplo: el promedio del PP hoy' in page
+    assert status == 200 and 'id="ejemplo"' in page and 'Un cálculo completo, con datos publicados' in page
     assert 'href="#ejemplo"' in page and page.index('id="banda"') < page.index('id="ejemplo"') < page.index('id="voto-estimado"')
     assert 'id="weights-table"' in page and 'id="weights-chart"' in page and 'id="weights-more"' not in page
     assert page.index('id="weights-chart"') < page.index('id="weights-list"') < page.index('id="weights-table"')
@@ -119,24 +119,31 @@ def test_promedio_page_shows_the_example_block(api):
     assert rows == ['5 oct', '1 oct', '24 sept']                                   # los más nuevos arriba
     assert '<td>32,4%</td>' in table and '<td>32,9%</td>' in table                  # publicada y corregida (GAD3)
     text = re.sub(r'\s+', ' ', page)
-    assert ('En el último cálculo publicado, el del 8 oct 2026, el promedio del PP leído el 8 oct 2026 es del 33,1%, con '
+    assert ('En el cálculo publicado el 8 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%, con '
             'una banda del 32,4% al 33,8%.') in text
-    assert 'El día de lectura es posterior al del cálculo' not in text             # mismo día en la fixture
-    assert 'Entran 3 sondeos, que por sus pesos equivalen a 2,6 sondeos independientes de igual peso' in text
-    assert 'La campana de ese día tiene 42 días de anchura.' in text
+    assert 'Las fechas describen dos cosas distintas' not in text              # mismo día en la fixture
+    assert 'En ese ajuste participaban 3 sondeos y la campana tenía una anchura de 42 días.' in text
+    assert 'El tamaño efectivo de los pesos era 2,6.' in text and 'No significa que tuviéramos exactamente 2,6 sondeos independientes' in text
     assert 'El sondeo que más pesa es el de Sigma Dos del 1 oct, con 1,14.' in text
     assert '<b>GAD3</b> / ABC' in text and '>–<' in page                             # muestra ausente → guion
     assert 'class="fill w"' in page and 'width: 17.1%' in page                      # peso 0,512 sobre 3
-    assert 'cell-shade' not in table and table.count('class="cell-bar"') == 3       # solo el peso lleva formato
+    assert 'cell-shade' not in table and table.count('class="cell-bar"') == 3       # sólo el peso lleva formato
     assert '<td>0,64</td>' in table and '<td>0,80</td>' in table                      # los factores, a secas
     assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
     data = initial(body)
     assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
-    # el texto va a la vista: la lista plegada justo bajo el gráfico, luego la lectura del gráfico y la de la tabla
+    # el texto va a la vista: el conmutador Publicada/Corregida (oculto sin JS) y la lista plegada junto al gráfico, luego
+    # la lectura del gráfico y la de la tabla
     card = page[page.index('id="ejemplo"'):page.index('id="voto-estimado"')]
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card
+    assert '<fieldset id="weights-field" class="seg" hidden>' in card and 'name="weights-field" value="pct_adj"' in card
+    assert card.index('id="weights-field"') < card.index('id="weights-chart"')
     assert re.search(r'id="weights-chart"[^>]*></div>\s*<details class="weights-list" id="weights-list">', card)
-    assert card.index('</details>') < card.index('Cada punto es un sondeo') < card.index('La tabla lista los sondeos')
+    assert card.index('</details>') < card.index('Cada punto es un sondeo') < card.index('La tabla recoge las fechas')
+    # the two figures of a poll are explained before the chart, with the CIS as the example, in plain words
+    assert card.index('Dos cifras para cada sondeo') < card.index('id="weights-field"') < card.index('id="weights-chart"')
+    assert 'su cifra corregida es la que habría publicado si midiera como la media de las encuestadoras' in text
+    assert 'La corrección no acerca los sondeos al resultado electoral' in text and '<legend>Cifra de los puntos</legend>' in card
     assert_public_wording(page, '/metodo/promedio')
 
 
@@ -144,25 +151,32 @@ def test_promedio_example_says_why_the_reading_day_is_later(api, monkeypatch):
     example = metodo.weights_example
     monkeypatch.setattr(metodo, 'weights_example', lambda: dict(example(), date='2026-10-18'))
     text = re.sub(r'\s+', ' ', html(call(api, '/metodo/promedio')[2]))
-    assert 'leído el 18 oct 2026' in text and 'El día de lectura es posterior al del cálculo' in text
+    assert 'leído en el 18 oct 2026' in text
+    assert 'Las fechas describen dos cosas distintas: el modelo se ejecutó el 8 oct 2026 y prolongó la estimación hasta el 18 oct 2026' in text
 
 
 def test_promedio_regression_card_explains_step_by_step(api):
     page = html(call(api, '/metodo/promedio')[2])
     card = re.sub(r'\s+', ' ', page[page.index('id="regresion"'):page.index('id="banda"')])
-    # each word of the name of the method, in order, then the titled blocks
-    leads = ['Regresión.', 'Polinómica.', 'Local.', 'Ponderada.', 'Por kernel.']
-    assert [card.index('<strong>' + lead + '</strong>') for lead in leads] == sorted(card.index('<strong>' + lead + '</strong>') for lead in leads)
-    assert card.index('Por kernel.') < card.index('<math') < card.index('Por qué una recta y no una media')
-    assert card.index('Por qué una recta y no una media') < card.index('id="anchura"') < card.index('id="consecuencias"')
-    assert 'Sheather y Jones' in card and 'href="#peso"' in card
-    assert '<a href="#ejemplo">El ejemplo de más abajo</a> dibuja la campana y la recta' in card
+    text = re.sub(r'<[^>]+>', '', card)
+    # the blocks of the expert's text, in order: the line, the bell, the fit, why not a mean, the bandwidth, the past
+    heads = ['Una recta para cada día', 'La campana que da más peso a lo cercano', 'Cómo elegimos la recta que mejor encaja',
+             'Por qué una recta ayuda más que una media', 'Cuánto debe abarcar la campana', 'Por qué puede cambiar el pasado']
+    assert [card.index('<h3') for _ in heads] and [card.index(head) for head in heads] == sorted(card.index(head) for head in heads)
+    assert card.count('<math display="block"') == 6   # ŷ, K(u), u, el factor temporal, ω y el error del ajuste
+    assert 'colocamos el día que queremos estimar en el cero del eje horizontal' in text and 'b = 0,02 representa una subida local' in text
+    assert 'La constante 1/√(2π) se cancela al dividir.' in text
+    # the worked example of three polls and the honest reading of the line
+    assert 'Su media es el 29%, pero las tres describen una subida de un punto cada diez días' in text
+    assert 'No supone que el último sondeo tenga razón ni que la subida vaya a continuar' in text
+    assert card.index('id="anchura"') < card.index('id="consecuencias"') and '81 días' in text and '54%' in text
+    assert 'El ejemplo de más abajo' not in card   # the regression card no longer links to the example
 
 
 def test_promedio_regression_card_without_the_example_has_no_link_to_it(api, tmp_path):
     without_weights(tmp_path)
     page = html(call(api, '/metodo/promedio')[2])
-    assert 'id="regresion"' in page and 'El ejemplo de más abajo' not in page   # sin el ejemplo del PP, sin enlace a él
+    assert 'id="regresion"' in page and 'href="#ejemplo"' not in page   # sin el ejemplo del PP, sin enlaces a él
 
 
 def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
@@ -172,8 +186,8 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     text = re.sub(r'\s+', ' ', html(body))
     card = text[text.index('id="ejemplo"'):text.index('id="voto-estimado"')]
     # the run and the reading day are two dates: the figure is the one of the reading day
-    assert status == 200 and 'el del 9 oct 2026, el promedio del PP leído el 8 oct 2026 es del 33,1%' in card
-    assert 'El día de lectura es posterior' not in card     # leído antes que el cálculo: nada que explicar
+    assert status == 200 and 'En el cálculo publicado el 9 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%' in card
+    assert 'Las fechas describen dos cosas distintas' not in card     # leído antes que el cálculo: nada que explicar
     assert initial(body)['example']['date'] == '2026-10-08'    # el gráfico sigue centrado en el día leído
 
 
@@ -198,7 +212,7 @@ def test_promedio_page_without_the_part_renders_as_before(api, tmp_path):
     assert 'initial-data' not in page and 'id="voto-estimado"' in page and 'id="banda"' in page
 
 
-# --- El ejemplo de los efectos de encuestadora: el CIS desde 2018 ---
+# --- El ejemplo de los efectos de casa: el CIS desde 2018 ---
 
 # El último sondeo del CIS (y uno de GAD3, que no cuenta) en las dos elecciones publicadas de los tests.
 HOUSE_ROWS = [
@@ -251,14 +265,14 @@ def test_house_example_counts_the_errors_of_the_pollster_since_the_date(house_si
     example = metodo.house_effects_example()
     assert example['pollster'] == 'CIS' and example['since'] == '2018-09-01' and example['href'] == '/casas/cis'
     assert example['blocks'] == ['Derecha', 'Izquierda'] and example['left'] == 'Izquierda' and example['right'] == 'Derecha'
-    assert [row['event_date'] for row in example['rows']] == ['2023-07-23', '2019-11-10']   # solo el CIS, las más nuevas arriba
+    assert [row['event_date'] for row in example['rows']] == ['2023-07-23', '2019-11-10']   # sólo el CIS, las más nuevas arriba
     assert example['rows'][0]['name'] == 'Generales 2023' and example['rows'][0]['scope'] == 'es' and example['rows'][0]['days'] == 11
     assert example['n'] == 2 and example['first'] == '2019-11-10' and example['last'] == '2023-07-23'
     assert example['over'] == {'Izquierda': 2, 'Derecha': 0} and example['under'] == {'Izquierda': 0, 'Derecha': 2}
     assert example['cycle'] == {'PP': -5.9, 'PSOE': 4.29, 'Derecha': -6.7, 'Izquierda': 4.24} and example['n_cycle'] == 36
     # two elections out of two on the same side: a fair coin does it once in four
-    assert example['chance'] == {'Izquierda': {'n': 2, 'k': 2, 'p': .25, 'odds': 4},
-                                 'Derecha': {'n': 2, 'k': 2, 'p': .25, 'odds': 4}}
+    coin = {'n': 2, 'k': 2, 'ways': 1, 'total': 4, 'p': .25, 'odds_exact': 4, 'odds': 4}
+    assert example['chance'] == {'Izquierda': coin, 'Derecha': coin}
     monkeypatch.setitem(metodo.HOUSE_EXAMPLE, 'since', '2020-01-01')
     assert [row['event_date'] for row in metodo.house_effects_example()['rows']] == ['2023-07-23']
     monkeypatch.setitem(metodo.HOUSE_EXAMPLE, 'since', '2024-01-01')
@@ -266,9 +280,13 @@ def test_house_example_counts_the_errors_of_the_pollster_since_the_date(house_si
 
 
 def test_sign_chance_is_the_binomial_tail_of_a_fair_coin():
-    # 21 or more of 23 on the same side: (C(23,21) + C(23,22) + C(23,23)) / 2^23 = 277 / 8388608, one in 30283
-    assert metodo.sign_chance(23, 21) == {'n': 23, 'k': 21, 'p': pytest.approx(277 / 2 ** 23), 'odds': 30000}
+    # 21 or more of 23 on the same side: (C(23,21) + C(23,22) + C(23,23)) / 2^23 = 277 / 8388608, one in 30284
+    assert metodo.sign_chance(23, 21) == {'n': 23, 'k': 21, 'ways': 277, 'total': 8388608, 'p': pytest.approx(277 / 2 ** 23),
+                                          'odds_exact': 30284, 'odds': 30000}
     assert metodo.sign_chance(10, 5)['odds'] == 1 and metodo.sign_chance(20, 15)['odds'] == 48
+    # the figures of the CIS example of the expert review (38 or more of 41): 11.522 of 2⁴¹, one in 190.854.301
+    assert metodo.sign_chance(41, 38)['ways'] == 11522 and metodo.sign_chance(41, 38)['odds_exact'] == 190854301
+    assert metodo.sign_chance(41, 38)['odds'] == 190000000
     assert metodo.sign_chance(0, 0) is None
 
 
@@ -287,7 +305,7 @@ def test_house_example_without_the_cycle_or_the_blocks(house_site, monkeypatch):
 def test_promedio_page_shows_the_house_example_card(house_site):
     status, _, body = call(house_site, '/metodo/promedio')
     page = html(body)
-    assert status == 200 and 'id="ejemplo-cis"' in page and 'Un ejemplo: el CIS desde 2018' in page
+    assert status == 200 and 'id="ejemplo-cis"' in page and 'El CIS: 2 de 2 elecciones en la misma dirección' in page
     assert 'href="#ejemplo-cis"' in page and page.index('href="#efectos-de-casa"') < page.index('href="#ejemplo-cis"') < page.index('href="#regresion"')
     assert page.index('id="efectos-de-casa"') < page.index('id="ejemplo-cis"') < page.index('id="regresion"')
     assert 'class="chart big" id="house-chart"' in page and '<details class="weights-list" id="house-list">' in page
@@ -295,17 +313,29 @@ def test_promedio_page_shows_the_house_example_card(house_site):
     card = page[page.index('id="ejemplo-cis"'):page.index('id="regresion"')]
     text = re.sub(r'\s+', ' ', card)
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card   # el texto va a la vista, bajo el gráfico
-    # la lista plegada va pegada al gráfico; el texto que lo explica, debajo de las dos
-    assert card.index('id="house-chart"') < card.index('id="house-list"') < card.index('Cada punto de la diana es el último sondeo del CIS')
-    assert card.index('Cada punto de la diana') < card.index('El modelo no espera a la elección')
-    assert 'José Félix Tezanos' in text and 'la «cocina»' in text and 'escaños' not in text
-    assert ('Desde entonces el CIS ha publicado sondeos antes de 2 elecciones que hemos analizado, generales y autonómicas. '
-            'En 2 de ellas su último sondeo dio a la Izquierda más voto del que obtuvo, y en 2, a la Derecha menos.') in text
-    # with two elections chance still explains it: no claim of a house effect
-    assert 'una entre 4' in text and 'no puede ser casualidad' not in text
-    assert ('En el ciclo actual de las generales, con 36 sondeos del CIS, su efecto es de +4,2 puntos en la Izquierda y −6,7 en la '
-            'Derecha (+4,3 en el PSOE y −5,9 en el PP): eso es lo que se descuenta hoy a cada uno de sus sondeos.') in text
+    # la lista plegada va pegada al gráfico; la lectura de la diana y la cuenta de las monedas, debajo de las dos
+    assert card.index('id="house-chart"') < card.index('id="house-list"') < card.index('La diana muestra los dos errores')
+    assert card.index('La diana muestra los dos errores') < card.index('Sería como lanzar una moneda equilibrada 2 veces')
+    assert card.index('Sería como lanzar una moneda') < card.index('Esta comprobación y el ajuste del promedio tienen funciones distintas')
+    assert 'cuando cambió su estimación de voto' in text and 'escaños' not in text
+    assert ('hemos analizado 2 elecciones generales y autonómicas con sondeos suyos. En 2 de ellas su último sondeo dio al '
+            'bloque de izquierdas más voto del que obtuvo. En 2, dio al bloque de derechas menos del que obtuvo.') in text
+    # with two elections chance still explains it: no bold claim
+    assert 'es de una entre 4: con tan pocas elecciones, el azar todavía podría explicarlo' in text
+    assert '<strong>Bajo esos supuestos' not in text
+    # the caveats of the coin count: dependence, no intentionality, the two blocks are one test, the CIS was picked after looking
+    assert 'ni mide la probabilidad de imparcialidad o de intencionalidad del CIS' in text and 'son una prueba y no dos' in text
+    assert 'elegimos el CIS después de mirar los datos, porque es el caso más llamativo' in text
+    assert ('En el ciclo actual de las generales, con 36 sondeos del CIS, su efecto frente al consenso es de +4,2 puntos en la '
+            'Izquierda y −6,7 en la Derecha (+4,3 en el PSOE y −5,9 en el PP). Eso es lo que se descuenta hoy a cada uno de sus '
+            'sondeos.') in text
+    assert 'El recuento de 2 sobreestimaciones no se utiliza como una penalización adicional' in text
     assert '<a href="/casas/cis">su perfil</a>' in text
+    # the note of the binomial count exists only with the example, numbered after the one of the effects
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == ['muestra', 'pesos', 'efectos', 'binomial', 'regresion', 'intervalos']
+    notes = re.sub(r'\s+', ' ', page[page.index('id="notas"'):])
+    assert 'Binomial</mtext><mo>(</mo><mn>2</mn><mo>,</mo><mn>0,5</mn>' in notes and '<mfrac><mn>1</mn><mn>4</mn></mfrac>' in notes
+    assert 'Equivale a una entre 4. La probabilidad bilateral' in notes
     assert re.search(r'<summary[^>]*>\s*Ver las 2 elecciones', card)
     headers = re.findall(r'<th scope="col"[^>]*>([^<]+)</th>', card)
     assert headers == ['Elección', 'Fecha', 'Días antes', 'Izquierda', 'Derecha']
@@ -326,9 +356,12 @@ def test_house_example_claims_the_effect_when_chance_cannot_explain_it(house_sit
         chance={'Izquierda': metodo.sign_chance(23, 21), 'Derecha': metodo.sign_chance(23, 20)}))
     page = html(call(house_site, '/metodo/promedio')[2])
     text = re.sub(r'\s+', ' ', page)
-    assert ('La probabilidad de que una encuestadora sin inclinación se pasara con la Izquierda en 21 o más de 23 elecciones '
-            'es de menos de una entre 30.000.') in text
-    assert 'es un efecto de encuestadora sostenido' in text
+    assert ('<strong>Bajo esos supuestos, la probabilidad de sobreestimar a la Izquierda en 21 o más de las 23 elecciones es '
+            'inferior a una entre 30.000.</strong>') in text
+    # the note shows the count: 277 favourable outcomes of 2^23, one in 30.284, floored to two significant figures
+    notes = text[text.index('id="notas"'):]
+    assert '<mfrac><mn>277</mn><mn>8.388.608</mn></mfrac>' in notes
+    assert 'Equivale a una entre 30.284, de donde procede «inferior a una entre 30.000»' in notes
     assert_public_wording(page, '/metodo/promedio')
 
 
@@ -346,33 +379,46 @@ def test_promedio_text_first_half(house_site):
     # the headline is the title of the page as its h1; the «En resumen» card introduces the process (2026-10-22)
     assert '<h1 class="headline">¿Cómo promediamos las encuestas?</h1>' in page
     assert page.index('class="headline"') < page.index('class="section-nav toc"') < page.index('id="resumen"')
-    assert ('El promedio de sondeos resume en una línea por partido lo que dicen todas las encuestas publicadas desde la '
-            'elección anterior. Para trazarla seguimos cuatro pasos') in text
-    assert 'con el ejemplo del CIS desde 2018' in text and 'de ahí parte la simulación de escaños' in text
+    # the opening card is the expert's: the two-polls question, the four steps, the band is not the vote, the curve
+    assert 'Una encuesta sitúa a un partido en el 31%; otra, pocos días después, en el 33%.' in text
+    assert 'El proceso tiene cuatro pasos' in text and 'varias encuestas pueden coincidir y equivocarse juntas' in text
+    assert 'De los sondeos a una curva' in text
+    # the polls are placed on the last day of their fieldwork; the cut looks at the fieldwork, not at the publication;
+    # the open online panels are defined, the professional online polls enter
+    assert 'Situamos cada encuesta en el último día de su trabajo de campo' in text
+    assert 'La regla mira al campo, no a la publicación' in text and 'como las de 40dB, entra como las demás' in text
+    assert 'Dejamos fuera los paneles online abiertos' in text and 'Esa etiqueta debe precisarse' not in text
     toc = page[page.index('<nav class="section-nav toc"'):]
     toc = toc[:toc.index('</nav>')]
     assert re.findall(r'href="#([a-z-]+)"', toc) == ['que-entra', 'peso', 'efectos-de-casa', 'ejemplo-cis', 'regresion',
-                                                     'banda', 'ejemplo', 'voto-estimado', 'notas']
+                                                     'banda', 'ejemplo', 'voto-estimado', 'comprobacion', 'limites', 'notas']
     peso = page[page.index('id="peso"'):page.index('id="efectos-de-casa"')]
     ids = [peso.index('id="{}"'.format(i)) for i in ('muestra', 'dispersion', 'sobrerrepresentacion', 'rating', 'cuentas')]
     assert ids == sorted(ids)
-    for phrase in ('Por qué una raíz y no otra cosa', 'Cuando falta la muestra', 'de los 2.935 sondeos de generales',
-                   'Por qué el rebaño se mide de otra manera', 'forman un grupo que pesa como un único sondeo',
-                   'Por qué un logaritmo', 'pesa 3,7 veces más que el barómetro del CIS', 'Por qué fiarnos del consenso',
-                   'Por qué los efectos suman cero', 'En las generales de este ciclo entra 1 sondeo de 1 encuestadora.'):
+    for phrase in ('más entrevistas ayudan, pero no lo resuelven todo',
+                   'Una encuesta con cuatro veces más entrevistas recibe el doble de peso por este factor',
+                   '558 de los 2.935 sondeos desde 1977, el 19%',
+                   'La comparación detecta un comportamiento; no demuestra por sí sola cuál es su causa',
+                   'Es una equivalencia de ponderación', 'evitar contar varias veces lo mismo', 'sólo 6 de los 328 sondeos del ciclo',
+                   'qué nos enseña su historial', 'Es una decisión de diseño, no un valor medido', 'Las cuentas de dos sondeos reales',
+                   'unas 3,7 veces el peso base del CIS', 'Miramos el ciclo actual y el historial', 'entre un 40% y un 70%',
+                   'El consenso sigue siendo una referencia, no una medición directa del voto verdadero',
+                   'en catorce ciclos y 43 encuestadoras', 'el efecto del CIS para el PP era de −5,94 puntos',
+                   'En el ciclo actual de las elecciones generales entra 1 sondeo de 1 encuestadora.'):
         assert phrase in text, phrase
-    for phrase in ('El problema.', 'La idea.', 'Los campos', 'Un caso real', 'backtest'):
+    # the long stories of the former page, the Bayesian label, the "bias" wording and the reviewer's own caveats are out
+    for phrase in ('El problema.', 'La idea.', 'bayesiana', 'sesgo sistemático', 'GAD3 publicó para ABC', 'Antena 3', 'auditad',
+                   'deben precisarse'):
         assert phrase not in text, phrase
-    calls = re.findall(r'id="llamada-([a-z]+)"', page)
-    assert calls[:7] == ['tope', 'diseno', 'umbrales', 'ventana', 'suelo', 'comun', 'convenciones']
-    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page)[:7] == ['1', '2', '3', '4', '5', '6', '7']
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == ['muestra', 'pesos', 'efectos', 'binomial', 'regresion', 'intervalos']
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == ['1', '2', '3', '4', '5', '6']
     assert_public_wording(page, '/metodo/promedio')
 
 
 def test_promedio_text_without_a_run_has_no_cycle_figures(api, monkeypatch):
     monkeypatch.setattr(metodo, 'cycle_counts', lambda: None)
     status, _, body = call(api, '/metodo/promedio')
-    assert status == 200 and 'En las generales de este ciclo' not in html(body)
+    assert status == 200 and 'En el ciclo actual de las elecciones generales' not in html(body)
 
 
 def test_promedio_text_second_half(house_site):
@@ -380,20 +426,25 @@ def test_promedio_text_second_half(house_site):
     regresion = page[page.index('id="regresion"'):page.index('id="banda"')]
     banda = page[page.index('id="banda"'):page.index('id="voto-estimado"')]
     assert regresion.index('id="anchura"') < regresion.index('id="consecuencias"')
-    assert regresion.count('<math display="block"') >= 4 and banda.count('<math display="block"') >= 2
+    assert regresion.count('<math display="block"') == 6 and banda.count('<math display="block"') == 1
     text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', page[page.index('id="regresion"'):]))
-    for phrase in ('regresión polinómica local ponderada por kernel', 'Por qué una recta y no una media',
-                   '1,70 puntos por partido', 'Por qué agrupamos por encuestadora', 'Por qué una t de Student',
-                   '93 %', '54 %'):
+    for phrase in ('regresión local polinómica ponderada por kernel', 'Por qué una recta ayuda más que una media',
+                   'Diez encuestas no siempre son diez confirmaciones distintas', 'error estándar robusto por grupos',
+                   'Se calcula para cada fecha por separado', '93%', '54%', 'No significa que tuviéramos exactamente',
+                   'Es la regla de combinación del modelo', 'Un método debe compararse con alternativas sencillas',
+                   'La evaluación histórica compara, elección a elección',   # sin backtest publicado, la versión sin cifras
+                   'Qué límites tiene el promedio', 'Un partido con menos de tres sondeos utilizables no se ajusta'):
         assert phrase in text, phrase
-    for phrase in ('El problema.', 'La idea.', 'Los campos', 'Un caso real', 'los de hace tres, casi nada'):
+    # Luis's rule: the figures of the backtest are given without the reviewer's valuation; no reviewer caveats either
+    for phrase in ('El problema.', 'La idea.', 'no basta para asegurar', 'es pequeña', 'auditad', 'deben precisarse',
+                   'deben especificarse', 'debe especificarse'):
         assert phrase not in text, phrase
-    keys = ['tope', 'diseno', 'umbrales', 'ventana', 'suelo', 'comun', 'convenciones', 'referencias', 'corte', 'isj',
-            'abramson', 'cobertura', 'limites', 'escala']
-    assert page.index('id="voto-estimado"') < page.index('id="notas"') < page.index('id="closing"')
+    keys = ['muestra', 'pesos', 'efectos', 'binomial', 'regresion', 'intervalos']
+    assert page.index('id="voto-estimado"') < page.index('id="comprobacion"') < page.index('id="limites"') < page.index('id="notas"')
+    assert page.index('id="notas"') < page.index('id="closing"')
     assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
     assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
-    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 15)]
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 7)]
     for target in re.findall(r'href="#(nota-[a-z]+)"', page):
         assert 'id="{}"'.format(target) in page, target
     # no byline after the notes: the footer signs the page (2026-10-22)
@@ -401,15 +452,33 @@ def test_promedio_text_second_half(house_site):
     assert_public_wording(page, '/metodo/promedio')
 
 
-def test_promedio_text_dates_the_september_figures_and_gets_kish_right(api):
+def test_promedio_text_dates_the_snapshot_figures(api):
     text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', html(call(api, '/metodo/promedio')[2])))
-    assert 'si uno pesa por los otros nueve juntos, informan como menos de cuatro' in text   # 18² / (81 + 9) = 3,6
-    assert 'En el PP, en septiembre, agrupar por encuestadora' in text
-    assert 'en septiembre, remuestreando por encuestadoras' in text
+    # the figures of the sections are a dated snapshot (September measurements, the run of 20 October); the examples are live
+    assert 'En el PP, en septiembre, agrupar por encuestadora subía el error estándar de 0,20 a 0,25 puntos' in text
+    assert 'Una comprobación publicada para el PP en septiembre de 2026 lo ilustra' in text
+    assert 'con los efectos de casa ya fijados (100 réplicas)' in text and 'Reestimar también los efectos en cada réplica da 1,18' in text
     assert 'en septiembre, las inclinaciones de las encuestadoras en el voto del PP' in text
-    assert 'En el cálculo del 20 de octubre, solo 6 de los 328 sondeos' in text
-    assert 'del mismo orden que lo que medimos directamente' in text
-    assert 'Vamos de la última a la primera' not in text and 'Las vemos una a una' in text
+    assert 'En el cálculo del 20 de octubre, sólo 6 de los 328 sondeos' in text
+    assert 'su barómetro de 4.020 entrevistas pesaba como uno de 610' in text
+    assert 'En septiembre, la anchura del PP iba de 61 a 130 días' in text and text.count('Datos del cálculo del 20 de octubre de 2026') >= 4
+    assert 'en septiembre de 2026 era de 4.715 entrevistas' in text
+
+
+def test_promedio_comprobacion_quotes_the_published_backtest(api, fresh_app):
+    """La tarjeta «Cómo comprobamos si funciona» da las cifras vivas del backtest publicado, sin valorarlas."""
+    from tests.test_pages import write_backtest
+    write_backtest(fresh_app.fs)
+    page = html(call(api, '/metodo/promedio')[2])
+    card = re.sub(r'\s+', ' ', page[page.index('id="comprobacion"'):page.index('id="limites"')])
+    text = re.sub(r'<[^>]+>', '', card)
+    assert 'sobre las 2 elecciones generales de 2019 a 2023 leídas 6 días antes de votar' in text
+    rows = re.findall(r'<tr><td class="f l">([^<]+)</td><td>([^<]+)</td></tr>', card)
+    assert rows == [('Promedio de Demoscopio', '1,69'), ('Último sondeo', '1,74'), ('Media de las cuatro semanas anteriores', '1,86')]
+    assert 'El promedio fue el método con menor error en ese ejercicio.' in text
+    assert 'incluyó el resultado en el 96% de los casos, frente al 95% al que aspira el cálculo' in text
+    assert 'es pequeña' not in text and 'no basta' not in text and 'La evaluación histórica compara, elección a elección' not in text
+    assert 'href="/metodo/backtest"' in card
 
 
 def test_promedio_page_without_a_run_keeps_the_notes_and_drops_the_examples(api, monkeypatch):
@@ -418,8 +487,10 @@ def test_promedio_page_without_a_run_keeps_the_notes_and_drops_the_examples(api,
     monkeypatch.setattr(metodo, 'part', missing)
     status, _, body = call(api, '/metodo/promedio')
     page = html(body)
-    assert status == 200 and 'id="ejemplo"' not in page and 'En las generales de este ciclo' not in page
-    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 15)]
+    assert status == 200 and 'id="ejemplo"' not in page and 'En el ciclo actual de las elecciones generales' not in page
+    # without the CIS example its note is not there either: five notes, numbered without a gap
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 6)]
+    assert re.findall(r'<li id="nota-([a-z]+)">', page) == ['muestra', 'pesos', 'efectos', 'regresion', 'intervalos']
     for target in re.findall(r'href="#((?:nota|llamada)-[a-z]+)"', page):
         assert 'id="{}"'.format(target) in page, target
 

@@ -5,9 +5,11 @@ import {DEFAULT_WINDOW} from './range.js';
 const WINDOW_KEY = 'ventana';
 const VIEW_KEY = 'vista';
 const SELECTED_KEY = 'sel';
-// The poll points of the average: shown by default, so the hash only carries them when hidden (`sondeos=0`)
-const POLLS_KEY = 'sondeos';
-const POLLS_HIDDEN = '0';
+// Layers of the average drawn: the poll points, the average (lines and bands) or both, the default, which the hash
+// omits (`mostrar=sondeos`, `mostrar=promedio`)
+const LAYERS_KEY = 'mostrar';
+const LAYERS = ['sondeos', 'promedio', 'ambos'];
+const DEFAULT_LAYERS = 'ambos';
 const PARTIES_VIEW = 'partidos';
 const BLOCKS_VIEW = 'bloques';
 
@@ -120,16 +122,16 @@ export function blockResult(result, blocks) {
 }
 
 /**
- * State of the average controls read from the URL hash (`#ventana=…&vista=…&sel=A,B&sondeos=0`).
+ * State of the average controls read from the URL hash (`#ventana=…&vista=…&sel=A,B&mostrar=sondeos`).
  *
  * @param {string} hash `location.hash`, with or without the leading `#`
  * @param {{parties: string[], blocks: string[], windows: string[]}} options names of the parties view, of
  *   the blocks view (empty when the scope has no blocks) and the valid windows
- * @returns {{window: string, view: string, selected: string[]|null, polls: boolean}} `window` in `windows`
+ * @returns {{window: string, view: string, selected: string[]|null, layers: string}} `window` in `windows`
  *   (otherwise `DEFAULT_WINDOW`, `all`), `view` `partidos` or `bloques` (only with blocks), `selected` the names
  *   of the hash in the list of the view, in its order (`[]` for an explicit empty `sel=`; null, the default
- *   selection, when the key is absent or no name is valid), `polls` whether the poll points are shown (false
- *   only with `sondeos=0`)
+ *   selection, when the key is absent or no name is valid), `layers` what is drawn: `sondeos` (the poll points
+ *   alone), `promedio` (the average alone) or `ambos` (both, the default and the fallback of any other value)
  */
 export function parseSeriesHash(hash, {parties, blocks, windows}) {
   const params = new Map();
@@ -154,24 +156,24 @@ export function parseSeriesHash(hash, {parties, blocks, windows}) {
     window: windows.includes(choice) ? choice : DEFAULT_WINDOW,
     view,
     selected: selected.length || raw === '' ? selected : null,
-    polls: params.get(POLLS_KEY) !== POLLS_HIDDEN,
+    layers: LAYERS.includes(params.get(LAYERS_KEY)) ? params.get(LAYERS_KEY) : DEFAULT_LAYERS,
   };
 }
 
 /**
  * URL hash of the state of the average controls, the inverse of `parseSeriesHash`.
  *
- * @param {{window: string, view: string, selected: string[]|null, polls: boolean}} state the controls state
+ * @param {{window: string, view: string, selected: string[]|null, layers: string}} state the controls state
  * @returns {string} `#ventana=…&vista=…`, plus `&sel=A,B` (each name URI-encoded) when `selected` is a list
- *   (`&sel=` for an empty one) and `&sondeos=0` when the poll points are hidden (`polls` false)
+ *   (`&sel=` for an empty one) and `&mostrar=sondeos` or `&mostrar=promedio` when one layer alone is shown
  */
-export function seriesHash({window, view, selected, polls = true}) {
+export function seriesHash({window, view, selected, layers = DEFAULT_LAYERS}) {
   let hash = `#${WINDOW_KEY}=${encodeURIComponent(window)}&${VIEW_KEY}=${encodeURIComponent(view)}`;
   if (selected) {
     hash += `&${SELECTED_KEY}=${selected.map(encodeURIComponent).join(',')}`;
   }
-  if (polls === false) {
-    hash += `&${POLLS_KEY}=${POLLS_HIDDEN}`;
+  if (layers !== DEFAULT_LAYERS) {
+    hash += `&${LAYERS_KEY}=${encodeURIComponent(layers)}`;
   }
   return hash;
 }

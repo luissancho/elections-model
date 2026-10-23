@@ -121,7 +121,9 @@ def national_figures() -> dict:
         ``n_sim`` (simulations of the latest published run of ``NATIONAL_SCOPE``, ``None`` without one),
         ``coverage`` (``[{'horizon', 'cov95'}]``: the share of results inside the 95 % interval by horizon in
         its published backtest, shortest horizon first; empty without a backtest), ``events`` and ``horizons``
-        (those of the backtest, empty without one).
+        (those of the backtest, empty without one), ``years`` (the distinct years of the events, ascending) and
+        ``backtest`` (the row of the shortest horizon: ``horizon``, ``n_cases``, ``mae`` (of the model),
+        ``mae_last_poll``, ``mae_mean_4w`` and ``cov95``; ``None`` without a backtest).
 
     Raises
     ------
@@ -140,12 +142,20 @@ def national_figures() -> dict:
     by_horizon = backtest_part(NATIONAL_SCOPE, 'by-horizon') or {}
     rows = sorted((row for row in by_horizon.get('rows') or [] if not _is_missing(row.get('cov_shares95'))),
                   key=lambda row: row['horizon'])
+    first = rows[0] if rows else None
+    events = meta.get('events') or []
 
     return {
         'n_sim': n_sim,
         'coverage': [{'horizon': row['horizon'], 'cov95': row['cov_shares95']} for row in rows],
-        'events': meta.get('events') or [],
+        'events': events,
         'horizons': meta.get('horizons') or [],
+        'years': sorted({str(event)[:4] for event in events}),
+        'backtest': None if first is None else {
+            'horizon': first['horizon'], 'n_cases': first.get('n_cases'), 'mae': first.get('mae_shares'),
+            'mae_last_poll': first.get('mae_last_poll'), 'mae_mean_4w': first.get('mae_mean_4w'),
+            'cov95': first['cov_shares95'],
+        },
     }
 
 
@@ -260,17 +270,22 @@ def sign_chance(n: int, k: int) -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``n``, ``k``, ``p`` (the probability) and ``odds`` (``1 / p`` floored to two significant figures, so "less
-        than one in ``odds``" is true). ``None`` without elections.
+        ``n``, ``k``, ``ways`` (the outcomes with ``k`` or more on that side, the sum of the binomial coefficients),
+        ``total`` (the 2ⁿ outcomes), ``p`` (``ways / total``), ``odds_exact`` (``1 / p`` rounded to the unit) and
+        ``odds`` (``1 / p`` floored to two significant figures, so "less than one in ``odds``" is true). ``None``
+        without elections.
     """
     if n <= 0:
         return None
 
-    p = sum(math.comb(n, j) for j in range(k, n + 1)) / 2 ** n
+    ways = sum(math.comb(n, j) for j in range(k, n + 1))
+    total = 2 ** n
+    p = ways / total
     odds = 1 / p
     scale = 10 ** max(0, int(math.log10(odds)) - 1)
 
-    return {'n': n, 'k': k, 'p': p, 'odds': int(odds // scale * scale)}
+    return {'n': n, 'k': k, 'ways': ways, 'total': total, 'p': p, 'odds_exact': round(odds),
+            'odds': int(odds // scale * scale)}
 
 
 def house_effects_example() -> Optional[dict]:

@@ -64,7 +64,7 @@ def test_summarize_case_on_synthetic_frames():
     assert m['brier_vs'] == pytest.approx(0.025)
     assert m['seats_valid'] is True
 
-    # Sin columnas `_h` (ejecución solo nowcast) las métricas del horizonte quedan a NaN
+    # Sin columnas `_h` (ejecución sólo nowcast) las métricas del horizonte quedan a NaN
     assert np.isnan(m['cov_shares95_h']) and np.isnan(m['crps_seats_h']) and np.isnan(m['brier_vs_h'])
 
     seats_invalid = seats.assign(seats_valid=False)
@@ -338,7 +338,7 @@ def test_run_backtest_passes_min_events_to_every_case(monkeypatch):
 
 
 def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(monkeypatch):
-    """De las series de los casos solo queda la del horizonte más corto que corrió en cada elección (el 6, o el 30
+    """De las series de los casos sólo queda la del horizonte más corto que corrió en cada elección (el 6, o el 30
     si el caso a 6 días se omitió); las demás tablas siguen igual."""
     import warnings
     from mtpy.lib import backtest

@@ -264,7 +264,7 @@ def test_equicorrelation_from_sum_variance_ratio():
     rho, corr = Simulator.equicorrelation(sig, 0.4)
     assert float(sig @ corr @ sig) == pytest.approx(0.4 * np.square(sig).sum())
     assert np.all(np.linalg.eigvalsh(corr) > 0)
-    # Un partido solo: sin correlación que imponer
+    # Un partido sólo: sin correlación que imponer
     assert Simulator.equicorrelation(np.array([2.]), 0.2)[0] == 0
 
 
@@ -544,7 +544,7 @@ def test_source_rules_split_shares_the_previous_vote_equally(source_rules_case):
 
 def test_source_rules_national_row_ignores_the_regional_list():
     # Canarias: la lista regional (100) recoge a los mismos votantes que las provincias; la fila nacional
-    # se recalcula solo desde las provincias, si no la base se cuenta dos veces
+    # se recalcula sólo desde las provincias, si no la base se cuenta dos veces
     regions = pd.Index([0, 35, 38, 100], name='region_id')
     prev = pd.DataFrame({'SUMAR': 10., 'FA': 0., 'UP': 0.}, index=regions)
     votes = pd.Series([100., 60., 40., 100.], index=regions)

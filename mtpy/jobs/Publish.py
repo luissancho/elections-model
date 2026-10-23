@@ -805,7 +805,7 @@ class Publish(ScopeReporter, Job):
         if result['status'] == 'published':
             line = '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
                 scope, result['event_date'], result['n_pollsters'], result['seconds']['total'])
-            return line if result.get('house_effects', True) else line + '; sin efectos de encuestadora'
+            return line if result.get('house_effects', True) else line + '; sin efectos de casa'
         return '{}: analysis {} ({})'.format(scope, result['status'], result['reason'])
 
     @staticmethod

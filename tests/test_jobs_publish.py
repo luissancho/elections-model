@@ -152,7 +152,7 @@ def test_national_window_covers_the_election_day(fresh_app, tmp_path, patched, m
 
 def test_analysis_of_a_scope_without_upcoming_event_is_published_unless_in_the_national_window(fresh_app, tmp_path,
                                                                                                 patched, monkeypatch):
-    """Un ámbito sin elección próxima (`es-md`) publica su análisis desde su última elección: solo lo guarda la
+    """Un ámbito sin elección próxima (`es-md`) publica su análisis desde su última elección: sólo lo guarda la
     ventana nacional, nunca queda `skipped` por no tener evento."""
     from mtpy.jobs.Publish import Publish
 
@@ -211,7 +211,7 @@ def test_analysis_action_publishes_each_scope(fresh_app, tmp_path, patched, caps
 
 def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, patched, capsys):
     """Con `dry_run`, el análisis va a `site-dry/v1/analysis/`; un ámbito sin sondeos en el ciclo actual se publica sin
-    efectos de encuestadora, uno que rompe falla sin detener a los demás, y el manifest no se toca."""
+    efectos de casa, uno que rompe falla sin detener a los demás, y el manifest no se toca."""
     from mtpy.jobs.Publish import Publish
 
     fs = FileSystem(str(tmp_path))
@@ -227,7 +227,7 @@ def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, 
 
 def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_without_effects(fresh_app, tmp_path, patched, capsys):
     """Un ámbito cuyo evento en curso aún no tiene sondeos publica el análisis de las elecciones pasadas, sin
-    efectos de encuestadora."""
+    efectos de casa."""
     from mtpy.jobs.Publish import Publish
 
     fs = FileSystem(str(tmp_path))
@@ -235,7 +235,7 @@ def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_wit
     assert result['es-cb']['status'] == 'published' and result['es']['status'] == 'published'
     out = capsys.readouterr().out
     assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters)' in out
-    assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters) in 0 s; sin efectos de encuestadora' in out
+    assert 'es-cb: analysis published (event 2026-11-29, 3 pollsters) in 0 s; sin efectos de casa' in out
     assert 'es: analysis published (event 2026-11-29, 3 pollsters) in 0 s\n' in out
     reader = bundle.BundleReader(fs)
     assert reader.analysis_exists('es') and reader.analysis_exists('es-cb')
@@ -284,7 +284,7 @@ def test_forecast_rebuilds_the_history_of_each_published_scope(fresh_app, tmp_pa
 
 
 def test_a_value_error_other_than_nothing_to_publish_fails_the_scope(fresh_app, tmp_path, patched, capsys):
-    """Solo `NothingToPublish` omite el ámbito; cualquier otro `ValueError` (validación del paquete) falla."""
+    """Sólo `NothingToPublish` omite el ámbito; cualquier otro `ValueError` (validación del paquete) falla."""
     from mtpy.jobs.Publish import Publish
 
     with pytest.raises(RuntimeError, match='es-ri'):
@@ -826,7 +826,7 @@ def test_progress_is_not_echoed_twice_by_a_console_logger(fresh_app, tmp_path, p
     for text in PROGRESS:
         found = [line for line in lines if text in line]
         assert len(found) == 1, text
-        assert found[0].index(text) == len('[2026-10-14 01:19:24,279] ')  # solo el prefijo del logger
+        assert found[0].index(text) == len('[2026-10-14 01:19:24,279] ')  # sólo el prefijo del logger
 
 
 def test_progress_without_logger_prints_once_with_the_time(fresh_app, tmp_path, patched, capsys):

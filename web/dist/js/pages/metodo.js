@@ -34,6 +34,28 @@ function pairs(horizons, values) {
 }
 
 /**
+ * Reveal the Publicada/Corregida switch of the weights example (`#weights-field`, hidden without JS) and redraw the
+ * points with the chosen figure when it changes: the published one, or the one net of the house effect that the
+ * line is fitted on.
+ *
+ * @param {HTMLElement} el the chart container
+ * @param {object} example the `example` of the page's initial data
+ */
+export function wireWeightsField(el, example) {
+  const field = document.getElementById('weights-field');
+  if (!field) {
+    return;
+  }
+  field.hidden = false;
+  field.addEventListener('change', (event) => {
+    const value = event.target && event.target.value;
+    if (value === 'pct' || value === 'pct_adj') {
+      tryDraw(() => renderWeights(el, example, {field: value}), 'the weights example');
+    }
+  });
+}
+
+/**
  * Draw the charts whose container is present. A scope without a published backtest renders no `#initial-data`
  * island (and no charts), so there is nothing to draw and `readInitial` must not be called.
  */
@@ -46,6 +68,7 @@ function paint() {
   const weightsEl = document.getElementById('weights-chart');
   if (weightsEl && data.example) {
     tryDraw(() => renderWeights(weightsEl, data.example), 'the weights example');
+    wireWeightsField(weightsEl, data.example);
   }
 
   const houseEl = document.getElementById('house-chart');

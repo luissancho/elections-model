@@ -34,7 +34,7 @@ const HOVER_SYMBOLS = {
 export function pollLines(row, name) {
   const who = row.sponsor ? `${row.pollster} / ${row.sponsor}` : row.pollster;
   const lines = pollTooltipLines({name: who, date: row.date, sample_size: row.sample_size}, [], {});
-  lines.push(escapeText(`Publicado ${fmtPct(row.pct)} · corregido ${fmtPct(row.pct_adj)}`));
+  lines.push(escapeText(`Publicada ${fmtPct(row.pct)} · Corregida ${fmtPct(row.pct_adj)}`));
   lines.push(escapeText(`Peso ${fmtNum(row.weight, 2)}`));
   lines.push(escapeText(`F(kernel) ${fmtNum(row.weight_kernel, 2)} · F(solape) ${fmtNum(row.weight_over, 2)}`
     + ` · F(muestra) ${fmtNum(row.weight_sample, 2)} · F(rating) ${fmtNum(row.weight_rating, 2)}`));
@@ -52,14 +52,38 @@ export function kernelLine(value) {
 }
 
 /**
+ * Range of the value axis, common to the published and the corrected figures of the polls: the union of both, of
+ * the line and of its band, widened half a point and rounded outwards to the unit. Switching the points between the
+ * two figures then keeps the axis still, so that the points are seen to move.
+ *
+ * @param {object[]} rows the polls of the example (`pct`, `pct_adj`)
+ * @param {object} line the local line (`mean`, `lo`, `hi`)
+ * @returns {{min: number, max: number}|{}} the axis bounds, empty without a finite value
+ */
+export function valueRange(rows, line) {
+  const values = [
+    ...rows.map((row) => row.pct), ...rows.map((row) => row.pct_adj),
+    ...(line.mean || []), ...(line.lo || []), ...(line.hi || []),
+  ].filter((value) => Number.isFinite(value));
+  if (!values.length) {
+    return {};
+  }
+  const pad = 0.5;
+  return {min: Math.floor(Math.min(...values) - pad), max: Math.ceil(Math.max(...values) + pad)};
+}
+
+/**
  * ECharts option of the example: the local line of the day with its band, the polls sized and shaded by weight,
  * the kernel bell on the right axis and the guides at the day and the value read.
  *
  * @param {object} example the `example` of the page's initial data (`name`, `color`, `date`, `stats`, `rows`,
  *   `line` {dates, mean, lo, hi}, `kernel` {dates, values})
+ * @param {object} [options]
+ * @param {string} [options.field='pct'] figure of each poll the points show: `pct` (as published) or `pct_adj`
+ *   (net of the house effect, the figure the line is fitted on)
  * @returns {object} the option
  */
-export function weightsOption(example) {
+export function weightsOption(example, {field = 'pct'} = {}) {
   const {name, color, date, stats, rows, line, kernel} = example;
   const times = line.dates.map(dayTime);
   const weights = rows.map((row) => row.weight || 0);
@@ -67,7 +91,7 @@ export function weightsOption(example) {
   const points = rows.map((row, index) => {
     const share = (row.weight || 0) / wmax;
     return {
-      value: [dayTime(row.date), row.pct, index],
+      value: [dayTime(row.date), row[field] ?? null, index],
       symbolSize: Math.round(MIN_SIZE + SIZE_RANGE * share),
       itemStyle: {color, opacity: MIN_OPACITY + (1 - MIN_OPACITY) * share},
     };
@@ -121,7 +145,8 @@ export function weightsOption(example) {
     },
     yAxis: [
       {
-        type: 'value', scale: true, position: 'right',
+        // the same bounds whichever figure the points show (`valueRange`); `scale` only acts without them
+        type: 'value', scale: true, ...valueRange(rows, line), position: 'right',
         axisLabel: {...axisLabelStyle(), formatter: (value) => fmtPct(value, 0)},
         splitLine: {lineStyle: {color: THEME.gridColor}},
       },
@@ -136,8 +161,16 @@ export function weightsOption(example) {
  *
  * @param {HTMLElement} el the chart container
  * @param {object} example the `example` of the page's initial data
+ * @param {object} [options] those of `weightsOption` (`field`)
  * @returns {object} the ECharts instance
  */
-export function renderWeights(el, example) {
-  return mountChart(el, weightsOption(example));
+export function renderWeights(el, example, options = {}) {
+  const option = weightsOption(example, options);
+  if (el.__chart) {
+    // a redraw with the other figure merges into the mounted chart: same series, same axes, so the points glide to
+    // their new values instead of being redrawn from scratch
+    el.__chart.setOption(option);
+    return el.__chart;
+  }
+  return mountChart(el, option);
 }

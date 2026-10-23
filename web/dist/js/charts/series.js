@@ -165,12 +165,15 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   that drives it with `legendToggleSelect`; `false`: hidden, but its `selected` still decides the names shown,
  *   for pages with their own selector), `result` (`{date, values: {name: share}}`, the official result of a
  *   past election: a diamond per party with a value, at `date`, which also gets the «Elección» mark line and
- *   closes the axis; null for none) and `asOfLabel` (label of the mark line at `asOf`, «Estimación» by default)
+ *   closes the axis; null for none), `asOfLabel` (label of the mark line at `asOf`, «Estimación» by default) and
+ *   `layers` (what is drawn: `ambos`, the default, the poll points and the average; `sondeos`, the points alone,
+ *   with the result and the mark lines; `promedio`, the lines, bands and projection alone, without the points)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
   series, polls, projection, parties, selected = null, colors = {}, asOf, when,
   window: windowChoice = DEFAULT_WINDOW, anchor = null, legend = true, result = null, asOfLabel = 'Estimación',
+  layers = 'ambos',
 }) {
   const color = (name) => colors[name] || OTHERS_COLOR;
   const seriesTimes = series.dates.map(dayTime);
@@ -187,8 +190,11 @@ export function seriesOption({
     return entry;
   };
 
+  // The layers control of the pages: `sondeos` leaves the poll points alone, `promedio` the average alone.
+  const withAverage = layers !== 'sondeos';
+  const withPolls = layers !== 'promedio';
   // Mean lines first: the legend takes its icon from the first series of each name.
-  const means = parties.map((name) => withRole('mean', {
+  const means = !withAverage ? [] : parties.map((name) => withRole('mean', {
     type: 'line',
     name,
     color: color(name),
@@ -198,10 +204,10 @@ export function seriesOption({
     lineStyle: {width: 2},
     data: seriesTimes.map((t, i) => [t, (series.mean[name] || [])[i] ?? null]),
   }));
-  const bands = parties.flatMap((name) => bandSeries(
+  const bands = !withAverage ? [] : parties.flatMap((name) => bandSeries(
     name, seriesTimes, series.lo[name] || [], series.hi[name] || [], {color: color(name)},
   ));
-  const points = parties.map((name) => withRole('poll', {
+  const points = !withPolls ? [] : parties.map((name) => withRole('poll', {
     type: 'scatter',
     name,
     color: color(name),
@@ -210,7 +216,7 @@ export function seriesOption({
     itemStyle: {opacity: 0.6},
     data: pollPoints(pollRecords, name).map(([date, value, index]) => [dayTime(date), value, index]),
   }));
-  const projected = !withProjection ? [] : parties.flatMap((name) => [
+  const projected = !withProjection || !withAverage ? [] : parties.flatMap((name) => [
     withRole('projection', {
       type: 'line',
       name,

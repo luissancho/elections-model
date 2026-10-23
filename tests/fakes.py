@@ -95,7 +95,7 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.drange, sim.alpha = (6, None), 0.05
     sim.names, sim.default_region, sim.regions = NAMES, 0, REGIONS
     sim.region_names = {0: 'es', 28: 'Madrid', 8: 'Barcelona'}
-    # Como en producción: los totales de la elección futura solo traen escaños (el cargador no rellena `votes`)
+    # Como en producción: los totales de la elección futura sólo traen escaños (el cargador no rellena `votes`)
     # y los votos válidos de la elección anterior están en `prev_totals`
     sim.reg_totals = pd.DataFrame({'votes': [np.nan, np.nan, np.nan], 'seats': [10, 6, 4]},
                                   index=pd.Index(REGIONS, name='region_id'))
@@ -179,7 +179,7 @@ def synthetic_analysis():
     names = NAMES + list(BMAPS['vs'])
     index = pd.MultiIndex.from_product([HOUSES, names], names=['pollster', 'name'])
     house_effects = pd.DataFrame({
-        # 40dB sin historia (solo ciclo); CIS con dos elecciones; GAD3 con una y sin sondeos en el ciclo
+        # 40dB sin historia (sólo ciclo); CIS con dos elecciones; GAD3 con una y sin sondeos en el ciclo
         'n_events': [0.] * 5 + [2.] * 5 + [1.] * 5,
         'hist': [np.nan] * 5 + [1.234, -0.567, 0.891, 2.125, -0.567] + [-0.4321, 0.9876, 0.1111, -0.321, 0.9876],
         'trend': [np.nan] * 5 + [0.3456, -0.1234, 0.0789, 0.4245, -0.1234] + [np.nan] * 5,
@@ -289,7 +289,7 @@ def write_backtest_source(root, scope='es'):
 
 def synthetic_event():
     """Tablas que lee `publish_event` de la base: `events` (dos elecciones destacadas pasadas con resultado
-    oficial según `has_results` y el ciclo en curso, no destacado y sin resultado), `results` (solo `2023-07-23`, región 0: una fila por `NAMES` y `Cs` sin escaños, con `pct` de
+    oficial según `has_results` y el ciclo en curso, no destacado y sin resultado), `results` (sólo `2023-07-23`, región 0: una fila por `NAMES` y `Cs` sin escaños, con `pct` de
     más decimales y 350 escaños) y `pollsters` (`id`/`name` de `HOUSES`: `CIS` 1, `GAD3` 2, `40dB` 3)."""
     events = pd.DataFrame({
         'date': ['2019-11-10', '2023-07-23', '2026-11-29'], 'scope': 'es',

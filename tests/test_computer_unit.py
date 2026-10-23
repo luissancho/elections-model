@@ -57,7 +57,7 @@ def test_house_effects_summary_decays_and_sums_blocks():
 
 
 def test_house_effects_summary_accepts_a_cycle_without_history():
-    """Un ámbito sin filas en `pollsters_parties` (autonómicos) llega solo con el ciclo: sin `dev_result_c` ni
+    """Un ámbito sin filas en `pollsters_parties` (autonómicos) llega sólo con el ciclo: sin `dev_result_c` ni
     `n_result`. La tabla debe salir con `hist`/`trend` nulos y el `cycle` de cada casa (`publish analysis`)."""
     cycle = pd.DataFrame({
         'event_date': pd.to_datetime(['2027-05-23'] * 2), 'pollster': ['GAD3'] * 2, 'party': ['PP', 'PSOE'],
@@ -318,7 +318,7 @@ def test_more_elections_shrink_the_standard_error():
 
 
 def test_measure_event_sigma_matches_the_weighted_spread():
-    """sigma: desviación típica ponderada por `W_e` de `d_e` alrededor de la media de su casa, solo con las casas
+    """sigma: desviación típica ponderada por `W_e` de `d_e` alrededor de la media de su casa, sólo con las casas
     de al menos 3 elecciones (B, con 2, queda fuera)."""
     c = bare_computer()
     rows = [('es-md', '2021-05-04', 'A'), ('es-cl', '2021-05-04', 'A'), ('es-ar', '2021-05-04', 'A'),
@@ -489,7 +489,7 @@ def test_gap_error_is_positive_when_the_poll_favours_the_first_block():
     assert out[('error', 'gap')].iloc[0] == pytest.approx(0.0787)
 
 
-# --- 2026-10-19: el rating por sondeo lo copia el cómputo de pesos, no solo la acción `ratings` ---
+# --- 2026-10-19: el rating por sondeo lo copia el cómputo de pesos, no sólo la acción `ratings` ---
 
 def test_compute_weights_copies_the_rating_of_the_event_to_each_poll():
     """Un sondeo cargado después del último `ratings` (la carga llama a `compute_weights`) sale con el rating de su
@@ -522,7 +522,7 @@ def test_compute_weights_copies_the_rating_of_the_event_to_each_poll():
 # --- Calidad previa a la fecha de cada elección ---
 
 def test_prior_quality_is_taken_at_the_date_of_each_target():
-    """D3: la calidad de una elección puntuada solo cuenta las generales anteriores a ella."""
+    """D3: la calidad de una elección puntuada sólo cuenta las generales anteriores a ella."""
     c = bare_computer()
 
     def prior(target):

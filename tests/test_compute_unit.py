@@ -7,7 +7,7 @@ from mtpy.lib import compute
 
 class FakeComputer:
     """Fábrica con la firma `Computer(scope=..., verbose=...)`: anota cada construcción y cada fase con su `save`
-    (y sus argumentos), y lanza `RuntimeError` en la fase `fail_at` (de todos los ámbitos, o solo de `fail_scope`)."""
+    (y sus argumentos), y lanza `RuntimeError` en la fase `fail_at` (de todos los ámbitos, o sólo de `fail_scope`)."""
 
     def __init__(self, fail_at=None, fail_scope=None):
         self.inits, self.calls, self.fail_at, self.fail_scope = [], [], fail_at, fail_scope
@@ -51,7 +51,7 @@ class FakeComputer:
             def compute_ratings(self, save=False, scopes=None):
                 # Como el real: devuelve la tabla de sondeos con sus columnas de rating (índice de `keys`) y deja
                 # la tabla de ratings en `self.ratings` (índice `event_date`/`pollster_id`), donde entra una casa
-                # (2) rateada solo con sondeos de otros ámbitos
+                # (2) rateada sólo con sondeos de otros ámbitos
                 self._phase('ratings', save, scopes=scopes)
                 self.ratings = pd.DataFrame({'rating': [50., 60.]}, index=pd.MultiIndex.from_tuples(
                     [('2023-07-23', 1), ('2023-07-23', 2)], names=['event_date', 'pollster_id']))
@@ -117,7 +117,7 @@ def test_the_real_computer_and_featured_updater_are_the_defaults(monkeypatch):
 
 
 def test_replicate_catalogues_saves_or_only_checks_the_rubric(monkeypatch):
-    """`catalogues`: con escritura, `save_catalogues()` y sus cifras; en seco, solo valida la rúbrica y el CSV de
+    """`catalogues`: con escritura, `save_catalogues()` y sus cifras; en seco, sólo valida la rúbrica y el CSV de
     la calidad previa (`read_quality`) y cuenta las evaluaciones, sin tocar la base."""
     saved = []
     monkeypatch.setattr(compute, 'save_catalogues', lambda: saved.append(1) or {'scopes': 18, 'districts': 118,

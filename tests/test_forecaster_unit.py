@@ -262,7 +262,7 @@ def test_house_dispersion_measures_the_excess_noise_of_a_house():
 def test_fit_dispersion_rescales_the_sample_weight_of_the_noisy_house_only():
     fc, _, _ = _synthetic_forecaster(noise={3: 4.5})
     fc.disp_enabled = True
-    fc.disp_params['herding'] = False  # Solo M12: las demás casas oscilan menos que su muestra (0,8 frente a 1,45)
+    fc.disp_params['herding'] = False  # Sólo M12: las demás casas oscilan menos que su muestra (0,8 frente a 1,45)
     before = fc.fc_series.groupby('pollster_id')[['weight_sample', 'weight']].mean()
 
     disp = fc.fit_dispersion()
