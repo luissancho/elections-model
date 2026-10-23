@@ -665,7 +665,7 @@ def test_default_coalition_is_the_first_vs_block_present_in_dist():
 
 def test_csv_links_cover_the_five_parts_in_order():
     links = pages.csv_links('es', 'nowcast', RUN)
-    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Escenario central', 'Abanico por horizonte']
+    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Reparto central', 'Abanico por horizonte']
     assert links[0]['href'] == '/api/v1/forecast/es/nowcast/summary?run={}&format=csv'.format(RUN)
     assert links[4]['href'] == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)
 

@@ -16,7 +16,7 @@ CSV_PARTS = (
     ('summary', 'Resumen por partido y bloque', True),
     ('dist', 'Escaños por simulación', True),
     ('districts', 'Circunscripciones', True),
-    ('scenario', 'Escenario central', True),
+    ('scenario', 'Reparto central', True),
     ('fan', 'Abanico por horizonte', False),
 )
 

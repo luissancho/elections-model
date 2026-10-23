@@ -109,7 +109,7 @@ SCHEMAS = {
                 'totals': dict},
     'dist': {'n_seats': int, 'parties': list, 'seats': list},
     'districts': {'parties': list, 'regions': list, 'rows': list},
-    'scenario': {'simulation': int, 'parties': list, 'rows': list},
+    'scenario': {'parties': list, 'rows': list},
     'projection': {'dates': list, 'groups': dict},
     'analysis-meta': {'scope': str, 'event_date': str, 'events': list, 'n_pollsters': int, 'params': dict,
                       'commit': NULLABLE_STR, 'dirty': bool, 'versions': dict, 'seconds': dict},
