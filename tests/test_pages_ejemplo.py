@@ -132,11 +132,11 @@ def test_promedio_page_shows_the_example_block(api):
     assert 'Descargar los pesos de todos los partidos (CSV)' in page and '/api/v1/forecast/es/weights?format=csv' in page
     data = initial(body)
     assert data['example']['name'] == 'PP' and len(data['example']['rows']) == 3 and 'fullname' not in data['example']
-    # el texto va a la vista: la lectura del gráfico entre el gráfico y la lista plegada, la de la tabla después
+    # el texto va a la vista: la lista plegada justo bajo el gráfico, luego la lectura del gráfico y la de la tabla
     card = page[page.index('id="ejemplo"'):page.index('id="voto-estimado"')]
     assert '<details class="how"' not in card and 'Cómo leerlo' not in card
-    assert card.index('id="weights-chart"') < card.index('Cada punto es un sondeo') < card.index('id="weights-list"')
-    assert card.index('id="weights-list"') < card.index('La tabla lista los sondeos')
+    assert re.search(r'id="weights-chart"[^>]*></div>\s*<details class="weights-list" id="weights-list">', card)
+    assert card.index('</details>') < card.index('Cada punto es un sondeo') < card.index('La tabla lista los sondeos')
     assert_public_wording(page, '/metodo/promedio')
 
 
@@ -342,9 +342,13 @@ def test_promedio_page_shows_the_house_example_without_the_weights(house_site, t
 
 def test_promedio_text_first_half(house_site):
     page = html(call(house_site, '/metodo/promedio')[2])
-    text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', page[page.index('class="headline"'):page.index('id="regresion"')]))
-    assert ('El promedio es una línea que sigue a las encuestas día a día: cada sondeo pesa según lo que sabe, a cada '
-            'encuestadora le restamos su inclinación y, para cada día, ajustamos una recta a los sondeos cercanos.') in text
+    text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', page[page.index('id="resumen"'):page.index('id="regresion"')]))
+    # the headline is the title of the page as its h1; the «En resumen» card introduces the process (2026-10-22)
+    assert '<h1 class="headline">¿Cómo promediamos las encuestas?</h1>' in page
+    assert page.index('class="headline"') < page.index('class="section-nav toc"') < page.index('id="resumen"')
+    assert ('El promedio de sondeos resume en una línea por partido lo que dicen todas las encuestas publicadas desde la '
+            'elección anterior. Para trazarla seguimos cuatro pasos') in text
+    assert 'con el ejemplo del CIS desde 2018' in text and 'de ahí parte la simulación de escaños' in text
     toc = page[page.index('<nav class="section-nav toc"'):]
     toc = toc[:toc.index('</nav>')]
     assert re.findall(r'href="#([a-z-]+)"', toc) == ['que-entra', 'peso', 'efectos-de-casa', 'ejemplo-cis', 'regresion',
@@ -380,7 +384,7 @@ def test_promedio_text_second_half(house_site):
     text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', page[page.index('id="regresion"'):]))
     for phrase in ('regresión polinómica local ponderada por kernel', 'Por qué una recta y no una media',
                    '1,70 puntos por partido', 'Por qué agrupamos por encuestadora', 'Por qué una t de Student',
-                   '93 %', '54 %', 'Por Luis Sancho'):
+                   '93 %', '54 %'):
         assert phrase in text, phrase
     for phrase in ('El problema.', 'La idea.', 'Los campos', 'Un caso real', 'los de hace tres, casi nada'):
         assert phrase not in text, phrase
@@ -392,8 +396,8 @@ def test_promedio_text_second_half(house_site):
     assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 15)]
     for target in re.findall(r'href="#(nota-[a-z]+)"', page):
         assert 'id="{}"'.format(target) in page, target
-    sign = page[page.index('id="notas"'):page.index('id="closing"')]
-    assert 'href="https://x.com/luis_sancho"' in sign and 'rel="me"' in sign
+    # no byline after the notes: the footer signs the page (2026-10-22)
+    assert 'Por Luis Sancho' not in text and 'class="byline"' not in page
     assert_public_wording(page, '/metodo/promedio')
 
 

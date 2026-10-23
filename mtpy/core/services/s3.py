@@ -45,9 +45,12 @@ class S3(FileSystem):
         return self
 
     def connection(self) -> Self:
+        # Without the listings cache: s3fs keeps directory listings for the life of the process, so a long-lived
+        # reader (the web) would never see the folders that a job publishes after its first listing.
         self._client = S3FileSystem(
             key=self.aws_params.get('key') or None,
-            secret=self.aws_params.get('secret') or None
+            secret=self.aws_params.get('secret') or None,
+            use_listings_cache=False
         )
 
     def get_path(self, name: str, force: bool = False) -> str:

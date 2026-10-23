@@ -602,7 +602,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 ol.notes { margin: 0; padding-left: 1.6em; font-size: 14px; color: var(--color-muted); }
 ol.notes > li { margin-bottom: var(--space-2); }
 ol.notes > li:target { color: var(--color-text); }
-.note-back { text-decoration: none; }
 /* Wide formulas scroll inside their block, never the page. */
 .math-wrap { overflow-x: auto; max-width: 100%; }
 .chart.chart-tall { height: auto; aspect-ratio: 2 / 1; min-height: 480px; max-height: min(720px, 72vh); }
@@ -737,6 +736,8 @@ ol.notes > li:target { color: var(--color-text); }
 
 .et-wrap { overflow-x: auto; margin-top: var(--space-2); }
 .et { table-layout: fixed; min-width: 980px; }
+/* Short tables of the method pages: as wide as their content, not the card; they still scroll in `.table-wrap` */
+.et.et-fit { table-layout: auto; width: auto; min-width: 0; }
 .et col.c-f { width: 200px; }
 .et col.c-r { width: 92px; }
 .et col.c-d { width: 80px; }
