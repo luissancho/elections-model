@@ -611,7 +611,8 @@ def lean_context(state: dict) -> dict:
         ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``periods``
         (``meta.periods``), ``verdicts`` (``lean.verdict_rows``), ``kpis``, ``tests``, ``tech`` (``lean.tech_note``),
         ``compare`` (``lean.compare_boxes``), ``elections`` (the rows of the period with Tezanos, newest first),
-        ``houses`` (the rows of the ranking with the ``href`` of the profile), ``election`` (the part, or ``None``),
+        ``houses`` (the rows of the ranking with the ``href`` of the profile), ``runner_up`` (``lean.runner_up``: the
+        house that follows the CIS, or ``None``), ``election`` (the part, or ``None``),
         ``sources``, ``csv_links``, ``initial`` (``lean.island`` plus the common ``state``) and ``published_at``
         (``None`` without the entry in the manifest).
 
@@ -635,6 +636,7 @@ def lean_context(state: dict) -> dict:
         compare=lean.compare_boxes(summary, periods),
         elections=lean.election_rows(parts),
         houses=lean.house_rows(parts),
+        runner_up=lean.runner_up(_get(parts['houses'], 'rows') or []),
         election=parts['election'] or None,
         sources=meta.get('sources') or [],
         csv_links=_csv_links(lean.LEAN),

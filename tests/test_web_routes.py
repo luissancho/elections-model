@@ -171,5 +171,6 @@ def test_chart_containers_have_aria_labels():
     for path in html_files():
         with open(path, encoding='utf-8') as fh:
             text = fh.read()
-        for tag in re.findall(r'<div[^>]*class="chart[^"]*"[^>]*>', text):
+        # the class `chart` itself, not a wrapper whose class only starts with it (`chart-scroll`)
+        for tag in re.findall(r'<div[^>]*class="chart(?: [^"]*)?"[^>]*>', text):
             assert 'aria-label="' in tag and 'role="img"' in tag, (os.path.basename(path), tag)

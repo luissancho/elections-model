@@ -894,6 +894,35 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .csv-links { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--space-3) 0; }
 .csv-links .pill { white-space: normal; text-decoration: none; }
 .glossary > .how { margin-top: 0; border-top: 0; }
+/* The CIS bias study (/analisis/sesgo-cis): square bullseyes centred in their column (the one of 2023 a bit wider),
+   the matrix scrolling sideways on phones, the before/after boxes, the three tests of chance and the technical note.
+   The matrix and the distance ranking get their heights from the page script. */
+.chart.square { aspect-ratio: 1 / 1; height: auto; max-width: 480px; margin: 0 auto; }
+.chart.square.wide { max-width: 560px; }
+.qcard .chart.square { height: auto; }
+.qcard .chart#matrix-chart, .qcard .chart#distance-chart { height: auto; }
+.chart-scroll { overflow-x: auto; margin-bottom: var(--space-3); }
+.chart-scroll > .chart { min-width: 760px; }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.cmp .box { padding: 12px 14px; border: 1px solid var(--color-line-strong); border-radius: 12px; background: var(--color-bg); }
+.cmp .box .k { font: 800 11px var(--font-head); letter-spacing: .04em; text-transform: uppercase; color: var(--color-muted); }
+.cmp .box .v { margin: 2px 0; font: 800 30px/1.1 var(--font-head); }
+.cmp .box .v small { font-size: 14px; font-weight: 600; color: var(--color-muted); }
+.cmp .box p { margin: 0; font-size: 12.5px; color: var(--color-muted); }
+.cmp .box.after { border-color: #ce3b3b; background: #fef2f2; }
+.tests { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.test { padding: 12px 14px; border: 1px solid var(--color-line-strong); border-radius: 12px; background: var(--color-bg); }
+.test .k { font: 800 11px var(--font-head); letter-spacing: .04em; text-transform: uppercase; color: var(--color-muted); }
+.test .v { margin: 4px 0; font: 800 24px/1.1 var(--font-head); }
+.test p { margin: 4px 0 0; font-size: 12.5px; color: var(--color-muted); }
+.test.hi { border-color: #ce3b3b; background: #fef2f2; }
+.tech { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--color-soft); font-size: 12.5px; color: var(--color-muted); }
+.tech b { color: var(--color-text); }
+#p2 .tests + .ctitle { margin-top: 4px; }
+#p2 .chart-scroll + .grid2 { margin-top: var(--space-4); }
+#p3 .table-wrap + .ctitle { margin-top: 14px; }
+td.blk { font-weight: 700; }
+#datos .src-list + .ctitle { margin-top: var(--space-3); }
 
 /* Tablet and narrow desktop (720 to 1099 px): one column where two were tight */
 @media (max-width: 1099px) {
@@ -932,6 +961,7 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
   .chart, .qcard .chart { height: 250px; }
   .chart.chart-tall { height: 280px; min-height: 0; max-height: none; aspect-ratio: auto; }
   .chart.hemi { height: auto; }
+  .cmp, .tests { grid-template-columns: 1fr; }
   #coalition-chart { height: 298px; }
   table { font-size: 12.5px; }
   dl { grid-template-columns: 1fr; }

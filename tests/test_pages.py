@@ -2700,11 +2700,17 @@ def assert_public_wording(page, label):
     assert not sólo, (label, sólo[:5])
 
 
-def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site):
+def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site, fresh_app):
+    # the two studies, published so their pages render (the fixture of the events does not write them)
+    publish_study(fresh_app.fs)
+    publish_study(fresh_app.fs, study='sesgo-cis')
     for path, query in (('/', ''), ('/es', ''), ('/es/escanos', ''), ('/elecciones', ''),
                         ('/elecciones', 'scope=es&date=2023-07-23'), ('/metodo', ''), ('/metodo/promedio', ''),
-                        ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', '')):
-        assert_public_wording(html(call(events_site, path, query=query)[2]), path + '?' + query)
+                        ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', ''),
+                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', '')):
+        status, _, body = call(events_site, path, query=query)
+        assert status == 200 or not path.startswith('/analisis'), path
+        assert_public_wording(html(body), path + '?' + query)
     for path in ('/es', '/es/escanos', '/'):
         page = html(call(events_site, path)[2])
         # the party cards of Promedios show the full name under the initials (phase 8); nothing else does
@@ -4473,6 +4479,55 @@ def test_lean_view_models_return_empty_for_missing_keys():
     assert [t['value'] for t in pages.lean.tests({})] == [None, None, None]
     assert pages.lean.tech_note(None)['with']['all'] == '–'
     assert pages.lean.island({})['ranking'] == [] and pages.lean.island({})['distance'] == []
+
+
+def test_lean_page_structure_and_wording(api, fresh_app):
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    status, _, body = call(api, '/analisis/sesgo-cis'); page = html(body)
+    assert status == 200 and '<h1 class="study-title">El sesgo del CIS de Tezanos</h1>' in page
+    assert '/dist/js/pages/analisis-sesgo-cis.js' in page and 'id="initial-data"' in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'NO', 'NO']
+    assert page.count('<div class="kpi">') == 3 and 'Cuánto sobreestima a la izquierda frente a la derecha' in page
+    for chart in ('bull-without', 'bull-with', 'matrix-chart', 'consensus-chart', 'ranking-chart', 'bull-2023', 'distance-chart'):
+        assert re.search(r'<div class="chart[^"]*" id="%s" role="img" aria-label="[^"]+"></div>' % chart, page), chart
+    assert 'class="chart square" id="bull-with"' in page and 'class="chart square wide" id="bull-2023"' in page
+    assert page.count('class="pill brand" href="/api/v1/studies/sesgo-cis/') == 4
+    assert 'Diferencia</td>' in page and 'Ganador' not in page and 'el CIS es la única casa prácticamente monocolor' in page
+    assert '<button type="button" class="more" id="elections-more"' in page
+    assert_public_wording(page, '/analisis/sesgo-cis')
+    assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
+
+
+def test_lean_runner_up_is_the_house_that_follows_the_cis(api, fresh_app):
+    """La casa que sigue al CIS en el ranking (la de más elecciones con la izquierda sobreestimada) y su moneda, para
+    el resumen de la pregunta 2; sin otras casas, ninguna."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    context = pages.lean_context(pages.parse_state({}))
+    assert context['runner_up'] == {'name': 'Sigma Dos', 'href': '/casas/sigma-dos', 'k': 6, 'n': 6, 'odds': '64'}
+    assert pages.lean.runner_up([]) is None and pages.lean.runner_up([{'pollster': 'CIS', 'n': 6, 'k_left': 5, 'cis': True}]) is None
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    assert re.search(r'<a href="/casas/sigma-dos">Sigma Dos</a>, con\s+6 de 6, está en 1 entre 64', page)
+
+
+@pytest.mark.parametrize('part', ['summary', 'elections', 'houses', 'matrix', 'election'])
+def test_lean_page_survives_a_missing_part(api, fresh_app, part):
+    """Sin una de las partes, la página se sirve igual (dashes donde faltan cifras), sin un error de plantilla."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_study('sesgo-cis', part))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/analisis/sesgo-cis')
+    assert status == 200, part
+    assert_public_wording(html(body), part)
+
+
+def test_analisis_lists_each_study_only_when_published(api, fresh_app):
+    assert call(api, '/analisis/sesgo-cis')[0] == 404
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    page = html(call(api, '/analisis')[2]); home = html(call(api, '/')[2])
+    assert page.count('class="card study-card"') == 1 and 'href="/analisis/sesgo-cis"' in page and 'href="/analisis/sesgo-cis"' in home
+    publish_study(fresh_app.fs)
+    page = html(call(api, '/analisis')[2])
+    assert [m for m in re.findall(r'href="(/analisis/[a-z-]+)"', page)] == ['/analisis/voto-cera', '/analisis/sesgo-cis']
 
 
 def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(api, fresh_app):

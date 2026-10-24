@@ -7,6 +7,7 @@ what the template renders, with ``None`` or an empty structure for what the part
 """
 from typing import Optional
 
+from ..studies.lean.stats import sign_chance
 from .cera import _get
 from .filters import delta_text, fmt_int, fmt_num
 from .slugs import PROFILE_PATH, slugify
@@ -215,6 +216,34 @@ def election_rows(parts: dict, period: str = 'with') -> list:
 def house_rows(parts: dict) -> list:
     """The rows of the ``houses`` part with the ``href`` of the profile of each house."""
     return [dict(row, href=house_href(row.get('pollster'))) for row in _get(parts.get('houses'), 'rows') or []]
+
+
+def runner_up(rows: list) -> Optional[dict]:
+    """
+    The house that follows the CIS in the ranking, for the summary of question 2: the one with the highest share of
+    elections with the left overestimated (then the highest lean), and how likely its count is as a coin.
+
+    Parameters
+    ----------
+    rows : list of dict
+        The rows of the ``houses`` part (``house_rows``).
+
+    Returns
+    -------
+    dict or None
+        ``{'name', 'href', 'k', 'n', 'odds'}`` (``odds`` formatted, ``None`` without a chance), or ``None`` without
+        another house with elections.
+    """
+    others = [row for row in rows if not row.get('cis') and row.get('n') and row.get('k_left') is not None]
+
+    if not others:
+        return None
+
+    best = max(others, key=lambda row: (row.get('share_left') or 0, row.get('mean_lean') or 0))
+    chance = sign_chance(best['n'], best['k_left'])
+
+    return {'name': best.get('pollster'), 'href': house_href(best.get('pollster')), 'k': best['k_left'],
+            'n': best['n'], 'odds': fmt_int(chance['odds']) if chance else None}
 
 
 def _bull(rows: list) -> list:
