@@ -14,7 +14,7 @@ from ..studies.lean.stats import sign_chance
 from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
 from .casas import election_label
-from .common import analysis_part, api_url, common_context, part
+from .common import analysis_part, api_url, bundle_part, common_context, part
 from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import _is_missing
 from .slugs import PROFILE_PATH, slugify
@@ -451,6 +451,7 @@ def metodo_section_context(state: dict, section: str) -> dict:
         context['example_csv'] = api_url(NATIONAL_SCOPE, 'weights', fmt='csv')
         context['house_example'] = house
         context['cycle'] = cycle_counts()
+        context['lean_published'] = bundle_part(site().study, 'sesgo-cis', 'meta') is not None
         initial = {'state': context['state']}
 
         if example is not None:
