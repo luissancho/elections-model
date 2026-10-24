@@ -246,14 +246,20 @@ def test_anchor_is_last_fitted_day_not_deadline(sim26):
 # Desde el 07-10-2026 cada casa pesa por su muestra efectiva (M12, `Forecaster.fit_dispersion`): el CIS, cuyos
 # barómetros se dispersan 2,7 veces más de lo que su muestra permite, pesa un tercio; el PP sube 0,27 puntos de
 # media en el ciclo y un escaño vuelve de VOX al PP, 140 / 107 / 63 / 8 -> 141 / 107 / 62 / 8.
-REGRESSION_TOTALS = [141, 107, 62, 8]
+# Desde el 19-10-2026 Sumar es FA (Frente Amplio) y Compromís va aparte en sus provincias; con la base del 24-10
+# (325 sondeos) la mediana expandida es 134 / 108 / 67 / 9.
+REGRESSION_TOTALS = [134, 108, 67, 9]
+# Desde el 24-10-2026 el titular es el reparto central (M13, `Simulator.central_result`): D'Hondt sobre el voto
+# central, igual en nowcast y forecast; no depende de la secuencia aleatoria, sólo del promedio y de las bases.
+CENTRAL_TOTALS = [136, 109, 64, 9]
 
 
 def test_nowcast_regression_seed_42(sim26):
     """La secuencia aleatoria del nowcast no cambia con M5: reproduce la regresión de referencia."""
     sim26.run(split=True, random=True, n_sim=200)
     assert (sim26.horizons == 0).all()
-    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'FA']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals()[['PP', 'PSOE', 'VOX', 'FA']].tolist() == CENTRAL_TOTALS
     assert (sim26.frame(0)['drift'].drop('-') == 0).all()
 
 
@@ -412,7 +418,8 @@ def test_simulator_without_house_effects_keeps_regression(sim26):
     assert sim26.house_effects is False and sim26.model.house_effects is None
     assert sim26.model.series['PP'].equals(sim26.model.series_raw['PP'])
     sim26.run(split=True, random=True, n_sim=200)
-    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'FA']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals()[['PP', 'PSOE', 'VOX', 'FA']].tolist() == CENTRAL_TOTALS
 
 
 def test_industry_bias_shifts_the_forecast(app, sim26_he):
