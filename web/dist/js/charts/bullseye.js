@@ -55,7 +55,8 @@ function pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop}) {
      data: data.map(({value, row, itemStyle}) => (itemStyle ? {value, row, itemStyle} : {value, row}))},
     // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
     {...style, type: 'scatter', symbolSize: POINT_SIZE, itemStyle: {opacity: 0}, silent: true, tooltip: {show: false},
-     label, labelLayout: {hideOverlap: true},
+     // The labels would inherit the invisible points' opacity: they get their own.
+     label: {...label, opacity: 1}, labelLayout: {hideOverlap: true},
      data: data.map(({value, row, label: faded}) => (faded ? {value, row, label: faded} : {value, row}))},
   ];
   if (!groupOf) {
