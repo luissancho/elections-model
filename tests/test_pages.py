@@ -1451,7 +1451,7 @@ def test_pages_package_layout():
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'inicio',
-                     'metodo', 'promedios', 'slugs']
+                     'lean', 'metodo', 'promedios', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -4284,9 +4284,9 @@ def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links
 STUDY_VERDICTS = [('q1', 'SÍ'), ('q2', 'SIN EVIDENCIA'), ('q3', 'NO')]
 
 
-def publish_study(fs, meta=None, parts=None):
+def publish_study(fs, meta=None, parts=None, study='voto-cera'):
     """Publica el estudio de los fixtures y vacía las cachés del sitio."""
-    write_study(fs, meta=meta, parts=parts)
+    write_study(fs, study=study, meta=meta, parts=parts)
     webapi.site().manifest_cache_clear()
 
 
@@ -4437,6 +4437,42 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert context['figures']['latam_rate'] is None and context['figures']['rest_rate'] is None
     assert context['kpis'][1]['support'] == 'censo vigente: cerrado el 1-10-2026'
     assert context['kpis'][2]['support'] == '2023: 208.431'
+
+
+def test_lean_context_figures_come_from_the_parts(api, fresh_app):
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    context = pages.lean_context(pages.parse_state({}))
+    summary = fixture_data('sesgo-cis-summary')
+    assert [k['label'] for k in context['kpis']] == ['Elecciones con la izquierda sobreestimada', 'Cuánto sobreestima a la izquierda frente a la derecha', 'A la izquierda del consenso de las demás encuestadoras']
+    assert context['kpis'][0]['value'] == '{} de {}'.format(summary['with']['k_left'], summary['with']['n'])
+    assert [t['key'] for t in context['tests']] == ['coin', 'dates', 'consensus'] and context['tests'][2]['highlight'] is True
+    assert set(context['initial']) == {'state', 'bull', 'matrix', 'consensus', 'ranking', 'election', 'distance'}
+    assert [link['label'] for link in context['csv_links']] == list(pages.CSV_LABELS['sesgo-cis'].values())
+    assert context['elections'][0]['event_date'] >= context['elections'][-1]['event_date'] and all(e['period'] == 'with' for e in context['elections'])
+    assert context['verdicts'][0]['label'] == 'SÍ' and context['verdicts'][1]['tone'] == 'q3'
+    # figures, links and the distance ranking
+    assert context['kpis'][1]['value'] == '8,3 puntos' and context['tests'][0]['value'] == '1 entre 9'
+    assert [h['href'] for h in context['houses']] == ['/casas/gad3', '/casas/sigma-dos', '/casas/cis']
+    assert [c['after'] for c in context['compare']] == [False, True]
+    distance = context['initial']['distance']
+    assert [d['dist'] for d in distance] == sorted(d['dist'] for d in distance)
+    assert sum(d['consensus'] for d in distance) == 1 and context['initial']['bull']['blocks'] == ['Derecha', 'Izquierda']
+
+
+def test_lean_context_survives_missing_parts(api, fresh_app):
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_study('sesgo-cis', 'election'))
+    webapi.site().manifest_cache_clear()
+    context = pages.lean_context(pages.parse_state({}))
+    assert context['election'] is None and context['initial']['distance'] == []
+    assert context['initial']['election']['consensus'] is None
+
+
+def test_lean_view_models_return_empty_for_missing_keys():
+    assert [k['value'] for k in pages.lean.kpis(None, None)] == [None, None, None]
+    assert [t['value'] for t in pages.lean.tests({})] == [None, None, None]
+    assert pages.lean.tech_note(None)['with']['all'] == '–'
+    assert pages.lean.island({})['ranking'] == [] and pages.lean.island({})['distance'] == []
 
 
 def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(api, fresh_app):
