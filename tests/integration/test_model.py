@@ -376,7 +376,6 @@ def test_projection_runs_from_as_of_to_the_election(sim26, sim26_fc):
 
 
 def test_cached_forecast_keeps_the_anchor(sim26_fc):
-    import os
     as_of = sim26_fc.as_of
     sim26_fc.save_forecast('test-anchor')
     try:
@@ -387,7 +386,7 @@ def test_cached_forecast_keeps_the_anchor(sim26_fc):
         for suffix in ('', '-stat', '-meta'):
             name = sim26_fc.model.get_path('fc/test-anchor{}.csv'.format(suffix))
             if sim26_fc.app.fs.exists(name):
-                os.remove(sim26_fc.app.fs.get_path(name))
+                sim26_fc.app.fs.remove(name)  # el sistema de ficheros de la app: local o S3 según el entorno
 
 
 # --- M6: efectos de casa ---
@@ -472,8 +471,8 @@ def test_party_ages_and_drift_multiplier(sim26_he):
     sim26_he.run(split=True, random=True, n_sim=50, horizon='deadline')
     frame = sim26_he.frame(0)
     rel = frame['drift'] / frame['pct']
-    # Los jóvenes (SUMAR, SALF) derivan `multiplier` veces más que los establecidos, en proporción a su cuota
-    assert rel['SUMAR'] == pytest.approx(sim26_he.v2drift.multiplier * rel['PSOE'], rel=0.05)
+    # Los jóvenes (FA, SALF) derivan `multiplier` veces más que los establecidos, en proporción a su cuota
+    assert rel['FA'] == pytest.approx(sim26_he.v2drift.multiplier * rel['PSOE'], rel=0.05)
     assert rel['VOX'] == pytest.approx(rel['PSOE'], rel=0.05)
     # En el abanico, la varianza añadida entre 0 y el límite es la de la deriva: `multiplier²` veces mayor en los jóvenes
     h = sim26_he.horizon_max
@@ -481,7 +480,7 @@ def test_party_ages_and_drift_multiplier(sim26_he):
     added = (fan[h] ** 2 - fan[0] ** 2) / (sim26_he.forecast.loc[fan.index, 'mean'] ** 2 * sim26_he.v2drift.k * h)
     assert added['PP'] == pytest.approx(1., rel=0.02) and added['VOX'] == pytest.approx(1., rel=0.02)
     assert added['SALF'] == pytest.approx(sim26_he.v2drift.multiplier ** 2, rel=0.02)
-    assert added['SUMAR'] == pytest.approx(sim26_he.v2drift.multiplier ** 2, rel=0.02)
+    assert added['FA'] == pytest.approx(sim26_he.v2drift.multiplier ** 2, rel=0.02)
 
 
 def test_party_age_uses_the_raw_party_not_its_block(app):
