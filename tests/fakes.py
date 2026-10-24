@@ -395,3 +395,107 @@ class RecordingFileSystem(FileSystem):
     def write_bytes(self, content, name):
         self.written.append(name)
         return super().write_bytes(content, name)
+
+
+LEAN_RUN = '20261024-120000'
+LEAN_BLOCKS = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'SUMAR']}
+LEAN_ERRORS = {  # (ámbito, fecha) -> {casa: (error Izquierda, error Derecha)}
+    ('es', '2008-03-09'): {'CIS': (-1.6, -1.2)},
+    ('es', '2011-11-20'): {'CIS': (0.4, 2.0)},
+    ('es', '2015-12-20'): {'CIS': (-6.3, 5.0)},
+    ('es', '2016-06-26'): {'CIS': (3.0, -2.3), 'GAD3': (1.0, -1.0)},
+    ('es', '2019-04-28'): {'CIS': (0.1, -0.1), 'GAD3': (-1.0, 1.0), 'Sigma Dos': (2.0, -1.0)},
+    ('es', '2019-11-10'): {'CIS': (6.4, -6.1), 'GAD3': (-1.0, 1.0), 'Sigma Dos': (2.0, -1.0)},
+    ('es', '2023-07-23'): {'CIS': (3.1, -2.8), 'GAD3': (-1.0, 1.0), 'Sigma Dos': (2.0, -1.0),
+                           'NC Report': (-4.0, 3.0), 'Hamalgama': (-4.4, 4.7)},
+    ('es-an', '2018-12-02'): {'CIS': (12.6, -9.5), 'GAD3': (-1.0, 1.0), 'Sigma Dos': (2.0, -1.0)},
+    ('es-an', '2022-06-19'): {'CIS': (3.1, -4.9), 'GAD3': (-1.0, 1.0), 'Sigma Dos': (2.0, -1.0)},
+    ('es-an', '2026-05-17'): {'CIS': (-0.5, -1.5), 'GAD3': (-1.0, 1.0), 'Sigma Dos': (2.0, -1.0),
+                              'NC Report': (-4.0, 3.0)},
+}
+
+
+def bundle_fixture(name):
+    """`data` de un fixture del paquete (`tests/fixtures/bundle/{name}.json`)."""
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+    with open(os.path.join(root, 'tests', 'fixtures', 'bundle', name + '.json'), encoding='utf-8') as fh:
+        return json.load(fh)['data']
+
+
+def write_lean_bundle(fs, *, since='2018-09-01'):
+    """
+    Paquete sintético con las entradas del estudio del sesgo del CIS (sin base de datos).
+
+    Escribe, para `es` y `es-an`, la `meta` y el `poll-errors` del análisis (errores de `LEAN_ERRORS`, `days` 10,
+    muestra 1000 y peso 1, más una fila del CIS de `es` en `2012-11-25` sin carpeta de evento) y una carpeta de
+    evento (`meta.json`) por fecha; el evento `es/2023-07-23` completo (`meta` con bloques, `polls` con las cinco
+    casas a 11, 6, 6, 7 y 10 días más Ipsos a 90, y `results`); y el manifest con el run nacional, cuyo `polls` tiene
+    sondeos de 2026 del CIS, GAD3, Sigma Dos y NC Report y de Hamalgama sólo en 2025.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        Raíz del paquete de prueba.
+    since : str, optional
+        Inicio del periodo con Tezanos, devuelto tal cual como `since`.
+
+    Returns
+    -------
+    dict
+        Las cifras que comprueban los tests: `since`, `cis_es_dates`, `industry`, `election` (lo que devuelve
+        `read_election` para `es`/`2023-07-23`), `summary_election` (distancias a 2 decimales) y `houses`.
+    """
+    from mtpy.lib import bundle
+
+    writer = bundle.BundleWriter(fs)
+    days = {'CIS': 11, 'GAD3': 6, 'Sigma Dos': 6, 'NC Report': 7, 'Hamalgama': 10}
+
+    def error_row(date, house, errors, **extra):
+        left, right = errors
+        return {'event_date': date, 'event': date, 'pollster': house, 'days': 10, 'sample_size': 1000, 'weight': 1,
+                'Derecha': right, 'Izquierda': left} | extra
+
+    for scope in ('es', 'es-an'):
+        dates = sorted(date for code, date in LEAN_ERRORS if code == scope)
+        rows = [error_row(date, house, errors) for date in dates for house, errors in LEAN_ERRORS[scope, date].items()]
+        if scope == 'es':
+            rows.append(error_row('2012-11-25', 'CIS', (1.0, -1.0)))
+        writer.write_json(bundle.path_analysis(scope, 'poll-errors'), 'poll-errors',
+                          {'blocks': ['Derecha', 'Izquierda'], 'rows': rows}, scope, run_id=LEAN_RUN)
+        writer.write_json(bundle.path_analysis(scope, 'meta'), 'analysis-meta',
+                          bundle_fixture('analysis-meta') | {'scope': scope, 'events': dates}, scope)
+        for date in dates:
+            meta = bundle_fixture('event-meta') | {'scope': scope, 'event_date': date, 'name': f'{scope} {date}'}
+            writer.write_json(bundle.path_event(scope, date, 'meta'), 'event-meta', meta, scope)
+
+    meta = bundle_fixture('event-meta') | {'scope': 'es', 'event_date': '2023-07-23', 'name': 'Generales 2023',
+                                           'blocks': LEAN_BLOCKS}
+    polls = {'blocks': ['Derecha', 'Izquierda'], 'rows': [
+        error_row('2023-07-23', house, LEAN_ERRORS['es', '2023-07-23'][house], days=days[house]) for house in days
+    ] + [error_row('2023-07-23', 'Ipsos', (-2.9, 2.5), days=90)]}
+    results = {'n_seats': 350, 'rows': [
+        {'party_id': index, 'party': party, 'votes': 1000 * (index + 1), 'pct': pct, 'seats': 100}
+        for index, (party, pct) in enumerate([('PP', 33.06), ('PSOE', 31.68), ('VOX', 12.38), ('SUMAR', 12.33)])
+    ]}
+    for part, schema, content in (('meta', 'event-meta', meta), ('polls', 'event-polls', polls),
+                                  ('results', 'event-results', results)):
+        writer.write_json(bundle.path_event('es', '2023-07-23', part), schema, content, 'es')
+
+    run_polls = [{'date': date, 'pollster_id': index, 'pollster': house, 'sample': 1000, 'PP': 33.0}
+                 for index, (house, date) in enumerate([
+                     ('CIS', '2026-10-05'), ('GAD3', '2026-09-20'), ('Sigma Dos', '2026-10-01'),
+                     ('NC Report', '2026-03-15'), ('Hamalgama', '2025-11-10'), ('GAD3', '2025-06-01')])]
+    writer.write_json(bundle.path_part('es', LEAN_RUN, 'polls'), 'polls',
+                      bundle_fixture('polls') | {'polls': run_polls}, 'es', run_id=LEAN_RUN)
+    publish.update_manifest(writer, {'es': publish.latest_entry(bundle_fixture('headline') | {'run_id': LEAN_RUN})})
+
+    return {
+        'since': since,
+        'cis_es_dates': ['2008-03-09', '2011-11-20', '2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10',
+                         '2023-07-23'],
+        'industry': {'n_events': 2, 'left': 0, 'right': 2, 'mean': -1.43},
+        'election': {'meta': meta, 'polls': polls, 'results': results},
+        'summary_election': {'cis_dist': 4.18, 'consensus_dist': 2.67, 'closer': 2, 'rank': 3, 'n': 5},
+        'houses': ['GAD3', 'Sigma Dos', 'CIS'],
+    }
