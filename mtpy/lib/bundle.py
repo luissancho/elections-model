@@ -27,6 +27,10 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
             meta.json pollsters.json polls.json results.json model.json
             csv/
                 pollsters.csv polls.csv results.csv model-shares.csv model-seats.csv model-blocks.csv
+        studies/{study}/                        one published study (voto-cera, sesgo-cis), overwritten on each publication
+            meta.json {part}.json               the parts of STUDY_PARTS[study]
+            csv/
+                {name}.csv                      the tables of STUDY_CSV[study]
 
 Every JSON file is an envelope::
 
@@ -69,14 +73,21 @@ BACKTEST_CSV = BACKTEST_PARTS[1:]
 EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
 EVENT_SCHEMAS = {part: 'event-' + part for part in EVENT_PARTS}
 EVENT_CSV = ('pollsters', 'polls', 'cycle', 'results', 'model-shares', 'model-seats', 'model-blocks', 'series')
-STUDIES = ('voto-cera',)
-STUDY_PARTS = ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
-STUDY_SCHEMAS = {part: 'study-' + part for part in STUDY_PARTS}
-STUDY_CSV = ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
-             'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check')
-STUDY_CSV_OF = {'census': ('census-series', 'census-provinces', 'census-countries'),
-                'participation': ('participation',), 'vote': ('vote', 'ecological'), 'prediction': ('last-seat',),
-                'sensitivity': ('sensitivity-grid', 'sensitivity-scenarios', 'placement-grid'), 'check': ('check',)}
+STUDIES = ('voto-cera', 'sesgo-cis')
+STUDY_PARTS = {'voto-cera': ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check'),
+               'sesgo-cis': ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')}
+STUDY_SCHEMAS = {'voto-cera': {part: 'study-' + part for part in STUDY_PARTS['voto-cera']},
+                 'sesgo-cis': {part: 'sesgo-cis-' + part for part in STUDY_PARTS['sesgo-cis']}}
+STUDY_CSV = {'voto-cera': ('census-series', 'census-provinces', 'census-countries', 'participation', 'vote', 'ecological',
+                           'last-seat', 'sensitivity-grid', 'sensitivity-scenarios', 'placement-grid', 'check'),
+             'sesgo-cis': ('elections', 'houses', 'matrix', 'election-houses')}
+STUDY_CSV_OF = {'voto-cera': {'census': ('census-series', 'census-provinces', 'census-countries'),
+                              'participation': ('participation',), 'vote': ('vote', 'ecological'),
+                              'prediction': ('last-seat',),
+                              'sensitivity': ('sensitivity-grid', 'sensitivity-scenarios', 'placement-grid'),
+                              'check': ('check',)},
+                'sesgo-cis': {'elections': ('elections',), 'houses': ('houses',), 'matrix': ('matrix',),
+                              'election': ('election-houses',)}}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 RUN_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
@@ -144,6 +155,15 @@ SCHEMAS = {
     'study-prediction': {'scenarios': dict, 'last_seat': list, 'report': dict},
     'study-sensitivity': {'grid': dict, 'scenarios': list, 'placement': dict},
     'study-check': {'elections': list, 'rows': list, 'verdict': NULLABLE_STR},
+    'sesgo-cis-meta': {'study': str, 'title': str, 'subtitle': str, 'pollster': str, 'periods': dict, 'blocks': list,
+                       'params': dict, 'inputs': dict, 'sources': list, 'commit': NULLABLE_STR, 'dirty': bool,
+                       'versions': dict, 'seconds': dict},
+    'sesgo-cis-summary': {'with': dict, 'without': dict, 'election': dict},
+    'sesgo-cis-elections': {'rows': list},
+    'sesgo-cis-houses': {'rows': list},
+    'sesgo-cis-matrix': {'events': list, 'houses': list, 'cells': list},
+    'sesgo-cis-election': {'scope': str, 'date': str, 'name': NULLABLE_STR, 'blocks': dict, 'max_days': int,
+                           'result': dict, 'cis': dict, 'consensus': dict, 'houses': list},
 }
 
 
@@ -516,7 +536,7 @@ def path_study(study: str, part: str) -> str:
     study : str
         The study slug (one of ``STUDIES``).
     part : str
-        The file name without extension (one of ``STUDY_PARTS``).
+        The file name without extension (one of ``STUDY_PARTS[study]``).
 
     Returns
     -------
@@ -529,7 +549,7 @@ def path_study(study: str, part: str) -> str:
         If the study or the part is invalid.
     """
     _check_study(study)
-    _check_file(study, part, STUDY_PARTS, 'study')
+    _check_file(study, part, STUDY_PARTS[study], 'study')
 
     return f'studies/{study}/{part}.json'
 
@@ -543,7 +563,7 @@ def path_study_csv(study: str, name: str) -> str:
     study : str
         The study slug (one of ``STUDIES``).
     name : str
-        The file name without extension (one of ``STUDY_CSV``).
+        The file name without extension (one of ``STUDY_CSV[study]``).
 
     Returns
     -------
@@ -556,7 +576,7 @@ def path_study_csv(study: str, name: str) -> str:
         If the study or the name is invalid.
     """
     _check_study(study)
-    _check_file(study, name, STUDY_CSV, 'study')
+    _check_file(study, name, STUDY_CSV[study], 'study')
 
     return f'studies/{study}/csv/{name}.csv'
 

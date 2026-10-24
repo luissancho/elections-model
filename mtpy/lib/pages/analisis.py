@@ -37,17 +37,25 @@ SCENARIO_NET = {'convocatoria': 'net', 'sin_litigio': 'net_b'}
 GAP_SHOWN = 10
 REPORT_KEYS = ('n_mean', 'n_max', 'votes_mean', 'votes_max')
 CSV_LABELS = {
-    'census-series': 'Serie mensual del censo CERA',
-    'census-provinces': 'Censo CERA por provincia',
-    'census-countries': 'Censo CERA por país',
-    'participation': 'Participación CERA por origen y en las generales',
-    'vote': 'Voto CERA por proceso electoral',
-    'ecological': 'Inferencia ecológica por provincia',
-    'last-seat': 'Último escaño por provincia',
-    'sensitivity-grid': 'Rejilla de participación y voto a la izquierda',
-    'sensitivity-scenarios': 'Escenarios de censo, participación y sesgo',
-    'placement-grid': 'Rejilla de colocación óptima',
-    'check': 'Comprobación con y sin voto CERA por provincia',
+    'voto-cera': {
+        'census-series': 'Serie mensual del censo CERA',
+        'census-provinces': 'Censo CERA por provincia',
+        'census-countries': 'Censo CERA por país',
+        'participation': 'Participación CERA por origen y en las generales',
+        'vote': 'Voto CERA por proceso electoral',
+        'ecological': 'Inferencia ecológica por provincia',
+        'last-seat': 'Último escaño por provincia',
+        'sensitivity-grid': 'Rejilla de participación y voto a la izquierda',
+        'sensitivity-scenarios': 'Escenarios de censo, participación y sesgo',
+        'placement-grid': 'Rejilla de colocación óptima',
+        'check': 'Comprobación con y sin voto CERA por provincia',
+    },
+    'sesgo-cis': {
+        'elections': 'Las elecciones del CIS, con y sin Tezanos',
+        'houses': 'Ranking de encuestadoras desde 2018',
+        'matrix': 'Matriz casa por elección',
+        'election-houses': 'Últimos sondeos de las generales de 2023 por bloques',
+    },
 }
 
 
@@ -60,7 +68,7 @@ def study_part(study: str, part: str) -> Optional[dict]:
     study : str
         Study slug, one of ``bundle.STUDIES``.
     part : str
-        Part name, one of ``bundle.STUDY_PARTS``.
+        Part name, one of ``bundle.STUDY_PARTS[study]``.
 
     Returns
     -------
@@ -449,13 +457,13 @@ def _csv_links(study: str) -> list:
     Returns
     -------
     list of dict
-        ``{'label', 'href'}`` per CSV of ``bundle.STUDY_CSV``, in that order; ``href`` is the ``api_url`` of its part
+        ``{'label', 'href'}`` per CSV of ``bundle.STUDY_CSV[study]``, in that order; ``href`` is the ``api_url`` of its part
         with ``format=csv`` and its ``table``.
     """
-    part_of = {name: part for part, names in bundle.STUDY_CSV_OF.items() for name in names}
+    part_of = {name: part for part, names in bundle.STUDY_CSV_OF[study].items() for name in names}
 
-    return [{'label': CSV_LABELS[name], 'href': api_url(study, part_of[name], kind='study', fmt='csv', table=name)}
-            for name in bundle.STUDY_CSV]
+    return [{'label': CSV_LABELS[study][name], 'href': api_url(study, part_of[name], kind='study', fmt='csv', table=name)}
+            for name in bundle.STUDY_CSV[study]]
 
 
 def _island(state: dict, parts: dict, figures: dict) -> dict:
@@ -550,7 +558,7 @@ def cera_context(state: dict) -> dict:
         503 without a bundle.
     """
     context = common_context(state, '/analisis')
-    parts = {part: study_part(CERA, part) or {} for part in bundle.STUDY_PARTS}
+    parts = {part: study_part(CERA, part) or {} for part in bundle.STUDY_PARTS[CERA]}
     meta = parts['meta']
     figures = _figures(parts)
     context.update({part: data for part, data in parts.items() if part != 'meta'})

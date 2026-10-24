@@ -41,10 +41,10 @@ def meta_of(writer):
 
 
 def test_export_study_parts_validate(study):
-    for part in bundle.STUDY_PARTS:
+    for part in bundle.STUDY_PARTS['voto-cera']:
         data, frames = getattr(publish, 'export_study_' + part.replace('-', '_'))(study)
-        valid(bundle.STUDY_SCHEMAS[part], data)
-        assert set(frames) == set(bundle.STUDY_CSV_OF.get(part, ()))
+        valid(bundle.STUDY_SCHEMAS['voto-cera'][part], data)
+        assert set(frames) == set(bundle.STUDY_CSV_OF['voto-cera'].get(part, ()))
 
 
 def test_export_study_figures(study):
@@ -115,9 +115,9 @@ def test_publish_study_writes_the_parts_in_order_and_meta_last(study, tmp_path):
     out = run(study, writer)
     root = 'site/v1/studies/' + STUDY + '/'
     jsons = [name for name in fs.written if name.endswith('.json') and name.startswith(root)]
-    assert jsons == [root + part + '.json' for part in (*bundle.STUDY_PARTS[1:], 'meta')]
+    assert jsons == [root + part + '.json' for part in (*bundle.STUDY_PARTS['voto-cera'][1:], 'meta')]
     csvs = {name for name in fs.written if name.endswith('.csv')}
-    assert csvs == {root + 'csv/' + name + '.csv' for name in bundle.STUDY_CSV}
+    assert csvs == {root + 'csv/' + name + '.csv' for name in bundle.STUDY_CSV['voto-cera']}
     assert fs.written[-1] == 'site/v1/manifest.json'
     assert writer.study_exists(STUDY)
     assert out['study'] == STUDY and out['registered_at'] is None and out['checked'] is False

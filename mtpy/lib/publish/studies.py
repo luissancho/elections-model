@@ -561,7 +561,7 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
                   prov: Optional[Callable] = None, today=None) -> dict:
     """Compute a study and write it into the bundle, overwriting the previous one, and update the manifest.
 
-    The parts are written in the order of ``bundle.STUDY_PARTS[1:]`` (each JSON with its CSV twins) and ``meta``
+    The parts are written in the order of ``bundle.STUDY_PARTS[study_id][1:]`` (each JSON with its CSV twins) and ``meta``
     last, so a failure halfway leaves the previous ``meta.json`` in place; the manifest entry of the study
     (``published_at``, ``registered_at``, ``checked``) is updated after it. Runs, analyses and the other studies
     are not touched. The registration of the prediction is explicit: only ``register`` writes it, and a later
@@ -633,12 +633,12 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
 
     def write(part, content, frames):
         """Write the JSON of a part and its CSV twins (``{csv name: frame}``)."""
-        writer.write_json(bundle.path_study(study_id, part), bundle.STUDY_SCHEMAS[part], content, None)
+        writer.write_json(bundle.path_study(study_id, part), bundle.STUDY_SCHEMAS[study_id][part], content, None)
         for name, frame in frames.items():
             writer.write_csv(bundle.path_study_csv(study_id, name), frame)
 
     checked = False
-    for part in bundle.STUDY_PARTS[1:]:
+    for part in bundle.STUDY_PARTS[study_id][1:]:
         content, frames = STUDY_EXPORTERS[part](study)
         write(part, content, frames)
         seconds[part] = lap()

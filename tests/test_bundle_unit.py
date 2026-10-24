@@ -81,21 +81,27 @@ def test_analysis_exists_needs_the_meta(tmp_path):
     assert writer.analysis_exists('es') and not writer.analysis_exists('es-md')
 
 
-def test_study_paths_follow_the_published_layout_and_reject_bad_input():
-    assert bundle.STUDIES == ('voto-cera',)
-    assert bundle.STUDY_PARTS == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
-    assert bundle.STUDY_SCHEMAS == {part: 'study-' + part for part in bundle.STUDY_PARTS}
-    assert all(name in bundle.SCHEMAS for name in bundle.STUDY_SCHEMAS.values())
+def test_study_registry_is_per_study():
+    assert bundle.STUDIES == ('voto-cera', 'sesgo-cis')
+    assert bundle.STUDY_PARTS['voto-cera'] == ('meta', 'census', 'participation', 'vote', 'placement', 'prediction', 'sensitivity', 'check')
+    assert bundle.STUDY_PARTS['sesgo-cis'] == ('meta', 'summary', 'elections', 'houses', 'matrix', 'election')
+    assert bundle.STUDY_SCHEMAS['voto-cera'] == {part: 'study-' + part for part in bundle.STUDY_PARTS['voto-cera']}
+    assert bundle.STUDY_SCHEMAS['sesgo-cis'] == {part: 'sesgo-cis-' + part for part in bundle.STUDY_PARTS['sesgo-cis']}
+    for study in bundle.STUDIES:
+        assert all(name in bundle.SCHEMAS for name in bundle.STUDY_SCHEMAS[study].values())
+        listed = [name for names in bundle.STUDY_CSV_OF[study].values() for name in names]
+        assert sorted(listed) == sorted(bundle.STUDY_CSV[study]) and set(bundle.STUDY_CSV_OF[study]) <= set(bundle.STUDY_PARTS[study])
+    assert bundle.STUDY_CSV['sesgo-cis'] == ('elections', 'houses', 'matrix', 'election-houses')
+    assert bundle.path_study('sesgo-cis', 'matrix') == 'studies/sesgo-cis/matrix.json'
+    assert bundle.path_study_csv('sesgo-cis', 'election-houses') == 'studies/sesgo-cis/csv/election-houses.csv'
     assert bundle.path_study('voto-cera', 'meta') == 'studies/voto-cera/meta.json'
     assert bundle.path_study_csv('voto-cera', 'last-seat') == 'studies/voto-cera/csv/last-seat.csv'
-    for call in (lambda: bundle.path_study('nope', 'meta'), lambda: bundle.path_study('voto-cera', 'nope'),
-                 lambda: bundle.path_study('voto-cera/..', 'meta'), lambda: bundle.path_study('Voto-Cera', 'meta'),
-                 lambda: bundle.path_study_csv('nope', 'check'), lambda: bundle.path_study_csv('voto-cera', 'meta'),
-                 lambda: bundle.path_study_csv('voto-cera\n', 'check')):
+    for call in (lambda: bundle.path_study('nope', 'meta'), lambda: bundle.path_study('voto-cera', 'summary'),
+                 lambda: bundle.path_study('sesgo-cis', 'census'), lambda: bundle.path_study('Voto-Cera', 'meta'),
+                 lambda: bundle.path_study('voto-cera/..', 'meta'), lambda: bundle.path_study_csv('voto-cera\n', 'check'),
+                 lambda: bundle.path_study_csv('sesgo-cis', 'check'), lambda: bundle.path_study_csv('voto-cera', 'houses')):
         with pytest.raises(ValueError):
             call()
-    listed = [name for names in bundle.STUDY_CSV_OF.values() for name in names]
-    assert sorted(listed) == sorted(bundle.STUDY_CSV) and set(bundle.STUDY_CSV_OF) <= set(bundle.STUDY_PARTS)
 
 
 def test_study_exists_needs_the_meta(tmp_path):
@@ -243,10 +249,12 @@ def test_backtest_exists_needs_the_meta(tmp_path):
     assert writer.backtest_exists('es') and not writer.backtest_exists('es-md')
 
 
-@pytest.mark.parametrize('part', bundle.STUDY_PARTS)
-def test_study_schemas_validate_the_fixtures(part):
-    obj = load_fixture('study-' + part)
-    assert bundle.validate('study-' + part, obj) is obj and obj['schema'] == f'study-{part}@1'
+@pytest.mark.parametrize('study, part', [(study, part) for study in bundle.STUDIES for part in bundle.STUDY_PARTS[study]],
+                         ids=lambda value: value)
+def test_study_schemas_validate_the_fixtures(study, part):
+    name = bundle.STUDY_SCHEMAS[study][part]
+    obj = load_fixture(name)
+    assert bundle.validate(name, obj) is obj and obj['schema'] == f'{name}@1'
     assert obj['scope'] is None and obj['data']
 
 
