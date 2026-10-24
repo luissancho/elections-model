@@ -11,6 +11,9 @@
       <p class="back"><a href="/elecciones{{ scope_query }}">← Todas las elecciones</a></p>
       {{ m.card_start('event', event.event_date|date ~ (' · ' ~ event.name if event.name else ''), 'Los sondeos de esta elección frente al resultado oficial: cuántos hubo, cuántas encuestadoras y cuánto se equivocaron de media.') }}
         <p class="muted">Sondeos: {{ event.n_polls|int }} · Encuestadoras: {{ event.n_pollsters|int }} · Error medio: {{ event.summary.error_avg|num(1) }} · Error de bloques: {{ event.summary.error_blocks_abs|num(1) }} · Sesgo bloques: {{ event.summary.error_blocks|num(1) }}</p>
+        {% if not analysed %}
+        <p class="notice">Esta elección tuvo menos de 10 sondeos útiles, así que no la usamos para el rating de las encuestadoras ni para el backtest.</p>
+        {% endif %}
         {% call m.how() %}
         <p>
           La línea resume los sondeos de esta elección: cuántos hubo, cuántas encuestadoras los publicaron y sus errores
@@ -170,8 +173,8 @@
         {% endcall %}
       {{ m.card_end() }}
       {% endif %}
+      {% if horizon_tables %}
       {{ m.card_start('model', 'Lo que dijo el modelo', 'El voto y los escaños que el modelo habría publicado a cada distancia de la elección, frente al resultado' ~ ('; de entrada, a ' ~ horizon_tables[0].horizon|int ~ ' días, el último día con sondeos.' if horizon_tables else '.')) }}
-        {% if horizon_tables %}
         <fieldset id="model-horizon" class="seg" hidden>
           <legend>Horizonte</legend>
           {% for table in horizon_tables %}
@@ -275,12 +278,8 @@
         </p>
         <p>Una probabilidad no se acierta ni se falla en una sola elección: una baja que se cumple no es por sí sola un error.</p>
         {% endcall %}
-        {% elif not analysed %}
-        <p class="notice">Esta elección tuvo menos de 10 sondeos útiles, así que no la usamos para el rating de las encuestadoras ni para el backtest.</p>
-        {% else %}
-        <p class="notice">Sin backtest para esta elección.</p>
-        {% endif %}
       {{ m.card_end() }}
+      {% endif %}
       <div class="split">
       {{ m.card_start('last-errors', 'Error del último sondeo', 'Cuánto se equivocó el último sondeo de cada encuestadora en el margen entre bloques, en puntos.') }}
         {% if last_rows %}

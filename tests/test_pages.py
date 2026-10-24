@@ -1933,7 +1933,7 @@ def test_eleccion_not_analysed_says_it_does_not_count_for_the_rating(api, fresh_
     write_event(fresh_app.fs, date='2019-11-10', model=False, featured=False)
     status, _, body = call(api, '/elecciones/es/generales/2019-11')
     page = html(body)
-    assert status == 200 and NOT_ANALYSED in page and 'Sin backtest para esta elección' not in page
+    assert status == 200 and NOT_ANALYSED in page and 'id="model"' not in page and 'Lo que dijo el modelo' not in page
 
 
 def test_eleccion_meta_without_featured_counts_as_analysed(api, fresh_app, tmp_path):
@@ -1945,13 +1945,13 @@ def test_eleccion_meta_without_featured_counts_as_analysed(api, fresh_app, tmp_p
     path.write_text(json.dumps(meta))
     status, _, body = call(api, '/elecciones/es/generales/2019-11')
     page = html(body)
-    assert status == 200 and 'Sin backtest para esta elección' in page and NOT_ANALYSED not in page
+    assert status == 200 and 'id="model"' not in page and NOT_ANALYSED not in page
 
 
 def test_eleccion_without_model_shows_a_notice(events_site):
     status, _, body = call(events_site, '/elecciones/es/generales/2019-11')
     page = html(body)
-    assert status == 200 and 'Sin backtest para esta elección' in page
+    assert status == 200 and 'id="model"' not in page and 'Sin backtest' not in page  # sin backtest no hay tarjeta (Luis, 2026-10-24)
     assert page.count('/api/v1/events/es/2019-11-10/') == 4 + 2
     assert 'id="series"' not in page and 'id="model-horizon"' not in page and 'tr class="fixed"' not in page
 
