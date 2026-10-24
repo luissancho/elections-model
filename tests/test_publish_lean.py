@@ -35,9 +35,11 @@ def test_export_lean_parts_validate(study):
     meta, frames = publish.export_lean_meta(study, prov=fake_prov())
     valid('sesgo-cis-meta', meta)
     assert frames == {}
-    assert meta['subtitle'].startswith('Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque '
-                                       'de izquierdas más voto del que obtuvo en 5 de 6 elecciones')
-    assert [s['url'] for s in meta['sources']][-3:] == [URL_INDEPENDIENTE_2018_07, URL_INDEPENDIENTE_2018_09, URL_UNED]
+    assert meta['subtitle'].startswith(
+        'Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque '
+        'de izquierdas más voto del que obtuvo en 5 de 6 elecciones')
+    assert [s['url'] for s in meta['sources']][-3:] == [
+        URL_INDEPENDIENTE_2018_07, URL_INDEPENDIENTE_2018_09, URL_UNED]
 
 
 def test_export_lean_frames_follow_the_study(study):

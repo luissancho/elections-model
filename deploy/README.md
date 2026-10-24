@@ -1016,7 +1016,8 @@ Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` 
 
 ```
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-cera"}'
-S3_BUCKET= python job.py publish '{"what":["analysis","study"],"study":"sesgo-cis"}'
+S3_BUCKET= python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
+S3_BUCKET= python job.py publish '{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
 

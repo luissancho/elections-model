@@ -14,18 +14,20 @@ from ...core.io import FileSystem
 URL_INDEPENDIENTE_2018_07 = ('https://www.elindependiente.com/politica/2018/07/09/'
                              'jose-felix-tezanos-presidente-del-cis-abandona-cargo-la-ejecutiva-federal-del-psoe/')
 
-URL_INDEPENDIENTE_2018_09 = 'https://www.elindependiente.com/politica/2018/09/25/los-datos-sorprendentes-cocina-cis-tezanos/'
+URL_INDEPENDIENTE_2018_09 = ('https://www.elindependiente.com/politica/2018/09/25/'
+                             'los-datos-sorprendentes-cocina-cis-tezanos/')
 
-URL_UNED = 'http://portal.uned.es/portal/page?_pageid=93%2C63197807&_dad=portal&_schema=PORTAL'
+URL_UNED = ('http://portal.uned.es/portal/page?_pageid=93%2C63197807'
+            '&_dad=portal&_schema=PORTAL')
 
 LEAN_SOURCES = [
     {'label': 'Histórico de errores de las encuestas por elección', 'url': '/elecciones'},
     {'label': 'Perfil del CIS', 'url': '/casas/cis'},
     {'label': 'Método: el ejemplo del CIS desde 2018', 'url': '/metodo/promedio#ejemplo-cis'},
     {'label': 'Análisis', 'url': '/analisis'},
-    {'label': 'José Félix Tezanos, presidente del CIS, abandona su cargo en la Ejecutiva Federal del PSOE. '
+    {'label': '«José Félix Tezanos, presidente del CIS, abandona su cargo en la Ejecutiva Federal del PSOE», '
               'El Independiente, 9-7-2018', 'url': URL_INDEPENDIENTE_2018_07},
-    {'label': 'Los datos sorprendentes de la cocina del CIS de Tezanos. El Independiente, 25-9-2018',
+    {'label': '«Los datos sorprendentes de la cocina del CIS de Tezanos», El Independiente, 25-9-2018',
      'url': URL_INDEPENDIENTE_2018_09},
     {'label': 'Perfil de José Félix Tezanos en la UNED', 'url': URL_UNED},
 ]
@@ -137,7 +139,7 @@ def export_lean_meta(study, study_id: str = 'sesgo-cis', registration: Optional[
         'study': study_id, 'title': title,
         'subtitle': subtitle.format(k=study.summary['with']['k_left'], n=study.summary['with']['n']),
         'pollster': study.params['pollster'], 'periods': study.periods, 'blocks': study.params['blocks'],
-        'params': study.params, 'inputs': study.inputs, 'sources': LEAN_SOURCES,
+        'params': study.params, 'inputs': study.inputs, 'sources': [dict(s) for s in LEAN_SOURCES],
         'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'], 'seconds': seconds or {},
     }
     return data, {}

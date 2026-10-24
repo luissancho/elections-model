@@ -588,8 +588,8 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
                   prov: Optional[Callable] = None, today=None) -> dict:
     """Compute a study and write it into the bundle, overwriting the previous one, and update the manifest.
 
-    The parts are written in the order of ``bundle.STUDY_PARTS[study_id][1:]`` (each JSON with its CSV twins) and ``meta``
-    last, so a failure halfway leaves the previous ``meta.json`` in place; the manifest entry of the study
+    The parts are written in the order of ``bundle.STUDY_PARTS[study_id][1:]`` (each JSON with its CSV twins) and
+    ``meta`` last, so a failure halfway leaves the previous ``meta.json`` in place; the manifest entry of the study
     (``published_at``, ``registered_at``, ``checked``) is updated after it. Runs, analyses and the other studies
     are not touched. The registration of the prediction is explicit: only ``register`` writes it, and a later
     publication without ``register`` keeps it (it reads the previous ``meta``).
@@ -624,8 +624,8 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
     ValueError
         If ``study_id`` is not one of ``bundle.STUDIES``.
     PublishRefused
-        With ``register``, if the study has nothing to register (``sesgo-cis``), if the tree is dirty or the study is already registered and ``force`` is not given;
-        nothing is written then.
+        With ``register``, if the study has nothing to register (``sesgo-cis``), if the tree is dirty or the
+        study is already registered and ``force`` is not given; nothing is written then.
     """
     if study_id not in bundle.STUDIES:
         raise ValueError(f'unknown study {study_id!r} (expected one of {", ".join(bundle.STUDIES)})')

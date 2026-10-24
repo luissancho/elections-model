@@ -417,8 +417,8 @@ def metodo_section_context(state: dict, section: str) -> dict:
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
         ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
-        ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``) and,
-        with either example, the
+        ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so
+        the card links to it) and, with either example, the
         ``initial`` island (``state``, the ``example`` slice the weights chart draws: ``name``, ``color``, ``date``,
         ``stats``, ``rows`` with ``ISLAND_ROW_KEYS``, ``line``, ``kernel``; and the ``house`` slice its bullseye
         draws: ``blocks`` and ``rows`` with ``HOUSE_ROW_KEYS`` plus the blocks).

@@ -8,10 +8,9 @@ import {renderRanking} from '../charts/ranking.js';
 import {renderScatter} from '../charts/scatter.js';
 import {mountWhenReady, readInitial, tryDraw, wireMore} from './common.js';
 
-// The colour of the CIS, of the regional elections and of the elections that are not national in the scatter.
+// The colour of the CIS and the one of everything that is not national (regional bullseye and scatter points).
 const RED = '#ce3b3b';
 const REGIONAL_COLOR = '#c0672e';
-const OTHER_ELECTION = '#f28e2b';
 // How many houses are named at each end of each axis in the bullseye of the last general election.
 const NAMED_AT_EACH_END = 2;
 
@@ -65,7 +64,7 @@ function drawConsensus(rows) {
       labelled: rows.filter((row) => row.national).map((row) => row.label),
       diagonal: true,
       axes: {xMin: -10, xMax: 15, yMin: -5, yMax: 15, interval: 5},
-      colorOf: (row) => (row.national ? THEME.accentColor : OTHER_ELECTION),
+      colorOf: (row) => (row.national ? THEME.accentColor : REGIONAL_COLOR),
       xName: 'Media de las demás casas, error en la izquierda',
       xLabel: 'demás casas',
       yLabel: 'CIS',

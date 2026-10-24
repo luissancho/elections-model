@@ -1,6 +1,6 @@
 # Web, Análisis: «El sesgo del CIS de Tezanos» (`/analisis/sesgo-cis`)
 
-Fecha: 2026-10-24. Estado: **pendiente de aprobación** (brainstorm cerrado con Luis el 24 de octubre, maqueta v23
+Fecha: 2026-10-24. Estado: **aprobada por Luis el 2026-10-24 y CONSTRUIDA el 2026-10-25 en la rama `analisis-sesgo-cis` (ver «Cierre»)** (brainstorm cerrado con Luis el 24 de octubre, maqueta v23
 aprobada: `docs/superpowers/specs/2026-10-24-web-analisis-sesgo-cis-mockup.html`; revisión del constructor en la
 sección final). Segundo estudio de la sección «Análisis», tras el del voto CERA
 (`2026-10-19-web-analisis-voto-cera-design.md`). Esta spec describe lo que cambia respecto de `dev` (b740448 + los
@@ -388,3 +388,45 @@ publicado, también en `dry_run` (D2); el índice y la banda de Inicio listan lo
 `bundle.STUDIES`, el CERA primero (D6); «Cómo leerlo» breve en las tres tarjetas-pregunta (D6); la comprobación de
 redacción pública se aplica a la página nueva y, si pasa, también a la del CERA (D6); los parámetros del estudio en
 `data/sesgo-cis/params.json` (D4); la nota de enlace en la tarjeta de Método sólo con el estudio publicado (D8).
+
+## Cierre (2026-10-25)
+
+Construida en la rama `analisis-sesgo-cis` (desde `dev` en d2cca2d). Commits, el más reciente primero:
+
+- (este commit) `Sesgo del CIS: pulido final, suite completa y cierre de la spec`
+- `e5c2cc8 Método: enlace al análisis del sesgo del CIS cuando está publicado`
+- `03f4e6d Diana: las etiquetas de los puntos ya no heredan la opacidad cero del gemelo`
+- `9237f42 Sesgo del CIS: los gráficos de la página`
+- `b54ac9f Gráficos: matriz de signos, ranking, distancia al resultado; marcas y realces en la diana, diagonal en la dispersión`
+- `878dab3 Sesgo del CIS: títulos fuertes y casa siguiente sólo cuando lo dicen las cifras`
+- `0da405a Sesgo del CIS: los resúmenes sólo afirman lo que dicen las cifras`
+- `b976721 Sesgo del CIS: la página /analisis/sesgo-cis`
+- `1eae780 Sesgo del CIS: contexto de la página y modelos de vista`
+- `3c3e902 API de estudios: los dos estudios, sus partes y sus CSV`
+- `68d31b0 Sesgo del CIS: exportadores, publicación genérica por estudio, fixtures y contrato`
+- `653ec20 Sesgo del CIS: el estudio en una llamada (compute_lean)`
+- `558145a Sesgo del CIS: pruebas de azar, t de Student, ranking, matriz y tabla de 2023`
+- `a44da6e Sesgo del CIS: el fake publica el análisis sin run_id como producción, media del sector redondeada con round y sin parámetro since`
+- `ae72fef Sesgo del CIS: lectura de las entradas desde las partes publicadas y parámetros del estudio`
+- `2e5b2b8 Estudios: partes, esquemas y CSV declarados por estudio; sesgo-cis en el registro`
+
+Suite completa: 1337 passed, 75 skipped, 1 warning previo (`dataviz.py`, `set_ticklabels`).
+
+### Desviaciones respecto de la spec, decididas durante la construcción
+
+- Las partes no llevan `slug`: la página deriva los enlaces de perfil con `slugs`.
+- `summary.with/without` no publican las filas internas.
+- `active_pollsters` devuelve también el `run_id`.
+- Los títulos fuertes de la matriz y el ranking y el subtítulo de la diana sólo aparecen cuando las cifras los sostienen (`cis_leads`, medias con signo), con títulos neutros si no.
+- La frase de «la casa que le sigue» sólo aparece cuando esa casa queda por debajo del CIS.
+- `sign_chance` vive en `studies.lean.stats` y Método la importa.
+- Las etiquetas de la diana ya no heredan la opacidad cero del gemelo (defecto previo del módulo, corregido).
+- El «fallo general» se define sin el CIS (tres o más casas) y la cifra de la maqueta «30 de 40» cambia.
+- La comprobación en móvil (390 px) no se pudo emular en headless Chrome.
+
+### Lista para Luis
+
+1. `python job.py publish '{"what":["study"],"study":"sesgo-cis"}'` contra el bundle de S3 (los análisis ya están publicados).
+2. Pasear `/analisis`, `/analisis/sesgo-cis` (de escritorio y en el móvil: la matriz con desplazamiento horizontal, el botón «Ver las 41 elecciones»), `/` (la banda) y `/metodo/promedio` (el enlace).
+3. Integrar la rama en `dev` (nota: `tests/fakes.py` tiene cambios sin confirmar en el checkout principal; la rama añade `write_lean_bundle` al final del fichero) y desplegar con la siguiente integración.
+4. Tras cada `publish analysis`, encadenar `study` para refrescar las cifras (`{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}`).
