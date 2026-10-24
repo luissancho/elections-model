@@ -246,14 +246,20 @@ def test_anchor_is_last_fitted_day_not_deadline(sim26):
 # Desde el 07-10-2026 cada casa pesa por su muestra efectiva (M12, `Forecaster.fit_dispersion`): el CIS, cuyos
 # barómetros se dispersan 2,7 veces más de lo que su muestra permite, pesa un tercio; el PP sube 0,27 puntos de
 # media en el ciclo y un escaño vuelve de VOX al PP, 140 / 107 / 63 / 8 -> 141 / 107 / 62 / 8.
-REGRESSION_TOTALS = [141, 107, 62, 8]
+# Desde el 19-10-2026 Sumar es FA (Frente Amplio) y Compromís va aparte en sus provincias; con la base del 24-10
+# (325 sondeos) la mediana expandida es 134 / 108 / 67 / 9.
+REGRESSION_TOTALS = [134, 108, 67, 9]
+# Desde el 24-10-2026 el titular es el reparto central (M13, `Simulator.central_result`): D'Hondt sobre el voto
+# central, igual en nowcast y forecast; no depende de la secuencia aleatoria, sólo del promedio y de las bases.
+CENTRAL_TOTALS = [136, 109, 64, 9]
 
 
 def test_nowcast_regression_seed_42(sim26):
     """La secuencia aleatoria del nowcast no cambia con M5: reproduce la regresión de referencia."""
     sim26.run(split=True, random=True, n_sim=200)
     assert (sim26.horizons == 0).all()
-    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'FA']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals()[['PP', 'PSOE', 'VOX', 'FA']].tolist() == CENTRAL_TOTALS
     assert (sim26.frame(0)['drift'].drop('-') == 0).all()
 
 
@@ -370,7 +376,6 @@ def test_projection_runs_from_as_of_to_the_election(sim26, sim26_fc):
 
 
 def test_cached_forecast_keeps_the_anchor(sim26_fc):
-    import os
     as_of = sim26_fc.as_of
     sim26_fc.save_forecast('test-anchor')
     try:
@@ -381,7 +386,7 @@ def test_cached_forecast_keeps_the_anchor(sim26_fc):
         for suffix in ('', '-stat', '-meta'):
             name = sim26_fc.model.get_path('fc/test-anchor{}.csv'.format(suffix))
             if sim26_fc.app.fs.exists(name):
-                os.remove(sim26_fc.app.fs.get_path(name))
+                sim26_fc.app.fs.remove(name)  # el sistema de ficheros de la app: local o S3 según el entorno
 
 
 # --- M6: efectos de casa ---
@@ -412,7 +417,8 @@ def test_simulator_without_house_effects_keeps_regression(sim26):
     assert sim26.house_effects is False and sim26.model.house_effects is None
     assert sim26.model.series['PP'].equals(sim26.model.series_raw['PP'])
     sim26.run(split=True, random=True, n_sim=200)
-    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'SUMAR']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals(method='median')[['PP', 'PSOE', 'VOX', 'FA']].tolist() == REGRESSION_TOTALS
+    assert sim26.totals()[['PP', 'PSOE', 'VOX', 'FA']].tolist() == CENTRAL_TOTALS
 
 
 def test_industry_bias_shifts_the_forecast(app, sim26_he):
@@ -465,8 +471,8 @@ def test_party_ages_and_drift_multiplier(sim26_he):
     sim26_he.run(split=True, random=True, n_sim=50, horizon='deadline')
     frame = sim26_he.frame(0)
     rel = frame['drift'] / frame['pct']
-    # Los jóvenes (SUMAR, SALF) derivan `multiplier` veces más que los establecidos, en proporción a su cuota
-    assert rel['SUMAR'] == pytest.approx(sim26_he.v2drift.multiplier * rel['PSOE'], rel=0.05)
+    # Los jóvenes (FA, SALF) derivan `multiplier` veces más que los establecidos, en proporción a su cuota
+    assert rel['FA'] == pytest.approx(sim26_he.v2drift.multiplier * rel['PSOE'], rel=0.05)
     assert rel['VOX'] == pytest.approx(rel['PSOE'], rel=0.05)
     # En el abanico, la varianza añadida entre 0 y el límite es la de la deriva: `multiplier²` veces mayor en los jóvenes
     h = sim26_he.horizon_max
@@ -474,7 +480,7 @@ def test_party_ages_and_drift_multiplier(sim26_he):
     added = (fan[h] ** 2 - fan[0] ** 2) / (sim26_he.forecast.loc[fan.index, 'mean'] ** 2 * sim26_he.v2drift.k * h)
     assert added['PP'] == pytest.approx(1., rel=0.02) and added['VOX'] == pytest.approx(1., rel=0.02)
     assert added['SALF'] == pytest.approx(sim26_he.v2drift.multiplier ** 2, rel=0.02)
-    assert added['SUMAR'] == pytest.approx(sim26_he.v2drift.multiplier ** 2, rel=0.02)
+    assert added['FA'] == pytest.approx(sim26_he.v2drift.multiplier ** 2, rel=0.02)
 
 
 def test_party_age_uses_the_raw_party_not_its_block(app):

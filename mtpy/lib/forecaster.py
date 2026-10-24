@@ -475,11 +475,13 @@ class Forecaster(Core):
             'weight_over', 'weight_sample', 'weight_rating', 'weight'
         ]
 
-        # Initialize series by concatenating events and polls
+        # Initialize series by concatenating events and polls. The copy consolidates the blocks of the frame:
+        # the party columns of `polls` arrive one block each, and the columns added below would otherwise raise
+        # pandas' PerformanceWarning (fragmented frame) in events with many parties (2019, 2023)
         series = pd.concat([
             polls.reset_index(),
             events.reset_index()
-        ], ignore_index=True, sort=False)
+        ], ignore_index=True, sort=False).copy()
 
         # Set days between start and end dates for each poll
         series['tfs'] = [(dt - self.date_start).days for dt in series.date]  # tfs: time from start
