@@ -2199,7 +2199,8 @@ def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     data = initial(body)
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
     assert data['mae']['last_poll'][0] == 1.74 and '5,77' in page
-    assert data['seats'] == {'mae': [4.88, 5.25], 'mae_h': [None, None]}  # sin ejecución a horizonte en el fixture
+    assert data['seats'] == {'mae': [4.88, 5.25]}  # una sola serie: el titular es el mismo en los dos modos
+    assert 'Error de escaños (modo Elección)' not in page and 'Brier de mayoría (modo Elección)' in page
     blocks = re.search(r'<table id="blocks-table">(.*?)</table>', page, re.S).group(1)
     rows = [re.findall(r'<td>(.*?)</td>', row) for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S) if '<td>' in row]
     invalid = [row for row in rows if row[0].startswith('10 ') and row[1] == '30']  # 2019-11-10 x 30
@@ -2499,7 +2500,7 @@ def test_backtest_subpage_has_the_seats_chart_and_the_subnav(api, fresh_app):
     status, _, body = call(api, '/metodo/backtest', query='scope=es')
     page = html(body)
     assert status == 200 and 'id="seats-chart"' in page and 'id="metodo-nav"' in page and 'id="scope-filter"' in page
-    assert initial(body)['seats'].keys() == {'mae', 'mae_h'}
+    assert initial(body)['seats'].keys() == {'mae'}
 
 
 def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
