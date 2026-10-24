@@ -20,7 +20,13 @@ from .pointers import update_manifest
 
 STUDY_TITLES = {'voto-cera': ('El voto CERA en España y el efecto de la «Ley de Nietos»',
                               '¿Es posible orquestar con éxito un fraude electoral significativo a través del censo '
-                              'exterior?')}
+                              'exterior?'),
+                # The subtitle is a template: {k} and {n} are the elections with a left lean and all of them
+                'sesgo-cis': ('El sesgo del CIS de Tezanos',
+                              'Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque de '
+                              'izquierdas más voto del que obtuvo en {k} de {n} elecciones generales y autonómicas '
+                              'celebradas. Es imposible que tal cosa pueda ocurrir por azar ni por un fallo general de '
+                              'las encuestas. Y no, en 2023 tampoco «acertó».')}
 
 REGISTRATION_KEYS = ('registered_at', 'registered_commit', 'registered', 'registered_changed_at')
 
@@ -550,10 +556,31 @@ def export_study_meta(study, study_id: str = 'voto-cera', registration: Optional
     return data, {}
 
 
-STUDY_EXPORTERS = {'census': export_study_census, 'participation': export_study_participation,
-                   'vote': export_study_vote, 'placement': export_study_placement,
-                   'prediction': export_study_prediction, 'sensitivity': export_study_sensitivity,
-                   'check': export_study_check}
+def _cera_compute(data: FileSystem, writer: BundleWriter):
+    """Compute the CERA study from the data folder (the study package is imported here, not at module level)."""
+    from ..studies.cera import compute_cera
+    return compute_cera(data)
+
+
+# lean.py takes the helpers above: it is imported once they exist (a circular import by design)
+from .lean import (  # noqa: E402
+    compute_for_publish, export_lean_election, export_lean_elections, export_lean_houses, export_lean_matrix,
+    export_lean_meta, export_lean_summary
+)
+
+STUDY_EXPORTERS = {'voto-cera': {'census': export_study_census, 'participation': export_study_participation,
+                                 'vote': export_study_vote, 'placement': export_study_placement,
+                                 'prediction': export_study_prediction, 'sensitivity': export_study_sensitivity,
+                                 'check': export_study_check},
+                   'sesgo-cis': {'summary': export_lean_summary, 'elections': export_lean_elections,
+                                 'houses': export_lean_houses, 'matrix': export_lean_matrix,
+                                 'election': export_lean_election}}
+
+STUDY_META = {'voto-cera': export_study_meta, 'sesgo-cis': export_lean_meta}
+
+# How each study is computed (``compute(data, writer)``) and whether it has a registered prediction
+STUDY_RUNNERS = {'voto-cera': {'compute': _cera_compute, 'registrable': True},
+                 'sesgo-cis': {'compute': compute_for_publish, 'registrable': False}}
 
 
 def publish_study(study_id: str, writer: BundleWriter, register: bool = False, force: bool = False,
@@ -581,7 +608,7 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
     data : FileSystem, optional
         The data folder the study reads (``data/`` of the repository by default).
     compute : callable, optional
-        ``compute(data)`` returning the study; ``studies.cera.compute_cera`` by default (imported here).
+        ``compute(data, writer)`` returning the study; ``STUDY_RUNNERS[study_id]['compute']`` by default.
     prov : callable, optional
         Replacement of ``provenance``.
     today : str, datetime.date or datetime.datetime, optional
@@ -597,11 +624,14 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
     ValueError
         If ``study_id`` is not one of ``bundle.STUDIES``.
     PublishRefused
-        With ``register``, if the tree is dirty or the study is already registered and ``force`` is not given;
+        With ``register``, if the study has nothing to register (``sesgo-cis``), if the tree is dirty or the study is already registered and ``force`` is not given;
         nothing is written then.
     """
     if study_id not in bundle.STUDIES:
         raise ValueError(f'unknown study {study_id!r} (expected one of {", ".join(bundle.STUDIES)})')
+    runner = STUDY_RUNNERS[study_id]
+    if register and not runner['registrable']:
+        raise PublishRefused(f'study: {study_id} has nothing to register')
     start = mark = time.perf_counter()
 
     def lap():
@@ -615,21 +645,19 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
     day = (_today(today) if today is not None else writer.now().date()).isoformat()
     meta_path = bundle.path_study(study_id, 'meta')
     previous = writer.read_json(meta_path)['data'] if writer.study_exists(study_id) else {}
-    registration = {key: previous.get(key) for key in REGISTRATION_KEYS}
+    registration = {key: previous.get(key) for key in REGISTRATION_KEYS} if runner['registrable'] else {}
     if register and info['dirty']:
         raise PublishRefused('study: register needs a clean tree')
-    if register and registration['registered_at'] and not force:
+    if register and registration.get('registered_at') and not force:
         raise PublishRefused(f'study: already registered on {registration["registered_at"]}')
 
-    if compute is None:
-        from ..studies.cera import compute_cera
-        compute = compute_cera
-    study = compute(data if data is not None else FileSystem(os.path.join(REPO_ROOT, 'data')))
+    compute = compute or runner['compute']
+    study = compute(data if data is not None else FileSystem(os.path.join(REPO_ROOT, 'data')), writer)
     seconds = {'compute': lap()}
     if register:
-        registration = {'registered_at': registration['registered_at'] or day, 'registered_commit': info['commit'],
+        registration = {'registered_at': registration.get('registered_at') or day, 'registered_commit': info['commit'],
                         'registered': registered_claim(study),
-                        'registered_changed_at': day if registration['registered_at'] else None}
+                        'registered_changed_at': day if registration.get('registered_at') else None}
 
     def write(part, content, frames):
         """Write the JSON of a part and its CSV twins (``{csv name: frame}``)."""
@@ -639,7 +667,7 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
 
     checked = False
     for part in bundle.STUDY_PARTS[study_id][1:]:
-        content, frames = STUDY_EXPORTERS[part](study)
+        content, frames = STUDY_EXPORTERS[study_id][part](study)
         write(part, content, frames)
         seconds[part] = lap()
         if part == 'check':
@@ -647,10 +675,10 @@ def publish_study(study_id: str, writer: BundleWriter, register: bool = False, f
     checked_at = (previous.get('checked_at') or day) if checked else None
     seconds['total'] = time.perf_counter() - start
     seconds = {step: round(value, 1) for step, value in seconds.items()}
-    meta, _ = export_study_meta(study, study_id, registration, checked_at, info, seconds)
+    meta, _ = STUDY_META[study_id](study, study_id, registration, checked_at, info, seconds)
     write('meta', meta, {})
     update_manifest(writer, studies={study_id: {'published_at': bundle.iso_utc(writer.now()),
-                                                'registered_at': registration['registered_at'],
+                                                'registered_at': registration.get('registered_at'),
                                                 'checked': checked}})
-    return {'study': study_id, 'registered_at': registration['registered_at'], 'checked': checked,
+    return {'study': study_id, 'registered_at': registration.get('registered_at'), 'checked': checked,
             'seconds': seconds}

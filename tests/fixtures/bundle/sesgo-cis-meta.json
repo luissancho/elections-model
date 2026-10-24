@@ -1,0 +1,163 @@
+{
+  "schema": "sesgo-cis-meta@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "study": "sesgo-cis",
+    "title": "El sesgo del CIS de Tezanos",
+    "subtitle": "Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque de izquierdas más voto del que obtuvo en 5 de 6 elecciones generales y autonómicas celebradas. Es imposible que tal cosa pueda ocurrir por azar ni por un fallo general de las encuestas. Y no, en 2023 tampoco «acertó».",
+    "pollster": "CIS",
+    "periods": {
+      "with": {
+        "from": "2018-09-01",
+        "to": null,
+        "label": "2018 – 2026",
+        "first_event": "2018-12-02",
+        "last_event": "2026-05-17",
+        "n": 6
+      },
+      "without": {
+        "from": "2008-01-01",
+        "to": "2017-01-01",
+        "label": "2008 – 2016",
+        "first_event": "2008-03-09",
+        "last_event": "2016-06-26",
+        "n": 4
+      }
+    },
+    "blocks": [
+      "Izquierda",
+      "Derecha"
+    ],
+    "params": {
+      "pollster": "CIS",
+      "since": "2018-09-01",
+      "control": [
+        "2008-01-01",
+        "2017-01-01"
+      ],
+      "blocks": [
+        "Izquierda",
+        "Derecha"
+      ],
+      "min_elections": 3,
+      "max_days": 60,
+      "active_from": "2026-01-01",
+      "election": {
+        "scope": "es",
+        "date": "2023-07-23"
+      },
+      "labels": {
+        "with": "2018 – 2026",
+        "without": "2008 – 2016"
+      }
+    },
+    "inputs": {
+      "scopes": {
+        "es": {
+          "run_id": null,
+          "generated_at": "2026-10-24T22:01:35Z"
+        },
+        "es-an": {
+          "run_id": null,
+          "generated_at": "2026-10-24T22:01:35Z"
+        },
+        "es-ar": {
+          "skipped": "no analysis"
+        },
+        "es-as": {
+          "skipped": "no analysis"
+        },
+        "es-ib": {
+          "skipped": "no analysis"
+        },
+        "es-cn": {
+          "skipped": "no analysis"
+        },
+        "es-cb": {
+          "skipped": "no analysis"
+        },
+        "es-cl": {
+          "skipped": "no analysis"
+        },
+        "es-cm": {
+          "skipped": "no analysis"
+        },
+        "es-ct": {
+          "skipped": "no analysis"
+        },
+        "es-vc": {
+          "skipped": "no analysis"
+        },
+        "es-ex": {
+          "skipped": "no analysis"
+        },
+        "es-ga": {
+          "skipped": "no analysis"
+        },
+        "es-md": {
+          "skipped": "no analysis"
+        },
+        "es-mc": {
+          "skipped": "no analysis"
+        },
+        "es-nc": {
+          "skipped": "no analysis"
+        },
+        "es-pv": {
+          "skipped": "no analysis"
+        },
+        "es-ri": {
+          "skipped": "no analysis"
+        }
+      },
+      "election": {
+        "generated_at": "2026-10-24T22:01:35Z"
+      },
+      "active_source": "run+events",
+      "run_id": "20261024-120000"
+    },
+    "sources": [
+      {
+        "label": "Histórico de errores de las encuestas por elección",
+        "url": "/elecciones"
+      },
+      {
+        "label": "Perfil del CIS",
+        "url": "/casas/cis"
+      },
+      {
+        "label": "Método: el ejemplo del CIS desde 2018",
+        "url": "/metodo/promedio#ejemplo-cis"
+      },
+      {
+        "label": "Análisis",
+        "url": "/analisis"
+      },
+      {
+        "label": "José Félix Tezanos, presidente del CIS, abandona su cargo en la Ejecutiva Federal del PSOE. El Independiente, 9-7-2018",
+        "url": "https://www.elindependiente.com/politica/2018/07/09/jose-felix-tezanos-presidente-del-cis-abandona-cargo-la-ejecutiva-federal-del-psoe/"
+      },
+      {
+        "label": "Los datos sorprendentes de la cocina del CIS de Tezanos. El Independiente, 25-9-2018",
+        "url": "https://www.elindependiente.com/politica/2018/09/25/los-datos-sorprendentes-cocina-cis-tezanos/"
+      },
+      {
+        "label": "Perfil de José Félix Tezanos en la UNED",
+        "url": "http://portal.uned.es/portal/page?_pageid=93%2C63197807&_dad=portal&_schema=PORTAL"
+      }
+    ],
+    "commit": "abc1234",
+    "dirty": false,
+    "versions": {
+      "python": "3.11.9"
+    },
+    "seconds": {
+      "compute": 0.1,
+      "total": 0.2
+    }
+  }
+}

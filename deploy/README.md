@@ -1005,10 +1005,18 @@ INE, escrutinios CERA de Interior, autonómicas, consulados y `params.json`; ver
 - Cada estudio termina `published`, `refused` (solo el registro) o `failed`; el resumen dice si está registrado y
   comprobado (`voto-cera: study published (registrado el 2026-10-20, sin comprobar) in 4 s`).
 
+**Sesgo del CIS.** `{"what":["study"],"study":"sesgo-cis"}` calcula «El sesgo del CIS de Tezanos»
+(`mtpy/lib/studies/lean/`) y lo escribe en `studies/sesgo-cis/` (partes `summary`, `elections`, `houses`, `matrix` y
+`election` con sus gemelos CSV, y `meta` la última). **Sólo lee partes ya publicadas** del paquete vivo (`site/v1/`,
+también con `dry_run`): los análisis de los ámbitos, las elecciones y sus resultados; por eso hay que publicarlos
+antes, y en una cadena va tras el análisis: `["analysis","study"]`. No necesita base de datos ni tiene registro
+(`"register":true` termina `refused` y no se escribe nada) ni comprobación (`checked` es siempre falso).
+
 Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
 
 ```
 S3_BUCKET= python job.py publish '{"what":["study"],"study":"voto-cera"}'
+S3_BUCKET= python job.py publish '{"what":["analysis","study"],"study":"sesgo-cis"}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 ```
 
