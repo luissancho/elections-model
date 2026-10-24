@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta v23 · /analisis/sesgo-cis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<style>
+html, body { margin: 0; }
+body { background: #d9dce3; font-family: 'DM Sans', system-ui, sans-serif; }
+#bar { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 8px 16px; background: #1a1c22; color: #fff; font-size: 13px; }
+#bar strong { font-family: Outfit, sans-serif; font-weight: 800; font-size: 15px; }
+#bar .grp { display: flex; gap: 2px; background: rgba(255,255,255,.12); padding: 3px; border-radius: 999px; }
+#bar button { font: 600 12px 'DM Sans', sans-serif; padding: 5px 12px; border-radius: 999px; border: 0; background: transparent; color: #cfd3dc; cursor: pointer; }
+#bar button.on { background: #fff; color: #1a1c22; }
+#bar .note { margin-left: auto; color: #9298ac; font-size: 12px; }
+.q { max-width: 1100px; margin: 18px auto 0; padding: 0 16px; font-size: 13.5px; color: #3a3f4f; }
+.q b { color: #1a1c22; }
+#stage { padding: 12px 0 60px; }
+
+.page {
+  --bg: #f4f5f8; --card: #fff; --soft: #eceef2; --soft2: #e3e6ec;
+  --line: rgba(0,0,0,.08); --line2: rgba(0,0,0,.15);
+  --ink: #1a1c22; --text2: #5a5f72; --text3: #9298ac;
+  --brand: #1d4f86; --brand-soft: #e7eef8; --hover: #eff4ff;
+  --green: #2e9e5b; --green-soft: #ecfdf3; --red: #ce3b3b; --red-soft: #fef2f2; --amber: #e8912b; --amber-soft: #fff7ed;
+  --r: 18px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+  --pad: 32px;
+  position: relative; background: var(--bg); color: var(--ink); max-width: 1180px; margin: 0 auto;
+  font: 15px/1.5 'DM Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+}
+.page * { box-sizing: border-box; }
+.page a { color: inherit; text-decoration: none; }
+.page h1, .page h2, .page h3, .page h4 { font-family: Outfit, sans-serif; margin: 0; line-height: 1.15; }
+.hdr { position: sticky; top: 41px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 var(--pad); background: var(--card); border-bottom: 1px solid var(--line); }
+.wm { font: 800 24px/1 Outfit, sans-serif; letter-spacing: -.02em; }
+.wm i { display: inline-block; width: 16px; height: 16px; border: 3px solid var(--brand); border-radius: 50%; margin-left: 3px; vertical-align: -1px; }
+.hdr nav { display: flex; gap: 4px; }
+.hdr nav a { display: inline-flex; align-items: center; height: 56px; padding: 0 12px; font-size: 13.5px; font-weight: 500; color: var(--text2); }
+.hdr nav a.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--brand); }
+.hdr .help { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--line2); display: grid; place-items: center; font-weight: 700; color: var(--text2); }
+.main { padding: 24px var(--pad) 48px; }
+.stack > * + * { margin-top: 16px; }
+.hero { padding: 6px 0 4px; }
+.hero .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.hero h1 { font: 800 36px/1.12 Outfit, sans-serif; letter-spacing: -.02em; max-width: 30ch; margin: 0 0 12px; }
+.hero h1 em { font-style: normal; color: var(--brand); }
+.hero p { margin: 0; font: 500 18px/1.4 Outfit, sans-serif; color: var(--text2); max-width: 70ch; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.toc a { padding: 5px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--line2); font-size: 12.5px; font-weight: 600; color: var(--text2); }
+.toc a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.toc a.g { border-color: var(--green); color: var(--green); } .toc a.o { border-color: var(--amber); color: #c2410c; } .toc a.r { border-color: var(--red); color: var(--red); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 8px; }
+.card-t { display: flex; align-items: center; gap: 9px; font: 700 16px/1.2 Outfit, sans-serif; }
+.card-t::before { content: ""; width: 4px; height: 18px; border-radius: 3px; background: var(--brand); }
+.lead { margin: 0 0 12px; font-size: 13.5px; color: var(--text2); max-width: 100ch; }
+.how { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--brand); }
+.how::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--brand-soft); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--text2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill.ok { background: var(--green-soft); color: #15803d; }
+.pill.warn { background: var(--amber-soft); color: #c2410c; }
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+.pill.bad { background: var(--red-soft); color: #b91c1c; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); }
+.seg span { padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; }
+.seg span.on { background: var(--ink); color: #fff; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.kpi { padding: 14px 16px; border-right: 1px solid var(--line); }
+.kpi:last-child { border-right: 0; }
+.kpi .l { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.kpi .v { font: 800 26px/1.1 Outfit, sans-serif; margin: 4px 0 2px; letter-spacing: -.01em; }
+.kpi .s { font-size: 12.5px; color: var(--text2); }
+.dlt { font-weight: 700; white-space: nowrap; }
+.dlt.up { color: #2ca02c; } .dlt.down { color: #d62728; } .dlt.flat { color: var(--text2); }
+.tw { overflow-x: auto; }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { padding: 6px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); text-align: right; white-space: nowrap; border-bottom: 1.5px solid var(--line2); }
+.t td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t th:first-child, .t td:first-child { text-align: left; }
+.t tbody tr:hover td { background: var(--hover); }
+.t .b { font-weight: 700; } .t .mut { color: var(--text3); }
+.t .pos { color: var(--green); font-weight: 600; } .t .neg { color: var(--red); font-weight: 600; }
+.t td.g1 { background: #ecfdf3; } .t td.g2 { background: #bbf7d0; } .t td.g3 { background: #4ade80; color: #fff; } .t td.g4 { background: #15803d; color: #fff; }
+.t td.z { background: #f4f5f8; color: var(--text3); }
+.chart { height: 320px; }
+.chart.short { height: 250px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+
+/* Tarjeta-pregunta (el formato de la infografía) */
+.qcard { position: relative; border-left: 8px solid var(--qc); padding-left: 22px; }
+.qcard .qh { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.qcard .qn { width: 36px; height: 36px; border-radius: 999px; background: var(--qc); color: #fff; display: grid; place-items: center; font: 800 18px Outfit, sans-serif; flex: none; }
+.qcard .qt { font: 800 22px/1.15 Outfit, sans-serif; letter-spacing: -.01em; flex: 1; }
+.qcard .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 16px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 18px Outfit, sans-serif; }
+.qcard .verdict i { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.qcard .band { padding: 10px 12px; border-radius: 10px; background: #f3f1ec; border: 1px solid #e2ded5; font-size: 13.5px; margin: 12px 0; }
+.qcard .sum { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.qcard .sum b { font-weight: 800; }
+.q1 { --qc: #2e9e5b; } .q2 { --qc: #e8912b; } .q3 { --qc: #ce3b3b; }
+.ctitle { font: 600 13px/1.3 Outfit, sans-serif; margin: 0 0 2px; }
+.csub { font-size: 11.5px; color: var(--text2); margin: 0 0 4px; }
+
+.claim { border: 1px solid var(--line2); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.claim h4 { font-size: 15px; margin-bottom: 4px; }
+.claim .src { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+.claim dl { margin: 0; font-size: 13px; }
+.claim dt { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); margin-top: 8px; }
+.claim dd { margin: 2px 0 0; }
+.claim .verd { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--card); font-weight: 600; font-size: 13px; border-left: 3px solid var(--red); }
+.claim .verd.ok { border-left-color: var(--green); }
+.claim .verd.amb { border-left-color: var(--amber); }
+.timeline { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.tl { border-top: 3px solid var(--line2); padding-top: 8px; font-size: 12.5px; }
+.tl b { display: block; font-family: Outfit, sans-serif; font-size: 13px; }
+.tl.done { border-color: var(--brand); } .tl.next { border-color: var(--amber); } .tl.wait { border-color: var(--line2); color: var(--text2); }
+.note { padding: 10px 12px; border-radius: 10px; background: var(--amber-soft); font-size: 13px; }
+.note.blue { background: var(--brand-soft); } .note.ok { background: var(--green-soft); }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.three a { display: block; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line2); border-top: 5px solid var(--qc); background: var(--bg); }
+.three .k { font: 800 12px Outfit, sans-serif; letter-spacing: .04em; color: var(--qc); }
+.three .tt { font: 700 15px/1.25 Outfit, sans-serif; margin: 4px 0 6px; }
+.three .vv { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--qc); color: #fff; font: 800 13px Outfit, sans-serif; margin-bottom: 6px; }
+.three p { margin: 0; font-size: 13px; color: var(--text2); }
+.foot { padding: 20px var(--pad) 28px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text2); }
+.src-list { font-size: 13px; } .src-list li { margin-bottom: 4px; }
+[hidden] { display: none !important; }
+
+.tests { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.test { border: 1px solid var(--line2); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.test .k { font: 800 11px Outfit, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.test .v { font: 800 24px/1.1 Outfit, sans-serif; margin: 4px 0; }
+.test .v small { font-size: 13px; font-weight: 600; color: var(--text2); }
+.test p { margin: 4px 0 0; font-size: 12.5px; color: var(--text2); }
+.test.hi { border-color: var(--red); background: var(--red-soft); }
+.more-btn { display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 600; color: var(--brand); cursor: pointer; }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.cmp .box { border-radius: 12px; padding: 12px 14px; background: var(--bg); border: 1px solid var(--line2); }
+.cmp .box .k { font: 800 11px Outfit, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
+.cmp .box .v { font: 800 30px/1.1 Outfit, sans-serif; margin: 2px 0; }
+.cmp .box .v small { font-size: 14px; font-weight: 600; color: var(--text2); }
+.cmp .box.after { border-color: var(--red); background: var(--red-soft); }
+.ask { background: #fff8e6; border: 1px dashed #e8912b; border-radius: 10px; padding: 8px 12px; font-size: 12.5px; color: #7c3a00; margin: 8px 0 0; }
+.ask b { color: #7c3a00; }
+.tech { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 12.5px; color: var(--text2); }
+.tech b { color: var(--ink); }
+.chart.bull { aspect-ratio: 1 / 1; height: auto; width: 100%; max-width: 460px; margin: 0 auto; }
+.chart.league { height: 400px; }
+.hero h1 { max-width: 34ch; }
+.grid2 > * { min-width: 0; }
+.grid2 .csub { min-height: 52px; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <strong>Maqueta v23 · /analisis/sesgo-cis</strong>
+  <span class="note">v15: cambios de los bloques 1 y 2 · v14: matriz + dos gráficos · v13: desviaciones típicas · v12: eje de probabilidad · v11: matriz rojo/azul · v10: matriz de signos · v9: conmutador de periodo · v8: sesgo de bloques (error_blocks) · v7: frente al consenso · v5: diana de 2023 sola · v4: titular y entradilla de Luis · v2: Tezanos en el titular · dianas cuadradas · control de los ocho años anteriores · ranking rehecho · t de Student · diana de 2023</span>
+</div>
+<p class="q">Cambios de la v1: <b>Tezanos en el titular</b> y «38 de 41» al subtítulo; <b>dianas cuadradas</b>; el control de la pregunta 1 es <b>sin Tezanos, 2008–2016</b> (39 elecciones), también frente al consenso; el ranking es un <b>gráfico de puntos</b> (proporción × magnitud) con el grupo de las demás casas marcado; <b>nota técnica</b> con la t de Student; en 2023, <b>diana</b> con el último sondeo de cada casa y sin la fila «Ganador». Las cajas naranjas son las decisiones que quedan.</p>
+
+<div id="stage">
+<div class="page">
+  <header class="hdr">
+    <a class="wm" href="#">Demoscopio<i></i></a>
+    <nav><a>Inicio</a><a>Histórico Errores</a><a>Ranking Encuestadoras</a><a class="on">Análisis</a><a>Método</a></nav>
+    <span class="help">?</span>
+  </header>
+
+  <main class="main stack">
+    <div class="hero">
+      <div class="tags">
+        <span class="pill brand">Análisis</span>
+        <span class="pill">Evidencia histórica · 41 elecciones desde 2018</span>
+        <span class="pill ok">Se actualiza con cada elección analizada</span>
+      </div>
+      <h1>El sesgo del CIS de Tezanos</h1>
+      <p>Desde el nombramiento de José Félix Tezanos en 2018, el CIS ha dado al bloque de izquierdas más voto del que obtuvo en 38 de 41 elecciones generales y autonómicas celebradas. Es imposible que tal cosa pueda ocurrir por azar ni por un fallo general de las encuestas. Y no, en 2023 tampoco «acertó».</p>
+    </div>
+
+    <nav class="toc">
+      <a class="on">Resumen</a><a class="g">1 · ¿Se inclina a la izquierda?</a><a class="r">2 · ¿Puede ser azar?</a><a class="r">3 · ¿Acertó en 2023?</a><a>Datos y método</a>
+    </nav>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Elecciones con la izquierda sobreestimada</div><div class="v">38 de 41</div><div class="s">último sondeo del CIS antes de cada elección analizada desde que lo preside Tezanos · 37 de 40 con la derecha subestimada</div></div>
+      <div class="kpi"><div class="l">Cuánto sobreestima a la izquierda frente a la derecha</div><div class="v">8,0 puntos</div><div class="s">de media en cada elección: 4,6 de más al bloque de izquierdas y 3,4 de menos al de derechas · sin Tezanos (2008–2016), el mismo CIS: −0,1</div></div>
+      <div class="kpi"><div class="l">A la izquierda del consenso de las demás encuestadoras</div><div class="v">39 de 41</div><div class="s">3,6 puntos más a la izquierda que la media de las otras casas en la misma elección · antes, 22 de 39</div></div>
+    </div>
+
+    <section class="card" id="resumen">
+      <div class="card-h"><h2 class="card-t">Tres preguntas, tres respuestas</h2></div>
+      <p class="lead">El debate sobre el CIS se reduce a tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.</p>
+      <div class="three">
+        <a class="q1"><div class="k">PREGUNTA 1</div><div class="tt">¿Se inclina el CIS hacia la izquierda desde que lo preside Tezanos?</div><div class="vv">SÍ</div><p>En 38 de 41 elecciones su último sondeo dio al bloque de izquierdas más voto del que obtuvo, 4,6 puntos de media. Sin Tezanos (2008–2016), el mismo CIS: 25 de 39 y 1,1 puntos.</p></a>
+        <a class="q3"><div class="k">PREGUNTA 2</div><div class="tt">¿Puede ser azar, o un fallo general de las encuestas?</div><div class="vv">NO</div><p>Como una moneda, 38 de 41 sale una vez entre 190 millones. Agrupando por fecha, 1 entre 7.200. Y el CIS quedó a la izquierda de las demás casas en 39 de 41 elecciones: no es que «todos fallaran».</p></a>
+        <a class="q3"><div class="k">PREGUNTA 3</div><div class="tt">¿Fue el CIS «el único que acertó» en 2023?</div><div class="vv">NO</div><p>Sobreestimó a la izquierda 3,1 puntos y subestimó a la derecha 2,8: su sesgo de siempre. Las demás fallaron hacia la derecha y el resultado quedó entre ambos, más cerca del consenso que del CIS.</p></a>
+      </div>
+      <p class="note blue" style="margin-top:12px">Medimos lo que dicen los sondeos frente a lo que dicen las urnas. No medimos intenciones: el dato es la persistencia del error en una dirección, su tamaño, su comparación con las demás encuestadoras y con el propio CIS de antes de 2018. Los datos por encima de bandos y consignas.</p>
+    </section>
+
+    <!-- PREGUNTA 1 -->
+    <section class="card qcard q1" id="p1">
+      <div class="qh"><div class="qn">1</div><h2 class="qt">¿Se inclina el CIS hacia la izquierda desde que lo preside Tezanos?</h2><span class="verdict">SÍ <i></i></span></div>
+      <p class="lead">José Félix Tezanos, miembro de la Ejecutiva Federal del PSOE hasta ese momento, fue nombrado presidente del CIS por el Gobierno en junio de 2018. Con él, en septiembre de 2018 el CIS cambió su estimación de voto: dejó de aplicar su modelo tradicional de ajuste y pasó a publicar una estimación basada en el voto directo más la simpatía por cada partido. Comparamos el último sondeo del CIS antes de cada elección analizada, generales y autonómicas, con el resultado, por bloques: positivo si le dio más voto del que obtuvo. Y hacemos lo mismo con el CIS de 2008 a 2016, antes de su llegada.</p>
+      <div class="grid2">
+        <div><p class="ctitle">Sin Tezanos: 39 elecciones (2008 – 2016)</p><p class="csub">Error del último sondeo del CIS por bloques · azul generales, naranja autonómicas · anillos a 2, 5 y 10 puntos</p><div class="chart bull" id="c-bull-pre"></div></div>
+        <div><p class="ctitle">Con Tezanos: 41 elecciones (2018 – 2026)</p><p class="csub">Los puntos se concentran arriba a la izquierda: más voto a la izquierda y menos a la derecha del que hubo</p><div class="chart bull" id="c-bull-post"></div></div>
+      </div>
+      <div class="cmp">
+        <div class="box "><div class="k">Sin Tezanos (2008 – 2016)</div><div class="v">25 de 39 <small>(64%)</small></div><p style="margin:0;font-size:12.5px;color:#5a5f72">elecciones con la izquierda sobreestimada · sesgo medio +1,1 en la izquierda, +1,3 en la derecha · a la izquierda del consenso de las demás casas en 22 de 39 (56%), +0,8 puntos</p></div>
+        <div class="box after"><div class="k">Con Tezanos (2018 – 2026)</div><div class="v">38 de 41 <small>(93%)</small></div><p style="margin:0;font-size:12.5px;color:#5a5f72">elecciones con la izquierda sobreestimada · sesgo medio +4,6 en la izquierda, −3,4 en la derecha · a la izquierda del consenso de las demás casas en 39 de 41 (95%), +3,6 puntos</p></div>
+      </div>
+      <div class="tw"><table class="t" id="t-cis">
+        <thead><tr><th>Elección</th><th>Fecha</th><th>Días antes</th><th>Izquierda</th><th>Derecha</th></tr></thead>
+        <tbody>
+<tr><td class="b">Andalucía 2026</td><td>17-05-2026</td><td>29</td><td style="background: rgba(44,160,44,0.33)">+3,6</td><td style="background: rgba(214,39,40,0.18)">−1,5</td></tr>
+<tr><td class="b">Castilla y León 2026</td><td>15-03-2026</td><td>30</td><td style="background: rgba(44,160,44,0.54)">+6,7</td><td style="background: rgba(214,39,40,0.41)">−4,8</td></tr>
+<tr><td class="b">Aragón 2026</td><td>08-02-2026</td><td>24</td><td style="background: rgba(44,160,44,0.48)">+5,9</td><td style="background: rgba(214,39,40,0.19)">−1,6</td></tr>
+<tr><td class="b">Extremadura 2025</td><td>21-12-2025</td><td>26</td><td style="background: rgba(44,160,44,0.43)">+5,2</td><td style="background: rgba(214,39,40,0.37)">−4,2</td></tr>
+<tr><td class="b">País Vasco 2024</td><td>21-04-2024</td><td>13</td><td style="background: rgba(214,39,40,0.09)">−0,1</td><td style="background: rgba(214,39,40,0.20)">−1,8</td></tr>
+<tr><td class="b">Galicia 2024</td><td>18-02-2024</td><td>11</td><td style="background: rgba(44,160,44,0.41)">+4,8</td><td style="background: rgba(214,39,40,0.44)">−5,2</td></tr>
+<tr><td class="b">Generales 2023</td><td>23-07-2023</td><td>11</td><td style="background: rgba(44,160,44,0.29)">+3,1</td><td style="background: rgba(214,39,40,0.28)">−2,8</td></tr>
+<tr><td class="b">Aragón 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.42)">+5,0</td><td style="background: rgba(214,39,40,0.30)">−3,2</td></tr>
+<tr class="more" hidden><td class="b">Asturias 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.32)">+3,5</td><td style="background: rgba(214,39,40,0.32)">−3,5</td></tr>
+<tr class="more" hidden><td class="b">Cantabria 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.50)">+6,1</td><td style="background: rgba(214,39,40,0.30)">−3,2</td></tr>
+<tr class="more" hidden><td class="b">Castilla-La Mancha 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.42)">+4,9</td><td style="background: rgba(214,39,40,0.44)">−5,3</td></tr>
+<tr class="more" hidden><td class="b">Canarias 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.63)">+11,7</td><td style="background: rgba(214,39,40,0.12)">−0,6</td></tr>
+<tr class="more" hidden><td class="b">Extremadura 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.42)">+5,0</td><td style="background: rgba(214,39,40,0.20)">−1,8</td></tr>
+<tr class="more" hidden><td class="b">Baleares 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.63)">+7,9</td><td style="background: rgba(214,39,40,0.63)">−9,0</td></tr>
+<tr class="more" hidden><td class="b">Murcia 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.63)">+10,0</td><td style="background: rgba(214,39,40,0.56)">−6,9</td></tr>
+<tr class="more" hidden><td class="b">Madrid 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.36)">+4,0</td><td style="background: rgba(214,39,40,0.36)">−4,0</td></tr>
+<tr class="more" hidden><td class="b">Navarra 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(214,39,40,0.20)">−1,7</td><td style="background: rgba(44,160,44,0.40)">+4,6</td></tr>
+<tr class="more" hidden><td class="b">La Rioja 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.63)">+9,7</td><td style="background: rgba(214,39,40,0.53)">−6,6</td></tr>
+<tr class="more" hidden><td class="b">C. Valenciana 2023</td><td>28-05-2023</td><td>32</td><td style="background: rgba(44,160,44,0.27)">+2,7</td><td style="background: rgba(214,39,40,0.55)">−6,8</td></tr>
+<tr class="more" hidden><td class="b">Andalucía 2022</td><td>19-06-2022</td><td>22</td><td style="background: rgba(44,160,44,0.29)">+3,1</td><td style="background: rgba(214,39,40,0.42)">−4,9</td></tr>
+<tr class="more" hidden><td class="b">Castilla y León 2022</td><td>13-02-2022</td><td>11</td><td style="background: rgba(44,160,44,0.23)">+2,2</td><td style="background: rgba(214,39,40,0.44)">−5,2</td></tr>
+<tr class="more" hidden><td class="b">Madrid 2021</td><td>04-05-2021</td><td>14</td><td style="background: rgba(44,160,44,0.48)">+5,9</td><td style="background: rgba(214,39,40,0.63)">−8,0</td></tr>
+<tr class="more" hidden><td class="b">Cataluña 2021</td><td>14-02-2021</td><td>11</td><td style="background: rgba(44,160,44,0.13)">+0,7</td><td style="background: rgba(44,160,44,0.32)">+3,5</td></tr>
+<tr class="more" hidden><td class="b">Galicia 2020</td><td>12-07-2020</td><td>23</td><td style="background: rgba(44,160,44,0.31)">+3,4</td><td style="background: rgba(214,39,40,0.12)">−0,5</td></tr>
+<tr class="more" hidden><td class="b">País Vasco 2020</td><td>12-07-2020</td><td>23</td><td style="background: rgba(44,160,44,0.63)">+8,6</td><td style="background: rgba(214,39,40,0.20)">−1,8</td></tr>
+<tr class="more" hidden><td class="b">Generales 2019</td><td>10-11-2019</td><td>28</td><td style="background: rgba(44,160,44,0.52)">+6,4</td><td style="background: rgba(214,39,40,0.50)">−6,1</td></tr>
+<tr class="more" hidden><td class="b">Aragón 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.35)">+3,9</td><td style="background: rgba(214,39,40,0.47)">−5,7</td></tr>
+<tr class="more" hidden><td class="b">Asturias 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.48)">+5,9</td><td style="background: rgba(214,39,40,0.23)">−2,2</td></tr>
+<tr class="more" hidden><td class="b">Cantabria 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.44)">+5,2</td><td style="background: rgba(214,39,40,0.25)">−2,4</td></tr>
+<tr class="more" hidden><td class="b">Castilla y León 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.48)">+5,9</td><td style="background: rgba(214,39,40,0.34)">−3,8</td></tr>
+<tr class="more" hidden><td class="b">Castilla-La Mancha 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.09)">+0,2</td><td style="background: rgba(214,39,40,0.20)">−1,7</td></tr>
+<tr class="more" hidden><td class="b">Canarias 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.20)">+1,7</td><td style="background: rgba(44,160,44,0.52)">+6,4</td></tr>
+<tr class="more" hidden><td class="b">Extremadura 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.35)">+3,9</td><td style="background: rgba(214,39,40,0.27)">−2,8</td></tr>
+<tr class="more" hidden><td class="b">Baleares 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.15)">+1,0</td><td style="background: rgba(214,39,40,0.17)">−1,3</td></tr>
+<tr class="more" hidden><td class="b">Murcia 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.36)">+4,0</td><td style="background: rgba(214,39,40,0.25)">−2,5</td></tr>
+<tr class="more" hidden><td class="b">Madrid 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.38)">+4,3</td><td style="background: rgba(214,39,40,0.46)">−5,6</td></tr>
+<tr class="more" hidden><td class="b">Navarra 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(44,160,44,0.63)">+8,0</td><td class="mut">–</td></tr>
+<tr class="more" hidden><td class="b">La Rioja 2019</td><td>26-05-2019</td><td>33</td><td style="background: rgba(214,39,40,0.18)">−1,5</td><td style="background: rgba(214,39,40,0.41)">−4,8</td></tr>
+<tr class="more" hidden><td class="b">C. Valenciana 2019</td><td>28-04-2019</td><td>35</td><td style="background: rgba(44,160,44,0.55)">+6,9</td><td style="background: rgba(214,39,40,0.63)">−9,5</td></tr>
+<tr class="more" hidden><td class="b">Generales 2019</td><td>28-04-2019</td><td>41</td><td style="background: rgba(44,160,44,0.09)">+0,1</td><td style="background: rgba(214,39,40,0.09)">−0,1</td></tr>
+<tr class="more" hidden><td class="b">Andalucía 2018</td><td>02-12-2018</td><td>32</td><td style="background: rgba(44,160,44,0.63)">+12,6</td><td style="background: rgba(214,39,40,0.63)">−9,5</td></tr>
+        </tbody></table></div>
+      <span class="more-btn" onclick="document.querySelectorAll('#t-cis .more').forEach(e => e.hidden = false); this.remove()">Ver las 41 elecciones ›</span>
+      <div class="sum"><b>Sí.</b> La misma institución, con otro presidente y otro método, cambió de comportamiento. Sin Tezanos (2008–2016) el CIS se equivocaba como todos, con una leve inclinación a la izquierda: 25 de 39 elecciones, 1,1 puntos de media, y a la izquierda del consenso en 22 de 39. Con Tezanos, 38 de 41, 4,6 puntos y a la izquierda del consenso en 39 de 41. Las 3 excepciones: País Vasco 2024, Navarra 2023, La Rioja 2019.</div>
+    </section>
+
+    <!-- PREGUNTA 2 -->
+    <section class="card qcard q3" id="p2">
+      <div class="qh"><div class="qn">2</div><h2 class="qt">¿Puede ser azar, o un fallo general de las encuestas?</h2><span class="verdict">NO <i></i></span></div>
+      <p class="lead">Tres comprobaciones, de la más sencilla a la más exigente. La tercera responde a la objeción habitual: «todas las encuestas fallaron».</p>
+      <div class="tests">
+        <div class="test"><div class="k">1 · Si fuera una moneda</div><div class="v">1 entre 190 millones</div><p>Probabilidad de sobreestimar a la izquierda en 38 o más de 41 elecciones si cada una fuera cara o cruz. Pero varias autonómicas comparten fecha y contexto: no son 41 pruebas independientes.</p></div>
+        <div class="test"><div class="k">2 · Una prueba por fecha electoral</div><div class="v">1 entre 7.200</div><p>Agrupando las elecciones del mismo día en una sola prueba quedan 17 fechas; en 16 el CIS sobreestimó a la izquierda de media.</p></div>
+        <div class="test hi"><div class="k">3 · Frente a las demás casas, elección a elección</div><div class="v">39 de 41</div><p>Elecciones en que el CIS quedó más a la izquierda que la media de las otras encuestadoras, 3,6 puntos de media. Si el error fuera general, el CIS estaría unas veces a un lado y otras al otro. Como moneda: 1 entre 2,5 mil millones.</p></div>
+      </div>
+      <p class="ctitle" style="margin-top:4px">Casa por casa y elección por elección: el CIS es la única casa prácticamente monocolor</p>
+      <p class="csub">Casas con 10 o más elecciones desde 2018 y sondeos en 2026, el CIS primero y las demás por proporción de elecciones con la izquierda sobreestimada. Rojo: el último sondeo dio al bloque de izquierdas más voto del que obtuvo; azul: menos; más intenso cuanto mayor el error; en blanco, la casa no sondeó esa elección. El detalle de cada celda, al pasar el ratón</p>
+      <div class="chart" id="c-matrix" style="height:420px"></div>
+      <div class="grid2" style="margin-top:16px">
+        <div><p class="ctitle">El CIS, frente a la media de las demás casas en la misma elección</p><p class="csub">Error en el bloque de izquierdas, cada punto una elección. Horizontal: la media de las otras casas. Vertical: el CIS. Sobre la diagonal, el CIS quedó más a la izquierda que el consenso</p><div class="chart league" id="c-cons"></div></div>
+        <div><p class="ctitle">Ninguna otra encuestadora se acerca</p><p class="csub">Casas con 10 o más elecciones desde 2018 y sondeos en 2026. Horizontal: en qué proporción de sus elecciones sobreestimó a la izquierda. Vertical: su sesgo de bloques medio (error en la izquierda menos error en la derecha), en puntos</p><div class="chart league" id="c-league"></div></div>
+      </div>
+      <div class="sum"><b>No.</b> Ni el azar ni un fallo general de las encuestas explican el patrón. Equivocarse hacia el mismo lado en 38 de 41 elecciones ocurre por azar una vez entre 190 millones; la casa que le sigue, Sigma Dos, con 23 de 30, está en una entre 380. Desde 2018 las encuestas en conjunto han fallado más veces hacia la izquierda (30 de 40 elecciones), y por eso casi todas las filas tienen más rojo que azul; pero al comparar cada casa con las demás en la misma elección esa inclinación común desaparece para todas menos para el CIS: 39 de 41, una entre 2,5 mil millones.</div>
+      <div class="tech"><b>Nota técnica.</b> Una prueba t sobre los 41 errores del CIS en el bloque de izquierdas da una media de +4,6 puntos, desviación típica 3,3 y <b>t = 9,1</b>; sobre las 17 fechas electorales (media de cada fecha), t = 6,7; sobre las 41 diferencias con el consenso, t = 9,1. Cualquiera de las tres equivale a una probabilidad por azar inferior a una entre mil millones. Sin Tezanos (2008–2016), las mismas pruebas dan t = 1,7, 0,5 y 2,0: compatibles con el azar.</div>
+      <div class="ask"><b>Ranking.</b> Horizontal: proporción de elecciones con la izquierda sobreestimada (38 de 41); vertical: sesgo de bloques medio (+8,0). Sólo casas con elecciones sondeadas en 2026 (Aragón, Castilla y León o Andalucía); en la página real el filtro sería «con algún sondeo publicado en 2026», incluido el ciclo de las generales.</div>
+    </section>
+
+    <!-- PREGUNTA 3 -->
+    <section class="card qcard q3" id="p3">
+      <div class="qh"><div class="qn">3</div><h2 class="qt">¿Fue el CIS «el único que acertó» en 2023?</h2><span class="verdict">NO <i></i></span></div>
+      <p class="lead">El 23-J las demás encuestadoras daban al PP una ventaja holgada, con mayorías absolutas de PP y VOX en sus escaños publicados, y el CIS ponía por delante al PSOE. La mayoría no llegó, el resultado se movió hacia donde apuntaba el CIS, y de ahí la leyenda. Miramos los bloques, que es donde está su sesgo: el último sondeo de cada casa (hasta 60 días antes) frente a las urnas.</p>
+      <div class="grid2">
+        <div><p class="ctitle">El último sondeo de cada casa frente al resultado, por bloques</p><p class="csub">Derecha → sobreestimó a PP + VOX · Izquierda ↑ sobreestimó a PSOE + SUMAR · el centro es el resultado · rojo, el CIS; rombo, el consenso de las 20 casas</p><div class="chart bull" id="c-bull-23"></div></div>
+        <div><p class="ctitle">El CIS y el consenso, frente al resultado</p><p class="csub">Último sondeo del CIS (12 de julio) y media de los últimos sondeos de las otras 20 casas · Izquierda: PSOE + SUMAR · Derecha: PP + VOX</p>
+          <div class="tw"><table class="t">
+            <thead><tr><th></th><th>CIS</th><th>Consenso</th><th>Resultado</th><th>Error CIS</th><th>Error consenso</th></tr></thead>
+            <tbody>
+              <tr><td class="b">Izquierda</td><td>47,1</td><td>41,4</td><td class="b">44,0</td><td class="pos">+3,1</td><td class="neg">−2,6</td></tr>
+              <tr><td class="b">Derecha</td><td>42,6</td><td>47,4</td><td class="b">45,4</td><td class="neg">−2,8</td><td class="pos">+2,0</td></tr>
+              <tr><td class="b">Diferencia</td><td>+4,5</td><td>−6,0</td><td class="b">−1,4</td><td class="b">+5,9</td><td class="b">−4,6</td></tr>
+            </tbody></table></div>
+          <p class="ctitle" style="margin-top:14px">Quién estuvo más cerca del resultado en los bloques</p><p class="csub">Distancia al centro de la diana de cada casa, en puntos; el CIS fue la 13.ª de 21</p>
+          <div class="chart" id="c-dist-23" style="height:360px"></div>
+        </div>
+      </div>
+      <div class="sum"><b>No.</b> El CIS sobreestimó a la izquierda 3,1 puntos y subestimó a la derecha 2,8: está a 4,2 puntos del centro de la diana, y el consenso de las otras 20 casas a 3,3. 12 de ellas quedaron más cerca del resultado que el CIS. Lo que ocurrió en 2023 es que las demás fallaron hacia la derecha y el resultado quedó entre los dos, más cerca de ellas. El error del CIS fue el de siempre: en noviembre de 2019, cuando las demás acertaron, ese mismo sesgo le dejó 6,4 puntos por encima en la izquierda.</div>
+      <div class="ask"><b>Escaños.</b> La frase sobre las mayorías absolutas publicadas (GAD3 180, NC Report 181…, resultado 170) va ahora en la entradilla, sin gráfico ni tabla, porque el CIS no publica escaños y la tesis se demuestra con los bloques. ¿Te vale así?</div>
+    </section>
+
+    <section class="card" id="datos">
+      <div class="card-h"><h2 class="card-t">Datos y método</h2></div>
+      <p class="lead">Todo sale de los sondeos y resultados publicados en Demoscopio y se puede descargar.</p>
+      <ul class="src-list">
+        <li><b>Elecciones analizadas:</b> las generales y autonómicas con análisis publicado en las que el CIS publicó un sondeo con trabajo de campo entre 6 y 42 días antes de la votación; se cuenta sólo el último. Los bloques son los de cada ámbito (en las generales de 2023, PSOE + SUMAR frente a PP + VOX).</li>
+        <li><b>Error por bloque:</b> suma de las estimaciones del sondeo para los partidos del bloque menos la suma de sus resultados, en puntos. Las mismas filas que la diana del <a href="#" style="color:var(--brand)">perfil del CIS</a> y que la tarjeta de <a href="#" style="color:var(--brand)">Método → El promedio</a>.</li>
+        <li><b>Consenso:</b> media simple de los últimos sondeos de las demás encuestadoras en la misma elección, con el mismo criterio de fechas.</li>
+        <li><b>Periodos:</b> «con Tezanos», desde el cambio de método de septiembre de 2018 (primera elección, Andalucía, diciembre de 2018); «sin Tezanos», de 2008 a 2016, las elecciones anteriores con sondeo del CIS en un periodo de la misma duración.</li>
+        <li><b>Pruebas:</b> binomial de una moneda equilibrada sobre las 41 elecciones y sobre las 17 fechas electorales; comparación con el consenso elección a elección; prueba t de una muestra sobre los errores, las medias por fecha y las diferencias con el consenso. Son comparaciones con el azar, no probabilidades de intencionalidad.</li>
+      </ul>
+      <p style="margin:10px 0 0"><span class="pill brand">CSV: las 41 elecciones</span> <span class="pill brand">CSV: las 39 anteriores</span> <span class="pill brand">CSV: CIS frente al consenso</span> <span class="pill brand">CSV: ranking de casas</span> <span class="pill brand">CSV: últimos sondeos 23-J</span></p>
+    </section>
+  </main>
+  <footer class="foot">Actualizado: 2026-10-24 · Fuente de sondeos: las encuestadoras y los medios que los publican · Fuente de resultados: Ministerio del Interior y juntas electorales · Los datos por encima de bandos y consignas · @luis_sancho</footer>
+</div>
+</div>
+
+<script>
+const INK = '#1a1c22', MUTED = '#5a5f72', BRAND = '#1d4f86', LINE = 'rgba(0,0,0,.08)', GREEN = '#2e9e5b', AMBER = '#e8912b', RED = '#ce3b3b', GREY = '#c7cdd8', ORANGE = '#f28e2b';
+const base = () => ({ textStyle: { fontFamily: 'DM Sans, system-ui, sans-serif', color: INK }, animation: false, grid: { left: 8, right: 16, top: 30, bottom: 24, containLabel: true } });
+const charts = [];
+function mk(id, opt) { const c = echarts.init(document.getElementById(id)); c.setOption(opt); charts.push(c); }
+const fmt = v => (v > 0 ? '+' : '') + v.toFixed(1).replace('.', ',').replace('-', '−');
+const tick = v => fmt(v).replace(',0', '');
+function ring(r) { const out = []; for (let i = 0; i <= 90; i++) { const a = 2 * Math.PI * i / 90; out.push([r * Math.cos(a), r * Math.sin(a)]); } return out; }
+
+function bullseye(id, lim, radii, series) {
+  const el = document.getElementById(id);
+  const side = Math.min(el.clientWidth, el.clientHeight) - 44;
+  const rings = radii.map(r => ({ type: 'line', data: ring(r), showSymbol: false, silent: true, lineStyle: { color: 'rgba(0,0,0,.18)', width: 1 }, tooltip: { show: false } }));
+  mk(id, { ...base(), grid: { left: 'center', top: 'middle', width: side, height: side },
+    tooltip: { formatter: p => p.data[2] ? `<b>${p.data[2]}</b>${p.data[4] ? ' · ' + p.data[4] : ''}<br>Izquierda ${fmt(p.data[1])} · Derecha ${fmt(p.data[0])}` : '' },
+    xAxis: { type: 'value', min: -lim, max: lim, interval: lim > 10 ? 5 : 2, axisLabel: { color: MUTED, formatter: v => Math.abs(v) === lim ? '' : tick(v) }, splitLine: { show: false }, axisLine: { lineStyle: { color: 'rgba(0,0,0,.25)' } }, axisTick: { show: false } },
+    yAxis: { type: 'value', min: -lim, max: lim, interval: lim > 10 ? 5 : 2, axisLabel: { color: MUTED, formatter: v => Math.abs(v) === lim ? '' : tick(v) }, splitLine: { show: false }, axisLine: { show: true, lineStyle: { color: 'rgba(0,0,0,.25)' } }, axisTick: { show: false } },
+    graphic: [
+      { type: 'text', right: 4, top: '48%', style: { text: 'Derecha →', fill: MUTED, fontSize: 11, fontFamily: 'DM Sans' } },
+      { type: 'text', left: '46%', top: 2, style: { text: '↑ Izquierda', fill: MUTED, fontSize: 11, fontFamily: 'DM Sans' } }],
+    series: [...rings, ...series] });
+}
+function periodBull(id, pts) {
+  bullseye(id, 15, [2, 5, 10], [
+    { type: 'scatter', data: pts.filter(p => !p[3]), symbolSize: 9, itemStyle: { color: ORANGE, opacity: .8 } },
+    { type: 'scatter', data: pts.filter(p => p[3]), symbolSize: 11, itemStyle: { color: BRAND }, label: { show: true, formatter: p => p.data[2].replace('Generales ', ''), position: 'right', fontSize: 10, color: BRAND } }]);
+}
+periodBull('c-bull-pre', [[-2.27, 3.02, "Generales 2016", true], [4.95, -6.26, "Generales 2015", true], [5.68, -4.31, "Aragón 2015", false], [1.79, -3.88, "Asturias 2015", false], [3.98, 2.87, "Cantabria 2015", false], [4.56, -5.23, "Castilla y León 2015", false], [0.77, -0.86, "Castilla-La Mancha 2015", false], [6.97, 1.77, "Canarias 2015", false], [0.11, 0.83, "Extremadura 2015", false], [7.94, 3.18, "Baleares 2015", false], [4.35, -1.68, "Murcia 2015", false], [5.77, -5.53, "Madrid 2015", false], [8.51, 5.47, "Navarra 2015", false], [3.22, -4.01, "La Rioja 2015", false], [6.6, 4.4, "C. Valenciana 2015", false], [-3.55, 3.34, "Andalucía 2015", false], [-3.55, -1.53, "Cataluña 2012", false], [-1.7, 7.59, "Galicia 2012", false], [-0.8, -1.69, "País Vasco 2012", false], [3.48, -3.41, "Andalucía 2012", false], [2.47, -3.17, "Asturias 2012", false], [1.97, 0.42, "Generales 2011", true], [-5.79, 5.62, "Aragón 2011", false], [12.25, 3.7, "Asturias 2011", false], [-5.19, 3.34, "Cantabria 2011", false], [-1.23, 2.55, "Castilla y León 2011", false], [-1.81, 1.6, "Castilla-La Mancha 2011", false], [-4.64, 9.22, "Canarias 2011", false], [-1.33, 0.93, "Extremadura 2011", false], [1.54, 7.79, "Baleares 2011", false], [0.81, 0.89, "Murcia 2011", false], [0.37, 1.62, "Madrid 2011", false], [4.01, 5.04, "Navarra 2011", false], [-3.14, 1.67, "La Rioja 2011", false], [3.68, 1.96, "C. Valenciana 2011", false], [-2.56, 4.32, "Cataluña 2010", false], [-3.58, 2.18, "Galicia 2009", false], [-0.77, -0.66, "País Vasco 2009", false], [-1.24, -1.64, "Generales 2008", true]]);
+periodBull('c-bull-post', [[-1.48, 3.6, "Andalucía 2026", false], [-4.78, 6.68, "Castilla y León 2026", false], [-1.62, 5.88, "Aragón 2026", false], [-4.22, 5.16, "Extremadura 2025", false], [-1.81, -0.13, "País Vasco 2024", false], [-5.19, 4.81, "Galicia 2024", false], [-2.84, 3.09, "Generales 2023", true], [-3.24, 5.0, "Aragón 2023", false], [-3.55, 3.49, "Asturias 2023", false], [-3.18, 6.07, "Cantabria 2023", false], [-5.28, 4.9, "Castilla-La Mancha 2023", false], [-0.57, 11.71, "Canarias 2023", false], [-1.81, 4.98, "Extremadura 2023", false], [-9.04, 7.94, "Baleares 2023", false], [-6.94, 9.97, "Murcia 2023", false], [-4.04, 4.0, "Madrid 2023", false], [4.63, -1.68, "Navarra 2023", false], [-6.57, 9.71, "La Rioja 2023", false], [-6.82, 2.73, "C. Valenciana 2023", false], [-4.88, 3.1, "Andalucía 2022", false], [-5.24, 2.17, "Castilla y León 2022", false], [-7.98, 5.87, "Madrid 2021", false], [3.5, 0.67, "Cataluña 2021", false], [-0.51, 3.37, "Galicia 2020", false], [-1.75, 8.61, "País Vasco 2020", false], [-6.09, 6.44, "Generales 2019", true], [-5.72, 3.93, "Aragón 2019", false], [-2.22, 5.88, "Asturias 2019", false], [-2.44, 5.25, "Cantabria 2019", false], [-3.84, 5.87, "Castilla y León 2019", false], [-1.73, 0.18, "Castilla-La Mancha 2019", false], [6.39, 1.74, "Canarias 2019", false], [-2.8, 3.93, "Extremadura 2019", false], [-1.32, 0.99, "Baleares 2019", false], [-2.51, 4.04, "Murcia 2019", false], [-5.57, 4.3, "Madrid 2019", false], [-4.76, -1.52, "La Rioja 2019", false], [-9.51, 6.89, "C. Valenciana 2019", false], [-0.11, 0.11, "Generales 2019", true], [-9.49, 12.57, "Andalucía 2018", false]]);
+
+const P23 = [[-2.84, 3.09, "CIS", true, "2023-07-12"], [-0.14, 0.49, "Opinometre", false, "2023-07-04"], [2.36, 1.49, "AtlasIntel", false, "2023-07-17"], [-0.54, -1.61, "GESOP", false, "2023-07-17"], [0.96, -1.61, "40dB", false, "2023-07-16"], [0.66, -1.61, "Simple Lógica", false, "2023-07-16"], [1.86, -1.61, "Cluster17", false, "2023-07-14"], [1.36, -1.31, "Sondaxe", false, "2023-07-16"], [1.86, -4.01, "InvyMark", false, "2023-07-14"], [2.46, -4.11, "Celeste Tel", false, "2023-07-12"], [2.06, -3.11, "Top Position", false, "2023-07-06"], [1.16, -2.41, "Sigma Dos", false, "2023-07-17"], [2.46, -2.91, "Ipsos", false, "2023-07-06"], [1.96, -3.01, "IMOP", false, "2023-07-14"], [1.76, -2.51, "SocioMétrica", false, "2023-07-16"], [3.16, -3.91, "GAD3", false, "2023-07-17"], [2.86, -4.41, "NC Report", false, "2023-07-16"], [2.36, -3.81, "DYM", false, "2023-07-13"], [4.66, -4.41, "Hamalgama", false, "2023-07-13"], [3.36, -3.81, "Target Point", false, "2023-07-16"], [3.06, -4.01, "Data10", false, "2023-07-17"]], C23 = [[1.98, -2.61, "Consenso de las 20 casas"]];
+bullseye('c-bull-23', 8, [2, 5], [
+  { type: 'scatter', data: P23.filter(p => !p[3]), symbolSize: 10, itemStyle: { color: BRAND, opacity: .7 }, label: { show: true, formatter: p => ['Hamalgama', 'GESOP', 'AtlasIntel', 'Opinometre'].includes(p.data[2]) ? p.data[2] : '', position: 'right', fontSize: 10.5, color: MUTED }, labelLayout: { hideOverlap: true } },
+  { type: 'scatter', data: C23, symbol: 'diamond', symbolSize: 16, itemStyle: { color: INK }, label: { show: true, formatter: 'Consenso', position: 'right', fontSize: 11, fontWeight: 700, color: INK } },
+  { type: 'scatter', data: P23.filter(p => p[3]), symbolSize: 15, itemStyle: { color: RED }, label: { show: true, formatter: 'CIS', position: 'right', fontSize: 12, fontWeight: 800, color: RED } }]);
+
+const MATRIX = {"post": {"events": ["AND 18", "GEN 19", "VAL 19", "ARA 19", "AST 19", "CAN 19", "CyL 19", "CLM 19", "CNR 19", "EXT 19", "BAL 19", "MUR 19", "MAD 19", "NAV 19", "RIO 19", "GEN 19", "GAL 20", "PV 20", "CAT 21", "MAD 21", "CyL 22", "AND 22", "ARA 23", "AST 23", "CAN 23", "CLM 23", "CNR 23", "EXT 23", "BAL 23", "MUR 23", "MAD 23", "NAV 23", "RIO 23", "VAL 23", "GEN 23", "GAL 24", "PV 24", "CAT 24", "EXT 25", "ARA 26", "CyL 26", "AND 26"], "event_names": ["Andalucía 2018", "Generales 2019", "C. Valenciana 2019", "Aragón 2019", "Asturias 2019", "Cantabria 2019", "Castilla y León 2019", "Castilla-La Mancha 2019", "Canarias 2019", "Extremadura 2019", "Baleares 2019", "Murcia 2019", "Madrid 2019", "Navarra 2019", "La Rioja 2019", "Generales 2019", "Galicia 2020", "País Vasco 2020", "Cataluña 2021", "Madrid 2021", "Castilla y León 2022", "Andalucía 2022", "Aragón 2023", "Asturias 2023", "Cantabria 2023", "Castilla-La Mancha 2023", "Canarias 2023", "Extremadura 2023", "Baleares 2023", "Murcia 2023", "Madrid 2023", "Navarra 2023", "La Rioja 2023", "C. Valenciana 2023", "Generales 2023", "Galicia 2024", "País Vasco 2024", "Cataluña 2024", "Extremadura 2025", "Aragón 2026", "Castilla y León 2026", "Andalucía 2026"], "houses": ["CIS", "Sigma Dos", "Data10", "Celeste Tel", "GAD3", "40dB", "SocioMétrica", "Hamalgama", "GESOP", "IMOP", "NC Report", "Target Point"], "cells": [[0, 0, 12.57], [1, 0, 0.11], [2, 0, 6.89], [3, 0, 3.93], [4, 0, 5.88], [5, 0, 5.25], [6, 0, 5.87], [7, 0, 0.18], [8, 0, 1.74], [9, 0, 3.93], [10, 0, 0.99], [11, 0, 4.04], [12, 0, 4.3], [13, 0, 8.02], [14, 0, -1.52], [15, 0, 6.44], [16, 0, 3.37], [17, 0, 8.61], [18, 0, 0.67], [19, 0, 5.87], [20, 0, 2.17], [21, 0, 3.1], [22, 0, 5.0], [23, 0, 3.49], [24, 0, 6.07], [25, 0, 4.9], [26, 0, 11.71], [27, 0, 4.98], [28, 0, 7.94], [29, 0, 9.97], [30, 0, 4.0], [31, 0, -1.68], [32, 0, 9.71], [33, 0, 2.73], [34, 0, 3.09], [35, 0, 4.81], [36, 0, -0.13], [38, 0, 5.16], [39, 0, 5.88], [40, 0, 6.68], [41, 0, 3.6], [0, 1, 5.17], [1, 1, 0.51], [2, 1, 2.29], [3, 1, 3.43], [5, 1, 4.05], [6, 1, -0.53], [9, 1, -5.47], [10, 1, 1.82], [12, 1, 1.6], [13, 1, 1.52], [15, 1, 2.14], [16, 1, 4.67], [17, 1, 3.11], [18, 1, -0.13], [19, 1, 4.97], [20, 1, 0.77], [21, 1, 2.9], [22, 1, 3.0], [25, 1, -0.3], [30, 1, 0.7], [31, 1, 2.22], [33, 1, -2.37], [34, 1, -2.41], [35, 1, 4.81], [36, 1, -0.73], [37, 1, 1.44], [38, 1, 1.96], [39, 1, 2.08], [40, 1, 2.68], [41, 1, 3.1], [20, 2, 0.57], [21, 2, 1.4], [22, 2, 2.8], [25, 2, -3.0], [26, 2, 3.91], [27, 2, 2.58], [28, 2, 0.47], [30, 2, -0.5], [33, 2, 1.53], [34, 2, -4.01], [35, 2, 3.1], [36, 2, -1.23], [37, 2, 1.34], [38, 2, 0.96], [39, 2, -0.35], [40, 2, 0.68], [41, 2, 1.2], [0, 3, 12.87], [1, 3, -0.59], [2, 3, 2.59], [15, 3, 0.44], [16, 3, 5.47], [17, 3, 4.51], [18, 3, -1.23], [19, 3, 3.67], [20, 3, -0.33], [21, 3, 2.9], [30, 3, -0.7], [34, 3, -4.11], [35, 3, 4.61], [36, 3, -1.53], [37, 3, 0.34], [38, 3, 4.86], [39, 3, 2.18], [40, 3, 1.18], [41, 3, 1.5], [0, 4, 6.07], [1, 4, 0.61], [2, 4, 3.99], [12, 4, -0.3], [14, 4, -0.02], [15, 4, -1.86], [16, 4, 2.47], [17, 4, 1.31], [18, 4, -2.53], [19, 4, 1.27], [20, 4, 1.17], [21, 4, 0.6], [23, 4, 1.09], [24, 4, 1.37], [26, 4, 7.61], [27, 4, 1.18], [29, 4, 4.37], [30, 4, -0.1], [32, 4, 2.51], [33, 4, 2.43], [34, 4, -3.91], [35, 4, 2.81], [36, 4, -1.53], [37, 4, 2.14], [38, 4, 1.06], [39, 4, -0.02], [40, 4, -2.21], [41, 4, 0.4], [1, 5, -0.99], [2, 5, 4.49], [12, 5, 3.1], [15, 5, 0.84], [16, 5, 4.37], [17, 5, 3.91], [20, 5, 1.67], [21, 5, 1.7], [30, 5, 0.0], [33, 5, -1.47], [34, 5, -1.61], [35, 5, 3.21], [36, 5, -1.73], [37, 5, 0.44], [38, 5, 3.46], [39, 5, 1.58], [40, 5, -0.02], [41, 5, 2.0], [0, 6, 7.27], [1, 6, 0.11], [12, 6, 3.1], [15, 6, -1.36], [16, 6, 3.07], [17, 6, 3.01], [18, 6, -2.03], [19, 6, 1.57], [20, 6, 0.37], [21, 6, 0.3], [22, 6, 2.6], [25, 6, -2.9], [27, 6, 2.28], [30, 6, -0.2], [33, 6, -1.17], [34, 6, -2.51], [35, 6, 2.61], [36, 6, -0.43], [37, 6, 0.84], [38, 6, 0.36], [39, 6, -0.02], [40, 6, 0.58], [41, 6, 1.0], [1, 7, -2.79], [8, 7, 1.14], [15, 7, 0.34], [16, 7, 4.67], [17, 7, 3.81], [18, 7, -2.83], [19, 7, 3.37], [20, 7, 0.47], [21, 7, 0.9], [30, 7, -0.5], [34, 7, -4.41], [35, 7, 7.81], [36, 7, -1.93], [37, 7, -0.06], [39, 7, 1.78], [40, 7, 0.98], [41, 7, 2.8], [1, 8, -1.19], [15, 8, -1.06], [16, 8, 2.17], [18, 8, -0.43], [19, 8, 4.27], [20, 8, 2.67], [23, 8, 0.99], [34, 8, -1.61], [35, 8, 2.0], [37, 8, 0.34], [38, 8, 1.36], [39, 8, 2.38], [40, 8, -0.22], [41, 8, 0.3], [1, 9, 0.91], [2, 9, 5.69], [12, 9, 1.8], [15, 9, -0.46], [20, 9, 1.87], [21, 9, 0.2], [22, 9, 4.7], [25, 9, 2.1], [33, 9, -2.17], [34, 9, -3.01], [37, 9, -0.16], [41, 9, -0.3], [0, 10, 11.77], [1, 10, -1.89], [2, 10, 1.89], [3, 10, -2.74], [4, 10, -3.16], [6, 10, -2.94], [7, 10, -5.7], [9, 10, -3.87], [10, 10, -3.07], [11, 10, -2.37], [12, 10, -0.11], [13, 10, -0.53], [14, 10, -6.57], [15, 10, -0.36], [16, 10, 3.87], [17, 10, 4.71], [18, 10, -1.53], [19, 10, 4.87], [20, 10, -0.63], [21, 10, 2.5], [22, 10, 3.6], [23, 10, 6.88], [24, 10, -0.03], [25, 10, -4.64], [26, 10, 5.31], [27, 10, 3.38], [28, 10, 0.07], [29, 10, 4.27], [30, 10, -0.7], [31, 10, 0.02], [32, 10, 2.21], [33, 10, 0.83], [34, 10, -4.41], [35, 10, 4.61], [36, 10, -1.73], [37, 10, 0.44], [38, 10, 5.06], [39, 10, 1.48], [40, 10, 0.98], [41, 10, 1.3], [20, 11, 1.57], [21, 11, 2.8], [22, 11, 0.25], [25, 11, -0.7], [30, 11, -0.1], [33, 11, -0.87], [34, 11, -3.81], [35, 11, 4.01], [36, 11, -0.83], [37, 11, -0.86], [38, 11, 1.06], [39, 11, 0.18], [40, 11, 1.48], [41, 11, -0.1]]}, "pre": {"events": ["GEN 08", "GAL 09", "PV 09", "CAT 10", "ARA 11", "AST 11", "CAN 11", "CyL 11", "CLM 11", "CNR 11", "EXT 11", "BAL 11", "MUR 11", "MAD 11", "NAV 11", "RIO 11", "VAL 11", "GEN 11", "AND 12", "AST 12", "GAL 12", "PV 12", "CAT 12", "AND 15", "ARA 15", "AST 15", "CAN 15", "CyL 15", "CLM 15", "CNR 15", "EXT 15", "BAL 15", "MUR 15", "MAD 15", "NAV 15", "RIO 15", "VAL 15", "CAT 15", "GEN 15", "GEN 16", "GAL 16", "PV 16"], "event_names": ["Generales 2008", "Galicia 2009", "País Vasco 2009", "Cataluña 2010", "Aragón 2011", "Asturias 2011", "Cantabria 2011", "Castilla y León 2011", "Castilla-La Mancha 2011", "Canarias 2011", "Extremadura 2011", "Baleares 2011", "Murcia 2011", "Madrid 2011", "Navarra 2011", "La Rioja 2011", "C. Valenciana 2011", "Generales 2011", "Andalucía 2012", "Asturias 2012", "Galicia 2012", "País Vasco 2012", "Cataluña 2012", "Andalucía 2015", "Aragón 2015", "Asturias 2015", "Cantabria 2015", "Castilla y León 2015", "Castilla-La Mancha 2015", "Canarias 2015", "Extremadura 2015", "Baleares 2015", "Murcia 2015", "Madrid 2015", "Navarra 2015", "La Rioja 2015", "C. Valenciana 2015", "Cataluña 2015", "Generales 2015", "Generales 2016", "Galicia 2016", "País Vasco 2016"], "houses": ["CIS", "Ikerfel", "TNS Demoscopia", "Celeste Tel", "Sigma Dos", "NC Report", "Metroscopia", "DYM", "GAD3"], "cells": [[0, 0, -1.64], [1, 0, 2.18], [2, 0, -0.66], [3, 0, 4.32], [4, 0, 5.62], [5, 0, 3.7], [6, 0, 3.34], [7, 0, 2.55], [8, 0, 1.6], [9, 0, 9.22], [10, 0, 0.93], [11, 0, 7.79], [12, 0, 0.89], [13, 0, 1.62], [14, 0, 5.04], [15, 0, 1.67], [16, 0, 1.96], [17, 0, 0.42], [18, 0, -3.41], [19, 0, -3.17], [20, 0, 7.59], [21, 0, -1.69], [22, 0, -1.53], [23, 0, 3.34], [24, 0, -4.31], [25, 0, -3.88], [26, 0, 2.87], [27, 0, -5.23], [28, 0, -0.86], [29, 0, 1.77], [30, 0, 0.83], [31, 0, 3.18], [32, 0, -1.68], [33, 0, -5.53], [34, 0, 5.47], [35, 0, -4.01], [36, 0, 4.4], [38, 0, -6.26], [39, 0, 3.02], [2, 1, 1.84], [4, 1, 7.12], [5, 1, -0.7], [6, 1, 5.64], [7, 1, 3.65], [8, 1, -0.9], [9, 1, 7.82], [10, 1, 0.83], [11, 1, 10.09], [12, 1, 1.79], [13, 1, 1.82], [14, 1, 5.44], [15, 1, 7.57], [16, 1, 2.16], [21, 1, -0.39], [26, 1, 1.57], [41, 1, 5.58], [0, 2, -1.57], [1, 2, 1.78], [2, 2, -2.96], [3, 2, 3.22], [4, 2, 0.22], [5, 2, 1.4], [6, 2, 1.54], [7, 2, 2.15], [8, 2, 0.5], [9, 2, 5.72], [10, 2, -1.37], [11, 2, 5.86], [12, 2, 2.79], [13, 2, 2.02], [14, 2, 1.14], [15, 2, 1.27], [16, 2, 3.56], [17, 2, 0.62], [38, 2, -5.36], [39, 2, 1.92], [40, 2, 2.03], [0, 3, 0.06], [2, 3, -1.86], [4, 3, 1.82], [5, 3, 2.1], [6, 3, 1.94], [7, 3, 1.95], [8, 3, 2.7], [9, 3, 2.22], [10, 3, 2.23], [11, 3, 10.66], [12, 3, 2.79], [13, 3, 1.82], [14, 3, 1.34], [15, 3, 2.67], [16, 3, 1.36], [17, 3, 2.82], [19, 3, -0.97], [23, 3, 1.24], [27, 3, -5.33], [37, 3, -0.52], [38, 3, -3.16], [39, 3, 3.32], [40, 3, 0.63], [41, 3, 3.58], [0, 4, 0.16], [1, 4, 2.08], [2, 4, -1.96], [3, 4, 3.42], [4, 4, 3.32], [5, 4, 2.3], [6, 4, 3.94], [7, 4, 2.75], [8, 4, 1.2], [9, 4, 6.32], [10, 4, -0.97], [11, 4, 6.96], [12, 4, 0.19], [13, 4, 1.32], [14, 4, 0.24], [15, 4, 5.07], [16, 4, 5.06], [17, 4, -0.18], [18, 4, -6.01], [19, 4, -3.37], [20, 4, 0.79], [21, 4, 1.31], [22, 4, 0.87], [23, 4, -2.06], [28, 4, -2.26], [31, 4, 0.38], [33, 4, -3.43], [36, 4, 2.8], [37, 4, -1.92], [38, 4, -3.96], [39, 4, 1.02], [40, 4, -0.57], [41, 4, 2.78], [1, 5, 1.18], [2, 5, 0.34], [3, 5, 3.42], [4, 5, 7.88], [5, 5, 6.38], [6, 5, 4.44], [7, 5, 4.92], [8, 5, 3.5], [9, 5, 4.92], [10, 5, 3.35], [11, 5, 6.46], [12, 5, 3.92], [13, 5, 2.53], [14, 5, 1.05], [15, 5, 4.17], [16, 5, 1.06], [17, 5, 2.52], [18, 5, -5.51], [19, 5, 0.4], [20, 5, 6.39], [21, 5, 0.01], [22, 5, -0.43], [23, 5, -2.36], [24, 5, -4.41], [25, 5, -10.68], [26, 5, 2.57], [27, 5, -2.23], [28, 5, -1.36], [29, 5, -4.13], [30, 5, -2.07], [31, 5, 1.74], [32, 5, -3.28], [33, 5, -5.93], [34, 5, -2.83], [35, 5, -2.61], [36, 5, 0.2], [37, 5, -0.62], [38, 5, -4.76], [39, 5, 2.82], [40, 5, 0.93], [41, 5, 3.58], [0, 6, 0.06], [1, 6, 2.78], [2, 6, -0.16], [3, 6, 2.02], [8, 6, -1.2], [13, 6, 2.92], [16, 6, 1.86], [17, 6, 4.02], [18, 6, -7.71], [22, 6, -2.13], [23, 6, 2.74], [24, 6, 5.19], [28, 6, -6.66], [30, 6, -3.57], [33, 6, -0.43], [36, 6, 7.5], [37, 6, -1.02], [38, 6, -1.26], [39, 6, 2.72], [40, 6, -0.17], [41, 6, 3.38], [0, 7, -1.54], [1, 7, -2.52], [2, 7, 1.54], [3, 7, 3.32], [17, 7, 3.92], [20, 7, 1.69], [22, 7, -1.23], [37, 7, -4.32], [38, 7, -3.96], [39, 7, 2.12], [8, 8, 0.7], [13, 8, 3.02], [16, 8, 4.36], [17, 8, 1.72], [18, 8, -4.71], [19, 8, -2.47], [23, 8, -2.16], [24, 8, -4.11], [25, 8, -5.28], [26, 8, 0.17], [27, 8, -1.73], [28, 8, -7.76], [30, 8, -7.77], [33, 8, -4.03], [35, 8, -4.21], [36, 8, -0.4], [37, 8, -0.82], [38, 8, -3.56], [39, 8, 2.32], [40, 8, 2.33], [41, 8, 1.98]]}};
+function shade(v) { const a = Math.min(Math.abs(v), 8) / 8; return v > 0 ? `rgba(214,39,40,${(0.15 + 0.75 * a).toFixed(2)})` : `rgba(29,79,134,${(0.15 + 0.75 * a).toFixed(2)})`; }
+(function () {
+  const M = MATRIX.post, el = document.getElementById('c-matrix');
+  el.style.height = (M.houses.length * 26 + 70) + 'px';
+  mk('c-matrix', { ...base(), grid: { left: 8, right: 8, top: 8, bottom: 8, containLabel: true },
+    tooltip: { formatter: p => `<b>${M.houses[p.data[1]]}</b> · ${M.event_names[p.data[0]]}<br>Error en el bloque de izquierdas: ${fmt(p.data[2])}` },
+    xAxis: { type: 'category', data: M.events, position: 'top', axisLabel: { rotate: 90, fontSize: 9.5, color: MUTED, interval: 0, formatter: v => v.startsWith('GEN') ? '{g|' + v + '}' : v, rich: { g: { fontWeight: 'bold', color: INK, fontSize: 9.5 } } }, axisTick: { show: false }, axisLine: { show: false } },
+    yAxis: { type: 'category', data: M.houses, inverse: true, axisLabel: { fontSize: 11.5, color: INK, fontWeight: 500 }, axisTick: { show: false }, axisLine: { show: false } },
+    series: [{ type: 'heatmap', data: M.cells.map(c => ({ value: c, itemStyle: { color: shade(c[2]), borderColor: '#fff', borderWidth: 2 } })), emphasis: { itemStyle: { borderColor: INK, borderWidth: 1.5 } } }] });
+})();
+
+const D23 = [{"name": "Opinometre", "dist": 0.51, "cis": false, "days": 19}, {"name": "GESOP", "dist": 1.7, "cis": false, "days": 6}, {"name": "Simple Lógica", "dist": 1.74, "cis": false, "days": 7}, {"name": "40dB", "dist": 1.87, "cis": false, "days": 7}, {"name": "Sondaxe", "dist": 1.89, "cis": false, "days": 7}, {"name": "Cluster17", "dist": 2.46, "cis": false, "days": 9}, {"name": "Sigma Dos", "dist": 2.67, "cis": false, "days": 6}, {"name": "AtlasIntel", "dist": 2.79, "cis": false, "days": 6}, {"name": "SocioMétrica", "dist": 3.07, "cis": false, "days": 7}, {"name": "Consenso (20 casas)", "dist": 3.28, "cis": false, "consensus": true, "days": null}, {"name": "IMOP", "dist": 3.59, "cis": false, "days": 9}, {"name": "Top Position", "dist": 3.73, "cis": false, "days": 17}, {"name": "Ipsos", "dist": 3.81, "cis": false, "days": 17}, {"name": "CIS", "dist": 4.2, "cis": true, "days": 11}, {"name": "InvyMark", "dist": 4.42, "cis": false, "days": 9}, {"name": "DYM", "dist": 4.48, "cis": false, "days": 10}, {"name": "Celeste Tel", "dist": 4.79, "cis": false, "days": 11}, {"name": "GAD3", "dist": 5.03, "cis": false, "days": 6}, {"name": "Data10", "dist": 5.04, "cis": false, "days": 6}, {"name": "Target Point", "dist": 5.08, "cis": false, "days": 7}, {"name": "NC Report", "dist": 5.26, "cis": false, "days": 7}, {"name": "Hamalgama", "dist": 6.42, "cis": false, "days": 10}];
+mk('c-dist-23', { ...base(), grid: { left: 8, right: 44, top: 4, bottom: 4, containLabel: true },
+  tooltip: { formatter: p => `<b>${D23[p.dataIndex].name}</b><br>${D23[p.dataIndex].dist.toFixed(1).replace('.', ',')} puntos del resultado` },
+  xAxis: { type: 'value', min: 0, max: 8, axisLabel: { show: false }, splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
+  yAxis: { type: 'category', inverse: true, data: D23.map(d => d.name), axisLabel: { fontSize: 10.5, color: INK, fontWeight: 500, formatter: v => v.startsWith('Consenso') ? '{c|' + v + '}' : v, rich: { c: { fontWeight: 'bold', color: INK, fontSize: 10.5 } } }, axisTick: { show: false }, axisLine: { show: false } },
+  series: [{ type: 'bar', barWidth: 9, data: D23.map(d => ({ value: d.dist, itemStyle: { color: d.cis ? RED : d.consensus ? INK : GREY } })),
+    label: { show: true, position: 'right', fontSize: 10.5, color: INK, formatter: p => p.value.toFixed(1).replace('.', ',') } }] });
+
+const CONS = [[8.21, 12.57, "Andalucía 2018", false], [3.39, 6.89, "C. Valenciana 2019", false], [-0.56, 0.11, "Generales 2019", true], [0.87, 3.93, "Aragón 2019", false], [-0.54, 5.88, "Asturias 2019", false], [4.05, 5.25, "Cantabria 2019", false], [-1.73, 5.87, "Castilla y León 2019", false], [-5.7, 0.18, "Castilla-La Mancha 2019", false], [1.49, 1.74, "Canarias 2019", false], [-3.04, 3.93, "Extremadura 2019", false], [0.22, 0.99, "Baleares 2019", false], [-1.2, 4.04, "Murcia 2019", false], [1.16, 4.3, "Madrid 2019", false], [-0.69, 8.02, "Navarra 2019", false], [-3.29, -1.52, "La Rioja 2019", false], [0.18, 6.44, "Generales 2019", true], [4.2, 3.37, "Galicia 2020", false], [3.6, 8.61, "País Vasco 2020", false], [-1.64, 0.67, "Cataluña 2021", false], [3.83, 5.87, "Madrid 2021", false], [0.84, 2.17, "Castilla y León 2022", false], [1.36, 3.1, "Andalucía 2022", false], [2.68, 5.0, "Aragón 2023", false], [2.84, 3.49, "Asturias 2023", false], [0.8, 6.07, "Cantabria 2023", false], [-1.57, 4.9, "Castilla-La Mancha 2023", false], [4.37, 11.71, "Canarias 2023", false], [2.23, 4.98, "Extremadura 2023", false], [2.36, 7.94, "Baleares 2023", false], [4.17, 9.97, "Murcia 2023", false], [-0.08, 4.0, "Madrid 2023", false], [0.08, -1.68, "Navarra 2023", false], [4.58, 9.71, "La Rioja 2023", false], [0.0, 2.73, "C. Valenciana 2023", false], [-2.61, 3.09, "Generales 2023", true], [3.8, 4.81, "Galicia 2024", false], [-0.91, -0.13, "País Vasco 2024", false], [2.39, 5.16, "Extremadura 2025", false], [1.24, 5.88, "Aragón 2026", false], [0.46, 6.68, "Castilla y León 2026", false], [1.05, 3.6, "Andalucía 2026", false]];
+mk('c-cons', { ...base(), grid: { left: 8, right: 16, top: 16, bottom: 30, containLabel: true },
+  tooltip: { formatter: p => p.data[2] ? `<b>${p.data[2]}</b><br>CIS ${fmt(p.data[1])} · demás casas ${fmt(p.data[0])}` : '' },
+  xAxis: { type: 'value', min: -10, max: 15, interval: 5, name: 'Media de las demás casas, error en la izquierda', nameLocation: 'middle', nameGap: 24, nameTextStyle: { color: MUTED, fontSize: 11 }, axisLabel: { color: MUTED, formatter: tick }, splitLine: { lineStyle: { color: LINE } } },
+  yAxis: { type: 'value', min: -5, max: 15, interval: 5, name: 'CIS', nameTextStyle: { color: MUTED, fontSize: 11 }, axisLabel: { color: MUTED, formatter: tick }, splitLine: { lineStyle: { color: LINE } } },
+  series: [{ type: 'line', data: [[-10, -10], [15, 15]], showSymbol: false, silent: true, lineStyle: { color: 'rgba(0,0,0,.35)', type: 'dashed', width: 1.5 }, tooltip: { show: false } },
+    { type: 'scatter', data: CONS.filter(p => !p[3]), symbolSize: 9, itemStyle: { color: ORANGE, opacity: .8 } },
+    { type: 'scatter', data: CONS.filter(p => p[3]), symbolSize: 11, itemStyle: { color: BRAND }, label: { show: true, formatter: p => p.data[2].replace('Generales ', ''), position: 'right', fontSize: 10, color: BRAND } }] });
+
+const LG = {"post": [[64.7, -0.5, "Hamalgama", 11, 17, false], [50.0, 0.6, "Target Point", 7, 14, false], [70.6, 0.68, "Data10", 12, 17, false], [65.2, 0.95, "SocioMétrica", 15, 23, false], [67.9, 1.66, "GAD3", 19, 28, false], [76.7, 1.71, "Sigma Dos", 23, 30, false], [64.3, 2.23, "GESOP", 9, 14, false], [58.3, 2.46, "IMOP", 7, 12, false], [66.7, 2.67, "40dB", 12, 18, false], [68.4, 2.68, "Celeste Tel", 13, 19, false], [52.5, 3.87, "NC Report", 21, 40, false], [92.7, 8.0, "CIS", 38, 41, true]], "pre": [[38.1, -4.8, "GAD3", 8, 21, false], [63.4, -3.73, "NC Report", 26, 41, false], [50.0, -1.31, "DYM", 5, 10, false], [66.7, -1.07, "Sigma Dos", 22, 33, false], [52.4, -0.25, "Metroscopia", 11, 21, false], [64.1, -0.13, "CIS", 25, 39, true], [81.0, 0.53, "TNS Demoscopia", 17, 21, false], [79.2, 0.85, "Celeste Tel", 19, 24, false], [82.4, 3.13, "Ikerfel", 14, 17, false]]}.post;
+const POS = { 'IMOP': 'top', 'GESOP': 'left', 'Celeste Tel': 'top', 'SocioMétrica': 'left', 'Target Point': 'left', 'NC Report': 'left' };
+(function () {
+  const pack = LG.filter(p => !p[5]);
+  const xs = pack.map(p => p[0]), ys = pack.map(p => p[1]);
+  const box = [Math.min(...xs) - 4, Math.min(...ys) - 0.5, Math.max(...xs) + 4, Math.max(...ys) + 0.5];
+  mk('c-league', { ...base(), grid: { left: 8, right: 24, top: 16, bottom: 30, containLabel: true },
+    tooltip: { formatter: p => { const d = p.data.value || p.data; return d[2] ? `<b>${d[2]}</b><br>Sobrestimó a la Izquierda en ${d[3]} de ${d[4]} elecciones (${d[0].toFixed(0)}%) · ${fmt(d[1])} puntos de media` : ''; } },
+    xAxis: { type: 'value', min: 0, max: 100, name: 'Elecciones en las que sobreestimó a la izquierda', nameLocation: 'middle', nameGap: 24, nameTextStyle: { color: MUTED, fontSize: 11 }, axisLabel: { color: MUTED, formatter: '{value} %' }, splitLine: { lineStyle: { color: LINE } } },
+    yAxis: { type: 'value', min: -2, max: 10, interval: 2, name: 'Sesgo de bloques medio, puntos (+ izquierda, − derecha)', nameTextStyle: { color: MUTED, fontSize: 11, align: 'left' }, axisLabel: { color: MUTED, formatter: tick }, splitLine: { lineStyle: { color: LINE } } },
+    series: [
+      { type: 'line', data: [[50, -2], [50, 10]], showSymbol: false, silent: true, lineStyle: { color: 'rgba(0,0,0,.3)', type: 'dashed', width: 1 }, tooltip: { show: false } },
+      { type: 'line', data: [[0, 0], [100, 0]], showSymbol: false, silent: true, lineStyle: { color: 'rgba(0,0,0,.3)', type: 'dashed', width: 1 }, tooltip: { show: false } },
+      { type: 'scatter', data: [[50, 0]], symbol: 'circle', symbolSize: 8, silent: true, itemStyle: { color: '#fff', borderColor: INK, borderWidth: 1.5 }, label: { show: true, formatter: 'Sin sesgo', position: 'bottom', offset: [-34, 4], fontSize: 11, fontWeight: 600, color: INK }, tooltip: { show: false } },
+      { type: 'scatter', data: pack.map(p => ({ value: p, label: { position: POS[p[2]] || 'right' } })), symbolSize: 11, itemStyle: { color: GREY, borderColor: MUTED, borderWidth: 1 },
+        label: { show: true, formatter: p => (p.data.value || p.data)[2], position: 'right', fontSize: 10.5, color: MUTED },
+        markArea: { silent: true, itemStyle: { color: 'rgba(29,79,134,.06)', borderColor: 'rgba(29,79,134,.35)', borderWidth: 1, borderType: 'dashed' },
+          label: { show: false },
+          data: [[{ xAxis: box[0], yAxis: box[1] }, { xAxis: box[2], yAxis: box[3] }]] } },
+      { type: 'scatter', data: LG.filter(p => p[5]), symbolSize: 18, itemStyle: { color: RED }, label: { show: true, formatter: p => `CIS · ${p.data[3]} de ${p.data[4]} · ${fmt(p.data[1])} puntos`, position: 'left', fontSize: 12, fontWeight: 800, color: RED } }] });
+})();
+window.addEventListener('resize', () => charts.forEach(c => c.resize()));
+</script>
+</body>
+</html>
