@@ -4492,21 +4492,67 @@ def test_lean_page_structure_and_wording(api, fresh_app):
         assert re.search(r'<div class="chart[^"]*" id="%s" role="img" aria-label="[^"]+"></div>' % chart, page), chart
     assert 'class="chart square" id="bull-with"' in page and 'class="chart square wide" id="bull-2023"' in page
     assert page.count('class="pill brand" href="/api/v1/studies/sesgo-cis/') == 4
-    assert 'Diferencia</td>' in page and 'Ganador' not in page and 'el CIS es la única casa prácticamente monocolor' in page
+    assert 'Diferencia</td>' in page and 'Ganador' not in page
+    # in the fixture Sigma Dos (6 de 6) beats the CIS (5 de 6): the neutral titles of question 2 (controller ruling)
+    assert '<p class="ctitle">Casa por casa y elección por elección</p>' in page and 'monocolor' not in page
+    assert '<p class="ctitle">Las casas, en proporción y magnitud</p>' in page and 'Ninguna otra encuestadora' not in page
     assert '<button type="button" class="more" id="elections-more"' in page
     assert_public_wording(page, '/analisis/sesgo-cis')
     assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
 
 
+# a ranking where the CIS leads: two houses behind it, one of them with the same share as the next
+LEAN_HOUSES = [{'pollster': 'GAD3', 'n': 30, 'k_left': 12, 'share_left': 0.4, 'mean_lean': -1.0, 'cis': False},
+               {'pollster': 'Sigma Dos', 'n': 30, 'k_left': 23, 'share_left': 23 / 30, 'mean_lean': 2.5, 'cis': False},
+               {'pollster': 'CIS', 'n': 41, 'k_left': 38, 'share_left': 38 / 41, 'mean_lean': 8.0, 'cis': True}]
+
+
 def test_lean_runner_up_is_the_house_that_follows_the_cis(api, fresh_app):
     """La casa que sigue al CIS en el ranking (la de más elecciones con la izquierda sobreestimada) y su moneda, para
-    el resumen de la pregunta 2; sin otras casas, ninguna."""
+    el resumen de la pregunta 2; sólo cuando de verdad le sigue (proporción estrictamente menor que la del CIS)."""
+    assert pages.lean.runner_up(LEAN_HOUSES) == {'name': 'Sigma Dos', 'href': '/casas/sigma-dos', 'k': 23, 'n': 30,
+                                                 'odds': '380'}
+    # without other houses, without the CIS, or with a house level with or above the CIS: none
+    assert pages.lean.runner_up([]) is None and pages.lean.runner_up(LEAN_HOUSES[2:]) is None
+    assert pages.lean.runner_up(LEAN_HOUSES[:2]) is None
+    level = [dict(LEAN_HOUSES[1], share_left=38 / 41)] + LEAN_HOUSES[2:]
+    assert pages.lean.runner_up(level) is None
+    # the fixture: Sigma Dos (6 de 6) is above the CIS (5 de 6), so the page drops the clause
     publish_study(fresh_app.fs, study='sesgo-cis')
-    context = pages.lean_context(pages.parse_state({}))
-    assert context['runner_up'] == {'name': 'Sigma Dos', 'href': '/casas/sigma-dos', 'k': 6, 'n': 6, 'odds': '64'}
-    assert pages.lean.runner_up([]) is None and pages.lean.runner_up([{'pollster': 'CIS', 'n': 6, 'k_left': 5, 'cis': True}]) is None
+    assert pages.lean_context(pages.parse_state({}))['runner_up'] is None
     page = html(call(api, '/analisis/sesgo-cis')[2])
-    assert re.search(r'<a href="/casas/sigma-dos">Sigma Dos</a>, con\s+6 de 6, está en 1 entre 64', page)
+    assert 'la casa que le sigue' not in page
+
+
+def test_lean_cis_leads_is_the_condition_of_the_strong_titles(api, fresh_app):
+    """Los títulos fuertes de la pregunta 2 («el CIS es la única casa prácticamente monocolor», «Ninguna otra
+    encuestadora se acerca») sólo con el CIS estrictamente primero del ranking."""
+    assert pages.lean.cis_leads(LEAN_HOUSES) is True and pages.lean.cis_leads(LEAN_HOUSES[2:]) is True
+    level = [dict(LEAN_HOUSES[1], share_left=38 / 41)] + LEAN_HOUSES[2:]
+    assert pages.lean.cis_leads(level) is False and pages.lean.cis_leads(LEAN_HOUSES[:2]) is False
+    assert pages.lean.cis_leads([]) is False
+    rows = [dict(row, slug=None, active_2026=True, n_lean=row['n'], mean_left=1.0) for row in LEAN_HOUSES]
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'houses': {'rows': rows}})
+    context = pages.lean_context(pages.parse_state({}))
+    assert context['cis_leads'] is True and context['runner_up']['name'] == 'Sigma Dos'
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    assert '<p class="ctitle">Casa por casa y elección por elección: el CIS es la única casa prácticamente monocolor</p>' in page
+    assert '<p class="ctitle">Ninguna otra encuestadora se acerca</p>' in page
+    assert re.search(r'la casa que le sigue en el ranking, <a href="/casas/sigma-dos">Sigma Dos</a>, con\s+23 de 30, '
+                     r'está en 1 entre 380', page)
+
+
+def test_lean_bullseye_reading_needs_the_mean_errors_on_its_side(api, fresh_app):
+    """La lectura de la diana con Tezanos («arriba a la izquierda») sólo con la izquierda sobreestimada y la derecha
+    subestimada de media; si no, el subtítulo neutro."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    assert 'Los puntos se concentran arriba a la izquierda' in html(call(api, '/analisis/sesgo-cis')[2])
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], mean_right=0.5)
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    assert 'se concentran' not in page
+    assert '<p class="csub">Error del último sondeo del CIS por bloques en el periodo con Tezanos</p>' in page
 
 
 def test_lean_summaries_claim_only_what_the_figures_show(api, fresh_app):

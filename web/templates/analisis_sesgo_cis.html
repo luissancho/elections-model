@@ -127,7 +127,12 @@
           </div>
           <div>
             <p class="ctitle">Con Tezanos: {{ w.get('n')|int }} elecciones ({{ pw.get('label') or '–' }})</p>
+            {#- the reading of the cloud only when the mean errors put it there -#}
+            {% if w.get('mean_left') is number and w.get('mean_right') is number and w.mean_left > 0 and w.mean_right < 0 %}
             <p class="csub">Los puntos se concentran arriba a la izquierda: más voto a la izquierda y menos a la derecha del que hubo</p>
+            {% else %}
+            <p class="csub">Error del último sondeo del CIS por bloques en el periodo con Tezanos</p>
+            {% endif %}
             <div class="chart square" id="bull-with" role="img" aria-label="Error del último sondeo del CIS por bloques en {{ w.get('n')|int }} elecciones con Tezanos: la izquierda sobreestimada en {{ count(w.get('k_left'), w.get('n')) }}, {{ w.get('mean_left')|delta(1) }} puntos de media en la izquierda y {{ w.get('mean_right')|delta(1) }} en la derecha"></div>
           </div>
         </div>
@@ -207,7 +212,8 @@
           </div>
           {% endfor %}
         </div>
-        <p class="ctitle">Casa por casa y elección por elección: el CIS es la única casa prácticamente monocolor</p>
+        {#- the strong titles only when the CIS tops the ranking (`lean.cis_leads`) -#}
+        <p class="ctitle">Casa por casa y elección por elección{% if cis_leads %}: el CIS es la única casa prácticamente monocolor{% endif %}</p>
         <p class="csub">
           Casas con {{ params.get('min_elections')|int }} o más elecciones desde 2018{% if active_year %} y sondeos en
           {{ active_year }}{% endif %}, el CIS primero y las demás por proporción de elecciones con la izquierda
@@ -225,7 +231,7 @@
             <div class="chart" id="consensus-chart" role="img" aria-label="El CIS quedó más a la izquierda que la media de las demás casas en {{ count(wc.get('k'), wc.get('n')) }} elecciones, {{ wc.get('mean_diff')|num(1) }} puntos de media"></div>
           </div>
           <div>
-            <p class="ctitle">Ninguna otra encuestadora se acerca</p>
+            <p class="ctitle">{{ 'Ninguna otra encuestadora se acerca' if cis_leads else 'Las casas, en proporción y magnitud' }}</p>
             <p class="csub">Casas con {{ params.get('min_elections')|int }} o más elecciones desde 2018{% if active_year %} y sondeos en {{ active_year }}{% endif %}. Horizontal: en qué proporción de sus elecciones sobreestimó a la izquierda. Vertical: su sesgo de bloques medio (error en la izquierda menos error en la derecha), en puntos</p>
             <div class="chart" id="ranking-chart" role="img" aria-label="{{ houses|length }} casas por proporción de elecciones con la izquierda sobreestimada y sesgo de bloques medio{% if cis_house %}; el CIS, {{ count(cis_house.get('k_left'), cis_house.get('n')) }} y {{ cis_house.get('mean_lean')|num(1) }} puntos{% endif %}"></div>
           </div>

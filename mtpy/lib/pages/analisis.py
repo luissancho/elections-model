@@ -612,7 +612,8 @@ def lean_context(state: dict) -> dict:
         (``meta.periods``), ``verdicts`` (``lean.verdict_rows``), ``kpis``, ``tests``, ``tech`` (``lean.tech_note``),
         ``compare`` (``lean.compare_boxes``), ``elections`` (the rows of the period with Tezanos, newest first),
         ``houses`` (the rows of the ranking with the ``href`` of the profile), ``runner_up`` (``lean.runner_up``: the
-        house that follows the CIS, or ``None``), ``election`` (the part, or ``None``),
+        house that follows the CIS, or ``None``), ``cis_leads`` (``lean.cis_leads``: whether the CIS tops the ranking,
+        the condition of the strong titles of question 2), ``election`` (the part, or ``None``),
         ``sources``, ``csv_links``, ``initial`` (``lean.island`` plus the common ``state``) and ``published_at``
         (``None`` without the entry in the manifest).
 
@@ -637,6 +638,7 @@ def lean_context(state: dict) -> dict:
         elections=lean.election_rows(parts),
         houses=lean.house_rows(parts),
         runner_up=lean.runner_up(_get(parts['houses'], 'rows') or []),
+        cis_leads=lean.cis_leads(_get(parts['houses'], 'rows') or []),
         election=parts['election'] or None,
         sources=meta.get('sources') or [],
         csv_links=_csv_links(lean.LEAN),

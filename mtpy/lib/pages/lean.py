@@ -218,10 +218,46 @@ def house_rows(parts: dict) -> list:
     return [dict(row, href=house_href(row.get('pollster'))) for row in _get(parts.get('houses'), 'rows') or []]
 
 
+def _cis_share(rows: list) -> Optional[float]:
+    """``share_left`` of the CIS row of the ranking, or ``None`` without it."""
+    share = next((row.get('share_left') for row in rows if row.get('cis')), None)
+
+    return share if isinstance(share, (int, float)) and not isinstance(share, bool) else None
+
+
+def _other_shares(rows: list) -> list:
+    """``share_left`` of every house of the ranking but the CIS that has one."""
+    return [row['share_left'] for row in rows if not row.get('cis')
+            and isinstance(row.get('share_left'), (int, float)) and not isinstance(row.get('share_left'), bool)]
+
+
+def cis_leads(rows: list) -> bool:
+    """
+    Whether the CIS has the strictly highest share of elections with the left overestimated in the ranking: the
+    condition of the strong titles of question 2 («el CIS es la única casa prácticamente monocolor», «Ninguna otra
+    encuestadora se acerca»).
+
+    Parameters
+    ----------
+    rows : list of dict
+        The rows of the ``houses`` part.
+
+    Returns
+    -------
+    bool
+        ``True`` when the CIS has a share above every other house's (also when it is the only house with one);
+        ``False`` without the CIS row or its share.
+    """
+    share = _cis_share(rows)
+
+    return share is not None and all(other < share for other in _other_shares(rows))
+
+
 def runner_up(rows: list) -> Optional[dict]:
     """
     The house that follows the CIS in the ranking, for the summary of question 2: the one with the highest share of
-    elections with the left overestimated (then the highest lean), and how likely its count is as a coin.
+    elections with the left overestimated (then the highest lean), and how likely its count is as a coin. It only
+    *follows* the CIS when its share is strictly below the CIS's; otherwise there is none.
 
     Parameters
     ----------
@@ -232,14 +268,19 @@ def runner_up(rows: list) -> Optional[dict]:
     -------
     dict or None
         ``{'name', 'href', 'k', 'n', 'odds'}`` (``odds`` formatted, ``None`` without a chance), or ``None`` without
-        another house with elections.
+        the CIS row, without another house with elections or when that house's share is not below the CIS's.
     """
+    share = _cis_share(rows)
     others = [row for row in rows if not row.get('cis') and row.get('n') and row.get('k_left') is not None]
 
-    if not others:
+    if share is None or not others:
         return None
 
     best = max(others, key=lambda row: (row.get('share_left') or 0, row.get('mean_lean') or 0))
+
+    if not (best.get('share_left') or 0) < share:
+        return None
+
     chance = sign_chance(best['n'], best['k_left'])
 
     return {'name': best.get('pollster'), 'href': house_href(best.get('pollster')), 'k': best['k_left'],
