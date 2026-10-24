@@ -1800,8 +1800,14 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     assert '<fieldset id="model-horizon" class="seg" hidden>' in page and '<input type="radio" name="horizon" value="6" checked>' in page
     assert 'data-horizon="6">' in page and 'data-horizon="30" hidden>' in page
     table = re.search(r'<table id="model-table-6">(.*?)</table>', page, re.S).group(1)
-    assert re.findall(r'<th scope="col">(.*?)</th>', table) == ['Partido', 'Promedio (%)', 'Resultado (%)', 'Error', 'Escaños modelo', 'Escaños reales']
+    assert re.findall(r'<th scope="col">(.*?)</th>', table) == ['Partido', 'Promedio (%)', 'Resultado (%)', 'Error', 'Escaños modelo', 'Escaños reales', 'Rango 95%']
     assert table.index('<td>PP</td>') < table.index('<td>32,4</td>') < table.index('<td><strong>140</strong></td>')
+    # la horquilla del 95 % como en Promedios: banda sobre los 350, marca en los escaños del modelo, línea en la mayoría
+    pp = table[table.index('<td>PP</td>'):table.index('</tr>', table.index('<td>PP</td>'))]
+    assert '<span class="rng"><i style="left: 37.2%; width: 5.4%;' in pp and '<b style="left: calc(40.0% - 1px);' in pp
+    assert '<u style="left: 50.3%"></u></span> <span class="mut">130–149</span>' in pp
+    blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', page, re.S).group(1)
+    assert '<span class="mut">160–182</span>' in blocks and blocks.count('<span class="rng">') == 2
     assert 'class="cell-shade"' in table and '0,6</td>' in table  # el error, 32,41 − 33,05, en su celda sombreada
     assert 'id="model-blocks-6"' in page and 'id="model-shares-6"' not in page and 'Lo que dijo el modelo' in page
     # las dos filas fijas del pie, tras la media simple
@@ -1973,9 +1979,11 @@ def test_published_events_and_horizon_tables(events_site):
     tables = context['horizon_tables']
     assert [table['horizon'] for table in tables] == [6, 30]
     pp = tables[0]['rows'][0]
-    assert pp == {'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 140}
+    assert pp == {'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 140,
+                  'seats_lo': 130.07, 'seats_hi': 149.07}
     assert set(tables[0]['blocks'][0]) == {'block', 'official', 'model', 'error', 'official_seats', 'model_seats',
-                                           'p_majority', 'majority'}
+                                           'p_majority', 'majority', 'seats_lo', 'seats_hi'}
+    assert (tables[0]['blocks'][0]['seats_lo'], tables[0]['blocks'][0]['seats_hi']) == (160, 182)
     # las medidas del modelo, con el margen de la elección (Derecha − Izquierda): PP+VOX frente a PSOE
     assert set(tables[0]) >= {'error_avg', 'error_blocks'} and tables[0]['error_avg'] is not None
     assert pages.event_part('es', '2020-01-01', 'meta') is None
@@ -2044,13 +2052,38 @@ def test_horizon_tables_merge_vote_and_seats_and_prefer_the_horizon_run():
              'blocks': [{'horizon': 6, 'block': 'Derecha', 'official_seats': 169, 'model_seats': 171, 'model_seats_h': 173,
                          'p_majority': 0.4, 'p_majority_h': 0.45, 'majority': False, 'seats_valid': True}]}
     [table] = pages.horizon_tables(model)
-    assert table['rows'] == [{'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 142}]
+    assert table['rows'] == [{'name': 'PP', 'official': 33.05, 'model': 32.41, 'error': round(32.41 - 33.05, 2), 'official_seats': 137, 'model_seats': 142,
+                              'seats_lo': None, 'seats_hi': None}]
     assert table['blocks'] == [{'block': 'Derecha', 'official': None, 'model': None, 'error': None, 'official_seats': 169,
-                                'model_seats': 173, 'p_majority': 0.45, 'majority': False}]  # sin `parties`, sin voto
+                                'model_seats': 173, 'p_majority': 0.45, 'majority': False, 'seats_lo': None, 'seats_hi': None}]  # sin `parties`, sin voto
     model['seats'][0]['model_h'] = None
     del model['blocks'][0]['model_seats_h'], model['blocks'][0]['p_majority_h']
     [table] = pages.horizon_tables(model)
     assert table['rows'][0]['model_seats'] == 140 and table['blocks'][0]['model_seats'] == 171 and table['blocks'][0]['p_majority'] == 0.4
+
+
+def test_horizon_tables_carry_the_95_range_of_the_seats_and_prefer_the_horizon_run():
+    """La horquilla de escaños (`seats_lo`, `seats_hi`) de partidos y bloques es la del 95 % de la ejecución a
+    horizonte (`lo95_h`/`hi95_h`) si la fila la trae; si no, la del nowcast; y nula en una parte publicada sin ella
+    (los bloques de un backtest anterior al 2026-10-24)."""
+    model = {'horizons': [6],
+             'shares': [{'horizon': 6, 'party': 'PP', 'main': True, 'official': 33.05, 'model': 32.41}],
+             'seats': [{'horizon': 6, 'party': 'PP', 'main': True, 'official': 137, 'model': 140, 'lo95': 130.07, 'hi95': 149.07,
+                        'model_h': 142, 'lo95_h': 128.5, 'hi95_h': 155.0, 'seats_valid': True}],
+             'blocks': [{'horizon': 6, 'block': 'Derecha', 'parties': 'PP', 'official_seats': 169, 'model_seats': 171,
+                         'lo95': 160, 'hi95': 182, 'model_seats_h': 173, 'lo95_h': 158, 'hi95_h': 186,
+                         'p_majority': 0.4, 'majority': False, 'seats_valid': True}]}
+    [table] = pages.horizon_tables(model)
+    assert (table['rows'][0]['seats_lo'], table['rows'][0]['seats_hi']) == (128.5, 155.0)
+    assert (table['blocks'][0]['seats_lo'], table['blocks'][0]['seats_hi']) == (158, 186)
+    for row in (model['seats'][0], model['blocks'][0]):
+        del row['lo95_h'], row['hi95_h']
+    [table] = pages.horizon_tables(model)
+    assert (table['rows'][0]['seats_lo'], table['rows'][0]['seats_hi']) == (130.07, 149.07)
+    assert (table['blocks'][0]['seats_lo'], table['blocks'][0]['seats_hi']) == (160, 182)
+    del model['blocks'][0]['lo95'], model['blocks'][0]['hi95']
+    [table] = pages.horizon_tables(model)
+    assert (table['blocks'][0]['seats_lo'], table['blocks'][0]['seats_hi']) == (None, None)
 
 
 def test_horizon_tables_sum_the_vote_of_each_block_and_score_the_model():
@@ -2087,7 +2120,7 @@ def test_eleccion_detail_scores_the_model_like_the_pollsters(events_site):
     assert re.search(r'<p class="muted model-score">Error medio: [0-9,]+ · Sesgo bloques: -?[0-9,]+</p>', model)
     blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', model, re.S).group(1)
     assert re.findall(r'<th scope="col">([^<]*)</th>', blocks) == ['Bloque', 'Promedio (%)', 'Resultado (%)', 'Error',
-                                                                  'Escaños modelo', 'Escaños reales', 'Prob. de mayoría']
+                                                                  'Escaños modelo', 'Escaños reales', 'Rango 95%', 'Prob. de mayoría']
     table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
     row = re.search(r'<tr class="model-row">(.*?)</tr>', table, re.S).group(1)
     assert '<a href="/metodo/promedio">Modelo (promedio)</a>' in row and '<td>6</td>' in row and '<td class="na">—</td>' in row
@@ -2116,6 +2149,27 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     assert 'id="model-table-30"' in page and 'id="model-table-6"' in page and 'id="model-shares-6"' not in page
     # la tabla de bloques sigue (el voto vale) con los escaños en raya, como la de partidos
     assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' in page
+    thirty = page[page.index('<table id="model-table-30">'):page.index('</table>', page.index('<table id="model-blocks-30">'))]
+    assert 'class="rng"' not in thirty and thirty.count('<td class="na">—</td>') == 3 * 3 + 2 * 4  # 3 partidos, 2 bloques
+
+
+def test_eleccion_detail_shows_a_dash_for_a_block_range_the_part_does_not_carry(events_site, monkeypatch):
+    """Una elección publicada con un backtest anterior al 2026-10-24 no trae la horquilla de los bloques: la celda
+    va en raya y la de los partidos sigue."""
+    real = pages.elecciones.event_part
+
+    def part(scope, date, name):
+        data = real(scope, date, name)
+        if name == 'model':
+            data = {**data, 'blocks': [{key: value for key, value in row.items() if key not in ('lo95', 'hi95')}
+                                       for row in data['blocks']]}
+        return data
+
+    monkeypatch.setattr(pages.elecciones, 'event_part', part)
+    page = html(call(events_site, '/elecciones/es/generales/2023-07')[2])
+    blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', page, re.S).group(1)
+    table = re.search(r'<table id="model-table-6">(.*?)</table>', page, re.S).group(1)
+    assert 'class="rng"' not in blocks and blocks.count('<td>–</td>') == 2 and table.count('<span class="rng">') == 3
 
 
 def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):

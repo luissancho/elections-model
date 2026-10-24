@@ -256,7 +256,7 @@ def synthetic_backtest():
     blocks = pd.DataFrame([
         {'event_date': e, 'horizon': h, 'block': block, 'parties': '+'.join(parties), 'official_seats': official,
          'model_seats': model, 'p_majority': p, 'majority': official >= 176, 'brier': brier, 'log_score': log,
-         'seats_valid': ok}
+         'seats_valid': ok, 'lo95': model - 11.0, 'hi95': model + 11.0}
         for (e, h), ok in zip(cases, valid)
         for block, parties, official, model, p, brier, log in (
             ('Derecha', ['PP', 'VOX'], 169, 171.0, 0.38412, 0.38412 ** 2, 0.4813),

@@ -857,14 +857,17 @@ def horizon_tables(model: dict, margin: Optional[Sequence[str]] = None) -> list:
         By horizon ascending: ``{'horizon', 'seats_valid', 'rows', 'blocks', 'error_avg', 'error_blocks'}``.
         ``seats_valid`` is ``False`` when any seats or blocks row of the horizon has it ``False`` (a case whose
         seats could not be projected). ``rows`` has the ``main`` parties of ``shares``: ``name``, ``official``,
-        ``model``, ``error = model - official`` (2 decimals), ``official_seats`` and ``model_seats`` (the seats
-        row of the party, ``None`` without one); ``blocks`` the ``block``, its vote ``official`` and ``model``
-        (the sum of its parties, ``_block_share``) and their ``error``, ``official_seats``, ``model_seats``,
-        ``p_majority`` and ``majority``. The seats and the probability come from the horizon run (``model_h``,
-        ``model_seats_h``, ``p_majority_h``) when the row has them, else from the nowcast. The measures of the
-        pollsters, with their definitions: ``error_avg``, the mean absolute error of the main parties, and
-        ``error_blocks``, the signed error of the margin (first block minus second, model minus result); both
-        rounded to 2 decimals, ``None`` without values.
+        ``model``, ``error = model - official`` (2 decimals), ``official_seats``, ``model_seats`` (the seats
+        row of the party, ``None`` without one) and ``seats_lo``, ``seats_hi``, the bounds of the 95 % interval of
+        the seats (``None`` when the row lacks them); ``blocks`` the ``block``, its vote ``official`` and
+        ``model`` (the sum of its parties, ``_block_share``) and their ``error``, ``official_seats``,
+        ``model_seats``, ``seats_lo``, ``seats_hi`` (``None`` in a part published before the backtest wrote the
+        intervals of the blocks), ``p_majority`` and ``majority``. The seats, their bounds and the probability
+        come from the horizon run (``model_h``, ``lo95_h``, ``hi95_h``, ``model_seats_h``, ``p_majority_h``) when
+        the row has them, else from the nowcast. The measures of the pollsters, with their definitions:
+        ``error_avg``, the mean absolute error of the main parties, and ``error_blocks``, the signed error of the
+        margin (first block minus second, model minus result); both rounded to 2 decimals, ``None`` without
+        values.
     """
     tables = []
 
@@ -876,7 +879,9 @@ def horizon_tables(model: dict, margin: Optional[Sequence[str]] = None) -> list:
              'error': None if row['official'] is None or row['model'] is None
              else round(row['model'] - row['official'], 2),
              'official_seats': seats.get(row['party'], {}).get('official'),
-             'model_seats': _horizon_value(seats.get(row['party'], {}), 'model')}
+             'model_seats': _horizon_value(seats.get(row['party'], {}), 'model'),
+             'seats_lo': _horizon_value(seats.get(row['party'], {}), 'lo95'),
+             'seats_hi': _horizon_value(seats.get(row['party'], {}), 'hi95')}
             for row in model.get('shares') or [] if row['horizon'] == horizon and row.get('main')
         ]
         blocks = []
@@ -890,6 +895,7 @@ def horizon_tables(model: dict, margin: Optional[Sequence[str]] = None) -> list:
             blocks.append({'block': row.get('block'), 'official': official, 'model': predicted,
                            'error': _difference(predicted, official), 'official_seats': row.get('official_seats'),
                            'model_seats': _horizon_value(row, 'model_seats'),
+                           'seats_lo': _horizon_value(row, 'lo95'), 'seats_hi': _horizon_value(row, 'hi95'),
                            'p_majority': _horizon_value(row, 'p_majority'), 'majority': row.get('majority')})
 
         errors = [abs(row['error']) for row in rows if row['error'] is not None]
@@ -1042,7 +1048,9 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         columns of the last-poll table, the left block first), ``bias_colors`` (``bias_colors``: the sides of the
         bar of «Sesgo bloques»), ``split_blocks`` (``split_sides``: the block of each side of the chart that
         splits the error of the last polls, ``None`` without two blocks), ``horizon_tables`` (with the margin of
-        ``blocks``), ``has_model``, ``analysed`` (``featured`` of the meta: the election feeds the ratings and the
+        ``blocks``), ``model_block_colors`` (``{block: colour}`` of the blocks of those tables, for their seat
+        ranges: the colour the page uses for the block), ``has_model``, ``analysed`` (``featured`` of the meta:
+        the election feeds the ratings and the
         backtest; a meta published before it carried the flag counts as analysed),
         ``has_series`` (whether the ``series`` part is published), ``series_horizon`` (the horizon of the
         series, else of the shortest horizon of the model), ``series_blocks`` (the blocks of the curve: those
@@ -1151,6 +1159,10 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     context['bias_colors'] = bias_colors(blocks, colour_meta, catalog)
     context['split_blocks'] = split
     context['horizon_tables'] = horizon_tables(model, blocks) if has_model else []
+    # the colour of the range of each block of «Lo que dijo el modelo»: the one the page uses for the block
+    context['model_block_colors'] = {
+        row['block']: block_colors.get(row['block']) or block_color(row['block'], colour_meta, catalog)
+        for table in context['horizon_tables'] for row in table['blocks']}
     # the model in the table of the last polls, at its shortest horizon: the measures of the pollsters
     context['last_table_rows'] = with_model_row(
         last_rows, context['horizon_tables'][0] if context['horizon_tables'] else None, blocks)

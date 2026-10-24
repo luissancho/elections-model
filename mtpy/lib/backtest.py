@@ -116,6 +116,34 @@ def _quantile_cols(x: np.ndarray, suffix: str = '') -> dict[str, float]:
     return out
 
 
+def _block_quantiles(dist: pd.DataFrame, parties: list, suffix: str = '') -> dict[str, float]:
+    """
+    Bounds of the central intervals of `LEVELS` of the seats of a block, as `lo{level}` / `hi{level}` columns.
+
+    The block is summed simulation by simulation (the quantiles of the sum, not the sum of the quantiles of its
+    parties, which would ignore their correlation).
+
+    Parameters
+    ----------
+    dist : pandas.DataFrame
+        Seats of each party per simulation (`Simulator.dist`).
+    parties : list of str
+        Parties of the block; those not in `dist` are ignored.
+    suffix : str, optional
+        Suffix of the column names (`'_h'` for the horizon run).
+
+    Returns
+    -------
+    dict of str to float
+        The bounds, or an empty dict when none of the parties is simulated.
+    """
+    cols = [p for p in parties if p in dist.columns]
+    if not cols:
+        return {}
+
+    return _quantile_cols(dist[cols].sum(axis=1).to_numpy(dtype=float), suffix)
+
+
 def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: set) -> pd.DataFrame:
     """
     Provincial evaluation of the nowcast run: one row per province and party with the official and simulated
@@ -343,12 +371,14 @@ def run_case(
             'brier': brier(p, y) if np.isfinite(p) else np.nan, 'log_score': log_score(p, y) if np.isfinite(p) else np.nan,
             'seats_valid': len(orphans) == 0
         }
+        row.update(_block_quantiles(now['dist'], parties))
         if fwd is not None:
             ph = float(fwd['probs'].get(block, np.nan))
             row['model_seats_h'] = float(fwd['summary'].loc[[p for p in parties if p in fwd['summary'].index], 'seats'].sum())
             row['p_majority_h'] = ph
             row['brier_h'] = brier(ph, y) if np.isfinite(ph) else np.nan
             row['log_score_h'] = log_score(ph, y) if np.isfinite(ph) else np.nan
+            row.update(_block_quantiles(fwd['dist'], parties, suffix='_h'))
         rows.append(row)
     blocks_df = pd.DataFrame(rows)
 

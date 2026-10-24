@@ -194,7 +194,13 @@
         "majority": false,
         "brier": 0.148,
         "log_score": 0.481,
-        "seats_valid": true
+        "seats_valid": true,
+        "lo50": 167,
+        "hi50": 175,
+        "lo80": 164,
+        "hi80": 178,
+        "lo95": 160,
+        "hi95": 182
       },
       {
         "event_date": "2023-07-23",
@@ -207,7 +213,13 @@
         "majority": false,
         "brier": 0.0,
         "log_score": 0.001,
-        "seats_valid": true
+        "seats_valid": true,
+        "lo50": 115,
+        "hi50": 121,
+        "lo80": 112,
+        "hi80": 124,
+        "lo95": 108,
+        "hi95": 128
       },
       {
         "event_date": "2023-07-23",
@@ -220,7 +232,13 @@
         "majority": false,
         "brier": 0.148,
         "log_score": 0.481,
-        "seats_valid": true
+        "seats_valid": true,
+        "lo50": 167,
+        "hi50": 175,
+        "lo80": 164,
+        "hi80": 178,
+        "lo95": 160,
+        "hi95": 182
       },
       {
         "event_date": "2023-07-23",
@@ -233,7 +251,13 @@
         "majority": false,
         "brier": 0.0,
         "log_score": 0.001,
-        "seats_valid": true
+        "seats_valid": true,
+        "lo50": 115,
+        "hi50": 121,
+        "lo80": 112,
+        "hi80": 124,
+        "lo95": 108,
+        "hi95": 128
       }
     ]
   }

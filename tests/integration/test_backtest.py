@@ -43,7 +43,10 @@ def test_run_case_horizon_run_2023_90_days(app):
     pp = shares.loc[shares['party'] == 'PP'].iloc[0]
     assert pp['lo95_h'] <= pp['lo95'] and pp['hi95_h'] >= pp['hi95']
     assert {'model_h', 'mean_h', 'crps_h', 'lo95_h', 'hi95_h'} <= set(seats.columns)
-    assert {'model_seats_h', 'p_majority_h', 'brier_h', 'log_score_h'} <= set(blocks.columns)
+    assert {'model_seats_h', 'p_majority_h', 'brier_h', 'log_score_h', 'lo95_h', 'hi95_h'} <= set(blocks.columns)
+    # la horquilla de cada bloque (2026-10-24): cuantiles de la suma de sus partidos, en las dos ejecuciones
+    assert {'lo50', 'hi50', 'lo80', 'hi80', 'lo95', 'hi95'} <= set(blocks.columns)
+    assert (blocks['lo95'] <= blocks['hi95']).all() and (blocks['lo95_h'] <= blocks['hi95_h']).all()
 
     m = summarize_case(shares, seats, blocks)
     assert 0 <= m['cov_shares95_h'] <= 1
