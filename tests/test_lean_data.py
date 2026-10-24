@@ -30,7 +30,9 @@ def test_read_error_rows_keeps_only_published_events(catalogue, tmp_path):
     assert (cis23['label'], cis23['short'], cis23['year'], cis23['lean']) == ('Generales 2023', 'GEN 23', 2023, 5.9)
     an18 = next(r for r in rows if r['scope'] == 'es-an' and r['event_date'] == '2018-12-02' and r['pollster'] == 'CIS')
     assert (an18['label'], an18['short'], an18['scope_name']) == ('Andalucía 2018', 'AN 18', 'Andalucía')
-    assert inputs['es']['run_id'] and inputs['es-an']['run_id'] and inputs['es-ct'] == {'skipped': 'no analysis'}
+    for code in ('es', 'es-an'):
+        assert inputs[code]['generated_at'] and inputs[code]['run_id'] is None
+    assert inputs['es-ct'] == {'skipped': 'no analysis'}
     assert rows[0]['scope'] == 'es' and rows[-1]['scope'] == 'es-an'
 
 

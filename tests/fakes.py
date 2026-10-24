@@ -423,7 +423,7 @@ def bundle_fixture(name):
         return json.load(fh)['data']
 
 
-def write_lean_bundle(fs, *, since='2018-09-01'):
+def write_lean_bundle(fs):
     """
     Paquete sintético con las entradas del estudio del sesgo del CIS (sin base de datos).
 
@@ -437,13 +437,11 @@ def write_lean_bundle(fs, *, since='2018-09-01'):
     ----------
     fs : FileSystem
         Raíz del paquete de prueba.
-    since : str, optional
-        Inicio del periodo con Tezanos, devuelto tal cual como `since`.
 
     Returns
     -------
     dict
-        Las cifras que comprueban los tests: `since`, `cis_es_dates`, `industry`, `election` (lo que devuelve
+        Las cifras que comprueban los tests: `cis_es_dates`, `industry`, `election` (lo que devuelve
         `read_election` para `es`/`2023-07-23`), `summary_election` (distancias a 2 decimales) y `houses`.
     """
     from mtpy.lib import bundle
@@ -462,7 +460,7 @@ def write_lean_bundle(fs, *, since='2018-09-01'):
         if scope == 'es':
             rows.append(error_row('2012-11-25', 'CIS', (1.0, -1.0)))
         writer.write_json(bundle.path_analysis(scope, 'poll-errors'), 'poll-errors',
-                          {'blocks': ['Derecha', 'Izquierda'], 'rows': rows}, scope, run_id=LEAN_RUN)
+                          {'blocks': ['Derecha', 'Izquierda'], 'rows': rows}, scope)
         writer.write_json(bundle.path_analysis(scope, 'meta'), 'analysis-meta',
                           bundle_fixture('analysis-meta') | {'scope': scope, 'events': dates}, scope)
         for date in dates:
@@ -491,10 +489,10 @@ def write_lean_bundle(fs, *, since='2018-09-01'):
     publish.update_manifest(writer, {'es': publish.latest_entry(bundle_fixture('headline') | {'run_id': LEAN_RUN})})
 
     return {
-        'since': since,
         'cis_es_dates': ['2008-03-09', '2011-11-20', '2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10',
                          '2023-07-23'],
-        'industry': {'n_events': 2, 'left': 0, 'right': 2, 'mean': -1.43},
+        'industry': {'n_events': 2, 'left': 0, 'right': 2, 'mean': -1.42},
+        # el `mean` es el round(-1.425, 2) de Python: es 2023 -1.85 y es-an 2026 -1.00
         'election': {'meta': meta, 'polls': polls, 'results': results},
         'summary_election': {'cis_dist': 4.18, 'consensus_dist': 2.67, 'closer': 2, 'rank': 3, 'n': 5},
         'houses': ['GAD3', 'Sigma Dos', 'CIS'],
