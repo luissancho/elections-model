@@ -41,10 +41,12 @@ class Publish(ScopeReporter, Job):
     ``site-dry/v1/backtest/``. Each scope ends ``published``, ``skipped`` (no results for the scope)
     or ``failed``.
 
-    ``study`` computes a study (today ``voto-cera``, the CERA vote study) and overwrites ``studies/{study}/``
-    (``publish.publish_study``), updating its entry of the manifest. It needs ``study``, has no LOREG guard (it
-    publishes no polls) and registers the prediction of the study only with ``register`` (and a clean tree; ``force``
-    replaces an existing registration). With ``dry_run`` it writes under ``site-dry/v1/``. The study ends
+    ``study`` computes a study (``voto-cera``, the CERA vote study, or ``sesgo-cis``, the lean of the CIS computed
+    from the published analyses and events) and overwrites ``studies/{study}/`` (``publish.publish_study``), updating
+    its entry of the manifest. It needs ``study``, has no LOREG guard (it publishes no polls) and registers the
+    prediction of the study only with ``register`` (and a clean tree; ``force`` replaces an existing registration;
+    ``sesgo-cis`` has nothing to register and refuses it). ``sesgo-cis`` reads the live bundle, so it is republished
+    after ``analysis`` and ``event``. With ``dry_run`` it writes under ``site-dry/v1/``. The study ends
     ``published``, ``refused`` (``publish.PublishRefused``: the registration was refused) or ``failed``.
 
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
@@ -78,6 +80,7 @@ class Publish(ScopeReporter, Job):
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
         python job.py publish '{"what":["study"],"study":"voto-cera"}'
         python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
+        python job.py publish '{"what":["study"],"study":"sesgo-cis"}'
         python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"..."}}'
         python job.py publish '{"what":["point"],"scopes":["es"],"run":"20261007-141503"}'
         python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'

@@ -77,7 +77,9 @@ function paint() {
       groupOf: (row) => (row.scope === NATIONAL_SCOPE ? KIND_GENERAL : KIND_REGIONAL),
       colors: {[KIND_GENERAL]: THEME.accentColor, [KIND_REGIONAL]: REGIONAL_COLOR},
       legend: true,
-      labelOf: (row) => `${row.event}-${row.scope}`,
+      // only the general elections, by their year (as /analisis/sesgo-cis): 41 codes like «2019-26M-es-ar» were
+      // clutter once the labels showed again (03f4e6d); the tooltip names every point
+      labelOf: (row) => (row.scope === NATIONAL_SCOPE ? row.event_date.slice(0, 4) : ''),
       onTop: (group) => group === KIND_GENERAL,
     }), 'the house effects example');
   }

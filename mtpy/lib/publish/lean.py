@@ -17,6 +17,9 @@ URL_INDEPENDIENTE_2018_07 = ('https://www.elindependiente.com/politica/2018/07/0
 URL_INDEPENDIENTE_2018_09 = ('https://www.elindependiente.com/politica/2018/09/25/'
                              'los-datos-sorprendentes-cocina-cis-tezanos/')
 
+# Significant figures of the p values of the summary, out of the rounding to 2 decimals of the other figures
+P_FIGURES = 3
+
 URL_UNED = ('http://portal.uned.es/portal/page?_pageid=93%2C63197807'
             '&_dad=portal&_schema=PORTAL')
 
@@ -53,10 +56,17 @@ def compute_for_publish(data: FileSystem, writer: bundle.BundleWriter):
     return compute_lean(bundle.BundleReader(writer.fs, prefix=bundle.PREFIX), data)
 
 
+def _significant(p, figures: int = P_FIGURES):
+    """A probability with ``figures`` significant figures (``None`` for a missing one): ``5e-06`` stays ``5e-06``."""
+    return None if p is None else float(f'{p:.{figures}g}')
+
+
 def export_lean_summary(study) -> tuple:
     """Export the headline figures of both periods and the 2023 comparison.
 
-    The internal ``rows`` of each period are left out (they are the ``elections`` part).
+    The internal ``rows`` of each period are left out (they are the ``elections`` part). Every figure is rounded to 2
+    decimals but the ``p`` of the tests (``t.*`` and ``chance.*``), which keep three significant figures: rounded to 2
+    decimals, a p of ``5e-06`` would be published as ``0.0`` and the page would state a false probability.
 
     Returns
     -------
@@ -64,7 +74,15 @@ def export_lean_summary(study) -> tuple:
         ``(data, {})``: ``data`` for ``sesgo-cis-summary`` with ``with``, ``without`` and ``election``.
     """
     periods = {key: {k: v for k, v in study.summary[key].items() if k != 'rows'} for key in ('with', 'without')}
-    return _rounded({**periods, 'election': study.summary['election']}), {}
+    data = _rounded({**periods, 'election': study.summary['election']})
+
+    for key in ('with', 'without'):
+        for group in ('t', 'chance'):
+            for name, test in (periods[key].get(group) or {}).items():
+                if test and 'p' in test:
+                    data[key][group][name]['p'] = _significant(_rounded(test['p'], None))
+
+    return data, {}
 
 
 def export_lean_elections(study) -> tuple:

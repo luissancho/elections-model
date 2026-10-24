@@ -7,9 +7,9 @@ what the template renders, with ``None`` or an empty structure for what the part
 """
 from typing import Optional
 
-from ..studies.lean.stats import sign_chance
+from ..studies.lean.stats import floor_odds, sign_chance
 from .cera import _get
-from .filters import delta_text, fmt_int, fmt_num
+from .filters import delta_text, fmt_int, fmt_num, fmt_prob
 from .slugs import PROFILE_PATH, slugify
 
 LEAN = 'sesgo-cis'
@@ -26,6 +26,15 @@ TEST_KEYS = ('coin', 'dates', 'consensus')
 TEST_LABELS = {'coin': '1 · Si fuera una moneda',
                'dates': '2 · Una prueba por fecha electoral',
                'consensus': '3 · Frente a las demás casas, elección a elección'}
+# How many tests of chance the technical note sums up, in words
+TEST_COUNTS = {2: 'dos', 3: 'tres'}
+# The p values are published with three significant figures: the largest true p they may stand for is, at most, this
+# factor times the published one (half a unit of the third figure), so "less than one in N" stays true
+P_MARGIN = 1.005
+# Below this p the technical note says "less than one in a thousand million" and stops counting
+P_BILLION = 1e-9
+# The threshold of the tests: at this p or above, the results are compatible with chance
+P_CHANCE = 0.05
 
 
 def verdict_rows() -> list:
@@ -142,6 +151,48 @@ def tests(summary: Optional[dict]) -> list:
     return boxes
 
 
+def _p_values(summary: Optional[dict], period: str) -> list:
+    """The p values of the Student's t tests of a period that the part has (the missing tests left out)."""
+    values = [_get(summary, period, 't', key, 'p') for key in ('all', 'dates', 'consensus')]
+
+    return [p for p in values if isinstance(p, (int, float)) and not isinstance(p, bool)]
+
+
+def chance_text(values: list) -> Optional[str]:
+    """
+    How likely the tests of chance are, in words: the largest of the p values present, with its figure.
+
+    Parameters
+    ----------
+    values : list of float
+        The p values of the tests (three significant figures, as published).
+
+    Returns
+    -------
+    str or None
+        «Cualquiera de las tres equivale a una probabilidad por azar inferior a una entre 82.000.» (the odds of the
+        largest p, floored to two figures; «mil millones» only below ``P_BILLION``), «No todas bastan para descartar el
+        azar…» when the largest p reaches ``P_CHANCE``; ``None`` without p values.
+    """
+    if not values:
+        return None
+
+    p, n = max(values), len(values)
+    lead = 'Equivale' if n == 1 else 'Cualquiera de las {} equivale'.format(TEST_COUNTS.get(n, fmt_int(n)))
+
+    if p < P_BILLION:
+        return lead + ' a una probabilidad por azar inferior a una entre mil millones.'
+
+    if p < P_CHANCE:
+        return lead + ' a una probabilidad por azar inferior a una entre {}.'.format(fmt_int(floor_odds(p * P_MARGIN)))
+
+    if n == 1:
+        return 'No basta para descartar el azar: su probabilidad es del {}.'.format(fmt_prob(p))
+
+    return 'No todas bastan para descartar el azar: la mayor de las {} probabilidades es del {}.'.format(
+        TEST_COUNTS.get(n, fmt_int(n)), fmt_prob(p))
+
+
 def tech_note(summary: Optional[dict]) -> dict:
     """
     The Student's t of the three tests in both periods, for the technical note.
@@ -154,13 +205,18 @@ def tech_note(summary: Optional[dict]) -> dict:
     Returns
     -------
     dict
-        ``{'with': {'all', 'dates', 'consensus', 'mean', 'sd'}, 'without': {'all', 'dates', 'consensus'}}`` with every t
-        formatted to one decimal (a dash when missing); ``mean`` and ``sd`` are those of ``with.all``.
+        ``{'with': {'all', 'dates', 'consensus', 'mean', 'sd', 'chance'}, 'without': {'all', 'dates', 'consensus',
+        'random'}}`` with every t formatted to one decimal (a dash when missing); ``mean`` and ``sd`` are those of
+        ``with.all``; ``chance`` is the ``chance_text`` of the p values with Tezanos; ``random`` whether every p
+        without him reaches ``P_CHANCE`` (``False`` without p values).
     """
     note = {period: {key: _num(_get(summary, period, 't', key, 't')) for key in ('all', 'dates', 'consensus')}
             for period in PERIODS}
     note['with'].update(mean=_num(_get(summary, 'with', 't', 'all', 'mean')),
-                        sd=_num(_get(summary, 'with', 't', 'all', 'sd')))
+                        sd=_num(_get(summary, 'with', 't', 'all', 'sd')),
+                        chance=chance_text(_p_values(summary, 'with')))
+    without = _p_values(summary, 'without')
+    note['without']['random'] = bool(without) and min(without) >= P_CHANCE
 
     return note
 

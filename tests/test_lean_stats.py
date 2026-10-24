@@ -40,6 +40,14 @@ def test_t_test_known_values():
     assert 0.02 < out['p'] < 0.04 and stats.t_test([1.0]) is None and stats.t_test([2.0, 2.0]) is None
 
 
+def test_t_test_keeps_a_tiny_p_with_three_significant_figures():
+    """Un p muy pequeño no se redondea a cero (revisión final: con 6 decimales, el t = 9,1 de los 41 errores del CIS
+    daba p = 0,0): tres cifras significativas."""
+    out = stats.t_test([4.0 + (i % 7) - 3 for i in range(41)])
+    assert out['t'] > 9 and 0 < out['p'] < 1e-9
+    assert out['p'] == float('{:.3g}'.format(out['p']))
+
+
 def test_summarize_period_counts_the_synthetic_cis(tmp_path):
     rows, expected = lean_rows(tmp_path)
     with_rows = [r for r in rows if r['event_date'] >= '2018-09-01']

@@ -1,5 +1,6 @@
 """Tests de `mtpy/lib/publish/lean.py`: los exportadores del sesgo del CIS y su publicación genérica por estudio."""
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -54,6 +55,24 @@ def test_export_lean_frames_follow_the_study(study):
     assert len(frames['election-houses']) == len(data['houses'])
     summary, _ = publish.STUDY_EXPORTERS['sesgo-cis']['summary'](study)
     assert set(summary) == {'with', 'without', 'election'}
+
+
+def test_export_lean_summary_keeps_three_significant_figures_in_p(study):
+    """Los valores p van con tres cifras significativas, fuera del redondeo a 2 decimales del resto (revisión
+    final: un p de 5e-06 se publicaba como 0.0 y la nota técnica afirmaba una probabilidad falsa)."""
+    summary = {key: dict(study.summary[key]) for key in ('with', 'without')}
+    summary['with']['t'] = {'all': {'n': 6, 'mean': 4.1349, 't': 9.87654, 'p': 4.98765e-06},
+                            'dates': {'n': 6, 'mean': 4.1, 't': 7.0, 'p': 0.0538123},
+                            'consensus': None}
+    summary['with']['chance'] = dict(summary['with']['chance'],
+                                     coin={'n': 41, 'k': 38, 'p': 1.23456e-08, 'odds': 81000})
+    data, _ = publish.export_lean_summary(SimpleNamespace(summary={**summary, 'election': study.summary['election']}))
+    assert data['with']['t']['all'] == {'n': 6, 'mean': 4.13, 't': 9.88, 'p': 4.99e-06}
+    assert data['with']['t']['dates']['p'] == 0.0538 and data['with']['t']['consensus'] is None
+    assert data['with']['chance']['coin']['p'] == 1.23e-08
+    assert data['with']['chance']['dates']['p'] == float('{:.3g}'.format(study.summary['with']['chance']['dates']['p']))
+    assert data['with']['mean_left'] == round(study.summary['with']['mean_left'], 2)
+    valid('sesgo-cis-summary', data)
 
 
 def test_publish_lean_writes_meta_last_and_updates_the_manifest(study, fresh_app, tmp_path):

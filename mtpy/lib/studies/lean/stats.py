@@ -3,6 +3,26 @@ import math
 from typing import Optional
 
 
+def floor_odds(p: float) -> int:
+    """
+    ``1 / p`` floored to two significant figures, so that "less than one in ``floor_odds(p)``" is true.
+
+    Parameters
+    ----------
+    p : float
+        A probability in (0, 1].
+
+    Returns
+    -------
+    int
+        The odds: ``7200`` for a p of ``1 / 7234``.
+    """
+    odds = 1 / p
+    scale = 10 ** max(0, int(math.log10(odds)) - 1)
+
+    return int(odds // scale * scale)
+
+
 def sign_chance(n: int, k: int) -> Optional[dict]:
     """
     How likely a pollster without lean errs to the same side in ``k`` or more of ``n`` elections: the upper tail of a
@@ -29,11 +49,8 @@ def sign_chance(n: int, k: int) -> Optional[dict]:
     ways = sum(math.comb(n, j) for j in range(k, n + 1))
     total = 2 ** n
     p = ways / total
-    odds = 1 / p
-    scale = 10 ** max(0, int(math.log10(odds)) - 1)
 
-    return {'n': n, 'k': k, 'ways': ways, 'total': total, 'p': p, 'odds_exact': round(odds),
-            'odds': int(odds // scale * scale)}
+    return {'n': n, 'k': k, 'ways': ways, 'total': total, 'p': p, 'odds_exact': round(1 / p), 'odds': floor_odds(p)}
 
 
 def t_test(values: list) -> Optional[dict]:
@@ -48,8 +65,9 @@ def t_test(values: list) -> Optional[dict]:
     Returns
     -------
     dict or None
-        ``n``, ``mean``, ``sd`` (sample, ddof 1) and ``t`` rounded to 2 decimals and ``p`` rounded to 6. ``None`` with
-        fewer than two values or without variance.
+        ``n``, ``mean``, ``sd`` (sample, ddof 1) and ``t`` rounded to 2 decimals and ``p`` with three significant
+        figures (rounded to decimals, a tiny p would become zero). ``None`` with fewer than two values or without
+        variance.
     """
     from scipy import stats
 
@@ -67,7 +85,7 @@ def t_test(values: list) -> Optional[dict]:
     t = mean / (sd / math.sqrt(n))
     p = 2 * stats.t.sf(abs(t), n - 1)
 
-    return {'n': n, 'mean': round(mean, 2), 'sd': round(sd, 2), 't': round(t, 2), 'p': round(float(p), 6)}
+    return {'n': n, 'mean': round(mean, 2), 'sd': round(sd, 2), 't': round(t, 2), 'p': float(f'{float(p):.3g}')}
 
 
 def _mean(values: list) -> Optional[float]:

@@ -187,7 +187,8 @@ de `poll-errors` en una elección de 2026. Sin manifiesto o sin run nacional, s�
 
 Envoltorio como todo estudio (`scope`, `run_id` y `mode` nulos; `schema` `sesgo-cis-{parte}@1`). Nombres de campo en
 inglés (regla del repo); los textos públicos, en la página. Redondeos: errores y medias a 2 decimales, probabilidades
-a 3 (`PROB_DECIMALS`) salvo las que se publican como «una entre N», que van enteras.
+con tres cifras significativas (un p de 5e-06 se publica como 5e-06, no como 0) salvo las que se publican como «una
+entre N», que van enteras.
 
 | Parte | Contenido (claves obligatorias en el esquema; el constructor fija el resto) |
 |---|---|
@@ -423,6 +424,10 @@ Suite completa: 1337 passed, 75 skipped, 1 warning previo (`dataviz.py`, `set_ti
 - Las etiquetas de la diana ya no heredan la opacidad cero del gemelo (defecto previo del módulo, corregido).
 - El «fallo general» se define sin el CIS (tres o más casas) y la cifra de la maqueta «30 de 40» cambia.
 - La comprobación en móvil (390 px) no se pudo emular en headless Chrome.
+- Revisión final: los valores p (`t.*.p`, `chance.*.p`) se publican con tres cifras significativas, fuera del redondeo a 2 decimales (y `t_test` ya no los redondea a 6 decimales): antes el p de las fechas (5e-06) salía 0,0 y los de los 41 errores y del consenso (2,6e-11) salían 0 desde el cálculo. La nota técnica dice la probabilidad de la mayor de las p presentes con su cifra («inferior a una entre 190.000» con los datos reales; «mil millones» sólo por debajo de 1e-9) y «compatibles con el azar» sólo con la menor p sin Tezanos en 0,05 o más (`lean.chance_text`, `tech_note`).
+- Revisión final: la diana acepta `rings` (por defecto `[2, 5, 10]`; el mayor es el alcance mínimo de los ejes) y la de 2023 dibuja sólo los anillos de 2 y 5 (D7): extremo ±6 en vez de ±12.
+- Revisión final: dos elecciones de un ámbito en el mismo año llevan el mes («Generales abr. 2019», «GEN 19A»; «Generales nov. 2019», «GEN 19N»), en la tabla, la matriz, la dispersión y el resumen.
+- Revisión final: con las etiquetas visibles otra vez (03f4e6d), la diana del ejemplo del CIS en `/metodo/promedio` mostraba 41 códigos como «2019-26M-es-ar» encima de los puntos; ahora etiqueta sólo las generales por su año, como esta página. La diana del detalle de una elección (`/elecciones/es/generales/2023-07`) se lee bien con los nombres de las casas y queda igual.
 
 ### Lista para Luis
 
@@ -430,3 +435,5 @@ Suite completa: 1337 passed, 75 skipped, 1 warning previo (`dataviz.py`, `set_ti
 2. Pasear `/analisis`, `/analisis/sesgo-cis` (de escritorio y en el móvil: la matriz con desplazamiento horizontal, el botón «Ver las 41 elecciones»), `/` (la banda) y `/metodo/promedio` (el enlace).
 3. Integrar la rama en `dev` (nota: `tests/fakes.py` tiene cambios sin confirmar en el checkout principal; la rama añade `write_lean_bundle` al final del fichero) y desplegar con la siguiente integración.
 4. Tras cada `publish analysis`, encadenar `study` para refrescar las cifras (`{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}`).
+5. Republicar el estudio también tras cada `publish event`: las filas se filtran por las carpetas de evento publicadas, así que la elección del 29-N sólo contará cuando su evento esté publicado (`{"what":["study"],"study":"sesgo-cis"}` después del `event`).
+6. Comprobar a la vista las dianas de los perfiles `/casas/{slug}` (necesitan la base de datos, no se pudieron ver en local): desde 03f4e6d sus etiquetas vuelven a verse; si estorban, domarlas en el cableado de esa página, no en el módulo.

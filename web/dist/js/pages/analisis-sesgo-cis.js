@@ -13,6 +13,8 @@ const RED = '#ce3b3b';
 const REGIONAL_COLOR = '#c0672e';
 // How many houses are named at each end of each axis in the bullseye of the last general election.
 const NAMED_AT_EACH_END = 2;
+// The rings of that bullseye (spec D7): the houses of one election sit within a few points, so no ring of ±10.
+const ELECTION_RINGS = [2, 5];
 
 /** The container `#id` when it exists and there is something to draw in it. */
 function container(id, ready) {
@@ -109,6 +111,7 @@ function drawElection(election) {
     blocks,
     color: THEME.accentColor,
     interval: 2,
+    rings: ELECTION_RINGS,
     labelOf: (row) => (named.has(row.name) ? row.name : ''),
     highlights,
   }), 'the bullseye of the last general election');

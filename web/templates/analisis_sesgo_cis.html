@@ -20,16 +20,6 @@
 {%- endmacro %}
 {#- What a poll did with a block, by the sign of its error: «sobreestimó a la izquierda 3,1 puntos». -#}
 {% macro miss(x, block) -%}{% if x is number and x > 0 %}sobreestimó a la {{ block }} {{ x|num(1) }} puntos{% elif x is number and x < 0 %}subestimó a la {{ block }} {{ x|abs|num(1) }} puntos{% else %}acertó en la {{ block }}{% endif %}{%- endmacro %}
-{#- How likely the tests of chance are, in words: the largest p of the three, against fixed thresholds. -#}
-{% macro chance_words(p) -%}
-{%- if p is not number -%}
-{%- elif p < 0.000000001 %}Cualquiera de las tres equivale a una probabilidad por azar inferior a una entre mil millones.
-{%- elif p < 0.000001 %}Cualquiera de las tres equivale a una probabilidad por azar inferior a una entre un millón.
-{%- elif p < 0.001 %}Cualquiera de las tres equivale a una probabilidad por azar inferior a una entre mil.
-{%- elif p < 0.05 %}Cualquiera de las tres equivale a una probabilidad por azar inferior al 5%.
-{%- else %}No todas bastan para descartar el azar: la mayor de las tres probabilidades es del {{ p|prob }}.
-{%- endif -%}
-{%- endmacro %}
 {#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
 {% macro answer(verdict, n) -%}
 <a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
@@ -252,19 +242,16 @@
           {%- if consensus_odds is number %} (como moneda, 1 entre {{ consensus_odds|int }}){% endif %}.{% endif %}
         </div>
         {% set t_with = w.get('t') or {} %}
-        {% set t_without = wo.get('t') or {} %}
-        {% set p_with = t_with.values()|select|map(attribute='p')|select('number')|list %}
-        {% set p_without = t_without.values()|select|map(attribute='p')|select('number')|list %}
         <div class="tech">
           <b>Nota técnica.</b> Una prueba t de Student sobre los {{ (t_with.get('all') or {}).get('n')|int }} errores del
           CIS en el bloque de izquierdas da una media de {{ tech['with'].mean|replace('-', '−') }} puntos, desviación típica
           {{ tech['with'].sd|replace('-', '−') }} y <b>t = {{ tech['with'].all|replace('-', '−') }}</b>; sobre las {{ (t_with.get('dates') or {}).get('n')|int }}
           fechas electorales (media de cada fecha), t = {{ tech['with'].dates|replace('-', '−') }}; sobre las
           {{ (t_with.get('consensus') or {}).get('n')|int }} diferencias con el consenso, t = {{ tech['with'].consensus|replace('-', '−') }}.
-          {% if p_with %}{{ chance_words(p_with|max) }}{% endif %}
+          {% if tech['with'].chance %}{{ tech['with'].chance }}{% endif %}
           Sin Tezanos ({{ pwo.get('label') or '–' }}), las mismas pruebas dan t = {{ tech['without'].all|replace('-', '−') }},
           {{ tech['without'].dates|replace('-', '−') }} y {{ tech['without'].consensus|replace('-', '−') }}
-          {%- if p_without and p_without|min >= 0.05 %}: compatibles con el azar{% endif %}.
+          {%- if tech['without'].random %}: compatibles con el azar{% endif %}.
         </div>
         {% call m.how() %}
         <p>
@@ -335,7 +322,7 @@
           {%- if cis_2023 %} El CIS {{ miss(ecis.e_left, 'izquierda') }} y {{ miss(ecis.e_right, 'derecha') }}.{% endif %}
           Está a {{ es.get('cis_dist')|num(1) }} puntos del centro de la diana, y el consenso de las otras
           {{ econ.get('n')|int }} casas, a {{ es.get('consensus_dist')|num(1) }}.
-          {%- if es.get('closer') is number %} {% if es.closer == 1 %}Una de ellas quedó{% else %}{{ es.closer|int }} de ellas quedaron{% endif %} más cerca del resultado que el CIS.{% endif %}
+          {%- if es.get('closer') is number %} {% if es.closer == 0 %}Ninguna quedó{% elif es.closer == 1 %}Una de ellas quedó{% else %}{{ es.closer|int }} de ellas quedaron{% endif %} más cerca del resultado que el CIS.{% endif %}
           {%- if others_right %} Lo que ocurrió en 2023 es que las demás fallaron hacia la derecha
           {%- if between %} y el resultado quedó entre los dos{% if nearer_consensus %}, más cerca de ellas{% endif %}{% endif %}.{% endif %}
           {%- if national %} En las demás generales con Tezanos, el error del último sondeo del CIS en la izquierda: {% for row in national %}el {{ row.get('event_date')|date }}, {{ row.get('Izquierda')|delta(1) }}{% if row.get('consensus') is number %} frente a {{ row.consensus|delta(1) }} de media de las demás casas{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}{% endif %}
@@ -360,7 +347,7 @@
           <li><b>Sesgo de bloques:</b> el error en la izquierda menos el error en la derecha; positivo si el sondeo inclinó la balanza hacia la izquierda.</li>
           <li><b>Consenso:</b> la media simple de los últimos sondeos de las demás encuestadoras en la misma elección, con el mismo criterio de fechas.</li>
           <li><b>Fallo general de las encuestas:</b> en las elecciones con tres o más casas distintas del CIS, el signo de la media de sus errores en el bloque de izquierdas; el CIS queda fuera para no inclinar la cifra hacia la propia tesis.</li>
-          <li><b>Periodos:</b> «con Tezanos» ({{ pw.get('label') or '–' }}), desde el cambio de método de septiembre de 2018{% if pw.get('first_event') %} (primera elección, el {{ pw.first_event|date }}){% endif %}; «sin Tezanos» ({{ pwo.get('label') or '–' }}), las elecciones anteriores con sondeo del CIS.</li>
+          <li><b>Periodos:</b> «con Tezanos» ({{ pw.get('label') or '–' }}), desde el cambio de método de septiembre de 2018{% if pw.get('first_event') %} (primera elección, el {{ pw.first_event|date }}){% endif %}; «sin Tezanos» ({{ pwo.get('label') or '–' }}){% if pwo.get('first_event') and pwo.get('last_event') %}, las elecciones de {{ pwo.first_event[:4] }} a {{ pwo.last_event[:4] }}{% endif %}.</li>
           <li><b>Pruebas:</b> binomial de una moneda equilibrada sobre las {{ w.get('n')|int }} elecciones y sobre las {{ (w.get('dates') or {}).get('n')|int }} fechas electorales; comparación con el consenso elección a elección; prueba t de Student de una muestra sobre los errores, las medias por fecha y las diferencias con el consenso. Son comparaciones con el azar, no probabilidades de intencionalidad.</li>
         </ul>
         {% if sources %}

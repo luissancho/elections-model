@@ -4573,6 +4573,55 @@ def test_lean_summaries_claim_only_what_the_figures_show(api, fresh_app):
             'desaparece: quedó a la izquierda del consenso en 5 de 6 elecciones, 4,3 puntos de media') in text
 
 
+def lean_t(*ps):
+    """La parte `t` de un periodo del resumen con un valor p por prueba (`None` para una prueba que falta)."""
+    return {key: None if p is None else {'n': 6, 'mean': 4.1, 'sd': 4.8, 't': 2.1, 'p': p}
+            for key, p in zip(('all', 'dates', 'consensus'), ps)}
+
+
+def test_lean_tech_note_states_the_chance_of_the_largest_p(api, fresh_app):
+    """La nota técnica dice la probabilidad por azar de la mayor de las p presentes, con su cifra: «mil millones»
+    sólo por debajo de 1e-9 (revisión final: con p de 5e-06 decía «inferior a una entre mil millones»); y «compatibles
+    con el azar» sin Tezanos sólo con la menor p del periodo de control en 0,05 o más."""
+    note = pages.lean.tech_note({'with': {'t': lean_t(1.2e-05, 5e-06, 3e-10)}, 'without': {'t': lean_t(0.6, 0.5, None)}})
+    assert note['with']['chance'] == ('Cualquiera de las tres equivale a una probabilidad por azar inferior a una '
+                                      'entre 82.000.')
+    assert note['without']['random'] is True
+    note = pages.lean.tech_note({'with': {'t': lean_t(4e-10, None, 3e-12)}, 'without': {'t': lean_t(0.0496, 0.5, 0.6)}})
+    assert note['with']['chance'] == ('Cualquiera de las dos equivale a una probabilidad por azar inferior a una '
+                                      'entre mil millones.')
+    assert note['without']['random'] is False
+    note = pages.lean.tech_note({'with': {'t': lean_t(0.09, None, None)}, 'without': {'t': lean_t(None, None, None)}})
+    assert note['with']['chance'] == 'No basta para descartar el azar: su probabilidad es del 9,0%.'
+    assert note['without']['random'] is False and pages.lean.tech_note(None)['with']['chance'] is None
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], t=lean_t(1.2e-05, 5e-06, 3e-10))
+    summary['without'] = dict(summary['without'], t=lean_t(0.0496, 0.5, 0.6))
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert 'inferior a una entre 82.000.' in text and 'mil millones' not in text
+    assert 'compatibles con el azar' not in text
+    summary['without'] = dict(summary['without'], t=lean_t(0.05, 0.5, 0.6))
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert ': compatibles con el azar.' in text
+
+
+def test_lean_2023_summary_and_data_wording(api, fresh_app):
+    """Sin ninguna casa más cerca del resultado que el CIS en 2023, «Ninguna quedó más cerca» (no «0 de ellas»); y el
+    periodo sin Tezanos son las elecciones de 2008 a 2016 (revisión final)."""
+    summary = fixture_data('sesgo-cis-summary')
+    summary['election'] = dict(summary['election'], closer=0)
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert 'Ninguna quedó más cerca del resultado que el CIS.' in text and '0 de ellas' not in text
+    assert '«sin Tezanos» (2008 – 2016), las elecciones de 2008 a 2016.' in text
+    assert 'las elecciones anteriores con sondeo del CIS' not in text
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert '2 de ellas quedaron más cerca del resultado que el CIS.' in text
+
+
 @pytest.mark.parametrize('part', ['summary', 'elections', 'houses', 'matrix', 'election'])
 def test_lean_page_survives_a_missing_part(api, fresh_app, part):
     """Sin una de las partes, la página se sirve igual (dashes donde faltan cifras), sin un error de plantilla."""

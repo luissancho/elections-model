@@ -676,6 +676,21 @@ def test_bullseye_interval_and_highlights():
     assert len(marked) == 2 and marked[1]['symbol'] == 'diamond' and marked[0]['label']['show'] is True
 
 
+def test_bullseye_draws_only_the_rings_asked_for():
+    """Con `rings: [2, 5]` (la diana de 2023 del sesgo del CIS, spec D7) sólo se dibujan esos dos anillos y el mayor
+    fija el alcance mínimo: con errores pequeños y paso 2 el extremo es ±6, no ±12 (revisión final)."""
+    small = [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': -3.9, 'Izquierda': 3.1},
+             {'event': '2023-23J', 'event_date': '2023-07-23', 'days': 9, 'Derecha': 1.2, 'Izquierda': -0.8}]
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], rings: [2, 5], interval: 2})', small)
+    rings = [s for s in option['series'] if s['type'] == 'line' and 'endLabel' in s]
+    assert [r['endLabel']['formatter'] for r in rings] == ['±2', '±5']
+    assert option['xAxis']['max'] <= 6 and option['xAxis']['max'] == 6 and option['yAxis']['min'] == -6
+    # by default the three rings and the reach of ±10
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], interval: 2})', small)
+    rings = [s for s in option['series'] if s['type'] == 'line' and 'endLabel' in s]
+    assert [r['endLabel']['formatter'] for r in rings] == ['±2', '±5', '±10'] and option['xAxis']['max'] == 12
+
+
 def test_scatter_diagonal_and_fixed_axes():
     option = run_js('sc.scatterOption([{x: 1, y: 2, name: "a"}], {x: "x", y: "y", name: "name", diagonal: true, axes: {xMin: -10, xMax: 15, yMin: -5, yMax: 15, interval: 5}})')
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
