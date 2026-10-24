@@ -18,6 +18,8 @@
 {% macro err(x, bold=False) -%}
 <td{% if x is number and x > 0 %} class="pos"{% elif x is number and x < 0 %} class="neg"{% endif %}>{% if bold %}<b>{{ x|delta(1) }}</b>{% else %}{{ x|delta(1) }}{% endif %}</td>
 {%- endmacro %}
+{#- What a poll did with a block, by the sign of its error: «sobreestimó a la izquierda 3,1 puntos». -#}
+{% macro miss(x, block) -%}{% if x is number and x > 0 %}sobreestimó a la {{ block }} {{ x|num(1) }} puntos{% elif x is number and x < 0 %}subestimó a la {{ block }} {{ x|abs|num(1) }} puntos{% else %}acertó en la {{ block }}{% endif %}{%- endmacro %}
 {#- How likely the tests of chance are, in words: the largest p of the three, against fixed thresholds. -#}
 {% macro chance_words(p) -%}
 {%- if p is not number -%}
@@ -54,6 +56,18 @@
 {% set national = elections|selectattr('scope', 'equalto', 'es')|rejectattr('event_date', 'equalto', el.get('date'))|list %}
 {% set matrix = initial.matrix or {} %}
 {% set consensus_odds = ((w.get('chance') or {}).get('consensus') or {}).get('odds') %}
+{% set before, after = compare %}
+{#- The claims of the texts, each from the figures that back it -#}
+{% set more_left = before.share is number and after.share is number and after.share > before.share %}
+{% set common_left = industry.get('left') is number and industry.get('right') is number and industry.left > industry.right %}
+{% set diff = wc.get('mean_diff') %}
+{% set cis_left_of_others = diff is number and diff > 0 and wc.get('k') is number and wc.get('n') and wc.k * 2 > wc.n %}
+{% set diff_text = diff|num(1) if (diff is number and diff > 0) else diff|delta(1) %}
+{% set cis_2023 = ecis.get('e_left') is number and ecis.get('e_right') is number %}
+{% set usual_2023 = cis_2023 and w.get('mean_left') is number and w.get('mean_right') is number and (ecis.e_left > 0) == (w.mean_left > 0) and (ecis.e_right > 0) == (w.mean_right > 0) %}
+{% set others_right = econ.get('e_left') is number and econ.get('e_right') is number and econ.e_left < 0 and econ.e_right > 0 %}
+{% set between = others_right and cis_2023 and ecis.e_left > 0 and ecis.e_right < 0 %}
+{% set nearer_consensus = es.get('consensus_dist') is number and es.get('cis_dist') is number and es.consensus_dist < es.cis_dist %}
     <div id="content" class="stack">
       <header id="study-head">
         <div class="tags">
@@ -82,15 +96,14 @@
           {% call answer(v2, 2) -%}
             {% if coin.value %}Como si cada elección fuera una moneda, {{ count(w.get('k_left'), w.get('n')) }} sale
             {{ coin.value }}.{% endif %}{% if dates.value %} Agrupando por fecha, {{ dates.value }}.{% endif %}
-            Y el CIS quedó a la izquierda de las demás casas en {{ count(wc.get('k'), wc.get('n')) }} elecciones: no es
-            que «todos fallaran».
+            Y el CIS quedó a la izquierda de las demás casas en {{ count(wc.get('k'), wc.get('n')) }} elecciones
+            {%- if cis_left_of_others %}: no es que «todos fallaran»{% endif %}.
           {%- endcall %}
           {% call answer(v3, 3) -%}
-            Sobreestimó a la izquierda {{ ecis.get('e_left')|num(1) }} puntos y subestimó a la derecha
-            {{ ecis.get('e_right')|abs|num(1) if ecis.get('e_right') is number else '–' }}: su sesgo de siempre.
-            {%- if econ.get('e_right') is number and econ.get('e_right') > 0 %} Las demás fallaron hacia la derecha
-            {%- if es.get('consensus_dist') is number and es.get('cis_dist') is number and es.consensus_dist < es.cis_dist %}
-            y el resultado quedó entre ambos, más cerca del consenso que del CIS{% endif %}.{% endif %}
+            {% if cis_2023 %}El CIS {{ miss(ecis.e_left, 'izquierda') }} y {{ miss(ecis.e_right, 'derecha') }}
+            {%- if usual_2023 %}, en el mismo sentido que su sesgo medio con Tezanos{% endif %}.{% endif %}
+            {%- if others_right %} Las demás fallaron hacia la derecha
+            {%- if between %} y el resultado quedó entre ambos{% if nearer_consensus %}, más cerca del consenso que del CIS{% endif %}{% endif %}.{% endif %}
           {%- endcall %}
         </div>
         <p class="note blue">Medimos lo que dicen los sondeos frente a lo que dicen las urnas. No medimos intenciones: el dato es la persistencia del error en una dirección, su tamaño, su comparación con las demás encuestadoras y con el propio CIS de antes de 2018. Los datos por encima de bandos y consignas.</p>
@@ -161,11 +174,13 @@
         <button type="button" class="more" id="elections-more" hidden>Ver las {{ elections|length }} elecciones</button>
         {% endif %}
         <div class="sum">
-          <b>Sí.</b> La misma institución, con otro presidente y otro método, cambió de comportamiento. Sin Tezanos
-          ({{ pwo.get('label') or '–' }}) el CIS se equivocaba como todos: {{ count(wo.get('k_left'), wo.get('n')) }}
-          elecciones con la izquierda sobreestimada, {{ wo.get('mean_left')|delta(1) }} puntos de media
-          {%- if woc.get('n') %}, y a la izquierda del consenso en {{ count(woc.get('k'), woc.get('n')) }}{% endif %}.
-          Con Tezanos, {{ count(w.get('k_left'), w.get('n')) }}, {{ w.get('mean_left')|delta(1) }} puntos
+          <b>Sí.</b>
+          {%- if more_left %} La misma institución, con otro presidente y otro método, sobreestimó a la izquierda en una
+          proporción mayor de elecciones.{% endif %} Sin Tezanos ({{ pwo.get('label') or '–' }}), el CIS sobreestimó a la
+          izquierda en {{ count(wo.get('k_left'), wo.get('n')) }} elecciones, {{ wo.get('mean_left')|delta(1) }} puntos de
+          media{% if woc.get('n') %}, y quedó a la izquierda del consenso en {{ count(woc.get('k'), woc.get('n')) }}{% endif %}.
+          Con Tezanos ({{ pw.get('label') or '–' }}), en {{ count(w.get('k_left'), w.get('n')) }},
+          {{ w.get('mean_left')|delta(1) }} puntos
           {%- if wc.get('n') %} y a la izquierda del consenso en {{ count(wc.get('k'), wc.get('n')) }}{% endif %}.
           {%- if exceptions|length == 1 %} La única excepción: {{ exceptions[0] }}.
           {%- elif exceptions %} Las {{ exceptions|length }} excepciones: {{ names(exceptions) }}.{% endif %}
@@ -219,16 +234,15 @@
           <b>No.</b> Ni el azar ni un fallo general de las encuestas explican el patrón.
           {%- if coin.value %} Equivocarse hacia el mismo lado en {{ count(w.get('k_left'), w.get('n')) }} elecciones
           ocurre por azar {{ coin.value }}
-          {%- if runner_up %}; la casa que le sigue, <a href="{{ runner_up.href }}">{{ runner_up.name }}</a>, con
+          {%- if runner_up %}; la casa que le sigue en el ranking, <a href="{{ runner_up.href }}">{{ runner_up.name }}</a>, con
           {{ count(runner_up.k, runner_up.n) }}{% if runner_up.odds %}, está en 1 entre {{ runner_up.odds }}{% endif %}{% endif %}.
           {%- endif %}
-          {%- set common_left = industry.get('left') is number and industry.get('right') is number and industry.left > industry.right %}
           {%- if industry.get('n_events') %} Desde 2018, la media de las demás encuestadoras sobreestimó a la izquierda en
-          {{ count(industry.get('left'), industry.get('n_events')) }} elecciones con tres o más casas aparte del CIS
-          {%- if common_left %}, y por eso casi todas las filas tienen más rojo que azul{% endif %}.{% endif %}
-          {%- if wc.get('n') %}{% if common_left %} Pero al comparar cada casa con las demás en la misma elección, esa
-          inclinación común desaparece para todas menos para el CIS:{% else %} Frente a las demás casas en la misma
-          elección, el CIS quedó a la izquierda en{% endif %} {{ count(wc.get('k'), wc.get('n')) }}
+          {{ count(industry.get('left'), industry.get('n_events')) }} elecciones con tres o más casas aparte del CIS.{% endif %}
+          {%- if wc.get('n') %}{% if common_left %} Al comparar cada casa con las demás en la misma elección se descuenta
+          esa inclinación común.{% if cis_left_of_others %} La del CIS no desaparece:{% else %} El CIS{% endif %}{% else %} Frente a
+          las demás casas en la misma elección, el CIS{% endif %} quedó a la izquierda del consenso en
+          {{ count(wc.get('k'), wc.get('n')) }} elecciones, {{ diff_text }} puntos de media
           {%- if consensus_odds is number %} (como moneda, 1 entre {{ consensus_odds|int }}){% endif %}.{% endif %}
         </div>
         {% set t_with = w.get('t') or {} %}
@@ -311,14 +325,14 @@
           </div>
         </div>
         <div class="sum">
-          <b>No.</b> El CIS sobreestimó a la izquierda {{ ecis.get('e_left')|num(1) }} puntos y subestimó a la derecha
-          {{ ecis.get('e_right')|abs|num(1) if ecis.get('e_right') is number else '–' }}: está a
-          {{ es.get('cis_dist')|num(1) }} puntos del centro de la diana, y el consenso de las otras
-          {{ econ.get('n')|int }} casas a {{ es.get('consensus_dist')|num(1) }}.
+          <b>No.</b>
+          {%- if cis_2023 %} El CIS {{ miss(ecis.e_left, 'izquierda') }} y {{ miss(ecis.e_right, 'derecha') }}.{% endif %}
+          Está a {{ es.get('cis_dist')|num(1) }} puntos del centro de la diana, y el consenso de las otras
+          {{ econ.get('n')|int }} casas, a {{ es.get('consensus_dist')|num(1) }}.
           {%- if es.get('closer') is number %} {% if es.closer == 1 %}Una de ellas quedó{% else %}{{ es.closer|int }} de ellas quedaron{% endif %} más cerca del resultado que el CIS.{% endif %}
-          {%- if econ.get('e_right') is number and econ.get('e_right') > 0 %} Lo que ocurrió en 2023 es que las demás fallaron hacia la derecha
-          {%- if es.get('consensus_dist') is number and es.get('cis_dist') is number and es.consensus_dist < es.cis_dist %} y el resultado quedó entre los dos, más cerca de ellas{% endif %}.{% endif %}
-          {%- if national %} El error del CIS fue el de siempre en las generales: {% for row in national %}el {{ row.get('event_date')|date }}, {{ row.get('Izquierda')|delta(1) }} en la izquierda{% if row.get('consensus') is number %} frente a {{ row.consensus|delta(1) }} de las demás casas{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}{% endif %}
+          {%- if others_right %} Lo que ocurrió en 2023 es que las demás fallaron hacia la derecha
+          {%- if between %} y el resultado quedó entre los dos{% if nearer_consensus %}, más cerca de ellas{% endif %}{% endif %}.{% endif %}
+          {%- if national %} En las demás generales con Tezanos, el error del último sondeo del CIS en la izquierda: {% for row in national %}el {{ row.get('event_date')|date }}, {{ row.get('Izquierda')|delta(1) }}{% if row.get('consensus') is number %} frente a {{ row.consensus|delta(1) }} de media de las demás casas{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}{% endif %}
         </div>
         {% else %}
         <p class="notice">Todavía no está publicado el análisis de esta elección.</p>

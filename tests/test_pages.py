@@ -4509,6 +4509,24 @@ def test_lean_runner_up_is_the_house_that_follows_the_cis(api, fresh_app):
     assert re.search(r'<a href="/casas/sigma-dos">Sigma Dos</a>, con\s+6 de 6, está en 1 entre 64', page)
 
 
+def test_lean_summaries_claim_only_what_the_figures_show(api, fresh_app):
+    """Las frases de los resúmenes salen de las cifras que las sostienen: la inclinación común de las demás casas sólo
+    se nombra cuando su media sobreestimó a la izquierda en más elecciones de las que la subestimó, y la del CIS se
+    cuenta con su cifra frente al consenso, no como un hecho sobre las demás casas."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    # the fixture: the other houses leaned right (0 of 2), so there is no common lean to discount
+    assert 'Frente a las demás casas en la misma elección, el CIS quedó a la izquierda del consenso en 5 de 6 elecciones, 4,3 puntos de media' in text
+    assert 'se descuenta esa inclinación común' not in text and 'desaparece para todas' not in text
+    assert 'como todos' not in text and 'más rojo que azul' not in text and 'el de siempre' not in text
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], industry={'n_events': 2, 'left': 2, 'right': 0, 'mean': 1.0})
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert ('Al comparar cada casa con las demás en la misma elección se descuenta esa inclinación común. La del CIS no '
+            'desaparece: quedó a la izquierda del consenso en 5 de 6 elecciones, 4,3 puntos de media') in text
+
+
 @pytest.mark.parametrize('part', ['summary', 'elections', 'houses', 'matrix', 'election'])
 def test_lean_page_survives_a_missing_part(api, fresh_app, part):
     """Sin una de las partes, la página se sirve igual (dashes donde faltan cifras), sin un error de plantilla."""
