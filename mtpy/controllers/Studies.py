@@ -27,7 +27,7 @@ class Studies(Base):
 
         for study in site().studies():
             data = json.loads(site().study(study, 'meta'))['data']
-            rows.append({key: data[key] for key in ('study', 'title', 'subtitle', 'registered_at', 'checked_at')})
+            rows.append({key: data.get(key) for key in ('study', 'title', 'subtitle', 'registered_at', 'checked_at')})
 
         return self.json_bytes(bundle.dumps({'contract': bundle.CONTRACT, 'studies': rows}))
 
