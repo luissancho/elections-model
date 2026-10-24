@@ -68,9 +68,10 @@ def test_active_pollsters_without_a_national_run(catalogue, tmp_path):
     fs = FileSystem(str(tmp_path))
     write_lean_bundle(fs)
     rows, _ = data.read_error_rows(bundle.BundleReader(fs), catalogue)
-    assert data.active_pollsters(bundle.BundleReader(fs), rows, '2026-01-01') == (CURRENT, 'run+events')
+    assert data.active_pollsters(bundle.BundleReader(fs), rows, '2026-01-01')[:2] == (CURRENT, 'run+events')
+    assert data.active_pollsters(bundle.BundleReader(fs), rows, '2026-01-01')[2]
     fs.remove(bundle.BundleReader(fs).path(bundle.path_manifest()))
-    assert data.active_pollsters(bundle.BundleReader(fs), rows, '2026-01-01') == (CURRENT, 'events')
+    assert data.active_pollsters(bundle.BundleReader(fs), rows, '2026-01-01') == (CURRENT, 'events', None)
 
 
 def test_load_params_reads_the_repository_file():

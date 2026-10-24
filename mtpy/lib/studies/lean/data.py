@@ -6,6 +6,7 @@ election (``meta``, ``polls`` and ``results``) and the polls of the latest natio
 ``BundleReader``, and the small parameters file in ``data/``. This module keeps independent of the web layer.
 """
 import json
+from typing import Optional
 
 import pandas as pd
 
@@ -161,7 +162,7 @@ def read_election(reader: BundleReader, scope: str, date: str) -> dict:
     return election
 
 
-def active_pollsters(reader: BundleReader, rows: list[dict], active_from: str) -> tuple[set[str], str]:
+def active_pollsters(reader: BundleReader, rows: list[dict], active_from: str) -> tuple[set[str], str, Optional[str]]:
     """
     Pollsters still publishing: with a poll in the latest national run or an error row in a recent election.
 
@@ -180,9 +181,12 @@ def active_pollsters(reader: BundleReader, rows: list[dict], active_from: str) -
         The pollsters.
     source : str
         ``'run+events'`` when the national run was read, ``'events'`` when there is no manifest or no run.
+    run_id : str or None
+        The national run read; ``None`` when the source is ``'events'``.
     """
     names = {row['pollster'] for row in rows if row['event_date'] >= active_from}
     source = 'events'
+    used = None
 
     if reader.exists(path_manifest()):
         run_id = reader.read_json(path_manifest())['data']['scopes'].get(NATIONAL, {}).get('latest')
@@ -192,5 +196,6 @@ def active_pollsters(reader: BundleReader, rows: list[dict], active_from: str) -
             polls = reader.read_json(part)['data']['polls']
             names |= {poll['pollster'] for poll in polls if poll['date'] >= active_from}
             source = 'run+events'
+            used = run_id
 
-    return names, source
+    return names, source, used
