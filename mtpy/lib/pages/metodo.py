@@ -6,11 +6,11 @@ house effects (the last poll of one pollster before every analysed election sinc
 analyses) and, on the ``rating`` subpage, the public rubric of the prior quality
 (``data/pollsters-quality-criteria.json``).
 """
-import math
 from typing import Optional
 
 from ...core.api import HttpError
 from ..quality import criteria_keys, load_criteria, max_points
+from ..studies.lean.stats import sign_chance
 from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
 from .casas import election_label
@@ -253,39 +253,6 @@ def cycle_counts() -> Optional[dict]:
         return None
 
     return {'n_polls': len(pollsters), 'n_pollsters': len(set(pollsters))}
-
-
-def sign_chance(n: int, k: int) -> Optional[dict]:
-    """
-    How likely a pollster without lean errs to the same side in ``k`` or more of ``n`` elections: the upper tail of a
-    binomial of a fair coin, as each election is equally likely to be over or under the result.
-
-    Parameters
-    ----------
-    n : int
-        Elections with an error in the block.
-    k : int
-        Elections erring to the side counted.
-
-    Returns
-    -------
-    dict or None
-        ``n``, ``k``, ``ways`` (the outcomes with ``k`` or more on that side, the sum of the binomial coefficients),
-        ``total`` (the 2ⁿ outcomes), ``p`` (``ways / total``), ``odds_exact`` (``1 / p`` rounded to the unit) and
-        ``odds`` (``1 / p`` floored to two significant figures, so "less than one in ``odds``" is true). ``None``
-        without elections.
-    """
-    if n <= 0:
-        return None
-
-    ways = sum(math.comb(n, j) for j in range(k, n + 1))
-    total = 2 ** n
-    p = ways / total
-    odds = 1 / p
-    scale = 10 ** max(0, int(math.log10(odds)) - 1)
-
-    return {'n': n, 'k': k, 'ways': ways, 'total': total, 'p': p, 'odds_exact': round(odds),
-            'odds': int(odds // scale * scale)}
 
 
 def house_effects_example() -> Optional[dict]:

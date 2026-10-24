@@ -491,8 +491,8 @@ def write_lean_bundle(fs):
     return {
         'cis_es_dates': ['2008-03-09', '2011-11-20', '2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10',
                          '2023-07-23'],
-        'industry': {'n_events': 2, 'left': 0, 'right': 2, 'mean': -1.42},
-        # el `mean` es el round(-1.425, 2) de Python: es 2023 -1.85 y es-an 2026 -1.00
+        'industry': {'n_events': 2, 'left': 0, 'right': 2, 'mean': -1.43},
+        # el `mean` es el round(-1.425, 2) de Python (-1.43): es 2023 -1.85 y es-an 2026 -1.00
         'election': {'meta': meta, 'polls': polls, 'results': results},
         'summary_election': {'cis_dist': 4.18, 'consensus_dist': 2.67, 'closer': 2, 'rank': 3, 'n': 5},
         'houses': ['GAD3', 'Sigma Dos', 'CIS'],
