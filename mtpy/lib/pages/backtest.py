@@ -282,7 +282,8 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         With a published backtest: ``backtest`` (its ``meta``),
         ``horizon_rows``, ``case_rows``, ``block_rows``, ``csv_links`` and ``initial`` (``state``,
         ``horizons`` and, aligned with them, the ``mae``, ``coverage`` and ``seats`` series; ``seats`` holds
-        ``mae`` and ``mae_h``, the mean absolute seat error of the nowcast and of the horizon runs).
+        ``mae``, the mean absolute seat error, the same in both modes since the headline is the central
+        allocation, so the horizon run's ``mae_seats_h`` stays in the table rows and the CSV only).
 
     Raises
     ------
@@ -324,7 +325,7 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         'mae': {'model': series('mae_shares'), 'last_poll': series('mae_last_poll'),
                 'mean_4w': series('mae_mean_4w'), 'prev_result': series('mae_prev_result')},
         'coverage': {'50': series('cov_shares50'), '80': series('cov_shares80'), '95': series('cov_shares95')},
-        'seats': {'mae': series('mae_seats'), 'mae_h': series('mae_seats_h')},
+        'seats': {'mae': series('mae_seats')},
         **bullseye,
     }
 

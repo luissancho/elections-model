@@ -183,8 +183,8 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('seats', 'Escaños y mayorías', 'El error de escaños de los partidos principales según los días que faltan para la elección, en los modos Hoy y Elección, y la calidad de la probabilidad de mayoría absoluta de cada bloque.') }}
-        <div class="chart" id="seats-chart" role="img" aria-label="Error absoluto medio de escaños por horizonte en los modos Hoy y Elección"></div>
+      {{ m.card_start('seats', 'Escaños y mayorías', 'El error de escaños de los partidos principales según los días que faltan para la elección y la calidad de la probabilidad de mayoría absoluta de cada bloque.') }}
+        <div class="chart" id="seats-chart" role="img" aria-label="Error absoluto medio de escaños por horizonte"></div>
         <div class="table-wrap">
           <table id="seats-table">
             <caption>Error de escaños y calidad de la probabilidad de mayoría, por días de antelación.</caption>
@@ -196,7 +196,6 @@
                 <th scope="col">Cobertura del 95%</th>
                 <th scope="col">CRPS de escaños</th>
                 <th scope="col">Brier de mayoría</th>
-                <th scope="col">Error de escaños (modo Elección)</th>
                 <th scope="col">Brier de mayoría (modo Elección)</th>
               </tr>
             </thead>
@@ -209,7 +208,6 @@
                 <td>{{ row.cov_seats95|num(3) }}</td>
                 <td>{{ row.crps_seats|num(2) }}</td>
                 <td>{{ row.brier_vs|num(3) }}</td>
-                <td>{{ row.mae_seats_h|num(2) }}</td>
                 <td>{{ row.brier_vs_h|num(3) }}</td>
               </tr>
               {% endfor %}
@@ -218,8 +216,8 @@
         </div>
         {% call m.how() %}
         <p>
-          Cada línea es el error absoluto medio de escaños por partido: la continua, el modo Hoy; la discontinua, el
-          modo Elección, que añade la deriva de la opinión hasta la votación. La tabla suma el CRPS (premia una
+          La línea es el error absoluto medio de escaños por partido. Es la misma en los modos Hoy y Elección: el
+          titular es el reparto del voto central y no depende de la deriva, así que sólo hay una. La tabla suma el CRPS (premia una
           distribución de escaños ajustada y bien centrada) y el Brier de la probabilidad de mayoría de cada
           bloque: cuanto más cerca de 0, mejor.
         </p>

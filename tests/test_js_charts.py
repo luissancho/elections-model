@@ -618,3 +618,27 @@ def test_histogram_caption_writes_its_lines_above_the_bars():
     assert text['style']['rich']['b']['fontWeight'] == 600 and option['grid']['top'] == 24 + 2 * 16
     plain = histogram_option('{}')
     assert plain['graphic'] == [] and plain['grid']['top'] == 24
+
+
+ROWS_JS = ('[{name: "PP", x0: 130, x1: 150, grid: [130, 140, 150], y: [0, 1, 0], median: 139.5, lo: 133, hi: 150, '
+           'central: 141}, {name: "PSOE", x0: 95, x1: 115, grid: [95, 105, 115], y: [0, 1, 0], median: 105, lo: 100, '
+           'hi: 112, central: null}, {name: "VOX", x0: 0, x1: 6, grid: [0, 3, 6], y: [0, 1, 0], median: 1, lo: 0, hi: 3, '
+           'central: 0}]')
+
+
+def ridge_option(rows_js, args):
+    """Opción de `renderRidge` con `rows_js` y `args`, leída de un contenedor falso: `mountChart` reutiliza su
+    `__chart`, y `renderRidge` fija `style.height` y lee `clientWidth`."""
+    return run_js('(() => { let got = null; '
+                  'r.renderRidge({__chart: {setOption: (o) => { got = o; }}, style: {}, clientWidth: 0}, %s, %s); '
+                  'return got; })()' % (rows_js, args))
+
+
+def test_ridge_marks_and_labels_the_central_seats_and_falls_back_to_the_median():
+    """La marca gruesa y el rótulo de cada cresta dicen el reparto central; sin él, la mediana."""
+    option = ridge_option(ROWS_JS, '{colors: {PP: "#1d4f86"}, majority: 176}')
+    thick = [[m['xAxis'] for m in s['markLine']['data'] if m['lineStyle'].get('width') == 2] for s in option['series']]
+    assert thick[2] == [0] and thick[:2] == [[141], [105]]
+    texts = [g['style']['text'] for g in option['graphic'] if g['type'] == 'text']
+    assert texts[0].startswith('{b|PP}\nReparto central: {b|141}') and texts[1].startswith('{b|PSOE}\nMediana: {b|105}')
+    assert texts[2].startswith('{b|VOX}\nReparto central: {b|0}')

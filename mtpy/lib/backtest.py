@@ -119,13 +119,14 @@ def _quantile_cols(x: np.ndarray, suffix: str = '') -> dict[str, float]:
 def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: set) -> pd.DataFrame:
     """
     Provincial evaluation of the nowcast run: one row per province and party with the official and simulated
-    share (median, intervals) and seats (median, intervals, CRPS), for the cells with an official or simulated
-    share of at least 1 %.
+    share (median, intervals) and seats (central allocation, median, intervals, CRPS), for the cells with an
+    official or simulated share of at least 1 %.
     """
     off_pct, off_seats = official_provinces(scope, event_date)
     names = sim.params['names']
     cats = sim.categories()
     ci = sim.cols_unit.index('vpred_pct')
+    central = sim.central_result()
     rows = []
     for ri, r in enumerate(sim.params['regions']):
         if r == sim.default_region:
@@ -143,7 +144,10 @@ def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: 
             row = {
                 'event_date': event_date, 'horizon': horizon, 'region': int(r), 'region_name': sim.region_names.get(r, r),
                 'party': n, 'main': n in main, 'official_pct': y_pct, 'model_pct': med, 'sd_pct': float(np.nanstd(pct)),
-                'official_seats': y_seats, 'model_seats': float(np.median(seats)), 'crps_seats': crps_from_samples(seats, y_seats)
+                'official_seats': y_seats, 'model_seats': (
+                    float(central.loc[sim.region_names.get(r, r), n]) if central is not None else float(np.median(seats))
+                ),
+                'median_seats': float(np.median(seats)), 'crps_seats': crps_from_samples(seats, y_seats)
             }
             row.update({k + '_pct': v for k, v in _quantile_cols(pct).items()})
             row.update({k + '_seats': v for k, v in _quantile_cols(seats).items()})

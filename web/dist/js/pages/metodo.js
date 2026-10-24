@@ -18,8 +18,6 @@ const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev
 const COVERAGE_COLORS = {'50': '#e69f00', '80': '#009e73', '95': '#1f4e79'};
 const NAMES = {model: 'Modelo', last_poll: 'Último sondeo', mean_4w: 'Media de 4 semanas', prev_result: 'Elección anterior'};
 const COVERAGE_LEVELS = ['50', '80', '95'];
-// The horizon run (mode Elección) of the seat error: its own colour, dashed.
-const ELECTION_COLOR = '#7f3c8d';
 // The bullseye of the house effects example, as the one of a profile (`casas.js`): general elections in the
 // accent and over the regional ones, which take a contrasting tone; every point labelled with its election.
 const NATIONAL_SCOPE = 'es';
@@ -116,9 +114,9 @@ function paint() {
 
   const seatsEl = document.getElementById('seats-chart');
   if (seatsEl && horizons.length) {
+    // One line: the headline is the central allocation, the same in both modes, so the horizon run adds nothing
     const series = [
-      {name: 'Modo Hoy', color: COLORS.model, points: pairs(horizons, seats.mae || [])},
-      {name: 'Modo Elección', color: ELECTION_COLOR, dashed: true, points: pairs(horizons, seats.mae_h || [])},
+      {name: 'Error de escaños', color: COLORS.model, points: pairs(horizons, seats.mae || [])},
     ].filter((line) => line.points.length);
     if (series.length) {
       tryDraw(() => renderLines(seatsEl, series, {formatter: (x) => fmtNum(x, 1)}), 'the seat error by horizon');

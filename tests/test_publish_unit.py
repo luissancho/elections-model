@@ -76,10 +76,11 @@ def test_export_districts_excludes_the_total_region():
     assert [r['id'] for r in data['regions']] == [28, 8]
     assert [r['seats'] for r in data['regions']][0] == 6
     assert len(data['rows']) == 2 * len(NAMES)
-    assert set(data['rows'][0]) == {'region_id', 'region', 'name', 'pct', 'pct_lo', 'pct_hi', 'seats', 'seats_mean', 'seats_lo',
-                                    'seats_hi', 'p_seats'}
+    assert set(data['rows'][0]) == {'region_id', 'region', 'name', 'pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean',
+                                    'seats_lo', 'seats_hi', 'p_seats'}
     assert frame.shape[0] == 6
-    assert all(isinstance(r['seats'], float) and r['seats'] == round(r['seats'], 1) for r in data['rows'])
+    assert all(isinstance(r['seats'], int) for r in data['rows'])
+    assert all(isinstance(r['seats_median'], float) for r in data['rows'])
 
 
 def test_export_districts_carries_the_community_and_the_votes():
@@ -122,14 +123,26 @@ def test_a_missing_catalogue_raises_instead_of_falling_back(fresh_app, tmp_path)
         publish.forecast.district_communities('es')
 
 
-def test_export_scenario_is_a_real_simulation():
+def test_export_scenario_is_the_central_allocation_and_old_runs_still_validate():
     sim = synthetic_simulator()
     data, frame = publish.export_scenario(sim)
     data = valid('scenario', data)
-    assert data['simulation'] == sim.scenario()
+    assert 'simulation' not in data
     assert [r['region_id'] for r in data['rows']] == REGIONS and data['rows'][0]['region'] == 'es'
-    assert data['rows'][0]['seats'] == [a + b for a, b in zip(data['rows'][1]['seats'], data['rows'][2]['seats'])]
+    assert [r['seats'] for r in data['rows']] == [[5, 4, 1], [3, 2, 1], [2, 2, 0]]
     assert list(frame.columns) == ['region_id', 'region'] + NAMES
+    old = valid('scenario', {'simulation': 0, 'parties': NAMES, 'rows': data['rows']})
+    assert old['simulation'] == 0
+
+
+def test_districts_seats_are_the_central_allocation_of_the_scenario():
+    sim = synthetic_simulator()
+    scenario = valid('scenario', publish.export_scenario(sim)[0])
+    districts = valid('districts', publish.export_districts(sim)[0])
+    summary = valid('summary', publish.export_summary(sim)[0])
+    by_region = {r['region_id']: dict(zip(scenario['parties'], r['seats'])) for r in scenario['rows']}
+    assert all(by_region[row['region_id']][row['name']] == row['seats'] for row in districts['rows'])
+    assert summary['totals'] == by_region[0]
 
 
 def test_export_projection_follows_the_mode():

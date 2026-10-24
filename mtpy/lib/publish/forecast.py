@@ -43,7 +43,7 @@ DEFAULT_CORRECTORS = {'house_effects': True, 'dispersion': True, 'regional_noise
                       'composition': None}
 
 
-SUMMARY_COLS = ('pct', 'pct_lo', 'pct_hi', 'seats', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats')
+SUMMARY_COLS = ('pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats')
 
 
 def _summary_table(sim, names=None):
@@ -150,8 +150,9 @@ def export_districts(sim, communities: Optional[dict] = None):
                for r in region_ids]
     rows = []
     for r in region_ids:
-        table = round_cols(sim.unit_summary(r), pct=PCT_COLS, prob=PROB_COLS, seats=(*SEATS_COLS, 'seats'))
+        table = round_cols(sim.unit_summary(r), pct=PCT_COLS, prob=PROB_COLS, seats=SEATS_COLS)
         for row in records(table[list(SUMMARY_COLS)]):
+            row['seats'] = int(row['seats'])
             rows.append({'region_id': r, 'region': sim.region_names.get(r, r), **row})
     columns = ['region_id', 'region', 'name', *SUMMARY_COLS]
     data = {'parties': list(sim.params['names']), 'regions': regions, 'rows': rows}
@@ -159,11 +160,10 @@ def export_districts(sim, communities: Optional[dict] = None):
 
 
 def export_scenario(sim):
-    """Export the deterministic simulation closest to the central seats as a coherent seat scenario.
+    """Export the central seat allocation of the total region and every district.
 
-    The simulation is ``sim.scenario()``: the one with the smallest L1 distance to the median seats
-    of every party (ties broken by L2 and then by the lowest index), so it is not random and the same
-    simulations always give the same scenario.
+    The table is ``sim.central_result()``, the allocation of the central vote shares. It is the same in
+    nowcast and horizon modes and is the one the headline of the seats shows.
 
     Parameters
     ----------
@@ -175,8 +175,7 @@ def export_scenario(sim):
     tuple of (dict, pandas.DataFrame)
         Data for the ``scenario`` schema and its CSV twin.
     """
-    i = sim.scenario()
-    table = sim.result(i)
+    table = sim.central_result()
     parties = list(table.columns)
     region_ids = list(sim.params['regions'])
     rows = [{'region_id': region_id, 'region': region, 'seats': [int(s) for s in values]}
@@ -185,7 +184,7 @@ def export_scenario(sim):
     frame.insert(0, 'region', list(table.index))
     frame.insert(0, 'region_id', region_ids)
     frame = frame.reset_index(drop=True)
-    return {'simulation': int(i), 'parties': parties, 'rows': rows}, frame
+    return {'parties': parties, 'rows': rows}, frame
 
 
 def export_projection(sim):

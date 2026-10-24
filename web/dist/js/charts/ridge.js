@@ -1,7 +1,7 @@
 // Ridge chart of the seat distributions: one row per party or block, each over its own seat range, the density
-// filled with the row's colour, a thick mark at the median, thin ones at the ends of the interval and a dashed
-// line at the majority when it falls within the row, as `Simulator.plot_dist_kde` draws it in the notebooks but
-// with the detail of every row.
+// filled with the row's colour, a thick mark at the central allocation (the headline seats; at the median when a
+// row lacks it), thin ones at the ends of the interval and a dashed line at the majority when it falls within the
+// row, as `Simulator.plot_dist_kde` draws it in the notebooks but with the detail of every row.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {fmtInt, fmtProb, fmtRange} from '../format.js';
 
@@ -42,12 +42,14 @@ export function ridgeHeight(n, rowHeight) {
  * Render `rows` (from `kde.js`) in `el`, whose height is set to fit them.
  *
  * @param {HTMLElement} el chart container
- * @param {object[]} rows one row per party or block (`ridgeRows`)
+ * @param {object[]} rows one row per party or block (`ridgeRows`); the thick mark goes at its `central` seats, or
+ *   at its `median` when `central` is null
  * @param {object} opts `colors` ({name: colour}), `majority` (seats of the absolute majority; the dashed line is
  *   drawn in the rows whose range holds it, labelled on the first), `rowHeight` (px per row, 144 by default),
  *   `fullnames` ({name: full name}, tooltip) and `guideEvery` (seats between the faint dashed vertical guides;
  *   10 by default, 20 on narrow containers; the labelled axis shows a number at each). The row label reads the
- *   name, `Mediana: …` and `Rango 95%: …`, with the name and the figures in bold.
+ *   name, `Reparto central: …` (`Mediana: …` without `central`) and `Rango 95%: …`, with the name and the figures
+ *   in bold.
  *   When every row shares the same range, only the last row shows the axis labels; otherwise each row shows its own.
  * @returns {object} the ECharts instance
  */
@@ -95,8 +97,9 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
         marks.push({xAxis: x, lineStyle: {color: THEME.gridColor, width: 1, type: 'dashed', opacity: 0.8}});
       }
     }
+    const mark = row.central ?? row.median;
     marks.push(
-      {xAxis: row.median, lineStyle: {color, width: 2, type: 'solid'}},
+      {xAxis: mark, lineStyle: {color, width: 2, type: 'solid'}},
       {xAxis: row.lo, lineStyle: {color, width: 1, type: 'solid', opacity: 0.7}},
       {xAxis: row.hi, lineStyle: {color, width: 1, type: 'solid', opacity: 0.7}},
     );
@@ -123,20 +126,24 @@ export function renderRidge(el, rows, {colors = {}, majority = null, rowHeight =
       z: 2,
     };
   });
-  const labels = rows.map((row, index) => ({
-    type: 'text',
-    left: 8,
-    top: TOP + index * rowHeight + curveHeight / 2 - 24,
-    style: {
-      // Rich text: the name, the median and the range in bold, the captions in regular weight
-      text: `{b|${row.name}}\nMediana: {b|${fmtInt(row.median)}}\nRango 95%: {b|${fmtRange(row.lo, row.hi, 0)}}`,
-      fill: THEME.textColor,
-      fontSize: narrow ? 10.5 : 12,
-      fontFamily: THEME.fontFamily,
-      lineHeight: 16,
-      rich: {b: {fontWeight: 600, fontSize: narrow ? 10.5 : 12, fontFamily: THEME.fontFamily, fill: THEME.textColor}},
-    },
-  }));
+  const labels = rows.map((row, index) => {
+    const withCentral = row.central !== null && row.central !== undefined;
+    const mark = withCentral ? `Reparto central: {b|${fmtInt(row.central)}}` : `Mediana: {b|${fmtInt(row.median)}}`;
+    return {
+      type: 'text',
+      left: 8,
+      top: TOP + index * rowHeight + curveHeight / 2 - 24,
+      style: {
+        // Rich text: the name, the marked seats and the range in bold, the captions in regular weight
+        text: `{b|${row.name}}\n${mark}\nRango 95%: {b|${fmtRange(row.lo, row.hi, 0)}}`,
+        fill: THEME.textColor,
+        fontSize: narrow ? 10.5 : 12,
+        fontFamily: THEME.fontFamily,
+        lineHeight: 16,
+        rich: {b: {fontWeight: 600, fontSize: narrow ? 10.5 : 12, fontFamily: THEME.fontFamily, fill: THEME.textColor}},
+      },
+    };
+  });
 
   const option = {
     ...baseOption(),

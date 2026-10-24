@@ -77,13 +77,13 @@ export function summarize(values, majority, alpha = 0.05) {
 }
 
 /**
- * Text of the majority calculator: the parties marked, their seats in the central scenario (the sum of their
+ * Text of the majority calculator: the parties marked, their seats in the central allocation (the sum of their
  * headline seats, the figure of the bar and of the blocks elsewhere on the site) and the probability that their
- * sum reaches the absolute majority in the simulations (Luis, 2026-10-21). The median and the range of the sum
- * go beside the histogram (`coalitionCaption`).
+ * sum reaches the absolute majority in the simulations (Luis, 2026-10-21). The central seats and the range of the
+ * sum go beside the histogram (`coalitionCaption`).
  *
  * @param {number} count parties marked
- * @param {number} central seats of the marked parties in the central scenario
+ * @param {number} central seats of the marked parties in the central allocation
  * @param {object} stats `summarize` of their sums
  * @returns {string} the text
  */
@@ -97,16 +97,17 @@ export function coalitionText(count, central, stats) {
 
 /**
  * Lines beside the histogram of the majority calculator, as the ridges of «Reparto de escaños» write theirs: the
- * simulations, the median of the sum and its 95% range. The median can differ from the seats of the central
- * scenario: the sum of the parties' medians is not the median of their sum.
+ * simulations, the seats of the marked parties in the central allocation (D'Hondt over the central vote, the
+ * headline figure, not the median of the simulated sums) and the 95% range of the sum.
  *
  * @param {object} stats `summarize` of the sums
+ * @param {number} central seats of the marked parties in the central allocation
  * @returns {{label: string, value: string}[]} the lines
  */
-export function coalitionCaption(stats) {
+export function coalitionCaption(stats, central) {
   return [
     {label: 'Simulaciones', value: fmtCount(stats.n)},
-    {label: 'Mediana', value: fmtInt(stats.median)},
+    {label: 'Reparto central', value: fmtInt(central)},
     {label: 'Rango 95%', value: fmtRange(stats.lo, stats.hi, 0)},
   ];
 }

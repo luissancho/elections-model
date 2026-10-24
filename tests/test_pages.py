@@ -665,7 +665,7 @@ def test_default_coalition_is_the_first_vs_block_present_in_dist():
 
 def test_csv_links_cover_the_five_parts_in_order():
     links = pages.csv_links('es', 'nowcast', RUN)
-    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Escenario central', 'Abanico por horizonte']
+    assert [l['label'] for l in links] == ['Resumen por partido y bloque', 'Escaños por simulación', 'Circunscripciones', 'Reparto central', 'Abanico por horizonte']
     assert links[0]['href'] == '/api/v1/forecast/es/nowcast/summary?run={}&format=csv'.format(RUN)
     assert links[4]['href'] == '/api/v1/forecast/es/fan?run={}&format=csv'.format(RUN)
 
@@ -2199,7 +2199,8 @@ def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     data = initial(body)
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
     assert data['mae']['last_poll'][0] == 1.74 and '5,77' in page
-    assert data['seats'] == {'mae': [4.88, 5.25], 'mae_h': [None, None]}  # sin ejecución a horizonte en el fixture
+    assert data['seats'] == {'mae': [4.88, 5.25]}  # una sola serie: el titular es el mismo en los dos modos
+    assert 'Error de escaños (modo Elección)' not in page and 'Brier de mayoría (modo Elección)' in page
     blocks = re.search(r'<table id="blocks-table">(.*?)</table>', page, re.S).group(1)
     rows = [re.findall(r'<td>(.*?)</td>', row) for row in re.findall(r'<tr>(.*?)</tr>', blocks, re.S) if '<td>' in row]
     invalid = [row for row in rows if row[0].startswith('10 ') and row[1] == '30']  # 2019-11-10 x 30
@@ -2499,7 +2500,7 @@ def test_backtest_subpage_has_the_seats_chart_and_the_subnav(api, fresh_app):
     status, _, body = call(api, '/metodo/backtest', query='scope=es')
     page = html(body)
     assert status == 200 and 'id="seats-chart"' in page and 'id="metodo-nav"' in page and 'id="scope-filter"' in page
-    assert initial(body)['seats'].keys() == {'mae', 'mae_h'}
+    assert initial(body)['seats'].keys() == {'mae'}
 
 
 def test_metodo_is_in_the_menu_and_the_footer_of_every_page(api):
@@ -3171,9 +3172,32 @@ def test_escanos_majority_calculator_draws_the_bar_above_the_histogram(api):
     assert card.index('id="coalition-result"') < card.index('id="coalition-bar"') < card.index('id="coalition-chart"')
     assert re.search(r'<div class="chart" id="coalition-bar" role="img" aria-label="[^"]+"></div>', card)
     assert 'los partidos marcados delante, en color, y el resto detrás, en gris' in re.sub(r'\s+', ' ', card)
-    assert 'la suma de esas medianas no tiene por qué coincidir con la mediana de la suma' in re.sub(r'\s+', ' ', card)
+    assert 'La franja de arriba y la línea del histograma son el reparto central' in re.sub(r'\s+', ' ', card)
+    assert 'mediana' not in card.lower()
     promedios = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
     assert 'la calculadora de mayorías están en la pestaña Escaños' in promedios and 'calculadora de coaliciones' not in promedios
+
+
+def test_escanos_texts_call_the_headline_the_central_allocation(api, fresh_app):
+    write_districts(fresh_app.fs)
+    page = re.sub(r'\s+', ' ', html(call(api, '/es/escanos')[2]))
+    assert "Reparto central: D'Hondt en cada circunscripción sobre el voto central; cada fila suma sus escaños." in page
+    assert 'la línea gruesa el reparto central' in page and 'la línea gruesa la mediana' not in page
+    assert 'la simulación más cercana a la mediana' not in page and 'Escenario central' not in page
+    assert 'la suma de las circunscripciones es el titular' in page
+    assert 'Reparto central' in page  # etiqueta del CSV
+    promedios = re.sub(r'\s+', ' ', html(call(api, '/es')[2]))
+    assert 'escaños del reparto central' in promedios and 'escenario central' not in promedios
+
+
+def test_metodo_escanos_explains_the_central_allocation(api):
+    text = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert '<strong>Los escaños de cada partido</strong> son su reparto central' in text
+    assert 'el mismo titular en el nowcast y en el forecast' in text
+    assert 'a veces saca escaño y a veces no' in text
+    assert 'son su mediana' not in text and 'El escenario central' not in text
+    assert 'El titular es un reparto' in text and 'el titular es el reparto del voto central' in text
+    assert 'Las cifras publicadas resumen todas las simulaciones' not in text
 
 
 def test_history_figures_are_a_kpi_row(history_site):
