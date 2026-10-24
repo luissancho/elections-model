@@ -195,10 +195,13 @@
                   <th scope="col">Error</th>
                   <th scope="col">Escaños modelo</th>
                   <th scope="col">Escaños reales</th>
+                  <th scope="col">Rango 95%</th>
                 </tr>
               </thead>
               <tbody>
                 {% for row in table.rows %}
+                {% set color = catalog[row.name].color %}
+                {% set r = row.seats_lo|rng(row.seats_hi, row.model_seats, n_seats, majority) %}
                 <tr>
                   <td>{{ row.name }}</td>
                   <td>{{ row.model|num(1) }}</td>
@@ -207,7 +210,9 @@
                   {% if table.seats_valid %}
                   <td><strong>{{ row.model_seats|int }}</strong></td>
                   <td>{{ row.official_seats|int }}</td>
+                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                   {% else %}
+                  <td class="na">—</td>
                   <td class="na">—</td>
                   <td class="na">—</td>
                   {% endif %}
@@ -227,11 +232,14 @@
                 <th scope="col">Error</th>
                 <th scope="col">Escaños modelo</th>
                 <th scope="col">Escaños reales</th>
+                <th scope="col">Rango 95%</th>
                 <th scope="col">Prob. de mayoría</th>
               </tr>
             </thead>
             <tbody>
               {% for row in table.blocks %}
+              {% set color = model_block_colors[row.block] %}
+              {% set r = row.seats_lo|rng(row.seats_hi, row.model_seats, n_seats, majority) %}
               <tr>
                 <td>{{ row.block }}</td>
                 <td>{{ row.model|num(1) }}</td>
@@ -240,8 +248,10 @@
                 {% if table.seats_valid %}
                 <td><strong>{{ row.model_seats|int }}</strong></td>
                 <td>{{ row.official_seats|int }}</td>
+                <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 <td>{{ row.p_majority|prob }}</td>
                 {% else %}
+                <td class="na">—</td>
                 <td class="na">—</td>
                 <td class="na">—</td>
                 <td class="na">—</td>
@@ -260,8 +270,12 @@
         <p>
           Cada fila es un partido principal: el voto del promedio del modelo a esa distancia de la elección y el
           oficial, su diferencia (promedio menos resultado, en puntos: rojo si el modelo se quedó corto y verde si se
-          pasó, más intenso cuanto mayor, hasta 8) y los escaños que proyectaba frente a los reales. Debajo, lo mismo
-          por bloque, con el voto sumado de sus partidos, y la probabilidad de mayoría absoluta que le daba el modelo.
+          pasó, más intenso cuanto mayor, hasta 8), los escaños que proyectaba frente a los reales y su rango del 95 %:
+          la banda es el tramo de la cámara donde el modelo situaba el 95 % de sus simulaciones, la marca son sus
+          escaños y la línea discontinua, la mayoría absoluta; un resultado fuera de la banda es un fallo mayor del
+          que el modelo esperaba. Debajo, lo mismo por bloque, con el voto sumado de sus partidos (su rango es el de
+          la suma, simulación a simulación, no la suma de los rangos), y la probabilidad de mayoría absoluta que le
+          daba el modelo.
         </p>
         <p>
           Encima de las tablas, el modelo medido como una encuestadora: su error medio (la distancia media, en puntos,

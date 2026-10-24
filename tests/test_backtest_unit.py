@@ -107,6 +107,21 @@ def test_summarize_case_horizon_columns():
     assert m['log_score_vs_h'] == pytest.approx(0.25)
 
 
+def test_block_quantiles_are_those_of_the_summed_simulations():
+    """La horquilla de escaños de un bloque es la de la suma de sus partidos simulación a simulación (no la suma
+    de las horquillas de cada partido, que ignora la correlación); los partidos sin simular no cuentan."""
+    from mtpy.lib.backtest import _block_quantiles
+
+    dist = pd.DataFrame({'A': [100, 120, 140, 160], 'B': [60, 40, 20, 0], 'C': [10, 10, 10, 10]})
+    out = _block_quantiles(dist, ['A', 'B'])
+    assert set(out) == {'lo50', 'hi50', 'lo80', 'hi80', 'lo95', 'hi95'}
+    assert out['lo95'] == out['hi95'] == 160  # A y B se compensan: el bloque suma 160 en toda simulación
+    out = _block_quantiles(dist, ['A', 'C', 'Z'], suffix='_h')
+    assert set(out) == {'lo50_h', 'hi50_h', 'lo80_h', 'hi80_h', 'lo95_h', 'hi95_h'}
+    assert out['lo95_h'] == pytest.approx(111.5) and out['hi95_h'] == pytest.approx(168.5)  # cuantiles de 110..170
+    assert _block_quantiles(dist, ['Z']) == {}
+
+
 def test_provinces_report_the_central_allocation_and_keep_the_median(monkeypatch):
     from mtpy.lib import backtest
     from tests.fakes import NAMES, synthetic_simulator
