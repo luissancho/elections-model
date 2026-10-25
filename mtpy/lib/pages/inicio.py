@@ -7,7 +7,7 @@ from typing import Optional
 
 from ..webapi import site
 from .common import (CHAMBERS, block_color, bundle_part, catalog, common_context, days_left, days_text, default_mode,
-                     event_title, hemicycle_order, published_scopes)
+                     event_title, hemicycle_order, published_scopes, run_horizon)
 from .analisis import study_cards
 from .elecciones import last_results, published_events
 from .filters import _madrid_tz, delta_text, fmt_date_short
@@ -87,11 +87,11 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
     list of dict
         ``es`` first, then the published scopes by ascending ``event_date``, then the unpublished ones by
         name; each with ``code``, ``name`` (of the catalogue), ``run`` (the latest run), ``title``,
-        ``published``, ``event_date``, ``days_text``, ``run_at``, ``frozen``, ``mode``, ``href``, ``href_seats``,
-        ``leader`` and ``majority`` (``card_headline``). The unpublished ones have no date, run, link or figures.
+        ``published``, ``event_date``, ``days_text``, ``run_at``, ``frozen``, ``mode`` (``default_mode`` of the
+        horizon of the latest run of the scope), ``href``, ``href_seats``, ``leader`` and ``majority``
+        (``card_headline``). The unpublished ones have no date, run, link or figures.
     """
     frozen = bool((site().manifest_data().get('freeze') or {}).get('active'))
-    mode = default_mode(frozen)
     ordered = sorted(scopes, key=lambda row: (row['code'] != 'es', not row['simulable'],
                                               (row.get('event_date') or '') if row['simulable'] else row['name']))
     cards = []
@@ -99,6 +99,8 @@ def event_cards(scopes: list, today: Optional[date] = None) -> list:
     for row in ordered:
         code = row['code']
         published = bool(row['simulable'])
+        # each card follows the horizon of its own run (the manifest entry carries ``as_of`` and ``event_date``)
+        mode = default_mode(run_horizon(row) if published else None)
         leader, majority = card_headline(row, mode) if published else (None, None)
         cards.append({
             'code': code,

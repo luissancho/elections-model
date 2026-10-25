@@ -83,7 +83,9 @@ usado), `date_fit_last` (o `null`), `horizon_max`, `n_sim`, `seed`, `drange`, `m
 evento en la base y fecha del último), `n_seats`, `majority`, `parties` (lista de `{name, id, fullname,
 color, block, regional}` en el orden de la simulación), `bmaps`, `smap`, `regions` (`{id, name, seats}`;
 incluye el total del ámbito, `id` 0, que es la cámara entera),
-`diagnostics` (`drift_k`, `multiplier`, `ages`, `composition`, `clip_rate` por modo), `seconds` (`init`,
+`diagnostics` (`drift_k`, `multiplier`, `ages`, `composition`, `clip_rate` por modo y, desde la enmienda 2026-10-25,
+`error_events`, las fechas ISO ascendentes de las elecciones cuyos sondeos ajustan el estimador de error, y
+`error_scope`, el ámbito estimador, `es` también en las autonómicas), `seconds` (`init`,
 `fit`, `nowcast`, `forecast`, `export`, `total`, a 1 decimal; `nowcast` y `forecast` miden solo las
 simulaciones y `export` suma la escritura de ambos modos y de los ficheros del ciclo), `freeze` y
 `limit_date`.
@@ -147,8 +149,12 @@ vacíos sin proyección; enmienda 2026-10-14).
 Abanico de voto por partido y horizonte. Fuente: `sim.fan()`.
 
 `data`: `horizons` (días, enteros ordenados; 0 es el nowcast) y `rows` (formato largo: `name`, `horizon`,
-`mean`, `sd`, `lo`, `hi`; el partido va en `name`, como en el resto de ficheros). CSV `csv/fan.csv`: las
-mismas filas.
+`mean`, `sd`, `lo`, `hi` y, desde la enmienda 2026-10-25, las tres piezas del margen en puntos, `err` (error
+estándar del promedio, `s`), `pct_err` (error histórico de los sondeos de la última semana, `e`) y `drift` (deriva
+de la opinión en ese horizonte, `d`, 0 en el horizonte 0), con `sd² = err² + pct_err² + drift²`, y `dof` (grados de
+libertad de la t, entero); el partido va en `name`, como en el resto de ficheros; los runs anteriores a la enmienda
+no traen las columnas nuevas y /metodo/escanos oculta entonces su tarjeta de los tres errores). CSV `csv/fan.csv`: las
+mismas filas y columnas, las seis históricas primero.
 
 ### `house-effects`
 
@@ -559,8 +565,13 @@ registran antes que las genéricas.
 Las rutas de páginas no forman parte del contrato de la API: las renderizan los controladores de
 `mtpy/controllers/` con plantillas Jinja2, y el contrato solo cubre `/api/v1` (enmienda 2026-10-13, fase 7: mapa por
 eventos). Hay dos familias. Las **de evento** viven bajo el código del ámbito: `/{scope}` (Promedios, controlador
-`Promedios`) y `/{scope}/escanos` (Escaños, `Escanos`), con `mode` y `run` (sin selector de modo desde la fase 7b:
-Hoy por defecto, Elección en veda; `mode` sigue aceptado en la query para enlaces y pruebas); un código que no es
+`Promedios`) y `/{scope}/escanos` (Escaños, `Escanos`), con `mode` y `run` (sin selector de modo desde la fase 7b.
+Desde el 2026-10-25 el modo por defecto lo decide sólo el horizonte del run mostrado: Elección cuando está a 60 días o
+menos de su elección, `event_date − as_of` del `meta` o de la entrada del manifest, `pages.run_horizon` y
+`pages.FORECAST_HORIZON`, porque convocada la elección la pregunta es el día de la votación, y Hoy más lejos; la veda
+congela la web a 6 días, ya dentro del plazo, y la congelación sólo decide la palabra «definitivo» y las fechas de los
+títulos, no el modo, así que una autonómica lejana sigue en Hoy durante la veda de las generales; las tarjetas de Inicio
+aplican la misma regla a su propio run; `mode` sigue aceptado en la query para enlaces y pruebas); un código que no es
 del catálogo da 404 ("Ámbito desconocido.") y uno del catálogo sin pronóstico, el 404 "Este ámbito no tiene
 pronóstico publicado.".
 `/{scope}/escanos` acepta además `region` (solo de la página, no de la API): un entero de `districts.regions`; mal

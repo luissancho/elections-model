@@ -53,6 +53,11 @@ HEMICYCLE_BLOCKS = ('Izquierda', 'Separatista', 'Regionalista', 'Derecha')
 # Chamber of a scope, for the event bar and the home ("Congreso, 350 escaños")
 CHAMBERS = {'es': 'Congreso'}
 DEFAULT_CHAMBER = 'Parlamento'
+# Horizon of a run (days from its anchor to its election, see ``run_horizon``) at or below which the event pages
+# open in the forecast mode: the election is called, or the legislature about to end, and the question is the
+# vote, not today (2026-10-25). Beyond it, "today" is the first question of the reader (phase 7). The veda
+# freezes the web six days before the vote, well inside: the freeze itself does not choose the mode
+FORECAST_HORIZON = 60
 # ``Router.handle`` returns the first route that matches: the fixed routes go before ``/{scope}``.
 ROUTES = [
     ('/promedio', 'redirect', 'promedio', ['GET']),
@@ -233,22 +238,52 @@ def parse_state(query: dict, scope: Optional[str] = None) -> dict:
     }
 
 
-def default_mode(frozen: bool) -> str:
+def run_horizon(entry: dict) -> Optional[int]:
+    """
+    Days from the anchor of a run to its election: the horizon of its forecast mode (the ``horizon_max``
+    of the Simulator).
+
+    Parameters
+    ----------
+    entry : dict
+        The meta part of a run or its scope entry of the manifest (``as_of``, ``event_date``, both ISO dates).
+
+    Returns
+    -------
+    int or None
+        ``event_date - as_of`` in days (negative after the election), or ``None`` when either date is missing
+        or invalid.
+    """
+    anchor = _parse_datetime(entry.get('as_of'))
+
+    if anchor is None:
+        return None
+
+    return days_left(entry.get('event_date'), today=anchor.date())
+
+
+def default_mode(horizon: Optional[int]) -> str:
     """
     Mode an event page shows when the request does not choose one.
 
     Parameters
     ----------
-    frozen : bool
-        Whether the publication is frozen (``manifest.freeze.active``).
+    horizon : int or None
+        Horizon of the run shown (``run_horizon``): days from its anchor to its election.
 
     Returns
     -------
     str
-        ``'forecast'`` while frozen (the final forecast is what matters and "today" no longer
-        gets polls), otherwise ``'nowcast'``.
+        ``'forecast'`` when the run is ``FORECAST_HORIZON`` days or less from the election (called, or the
+        legislature about to end: the question is the vote, not today); otherwise ``'nowcast'``, including a run
+        without horizon. The freeze of the veda does not enter: it is one switch for every scope, the general
+        election is then inside the horizon anyway, and a far regional election must not read "definitive"
+        (the freeze only shapes the titles, see ``title_of``).
     """
-    return 'forecast' if frozen else 'nowcast'
+    if horizon is not None and horizon <= FORECAST_HORIZON:
+        return 'forecast'
+
+    return 'nowcast'
 
 
 def analysis_part(scope: str, name: str) -> Optional[dict]:
@@ -892,7 +927,8 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     dict
         ``site_title``, ``site_tagline``, ``site_host`` (the host of ``settings()['site_url']``, for the signature of the
         downloadable images), ``author_handle``, ``author_url``, ``pages`` (``href``, ``label``, ``active``), ``state`` (``scope``,
-        ``mode`` resolved with ``default_mode``, ``run``, ``pinned``), ``query`` (``event_query``
+        ``mode`` resolved with ``default_mode`` from the horizon of the run, ``run``, ``pinned``),
+        ``query`` (``event_query``
         on an event page, ``scope_query`` on a global one), ``scope_query``, ``scopes`` and
         ``scope_filter`` (``published_scopes()``, the options of the scope filter),
         ``filter_action`` (``active``, target of the scope filter), ``is_event``, ``event_bar``
@@ -916,7 +952,7 @@ def common_context(state: dict, active: Optional[str], event: bool = False, acti
     # a manifest written before phase 6 has no ``since``: complete the switch for StrictUndefined
     freeze = {'active': False, 'message': None, 'since': None, **(manifest.get('freeze') or {})}
     frozen = bool(freeze.get('active'))
-    mode = state['mode'] or default_mode(frozen)
+    mode = state['mode'] or default_mode(run_horizon(meta))
     full = {'scope': scope, 'mode': mode, 'run': run, 'pinned': pinned}
     scopes = published_scopes()
     info = event_info(scope, meta, active_suffix, full, scopes=scopes) if event else None

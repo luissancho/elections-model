@@ -111,6 +111,7 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.as_of, sim.deadline, sim.horizon_max = pd.Timestamp('2026-10-05'), pd.Timestamp('2026-11-29'), 55
     sim.ages = pd.Series({'PP': 40., 'PSOE': 40., 'VOX': 12.}, name='age')
     sim.v2err = sim.v2drift = sim.v2seats = None
+    sim.computer, sim.est_scope, sim.n_last = None, 'es', 1  # no past elections: no error estimator
     sim.composition_ratio, sim.composition_rho = 1.0, 0.
     sim.house_effects = sim.dispersion = sim.regional_noise = True
     sim.industry_bias, sim.composition, sim.smap = False, None, {'UP': [{'agg': ['UP', 'MP']}]}

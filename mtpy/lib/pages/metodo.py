@@ -14,7 +14,7 @@ from ..studies.lean.stats import sign_chance
 from ..webapi import catalogue, site
 from .backtest import backtest_context, backtest_part
 from .casas import election_label
-from .common import analysis_part, api_url, bundle_part, common_context, part
+from .common import analysis_part, api_url, bundle_part, catalog, common_context, part
 from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
 from .filters import _is_missing
 from .slugs import PROFILE_PATH, slugify
@@ -156,6 +156,66 @@ def national_figures() -> dict:
             'mae_last_poll': first.get('mae_last_poll'), 'mae_mean_4w': first.get('mae_mean_4w'),
             'cov95': first['cov_shares95'],
         },
+    }
+
+
+def error_example() -> Optional[dict]:
+    """
+    The live example of the three errors: the pieces of the margin of each main party of the latest national
+    run, at the anchor of the run (``Hoy``) and at its election (``Elección``), from the ``fan`` part.
+
+    Returns
+    -------
+    dict or None
+        ``published`` (``run_at``), ``event_date``, ``horizon`` (days from the anchor to the election: the
+        largest horizon of the fan, 0 on election day), ``n_events``, ``first_year`` and ``last_year`` (of the
+        elections whose polls fit the polling-error estimator, ``meta.diagnostics.error_events``), ``scope`` (the
+        estimator scope) and ``rows``, one per party of ``bmaps.main`` with a fit, by vote descending: ``name``,
+        ``fullname``, ``color``, ``pct``, ``err`` (``s``), ``pct_err`` (``e``), ``dof``, ``sd_now`` (``σ`` at
+        horizon 0), ``drift`` (``d`` at ``horizon``), ``sd_election``, ``lo`` and ``hi`` (the 95 % interval at
+        ``horizon``). ``None`` without a national run, when its fan lacks the pieces (published before 2026-10-25)
+        or when its meta lacks ``error_events``.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than a 404.
+    """
+    try:
+        run = site().latest_run(NATIONAL_SCOPE)
+        meta = part(NATIONAL_SCOPE, run, 'meta')
+        fan = part(NATIONAL_SCOPE, run, 'fan')
+    except HttpError as error:
+        if error.status != 404:
+            raise
+
+        return None
+
+    rows = fan.get('rows') or []
+    events = (meta.get('diagnostics') or {}).get('error_events')
+    if not rows or not all('pct_err' in row for row in rows) or not events:
+        return None
+
+    horizon = max(int(h) for h in fan.get('horizons') or [0])
+    at_now = {row['name']: row for row in rows if int(row['horizon']) == 0}
+    at_election = {row['name']: row for row in rows if int(row['horizon']) == horizon}
+    parties = catalog(meta)
+    out = []
+    for name in (meta.get('bmaps') or {}).get('main') or []:
+        now, then = at_now.get(name), at_election.get(name)
+        if now is None or then is None:
+            continue  # no fit for the party: no row in the fan
+        out.append({
+            'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'], 'pct': now['mean'],
+            'err': now['err'], 'pct_err': now['pct_err'], 'drift': then['drift'], 'sd_now': now['sd'],
+            'sd_election': then['sd'], 'lo': then['lo'], 'hi': then['hi'], 'dof': now['dof'],
+        })
+    out.sort(key=lambda row: -(row['pct'] or 0))
+
+    return {
+        'published': meta.get('run_at'), 'event_date': meta.get('event_date'), 'horizon': horizon,
+        'n_events': len(events), 'first_year': str(events[0])[:4], 'last_year': str(events[-1])[:4],
+        'scope': (meta.get('diagnostics') or {}).get('error_scope'), 'rows': out,
     }
 
 
@@ -415,7 +475,8 @@ def metodo_section_context(state: dict, section: str) -> dict:
     dict
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
-        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``promedio`` subpage adds
+        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``escanos`` subpage adds
+        ``errors`` (``error_example``, ``None`` without one). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
         ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so
         the card links to it) and, with either example, the
@@ -443,6 +504,9 @@ def metodo_section_context(state: dict, section: str) -> dict:
 
     if section == 'rating':
         context['rubric'] = quality_rubric()
+
+    if section == 'escanos':
+        context['errors'] = error_example()
 
     if section == 'promedio':
         example = weights_example()

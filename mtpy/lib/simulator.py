@@ -446,6 +446,27 @@ class Simulator(Core):
 
         return self.computer.get_error_estimator(drange=self.ERROR_DRANGE, n_last=self.n_last)
 
+    def error_events(self) -> list[str]:
+        """
+        Elections whose polls fit the polling-error estimator (`fit_error_estimator`): the distinct event dates
+        of the past polls of the estimator scope within `ERROR_DRANGE` (the last `n_last` of each pollster).
+
+        Returns
+        -------
+        list of str
+            ISO dates, ascending; empty without an estimator (`v2err` is `None`).
+        """
+        if self.v2err is None:
+            return []
+
+        polls = self.computer.filter_polls(featured=True, drange=self.ERROR_DRANGE, n_last=self.n_last)
+        if 'event_date' in polls.index.names:
+            events = polls.index.get_level_values('event_date')
+        else:
+            events = polls['event_date']
+
+        return sorted(pd.to_datetime(pd.Series(events)).dt.strftime('%Y-%m-%d').unique().tolist())
+
     def _past_computer(
         self,
         scope: str,
@@ -1035,14 +1056,17 @@ class Simulator(Core):
         Returns
         -------
         pd.DataFrame
-            `party`, `horizon`, `mean`, `sd`, `lo`, `hi` (long) or the wide table.
+            Long: `party`, `horizon`, `mean`, `err` (standard error of the average, `s`), `pct_err` (terminal
+            polling error, `e`), `drift` (drift at that horizon, `d`, 0 at horizon 0), `sd`
+            (`sqrt(err² + pct_err² + drift²)`), `lo`, `hi` and `dof` (degrees of freedom of the t); or the wide
+            table of `lo` and `hi` by horizon.
         """
         self._require_forecast()
 
         if horizons is None:
             horizons = sorted(set(self.DEFAULT_FAN) | {self.horizon_max})
 
-        df = self._fan(horizons, alpha=alpha).drop(columns='dof')
+        df = self._fan(horizons, alpha=alpha)
 
         if wide:
             order = [n for n in self.params['names'] if n in set(df['party'])]
@@ -1057,8 +1081,9 @@ class Simulator(Core):
         alpha: Optional[float] = None
     ) -> pd.DataFrame:
         """
-        Long fan of `fan` for the given horizons (clipped to `[0, horizon_max]`), with the degrees of freedom
-        of the Student t of each party (`dof`, the same as in `build_frame`).
+        Long fan of `fan` for the given horizons (clipped to `[0, horizon_max]`), with the three pieces of the
+        margin of each party (`err`, `pct_err`, `drift`, percentage points) and the degrees of freedom of its
+        Student t (`dof`, the same as in `build_frame`).
         """
         alpha = self.alpha if alpha is None else alpha
         horizons = [int(h) for h in horizons if 0 <= int(h) <= self.horizon_max]
@@ -1081,14 +1106,15 @@ class Simulator(Core):
 
             for h in horizons:
                 age = float(self.ages.get(n, np.nan)) if self.ages is not None else np.nan
-                drift_var = self.v2drift.var(h, mean, age=age) if self.v2drift is not None else 0.
+                drift_var = float(self.v2drift.var(h, mean, age=age)) if self.v2drift is not None else 0.
                 sd = float(np.sqrt(base + drift_var))
                 rows.append({
-                    'party': n, 'horizon': h, 'mean': mean, 'sd': sd,
+                    'party': n, 'horizon': h, 'mean': mean, 'err': float(np.nan_to_num(err)), 'pct_err': pct_err,
+                    'drift': float(np.sqrt(drift_var)), 'sd': sd,
                     'lo': max(mean - q * sd, 0.), 'hi': mean + q * sd, 'dof': dof
                 })
 
-        return pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'sd', 'lo', 'hi', 'dof'])
+        return pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'err', 'pct_err', 'drift', 'sd', 'lo', 'hi', 'dof'])
 
     def _require_forecast(self) -> None:
         if self.forecast is None or self.horizon_max is None:
