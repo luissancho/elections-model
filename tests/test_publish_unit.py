@@ -269,8 +269,10 @@ def test_export_fan_house_effects_and_dispersion():
     fan, _ = publish.export_fan(sim)
     fan = valid('fan', fan, mode=None)
     assert fan['horizons'] == [0, 7, 14, 30, 55] and len(fan['rows']) == 5 * 3
-    assert set(fan['rows'][0]) == {'name', 'horizon', 'mean', 'sd', 'lo', 'hi'}
-    assert list(publish.export_fan(sim)[1].columns) == ['name', 'horizon', 'mean', 'sd', 'lo', 'hi']
+    # the three pieces of the margin and the dof travel with the fan (2026-10-25)
+    assert set(fan['rows'][0]) == {'name', 'horizon', 'mean', 'sd', 'lo', 'hi', 'err', 'pct_err', 'drift', 'dof'}
+    assert fan['rows'][0]['dof'] == 38 and fan['rows'][0]['drift'] == 0.0 and fan['rows'][0]['err'] == 1.5
+    assert list(publish.export_fan(sim)[1].columns) == ['name', 'horizon', 'mean', 'sd', 'lo', 'hi', 'err', 'pct_err', 'drift', 'dof']
     he, frame = publish.export_house_effects(sim.model)
     he = valid('house-effects', he, mode=None)
     assert len(he['rows']) == 4 and he['rows'][1]['prior'] is None and he['rows'][0]['name'] == 'PP'
@@ -363,7 +365,8 @@ def test_export_meta_and_headline():
     assert meta['parties'][0] == {'name': 'PP', 'id': 1, 'fullname': 'Partido Popular', 'color': '#1d84ce', 'block': 'Derecha', 'regional': 0}
     assert meta['regions'][1] == {'id': 28, 'name': 'Madrid', 'seats': 6}
     assert meta['diagnostics'] == {'drift_k': None, 'multiplier': None, 'ages': {'PP': 40.0, 'PSOE': 40.0, 'VOX': 12.0},
-                                   'composition': 1.0, 'clip_rate': {'nowcast': 0.0, 'forecast': 0.01}}
+                                   'composition': 1.0, 'clip_rate': {'nowcast': 0.0, 'forecast': 0.01},
+                                   'error_events': [], 'error_scope': 'es'}
     assert meta['smap'] == {'UP': [{'agg': ['UP', 'MP']}]} and 'vs' in meta['bmaps']
 
     head = publish.export_headline(sim, '20261008-120000', '2026-10-08T12:00:00Z', {'parties': [], 'p_majority': {}},

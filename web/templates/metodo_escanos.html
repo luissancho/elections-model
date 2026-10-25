@@ -18,6 +18,7 @@
       <nav class="section-nav toc" aria-label="Secciones">
         <a href="#sorteo">Del promedio al sorteo del voto</a>
         <a href="#hoy-y-eleccion">Hoy y Elección</a>
+        {% if errors %}<a href="#errores">Los tres errores del último cálculo</a>{% endif %}
         <a href="#circunscripciones">De España a las circunscripciones</a>
         <a href="#dhondt">El reparto D'Hondt</a>
         <a href="#barreras">Las barreras</a>
@@ -120,6 +121,64 @@
           votación quede lejos.
         </p>
       {{ m.card_end() }}
+      {% if errors %}
+      {{ m.card_start('errores', 'Un ejemplo con datos publicados: los tres errores del ' ~ (errors.published|date),
+                      'Las tres piezas del margen de cada partido principal en el último cálculo de las generales, en puntos de voto.') }}
+        <div class="table-wrap">
+          <table id="errors-table">
+            <caption>Error del promedio, error histórico y deriva de cada partido principal, con el margen total de cada modo.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Partido</th>
+                <th scope="col">Voto</th>
+                <th scope="col">Promedio (s)</th>
+                <th scope="col">Histórico (e)</th>
+                <th scope="col">Deriva (d), {{ errors.horizon|int }} días</th>
+                <th scope="col">Hoy (σ)</th>
+                <th scope="col">Elección (σ)</th>
+                <th scope="col">Rango 95% en Elección</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in errors.rows %}
+              <tr>
+                <th scope="row">{{ row.name }}</th>
+                <td>{{ row.pct|pct(1) }}</td>
+                <td>{{ row.err|num(2) }}</td>
+                <td>{{ row.pct_err|num(2) }}</td>
+                <td>{{ row.drift|num(2) }}</td>
+                <td>{{ row.sd_now|num(2) }}</td>
+                <td>{{ row.sd_election|num(2) }}</td>
+                <td>{{ row.lo|range(row.hi) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Cada fila descompone el margen de un partido: <var>s</var> es la banda del promedio; <var>e</var>, lo que
+          se equivocaron los sondeos de la última semana en las elecciones pasadas para un partido de ese tamaño; y
+          <var>d</var>, lo que la opinión puede moverse en los {{ errors.horizon|int }} días que faltan hasta el
+          {{ errors.event_date|date }}. Hoy suma las dos primeras y Elección las tres, siempre en cuadratura: la
+          raíz de la suma de los cuadrados.
+        </p>
+        <p>
+          <strong>De dónde sale <var>e</var>.</strong> De la última encuesta de cada encuestadora antes de cada una
+          de las {{ errors.n_events|int }} elecciones generales con sondeos celebradas de {{ errors.first_year }} a
+          {{ errors.last_year }}, todas con el mismo peso y con sus fallos grandes dentro. Por eso vale varias veces
+          la banda del promedio: la banda dice cuánto puede equivocarse la línea al resumir los sondeos;
+          <var>e</var>, cuánto se han equivocado los sondeos frente a las urnas.
+        </p>
+        <p>
+          <strong>No tiene dirección.</strong> El modelo no sabe hacia qué lado se equivocarán los sondeos esta
+          vez, sólo cuánto suelen hacerlo: el sorteo reparte ese error a los dos lados del voto estimado.
+        </p>
+        <p>
+          <strong>Las colas.</strong> El sorteo usa una t de Student cuyos grados de libertad salen del número de
+          sondeos del partido, muchos en los grandes, así que sus colas son casi las de una campana normal.
+        </p>
+      {{ m.card_end() }}
+      {% endif %}
       {{ m.card_start('circunscripciones', 'De España a las circunscripciones', 'El voto sorteado es el del conjunto; para repartir escaños hace falta el de cada circunscripción, y el modelo lo deduce de la elección anterior.') }}
         <p>
           <strong>El swing proporcional.</strong> Cada partido conserva la geografía de su voto en la elección

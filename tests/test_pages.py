@@ -44,6 +44,22 @@ FIXTURE_POLLS = 1  # polls of the `polls` part of tests/fixtures/bundle
 def html(body):
     return body.decode('utf-8')
 
+
+FAR_EVENT = '2027-08-22'  # fin de legislatura: a más de 60 días de cualquier run del fixture
+
+
+def write_far_bundle(fs, scope='es', run_id=RUN, event_date=FAR_EVENT, headline=None):
+    """El paquete del fixture con la elección lejana: `meta`, `headline` y el manifest llevan `event_date`, así que el
+    run queda a más de 60 días de la votación y las páginas abren en Hoy (ver `pages.run_horizon`)."""
+    writer = write_bundle(fs, scope=scope, run_id=run_id, manifest=False)
+    headline = (headline or fixture_data('headline')) | {'event_date': event_date}
+    meta = fixture_data('meta') | {'event_date': event_date}
+    writer.write_json(bundle.path_part(scope, run_id, 'meta'), 'meta', meta, scope, run_id=run_id)
+    writer.write_json(bundle.path_part(scope, run_id, 'headline'), 'headline', headline, scope, run_id=run_id)
+    publish.rebuild_history(writer, scope)
+    publish.update_manifest(writer, {scope: publish.latest_entry(headline | {'run_id': run_id})})
+    return writer
+
 def header_tooltips(table):
     """{etiqueta: tooltip} de las cabeceras de una tabla, con los espacios normalizados (la etiqueta sin su segunda
     línea, `th-sub`)."""
@@ -86,7 +102,7 @@ def test_promedios_initial_data_has_the_page_parts_with_one_run(api):
     data = initial(call(api, '/es')[2])
     assert set(data) == {'state', 'meta', 'headline', 'series', 'polls', 'projection', 'vote', 'summary', 'runs', 'cards', 'inks', 'deltas', 'catalog'}
     assert data['catalog'] == {'parties': [dict(pages.catalog(data['meta'])['PP'], name='PP')], 'bmaps': data['meta']['bmaps']}
-    assert data['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
+    assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}  # a 52 días: Elección
     assert list(data['state']) == ['scope', 'mode', 'run', 'pinned']
     assert data['meta']['run_id'] == RUN and data['headline']['run_id'] == RUN
     assert data['runs']['runs'][0]['run_id'] == RUN
@@ -167,17 +183,31 @@ def test_default_scope_is_the_first_published(api, fresh_app):
     assert '<option value="es" selected>' in page and '<option value="es-md">Madrid</option>' in page
 
 
-def test_event_pages_live_under_the_scope_and_default_to_nowcast(api):
+def test_event_pages_live_under_the_scope_and_default_to_the_forecast_near_the_election(api):
+    """El run del fixture está a 52 días de la elección (`as_of` 2026-10-08, 29-N): convocada, la pregunta es el
+    día de la votación, y el modo por defecto es Elección (2026-10-25)."""
     status, headers, body = call(api, '/es')
     page = html(body)
     assert status == 200 and headers['cache-control'] == 'public, max-age=60'
     assert '<title>Demoscopio · Promedios</title>' in page
-    assert 'estimación a' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
-    assert 'name="mode"' not in page
-    assert 'href="/es/escanos?mode=nowcast"' in page and 'id="controls"' not in page
+    assert 'pronóstico para el 29 nov 2026' in page and 'id="event-bar"' in page and 'Elecciones generales' in page
+    assert 'estimación a' not in page and 'name="mode"' not in page
+    assert 'href="/es/escanos?mode=forecast"' in page and 'id="controls"' not in page
+    assert initial(body)['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
+    status, _, body = call(api, '/es/escanos', query='mode=nowcast&run=' + RUN)
+    assert status == 200 and 'estimación a' in html(body) and 'Run del 8 oct 2026' in html(body)
+
+
+def test_event_pages_default_to_the_nowcast_when_the_election_is_far(api, fresh_app):
+    """Con la elección a más de 60 días del run (fin de legislatura, sin convocar), la primera pregunta sigue siendo
+    qué pasaría hoy."""
+    write_far_bundle(fresh_app.fs)
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/es')
+    page = html(body)
+    assert status == 200 and 'estimación a' in page and 'pronóstico para el' not in page
+    assert 'href="/es/escanos?mode=nowcast"' in page
     assert initial(body)['state'] == {'scope': 'es', 'mode': 'nowcast', 'run': RUN, 'pinned': False}
-    status, _, body = call(api, '/es/escanos', query='mode=forecast&run=' + RUN)
-    assert status == 200 and 'pronóstico para el' in html(body) and 'Run del 8 oct 2026' in html(body)
 
 
 def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_definitive(api, fresh_app):
@@ -264,7 +294,22 @@ def test_event_info_counts_one_day_and_unknown_dates_and_marks_the_tab():
     assert unknown['days_left'] is None and unknown['days_text'] is None
     assert pages.event_query({'mode': 'nowcast', 'run': RUN, 'pinned': False}) == '?mode=nowcast'
     assert pages.scope_query('es-md') == '?scope=es-md'
-    assert pages.default_mode(True) == 'forecast' and pages.default_mode(False) == 'nowcast'
+    assert pages.default_mode(None) == 'nowcast' and pages.default_mode(6) == 'forecast'
+
+
+def test_default_mode_is_the_forecast_within_sixty_days_of_the_election():
+    """Convocada la elección, la pregunta es el día de la votación, no hoy: a 60 días o menos del evento, contados
+    desde el ancla del run (`as_of` → `event_date`, el `horizon_max` del Simulator), el modo por defecto es Elección
+    (2026-10-25). El horizonte es la única condición: la veda congela la web a 6 días, ya dentro del plazo, y la
+    congelación sólo decide la palabra «definitivo» y las fechas de los títulos. Sin horizonte (un run sin fechas), Hoy."""
+    assert pages.FORECAST_HORIZON == 60
+    assert pages.default_mode(61) == 'nowcast' and pages.default_mode(60) == 'forecast'
+    assert pages.default_mode(34) == 'forecast' and pages.default_mode(-2) == 'forecast'
+    assert pages.default_mode(None) == 'nowcast'
+    assert pages.run_horizon({'event_date': '2026-11-29', 'as_of': '2026-10-26'}) == 34
+    assert pages.run_horizon({'event_date': '2027-05-23', 'as_of': '2026-06-22'}) == 335
+    assert pages.run_horizon({'event_date': '2026-11-29'}) is None and pages.run_horizon({}) is None
+    assert pages.run_horizon({'as_of': '2026-10-26'}) is None
 
 
 def test_parse_state_takes_the_scope_of_the_route_and_leaves_the_mode_unresolved(api):
@@ -2748,7 +2793,8 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
     from mtpy.lib.pages.filters import _madrid_tz
     today = pages.fmt_date(datetime.now(_madrid_tz()).date().isoformat())
     for path in ('/es', '/es/escanos'):
-        page = html(call(api, path)[2])
+        # the run of the fixture is 52 days from the election, so its default is Elección: Hoy is asked for
+        page = html(call(api, path, query='mode=nowcast')[2])
         bar = page[page.index('id="event-bar"'):page.index('<main')]
         # the district form of Escaños keeps `mode` hidden: no radio and nothing in the bar
         assert 'type="radio" id="mode-' not in page and 'name="mode"' not in bar, path
@@ -2763,14 +2809,14 @@ def test_event_bar_has_no_mode_control_and_the_title_shows_today(api, fresh_app)
         assert 'Actualizado: {} (8 oct 2026)'.format(RUN) in footer and 'Estimación' not in footer, path
     write_bundle(fresh_app.fs, run_id=OLDER_RUN, manifest=False)
     webapi.site().manifest_cache_clear()
-    page = html(call(api, '/es', query='run=' + OLDER_RUN)[2])
+    page = html(call(api, '/es', query='run=' + OLDER_RUN + '&mode=nowcast')[2])
     assert 'estimación del 8 oct 2026' in page and 'Estimación a ' + today not in page  # run_at of the fixture
     bar = page[page.index('id="event-bar"'):page.index('<main')]
     assert '<span class="pill event-run">Run del 8 oct 2026</span>' in bar and '<form' not in bar
-    # `?mode=` is still accepted in the query and kept in the tabs
-    page = html(call(api, '/es', query='mode=forecast')[2])
+    # without `?mode=` the run opens in Elección (2026-10-25), with the mode kept in the tabs and still no control
+    page = html(call(api, '/es')[2])
     assert 'pronóstico para el 29 nov 2026' in page and 'href="/es/escanos?mode=forecast"' in page
-    assert 'name="mode"' not in page
+    assert 'name="mode"' not in page and 'Estimación a ' + today not in page
 
 
 def test_frozen_site_has_no_control_and_shows_the_forecast(api, fresh_app):
@@ -2884,15 +2930,15 @@ def test_promedios_hemicycle_card_offers_a_download_button_hidden_without_js(api
     assert button, hemi
     attrs = dict(re.findall(r'data-(\w+)="([^"]*)"', button.group(1)))
     assert attrs['title'] == 'Elecciones generales · 29 nov 2026'
-    assert re.fullmatch(r'Hemiciclo · Estimación a \d+ \w+ 2026', attrs['subtitle']), attrs
+    assert attrs['subtitle'] == 'Hemiciclo · Pronóstico para el 29 nov 2026', attrs  # Elección: the run is 52 days away
     assert attrs['sign'] == 'demoscopio.es · @luis_sancho'
     assert attrs['file'] == 'demoscopio-hemiciclo-es-2026-10-08.png'
     assert set(attrs) == {'title', 'subtitle', 'sign', 'file'}
     assert button.group(2) == '<svg aria-hidden="true"><use href="#i-download"/></svg>Descargar'
     assert 'id="i-download"' in page  # the icon is in the sprite
     # the subtitle follows the mode and the file the scope
-    forecast = html(call(api, '/es', query='mode=forecast')[2]).replace('\n', ' ')
-    assert 'data-subtitle="Hemiciclo · Pronóstico para el 29 nov 2026"' in forecast
+    nowcast = html(call(api, '/es', query='mode=nowcast')[2]).replace('\n', ' ')
+    assert re.search(r'data-subtitle="Hemiciclo · Estimación a \d+ \w+ 2026"', nowcast)
     # the other hemicycles (home, election detail) have no button
     assert 'hemicycle-download' not in html(call(api, '/')[2])
 
@@ -2907,12 +2953,12 @@ def test_promedios_series_card_offers_a_download_button_hidden_without_js(api):
     assert button, card
     attrs = dict(re.findall(r'data-(\w+)="([^"]*)"', button.group(1)))
     assert attrs['title'] == 'Elecciones generales · 29 nov 2026'
-    assert re.fullmatch(r'Promedio de sondeos · Estimación a \d+ \w+ 2026', attrs['subtitle']), attrs
+    assert attrs['subtitle'] == 'Promedio de sondeos y proyección · Pronóstico para el 29 nov 2026', attrs  # Elección
     assert attrs['sign'] == 'demoscopio.es · @luis_sancho'
     assert attrs['file'] == 'demoscopio-promedio-es-2026-10-08.png'
     assert button.group(2) == '<svg aria-hidden="true"><use href="#i-download"/></svg>Descargar'
-    forecast = html(call(api, '/es', query='mode=forecast')[2]).replace('\n', ' ')
-    assert 'data-subtitle="Promedio de sondeos y proyección · Pronóstico para el 29 nov 2026"' in forecast
+    nowcast = html(call(api, '/es', query='mode=nowcast')[2]).replace('\n', ' ')
+    assert re.search(r'data-subtitle="Promedio de sondeos · Estimación a \d+ \w+ 2026"', nowcast)
 
 
 def download_attrs(page, button_id, heading):
@@ -2930,7 +2976,7 @@ def test_promedios_pollster_card_offers_a_download_button_named_after_the_house_
     attrs = download_attrs(page, 'pollster-download', 'Una encuestadora frente al promedio')
     assert attrs, page[page.index('id="pollster"'):page.index('id="pollster"') + 800]
     assert attrs['title'] == 'Elecciones generales · 29 nov 2026'
-    assert re.fullmatch(r'frente al promedio · Estimación a \d+ \w+ 2026', attrs['subtitle']), attrs
+    assert attrs['subtitle'] == 'frente al promedio · Pronóstico para el 29 nov 2026', attrs  # Elección by default
     assert attrs['file'] == 'demoscopio-encuestadora-es-2026-10-08.png' and attrs['sign'] == 'demoscopio.es · @luis_sancho'
 
 
@@ -3011,7 +3057,7 @@ def test_rng_cell_places_the_range_the_median_and_the_majority():
 
 def test_card_subtitle_is_a_pill(api):
     page = html(call(api, '/es')[2])
-    assert '<span class="pill">estimación a ' in page and 'mode-subtitle' not in page
+    assert '<span class="pill">pronóstico para el 29 nov 2026' in page and 'mode-subtitle' not in page
 
 
 def test_tabbar_links_the_five_sections_and_marks_the_active_one():
@@ -3033,17 +3079,17 @@ def test_header_is_compact_and_the_pages_carry_the_tabbar_and_the_icons(api):
     assert '<svg hidden aria-hidden="true"' in page and page.index('<symbol id="i-home"') < page.index('<main')
     assert 'class="ico-btn" href="/metodo" aria-label="Método"' in page
     bar = re.search(r'<nav class="tabbar" aria-label="Secciones">(.*?)</nav>', page, re.S).group(1)
-    assert bar.count('<a ') == 5 and 'href="/es/escanos?mode=nowcast"' in bar and '<use href="#i-trophy"' in bar
-    assert re.search(r'<a class="on" href="/es\?mode=nowcast"[^>]*><svg[^>]*><use href="#i-line"', bar)
+    assert bar.count('<a ') == 5 and 'href="/es/escanos?mode=forecast"' in bar and '<use href="#i-trophy"' in bar
+    assert re.search(r'<a class="on" href="/es\?mode=forecast"[^>]*><svg[^>]*><use href="#i-line"', bar)
     assert page.index('</footer>') < page.index('<nav class="tabbar"')
 
 
 def test_event_bar_names_the_chamber_and_the_publication(api):
     page = html(call(api, '/es')[2])
     assert '<h2>Elecciones generales<small>29 nov 2026 · ' in page and 'Congreso, 350 escaños</small></h2>' in page
-    assert '<span class="pill brand">Estimación a ' in page
+    assert '<span class="pill brand">Pronóstico para el 29 nov 2026</span>' in page  # Elección: 52 days away
     assert 'Publicación del 8 oct 2026 · 120 sondeos' in page
-    assert 'class="seg lg event-tabs"' in page and re.search(r'<a class="on" href="/es\?mode=nowcast" aria-current="page"><svg', page)
+    assert 'class="seg lg event-tabs"' in page and re.search(r'<a class="on" href="/es\?mode=forecast" aria-current="page"><svg', page)
 
 
 def test_error_page_has_no_tabbar(api):
@@ -3091,7 +3137,8 @@ def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(ap
     summary['parties'].append(dict(summary['parties'][0], name='XX', seats=3, pct=1.0, seats_lo=0, seats_hi=5, p_first=0))
     summary['totals']['XX'] = 3
     writer = write_bundle(fresh_app.fs)
-    writer.write_json(bundle.path_part('es', RUN, 'summary', 'nowcast'), 'summary', summary, 'es', run_id=RUN, mode='nowcast')
+    for mode in bundle.MODES:  # the page reads the summary of its default mode (Elección for a run 52 days away)
+        writer.write_json(bundle.path_part('es', RUN, 'summary', mode), 'summary', summary, 'es', run_id=RUN, mode=mode)
     os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'polls')))
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es')
@@ -3152,14 +3199,16 @@ def test_home_hero_falls_back_to_the_first_published_scope(api, fresh_app, tmp_p
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/')[2])
     assert re.search(r'<span class="eyebrow"[^>]*>Madrid · \d+ \w+ \d{4} · ', page)
-    assert 'class="flag"' not in page and 'Parlamento · 350 escaños · ' in page and 'Si hoy hubiera elecciones en Madrid' in page
+    assert 'class="flag"' not in page and 'Parlamento · 350 escaños · ' in page
+    assert 'Pronóstico para Madrid' in page  # el run del fixture está a 52 días: Elección
     assert 'id="auto-rows"' not in page  # el único ámbito publicado es el hero
     assert 'href="/es-md/escanos"' in re.search(r'<nav class="tabbar".*?</nav>', page, re.S).group(0)
 
 
 def test_home_without_summary_or_polls_keeps_the_hero_without_the_bar(api, fresh_app, tmp_path):
     os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'polls')))
-    os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'summary', 'nowcast')))
+    for mode in bundle.MODES:
+        os.remove(os.path.join(str(tmp_path), bundle.PREFIX, bundle.path_part('es', RUN, 'summary', mode)))
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/')
     page = html(body)
@@ -3178,11 +3227,13 @@ def test_home_hero_segments_read_the_chamber_from_the_summary():
     assert pages.inicio.hero_segments(None, catalog) == [] and pages.inicio.hero_segments({'totals': {}}, catalog) == []
 
 
-def test_home_follows_the_default_mode_while_frozen(api, fresh_app):
-    headline = fixture_data('headline')
+def test_home_follows_the_horizon_of_the_run_even_while_frozen(api, fresh_app):
+    """El modo del hero lo decide el horizonte del run, congelada la web o no: la congelación es un interruptor único
+    para todos los ámbitos, así que durante la veda de las generales una elección lejana sigue en Hoy, con la fecha de
+    su publicación y sin «definitivo»; la cercana abre en el pronóstico definitivo."""
+    headline = fixture_data('headline') | {'event_date': FAR_EVENT}
     headline['forecast']['parties'] = [dict(party, name='PP', pct=41.5, seats=161) for party in headline['forecast']['parties']]
-    writer = write_bundle(fresh_app.fs)
-    writer.write_json(bundle.path_part('es', RUN, 'headline'), 'headline', headline, 'es', run_id=RUN)
+    writer = write_far_bundle(fresh_app.fs, headline=headline)
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/')[2])
     assert 'Si hoy hubiera elecciones' in page and '33,1' in page and '41,5' not in page
@@ -3190,7 +3241,31 @@ def test_home_follows_the_default_mode_while_frozen(api, fresh_app):
                             freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
     webapi.site().manifest_cache_clear()
     page = html(call(api, '/')[2])
+    assert 'Si hoy hubiera elecciones' in page and '33,1' in page and 'definitivo' not in page
+    side = page[page.index('id="side-hemicycle"'):page.index('id="side-polls"')]
+    assert '<span class="pill">8 oct 2026</span>' in side  # the publication date, never today over a frozen run
+    # the same run with its election 52 days away: the definitive forecast
+    near = fixture_data('headline')
+    near['forecast']['parties'] = headline['forecast']['parties']
+    writer.write_json(bundle.path_part('es', RUN, 'meta'), 'meta', fixture_data('meta'), 'es', run_id=RUN)
+    writer.write_json(bundle.path_part('es', RUN, 'headline'), 'headline', near, 'es', run_id=RUN)
+    publish.update_manifest(writer, {'es': publish.latest_entry(near | {'run_id': RUN})},
+                            freeze={'active': True, 'message': 'Veda'}, today='2026-11-23')
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/')[2])
     assert 'Pronóstico definitivo' in page and '41,5%' in page and '>161</b>' in page and 'Si hoy hubiera' not in page
+
+
+def test_home_cards_pick_the_mode_of_each_scope_by_its_horizon(api, fresh_app):
+    """Cada tarjeta de Inicio sigue el horizonte de su propio run: las generales a 52 días abren en Elección y una
+    autonómica con la legislatura lejana, en Hoy."""
+    write_far_bundle(fresh_app.fs, scope='es-md', run_id='20261009-120000', event_date='2027-05-23')
+    webapi.site().manifest_cache_clear()
+    rows = webapi.site().scopes()['scopes']
+    assert {card['code']: card['mode'] for card in pages.inicio.event_cards(rows) if card['published']} == {
+        'es': 'forecast', 'es-md': 'nowcast'}
+    page = html(call(api, '/')[2])
+    assert 'Pronóstico para las generales' in page and 'Si hoy hubiera' not in page
 
 
 def test_home_closing_sections_link_the_model_pages_and_the_past(events_site):
@@ -3334,11 +3409,11 @@ def test_profile_effects_switch_between_result_and_cycle_deviations(houses):
 def test_home_wording_of_the_second_walkthrough(api):
     """Apuntes de Luis del 15 de octubre: la fecha de la estimación es la de hoy, "Actualizado:", sin la nota de las
     tres páginas, el subtítulo nuevo, diez encuestas, el pie con el perfil de X y aire bajo la barra de escaños."""
-    from datetime import datetime
     page = html(call(api, '/')[2])
-    today = pages.fmt_date(datetime.now(pages.filters._madrid_tz()).date().isoformat())
     side = page[page.index('id="side-hemicycle"'):page.index('id="side-polls"')]
-    assert '<span class="pill">%s</span>' % today in side
+    # the run is 52 days from the election, so the hero is the forecast and its pill is the publication date;
+    # a live nowcast (election far away) shows today's date instead
+    assert '<span class="pill">8 oct 2026</span>' in side
     assert 'Actualizado: 8 oct 2026 · 120 sondeos de 15 encuestadoras' in page and 'Última publicación' not in page
     assert 'Tres páginas comunes' not in page
     assert 'Un proyecto transparente y divulgativo, con el método y modelo a la vista.' in page and 'Sin cookies' not in page
@@ -4054,7 +4129,8 @@ def test_promedios_tables_compare_with_the_previous_election(events_site, fresh_
     summary['parties'].append(dict(summary['parties'][0], name='XX', seats=3, pct=1.0, seats_lo=0, seats_hi=5, p_first=0))
     summary['totals']['XX'] = 3
     writer = write_bundle(fresh_app.fs)
-    writer.write_json(bundle.path_part('es', RUN, 'summary', 'nowcast'), 'summary', summary, 'es', run_id=RUN, mode='nowcast')
+    for mode in bundle.MODES:  # the page reads the summary of its default mode (Elección for a run 52 days away)
+        writer.write_json(bundle.path_part('es', RUN, 'summary', mode), 'summary', summary, 'es', run_id=RUN, mode=mode)
     webapi.site().manifest_cache_clear()
     page = html(call(events_site, '/es')[2])
     parties = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)

@@ -20,12 +20,11 @@ from .casas import (ANALYSIS_CSV, HERDING_KEYS, MTYPE_DEFAULT, MTYPE_LABELS, PAT
                     RANKING_SHOWN, analysis_part, block_bar_colors, casa_context, table_columns,
                     casas_context, effects_table, herding_rows, house_effects_grid, last_poll_records, mtype_label, poll_date,
                     profile_rows, quality_card, ranking_rows, rating_path)
-from .common import (EVENT_TABS, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES, SITE_TAGLINE,
-                     SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog, chamber_text, common_context,
-                     days_left, days_text, default_mode, environment, event_info, event_query, event_title, hemicycle_order,
-                     ink_color, parse_state, part, parties_catalogue, published_scopes, resolve_event_scope, resolve_scope,
-                     scope_query, tabbar,
-                     title_of)
+from .common import (EVENT_TABS, FORECAST_HORIZON, MESSAGES, NOT_FOUND, OTHERS_COLOR, PAGES, REPO_ROOT, ROUTES,
+                     SITE_TAGLINE, SITE_TITLE, TABBAR, TEMPLATES_DIR, Catalog, api_url, block_color, catalog,
+                     chamber_text, common_context, days_left, days_text, default_mode, environment, event_info,
+                     event_query, event_title, hemicycle_order, ink_color, parse_state, part, parties_catalogue,
+                     published_scopes, resolve_event_scope, resolve_scope, run_horizon, scope_query, tabbar, title_of)
 from .elecciones import (EVENT_CSV, HISTORY_COLUMNS, LAST_KEYS, LEFT_BLOCK, RESULTS_SHOWN, SUMMARY_KEYS, bias_colors,
                          chart_parties, curve_block_colors, error_blocks, event_block_rows, history_events, history_rows,
                          history_scopes,

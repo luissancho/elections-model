@@ -651,3 +651,46 @@ def test_unit_summary_carries_the_central_seats_and_the_median():
     assert list(madrid.columns) == ['pct', 'pct_lo', 'pct_hi', 'seats', 'seats_median', 'seats_mean', 'seats_lo', 'seats_hi', 'p_seats']
     assert madrid['seats'].tolist() == [3, 2, 1]
     assert madrid['seats_median'].tolist() == pd.DataFrame(sim.results[:, 1, :], columns=NAMES).median().tolist()
+
+
+def test_fan_carries_the_three_errors_and_the_dof():
+    """El abanico conserva las tres piezas del margen (`err`, `pct_err`, `drift`) y los grados de libertad por
+    horizonte (2026-10-25): `sd² = err² + pct_err² + drift²`, con `drift` 0 en el horizonte 0; la tabla ancha no cambia."""
+    import math
+    import types
+    sim = synthetic_simulator()
+    sim.v2err = types.SimpleNamespace(predict=lambda p: np.array([2.0]))
+    sim.v2drift = types.SimpleNamespace(var=lambda d, level, age=None: 1e-4 * d * level ** 2)
+    fan = sim.fan(horizons=[0, 55])
+    assert list(fan.columns) == ['party', 'horizon', 'mean', 'err', 'pct_err', 'drift', 'sd', 'lo', 'hi', 'dof']
+    pp0 = fan[(fan.party == 'PP') & (fan.horizon == 0)].iloc[0]
+    pp55 = fan[(fan.party == 'PP') & (fan.horizon == 55)].iloc[0]
+    assert (pp0.err, pp0.pct_err, pp0.drift, pp0.dof) == (1.5, 2.0, 0.0, 38.0)
+    assert pp0.sd == pytest.approx(math.sqrt(1.5 ** 2 + 2.0 ** 2))
+    assert pp55.drift == pytest.approx(40 * math.sqrt(1e-4 * 55))
+    assert pp55.sd == pytest.approx(math.sqrt(pp55.err ** 2 + pp55.pct_err ** 2 + pp55.drift ** 2))
+    wide = sim.fan(horizons=[0, 55], wide=True)
+    assert list(wide.columns.get_level_values(0).unique()) == ['lo', 'hi']  # the wide table does not change
+
+
+def test_error_events_lists_the_elections_of_the_error_estimator():
+    """Las elecciones cuyos sondeos ajustan el estimador de error: las fechas de evento distintas de los sondeos que
+    entran con `ERROR_DRANGE` y `n_last`; vacío sin estimador."""
+    import types
+    sim = synthetic_simulator()
+    assert sim.error_events() == []  # no estimator
+    sim.v2err = types.SimpleNamespace(predict=lambda p: np.array([2.0]))
+    sim.n_last = 1
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-23'), pd.Timestamp('2023-07-16'), 1),
+                                       (pd.Timestamp('2019-11-10'), pd.Timestamp('2019-11-03'), 1),
+                                       (pd.Timestamp('2023-07-23'), pd.Timestamp('2023-07-15'), 2)],
+                                      names=['event_date', 'date', 'pollster_id'])
+    seen = {}
+
+    def filter_polls(featured=True, **kwargs):
+        seen.update(kwargs, featured=featured)
+        return pd.DataFrame({'PP': [1., 2., 3.]}, index=index)
+
+    sim.computer = types.SimpleNamespace(filter_polls=filter_polls)
+    assert sim.error_events() == ['2019-11-10', '2023-07-23']
+    assert seen == {'featured': True, 'drange': Simulator.ERROR_DRANGE, 'n_last': 1}

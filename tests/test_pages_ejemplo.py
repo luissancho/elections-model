@@ -502,3 +502,72 @@ def test_promedio_page_without_a_run_keeps_the_notes_and_drops_the_examples(api,
     for target in re.findall(r'href="#((?:nota|llamada)-[a-z]+)"', page):
         assert 'id="{}"'.format(target) in page, target
 
+
+
+def test_error_example_reads_the_three_errors_of_the_main_parties(api):
+    """El ejemplo vivo de los tres errores (2026-10-25): por partido principal del último run nacional, `s`, `e`, `d`
+    al horizonte de la elección y los totales de cada modo, con las elecciones que ajustan el estimador de error."""
+    example = metodo.error_example()
+    pp = pages.catalog(fixture_data('meta'))['PP']
+    assert {k: example[k] for k in ('published', 'event_date', 'horizon', 'n_events', 'first_year', 'last_year', 'scope')} == {
+        'published': '2026-10-08T12:00:00Z', 'event_date': '2026-11-29', 'horizon': 52, 'n_events': 5,
+        'first_year': '2015', 'last_year': '2023', 'scope': 'es'}
+    assert example['rows'] == [{'name': 'PP', 'fullname': pp['fullname'], 'color': pp['color'], 'pct': 33.1, 'err': 0.5,
+                                'pct_err': 0.87, 'drift': 0.8, 'sd_now': 1.0, 'sd_election': 1.28, 'lo': 30.5, 'hi': 35.7,
+                                'dof': 38}]
+
+
+def test_error_example_is_none_without_the_components_and_skips_parties_without_a_fit(api, monkeypatch):
+    fan, meta = fixture_data('fan'), fixture_data('meta')
+    old = {**fan, 'rows': [{k: v for k, v in row.items() if k not in ('err', 'pct_err', 'drift', 'dof')} for row in fan['rows']]}
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: old if name == 'fan' else fixture_data(name))
+    assert metodo.error_example() is None  # a run published before the columns existed
+    without = {**meta, 'diagnostics': {k: v for k, v in meta['diagnostics'].items() if k != 'error_events'}}
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: without if name == 'meta' else fixture_data(name))
+    assert metodo.error_example() is None
+    wider = {**meta, 'bmaps': {**meta['bmaps'], 'main': ['PP', 'XX']}}
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: wider if name == 'meta' else fixture_data(name))
+    assert [row['name'] for row in metodo.error_example()['rows']] == ['PP']  # XX has no fit: no row
+    nowcast_only = {**fan, 'horizons': [0], 'rows': [row for row in fan['rows'] if row['horizon'] == 0]}
+    monkeypatch.setattr(metodo, 'part', lambda scope, run, name, mode=None: nowcast_only if name == 'fan' else fixture_data(name))
+    row = metodo.error_example()['rows'][0]
+    assert metodo.error_example()['horizon'] == 0 and row['drift'] == 0.0 and row['sd_election'] == row['sd_now']
+
+
+def test_error_example_lets_other_errors_through_and_is_none_without_a_run(api, monkeypatch):
+    def boom(scope, run, name, mode=None):
+        raise HttpError(503, 'bundle unavailable')
+    monkeypatch.setattr(metodo, 'part', boom)
+    with pytest.raises(HttpError):
+        metodo.error_example()
+
+    def not_found(scope, run, name, mode=None):
+        raise HttpError(404, 'run not found')
+    monkeypatch.setattr(metodo, 'part', not_found)
+    assert metodo.error_example() is None
+
+
+def test_metodo_escanos_shows_the_three_errors_of_the_latest_run(api):
+    """La tarjeta de los tres errores en /metodo/escanos (2026-10-25): tabla por partido principal con `s`, `e`, `d`,
+    los totales de cada modo y el rango, y la prosa con las elecciones del estimador, visible y con la redacción
+    pública."""
+    page = html(call(api, '/metodo/escanos')[2])
+    assert 'href="#errores">Los tres errores del último cálculo</a>' in page and 'id="errores"' in page
+    assert 'Un ejemplo con datos publicados: los tres errores del 8 oct 2026' in page
+    table = re.search(r'<table[^>]*id="errors-table">(.*?)</table>', page, re.S).group(1)
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', table) == [
+        'Partido', 'Voto', 'Promedio (s)', 'Histórico (e)', 'Deriva (d), 52 días', 'Hoy (σ)', 'Elección (σ)',
+        'Rango 95% en Elección']
+    row = re.sub(r'\s+', ' ', re.findall(r'<tr>(.*?)</tr>', table, re.S)[1])
+    for cell in ('PP', '33,1%', '0,50', '0,87', '0,80', '1,00', '1,28', '30,5–35,7'):
+        assert cell in row, cell
+    text = re.sub(r'\s+', ' ', page)
+    assert 'las 5 elecciones generales con sondeos celebradas de 2015 a 2023' in text
+    assert 'No tiene dirección' in text and 'los 52 días que faltan hasta el 29 nov 2026' in text
+    assert_public_wording(page, '/metodo/escanos')
+
+
+def test_metodo_escanos_hides_the_errors_card_on_an_old_run(api, monkeypatch):
+    monkeypatch.setattr(pages.metodo, 'error_example', lambda: None)
+    page = html(call(api, '/metodo/escanos')[2])
+    assert 'id="errores"' not in page and '#errores' not in page and 'los tres errores' not in page

@@ -82,8 +82,12 @@ familias de páginas:
 - **De evento** (la próxima elección de un ámbito), bajo el código del ámbito del catálogo: `/{scope}` (Promedios,
   controlador `Promedios`, `promedios.html`) y `/{scope}/escanos` (Escaños, `Escanos`, `escanos.html`, con
   `?region=`). Aceptan `?mode=` (`nowcast` o `forecast`) y `?run=`, pero desde la fase 7b ninguna página pinta un
-  selector de modo: sin `?mode=`, `pages.default_mode(frozen)` muestra Hoy (`nowcast`) y, mientras la publicación
-  está congelada (veda), Elección (`forecast`); `?mode=` queda para enlaces y pruebas. Un código que no es del
+  selector de modo: sin `?mode=`, `pages.default_mode(horizon)` muestra Elección (`forecast`) cuando el run mostrado
+  está a 60 días o menos de su elección (`pages.run_horizon`: `event_date − as_of`; `pages.FORECAST_HORIZON`, desde el
+  2026-10-25, porque convocada la elección la pregunta es el día de la votación) y Hoy (`nowcast`) más lejos; la
+  congelación de la veda no elige el modo (las generales ya están dentro del plazo y una autonómica lejana sigue en
+  Hoy), sólo la palabra «definitivo» y las fechas de los títulos; cada tarjeta de Inicio sigue el horizonte de su run;
+  `?mode=` queda para enlaces y pruebas. Un código que no es del
   catálogo da 404 "Ámbito desconocido."; uno del catálogo sin pronóstico, 404 "Este ámbito no tiene pronóstico
   publicado".
 - **Globales**, en el menú principal (`pages.PAGES`: Inicio, Histórico Errores, Ranking Encuestadoras, Método):

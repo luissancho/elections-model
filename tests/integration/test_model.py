@@ -309,7 +309,10 @@ def test_random_horizon_uses_the_date_prior(sim26):
 
 def test_fan_widths_grow_with_horizon(sim26):
     fan = sim26.fan()
-    assert list(fan.columns) == ['party', 'horizon', 'mean', 'sd', 'lo', 'hi']
+    # since 2026-10-25 the long fan carries the three pieces of the margin and the dof (see export_fan)
+    assert list(fan.columns) == ['party', 'horizon', 'mean', 'err', 'pct_err', 'drift', 'sd', 'lo', 'hi', 'dof']
+    assert np.allclose(fan['sd'] ** 2, fan['err'] ** 2 + fan['pct_err'] ** 2 + fan['drift'] ** 2)
+    assert (fan.loc[fan['horizon'] == 0, 'drift'] == 0).all()
     assert {h for h in (0, 30, 90, 180) if h <= sim26.horizon_max} | {sim26.horizon_max} <= set(fan['horizon'])
     for party, g in fan.groupby('party'):
         g = g.sort_values('horizon')

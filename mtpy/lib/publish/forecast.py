@@ -18,6 +18,8 @@ from .common import (
 
 
 PCT_COLS = ('pct', 'pct_mean', 'pct_lo', 'pct_hi', 'mean', 'lo', 'hi', 'sd')
+# Columns of the ``fan`` part and its CSV: the six historical ones first, then the pieces of the margin (2026-10-25)
+FAN_COLUMNS = ['name', 'horizon', 'mean', 'sd', 'lo', 'hi', 'err', 'pct_err', 'drift', 'dof']
 
 
 PROB_COLS = ('p_seats', 'p_majority', 'p_first')
@@ -378,9 +380,14 @@ def export_fan(sim):
     Returns
     -------
     tuple of (dict, pandas.DataFrame)
-        Data for the ``fan`` schema and its CSV twin; rows are ``name, horizon, mean, sd, lo, hi``.
+        Data for the ``fan`` schema and its CSV twin; rows are ``name, horizon, mean, sd, lo, hi`` plus, since
+        2026-10-25, the three pieces of the margin in points, ``err`` (standard error of the average), ``pct_err``
+        (terminal polling error) and ``drift`` (drift at that horizon, 0 at horizon 0), with
+        ``sd² = err² + pct_err² + drift²``, and ``dof`` (degrees of freedom of the t, integer).
     """
-    fan = round_cols(sim.fan(), pct=('mean', 'sd', 'lo', 'hi')).rename(columns={'party': 'name'})
+    fan = round_cols(sim.fan(), pct=('mean', 'sd', 'lo', 'hi', 'err', 'pct_err', 'drift')).rename(columns={'party': 'name'})
+    fan['dof'] = fan['dof'].astype(int)
+    fan = fan[FAN_COLUMNS]
     horizons = sorted(int(h) for h in fan['horizon'].unique())
     return {'horizons': horizons, 'rows': fan.to_dict(orient='records')}, fan
 
@@ -555,7 +562,9 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
         'diagnostics': {'drift_k': float(drift.k) if drift is not None else None,
                         'multiplier': float(drift.multiplier) if drift is not None else None,
                         'ages': sim.ages.round(PCT_DECIMALS).to_dict(), 'composition': float(sim.composition_ratio),
-                        'clip_rate': clip_rate},
+                        'clip_rate': clip_rate,
+                        # the elections whose polls fit the polling-error estimator, and the scope they belong to
+                        'error_events': sim.error_events(), 'error_scope': sim.est_scope},
         'seconds': seconds, 'freeze': bool(freeze), 'limit_date': limit_date,
     }
 
