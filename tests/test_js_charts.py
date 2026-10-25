@@ -28,6 +28,9 @@ SLOPE_JS = pathlib.Path(DIST, 'js', 'charts', 'slope.js').as_uri()
 RADAR_JS = pathlib.Path(DIST, 'js', 'charts', 'radar.js').as_uri()
 GROUPED_JS = pathlib.Path(DIST, 'js', 'charts', 'grouped.js').as_uri()
 SERIES_WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'series-wire.js').as_uri()
+MATRIX_JS = pathlib.Path(DIST, 'js', 'charts', 'matrix.js').as_uri()
+RANKING_JS = pathlib.Path(DIST, 'js', 'charts', 'ranking.js').as_uri()
+DISTANCE_JS = pathlib.Path(DIST, 'js', 'charts', 'distance.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
@@ -43,7 +46,7 @@ ROWS = [
 def run_js(expr, rows=ROWS):
     """Evalúa `expr` con `b` (diana), `d` (divergentes), `h` (hemiciclo), `s` (series), `base` (tema), `sw` (el
     cableado compartido del promedio), `c` (el catálogo), los gráficos del estudio CERA (`ce` censo, `sc`
-    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas) y `rows` definidos y devuelve su JSON (las
+    dispersión, `sl` pendientes, `ra` radar, `g` barras agrupadas), los del estudio del CIS (`mx` matriz, `rk` ranking, `ds` distancia) y `rows` definidos y devuelve su JSON (las
     funciones de la opción se pierden en la serialización, como en `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
@@ -53,11 +56,12 @@ def run_js(expr, rows=ROWS):
         'const p = await import("{}"); const w = await import("{}"); const st = await import("{}"); '
         'const sw = await import("{}"); const c = await import("{}"); '
         'const ce = await import("{}"); const sc = await import("{}"); const sl = await import("{}"); '
-        'const ra = await import("{}"); const g = await import("{}"); const rows = {}; '
+        'const ra = await import("{}"); const g = await import("{}"); const mx = await import("{}"); '
+        'const rk = await import("{}"); const ds = await import("{}"); const rows = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
     ).format(json.dumps(ECHARTS), BULLSEYE_JS, DIVERGING_JS, HEMICYCLE_JS, SERIES_JS, BASE_JS, RIDGE_JS, PATH_JS,
              WEIGHTS_JS, STACKED_JS, SERIES_WIRE_JS, CATALOG_JS, CENSUS_JS, SCATTER_JS, SLOPE_JS, RADAR_JS, GROUPED_JS,
-             json.dumps(rows), expr)
+             MATRIX_JS, RANKING_JS, DISTANCE_JS, json.dumps(rows), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -642,3 +646,51 @@ def test_ridge_marks_and_labels_the_central_seats_and_falls_back_to_the_median()
     texts = [g['style']['text'] for g in option['graphic'] if g['type'] == 'text']
     assert texts[0].startswith('{b|PP}\nReparto central: {b|141}') and texts[1].startswith('{b|PSOE}\nMediana: {b|105}')
     assert texts[2].startswith('{b|VOX}\nReparto central: {b|0}')
+
+
+def test_matrix_option_colours_by_sign_and_bolds_the_general_elections():
+    option = run_js('mx.matrixOption({events: [{short: "AN 18", label: "Andalucía 2018"}, {short: "GEN 23", label: "Generales 2023"}], houses: ["CIS", "GAD3"], cells: [[0, 0, 12.6], [1, 1, -4.0]]})')
+    assert option['xAxis']['position'] == 'top' and option['yAxis']['inverse'] is True and option['series'][0]['type'] == 'heatmap'
+    colours = [cell['itemStyle']['color'] for cell in option['series'][0]['data']]
+    assert colours[0].startswith('rgba(214,39,40') and colours[1].startswith('rgba(29,79,134')
+
+
+def test_ranking_option_marks_the_centre_the_pack_and_the_pollster():
+    rows = [{'x': 93, 'y': 8.0, 'name': 'CIS', 'k': 38, 'n': 41, 'cis': True}, {'x': 77, 'y': 1.6, 'name': 'Sigma Dos', 'k': 23, 'n': 30, 'cis': False}]
+    option = run_js('rk.rankingOption(%s)' % json.dumps(rows))
+    kinds = [s['type'] for s in option['series']]
+    assert kinds == ['line', 'line', 'scatter', 'scatter', 'scatter'] and option['yAxis']['interval'] == 2 and option['xAxis']['max'] == 100
+    assert option['series'][3]['markArea']['label']['show'] is False and option['series'][4]['data'][0]['value'][:2] == [93, 8.0]
+
+
+def test_distance_option_colours_the_pollster_and_the_consensus():
+    option = run_js('ds.distanceOption([{name: "Opinometre", dist: 0.5}, {name: "Consenso (20 casas)", dist: 3.3, consensus: true}, {name: "CIS", dist: 4.2, cis: true}])')
+    colours = [d['itemStyle']['color'] for d in option['series'][0]['data']]
+    assert colours[2] == '#ce3b3b' and colours[1] == '#1a1c22' and option['xAxis']['axisLabel']['show'] is False
+
+
+def test_bullseye_interval_and_highlights():
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], interval: 5, highlights: [{row: rows[0], color: "#ce3b3b", label: "CIS"}, {row: rows[1], color: "#1a1c22", symbol: "diamond", label: "Consenso"}]})')
+    assert option['xAxis']['interval'] == 5 and option['xAxis']['max'] % 5 == 0 and option['xAxis']['max'] > 10
+    marked = [s for s in option['series'] if s.get('id', '').startswith('highlight')]
+    assert len(marked) == 2 and marked[1]['symbol'] == 'diamond' and marked[0]['label']['show'] is True
+
+
+def test_bullseye_draws_only_the_rings_asked_for():
+    """Con `rings: [2, 5]` (la diana de 2023 del sesgo del CIS, spec D7) sólo se dibujan esos dos anillos y el mayor
+    fija el alcance mínimo: con errores pequeños y paso 2 el extremo es ±6, no ±12 (revisión final)."""
+    small = [{'event': '2023-23J', 'event_date': '2023-07-23', 'days': 7, 'Derecha': -3.9, 'Izquierda': 3.1},
+             {'event': '2023-23J', 'event_date': '2023-07-23', 'days': 9, 'Derecha': 1.2, 'Izquierda': -0.8}]
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], rings: [2, 5], interval: 2})', small)
+    rings = [s for s in option['series'] if s['type'] == 'line' and 'endLabel' in s]
+    assert [r['endLabel']['formatter'] for r in rings] == ['±2', '±5']
+    assert option['xAxis']['max'] <= 6 and option['xAxis']['max'] == 6 and option['yAxis']['min'] == -6
+    # by default the three rings and the reach of ±10
+    option = run_js('b.bullseyeOption(rows, {blocks: ["Derecha", "Izquierda"], interval: 2})', small)
+    rings = [s for s in option['series'] if s['type'] == 'line' and 'endLabel' in s]
+    assert [r['endLabel']['formatter'] for r in rings] == ['±2', '±5', '±10'] and option['xAxis']['max'] == 12
+
+
+def test_scatter_diagonal_and_fixed_axes():
+    option = run_js('sc.scatterOption([{x: 1, y: 2, name: "a"}], {x: "x", y: "y", name: "name", diagonal: true, axes: {xMin: -10, xMax: 15, yMin: -5, yMax: 15, interval: 5}})')
+    assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]

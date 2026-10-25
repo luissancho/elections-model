@@ -57,14 +57,15 @@ def write_analysis(fs, scope='es'):
 
 
 def write_study(fs, study='voto-cera', meta=None, parts=None):
-    """Estudio publicado a partir de los fixtures: los once gemelos CSV mínimos y las ocho partes (`meta` la última,
+    """Estudio publicado a partir de los fixtures: los gemelos CSV mínimos y las partes de `study` (`meta` la última,
     como `publish`), con `meta` sustituyendo campos del `meta` del fixture y `parts` (`{parte: campos}`) los de las
     demás partes."""
     writer = bundle.BundleWriter(fs)
-    for name in bundle.STUDY_CSV:
+    for name in bundle.STUDY_CSV[study]:
         writer.write_csv(bundle.path_study_csv(study, name), pd.DataFrame({'name': [name], 'value': [1.5]}))
-    for part in bundle.STUDY_PARTS[1:] + bundle.STUDY_PARTS[:1]:
-        schema = bundle.STUDY_SCHEMAS[part]
+    parts_of = bundle.STUDY_PARTS[study]
+    for part in parts_of[1:] + parts_of[:1]:
+        schema = bundle.STUDY_SCHEMAS[study][part]
         data = fixture_data(schema) | (parts or {}).get(part, {})
         if part == 'meta':
             data = data | (meta or {})

@@ -55,7 +55,8 @@ function pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop}) {
      data: data.map(({value, row, itemStyle}) => (itemStyle ? {value, row, itemStyle} : {value, row}))},
     // Many houses crowd the centre: a label that would overlap another is left out (the tooltip keeps it).
     {...style, type: 'scatter', symbolSize: POINT_SIZE, itemStyle: {opacity: 0}, silent: true, tooltip: {show: false},
-     label, labelLayout: {hideOverlap: true},
+     // The labels would inherit the invisible points' opacity: they get their own.
+     label: {...label, opacity: 1}, labelLayout: {hideOverlap: true},
      data: data.map(({value, row, label: faded}) => (faded ? {value, row, label: faded} : {value, row}))},
   ];
   if (!groupOf) {
@@ -102,14 +103,15 @@ function groupedTooltip(row, xBlock, yBlock) {
 }
 
 /**
- * Silent line series of the rings (±2, ±5 and ±10 points) and of the zero cross, in axis units so they follow
- * the axes.
+ * Silent line series of the rings (±2, ±5 and ±10 points by default) and of the zero cross, in axis units so they
+ * follow the axes.
  *
  * @param {number} limit extent of both axes
+ * @param {number[]} radii radii of the rings, in points
  * @returns {object[]} ECharts line series
  */
-function guideSeries(limit) {
-  const rings = RINGS.map((radius) => ({
+function guideSeries(limit, radii = RINGS) {
+  const rings = radii.map((radius) => ({
     type: 'line',
     data: ringPoints(radius),
     showSymbol: false,
@@ -130,7 +132,7 @@ function guideSeries(limit) {
 }
 
 /**
- * ECharts option of the bullseye: the rings at ±2, ±5 and ±10 points and the zero cross as line series,
+ * ECharts option of the bullseye: the rings (±2, ±5 and ±10 points by default) and the zero cross as line series,
  * symmetric axes at the edges of the grid, each named after its block, and one point per row (with its label on
  * a silent twin series, so only the points open the tooltip).
  *
@@ -140,7 +142,8 @@ function guideSeries(limit) {
  */
 export function bullseyeOption(rows, {
   blocks, groupOf = null, colors = {}, color = null, legend = false, labels = true, groupLabel = (group) => group,
-  labelOf = (row) => row.event, alphaOf = null, onTop = null, highlight = null,
+  labelOf = (row) => row.event, alphaOf = null, onTop = null, highlight = null, highlights = [], interval = null,
+  rings = RINGS,
 }) {
   const [xBlock, yBlock] = blocks;
   const styled = (row) => {
@@ -155,9 +158,12 @@ export function bullseyeOption(rows, {
     .map((row) => ({value: [row[xBlock], row[yBlock]], row, ...styled(row)}));
   const marked = highlight && Number.isFinite(highlight.row[xBlock]) && Number.isFinite(highlight.row[yBlock])
     ? [highlight.row[xBlock], highlight.row[yBlock]] : null;
-  const reach = Math.max(RINGS[RINGS.length - 1], ...points.flatMap((p) => p.value.map(Math.abs)),
-    ...(marked || []).map(Math.abs));
-  const limit = Math.ceil(reach * 1.1);
+  const drawn = highlights.filter(({row}) => Number.isFinite(row[xBlock]) && Number.isFinite(row[yBlock]));
+  // The largest ring is always in view, whatever the points.
+  const reach = Math.max(Math.max(...rings), ...points.flatMap((p) => p.value.map(Math.abs)),
+    ...(marked || []).map(Math.abs), ...drawn.flatMap(({row}) => [row[xBlock], row[yBlock]].map(Math.abs)));
+  // With a fixed tick `interval` the extent is the first multiple of it beyond the reach, so the last tick is round.
+  const limit = interval ? (Math.floor(reach / interval) + 1) * interval : Math.ceil(reach * 1.1);
 
   const axis = (name) => ({
     type: 'value',
@@ -171,6 +177,7 @@ export function bullseyeOption(rows, {
     axisTick: {show: false},
     // The extent is not a round number: its labels would crowd the last round tick.
     axisLabel: {...axisLabelStyle(), showMinLabel: false, showMaxLabel: false},
+    ...(interval ? {interval} : {}),
   });
   const option = {
     ...baseOption(),
@@ -198,7 +205,7 @@ export function bullseyeOption(rows, {
         ].join('<br>');
       },
     },
-    series: [...guideSeries(limit), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop})],
+    series: [...guideSeries(limit, rings), ...pointSeries(points, {groupOf, colors, labels, labelOf, color, onTop})],
   };
   if (marked) {
     // no label: the colour and the `z` over every other point (POINT_Z, TOP_Z) are enough; the tooltip names it
@@ -208,6 +215,19 @@ export function bullseyeOption(rows, {
       data: [{value: marked, row: highlight.row}],
     });
   }
+  drawn.forEach(({row, color: markColor, symbol = 'circle', label = null}, index) => {
+    option.series.push({
+      id: `highlight-${index}`,
+      type: 'scatter',
+      symbol,
+      symbolSize: symbol === 'diamond' ? POINT_SIZE + 4 : POINT_SIZE,
+      z: HIGHLIGHT_Z,
+      color: markColor,
+      label: label === null ? {show: false}
+        : {show: true, position: 'right', formatter: label, fontWeight: 'bold', color: markColor, fontSize: 11},
+      data: [{value: [row[xBlock], row[yBlock]], row}],
+    });
+  });
   if (legend && groupOf) {
     // Only the groups are named series, so the rings stay out of the legend.
     option.legend = {type: 'scroll', bottom: 0, data: groupNames(points, groupOf), formatter: groupLabel};
@@ -232,7 +252,11 @@ export function bullseyeOption(rows, {
  *   other groups', e.g. the general elections over the regional ones; `null` keeps the order of the groups) and
  *   `highlight` (`{row, color}`: one more point, of the size of the others and in its `color` (the text colour by
  *   default), without a label, drawn over every other point and counted in the extent of the axes; its tooltip
- *   names `row`; nothing without coordinates)
+ *   names `row`; nothing without coordinates), `highlights` (array of `{row, color, symbol = 'circle', label =
+ *   null}`: several such points, each a series `highlight-<index>`, a diamond slightly larger, written to its right
+ *   in bold when `label` is given), `interval` (step of both axes: their extent becomes the first multiple of
+ *   it beyond the farthest point, with the outer tick unlabelled) and `rings` (radii of the rings drawn, in points,
+ *   `[2, 5, 10]` by default; the largest is the least extent of the axes)
  * @returns {object} the ECharts instance
  */
 export function renderBullseye(el, rows, opts) {

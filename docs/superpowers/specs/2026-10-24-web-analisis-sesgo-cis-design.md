@@ -1,6 +1,6 @@
 # Web, Análisis: «El sesgo del CIS de Tezanos» (`/analisis/sesgo-cis`)
 
-Fecha: 2026-10-24. Estado: **pendiente de aprobación** (brainstorm cerrado con Luis el 24 de octubre, maqueta v23
+Fecha: 2026-10-24. Estado: **aprobada por Luis el 2026-10-24 y CONSTRUIDA el 2026-10-25 en la rama `analisis-sesgo-cis` (ver «Cierre»)** (brainstorm cerrado con Luis el 24 de octubre, maqueta v23
 aprobada: `docs/superpowers/specs/2026-10-24-web-analisis-sesgo-cis-mockup.html`; revisión del constructor en la
 sección final). Segundo estudio de la sección «Análisis», tras el del voto CERA
 (`2026-10-19-web-analisis-voto-cera-design.md`). Esta spec describe lo que cambia respecto de `dev` (b740448 + los
@@ -187,7 +187,8 @@ de `poll-errors` en una elección de 2026. Sin manifiesto o sin run nacional, s�
 
 Envoltorio como todo estudio (`scope`, `run_id` y `mode` nulos; `schema` `sesgo-cis-{parte}@1`). Nombres de campo en
 inglés (regla del repo); los textos públicos, en la página. Redondeos: errores y medias a 2 decimales, probabilidades
-a 3 (`PROB_DECIMALS`) salvo las que se publican como «una entre N», que van enteras.
+con tres cifras significativas (un p de 5e-06 se publica como 5e-06, no como 0) salvo las que se publican como «una
+entre N», que van enteras.
 
 | Parte | Contenido (claves obligatorias en el esquema; el constructor fija el resto) |
 |---|---|
@@ -388,3 +389,51 @@ publicado, también en `dry_run` (D2); el índice y la banda de Inicio listan lo
 `bundle.STUDIES`, el CERA primero (D6); «Cómo leerlo» breve en las tres tarjetas-pregunta (D6); la comprobación de
 redacción pública se aplica a la página nueva y, si pasa, también a la del CERA (D6); los parámetros del estudio en
 `data/sesgo-cis/params.json` (D4); la nota de enlace en la tarjeta de Método sólo con el estudio publicado (D8).
+
+## Cierre (2026-10-25)
+
+Construida en la rama `analisis-sesgo-cis` (desde `dev` en d2cca2d). Commits, el más reciente primero:
+
+- (este commit) `Sesgo del CIS: pulido final, suite completa y cierre de la spec`
+- `e5c2cc8 Método: enlace al análisis del sesgo del CIS cuando está publicado`
+- `03f4e6d Diana: las etiquetas de los puntos ya no heredan la opacidad cero del gemelo`
+- `9237f42 Sesgo del CIS: los gráficos de la página`
+- `b54ac9f Gráficos: matriz de signos, ranking, distancia al resultado; marcas y realces en la diana, diagonal en la dispersión`
+- `878dab3 Sesgo del CIS: títulos fuertes y casa siguiente sólo cuando lo dicen las cifras`
+- `0da405a Sesgo del CIS: los resúmenes sólo afirman lo que dicen las cifras`
+- `b976721 Sesgo del CIS: la página /analisis/sesgo-cis`
+- `1eae780 Sesgo del CIS: contexto de la página y modelos de vista`
+- `3c3e902 API de estudios: los dos estudios, sus partes y sus CSV`
+- `68d31b0 Sesgo del CIS: exportadores, publicación genérica por estudio, fixtures y contrato`
+- `653ec20 Sesgo del CIS: el estudio en una llamada (compute_lean)`
+- `558145a Sesgo del CIS: pruebas de azar, t de Student, ranking, matriz y tabla de 2023`
+- `a44da6e Sesgo del CIS: el fake publica el análisis sin run_id como producción, media del sector redondeada con round y sin parámetro since`
+- `ae72fef Sesgo del CIS: lectura de las entradas desde las partes publicadas y parámetros del estudio`
+- `2e5b2b8 Estudios: partes, esquemas y CSV declarados por estudio; sesgo-cis en el registro`
+
+Suite completa: 1337 passed, 75 skipped, 1 warning previo (`dataviz.py`, `set_ticklabels`).
+
+### Desviaciones respecto de la spec, decididas durante la construcción
+
+- Las partes no llevan `slug`: la página deriva los enlaces de perfil con `slugs`.
+- `summary.with/without` no publican las filas internas.
+- `active_pollsters` devuelve también el `run_id`.
+- Los títulos fuertes de la matriz y el ranking y el subtítulo de la diana sólo aparecen cuando las cifras los sostienen (`cis_leads`, medias con signo), con títulos neutros si no.
+- La frase de «la casa que le sigue» sólo aparece cuando esa casa queda por debajo del CIS.
+- `sign_chance` vive en `studies.lean.stats` y Método la importa.
+- Las etiquetas de la diana ya no heredan la opacidad cero del gemelo (defecto previo del módulo, corregido).
+- El «fallo general» se define sin el CIS (tres o más casas) y la cifra de la maqueta «30 de 40» cambia.
+- La comprobación en móvil (390 px) no se pudo emular en headless Chrome.
+- Revisión final: los valores p (`t.*.p`, `chance.*.p`) se publican con tres cifras significativas, fuera del redondeo a 2 decimales (y `t_test` ya no los redondea a 6 decimales): antes el p de las fechas (5e-06) salía 0,0 y los de los 41 errores y del consenso (2,6e-11) salían 0 desde el cálculo. La nota técnica dice la probabilidad de la mayor de las p presentes con su cifra («inferior a una entre 190.000» con los datos reales; «mil millones» sólo por debajo de 1e-9) y «compatibles con el azar» sólo con la menor p sin Tezanos en 0,05 o más (`lean.chance_text`, `tech_note`).
+- Revisión final: la diana acepta `rings` (por defecto `[2, 5, 10]`; el mayor es el alcance mínimo de los ejes) y la de 2023 dibuja sólo los anillos de 2 y 5 (D7): extremo ±6 en vez de ±12.
+- Revisión final: dos elecciones de un ámbito en el mismo año llevan el mes («Generales abr. 2019», «GEN 19A»; «Generales nov. 2019», «GEN 19N»), en la tabla, la matriz, la dispersión y el resumen.
+- Revisión final: con las etiquetas visibles otra vez (03f4e6d), la diana del ejemplo del CIS en `/metodo/promedio` mostraba 41 códigos como «2019-26M-es-ar» encima de los puntos; ahora etiqueta sólo las generales por su año, como esta página. La diana del detalle de una elección (`/elecciones/es/generales/2023-07`) se lee bien con los nombres de las casas y queda igual.
+
+### Lista para Luis
+
+1. `python job.py publish '{"what":["study"],"study":"sesgo-cis"}'` contra el bundle de S3 (los análisis ya están publicados).
+2. Pasear `/analisis`, `/analisis/sesgo-cis` (de escritorio y en el móvil: la matriz con desplazamiento horizontal, el botón «Ver las 41 elecciones»), `/` (la banda) y `/metodo/promedio` (el enlace).
+3. Integrar la rama en `dev` (nota: `tests/fakes.py` tiene cambios sin confirmar en el checkout principal; la rama añade `write_lean_bundle` al final del fichero) y desplegar con la siguiente integración.
+4. Tras cada `publish analysis`, encadenar `study` para refrescar las cifras (`{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}`).
+5. Republicar el estudio también tras cada `publish event`: las filas se filtran por las carpetas de evento publicadas, así que la elección del 29-N sólo contará cuando su evento esté publicado (`{"what":["study"],"study":"sesgo-cis"}` después del `event`).
+6. Comprobar a la vista las dianas de los perfiles `/casas/{slug}` (necesitan la base de datos, no se pudieron ver en local): desde 03f4e6d sus etiquetas vuelven a verse; si estorban, domarlas en el cableado de esa página, no en el módulo.

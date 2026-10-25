@@ -56,5 +56,6 @@ from .pointers import point, read_manifest, rebuild_history, unpublish, update_m
 from .studies import (
     export_study_census, export_study_check, export_study_meta, export_study_participation, export_study_placement,
     export_study_prediction, export_study_sensitivity, export_study_vote, publish_study, registered_claim,
-    STUDY_EXPORTERS, STUDY_TITLES, study_sources
+    compute_for_publish, export_lean_election, export_lean_elections, export_lean_houses, export_lean_matrix,
+    export_lean_meta, export_lean_summary, STUDY_EXPORTERS, STUDY_META, STUDY_RUNNERS, STUDY_TITLES, study_sources
 )

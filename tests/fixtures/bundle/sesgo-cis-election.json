@@ -1,0 +1,101 @@
+{
+  "schema": "sesgo-cis-election@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "blocks": {
+      "Izquierda": [
+        "PSOE",
+        "SUMAR"
+      ],
+      "Derecha": [
+        "PP",
+        "VOX"
+      ]
+    },
+    "max_days": 60,
+    "result": {
+      "Izquierda": 44.01,
+      "Derecha": 45.44,
+      "gap": -1.43
+    },
+    "cis": {
+      "days": 11,
+      "Izquierda": 47.11,
+      "Derecha": 42.64,
+      "gap": 4.47,
+      "e_left": 3.1,
+      "e_right": -2.8,
+      "e_gap": 5.9,
+      "dist": 4.18
+    },
+    "consensus": {
+      "Izquierda": 42.16,
+      "Derecha": 47.37,
+      "gap": -5.21,
+      "e_left": -1.85,
+      "e_right": 1.93,
+      "e_gap": -3.77,
+      "dist": 2.67,
+      "n": 4
+    },
+    "houses": [
+      {
+        "pollster": "GAD3",
+        "days": 6,
+        "Izquierda": 43.01,
+        "Derecha": 46.44,
+        "gap": -3.43,
+        "e_left": -1.0,
+        "e_right": 1.0,
+        "dist": 1.41
+      },
+      {
+        "pollster": "Sigma Dos",
+        "days": 6,
+        "Izquierda": 46.01,
+        "Derecha": 44.44,
+        "gap": 1.57,
+        "e_left": 2.0,
+        "e_right": -1.0,
+        "dist": 2.24
+      },
+      {
+        "pollster": "CIS",
+        "days": 11,
+        "Izquierda": 47.11,
+        "Derecha": 42.64,
+        "gap": 4.47,
+        "e_left": 3.1,
+        "e_right": -2.8,
+        "dist": 4.18
+      },
+      {
+        "pollster": "NC Report",
+        "days": 7,
+        "Izquierda": 40.01,
+        "Derecha": 48.44,
+        "gap": -8.43,
+        "e_left": -4.0,
+        "e_right": 3.0,
+        "dist": 5.0
+      },
+      {
+        "pollster": "Hamalgama",
+        "days": 10,
+        "Izquierda": 39.61,
+        "Derecha": 50.14,
+        "gap": -10.53,
+        "e_left": -4.4,
+        "e_right": 4.7,
+        "dist": 6.44
+      }
+    ],
+    "scope": "es",
+    "date": "2023-07-23",
+    "name": "Generales 2023"
+  }
+}

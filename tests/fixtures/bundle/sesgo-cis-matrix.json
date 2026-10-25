@@ -1,0 +1,145 @@
+{
+  "schema": "sesgo-cis-matrix@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "events": [
+      {
+        "scope": "es-an",
+        "event_date": "2018-12-02",
+        "label": "Andalucía 2018",
+        "short": "AN 18"
+      },
+      {
+        "scope": "es",
+        "event_date": "2019-04-28",
+        "label": "Generales abr. 2019",
+        "short": "GEN 19A"
+      },
+      {
+        "scope": "es",
+        "event_date": "2019-11-10",
+        "label": "Generales nov. 2019",
+        "short": "GEN 19N"
+      },
+      {
+        "scope": "es-an",
+        "event_date": "2022-06-19",
+        "label": "Andalucía 2022",
+        "short": "AN 22"
+      },
+      {
+        "scope": "es",
+        "event_date": "2023-07-23",
+        "label": "Generales 2023",
+        "short": "GEN 23"
+      },
+      {
+        "scope": "es-an",
+        "event_date": "2026-05-17",
+        "label": "Andalucía 2026",
+        "short": "AN 26"
+      }
+    ],
+    "houses": [
+      "CIS",
+      "Sigma Dos",
+      "GAD3"
+    ],
+    "cells": [
+      [
+        1,
+        0,
+        0.1
+      ],
+      [
+        1,
+        2,
+        -1.0
+      ],
+      [
+        1,
+        1,
+        2.0
+      ],
+      [
+        2,
+        0,
+        6.4
+      ],
+      [
+        2,
+        2,
+        -1.0
+      ],
+      [
+        2,
+        1,
+        2.0
+      ],
+      [
+        4,
+        0,
+        3.1
+      ],
+      [
+        4,
+        2,
+        -1.0
+      ],
+      [
+        4,
+        1,
+        2.0
+      ],
+      [
+        0,
+        0,
+        12.6
+      ],
+      [
+        0,
+        2,
+        -1.0
+      ],
+      [
+        0,
+        1,
+        2.0
+      ],
+      [
+        3,
+        0,
+        3.1
+      ],
+      [
+        3,
+        2,
+        -1.0
+      ],
+      [
+        3,
+        1,
+        2.0
+      ],
+      [
+        5,
+        0,
+        -0.5
+      ],
+      [
+        5,
+        2,
+        -1.0
+      ],
+      [
+        5,
+        1,
+        2.0
+      ]
+    ]
+  }
+}

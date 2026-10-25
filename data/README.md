@@ -28,6 +28,7 @@ resuelve en `mtpy.run()` (`app.data`, `app.datapath`); se puede cambiar con la v
 | `cera/params.json` | Parámetros del estudio del voto CERA (convocatoria, inscripciones en litigio, participación por origen, periodos, bloques, umbral de la comprobación) | Curación propia |
 | `cera/autonomicas.csv` | Voto CERA de seis autonómicas (Castilla y León 2022/2026, Andalucía 2022/2026, Aragón 2023/2026): censo, votantes, PP, PSOE, VOX, otras izquierdas y bloques izquierda/derecha/resto | Juntas electorales de cada comunidad (BOCYL, BOJA, BOA) |
 | `cera/consulados/{proceso}.csv` | Censo y votantes CERA por país de residencia (consulados sumados por país): Castilla y León 2026, Extremadura 2023 y 2025, Aragón 2026 | Juntas electorales de cada comunidad (BOCYL, DOE, BOA) |
+| `sesgo-cis/params.json` | Parámetros del estudio del sesgo del CIS (casa, periodos con y sin Tezanos, bloques, mínimo de elecciones, ventana de 2023, actividad en 2026, elección analizada) | Curación propia. |
 
 Las tablas de encuestas de Wikipedia se descargan en vivo con `WikipediaLoader`, y los resultados autonómicos con `WikipediaResultsLoader`; su contenido es CC BY-SA 4.0. `load/run_load.py` hace la carga por lotes de los ámbitos autonómicos y guarda una copia de los artículos en `files/stage/wikipedia/`.
 

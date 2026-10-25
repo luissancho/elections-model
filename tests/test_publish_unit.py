@@ -1180,7 +1180,8 @@ def test_publish_package_layout():
     import inspect
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(publish.__path__))
-    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'parties', 'pointers', 'studies']
+    assert names == ['analysis', 'backtest', 'common', 'events', 'forecast', 'lean', 'parties', 'pointers',
+                     'studies']
     for name in names:
         assert inspect.ismodule(getattr(publish, name)), name
     assert publish.loreg_guard.__module__ == 'mtpy.lib.publish.common'

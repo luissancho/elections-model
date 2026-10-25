@@ -1,0 +1,45 @@
+{
+  "schema": "sesgo-cis-houses@1",
+  "contract": 1,
+  "scope": null,
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-10-08T12:00:00Z",
+  "data": {
+    "rows": [
+      {
+        "pollster": "GAD3",
+        "n": 6,
+        "k_left": 0,
+        "share_left": 0.0,
+        "n_lean": 6,
+        "mean_lean": -2.0,
+        "mean_left": -1.0,
+        "active_2026": true,
+        "cis": false
+      },
+      {
+        "pollster": "Sigma Dos",
+        "n": 6,
+        "k_left": 6,
+        "share_left": 1.0,
+        "n_lean": 6,
+        "mean_lean": 3.0,
+        "mean_left": 2.0,
+        "active_2026": true,
+        "cis": false
+      },
+      {
+        "pollster": "CIS",
+        "n": 6,
+        "k_left": 5,
+        "share_left": 0.83,
+        "n_lean": 6,
+        "mean_lean": 8.28,
+        "mean_left": 4.13,
+        "active_2026": true,
+        "cis": true
+      }
+    ]
+  }
+}

@@ -1451,7 +1451,7 @@ def test_pages_package_layout():
     import pkgutil
     names = sorted(m.name for m in pkgutil.iter_modules(pages.__path__))
     assert names == ['analisis', 'backtest', 'casas', 'cera', 'common', 'elecciones', 'escanos', 'filters', 'inicio',
-                     'metodo', 'promedios', 'slugs']
+                     'lean', 'metodo', 'promedios', 'slugs']
     for name in names:
         assert inspect.ismodule(getattr(pages, name)), name
     assert pages.fmt_pct.__module__ == 'mtpy.lib.pages.filters'
@@ -2700,11 +2700,17 @@ def assert_public_wording(page, label):
     assert not sólo, (label, sólo[:5])
 
 
-def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site):
+def test_public_wording_uses_encuestadora_and_medio_and_short_names(events_site, fresh_app):
+    # the two studies, published so their pages render (the fixture of the events does not write them)
+    publish_study(fresh_app.fs)
+    publish_study(fresh_app.fs, study='sesgo-cis')
     for path, query in (('/', ''), ('/es', ''), ('/es/escanos', ''), ('/elecciones', ''),
                         ('/elecciones', 'scope=es&date=2023-07-23'), ('/metodo', ''), ('/metodo/promedio', ''),
-                        ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', '')):
-        assert_public_wording(html(call(events_site, path, query=query)[2]), path + '?' + query)
+                        ('/metodo/escanos', ''), ('/metodo/rating', ''), ('/metodo/backtest', ''),
+                        ('/analisis/voto-cera', ''), ('/analisis/sesgo-cis', '')):
+        status, _, body = call(events_site, path, query=query)
+        assert status == 200 or not path.startswith('/analisis'), path
+        assert_public_wording(html(body), path + '?' + query)
     for path in ('/es', '/es/escanos', '/'):
         page = html(call(events_site, path)[2])
         # the party cards of Promedios show the full name under the initials (phase 8); nothing else does
@@ -4284,9 +4290,9 @@ def test_eleccion_cycle_table_shows_the_rating_each_house_arrived_with_and_links
 STUDY_VERDICTS = [('q1', 'SÍ'), ('q2', 'SIN EVIDENCIA'), ('q3', 'NO')]
 
 
-def publish_study(fs, meta=None, parts=None):
+def publish_study(fs, meta=None, parts=None, study='voto-cera'):
     """Publica el estudio de los fixtures y vacía las cachés del sitio."""
-    write_study(fs, meta=meta, parts=parts)
+    write_study(fs, study=study, meta=meta, parts=parts)
     webapi.site().manifest_cache_clear()
 
 
@@ -4437,6 +4443,204 @@ def test_cera_context_figures_come_from_the_parts(api, fresh_app):
     assert context['figures']['latam_rate'] is None and context['figures']['rest_rate'] is None
     assert context['kpis'][1]['support'] == 'censo vigente: cerrado el 1-10-2026'
     assert context['kpis'][2]['support'] == '2023: 208.431'
+
+
+def test_lean_context_figures_come_from_the_parts(api, fresh_app):
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    context = pages.lean_context(pages.parse_state({}))
+    summary = fixture_data('sesgo-cis-summary')
+    assert [k['label'] for k in context['kpis']] == ['Elecciones con la izquierda sobreestimada', 'Cuánto sobreestima a la izquierda frente a la derecha', 'A la izquierda del consenso de las demás encuestadoras']
+    assert context['kpis'][0]['value'] == '{} de {}'.format(summary['with']['k_left'], summary['with']['n'])
+    assert [t['key'] for t in context['tests']] == ['coin', 'dates', 'consensus'] and context['tests'][2]['highlight'] is True
+    assert set(context['initial']) == {'state', 'bull', 'matrix', 'consensus', 'ranking', 'election', 'distance'}
+    assert [link['label'] for link in context['csv_links']] == list(pages.CSV_LABELS['sesgo-cis'].values())
+    assert context['elections'][0]['event_date'] >= context['elections'][-1]['event_date'] and all(e['period'] == 'with' for e in context['elections'])
+    assert context['verdicts'][0]['label'] == 'SÍ' and context['verdicts'][1]['tone'] == 'q3'
+    # figures, links and the distance ranking
+    assert context['kpis'][1]['value'] == '8,3 puntos' and context['tests'][0]['value'] == '1 entre 9'
+    assert [h['href'] for h in context['houses']] == ['/casas/gad3', '/casas/sigma-dos', '/casas/cis']
+    assert [c['after'] for c in context['compare']] == [False, True]
+    distance = context['initial']['distance']
+    assert [d['dist'] for d in distance] == sorted(d['dist'] for d in distance)
+    assert sum(d['consensus'] for d in distance) == 1 and context['initial']['bull']['blocks'] == ['Derecha', 'Izquierda']
+
+
+def test_lean_context_survives_missing_parts(api, fresh_app):
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_study('sesgo-cis', 'election'))
+    webapi.site().manifest_cache_clear()
+    context = pages.lean_context(pages.parse_state({}))
+    assert context['election'] is None and context['initial']['distance'] == []
+    assert context['initial']['election']['consensus'] is None
+
+
+def test_lean_view_models_return_empty_for_missing_keys():
+    assert [k['value'] for k in pages.lean.kpis(None, None)] == [None, None, None]
+    assert [t['value'] for t in pages.lean.tests({})] == [None, None, None]
+    assert pages.lean.tech_note(None)['with']['all'] == '–'
+    assert pages.lean.island({})['ranking'] == [] and pages.lean.island({})['distance'] == []
+
+
+def test_lean_page_structure_and_wording(api, fresh_app):
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    status, _, body = call(api, '/analisis/sesgo-cis'); page = html(body)
+    assert status == 200 and '<h1 class="study-title">El sesgo del CIS de Tezanos</h1>' in page
+    assert '/dist/js/pages/analisis-sesgo-cis.js' in page and 'id="initial-data"' in page
+    assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', page) == ['SÍ', 'NO', 'NO']
+    assert page.count('<div class="kpi">') == 3 and 'Cuánto sobreestima a la izquierda frente a la derecha' in page
+    for chart in ('bull-without', 'bull-with', 'matrix-chart', 'consensus-chart', 'ranking-chart', 'bull-2023', 'distance-chart'):
+        assert re.search(r'<div class="chart[^"]*" id="%s" role="img" aria-label="[^"]+"></div>' % chart, page), chart
+    assert 'class="chart square" id="bull-with"' in page and 'class="chart square wide" id="bull-2023"' in page
+    assert page.count('class="pill brand" href="/api/v1/studies/sesgo-cis/') == 4
+    assert 'Diferencia</td>' in page and 'Ganador' not in page
+    # in the fixture Sigma Dos (6 de 6) beats the CIS (5 de 6): the neutral titles of question 2 (controller ruling)
+    assert '<p class="ctitle">Casa por casa y elección por elección</p>' in page and 'monocolor' not in page
+    assert '<p class="ctitle">Las casas, en proporción y magnitud</p>' in page and 'Ninguna otra encuestadora' not in page
+    assert '<button type="button" class="more" id="elections-more"' in page
+    assert_public_wording(page, '/analisis/sesgo-cis')
+    assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
+
+
+# a ranking where the CIS leads: two houses behind it, one of them with the same share as the next
+LEAN_HOUSES = [{'pollster': 'GAD3', 'n': 30, 'k_left': 12, 'share_left': 0.4, 'mean_lean': -1.0, 'cis': False},
+               {'pollster': 'Sigma Dos', 'n': 30, 'k_left': 23, 'share_left': 23 / 30, 'mean_lean': 2.5, 'cis': False},
+               {'pollster': 'CIS', 'n': 41, 'k_left': 38, 'share_left': 38 / 41, 'mean_lean': 8.0, 'cis': True}]
+
+
+def test_lean_runner_up_is_the_house_that_follows_the_cis(api, fresh_app):
+    """La casa que sigue al CIS en el ranking (la de más elecciones con la izquierda sobreestimada) y su moneda, para
+    el resumen de la pregunta 2; sólo cuando de verdad le sigue (proporción estrictamente menor que la del CIS)."""
+    assert pages.lean.runner_up(LEAN_HOUSES) == {'name': 'Sigma Dos', 'href': '/casas/sigma-dos', 'k': 23, 'n': 30,
+                                                 'odds': '380'}
+    # without other houses, without the CIS, or with a house level with or above the CIS: none
+    assert pages.lean.runner_up([]) is None and pages.lean.runner_up(LEAN_HOUSES[2:]) is None
+    assert pages.lean.runner_up(LEAN_HOUSES[:2]) is None
+    level = [dict(LEAN_HOUSES[1], share_left=38 / 41)] + LEAN_HOUSES[2:]
+    assert pages.lean.runner_up(level) is None
+    # the fixture: Sigma Dos (6 de 6) is above the CIS (5 de 6), so the page drops the clause
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    assert pages.lean_context(pages.parse_state({}))['runner_up'] is None
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    assert 'la casa que le sigue' not in page
+
+
+def test_lean_cis_leads_is_the_condition_of_the_strong_titles(api, fresh_app):
+    """Los títulos fuertes de la pregunta 2 («el CIS es la única casa prácticamente monocolor», «Ninguna otra
+    encuestadora se acerca») sólo con el CIS estrictamente primero del ranking."""
+    assert pages.lean.cis_leads(LEAN_HOUSES) is True and pages.lean.cis_leads(LEAN_HOUSES[2:]) is True
+    level = [dict(LEAN_HOUSES[1], share_left=38 / 41)] + LEAN_HOUSES[2:]
+    assert pages.lean.cis_leads(level) is False and pages.lean.cis_leads(LEAN_HOUSES[:2]) is False
+    assert pages.lean.cis_leads([]) is False
+    rows = [dict(row, slug=None, active_2026=True, n_lean=row['n'], mean_left=1.0) for row in LEAN_HOUSES]
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'houses': {'rows': rows}})
+    context = pages.lean_context(pages.parse_state({}))
+    assert context['cis_leads'] is True and context['runner_up']['name'] == 'Sigma Dos'
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    assert '<p class="ctitle">Casa por casa y elección por elección: el CIS es la única casa prácticamente monocolor</p>' in page
+    assert '<p class="ctitle">Ninguna otra encuestadora se acerca</p>' in page
+    assert re.search(r'la casa que le sigue en el ranking, <a href="/casas/sigma-dos">Sigma Dos</a>, con\s+23 de 30, '
+                     r'está en 1 entre 380', page)
+
+
+def test_lean_bullseye_reading_needs_the_mean_errors_on_its_side(api, fresh_app):
+    """La lectura de la diana con Tezanos («arriba a la izquierda») sólo con la izquierda sobreestimada y la derecha
+    subestimada de media; si no, el subtítulo neutro."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    assert 'Los puntos se concentran arriba a la izquierda' in html(call(api, '/analisis/sesgo-cis')[2])
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], mean_right=0.5)
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    assert 'se concentran' not in page
+    assert '<p class="csub">Error del último sondeo del CIS por bloques en el periodo con Tezanos</p>' in page
+
+
+def test_lean_summaries_claim_only_what_the_figures_show(api, fresh_app):
+    """Las frases de los resúmenes salen de las cifras que las sostienen: la inclinación común de las demás casas sólo
+    se nombra cuando su media sobreestimó a la izquierda en más elecciones de las que la subestimó, y la del CIS se
+    cuenta con su cifra frente al consenso, no como un hecho sobre las demás casas."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    # the fixture: the other houses leaned right (0 of 2), so there is no common lean to discount
+    assert 'Frente a las demás casas en la misma elección, el CIS quedó a la izquierda del consenso en 5 de 6 elecciones, 4,3 puntos de media' in text
+    assert 'se descuenta esa inclinación común' not in text and 'desaparece para todas' not in text
+    assert 'como todos' not in text and 'más rojo que azul' not in text and 'el de siempre' not in text
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], industry={'n_events': 2, 'left': 2, 'right': 0, 'mean': 1.0})
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert ('Al comparar cada casa con las demás en la misma elección se descuenta esa inclinación común. La del CIS no '
+            'desaparece: quedó a la izquierda del consenso en 5 de 6 elecciones, 4,3 puntos de media') in text
+
+
+def lean_t(*ps):
+    """La parte `t` de un periodo del resumen con un valor p por prueba (`None` para una prueba que falta)."""
+    return {key: None if p is None else {'n': 6, 'mean': 4.1, 'sd': 4.8, 't': 2.1, 'p': p}
+            for key, p in zip(('all', 'dates', 'consensus'), ps)}
+
+
+def test_lean_tech_note_states_the_chance_of_the_largest_p(api, fresh_app):
+    """La nota técnica dice la probabilidad por azar de la mayor de las p presentes, con su cifra: «mil millones»
+    sólo por debajo de 1e-9 (revisión final: con p de 5e-06 decía «inferior a una entre mil millones»); y «compatibles
+    con el azar» sin Tezanos sólo con la menor p del periodo de control en 0,05 o más."""
+    note = pages.lean.tech_note({'with': {'t': lean_t(1.2e-05, 5e-06, 3e-10)}, 'without': {'t': lean_t(0.6, 0.5, None)}})
+    assert note['with']['chance'] == ('Cualquiera de las tres equivale a una probabilidad por azar inferior a una '
+                                      'entre 82.000.')
+    assert note['without']['random'] is True
+    note = pages.lean.tech_note({'with': {'t': lean_t(4e-10, None, 3e-12)}, 'without': {'t': lean_t(0.0496, 0.5, 0.6)}})
+    assert note['with']['chance'] == ('Cualquiera de las dos equivale a una probabilidad por azar inferior a una '
+                                      'entre mil millones.')
+    assert note['without']['random'] is False
+    note = pages.lean.tech_note({'with': {'t': lean_t(0.09, None, None)}, 'without': {'t': lean_t(None, None, None)}})
+    assert note['with']['chance'] == 'No basta para descartar el azar: su probabilidad es del 9,0%.'
+    assert note['without']['random'] is False and pages.lean.tech_note(None)['with']['chance'] is None
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], t=lean_t(1.2e-05, 5e-06, 3e-10))
+    summary['without'] = dict(summary['without'], t=lean_t(0.0496, 0.5, 0.6))
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert 'inferior a una entre 82.000.' in text and 'mil millones' not in text
+    assert 'compatibles con el azar' not in text
+    summary['without'] = dict(summary['without'], t=lean_t(0.05, 0.5, 0.6))
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert ': compatibles con el azar.' in text
+
+
+def test_lean_2023_summary_and_data_wording(api, fresh_app):
+    """Sin ninguna casa más cerca del resultado que el CIS en 2023, «Ninguna quedó más cerca» (no «0 de ellas»); y el
+    periodo sin Tezanos son las elecciones de 2008 a 2016 (revisión final)."""
+    summary = fixture_data('sesgo-cis-summary')
+    summary['election'] = dict(summary['election'], closer=0)
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert 'Ninguna quedó más cerca del resultado que el CIS.' in text and '0 de ellas' not in text
+    assert '«sin Tezanos» (2008 – 2016), las elecciones de 2008 a 2016.' in text
+    assert 'las elecciones anteriores con sondeo del CIS' not in text
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert '2 de ellas quedaron más cerca del resultado que el CIS.' in text
+
+
+@pytest.mark.parametrize('part', ['summary', 'elections', 'houses', 'matrix', 'election'])
+def test_lean_page_survives_a_missing_part(api, fresh_app, part):
+    """Sin una de las partes, la página se sirve igual (dashes donde faltan cifras), sin un error de plantilla."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_study('sesgo-cis', part))
+    webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/analisis/sesgo-cis')
+    assert status == 200, part
+    assert_public_wording(html(body), part)
+
+
+def test_analisis_lists_each_study_only_when_published(api, fresh_app):
+    assert call(api, '/analisis/sesgo-cis')[0] == 404
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    page = html(call(api, '/analisis')[2]); home = html(call(api, '/')[2])
+    assert page.count('class="card study-card"') == 1 and 'href="/analisis/sesgo-cis"' in page and 'href="/analisis/sesgo-cis"' in home
+    publish_study(fresh_app.fs)
+    page = html(call(api, '/analisis')[2])
+    assert [m for m in re.findall(r'href="(/analisis/[a-z-]+)"', page)] == ['/analisis/voto-cera', '/analisis/sesgo-cis']
 
 
 def test_cera_page_loads_its_module_and_the_island_carries_what_the_charts_draw(api, fresh_app):
