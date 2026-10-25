@@ -375,7 +375,7 @@ class Site:
         study : str
             Validated study slug.
         part : str
-            Part name, one of ``STUDY_PARTS``.
+            Part name, one of ``STUDY_PARTS[study]``.
 
         Returns
         -------
@@ -398,7 +398,7 @@ class Site:
         study : str
             Validated study slug.
         name : str
-            CSV name, one of ``bundle.STUDY_CSV``.
+            CSV name, one of ``bundle.STUDY_CSV[study]``.
 
         Returns
         -------

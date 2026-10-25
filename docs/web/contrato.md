@@ -390,7 +390,7 @@ que tienen tabla en el backtest; al republicar se borran los gemelos `model-*` d
 ## Estudios
 
 Enmienda 2026-10-19 (estudio del voto CERA). Un estudio vive en `studies/{study}/` (en `site/v1/`, o en `site-dry/v1/` con
-`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay uno: `voto-cera`.
+`dry_run`) y lo escribe el publicador de estudios (`publish.publish_study`). Hoy hay dos: `voto-cera` y `sesgo-cis`.
 Como el análisis, **se sobrescribe** en cada publicación: sin `run_id` y fuera de `history.json`. Su única huella en
 el manifest es su entrada en `manifest.studies` (ver «Punteros»).
 
@@ -400,9 +400,16 @@ studies/{study}/csv/{nombre}.csv
 ```
 
 La fuente de verdad en código es `bundle.STUDIES`, `STUDY_PARTS`, `STUDY_SCHEMAS`, `STUDY_CSV`, `STUDY_CSV_OF`
-(`path_study`, `path_study_csv`, `BundleReader.study_exists`) y `publish.publish_study`.
+(`path_study`, `path_study_csv`, `BundleReader.study_exists`) y `publish.publish_study`. El registro es **por estudio**:
+`STUDY_PARTS[estudio]`, `STUDY_SCHEMAS[estudio][parte]`, `STUDY_CSV[estudio]` y `STUDY_CSV_OF[estudio][parte]`; en la
+publicación, `publish.STUDY_RUNNERS` (cómo se calcula y si se puede registrar), `STUDY_EXPORTERS` y `STUDY_META`.
 
-Mismo sobre que el resto, con `scope` y `run_id` a `null` (y `mode` a `null`) y `schema` `study-{parte}@1`. Ocho partes:
+Mismo sobre que el resto, con `scope` y `run_id` a `null` (y `mode` a `null`). Las partes de `voto-cera` llevan `schema`
+`study-{parte}@1`; las de `sesgo-cis`, `sesgo-cis-{parte}@1`.
+
+### `voto-cera`
+
+Ocho partes:
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
@@ -429,7 +436,39 @@ Gemelos CSV (`studies/{study}/csv/{nombre}.csv`); el primero de cada parte es el
 | `sensitivity` | `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` |
 | `check` | `check` |
 
-`meta`, `placement` no tienen gemelo. `meta.json` se escribe **el último**: un estudio sin él cuenta como «no
+`meta`, `placement` no tienen gemelo.
+
+### `sesgo-cis`
+
+«El sesgo del CIS de Tezanos». Seis partes, sin `slug`; se calcula sólo con las partes ya publicadas del paquete
+(análisis y elecciones) y no se registra:
+
+| Parte | `schema` | `data` (claves obligatorias) |
+|---|---|---|
+| `meta` | `sesgo-cis-meta@1` | `study`, `title`, `subtitle`, `pollster`, `periods` (dict), `blocks` (lista), `params` (dict), `inputs` (dict), `sources` (lista de `{label, url}`), `commit` (texto o `null`), `dirty`, `versions` (dict), `seconds` (dict) |
+| `summary` | `sesgo-cis-summary@1` | `with` (dict), `without` (dict), `election` (dict) |
+| `elections` | `sesgo-cis-elections@1` | `rows` (lista) |
+| `houses` | `sesgo-cis-houses@1` | `rows` (lista) |
+| `matrix` | `sesgo-cis-matrix@1` | `events` (lista), `houses` (lista), `cells` (lista de `[elección, casa, error]`) |
+| `election` | `sesgo-cis-election@1` | `scope`, `date`, `name` (texto o `null`), `blocks` (dict), `max_days` (entero), `result`, `cis`, `consensus` (dicts), `houses` (lista) |
+
+`summary.with` y `summary.without` no llevan las filas internas del periodo (son la parte `elections`). Los subtítulos
+se formatean al publicar con las elecciones con sesgo a la izquierda y el total del periodo actual.
+
+Gemelos CSV:
+
+| Parte | CSV |
+|---|---|
+| `elections` | `elections` |
+| `houses` | `houses` |
+| `matrix` | `matrix` (largo: `pollster`, `scope`, `event_date`, `Izquierda`) |
+| `election` | `election-houses` |
+
+`meta`, `summary` no tienen gemelo.
+
+### Escritura
+
+`meta.json` se escribe **el último**: un estudio sin él cuenta como «no
 publicado» (`study_exists` es falso y la API da 404 `study not published`), de modo que una publicación a medias
 nunca se ve.
 
@@ -696,9 +735,9 @@ sobrescriben en cada publicación.
 | Ruta | Parámetros | Respuesta JSON | CSV (`?format=csv`) |
 |---|---|---|---|
 | `/api/v1/studies` | | `{contract, studies}`; cada estudio publicado `{study, title, subtitle, registered_at, checked_at}`, leído de su `meta` | |
-| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`; `part` ∈ `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check` |
+| `/api/v1/studies/{study}/{part}` | `study` ∈ `voto-cera`, `sesgo-cis`; `part` ∈ las partes del estudio (`voto-cera`: `meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`; `sesgo-cis`: `meta`, `summary`, `elections`, `houses`, `matrix`, `election`); `table`: un CSV de la parte (el primero por defecto) | el fichero del estudio tal cual (sobre completo, `scope` nulo) | `{study}-{nombre}.csv`, con `nombre` ∈ `census-series`, `census-provinces`, `census-countries` (`census`); `participation`; `vote`, `ecological` (`vote`); `last-seat` (`prediction`); `sensitivity-grid`, `sensitivity-scenarios`, `placement-grid` (`sensitivity`); `check`; de `sesgo-cis`: `elections`, `houses`, `matrix`, `election-houses` (`election`) |
 
-- `meta` y `placement` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
+- `meta`, `placement` y `summary` no tienen gemelo CSV: `format=csv` da 404 `no csv for this part`, igual que un `table` que
   no pertenece a la parte.
 - Un estudio está publicado cuando tiene `meta.json`; `studies` lista solo los publicados.
 

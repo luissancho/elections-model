@@ -27,7 +27,7 @@ class Studies(Base):
 
         for study in site().studies():
             data = json.loads(site().study(study, 'meta'))['data']
-            rows.append({key: data[key] for key in ('study', 'title', 'subtitle', 'registered_at', 'checked_at')})
+            rows.append({key: data.get(key) for key in ('study', 'title', 'subtitle', 'registered_at', 'checked_at')})
 
         return self.json_bytes(bundle.dumps({'contract': bundle.CONTRACT, 'studies': rows}))
 
@@ -44,7 +44,7 @@ class Studies(Base):
         study : str
             Study slug, one of ``STUDIES``.
         part : str
-            Part name, one of ``STUDY_PARTS``.
+            Part name, one of ``STUDY_PARTS[study]``.
 
         Returns
         -------
@@ -58,13 +58,13 @@ class Studies(Base):
             ``table`` that does not belong to it; 404 ``study not published`` when the file is missing.
         """
         check_study(study)
-        check_part(part, STUDY_PARTS)
+        check_part(part, STUDY_PARTS[study])
         fmt = check_format(self.query.get('format'))
         table = self.query.get('table') or None
         self.notice_freeze()
 
         if fmt == 'csv':
-            names = bundle.STUDY_CSV_OF.get(part, ())
+            names = bundle.STUDY_CSV_OF[study].get(part, ())
 
             if not names or (table is not None and table not in names):
                 raise HttpError(404, 'no csv for this part')

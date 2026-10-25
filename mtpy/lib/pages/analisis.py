@@ -16,10 +16,12 @@ from ..webapi import site
 from .common import api_url, bundle_part, common_context
 from .cera import (MONTHS_LONG, SCENARIOS, UNIFORM_SPLIT, _census_version, _check, _debate, _get, _question_1,
                    _question_2, _question_3, _sigla, _two_periods, _version)
+from . import lean
 from .filters import delta_badge, fmt_int, fmt_pct
 
 # Page template of each study with a page; a published study missing here has no page (404)
-STUDIES = {'voto-cera': {'template': 'analisis_voto_cera.html'}}
+STUDIES = {'voto-cera': {'template': 'analisis_voto_cera.html'},
+           'sesgo-cis': {'template': 'analisis_sesgo_cis.html'}}
 CERA = 'voto-cera'
 # Verdict of each of the three questions of the CERA study and the colour class of its card
 VERDICTS = [('SÍ', 'q1'), ('SIN EVIDENCIA', 'q2'), ('NO', 'q3')]
@@ -37,17 +39,25 @@ SCENARIO_NET = {'convocatoria': 'net', 'sin_litigio': 'net_b'}
 GAP_SHOWN = 10
 REPORT_KEYS = ('n_mean', 'n_max', 'votes_mean', 'votes_max')
 CSV_LABELS = {
-    'census-series': 'Serie mensual del censo CERA',
-    'census-provinces': 'Censo CERA por provincia',
-    'census-countries': 'Censo CERA por país',
-    'participation': 'Participación CERA por origen y en las generales',
-    'vote': 'Voto CERA por proceso electoral',
-    'ecological': 'Inferencia ecológica por provincia',
-    'last-seat': 'Último escaño por provincia',
-    'sensitivity-grid': 'Rejilla de participación y voto a la izquierda',
-    'sensitivity-scenarios': 'Escenarios de censo, participación y sesgo',
-    'placement-grid': 'Rejilla de colocación óptima',
-    'check': 'Comprobación con y sin voto CERA por provincia',
+    'voto-cera': {
+        'census-series': 'Serie mensual del censo CERA',
+        'census-provinces': 'Censo CERA por provincia',
+        'census-countries': 'Censo CERA por país',
+        'participation': 'Participación CERA por origen y en las generales',
+        'vote': 'Voto CERA por proceso electoral',
+        'ecological': 'Inferencia ecológica por provincia',
+        'last-seat': 'Último escaño por provincia',
+        'sensitivity-grid': 'Rejilla de participación y voto a la izquierda',
+        'sensitivity-scenarios': 'Escenarios de censo, participación y sesgo',
+        'placement-grid': 'Rejilla de colocación óptima',
+        'check': 'Comprobación con y sin voto CERA por provincia',
+    },
+    'sesgo-cis': {
+        'elections': 'Las elecciones del CIS, con y sin Tezanos',
+        'houses': 'Ranking de encuestadoras desde 2018',
+        'matrix': 'Matriz casa por elección',
+        'election-houses': 'Últimos sondeos de las generales de 2023 por bloques',
+    },
 }
 
 
@@ -60,7 +70,7 @@ def study_part(study: str, part: str) -> Optional[dict]:
     study : str
         Study slug, one of ``bundle.STUDIES``.
     part : str
-        Part name, one of ``bundle.STUDY_PARTS``.
+        Part name, one of ``bundle.STUDY_PARTS[study]``.
 
     Returns
     -------
@@ -146,7 +156,7 @@ def study_context(state: dict, study: str) -> dict:
     Returns
     -------
     dict
-        The context of the study (``cera_context`` for ``voto-cera``).
+        The context of the study (``CONTEXTS[study]``: ``cera_context`` or ``lean_context``).
 
     Raises
     ------
@@ -439,7 +449,7 @@ def _kpis(figures: dict, meta: dict) -> list:
 
 def _csv_links(study: str) -> list:
     """
-    The eleven CSV downloads of a study.
+    The CSV downloads of a study (``CSV_LABELS[study]``).
 
     Parameters
     ----------
@@ -449,13 +459,13 @@ def _csv_links(study: str) -> list:
     Returns
     -------
     list of dict
-        ``{'label', 'href'}`` per CSV of ``bundle.STUDY_CSV``, in that order; ``href`` is the ``api_url`` of its part
+        ``{'label', 'href'}`` per CSV of ``bundle.STUDY_CSV[study]``, in that order; ``href`` is the ``api_url`` of its part
         with ``format=csv`` and its ``table``.
     """
-    part_of = {name: part for part, names in bundle.STUDY_CSV_OF.items() for name in names}
+    part_of = {name: part for part, names in bundle.STUDY_CSV_OF[study].items() for name in names}
 
-    return [{'label': CSV_LABELS[name], 'href': api_url(study, part_of[name], kind='study', fmt='csv', table=name)}
-            for name in bundle.STUDY_CSV]
+    return [{'label': CSV_LABELS[study][name], 'href': api_url(study, part_of[name], kind='study', fmt='csv', table=name)}
+            for name in bundle.STUDY_CSV[study]]
 
 
 def _island(state: dict, parts: dict, figures: dict) -> dict:
@@ -550,7 +560,7 @@ def cera_context(state: dict) -> dict:
         503 without a bundle.
     """
     context = common_context(state, '/analisis')
-    parts = {part: study_part(CERA, part) or {} for part in bundle.STUDY_PARTS}
+    parts = {part: study_part(CERA, part) or {} for part in bundle.STUDY_PARTS[CERA]}
     meta = parts['meta']
     figures = _figures(parts)
     context.update({part: data for part, data in parts.items() if part != 'meta'})
@@ -578,5 +588,66 @@ def cera_context(state: dict) -> dict:
     return context
 
 
+def _published_at(study: str) -> Optional[str]:
+    """``published_at`` of a study in the manifest, or ``None`` without a manifest or without the entry."""
+    try:
+        return _get(site().manifest_data(), 'studies', study, 'published_at')
+    except HttpError:
+        return None
+
+
+def lean_context(state: dict) -> dict:
+    """
+    Template context of the page of the CIS bias study (``/analisis/sesgo-cis``).
+
+    Parameters
+    ----------
+    state : dict
+        Validated page parameters (``parse_state``).
+
+    Returns
+    -------
+    dict
+        ``common_context`` of ``/analisis`` plus ``study_meta`` (the ``meta`` part), ``summary``, ``periods``
+        (``meta.periods``), ``verdicts`` (``lean.verdict_rows``), ``kpis``, ``tests``, ``tech`` (``lean.tech_note``),
+        ``compare`` (``lean.compare_boxes``), ``elections`` (the rows of the period with Tezanos, newest first),
+        ``houses`` (the rows of the ranking with the ``href`` of the profile), ``runner_up`` (``lean.runner_up``: the
+        house that follows the CIS, or ``None``), ``cis_leads`` (``lean.cis_leads``: whether the CIS tops the ranking,
+        the condition of the strong titles of question 2), ``election`` (the part, or ``None``),
+        ``sources``, ``csv_links``, ``initial`` (``lean.island`` plus the common ``state``) and ``published_at``
+        (``None`` without the entry in the manifest).
+
+    Raises
+    ------
+    HttpError
+        503 without a bundle.
+    """
+    context = common_context(state, '/analisis')
+    parts = {part: study_part(lean.LEAN, part) or {} for part in bundle.STUDY_PARTS[lean.LEAN]}
+    meta, summary = parts['meta'], parts['summary']
+    periods = _get(meta, 'periods')
+    context.update(
+        study_meta=meta,
+        summary=summary,
+        periods=periods,
+        verdicts=lean.verdict_rows(),
+        kpis=lean.kpis(summary, periods),
+        tests=lean.tests(summary),
+        tech=lean.tech_note(summary),
+        compare=lean.compare_boxes(summary, periods),
+        elections=lean.election_rows(parts),
+        houses=lean.house_rows(parts),
+        runner_up=lean.runner_up(_get(parts['houses'], 'rows') or []),
+        cis_leads=lean.cis_leads(_get(parts['houses'], 'rows') or []),
+        election=parts['election'] or None,
+        sources=meta.get('sources') or [],
+        csv_links=_csv_links(lean.LEAN),
+        initial=dict(lean.island(parts), state=context['state']),
+        published_at=_published_at(lean.LEAN),
+    )
+
+    return context
+
+
 # Context builder of each study of ``STUDIES``
-CONTEXTS = {CERA: cera_context}
+CONTEXTS = {CERA: cera_context, lean.LEAN: lean_context}

@@ -6,11 +6,11 @@ import re
 import pytest
 
 from mtpy.core.api import HttpError
-from mtpy.lib import bundle, pages
+from mtpy.lib import bundle, pages, webapi
 from mtpy.lib.pages import metodo
 from tests.test_api_asgi import call
 from tests.test_pages import api, assert_public_wording, html, initial  # noqa: F401  (fixtures y ayudas de las páginas)
-from tests.test_webapi_unit import RUN, fixture_data, write_analysis, write_event
+from tests.test_webapi_unit import RUN, fixture_data, write_analysis, write_event, write_study
 
 STATE = {'scope': 'es', 'mode': None, 'run': None}
 
@@ -251,6 +251,14 @@ def write_house_example(fs):
 def house_site(api, fresh_app):
     write_house_example(fresh_app.fs)
     return api
+
+
+def test_method_card_links_the_study_only_when_published(house_site, fresh_app):
+    page = html(call(house_site, '/metodo/promedio')[2])
+    assert '/analisis/sesgo-cis' not in page
+    write_study(fresh_app.fs, study='sesgo-cis'); webapi.site().manifest_cache_clear()
+    page = html(call(house_site, '/metodo/promedio')[2])
+    assert 'El análisis completo, con el CIS de antes de 2018, las demás casas y 2023, está en <a href="/analisis/sesgo-cis">' in page
 
 
 def test_house_example_is_none_without_an_analysis(api):

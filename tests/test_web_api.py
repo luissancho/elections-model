@@ -396,6 +396,22 @@ def test_studies_index_and_parts_and_csv(api, fresh_app, tmp_path):
     assert status == 200 and json.loads(body)['schema'] == 'study-meta@1'
 
 
+def test_studies_api_serves_both_studies(api, fresh_app, tmp_path):
+    write_study(fresh_app.fs); write_study(fresh_app.fs, study='sesgo-cis'); webapi.site().manifest_cache_clear()
+    status, _, body = call(api, '/api/v1/studies')
+    assert [s['study'] for s in json.loads(body)['studies']] == ['voto-cera', 'sesgo-cis']
+    assert json.loads(body)['studies'][1]['registered_at'] is None
+    status, headers, body = call(api, '/api/v1/studies/sesgo-cis/matrix', query='format=csv')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="sesgo-cis-matrix.csv"'
+    status, _, body = call(api, '/api/v1/studies/sesgo-cis/election', query='format=csv&table=election-houses')
+    assert status == 200
+    for path, query, message in (('/api/v1/studies/sesgo-cis/census', '', 'unknown part'),
+                                 ('/api/v1/studies/sesgo-cis/summary', 'format=csv', 'no csv for this part'),
+                                 ('/api/v1/studies/voto-cera/matrix', '', 'unknown part')):
+        got, _, body = call(api, path, query=query)
+        assert got == 404 and json.loads(body)['message'] == message
+
+
 @pytest.mark.parametrize('path, query, status, message', [
     ('/api/v1/studies/voto-cera/meta', 'format=csv', 404, 'no csv for this part'),
     ('/api/v1/studies/voto-cera/vote', 'format=csv&table=last-seat', 404, 'no csv for this part'),

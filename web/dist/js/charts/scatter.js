@@ -12,14 +12,16 @@ const FIT_COLOR = '#ce3b3b';
  *
  * @param {object[]} rows one per point
  * @param {object} opts `x`, `y` and `name` (field names of the coordinates and of the name), `labelled` (names
- *   to write beside their point), `fit` (`[[x0, y0], [x1, y1]]`: the ends of the fitted line, or null),
+ *   to write beside their point), `axes` (`{xMin, xMax, yMin, yMax, interval}`: fixed limits and tick step of
+ *   both axes instead of fitting the data), `diagonal` (a dashed line from `[min, min]` to `[max, max]` of
+ *   those axes; needs `axes`), `colorOf` (`row => colour` of each point), `fit` (`[[x0, y0], [x1, y1]]`: the ends of the fitted line, or null),
  *   `xFormatter` and `yFormatter` (number → text of each axis and of the tooltip), `xName` (title of the x axis)
  *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip)
  * @returns {object} the option
  */
 export function scatterOption(rows, {
   x, y, name, labelled = [], fit = null, xFormatter = (v) => fmtNum(v, 1), yFormatter = (v) => fmtNum(v, 1),
-  xName = '', xLabel = '', yLabel = '',
+  xName = '', xLabel = '', yLabel = '', diagonal = false, axes = null, colorOf = null,
 } = {}) {
   const named = new Set(labelled);
   const xs = rows.map((row) => row[x]).filter(Number.isFinite);
@@ -35,6 +37,7 @@ export function scatterOption(rows, {
     data: rows.map((row) => ({
       value: [row[x], row[y]],
       name: row[name],
+      ...(colorOf ? {itemStyle: {color: colorOf(row)}} : {}),
       label: {show: named.has(row[name]), position: row[x] > rightQuarter ? 'left' : 'right'},
     })),
   };
@@ -50,12 +53,27 @@ export function scatterOption(rows, {
       lineStyle: {color: FIT_COLOR, width: 1.5, type: 'dashed'},
     });
   }
+  if (diagonal && axes) {
+    const low = Math.min(axes.xMin, axes.yMin);
+    const high = Math.max(axes.xMax, axes.yMax);
+    series.push({
+      type: 'line',
+      name: '',
+      data: [[low, low], [high, high]],
+      showSymbol: false,
+      silent: true,
+      tooltip: {show: false},
+      lineStyle: {color: 'rgba(0,0,0,.35)', width: 1.5, type: 'dashed'},
+    });
+  }
+  const fixed = (min, max) => (axes ? {min, max, interval: axes.interval} : {});
   return {
     ...baseOption(),
     grid: {left: 8, right: 16, top: 16, bottom: xName ? 32 : 8, containLabel: true},
     xAxis: {
       type: 'value',
-      scale: true,
+      scale: !axes,
+      ...fixed(axes && axes.xMin, axes && axes.xMax),
       name: xName,
       nameLocation: 'middle',
       nameGap: 26,
@@ -65,7 +83,8 @@ export function scatterOption(rows, {
     },
     yAxis: {
       type: 'value',
-      scale: true,
+      scale: !axes,
+      ...fixed(axes && axes.yMin, axes && axes.yMax),
       splitLine: {lineStyle: {color: THEME.gridColor}},
       axisLabel: {...axisLabelStyle(), formatter: (value) => yFormatter(value)},
     },

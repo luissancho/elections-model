@@ -1,0 +1,368 @@
+{% extends 'base.html' %}
+{% block title %}{{ study_meta.get('title') or 'El sesgo del CIS de Tezanos' }}{% endblock %}
+{% block description %}{{ study_meta.get('subtitle') or 'El último sondeo del CIS antes de cada elección, frente a las urnas, con y sin Tezanos.' }}{% endblock %}
+{% block scripts %}
+  <script type="module" src="/dist/js/pages/analisis-sesgo-cis.js"></script>
+{% endblock %}
+{% block content %}
+{% import '_macros.html' as m %}
+{#- A list of names in prose: «A, B y C». -#}
+{% macro names(items) -%}{% if items|length > 1 %}{{ items[:-1]|join(', ') }} y {{ items[-1] }}{% else %}{{ items|join('') }}{% endif %}{%- endmacro %}
+{#- A share in 0-1 as a whole percentage glued to the figure: «93%» (a dash without it). -#}
+{% macro share(x) -%}{% if x is number %}{{ (x * 100)|pct(0) }}{% else %}–{% endif %}{%- endmacro %}
+{#- «k de n» with the site's integer format. -#}
+{% macro count(k, n) -%}{{ k|int }} de {{ n|int }}{%- endmacro %}
+{#- The parties of a block of the 2023 election joined: «PSOE + SUMAR». -#}
+{% macro parties(name) -%}{{ (blocks.get(name) or [name])|join(' + ') }}{%- endmacro %}
+{#- A signed error cell of the 2023 table, green when the poll overshot the block and red when it fell short. -#}
+{% macro err(x, bold=False) -%}
+<td{% if x is number and x > 0 %} class="pos"{% elif x is number and x < 0 %} class="neg"{% endif %}>{% if bold %}<b>{{ x|delta(1) }}</b>{% else %}{{ x|delta(1) }}{% endif %}</td>
+{%- endmacro %}
+{#- What a poll did with a block, by the sign of its error: «sobreestimó a la izquierda 3,1 puntos». -#}
+{% macro miss(x, block) -%}{% if x is number and x > 0 %}sobreestimó a la {{ block }} {{ x|num(1) }} puntos{% elif x is number and x < 0 %}subestimó a la {{ block }} {{ x|abs|num(1) }} puntos{% else %}acertó en la {{ block }}{% endif %}{%- endmacro %}
+{#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
+{% macro answer(verdict, n) -%}
+<a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
+{%- endmacro %}
+{% set v1, v2, v3 = verdicts %}
+{% set coin, dates, versus = tests %}
+{% set w = summary.get('with') or {} %}
+{% set wo = summary.get('without') or {} %}
+{% set wc = w.get('consensus') or {} %}
+{% set woc = wo.get('consensus') or {} %}
+{% set industry = w.get('industry') or {} %}
+{% set pw = (periods or {}).get('with') or {} %}
+{% set pwo = (periods or {}).get('without') or {} %}
+{% set params = study_meta.get('params') or {} %}
+{% set active_year = (params.get('active_from') or '')[:4] %}
+{% set el = election or {} %}
+{% set blocks = el.get('blocks') or {} %}
+{% set ecis = el.get('cis') or {} %}
+{% set econ = el.get('consensus') or {} %}
+{% set eres = el.get('result') or {} %}
+{% set es = summary.get('election') or {} %}
+{% set exceptions = w.get('exceptions') or [] %}
+{% set cis_house = (houses|selectattr('cis')|list or [none])[0] %}
+{% set national = elections|selectattr('scope', 'equalto', 'es')|rejectattr('event_date', 'equalto', el.get('date'))|list %}
+{% set matrix = initial.matrix or {} %}
+{% set consensus_odds = ((w.get('chance') or {}).get('consensus') or {}).get('odds') %}
+{% set before, after = compare %}
+{#- The claims of the texts, each from the figures that back it -#}
+{% set more_left = before.share is number and after.share is number and after.share > before.share %}
+{% set common_left = industry.get('left') is number and industry.get('right') is number and industry.left > industry.right %}
+{% set diff = wc.get('mean_diff') %}
+{% set cis_left_of_others = diff is number and diff > 0 and wc.get('k') is number and wc.get('n') and wc.k * 2 > wc.n %}
+{% set diff_text = diff|num(1) if (diff is number and diff > 0) else diff|delta(1) %}
+{% set cis_2023 = ecis.get('e_left') is number and ecis.get('e_right') is number %}
+{% set usual_2023 = cis_2023 and w.get('mean_left') is number and w.get('mean_right') is number and (ecis.e_left > 0) == (w.mean_left > 0) and (ecis.e_right > 0) == (w.mean_right > 0) %}
+{% set others_right = econ.get('e_left') is number and econ.get('e_right') is number and econ.e_left < 0 and econ.e_right > 0 %}
+{% set between = others_right and cis_2023 and ecis.e_left > 0 and ecis.e_right < 0 %}
+{% set nearer_consensus = es.get('consensus_dist') is number and es.get('cis_dist') is number and es.consensus_dist < es.cis_dist %}
+    <div id="content" class="stack">
+      <header id="study-head">
+        <div class="tags">
+          <span class="pill brand">Análisis</span>
+          <span class="pill">Evidencia histórica · {{ w.get('n')|int }} elecciones desde 2018</span>
+          {% if published_at %}<span class="pill ok">Actualizado el {{ published_at|date }}</span>{% endif %}
+        </div>
+        <h1 class="study-title">{{ study_meta.get('title') or 'El sesgo del CIS de Tezanos' }}</h1>
+        {% if study_meta.get('subtitle') %}<p class="study-subtitle">{{ study_meta.subtitle }}</p>{% endif %}
+      </header>
+      <nav class="section-nav toc" aria-label="Secciones">
+        <a href="#resumen">Resumen</a>
+        <a href="#p1" class="{{ v1.tone }}">1 · ¿Se inclina a la izquierda?</a>
+        <a href="#p2" class="{{ v2.tone }}">2 · ¿Puede ser azar?</a>
+        <a href="#p3" class="{{ v3.tone }}">3 · ¿Acertó en 2023?</a>
+        <a href="#datos">Datos y método</a>
+      </nav>
+      {{ m.kpis(kpis) }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'El debate sobre el CIS se reduce a tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.') }}
+        <div class="three">
+          {% call answer(v1, 1) -%}
+            En {{ count(w.get('k_left'), w.get('n')) }} elecciones su último sondeo dio al bloque de izquierdas más voto
+            del que obtuvo, {{ w.get('mean_left')|num(1) }} puntos de media. Sin Tezanos ({{ pwo.get('label') or '–' }}),
+            el mismo CIS: {{ count(wo.get('k_left'), wo.get('n')) }} y {{ wo.get('mean_left')|delta(1) }} puntos.
+          {%- endcall %}
+          {% call answer(v2, 2) -%}
+            {% if coin.value %}Como si cada elección fuera una moneda, {{ count(w.get('k_left'), w.get('n')) }} sale
+            {{ coin.value }}.{% endif %}{% if dates.value %} Agrupando por fecha, {{ dates.value }}.{% endif %}
+            Y el CIS quedó a la izquierda de las demás casas en {{ count(wc.get('k'), wc.get('n')) }} elecciones
+            {%- if cis_left_of_others %}: no es que «todos fallaran»{% endif %}.
+          {%- endcall %}
+          {% call answer(v3, 3) -%}
+            {% if cis_2023 %}El CIS {{ miss(ecis.e_left, 'izquierda') }} y {{ miss(ecis.e_right, 'derecha') }}
+            {%- if usual_2023 %}, en el mismo sentido que su sesgo medio con Tezanos{% endif %}.{% endif %}
+            {%- if others_right %} Las demás fallaron hacia la derecha
+            {%- if between %} y el resultado quedó entre ambos{% if nearer_consensus %}, más cerca del consenso que del CIS{% endif %}{% endif %}.{% endif %}
+          {%- endcall %}
+        </div>
+        <p class="note blue">Medimos lo que dicen los sondeos frente a lo que dicen las urnas. No medimos intenciones: el dato es la persistencia del error en una dirección, su tamaño, su comparación con las demás encuestadoras y con el propio CIS de antes de 2018. Los datos por encima de bandos y consignas.</p>
+      {{ m.card_end() }}
+      <section class="card qcard {{ v1.tone }}" id="p1">
+        <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
+        <p class="lead">
+          José Félix Tezanos, secretario de Estudios y Programas de la Ejecutiva Federal del PSOE y responsable de los
+          sondeos del partido desde junio de 2017, fue nombrado presidente del CIS por el Consejo de Ministros el 29 de
+          junio de 2018 y dejó la Ejecutiva al mes siguiente. Con él, en septiembre de 2018 el CIS cambió su estimación
+          de voto: dejó de aplicar su modelo tradicional de ajuste y pasó a publicar una estimación basada en el voto
+          directo más la simpatía por cada partido. Comparamos el último sondeo del CIS antes de cada elección
+          analizada, generales y autonómicas, con el resultado, por bloques: positivo si le dio más voto del que
+          obtuvo. Y hacemos lo mismo con el CIS de antes de su llegada, sin Tezanos ({{ pwo.get('label') or '–' }}).
+        </p>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">Sin Tezanos: {{ wo.get('n')|int }} elecciones ({{ pwo.get('label') or '–' }})</p>
+            <p class="csub">Error del último sondeo del CIS por bloques · azul generales, naranja autonómicas · anillos a 2, 5 y 10 puntos</p>
+            <div class="chart square" id="bull-without" role="img" aria-label="Error del último sondeo del CIS por bloques en {{ wo.get('n')|int }} elecciones sin Tezanos: la izquierda sobreestimada en {{ count(wo.get('k_left'), wo.get('n')) }}, {{ wo.get('mean_left')|delta(1) }} puntos de media en la izquierda y {{ wo.get('mean_right')|delta(1) }} en la derecha"></div>
+          </div>
+          <div>
+            <p class="ctitle">Con Tezanos: {{ w.get('n')|int }} elecciones ({{ pw.get('label') or '–' }})</p>
+            {#- the reading of the cloud only when the mean errors put it there -#}
+            {% if w.get('mean_left') is number and w.get('mean_right') is number and w.mean_left > 0 and w.mean_right < 0 %}
+            <p class="csub">Los puntos se concentran arriba a la izquierda: más voto a la izquierda y menos a la derecha del que hubo</p>
+            {% else %}
+            <p class="csub">Error del último sondeo del CIS por bloques en el periodo con Tezanos</p>
+            {% endif %}
+            <div class="chart square" id="bull-with" role="img" aria-label="Error del último sondeo del CIS por bloques en {{ w.get('n')|int }} elecciones con Tezanos: la izquierda sobreestimada en {{ count(w.get('k_left'), w.get('n')) }}, {{ w.get('mean_left')|delta(1) }} puntos de media en la izquierda y {{ w.get('mean_right')|delta(1) }} en la derecha"></div>
+          </div>
+        </div>
+        <div class="cmp">
+          {% for box in compare %}
+          <div class="box{% if box.after %} after{% endif %}">
+            <div class="k">{{ 'Con' if box.after else 'Sin' }} Tezanos ({{ box.label or '–' }})</div>
+            <div class="v">{{ count(box.k, box.n) }} <small>({{ share(box.share) }})</small></div>
+            <p>
+              elecciones con la izquierda sobreestimada · sesgo medio {{ box.mean_left|delta(1) }} en la izquierda,
+              {{ box.mean_right|delta(1) }} en la derecha
+              {%- if box.consensus_n %} · a la izquierda del consenso de las demás casas en
+              {{ count(box.consensus_k, box.consensus_n) }} ({{ share(box.consensus_share) }}),
+              {{ box.mean_diff|delta(1) }} puntos{% endif %}
+            </p>
+          </div>
+          {% endfor %}
+        </div>
+        {% if elections %}
+        <div class="table-wrap">
+          <table id="elections-table">
+            <caption class="sr-only">Error del último sondeo del CIS antes de cada una de las {{ elections|length }} elecciones con Tezanos, en puntos (sondeo menos resultado), las más recientes primero.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Elección</th>
+                <th scope="col">Fecha</th>
+                <th scope="col" title="Días entre el fin del trabajo de campo del sondeo y la votación">Días antes</th>
+                <th scope="col" title="Error en el bloque: positivo si el sondeo le dio más voto que el resultado, negativo si menos">Izquierda</th>
+                <th scope="col" title="Error en el bloque: positivo si el sondeo le dio más voto que el resultado, negativo si menos">Derecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in elections %}
+              <tr{% if loop.index > 8 %} hidden{% endif %}>
+                <td><b>{{ row.get('label') }}</b></td><td>{{ row.get('event_date')|date }}</td><td>{{ row.get('days')|int }}</td>
+                {#- double gradient, as the profile and Método: red the more the poll fell short of the block, green the more it overshot it #}
+                <td class="cell-shade" style="background-color: {{ row.get('Izquierda')|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row.get('Izquierda')|delta(1) }}</td>
+                <td class="cell-shade" style="background-color: {{ row.get('Derecha')|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row.get('Derecha')|delta(1) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="more" id="elections-more" hidden>Ver las {{ elections|length }} elecciones</button>
+        {% endif %}
+        <div class="sum">
+          <b>Sí.</b>
+          {%- if more_left %} La misma institución, con otro presidente y otro método, sobreestimó a la izquierda en una
+          proporción mayor de elecciones.{% endif %} Sin Tezanos ({{ pwo.get('label') or '–' }}), el CIS sobreestimó a la
+          izquierda en {{ count(wo.get('k_left'), wo.get('n')) }} elecciones, {{ wo.get('mean_left')|delta(1) }} puntos de
+          media{% if woc.get('n') %}, y quedó a la izquierda del consenso en {{ count(woc.get('k'), woc.get('n')) }}{% endif %}.
+          Con Tezanos ({{ pw.get('label') or '–' }}), en {{ count(w.get('k_left'), w.get('n')) }},
+          {{ w.get('mean_left')|delta(1) }} puntos
+          {%- if wc.get('n') %} y a la izquierda del consenso en {{ count(wc.get('k'), wc.get('n')) }}{% endif %}.
+          {%- if exceptions|length == 1 %} La única excepción: {{ exceptions[0] }}.
+          {%- elif exceptions %} Las {{ exceptions|length }} excepciones: {{ names(exceptions) }}.{% endif %}
+        </div>
+        {% call m.how() %}
+        <p>
+          Cada punto de las dianas es una elección: el último sondeo del CIS antes de la votación. En horizontal va el
+          error en el bloque de derechas y en vertical el del bloque de izquierdas, los dos en puntos y como sondeo
+          menos resultado. El centro es el resultado exacto: un punto arriba a la izquierda dio más voto a la izquierda
+          y menos a la derecha del que hubo. Las cajas y la tabla cuentan las mismas filas; en la tabla, verde si el
+          sondeo le dio al bloque más voto del que obtuvo y rojo si le dio menos.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard {{ v2.tone }}" id="p2">
+        <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
+        <p class="lead">Tres comprobaciones, de la más sencilla a la más exigente. La tercera responde a la objeción habitual: «todas las encuestas fallaron».</p>
+        <div class="tests">
+          {% for box in tests %}
+          <div class="test{% if box.highlight %} hi{% endif %}">
+            <div class="k">{{ box.label }}</div>
+            <div class="v">{{ box.value or '–' }}</div>
+            {% if box.text %}<p>{{ box.text }}</p>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {#- the strong titles only when the CIS tops the ranking (`lean.cis_leads`) -#}
+        <p class="ctitle">Casa por casa y elección por elección{% if cis_leads %}: el CIS es la única casa prácticamente monocolor{% endif %}</p>
+        <p class="csub">
+          Casas con {{ params.get('min_elections')|int }} o más elecciones desde 2018{% if active_year %} y sondeos en
+          {{ active_year }}{% endif %}, el CIS primero y las demás por proporción de elecciones con la izquierda
+          sobreestimada. Rojo: el último sondeo dio al bloque de izquierdas más voto del que obtuvo; azul: menos; más
+          intenso cuanto mayor el error; en blanco, la casa no sondeó esa elección; las generales, en negrita. El
+          detalle de cada celda, al pasar el ratón
+        </p>
+        <div class="chart-scroll">
+          <div class="chart" id="matrix-chart" role="img" aria-label="Error en el bloque de izquierdas del último sondeo de {{ (matrix.get('houses') or [])|length }} casas en {{ (matrix.get('events') or [])|length }} elecciones con Tezanos; el CIS sobreestimó a la izquierda en {{ count(w.get('k_left'), w.get('n')) }}"></div>
+        </div>
+        <div class="grid2">
+          <div>
+            <p class="ctitle">El CIS, frente a la media de las demás casas en la misma elección</p>
+            <p class="csub">Error en el bloque de izquierdas, cada punto una elección. Horizontal: la media de las otras casas. Vertical: el CIS. Sobre la diagonal, el CIS quedó más a la izquierda que el consenso</p>
+            <div class="chart" id="consensus-chart" role="img" aria-label="El CIS quedó más a la izquierda que la media de las demás casas en {{ count(wc.get('k'), wc.get('n')) }} elecciones, {{ wc.get('mean_diff')|num(1) }} puntos de media"></div>
+          </div>
+          <div>
+            <p class="ctitle">{{ 'Ninguna otra encuestadora se acerca' if cis_leads else 'Las casas, en proporción y magnitud' }}</p>
+            <p class="csub">Casas con {{ params.get('min_elections')|int }} o más elecciones desde 2018{% if active_year %} y sondeos en {{ active_year }}{% endif %}. Horizontal: en qué proporción de sus elecciones sobreestimó a la izquierda. Vertical: su sesgo de bloques medio (error en la izquierda menos error en la derecha), en puntos</p>
+            <div class="chart" id="ranking-chart" role="img" aria-label="{{ houses|length }} casas por proporción de elecciones con la izquierda sobreestimada y sesgo de bloques medio{% if cis_house %}; el CIS, {{ count(cis_house.get('k_left'), cis_house.get('n')) }} y {{ cis_house.get('mean_lean')|num(1) }} puntos{% endif %}"></div>
+          </div>
+        </div>
+        <div class="sum">
+          <b>No.</b> Ni el azar ni un fallo general de las encuestas explican el patrón.
+          {%- if coin.value %} Equivocarse hacia el mismo lado en {{ count(w.get('k_left'), w.get('n')) }} elecciones
+          ocurre por azar {{ coin.value }}
+          {%- if runner_up %}; la casa que le sigue en el ranking, <a href="{{ runner_up.href }}">{{ runner_up.name }}</a>, con
+          {{ count(runner_up.k, runner_up.n) }}{% if runner_up.odds %}, está en 1 entre {{ runner_up.odds }}{% endif %}{% endif %}.
+          {%- endif %}
+          {%- if industry.get('n_events') %} Desde 2018, la media de las demás encuestadoras sobreestimó a la izquierda en
+          {{ count(industry.get('left'), industry.get('n_events')) }} elecciones con tres o más casas aparte del CIS.{% endif %}
+          {%- if wc.get('n') %}{% if common_left %} Al comparar cada casa con las demás en la misma elección se descuenta
+          esa inclinación común.{% if cis_left_of_others %} La del CIS no desaparece:{% else %} El CIS{% endif %}{% else %} Frente a
+          las demás casas en la misma elección, el CIS{% endif %} quedó a la izquierda del consenso en
+          {{ count(wc.get('k'), wc.get('n')) }} elecciones, {{ diff_text }} puntos de media
+          {%- if consensus_odds is number %} (como moneda, 1 entre {{ consensus_odds|int }}){% endif %}.{% endif %}
+        </div>
+        {% set t_with = w.get('t') or {} %}
+        <div class="tech">
+          <b>Nota técnica.</b> Una prueba t de Student sobre los {{ (t_with.get('all') or {}).get('n')|int }} errores del
+          CIS en el bloque de izquierdas da una media de {{ tech['with'].mean|replace('-', '−') }} puntos, desviación típica
+          {{ tech['with'].sd|replace('-', '−') }} y <b>t = {{ tech['with'].all|replace('-', '−') }}</b>; sobre las {{ (t_with.get('dates') or {}).get('n')|int }}
+          fechas electorales (media de cada fecha), t = {{ tech['with'].dates|replace('-', '−') }}; sobre las
+          {{ (t_with.get('consensus') or {}).get('n')|int }} diferencias con el consenso, t = {{ tech['with'].consensus|replace('-', '−') }}.
+          {% if tech['with'].chance %}{{ tech['with'].chance }}{% endif %}
+          Sin Tezanos ({{ pwo.get('label') or '–' }}), las mismas pruebas dan t = {{ tech['without'].all|replace('-', '−') }},
+          {{ tech['without'].dates|replace('-', '−') }} y {{ tech['without'].consensus|replace('-', '−') }}
+          {%- if tech['without'].random %}: compatibles con el azar{% endif %}.
+        </div>
+        {% call m.how() %}
+        <p>
+          Las tres cajas comparan al CIS con el azar: la primera trata cada elección como una moneda al aire, la
+          segunda junta las elecciones del mismo día en una sola prueba y la tercera mide al CIS frente a las demás
+          casas en cada elección. En la matriz, cada fila es una encuestadora y cada columna una elección: el color dice
+          hacia qué lado erró su último sondeo en el bloque de izquierdas y la intensidad, por cuánto. En el gráfico del
+          consenso, cada punto sobre la diagonal es una elección en la que el CIS quedó más a la izquierda que la media
+          de las demás. En el ranking, cuanto más a la derecha y más arriba está una casa, más a menudo y por más puntos
+          sobreestimó a la izquierda.
+        </p>
+        {% endcall %}
+      </section>
+      <section class="card qcard {{ v3.tone }}" id="p3">
+        <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
+        <p class="lead">
+          El 23-J las demás encuestadoras daban al PP una ventaja holgada, con mayorías absolutas de PP y VOX en sus
+          escaños publicados, y el CIS ponía por delante al PSOE. La mayoría no llegó, el resultado se movió hacia donde
+          apuntaba el CIS, y de ahí la leyenda. Miramos los bloques, que es donde está su sesgo: el último sondeo de
+          cada casa{% if el.get('max_days') %} (hasta {{ el.max_days|int }} días antes){% endif %} frente a las urnas.
+        </p>
+        {% if election %}
+        <div class="grid2">
+          <div>
+            <p class="ctitle">El último sondeo de cada casa frente al resultado, por bloques</p>
+            <p class="csub">Derecha → sobreestimó a {{ parties('Derecha') }} · Izquierda ↑ sobreestimó a {{ parties('Izquierda') }} · el centro es el resultado · rojo, el CIS; rombo, el consenso de las {{ econ.get('n')|int }} casas</p>
+            <div class="chart square wide" id="bull-2023" role="img" aria-label="Error del último sondeo de {{ (el.get('houses') or [])|length }} casas en {{ el.get('name') or 'la elección' }}, por bloques: el CIS a {{ es.get('cis_dist')|num(1) }} puntos del resultado y el consenso de las demás a {{ es.get('consensus_dist')|num(1) }}"></div>
+          </div>
+          <div>
+            <p class="ctitle">El CIS y el consenso, frente al resultado</p>
+            <p class="csub">
+              Último sondeo del CIS{% if ecis.get('date') %} ({{ ecis.date|date }}){% elif ecis.get('days') is number %} ({{ ecis.days|int }} días antes){% endif %}
+              y media de los últimos sondeos de las otras {{ econ.get('n')|int }} casas · Izquierda: {{ parties('Izquierda') }} · Derecha: {{ parties('Derecha') }}
+            </p>
+            <div class="table-wrap">
+              <table id="election-table">
+                <caption class="sr-only">Cuota de cada bloque en el último sondeo del CIS, en la media de las demás casas y en el resultado de {{ el.get('name') or 'la elección' }}, y los errores de los dos sondeos, en puntos.</caption>
+                <thead>
+                  <tr>
+                    <th scope="col"><span class="sr-only">Bloque</span></th>
+                    <th scope="col">CIS</th>
+                    <th scope="col">Consenso</th>
+                    <th scope="col">Resultado</th>
+                    <th scope="col">Error CIS</th>
+                    <th scope="col">Error consenso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="blk">Izquierda</td><td>{{ ecis.get('Izquierda')|num(1) }}</td><td>{{ econ.get('Izquierda')|num(1) }}</td><td><b>{{ eres.get('Izquierda')|num(1) }}</b></td>{{ err(ecis.get('e_left')) }}{{ err(econ.get('e_left')) }}
+                  </tr>
+                  <tr>
+                    <td class="blk">Derecha</td><td>{{ ecis.get('Derecha')|num(1) }}</td><td>{{ econ.get('Derecha')|num(1) }}</td><td><b>{{ eres.get('Derecha')|num(1) }}</b></td>{{ err(ecis.get('e_right')) }}{{ err(econ.get('e_right')) }}
+                  </tr>
+                  <tr>
+                    <td class="blk">Diferencia</td><td>{{ ecis.get('gap')|delta(1) }}</td><td>{{ econ.get('gap')|delta(1) }}</td><td><b>{{ eres.get('gap')|delta(1) }}</b></td><td><b>{{ ecis.get('e_gap')|delta(1) }}</b></td><td><b>{{ econ.get('e_gap')|delta(1) }}</b></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="ctitle">Quién estuvo más cerca del resultado en los bloques</p>
+            <p class="csub">Distancia al centro de la diana de cada casa, en puntos{% if es.get('rank') %}; el CIS fue la {{ es.rank|int }}.ª de {{ es.get('n')|int }}{% endif %}</p>
+            <div class="chart" id="distance-chart" role="img" aria-label="Distancia al resultado de {{ (el.get('houses') or [])|length }} casas y del consenso en {{ el.get('name') or 'la elección' }}{% if es.get('rank') %}: el CIS, a {{ es.get('cis_dist')|num(1) }} puntos, fue la {{ es.rank|int }}.ª de {{ es.get('n')|int }}{% endif %}"></div>
+          </div>
+        </div>
+        <div class="sum">
+          <b>No.</b>
+          {%- if cis_2023 %} El CIS {{ miss(ecis.e_left, 'izquierda') }} y {{ miss(ecis.e_right, 'derecha') }}.{% endif %}
+          Está a {{ es.get('cis_dist')|num(1) }} puntos del centro de la diana, y el consenso de las otras
+          {{ econ.get('n')|int }} casas, a {{ es.get('consensus_dist')|num(1) }}.
+          {%- if es.get('closer') is number %} {% if es.closer == 0 %}Ninguna quedó{% elif es.closer == 1 %}Una de ellas quedó{% else %}{{ es.closer|int }} de ellas quedaron{% endif %} más cerca del resultado que el CIS.{% endif %}
+          {%- if others_right %} Lo que ocurrió en 2023 es que las demás fallaron hacia la derecha
+          {%- if between %} y el resultado quedó entre los dos{% if nearer_consensus %}, más cerca de ellas{% endif %}{% endif %}.{% endif %}
+          {%- if national %} En las demás generales con Tezanos, el error del último sondeo del CIS en la izquierda: {% for row in national %}el {{ row.get('event_date')|date }}, {{ row.get('Izquierda')|delta(1) }}{% if row.get('consensus') is number %} frente a {{ row.consensus|delta(1) }} de media de las demás casas{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}{% endif %}
+        </div>
+        {% else %}
+        <p class="notice">Todavía no está publicado el análisis de esta elección.</p>
+        {% endif %}
+        {% call m.how() %}
+        <p>
+          La diana pone el resultado en el centro y cada casa donde la dejó su último sondeo: hacia la derecha si
+          sobreestimó a {{ parties('Derecha') }} y hacia arriba si sobreestimó a {{ parties('Izquierda') }}. El rombo
+          es el consenso, la media de las demás casas, y el punto rojo, el CIS. Las barras ordenan las casas por su
+          distancia al centro, que junta los dos errores en una sola cifra: cuanto más corta, más cerca estuvo del
+          resultado en los bloques. La tabla da la cuota de cada bloque, sus errores y la diferencia entre los dos.
+        </p>
+        {% endcall %}
+      </section>
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y resultados publicados en Demoscopio y se puede descargar.') }}
+        <ul class="src-list">
+          <li><b>Elecciones analizadas:</b> las generales y autonómicas con resultado en las que el CIS publicó un sondeo con trabajo de campo entre 6 y 42 días antes de la votación; se cuenta sólo el último. Los bloques son los de cada ámbito{% if blocks %} (en {{ el.get('name') or 'la elección de 2023' }}, {{ parties('Izquierda') }} frente a {{ parties('Derecha') }}){% endif %}.</li>
+          <li><b>Error por bloque:</b> la suma de las estimaciones del sondeo para los partidos del bloque menos la suma de sus resultados, en puntos: positivo si le dio más voto del que obtuvo. Son las mismas filas que la diana del <a href="/casas/cis">perfil del CIS</a> y que la tarjeta de <a href="/metodo/promedio#ejemplo-cis">Método → El promedio</a>.</li>
+          <li><b>Sesgo de bloques:</b> el error en la izquierda menos el error en la derecha; positivo si el sondeo inclinó la balanza hacia la izquierda.</li>
+          <li><b>Consenso:</b> la media simple de los últimos sondeos de las demás encuestadoras en la misma elección, con el mismo criterio de fechas.</li>
+          <li><b>Fallo general de las encuestas:</b> en las elecciones con tres o más casas distintas del CIS, el signo de la media de sus errores en el bloque de izquierdas; el CIS queda fuera para no inclinar la cifra hacia la propia tesis.</li>
+          <li><b>Periodos:</b> «con Tezanos» ({{ pw.get('label') or '–' }}), desde el cambio de método de septiembre de 2018{% if pw.get('first_event') %} (primera elección, el {{ pw.first_event|date }}){% endif %}; «sin Tezanos» ({{ pwo.get('label') or '–' }}){% if pwo.get('first_event') and pwo.get('last_event') %}, las elecciones de {{ pwo.first_event[:4] }} a {{ pwo.last_event[:4] }}{% endif %}.</li>
+          <li><b>Pruebas:</b> binomial de una moneda equilibrada sobre las {{ w.get('n')|int }} elecciones y sobre las {{ (w.get('dates') or {}).get('n')|int }} fechas electorales; comparación con el consenso elección a elección; prueba t de Student de una muestra sobre los errores, las medias por fecha y las diferencias con el consenso. Son comparaciones con el azar, no probabilidades de intencionalidad.</li>
+        </ul>
+        {% if sources %}
+        <p class="ctitle">Fuentes</p>
+        <ul class="src-list">
+          {% for source in sources %}
+          <li><a href="{{ source.url }}">{{ source.label }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if csv_links %}
+        <p class="csv-links">
+          {% for link in csv_links %}<a class="pill brand" href="{{ link.href }}">CSV: {{ link.label }}</a>{% endfor %}
+        </p>
+        {% endif %}
+      {{ m.card_end() }}
+    </div>
+{% endblock %}
