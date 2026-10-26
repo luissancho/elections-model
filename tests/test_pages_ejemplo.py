@@ -571,3 +571,14 @@ def test_metodo_escanos_hides_the_errors_card_on_an_old_run(api, monkeypatch):
     monkeypatch.setattr(pages.metodo, 'error_example', lambda: None)
     page = html(call(api, '/metodo/escanos')[2])
     assert 'id="errores"' not in page and '#errores' not in page and 'los tres errores' not in page
+
+
+def test_method_texts_say_the_average_is_read_on_the_day_of_the_run(api):
+    """Luis, 2026-10-26: el promedio se lee el día del cálculo, nunca después; los textos del método lo dicen."""
+    seats = re.sub(r'\s+', ' ', html(call(api, '/metodo/escanos')[2]))
+    assert 'la elección simulada se celebra en la fecha de la estimación, el día del cálculo' in seats
+    assert 'que se prolonga unos días tras el último sondeo' not in seats
+    average = re.sub(r'\s+', ' ', html(call(api, '/metodo/promedio')[2]))
+    assert 'el promedio publicado se lee el día del cálculo, nunca después' in average
+    assert 'prolonga la estimación hasta diez días después del último sondeo y después mantiene el valor' not in average
+    assert_public_wording(average, '/metodo/promedio')

@@ -569,7 +569,27 @@ def test_promedios_title_mentions_the_projection_only_in_forecast(api):
     page = html(call(api, '/es', query='mode=nowcast')[2])
     assert 'Promedio de sondeos' in page and 'y proyección' not in page
     assert 'y la proyección' not in page  # aria-label de los gráficos
-    assert 'banda de incertidumbre y la proyección"' in html(call(api, '/es', query='mode=forecast')[2])
+    assert 'aria-label="Promedio de sondeos y la proyección"' in html(call(api, '/es', query='mode=forecast')[2])
+
+
+def test_series_cards_explain_the_election_bar_and_not_a_band(events_site):
+    """Luis, 2026-10-26: la banda del promedio ya no se dibuja; en Elección, la barra del final es el rango del 29-N.
+    Los textos de Promedios, del detalle de una elección y de las dos páginas del método dejan de hablar de ella."""
+    page = html(call(events_site, '/es')[2])
+    text = re.sub(r'\s+', ' ', page)
+    assert 'banda' not in text.lower()
+    assert 'la barra del final es el rango del 95% de cada partido ese día: pasa por el punto para ver las cifras' in text
+    assert 'La línea dice dónde está el consenso de las encuestadoras; la barra del final, dónde puede estar el voto el día de la elección.' in text
+    assert 'la línea es el promedio de todas' in text
+    assert_public_wording(page, '/es')
+    detail = re.sub(r'\s+', ' ', html(call(events_site, '/elecciones/es/generales/2023-07')[2]))
+    assert 'con su banda' not in detail and 'la banda, su intervalo' not in detail  # the seats range cell keeps its own «banda»
+    assert 'La línea dice dónde estaba el consenso de las encuestadoras, no la incertidumbre del resultado' in detail
+    method = re.sub(r'\s+', ' ', html(call(events_site, '/metodo/promedio')[2]))
+    assert 'Qué significa la precisión del promedio' in method and 'href="#banda">La precisión del promedio</a>' in method
+    assert 'ya no la dibujan como una banda' in method and 'Qué significa la banda del promedio' not in method
+    seats = re.sub(r'\s+', ' ', html(call(events_site, '/metodo/escanos')[2]))
+    assert 'el de su banda' not in seats and 'es la precisión del promedio' in seats and 'la banda del promedio' not in seats
 
 
 def polls_tbody(page):

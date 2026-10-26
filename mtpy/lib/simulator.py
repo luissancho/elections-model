@@ -3,6 +3,8 @@ import numpy as np
 import warnings
 import pandas as pd
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from scipy.stats import norm, t as student_t
 from tqdm import tqdm
 
@@ -47,6 +49,7 @@ class Simulator(Core):
         alpha: float = 0.05,
         limit_date: Optional[str] = None,
         as_of: Optional[str] = None,
+        today: Optional[str] = None,
         mode: Literal['nowcast', 'forecast'] = 'nowcast',
         n_last: int = 1,
         add_errors: bool = True,
@@ -91,9 +94,13 @@ class Simulator(Core):
             bound of `drange` to the days from that day to `event_date`, as the backtest does).
             If not provided, the date will be set to the last day of the campaign period (defined by `drange`).
         as_of: str, optional
-            The day on which the forecast is read: the anchor of the nowcast. By default the last day actually
-            fitted (`last poll + max_fc`) or `limit_date`, whichever comes first. The horizons of the simulation
-            (see `run`) are counted from this day up to `event_date`, treated as the deadline of the legislature.
+            The day on which the forecast is read: the anchor of the nowcast. By default the earliest of the last
+            day actually fitted (`last poll + max_fc`), `limit_date` and `today`: the average is never read in
+            the future (2026-10-26; the backtest and the backfills already read on their own day). The horizons
+            of the simulation (see `run`) are counted from this day up to `event_date`, treated as the deadline
+            of the legislature.
+        today: str, optional
+            The day taken as today for the default `as_of`; the current date in Europe/Madrid by default.
         mode : {'nowcast', 'forecast'}, optional
             Default horizon of the simulated election (see `run`, `horizon`, `vote_forecast`): `'nowcast'`
             (default) holds it at `as_of`, with the polling error only; `'forecast'` holds it at `event_date`
@@ -213,6 +220,7 @@ class Simulator(Core):
         # anchored at `as_of` (set by `build_forecast`) and `horizon_max` days remain up to the deadline
         self.deadline = pd.Timestamp(self.event_date)
         self._as_of = pd.Timestamp(as_of) if as_of is not None else None
+        self.today = today
         self.as_of = None
         self.horizon_max = None
         self.ages = None  # Age of each party at `as_of` (years since its first poll), see `party_ages`
@@ -650,8 +658,9 @@ class Simulator(Core):
     def _set_anchor(self) -> None:
         """
         Set `as_of`, the day the forecast is read, and `horizon_max`, the days from `as_of` to the deadline.
-        By default `as_of` is the last day actually fitted (`Forecaster.date_fit_last`, or the last poll when
-        the forecast was loaded from a file) or `limit_date`, whichever comes first.
+        By default `as_of` is the earliest of the last day actually fitted (`Forecaster.date_fit_last`, or the
+        last poll when the forecast was loaded from a file), `limit_date` and today (`today`, or the date in
+        Europe/Madrid): the average is never read in the future.
         """
         forecast = self.model.forecast
         if self.model.date_fit_last is not None:
@@ -659,7 +668,9 @@ class Simulator(Core):
         else:
             fit_last = pd.Timestamp(self.model.date_last)
 
-        as_of = self._as_of if self._as_of is not None else min(pd.Timestamp(self.limit_date), fit_last)
+        today = getattr(self, 'today', None)
+        today = pd.Timestamp(today) if today is not None else pd.Timestamp(datetime.now(ZoneInfo('Europe/Madrid')).date())
+        as_of = self._as_of if self._as_of is not None else min(pd.Timestamp(self.limit_date), fit_last, today)
 
         if as_of not in forecast.index:
             raise ValueError('`as_of` {} is outside the forecast range ({} to {})'.format(
@@ -667,7 +678,9 @@ class Simulator(Core):
             ))
         if as_of > self.deadline:
             raise ValueError('`as_of` {} is after the deadline {}'.format(as_of.date(), self.deadline.date()))
-        if self._as_of is not None and as_of < pd.Timestamp(self.model.date_last):
+        # also on the default path: a `today` before the last poll (a rehearsal with a past date, a poll dated
+        # after the run) reads a two-sided kernel that uses later polls
+        if as_of < pd.Timestamp(self.model.date_last):
             warnings.warn(
                 '`as_of` {} precedes the last poll: the kernel average is two-sided, so the value read there '
                 'uses later polls and is not a freeze (cut the polls with `drange` for that)'.format(as_of.date())

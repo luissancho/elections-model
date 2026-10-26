@@ -11,15 +11,17 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
    "Comprobaciones de la infraestructura" (`nginx-check.sh`, `smoke.sh`, `check-api.sh`).
 3. "Despliegue en ECS": qué debe existir en AWS, marcadores de las plantillas de `deploy/ecs/` y procedimiento.
 4. "Comprobar S3" y "Si `check_s3` falla".
-5. "Calcular las series y los ratings": el job `compute` (qué hace cada acción y cuándo lanzarla, ejemplos,
+5. "Cargar los sondeos": el job `load` (qué hace y cuándo lanzarla, nombres descartados y `force`, ejemplos,
+   parámetros, estados y resumen). Es el primer paso de la cadena `load`, `compute`, `publish`.
+6. "Calcular las series y los ratings": el job `compute` (qué hace cada acción y cuándo lanzarla, ejemplos,
    parámetros, estados y resumen).
-6. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
-7. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
+7. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
+8. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
    estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, estudios (el del voto CERA y su
    registro), publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el
    manifest, retirada de un run y "Guarda LOREG".
-8. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
-9. "Duraciones medidas": publicación, carga local, arranque de un worker y memoria del job.
+9. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
+10. "Duraciones medidas": publicación, carga de sondeos, carga local, arranque de un worker y memoria del job.
 
 ## Fichero de configuración
 
@@ -517,6 +519,120 @@ Cada paso imprime `<paso> OK` o `<paso> FAIL: <error>`; si alguno falla, el job 
 
 El primer `FAIL` es la causa raíz (los pasos posteriores fallan en cascada). Un `AccessDenied`, o un `gone FAIL` tras `remove OK`, indica que al usuario de AWS le falta `s3:DeleteObject` sobre el bucket, no un problema de `s3fs`.
 
+## Cargar los sondeos
+
+`python job.py load '{...}'` (`mtpy/jobs/Load.py`) carga en la base de datos los sondeos de Wikipedia de una elección,
+la secuencia de `notebooks/data-load/PollsLoadWikipedia.ipynb`: es el primer paso de la cadena cargar, `compute`,
+`publish`. Lógica en `mtpy/lib/load.py` (`load_polls`); la lectura y el parseo de los artículos son de
+`WikipediaLoader` (`mtpy/lib/loader.py`). `load/run_load.py` sigue siendo la vía de los autonómicos con su informe por eventos (su paso
+`polls` no se ha tocado); para `es`, o para recargar un ciclo concreto, se lanza el job.
+
+### Qué hace y cuándo lanzarla
+
+Por cada ámbito, en este orden:
+
+1. Lee el artículo de sondeos del evento (`wp-urls.json`).
+2. Comprueba los nombres: imprime el bloque `# Polls: n` con los partidos, encuestadoras y medios sin mapear y,
+   si queda alguno (sin `force` las casas y los medios; los partidos siempre), el ámbito termina `failed` sin haber
+   escrito nada. La excepción es `force` con nombres que siguen sin mapear tras las altas (`unmapped after adding:
+   …`): las encuestadoras y los medios dados de alta ya están en la base, aunque no se haya guardado ningún sondeo.
+3. Construye las series, con las correcciones del CSV de `data/polls`; las correcciones sin sondeo se avisan.
+4. Guarda: sin `overwrite`, sólo los sondeos que no están en la base; con `overwrite`, borra el ciclo y lo reinserta
+   entero. También guarda los resultados.
+5. Recalcula los pesos del evento (sólo si se guardó algo o hay `overwrite`), como el cuaderno.
+
+Tras cargar hay que lanzar `compute` (series y ratings; ver "Calcular las series y los ratings") y después
+`publish` con `forecast` y `analysis` (ver "Publicar"): el job no encadena nada más que los pesos. Se lanza cuando
+aparecen sondeos nuevos en Wikipedia, o con `overwrite` cuando se corrige alguno ya cargado.
+
+Los nombres descartados no avisan ni se dan de alta. Una encuestadora sin id se descarta (su sondeo no entra) si
+está en `skip.pollsters` de `data/wikipedia/wp-maps.json`, si se llama como un partido (`Sumar`, `PSOE`) o si es una
+`CIS (…)` (estimaciones de terceros sobre los datos del CIS); un medio sin id entra con `sponsor_id` 0 si está en
+`skip.sponsors` o se llama como un partido (encargos de partidos). Un nombre que sí tiene id conserva su sondeo. Las
+columnas de partidos menores sin ficha se ignoran sin aviso si su clave está en `skip.parties` del mismo fichero; un
+partido nuevo que no está ahí detiene el ámbito, con o sin `force`, y hay que darlo de alta a mano. Con
+`verbose` 2 se imprimen los descartados (`Skipped pollsters`, `Skipped sponsors`, `Skipped parties`) para auditar la
+regla.
+
+Con `force` las encuestadoras y los medios nuevos se dan de alta en la base y la carga sigue. La encuestadora nace sin
+`mtype`: hay que revisarla (un aviso por alta, `new pollster «X» without mtype: check it`) y, si es un agregador o un
+panel online, marcarlo a mano, porque `DROP_MTYPES` no la excluirá del promedio mientras no tenga el tipo. Con
+`dry_run`, `force` no da de alta nada: la línea dice lo que se habría dado de alta. Antes del primer `force` real,
+comprobar que las secuencias de identidad de `elections.pollsters` y `elections.sponsors` van por delante de
+`max(id)`: si los catálogos se cargaron alguna vez con ids explícitos, la primera alta falla por clave duplicada (sin
+escribir nada más). Para cada tabla (aquí `elections.pollsters`; lo mismo con `elections.sponsors`), las dos
+primeras consultas y, si `last_value` es menor que `max(id)`, la tercera:
+
+```
+SELECT max(id) FROM elections.pollsters;
+SELECT last_value FROM pg_sequences WHERE schemaname || '.' || sequencename = pg_get_serial_sequence('elections.pollsters', 'id');
+SELECT setval(pg_get_serial_sequence('elections.pollsters', 'id'), (SELECT max(id) FROM elections.pollsters));
+```
+
+Los ámbitos están aislados: uno que falla no detiene a los demás, y el job termina con error al final si alguno falló.
+
+### Ejemplos
+
+```
+python job.py load '{"scopes":["es"],"overwrite":true}'
+python job.py load '{"scopes":["es"],"force":true}'
+python job.py load '{"scopes":["es"],"event_date":"2023-07-23","overwrite":true}'
+python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
+```
+
+1. Recargar entero el ciclo de la próxima elección de `es`: la vía normal tras corregir sondeos.
+2. Cargar sólo lo nuevo, dando de alta las encuestadoras y los medios que falten (revisar luego su `mtype`).
+3. Recargar el ciclo de una elección pasada, con su fecha.
+4. Ensayo en todos los ámbitos sin escribir nada, con una línea por fase y los nombres descartados. Los ámbitos cuyo
+   próximo evento aún no tiene artículo de sondeos (hoy `es-an`, `es-ar`, `es-cl` y `es-ex`) terminan `skipped` y no
+   cuentan como fallo.
+
+### Parámetros
+
+| Parámetro | Por defecto | Significado |
+| --- | --- | --- |
+| `what` | `["polls"]` | Acciones a ejecutar; hoy sólo `polls`. Una desconocida falla con `ValueError` antes de empezar |
+| `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
+| `event_date` | próximo evento de cada ámbito | Fecha ISO de la elección, para cargar un ciclo pasado. Un ámbito sin próximo evento, o cuyo evento no tiene artículo de sondeos en `wp-urls.json`, no lee nada: con `"all"` termina `skipped` (no es un fallo); nombrado en `scopes`, termina `failed` |
+| `overwrite` | `false` | `false`: sólo los sondeos que no están en la base; `true`: borra el ciclo y lo reinserta entero |
+| `force` | `false` | Dar de alta las encuestadoras y los medios nuevos y seguir, en vez de parar el ámbito; los partidos no se dan de alta nunca |
+| `years` | `null` | Lista de años del artículo que se leen (`["2026"]`; los números se convierten), todos por defecto. No se combina con `overwrite`: el job falla con `ValueError` antes de empezar, porque `overwrite` borraría los demás años del ciclo |
+| `dry_run` | `false` | Leer, resolver nombres e informar sin escribir nada (ni altas, ni sondeos, ni pesos) |
+| `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
+
+Niveles de `verbose`:
+
+| Nivel | Qué sale |
+| --- | --- |
+| 0 | Sólo la cabecera (`load polls: 1 ámbito`, con `· overwrite`, `· force` y `· dry run` si están activos) y el resumen final |
+| 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, el bloque de nombres sin mapear, los avisos en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") y la línea de resultado en el momento |
+| 2 | Lo anterior más una línea por fase con sus segundos (`lectura`, `nombres`, `series`, `guardado`, `pesos`), los nombres descartados y la tabla de comprobación de partidos (sólo cuando se guarda, no en un `dry_run`) |
+| 3 | Lo anterior más la salida propia del loader y del `Computer` (que reciben `verbose - 2`) |
+
+### Estados y resumen
+
+Cada ámbito termina `loaded`, `checked` (un `dry_run` que llega al final), `skipped` (con `"all"`, un ámbito sin
+próximo evento o sin artículo de sondeos) o `failed`; `results[ámbito]` lleva el `status`, las cifras, las altas
+(`added`) y los `warnings`. Las líneas del resumen tienen esta forma:
+
+```
+es: polls loaded (520 read, 4 saved, 2026-11-29) in 38 s
+es: polls loaded (520 read, 520 saved, 2026-11-29, overwrite) in 61 s · 2 pollsters added, 1 sponsor added · 3 avisos
+es: polls checked (520 read, 4 new, 2026-11-29, dry run) in 12 s
+es: polls checked (520 read, 520 new, 2026-11-29, overwrite, dry run) in 12 s
+es: polls failed (unmapped pollsters: Sumar; unmapped sponsors: Artículo 14)
+es-md: polls failed (no polls article for 2027-05-23)
+es-an: polls skipped (no polls article for 2030-06-16)
+es-ex: polls skipped (no upcoming event)
+```
+
+Sin `overwrite` y sin sondeos nuevos no se escribe nada y la línea dice `0 saved`. Un ámbito fallido no detiene a los
+demás; al final el job termina con `RuntimeError: load: failed scopes: es (polls)`. Los `skipped` no cuentan como
+fallo. El resumen va también al logger y al servicio de avisos si está configurado (`alert`), como en `compute` y
+`publish`.
+
+En Docker: `RUN_JOB='load {"scopes":["es"],"overwrite":true}'`. El contenedor necesita salida HTTPS a Wikipedia.
+
 ## Calcular las series y los ratings
 
 Enmienda 2026-10-17 (documentación). `python job.py compute '{...}'` (`mtpy/jobs/Compute.py`) recalcula en la base
@@ -531,7 +647,7 @@ para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
 | `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
-| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa y rebaño. Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (los notebooks de carga de `es` y `run_load` ya lo hacen) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
+| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa y rebaño. Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
 
 `what` admite las tres acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los
@@ -698,7 +814,8 @@ Contrato de los ficheros: `docs/web/contrato.md`. El código está en el paquete
 
 ### Qué hace cada acción y cuándo lanzarla
 
-Antes de publicar está la carga, que no es cosa de este job: los notebooks de `notebooks/data-load/` (para `es`) y
+Antes de publicar está la carga, que no es cosa de este job: `python job.py load` (la vía normal para `es`, ver
+"Cargar los sondeos"), los notebooks de `notebooks/data-load/` y
 `load/run_load.py` (para los autonómicos: `--what urls polls results compute ratings`) meten en la base los sondeos y
 los resultados y recalculan ahí las series derivadas (pesos, errores, deriva, efectos de casa, herding) y los
 ratings de las encuestadoras (el job `compute`; ver "Calcular las series y los ratings"). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`),
@@ -805,7 +922,7 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `register` | `false` | Con `study`, registrar la predicción del estudio (`registered_at`, `registered_commit`, `registered`); exige el árbol de git limpio y que no hubiera registro, salvo `force` (enmienda 2026-10-20; ver "Estudios") |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what`. Con `"replace": true` (enmienda 2026-10-17), un día cuyo run ya existe se borra antes (como `unpublish`) y se recalcula en vez de saltarse |
 | `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
-| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
+| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, el tope de `backfill` y el ancla `as_of` del promedio, que se lee ese día y nunca después, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`, pero un `today` pasado publica un run leído en el pasado) |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -1234,6 +1351,12 @@ Primer paquete local de `es` (2026-10-08, contra la RDS, `n_sim=1000`): 121 s en
 42,5; nowcast 21,0; forecast 21,5; exportación 0,8). Ensayo con `n_sim=20`: 86 s. La duración de
 `scopes: "all"` contra la RDS está pendiente de medir. El análisis de casas de `es` (`what: ["analysis"]`)
 tardó 44 s en el test de integración contra la RDS (2026-10-10).
+
+Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
+tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los
+18 ámbitos tarda unos 30 s (un artículo por ámbito, cuatro ámbitos `skipped` sin artículo). La primera carga real
+(`save`, pesos incluidos) la mide Luis; la recarga entera del ciclo de `es` con `overwrite` desde el cuaderno,
+la misma secuencia, está en el orden del minuto.
 
 Ensayo de carga local (2026-10-13), `bash deploy/load-test.sh http://127.0.0.1:8001 10 5` contra
 `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` (un proceso, sin nginx ni caché), con `ab`: API 30 622

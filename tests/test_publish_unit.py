@@ -412,6 +412,27 @@ def publish_es(tmp_path, run_id=RUN, fs=None, factory=None):
     return writer, factory, result
 
 
+def test_publish_forecast_reads_the_average_today_and_cuts_the_series_at_the_anchor(tmp_path):
+    """Luis, 2026-10-26: el promedio se lee hoy, nunca después. El job pasa `today` al Simulator y la parte `series`
+    acaba en el ancla `as_of`, de donde arranca la proyección, aunque el ajuste llegue más lejos."""
+    factory = FakeSimulator()
+
+    def early(scope, event_date, **kwargs):
+        sim = factory(scope, event_date, **kwargs)
+        sim.as_of = pd.Timestamp('2026-10-03')  # read two days before the end of the fit (2026-10-05)
+        return sim
+
+    writer = make_writer(tmp_path)
+    publish.publish_forecast('es', writer, RUN, '2026-11-29', n_sim=50, simulator=early, stats=fake_stats, prov=fake_prov,
+                             today='2026-10-03')
+    assert factory.calls[0][3]['today'] == '2026-10-03'
+    series = writer.read_json(bundle.path_part('es', RUN, 'series'))['data']
+    assert series['dates'][-1] == '2026-10-03'
+    assert writer.read_json(bundle.path_part('es', RUN, 'weights'))['data']['date'] == '2026-10-03'
+    meta = writer.read_json(bundle.path_part('es', RUN, 'meta'))['data']
+    assert meta['as_of'] == '2026-10-03' and meta['date_fit_last'] == '2026-10-05'
+
+
 def test_publish_forecast_writes_the_whole_layout_in_order(tmp_path):
     fs = RecordingFileSystem(str(tmp_path))
     writer, factory, result = publish_es(tmp_path, fs=fs)

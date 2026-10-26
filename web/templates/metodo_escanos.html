@@ -53,8 +53,8 @@
           </mrow>
         </math>
         <ul>
-          <li><var>s</var> es el error del propio promedio, el de su banda: dice cuánto puede equivocarse la
-            línea al resumir los sondeos.</li>
+          <li><var>s</var> es el error del propio promedio: dice cuánto puede equivocarse la línea al resumir los
+            sondeos.</li>
           <li><var>e</var> es el error histórico: lo que se equivocaron los sondeos de la última semana frente al
             resultado en las elecciones pasadas, para un partido de ese tamaño y según sea de ámbito estatal o
             regional. Suele ser el mayor de los dos.</li>
@@ -80,8 +80,8 @@
       {{ m.card_start('hoy-y-eleccion', 'Hoy y Elección', 'Los dos modos parten del mismo voto estimado; Elección añade lo que la opinión puede moverse hasta el día de la votación.') }}
         <p>
           <strong>Hoy</strong> responde a qué pasaría si se votara ahora: la elección simulada se celebra en la
-          fecha de la estimación, normalmente el último día al que llega el promedio, que se prolonga unos días
-          tras el último sondeo. El margen es el de arriba, los dos errores.
+          fecha de la estimación, el día del cálculo. El promedio se lee ese día, nunca después, aunque la recta
+          que lo ajusta se prolongue unos días tras el último sondeo. El margen es el de arriba, los dos errores.
         </p>
         <p>
           <strong>Elección</strong> simula la votación en la fecha de la elección: la convocada o, si aún no lo
@@ -156,7 +156,7 @@
           </table>
         </div>
         <p>
-          Cada fila descompone el margen de un partido: <var>s</var> es la banda del promedio; <var>e</var>, lo que
+          Cada fila descompone el margen de un partido: <var>s</var> es la precisión del promedio; <var>e</var>, lo que
           se equivocaron los sondeos de la última semana en las elecciones pasadas para un partido de ese tamaño; y
           <var>d</var>, lo que la opinión puede moverse en los {{ errors.horizon|int }} días que faltan hasta el
           {{ errors.event_date|date }}. Hoy suma las dos primeras y Elección las tres, siempre en cuadratura: la
@@ -166,7 +166,7 @@
           <strong>De dónde sale <var>e</var>.</strong> De la última encuesta de cada encuestadora antes de cada una
           de las {{ errors.n_events|int }} elecciones generales con sondeos celebradas de {{ errors.first_year }} a
           {{ errors.last_year }}, todas con el mismo peso y con sus fallos grandes dentro. Por eso vale varias veces
-          la banda del promedio: la banda dice cuánto puede equivocarse la línea al resumir los sondeos;
+          el error del promedio: ese error dice cuánto puede equivocarse la línea al resumir los sondeos;
           <var>e</var>, cuánto se han equivocado los sondeos frente a las urnas.
         </p>
         <p>

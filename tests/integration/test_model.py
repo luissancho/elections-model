@@ -61,7 +61,8 @@ def test_others_and_provincial_shares_are_consistent(sim26):
     frame = sim26.frame()
 
     assert '-' in frame.index
-    assert frame.loc['-', 'vpred'] == pytest.approx(100 - frame.loc[names, 'vpred'].sum(), abs=0.02)
+    # the frame is stored rounded to 2 decimals: the residual and the sum of 13 rounded shares may differ by a few hundredths
+    assert frame.loc['-', 'vpred'] == pytest.approx(100 - frame.loc[names, 'vpred'].sum(), abs=0.07)
 
     for region in sim26.params['regions']:
         unit = sim26.unit(0, region)
@@ -222,11 +223,15 @@ def test_predecessor_polls_count_for_successor_2023(app):
 
 # --- M5: nowcast, horizonte y fecha incierta ---
 
-def test_anchor_is_last_fitted_day_not_deadline(sim26):
-    """El pronóstico se lee en `as_of` (última encuesta + max_fc), no en `deadline - drange`."""
+def test_anchor_is_the_earliest_of_the_fit_end_the_ban_eve_and_today(sim26):
+    """El pronóstico se lee en `as_of` = min(última encuesta + max_fc, víspera de la veda, hoy): nunca en el futuro
+    (Luis, 2026-10-26; antes, última encuesta + max_fc, diez días por delante en producción)."""
     import pandas as pd
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     date_last = pd.Timestamp(sim26.model.date_last)
-    assert sim26.as_of == pd.Timestamp(sim26.model.date_fit_last)
+    today = pd.Timestamp(datetime.now(ZoneInfo('Europe/Madrid')).date())
+    assert sim26.as_of == min(pd.Timestamp(sim26.model.date_fit_last), pd.Timestamp(sim26.limit_date), today)
     assert date_last <= sim26.as_of <= date_last + pd.Timedelta(days=3)  # max_fc=3 en la fixture
     assert sim26.as_of < pd.Timestamp(sim26.limit_date)
     assert sim26.horizon_max == (sim26.deadline - sim26.as_of).days
@@ -247,11 +252,13 @@ def test_anchor_is_last_fitted_day_not_deadline(sim26):
 # barómetros se dispersan 2,7 veces más de lo que su muestra permite, pesa un tercio; el PP sube 0,27 puntos de
 # media en el ciclo y un escaño vuelve de VOX al PP, 140 / 107 / 63 / 8 -> 141 / 107 / 62 / 8.
 # Desde el 19-10-2026 Sumar es FA (Frente Amplio) y Compromís va aparte en sus provincias; con la base del 24-10
-# (325 sondeos) la mediana expandida es 134 / 108 / 67 / 9.
-REGRESSION_TOTALS = [134, 108, 67, 9]
+# (325 sondeos) la mediana expandida es 134 / 108 / 67 / 9. Desde el 26-10-2026 el promedio se lee hoy, no tres
+# días por delante del último sondeo (`as_of` nunca en el futuro): con la base del 26-10, 135 / 109 / 68 / 8.
+REGRESSION_TOTALS = [135, 109, 68, 8]
 # Desde el 24-10-2026 el titular es el reparto central (M13, `Simulator.central_result`): D'Hondt sobre el voto
 # central, igual en nowcast y forecast; no depende de la secuencia aleatoria, sólo del promedio y de las bases.
-CENTRAL_TOTALS = [136, 109, 64, 9]
+# Con la lectura a hoy del 26-10-2026 (base del 26-10), 134 / 111 / 66 / 9.
+CENTRAL_TOTALS = [134, 111, 66, 9]
 
 
 def test_nowcast_regression_seed_42(sim26):
@@ -379,12 +386,14 @@ def test_projection_runs_from_as_of_to_the_election(sim26, sim26_fc):
 
 
 def test_cached_forecast_keeps_the_anchor(sim26_fc):
+    import pandas as pd
     as_of = sim26_fc.as_of
     sim26_fc.save_forecast('test-anchor')
     try:
         sim26_fc.load_forecast('test-anchor')
         assert sim26_fc.as_of == as_of
-        assert sim26_fc.as_of > sim26_fc.model.date_last  # última encuesta + max_fc, no la última encuesta
+        # nunca después del último día ajustado ni de hoy; coincide con la última encuesta si esta es de hoy (2026-10-26)
+        assert sim26_fc.model.date_last <= sim26_fc.as_of <= pd.Timestamp(sim26_fc.model.date_fit_last)
     finally:
         for suffix in ('', '-stat', '-meta'):
             name = sim26_fc.model.get_path('fc/test-anchor{}.csv'.format(suffix))

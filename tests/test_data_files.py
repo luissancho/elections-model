@@ -3,6 +3,7 @@ import json
 import os
 
 import pandas as pd
+import pytest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DATA = os.path.join(ROOT, 'data')
@@ -157,7 +158,8 @@ def test_quality_csv_fits_the_replica_columns():
 def test_poll_fixes_files_are_well_formed():
     import glob
     files = glob.glob(os.path.join(DATA, 'polls', '*', '*.csv'))
-    assert files
+    if not files:
+        pytest.skip('no curated poll fixes at the moment')
     for fname in files:
         df = pd.read_csv(fname)
         assert df.columns.tolist() == ['pollster', 'date', 'sponsor', 'party', 'pct', 'seats', 'note'], fname
@@ -170,8 +172,20 @@ def test_poll_fixes_files_are_well_formed():
 
 def test_params_2026_general_election_line_up():
     conf = json.load(open(os.path.join(DATA, 'params.json')))['es']['2026-11-29']
-    assert conf['parties']['event'][-1] == 'COMPROMIS'
-    assert conf['bmaps']['blocks']['Regionalista'] == ['PNV', 'CC', 'BNG', 'COMPROMIS']
-    assert conf['smap']['COMPROMIS'] == {'type': 'agg', 'names': ['SUMAR'], 'regions': ['3', '12', '46']}
+    # Since 2026-10-26 Compromís is not simulated apart: Wikipedia folds it into Frente Amplio, the new name of
+    # Sumar, so FA inherits Sumar's base everywhere (Alicante, Castellón and Valencia included)
+    assert 'COMPROMIS' not in conf['parties']['event'] and 'COMPROMIS' not in conf['parties']['polls']
+    assert conf['bmaps']['blocks']['Regionalista'] == ['PNV', 'CC', 'BNG']
+    assert 'COMPROMIS' not in conf['smap']
+    assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR']}
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
-    assert conf['smap']['FA'][1]['regions'] == {'exclude': ['3', '12', '46']}
+
+
+def test_wp_maps_skip_parties_is_a_clean_list():
+    maps = json.load(open(os.path.join(DATA, 'wikipedia', 'wp-maps.json')))
+    skip = maps['skip']['parties']
+    assert isinstance(skip, list) and skip == sorted(skip) and len(skip) == len(set(skip))
+    aliases = {alias for aliases in maps['parties'].values() for alias in aliases}
+    # Only global aliases: a global alias always resolves, so a skip entry would be dead. A scope may alias a key
+    # that is silenced elsewhere (e.g. 'PP+Cs' maps to PP in es-pv).
+    assert not set(skip) & aliases and not set(skip) & set(maps['parties'])

@@ -104,6 +104,14 @@ def test_dry_run_writes_apart_and_leaves_the_pointers_alone(fresh_app, tmp_path,
     assert not (tmp_path / 'site-dry' / 'v1' / 'runs' / 'es' / 'history.json').exists()
 
 
+def test_forecast_passes_today_to_the_publication(fresh_app, tmp_path, patched):
+    """El día tomado como hoy llega a `publish_forecast`, que lo da al Simulator como tope del ancla (2026-10-26)."""
+    from mtpy.jobs.Publish import Publish
+
+    result = Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), today='2026-10-20')
+    assert result['es']['status'] == 'published' and patched[0][3]['today'] == '2026-10-20'
+
+
 def test_loreg_window_refuses_es_unless_forced(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 

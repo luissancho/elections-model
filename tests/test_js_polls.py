@@ -48,8 +48,13 @@ def test_poll_tooltip_lines_show_the_date_the_sample_the_colour_and_escape_the_t
 def test_mean_tooltip_line_shows_the_average_its_interval_and_the_date():
     line = run_js('s.meanTooltipLine("PP", 33.1, 31.0, 35.3, "2026-10-13", "#1")')
     assert line.endswith('PP: 33,1% (31,0–35,3) · 13 oct 2026') and 'background-color:#1' in line
+    # without bounds there is no parenthesis (the history of the series chart, whose band is no longer drawn)
+    bare = run_js('s.meanTooltipLine("PP", 33.1, null, null, "2026-10-13", "#1")')
+    assert bare.endswith('PP: 33,1% · 13 oct 2026') and '(' not in bare
     projected = run_js('s.meanTooltipLine("PP", 33.1, null, null, "2026-11-29", "#1", true)')
-    assert projected.startswith('Proyección<br>') and projected.endswith('PP: 33,1% (–) · 29 nov 2026')
+    assert projected.startswith('Proyección<br>') and projected.endswith('PP: 33,1% · 29 nov 2026')
+    election = run_js('s.meanTooltipLine("PP", 31.4, 25.9, 37.0, "2026-11-29", "#1", "Elección")')
+    assert election.startswith('Elección<br>') and election.endswith('PP: 31,4% (25,9–37,0) · 29 nov 2026')
 
 
 TABLE_POLLS = [
