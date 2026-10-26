@@ -3,13 +3,15 @@
 Los fixtures de `tests/fixtures/wikipedia/` son artículos recortados (encabezados y tablas) de la
 instantánea del 01-10-2026; ver `build_fixtures.py`.
 """
+import copy
 import os
 
 import pandas as pd
 import pytest
 from lxml import html
 
-from mtpy.lib.loader import WikipediaLoader, apply_poll_fixes
+from mtpy.core.utils.helpers import is_number
+from mtpy.lib.loader import WikipediaLoader, apply_poll_fixes, normalized
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DATA = os.path.join(ROOT, 'data')
@@ -31,7 +33,7 @@ def load(page):
         return html.fromstring(fh.read())
 
 
-def bare_loader(scope, maps=None, party_ids=None):
+def bare_loader(scope, maps=None, party_ids=None, party_names=None):
     """Cargador sin base de datos: sólo los atributos que usa la lectura de tablas."""
     loader = WikipediaLoader.__new__(WikipediaLoader)
     loader.scope = scope
@@ -44,6 +46,8 @@ def bare_loader(scope, maps=None, party_ids=None):
     loader.sponsors_colmap = loader.get_colmap('sponsors')
     loader.sponsors_idmap = AnyKey()
     loader.parties_missing, loader.pollsters_missing, loader.sponsors_missing = [], [], []
+    loader.party_names = {normalized(n) for n in party_names or ()}
+    loader.pollsters_skipped, loader.sponsors_skipped = [], []
 
     return loader
 
@@ -546,3 +550,54 @@ def test_poll_fixes_new_row_without_seats_keeps_the_frame_clean():
     assert row['pct'] == 1.3 and pd.isnull(row['seats']) and pd.isnull(row['seats_min']) and pd.isnull(row['seats_max'])
     assert out_results['seats'].dtype == results['seats'].dtype
     assert out_polls.set_index('pollster_id')['parties'].to_dict() == {7: 3, 9: 1}
+
+
+def fake_cols(table, pollster, sponsor):
+    """Cells of the first poll row of `table` with the first one rewritten as `pollster/sponsor`."""
+    for row in table.xpath('.//tr'):
+        cells = row.xpath('./td')
+        last = ''.join(cells[-1].xpath('.//text()')).strip() if cells else ''
+        if len(cells) > 3 and not row.xpath('./td[1]/b') and is_number(last):
+            cols = copy.deepcopy(cells)
+            for node in cols[0].xpath('.//text()'):
+                parent = node.getparent()
+                if node.is_text:
+                    parent.text = ''
+                else:
+                    parent.tail = ''
+            cols[0].text = f'{pollster}/{sponsor}'
+            return cols
+    raise AssertionError('no poll row in the fixture')
+
+
+def test_discard_rules_for_pollsters_and_sponsors():
+    from mtpy.lib.loader import discarded_pollster, discarded_sponsor, normalized
+    parties = {normalized('Sumar'), normalized('Partido Popular'), normalized('IMC')}
+    assert discarded_pollster('CIS (Sondaxe)', [], parties) and discarded_pollster('CIS (Demócrata)', [], parties)
+    assert not discarded_pollster('CIS', [], parties)
+    assert discarded_pollster('SUMAR', [], parties) and discarded_pollster('partido popular', [], parties)
+    assert discarded_pollster('PSPV', ['PSPV'], parties) and not discarded_pollster('GAD3', ['PSPV'], parties)
+    assert discarded_sponsor('Sumar', [], parties) and discarded_sponsor('PSN', ['PSN'], parties)
+    assert not discarded_sponsor('El Mundo', ['PSN'], parties)
+
+
+def test_read_cols_skips_discarded_names_only_when_they_have_no_id():
+    """A pollster without id named like a party or «CIS (...)» is dropped silently; with an id it keeps its poll
+    (IMC); a sponsor without id named like a party enters with sponsor_id 0 and no warning."""
+    maps = {'parties': {}, 'pollsters': {}, 'sponsors': {}, 'scopes': {},
+            'skip': {'pollsters': ['PSPV'], 'sponsors': ['PSN']}}
+    loader = bare_loader('es', maps=maps, party_names=['Sumar', 'IMC'])
+    loader.pollsters_idmap = {'IMC': 110, 'GAD3': 1}
+    loader.sponsors_idmap = {'El Mundo': 5}
+    table = WikipediaLoader.find_poll_table(load('2023_Madrilenian_regional_election'))
+    parties, lead = WikipediaLoader.read_header(table)
+    rows = {}
+    for name in ('IMC', 'Sumar', 'CIS (Sondaxe)', 'PSPV', 'GAD3'):
+        cols = fake_cols(table, pollster=name, sponsor='Sumar' if name == 'GAD3' else 'El Mundo')
+        rows[name] = loader.read_cols(cols, parties, lead, '2023')
+    assert rows['IMC']['pollster_id'] == 110 and rows['GAD3']['pollster_id'] == 1
+    assert rows['Sumar'] == {} and rows['CIS (Sondaxe)'] == {} and rows['PSPV'] == {}
+    assert rows['GAD3']['sponsor_id'] == 0
+    assert loader.pollsters_missing == [] and loader.sponsors_missing == []
+    assert sorted(loader.pollsters_skipped) == ['CIS (Sondaxe)', 'PSPV', 'Sumar']
+    assert loader.sponsors_skipped == ['Sumar']

@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import re
 import requests
+import unicodedata
 
 from typing import Any, Optional
 from typing_extensions import Self
@@ -24,6 +25,68 @@ from .computer import Computer
 HEADERS = {
     'User-Agent': 'ManyThings/1.0 (https://manythings.pro/; info@manythings.pro) mtpy/elections/1.0'
 }
+
+
+def normalized(name: str) -> str:
+    """
+    Lowercase `name` without accents or surrounding whitespace, to compare names across spellings.
+
+    Parameters
+    ----------
+    name : str
+        Name to normalize.
+
+    Returns
+    -------
+    str
+        Normalized name.
+    """
+    decomposed = unicodedata.normalize('NFKD', name)
+
+    return ''.join(c for c in decomposed if not unicodedata.combining(c)).lower().strip()
+
+
+def discarded_pollster(name: str, skip: list[str], party_names: set[str]) -> bool:
+    """
+    Whether a pollster without id is left out on purpose: listed in `skip`, named like a party or one of
+    the «CIS (...)» variants.
+
+    Parameters
+    ----------
+    name : str
+        Pollster name, once aliases are applied.
+    skip : list[str]
+        Names listed under `skip.pollsters` in wp-maps.json.
+    party_names : set[str]
+        Normalized names of the parties (see `normalized`).
+
+    Returns
+    -------
+    bool
+        True if the poll must be dropped without reporting the name.
+    """
+    return name in skip or normalized(name) in party_names or re.fullmatch(r'CIS \(.+\)', name) is not None
+
+
+def discarded_sponsor(name: str, skip: list[str], party_names: set[str]) -> bool:
+    """
+    Whether a sponsor without id is left out on purpose: listed in `skip` or named like a party.
+
+    Parameters
+    ----------
+    name : str
+        Sponsor name, once aliases are applied.
+    skip : list[str]
+        Names listed under `skip.sponsors` in wp-maps.json.
+    party_names : set[str]
+        Normalized names of the parties (see `normalized`).
+
+    Returns
+    -------
+    bool
+        True if the sponsor must be ignored without reporting the name.
+    """
+    return name in skip or normalized(name) in party_names
 
 
 def scope_colmap(maps: dict, scope: str, key: str) -> dict[str, str]:
@@ -478,16 +541,21 @@ class WikipediaLoader(Core):
         self.parties_colmap = self.get_colmap('parties')
         self.parties_idmap = self.get_idmap('parties')
         self.parties_missing = []
+        self.party_names = {
+            normalized(n) for n in pd.concat([self.parties['name'], self.parties['fullname']]).dropna()
+        }
 
         self.pollsters = Pollsters().get_results(formatted=True)
         self.pollsters_colmap = self.get_colmap('pollsters')
         self.pollsters_idmap = self.get_idmap('pollsters')
         self.pollsters_missing = []
+        self.pollsters_skipped = []  # Names left out on purpose (see `discarded_pollster`)
 
         self.sponsors = Sponsors().get_results(formatted=True)
         self.sponsors_colmap = self.get_colmap('sponsors')
         self.sponsors_idmap = self.get_idmap('sponsors')
         self.sponsors_missing = []
+        self.sponsors_skipped = []  # Names left out on purpose (see `discarded_sponsor`)
         self.fixes_missing = []  # Polls of the curated fixes not read from the article (see `build_series`)
 
     def get_colmap(self, key: str) -> dict[str, str]:
@@ -679,18 +747,25 @@ class WikipediaLoader(Core):
         if data['pollster'] in self.pollsters_colmap:
             data['pollster'] = self.pollsters_colmap[data['pollster']]
         if data['pollster'] in skip.get('pollsters', []):
+            self.pollsters_skipped.append(data['pollster'])
             return {}
         if data['pollster'] in self.pollsters_idmap:
             data['pollster_id'] = self.pollsters_idmap[data['pollster']]
-        elif data['pollster'] is not None:
+        elif discarded_pollster(data['pollster'], [], self.party_names):
+            self.pollsters_skipped.append(data['pollster'])
+            return {}
+        else:
             self.pollsters_missing.append(data['pollster'])
 
         if data['sponsor'] in self.sponsors_colmap:
             data['sponsor'] = self.sponsors_colmap[data['sponsor']]
         if data['sponsor'] in self.sponsors_idmap:
             data['sponsor_id'] = self.sponsors_idmap[data['sponsor']]
-        elif data['sponsor'] is not None and data['sponsor'] not in skip.get('sponsors', []):
-            self.sponsors_missing.append(data['sponsor'])
+        elif data['sponsor'] is not None:
+            if discarded_sponsor(data['sponsor'], skip.get('sponsors', []), self.party_names):
+                self.sponsors_skipped.append(data['sponsor'])
+            else:
+                self.sponsors_missing.append(data['sponsor'])
 
         data['name'] = data['pollster'] + (' / ' + data['sponsor'] if data['sponsor'] is not None else '')
 
