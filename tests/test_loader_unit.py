@@ -47,7 +47,7 @@ def bare_loader(scope, maps=None, party_ids=None, party_names=None):
     loader.sponsors_idmap = AnyKey()
     loader.parties_missing, loader.pollsters_missing, loader.sponsors_missing = [], [], []
     loader.party_names = {normalized(n) for n in party_names or ()}
-    loader.pollsters_skipped, loader.sponsors_skipped = [], []
+    loader.pollsters_skipped, loader.sponsors_skipped, loader.parties_skipped = [], [], []
 
     return loader
 
@@ -87,6 +87,26 @@ def test_madrid_2023_header_keys_and_first_poll():
     assert (first['start_date'], first['end_date']) == (pd.Timestamp('2023-05-12'), pd.Timestamp('2023-05-27'))
     pp = first['results'][0]
     assert (pp['pct'], pp['seats_min'], pp['seats_max']) == (49.5, 70, 72)
+
+
+def first_poll_cols(table):
+    """Cells (`td`) of the first poll row of a poll table (no style: the election result row is shaded)."""
+    for tr in table.xpath('.//tr'):
+        cols = tr.xpath('./td')
+        if len(cols) > 3 and 'style' not in tr.attrib and is_number((cols[-1].text_content() or '').strip()):
+            return cols
+    raise AssertionError('no poll row')
+
+
+def test_read_cols_ignores_the_party_columns_of_skip_parties():
+    maps = {'parties': {}, 'pollsters': {}, 'sponsors': {}, 'scopes': {}, 'skip': {'parties': ['Más_Madrid']}}
+    loader = bare_loader('es-md', maps=maps, party_ids={"People's_Party_of_the_Community_of_Madrid": 1})
+    table = WikipediaLoader.find_poll_table(load('2023_Madrilenian_regional_election'))
+    parties, lead = WikipediaLoader.read_header(table)
+    row = loader.read_cols(first_poll_cols(table), parties, lead, '2023')
+    assert 'Más_Madrid' not in [r['party'] for r in row['results']]
+    assert loader.parties_skipped == ['Más_Madrid'] and 'Más_Madrid' not in loader.parties_missing
+    assert [r for r in row['results'] if r['party_id'] is None]  # the other unmapped columns stay without id
 
 
 def test_next_madrid_reads_the_last_party_column():

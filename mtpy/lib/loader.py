@@ -549,6 +549,7 @@ class WikipediaLoader(Core):
         self.pollsters_colmap = self.get_colmap('pollsters')
         self.pollsters_idmap = self.get_idmap('pollsters')
         self.pollsters_missing = []
+        self.parties_skipped = []  # Party columns left out on purpose (`skip.parties` in the maps)
         self.pollsters_skipped = []  # Names left out on purpose (see `discarded_pollster`)
 
         self.sponsors = Sponsors().get_results(formatted=True)
@@ -802,6 +803,10 @@ class WikipediaLoader(Core):
                 'seats_min': None,
                 'seats_max': None
             }
+
+            if party in self.maps.get('skip', {}).get('parties', []):
+                self.parties_skipped.append(party)
+                continue
 
             if result['party'] in self.parties_colmap:
                 result['party'] = self.parties_colmap[result['party']]

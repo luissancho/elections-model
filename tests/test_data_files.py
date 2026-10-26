@@ -179,3 +179,11 @@ def test_params_2026_general_election_line_up():
     assert 'COMPROMIS' not in conf['smap']
     assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR']}
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
+
+
+def test_wp_maps_skip_parties_is_a_clean_list():
+    maps = json.load(open(os.path.join(DATA, 'wikipedia', 'wp-maps.json')))
+    skip = maps['skip']['parties']
+    assert isinstance(skip, list) and skip == sorted(skip) and len(skip) == len(set(skip))
+    aliases = {alias for aliases in maps['parties'].values() for alias in aliases}
+    assert not set(skip) & aliases and not set(skip) & set(maps['parties'])
