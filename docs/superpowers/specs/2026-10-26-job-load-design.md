@@ -16,6 +16,14 @@ Enmiendas de la revisión final (2026-10-26): `years` con `overwrite` se rechaza
 próximo evento o sin artículo de sondeos termina `skipped` (no `failed`); un fallo de `parties_checks` es un aviso;
 una casa o un medio desconocidos sólo se anotan como sin mapear si la fila es un sondeo (fechas y `Lead` numérico).
 
+Dry run de todos los ámbitos tras la ola de correcciones (2026-10-26, commit 7dd320a, sólo lectura):
+`es` y nueve autonómicos `checked` (es-vc con 4 sondeos nuevos); `es-an`, `es-ar`, `es-cl` y `es-ex` `skipped`
+(su próximo evento no tiene artículo de sondeos); cinco `failed` por nombres sin mapear aparecidos en
+Wikipedia desde la última carga autonómica: es-cn (partidos `Drago_Canarias`, `Municipalists_Canaries_First`;
+casas «Areópago Genuina 26», «GCEMOP»; medio «Atlántico Hoy»), es-cm (casa «The Place Public Affairs», medio
+«Diario Lanza»), es-ct (casa y medio «The Objective»), es-mc (medio «La 7»), es-nc (medios «CoCiudadana»,
+«EiTB»). Las casas y los medios entran con `force`; los dos partidos canarios piden alias o `skip.parties`.
+
 ## Intención
 
 Convertir el cuaderno `notebooks/data-load/PollsLoadWikipedia.ipynb` en un job de `mtpy/jobs`, al estilo de
