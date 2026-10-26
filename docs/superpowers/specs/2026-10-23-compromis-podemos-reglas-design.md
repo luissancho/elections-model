@@ -156,3 +156,17 @@ aplican solas), `PollsCompute`, pasada de comprobación, publicación.
 - Nombres de la función extraída y de los helpers del CSV; forma de los fixtures de los tests.
 - Texto exacto de los avisos de `fixes_missing`.
 - Dónde imprime el notebook el aviso (basta un `print` con `verbose` y el atributo en el loader).
+
+## Estado
+
+- 2026-10-23: construido y comprobado (Compromís con tres sondeos utilizables, escaños sólo en 3/12/46).
+- 2026-10-26: **Compromís deja de simularse aparte.** Wikipedia retiró la columna de Compromís-Front Valencià y
+  pliega su cifra en la de Frente Amplio, al que trata como el nuevo nombre de Sumar (los sondeos que la dan
+  aparte llevan la nota «Includes separate figures for Compromís»). Luis decidió seguir esa doctrina: COMPROMIS
+  sale de `parties.event`, `parties.polls`, del bloque Regionalista y del `smap`; FA pasa a `agg SUMAR` sin
+  excluir 3/12/46 (hereda la base entera de Sumar, también en la Comunidad Valenciana); el CSV de correcciones
+  `data/polls/es/2026-11-29.csv` se borra, de modo que Celeste Tel 16–21 Sep y SocioMétrica 10–11 Oct vuelven a
+  la cifra de Wikipedia (6,4 y 5,8, con Compromís dentro). La regla de Podemos (`sub FA` fuera de Cataluña) y
+  `Simulator.apply_source_rules` siguen vigentes. El detonante fue el run 20261026-080818: el tracking de Sigma
+  Dos 8–22 Oct dejó a peso 0 el de 1–14 Oct (regla de solapamiento) y Compromís se quedó con dos sondeos
+  utilizables, sin ajuste y fuera del titular.
