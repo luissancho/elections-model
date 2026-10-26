@@ -137,7 +137,10 @@
         {% endcall %}
         {% endif %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Hacia dónde se equivocaron', 'Cada punto es un sondeo, colocado según su error en el voto de cada uno de los dos bloques principales; con un ámbito elegido el color dice de qué elección es y con Todos, de qué ámbito.') }}
+      {#- the subtitle and the file of the image get the filters chosen and the count (`elecciones.js`) -#}
+      {{ m.card_start('bullseye', 'Hacia dónde se equivocaron', 'Cada punto es un sondeo, colocado según su error en el voto de cada uno de los dos bloques principales; con un ámbito elegido el color dice de qué elección es y con Todos, de qué ámbito.',
+                      tools=m.download_button('errors-download', 'Histórico de errores', 'Hacia dónde se equivocaron', site_host ~ ' · ' ~ author_handle,
+                                              site_title|lower ~ '-diana-errores.png') if not analysis_missing else none) }}
         {% if analysis_missing %}
         <p class="notice">Análisis no publicado todavía.</p>
         {% else %}

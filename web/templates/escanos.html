@@ -7,7 +7,9 @@
 {% block content %}
 {% import '_macros.html' as m %}
     <div id="content" class="stack">
-      {{ m.card_start('seats', 'Reparto de escaños', 'Los escaños de cada partido, o de cada bloque, en miles de elecciones simuladas: el reparto central, el intervalo de cada uno y la distribución completa.', subtitle) }}
+      {{ m.card_start('seats', 'Reparto de escaños', 'Los escaños de cada partido, o de cada bloque, en miles de elecciones simuladas: el reparto central, el intervalo de cada uno y la distribución completa.', subtitle,
+                      tools=m.download_button('seats-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Reparto de escaños · ' ~ title_suffix,
+                                              site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-escanos-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
         {% if block_rows %}
         <div class="series-controls">
           <fieldset id="seats-view" class="seg" hidden>
@@ -107,8 +109,11 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('coalition', 'Calculadora de mayorías', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle) }}
-        <fieldset class="pills lg" id="coalition-parties">
+      {#- the subtitle and the file of the image get the parties marked (`escanos.js`) -#}
+      {{ m.card_start('coalition', 'Calculadora de mayorías', 'Suma, simulación a simulación, los escaños de los partidos que marques y calcula la probabilidad de que juntos lleguen a la mayoría absoluta.', subtitle,
+                      tools=m.download_button('coalition-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Calculadora de mayorías · ' ~ title_suffix,
+                                              site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-mayorias-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
+        <fieldset class="pills" id="coalition-parties">
           <legend class="sr-only">Partidos de la coalición</legend>
           {% for entry in calculator %}
           <label class="pill" style="--pill-color: {{ entry.color }}; --pill-ink: {{ entry.color|ink }}" title="{{ entry.fullname }}"><input type="checkbox" name="coalition" value="{{ entry.name }}"{% if entry.checked %} checked{% endif %}> {{ entry.name }}</label>

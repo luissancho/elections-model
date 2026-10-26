@@ -10,19 +10,21 @@ import {parseSeriesHash} from '../blocks.js';
 import {Catalog} from '../catalog.js';
 import {fmtDate, fmtNum} from '../format.js';
 import {
-  DEFAULT_MEASURE, MEASURES, complements, errorsHash, eventKey, eventsOf, filterRows, meanOf, parseErrorsHash,
-  restPoints, trendPoints, weeksTable,
+  DEFAULT_MEASURE, MEASURES, complements, errorsHash, eventKey, eventsOf, filterRows, imageTexts, meanOf,
+  parseErrorsHash, restPoints, trendPoints, weeksTable, yearsText,
 } from '../errors.js';
 import {THEME} from '../charts/base.js';
 import {renderBars} from '../charts/bars.js';
-import {renderBullseye} from '../charts/bullseye.js';
+import {bullseyeOption, renderBullseye} from '../charts/bullseye.js';
 import {renderDiverging} from '../charts/diverging.js';
 import {renderHemicycle} from '../charts/hemicycle.js';
 import {renderHistogram} from '../charts/histogram.js';
 import {renderSeries, seriesImageOption} from '../charts/series.js';
 import {renderTrend} from '../charts/trend.js';
 import {fillComplements, fillFigures, fillSelect, filterEventsTable} from './history-dom.js';
-import {mapNames, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
+import {BULLSEYE_IMAGE_HEIGHT, chosenLabel} from './bullseye-wire.js';
+import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireMore} from './common.js';
+import {wireDownload} from '../share.js';
 import {wirePollsTable} from './polls-wire.js';
 import {WINDOWS, seriesViews, wireAverage} from './series-wire.js';
 
@@ -178,14 +180,14 @@ function drawTrend(el, rows, others, state, {scopes, colors, hrefs}) {
  * Bullseye of the filtered rows: coloured by election with a scope chosen and by scope with "Todos" (the
  * national scope, the general elections, drawn over the others).
  *
- * @param {HTMLElement} el chart container
  * @param {object[]} rows filtered rows with their `href`
  * @param {string[]} blocks the two blocks of the axes
  * @param {(string|null)} scope the chosen scope
  * @param {object} context `events` (published list), `colors` (by scope name) and `national` (name of the
  *   national scope) of the page
+ * @returns {object} the options of `bullseyeOption`
  */
-function drawErrorBullseye(el, rows, blocks, scope, {events, colors, national}) {
+function errorBullseyeOptions(rows, blocks, scope, {events, colors, national}) {
   let groupOf = (row) => row.scope_name;
   let palette = colors;
   let groupLabel = (group) => group;
@@ -200,8 +202,7 @@ function drawErrorBullseye(el, rows, blocks, scope, {events, colors, national}) 
     const labels = new Map(rows.map((row) => [eventKey(row), row.event]));
     groupLabel = (key) => labels.get(key) ?? key;
   }
-  tryDraw(() => renderBullseye(el, rows, {blocks, groupOf, colors: palette, legend: true, labels: false, groupLabel, onTop}),
-    'the errors bullseye');
+  return {blocks, groupOf, colors: palette, legend: true, labels: false, groupLabel, onTop};
 }
 
 /**
@@ -231,6 +232,7 @@ function wireHistory(initial) {
   const count = document.getElementById('errors-count');
   const histogramEl = document.getElementById('errors-histogram');
   const bullseyeEl = document.getElementById('errors-bullseye');
+  let shown = [];  // the rows drawn, the ones the download button exports
   const trendEl = document.getElementById('trend-chart');
   const weeksEl = document.getElementById('weeks-table');
   const weeksNote = document.getElementById('weeks-note');
@@ -315,8 +317,10 @@ function wireHistory(initial) {
     if (histogramEl) {
       drawErrorHistogram(histogramEl, rows, state.measure);
     }
+    shown = rows;
     if (bullseyeEl && blocks.length >= 2) {
-      drawErrorBullseye(bullseyeEl, rows, blocks, state.scope, {events, colors, national});
+      tryDraw(() => renderBullseye(bullseyeEl, rows, errorBullseyeOptions(rows, blocks, state.scope, {events, colors, national})),
+        'the errors bullseye');
     }
     if (weeksEl) {
       const perElection = keys.size <= WEEKS_MAX_EVENTS;
@@ -374,6 +378,15 @@ function wireHistory(initial) {
   });
   apply();
   writeHash();
+  // the bullseye as filtered, the filters chosen and the count in the subtitle and the file name
+  wireDownload(document.getElementById('errors-download'),
+    () => bullseyeOption(shown, errorBullseyeOptions(shown, blocks, state.scope, {events, colors, national})), showError, {
+      chartHeight: BULLSEYE_IMAGE_HEIGHT,
+      texts: (dataset) => imageTexts(dataset, [
+        chosenLabel(form.elements.ambito), chosenLabel(form.elements.eleccion), chosenLabel(form.elements.casa),
+        yearsText(state.from, state.to),
+      ], count ? count.textContent : null),
+    });
 }
 
 /**

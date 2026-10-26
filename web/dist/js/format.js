@@ -223,3 +223,14 @@ export function fmtDelta(x, digits = 0) {
   }
   return `${x > 0 ? '▲' : '▼'} ${magnitude}`;
 }
+
+/**
+ * A text as a piece of a file name: without accents, in lower case and with dashes between its words.
+ *
+ * @param {string} text the text («Sigma Dos / El Mundo»)
+ * @returns {string} the slug («sigma-dos-el-mundo»)
+ */
+export function fileSlug(text) {
+  return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}

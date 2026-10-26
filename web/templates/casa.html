@@ -123,7 +123,10 @@
         {% endcall %}
         {% include '_glosario.html' %}
       {{ m.card_end() }}
-      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver sólo esas elecciones.') }}
+      {#- the subtitle and the file of the image get the filters chosen and the count (`bullseye-wire.js`) -#}
+      {{ m.card_start('bullseye', 'Diana de errores', 'Cuánto falló su último sondeo antes de cada elección analizada, de cualquier ámbito, en cada bloque. Elige un ámbito o unos años para ver sólo esas elecciones.',
+                      tools=m.download_button('bullseye-download', profile.pollster.name, 'Diana de errores', site_host ~ ' · ' ~ author_handle,
+                                              site_title|lower ~ '-diana-' ~ profile.pollster.name|slug ~ '.png') if bullseye else none) }}
         {% if bullseye %}
         {% set bv = {'rows': bullseye, 'scopes': bullseye_scopes, 'years': bullseye_years, 'table_blocks': table_blocks,
                      'aria': 'Error de ' ~ profile.pollster.name ~ ' en cada elección por bloque',

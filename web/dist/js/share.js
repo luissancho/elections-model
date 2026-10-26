@@ -1,9 +1,13 @@
-// Downloadable image of a chart: the chart drawn off screen at a fixed size under a title and a subtitle, with a
-// discreet signature (site and author) at the bottom right, saved as a PNG. A page module wires the download
-// button of a card (`wireDownload`) with a function that returns the ECharts option to draw and, optionally, a
-// side panel drawn at the right of the chart: a table of the page read from the DOM (`tableImage`), drawn on the
-// canvas as the site's tables look.
+// Downloadable image of a chart: the chart (or several, one under another) drawn off screen at a fixed size under
+// a title and a subtitle, with a discreet signature (site and author) at the bottom right, saved as a PNG. A page
+// module wires the download button of a card (`wireDownload`) with a function that returns the ECharts option to
+// draw and, optionally, a note chip under the subtitle (the text of the majority calculator) and a panel at the
+// right of the chart or under it: a table of the page read from the DOM (`tableImage`), drawn on the canvas as the
+// site's tables look.
 import {THEME} from './charts/base.js';
+import {fileSlug} from './format.js';
+
+export {fileSlug};
 
 /**
  * Size of the image in CSS pixels (the PNG is `scale` times bigger): its width, the height of the chart, the
@@ -28,23 +32,44 @@ export const TABLE = {
 };
 
 /**
+ * A note chip of an image (`imageLayout`) as the chips of the site look (`.chip`): the side padding, the height,
+ * the corner radius, the font and the colours of the plain chip and of the `ok` (green) one.
+ */
+export const CHIP = {
+  padX: 11, height: 30, r: 10,
+  font: `600 13px ${THEME.fontFamily}`,
+  color: THEME.textColor, background: '#eceef2', okColor: '#15803d', okBackground: '#ecfdf3',
+};
+
+/**
  * Layout of the image: the texts given (title, subtitle, signature) with their position, font and colour, the
- * box of the chart and the size of the whole. The title and the subtitle go at the top left, the chart under
- * them between the same side margins and the signature, small and muted, under the chart at the right. The `y`
- * of a text is its top edge. With a `side` panel, the chart narrows to leave it room at the right, and the
- * shorter of the two is centred vertically against the taller.
+ * boxes of the charts and the size of the whole. The title and the subtitle go at the top left, the charts under
+ * them, one under another between the same side margins, and the signature, small and muted, under everything at
+ * the right. The `y` of a text is its top edge. With a `note`, a chip with its text goes between the subtitle and
+ * the charts. With a `side` panel, the charts narrow to leave it room at the right, and the shorter of the two
+ * (the column of charts, the panel) is centred vertically against the taller. With a `bottom` panel, it goes
+ * under the charts, centred, and the image widens if the panel needs it.
  *
  * @param {object} opts `title`, `subtitle`, `sign` (texts, each optional), `width` (of the image), `chartHeight`
- *   and `scale` (`IMAGE` by default) and `side` (a panel at the right of the chart, `{width, height, items}` as
- *   `tableDrawing` returns it; null for none)
+ *   (of the single chart, when `charts` is not given) and `scale` (`IMAGE` by default), `charts` (the heights of
+ *   the charts stacked, `[{height}]`), `note` (`{text, width, ok}`, the text of the chip, its measured width and
+ *   whether it is green; null for none), `side` (a panel at the right of the charts, `{width, height, items}` as
+ *   `tableDrawing` returns it; null for none) and `bottom` (a panel under the charts, the same shape)
  * @returns {object} `{width, height, scale, texts: [{role, text, x, y, align, font, color}], chart: {x, y, width,
- *   height}, side: {x, y, width, height, items}|null}`
+ *   height}, charts: [{x, y, width, height}], note: {x, y, width, height, r, text, font, color, background}|null,
+ *   side: {x, y, width, height, items}|null, bottom: {x, y, width, height, items}|null}` (`chart` is the first
+ *   of `charts`)
  */
 export function imageLayout({
   title, subtitle, sign, width = IMAGE.width, chartHeight = IMAGE.chartHeight, scale = IMAGE.scale, side = null,
+  charts = null, note = null, bottom = null,
 } = {}) {
+  const heights = (charts || [{height: chartHeight}]).map((chart) => chart.height);
+  if (bottom) {
+    width = Math.max(width, bottom.width + 2 * IMAGE.pad);
+  }
   const texts = [];
-  let y = title || subtitle ? IMAGE.pad : 0;
+  let y = title || subtitle || note ? IMAGE.pad : 0;
   if (title) {
     texts.push({role: 'title', text: title, x: IMAGE.pad, y, align: 'left', font: `700 22px ${THEME.headFamily}`, color: THEME.textColor});
     y += IMAGE.titleLine;
@@ -56,20 +81,40 @@ export function imageLayout({
   if (title || subtitle) {
     y += IMAGE.gap;
   }
-  const body = side ? Math.max(chartHeight, side.height) : chartHeight;
+  let chip = null;
+  if (note) {
+    chip = {
+      x: IMAGE.pad, y, width: note.width + 2 * CHIP.padX, height: CHIP.height, r: CHIP.r, text: note.text, font: CHIP.font,
+      color: note.ok ? CHIP.okColor : CHIP.color, background: note.ok ? CHIP.okBackground : CHIP.background,
+    };
+    y += CHIP.height + IMAGE.gap;
+  }
+  const column = heights.reduce((sum, height) => sum + height, 0) + (heights.length - 1) * IMAGE.gap;
+  const body = side ? Math.max(column, side.height) : column;
   const chartWidth = width - 2 * IMAGE.pad - (side ? side.width + IMAGE.sideGap : 0);
-  const chart = {x: IMAGE.pad, y: y + Math.round((body - chartHeight) / 2), width: chartWidth, height: chartHeight};
+  let top = y + Math.round((body - column) / 2);
+  const boxes = heights.map((height) => {
+    const box = {x: IMAGE.pad, y: top, width: chartWidth, height};
+    top += height + IMAGE.gap;
+    return box;
+  });
   const panel = side ? {
     x: width - IMAGE.pad - side.width, y: y + Math.round((body - side.height) / 2), width: side.width,
     height: side.height, items: side.items,
   } : null;
   y += body;
+  let foot = null;
+  if (bottom) {
+    y += IMAGE.gap;
+    foot = {x: Math.round((width - bottom.width) / 2), y, width: bottom.width, height: bottom.height, items: bottom.items};
+    y += bottom.height;
+  }
   if (sign) {
     y += IMAGE.signGap;
     texts.push({role: 'sign', text: sign, x: width - IMAGE.pad, y, align: 'right', font: `600 12px ${THEME.fontFamily}`, color: THEME.mutedColor});
     y += IMAGE.signLine + IMAGE.bottom;
   }
-  return {width, height: y, scale, texts, chart, side: panel};
+  return {width, height: y, scale, texts, chart: boxes[0], charts: boxes, note: chip, side: panel, bottom: foot};
 }
 
 /**
@@ -275,20 +320,25 @@ export function chartDataUrl(option, {width, height, scale}) {
 }
 
 /**
- * Draw `layout` (its texts, the chart image of `chartUrl` and its side panel) on a white canvas and return it as
- * a PNG blob. The fonts of the texts are loaded first, so the canvas draws them with the site fonts.
+ * Draw `layout` (its texts, the chart images of `chartUrls`, its note chip and its panels) on a white canvas and
+ * return it as a PNG blob. The fonts of the texts are loaded first, so the canvas draws them with the site fonts.
  *
  * @param {object} layout `imageLayout` result
- * @param {string} chartUrl data URL of the chart (`chartDataUrl`)
+ * @param {string|string[]} chartUrls data URL of the chart (`chartDataUrl`), or one per chart of the layout
  * @returns {Promise<Blob>} the PNG
  */
-export async function composeImage(layout, chartUrl) {
+export async function composeImage(layout, chartUrls) {
+  const urls = Array.isArray(chartUrls) ? chartUrls : [chartUrls];
+  const fonts = [...layout.texts.map((text) => text.font), ...(layout.note ? [layout.note.font] : [])];
   if (document.fonts) {
-    await Promise.all(layout.texts.map((text) => document.fonts.load(text.font).catch(() => null)));
+    await Promise.all(fonts.map((font) => document.fonts.load(font).catch(() => null)));
   }
-  const image = new Image();
-  image.src = chartUrl;
-  await image.decode();
+  const images = await Promise.all(urls.map(async (url) => {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    return image;
+  }));
   const canvas = document.createElement('canvas');
   canvas.width = layout.width * layout.scale;
   canvas.height = layout.height * layout.scale;
@@ -296,7 +346,11 @@ export async function composeImage(layout, chartUrl) {
   ctx.scale(layout.scale, layout.scale);
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, layout.width, layout.height);
-  ctx.drawImage(image, layout.chart.x, layout.chart.y, layout.chart.width, layout.chart.height);
+  layout.charts.forEach((box, i) => {
+    if (images[i]) {
+      ctx.drawImage(images[i], box.x, box.y, box.width, box.height);
+    }
+  });
   ctx.textBaseline = 'top';
   for (const text of layout.texts) {
     ctx.font = text.font;
@@ -304,25 +358,21 @@ export async function composeImage(layout, chartUrl) {
     ctx.textAlign = text.align;
     ctx.fillText(text.text, text.x, text.y);
   }
-  if (layout.side) {
-    for (const item of layout.side.items) {
-      drawItem(ctx, item, layout.side.x, layout.side.y);
+  if (layout.note) {
+    const {x, y, width, height, r, text, font, color, background} = layout.note;
+    drawItem(ctx, {type: 'rect', x, y, width, height, r, color: background, opacity: 1}, 0, 0);
+    drawItem(ctx, {type: 'text', text, x: x + CHIP.padX, y: y + height / 2, align: 'left', baseline: 'middle', font, color}, 0, 0);
+  }
+  for (const panel of [layout.side, layout.bottom]) {
+    if (panel) {
+      for (const item of panel.items) {
+        drawItem(ctx, item, panel.x, panel.y);
+      }
     }
   }
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('empty image'))), 'image/png');
   });
-}
-
-/**
- * A text as a piece of a file name: without accents, in lower case and with dashes between its words.
- *
- * @param {string} text the text («Sigma Dos / El Mundo»)
- * @returns {string} the slug («sigma-dos-el-mundo»)
- */
-export function fileSlug(text) {
-  return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -343,19 +393,42 @@ export function saveBlob(blob, file) {
 }
 
 /**
+ * The note chip of an image (`imageLayout`) with its text measured in the chip font, once the font is loaded.
+ *
+ * @param {{text: string, ok: boolean}|null} note the text and whether the chip is green
+ * @returns {Promise<object|null>} `{text, ok, width}`, or null without a note
+ */
+async function measuredNote(note) {
+  if (!note) {
+    return null;
+  }
+  if (document.fonts) {
+    await document.fonts.load(CHIP.font).catch(() => null);
+  }
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = CHIP.font;
+  return {text: note.text, ok: Boolean(note.ok), width: ctx.measureText(note.text).width};
+}
+
+/**
  * Reveal `button` (hidden without JS) and, when clicked, download the chart as a PNG: the option of
  * `optionOf(box)` (`box` is the chart box of the layout, `{width, height}` among others) drawn under the texts of
- * the button's data attributes (`title`, `subtitle`, `sign`) and saved as `file`, with the panel of `side()` at
- * its right when given.
+ * the button's data attributes (`title`, `subtitle`, `sign`) and saved as `file`, with the note chip of `note()`
+ * under the subtitle, the panel of `side()` at its right and the panel of `bottom()` under it when given. With
+ * `charts`, several charts go one under another instead of the single one of `optionOf`.
  *
  * @param {HTMLButtonElement|null} button the download button (nothing happens without it)
- * @param {function} optionOf chart box → ECharts option
+ * @param {function|null} optionOf chart box → ECharts option (unused with `charts`)
  * @param {function} [onError] called with a message when the image cannot be made
- * @param {object} [image] `width` and `chartHeight` of the image (`IMAGE` by default), `side` (async, returns
- *   the side panel, `tableImage`) and `texts` (`(dataset) => {title, subtitle, sign, file}`, the texts of the
- *   moment when they follow a control of the card, over those of the data attributes)
+ * @param {object} [image] `width` and `chartHeight` of the image (`IMAGE` by default), `charts` (the charts
+ *   stacked, `[{height, option}]` with `option` as `optionOf`, or a function returning them at the moment of the
+ *   click), `note` (`() => {text, ok}|null`, the chip of the moment), `side` and `bottom` (async, return a panel,
+ *   `tableImage`) and `texts` (`(dataset) => {title, subtitle, sign, file}`, the texts of the moment when they
+ *   follow a control of the card, over those of the data attributes)
  */
-export function wireDownload(button, optionOf, onError = null, {width, chartHeight, side = null, texts = null} = {}) {
+export function wireDownload(button, optionOf, onError = null, {
+  width, chartHeight, side = null, texts = null, charts = null, note = null, bottom = null,
+} = {}) {
   if (!button) {
     return;
   }
@@ -364,10 +437,14 @@ export function wireDownload(button, optionOf, onError = null, {width, chartHeig
     button.disabled = true;
     try {
       const {title, subtitle, sign, file} = {...button.dataset, ...(texts ? texts({...button.dataset}) : {})};
-      const panel = side ? await side() : null;
-      const layout = imageLayout({title, subtitle, sign, width, chartHeight, side: panel});
-      const url = chartDataUrl(optionOf(layout.chart), {width: layout.chart.width, height: layout.chart.height, scale: layout.scale});
-      saveBlob(await composeImage(layout, url), file || 'grafico.png');
+      const stack = charts ? (typeof charts === 'function' ? charts() : charts) : null;
+      const options = stack ? stack.map((chart) => chart.option) : [optionOf];
+      const layout = imageLayout({
+        title, subtitle, sign, width, chartHeight, side: side ? await side() : null, bottom: bottom ? await bottom() : null,
+        charts: stack ? stack.map(({height}) => ({height})) : null, note: await measuredNote(note ? note() : null),
+      });
+      const urls = layout.charts.map((box, i) => chartDataUrl(options[i](box), {width: box.width, height: box.height, scale: layout.scale}));
+      saveBlob(await composeImage(layout, urls), file || 'grafico.png');
     } catch (error) {
       console.error('Could not make the image', error);
       if (onError) {

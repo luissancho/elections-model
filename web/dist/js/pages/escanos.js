@@ -1,20 +1,25 @@
 // Seats page: the ridge of the party seat distributions, stacked blocks, majority calculator, vote fan and seat evolution, drawn
-// from the data embedded by the server.
+// from the data embedded by the server. «Reparto de escaños» (the bar with the table of its view under it) and the
+// majority calculator (its chip, bar and histogram) download as signed images (`share.js`).
 import {fmtInt} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {THEME} from '../charts/base.js';
 import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
-import {renderHistogram} from '../charts/histogram.js';
+import {histogramOption, renderHistogram} from '../charts/histogram.js';
 import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
 import {ridgeBlocks, ridgeData} from '../kde.js';
-import {renderStacked} from '../charts/stacked.js';
+import {renderStacked, stackedOption} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
 import {coalitionCaption, coalitionHash, coalitionSeats, coalitionText, parseCoalition, summarize} from '../seats.js';
-import {mapNames, markPills, markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireForm} from './common.js';
+import {mapNames, markPills, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireForm} from './common.js';
+import {fileSlug, tableImage, wireDownload} from '../share.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
+/** Heights of the charts in the images: the bar as on the page (`#seats-bar`), the histogram a little shorter. */
+const BAR_IMAGE_HEIGHT = 120;
+const HISTOGRAM_IMAGE_HEIGHT = 300;
 /** Shared seat axis of the ridges, as a share of the chamber: parties up to 60%, blocks up to 80% (Luis, 2026-10-14). */
 const PARTY_AXIS_SHARE = 0.6;
 const BLOCK_AXIS_SHARE = 0.8;
@@ -53,7 +58,8 @@ function partyBar(initial, catalog, colors) {
  * (`coalitionText`), the bar of the central allocation (the marked parties first, in colour, and the rest after
  * them in grey) and the histogram of the marked parties, marked at their central seats, with its caption
  * (`coalitionCaption`) on load and on every change. Only a change rewrites the fragment, so a link to another
- * section (`#districts`) survives the load.
+ * section (`#districts`) survives the load. The download button (disabled without parties marked) draws the
+ * chip, the bar and the histogram of the moment, the parties in the subtitle and in the file name.
  *
  * @param {object} dist the dist part
  * @param {number} majority seats of the absolute majority
@@ -65,6 +71,7 @@ function wireCoalition(dist, majority, bar, nSeats) {
   const result = document.getElementById('coalition-result');
   const chart = document.getElementById('coalition-chart');
   const barEl = document.getElementById('coalition-bar');
+  const download = document.getElementById('coalition-download');
   if (!fieldset || !result || !chart) {
     return;
   }
@@ -75,19 +82,31 @@ function wireCoalition(dist, majority, bar, nSeats) {
       box.checked = fromHash.includes(box.value);
     }
   }
+  let current = {names: [], values: [], stats: null, central: 0};  // the selection drawn, the one the button exports
+
+  /** Rows and options of the bar with `names` first, in colour, and the rest after them in grey. */
+  const barOf = (names) => {
+    const muted = bar.rows.map((row) => row.name).filter((name) => !names.includes(name));
+    return [
+      [...bar.rows.filter((row) => names.includes(row.name)), ...bar.rows.filter((row) => muted.includes(row.name))],
+      {colors: bar.colors, fullnames: bar.fullnames, majority, total: nSeats, deltas: bar.deltas, year: bar.year, muted},
+    ];
+  };
+  /** Options of the histogram of the sums marked at `central` with its caption. */
+  const histogramOf = ({stats, central}) => ({
+    majority, median: central, markLabel: `Reparto central: ${fmtInt(central)}`, lo: stats.lo, hi: stats.hi,
+    color: THEME.barColor, bounds: true, markLabels: false, caption: coalitionCaption(stats, central),
+  });
 
   function update() {
     markPills(fieldset);
     const names = boxes.filter((box) => box.checked).map((box) => box.value);
     const values = coalitionSeats(dist, names);
     const stats = summarize(values, majority);
+    const central = bar.rows.filter((row) => names.includes(row.name)).reduce((sum, row) => sum + row.seats, 0);
+    current = {names, values, stats, central};
     if (barEl) {
-      const muted = bar.rows.map((row) => row.name).filter((name) => !names.includes(name));
-      tryDraw(() => renderStacked(barEl, [
-        ...bar.rows.filter((row) => names.includes(row.name)), ...bar.rows.filter((row) => muted.includes(row.name)),
-      ], {
-        colors: bar.colors, fullnames: bar.fullnames, majority, total: nSeats, deltas: bar.deltas, year: bar.year, muted,
-      }), 'the majority bar');
+      tryDraw(() => renderStacked(barEl, ...barOf(names)), 'the majority bar');
     }
     result.classList.toggle('ok', Boolean(stats) && stats.pMajority >= 0.5);
     if (!stats) {
@@ -96,12 +115,11 @@ function wireCoalition(dist, majority, bar, nSeats) {
         chart.__chart.clear();
       }
     } else {
-      const central = bar.rows.filter((row) => names.includes(row.name)).reduce((sum, row) => sum + row.seats, 0);
       result.textContent = coalitionText(names.length, central, stats);
-      renderHistogram(chart, values, {
-        majority, median: central, markLabel: `Reparto central: ${fmtInt(central)}`, lo: stats.lo, hi: stats.hi,
-        color: THEME.barColor, bounds: true, markLabels: false, caption: coalitionCaption(stats, central),
-      });
+      renderHistogram(chart, values, histogramOf(current));
+    }
+    if (download) {
+      download.disabled = !stats;
     }
     return names;
   }
@@ -112,6 +130,22 @@ function wireCoalition(dist, majority, bar, nSeats) {
     window.history.replaceState(null, '', pathname + search + coalitionHash(names));
   });
   update();
+  wireDownload(download, null, showError, {
+    charts: () => [
+      {height: BAR_IMAGE_HEIGHT, option: () => stackedOption(...barOf(current.names))},
+      {height: HISTOGRAM_IMAGE_HEIGHT, option: () => histogramOption(current.values, histogramOf(current))},
+    ],
+    note: () => ({text: result.textContent, ok: result.classList.contains('ok')}),
+    texts: ({subtitle, file}) => {
+      const {names} = current;
+      if (!names.length) {
+        return {};
+      }
+      // the parties marked after the name of the card: «Calculadora de mayorías · PP + VOX · Pronóstico para …»
+      const [head, ...rest] = subtitle.split(' · ');
+      return {subtitle: [head, names.join(' + '), ...rest].join(' · '), file: file.replace(/\.png$/, `-${fileSlug(names.join(' '))}.png`)};
+    },
+  });
 }
 
 const CAPTION = {
@@ -187,7 +221,8 @@ function wireTerritory(initial, catalog) {
 /**
  * Wire the seats card: the Partidos/Bloques switch draws the stacked bar and the ridges of the view and shows
  * its table. Parties are ordered by headline seats (then by mean, like `Simulator.plot_dist_kde`); blocks the
- * same way, their simulations being the sum of their parties.
+ * same way, their simulations being the sum of their parties. The download button draws the bar of the view
+ * shown with its table under it (without the ridges).
  *
  * @param {object} initial the page's initial data
  * @param {Catalog} catalog party catalogue of the run
@@ -235,10 +270,17 @@ function wireSeats(initial, catalog, colors) {
   const barEl = document.getElementById('seats-bar');
   const ridgeEl = document.getElementById('ridge-chart');
   const cache = {};
+  let shown = views.partidos;  // the view drawn, the one the download button exports
+
+  /** Options of the bar of `view`. */
+  const barOf = (view) => ({
+    colors: view.colors, fullnames: view.fullnames, majority, total: nSeats, deltas: view.deltas, year: deltas.year,
+  });
 
   /** Draw the bar and the ridges of `view` and show its table. */
   function draw(view) {
     const chosen = views[view];
+    shown = chosen;
     for (const [name, item] of Object.entries(views)) {
       const container = document.getElementById(item.container);
       if (container) {
@@ -246,9 +288,7 @@ function wireSeats(initial, catalog, colors) {
       }
     }
     if (barEl) {
-      tryDraw(() => renderStacked(barEl, chosen.bar, {
-        colors: chosen.colors, fullnames: chosen.fullnames, majority, total: nSeats, deltas: chosen.deltas, year: deltas.year,
-      }), `the ${view} bar`);
+      tryDraw(() => renderStacked(barEl, chosen.bar, barOf(chosen)), `the ${view} bar`);
     }
     if (ridgeEl) {
       cache[view] = cache[view] || chosen.ridges();
@@ -261,6 +301,9 @@ function wireSeats(initial, catalog, colors) {
   }
 
   draw('partidos');
+  wireDownload(document.getElementById('seats-download'), () => stackedOption(shown.bar, barOf(shown)), showError, {
+    chartHeight: BAR_IMAGE_HEIGHT, bottom: () => tableImage(document.querySelector(`#${shown.container} table`)),
+  });
   const fieldset = document.getElementById('seats-view');
   if (fieldset) {
     fieldset.hidden = false;
