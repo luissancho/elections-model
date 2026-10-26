@@ -48,6 +48,7 @@ def bare_loader(scope, maps=None, party_ids=None, party_names=None):
     loader.parties_missing, loader.pollsters_missing, loader.sponsors_missing = [], [], []
     loader.party_names = {normalized(n) for n in party_names or ()}
     loader.pollsters_skipped, loader.sponsors_skipped, loader.parties_skipped = [], [], []
+    loader.pages = {}
 
     return loader
 
@@ -632,3 +633,23 @@ def test_read_cols_skips_discarded_names_only_when_they_have_no_id():
     assert loader.pollsters_missing == [] and loader.sponsors_missing == []
     assert sorted(loader.pollsters_skipped) == ['CIS (Sondaxe)', 'PSPV', 'Sumar']
     assert loader.sponsors_skipped == ['Sumar']
+
+
+def test_read_data_reuses_the_pages_and_reload_catalogues_resolves_new_names(monkeypatch):
+    from mtpy.lib import loader as loader_module
+
+    fetched = []
+
+    def fake_fetch(url, cache_dir=None, refresh=False):
+        fetched.append(url)
+        return fixture_bytes('2023_Madrilenian_regional_election')
+    monkeypatch.setattr(loader_module, 'fetch_page', fake_fetch)
+    loader = bare_loader('es-md', party_ids={})
+    loader.params, loader.years, loader.verbose, loader.cache_dir, loader.refresh = {'polls': 'u'}, None, 0, None, False
+    loader.event_date = '2023-05-28'
+    loader.pollsters_idmap = {}          # nadie mapeado: todas las casas a pollsters_missing
+    loader.read_data()
+    assert fetched == ['u'] and set(loader.pages) == {'u'} and loader.data == [] and loader.pollsters_missing
+    loader.pollsters_idmap = AnyKey()   # «altas» hechas
+    loader.read_data(pages=loader.pages)
+    assert fetched == ['u'] and len(loader.data) > 0 and loader.pollsters_missing == []

@@ -537,10 +537,28 @@ class WikipediaLoader(Core):
         self.maps = json.loads(self.app.data.read('wikipedia/wp-maps.json'))
         self.params = self.urls[self.scope][self.event_date]  # `polls` is optional: an event may have results only
 
+        self.pages = {}  # Articles read by `read_data`, by url (see its `pages` argument)
+        self.parties_missing = []
+        self.pollsters_missing = []
+        self.sponsors_missing = []
+        self.parties_skipped = []  # Party columns left out on purpose (`skip.parties` in the maps)
+        self.pollsters_skipped = []  # Names left out on purpose (see `discarded_pollster`)
+        self.sponsors_skipped = []  # Names left out on purpose (see `discarded_sponsor`)
+        self.reload_catalogues()
+        self.fixes_missing = []  # Polls of the curated fixes not read from the article (see `build_series`)
+
+    def reload_catalogues(self) -> Self:
+        """
+        Read again the catalogues of parties, pollsters and sponsors, with their column maps and id maps, and
+        the normalized party names. Needed after new entries are added to the database.
+
+        Returns
+        -------
+        Self
+        """
         self.parties = Parties().get_results(formatted=True)
         self.parties_colmap = self.get_colmap('parties')
         self.parties_idmap = self.get_idmap('parties')
-        self.parties_missing = []
         self.party_names = {
             normalized(n) for n in pd.concat([self.parties['name'], self.parties['fullname']]).dropna()
         }
@@ -548,16 +566,12 @@ class WikipediaLoader(Core):
         self.pollsters = Pollsters().get_results(formatted=True)
         self.pollsters_colmap = self.get_colmap('pollsters')
         self.pollsters_idmap = self.get_idmap('pollsters')
-        self.pollsters_missing = []
-        self.parties_skipped = []  # Party columns left out on purpose (`skip.parties` in the maps)
-        self.pollsters_skipped = []  # Names left out on purpose (see `discarded_pollster`)
 
         self.sponsors = Sponsors().get_results(formatted=True)
         self.sponsors_colmap = self.get_colmap('sponsors')
         self.sponsors_idmap = self.get_idmap('sponsors')
-        self.sponsors_missing = []
-        self.sponsors_skipped = []  # Names left out on purpose (see `discarded_sponsor`)
-        self.fixes_missing = []  # Polls of the curated fixes not read from the article (see `build_series`)
+
+        return self
 
     def get_colmap(self, key: str) -> dict[str, str]:
         """
@@ -943,12 +957,28 @@ class WikipediaLoader(Core):
 
         return rows
 
-    def read_data(self) -> Self:
+    def read_data(self, pages: Optional[dict[str, bytes]] = None) -> Self:
+        """
+        Read the polls of the articles of the event into `self.data`.
+
+        Parameters
+        ----------
+        pages : dict, optional
+            Articles by url (as left in `self.pages` by a previous call). When given, they are parsed instead
+            of downloading them.
+
+        Returns
+        -------
+        Self
+        """
         data = {}
 
         self.parties_missing = []
         self.pollsters_missing = []
         self.sponsors_missing = []
+        self.parties_skipped = []
+        self.pollsters_skipped = []
+        self.sponsors_skipped = []
 
         urls = self.params.get('polls', [])
         if not isinstance(urls, list):
@@ -962,7 +992,9 @@ class WikipediaLoader(Core):
             years = []
         
         for url in urls:
-            r = html.fromstring(fetch_page(url, self.cache_dir, self.refresh))
+            page = pages[url] if pages else fetch_page(url, self.cache_dir, self.refresh)
+            self.pages[url] = page
+            r = html.fromstring(page)
             tables = r.xpath("//table[contains(@class, 'wikitable')]")
 
             if len(years) == 0:
