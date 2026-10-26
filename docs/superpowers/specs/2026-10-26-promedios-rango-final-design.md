@@ -106,3 +106,13 @@ Elegido **B1** (Luis, 2026-10-26).
 - `python -m pytest tests/test_js_charts.py tests/test_pages.py tests/test_pages_ejemplo.py -q` y la suite completa.
 - Paseo de Luis por /es en Elección y en Hoy (`?mode=nowcast`), vista Bloques, selector Sondeos / Promedio / Ambos,
   la encuestadora frente al promedio y el detalle de 2023; en el móvil, el realce al tocar un punto.
+
+## Ajustes tras el paseo de Luis (2026-10-26, tarde)
+
+- **La barra es silenciosa; sólo su punto central activa el realce y el tooltip.** El trazo de `lo` a `hi` lleva
+  `silent: true` en el elemento que devuelve `renderItem`; el punto blanco sigue siendo el objetivo. Comprobado en el
+  motor real a través de la detección de impacto de zrender (`handler.dispatch('mousemove', …)`): sobre la barra
+  lejos del punto no pasa nada; sobre el punto, la barra a opacidad 1 y las demás a 0,15.
+- **Las etiquetas «Estimación» y «Elección» ya no se pisan con un horizonte corto.** Cada una se alinea al lado
+  opuesto de su línea: «Estimación» (o «A n días») termina en su línea y se lee a la izquierda, «Elección» empieza
+  en la suya y se lee a la derecha; el margen derecho del gráfico pasa de 48 a 72 px para que quepa.

@@ -112,15 +112,20 @@ export function axisPctLabel(value) {
   return fmtPct(value, Math.abs(value - Math.round(value)) < 1e-6 ? 0 : 1);
 }
 
-/** Vertical mark line at `time` with a label at the top. */
-function markAt(time, label) {
-  return {xAxis: time, label: {formatter: label, position: 'end', color: THEME.markColor}};
+/**
+ * Vertical mark line at `time` with a label at the top. `align` places the text on one side of the line
+ * (`'right'`: the text ends at the line, so it reads to its left; `'left'`: it starts there): «Estimación» goes
+ * left and «Elección» right, so the two labels never overlap on a short horizon (Luis, 2026-10-26).
+ */
+function markAt(time, label, align = 'center') {
+  return {xAxis: time, label: {formatter: label, position: 'end', align, color: THEME.markColor}};
 }
 
 /**
  * The 95 % range of a party at the election as a vertical bar from `lo` to `hi` at `time`, with a white point at
- * `mean`: a `custom` series named after the party (the legend toggles it with its line). Hovering it brings it to
- * the front at full opacity while the other bars blur, so overlapping ranges can still be read one by one. ECharts
+ * `mean`: a `custom` series named after the party (the legend toggles it with its line). Hovering its point brings
+ * the bar to the front at full opacity while the other bars blur, so overlapping ranges can still be read one by
+ * one; the bar itself is silent, so a pointer crossing the bars activates nothing (Luis, 2026-10-26). ECharts
  * reads `focus`/`blurScope` of a custom series from the root element `renderItem` returns, not from the series:
  * they go on the group. The blur reaches every series of the chart, so the lines, points and marks declare a blur
  * state that keeps them as they are (`KEEP_ON_BLUR`): only the other bars fade.
@@ -150,6 +155,7 @@ export function rangeBarSeries(name, time, lo, hi, mean, color) {
         children: [
           {
             type: 'line',
+            silent: true,
             shape: {x1: x, y1: y(1), x2: x, y2: y(2)},
             style: {stroke: color, lineWidth: 4, lineCap: 'round', opacity: RANGE_OPACITY},
             emphasis: {style: {opacity: 1}},
@@ -306,11 +312,11 @@ export function seriesOption({
       ...KEEP_POINTS_ON_BLUR(0.8),
       data: [[dayTime(result.date), result.values[name]]],
     }));
-  const marks = [markAt(dayTime(asOf), asOfLabel)];
+  const marks = [markAt(dayTime(asOf), asOfLabel, 'right')];
   if (result) {
-    marks.push(markAt(dayTime(result.date), 'Elección'));
+    marks.push(markAt(dayTime(result.date), 'Elección', 'left'));
   } else if (withProjection && when) {
-    marks.push(markAt(dayTime(when), 'Elección'));
+    marks.push(markAt(dayTime(when), 'Elección', 'left'));
   }
   // Mark lines on their own empty series, so hiding a party never hides them.
   const markSeries = {
@@ -373,9 +379,9 @@ export function seriesOption({
       data: parties,
       selected: Object.fromEntries(parties.map((name) => [name, !selected || selected.includes(name)])),
     },
-    // Right margin wide enough for the centred mark-line labels at the end of the axis.
+    // Right margin wide enough for the «Elección» label, which reads to the right of the last axis date.
     // Without a drawn legend the top margin only keeps room for the mark-line labels.
-    grid: {left: 8, right: 48, top: drawn ? 40 : 24, bottom: 56, containLabel: true},
+    grid: {left: 8, right: 72, top: drawn ? 40 : 24, bottom: 56, containLabel: true},
     xAxis: {
       type: 'time',
       minInterval: DAY_MS,
