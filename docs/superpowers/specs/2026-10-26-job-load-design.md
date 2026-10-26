@@ -1,6 +1,16 @@
 # Job `load`: la carga de sondeos de Wikipedia como un job
 
-Fecha: 2026-10-26. Estado: borrador, pendiente de aprobación de Luis.
+Fecha: 2026-10-26. Estado: aprobado por Luis el 2026-10-26; construido el 2026-10-26 (plan docs/superpowers/plans/2026-10-26-job-load.md)
+
+Comprobación: dry run contra la base del `.env` (`python job.py load '{"scopes":["es"],"dry_run":true,"verbose":2}'`,
+commit f3adccd): `es: polls checked (521 read, 0 new, 2026-11-29, dry run) in 2 s`, con los tres conjuntos
+`Missing` vacíos; `Skipped pollsters` = las «CIS (…)» (Ateneo del Dato, Demócrata, Jaime Miquel, JM, Logoslab,
+Opina 360, Sondaxe, SocioMétrica, Target Point), `Sumar` y `PSOE`; `Skipped sponsors` = `{'PP'}`.
+
+Pendiente de Luis: la primera carga real (`python job.py load '{"scopes":["es"]}'`) y, con `force`, revisar el `mtype` de las casas nuevas.
+
+Desviaciones de la construcción: `skip.parties` se comprueba después de los alias (así `PP+Cs` sigue mapeado a PP
+en `es-pv` y se silencia donde no hay alias), y `load/run_load.py` no se ha tocado.
 
 ## Intención
 
