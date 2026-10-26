@@ -653,3 +653,43 @@ def test_read_data_reuses_the_pages_and_reload_catalogues_resolves_new_names(mon
     loader.pollsters_idmap = AnyKey()   # «altas» hechas
     loader.read_data(pages=loader.pages)
     assert fetched == ['u'] and len(loader.data) > 0 and loader.pollsters_missing == []
+
+
+def set_text(cell, text):
+    """Replace every text node of a cell (`td`) by `text`."""
+    for node in cell.xpath('.//text()'):
+        parent = node.getparent()
+        if node.is_text:
+            parent.text = ''
+        else:
+            parent.tail = ''
+    cell.text = text
+
+
+def test_read_cols_records_unknown_names_only_for_poll_rows():
+    """An unknown pollster or sponsor is recorded only once the row is known to be a poll (dates and a numeric
+    lead): a non-poll row with an unknown first cell blocks nothing and `force` would never add its text."""
+    loader = bare_loader('es-md')
+    loader.pollsters_idmap = {'GAD3': 1}
+    loader.sponsors_idmap = {'El Mundo': 5}
+    table = WikipediaLoader.find_poll_table(load('2023_Madrilenian_regional_election'))
+    parties, lead = WikipediaLoader.read_header(table)
+
+    no_lead = fake_cols(table, pollster='Footnote text', sponsor='El Mundo')
+    set_text(no_lead[lead], 'Tie')
+    no_date = fake_cols(table, pollster='Other note', sponsor='Some medium')
+    set_text(no_date[1], '?')
+    known_no_lead = fake_cols(table, pollster='GAD3', sponsor='Some medium')
+    set_text(known_no_lead[lead], 'Tie')
+    short = fake_cols(table, pollster='Short note', sponsor='Some medium')[:2]
+    for cols in (no_lead, no_date, known_no_lead, short):
+        assert loader.read_cols(cols, parties, lead, '2023') == {}
+    assert loader.pollsters_missing == [] and loader.sponsors_missing == []
+
+    poll = loader.read_cols(fake_cols(table, pollster='Unknown Pollster', sponsor='Unknown Medium'), parties, lead,
+                            '2023')
+    assert poll == {}
+    assert loader.pollsters_missing == ['Unknown Pollster'] and loader.sponsors_missing == ['Unknown Medium']
+    poll = loader.read_cols(fake_cols(table, pollster='GAD3', sponsor='New Medium'), parties, lead, '2023')
+    assert poll['pollster_id'] == 1 and poll['sponsor_id'] == 0
+    assert loader.sponsors_missing == ['Unknown Medium', 'New Medium']

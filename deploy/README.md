@@ -520,9 +520,9 @@ El primer `FAIL` es la causa raíz (los pasos posteriores fallan en cascada). Un
 ## Cargar los sondeos
 
 `python job.py load '{...}'` (`mtpy/jobs/Load.py`) carga en la base de datos los sondeos de Wikipedia de una elección,
-la secuencia de `notebooks/data-load/PollsLoad.ipynb`: es el primer paso de la cadena cargar, `compute`, `publish`.
-Lógica en `mtpy/lib/load.py` (`load_polls`); la lectura y el parseo de los artículos son de `WikipediaLoader`
-(`mtpy/lib/loader.py`). `load/run_load.py` sigue siendo la vía de los autonómicos con su informe por eventos (su paso
+la secuencia de `notebooks/data-load/PollsLoadWikipedia.ipynb`: es el primer paso de la cadena cargar, `compute`,
+`publish`. Lógica en `mtpy/lib/load.py` (`load_polls`); la lectura y el parseo de los artículos son de
+`WikipediaLoader` (`mtpy/lib/loader.py`). `load/run_load.py` sigue siendo la vía de los autonómicos con su informe por eventos (su paso
 `polls` no se ha tocado); para `es`, o para recargar un ciclo concreto, se lanza el job.
 
 ### Qué hace y cuándo lanzarla
@@ -532,7 +532,8 @@ Por cada ámbito, en este orden:
 1. Lee el artículo de sondeos del evento (`wp-urls.json`).
 2. Comprueba los nombres: imprime el bloque `# Polls: n` con los partidos, encuestadoras y medios sin mapear y,
    si queda alguno (sin `force` las casas y los medios; los partidos siempre), el ámbito termina `failed` sin haber
-   escrito nada.
+   escrito nada. La excepción es `force` con nombres que siguen sin mapear tras las altas (`unmapped after adding:
+   …`): las encuestadoras y los medios dados de alta ya están en la base, aunque no se haya guardado ningún sondeo.
 3. Construye las series, con las correcciones del CSV de `data/polls`; las correcciones sin sondeo se avisan.
 4. Guarda: sin `overwrite`, sólo los sondeos que no están en la base; con `overwrite`, borra el ciclo y lo reinserta
    entero. También guarda los resultados.
@@ -554,7 +555,17 @@ regla.
 Con `force` las encuestadoras y los medios nuevos se dan de alta en la base y la carga sigue. La encuestadora nace sin
 `mtype`: hay que revisarla (un aviso por alta, `new pollster «X» without mtype: check it`) y, si es un agregador o un
 panel online, marcarlo a mano, porque `DROP_MTYPES` no la excluirá del promedio mientras no tenga el tipo. Con
-`dry_run`, `force` no da de alta nada: la línea dice lo que se habría dado de alta.
+`dry_run`, `force` no da de alta nada: la línea dice lo que se habría dado de alta. Antes del primer `force` real,
+comprobar que las secuencias de identidad de `elections.pollsters` y `elections.sponsors` van por delante de
+`max(id)`: si los catálogos se cargaron alguna vez con ids explícitos, la primera alta falla por clave duplicada (sin
+escribir nada más). Para cada tabla (aquí `elections.pollsters`; lo mismo con `elections.sponsors`), las dos
+primeras consultas y, si `last_value` es menor que `max(id)`, la tercera:
+
+```
+SELECT max(id) FROM elections.pollsters;
+SELECT last_value FROM pg_sequences WHERE schemaname || '.' || sequencename = pg_get_serial_sequence('elections.pollsters', 'id');
+SELECT setval(pg_get_serial_sequence('elections.pollsters', 'id'), (SELECT max(id) FROM elections.pollsters));
+```
 
 Los ámbitos están aislados: uno que falla no detiene a los demás, y el job termina con error al final si alguno falló.
 
@@ -570,7 +581,9 @@ python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
 1. Recargar entero el ciclo de la próxima elección de `es`: la vía normal tras corregir sondeos.
 2. Cargar sólo lo nuevo, dando de alta las encuestadoras y los medios que falten (revisar luego su `mtype`).
 3. Recargar el ciclo de una elección pasada, con su fecha.
-4. Ensayo en todos los ámbitos sin escribir nada, con una línea por fase y los nombres descartados.
+4. Ensayo en todos los ámbitos sin escribir nada, con una línea por fase y los nombres descartados. Los ámbitos cuyo
+   próximo evento aún no tiene artículo de sondeos (hoy `es-an`, `es-ar`, `es-cl` y `es-ex`) terminan `skipped` y no
+   cuentan como fallo.
 
 ### Parámetros
 
@@ -578,10 +591,10 @@ python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
 | --- | --- | --- |
 | `what` | `["polls"]` | Acciones a ejecutar; hoy sólo `polls`. Una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
-| `event_date` | próximo evento de cada ámbito | Fecha ISO de la elección, para cargar un ciclo pasado. Un ámbito sin próximo evento, o cuyo evento no tiene artículo de sondeos en `wp-urls.json`, termina `failed` sin leer nada |
+| `event_date` | próximo evento de cada ámbito | Fecha ISO de la elección, para cargar un ciclo pasado. Un ámbito sin próximo evento, o cuyo evento no tiene artículo de sondeos en `wp-urls.json`, no lee nada: con `"all"` termina `skipped` (no es un fallo); nombrado en `scopes`, termina `failed` |
 | `overwrite` | `false` | `false`: sólo los sondeos que no están en la base; `true`: borra el ciclo y lo reinserta entero |
 | `force` | `false` | Dar de alta las encuestadoras y los medios nuevos y seguir, en vez de parar el ámbito; los partidos no se dan de alta nunca |
-| `years` | `null` | Lista de años del artículo que se leen, todos por defecto |
+| `years` | `null` | Lista de años del artículo que se leen (`["2026"]`; los números se convierten), todos por defecto. No se combina con `overwrite`: el job falla con `ValueError` antes de empezar, porque `overwrite` borraría los demás años del ciclo |
 | `dry_run` | `false` | Leer, resolver nombres e informar sin escribir nada (ni altas, ni sondeos, ni pesos) |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
@@ -591,25 +604,30 @@ Niveles de `verbose`:
 | --- | --- |
 | 0 | Sólo la cabecera (`load polls: 1 ámbito`, con `· overwrite`, `· force` y `· dry run` si están activos) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, el bloque de nombres sin mapear, los avisos en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") y la línea de resultado en el momento |
-| 2 | Lo anterior más una línea por fase con sus segundos (`lectura`, `nombres`, `series`, `guardado`, `pesos`), los nombres descartados y la tabla de comprobación de partidos |
+| 2 | Lo anterior más una línea por fase con sus segundos (`lectura`, `nombres`, `series`, `guardado`, `pesos`), los nombres descartados y la tabla de comprobación de partidos (sólo cuando se guarda, no en un `dry_run`) |
 | 3 | Lo anterior más la salida propia del loader y del `Computer` (que reciben `verbose - 2`) |
 
 ### Estados y resumen
 
-Cada ámbito termina `loaded`, `checked` (un `dry_run` que llega al final) o `failed`; `results[ámbito]` lleva el
-`status`, las cifras, las altas (`added`) y los `warnings`. Las líneas del resumen tienen esta forma:
+Cada ámbito termina `loaded`, `checked` (un `dry_run` que llega al final), `skipped` (con `"all"`, un ámbito sin
+próximo evento o sin artículo de sondeos) o `failed`; `results[ámbito]` lleva el `status`, las cifras, las altas
+(`added`) y los `warnings`. Las líneas del resumen tienen esta forma:
 
 ```
 es: polls loaded (520 read, 4 saved, 2026-11-29) in 38 s
 es: polls loaded (520 read, 520 saved, 2026-11-29, overwrite) in 61 s · 2 pollsters added, 1 sponsor added · 3 avisos
 es: polls checked (520 read, 4 new, 2026-11-29, dry run) in 12 s
+es: polls checked (520 read, 520 new, 2026-11-29, overwrite, dry run) in 12 s
 es: polls failed (unmapped pollsters: Sumar; unmapped sponsors: Artículo 14)
 es-md: polls failed (no polls article for 2027-05-23)
+es-an: polls skipped (no polls article for 2030-06-16)
+es-ex: polls skipped (no upcoming event)
 ```
 
 Sin `overwrite` y sin sondeos nuevos no se escribe nada y la línea dice `0 saved`. Un ámbito fallido no detiene a los
-demás; al final el job termina con `RuntimeError: load: failed scopes: es (polls)`. El resumen va también al logger
-y al servicio de avisos si está configurado (`alert`), como en `compute` y `publish`.
+demás; al final el job termina con `RuntimeError: load: failed scopes: es (polls)`. Los `skipped` no cuentan como
+fallo. El resumen va también al logger y al servicio de avisos si está configurado (`alert`), como en `compute` y
+`publish`.
 
 En Docker: `RUN_JOB='load {"scopes":["es"],"overwrite":true}'`. El contenedor necesita salida HTTPS a Wikipedia.
 
@@ -627,7 +645,7 @@ para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
 | `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
-| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa y rebaño. Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el job `load`, el cuaderno de `es` y `run_load` ya lo hacen) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
+| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa y rebaño. Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
 
 `what` admite las tres acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los

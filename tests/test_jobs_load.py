@@ -29,13 +29,20 @@ def run(loader, **kwargs):
 
 
 def test_load_runs_every_scope_and_prints_the_summary(fresh_app, scopes, events, capsys):
-    with pytest.raises(RuntimeError, match=r'load: failed scopes: es-md \(polls\)'):
-        run(FakeLoader(), what='polls', scopes='all', verbose=0)
+    # With "all", a scope whose event has no polls article is skipped, not failed
+    results = run(FakeLoader(), what='polls', scopes='all', verbose=0)
     out = capsys.readouterr().out
     assert 'load polls: 2 ámbitos' in out
     assert 'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s' in out
-    assert 'es-md: polls failed (no polls article for 2027-05-23)' in out
+    assert 'es-md: polls skipped (no polls article for 2027-05-23)' in out
     assert 'empezando' not in out
+    assert results['es-md']['status'] == 'skipped' and results['es']['status'] == 'loaded'
+
+
+def test_load_scope_named_explicitly_without_article_fails(fresh_app, scopes, events, capsys):
+    with pytest.raises(RuntimeError, match=r'load: failed scopes: es-md \(polls\)'):
+        run(FakeLoader(), scopes=['es-md'], verbose=0)
+    assert 'es-md: polls failed (no polls article for 2027-05-23)' in capsys.readouterr().out
 
 
 def test_load_returns_the_result_of_each_scope(fresh_app, scopes, events):
@@ -47,7 +54,7 @@ def test_load_header_flags_and_overwrite_line(fresh_app, scopes, events, capsys)
     results = run(FakeLoader(), scopes=['es'], overwrite=True, force=True, dry_run=True, verbose=0)
     out = capsys.readouterr().out
     assert 'load polls: 1 ámbito · overwrite · force · dry run' in out
-    assert 'es: polls checked (5 read, 5 new, 2026-11-29, dry run) in 0 s' in out
+    assert 'es: polls checked (5 read, 5 new, 2026-11-29, overwrite, dry run) in 0 s' in out
     assert results['es']['status'] == 'checked'
     results = run(FakeLoader(), scopes=['es'], overwrite=True, verbose=0)
     assert 'es: polls loaded (5 read, 5 saved, 2026-11-29, overwrite) in 0 s' in capsys.readouterr().out
@@ -64,6 +71,35 @@ def test_load_event_date_parameter_and_scope_without_upcoming_event(fresh_app, s
         run(loader, scopes=['es'], verbose=0)
     assert loader.inits == []
     assert 'es: polls failed (no upcoming event)' in capsys.readouterr().out
+    results = run(FakeLoader(), scopes='all', verbose=0)
+    assert 'es: polls skipped (no upcoming event)' in capsys.readouterr().out
+    assert results['es']['status'] == results['es-md']['status'] == 'skipped'
+
+
+def test_load_event_lookup_error_fails_only_its_scope(fresh_app, scopes, events, capsys, monkeypatch):
+    def next_event(scope):
+        if scope == 'es':
+            raise ConnectionError('db down')
+        return '2026-11-29'
+    monkeypatch.setattr(module, 'next_event_date', next_event)
+    with pytest.raises(RuntimeError, match=r'load: failed scopes: es \(polls\)'):
+        run(FakeLoader(), scopes='all', verbose=0)
+    out = capsys.readouterr().out
+    assert 'es: polls failed (ConnectionError: db down)' in out
+    assert 'es-md: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s' in out
+
+
+def test_load_refuses_years_with_overwrite(fresh_app, scopes, events):
+    loader = FakeLoader()
+    with pytest.raises(ValueError, match='cannot be combined'):
+        run(loader, scopes=['es'], years=['2026'], overwrite=True, verbose=0)
+    assert loader.inits == []
+
+
+def test_load_years_are_passed_as_strings(fresh_app, scopes, events):
+    loader = FakeLoader()
+    run(loader, scopes=['es'], years=[2025, '2026'], verbose=0)
+    assert loader.inits[0][2] == ['2025', '2026']
 
 
 def test_load_unmapped_names_fail_the_scope_and_force_adds_them(fresh_app, scopes, events, capsys):

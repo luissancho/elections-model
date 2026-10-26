@@ -259,3 +259,28 @@ def test_add_catalogue_entries_inserts_without_truncating(monkeypatch):
 
     inserted.clear()
     assert add_catalogue_entries([], []) == {'pollsters': [], 'sponsors': []} and inserted == {}
+
+
+def test_load_polls_refuses_years_with_overwrite_before_anything_runs():
+    loader, computer = FakeLoader(), FakeComputer()
+    with pytest.raises(ValueError, match='"years" cannot be combined with "overwrite"'):
+        load_polls('es', '2030-01-01', overwrite=True, years=['2026'], loader=loader, computer=computer, urls=URLS)
+    assert loader.inits == [] and computer.calls == []
+
+
+def test_load_polls_survives_a_failing_parties_check():
+    def broken(self):
+        raise KeyError('PP')
+
+    class BrokenChecks(FakeLoader):
+        """`parties_checks` (a database query in the real loader) raises after the save."""
+
+        def __call__(self, *args, **kwargs):
+            loader = super().__call__(*args, **kwargs)
+            type(loader).parties_checks = property(broken)
+            return loader
+
+    with pytest.warns(UserWarning) as record:
+        result, loader, computer, *_ = run(BrokenChecks())
+    assert result['status'] == 'loaded' and computer.calls == [(True, True)]
+    assert [str(w.message) for w in record] == ["parties checks failed: KeyError: 'PP'"]

@@ -764,13 +764,16 @@ class WikipediaLoader(Core):
         if data['pollster'] in skip.get('pollsters', []):
             self.pollsters_skipped.append(data['pollster'])
             return {}
+        # Unknown names are recorded only once the row is known to be a poll (dates and a numeric lead), so that a
+        # note or any other row with an unknown first cell neither stops the load nor gets added with `force`
+        missing = {}
         if data['pollster'] in self.pollsters_idmap:
             data['pollster_id'] = self.pollsters_idmap[data['pollster']]
         elif discarded_pollster(data['pollster'], [], self.party_names):
             self.pollsters_skipped.append(data['pollster'])
             return {}
         else:
-            self.pollsters_missing.append(data['pollster'])
+            missing['pollsters'] = data['pollster']
 
         if data['sponsor'] in self.sponsors_colmap:
             data['sponsor'] = self.sponsors_colmap[data['sponsor']]
@@ -780,14 +783,15 @@ class WikipediaLoader(Core):
             if discarded_sponsor(data['sponsor'], skip.get('sponsors', []), self.party_names):
                 self.sponsors_skipped.append(data['sponsor'])
             else:
-                self.sponsors_missing.append(data['sponsor'])
+                missing['sponsors'] = data['sponsor']
 
         data['name'] = data['pollster'] + (' / ' + data['sponsor'] if data['sponsor'] is not None else '')
 
-        if data['pollster_id'] is None:
-            return {}
         if data['sponsor_id'] is None:
             data['sponsor_id'] = 0
+
+        if len(cols) < 3:
+            return {}  # Too short for dates, sample and lead: not a poll
 
         dates = self.parse_dates((array_shift(cols[1].xpath('.//text()')) or '').strip(), year)
         if dates is None:
@@ -802,6 +806,13 @@ class WikipediaLoader(Core):
         lead_col = lead_col if lead_col is not None and lead_col < len(cols) else len(cols) - 1
         lead = array_shift(cols[lead_col].xpath('.//text()'))
         if not is_number(lead):
+            return {}
+
+        if 'pollsters' in missing:
+            self.pollsters_missing.append(missing['pollsters'])
+        if 'sponsors' in missing:
+            self.sponsors_missing.append(missing['sponsors'])
+        if data['pollster_id'] is None:
             return {}
 
         for i, party in parties.items():

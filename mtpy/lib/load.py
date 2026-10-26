@@ -25,6 +25,11 @@ from .quality import load_criteria, quality_from_points
 LOAD_STEPS = ('read', 'names', 'series', 'save', 'weights')
 # Classes of names that must be mapped, in the order of the failure reason
 NAME_CLASSES = ('parties', 'pollsters', 'sponsors')
+# Failure reason of an event without a polls article in `wp-urls.json` (formatted with the event date)
+NO_POLLS_ARTICLE = 'no polls article for {}'
+# Refusal of `years` with `overwrite`: the overwrite deletes the whole cycle and reinserts only the years read
+YEARS_WITH_OVERWRITE = ('load: "years" cannot be combined with "overwrite" '
+                        '(the other years of the cycle would be deleted)')
 
 
 def has_polls_article(scope: str, event_date: str, urls: Optional[dict] = None) -> bool:
@@ -139,7 +144,7 @@ def load_polls(
     force : bool, default False
         Add the unknown pollsters and sponsors to the catalogues (a missing party always fails).
     years : list of str, optional
-        Restrict the polls to these years.
+        Restrict the polls to these years (as ``'2026'``); not allowed together with ``overwrite``.
     save : bool, default True
         Write polls, results and weights into the database; without it, nothing is written (a dry run).
     verbose : int, default 0
@@ -165,7 +170,15 @@ def load_polls(
         ``n_read`` (polls in the article), ``n_saved`` (polls selected), ``overwrite``, ``missing`` and ``skipped``
         (names by class), ``added`` (pollsters and sponsors added, or that `force` would add in a dry run),
         ``seconds`` (per phase and ``total``) and, when failed, ``reason``.
+
+    Raises
+    ------
+    ValueError
+        If ``years`` and ``overwrite`` are both given: the overwrite would delete the other years of the cycle.
     """
+    if years and overwrite:
+        raise ValueError(YEARS_WITH_OVERWRITE)
+
     loader = WikipediaLoader if loader is None else loader
     computer = Computer if computer is None else computer
     catalogues = add_catalogue_entries if catalogues is None else catalogues
@@ -188,7 +201,7 @@ def load_polls(
             report(text, level)
 
     if not has_polls_article(scope, event_date, urls):
-        return finish('failed', 'no polls article for {}'.format(event_date))
+        return finish('failed', NO_POLLS_ARTICLE.format(event_date))
 
     # The loader reads the article and the catalogues of names on construction and in `read_data`
     def read():
@@ -247,7 +260,13 @@ def load_polls(
         if save:
             wiki.save_polls(overwrite)
             wiki.save_results(overwrite)
-            say(wiki.parties_checks.to_string(), 2)
+            # The checks query the database: a failure there must not fail a save already done nor skip the weights
+            try:
+                checks = wiki.parties_checks.to_string()
+            except Exception as e:
+                warnings.warn('parties checks failed: {}: {}'.format(type(e).__name__, e))
+            else:
+                say(checks, 2)
 
     _phase('save', select_and_save, seconds, progress)
 

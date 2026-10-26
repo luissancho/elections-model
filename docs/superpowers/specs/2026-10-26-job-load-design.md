@@ -12,6 +12,10 @@ Pendiente de Luis: la primera carga real (`python job.py load '{"scopes":["es"]}
 Desviaciones de la construcción: `skip.parties` se comprueba después de los alias (así `PP+Cs` sigue mapeado a PP
 en `es-pv` y se silencia donde no hay alias), y `load/run_load.py` no se ha tocado.
 
+Enmiendas de la revisión final (2026-10-26): `years` con `overwrite` se rechaza; con `"all"`, un ámbito sin
+próximo evento o sin artículo de sondeos termina `skipped` (no `failed`); un fallo de `parties_checks` es un aviso;
+una casa o un medio desconocidos sólo se anotan como sin mapear si la fila es un sondeo (fechas y `Lead` numérico).
+
 ## Intención
 
 Convertir el cuaderno `notebooks/data-load/PollsLoadWikipedia.ipynb` en un job de `mtpy/jobs`, al estilo de
@@ -104,10 +108,10 @@ python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
 | --- | --- | --- |
 | `what` | `["polls"]` | Acciones; hoy sólo `polls`. Una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`publish.resolve_scopes`) |
-| `event_date` | próximo evento de cada ámbito | `publish.next_event_date(scope)`; también una fecha ISO para cargar un ciclo pasado. Un ámbito sin próximo evento, o cuyo evento no tiene `polls` en `wp-urls.json`, termina `failed` sin leer nada |
+| `event_date` | próximo evento de cada ámbito | `publish.next_event_date(scope)`; también una fecha ISO para cargar un ciclo pasado. Un ámbito sin próximo evento, o cuyo evento no tiene `polls` en `wp-urls.json`, no lee nada y termina `skipped` si se pidió `"all"` (como los ámbitos sin sondeos suficientes de `publish forecast`) o `failed` si se nombró en `scopes` |
 | `overwrite` | `false` | `false`: sólo los sondeos que no están en la base (`select_series`); `true`: borra el ciclo y lo reinserta entero |
 | `force` | `false` | Dar de alta las casas y los medios nuevos y seguir, en vez de parar el ámbito |
-| `years` | `null` | Lista de años que se pasa tal cual al loader (como en el cuaderno) |
+| `years` | `null` | Lista de años (`"2026"`; los números se convierten) que se pasa al loader (como en el cuaderno). Con `overwrite` falla con `ValueError` antes de empezar: el borrado del ciclo se llevaría los demás años |
 | `dry_run` | `false` | Leer, resolver nombres e informar sin escribir nada (ni altas, ni sondeos, ni pesos) |
 | `verbose` | `1` | Niveles abajo |
 | `loader`, `computer` | reales | Fábricas para los tests: `loader(scope, event_date, years=None, exclude=None, verbose=0, path=None)` y `Computer(scope=..., event_dates=..., verbose=..., path=...)` (ésta ya la usa el loader; la del job sirve para sustituir `compute_series`) |
@@ -144,7 +148,8 @@ sus segundos:
 5. `weights` (sólo con `save` y si se guardó algo o hay `overwrite`): `compute_series(save=True,
    overwrite=True)`, los pesos del evento, como el cuaderno.
 
-`parties_checks` (la tabla del cuaderno) se imprime al nivel 2, después de guardar.
+`parties_checks` (la tabla del cuaderno) se imprime al nivel 2, después de guardar; si su consulta falla, es un
+aviso (`parties checks failed: …`) y los pesos se calculan igual.
 
 Resultado: `{'status': 'loaded' | 'checked' | 'failed', 'action': 'polls', 'event_date', 'n_read',
 'n_saved', 'overwrite', 'missing': {'parties': [...], 'pollsters': [...], 'sponsors': [...]}, 'added':
@@ -222,12 +227,15 @@ Líneas de resumen:
 es: polls loaded (520 read, 4 saved, 2026-11-29) in 38 s
 es: polls loaded (520 read, 520 saved, 2026-11-29, overwrite) in 61 s · 2 pollsters added, 1 sponsor added · 3 avisos
 es: polls checked (520 read, 4 new, 2026-11-29, dry run) in 12 s
+es: polls checked (520 read, 520 new, 2026-11-29, overwrite, dry run) in 12 s
 es: polls failed (unmapped pollsters: Sumar; unmapped sponsors: Artículo 14)
 es-md: polls failed (no polls article for 2027-05-23)
+es-an: polls skipped (no polls article for 2030-06-16)
+es-ex: polls skipped (no upcoming event)
 ```
 
 Los ámbitos están aislados y el job termina con `RuntimeError: load: failed scopes: es (polls)` si alguno
-falló, después del resumen y del `alert`, como `compute`.
+falló, después del resumen y del `alert`, como `compute`; los `skipped` no cuentan.
 
 ### 6. Relación con `compute` y con `run_load.py`
 
