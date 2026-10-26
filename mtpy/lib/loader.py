@@ -804,14 +804,14 @@ class WikipediaLoader(Core):
                 'seats_max': None
             }
 
-            if party in self.maps.get('skip', {}).get('parties', []):
-                self.parties_skipped.append(party)
-                continue
-
             if result['party'] in self.parties_colmap:
                 result['party'] = self.parties_colmap[result['party']]
             if result['party'] in self.parties_idmap:
                 result['party_id'] = self.parties_idmap[result['party']]
+            elif result['party'] in self.maps.get('skip', {}).get('parties', []):
+                # Unresolved by any alias (global or scope) and listed under `skip.parties`: left out silently
+                self.parties_skipped.append(result['party'])
+                continue
             elif result['party'] is not None:
                 self.parties_missing.append(result['party'])
 

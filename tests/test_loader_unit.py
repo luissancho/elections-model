@@ -109,6 +109,17 @@ def test_read_cols_ignores_the_party_columns_of_skip_parties():
     assert [r for r in row['results'] if r['party_id'] is None]  # the other unmapped columns stay without id
 
 
+def test_read_cols_maps_a_skipped_key_that_the_scope_aliases():
+    maps = {'parties': {}, 'pollsters': {}, 'sponsors': {}, 'scopes': {'es-md': {'parties': {'Podemos_Madrid': ['Más_Madrid']}}},
+            'skip': {'parties': ['Más_Madrid']}}
+    loader = bare_loader('es-md', maps=maps, party_ids={'Podemos_Madrid': 7})
+    table = WikipediaLoader.find_poll_table(load('2023_Madrilenian_regional_election'))
+    parties, lead = WikipediaLoader.read_header(table)
+    row = loader.read_cols(first_poll_cols(table), parties, lead, '2023')
+    assert 7 in [r['party_id'] for r in row['results']]
+    assert 'Más_Madrid' not in loader.parties_skipped
+
+
 def test_next_madrid_reads_the_last_party_column():
     parties, lead = WikipediaLoader.read_header(WikipediaLoader.find_poll_table(load('Next_Madrilenian_regional_election')))
     assert parties[11] == 'Se_Acabó_La_Fiesta' and lead == 12

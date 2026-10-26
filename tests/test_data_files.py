@@ -186,4 +186,6 @@ def test_wp_maps_skip_parties_is_a_clean_list():
     skip = maps['skip']['parties']
     assert isinstance(skip, list) and skip == sorted(skip) and len(skip) == len(set(skip))
     aliases = {alias for aliases in maps['parties'].values() for alias in aliases}
+    # Only global aliases: a global alias always resolves, so a skip entry would be dead. A scope may alias a key
+    # that is silenced elsewhere (e.g. 'PP+Cs' maps to PP in es-pv).
     assert not set(skip) & aliases and not set(skip) & set(maps['parties'])
