@@ -11,15 +11,17 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
    "Comprobaciones de la infraestructura" (`nginx-check.sh`, `smoke.sh`, `check-api.sh`).
 3. "Despliegue en ECS": qué debe existir en AWS, marcadores de las plantillas de `deploy/ecs/` y procedimiento.
 4. "Comprobar S3" y "Si `check_s3` falla".
-5. "Calcular las series y los ratings": el job `compute` (qué hace cada acción y cuándo lanzarla, ejemplos,
+5. "Cargar los sondeos": el job `load` (qué hace y cuándo lanzarla, nombres descartados y `force`, ejemplos,
+   parámetros, estados y resumen). Es el primer paso de la cadena `load`, `compute`, `publish`.
+6. "Calcular las series y los ratings": el job `compute` (qué hace cada acción y cuándo lanzarla, ejemplos,
    parámetros, estados y resumen).
-6. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
-7. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
+7. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
+8. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
    estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, estudios (el del voto CERA y su
    registro), publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el
    manifest, retirada de un run y "Guarda LOREG".
-8. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
-9. "Duraciones medidas": publicación, carga local, arranque de un worker y memoria del job.
+9. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
+10. "Duraciones medidas": publicación, carga de sondeos, carga local, arranque de un worker y memoria del job.
 
 ## Fichero de configuración
 
@@ -1349,6 +1351,12 @@ Primer paquete local de `es` (2026-10-08, contra la RDS, `n_sim=1000`): 121 s en
 42,5; nowcast 21,0; forecast 21,5; exportación 0,8). Ensayo con `n_sim=20`: 86 s. La duración de
 `scopes: "all"` contra la RDS está pendiente de medir. El análisis de casas de `es` (`what: ["analysis"]`)
 tardó 44 s en el test de integración contra la RDS (2026-10-10).
+
+Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
+tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los
+18 ámbitos tarda unos 30 s (un artículo por ámbito, cuatro ámbitos `skipped` sin artículo). La primera carga real
+(`save`, pesos incluidos) la mide Luis; la recarga entera del ciclo de `es` con `overwrite` desde el cuaderno,
+la misma secuencia, está en el orden del minuto.
 
 Ensayo de carga local (2026-10-13), `bash deploy/load-test.sh http://127.0.0.1:8001 10 5` contra
 `S3_BUCKET= DB_HOST= uvicorn api:api --port 8001` (un proceso, sin nginx ni caché), con `ab`: API 30 622
