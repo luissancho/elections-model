@@ -136,3 +136,40 @@ def test_table_drawing_lines_up_the_range_bars_and_draws_the_band_the_mark_and_t
 def test_file_slug_drops_accents_and_joins_words_with_dashes():
     assert run_js('["Sigma Dos / El Mundo", "40dB", "Céleste-Tel", "  CIS  "].map(s.fileSlug)') == [
         'sigma-dos-el-mundo', '40db', 'celeste-tel', 'cis']
+
+
+def test_image_layout_stacks_several_charts_with_a_gap():
+    """La imagen de la calculadora de mayorías (Luis, 2026-10-26) lleva dos gráficos, la barra y el histograma,
+    uno bajo otro con el mismo hueco que separa los textos; `chart` sigue siendo el primero."""
+    layout = run_js('s.imageLayout({title: "T", subtitle: "S", sign: "F", charts: [{height: 120}, {height: 300}]})')
+    assert layout['charts'] == [{'x': 28, 'y': 88, 'width': 744, 'height': 120},
+                                {'x': 28, 'y': 88 + 120 + 12, 'width': 744, 'height': 300}]
+    assert layout['chart'] == layout['charts'][0]
+    assert layout['height'] == 88 + 120 + 12 + 300 + 8 + 16 + 20
+    single = run_js('s.imageLayout({chartHeight: 330})')
+    assert single['charts'] == [single['chart']] == [{'x': 28, 'y': 0, 'width': 744, 'height': 330}]
+
+
+def test_image_layout_draws_a_note_chip_under_the_subtitle():
+    """El texto de la calculadora («2 partidos · 200 escaños · P(mayoría absoluta): 98,8 %») va como en la página:
+    un chip de fondo suave bajo el subtítulo, verde cuando la mayoría es probable; su anchura la mide quien llama."""
+    layout = run_js('s.imageLayout({title: "T", subtitle: "S", chartHeight: 120, '
+                    'note: {text: "2 partidos · 200 escaños", width: 180, ok: false}})')
+    assert layout['note'] == {'x': 28, 'y': 88, 'width': 180 + 22, 'height': 30, 'r': 10, 'text': '2 partidos · 200 escaños',
+                              'font': "600 13px 'DM Sans', system-ui, sans-serif", 'color': '#1a1c22', 'background': '#eceef2'}
+    assert layout['chart']['y'] == 88 + 30 + 12 and layout['height'] == 130 + 120
+    ok = run_js('s.imageLayout({chartHeight: 120, note: {text: "ok", width: 20, ok: true}})')
+    assert ok['note']['color'] == '#15803d' and ok['note']['background'] == '#ecfdf3' and ok['note']['y'] == 28
+    assert run_js('s.imageLayout({}).note') is None
+
+
+def test_image_layout_puts_a_bottom_panel_under_the_charts_centred():
+    """La tabla de «Reparto de escaños» (Luis, 2026-10-26) va bajo la barra, centrada; si es más ancha que la imagen,
+    la imagen se ensancha hasta darle sitio."""
+    layout = run_js('s.imageLayout({title: "T", sign: "F", chartHeight: 120, bottom: {width: 600, height: 390, items: []}})')
+    assert layout['chart'] == {'x': 28, 'y': 68, 'width': 744, 'height': 120}
+    assert layout['bottom'] == {'x': 100, 'y': 68 + 120 + 12, 'width': 600, 'height': 390, 'items': []}
+    assert layout['height'] == 200 + 390 + 8 + 16 + 20
+    wide = run_js('s.imageLayout({chartHeight: 120, bottom: {width: 900, height: 60, items: []}})')
+    assert wide['width'] == 956 and wide['chart']['width'] == 900 and wide['bottom']['x'] == 28
+    assert run_js('s.imageLayout({}).bottom') is None

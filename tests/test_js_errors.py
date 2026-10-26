@@ -177,3 +177,19 @@ def test_weeks_table_cells_and_order():
     assert table['rows'][2]['cells']['3'] == {'n': 2, 'mean': 5.0}
     assert table['rows'][0]['cells'] == {'1': {'n': 1, 'mean': 4.0}, '2': {'n': 1, 'mean': 2.0}}
     assert run_js('e.weeksTable([], "error_avg")') == {'weeks': [], 'rows': []}
+
+
+def test_years_text_names_the_bounds_chosen():
+    """Los años elegidos en los filtros de una diana, para el subtítulo de su imagen (Luis, 2026-10-26): nada con
+    los dos extremos abiertos, «desde»/«hasta» con uno y el rango con los dos, ordenados si vienen al revés."""
+    assert run_js('[e.yearsText(null, null), e.yearsText(2019, null), e.yearsText(null, 2023), e.yearsText(2019, 2023), '
+                  'e.yearsText(2023, 2019)]') == [None, 'desde 2019', 'hasta 2023', '2019–2023', '2019–2023']
+
+
+def test_image_texts_add_the_filters_and_the_count_to_the_subtitle_and_the_file():
+    """Los textos de la imagen de una diana: el subtítulo del botón, los filtros elegidos (los nulos no cuentan) y el
+    recuento, separados por « · »; el fichero lleva los filtros como slug."""
+    out = run_js('e.imageTexts({subtitle: "Diana de errores", file: "demoscopio-diana-gad3.png"}, '
+                 '["España", null, e.yearsText(2019, 2023)], "4 elecciones")')
+    assert out == {'subtitle': 'Diana de errores · España · 2019–2023 · 4 elecciones', 'file': 'demoscopio-diana-gad3-espana-2019-2023.png'}
+    assert run_js('e.imageTexts({subtitle: "S", file: "f.png"}, [null, null], null)') == {'subtitle': 'S', 'file': 'f.png'}

@@ -68,3 +68,15 @@ def test_series_legend_is_hidden_selectable_or_read_only(legend, show, selected_
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
     option = json.loads(out.stdout)
     assert option['show'] is show and option.get('selectedMode') == selected_mode and option['selected'] == {'A': True}
+
+
+def test_histogram_option_is_what_the_renderer_draws():
+    """`histogramOption` da la opción sin montarla: la imagen descargable de la calculadora de mayorías la dibuja
+    fuera de pantalla (Luis, 2026-10-26)."""
+    script = STUB + ('const h = await import("{}"); const values = [170, 171, 171, 175]; '
+                     'const opts = {{median: 171, lo: 170, hi: 175, width: 1, caption: [{{label: "Simulaciones", value: "4"}}]}}; '
+                     'h.renderHistogram({{}}, values, opts); '
+                     'console.log(JSON.stringify([h.histogramOption(values, opts), last]));').format(HISTOGRAM_JS)
+    out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
+    option, drawn = json.loads(out.stdout)
+    assert option == drawn and option['series'][0]['data'][:2] == [25.0, 50.0] and len(option['graphic']) == 1

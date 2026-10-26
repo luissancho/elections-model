@@ -1,5 +1,7 @@
 // Error history of the polls (the `poll-errors` rows embedded in /elecciones): filters, means, the table by weeks
-// before the election and the URL hash of the filters. Pure logic, no DOM and no ECharts, so node can test it.
+// before the election, the URL hash of the filters and the texts of the filters in the image of a bullseye. Pure
+// logic, no DOM and no ECharts, so node can test it.
+import {fileSlug} from './format.js';
 
 /** Measures the histogram and the weeks table can show; the first one is the default. */
 export const MEASURES = ['error_blocks_abs', 'error_avg'];
@@ -335,4 +337,44 @@ export function errorsHash({scope, event, pollster, from, to, measure}) {
     add(MEASURE_KEY, measure);
   }
   return parts.length ? `#${parts.join('&')}` : '';
+}
+
+/**
+ * The years chosen in the filters of a bullseye, for the subtitle of its image: nothing with both bounds open,
+ * «desde 2019» or «hasta 2023» with one, «2019–2023» with both (in order, whichever way they came).
+ *
+ * @param {number|null} from first year, or null for open
+ * @param {number|null} to last year, or null for open
+ * @returns {string|null} the text
+ */
+export function yearsText(from, to) {
+  if (from === null && to === null) {
+    return null;
+  }
+  if (from === null) {
+    return `hasta ${to}`;
+  }
+  if (to === null) {
+    return `desde ${from}`;
+  }
+  const [low, high] = from <= to ? [from, to] : [to, from];
+  return `${low}–${high}`;
+}
+
+/**
+ * Texts of the image of a bullseye drawn with filters (`share.js`): the subtitle of the button followed by the
+ * filters chosen and by the count of what passed them, separated by « · »; the file name gets the filters as a
+ * slug. A null or empty part is a filter left open.
+ *
+ * @param {{subtitle: string, file: string}} dataset the texts of the button
+ * @param {(string|null)[]} parts the filters chosen, as the reader sees them («España», «desde 2019»)
+ * @param {string|null} count what passed the filters («4 elecciones»)
+ * @returns {{subtitle: string, file: string}} the texts of the image
+ */
+export function imageTexts({subtitle, file}, parts, count = null) {
+  const chosen = parts.filter(Boolean);
+  return {
+    subtitle: [subtitle, ...chosen, count].filter(Boolean).join(' · '),
+    file: chosen.length ? file.replace(/\.png$/, `-${fileSlug(chosen.join(' '))}.png`) : file,
+  };
 }

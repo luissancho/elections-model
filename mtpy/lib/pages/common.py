@@ -145,7 +145,7 @@ def environment() -> Environment:
     filters ``num``, ``int``, ``pct``, ``prob``, ``range``, ``date``, ``datetime``, ``ink``, ``rng``
     (``ink_color``), ``bar`` (``bar_width``), ``sides`` (``bar_sides``) and ``shade`` (``shade``: the bars and
     shades of the cells of the ranking), ``shade_scale`` (``shade_scale``: the green of the sensitivity grids of the
-    studies) and the globals ``method_href`` (``metodo.method_href``: link to a
+    studies), ``slug`` (``slugs.slugify``: a name as a piece of a file name) and the globals ``method_href`` (``metodo.method_href``: link to a
     subpage of the method, or to the method itself while the subpage has no text) and ``pollster_href``
     (``slugs.pollster_href``: link to the profile of a pollster). Without a booted App the
     environment is built but not cached.
@@ -189,7 +189,8 @@ def environment() -> Environment:
         })
         # imported here: ``metodo`` and ``slugs`` import this module
         from .metodo import method_href
-        from .slugs import pollster_href
+        from .slugs import pollster_href, slugify
+        env.filters['slug'] = slugify
         env.globals['method_href'] = method_href
         env.globals['pollster_href'] = pollster_href
 

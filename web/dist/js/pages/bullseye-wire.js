@@ -1,11 +1,17 @@
 // The bullseye of the last polls by election with its scope and years filters, shared by the pollster profile and
 // the model in the backtest page: the chart (`#bullseye-chart`), the filters (`#bullseye-filter`) and the table
-// (`#bullseye-table`), redrawn from the rows that pass them. No hash: the filters are the only state.
+// (`#bullseye-table`), redrawn from the rows that pass them. No hash: the filters are the only state. The download
+// button of the card (`#bullseye-download`, the profile) draws the bullseye as filtered, the filters and the count
+// in the subtitle and the file name.
 import {fmtDate, fmtNum, shadeAround} from '../format.js';
-import {fadeByDate, filterRows} from '../errors.js';
+import {fadeByDate, filterRows, imageTexts, yearsText} from '../errors.js';
 import {THEME} from '../charts/base.js';
-import {renderBullseye} from '../charts/bullseye.js';
-import {tryDraw} from './common.js';
+import {bullseyeOption, renderBullseye} from '../charts/bullseye.js';
+import {IMAGE, wireDownload} from '../share.js';
+import {showError, tryDraw} from './common.js';
+
+/** Height of the chart in the image of a bullseye: as wide as the chart box, so the rings stay round. */
+export const BULLSEYE_IMAGE_HEIGHT = IMAGE.width - 2 * IMAGE.pad;
 
 // The bullseye and the rating path of a profile: general elections in the accent, regional ones in a contrasting
 // tone; a point of the bullseye fades with the age of its election down to this opacity.
@@ -60,8 +66,20 @@ function fillBullseyeTable(table, rows) {
 }
 
 /**
+ * Label of the option chosen in `select`, or null when its value is empty (the open «Todos»/«Todas»).
+ *
+ * @param {HTMLSelectElement|undefined} select the select
+ * @returns {string|null} the label
+ */
+export function chosenLabel(select) {
+  const option = select && select.selectedOptions && select.selectedOptions[0];
+  return option && option.value !== '' ? option.textContent.trim() : null;
+}
+
+/**
  * Bullseye with its filters (a pollster profile, the model in the backtest page): draw it and its table from the rows that pass the chosen scope and
- * years; the form only works with JavaScript, so the server renders it hidden and this shows it.
+ * years; the form only works with JavaScript, so the server renders it hidden and this shows it. The download
+ * button, when the card has one, exports the bullseye as filtered.
  *
  * @param {object[]} bullseye the bullseye rows (`scope`, `year` and the block errors)
  * @param {string[]} blocks the two blocks of the axes
@@ -74,6 +92,7 @@ export function wireBullseye(bullseye, blocks) {
   const form = document.getElementById('bullseye-filter');
   const table = document.getElementById('bullseye-table');
   const count = document.getElementById('bullseye-count');
+  let current = {rows: bullseye, scope: null, from: null, to: null};  // what is drawn, what the button exports
   // The fading is fixed over every election of the house, so a filter does not change the tone of a point.
   const alphas = new Map(fadeByDate(bullseye, {min: OLDEST_ALPHA}).map((alpha, i) => [bullseye[i], alpha]));
   const options = {
@@ -101,13 +120,19 @@ export function wireBullseye(bullseye, blocks) {
     const last = Number(hasta.options[hasta.options.length - 1]?.value);
     form.addEventListener('change', () => {
       const {ambito} = form.elements;
-      draw(filterRows(bullseye, {
+      const filters = {
         scope: ambito.value || null,
         from: Number(desde.value) === first ? null : Number(desde.value),
         to: Number(hasta.value) === last ? null : Number(hasta.value),
-      }));
+      };
+      current = {rows: filterRows(bullseye, filters), scope: chosenLabel(ambito), from: filters.from, to: filters.to};
+      draw(current.rows);
     });
     form.hidden = false;
   }
   draw(bullseye);
+  wireDownload(document.getElementById('bullseye-download'), () => bullseyeOption(current.rows, options), showError, {
+    chartHeight: BULLSEYE_IMAGE_HEIGHT,
+    texts: (dataset) => imageTexts(dataset, [current.scope, yearsText(current.from, current.to)], count ? count.textContent : null),
+  });
 }

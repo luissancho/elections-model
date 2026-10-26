@@ -21,10 +21,10 @@ function binIndex(starts, width, value) {
 }
 
 /**
- * Render the share of simulations per seat bin (or the raw count of values, with `share: false`) as bars, with a solid mark line at the median and a dashed
- * one at the majority (only when the majority lies within the bins).
+ * ECharts option of the share of simulations per seat bin (or the raw count of values, with `share: false`) as
+ * bars, with a solid mark line at the median and a dashed one at the majority (only when the majority lies within
+ * the bins).
  *
- * @param {HTMLElement} el chart container
  * @param {number[]} values seats per simulation
  * @param {object} opts `color` (bars, `THEME.barColor` by default), `majority`, `median`, `lo`, `hi` (seats, tooltip subtitle),
  *   `width` (bin width, from `binWidth` when null), `formatter` (seats → text), `unit` (of the default bin
@@ -34,9 +34,9 @@ function binIndex(starts, width, value) {
  *   when `share` is false), `bounds` (thin solid lines at the bins of `lo` and `hi`, and a thicker median
  *   line), `markLabels` (`false` draws every mark line without a label) and `caption` (`{label, value}` lines
  *   written at the top left above the bars, the value in bold, as the ridges write theirs)
- * @returns {object} the ECharts instance
+ * @returns {object} the option
  */
-export function renderHistogram(el, values, {
+export function histogramOption(values, {
   color = THEME.barColor, majority = null, median = null, lo = null, hi = null, width = null, formatter = fmtInt,
   unit = 'escaños', label = null, markLabel = null, share = true, countLabel = fmtInt, bounds = false,
   markLabels = true, caption = null,
@@ -151,5 +151,17 @@ export function renderHistogram(el, values, {
       markLine: {silent: true, symbol: 'none', data: marks},
     }],
   };
-  return mountChart(el, option);
+  return option;
+}
+
+/**
+ * Render the histogram of `values` in `el` (see `histogramOption`).
+ *
+ * @param {HTMLElement} el chart container
+ * @param {number[]} values seats per simulation
+ * @param {object} opts see `histogramOption`
+ * @returns {object} the ECharts instance
+ */
+export function renderHistogram(el, values, opts = {}) {
+  return mountChart(el, histogramOption(values, opts));
 }

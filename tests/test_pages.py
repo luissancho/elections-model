@@ -659,7 +659,7 @@ def test_escanos_table_histograms_blocks_and_pills(api):
     assert 'name="sview" value="partidos" checked' in flat and 'name="sview" value="bloques"' in flat
     assert '<div id="seats-blocks" hidden>' in page and '<div id="seats-parties">' in page
     assert 'id="blocks-chart"' not in page and 'id="blocks"' not in page and 'id="seats"' in page
-    assert '<fieldset class="pills lg" id="coalition-parties">' in page
+    assert '<fieldset class="pills" id="coalition-parties">' in page
     assert 'class="pill"' in page and 'name="coalition"' in page
 
 
@@ -3009,6 +3009,57 @@ def test_eleccion_series_card_offers_a_download_button(events_site):
                      'sign': 'demoscopio.es · @luis_sancho', 'file': 'demoscopio-promedio-es-2023-07-23.png'}
 
 
+def test_escanos_seats_card_offers_a_download_button_hidden_without_js(api):
+    """«Reparto de escaños» se descarga como PNG firmado (Luis, 2026-10-26): la barra con la tabla de la vista
+    debajo, sin las curvas; el botón va en la cabecera con los mismos textos que el hemiciclo."""
+    page = html(call(api, '/es/escanos')[2]).replace('\n', ' ')
+    attrs = download_attrs(page, 'seats-download', 'Reparto de escaños')
+    assert attrs == {'title': 'Elecciones generales · 29 nov 2026', 'subtitle': 'Reparto de escaños · Pronóstico para el 29 nov 2026',
+                     'sign': 'demoscopio.es · @luis_sancho', 'file': 'demoscopio-escanos-es-2026-10-08.png'}
+    nowcast = html(call(api, '/es/escanos', query='mode=nowcast')[2]).replace('\n', ' ')
+    assert re.search(r'data-subtitle="Reparto de escaños · Estimación a \d+ \w+ 2026"', nowcast)
+
+
+def test_escanos_majority_calculator_offers_a_download_button_named_after_the_parties_in_js(api):
+    """La calculadora de mayorías se descarga completa (Luis, 2026-10-26): el chip, la barra y el histograma; el
+    servidor deja el subtítulo sin los partidos, que el JS intercala con los marcados, y les añade al fichero su
+    nombre. Los selectores de los partidos van sin el borde de la leyenda (la clase `lg`)."""
+    page = html(call(api, '/es/escanos')[2]).replace('\n', ' ')
+    attrs = download_attrs(page, 'coalition-download', 'Calculadora de mayorías')
+    assert attrs == {'title': 'Elecciones generales · 29 nov 2026', 'subtitle': 'Calculadora de mayorías · Pronóstico para el 29 nov 2026',
+                     'sign': 'demoscopio.es · @luis_sancho', 'file': 'demoscopio-mayorias-es-2026-10-08.png'}
+    assert '<fieldset class="pills" id="coalition-parties">' in page and 'pills lg' not in page
+
+
+def test_casa_profile_bullseye_offers_a_download_button_with_the_filters_in_js(houses):
+    """La diana del perfil se descarga como PNG firmado (Luis, 2026-10-26): el título es la encuestadora y el fichero
+    lleva su slug; el JS añade al subtítulo y al fichero el ámbito y los años elegidos y el recuento de elecciones.
+    Una casa sin diana no tiene botón."""
+    page = html(call(houses, '/casas/gad3')[2]).replace('\n', ' ')
+    attrs = download_attrs(page, 'bullseye-download', 'Diana de errores')
+    assert attrs == {'title': 'GAD3', 'subtitle': 'Diana de errores', 'sign': 'demoscopio.es · @luis_sancho',
+                     'file': 'demoscopio-diana-gad3.png'}
+    assert 'bullseye-download' not in html(call(houses, '/casas/nueva')[2])
+    assert pages.environment().filters['slug'] is pages.slugify
+
+
+def test_casa_profile_without_analysis_has_no_bullseye_download(houses_without_analysis):
+    assert 'bullseye-download' not in html(call(houses_without_analysis, '/casas/gad3')[2])
+
+
+def test_elecciones_bullseye_offers_a_download_button_with_the_filters_in_js(history_site):
+    """La diana del histórico de errores se descarga igual (Luis, 2026-10-26): el JS añade al subtítulo y al fichero
+    los filtros elegidos (ámbito, elección, encuestadora, años) y el recuento de sondeos y elecciones."""
+    page = html(call(history_site, '/elecciones')[2]).replace('\n', ' ')
+    attrs = download_attrs(page, 'errors-download', 'Hacia dónde se equivocaron')
+    assert attrs == {'title': 'Histórico de errores', 'subtitle': 'Hacia dónde se equivocaron', 'sign': 'demoscopio.es · @luis_sancho',
+                     'file': 'demoscopio-diana-errores.png'}
+
+
+def test_elecciones_without_analysis_has_no_bullseye_download(events_site):
+    assert 'errors-download' not in html(call(events_site, '/elecciones')[2])
+
+
 def test_tables_show_probabilities_with_one_decimal_and_the_home_card_without(api):
     page = html(call(api, '/es/escanos')[2])
     table = page[page.index('id="parties-table"'):page.index('</table>', page.index('id="parties-table"'))]
@@ -3314,7 +3365,7 @@ def test_escanos_table_draws_the_seat_range_and_the_ridge_is_compact(api):
     page = html(call(api, '/es/escanos')[2])
     table = re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
     assert 'class="rng"' in table and '<u style="left: 50.3%"></u>' in table and '120–150' in table
-    assert '<fieldset class="pills lg" id="coalition-parties">' in page
+    assert '<fieldset class="pills" id="coalition-parties">' in page
     assert '<p class="chip" id="coalition-result">' in page
 
 
