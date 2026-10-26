@@ -148,7 +148,7 @@
           </fieldset>
         </div>
         <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
-        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos del ciclo con su banda, los sondeos y el resultado oficial"></div>
+        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos del ciclo, los sondeos y el resultado oficial"></div>
         <noscript><p class="muted">La curva necesita JavaScript; la serie está en el CSV de Descargas.</p></noscript>
         {% else %}
         <p class="notice">El promedio de este ciclo no está publicado todavía: hace falta volver a publicar la elección con un backtest que guarde la serie.</p>
@@ -156,8 +156,8 @@
         {% call m.how() %}
         <p>
           Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
-          promedio ponderado del modelo y la banda, su intervalo de confianza. El selector Sondeos / Promedio / Ambos
-          deja a la vista sólo los puntos, sólo la línea con su banda, o las dos cosas. El punto marcado del final,
+          promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos deja a la vista sólo los puntos,
+          sólo la línea, o las dos cosas. El punto marcado del final,
           en la fecha de la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se
           ajusta a la ventana y a los partidos visibles.
         </p>
@@ -167,8 +167,8 @@
           vista Bloques, cada bloque suma sus partidos.
         </p>
         <p>
-          La banda dice dónde estaba el consenso de las encuestadoras, no la incertidumbre del resultado; y la línea
-          no recoge lo que cambió en la última semana.
+          La línea dice dónde estaba el consenso de las encuestadoras, no la incertidumbre del resultado; y no recoge
+          lo que cambió en la última semana.
         </p>
         {% endcall %}
       {{ m.card_end() }}

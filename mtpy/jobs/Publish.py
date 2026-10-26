@@ -143,9 +143,10 @@ class Publish(ScopeReporter, Job):
         fs : FileSystem, optional
             File system to write to. Defaults to ``self.app.fs``.
         today : str, optional
-            Date (``YYYY-MM-DD``) taken as today by the LOREG guard and the backfill range
-            check; for tests and rehearsals only (unlike ``force``, it leaves no mark in
-            ``meta.freeze``).
+            Date (``YYYY-MM-DD``) taken as today by the LOREG guard, the backfill range check and
+            the anchor of the average (the run is read that day, never later: ``meta.as_of``);
+            for tests and rehearsals only (unlike ``force``, it leaves no mark in ``meta.freeze``,
+            but a past ``today`` publishes a run read in the past).
         backfill : dict, optional
             Range ``{'from': 'YYYY-MM-DD', 'to': 'YYYY-MM-DD'}`` (``to`` defaults to ``from``
             and must be before today) of retrospective ``forecast`` runs, one per day; see
@@ -527,7 +528,7 @@ class Publish(ScopeReporter, Job):
                 replaced = True
             with self._collect_warnings(notes, note):
                 out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, progress=progress,
-                                               **params)
+                                               today=today, **params)
         except publish.PublishRefused as e:
             return done({'status': 'refused', 'reason': str(e), 'warnings': notes})
         except publish.NothingToPublish as e:

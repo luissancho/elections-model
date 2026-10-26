@@ -1,7 +1,8 @@
-// Poll average over time: fitted series with its band, published polls, the projection to the event and, in the
-// detail of a past election, the official result marked at the election date. The vertical axis follows what is
-// on screen (the window and the parties the legend shows) instead of starting at zero, so the curves keep their
-// shape (Luis, 2026-10-19).
+// Poll average over time: fitted series, published polls, the dashed projection to the event with the 95 % range of
+// each party at the election drawn as a bar (the band of the average and the fan of the projection are no longer
+// drawn: seen together they read as one band with a step, Luis 2026-10-26) and, in the detail of a past election,
+// the official result marked at the election date. The vertical axis follows what is on screen (the window and the
+// parties the legend shows) instead of starting at zero, so the curves keep their shape (Luis, 2026-10-19).
 import {axisLabelStyle, baseOption, mountChart, THEME, timeAxisLabel, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtPct} from '../format.js';
@@ -11,8 +12,13 @@ import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
 export {meanTooltipLine, pollTooltipLines, resultTooltipLine};
 
 const DAY_MS = 24 * 3600 * 1000;
-const BAND_OPACITY = 0.15;
-const PROJECTION_OPACITY = 0.1;
+const BAND_OPACITY = 0.15;  // `bandSeries`, still drawn by the live example of the method (`weights.js`)
+const RANGE_OPACITY = 0.45;  // the range bar at the election; full opacity when hovered
+const RANGE_BLUR_OPACITY = 0.15;  // the other bars while one is hovered
+// Blur states of the lines and points: the hovered bar blurs every other series of the chart, and these keep them as
+// they are, so only the other bars fade.
+const KEEP_LINE_ON_BLUR = {blur: {lineStyle: {opacity: 1}}};
+const KEEP_POINTS_ON_BLUR = (opacity) => ({blur: {itemStyle: {opacity}}});
 // Symbols of the average lines: invisible until hovered, so that each day of a line has its own tooltip.
 const HOVER_SYMBOLS = {
   showSymbol: true,
@@ -112,6 +118,57 @@ function markAt(time, label) {
 }
 
 /**
+ * The 95 % range of a party at the election as a vertical bar from `lo` to `hi` at `time`, with a white point at
+ * `mean`: a `custom` series named after the party (the legend toggles it with its line). Hovering it brings it to
+ * the front at full opacity while the other bars blur, so overlapping ranges can still be read one by one. ECharts
+ * reads `focus`/`blurScope` of a custom series from the root element `renderItem` returns, not from the series:
+ * they go on the group. The blur reaches every series of the chart, so the lines, points and marks declare a blur
+ * state that keeps them as they are (`KEEP_ON_BLUR`): only the other bars fade.
+ *
+ * @param {string} name party or block
+ * @param {number} time timestamp of the election day
+ * @param {number} lo lower bound of the range
+ * @param {number} hi upper bound of the range
+ * @param {number} mean central estimate
+ * @param {string} color colour of the party
+ * @returns {object} the ECharts series
+ */
+export function rangeBarSeries(name, time, lo, hi, mean, color) {
+  return {
+    type: 'custom',
+    name,
+    color,
+    z: 6,
+    encode: {x: 0, y: [1, 2, 3]},
+    renderItem: (params, api) => {
+      const x = api.coord([api.value(0), 0])[0];
+      const y = (k) => api.coord([api.value(0), api.value(k)])[1];
+      return {
+        type: 'group',
+        focus: 'series',
+        blurScope: 'coordinateSystem',
+        children: [
+          {
+            type: 'line',
+            shape: {x1: x, y1: y(1), x2: x, y2: y(2)},
+            style: {stroke: color, lineWidth: 4, lineCap: 'round', opacity: RANGE_OPACITY},
+            emphasis: {style: {opacity: 1}},
+            blur: {style: {opacity: RANGE_BLUR_OPACITY}},
+          },
+          {
+            type: 'circle',
+            shape: {cx: x, cy: y(3), r: 4},
+            style: {fill: '#fff', stroke: color, lineWidth: 2},
+            blur: {style: {opacity: RANGE_BLUR_OPACITY}},
+          },
+        ],
+      };
+    },
+    data: [[time, lo, hi, mean]],
+  };
+}
+
+/**
  * ISO dates of the time axis: the fitted series plus, in forecast, the projected days after it and, with an
  * official result later than the last of them, its date (the detail of a past election: the series stops where
  * the model was frozen and the result sits at the election).
@@ -147,15 +204,16 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
 }
 
 /**
- * Render the poll average of `parties`: per party the `lo–hi` band, the `mean` line, the published polls
- * and, in forecast, the projected band from `asOf` to `when`, with mark lines at both dates. The initial
+ * Render the poll average of `parties`: per party the `mean` line, the published polls and, in forecast, the
+ * dashed projection from `asOf` to `when` with the bar of its 95 % range at the election (`rangeBarSeries`), with
+ * mark lines at both dates. Neither the band of the average nor the fan of the projection are drawn. The initial
  * zoom is the `window` choice (a key of `WINDOW_DAYS`: the last days before `anchor`; `all`: the whole axis).
  * The window filters the data (`filterMode: 'filter'`) and the vertical axis is scaled to the visible data of
  * the series the legend shows, without a fixed zero, so a tight race fills the height.
  * The Promedios page also draws the blocks with it, passing the block series, polls and projection as parties.
  * The tooltip follows the item under the pointer: a poll shows its box (`pollTooltipLines`), a day of the
- * average or of the projection its value and band (`meanTooltipLine`), the official result its share
- * (`resultTooltipLine`); the bands have none.
+ * average its value, a day of the projection or the range bar its value and range (`meanTooltipLine`), the
+ * official result its share (`resultTooltipLine`).
  *
  * @param {object} data `series`, `polls`, `projection` (the `data` members of the envelopes), `parties`
  *   (names, legend order), `selected` (names shown at first; all when null), `colors` ({name: colour}),
@@ -167,7 +225,7 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  *   past election: a diamond per party with a value, at `date`, which also gets the «Elección» mark line and
  *   closes the axis; null for none), `asOfLabel` (label of the mark line at `asOf`, «Estimación» by default) and
  *   `layers` (what is drawn: `ambos`, the default, the poll points and the average; `sondeos`, the points alone,
- *   with the result and the mark lines; `promedio`, the lines, bands and projection alone, without the points)
+ *   with the result and the mark lines; `promedio`, the lines, projection and range bars alone, without the points)
  * @returns {object} the ECharts option
  */
 export function seriesOption({
@@ -183,7 +241,7 @@ export function seriesOption({
   const projectionTimes = withProjection ? projection.dates.map(dayTime) : [];
   const pollRecords = polls.polls || [];
   const colorOf = Object.fromEntries(parties.map((name) => [name, color(name)]));
-  // Role of each series for the tooltip: `mean`, `projection` or `poll` (bands and marks have none).
+  // Role of each series for the tooltip: `mean`, `projection`, `range`, `poll` or `result` (marks have none).
   const roles = new Map();
   const withRole = (role, entry) => {
     roles.set(entry, role);
@@ -200,13 +258,11 @@ export function seriesOption({
     color: color(name),
     z: 3,
     ...HOVER_SYMBOLS,
+    ...KEEP_LINE_ON_BLUR,
     connectNulls: false,
     lineStyle: {width: 2},
     data: seriesTimes.map((t, i) => [t, (series.mean[name] || [])[i] ?? null]),
   }));
-  const bands = !withAverage ? [] : parties.flatMap((name) => bandSeries(
-    name, seriesTimes, series.lo[name] || [], series.hi[name] || [], {color: color(name)},
-  ));
   const points = !withPolls ? [] : parties.map((name) => withRole('poll', {
     type: 'scatter',
     name,
@@ -214,23 +270,28 @@ export function seriesOption({
     z: 4,
     symbolSize: 6,
     itemStyle: {opacity: 0.6},
+    ...KEEP_POINTS_ON_BLUR(0.6),
     data: pollPoints(pollRecords, name).map(([date, value, index]) => [dayTime(date), value, index]),
   }));
-  const projected = !withProjection || !withAverage ? [] : parties.flatMap((name) => [
-    withRole('projection', {
-      type: 'line',
-      name,
-      color: color(name),
-      z: 3,
-      ...HOVER_SYMBOLS,
-      connectNulls: false,
-      lineStyle: {width: 2, type: 'dashed'},
-      data: projectionTimes.map((t, i) => [t, (groups.mean[name] || [])[i] ?? null]),
-    }),
-    ...bandSeries(name, projectionTimes, groups.lo[name] || [], groups.hi[name] || [], {
-      color: color(name), opacity: PROJECTION_OPACITY, stack: `projection:${name}`,
-    }),
-  ]);
+  const projected = !withProjection || !withAverage ? [] : parties.map((name) => withRole('projection', {
+    type: 'line',
+    name,
+    color: color(name),
+    z: 3,
+    ...HOVER_SYMBOLS,
+    ...KEEP_LINE_ON_BLUR,
+    connectNulls: false,
+    lineStyle: {width: 2, type: 'dashed'},
+    data: projectionTimes.map((t, i) => [t, (groups.mean[name] || [])[i] ?? null]),
+  }));
+  // The 95 % range at the election: the last day of the projection, for the parties that have one.
+  const lastDay = withProjection ? projection.dates[projection.dates.length - 1] : null;
+  const lastOf = (values) => (values || [])[projection.dates.length - 1] ?? null;
+  const ranges = !withProjection || !withAverage ? [] : parties.flatMap((name) => {
+    const [lo, hi, mean] = [lastOf(groups.lo[name]), lastOf(groups.hi[name]), lastOf(groups.mean[name])];
+    return [lo, hi, mean].every(Number.isFinite)
+      ? [withRole('range', rangeBarSeries(name, dayTime(lastDay), lo, hi, mean, color(name)))] : [];
+  });
   // The official result of a past election: a diamond per party with a value, drawn over everything else.
   const results = !result ? [] : parties
     .filter((name) => Number.isFinite(result.values[name]))
@@ -241,7 +302,8 @@ export function seriesOption({
       z: 5,
       symbol: 'diamond',
       symbolSize: 12,
-      itemStyle: {borderColor: '#fff', borderWidth: 1.5},
+      itemStyle: {borderColor: '#fff', borderWidth: 1.5, opacity: 0.8},  // the scatter default, made explicit
+      ...KEEP_POINTS_ON_BLUR(0.8),
       data: [[dayTime(result.date), result.values[name]]],
     }));
   const marks = [markAt(dayTime(asOf), asOfLabel)];
@@ -256,10 +318,12 @@ export function seriesOption({
     name: 'marks',
     data: [],
     silent: true,
+    ...KEEP_LINE_ON_BLUR,
     markLine: {
       silent: true,
       symbol: 'none',
       lineStyle: {type: 'dashed', color: THEME.markColor},
+      blur: {lineStyle: {opacity: 1}, label: {opacity: 1}},
       data: marks,
     },
   };
@@ -267,7 +331,7 @@ export function seriesOption({
   const axisDates = axisDatesOf(series, projection, result);
   const zoom = seriesWindow(windowChoice, axisDates, anchor);
 
-  const allSeries = [...means, ...bands, ...points, ...projected, ...results, markSeries];
+  const allSeries = [...means, ...points, ...projected, ...ranges, ...results, markSeries];
 
   /** Box of the item under the pointer: a poll, a day of the average or of the projection, or the result. */
   function tooltip(params) {
@@ -281,12 +345,18 @@ export function seriesOption({
     if (role === 'result') {
       return resultTooltipLine(name, result.values[name], result.date, color(name));
     }
-    if (role === 'mean' || role === 'projection') {
-      const source = role === 'mean' ? series : groups;
-      const dates = role === 'mean' ? series.dates : projection.dates;
+    if (role === 'range') {
+      return meanTooltipLine(name, lastOf(groups.mean[name]), lastOf(groups.lo[name]), lastOf(groups.hi[name]),
+        lastDay, color(name), 'Elección');
+    }
+    if (role === 'mean') {
+      // the band of the average is not drawn any more, so its interval is not shown either
+      return meanTooltipLine(name, (series.mean[name] || [])[i] ?? null, null, null, series.dates[i], color(name));
+    }
+    if (role === 'projection') {
       const at = (values) => (values || [])[i] ?? null;
-      return meanTooltipLine(name, at(source.mean[name]), at(source.lo[name]), at(source.hi[name]), dates[i],
-        color(name), role === 'projection');
+      return meanTooltipLine(name, at(groups.mean[name]), at(groups.lo[name]), at(groups.hi[name]),
+        projection.dates[i], color(name), true);
     }
     return '';
   }

@@ -1,5 +1,12 @@
 # Método 5: nowcast, deriva de la opinión y fecha incierta (24-09-2026)
 
+
+> **Enmienda 2026-10-26.** El ancla por defecto es ahora `as_of = min(limit_date, date_fit_last, hoy)`
+> (`Simulator(today=...)`, hoy en Europe/Madrid): el promedio nunca se lee en el futuro. En producción se leía en
+> `date_fit_last` = último sondeo + `max_fc`, diez días por delante, y la marca «Estimación» del gráfico caía allí;
+> el backtest y los rellenos ya leían el día del corte, así que lo validado era la lectura «a hoy». La parte `series`
+> publicada se corta en el ancla. Spec: `docs/superpowers/specs/2026-10-26-ancla-hoy-design.md`.
+
 Cambios: `Simulator` (`mtpy/lib/simulator.py`: ancla `as_of`, `horizon_max`, `durations`, params `horizon` y `date_prior` de `run()`, `build_horizons`, `horizon_candidates`, `horizon_sampler`, columna `drift` del frame, `fan()`, `TERMINAL_WEEKS`); `DriftEstimator` y `Computer.get_drift_data / compute_drift / load_drift / get_drift_estimator` (`mtpy/lib/computer.py`); `Forecaster.date_fit_last` (`mtpy/lib/forecaster.py`); tabla nueva `elections.drift` (modelo `Drift` en `mtpy/models/elections.py`, `get_drift` y `save_drift_data` en `mtpy/lib/data.py`, `Model.table_exists` en `mtpy/core/data.py`); backtest en dos modos (`mtpy/lib/backtest.py`, `backtest/run_backtest.py --nowcast-only`); notebooks `data-load/PollsCompute` (celda `compute_drift`) y `PollsSimulations` (sección "Pronóstico a fecha"). Tests: `tests/test_simulator_unit.py` (M5), `tests/test_backtest_unit.py`, `tests/integration/test_model.py` (M5), `tests/integration/test_backtest.py`. Lo motivó el backtest (`metodo-3-backtest.md`): coberturas del 50 % de 0,33-0,38 a 60-180 días.
 
 ## Problema: dos preguntas con un solo número

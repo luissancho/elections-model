@@ -256,7 +256,8 @@ def export_series(fc, names, end=None):
     end : str or pandas.Timestamp, optional
         Last day exported, inclusive. By default the last fitted day (``fc.date_fit_last``, or the end of the
         series without it); an ``end`` beyond it changes nothing, an earlier one cuts the series there (the
-        backtest cuts at the anchor of each case, so the series stops where the model was frozen).
+        backtest cuts at the anchor of each case, so the series stops where the model was frozen, and since
+        2026-10-26 the publish cuts at ``sim.as_of`` too, where the projection starts).
 
     Returns
     -------
@@ -725,7 +726,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
                      simulator: Optional[Callable] = None, stats: Optional[Callable] = None,
                      prov: Optional[Callable] = None, limit_date: Optional[str] = None,
                      run_at: Optional[str] = None,
-                     progress: Optional[Callable[[str, float], None]] = None) -> dict:
+                     progress: Optional[Callable[[str, float], None]] = None,
+                     today: Optional[str] = None) -> dict:
     """Run the model for one scope and write an immutable run into the bundle.
 
     Pointers (history and manifest) are not touched. ``headline.json`` is written last, so a run
@@ -762,6 +764,9 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
         (default) runs with ``drange`` as given.
     run_at : str, optional
         ISO UTC timestamp recorded as the run moment; defaults to the writer clock.
+    today : str, optional
+        The day taken as today (``YYYY-MM-DD``), given to the simulator as the cap of its anchor: the average
+        is read on the day of the run, never in the future (2026-10-26); the date in Europe/Madrid by default.
     progress : callable, optional
         Called as ``progress(step, seconds)`` when each phase ends, with ``step`` in order ``init``
         (simulator built), ``fit`` (average fitted), ``nowcast`` (simulation of today),
@@ -812,7 +817,7 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
 
     try:
         sim = (simulator or Simulator)(scope=scope, event_date=event_date, drange=drange, alpha=alpha, seed=seed,
-                                       mode='nowcast', verbose=verbose, path='.', **cutoff, **correctors)
+                                       mode='nowcast', verbose=verbose, path='.', today=today, **cutoff, **correctors)
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
     init = report('init', lap())
@@ -834,7 +839,8 @@ def publish_forecast(scope: str, writer: BundleWriter, run_id: str, event_date: 
     forecast = report('forecast', lap())
     heads['forecast'] = publish_mode(sim, writer, scope, run_id, communities)
     fc = sim.model
-    cycle = (('series', export_series(fc, names)), ('polls', export_polls(fc, names, seats=poll_seats(fc))),
+    # the published series ends at the anchor, where the projection starts (the fit may reach further)
+    cycle = (('series', export_series(fc, names, end=sim.as_of)), ('polls', export_polls(fc, names, seats=poll_seats(fc))),
              ('fan', export_fan(sim)),
              ('house-effects', export_house_effects(fc)), ('dispersion', export_dispersion(fc)),
              ('weights', export_weights(fc, names, sim.as_of)))

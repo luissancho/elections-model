@@ -922,7 +922,7 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `register` | `false` | Con `study`, registrar la predicción del estudio (`registered_at`, `registered_commit`, `registered`); exige el árbol de git limpio y que no hubiera registro, salvo `force` (enmienda 2026-10-20; ver "Estudios") |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what`. Con `"replace": true` (enmienda 2026-10-17), un día cuyo run ya existe se borra antes (como `unpublish`) y se recalcula en vez de saltarse |
 | `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
-| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG y el tope de `backfill`, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`) |
+| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, el tope de `backfill` y el ancla `as_of` del promedio, que se lee ese día y nunca después, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`, pero un `today` pasado publica un run leído en el pasado) |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:

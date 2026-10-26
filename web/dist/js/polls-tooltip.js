@@ -56,20 +56,25 @@ export function pollTooltipLines(poll, parties, colors) {
 }
 
 /**
- * Box of one point of the average (or of its projection): `{name}: {mean} ({lo}–{hi}) · {date}`.
+ * Box of one point of the average, of its projection or of the range bar at the election:
+ * `{name}: {mean} ({lo}–{hi}) · {date}`; without bounds, `{name}: {mean} · {date}` (the history of the series
+ * chart, whose band is no longer drawn, 2026-10-26).
  *
  * @param {string} name party or block
  * @param {number|null} mean average of the day
- * @param {number|null} lo lower bound of the band
- * @param {number|null} hi upper bound of the band
+ * @param {number|null} lo lower bound of the interval, or null for none
+ * @param {number|null} hi upper bound of the interval, or null for none
  * @param {string} date ISO date of the point
  * @param {string} color colour of the marker
- * @param {boolean} [projected=false] whether the point belongs to the projection (a first line says so)
+ * @param {boolean|string|null} [header=null] a first line over the box: `true` for «Proyección» (a point of the
+ *   projection), a string for a literal heading («Elección» for the range bar), null for none
  * @returns {string} the HTML of the box, escaped
  */
-export function meanTooltipLine(name, mean, lo, hi, date, color, projected = false) {
-  const text = `${name}: ${fmtPct(mean)} (${fmtRange(lo, hi)}) · ${fmtDate(date)}`;
-  return `${projected ? 'Proyección<br>' : ''}${tooltipMarker(color)}${escapeText(text)}`;
+export function meanTooltipLine(name, mean, lo, hi, date, color, header = null) {
+  const bounds = lo !== null && lo !== undefined && hi !== null && hi !== undefined;
+  const text = `${name}: ${fmtPct(mean)}${bounds ? ` (${fmtRange(lo, hi)})` : ''} · ${fmtDate(date)}`;
+  const heading = header === true ? 'Proyección' : header;
+  return `${heading ? `${escapeText(heading)}<br>` : ''}${tooltipMarker(color)}${escapeText(text)}`;
 }
 
 /**

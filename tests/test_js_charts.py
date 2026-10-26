@@ -232,7 +232,7 @@ def test_series_result_draws_a_diamond_at_the_election_and_extends_the_axis():
     election = run_js('s.dayTime("2026-10-08")')
     diamonds = [s for s in option['series'] if s['type'] == 'scatter' and s.get('symbol') == 'diamond']
     assert [(s['name'], s['data'], s['symbolSize'], s['z']) for s in diamonds] == [('PP', [[election, 31.5]], 12, 5)]
-    assert diamonds[0]['itemStyle'] == {'borderColor': '#fff', 'borderWidth': 1.5}
+    assert diamonds[0]['itemStyle'] == {'borderColor': '#fff', 'borderWidth': 1.5, 'opacity': 0.8}  # explicit, kept on blur
     marks = option['series'][-1]['markLine']['data']
     assert [m['label']['formatter'] for m in marks] == ['A 6 días', 'Elección'] and marks[1]['xAxis'] == election
     assert option['dataZoom'][0]['endValue'] == election
@@ -262,16 +262,16 @@ LAYER_ARGS = LAYER_ARGS.replace("polls: {parties: ['PP'], polls: []}", "polls: {
 
 
 def series_roles(option):
-    """Papel de cada serie de la opción del promedio, deducido de su forma: `mean`, `band`, `poll`, `projection`,
-    `result` y `marks`, sin repetir y ordenados."""
+    """Papel de cada serie de la opción del promedio, deducido de su forma: `mean`, `poll`, `projection`, `range`,
+    `result` y `marks`, sin repetir y ordenados (las bandas ya no se dibujan, 2026-10-26)."""
     roles = set()
     for entry in option['series']:
         if entry['name'] == 'marks':
             roles.add('marks')
         elif entry['type'] == 'scatter':
             roles.add('result' if entry.get('symbol') == 'diamond' else 'poll')
-        elif entry.get('lineStyle', {}).get('opacity') == 0:
-            roles.add('band')
+        elif entry['type'] == 'custom':
+            roles.add('range')  # the bar of the 95 % range at the election (2026-10-26)
         elif entry.get('lineStyle', {}).get('type') == 'dashed':
             roles.add('projection')
         else:
@@ -281,21 +281,111 @@ def series_roles(option):
 
 def test_series_layers_draw_the_polls_the_average_or_both():
     """«Sondeos / Promedio / Ambos» (Luis, 2026-10-23): la capa elegida decide qué se dibuja. Sólo sondeos: los
-    puntos, el resultado y las marcas, sin líneas, bandas ni proyección; sólo promedio: sin puntos; ambas (por
+    puntos, el resultado y las marcas, sin líneas, barras ni proyección; sólo promedio: sin puntos; ambas (por
     defecto): todo. El tooltip sigue a las series que quedan, y la imagen respeta la capa."""
-    everything = ['band', 'marks', 'mean', 'poll', 'projection', 'result']
+    everything = ['marks', 'mean', 'poll', 'projection', 'range', 'result']
     assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'ambos'"))) == everything
-    assert series_roles(run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))) == ['band', 'marks', 'mean', 'poll']
+    assert series_roles(run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))) == ['marks', 'mean', 'poll']
     polls_only = run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'sondeos'"))
     assert series_roles(polls_only) == ['marks', 'poll', 'result']
     assert [len(entry['data']) for entry in polls_only['series'] if entry['type'] == 'scatter'] == [1, 1]
-    assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'promedio'"))) == ['band', 'marks', 'mean', 'projection', 'result']
+    assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'promedio'"))) == ['marks', 'mean', 'projection', 'range', 'result']
     # the first series is now the poll points: its tooltip is the box of the poll, not a day of the average
     box = run_js("(() => { const o = s.seriesOption(%s); return o.tooltip.formatter({seriesIndex: 0, seriesName: 'PP', "
                  "dataIndex: 0, data: o.series[0].data[0]}); })()" % (LAYER_ARGS % "'sondeos'"))
     assert '<strong>Casa A</strong>' in box and 'PP 30,5' in box
     image = run_js('s.seriesImageOption(%s)' % (LAYER_ARGS % "'sondeos'"))
     assert series_roles(image) == ['marks', 'poll', 'result'] and image['legend']['data'] == ['PP']
+
+
+def test_series_draws_the_election_range_as_a_bar_instead_of_the_bands():
+    """Luis, 2026-10-26: fuera la banda del promedio y la franja de la proyección; en Elección, una barra por partido
+    con el rango del 95 % del último día de la proyección y el punto del voto central, al frente al pasar."""
+    option = run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'ambos'"))
+    assert not [s for s in option['series'] if s.get('lineStyle', {}).get('opacity') == 0]  # no bands at all
+    bars = [s for s in option['series'] if s['type'] == 'custom']
+    last = run_js('s.dayTime("2026-10-03")')
+    assert [(s['name'], s['data'], s['z'], s['color']) for s in bars] == [('PP', [[last, 30, 33, 31.5]], 6, '#1d84ce')]
+    assert bars[0]['encode'] == {'x': 0, 'y': [1, 2, 3]}
+    # the bar is drawn after the lines, so it sits over them; hidden with the polls-only layer and without projection
+    lines = [i for i, s in enumerate(option['series']) if s['type'] == 'line' and s['name'] == 'PP']
+    assert option['series'].index(bars[0]) > max(lines)
+    assert not [s for s in run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'sondeos'"))['series'] if s['type'] == 'custom']
+    assert not [s for s in run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))['series'] if s['type'] == 'custom']
+    # the tooltip of the bar: «Elección» and the figure with its range at the election day
+    box = run_js("(() => { const o = s.seriesOption(%s); const i = o.series.findIndex((x) => x.type === 'custom'); "
+                 "return o.tooltip.formatter({seriesIndex: i, seriesName: 'PP', dataIndex: 0, data: o.series[i].data[0]}); })()" % (LAYER_ARGS % "'ambos'"))
+    assert box.startswith('Elección<br>') and box.endswith('PP: 31,5% (30,0–33,0) · 3 oct 2026')
+    # the history keeps its value and date, without the interval of the average
+    line = run_js("(() => { const o = s.seriesOption(%s); return o.tooltip.formatter({seriesIndex: 0, seriesName: 'PP', dataIndex: 0}); })()" % (SERIES_ARGS % "'hidden'"))
+    assert line.endswith('PP: 30,0% · 1 oct 2026') and '(' not in line
+    # a party whose projection ends in null gets no bar and breaks nothing
+    missing = LAYER_ARGS.replace("hi: {PP: [32, 33]}", "hi: {PP: [32, null]}")
+    assert not [s for s in run_js('s.seriesOption(%s)' % (missing % "'ambos'"))['series'] if s['type'] == 'custom']
+
+
+def test_series_range_bar_renders_a_rounded_line_and_a_white_point():
+    shape = run_js("(() => { const o = s.seriesOption(%s); const bar = o.series.find((x) => x.type === 'custom'); "
+                   "const api = {value: (k) => [1, 30, 33, 31.5][k], coord: ([x, y]) => [x === 1 ? 100 : 0, y === 0 ? 0 : 400 - y * 10]}; "
+                   "const g = bar.renderItem({}, api); return {type: g.type, focus: g.focus, blurScope: g.blurScope, kinds: g.children.map((c) => c.type), "
+                   "line: g.children[0].shape, lineStyle: g.children[0].style, emphasis: g.children[0].emphasis, blur: g.children[0].blur, "
+                   "point: g.children[1].shape, pointStyle: g.children[1].style}; })()" % (LAYER_ARGS % "'ambos'"))
+    # ECharts reads `focus`/`blurScope` of a custom series from the root element of `renderItem`, not from the series
+    assert shape['type'] == 'group' and shape['kinds'] == ['line', 'circle']
+    assert (shape['focus'], shape['blurScope']) == ('series', 'coordinateSystem')
+    assert shape['line'] == {'x1': 100, 'y1': 100, 'x2': 100, 'y2': 70}  # lo 30 → 100, hi 33 → 70
+    assert shape['lineStyle'] == {'stroke': '#1d84ce', 'lineWidth': 4, 'lineCap': 'round', 'opacity': 0.45}
+    assert shape['emphasis'] == {'style': {'opacity': 1}} and shape['blur'] == {'style': {'opacity': 0.15}}
+    assert shape['point'] == {'cx': 100, 'cy': 85, 'r': 4} and shape['pointStyle'] == {'fill': '#fff', 'stroke': '#1d84ce', 'lineWidth': 2}
+
+
+HOVER_PROBE = """(() => {
+  const option = s.seriesOption({
+    series: {dates: ['2026-10-01', '2026-10-02', '2026-10-03'], parties: ['PP', 'PSOE'], mean: {PP: [30, 31, 31], PSOE: [26, 26, 27]},
+             lo: {PP: [29, 30, 30], PSOE: [25, 25, 26]}, hi: {PP: [31, 32, 32], PSOE: [27, 27, 28]}},
+    polls: {parties: ['PP', 'PSOE'], polls: [{date: '2026-10-02', pollster: 'A', PP: 30.5, PSOE: 26.5}]},
+    projection: {dates: ['2026-10-03', '2026-10-04', '2026-10-05'], groups: {parties: {mean: {PP: [31, 31, 31], PSOE: [27, 27, 27]},
+                lo: {PP: [29, 28, 27], PSOE: [25, 24, 23]}, hi: {PP: [33, 34, 35], PSOE: [29, 30, 31]}}}},
+    parties: ['PP', 'PSOE'], selected: null, colors: {PP: '#1d84ce', PSOE: '#ef1c27'}, asOf: '2026-10-03', when: '2026-10-05',
+    window: 'all', legend: 'hidden', layers: 'ambos', result: {date: '2026-10-05', values: {PSOE: 27.5}},
+  });
+  const chart = echarts.init(null, null, {renderer: 'svg', ssr: true, width: 600, height: 300});
+  // state changes apply on the next frame of the engine, animated: no animation, and a frame is forced by hand
+  chart.setOption({...option, stateAnimation: {duration: 0}});
+  const frame = () => chart.getZr().animation.trigger('frame');
+  const all = chart.getZr().storage.getDisplayList(true);
+  const bars = all.filter((el) => el.style && el.style.lineWidth === 4 && el.style.lineCap === 'round');
+  const pp = bars.find((el) => el.style.stroke === '#1d84ce'), psoe = bars.find((el) => el.style.stroke === '#ef1c27');
+  const snap = () => ({
+    pp: pp.style.opacity, psoe: psoe.style.opacity, states: [pp.currentStates, psoe.currentStates],
+    lines: all.filter((el) => el.type === 'ec-polyline').map((l) => l.style.opacity),
+    marks: all.filter((el) => el.type === 'ec-line').map((l) => l.style.opacity),
+    points: all.filter((el) => el.type !== 'ec-polyline' && el.style && el.style.fill === '#ef1c27').map((p) => p.style.opacity),
+  });
+  const before = snap();
+  chart.getZr().trigger('mouseover', {target: pp, topTarget: pp});
+  frame();
+  const hovered = snap();
+  chart.getZr().trigger('mouseout', {target: pp, topTarget: pp});
+  frame();
+  const after = snap();
+  return {before, hovered, after};
+})()"""
+
+
+def test_series_hovering_a_range_bar_dims_only_the_other_bars():
+    """Luis, 2026-10-26: al pasar por el punto de un partido su barra viene al frente y se ve completa. Comprobado en el
+    motor real: la barra pasa a opacidad 1, las demás barras bajan a 0,15 y el resto del gráfico (líneas, sondeos) no
+    se atenúa; al salir, todo vuelve."""
+    probe = run_js(HOVER_PROBE)
+    assert probe['before']['pp'] == 0.45 and probe['before']['psoe'] == 0.45 and probe['before']['states'] == [[], []]
+    assert probe['hovered']['pp'] == 1 and probe['hovered']['psoe'] == 0.15
+    assert probe['hovered']['states'] == [['emphasis'], ['blur']]
+    # the lines, the mark lines and the poll points of the other party keep their opacity: only the bars react
+    assert probe['hovered']['lines'] == probe['before']['lines'] and all(o == 1 for o in probe['hovered']['lines'])
+    assert probe['hovered']['marks'] == probe['before']['marks'] and probe['hovered']['points'] == probe['before']['points']
+    assert len(probe['before']['marks']) == 2 and len(probe['before']['points']) >= 1
+    assert probe['after'] == probe['before']
 
 
 def test_series_views_carry_the_result_of_each_view():
@@ -313,6 +403,12 @@ def test_series_views_carry_the_result_of_each_view():
     # the colour of a block is the one the page already uses for it (`block_colors`), else that of its first party
     painted = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog))' % (json.dumps({**initial, 'block_colors': {'Derecha': '#112233'}}), json.dumps(initial)))
     assert painted['bloques']['colors'] == {'Derecha': '#112233', 'Izquierda': '#000000'}
+    # the block view carries the published block projection, so the range bars of the blocks come from it
+    with_projection = {**initial, 'projection': {'dates': ['2026-10-01', '2026-10-02'], 'groups': {
+        'parties': {'mean': {'PP': [30, 30]}, 'lo': {'PP': [28, 27]}, 'hi': {'PP': [32, 33]}},
+        'blocks': {'mean': {'Derecha': [40, 40]}, 'lo': {'Derecha': [37, 36]}, 'hi': {'Derecha': [43, 44]}}}}}
+    bloques = run_js('sw.seriesViews(%s, new c.Catalog(%s.catalog)).bloques' % (json.dumps(with_projection), json.dumps(initial)))
+    assert bloques['projection']['groups']['parties']['lo'] == {'Derecha': [37, 36]}
 
 
 def test_ridge_rows_are_taller_on_desktop():

@@ -694,3 +694,40 @@ def test_error_events_lists_the_elections_of_the_error_estimator():
     sim.computer = types.SimpleNamespace(filter_polls=filter_polls)
     assert sim.error_events() == ['2019-11-10', '2023-07-23']
     assert seen == {'featured': True, 'drange': Simulator.ERROR_DRANGE, 'n_last': 1}
+
+
+def anchor_simulator(last='2026-10-26', fit_last='2026-11-05', limit='2026-11-23', deadline='2026-11-29', today=None, as_of=None):
+    """Simulador mínimo para `_set_anchor`: un promedio ajustado hasta `fit_last` y las fechas del ancla."""
+    import types
+    sim = Simulator.__new__(Simulator)
+    dates = pd.date_range('2026-08-01', fit_last)
+    sim.model = types.SimpleNamespace(forecast=pd.DataFrame({'PP': 30.}, index=dates), date_fit_last=pd.Timestamp(fit_last),
+                                      date_last=pd.Timestamp(last))
+    sim.limit_date, sim.deadline = limit, pd.Timestamp(deadline)
+    sim._as_of = pd.Timestamp(as_of) if as_of is not None else None
+    sim.today = today
+    sim._set_anchor()
+    return sim
+
+
+def test_anchor_never_reads_the_average_in_the_future():
+    """Luis, 2026-10-26: la estimación se lee hoy, no diez días por delante del último sondeo. `as_of` es el mínimo de
+    la víspera de la veda, el último día ajustado y hoy; un `as_of` explícito sigue mandando."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    sim = anchor_simulator(today='2026-10-26')
+    assert sim.as_of == pd.Timestamp('2026-10-26') and sim.horizon_max == 34
+    assert anchor_simulator(today='2026-11-10').as_of == pd.Timestamp('2026-11-05')  # the fit ends before today
+    assert anchor_simulator(fit_last='2026-11-28', today='2026-11-25').as_of == pd.Timestamp('2026-11-23')  # the eve of the ban
+    assert anchor_simulator(last='2026-10-15', today='2026-10-26', as_of='2026-10-20').as_of == pd.Timestamp('2026-10-20')
+    wall = anchor_simulator()  # without `today`: the clock of Europe/Madrid
+    assert wall.as_of <= min(pd.Timestamp(datetime.now(ZoneInfo('Europe/Madrid')).date()), pd.Timestamp('2026-11-05'))
+
+
+def test_anchor_before_the_last_poll_warns_even_by_default():
+    """Un `today` anterior al último sondeo (un ensayo con fecha pasada, un sondeo fechado después del cálculo) deja el
+    ancla antes del último sondeo: el kernel es bilateral y el valor leído usa sondeos posteriores. Avisa también por la
+    ruta por defecto, no sólo con `as_of` explícito (revisión 2026-10-26)."""
+    with pytest.warns(UserWarning, match='precedes the last poll'):
+        sim = anchor_simulator(last='2026-10-26', today='2026-10-20')
+    assert sim.as_of == pd.Timestamp('2026-10-20')

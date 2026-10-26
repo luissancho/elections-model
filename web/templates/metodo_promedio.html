@@ -18,7 +18,7 @@
         <a href="#efectos-de-casa">Efectos de casa</a>
         {% if house_example %}<a href="#ejemplo-cis">El {{ house_example.pollster }} desde {{ house_example.since[:4] }}</a>{% endif %}
         <a href="#regresion">La tendencia de cada día</a>
-        <a href="#banda">La banda</a>
+        <a href="#banda">La precisión del promedio</a>
         {% if example %}<a href="#ejemplo">Un cálculo completo</a>{% endif %}
         <a href="#voto-estimado">Del promedio al voto</a>
         <a href="#comprobacion">Cómo lo comprobamos</a>
@@ -37,13 +37,13 @@
         </p>
         <p>
           El proceso tiene cuatro pasos: seleccionamos las encuestas, asignamos un peso a cada una, ajustamos las
-          diferencias habituales entre encuestadoras y calculamos una tendencia para cada día. Después añadimos una banda
-          que muestra la incertidumbre de ese cálculo.
+          diferencias habituales entre encuestadoras y calculamos una tendencia para cada día, con una medida de la
+          precisión de ese cálculo.
         </p>
         <p>
           Hay una distinción que conviene tener presente: <strong>varias encuestas pueden coincidir y equivocarse
           juntas</strong>. La precisión con la que conocemos su promedio no es la misma que la precisión con la que
-          podemos anticipar el voto. Por eso la banda de la curva y el intervalo de nuestra estimación electoral
+          podemos anticipar el voto. Por eso la precisión de la curva y el intervalo de nuestra estimación electoral
           responden a preguntas diferentes.
         </p>
         <h3>De los sondeos a una curva</h3>
@@ -642,16 +642,25 @@
           incorporarla, puede modificarse ligeramente un tramo anterior de la curva.
         </p>
         <p>
-          En el extremo más reciente, el procedimiento prolonga la estimación hasta diez días después del último sondeo y
-          después mantiene el valor. Esa prolongación es una estimación a partir de los datos disponibles, no una nueva
-          medición. Por eso distinguimos la fecha del último sondeo, la del cálculo y la fecha en la que se lee el
-          promedio.
+          En el extremo más reciente, el procedimiento prolonga la recta hasta diez días después del último sondeo,
+          siguiendo su tendencia, para que haya estimación los días en que aún no ha llegado otro sondeo; pero el
+          promedio publicado se lee el día del cálculo, nunca después (hasta octubre de 2026 se leía al final de esa
+          prolongación). La prolongación es una
+          estimación a partir de los datos disponibles, no una nueva medición. Por eso distinguimos la fecha del
+          último sondeo y la del cálculo, que es la de la estimación.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('banda', 'Qué significa la banda del promedio', 'La franja que acompaña a la curva mide con qué precisión estimamos la tendencia que describen las encuestas, no cuánto se parecerá al resultado.') }}
+      {{ m.card_start('banda', 'Qué significa la precisión del promedio', 'La precisión con la que estimamos la tendencia que describen las encuestas, no cuánto se parecerá al resultado.') }}
         <p>
-          La curva va acompañada de una franja que expresa la incertidumbre del cálculo. Si hay información suficiente y
-          el ajuste resulta preciso, la banda puede ser estrecha; si hay más incertidumbre, se ensancha.
+          El cálculo de la curva lleva una medida de su propia incertidumbre, una banda alrededor de cada punto. Si
+          hay información suficiente y el ajuste resulta preciso, la banda es estrecha; si hay más incertidumbre, se
+          ensancha.
+        </p>
+        <p>
+          Desde octubre de 2026 los gráficos de la web ya no la dibujan como una banda alrededor de la curva: se
+          confundía con el margen del pronóstico, que es mucho mayor. Es la primera de las tres piezas de ese margen,
+          la <var>s</var> de <a href="{{ method_href('escanos') }}#errores">¿Cómo simulamos los escaños?</a>; el
+          ejemplo de más abajo sí la dibuja, porque ahí es lo que se explica.
         </p>
         <p>
           Responde a una pregunta: <strong>¿con qué precisión estimamos la tendencia que describen estas

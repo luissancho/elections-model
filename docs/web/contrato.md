@@ -121,8 +121,9 @@ antes de 2026-10-09) como `false`. El contrato sigue en 1: son claves adicionale
 
 ### `series`
 
-Serie diaria ajustada de cada partido con sus cotas, hasta `date_fit_last` (o el último día del
-pronóstico). Orientación columnar. Fuente: `Forecaster.forecast` y `Forecaster.fc_stat` (`cmin`, `cmax`).
+Serie diaria ajustada de cada partido con sus cotas, hasta `meta.as_of`, el día en que se lee el promedio
+(enmienda 2026-10-26; antes hasta `date_fit_last`, que puede quedar hasta diez días más allá y sigue en `meta`).
+Orientación columnar. Fuente: `Forecaster.forecast` y `Forecaster.fc_stat` (`cmin`, `cmax`).
 
 `data`: `dates`, `parties`, y `mean`, `lo`, `hi` (cada uno `{partido: [valor por fecha]}`; `lo`/`hi` son
 `null` donde no hay estadística). CSV `csv/series.csv`: `date, name, mean, lo, hi` (largo).
@@ -176,7 +177,9 @@ ratio, herd_ratio, factor` (todas menos las tres primeras a 3 decimales). CSV `c
 
 Los sondeos que pesan en el promedio el día en que el run lee el voto estimado, con la recta local de ese día.
 Enmienda 2026-10-15 (fase 9): los runs anteriores no la tienen. Fuente: `Forecaster.weights_at(name, date)`
-leído en `sim.as_of` (en un run normal, `date_fit_last`; en uno retrospectivo o en la última semana, antes),
+leído en `sim.as_of` (desde la enmienda 2026-10-26, el día del cálculo, nunca después: el mínimo de `date_fit_last`,
+la víspera de la veda y hoy; antes, `date_fit_last`, diez días por delante del último sondeo; en uno retrospectivo,
+su día),
 con la rejilla y el error agrupado de `fit`, así que la recta leída ese día es el promedio publicado.
 
 `data`: `date` (el día leído), `parties` (los partidos con ajuste), `rows`, `line`, `kernel` y `stats`.

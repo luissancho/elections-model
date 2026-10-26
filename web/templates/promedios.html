@@ -46,22 +46,23 @@
           </fieldset>
         </div>
         <div class="legend" id="series-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
-        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos con su banda de incertidumbre{{ projection_label }}"></div>
+        <div class="chart chart-tall" id="series-chart" role="img" aria-label="Promedio de sondeos{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
           Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
-          promedio ponderado del modelo y la banda, su intervalo de confianza. El selector Sondeos / Promedio / Ambos
-          deja a la vista sólo los puntos, sólo la línea con su banda, o las dos cosas, para leer mejor cada una en
-          el móvil. En el modo Elección, la línea discontinua proyecta el voto desde la estimación hasta el día de la
-          elección. En la vista Bloques, cada bloque suma sus partidos. Pulsa un partido de la leyenda para ocultarlo
-          o mostrarlo.
+          promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos deja a la vista sólo los puntos, sólo
+          la línea, o las dos cosas, para leer mejor cada una en el móvil. En el modo Elección, la línea discontinua
+          lleva el voto estimado hasta el día de la votación y la barra del final es el rango del 95% de cada partido
+          ese día: pasa por el punto para ver las cifras. En la vista Bloques, cada bloque suma sus partidos.
+          Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
         </p>
         <p>
           El eje vertical no empieza en cero: se ajusta a la ventana y a los partidos visibles, así que al ocultar
           partidos se ven mejor las curvas de los demás.
         </p>
         <p>
-          La banda dice dónde está el consenso de las encuestadoras, no dónde estará el voto el día de la elección.
+          La línea dice dónde está el consenso de las encuestadoras; la barra del final, dónde puede estar el voto el
+          día de la elección.
         </p>
         {% endcall %}
       {{ m.card_end() }}
@@ -222,7 +223,7 @@
         <div class="chart chart-tall" id="pollster-chart" role="img" aria-label="Sondeos de la encuestadora elegida frente al promedio de sondeos{{ projection_label }}"></div>
         {% call m.how() %}
         <p>
-          Los puntos son sólo los sondeos de la encuestadora elegida; la línea y la banda son el promedio de todas.
+          Los puntos son sólo los sondeos de la encuestadora elegida; la línea es el promedio de todas.
           Tiene su propia ventana y vista; pulsa la leyenda para mostrar u ocultar partidos y el eje vertical se
           ajusta a lo que queda a la vista.
         </p>
@@ -256,7 +257,7 @@
       {{ m.card_end() }}
       {% endif %}
       {{ m.closing('¿Cómo promediamos las encuestas?', method_href('promedio'),
-                   'Qué sondeos entran en el promedio, cuánto pesa cada uno y cómo se corrige la tendencia de cada encuestadora. También, qué mide la banda y qué no.',
+                   'Qué sondeos entran en el promedio, cuánto pesa cada uno y cómo se corrige la tendencia de cada encuestadora. También, qué mide la precisión del promedio y qué no.',
                    [{'href': '/elecciones' ~ scope_query, 'label': 'Cómo acertaron las encuestas en las elecciones anteriores'},
                     {'href': '/casas' ~ scope_query, 'label': 'Las encuestadoras que sondean este ámbito'}]) }}
     </div>
