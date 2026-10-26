@@ -235,6 +235,8 @@ def test_series_result_draws_a_diamond_at_the_election_and_extends_the_axis():
     assert diamonds[0]['itemStyle'] == {'borderColor': '#fff', 'borderWidth': 1.5, 'opacity': 0.8}  # explicit, kept on blur
     marks = option['series'][-1]['markLine']['data']
     assert [m['label']['formatter'] for m in marks] == ['A 6 días', 'Elección'] and marks[1]['xAxis'] == election
+    # «Estimación» reads to the left of its line and «Elección» to the right: no overlap on a short horizon (2026-10-26)
+    assert [m['label']['align'] for m in marks] == ['right', 'left'] and option['grid']['right'] >= 72
     assert option['dataZoom'][0]['endValue'] == election
     plain = run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))
     assert not [s for s in plain['series'] if s.get('symbol') == 'diamond']
@@ -327,12 +329,13 @@ def test_series_draws_the_election_range_as_a_bar_instead_of_the_bands():
 def test_series_range_bar_renders_a_rounded_line_and_a_white_point():
     shape = run_js("(() => { const o = s.seriesOption(%s); const bar = o.series.find((x) => x.type === 'custom'); "
                    "const api = {value: (k) => [1, 30, 33, 31.5][k], coord: ([x, y]) => [x === 1 ? 100 : 0, y === 0 ? 0 : 400 - y * 10]}; "
-                   "const g = bar.renderItem({}, api); return {type: g.type, focus: g.focus, blurScope: g.blurScope, kinds: g.children.map((c) => c.type), "
+                   "const g = bar.renderItem({}, api); return {type: g.type, focus: g.focus, blurScope: g.blurScope, kinds: g.children.map((c) => c.type), silent: g.children.map((c) => Boolean(c.silent)), "
                    "line: g.children[0].shape, lineStyle: g.children[0].style, emphasis: g.children[0].emphasis, blur: g.children[0].blur, "
                    "point: g.children[1].shape, pointStyle: g.children[1].style}; })()" % (LAYER_ARGS % "'ambos'"))
     # ECharts reads `focus`/`blurScope` of a custom series from the root element of `renderItem`, not from the series
     assert shape['type'] == 'group' and shape['kinds'] == ['line', 'circle']
     assert (shape['focus'], shape['blurScope']) == ('series', 'coordinateSystem')
+    assert shape['silent'] == [True, False]  # only the point reacts to the pointer (Luis, 2026-10-26)
     assert shape['line'] == {'x1': 100, 'y1': 100, 'x2': 100, 'y2': 70}  # lo 30 → 100, hi 33 → 70
     assert shape['lineStyle'] == {'stroke': '#1d84ce', 'lineWidth': 4, 'lineCap': 'round', 'opacity': 0.45}
     assert shape['emphasis'] == {'style': {'opacity': 1}} and shape['blur'] == {'style': {'opacity': 0.15}}
@@ -362,14 +365,17 @@ HOVER_PROBE = """(() => {
     marks: all.filter((el) => el.type === 'ec-line').map((l) => l.style.opacity),
     points: all.filter((el) => el.type !== 'ec-polyline' && el.style && el.style.fill === '#ef1c27').map((p) => p.style.opacity),
   });
+  // the pointer goes through zrender's hit testing (`handler.dispatch('mousemove')`), which is what `silent` governs
+  const moveTo = (x, y) => { chart.getZr().handler.dispatch('mousemove', {zrX: x, zrY: y}); frame(); };
+  const ppPoint = pp.parent.childrenRef()[1];
   const before = snap();
-  chart.getZr().trigger('mouseover', {target: pp, topTarget: pp});
-  frame();
+  moveTo(pp.shape.x1, pp.shape.y1 - 15);  // on the bar, away from its point: silent
+  const overLine = snap();
+  moveTo(ppPoint.shape.cx, ppPoint.shape.cy);  // on the point: the whole bar reacts
   const hovered = snap();
-  chart.getZr().trigger('mouseout', {target: pp, topTarget: pp});
-  frame();
+  moveTo(5, 5);  // away from everything
   const after = snap();
-  return {before, hovered, after};
+  return {before, overLine, hovered, after};
 })()"""
 
 
@@ -379,6 +385,7 @@ def test_series_hovering_a_range_bar_dims_only_the_other_bars():
     se atenúa; al salir, todo vuelve."""
     probe = run_js(HOVER_PROBE)
     assert probe['before']['pp'] == 0.45 and probe['before']['psoe'] == 0.45 and probe['before']['states'] == [[], []]
+    assert probe['overLine'] == probe['before']  # the bar itself is silent: only its central point activates it
     assert probe['hovered']['pp'] == 1 and probe['hovered']['psoe'] == 0.15
     assert probe['hovered']['states'] == [['emphasis'], ['blur']]
     # the lines, the mark lines and the poll points of the other party keep their opacity: only the bars react
