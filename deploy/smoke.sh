@@ -76,6 +76,7 @@ if [ -n "$env_file" ]; then
     check_static "/casas?scope=es" text/html
 fi
 check_static /dist/vendor/echarts-5.6.0.min.js application/javascript
+check_static /dist/vendor/html2canvas-1.4.1.min.js application/javascript
 # (A una variable: con pipefail, `grep -q` cortaria la tuberia de curl.)
 home="$(curl -s --max-time 20 "$base/")"
 if ! grep -q initial-data <<<"$home"; then

@@ -15,7 +15,7 @@ demuestre dos cosas con datos públicos:
 
 1. Que es prácticamente imposible que ese patrón se deba al azar o a un fallo general de las encuestas, y que la
    deriva coincide con la llegada de José Félix Tezanos a la presidencia del CIS (junio de 2018), un nombramiento
-   político: el propio CIS, entre 2008 y 2016, se equivocaba como las demás casas y sin dirección dominante.
+   político: el propio CIS, entre 2008 y 2017, se equivocaba como las demás casas y sin dirección dominante.
 2. Que la leyenda de que «el CIS fue el único que acertó en 2023» es falsa: las demás casas fallaron hacia la derecha,
    el resultado se movió en la dirección del CIS, pero quedó más cerca del consenso de las otras casas que del CIS, cuyo
    error en los bloques fue el de siempre.
@@ -33,7 +33,8 @@ tampoco «acertó».» (el «38 de 41» es una cifra viva).
 1. Evidencia histórica, sin predicción registrada.
 2. Tezanos en el titular; la página debe mostrar que la deriva es suya (nombramiento político, cambio de método).
 3. 2023 se analiza **sólo por bloques** (Izquierda frente a Derecha), no por partidos.
-4. El control son los años **sin Tezanos, de 2008 a 2016**: mismo CIS, misma medida.
+4. El control son los años **sin Tezanos, de 2008 a 2017** (hasta 2016 en la primera versión; ampliado el
+   2026-10-27): mismo CIS, misma medida.
 5. Tres preguntas con veredicto, como la página del voto CERA: ¿Se inclina a la izquierda desde que lo preside
    Tezanos? **SÍ** · ¿Puede ser azar, o un fallo general de las encuestas? **NO** · ¿Fue el CIS «el único que acertó»
    en 2023? **NO**.
@@ -164,8 +165,8 @@ error_avg, bias_avg, error_blocks, bias_blocks, bias` y las columnas de bloque p
 una puede ser nula, p. ej. Navarra 2019 sin `Derecha`). Un ámbito sin análisis se omite y se anota.
 
 **Los dos periodos** (parámetros, D4): «con Tezanos», `event_date >= 2018-09-01`; «sin Tezanos»,
-`2008-01-01 <= event_date < 2017-01-01`. Etiquetas públicas fijas: «2018 – 2026» (el año final es el de la última
-elección con sondeo del CIS) y «2008 – 2016».
+`2008-01-01 <= event_date < 2018-01-01`. Etiquetas públicas fijas: «2018 – 2026» (el año final es el de la última
+elección con sondeo del CIS) y «2008 – 2017».
 
 **Medidas por fila.** `Izquierda` (error en el bloque de izquierdas, positivo si el sondeo le dio más voto),
 `Derecha`, y el **sesgo de bloques** `lean = -error_blocks` (= `Izquierda − Derecha`, positivo hacia la izquierda;
@@ -214,7 +215,7 @@ Paquete nuevo (nombre en inglés, «lean» = inclinación), ligero (`pandas` opc
   típica muestral, t, p bilateral con `scipy.stats.t`), `by_date(rows)`, `consensus(rows)`, `house_rows(rows,
   active, min_n)`, `matrix(rows, houses)`, `industry(rows)`.
 - `study.py`: `compute_lean(reader, catalogue, params=None) -> LeanStudy` (dataclass con los bloques de D3) y los
-  parámetros por defecto `PARAMS`: `pollster 'CIS'`, `since '2018-09-01'`, `control ['2008-01-01', '2017-01-01']`,
+  parámetros por defecto `PARAMS`: `pollster 'CIS'`, `since '2018-09-01'`, `control ['2008-01-01', '2018-01-01']`,
   `blocks ['Izquierda', 'Derecha']`, `min_elections 10`, `max_days 60`, `active_from '2026-01-01'`, `election
   {scope 'es', date '2023-07-23'}`. Viven en `data/sesgo-cis/params.json` (como `data/cera/params.json`), con su fila
   en `data/README.md`; el estudio los lee del `app.data` y los publica en `meta.params`.
@@ -260,18 +261,18 @@ rows, blocks}`), `matrix`, `consensus` (`[{x, y, label, national}]`), `ranking` 
 - `m.kpis`: «Elecciones con la izquierda sobreestimada» `{k_left} de {n}` (apoyo: «último sondeo del CIS antes de cada
   elección analizada desde que lo preside Tezanos · {k_right} de {n_right} con la derecha subestimada»); «Cuánto
   sobreestima a la izquierda frente a la derecha» `{mean_lean} puntos` («de media en cada elección: {mean_left} de más
-  al bloque de izquierdas y {|mean_right|} de menos al de derechas · sin Tezanos (2008 – 2016), el mismo CIS:
+  al bloque de izquierdas y {|mean_right|} de menos al de derechas · sin Tezanos (2008 – 2017), el mismo CIS:
   {without.mean_lean}»); «A la izquierda del consenso de las demás encuestadoras» `{consensus.k} de {consensus.n}`
   («{mean_diff} puntos más a la izquierda que la media de las otras casas en la misma elección · antes, {without.k} de
   {without.n}»).
 - `#resumen`: «Tres preguntas, tres respuestas», las tres tarjetas-enlace (`answer`) con una frase viva cada una y la
   nota azul («Medimos lo que dicen los sondeos frente a lo que dicen las urnas. No medimos intenciones…»).
 - `#p1` (SÍ): entradilla con los hechos verificados (Tezanos, nombramiento, cambio de método) y el método de
-  comparación; `grid2` con dos dianas cuadradas «Sin Tezanos: {without.n} elecciones (2008 – 2016)» y «Con Tezanos:
+  comparación; `grid2` con dos dianas cuadradas «Sin Tezanos: {without.n} elecciones (2008 – 2017)» y «Con Tezanos:
   {with.n} elecciones (2018 – 2026)» (`#bull-without`, `#bull-with`); las dos cajas de comparación (`.cmp`: elecciones
-  con la izquierda sobreestimada, sesgo medio en cada bloque, a la izquierda del consenso); la tabla de las {n}
-  elecciones con Tezanos (Elección, Fecha, Días antes, Izquierda, Derecha con `shade_around(0, 8)`), plegada a 8 filas
-  con «Ver las {n} elecciones» (`wireMore`); `.sum` con el veredicto y las excepciones.
+  con la izquierda sobreestimada, sesgo medio en cada bloque, a la izquierda del consenso); `.sum` con el veredicto y
+  las excepciones. (La tabla de las {n} elecciones con Tezanos, plegada a 8 filas con «Ver las {n} elecciones», se
+  quitó el 2026-10-27: la parte `elections` sigue publicada y su CSV, enlazado en «Datos y método».)
 - `#p2` (NO): entradilla; `.tests` con las tres cajas (moneda «1 entre {odds}», fecha «1 entre {odds}», consenso
   «{k} de {n}», la tercera resaltada); la matriz (`#matrix`, título «Casa por casa y elección por elección: el CIS es
   la única casa prácticamente monocolor», subtítulo de lectura: rojo más a la izquierda, azul menos, intensidad por
@@ -432,8 +433,22 @@ Suite completa: 1337 passed, 75 skipped, 1 warning previo (`dataviz.py`, `set_ti
 ### Lista para Luis
 
 1. `python job.py publish '{"what":["study"],"study":"sesgo-cis"}'` contra el bundle de S3 (los análisis ya están publicados).
-2. Pasear `/analisis`, `/analisis/sesgo-cis` (de escritorio y en el móvil: la matriz con desplazamiento horizontal, el botón «Ver las 41 elecciones»), `/` (la banda) y `/metodo/promedio` (el enlace).
+2. Pasear `/analisis`, `/analisis/sesgo-cis` (de escritorio y en el móvil: la matriz con desplazamiento horizontal), `/` (la banda) y `/metodo/promedio` (el enlace).
 3. Integrar la rama en `dev` (nota: `tests/fakes.py` tiene cambios sin confirmar en el checkout principal; la rama añade `write_lean_bundle` al final del fichero) y desplegar con la siguiente integración.
 4. Tras cada `publish analysis`, encadenar `study` para refrescar las cifras (`{"what":["analysis","study"],"scopes":"all","study":"sesgo-cis"}`).
 5. Republicar el estudio también tras cada `publish event`: las filas se filtran por las carpetas de evento publicadas, así que la elección del 29-N sólo contará cuando su evento esté publicado (`{"what":["study"],"study":"sesgo-cis"}` después del `event`).
 6. Comprobar a la vista las dianas de los perfiles `/casas/{slug}` (necesitan la base de datos, no se pudieron ver en local): desde 03f4e6d sus etiquetas vuelven a verse; si estorban, domarlas en el cableado de esa página, no en el módulo.
+
+## Seguimiento (2026-10-27)
+
+Pequeños cambios pedidos por Luis sobre la página ya integrada en `dev`:
+
+- Pregunta 1 sin la tabla de elecciones (dianas y cajas bastan; la parte y su CSV siguen).
+- Periodo de control ampliado a **2008 – 2017** (`control ['2008-01-01', '2018-01-01']`, etiqueta «2008 – 2017»):
+  entra la elección catalana de diciembre de 2017 si el CIS la sondeó en la ventana. Hay que republicar el estudio
+  (`publish study sesgo-cis`) para que las cifras cambien; hasta entonces la página sigue con las publicadas.
+- La frase del resumen de la pregunta 1 pasa a «La misma institución, tras la llegada de un nuevo presidente, pasó a
+  sobreestimar a la izquierda de forma sistemática», sólo cuando la proporción de elecciones con la izquierda
+  sobreestimada supera la del periodo sin Tezanos y llega al 80% (`systematic`, en la plantilla).
+- Los dos gráficos de dispersión de la pregunta 2 (consenso y ranking) siguen su columna a 4:3 (tope 480 px) en vez
+  de los 280 px fijos de las tarjetas de preguntas.

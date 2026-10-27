@@ -4643,7 +4643,8 @@ def test_lean_page_structure_and_wording(api, fresh_app):
     # in the fixture Sigma Dos (6 de 6) beats the CIS (5 de 6): the neutral titles of question 2 (controller ruling)
     assert '<p class="ctitle">Casa por casa y elección por elección</p>' in page and 'monocolor' not in page
     assert '<p class="ctitle">Las casas, en proporción y magnitud</p>' in page and 'Ninguna otra encuestadora' not in page
-    assert '<button type="button" class="more" id="elections-more"' in page
+    # question 1 has no table of elections (2026-10-27): the two bullseyes and the two boxes carry the figures
+    assert 'elections-table' not in page and 'elections-more' not in page and 'Ver las ' not in page
     assert_public_wording(page, '/analisis/sesgo-cis')
     assert 'empresa' not in visible_text(page).lower() and 'max-width' not in page
 
@@ -4720,6 +4721,66 @@ def test_lean_summaries_claim_only_what_the_figures_show(api, fresh_app):
             'desaparece: quedó a la izquierda del consenso en 5 de 6 elecciones, 4,3 puntos de media') in text
 
 
+CARD_IMAGE_BUTTON = ('<button type="button" class="card-img-btn" hidden data-file="{file}" data-sign="{sign}" '
+                     'title="Descargar la tarjeta como imagen" aria-label="Descargar la tarjeta como imagen">')
+
+
+def card_image_buttons(page):
+    """`(id de la tarjeta, fichero, firma)` de cada botón de descarga de tarjeta, en orden; la tarjeta lleva `shot`."""
+    found = []
+    for match in re.finditer(r'<section class="card ([^"]*)" id="([^"]+)">(.*?)</section>', page, re.S):
+        classes, card_id, body = match.groups()
+        button = re.search(r'<button type="button" class="card-img-btn" hidden data-file="([^"]+)" data-sign="([^"]+)"', body)
+        if button:
+            assert 'shot' in classes.split(), card_id
+            found.append((card_id, button.group(1), button.group(2)))
+    return found
+
+
+def test_study_cards_carry_a_card_image_button(api, fresh_app):
+    """Cada tarjeta de los dos análisis lleva el botón cuadrado que la descarga entera como imagen (oculto sin JS):
+    fichero por tarjeta y firma con el estudio, el sitio y el autor; el módulo y la librería vendorizada existen."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    page = html(call(api, '/analisis/sesgo-cis')[2])
+    sign = 'El sesgo del CIS de Tezanos · demoscopio.es · @luis_sancho'
+    assert card_image_buttons(page) == [(card, 'demoscopio-sesgo-cis-%s.png' % slug, sign) for card, slug in
+                                        [('resumen', 'resumen'), ('p1', 'pregunta-1'), ('p2', 'pregunta-2'),
+                                         ('p3', 'pregunta-3'), ('datos', 'datos')]]
+    assert CARD_IMAGE_BUTTON.format(file='demoscopio-sesgo-cis-pregunta-1.png', sign=sign) in page
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    assert 'card-image.js' in open(os.path.join(root, 'web', 'dist', 'js', 'pages', 'analisis-sesgo-cis.js')).read()
+    publish_study(fresh_app.fs)
+    page = html(call(api, '/analisis/voto-cera')[2])
+    sign = 'El voto CERA y la «Ley de Nietos» · demoscopio.es · @luis_sancho'
+    assert [(card, file) for card, file, _ in card_image_buttons(page)] == [
+        (card, 'demoscopio-voto-cera-%s.png' % slug) for card, slug in
+        [('resumen', 'resumen'), ('p1', 'pregunta-1'), ('p2', 'pregunta-2'), ('p3', 'pregunta-3'),
+         ('debate', 'debate'), ('comprobacion', 'comprobacion'), ('datos', 'datos')]]
+    assert {s for _, _, s in card_image_buttons(page)} == {sign}
+    assert 'card-image.js' in open(os.path.join(root, 'web', 'dist', 'js', 'pages', 'analisis-cera.js')).read()
+    vendor = os.path.join(root, 'web', 'dist', 'vendor')
+    assert os.path.getsize(os.path.join(vendor, 'html2canvas-1.4.1.min.js')) > 150_000
+    assert 'Permission is hereby granted' in open(os.path.join(vendor, 'LICENSE-html2canvas.txt')).read()
+    module = open(os.path.join(root, 'web', 'dist', 'js', 'card-image.js')).read()
+    assert "vendor: '/dist/vendor/html2canvas-1.4.1.min.js'" in module
+
+
+def test_lean_systematic_sentence_needs_a_large_share_of_elections(api, fresh_app):
+    """«Pasó a sobreestimar a la izquierda de forma sistemática» sólo con una proporción de elecciones mayor que sin
+    Tezanos y de al menos el 80%: con 5 de 6 (83%) frente a 2 de 4 sale; con 4 de 6 (67%) no."""
+    publish_study(fresh_app.fs, study='sesgo-cis')
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert ('La misma institución, tras la llegada de un nuevo presidente, pasó a sobreestimar a la izquierda de forma '
+            'sistemática.') in text
+    assert 'otro presidente y otro método' not in text and 'proporción mayor' not in text
+    summary = fixture_data('sesgo-cis-summary')
+    summary['with'] = dict(summary['with'], k_left=4)
+    publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
+    text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
+    assert 'de forma sistemática' not in text
+    assert 'Sin Tezanos (2008 – 2017), el CIS sobreestimó a la izquierda en 2 de 4' in text
+
+
 def lean_t(*ps):
     """La parte `t` de un periodo del resumen con un valor p por prueba (`None` para una prueba que falta)."""
     return {key: None if p is None else {'n': 6, 'mean': 4.1, 'sd': 4.8, 't': 2.1, 'p': p}
@@ -4756,13 +4817,14 @@ def test_lean_tech_note_states_the_chance_of_the_largest_p(api, fresh_app):
 
 def test_lean_2023_summary_and_data_wording(api, fresh_app):
     """Sin ninguna casa más cerca del resultado que el CIS en 2023, «Ninguna quedó más cerca» (no «0 de ellas»); y el
-    periodo sin Tezanos son las elecciones de 2008 a 2016 (revisión final)."""
+    periodo sin Tezanos lleva la etiqueta de los parámetros (2008 – 2017 desde el 2026-10-27) y los años de sus
+    elecciones (revisión final)."""
     summary = fixture_data('sesgo-cis-summary')
     summary['election'] = dict(summary['election'], closer=0)
     publish_study(fresh_app.fs, study='sesgo-cis', parts={'summary': summary})
     text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
     assert 'Ninguna quedó más cerca del resultado que el CIS.' in text and '0 de ellas' not in text
-    assert '«sin Tezanos» (2008 – 2016), las elecciones de 2008 a 2016.' in text
+    assert '«sin Tezanos» (2008 – 2017), las elecciones de 2008 a 2017.' in text
     assert 'las elecciones anteriores con sondeo del CIS' not in text
     publish_study(fresh_app.fs, study='sesgo-cis')
     text = re.sub(r'\s+', ' ', visible_text(html(call(api, '/analisis/sesgo-cis')[2])))
@@ -4849,7 +4911,7 @@ def test_cera_page_head_and_question_1(api, fresh_app):
     assert 'el 18% de las altas con el 25% del censo' in resumen
     assert 'Con el censo real, la participación real y el reparto real: cero escaños.' in resumen
     assert 'class="note blue"' in resumen and 'los datos por encima de bandos y consignas.</p>' in resumen
-    assert page[:page.index('id="p1"')].endswith('<section class="card qcard q1" ')
+    assert page[:page.index('id="p1"')].endswith('<section class="card qcard shot q1" ')
     p1 = page[page.index('id="p1"'):]
     p1 = p1[:p1.index('</section>')]
     assert '<div class="qn">1</div><h2 class="qt">¿Se dispara el censo de los españoles en el exterior?</h2>' in p1
@@ -4944,7 +5006,7 @@ def regional_vote(community, previous, last, d_psoe, d_other_left, d_block):
 def test_cera_page_questions_2_and_3(api, fresh_app):
     publish_study(fresh_app.fs)
     page = cera_page(api)
-    assert page[:page.index('id="p2"')].endswith('<section class="card qcard q2" ')
+    assert page[:page.index('id="p2"')].endswith('<section class="card qcard shot q2" ')
     p2 = cera_section(page, 'p2')
     assert ('<div class="qn">2</div><h2 class="qt">¿Sesgo de izquierdas o reparto en provincias «estratégicas»?</h2>'
             in p2)
@@ -4980,7 +5042,7 @@ def test_cera_page_questions_2_and_3(api, fresh_app):
     assert '17,4%' not in p2[:p2.index('class="how"')]
     # question 3
     p3 = cera_section(page, 'p3')
-    assert page[:page.index('id="p3"')].endswith('<section class="card qcard q3" ')
+    assert page[:page.index('id="p3"')].endswith('<section class="card qcard shot q3" ')
     assert '<div class="qn">3</div><h2 class="qt">¿Pueden alterar el reparto de escaños el 29-N?</h2>' in p3
     assert re.findall(r'<span class="verdict">([^<]+)<i></i></span>', p3) == ['NO']
     scenario = p3[p3.index('<fieldset class="seg" id="scenario">'):]
@@ -5110,7 +5172,7 @@ def test_cera_page_debate_check_and_sources(api, fresh_app):
     publish_study(fresh_app.fs)
     page = cera_page(api)
     debate = cera_section(page, 'debate')
-    assert page[:page.index('id="debate"')].endswith('<section class="card" ')
+    assert page[:page.index('id="debate"')].endswith('<section class="card shot" ')
     assert '<h2>Lo que dice el debate, y por qué no se sostiene <span class="pill bad">' in debate
     assert 'Cada cifra mide algo; ninguna mide escaños.' in debate
     # the claim of the 23 seats, with the replication of the report from `prediction.report`

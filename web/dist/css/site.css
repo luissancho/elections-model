@@ -364,6 +364,17 @@ label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .tool-btn:disabled { opacity: .45; cursor: default; }
 .tool-btn svg { width: 15px; height: 15px; }
 .tool-btn[hidden] { display: none; }
+/* The square button at the top right corner of a card that downloads the whole card as an image
+   (`card-image.js`); the head of such a card (`.shot`) leaves it room, and the image carries a signature line */
+.card.shot { position: relative; }
+.card-img-btn { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; min-height: 0; margin: 0; padding: 0; border: 1px solid var(--color-line-strong); border-radius: 7px; background: var(--color-card); color: var(--color-muted); cursor: pointer; }
+.card-img-btn:hover { color: var(--color-text); border-color: var(--color-text); }
+.card-img-btn:disabled { opacity: .45; cursor: default; }
+.card-img-btn svg { width: 14px; height: 14px; }
+.card-img-btn[hidden] { display: none; }
+.card.shot > .qh, .card.shot > .card-head { padding-right: 36px; }
+.shot-image { box-shadow: none; }
+.shot-sign { margin: 14px 0 0; text-align: right; font-size: 12px; font-weight: 600; color: var(--color-muted); }
 .card-head h2, .card-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0; }
 .card-head h2::before, .card-head h3::before {
   content: "";
@@ -812,9 +823,10 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 
 /* Análisis: the page of a study (the CERA study). `--qc` is the colour of each question, the one of its verdict
    (the infographic's green, orange and red, only here); `--qc-ink` its darker twin for text on white. */
-.q1 { --qc: #2e9e5b; --qc-ink: #15803d; }
-.q2 { --qc: #e8912b; --qc-ink: #c2410c; }
-.q3 { --qc: #ce3b3b; --qc-ink: #b91c1c; }
+/* `--qc-soft` is the 9% tint of `--qc` on white, written out so the card images (html2canvas) can paint it */
+.q1 { --qc: #2e9e5b; --qc-ink: #15803d; --qc-soft: #ecf6f0; }
+.q2 { --qc: #e8912b; --qc-ink: #c2410c; --qc-soft: #fdf5ec; }
+.q3 { --qc: #ce3b3b; --qc-ink: #b91c1c; --qc-soft: #fbeded; }
 /* The head: the pills (section, election, state of the prediction), the title and the subtitle */
 #study-head .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .pill.warn { background: #fff7ed; color: #c2410c; }
@@ -862,7 +874,7 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .qcard .chart { height: 280px; }
 /* A band of text inside a question (an objection and its answer) and the summary sentence of each question */
 .band { margin: var(--space-3) 0; padding: 10px 12px; border: 1px solid #e2ded5; border-radius: var(--radius-sm); background: #f3f1ec; font-size: 13.5px; }
-.sum { margin-top: var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--qc) 9%, #fff); font-size: 14px; font-weight: 500; }
+.sum { margin-top: var(--space-3); padding: 10px 12px; border-radius: var(--radius-sm); background: var(--qc-soft); font-size: 14px; font-weight: 500; }
 .sum b { font-weight: 800; }
 /* Question 3: the lead beside the scenario selector, the subheading, the notes under the tables and the gap chart
    with room for ten rows; without JS the selector still swaps the two tables of the prediction */
@@ -897,7 +909,8 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .glossary > .how { margin-top: 0; border-top: 0; }
 /* The CIS bias study (/analisis/sesgo-cis): square bullseyes centred in their column (the one of 2023 a bit wider),
    the matrix scrolling sideways on phones, the before/after boxes, the three tests of chance and the technical note.
-   The matrix and the distance ranking get their heights from the page script. */
+   The matrix and the distance ranking get their heights from the page script; the consensus and ranking scatters of
+   question 2 follow their column at 4:3, so they are not flattened. */
 .chart.square { aspect-ratio: 1 / 1; height: auto; max-width: 480px; margin: 0 auto; }
 .chart.square.wide { max-width: 560px; }
 .qcard .chart.square { height: auto; }
@@ -921,6 +934,7 @@ tr.model-row td { background: var(--color-soft); font-weight: 600; }
 .tech b { color: var(--color-text); }
 #p2 .tests + .ctitle { margin-top: 4px; }
 #p2 .chart-scroll + .grid2 { margin-top: var(--space-4); }
+#p2 .grid2 .chart { height: auto; aspect-ratio: 4 / 3; max-height: 480px; }
 #p3 .table-wrap + .ctitle { margin-top: 14px; }
 td.blk { font-weight: 700; }
 #datos .src-list + .ctitle { margin-top: var(--space-3); }

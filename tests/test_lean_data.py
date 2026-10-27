@@ -80,7 +80,7 @@ def test_active_pollsters_without_a_national_run(catalogue, tmp_path):
 def test_load_params_reads_the_repository_file():
     params = data.load_params(FileSystem(os.path.join(ROOT, 'data')))
     assert params['pollster'] == 'CIS' and params['since'] == '2018-09-01'
-    assert params['control'] == ['2008-01-01', '2017-01-01']
+    assert params['control'] == ['2008-01-01', '2018-01-01']
     assert params['min_elections'] == 10 and params['max_days'] == 60 and params['active_from'] == '2026-01-01'
     assert params['election'] == {'scope': 'es', 'date': '2023-07-23'} and params['blocks'] == ['Izquierda', 'Derecha']
-    assert params['labels'] == {'with': '2018 – 2026', 'without': '2008 – 2016'}
+    assert params['labels'] == {'with': '2018 – 2026', 'without': '2008 – 2017'}

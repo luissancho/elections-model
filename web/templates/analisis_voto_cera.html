@@ -8,6 +8,8 @@
 {% import '_macros.html' as m %}
 {#- A pace of additions as the infographic writes it: «×2,2». -#}
 {% macro pace(x) -%}×{{ x|num(1) }}{%- endmacro %}
+{#- The square button that downloads a card of this page as an image: file by `slug`, signed with the study. -#}
+{% macro shot(slug) -%}{{ m.card_image_button(site_title|lower ~ '-voto-cera-' ~ slug ~ '.png', 'El voto CERA y la «Ley de Nietos» · ' ~ site_host ~ ' · ' ~ author_handle) }}{%- endmacro %}
 {#- A change of seats: «0» without a sign, else «+1» / «−1» (a dash without a value). -#}
 {% macro seats(x) -%}{{ '0' if x == 0 else x|delta }}{%- endmacro %}
 {#- A value with the typographic minus: «−0,74». -#}
@@ -84,7 +86,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         <a href="#datos">Datos y método</a>
       </nav>
       {{ m.kpis(kpis) }}
-      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'La acusación de fraude, despojada de ruido, son tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.') }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'La acusación de fraude, despojada de ruido, son tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.', classes='shot') }}
+        {{ shot('resumen') }}
         <div class="three">
           {% call answer(v1, 1) -%}
             El ritmo de altas se duplica ({{ pace(figures.ratio) }}) tras la ley. Quien lo denuncia tiene
@@ -109,7 +112,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         </div>
         <p class="note blue">El censo exterior crece y merece escrutinio, y una sospecha razonable sobre cualquier reforma es legítima. Pero los datos no sostienen un fraude capaz de regalar escaños. Una sospecha no es una prueba: los datos por encima de bandos y consignas.</p>
       {{ m.card_end() }}
-      <section class="card qcard q1" id="p1">
+      <section class="card qcard shot q1" id="p1">
+        {{ shot('pregunta-1') }}
         <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
         <p class="lead">
           Serie mensual del INE hasta el último cierre y altas netas en dos periodos
@@ -227,7 +231,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
       {% set cs = q2.communities %}
       {% set moved = cs|rejectattr('d_block', 'none')|list %}
       {% set params = study_meta.get('params') or {} %}
-      <section class="card qcard q2" id="p2">
+      <section class="card qcard shot q2" id="p2">
+        {{ shot('pregunta-2') }}
         <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
         <p class="lead">
           {% if q2.lower and eco.r is not none and eco.r < 0 and sens.down -%}
@@ -387,7 +392,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
       {% set litigation = params.get('litigation') or {} %}
       {% set rates = params.get('participation') or {} %}
       {% set split_year = (params.get('split_source') or '')[:4] or figures.baseline_year %}
-      <section class="card qcard q3" id="p3">
+      <section class="card qcard shot q3" id="p3">
+        {{ shot('pregunta-3') }}
         <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
         <div class="card-h">
           <p class="lead">
@@ -606,7 +612,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
       {{ m.card_end() }}
       {% set report, history, fv, passed = debate.report, debate.history, debate.verdict, debate.passed %}
       {% set baseline = figures.baseline_year or 'las últimas generales' %}
-      {{ m.card_start('debate', 'Lo que dice el debate, y por qué no se sostiene', 'Cada cifra mide algo; ninguna mide escaños. Qué calcula cada una, qué le falta y qué sale al hacer el cálculo completo.', subtitle='Las cifras que circulan, replicadas con los mismos datos oficiales', subtitle_class='bad') }}
+      {{ m.card_start('debate', 'Lo que dice el debate, y por qué no se sostiene', 'Cada cifra mide algo; ninguna mide escaños. Qué calcula cada una, qué le falta y qué sale al hacer el cálculo completo.', subtitle='Las cifras que circulan, replicadas con los mismos datos oficiales', subtitle_class='bad', classes='shot') }}
+        {{ shot('debate') }}
         <div class="grid2">
           <article class="claim">
             <h3>«Hasta 23 escaños»</h3>
@@ -792,7 +799,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
       {{ m.card_end() }}
       {% set cc = comprobacion %}
       {% set past = cc.precedents|map(attribute='year')|list %}
-      {{ m.card_start('comprobacion', 'Comprobación: ¿decidió el voto CERA algún escaño, y a favor de quién?', "La prueba definitiva no es un modelo: con el escrutinio real se reparte D'Hondt con y sin los votos CERA en cada provincia." ~ (' La misma prueba, hacia atrás, para ' ~ names(past) ~ '.' if past else ''), subtitle=('Escrutinio del ' ~ study_meta.checked_at|date ~ ' cargado') if checked else 'Pendiente del escrutinio CERA', subtitle_class='ok' if checked else 'warn') }}
+      {{ m.card_start('comprobacion', 'Comprobación: ¿decidió el voto CERA algún escaño, y a favor de quién?', "La prueba definitiva no es un modelo: con el escrutinio real se reparte D'Hondt con y sin los votos CERA en cada provincia." ~ (' La misma prueba, hacia atrás, para ' ~ names(past) ~ '.' if past else ''), subtitle=('Escrutinio del ' ~ study_meta.checked_at|date ~ ' cargado') if checked else 'Pendiente del escrutinio CERA', subtitle_class='ok' if checked else 'warn', classes='shot') }}
+        {{ shot('comprobacion') }}
         <div class="table-wrap">
           <table id="check-table">
             <caption class="sr-only">El voto CERA de cada elección con escrutinio y los escaños que decidió al repartir con y sin él.</caption>
@@ -900,7 +908,8 @@ Los precedentes, con el mismo cálculo: {% for row in rows %}en {{ row.year }}, 
         {% if cc.precedents %}<p>{{ precedents(cc.precedents) }}</p>{% endif %}
         {% endcall %}
       {{ m.card_end() }}
-      {{ m.card_start('datos', 'Datos y método', 'Todo sale de fuentes oficiales y se puede descargar.') }}
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de fuentes oficiales y se puede descargar.', classes='shot') }}
+        {{ shot('datos') }}
         {% if sources %}
         <ul class="src-list">
           {% for source in sources %}
