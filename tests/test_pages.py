@@ -2489,15 +2489,52 @@ def test_metodo_promedio_text(api):
 
 
 def test_metodo_escanos_text(api):
+    """/metodo/escanos in the style of /metodo/promedio (2026-10-27): the title as h1, the cards in order, the
+    dated tables of the measurements, the six technical notes linked both ways and the sentences the rest of
+    the site relies on."""
     page = html(call(api, '/metodo/escanos')[2])
-    for anchor in ('sorteo', 'hoy-y-eleccion', 'circunscripciones', 'dhondt', 'barreras', 'cifras'):
+    cards = ('resumen', 'sorteo', 'hoy-y-eleccion', 'errores', 'circunscripciones', 'dhondt', 'barreras', 'cifras',
+             'comprobacion', 'limites', 'notas', 'closing')
+    for anchor in cards:
         assert 'id="' + anchor + '"' in page, anchor
+    assert [page.index('id="' + anchor + '"') for anchor in cards] == sorted(page.index('id="' + anchor + '"') for anchor in cards)
+    assert '<h1 class="headline">¿Cómo simulamos los escaños?</h1>' in page
+    for h3 in ('dos-errores', 'historico', 'conjunto', 'ancla', 'deriva', 'jovenes', 'swing', 'herencias',
+               'oscilaciones', 'participacion'):
+        assert '<h3 id="' + h3 + '">' in page, h3
     assert 'id="thresholds-table"' in page and 'Canarias' in page and 'Comunidad Valenciana' in page
     assert str(fixture_data('meta')['n_sim']) in page.replace('.', '') and '1.000 simulaciones' not in page
-    assert '<math' in page and 'Ejemplo' in page
+    assert page.count('<math display="block"') >= 7 and 'Ejemplo' in page
     text = re.sub(r'\s+', ' ', page)
-    assert 'en un mes, uno al 30% puede moverse alrededor de un punto' in text and 'en unos meses' not in text
-    assert 'suben y bajan a la vez' not in text and 'lo que gana un partido lo pierde otro' in text
+    for phrase in ('en un mes, uno al 30% puede moverse alrededor de un punto', 'lo que gana un partido lo pierde otro',
+                   'el titular de escaños es un reparto, no una media', 'es la precisión del promedio',
+                   'la elección simulada se celebra en la fecha de la estimación, el día del cálculo',
+                   'Por qué cada partido se sortea por su lado', 'Un paseo al azar proporcional al tamaño',
+                   'Las oscilaciones por comunidad y provincia', 'Qué límites tiene la simulación',
+                   'en las generales, el 3% de los votos válidos', 'cambiaba 64 de los 10.400 repartos provinciales'):
+        assert phrase in text, phrase
+    for phrase in ('en unos meses', 'suben y bajan a la vez', 'el de su banda', 'la banda del promedio', 'En resumen',
+                   'que se prolonga unos días tras el último sondeo', 'lo que se sabía'):
+        assert phrase not in text, phrase
+    # the dated tables: the error by size, the drift by horizon and by age, the swing residuals, the joint draw and
+    # the backtest of the reference run
+    for row in ('<td class="f l">De ámbito estatal</td><td>1,36</td><td>1,49</td><td>1,70</td><td>2,14</td><td>2,57</td><td>3,00</td>',
+                '<td class="f l">Parte del voto</td><td>1,7%</td><td>3,4%</td><td>6,0%</td><td>8,4%</td><td>11,6%</td>',
+                '<td class="f l">Deriva frente a los asentados</td><td>×3,0</td><td>×4,5</td><td>×3,2</td><td>×1,1</td><td>×0,9</td>',
+                '<td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,7</td>',
+                '<td class="f l">Probabilidad de mayoría absoluta de la derecha</td><td>0,984</td><td>0,974</td>',
+                '<td class="f l">Error medio de los escaños</td><td>7,1</td><td>9,4</td><td>12,8</td>'):
+        assert row in page, row
+    assert 'id="seats-backtest-table"' in page and 'ejecución de referencia del 24 de octubre de 2026' in text
+    # the six notes, numbered by their order and linked both ways
+    keys = ['error', 'conjunto', 'deriva', 'swing', 'oscilaciones', 'reparto']
+    assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 7)]
+    for target in re.findall(r'href="#(nota-[a-z]+)"', page):
+        assert 'id="{}"'.format(target) in page, target
+    assert page.index('id="notas"') < page.index('id="closing"')
+    assert_public_wording(page, '/metodo/escanos')
 
 
 def test_metodo_rating_text(api):
