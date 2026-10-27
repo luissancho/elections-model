@@ -1,11 +1,11 @@
 {
   "pollster": "CIS",
   "since": "2018-09-01",
-  "control": ["2008-01-01", "2017-01-01"],
+  "control": ["2008-01-01", "2018-01-01"],
   "blocks": ["Izquierda", "Derecha"],
   "min_elections": 10,
   "max_days": 60,
   "active_from": "2026-01-01",
   "election": {"scope": "es", "date": "2023-07-23"},
-  "labels": {"with": "2018 – 2026", "without": "2008 – 2016"}
+  "labels": {"with": "2018 – 2026", "without": "2008 – 2017"}
 }

@@ -20,6 +20,8 @@
 {%- endmacro %}
 {#- What a poll did with a block, by the sign of its error: «sobreestimó a la izquierda 3,1 puntos». -#}
 {% macro miss(x, block) -%}{% if x is number and x > 0 %}sobreestimó a la {{ block }} {{ x|num(1) }} puntos{% elif x is number and x < 0 %}subestimó a la {{ block }} {{ x|abs|num(1) }} puntos{% else %}acertó en la {{ block }}{% endif %}{%- endmacro %}
+{#- The square button that downloads a card of this page as an image: file by `slug`, signed with the study. -#}
+{% macro shot(slug) -%}{{ m.card_image_button(site_title|lower ~ '-sesgo-cis-' ~ slug ~ '.png', (study_meta.get('title') or 'El sesgo del CIS de Tezanos') ~ ' · ' ~ site_host ~ ' · ' ~ author_handle) }}{%- endmacro %}
 {#- A card-link of the summary: the number and the question, the verdict and one sentence (the `call` body). -#}
 {% macro answer(verdict, n) -%}
 <a class="{{ verdict.tone }}" href="#p{{ n }}"><div class="k">PREGUNTA {{ n }}</div><div class="tt">{{ verdict.question }}</div><div class="vv">{{ verdict.label }}</div><p>{{ caller() }}</p></a>
@@ -49,6 +51,8 @@
 {% set before, after = compare %}
 {#- The claims of the texts, each from the figures that back it -#}
 {% set more_left = before.share is number and after.share is number and after.share > before.share %}
+{#- «de forma sistemática»: a larger share of elections than before and at least 80% of them -#}
+{% set systematic = more_left and after.share >= 0.8 %}
 {% set common_left = industry.get('left') is number and industry.get('right') is number and industry.left > industry.right %}
 {% set diff = wc.get('mean_diff') %}
 {% set cis_left_of_others = diff is number and diff > 0 and wc.get('k') is number and wc.get('n') and wc.k * 2 > wc.n %}
@@ -76,7 +80,8 @@
         <a href="#datos">Datos y método</a>
       </nav>
       {{ m.kpis(kpis) }}
-      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'El debate sobre el CIS se reduce a tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.') }}
+      {{ m.card_start('resumen', 'Tres preguntas, tres respuestas', 'El debate sobre el CIS se reduce a tres preguntas concretas. Cada una tiene su tarjeta, con los datos y el veredicto.', classes='shot') }}
+        {{ shot('resumen') }}
         <div class="three">
           {% call answer(v1, 1) -%}
             En {{ count(w.get('k_left'), w.get('n')) }} elecciones su último sondeo dio al bloque de izquierdas más voto
@@ -98,7 +103,8 @@
         </div>
         <p class="note blue">Medimos lo que dicen los sondeos frente a lo que dicen las urnas. No medimos intenciones: el dato es la persistencia del error en una dirección, su tamaño, su comparación con las demás encuestadoras y con el propio CIS de antes de 2018. Los datos por encima de bandos y consignas.</p>
       {{ m.card_end() }}
-      <section class="card qcard {{ v1.tone }}" id="p1">
+      <section class="card qcard shot {{ v1.tone }}" id="p1">
+        {{ shot('pregunta-1') }}
         <div class="qh"><div class="qn">1</div><h2 class="qt">{{ v1.question }}</h2><span class="verdict">{{ v1.label }}<i></i></span></div>
         <p class="lead">
           José Félix Tezanos, secretario de Estudios y Programas de la Ejecutiva Federal del PSOE y responsable de los
@@ -141,37 +147,10 @@
           </div>
           {% endfor %}
         </div>
-        {% if elections %}
-        <div class="table-wrap">
-          <table id="elections-table">
-            <caption class="sr-only">Error del último sondeo del CIS antes de cada una de las {{ elections|length }} elecciones con Tezanos, en puntos (sondeo menos resultado), las más recientes primero.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Elección</th>
-                <th scope="col">Fecha</th>
-                <th scope="col" title="Días entre el fin del trabajo de campo del sondeo y la votación">Días antes</th>
-                <th scope="col" title="Error en el bloque: positivo si el sondeo le dio más voto que el resultado, negativo si menos">Izquierda</th>
-                <th scope="col" title="Error en el bloque: positivo si el sondeo le dio más voto que el resultado, negativo si menos">Derecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in elections %}
-              <tr{% if loop.index > 8 %} hidden{% endif %}>
-                <td><b>{{ row.get('label') }}</b></td><td>{{ row.get('event_date')|date }}</td><td>{{ row.get('days')|int }}</td>
-                {#- double gradient, as the profile and Método: red the more the poll fell short of the block, green the more it overshot it #}
-                <td class="cell-shade" style="background-color: {{ row.get('Izquierda')|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row.get('Izquierda')|delta(1) }}</td>
-                <td class="cell-shade" style="background-color: {{ row.get('Derecha')|shade_around(0, 8, '#d62728', '#2ca02c') }}">{{ row.get('Derecha')|delta(1) }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        <button type="button" class="more" id="elections-more" hidden>Ver las {{ elections|length }} elecciones</button>
-        {% endif %}
         <div class="sum">
           <b>Sí.</b>
-          {%- if more_left %} La misma institución, con otro presidente y otro método, sobreestimó a la izquierda en una
-          proporción mayor de elecciones.{% endif %} Sin Tezanos ({{ pwo.get('label') or '–' }}), el CIS sobreestimó a la
+          {%- if systematic %} La misma institución, tras la llegada de un nuevo presidente, pasó a sobreestimar a la
+          izquierda de forma sistemática.{% endif %} Sin Tezanos ({{ pwo.get('label') or '–' }}), el CIS sobreestimó a la
           izquierda en {{ count(wo.get('k_left'), wo.get('n')) }} elecciones, {{ wo.get('mean_left')|delta(1) }} puntos de
           media{% if woc.get('n') %}, y quedó a la izquierda del consenso en {{ count(woc.get('k'), woc.get('n')) }}{% endif %}.
           Con Tezanos ({{ pw.get('label') or '–' }}), en {{ count(w.get('k_left'), w.get('n')) }},
@@ -185,12 +164,12 @@
           Cada punto de las dianas es una elección: el último sondeo del CIS antes de la votación. En horizontal va el
           error en el bloque de derechas y en vertical el del bloque de izquierdas, los dos en puntos y como sondeo
           menos resultado. El centro es el resultado exacto: un punto arriba a la izquierda dio más voto a la izquierda
-          y menos a la derecha del que hubo. Las cajas y la tabla cuentan las mismas filas; en la tabla, verde si el
-          sondeo le dio al bloque más voto del que obtuvo y rojo si le dio menos.
+          y menos a la derecha del que hubo. Las dos cajas cuentan las mismas elecciones que las dianas.
         </p>
         {% endcall %}
       </section>
-      <section class="card qcard {{ v2.tone }}" id="p2">
+      <section class="card qcard shot {{ v2.tone }}" id="p2">
+        {{ shot('pregunta-2') }}
         <div class="qh"><div class="qn">2</div><h2 class="qt">{{ v2.question }}</h2><span class="verdict">{{ v2.label }}<i></i></span></div>
         <p class="lead">Tres comprobaciones, de la más sencilla a la más exigente. La tercera responde a la objeción habitual: «todas las encuestas fallaron».</p>
         <div class="tests">
@@ -265,7 +244,8 @@
         </p>
         {% endcall %}
       </section>
-      <section class="card qcard {{ v3.tone }}" id="p3">
+      <section class="card qcard shot {{ v3.tone }}" id="p3">
+        {{ shot('pregunta-3') }}
         <div class="qh"><div class="qn">3</div><h2 class="qt">{{ v3.question }}</h2><span class="verdict">{{ v3.label }}<i></i></span></div>
         <p class="lead">
           El 23-J las demás encuestadoras daban al PP una ventaja holgada, con mayorías absolutas de PP y VOX en sus
@@ -340,7 +320,8 @@
         </p>
         {% endcall %}
       </section>
-      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y resultados publicados en Demoscopio y se puede descargar.') }}
+      {{ m.card_start('datos', 'Datos y método', 'Todo sale de los sondeos y resultados publicados en Demoscopio y se puede descargar.', classes='shot') }}
+        {{ shot('datos') }}
         <ul class="src-list">
           <li><b>Elecciones analizadas:</b> las generales y autonómicas con resultado en las que el CIS publicó un sondeo con trabajo de campo entre 6 y 42 días antes de la votación; se cuenta sólo el último. Los bloques son los de cada ámbito{% if blocks %} (en {{ el.get('name') or 'la elección de 2023' }}, {{ parties('Izquierda') }} frente a {{ parties('Derecha') }}){% endif %}.</li>
           <li><b>Error por bloque:</b> la suma de las estimaciones del sondeo para los partidos del bloque menos la suma de sus resultados, en puntos: positivo si le dio más voto del que obtuvo. Son las mismas filas que la diana del <a href="/casas/cis">perfil del CIS</a> y que la tarjeta de <a href="/metodo/promedio#ejemplo-cis">Método → El promedio</a>.</li>

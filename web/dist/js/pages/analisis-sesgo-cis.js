@@ -1,12 +1,13 @@
 // The page of the CIS bias study (`/analisis/sesgo-cis`): the charts of its questions, drawn from the data embedded
-// by the server (`initial`, `island` of `mtpy/lib/pages/lean.py`), and the «Ver las N elecciones» button of its table.
+// by the server (`initial`, `island` of `mtpy/lib/pages/lean.py`), and the buttons that download each card as an image.
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderDistance} from '../charts/distance.js';
 import {renderMatrix} from '../charts/matrix.js';
 import {renderRanking} from '../charts/ranking.js';
 import {renderScatter} from '../charts/scatter.js';
-import {mountWhenReady, readInitial, tryDraw, wireMore} from './common.js';
+import {wireCardImages} from '../card-image.js';
+import {mountWhenReady, readInitial, showError, tryDraw} from './common.js';
 
 // The colour of the CIS and the one of everything that is not national (regional bullseye and scatter points).
 const RED = '#ce3b3b';
@@ -136,5 +137,5 @@ function paint() {
   drawDistance(data.distance || []);
 }
 
-wireMore('elections-more', 'elections-table');
 mountWhenReady(paint);
+wireCardImages(document, showError);

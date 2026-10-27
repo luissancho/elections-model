@@ -1,6 +1,7 @@
 // The page of the CERA study (`/analisis/voto-cera`): the charts of its three questions, drawn from the data
 // embedded by the server (`initial`, `_island` of `pages/analisis.py`), the «Ver más» buttons of its tables and the
-// scenario selector of question 3, which swaps the table of the prediction and redraws the gap chart.
+// scenario selector of question 3, which swaps the table of the prediction and redraws the gap chart; and the
+// buttons that download each card as an image.
 import {fmtDate, fmtInt, fmtNum, fmtPct} from '../format.js';
 import {THEME} from '../charts/base.js';
 import {renderCensus} from '../charts/census.js';
@@ -8,7 +9,8 @@ import {renderGrouped} from '../charts/grouped.js';
 import {renderRadar} from '../charts/radar.js';
 import {renderScatter} from '../charts/scatter.js';
 import {renderSlope} from '../charts/slope.js';
-import {markSegments, mountWhenReady, readInitial, tryDraw, wireControls, wireMore} from './common.js';
+import {wireCardImages} from '../card-image.js';
+import {markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireMore} from './common.js';
 
 // The palette of the study's charts (the approved mockup): the accent for what is, red for what is feared.
 const RED = '#ce3b3b';
@@ -319,3 +321,4 @@ wireMore('provinces-more', 'provinces-table');
 wireMore('check-more', 'check-rows');
 markSegments();
 mountWhenReady(paint);
+wireCardImages(document, showError);

@@ -17,6 +17,13 @@
 <button type="button" class="tool-btn" id="{{ id }}" hidden data-title="{{ title }}" data-subtitle="{{ subtitle }}" data-sign="{{ sign }}" data-file="{{ file }}"><svg aria-hidden="true"><use href="#i-download"/></svg>Descargar</button>
 {%- endmacro %}
 
+{#- The square button at the top right corner of a card that downloads the whole card as a PNG (`card-image.js`
+    reveals and wires it; hidden without JS): the file name and the signature travel in its data attributes. The
+    card needs the class `shot` (room for the button and the position it hangs from). -#}
+{% macro card_image_button(file, sign) -%}
+<button type="button" class="card-img-btn" hidden data-file="{{ file }}" data-sign="{{ sign }}" title="Descargar la tarjeta como imagen" aria-label="Descargar la tarjeta como imagen"><svg aria-hidden="true"><use href="#i-download"/></svg></button>
+{%- endmacro %}
+
 {% macro card_end() -%}
 </section>
 {%- endmacro %}

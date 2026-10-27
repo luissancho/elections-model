@@ -20,8 +20,8 @@ def test_compute_lean_on_the_synthetic_bundle(fresh_app, tmp_path):
     assert study.params['min_elections'] == 3 and study.params['pollster'] == 'CIS'
     assert study.periods['with'] == {'from': '2018-09-01', 'to': None, 'label': '2018 – 2026',
                                      'first_event': '2018-12-02', 'last_event': '2026-05-17', 'n': 6}
-    assert study.periods['without']['n'] == 4 and study.periods['without']['label'] == '2008 – 2016'
-    assert study.periods['without']['to'] == '2017-01-01'
+    assert study.periods['without']['n'] == 4 and study.periods['without']['label'] == '2008 – 2017'
+    assert study.periods['without']['to'] == '2018-01-01'
     assert study.summary['with']['k_left'] == 5 and study.summary['without']['k_left'] == 2
     assert study.summary['election'] == expected['summary_election']
     assert [e['period'] for e in study.elections].count('with') == 6
