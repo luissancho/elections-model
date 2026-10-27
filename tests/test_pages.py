@@ -2501,28 +2501,66 @@ def test_metodo_escanos_text(api):
 
 
 def test_metodo_rating_text(api):
+    """/metodo/rating in the style of /metodo/promedio (2026-10-27): the title as h1, the cards of the method in
+    order, the dated tables of the snapshot of 20 October, the six technical notes linked both ways and the
+    sentences the other pages of the site rely on."""
     page = html(call(api, '/metodo/rating')[2])
-    for anchor in ('que-se-mide', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global', 'herding'):
+    cards = ('resumen', 'que-se-mide', 'diferencial', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global',
+             'herding', 'comprobacion', 'limites', 'notas', 'closing')
+    for anchor in cards:
         assert 'id="' + anchor + '"' in page, anchor
+    assert [page.index('id="' + anchor + '"') for anchor in cards] == sorted(page.index('id="' + anchor + '"') for anchor in cards)
+    assert '<h1 class="headline">¿Cómo calculamos el rating de las encuestadoras?</h1>' in page
+    # the sections inside the cards, in order
+    for h3 in ('elecciones', 'partes', 'escala', 'generales', 'prior', 'por-elecciones', 'pesos',
+               'diferencial-encuestadora', 'nota', 'mezcla', 'cuentas', 'promedio'):
+        assert '<h3 id="' + h3 + '">' in page, h3
+    assert page.index('id="cuentas"') < page.index('id="promedio"') < page.index('id="ranking-global"')
     assert 'la mitad' in page or '50%' in page  # rating_weight 0,5 leído del catálogo
-    assert '<math' in page
+    assert page.count('<math display="block"') >= 12
     landing = html(call(api, '/metodo')[2])
     assert 'Cómo funciona el modelo' not in landing and 'href="/metodo/rating"' in landing
     text = re.sub(r'\s+', ' ', page)
-    assert 'la desviación de cada encuestadora apenas cambia' in text and 'no cambia:' not in text
-    assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
-    assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
-    assert 'viendo sólo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
-    assert 'Trabajo de campo' in text and 'Implantación' in text and '<table id="rubric-table">' in page
-    assert '<strong>Diferencial</strong>' in text and 'Sesgo bloques' in text and 'Calidad</strong>' not in text
-    assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
-    assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text
-    assert 'En las tablas del sitio aparece como «Confianza»' in text and 'es la columna «Confianza»' in text
-    assert 'cuentan como una elección' in text and 'pesa en torno al 10% de su rating' in text
-    assert 'la calidad previa pesa dos tercios del rating' in text and 'entre 3 y 4' not in text
-    assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
-    assert 'puesta a mano' not in text and 'rúbrica pública' in text
-    assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    # what the method says, in the words the rest of the site quotes
+    for phrase in ('el rating no mide cuánto acierta una encuestadora, sino cuánto acierta más o menos que las demás',
+                   'la desviación de cada encuestadora apenas cambia', 'un fallo compartido no penaliza a nadie',
+                   'el denominador es la calidad previa media de las encuestadoras, no el rating medio',
+                   'muestra multiplicada por <var>h</var>′<sup>2</sup>',
+                   'viendo sólo los sondeos publicados hasta cada fecha',
+                   'Trabajo de campo', 'Implantación', '<table id="rubric-table">',
+                   '<strong>Diferencial</strong>', 'Sesgo bloques',
+                   'cada punto vale 8 de calidad, con un mínimo de 5', 'nadie pasa de 80 antes de los datos',
+                   'los puntos que faltan se ganan acertando', 'de la que apenas se sabe nada',
+                   'En las tablas del sitio aparece como «Confianza»', 'es la columna «Confianza»',
+                   'cuentan como una elección', 'pesa en torno al 10% de su rating',
+                   'la calidad previa pesa dos tercios del rating', 'rúbrica pública',
+                   'Un sondeo de tres meses antes cuenta tanto como uno de la última semana',
+                   'Las cuentas de cuatro encuestadoras reales', 'El rebaño, aparte', 'Qué límites tiene el rating'):
+        assert phrase in text, phrase
+    for phrase in ('Por su cercanía a la votación', 'multiplica el peso por 0,7', 'puesta a mano', 'Calidad</strong>',
+                   'entre 3 y 4', 'no cambia:', 'lo que se sabía', 'En resumen'):
+        assert phrase not in text, phrase
+    # the dated snapshot: the ratings of 20 October 2026 and their factors, the herding by cycle, the backtest
+    assert 'id="ratings-example-table"' in page and 'Datos del cálculo de los ratings del 20 de octubre de 2026' in text
+    for row in ('<td class="f l">GAD3</td><td>51</td><td>14,48</td><td>−0,84</td><td>80,0</td><td>56</td><td>12%</td><td><strong>77,1</strong></td>',
+                '<td class="f l">CENTRA</td><td>2</td><td>0,83</td><td>−0,95</td><td>83,1</td><td>48</td><td>70%</td><td><strong>58,4</strong></td>',
+                '<td class="f l">CIS</td><td>17,2</td><td>0,65</td>', '<td class="f l">GAD3</td><td>77,1</td><td>2,35</td>'):
+        assert row in page, row
+    assert 'id="herding-table"' in page and 'análisis del 7 de octubre de 2026' in text
+    assert 'id="rating-backtest-table"' in page and '<td class="f l">Error de los escaños (CRPS)</td><td>7,23</td><td>7,27</td>' in page
+    # the shrink and the scale tables derive from the parameters: 1 election keeps 34%, −τ gives 84
+    assert '<td class="f l">Diferencial conservado</td><td>34%</td><td>51%</td><td>72%</td><td>84%</td><td>90%</td>' in page
+    assert '<td class="f l">Rating ajustado</td><td>2</td><td>16</td><td>50</td><td>69</td><td>84</td><td>93</td><td>98</td>' in page
+    # the six notes, numbered by their order and linked both ways
+    keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano']
+    assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 7)]
+    for target in re.findall(r'href="#(nota-[a-z]+)"', page):
+        assert 'id="{}"'.format(target) in page, target
+    assert page.index('id="notas"') < page.index('id="closing"')
+    assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', landing)
+    assert_public_wording(page, '/metodo/rating')
 
 
 def test_metodo_rating_explains_evidence_by_election(api):
@@ -2564,17 +2602,17 @@ def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypat
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
     assert 'cada elección autonómica pesa la mitad que unas generales' in page
     assert 'href="/metodo/promedio#peso"' in page and 'href="/casas?scope=es"' in page and 'href="/metodo/backtest"' in page
-    assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'En resumen' in page
+    assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'Qué nos dice el rating de una encuestadora' in page
     changed = webapi.catalogue().copy()
     changed.loc[changed.index != 'es', 'rating_weight'] = 0.25
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa el 25% de unas generales' in page and 'la mitad' not in page
+    assert 'pesa el 25% de unas generales' in page and 'pesa la mitad que unas generales' not in page
     mixed = changed.copy()
     mixed.loc['es-md', 'rating_weight'] = 0.5
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa menos que unas generales' in page and 'la mitad' not in page
+    assert 'pesa menos que unas generales' in page and 'pesa la mitad que unas generales' not in page
 
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):

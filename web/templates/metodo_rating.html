@@ -1,11 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo calculamos el rating de las encuestadoras?{% endblock %}
-{% block description %}Cómo se calcula el rating de cada encuestadora: qué error se mide y frente a qué, la calidad previa (una rúbrica pública), por qué la evidencia se cuenta por elecciones, del rating ajustado al rating final, el ranking global con generales y autonómicas y por qué el rebaño se publica aparte.{% endblock %}
+{% block description %}Cómo calculamos el rating de cada encuestadora: qué sondeos y qué error medimos, la comparación con los demás sondeos de la misma elección en las mismas fechas, la calidad previa de una rúbrica pública, por qué la evidencia se cuenta por elecciones, del diferencial al rating y a su peso en el promedio, el ranking global, el rebaño y cómo lo comprobamos, con las fórmulas y los supuestos en seis notas técnicas.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
+{#- The six technical notes, in order of appearance: their calls are numbered by their position here. -#}
+{% set note_keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano'] %}
 {#- How much a regional election weighs in the ratings against a general election: the ratio of the
     `rating_weight` of the regional scopes of the catalogue to the national one, in words. -#}
 {% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
@@ -20,76 +22,174 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
 {%- endmacro %}
     {% include '_metodo_nav.html' +%}
     <div id="content" class="stack">
-      {{ m.headline('El rating de una encuestadora mide si sus sondeos se equivocaron más o menos que los demás de la misma elección en las mismas fechas; mientras ha sondeado pocas elecciones, manda una calidad previa.') }}
+      {{ m.headline(self.title(), tag='h1') }}
       <nav class="section-nav toc" aria-label="Secciones">
-        <a href="#que-se-mide">Qué se mide</a>
+        <a href="#que-se-mide">Qué sondeos y qué error</a>
+        <a href="#diferencial">Frente a qué</a>
         <a href="#calidad-previa">La calidad previa</a>
         <a href="#evidencia">La evidencia, por elecciones</a>
-        <a href="#rating-final">Del rating ajustado al rating final</a>
+        <a href="#rating-final">Del diferencial al rating</a>
         <a href="#ranking-global">Un ranking global</a>
         <a href="#herding">El rebaño, aparte</a>
+        <a href="#comprobacion">Cómo lo comprobamos</a>
+        <a href="#limites">Límites</a>
+        <a href="#notas">Notas</a>
       </nav>
-      {{ m.card_start('resumen', 'En resumen', 'El rating de las encuestadoras en cuatro ideas.') }}
-        <ul>
-          <li>Cada sondeo pasado se compara con el resultado: en el tamaño de los bloques y en el reparto dentro de cada bloque.</li>
-          <li>Ese error se compara con el de los sondeos de la misma elección y las mismas fechas: un fallo de todo el sector no penaliza.</li>
-          <li>Con pocas elecciones sondeadas manda una calidad previa según una rúbrica pública; con muchas, lo medido. La evidencia se cuenta por elecciones, no por sondeos. El rating va de 0 a 100.</li>
-          <li>Cuentan todas las elecciones anteriores, generales y autonómicas; el rebaño se publica aparte y sólo resta peso.</li>
-        </ul>
-      {{ m.card_end() }}
-      {{ m.card_start('que-se-mide', 'Qué se mide', 'El rating no premia acertar, sino acertar más que los demás: el error de cada sondeo se compara con el de los sondeos de la misma elección publicados en fechas cercanas.') }}
+      {{ m.card_start('resumen', 'Qué nos dice el rating de una encuestadora', 'Cómo pasamos de los sondeos de las elecciones pasadas a una nota de 0 a 100 por encuestadora, en cuatro pasos.') }}
         <p>
-          El punto de partida son las elecciones ya celebradas, con su resultado oficial. Cada sondeo publicado
-          antes de ellas se compara con ese resultado; quedan fuera los agregadores, los paneles en línea, los
-          sondeos de la veda y los de boca de urna. El error de un sondeo tiene dos partes:
+          Un sondeo dio a un partido tres puntos menos de los que sacó en las urnas. ¿Fue un mal sondeo, o ese mes se
+          equivocaron todas las encuestadoras en la misma dirección?
+        </p>
+        <p>
+          Una sola elección no suele bastar para responder. El rating de Demoscopio reúne lo que sabemos de cada
+          encuestadora: cuánto se equivocaron sus sondeos en las elecciones ya celebradas, si se equivocaron más o
+          menos que los demás sondeos de esas mismas elecciones en las mismas fechas, en cuántas elecciones distintas
+          lo ha demostrado y, mientras son pocas, cómo trabaja.
+        </p>
+        <p>
+          El proceso tiene cuatro pasos: medimos el error de cada sondeo frente al resultado oficial, lo comparamos con
+          el error medio de los sondeos de su elección en su fecha, resumimos esas diferencias por elecciones y las
+          convertimos en una nota, y mezclamos la nota con una calidad previa que pesa menos cuantas más elecciones
+          ha sondeado la encuestadora.
+        </p>
+        <p>
+          Hay una distinción que conviene tener presente: <strong>el rating no mide cuánto acierta una encuestadora,
+          sino cuánto acierta más o menos que las demás</strong>. Un fallo compartido por todo el sector no mueve el
+          rating de nadie. Por eso una encuestadora que se equivoca como la media del sector saca 50, y las que se
+          equivocan menos quedan por encima.
+        </p>
+        <h3>De los sondeos a una nota</h3>
+        <p>
+          Imaginemos un gráfico de una elección pasada con las fechas en el eje horizontal y el error de cada sondeo
+          frente al resultado en el vertical. Cada punto es un sondeo. Los puntos suelen bajar al acercarse la votación,
+          y en algunas elecciones todos quedan altos: ese año falló el sector.
+        </p>
+        <p>
+          Trazamos una línea con el error medio de cada día y medimos la distancia de cada sondeo a ella. Esa
+          distancia, el <strong>diferencial</strong>, es lo que dice de la encuestadora y no de la elección. Reunimos
+          los diferenciales de sus sondeos en cada elección, después los de todas sus elecciones, y los convertimos en
+          una nota de 0 a 100. Veamos qué entra en ese cálculo y por qué.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('que-se-mide', 'Qué sondeos y qué error medimos', 'Los sondeos de las elecciones ya celebradas con resultado oficial y al menos diez sondeos útiles, comparados con las urnas en dos partes: el tamaño de los bloques y el reparto dentro de cada bloque.') }}
+        <h3 id="elecciones">Las elecciones que cuentan</h3>
+        <p>
+          El punto de partida son las elecciones ya celebradas con resultado oficial y, como mínimo, diez sondeos
+          útiles: las generales desde 1977 y las autonómicas desde 2009 que cumplen esa condición. De cada una entran
+          todos los sondeos publicados durante su ciclo, desde el primero hasta el último, con las mismas reglas de
+          exclusión del promedio:
+        </p>
+        <ul>
+          <li><strong>Dejamos fuera los agregadores y los paneles en línea abiertos.</strong> Sus sondeos no entran
+            en el promedio, así que tampoco reciben rating; sus errores se calculan igualmente y se muestran en su
+            perfil, a título informativo.</li>
+          <li><strong>Dejamos fuera los sondeos de la veda y los de boca de urna.</strong> No se hicieron en las
+            mismas condiciones que el resto.</li>
+          <li><strong>No contamos dos veces la misma información.</strong> Una entrega cuyo trabajo de campo se
+            solapa con una posterior de la misma encuestadora queda fuera, como en el promedio.</li>
+        </ul>
+        <p>
+          Un sondeo de tres meses antes cuenta tanto como uno de la última semana, salvo por su posición entre los de
+          su encuestadora, que se cuenta más abajo. No descontamos la distancia a la votación, porque cada sondeo se compara con los demás de su misma fecha, no con el resultado a secas: un
+          sondeo lejano informa de la encuestadora tanto como uno cercano.
+        </p>
+        <h3 id="partes">El error de un sondeo, en dos partes</h3>
+        <p>
+          Cada sondeo se compara con el resultado oficial de su elección. Su error tiene dos partes:
         </p>
         <ul>
           <li><strong>Entre bloques:</strong> cuánto se equivocó en el tamaño de los dos bloques principales,
-            derecha e izquierda.</li>
+            derecha e izquierda, tal como los define cada elección.</li>
           <li><strong>Dentro del bloque:</strong> cuánto se equivocó en cómo se reparte cada bloque entre sus
-            partidos, sea cual sea el tamaño del bloque. Así se distingue un sondeo que reparte mal los votos
-            entre PSOE y SUMAR pero clava la suma de la izquierda de uno que se equivoca de bloque.</li>
+            partidos, sea cual sea el tamaño del bloque. Así distinguimos un sondeo que reparte mal los votos entre
+            PSOE y SUMAR pero clava la suma de la izquierda de uno que se equivoca de bloque.</li>
         </ul>
         <p>Las dos partes se combinan así:</p>
-        <math display="block" aria-label="E igual a 0,7 por E sub bloques más 0,3 por E sub dentro">
-          <mrow>
-            <mi>E</mi><mo>=</mo>
-            <mn>0,7</mn><mo>·</mo><msub><mi>E</mi><mtext>bloques</mtext></msub><mo>+</mo>
-            <mn>0,3</mn><mo>·</mo><msub><mi>E</mi><mtext>dentro</mtext></msub>
-          </mrow>
-        </math>
+        <div class="math-wrap">
+          <math display="block" aria-label="E igual a 0,7 por E sub bloques más 0,3 por E sub dentro"><mrow><mi>E</mi><mo>=</mo><mn>0,7</mn><mo>·</mo><msub><mi>E</mi><mtext>bloques</mtext></msub><mo>+</mo><mn>0,3</mn><mo>·</mo><msub><mi>E</mi><mtext>dentro</mtext></msub></mrow></math>
+        </div>
+        <h3 id="escala">Por qué en una escala relativa</h3>
         <p>
-          Los errores se miden en una escala relativa, la de los <em>log-odds</em> (el logaritmo de la razón
-          de probabilidades): en ella, dos puntos de error con un partido del 20% son más error que con uno del
-          45%. Cada bloque y cada partido cuenta en proporción a su voto real. En esa escala, el error dentro
-          del bloque suele ser unas tres veces mayor que el de los bloques, porque la cuota del socio menor
-          dentro de su bloque se mueve mucho en términos relativos; con los pesos de arriba, las dos partes
-          acaban contando de hecho parecido.
+          Los errores se miden en la escala de los <em>log-odds</em>, el logaritmo de la razón de probabilidades. En
+          ella, dos puntos de error con un partido del 20% son más error que con uno del 45%: no es lo mismo dar 18
+          a quien saca 20 que dar 43 a quien saca 45. Cada bloque y cada partido cuenta en proporción a su voto real,
+          para que un error con un partido del 2% no pese como uno con un partido del 30%.
         </p>
         <p>
-          <strong>Frente a qué.</strong> Un error grande no dice nada por sí solo: hay elecciones en las que
-          fallan todas las encuestadoras, y un sondeo de tres meses antes de la votación suele fallar más que uno de
-          la última semana sin que eso sea culpa de la encuestadora. Por eso, para cada elección, el modelo traza día a
-          día el error medio de todos sus sondeos, con una regresión local como la del promedio (ponderada por
-          la muestra y la sobrerrepresentación, no por el rating, que es lo que se está calculando). La
-          desviación de un sondeo es su error menos el error medio de su fecha:
-          <var>d</var> = <var>E</var> − <var>Ē</var>(<var>t</var>). Si es negativa, la encuestadora se equivocó menos
-          que el sector en ese momento.
+          En esa escala, el error dentro del bloque suele ser unas tres veces mayor que el de los bloques, porque la
+          cuota del socio menor dentro de su bloque se mueve mucho en términos relativos. Con los pesos de arriba,
+          0,7 y 0,3, las dos partes acaban contando de hecho parecido. Es una decisión de diseño, no un valor
+          medido. La nota{{ m.note('error', note_keys) }} recoge las fórmulas de las dos partes y la escala en que se
+          publican, la del sesgo.
         </p>
         <p>
-          Si todo el sector subestimó a un partido, el error medio de esos días sube con él y la desviación de
-          cada encuestadora apenas cambia: <strong>un fallo compartido no penaliza a nadie</strong>. La línea incluye a
-          todas las encuestadoras de la elección, también a la propia. Y cuando la fecha tenía pocos sondeos con los que
-          comparar, la línea es menos segura: la desviación del sondeo se encoge hacia cero, como si se pareciera
-          más a la media, en proporción a esa incertidumbre.
+          Las tablas del sitio muestran además dos medidas descriptivas en puntos, más fáciles de leer: el
+          <strong>error medio</strong>, la distancia media entre el sondeo y el resultado de cada partido principal, y
+          el <strong>sesgo de bloques</strong>, cuánto se equivocó, con signo, en el margen entre los dos bloques.
+          Describen a la encuestadora, pero no entran en la nota: la nota sale sólo del error relativo de arriba y de
+          su comparación con los demás.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('calidad-previa', 'La calidad previa', 'Antes de ver sus sondeos, cada encuestadora tiene una calidad previa de 0 a 100: lo que se sabe de cómo trabaja, no de cuánto acierta. En las tablas del sitio aparece como «Confianza».') }}
+      {{ m.card_start('diferencial', 'Frente a qué: el error de los demás', 'Un error grande no dice nada por sí solo. Comparamos cada sondeo con el error medio de los sondeos de la misma elección en su fecha, y esa diferencia es el diferencial.') }}
+        <p>
+          Hay elecciones en las que fallan todas las encuestadoras, y un sondeo de tres meses antes de la votación
+          suele fallar más que uno de la última semana sin que eso sea culpa de la encuestadora. Un error de dos puntos
+          puede ser excelente en una elección y pobre en otra.
+        </p>
+        <p>
+          Por eso, para cada elección, trazamos día a día el error medio de todos sus sondeos. Lo hacemos con una
+          regresión local como la del promedio: para cada fecha, una recta ajustada a los errores de los sondeos
+          cercanos, con más peso cuanto más cerca, y cada sondeo pesa por su muestra y por su solapamiento, no por el
+          rating, que es lo que estamos calculando. La altura de la recta en cada día es el error medio del sector ese
+          día, <var>Ē</var>(<var>t</var>). El diferencial de un sondeo es su error menos el error medio de su fecha:
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="d sub i igual a E sub i menos E media de t sub i"><mrow><msub><mi>d</mi><mi>i</mi></msub><mo>=</mo><msub><mi>E</mi><mi>i</mi></msub><mo>−</mo><mover accent="true"><mi>E</mi><mo>¯</mo></mover><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>)</mo></mrow></math>
+        </div>
+        <p>
+          Si es negativo, la encuestadora se equivocó menos que el sector en ese momento; si es positivo, más. Si
+          todo el sector subestimó a un partido, el error medio de esos días sube con él y la desviación de cada
+          encuestadora apenas cambia: <strong>un fallo compartido no penaliza a nadie</strong>. La línea incluye a
+          todas las encuestadoras de la elección, también a la propia.
+        </p>
+        <h3>Cuando hay pocos sondeos con los que comparar</h3>
+        <p>
+          La línea del error medio es tan segura como los sondeos que la sostienen. En una fecha con muchos sondeos
+          sabemos bien qué decía el sector; en una con dos o tres, apenas. Por eso el diferencial de un sondeo se
+          encoge hacia cero en proporción a la incertidumbre de la línea en su fecha, como si se pareciera más a la
+          media: cuanto menos seguros estamos de con qué lo comparamos, menos le atribuimos.
+        </p>
+        <p>
+          Lo hemos medido en dos campañas cortas, las de 2016 y noviembre de 2019: con unos dieciocho sondeos
+          efectivos por fecha, el diferencial conservaba de media la mitad de su valor bruto, y entre un quinto y
+          nueve décimas según la fecha. La nota{{ m.note('consenso', note_keys) }} recoge la regresión, la regla de
+          contracción y esas cifras.
+        </p>
+        <h3>Un ejemplo simplificado</h3>
+        <p>
+          Supongamos que en la última semana de una elección el error medio del sector, en la escala del sesgo, era
+          de 2,0, y que un sondeo de esa semana tenía un error de 1,5. Su diferencial es −0,5: se equivocó, pero
+          medio punto menos que los demás. Otro sondeo de tres meses antes, con un error de 3,0 cuando el sector
+          estaba en 3,4, tiene un diferencial de −0,4: parecido, aunque su error fuera el doble. Lo que cuenta es la
+          distancia a la línea, no la altura.
+        </p>
+        <p>
+          En el perfil de cada encuestadora, el «Camino al rating» muestra su diferencial en cada elección que
+          sondeó; en <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>, la columna «Diferencial» resume
+          todas sus elecciones, como se cuenta más abajo.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('calidad-previa', 'La calidad previa: lo que sabemos antes de ver sus sondeos', 'Antes de ver sus sondeos, cada encuestadora tiene una calidad previa de 0 a 100: lo que se sabe de cómo trabaja, no de cuánto acierta. En las tablas del sitio aparece como «Confianza».') }}
+        <p>
+          Una encuestadora nueva no tiene elecciones con las que juzgarla, y una con dos elecciones puede haber tenido
+          suerte. Mientras la evidencia es escasa necesitamos algo con lo que empezar, y queremos que sea comprobable:
+          no una impresión, sino unos pocos criterios sobre cómo trabaja, con su fuente.
+        </p>
         <p>
           La calidad previa se puntúa con una rúbrica pública: unos pocos criterios sobre cómo trabaja la
-          encuestadora, cada uno con sus niveles. No mide el acierto pasado ni la coherencia entre sondeos: eso lo miden
-          los datos, a medida que se acumulan sus sondeos. De la trayectoria sólo recoge, en la Implantación, si la
-          encuestadora ha publicado sondeos de elecciones generales.
+          encuestadora, cada uno con sus niveles. No mide el acierto pasado ni la coherencia entre sondeos: eso lo
+          miden los datos, a medida que se acumulan sus sondeos. De la trayectoria sólo recoge, en la Implantación, si
+          la encuestadora ha publicado sondeos de elecciones generales.
         </p>
         <div class="table-wrap">
           <table id="rubric-table">
@@ -121,11 +221,12 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </div>
         <p>
           La calidad es la suma de puntos, hasta {{ rubric.max_points }}: cada punto vale {{ rubric.per_point }} de
-          calidad, con un mínimo de {{ rubric.floor }}; nadie pasa de {{ rubric.cap }} antes de los datos, los puntos que
-          faltan se ganan acertando. Lo que no se puede comprobar vale 0 en su criterio, así que una encuestadora de la
-          que apenas se sabe nada queda cerca del mínimo; una sin evaluar tiene el mínimo, {{ rubric.floor }}, o
-          {{ rubric.per_point }} si ha publicado sondeos de alguna elección general (el punto de Implantación que se calcula
-          sólo).
+          calidad, con un mínimo de {{ rubric.floor }}; nadie pasa de {{ rubric.cap }} antes de los datos, los puntos
+          que faltan se ganan acertando. Lo que no se puede comprobar vale 0 en su criterio, así que una encuestadora
+          de la que apenas se sabe nada queda cerca del mínimo; una sin evaluar tiene el mínimo, {{ rubric.floor }}, o
+          {{ rubric.per_point }} si ha publicado sondeos de alguna elección general (el punto de Implantación que se
+          calcula sólo). La nota{{ m.note('calidad', note_keys) }} recoge la regla y cómo se cuenta la Implantación a
+          la fecha de cada elección.
         </p>
         <p>
           La evaluación es pública y revisable: cada criterio de cada encuestadora lleva su fuente, en el fichero
@@ -133,103 +234,100 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a> es la columna «Confianza», y el perfil de cada
           encuestadora muestra el desglose.
         </p>
+        <h3 id="generales">Por qué cuentan las generales</h3>
         <p>
-          <strong>Por qué cuentan las generales.</strong> El criterio «Implantación» tiene dos partes. La de las
-          generales se calcula con los sondeos publicados, a la fecha de cada elección: el rating de una elección
-          pasada no cuenta las generales que vinieron después. La de los estándares (Insights+Analytics España,
-          ESOMAR o la norma ISO 20252) se evalúa a mano, con su fuente, como el resto de la rúbrica.
+          El criterio «Implantación» tiene dos partes. La de las generales se calcula con los sondeos publicados, a la
+          fecha de cada elección: el rating de una elección pasada no cuenta las generales que vinieron después. La de
+          los estándares (Insights+Analytics España, ESOMAR o la norma ISO 20252) se evalúa a mano, con su fuente, como
+          el resto de la rúbrica.
         </p>
         <p>
           La experiencia en generales entra en la calidad previa, y no rebajando el peso de las autonómicas, porque
-          las autonómicas no son más fáciles de pronosticar. Con el último sondeo de cada encuestadora a 30 días o
-          menos de la votación, en 65 autonómicas y 14 generales:
+          las autonómicas no son más fáciles de pronosticar. Lo hemos medido con el último sondeo de cada
+          encuestadora a 30 días o menos de la votación, en 65 autonómicas y 14 generales:
         </p>
         <div class="table-wrap">
-          <table id="difficulty-table">
-            <caption>Error del último sondeo de cada encuestadora a 30 días o menos de la votación. Los errores, en puntos; la separación entre encuestadoras, como desviación típica de su «Diferencial» en cada elección, en la escala del sesgo.</caption>
+          <table class="et et-fit" id="difficulty-table">
+            <caption>Error del último sondeo de cada encuestadora a 30 días o menos de la votación, medido el 20 de octubre de 2026. Los errores, en puntos; la separación entre encuestadoras, como desviación típica de su «Diferencial» en cada elección, en la escala del sesgo.</caption>
             <thead>
               <tr>
-                <th scope="col">Medida</th>
+                <th scope="col" class="f l">Medida</th>
                 <th scope="col">Autonómicas</th>
                 <th scope="col">Generales</th>
               </tr>
             </thead>
             <tbody>
-              <tr><th scope="row">Error medio por partido</th><td>2,36</td><td>2,30</td></tr>
-              <tr><th scope="row">Error en el margen entre bloques</th><td>4,34</td><td>4,72</td></tr>
-              <tr><th scope="row">Error común de todas las encuestadoras en el margen</th><td>4,46</td><td>4,09</td></tr>
-              <tr><th scope="row">Separación entre encuestadoras en una misma elección (escala del sesgo)</th><td>1,28</td><td>1,68</td></tr>
+              <tr><td class="f l">Error medio por partido</td><td>2,36</td><td>2,30</td></tr>
+              <tr><td class="f l">Error en el margen entre bloques</td><td>4,34</td><td>4,72</td></tr>
+              <tr><td class="f l">Error común de todas las encuestadoras en el margen</td><td>4,46</td><td>4,09</td></tr>
+              <tr><td class="f l">Separación entre encuestadoras en una misma elección</td><td>1,28</td><td>1,68</td></tr>
             </tbody>
           </table>
         </div>
         <p>
-          Los errores son parecidos: las autonómicas no son más fáciles, así que no hay motivo para descontarlas
-          más. Que en ellas las encuestadoras se separen menos unas de otras ya lo recoge su peso: cada elección
-          autonómica {{ regional_weight() }}. Y la experiencia en generales entra por la calidad previa, con el
-          criterio «Implantación», que es lo que manda cuando hay poca evidencia.
+          Los errores son parecidos: las autonómicas no son más fáciles, así que no hay motivo para descontarlas más.
+          Que en ellas las encuestadoras se separen menos unas de otras ya lo recoge su peso: cada elección autonómica
+          {{ regional_weight() }}. Y la experiencia en generales entra por la calidad previa, con el criterio
+          «Implantación», que es lo que manda cuando hay poca evidencia.
         </p>
+        <h3 id="prior">Un prior, no un predictor</h3>
         <p>
-          <strong>Un prior, no un predictor.</strong> La calidad previa es un prior de criterios observables y
-          documentados, no un predictor validado del acierto. Se ha comprobado con las elecciones pasadas: para cada
-          criterio, si las encuestadoras de un grupo se desviaron menos que las del otro en las mismas elecciones.
-          Con 59 encuestadoras evaluadas, ninguna diferencia es concluyente: todos los intervalos incluyen el cero.
+          La calidad previa es un prior de criterios observables y documentados, no un predictor validado del acierto.
+          Lo hemos comprobado con las elecciones pasadas: para cada criterio, si las encuestadoras de un grupo se
+          desviaron menos que las del otro en las mismas elecciones. Con 59 encuestadoras evaluadas, ninguna
+          diferencia es concluyente: todos los intervalos incluyen el cero.
         </p>
         <div class="table-wrap">
-          <table id="criteria-test-table">
-            <caption>Diferencia entre la desviación media de las encuestadoras de los dos grupos en las mismas elecciones, en la escala del «Diferencial» (negativa: el primer grupo se equivocó menos), con su intervalo del 95% remuestreando encuestadoras. Una encuestadora puede estar en los dos grupos de «Implantación» o de «Generales previas» en elecciones distintas.</caption>
+          <table class="et et-fit" id="criteria-test-table">
+            <caption>Diferencia entre la desviación media de las encuestadoras de los dos grupos en las mismas elecciones, en la escala del «Diferencial» (negativa: el primer grupo se equivocó menos), con su intervalo del 95% remuestreando encuestadoras. Medido el 20 de octubre de 2026. Una encuestadora puede estar en los dos grupos de «Implantación» o de «Generales previas» en elecciones distintas.</caption>
             <thead>
               <tr>
-                <th scope="col">Comparación</th>
+                <th scope="col" class="f l">Comparación</th>
                 <th scope="col">Diferencia</th>
                 <th scope="col">Intervalo del 95%</th>
                 <th scope="col">Encuestadoras</th>
               </tr>
             </thead>
             <tbody>
-              <tr><th scope="row">Implantación 2 frente a 0</th><td>−0,24</td><td>−0,50 a +0,07</td><td>9 / 59</td></tr>
-              <tr><th scope="row">Implantación 1 frente a 0</th><td>+0,12</td><td>−0,32 a +0,52</td><td>22 / 59</td></tr>
-              <tr><th scope="row">Generales previas, sí frente a no</th><td>−0,01</td><td>−0,33 a +0,32</td><td>31 / 59</td></tr>
-              <tr><th scope="row">Estándares, sí frente a no</th><td>−0,31</td><td>−0,66 a +0,07</td><td>11 / 48</td></tr>
-              <tr><th scope="row">Independencia 2 frente a menos de 2</th><td>−0,34</td><td>−0,69 a +0,12</td><td>23 / 36</td></tr>
-              <tr><th scope="row">Transparencia 2 o más frente a menos de 2</th><td>+0,72</td><td>−0,70 a +1,02</td><td>7 / 52</td></tr>
-              <tr><th scope="row">Trabajo de campo 3 frente a menos de 3</th><td>−0,02</td><td>−0,40 a +0,34</td><td>29 / 30</td></tr>
+              <tr><td class="f l">Implantación 2 frente a 0</td><td>−0,24</td><td>−0,50 a +0,07</td><td>9 / 59</td></tr>
+              <tr><td class="f l">Implantación 1 frente a 0</td><td>+0,12</td><td>−0,32 a +0,52</td><td>22 / 59</td></tr>
+              <tr><td class="f l">Generales previas, sí frente a no</td><td>−0,01</td><td>−0,33 a +0,32</td><td>31 / 59</td></tr>
+              <tr><td class="f l">Estándares, sí frente a no</td><td>−0,31</td><td>−0,66 a +0,07</td><td>11 / 48</td></tr>
+              <tr><td class="f l">Independencia 2 frente a menos de 2</td><td>−0,34</td><td>−0,69 a +0,12</td><td>23 / 36</td></tr>
+              <tr><td class="f l">Transparencia 2 o más frente a menos de 2</td><td>+0,72</td><td>−0,70 a +1,02</td><td>7 / 52</td></tr>
+              <tr><td class="f l">Trabajo de campo 3 frente a menos de 3</td><td>−0,02</td><td>−0,40 a +0,34</td><td>29 / 30</td></tr>
             </tbody>
           </table>
         </div>
         <p>
           La diferencia de la transparencia es casi toda del CIS: sin él, +0,05. Por eso conviene que la calidad
-          previa pese poco: su peso <var>k</var> son unas 2 elecciones de evidencia (abajo), y se diluye a medida
-          que la encuestadora acumula elecciones.
+          previa pese poco: su peso <var>k</var> son unas 2 elecciones de evidencia, como se explica a continuación,
+          y se diluye a medida que la encuestadora acumula elecciones.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('evidencia', 'La evidencia, por elecciones', 'La calidad previa pesa más cuantas menos elecciones ha sondeado la encuestadora. La evidencia se cuenta por elecciones, no por sondeos, porque los sondeos de una misma elección comparten su suerte.') }}
+      {{ m.card_start('evidencia', 'La evidencia se cuenta por elecciones', 'La calidad previa pesa más cuantas menos elecciones ha sondeado la encuestadora. La evidencia se cuenta por elecciones, no por sondeos, porque los sondeos de una misma elección comparten su suerte.') }}
         <p>
           El rating final <var>R</var> mezcla la calidad previa <var>Q</var> con el rating ajustado
-          <var>R</var><sub>aj</sub>, la nota que sale de los sondeos de la encuestadora (abajo), en proporción a la
-          evidencia <var>W</var> que la respalda:
+          <var>R</var><sub>aj</sub>, la nota que sale de los sondeos de la encuestadora (en la sección siguiente), en
+          proporción a la evidencia <var>W</var> que la respalda:
         </p>
-        <math display="block" aria-label="R igual a W por R ajustado más k por Q, entre W más k">
-          <mrow>
-            <mi>R</mi><mo>=</mo>
-            <mfrac>
-              <mrow><mi>W</mi><mo>·</mo><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mo>·</mo><mi>Q</mi></mrow>
-              <mrow><mi>W</mi><mo>+</mo><mi>k</mi></mrow>
-            </mfrac>
-          </mrow>
-        </math>
+        <div class="math-wrap">
+          <math display="block" aria-label="R igual a W por R ajustado más k por Q, entre W más k"><mrow><mi>R</mi><mo>=</mo><mfrac><mrow><mi>W</mi><mo>·</mo><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mo>·</mo><mi>Q</mi></mrow><mrow><mi>W</mi><mo>+</mo><mi>k</mi></mrow></mfrac></mrow></math>
+        </div>
+        <h3 id="por-elecciones">Por qué por elecciones</h3>
         <p>
-          <strong>Por qué por elecciones.</strong> Los sondeos de una encuestadora en una misma elección no son
-          pruebas independientes: si su método acierta o falla con un partido, lo hace en todos sus sondeos de esa
-          elección. Lo que importa es cuánto cambia su desviación de una elección a otra, frente a lo que se
-          diferencian las encuestadoras entre sí. En la escala de los log-odds:
+          Los sondeos de una encuestadora en una misma elección no son pruebas independientes: si su método acierta o
+          falla con un partido, lo hace en todos sus sondeos de esa elección. Veinte sondeos de una misma elección no
+          son veinte confirmaciones distintas. Lo que importa es cuánto cambia su diferencial de una elección a otra,
+          frente a lo que se diferencian las encuestadoras entre sí. En la escala de los log-odds:
         </p>
         <ul>
-          <li><strong>σ</strong>, lo que varía la desviación de una encuestadora de una elección a otra: unos
-            0,014. Medido con las encuestadoras de tres o más elecciones, da 0,0135 con el procedimiento de
-            medida y 0,014 con la corrección por grados de libertad.</li>
+          <li><strong>σ</strong>, lo que varía el diferencial de una encuestadora de una elección a otra: unos
+            0,014. Medido con las encuestadoras de tres o más elecciones, da 0,0135 con el procedimiento de medida y
+            0,014 con la corrección por grados de libertad.</li>
           <li><strong>τ</strong>, la escala de las diferencias entre encuestadoras, la misma del rating ajustado:
             0,01.</li>
-          <li>Lo que se separan las desviaciones medias de las encuestadoras con cinco o más elecciones: 0,006, y
+          <li>Lo que se separan los diferenciales medios de las encuestadoras con cinco o más elecciones: 0,006, y
             menos aún si se descuenta el ruido de cada media.</li>
         </ul>
         <p>
@@ -240,68 +338,158 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           <var>k</var> es el peso de la calidad previa, contado en elecciones:
           <var>k</var> = (σ/τ)<sup>2</sup> = (0,014/0,01)<sup>2</sup> = 1,96, unas 2 elecciones. Con
           <var>W</var> = 2, mitad y mitad; con menos, manda la calidad previa; con muchas más, lo medido. Una
-          encuestadora sin sondeos evaluables tiene como rating su calidad previa.
+          encuestadora sin sondeos evaluables tiene como rating su calidad previa. Es la regla de un modelo
+          jerárquico sencillo: si cada elección añade un ruido σ al diferencial verdadero de la encuestadora, y los
+          diferenciales verdaderos se reparten con una anchura τ, la mejor estimación mezcla lo medido con el prior
+          en esa proporción. La nota{{ m.note('evidencia', note_keys) }} desarrolla esa lectura y cómo se midió σ.
         </p>
+        <h3 id="pesos">Cuánto pesa cada elección</h3>
         <p>
           <var>W</var> no es el número bruto de elecciones, sino su suma ponderada:
         </p>
         <ul>
           <li><strong>Por su antigüedad:</strong> cada año de distancia con la elección más reciente multiplica
-            el peso de una elección por 0,9.</li>
+            el peso de una elección por 0,9. Una elección de hace diez años cuenta como un tercio de una de este
+            año.</li>
           <li><strong>Por su ámbito:</strong> cada elección autonómica {{ regional_weight() }} (ver
             <a href="#ranking-global">Un ranking global</a>).</li>
         </ul>
         <p>
-          Dentro de cada elección, los sondeos deciden la desviación de la encuestadora en ella, pero no suman
+          Dentro de cada elección, los sondeos deciden el diferencial de la encuestadora en ella, pero no suman
           evidencia: veinte sondeos de una misma elección cuentan como una elección. Cada sondeo pesa por su muestra
-          y su sobrerrepresentación, los dos primeros factores del peso en el promedio, y por su posición: el último
-          sondeo de la encuestadora en esa elección pesa 1, el anterior 0,5, el anterior 0,25 y así sucesivamente. Los
-          sondeos con un peso total, contando la antigüedad y el ámbito, por debajo de una centésima se descartan.
+          y su solapamiento, los dos primeros factores del peso en el promedio, y por su posición: el último sondeo de
+          la encuestadora en esa elección pesa 1, el anterior 0,5, el anterior 0,25 y así sucesivamente. Los sondeos
+          con un peso total, contando la antigüedad y el ámbito, por debajo de una centésima se descartan.
         </p>
+        <h3>Un ejemplo</h3>
         <p>
-          <strong>Un ejemplo.</strong> Por cómo se pesan, dos autonómicas cuentan en el rating como unas generales
-          del mismo año. Si son del último año, suman <var>W</var> = 1: con <var>k</var> cerca de 2, la calidad previa pesa dos tercios del rating. Una encuestadora con
-          decenas de elecciones, como el CIS o Sigma Dos, suma <var>W</var> ≈ 17, y su calidad previa pesa en torno al
-          10% de su rating.
+          Por cómo se pesan, dos autonómicas cuentan en el rating como unas generales del mismo año. Si son del
+          último año, suman <var>W</var> = 1: con <var>k</var> cerca de 2, la calidad previa pesa dos tercios del
+          rating. Una encuestadora con decenas de elecciones, como el CIS o Sigma Dos, suma <var>W</var> ≈ 17, y su
+          calidad previa pesa en torno al 10% de su rating. En el cálculo del 20 de octubre de 2026, la calidad previa
+          pesaba el 21% del rating en la mediana de las 24 encuestadoras con diez o más elecciones, y el 41% en la de
+          las 41 con cinco o más.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('rating-final', 'Del rating ajustado al rating final', 'Las desviaciones de los sondeos de una encuestadora se resumen en una sola, se convierten en una nota de 0 a 100 y se mezclan con la calidad previa.') }}
+      {{ m.card_start('rating-final', 'Del diferencial al rating', 'Los diferenciales de una encuestadora se resumen en uno por elección y en uno global, se convierten en una nota de 0 a 100 y se mezclan con la calidad previa.') }}
+        <h3 id="diferencial-encuestadora">El diferencial de la encuestadora</h3>
         <p>
-          <strong>La desviación de la encuestadora.</strong> Primero, la de cada elección: la media de las
-          desviaciones de sus sondeos en ella, con los pesos de la sección anterior. Después, la media de sus
-          elecciones, cada una con su peso. Esa media se encoge otra vez hacia cero según su incertidumbre,
-          σ/√<var>n</var>, con <var>n</var> el número efectivo de elecciones (el de elecciones si todas pesan igual,
-          algo menos si pesan distinto): con pocas elecciones, la encuestadora se acerca a la media del sector, porque
-          pocos aciertos pueden ser suerte.
+          Primero, el de cada elección: la media de los diferenciales de sus sondeos en ella, con los pesos de la
+          sección anterior. Después, la media de sus elecciones, cada una con su peso. Es la cifra que
+          <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a> publica como «Diferencial», en la escala del
+          sesgo.
         </p>
         <p>
-          <strong>El rating ajustado.</strong> Esa desviación <var>d</var> se convierte en una nota de 0 a 100:
+          Esa media se encoge otra vez hacia cero según su incertidumbre, σ/√<var>n</var>, con <var>n</var> el
+          número efectivo de elecciones (el de elecciones si todas pesan igual, algo menos si pesan distinto): con
+          pocas elecciones, la encuestadora se acerca a la media del sector, porque pocos aciertos pueden ser suerte.
+          Con σ y τ de arriba, la regla deja esto:
         </p>
-        <math display="block" aria-label="R ajustado igual a 100 por Phi de menos d entre tau">
-          <mrow>
-            <msub><mi>R</mi><mtext>aj</mtext></msub><mo>=</mo><mn>100</mn><mo>·</mo>
-            <mi>Φ</mi><mo>(</mo><mo>−</mo><mfrac><mi>d</mi><mi>τ</mi></mfrac><mo>)</mo>
-          </mrow>
-        </math>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Parte del diferencial medio que se conserva tras la contracción, según el número efectivo de elecciones de la encuestadora, con σ = 0,014 y τ = 0,01.</caption>
+            <thead><tr><th scope="col" class="f l">Elecciones</th><th scope="col">1</th><th scope="col">2</th><th scope="col">5</th><th scope="col">10</th><th scope="col">17</th></tr></thead>
+            <tbody><tr><td class="f l">Diferencial conservado</td><td>34%</td><td>51%</td><td>72%</td><td>84%</td><td>90%</td></tr></tbody>
+          </table>
+        </div>
+        <h3 id="nota">El rating ajustado</h3>
         <p>
-          Φ es la función de distribución normal: la parte de una campana de Gauss que queda por debajo de un
-          valor. τ es la escala, 0,01 en la escala de los log-odds. Una encuestadora que se equivoca como la media del
-          sector (<var>d</var> = 0) saca 50; una cuya desviación es −τ, 84; con −2τ, 98. Una que falla más que el
-          sector queda por debajo de 50 de forma simétrica: +τ da 16.
+          El diferencial <var>d</var>, ya contraído, se convierte en una nota de 0 a 100:
         </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="R ajustado igual a 100 por Phi de menos d entre tau"><mrow><msub><mi>R</mi><mtext>aj</mtext></msub><mo>=</mo><mn>100</mn><mo>·</mo><mi>Φ</mi><mo>(</mo><mo>−</mo><mfrac><mi>d</mi><mi>τ</mi></mfrac><mo>)</mo></mrow></math>
+        </div>
         <p>
-          <strong>El rating final.</strong> Es la mezcla del rating ajustado con la calidad previa, con la fórmula
-          de la sección anterior. También va de 0 a 100, y es el que se publica. En el perfil de cada encuestadora, el
-          «Camino al rating» muestra elección a elección los dos, el ajustado y el final.
+          Φ es la función de distribución normal: la parte de una campana de Gauss que queda por debajo de un valor.
+          τ es la escala, 0,01 en la escala de los log-odds, que en la escala del sesgo de las tablas es un 1,0. Una
+          encuestadora que se equivoca como la media del sector (<var>d</var> = 0) saca 50; una cuyo diferencial es
+          −τ, 84; con −2τ, 98. Una que falla más que el sector queda por debajo de 50 de forma simétrica: +τ da 16.
         </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>El rating ajustado según el diferencial contraído, en unidades de τ (en la escala del sesgo, τ es 1,0).</caption>
+            <thead><tr><th scope="col" class="f l">Diferencial</th><th scope="col">+2τ</th><th scope="col">+τ</th><th scope="col">0</th><th scope="col">−0,5τ</th><th scope="col">−τ</th><th scope="col">−1,5τ</th><th scope="col">−2τ</th></tr></thead>
+            <tbody><tr><td class="f l">Rating ajustado</td><td>2</td><td>16</td><td>50</td><td>69</td><td>84</td><td>93</td><td>98</td></tr></tbody>
+          </table>
+        </div>
+        <h3 id="mezcla">El rating final</h3>
         <p>
-          <strong>Cómo entra en el promedio.</strong> El rating de cada elección se calcula sólo con las
-          elecciones anteriores, y con él se pesan los sondeos de esa elección. Su factor en el peso de un sondeo
-          es ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100), con <var>R̄</var> el rating medio de las encuestadoras:
-          una encuestadora de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no
-          pesa nada. Una encuestadora sin rating calculado entra con su calidad previa en lugar del rating, y entonces
-          el denominador es la calidad previa media de las encuestadoras, no el rating medio. Cómo se combina con los
-          demás factores del peso se cuenta en
+          Es la mezcla del rating ajustado con la calidad previa, con la fórmula de la sección anterior. También va
+          de 0 a 100, y es el que se publica. En el perfil de cada encuestadora, el «Camino al rating» muestra
+          elección a elección los dos, el ajustado y el final, y cuánto subió o bajó el rating tras cada elección.
+          La nota{{ m.note('rating', note_keys) }} recoge las fórmulas de la contracción, de la nota y de la mezcla.
+        </p>
+        <h3 id="cuentas">Las cuentas de cuatro encuestadoras reales</h3>
+        <p>
+          Estas son las cifras publicadas para cuatro encuestadoras en el cálculo de los ratings del 20 de octubre
+          de 2026, de cara a las generales de 2026:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit" id="ratings-example-table">
+            <caption>Datos del cálculo de los ratings del 20 de octubre de 2026, para las generales de 2026. <var>W</var> es la evidencia, en elecciones ponderadas; el peso de la confianza es <var>k</var>/(<var>W</var> + <var>k</var>), con <var>k</var> = 1,96.</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="f l">Encuestadora</th>
+                <th scope="col">Elecciones</th>
+                <th scope="col"><var>W</var></th>
+                <th scope="col">Diferencial</th>
+                <th scope="col">Rating ajustado</th>
+                <th scope="col">Confianza</th>
+                <th scope="col">Peso de la confianza</th>
+                <th scope="col">Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="f l">GAD3</td><td>51</td><td>14,48</td><td>−0,84</td><td>80,0</td><td>56</td><td>12%</td><td><strong>77,1</strong></td></tr>
+              <tr><td class="f l">Sigma Dos</td><td>72</td><td>17,10</td><td>−0,26</td><td>60,2</td><td>64</td><td>10%</td><td><strong>60,6</strong></td></tr>
+              <tr><td class="f l">CEMOP</td><td>6</td><td>1,80</td><td>−0,79</td><td>78,8</td><td>56</td><td>52%</td><td><strong>66,9</strong></td></tr>
+              <tr><td class="f l">CENTRA</td><td>2</td><td>0,83</td><td>−0,95</td><td>83,1</td><td>48</td><td>70%</td><td><strong>58,4</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
+        <p>
+          Las cifras están redondeadas. GAD3 suma 51 elecciones, que con su antigüedad y su ámbito valen
+          <var>W</var> = 14,5: su rating es casi todo lo medido, 80, y la confianza apenas lo baja a 77,1. Sigma Dos
+          tiene más elecciones que nadie, 72, y un diferencial más modesto: queda en 60,6. CEMOP y CENTRA tienen
+          diferenciales mejores que GAD3, pero en 6 y 2 elecciones: su rating ajustado, 79 y 83, pesa la mitad en un
+          caso y menos de un tercio en el otro, y las dos quedan por debajo de GAD3. Antes de contar la evidencia por
+          elecciones, CENTRA era la primera del ranking con sus dos autonómicas; ese caso fue el que llevó al cambio.
+        </p>
+        <h3 id="promedio">Cómo entra en el promedio</h3>
+        <p>
+          El rating de cada elección se calcula sólo con las elecciones anteriores, y con él se pesan los sondeos de
+          esa elección. Su factor en el peso de un sondeo es una transformación logarítmica del rating, dividida por
+          la misma transformación del rating medio de las encuestadoras:
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="Factor de rating igual al logaritmo de uno más R entre cien, dividido por el logaritmo de uno más R medio entre cien"><mrow><mtext>Factor de rating</mtext><mo>=</mo><mfrac><mrow><mi>ln</mi><mo>(</mo><mn>1</mn><mo>+</mo><mi>R</mi><mo>/</mo><mn>100</mn><mo>)</mo></mrow><mrow><mi>ln</mi><mo>(</mo><mn>1</mn><mo>+</mo><mover accent="true"><mi>R</mi><mo>¯</mo></mover><mo>/</mo><mn>100</mn><mo>)</mo></mrow></mfrac></mrow></math>
+        </div>
+        <p>
+          Una encuestadora de rating medio pesa 1, el peso crece con el rating cada vez más despacio y un rating 0 no
+          pesa nada. El logaritmo modera las diferencias respecto a una ponderación directamente proporcional al
+          rating. Una encuestadora sin rating calculado entra con su calidad previa en lugar del rating, y entonces el
+          denominador es la calidad previa media de las encuestadoras, no el rating medio.
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Datos del cálculo del 20 de octubre de 2026, generales.</caption>
+            <thead><tr><th scope="col" class="f l">Encuestadora</th><th scope="col">Rating</th><th scope="col">Factor</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">GAD3</td><td>77,1</td><td>2,35</td></tr>
+              <tr><td class="f l">40dB</td><td>60,7</td><td>1,95</td></tr>
+              <tr><td class="f l">Sigma Dos</td><td>60,6</td><td>1,95</td></tr>
+              <tr><td class="f l">NC Report</td><td>35,6</td><td>1,25</td></tr>
+              <tr><td class="f l">Hamalgama</td><td>34,8</td><td>1,23</td></tr>
+              <tr><td class="f l">InvyMark</td><td>28,1</td><td>1,02</td></tr>
+              <tr><td class="f l">CIS</td><td>17,2</td><td>0,65</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          En el cálculo del 20 de octubre de 2026, GAD3 tenía un rating de 77,1 y el CIS de 17,2. La relación entre
+          ambos era de unas 4,5 veces; después de la transformación, sus factores estaban en una relación de unas 3,6
+          veces. Cómo se combina este factor con la muestra, la dispersión y la frecuencia de cada sondeo se cuenta en
           <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
         </p>
       {{ m.card_end() }}
@@ -327,57 +515,357 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </p>
         <p>Las columnas de <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>:</p>
         <ul>
-          <li><strong>Rating</strong>, <strong>Diferencial</strong> y <strong>Confianza</strong>: el rating final, la
-            desviación de la que sale (la de la sección anterior, en la escala del sesgo) y la calidad previa, de 0 a
+          <li><strong>Rating</strong>, <strong>Diferencial</strong> y <strong>Confianza</strong>: el rating final, el
+            diferencial del que sale (el de la sección anterior, en la escala del sesgo) y la calidad previa, de 0 a
             100.</li>
           <li><strong>Sondeos</strong>: los que entran en el cálculo, tras descartar los de peso ínfimo.
             <strong>Elecciones</strong>: en cuántas publicó, contando cada ámbito y fecha por separado (dos
-            autonómicas del mismo día cuentan dos). <strong>Generales</strong>: cuántas elecciones generales ha
-            sondeado antes de la próxima, el dato del criterio «Implantación».</li>
+            autonómicas del mismo día cuentan dos) y, entre paréntesis, cuántas de ellas fueron elecciones generales,
+            el dato del criterio «Implantación».</li>
           <li><strong>Error medio</strong>: la distancia media, en puntos, entre sus sondeos y el resultado de
             cada partido principal. <strong>Sesgo bloques</strong>: la media, con signo, de cuánto se
-            equivocaron sus sondeos en la diferencia entre los dos bloques principales. Las dos son medias
+            equivocaron sus sondeos en el margen entre los dos bloques principales. Las dos son medias
             ponderadas con los pesos del rating y describen a la encuestadora, pero no entran en la nota: la nota sale
-            sólo de la desviación.</li>
+            sólo del diferencial.</li>
           <li><strong>Rebaño</strong>: la medida de la sección siguiente.</li>
         </ul>
       {{ m.card_end() }}
       {{ m.card_start('herding', 'El rebaño, aparte', 'El rebaño mide si las cifras de una encuestadora se mueven menos de lo que permitiría el azar de sus muestras; se publica junto al rating, pero no entra en él.') }}
         <p>
-          <strong>La medida.</strong> Una encuestadora con cinco o más sondeos con muestra publicada en un ciclo se
-          compara con el promedio calculado sin sus sondeos, para que no lo arrastre hacia ella. En las cuatro
-          series principales, las de más voto medio en los sondeos, se mide cuánto oscilan sus cifras alrededor
-          de ese promedio, descontada su inclinación propia, y se compara con lo que permitiría el azar del
-          muestreo con sus muestras,
-          <var>p</var>(1 − <var>p</var>)/<var>n</var>:
-          <var>h</var> = √(Σ residuo<sup>2</sup> / Σ varianza esperada). Un valor cerca de 1 es lo esperable;
-          por debajo de 1, sus cifras se mueven menos de lo que permite el azar.
+          Si repitiéramos una encuesta con otra muestra, obtendríamos una cifra algo distinta. Una encuestadora cuyas
+          cifras oscilan menos de lo que ese azar permite está haciendo algo más que medir: seguir al consenso,
+          entrevistar siempre al mismo panel, ponderar por recuerdo de voto o suavizar sus propias oleadas. La medida
+          no distingue entre esas causas, pero para el promedio dan igual: sus sondeos aportan menos información
+          independiente de lo que sugiere su muestra.
         </p>
+        <h3>La medida</h3>
         <p>
-          Puede deberse a seguir al consenso, a entrevistar siempre al mismo panel, a ponderar por recuerdo de
-          voto o a suavizar sus propias oleadas. La medida no distingue entre ellas, pero para el promedio dan
-          igual: sus sondeos aportan menos información independiente de lo que sugiere su muestra.
+          Una encuestadora con cinco o más sondeos con muestra publicada en un ciclo se compara con el promedio
+          calculado sin sus sondeos, para que no lo arrastre hacia ella. En las cuatro series principales, las de más
+          voto medio en los sondeos, medimos cuánto oscilan sus cifras alrededor de ese promedio, descontada su
+          inclinación propia, y lo comparamos con lo que permitiría el azar del muestreo con sus muestras,
+          <var>p</var>(1 − <var>p</var>)/<var>n</var>:
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="h igual a la raíz de la suma de los residuos al cuadrado entre la suma de la varianza esperada"><mrow><mi>h</mi><mo>=</mo><msqrt><mfrac><mrow><mo>∑</mo><msup><mtext>residuo</mtext><mn>2</mn></msup></mrow><mrow><mo>∑</mo><mtext>varianza esperada</mtext></mrow></mfrac></msqrt></mrow></math>
+        </div>
+        <p>
+          Un valor cerca de 1 es lo esperable; por debajo de 1, sus cifras se mueven menos de lo que permite el azar;
+          por encima, más. En el análisis del 7 de octubre de 2026, con las cuatro series principales de cada ciclo de
+          las generales:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit" id="herding-table">
+            <caption>Rebaño de cada encuestadora en cada ciclo de las generales, con cinco o más sondeos con muestra publicada; análisis del 7 de octubre de 2026. Un guion: menos de cinco sondeos en ese ciclo.</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="f l">Encuestadora</th>
+                <th scope="col">2015</th>
+                <th scope="col">2016</th>
+                <th scope="col">2019-04</th>
+                <th scope="col">2019-11</th>
+                <th scope="col">2023</th>
+                <th scope="col">2026 (en curso)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="f l">Hamalgama</td><td>–</td><td>–</td><td>–</td><td>0,37</td><td>0,63</td><td>0,49</td></tr>
+              <tr><td class="f l">Celeste Tel</td><td>1,37</td><td>0,43</td><td>1,15</td><td>0,62</td><td>0,80</td><td>0,51</td></tr>
+              <tr><td class="f l">NC Report</td><td>1,19</td><td>0,74</td><td>1,01</td><td>–</td><td>0,75</td><td>0,58</td></tr>
+              <tr><td class="f l">SocioMétrica</td><td>–</td><td>–</td><td>1,03</td><td>0,77</td><td>0,76</td><td>0,78</td></tr>
+              <tr><td class="f l">GAD3</td><td>1,24</td><td>0,79</td><td>1,28</td><td>0,98</td><td>0,98</td><td>0,74</td></tr>
+              <tr><td class="f l">Sigma Dos</td><td>1,94</td><td>0,53</td><td>1,16</td><td>0,67</td><td>1,17</td><td>0,88</td></tr>
+              <tr><td class="f l">CIS</td><td>2,11</td><td>–</td><td>1,93</td><td>–</td><td>2,53</td><td>3,16</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
+        <p>
+          Hay encuestadoras con rebaño persistente, como Hamalgama, Celeste Tel desde 2016, NC Report o
+          SocioMétrica, y el ciclo actual está por debajo de 1 en casi todas. El CIS oscila siempre de más: en el
+          ciclo actual, como una muestra de unas 400 entrevistas siendo de 4.000. Los ciclos cortos, como 2016 o
+          noviembre de 2019, dan valores más bajos en casi todas, porque en pocas semanas la opinión se mueve menos de
+          lo que el promedio deja sin explicar en un ciclo largo.
         </p>
         <p>
           En <a href="/casas{{ scope_query }}">Ranking Encuestadoras</a>, «Rebaño» reúne los ciclos del ámbito
           hasta hoy, el actual incluido, porque no necesita el resultado; cada ciclo pesa 0,9 por año de
           antigüedad, como en el rating. La tabla da también el del último ciclo y su p-valor: la probabilidad de
-          un valor tan bajo si no hubiera rebaño.
+          un valor tan bajo si no hubiera rebaño. La nota{{ m.note('rebano', note_keys) }} recoge la cuenta y sus
+          supuestos.
+        </p>
+        <h3>Por qué no entra en el rating</h3>
+        <p>
+          El rating mide el error frente al sector, y una encuestadora pegada al consenso tiende a fallar como el
+          sector: el diferencial no la distingue. Contarlo también en el rating penalizaría dos veces. La
+          penalización va por el peso.
         </p>
         <p>
-          <strong>Por qué no entra en el rating.</strong> El rating mide el error frente al sector, y una encuestadora
-          pegada al consenso tiende a fallar como el sector: la desviación no la distingue. Contarlo también en
-          el rating penalizaría dos veces. La penalización va por el peso.
-        </p>
-        <p>
-          <strong>Qué hace en el peso.</strong> En el ciclo que se promedia, una encuestadora por debajo de 1 pesa como
-          una muestra más pequeña: su peso por muestra se multiplica por su rebaño ya acercado a 1, más cuanto
-          menos sondeos tiene; llamando <var>h</var>′ a ese valor acercado, es como si cada sondeo tuviera su
-          muestra multiplicada por <var>h</var>′<sup>2</sup>. Con la encuestadora que oscila de más pasa lo mismo al
-          revés: pesa como la muestra que produciría esa oscilación. Los detalles están en
+          En el ciclo que se promedia, una encuestadora por debajo de 1 pesa como una muestra más pequeña: su peso
+          por muestra se multiplica por su rebaño ya acercado a 1, más cuanto menos sondeos tiene; llamando
+          <var>h</var>′ a ese valor acercado, es como si cada sondeo tuviera su muestra multiplicada por
+          <var>h</var>′<sup>2</sup>. Con la encuestadora que oscila de más pasa lo mismo al revés: pesa como la
+          muestra que produciría esa oscilación. Los detalles están en
           <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
         </p>
       {{ m.card_end() }}
+      {{ m.card_start('comprobacion', 'Cómo lo comprobamos', 'El rating de cada elección se calcula sólo con las elecciones anteriores a ella, y se juzga por lo que hace: si el promedio que pondera con él acierta más.') }}
+        <p>
+          El rating no se comprueba por sí solo, porque no pronostica nada: es un peso. Lo que se comprueba es el
+          promedio que pondera con él. Para que la prueba sea válida hay que utilizar lo que se conocía en cada
+          fecha: el rating con el que se pesan los sondeos de una elección se calcula sólo con las elecciones
+          anteriores, también en las pruebas históricas, de modo que el promedio de 2019 no puede aprender de los
+          resultados de 2023.
+        </p>
+        <p>
+          Cuando cambiamos el cálculo, repetimos esas pruebas antes y después. Al pasar a contar la evidencia por
+          elecciones, en octubre de 2026, el promedio de las cinco elecciones generales de 2015 a 2023 apenas se
+          movió:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit" id="rating-backtest-table">
+            <caption>Pruebas históricas de las cinco elecciones generales de 2015 a 2023, con los ratings recalculados con cada versión del cálculo y sólo con las elecciones anteriores a cada fecha, el 20 de octubre de 2026. Media de los seis horizontes salvo donde se indica.</caption>
+            <thead><tr><th scope="col" class="f l">Medida</th><th scope="col">Por sondeos</th><th scope="col">Por elecciones</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">Error medio del voto a 6 días, en puntos</td><td>1,70</td><td>1,70</td></tr>
+              <tr><td class="f l">Error medio del voto a 30 días, en puntos</td><td>2,18</td><td>2,18</td></tr>
+              <tr><td class="f l">Error medio del voto, media de los horizontes</td><td>2,42</td><td>2,42</td></tr>
+              <tr><td class="f l">Error de los escaños (CRPS)</td><td>7,23</td><td>7,27</td></tr>
+              <tr><td class="f l">Probabilidades de mayoría (Brier)</td><td>0,075</td><td>0,077</td></tr>
+              <tr><td class="f l">Cobertura del intervalo del 95% del voto</td><td>88%</td><td>89%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          El voto no cambia; los escaños y las probabilidades empeoran una pizca, dentro de lo que pueden mover
+          cinco elecciones. El cambio no buscaba mejorar esas cifras, sino corregir lo que contaba el ejemplo de
+          arriba: una encuestadora primera del ranking con dos autonómicas. Es una lección sobre lo que el rating
+          puede y no puede demostrar: con pocas elecciones, los pesos de las encuestadoras mueven poco el promedio, y
+          lo que se les pide es sobre todo que no premien la suerte.
+        </p>
+        <p>
+          También hemos comprobado si acertar en unas elecciones predice acertar en otras. Entre las encuestadoras
+          con tres o más autonómicas y tres o más generales, la correlación entre su error medio en unas y en otras
+          es de 0,04; y entre dos mitades de las generales, de 0,02. Con 14 generales los datos no deciden ni a favor
+          ni en contra: el acierto de una encuestadora se repite menos de lo que uno esperaría, y por eso el rating
+          contrae tanto hacia la media. Los periodos, las métricas y los cortes de evaluación se detallan en
+          <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('limites', 'Qué límites tiene el rating', 'Comparar a las encuestadoras entre sí ayuda a repartir el peso del promedio, pero con pocas elecciones distingue poco, y varias de sus reglas son convenciones.') }}
+        <p>
+          El rating se apoya en pocas elecciones: catorce generales con sondeos suficientes desde 1977, y unas
+          autonómicas que son muchas más pero separan menos a unas encuestadoras de otras. Una encuestadora con cinco
+          elecciones conserva menos de tres cuartos de su diferencial; con dos, la mitad. Las diferencias entre
+          encuestadoras que el rating puede demostrar son pequeñas, y por eso las notas se apiñan más de lo que
+          parece: 60 y 70 están más cerca de lo que sugieren los números.
+        </p>
+        <p>
+          La escala τ, 0,01, se fijó antes de medir cuánto se separan realmente las encuestadoras, y parece ancha:
+          los diferenciales medios de las encuestadoras con cinco o más elecciones se separan 0,006, y
+          menos de 0,004 si se descuenta el ruido de cada media. Con una escala más estrecha, las notas se
+          contraerían más hacia 50. Está anotado, y de momento no se cambia.
+        </p>
+        <p>
+          La línea del error medio de cada elección incluye los sondeos de la propia encuestadora: en las fechas con
+          pocos sondeos, su diferencial se acerca a cero por partida doble, por la línea y por la contracción. El
+          diferencial de cada sondeo se contrae por la incertidumbre de la línea y el de la encuestadora por la suya:
+          es una regularización en dos pasos, no una actualización bayesiana exacta.
+        </p>
+        <p>
+          El modelo también contiene decisiones que deben poder revisarse: los pesos 0,7 y 0,3 de las dos partes del
+          error, la posición de cada sondeo (0,5), la antigüedad (0,9 por año), el peso de las autonómicas, el corte
+          de diez sondeos para que una elección cuente y la propia rúbrica, que ningún criterio demuestra
+          concluyentemente. Algunas se apoyan en comprobaciones publicadas; otras son reglas razonadas que todavía no
+          se han comparado sistemáticamente con alternativas.
+        </p>
+        <p>
+          Por eso explicamos los pasos, publicamos las cuentas y mostramos las limitaciones. El rating ofrece una
+          lectura de lo que cada encuestadora ha demostrado frente a las demás, con una contracción que reconoce
+          cuánto de eso puede ser suerte, y que podemos examinar y mejorar a medida que disponemos de más elecciones.
+        </p>
+      {{ m.card_end() }}
+      {% call m.notes_card(note_keys) %}
+        {% call m.note_item('error') %}<strong>El error de un sondeo: la escala de los log-odds y sus dos partes.</strong>
+          <p>
+            Sea <var>p</var><sub><var>j</var></sub> la proporción que el sondeo da al partido o bloque <var>j</var>,
+            entre 0 y 1, y <var>r</var><sub><var>j</var></sub> su resultado. Su error en log-odds es:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="L sub j igual al logaritmo de p sub j entre uno menos p sub j, dividido por r sub j entre uno menos r sub j"><mrow><msub><mi>L</mi><mi>j</mi></msub><mo>=</mo><mi>ln</mi><mfrac><mrow><msub><mi>p</mi><mi>j</mi></msub><mo>/</mo><mo>(</mo><mn>1</mn><mo>−</mo><msub><mi>p</mi><mi>j</mi></msub><mo>)</mo></mrow><mrow><msub><mi>r</mi><mi>j</mi></msub><mo>/</mo><mo>(</mo><mn>1</mn><mo>−</mo><msub><mi>r</mi><mi>j</mi></msub><mo>)</mo></mrow></mfrac></mrow></math></div>
+          <p>
+            Es un error relativo: dar 18 a quien saca 20 es <var>L</var> = −0,13, y dar 43 a quien saca 45, −0,08.
+            La parte de los bloques es la media, ponderada por el voto real de cada bloque, del valor absoluto de ese
+            error en los dos bloques principales de la elección (el mapa de bloques de cada elección decide qué
+            partidos forman la derecha y la izquierda):
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="E sub bloques igual a la suma sobre los bloques b de r sub b por el valor absoluto de L sub b, entre la suma de r sub b"><mrow><msub><mi>E</mi><mtext>bloques</mtext></msub><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mi>b</mi></munder><msub><mi>r</mi><mi>b</mi></msub><mo>|</mo><msub><mi>L</mi><mi>b</mi></msub><mo>|</mo></mrow><mrow><munder><mo>∑</mo><mi>b</mi></munder><msub><mi>r</mi><mi>b</mi></msub></mrow></mfrac></mrow></math></div>
+          <p>
+            La parte de dentro del bloque mide, para cada partido, la cuota que el sondeo le da dentro de su bloque
+            frente a la cuota que obtuvo, con el mismo error en log-odds sobre esas dos cuotas, en valor absoluto y
+            ponderado por el voto real del partido. Vale 0 cuando cada bloque se reparte como en las urnas, sea cual
+            sea el tamaño del bloque. Un sondeo que omite un partido del bloque se juzga entre los partidos que
+            publica. Un bloque de un solo partido no tiene reparto que acertar.
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="E sub dentro igual a la suma sobre los partidos j de r sub j por el valor absoluto de L sub j dentro, entre la suma de r sub j"><mrow><msub><mi>E</mi><mtext>dentro</mtext></msub><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mi>j</mi></munder><msub><mi>r</mi><mi>j</mi></msub><mo>|</mo><msubsup><mi>L</mi><mi>j</mi><mtext>dentro</mtext></msubsup><mo>|</mo></mrow><mrow><munder><mo>∑</mo><mi>j</mi></munder><msub><mi>r</mi><mi>j</mi></msub></mrow></mfrac></mrow></math></div>
+          <p>
+            <var>E</var> = 0,7·<var>E</var><sub>bloques</sub> + 0,3·<var>E</var><sub>dentro</sub>, en log-odds. Todo
+            el cálculo del rating se hace en esa escala; las tablas del sitio publican los valores en la <em>escala del
+            sesgo</em>, (<var>e</var><sup><var>x</var></sup> − 1)·100, el cambio porcentual de la razón de
+            probabilidades, redondeado a dos decimales: 0,01 en log-odds es 1,005 en esa escala, de ahí que un
+            diferencial de 2 ya sea una diferencia grande. Las medidas descriptivas en puntos son el error medio
+            (la media de |<var>p</var><sub><var>j</var></sub> − <var>r</var><sub><var>j</var></sub>| sobre los partidos
+            principales de la elección, ponderada por el voto real) y el sesgo de bloques (el margen entre el primer
+            bloque y el segundo en el sondeo menos el mismo margen en las urnas, con signo). Los pesos 0,7 y 0,3 y la
+            ponderación por el voto real, que hace que el error con un partido pequeño pese poco mientras el log-odds
+            lo amplifica, son convenciones del modelo que no hemos comparado con alternativas.
+          </p>
+        {% endcall %}
+        {% call m.note_item('consenso') %}<strong>La línea del error medio y la contracción del diferencial de cada sondeo.</strong>
+          <p>
+            Para cada elección, <var>Ē</var>(<var>t</var>) es una regresión local lineal de los errores
+            <var>E</var><sub><var>i</var></sub> de sus sondeos sobre sus fechas, ajustada en cada día desde el primer
+            sondeo hasta la votación: kernel gaussiano, ancho de banda adaptativo elegido con el método ISJ en tres
+            iteraciones y recta de grado 1, el mismo procedimiento que la tendencia del promedio, descrito en la nota
+            de la regresión de <a href="{{ method_href('promedio') }}#notas">¿Cómo promediamos las encuestas?</a>.
+            El peso de cada sondeo en la línea es <var>o</var><sub><var>i</var></sub>·<var>M</var><sub><var>i</var></sub>,
+            su factor de solapamiento por su factor de muestra, sin el rating. Entran los sondeos que entran en el
+            rating; la línea incluye los de la propia encuestadora y los posteriores de la misma campaña. Su error
+            estándar <var>s</var>(<var>t</var>) se calcula con una covarianza robusta a la autocorrelación (HAC de
+            Bartlett con un retardo).
+          </p>
+          <p>El diferencial de cada sondeo se contrae hacia cero según ese error estándar en su fecha:</p>
+          <div class="math-wrap"><math display="block" aria-label="d prima sub i igual a d sub i por tau al cuadrado entre tau al cuadrado más s de t sub i al cuadrado"><mrow><msubsup><mi>d</mi><mi>i</mi><mo>′</mo></msubsup><mo>=</mo><msub><mi>d</mi><mi>i</mi></msub><mo>·</mo><mfrac><msup><mi>τ</mi><mn>2</mn></msup><mrow><msup><mi>τ</mi><mn>2</mn></msup><mo>+</mo><mi>s</mi><msup><mrow><mo>(</mo><msub><mi>t</mi><mi>i</mi></msub><mo>)</mo></mrow><mn>2</mn></msup></mrow></mfrac></mrow></math></div>
+          <p>
+            con τ = 0,01 en log-odds. Es la actualización normal-normal con un prior centrado en cero de desviación
+            típica τ, pero con la incertidumbre de la línea como verosimilitud, no con la dispersión del propio sondeo:
+            por eso conviene leerla como una regularización que depende de la densidad de sondeos en cada fecha. En la
+            comprobación de septiembre de 2026 sobre las campañas de 2016 y noviembre de 2019, el error estándar de
+            la línea tenía una mediana de 0,012 en log-odds, con un tamaño efectivo de unos 18 sondeos por fecha; la
+            desviación típica de los diferenciales brutos era de 0,038, casi cuatro veces τ, y el factor de
+            contracción tenía una mediana de 0,49 (del 0,20 al 0,89 entre los percentiles 5 y 95). La distancia a la
+            votación no se descuenta en ningún paso: la comparación con la línea de la misma fecha ya la absorbe.
+          </p>
+        {% endcall %}
+        {% call m.note_item('calidad') %}<strong>De los puntos a la calidad previa, y la Implantación a la fecha.</strong>
+          <p>
+            Con <var>C</var> el trabajo de campo (0-3), <var>T</var> la transparencia (0-3), <var>I</var> = 1 si hay
+            una entidad identificable, <var>N</var> la independencia (0-2), <var>G</var> el número de elecciones
+            generales con sondeos de la encuestadora celebradas estrictamente antes de la fecha y <var>S</var> = 1 si
+            está asociada o certificada, los puntos y la calidad son:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="P igual a C más T por I más N más el indicador de G mayor que cero por uno más S; Q igual al máximo entre el mínimo y los puntos por punto por P"><mrow><mi>P</mi><mo>=</mo><mi>C</mi><mo>+</mo><mi>T</mi><mo>·</mo><mi>I</mi><mo>+</mo><mi>N</mi><mo>+</mo><mo>[</mo><mi>G</mi><mo>&gt;</mo><mn>0</mn><mo>]</mo><mo>·</mo><mo>(</mo><mn>1</mn><mo>+</mo><mi>S</mi><mo>)</mo><mo>,</mo><mspace width="1.5em"/><mi>Q</mi><mo>=</mo><mi>max</mi><mo>(</mo><mn>{{ rubric.floor }}</mn><mo>,</mo><mn>{{ rubric.per_point }}</mn><mo>·</mo><mi>P</mi><mo>)</mo></mrow></math></div>
+          <p>
+            Las generales se cuentan con los sondeos de la encuestadora que tienen un error evaluable en las
+            generales, sin los de la veda ni los de boca de urna y sin filtrar por tipo de encuestadora, para que el
+            dato de un agregador o un panel sea cierto aunque no reciban rating. El rating de cada elección usa la
+            calidad previa a su fecha, así que el «Camino al rating» del perfil puede mostrar una calidad distinta de
+            la de hoy, que es la del indicador del perfil y la de la columna «Confianza». La prueba por criterio de la
+            tabla centra el diferencial de cada encuestadora en cada elección por la media de esa elección y remuestrea
+            encuestadoras con reemplazo, 2.000 réplicas, sobre 59 encuestadoras evaluadas y 775 pares de encuestadora y
+            elección; la Implantación y las generales previas se calculan a la fecha de cada elección. El tope de
+            {{ rubric.cap }} y los {{ rubric.per_point }} puntos de calidad por punto de rúbrica son una convención:
+            con 10 por punto, una encuestadora nueva perfecta pesaría más que las mejores con historial.
+          </p>
+        {% endcall %}
+        {% call m.note_item('evidencia') %}<strong>Pesos, evidencia, σ y el peso del prior.</strong>
+          <p>
+            El peso del sondeo <var>i</var> dentro de su elección es
+            <var>w</var><sub><var>i</var></sub> = <var>o</var><sub><var>i</var></sub>·<var>M</var><sub><var>i</var></sub>·0,5<sup><var>p</var><sub><var>i</var></sub></sup>,
+            con <var>o</var><sub><var>i</var></sub> y <var>M</var><sub><var>i</var></sub> los factores de solapamiento
+            y de muestra del promedio (la raíz de la muestra entre la mediana de la elección) y
+            <var>p</var><sub><var>i</var></sub> su posición desde el último sondeo de la encuestadora en la elección
+            (0 el último, 1 el anterior). El peso de la elección <var>e</var> es
+            <var>W</var><sub><var>e</var></sub> = 0,9<sup><var>a</var><sub><var>e</var></sub></sup>·<var>ω</var><sub><var>e</var></sub>,
+            con <var>a</var><sub><var>e</var></sub> los años entre la elección y la más reciente de las que entran en el
+            cálculo y <var>ω</var><sub><var>e</var></sub> el peso de su ámbito en el catálogo. Un sondeo cuyo peso total
+            <var>w</var><sub><var>i</var></sub>·<var>W</var><sub><var>e</var></sub> es menor que 0,01 se descarta.
+            Para cada encuestadora:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="d sub e igual a la suma de w sub i por d prima sub i entre la suma de w sub i; d igual a la suma de W sub e por d sub e entre la suma de W sub e; W igual a la suma de W sub e; n efectivo igual a W al cuadrado entre la suma de W sub e al cuadrado"><mrow><msub><mi>d</mi><mi>e</mi></msub><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mrow><mi>i</mi><mo>∈</mo><mi>e</mi></mrow></munder><msub><mi>w</mi><mi>i</mi></msub><msubsup><mi>d</mi><mi>i</mi><mo>′</mo></msubsup></mrow><mrow><munder><mo>∑</mo><mrow><mi>i</mi><mo>∈</mo><mi>e</mi></mrow></munder><msub><mi>w</mi><mi>i</mi></msub></mrow></mfrac><mo>,</mo><mspace width="1.5em"/><mi>d</mi><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mi>e</mi></munder><msub><mi>W</mi><mi>e</mi></msub><msub><mi>d</mi><mi>e</mi></msub></mrow><mrow><munder><mo>∑</mo><mi>e</mi></munder><msub><mi>W</mi><mi>e</mi></msub></mrow></mfrac><mo>,</mo><mspace width="1.5em"/><mi>W</mi><mo>=</mo><munder><mo>∑</mo><mi>e</mi></munder><msub><mi>W</mi><mi>e</mi></msub><mo>,</mo><mspace width="1.5em"/><msub><mi>n</mi><mtext>ef</mtext></msub><mo>=</mo><mfrac><msup><mi>W</mi><mn>2</mn></msup><mrow><munder><mo>∑</mo><mi>e</mi></munder><msubsup><mi>W</mi><mi>e</mi><mn>2</mn></msubsup></mrow></mfrac></mrow></math></div>
+          <p>
+            El error estándar de <var>d</var> es σ/√<var>n</var><sub>ef</sub>, con σ un parámetro fijo del modelo,
+            0,014, no una estimación de cada ejecución. Se midió el 20 de octubre de 2026 sobre 4.088 sondeos de 18
+            ámbitos: la desviación típica, ponderada por <var>W</var><sub><var>e</var></sub>, de los
+            <var>d</var><sub><var>e</var></sub> de cada encuestadora alrededor de su media, con las 62 encuestadoras
+            de tres o más elecciones (872 elecciones), es 0,0135; corregida por los grados de libertad que consume
+            cada media, Σ<var>W</var><sub><var>e</var></sub><var>r</var><sup>2</sup> / Σ<sub>encuestadoras</sub>(Σ<var>W</var><sub><var>e</var></sub> − Σ<var>W</var><sub><var>e</var></sub><sup>2</sup>/Σ<var>W</var><sub><var>e</var></sub>),
+            es 0,0140. Con las 41 encuestadoras de cinco o más elecciones salen 0,0136 y 0,0140.
+          </p>
+          <p>
+            <em>El peso del prior.</em> Si el diferencial verdadero θ de cada encuestadora se reparte como una normal
+            de media 0 y desviación típica τ, y cada elección observa θ más un ruido de desviación típica σ, la media
+            posterior de θ tras <var>n</var> elecciones de igual peso es
+            <var>d̄</var>·<var>n</var>/(<var>n</var> + σ<sup>2</sup>/τ<sup>2</sup>): el prior cuenta como
+            <var>k</var> = σ<sup>2</sup>/τ<sup>2</sup> elecciones. Con σ = 0,014 y τ = 0,01, <var>k</var> = 1,96. El
+            modelo aplica esa misma proporción, con <var>W</var> en lugar de <var>n</var>, a la mezcla del rating
+            ajustado con la calidad previa; la contracción del diferencial usa
+            <var>n</var><sub>ef</sub>. Las dos lecturas coinciden sólo si τ es realmente la dispersión entre
+            encuestadoras: la medida directa, 0,006 entre las medias de las encuestadoras de cinco o más elecciones y
+            unos 0,0034 descontado el ruido de cada media (σ<sup>2</sup>/<var>n</var><sub>ef</sub>), sugiere que
+            τ = 0,01 es ancho. No se ha cambiado.
+          </p>
+        {% endcall %}
+        {% call m.note_item('rating') %}<strong>Contracción, nota y mezcla.</strong>
+          <p>Con <var>s</var> = σ/√<var>n</var><sub>ef</sub>, el diferencial contraído y su error son:</p>
+          <div class="math-wrap"><math display="block" aria-label="d post igual a d por tau al cuadrado entre tau al cuadrado más s al cuadrado; s post igual a la raíz de uno entre uno entre tau al cuadrado más uno entre s al cuadrado"><mrow><msub><mi>d</mi><mtext>post</mtext></msub><mo>=</mo><mi>d</mi><mo>·</mo><mfrac><msup><mi>τ</mi><mn>2</mn></msup><mrow><msup><mi>τ</mi><mn>2</mn></msup><mo>+</mo><msup><mi>s</mi><mn>2</mn></msup></mrow></mfrac><mo>,</mo><mspace width="1.5em"/><msub><mi>s</mi><mtext>post</mtext></msub><mo>=</mo><msup><mrow><mo>(</mo><mfrac><mn>1</mn><msup><mi>τ</mi><mn>2</mn></msup></mfrac><mo>+</mo><mfrac><mn>1</mn><msup><mi>s</mi><mn>2</mn></msup></mfrac><mo>)</mo></mrow><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup></mrow></math></div>
+          <p>
+            Es la misma actualización normal-normal de la nota anterior, ahora sobre la media de la encuestadora. Como
+            los <var>d</var>′<sub><var>i</var></sub> ya estaban contraídos, el prior actúa dos veces: de forma suave,
+            porque la primera contracción depende de la densidad de sondeos y la segunda del número de elecciones, pero
+            no es una actualización bayesiana exacta. <var>d</var><sub>post</sub> es el «Diferencial» que se publica,
+            en la escala del sesgo y redondeado a dos decimales; la nota y la mezcla son:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="R ajustado igual a 100 por Phi de menos d post entre tau; R igual a W por R ajustado más k por Q entre W más k, con k igual a sigma entre tau al cuadrado"><mrow><msub><mi>R</mi><mtext>aj</mtext></msub><mo>=</mo><mn>100</mn><mo>·</mo><mi>Φ</mi><mrow><mo>(</mo><mo>−</mo><mfrac><msub><mi>d</mi><mtext>post</mtext></msub><mi>τ</mi></mfrac><mo>)</mo></mrow><mo>,</mo><mspace width="1.5em"/><mi>R</mi><mo>=</mo><mfrac><mrow><mi>W</mi><msub><mi>R</mi><mtext>aj</mtext></msub><mo>+</mo><mi>k</mi><mi>Q</mi></mrow><mrow><mi>W</mi><mo>+</mo><mi>k</mi></mrow></mfrac><mo>,</mo><mspace width="1.5em"/><mi>k</mi><mo>=</mo><msup><mrow><mo>(</mo><mi>σ</mi><mo>/</mo><mi>τ</mi><mo>)</mo></mrow><mn>2</mn></msup></mrow></math></div>
+          <p>
+            Una encuestadora sin sondeos evaluables tiene <var>W</var> = 0 y <var>R</var> = <var>Q</var>. Los
+            agregadores y los paneles en línea abiertos no reciben <var>R</var><sub>aj</sub> ni <var>R</var>, y quedan
+            fuera de la media <var>R̄</var> del factor del promedio, ln(1 + <var>R</var>/100) / ln(1 + <var>R̄</var>/100),
+            que se calcula sobre todas las encuestadoras calificadas, también las que no tienen sondeos y valen su
+            calidad previa. El logaritmo es creciente y cóncavo: preserva la ordenación y comprime las diferencias
+            respecto a la ponderación proporcional al rating. Para las encuestadoras sin fila de rating, el promedio
+            sustituye <var>R</var> por <var>Q</var> y <var>R̄</var> por la calidad previa media. Φ es sólo una
+            transformación a la escala de 0 a 100, no una probabilidad de nada: 84 no significa que la encuestadora
+            acierte el 84% de las veces, sino que su diferencial contraído es una τ mejor que la media del sector.
+          </p>
+        {% endcall %}
+        {% call m.note_item('rebano') %}<strong>La medida del rebaño y su uso en el peso.</strong>
+          <p>
+            Para una encuestadora con <var>k</var> ≥ 5 sondeos con muestra publicada en el ciclo, se reajusta el
+            promedio de cada una de las cuatro series principales con el peso de sus sondeos puesto a cero, y para cada
+            sondeo <var>i</var> se toma el residuo <var>r</var><sub><var>i</var></sub> de su cifra publicada (sin
+            corregir por el efecto de casa) frente a ese promedio en su fecha, y la varianza de muestreo al nivel del
+            promedio, <var>p</var><sub><var>i</var></sub>, con su muestra publicada
+            <var>n</var><sub><var>i</var></sub>:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="SS observada igual a la suma de r sub i menos r media, al cuadrado; SS esperada igual a uno menos uno entre k, por la suma de diez a la cuarta por p sub i por uno menos p sub i, entre n sub i; h igual a la raíz de SS observada entre SS esperada"><mrow><msub><mi>SS</mi><mtext>obs</mtext></msub><mo>=</mo><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>k</mi></munderover><msup><mrow><mo>(</mo><msub><mi>r</mi><mi>i</mi></msub><mo>−</mo><mover accent="true"><mi>r</mi><mo>¯</mo></mover><mo>)</mo></mrow><mn>2</mn></msup><mo>,</mo><mspace width="1.5em"/><msub><mi>SS</mi><mtext>esp</mtext></msub><mo>=</mo><mrow><mo>(</mo><mn>1</mn><mo>−</mo><mfrac><mn>1</mn><mi>k</mi></mfrac><mo>)</mo></mrow><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>k</mi></munderover><msup><mn>10</mn><mn>4</mn></msup><mfrac><mrow><msub><mi>p</mi><mi>i</mi></msub><mo>(</mo><mn>1</mn><mo>−</mo><msub><mi>p</mi><mi>i</mi></msub><mo>)</mo></mrow><msub><mi>n</mi><mi>i</mi></msub></mfrac><mo>,</mo><mspace width="1.5em"/><mi>h</mi><mo>=</mo><msqrt><mrow><msub><mi>SS</mi><mtext>obs</mtext></msub><mo>/</mo><msub><mi>SS</mi><mtext>esp</mtext></msub></mrow></msqrt></mrow></math></div>
+          <p>
+            Las dos sumas se calculan por serie y se suman sobre las cuatro series; el centrado por
+            <var>r̄</var> quita la inclinación propia de la encuestadora y el factor 1 − 1/<var>k</var>, la variación
+            que consume esa media. Se descartan las muestras imputadas o recortadas, porque una muestra recortada haría
+            parecer rebaño a una encuestadora grande. El p-valor publicado es la cola inferior de una χ² con
+            <var>n</var> − 1 grados de libertad, con <var>n</var> los sondeos: la cuenta conservadora, porque las
+            cuatro series de un mismo sondeo comparten entrevistados y se tratan como una sola. Un efecto de diseño
+            real, que suele multiplicar la varianza de muestreo por 1,2 o 1,5, dejaría a las encuestadoras por debajo
+            de 1 aún más lejos de lo que deberían oscilar, así que la medida es conservadora. Se comprobó también
+            frente al consenso publicado antes de cada sondeo, la media de las demás encuestadoras en los 21 días
+            anteriores, con los mismos resultados.
+          </p>
+          <p>
+            En el ranking, el rebaño reúne los ciclos de la encuestadora hasta hoy con un decaimiento de 0,9 por año
+            de antigüedad: <var>h</var> = √(Σ 0,9<sup><var>a</var></sup>·<var>SS</var><sub>obs</sub> / Σ 0,9<sup><var>a</var></sup>·<var>SS</var><sub>esp</sub>).
+            En el peso del promedio se usa el del ciclo que se promedia, acercado a 1 por los sondeos en que se
+            apoya, <var>h</var>′ = 1 + (<var>h</var> − 1)·<var>n</var>/(<var>n</var> + 5), con un suelo de 0,1: el
+            factor de dispersión es <var>h</var>′ si <var>h</var>′ &lt; 1 y, para una encuestadora que oscila de
+            más, el inverso de su cociente de dispersión, como se explica en la nota de la muestra de
+            <a href="{{ method_href('promedio') }}#notas">¿Cómo promediamos las encuestas?</a>. Con un peso de muestra
+            proporcional a √<var>n</var>, los dos casos equivalen a una muestra <var>n</var>·factor<sup>2</sup>. En
+            las pruebas históricas de las cinco generales de 2015 a 2023, activar la penalización por rebaño dejó el
+            error medio del voto en 2,40 puntos frente a 2,40 sin ella, y mejoró las probabilidades de mayoría un 2%:
+            neutro, dentro del ruido. Los umbrales (cinco sondeos, cinco de contracción, el suelo de 0,1, las cuatro
+            series) son elecciones razonables que no hemos comparado con otras.
+          </p>
+        {% endcall %}
+      {% endcall %}
       {{ m.closing('¿Cuánto acierta el modelo?', method_href('backtest'),
                    'El modelo repetido en elecciones ya celebradas, viendo sólo los sondeos publicados hasta cada fecha, frente al resultado oficial.',
                    [{'href': '/casas' ~ scope_query, 'label': 'Ranking Encuestadoras'},
