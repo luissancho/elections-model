@@ -127,3 +127,14 @@ def test_rest_block_needs_every_other_block():
     res = run_js('b.blockResult({date: "d", values: {PP: 33, VOX: 12, PSOE: 32, PNV: 1}}, %s)' % json.dumps(REST))
     assert res['values'] == {'Izquierda': 32, 'Derecha': 45, 'Otros': 23}
     assert 'Otros' not in run_js('b.blockResult({date: "d", values: {PSOE: 32}}, %s)' % json.dumps(REST))['values']
+
+
+def test_rest_block_series_has_no_value_on_a_date_missing_a_side():
+    gap = {'dates': ['2026-01-01', '2026-01-02'], 'parties': ['PP', 'VOX', 'PSOE'],
+           'mean': {'PP': [30, None], 'VOX': [10, None], 'PSOE': [28, 28]},
+           'lo': {'PP': [28, None], 'VOX': [8, None], 'PSOE': [26, 26]},
+           'hi': {'PP': [32, None], 'VOX': [12, None], 'PSOE': [30, 30]}}
+    out = run_js('b.blockSeries(%s, %s)' % (json.dumps(gap), json.dumps(REST)))
+    assert out['mean']['Otros'] == [32, None]
+    assert out['lo']['Otros'][1] is None and out['hi']['Otros'][1] is None
+    assert out['lo']['Otros'][0] is not None

@@ -1,4 +1,6 @@
 // Party catalogue built from the data of the meta part.
+// The blocks view is ordered Izquierda, Otros, Derecha (BLOCK_VIEW_ORDER; unknown names last) and the rest block
+// Otros is always painted grey (OTHERS_COLOR); parties keep their own block order (BLOCK_ORDER).
 import {REST_BLOCK} from './blocks.js';
 
 export const OTHERS_COLOR = '#9e9e9e';
