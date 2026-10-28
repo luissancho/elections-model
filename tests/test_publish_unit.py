@@ -382,6 +382,7 @@ def test_web_blocks_puts_everything_outside_vs_in_otros():
         'Izquierda': ['PSOE', 'FA'], 'Derecha': ['PP', 'VOX'], 'Otros': ['PNV', 'ERC']}
     assert list(web_blocks(vs, ['PP', 'PSOE'])) == ['Izquierda', 'Derecha', 'Otros']
     assert web_blocks({'Derecha': ['PP']}, ['PP']) is None and web_blocks({}, ['PP']) is None
+    assert web_blocks({'Derecha': ['XX'], 'Izquierda': ['PSOE']}, ['PP', 'PSOE']) is None
 
 
 def test_export_summary_blocks_are_left_right_and_the_rest():
@@ -416,6 +417,33 @@ def test_export_projection_otros_is_the_complement_of_left_and_right():
     for i in range(len(data['dates'])):
         assert sum(blocks['mean'][n][i] for n in blocks['names']) == pytest.approx(100, abs=0.05)
         assert 0 <= blocks['lo']['Otros'][i] <= blocks['mean']['Otros'][i] <= blocks['hi']['Otros'][i] <= 100
+
+
+def test_empty_side_keeps_the_model_blocks_in_summary_and_projection():
+    for mode in ('nowcast', 'forecast'):
+        sim = synthetic_simulator(mode=mode)
+        sim.model.bmaps = {**sim.model.bmaps, 'vs': {'Derecha': ['XX'], 'Izquierda': ['PSOE']}}
+        summary = valid('summary', publish.export_summary(sim)[0], mode=mode)
+        assert [r['name'] for r in summary['blocks']] == list(BMAPS['blocks'])
+        projection = valid('projection', publish.export_projection(sim)[0], mode=mode)
+        assert projection['groups']['blocks']['names'] == ['Izquierda', 'Derecha'] or set(
+            projection['groups']['blocks']['names']) == set(BMAPS['blocks'])
+
+
+def test_export_projection_otros_band_is_clipped_to_0_100():
+    sim = synthetic_simulator(mode='forecast')
+    real = sim.projection
+
+    def wide(names=None, alpha=None):
+        out = real(names)
+        if isinstance(names, dict) and '__vs__' in names:
+            out[('hi', '__vs__')] = 120.0
+            out[('lo', '__vs__')] = -5.0
+        return out
+
+    sim.projection = wide
+    blocks = valid('projection', publish.export_projection(sim)[0], mode='forecast')['groups']['blocks']
+    assert min(blocks['lo']['Otros']) == 0 and max(blocks['hi']['Otros']) <= 100
 
 
 def test_export_meta_writes_the_three_block_map():

@@ -25,13 +25,15 @@ def web_blocks(vs: dict, names: list) -> Optional[dict]:
     dict or None
         `{'Izquierda': [...], 'Derecha': [...], 'Otros': [...]}` where the members of the first two keep the
         order of `vs` (filtered to `names`) and Otros holds every other name of `names`, in its order. `None`
-        when `vs` lacks Izquierda or Derecha.
+        when `vs` lacks Izquierda or Derecha, or one of them has no member among `names`.
     """
     if 'Izquierda' not in vs or 'Derecha' not in vs:
         return None
 
     left = [n for n in vs['Izquierda'] if n in names]
     right = [n for n in vs['Derecha'] if n in names]
+    if len(left) == 0 or len(right) == 0:
+        return None
     rest = [n for n in names if n not in left and n not in right]
 
     return {'Izquierda': left, 'Derecha': right, REST_BLOCK: rest}
