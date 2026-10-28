@@ -107,7 +107,51 @@ def inherited_results(results: Optional[dict], meta: dict) -> Optional[dict]:
 
         parties[name] = {'seats': total('seats'), 'pct': total('pct', 2), 'inherited': members}
 
-    return results | {'parties': parties}
+    vs = (meta.get('bmaps') or {}).get('vs') or {}
+    if not (vs.get('Izquierda') and vs.get('Derecha')):
+        return results | {'parties': parties}
+
+    return results | {'parties': parties, 'blocks': lineage_blocks(results.get('parties') or {}, parties, vs)}
+
+
+def lineage_blocks(previous: dict, inherited: dict, vs: dict) -> dict:
+    """
+    The blocks of the last election regrouped by today's ``vs`` through the lineage of the source map: a previous
+    party goes to the block that lists it or that lists the party which inherits it, and counts once.
+
+    Parameters
+    ----------
+    previous : dict
+        Original ``results['parties']``, ``{name: {'pct', 'seats'}}``.
+    inherited : dict
+        The same parties after ``inherited_results``; ``inherited[name]['inherited']`` lists the parties summed.
+    vs : dict
+        ``meta.bmaps.vs``: ``{'Izquierda': [names], 'Derecha': [names]}``.
+
+    Returns
+    -------
+    dict
+        ``{'Izquierda'|'Derecha'|REST_BLOCK: {'pct', 'seats'}}``; the rest block is what is left up to 100 % and
+        up to the seats of all the previous parties.
+    """
+    sides = ('Izquierda', 'Derecha')
+    totals = {side: {'pct': 0.0, 'seats': 0} for side in sides}
+
+    for name, result in previous.items():
+        for side in sides:
+            members = vs.get(side) or []
+            heirs = [heir for heir in members if name in ((inherited.get(heir) or {}).get('inherited') or [])]
+            if name in members or heirs:
+                totals[side]['pct'] += result.get('pct') or 0
+                totals[side]['seats'] += result.get('seats') or 0
+                break
+
+    seats = sum(result.get('seats') or 0 for result in previous.values())
+    blocks = {side: {'pct': round(totals[side]['pct'], 2), 'seats': totals[side]['seats']} for side in sides}
+    blocks[REST_BLOCK] = {'pct': round(100 - blocks['Izquierda']['pct'] - blocks['Derecha']['pct'], 2),
+                          'seats': seats - blocks['Izquierda']['seats'] - blocks['Derecha']['seats']}
+
+    return blocks
 
 
 def result_rows(summary: dict, results: Optional[dict] = None) -> list:

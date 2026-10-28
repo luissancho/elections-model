@@ -4464,6 +4464,37 @@ def test_escanos_tables_without_a_published_election_have_no_comparison(api):
 # Seguimiento 2026-10-20 (Luis): un partido que absorbe a otro en el `smap` del evento (FA a Sumar, PP a UPN) se compara
 # con lo que obtuvieron ambos en la última elección, en vez de salir sin diferencia.
 
+def test_lineage_blocks_follow_the_heirs_and_count_each_previous_party_once():
+    """`lineage_blocks`: cada partido previo cuenta una vez, en el bloque del `vs` actual que lo lista o que lista a
+    quien lo hereda; Otros es el resto."""
+    previous = {'PP': {'pct': 33.0, 'seats': 136}, 'UPN': {'pct': 0.2, 'seats': 1}, 'VOX': {'pct': 12.4, 'seats': 33},
+                'PSOE': {'pct': 31.7, 'seats': 121}, 'SUMAR': {'pct': 12.3, 'seats': 31}, 'PNV': {'pct': 1.1, 'seats': 5},
+                'ERC': {'pct': 1.9, 'seats': 7}, 'BNG': {'pct': 0.6, 'seats': 1}, 'CC': {'pct': 0.5, 'seats': 1},
+                'JxCat': {'pct': 1.6, 'seats': 7}, 'EHB': {'pct': 1.4, 'seats': 6}}
+    inherited = dict(previous, PP={'pct': 33.2, 'seats': 137, 'inherited': ['PP', 'UPN']},
+                     FA={'pct': 12.3, 'seats': 31, 'inherited': ['SUMAR']})
+    vs = {'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'SUMAR', 'FA', 'UP']}
+    out = pages.lineage_blocks(previous, inherited, vs)
+    assert out['Derecha'] == {'pct': 45.6, 'seats': 170}          # UPN's seat is Derecha's already
+    assert out['Izquierda'] == {'pct': 44.0, 'seats': 152}        # Sumar counted once, not twice through FA
+    assert out['Otros']['seats'] == 349 - 170 - 152 and out['Otros']['pct'] == round(100 - 45.6 - 44.0, 2)
+
+
+def test_inherited_results_replace_the_blocks_with_the_lineage_of_the_run_vs():
+    """`inherited_results`: con `bmaps.vs` de dos lados los bloques del resultado previo siguen el linaje del smap."""
+    results = {'date': '2023-07-23', 'year': 2023,
+               'parties': {'PP': {'seats': 137, 'pct': 33.06}, 'UPN': {'seats': 1, 'pct': 0.21},
+                           'SUMAR': {'seats': 31, 'pct': 12.33}, 'PNV': {'seats': 5, 'pct': 1.12}},
+               'blocks': {'Derecha': {'seats': 137, 'pct': 33.06}}}
+    meta = {'parties': [{'name': 'PP'}, {'name': 'FA'}],
+            'smap': {'FA': [{'type': 'agg', 'names': ['SUMAR']}], 'PP': {'type': 'agg', 'names': ['UPN']}},
+            'bmaps': {'vs': {'Derecha': ['PP'], 'Izquierda': ['FA']}}}
+    out = pages.inherited_results(results, meta)
+    assert out['blocks'] == {'Izquierda': {'pct': 12.33, 'seats': 31}, 'Derecha': {'pct': 33.27, 'seats': 138},
+                             'Otros': {'pct': round(100 - 12.33 - 33.27, 2), 'seats': 174 - 31 - 138}}
+    assert pages.inherited_results(results, {**meta, 'bmaps': {}})['blocks'] == results['blocks']
+
+
 def test_inherited_results_sum_the_parties_a_run_party_absorbs():
     """`inherited_results`: el resultado previo de un partido es el suyo más el de los que absorbe por reglas `agg`
     sin regiones (el linaje del promedio de encuestas, `Simulator.poll_blocks`); las reglas `sub`, las regionales y
