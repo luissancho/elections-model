@@ -1793,7 +1793,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     blocks = re.search(r'<section class="card" id="results-blocks" hidden>(.*?)</section>', page, re.S).group(1)
     assert re.findall(r'<th scope="col">(.*?)</th>', blocks) == ['Bloque', '% Voto', 'Escaños']
     assert re.findall(r'</span>(\w+)</td>\s*<td>(.*?)</td>\s*<td><strong>(\d+)</strong>', blocks) == [
-        ('Izquierda', '31,4%', '150'), ('Derecha', '45,5%', '200')]
+        ('Izquierda', '31,4%', '150'), ('Derecha', '45,5%', '200'), ('Otros', '23,1%', '0')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls',
                          'series', 'result', 'model_last', 'inks', 'model_point'}
@@ -1802,11 +1802,12 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
     # el hemiciclo del resultado oficial y el reparto del error por bloque (Izquierda a la izquierda)
     rows = data['results'].pop('rows')
-    assert data['results'] == {'n_seats': 350, 'majority': 176, 'blocks': [{'name': 'Izquierda', 'seats': 150}, {'name': 'Derecha', 'seats': 200}]}
+    assert data['results'] == {'n_seats': 350, 'majority': 176, 'blocks': [{'name': 'Izquierda', 'seats': 150}, {'name': 'Derecha', 'seats': 200}, {'name': 'Otros', 'seats': 0}]}
     assert rows[0] == {'name': 'PP', 'seats': 160, 'pct': 33.06} and all('pct' in row for row in rows)
     assert [(row['name'], row['seats']) for row in rows] == [('PP', 160), ('PSOE', 150), ('VOX', 40), ('Cs', 0)]
     assert data['split'] == {'left': 'Izquierda', 'right': 'Derecha'}
-    assert data['block_colors'] == {'Derecha': fixture_data('meta')['parties'][0]['color'], 'Izquierda': pages.OTHERS_COLOR}
+    assert data['block_colors'] == {'Derecha': fixture_data('meta')['parties'][0]['color'], 'Izquierda': pages.OTHERS_COLOR,
+                                      'Otros': pages.OTHERS_COLOR}
     # primera fila como en Promedios: hemiciclo y tabla de resultados (% Voto y Escaños, sin P(primero))
     results = re.search(r'<table id="results-table">(.*?)</table>', page, re.S).group(1)
     assert re.findall(r'<th scope="col">(.*?)</th>', results) == ['Partido', '% Voto', '<span class="sr-only">Barra del voto</span>', 'Escaños']
@@ -1918,7 +1919,7 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     assert data['result']['date'] == '2023-07-23' and data['result']['values']['PP'] == 33.06
     assert data['model_last'] == {'horizon': 6, 'date': '2023-07-17', 'pct': {'PP': 32.41, 'PSOE': 30.99, 'VOX': 13.01},
                                   'seats': {'PP': 140, 'PSOE': 118, 'VOX': 30}, 'seats_valid': True}
-    assert data['catalog']['bmaps'] == {'main': ['PP', 'PSOE', 'VOX'], 'blocks': {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE']}}
+    assert data['catalog']['bmaps'] == {'main': ['PP', 'PSOE', 'VOX'], 'blocks': {'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX', 'Cs'], 'Otros': []}}  # Otros vacío: el navegador lo calcula como el resto
     assert set(data['inks']) >= {'PP', 'PSOE', 'VOX', 'Derecha', 'Izquierda'}
 
 
@@ -1993,20 +1994,26 @@ def test_eleccion_detail_helpers_of_the_shown_parties_and_the_blocks():
     seated = [{'party': 'PP', 'seats': 137}, {'party': 'TE', 'seats': 1}, {'party': 'PACMA', 'seats': 0}, {'party': 'X'}]
     assert [row['shown'] for row in pages.mark_shown(seated, ['PP'])] == [True, True, False, False]
     assert [row['shown'] for row in pages.mark_shown(seated, None, limit=1)] == [True, False, False, False]
-    catalog = pages.Catalog({'PP': {'block': 'Derecha'}, 'ERC': {'block': 'Separatista'}})
-    params = {'bmaps': {'blocks': {'Derecha': ['PP', 'Cs'], 'Izquierda': ['PSOE']}}}
+    params = {'bmaps': {'vs': {'Derecha': ['PP', 'Cs'], 'Izquierda': ['PSOE']}, 'blocks': {'Regionalista': ['PNV']}}}
     meta_blocks = {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'UP']}
     names = ['PP', 'PSOE', 'Cs', 'ERC', 'UP', 'MM']
-    # los parámetros primero, luego el meta de la elección, luego el catálogo del run; sin fuente, nada
-    assert pages.party_blocks(names, params, meta_blocks, catalog) == {
-        'PP': 'Derecha', 'PSOE': 'Izquierda', 'Cs': 'Derecha', 'ERC': 'Separatista', 'UP': 'Izquierda', 'MM': None}
-    assert pages.party_blocks(names, {}, None, catalog) == {'PP': 'Derecha', 'PSOE': None, 'Cs': None, 'ERC': 'Separatista', 'UP': None, 'MM': None}
-    blocks = pages.party_blocks(names, params, meta_blocks, catalog)
+    # el vs de los parámetros cuando tiene los dos bloques, si no el del meta de la elección; el resto, Otros
+    assert pages.party_blocks(names, params, meta_blocks) == {
+        'PP': 'Derecha', 'PSOE': 'Izquierda', 'Cs': 'Derecha', 'ERC': 'Otros', 'UP': 'Otros', 'MM': 'Otros'}
+    assert pages.party_blocks(names, {}, meta_blocks) == {
+        'PP': 'Derecha', 'PSOE': 'Izquierda', 'Cs': 'Otros', 'ERC': 'Otros', 'UP': 'Izquierda', 'MM': 'Otros'}
+    assert pages.party_blocks(names, {'bmaps': {'vs': {'Derecha': ['PP']}}}, meta_blocks)['UP'] == 'Izquierda'
+    assert pages.party_blocks(names, {}, None) == dict.fromkeys(names, 'Otros')
+    blocks = pages.party_blocks(names, params, meta_blocks)
     assert pages.event_block_rows(rows, blocks, lambda block: block[0]) == [
         {'name': 'Izquierda', 'pct': 31.44, 'seats': 150, 'color': 'I'}, {'name': 'Derecha', 'pct': 33.19, 'seats': 160, 'color': 'D'},
-        {'name': 'Separatista', 'pct': 1.9, 'seats': 7, 'color': 'S'}]
-    assert pages.event_block_rows([{'party': 'X', 'pct': None, 'seats': None}], {'X': 'Otro'}, str) == [
-        {'name': 'Otro', 'pct': None, 'seats': None, 'color': 'Otro'}]
+        {'name': 'Otros', 'pct': 35.37, 'seats': 7, 'color': 'O'}]
+    # sin un lado, Otros no tiene valor
+    assert pages.event_block_rows([{'party': 'X', 'pct': None, 'seats': None}, {'party': 'Y', 'pct': 5.0, 'seats': 3}],
+                                  {'X': 'Izquierda', 'Y': 'Otros'}, str) == [
+        {'name': 'Izquierda', 'pct': None, 'seats': None, 'color': 'Izquierda'},
+        {'name': 'Derecha', 'pct': None, 'seats': None, 'color': 'Derecha'},
+        {'name': 'Otros', 'pct': None, 'seats': None, 'color': 'Otros'}]
     assert pages.event_block_rows(rows, {}, str) == []
 
 
@@ -2137,6 +2144,23 @@ def test_fixed_rows_of_the_polls_table_footer():
     assert pages.fixed_rows(None, results, ['PP'], colors, '2023-07-23') == []
 
 
+def test_party_blocks_use_the_vs_of_the_election_and_send_the_rest_to_otros():
+    params = {'bmaps': {'vs': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE', 'SUMAR']}}}
+    assert pages.party_blocks(['PP', 'PSOE', 'PNV', 'UPN'], params, None) == {
+        'PP': 'Derecha', 'PSOE': 'Izquierda', 'PNV': 'Otros', 'UPN': 'Otros'}
+    assert pages.party_blocks(['PP', 'ERC'], {}, {'Derecha': ['PP'], 'Izquierda': ['PSOE']}) == {'PP': 'Derecha', 'ERC': 'Otros'}
+
+
+def test_event_block_rows_make_otros_the_rest_of_the_vote_and_the_chamber():
+    rows = [{'party': 'PP', 'pct': 33.0, 'seats': 137}, {'party': 'PSOE', 'pct': 31.7, 'seats': 121},
+            {'party': 'VOX', 'pct': 12.4, 'seats': 33}, {'party': 'PNV', 'pct': 1.1, 'seats': 5},
+            {'party': 'X', 'pct': 0.3, 'seats': None}]
+    blocks = {'PP': 'Derecha', 'VOX': 'Derecha', 'PSOE': 'Izquierda', 'PNV': 'Otros', 'X': 'Otros'}
+    out = pages.event_block_rows(rows, blocks, lambda b: '#000')
+    assert [r['name'] for r in out] == ['Izquierda', 'Derecha', 'Otros']
+    assert out[2]['pct'] == round(100 - 31.7 - 45.4, 2) and out[2]['seats'] == 296 - 121 - 170
+
+
 def test_curve_block_colors_follow_the_page_then_the_first_party():
     """Los bloques de la curva van del color que ya usa la página para el bloque (hemiciclo, resultados por bloque) y,
     si la página no lo tiene, del color de su primer partido: así las tres vistas Bloques cuadran."""
@@ -2146,6 +2170,9 @@ def test_curve_block_colors_follow_the_page_then_the_first_party():
     colors = pages.curve_block_colors(blocks_map, {'Derecha': '#000080', 'Izquierda': '#e4001c'}, catalog)
     assert colors == {'Derecha': '#000080', 'Separatista': '#ffb232'}
     assert pages.curve_block_colors({}, {'Derecha': '#000080'}, catalog) == {}
+    # an empty Otros (the browser computes it) has no first party to ask: grey
+    assert pages.curve_block_colors({'Derecha': ['PP'], 'Otros': []}, {}, catalog) == {
+        'Derecha': '#1d84ce', 'Otros': pages.OTHERS_COLOR}
 
 
 def test_horizon_tables_merge_vote_and_seats_and_prefer_the_horizon_run():
@@ -4325,7 +4352,8 @@ def test_last_results_sum_the_previous_blocks_with_the_catalogue(events_site):
     catalog = pages.catalog(fixture_data('meta'))
     results = pages.last_results('es', catalog)
     assert results['date'] == '2023-07-23' and results['parties']['PP'] == {'seats': 160, 'pct': 33.06}
-    assert results['blocks'] == {'Derecha': {'pct': 45.48, 'seats': 200}, 'Izquierda': {'pct': 31.44, 'seats': 150}}
+    assert results['blocks'] == {'Derecha': {'pct': 45.48, 'seats': 200}, 'Izquierda': {'pct': 31.44, 'seats': 150},
+                                 'Otros': {'pct': 23.08, 'seats': 0}}
     assert 'blocks' not in pages.last_results('es')  # sin catálogo, como lo usa Inicio
 
 
@@ -5486,18 +5514,14 @@ def test_shade_scale_filter_grows_green_from_lo_to_hi():
     assert pages.environment().filters['shade_scale'] is pages.shade_scale
 
 
-def test_run_less_colours_take_the_first_party_of_each_named_block():
-    """Sin run del ámbito: el margen es el de la elección y los bloques del mapa nacional se colorean con su
-    primer partido en los resultados; un bloque fuera del mapa (el resto) se queda sin color, como con run."""
+def test_run_less_colours_take_the_colours_from_the_vs_of_the_election():
+    """Sin run del ámbito: el margen es el de la elección, Izquierda y Derecha se colorean con su primer partido y
+    Otros va siempre en gris."""
     meta = {'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}}
-    national = {'bmaps': {'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE'], 'Regionalista': ['PNV']}}}
-    blocks_of = {'PP': 'Derecha', 'PSOE': 'Izquierda', 'ADELANTE': 'Regionalista', 'PA': 'Regionalista', 'X': 'Otros',
-                 'Y': None}
-    out = pages.run_less_colours(meta, national, blocks_of)
-    assert out['bmaps']['vs'] == meta['blocks']
-    assert out['bmaps']['blocks'] == {'Derecha': ['PP'], 'Izquierda': ['PSOE'], 'Regionalista': ['ADELANTE', 'PA']}
+    out = pages.run_less_colours(meta)
+    assert out['bmaps']['vs'] == meta['blocks'] and out['bmaps']['blocks'] == {}
     catalog = pages.Catalog({name: {'fullname': name, 'color': color} for name, color in
-                             [('PP', '#1d84ce'), ('PSOE', '#ef1c27'), ('ADELANTE', '#1eca7f'), ('PA', '#00aa00'),
-                              ('X', '#123456')]})
-    assert pages.block_color('Regionalista', out, catalog) == '#1eca7f'
+                             [('PP', '#1d84ce'), ('PSOE', '#ef1c27'), ('VOX', '#63be21')]})
+    assert pages.block_color('Derecha', out, catalog) == '#1d84ce'
+    assert pages.block_color('Izquierda', out, catalog) == '#ef1c27'
     assert pages.block_color('Otros', out, catalog) == pages.OTHERS_COLOR
