@@ -892,8 +892,42 @@ def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_orde
     assert pages.result_rows(summary) == [{'name': 'PP', 'pct': 32.66, 'seats': 139, 'seats_lo': None, 'seats_hi': None, 'p_first': 0.95,
                                            'prev_pct': None, 'prev_seats': None, 'delta_pct': None, 'delta_seats': None, 'prev_from': []}]
     rows = pages.block_result_rows(summary, fixture_data('meta'), pages.Catalog(fixture_data('meta')))
-    assert [r['name'] for r in rows] == ['Derecha', 'Izquierda'] and rows[0]['p_majority'] == 0.995 and rows[0]['color'].startswith('#')
+    assert [r['name'] for r in rows] == ['Izquierda', 'Derecha'] and rows[1]['p_majority'] == 0.995 and rows[0]['color'].startswith('#')
     assert pages.result_rows({}) == [] and pages.block_result_rows({}, fixture_data('meta'), pages.Catalog(fixture_data('meta'))) == []
+
+
+def test_the_rest_block_name_of_the_pages_is_the_one_of_the_model():
+    from mtpy.lib.utils import REST_BLOCK
+    from mtpy.lib.pages.common import REST_BLOCK as PAGES_REST_BLOCK
+    assert PAGES_REST_BLOCK == REST_BLOCK == 'Otros'
+
+
+def test_block_color_paints_otros_grey_even_when_the_map_lists_parties():
+    meta = {'bmaps': {'vs': {'Izquierda': ['PSOE'], 'Derecha': ['PP']},
+                      'blocks': {'Izquierda': ['PSOE'], 'Derecha': ['PP'], 'Otros': ['PNV']}}}
+    catalog = pages.Catalog({name: {'fullname': name, 'color': color} for name, color in
+                             [('PP', '#1d84ce'), ('PSOE', '#ef1c27'), ('PNV', '#123456')]})
+    assert pages.block_color('Otros', meta, catalog) == pages.OTHERS_COLOR
+    assert pages.block_color('Izquierda', meta, catalog) == '#ef1c27'
+
+
+def test_block_result_rows_put_left_right_and_the_rest_and_dash_the_majority_of_otros():
+    summary = {'blocks': [{'name': 'Otros', 'pct': 10, 'seats': 30, 'p_majority': None},
+                          {'name': 'Derecha', 'pct': 50, 'seats': 180, 'p_majority': 0.9},
+                          {'name': 'Izquierda', 'pct': 40, 'seats': 140, 'p_majority': 0.1}]}
+    meta = fixture_data('meta')
+    rows = pages.block_result_rows(summary, meta, pages.Catalog(meta))
+    assert [r['name'] for r in rows] == ['Izquierda', 'Derecha', 'Otros']
+    assert rows[2]['color'] == pages.OTHERS_COLOR and rows[2]['p_majority'] is None
+    assert pages.BLOCK_ORDER == ('Izquierda', 'Derecha', 'Otros')
+
+
+def test_block_result_rows_of_an_old_run_keep_its_four_blocks_last():
+    meta = fixture_data('meta')
+    summary = {'blocks': [{'name': n, 'pct': 1, 'seats': 1}
+                          for n in ('Derecha', 'Separatista', 'Izquierda', 'Regionalista')]}
+    names = [r['name'] for r in pages.block_result_rows(summary, meta, pages.Catalog(meta))]
+    assert names == ['Izquierda', 'Derecha', 'Separatista', 'Regionalista']
 
 
 def test_promedios_central_block_is_three_cards_with_ranges(api):
@@ -1759,7 +1793,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
     blocks = re.search(r'<section class="card" id="results-blocks" hidden>(.*?)</section>', page, re.S).group(1)
     assert re.findall(r'<th scope="col">(.*?)</th>', blocks) == ['Bloque', '% Voto', 'Escaños']
     assert re.findall(r'</span>(\w+)</td>\s*<td>(.*?)</td>\s*<td><strong>(\d+)</strong>', blocks) == [
-        ('Derecha', '45,5%', '200'), ('Izquierda', '31,4%', '150')]
+        ('Izquierda', '31,4%', '150'), ('Derecha', '45,5%', '200')]
     data = initial(body)
     assert set(data) == {'state', 'meta', 'results', 'last', 'blocks', 'split', 'block_colors', 'poll_errors', 'catalog', 'polls',
                          'series', 'result', 'model_last', 'inks', 'model_point'}
@@ -1768,7 +1802,7 @@ def test_eleccion_detail_renders_results_last_polls_bullseye_and_model(events_si
                                'error_blocks': 1.36, 'error_blocks_abs': 1.36, 'Derecha': 0.68, 'Izquierda': -0.68}
     # el hemiciclo del resultado oficial y el reparto del error por bloque (Izquierda a la izquierda)
     rows = data['results'].pop('rows')
-    assert data['results'] == {'n_seats': 350, 'majority': 176, 'blocks': [{'name': 'Derecha', 'seats': 200}, {'name': 'Izquierda', 'seats': 150}]}
+    assert data['results'] == {'n_seats': 350, 'majority': 176, 'blocks': [{'name': 'Izquierda', 'seats': 150}, {'name': 'Derecha', 'seats': 200}]}
     assert rows[0] == {'name': 'PP', 'seats': 160, 'pct': 33.06} and all('pct' in row for row in rows)
     assert [(row['name'], row['seats']) for row in rows] == [('PP', 160), ('PSOE', 150), ('VOX', 40), ('Cs', 0)]
     assert data['split'] == {'left': 'Izquierda', 'right': 'Derecha'}
@@ -1969,7 +2003,7 @@ def test_eleccion_detail_helpers_of_the_shown_parties_and_the_blocks():
     assert pages.party_blocks(names, {}, None, catalog) == {'PP': 'Derecha', 'PSOE': None, 'Cs': None, 'ERC': 'Separatista', 'UP': None, 'MM': None}
     blocks = pages.party_blocks(names, params, meta_blocks, catalog)
     assert pages.event_block_rows(rows, blocks, lambda block: block[0]) == [
-        {'name': 'Derecha', 'pct': 33.19, 'seats': 160, 'color': 'D'}, {'name': 'Izquierda', 'pct': 31.44, 'seats': 150, 'color': 'I'},
+        {'name': 'Izquierda', 'pct': 31.44, 'seats': 150, 'color': 'I'}, {'name': 'Derecha', 'pct': 33.19, 'seats': 160, 'color': 'D'},
         {'name': 'Separatista', 'pct': 1.9, 'seats': 7, 'color': 'S'}]
     assert pages.event_block_rows([{'party': 'X', 'pct': None, 'seats': None}], {'X': 'Otro'}, str) == [
         {'name': 'Otro', 'pct': None, 'seats': None, 'color': 'Otro'}]
@@ -3286,6 +3320,48 @@ def test_promedios_party_table_draws_the_seat_range_without_a_vote_bar(api):
     assert '120–150' in table and '<th scope="col">Rango 95%</th>' in table
 
 
+def three_block_summary(otros_seats=200):
+    """Summary of the fixture with the three blocks of a new run (Izquierda, Derecha, Otros) in the published order;
+    the probability of a majority belongs to the two blocks of ``vs`` and Otros has none."""
+    summary = fixture_data('summary')
+    template = summary['blocks'][0]
+    summary['blocks'] = [dict(template, name='Izquierda', pct=30.0, seats=70, seats_lo=60, seats_hi=80, p_majority=0.0),
+                         dict(template, name='Derecha', pct=33.1, seats=80, seats_lo=70, seats_hi=90, p_majority=0.41),
+                         dict(template, name='Otros', pct=36.9, seats=otros_seats, seats_lo=190, seats_hi=210, p_majority=None)]
+    summary['vs'] = summary['blocks'][:2]
+    summary['p_majority'] = {'Izquierda': 0.0, 'Derecha': 0.41}
+    return summary
+
+
+def write_summary(fs, summary):
+    """Replace the summary of every mode of the fixture run."""
+    writer = bundle.BundleWriter(fs)
+    for mode in bundle.MODES:
+        writer.write_json(bundle.path_part('es', RUN, 'summary', mode), 'summary', summary, 'es', run_id=RUN, mode=mode)
+    webapi.site().manifest_cache_clear()
+
+
+def test_escanos_and_promedios_tables_list_the_three_blocks_and_dash_the_majority_of_otros(api, fresh_app):
+    write_summary(fresh_app.fs, three_block_summary())
+    escanos = html(call(api, '/es/escanos')[2])
+    table = re.search(r'<table id="blocks-table">(.*?)</table>', escanos, re.S).group(1)
+    rows = re.findall(r'<tr>(.*?)</tr>', table, re.S)[1:]
+    assert [re.search(r'</span>(\w+)</span>', row).group(1) for row in rows] == ['Izquierda', 'Derecha', 'Otros']
+    assert 'background-color: {}'.format(pages.OTHERS_COLOR) in rows[2]
+    assert re.findall(r'<td>([^<]*)</td>\s*$', rows[2].strip(), re.S) == ['–']  # P(mayoría) of Otros
+    assert re.findall(r'<td>([^<]*)</td>\s*$', rows[1].strip(), re.S) == ['41,0%']
+    promedios = html(call(api, '/es')[2])
+    table = re.search(r'<table id="blocks-result-table">(.*?)</table>', promedios, re.S).group(1)
+    assert re.findall(r'</span>(\w+)</span></td>', table) == ['Izquierda', 'Derecha', 'Otros']
+
+
+def test_promedios_majority_kpi_keeps_the_vs_block_when_otros_has_the_most_seats(api, fresh_app):
+    write_summary(fresh_app.fs, three_block_summary(otros_seats=250))
+    page = html(call(api, '/es')[2]).replace('\n', ' ')
+    kpi = re.search(r'<div class="l">Mayoría absoluta</div>(.*?)</div>\s*</div>', page, re.S).group(1)
+    assert 'Derecha' in kpi and 'Otros' not in kpi and '41,0%' in kpi
+
+
 def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(api, fresh_app, tmp_path):
     summary = fixture_data('summary')
     summary['parties'].append(dict(summary['parties'][0], name='XX', seats=3, pct=1.0, seats_lo=0, seats_hi=5, p_first=0))
@@ -4266,7 +4342,7 @@ def test_result_rows_carry_the_deltas_against_the_previous_election():
     meta = fixture_data('meta')
     blocks = pages.block_result_rows(summary, meta, pages.Catalog(meta), results)
     assert [(row['name'], row['prev_pct'], row['prev_seats'], row['delta_pct'], row['delta_seats']) for row in blocks] == [
-        ('Derecha', 45.48, 200, -0.28, -22), ('Izquierda', 31.44, 150, 8.56, 10)]
+        ('Izquierda', 31.44, 150, 8.56, 10), ('Derecha', 45.48, 200, -0.28, -22)]
     # sin resultados anteriores, o sin bloques en ellos, las cuatro claves van a None
     assert all(row[key] is None for row in pages.result_rows(summary) for key in ('prev_pct', 'prev_seats', 'delta_pct', 'delta_seats'))
     assert all(row['delta_seats'] is None for row in pages.block_result_rows(summary, meta, pages.Catalog(meta), {'date': '2023-07-23', 'parties': {}}))

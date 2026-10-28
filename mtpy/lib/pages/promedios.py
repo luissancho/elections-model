@@ -8,14 +8,14 @@ from typing import Optional
 
 from .. import bundle
 from ..webapi import site
-from .common import OTHERS_COLOR, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
+from .common import OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
                       fmt_prob, fmt_range, gradient)
 from .slugs import pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
-BLOCK_ORDER = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
+BLOCK_ORDER = ('Izquierda', 'Derecha', REST_BLOCK)
 
 
 def _deltas(row: dict, before: Optional[dict]) -> dict:

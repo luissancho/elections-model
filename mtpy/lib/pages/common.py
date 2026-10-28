@@ -98,6 +98,9 @@ MESSAGES = {
     'study not found': 'Ese análisis no existe o no está publicado.',
 }
 OTHERS_COLOR = '#9e9e9e'
+# Name of the rest block; the same as ``mtpy.lib.utils.REST_BLOCK``, repeated here because utils pulls statsmodels
+# in and the web workers must stay light (a test pins both together)
+REST_BLOCK = 'Otros'
 # The national scope: its run is the common part of the pages of a scope without a published forecast
 NATIONAL_SCOPE = 'es'
 _COLOR_RE = re.compile(r'#[0-9A-Fa-f]{3,8}')
@@ -877,7 +880,8 @@ def hemicycle_order(names: list, parties: Catalog) -> list:
 
 def block_color(block: str, meta: dict, parties: Catalog) -> str:
     """
-    Colour of a block: that of its first party in ``bmaps.vs``, then in ``bmaps.blocks``.
+    Colour of a block: that of its first party in ``bmaps.vs``, then in ``bmaps.blocks``; always
+    ``OTHERS_COLOR`` for the rest block (``REST_BLOCK``), whatever the maps list under it.
 
     Parameters
     ----------
@@ -893,6 +897,9 @@ def block_color(block: str, meta: dict, parties: Catalog) -> str:
     str
         The colour, or ``OTHERS_COLOR`` when the block has no party in either map.
     """
+    if block == REST_BLOCK:
+        return OTHERS_COLOR
+
     bmaps = meta.get('bmaps') or {}
 
     for key in ('vs', 'blocks'):
