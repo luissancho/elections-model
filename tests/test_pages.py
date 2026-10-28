@@ -1950,10 +1950,15 @@ def test_eleccion_detail_helpers_of_the_shown_parties_and_the_blocks():
     assert pages.shown_parties({}) is None and pages.shown_parties({'parties': {}}) is None and pages.shown_parties(None) is None
     rows = [{'party': 'PP', 'pct': 33.06, 'seats': 160}, {'party': 'PSOE', 'pct': 31.44, 'seats': 150},
             {'party': 'Cs', 'pct': 0.13, 'seats': 0}, {'party': 'ERC', 'pct': 1.9, 'seats': 7}]
-    assert [row['shown'] for row in pages.mark_shown(rows, ['PSOE', 'ERC', 'UP'])] == [False, True, False, True]
+    assert [row['shown'] for row in pages.mark_shown(rows, ['PSOE', 'ERC', 'UP'])] == [True, True, False, True]  # PP por sus escaños
     assert [row['shown'] for row in pages.mark_shown(rows, None, limit=2)] == [True, True, False, False]
-    assert [row['shown'] for row in pages.mark_shown(rows, ['UP'], limit=3)] == [True, True, True, False]  # ninguno en la lista
+    assert [row['shown'] for row in pages.mark_shown(rows, ['UP'], limit=3)] == [True, True, False, True]  # ninguno en la lista: los que tienen escaño
+    assert [row['shown'] for row in pages.mark_shown([{'party': 'A', 'seats': 0}, {'party': 'B'}], ['UP'], limit=1)] == [True, False]
     assert pages.mark_shown([], ['PP']) == []
+    # a party with seats is shown even when the model never listed it (a result is a result)
+    seated = [{'party': 'PP', 'seats': 137}, {'party': 'TE', 'seats': 1}, {'party': 'PACMA', 'seats': 0}, {'party': 'X'}]
+    assert [row['shown'] for row in pages.mark_shown(seated, ['PP'])] == [True, True, False, False]
+    assert [row['shown'] for row in pages.mark_shown(seated, None, limit=1)] == [True, False, False, False]
     catalog = pages.Catalog({'PP': {'block': 'Derecha'}, 'ERC': {'block': 'Separatista'}})
     params = {'bmaps': {'blocks': {'Derecha': ['PP', 'Cs'], 'Izquierda': ['PSOE']}}}
     meta_blocks = {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'UP']}

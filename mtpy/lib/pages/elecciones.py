@@ -603,13 +603,15 @@ def mark_shown(rows: list, parties: Optional[list], limit: int = RESULTS_SHOWN) 
     Returns
     -------
     list of dict
-        Each row with ``shown``: whether its party is in ``parties``; without a list, or when none of the rows
-        is in it, whether the row is among the first ``limit``.
+        Each row with ``shown``: whether its party is in ``parties`` or won a seat (a result is shown whether or
+        not the model listed the party); without a list, or when no row qualifies, whether the row is among the
+        first ``limit``.
     """
     wanted = set(parties) if parties is not None else set()
+    shown = [row.get('party') in wanted or (row.get('seats') or 0) > 0 for row in rows]
 
-    if any(row.get('party') in wanted for row in rows):
-        return [dict(row, shown=row.get('party') in wanted) for row in rows]
+    if parties is not None and any(shown):
+        return [dict(row, shown=flag) for row, flag in zip(rows, shown)]
 
     return [dict(row, shown=index < limit) for index, row in enumerate(rows)]
 
@@ -1037,8 +1039,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
     dict
         The common context plus ``event`` (its ``meta``), ``results_rows`` (as published, with the
         ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party, and ``shown``:
-        ``mark_shown`` with the ``parties.event`` of the election in ``data/params.json``, else the first
-        ``RESULTS_SHOWN``), ``results_hidden`` (the rows not shown, behind "Ver más"), ``block_result_rows``
+        ``mark_shown`` with the ``parties.event`` of the election in ``data/params.json`` plus every party with a
+        seat, else the first ``RESULTS_SHOWN``), ``results_hidden`` (the rows not shown, behind "Ver más"), ``block_result_rows``
         (``event_block_rows``: the results by block, ``party_blocks`` from the parameters, the event meta and the
         run catalogue, coloured by ``block_color``; empty when no party has a block), ``n_seats``,
         ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
