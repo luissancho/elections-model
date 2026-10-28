@@ -33,7 +33,7 @@
                 },
                 "vs": {
                     "Derecha": ["PP", "VOX", "SALF"],
-                    "Izquierda": ["PSOE", "FA", "UP"]
+                    "Izquierda": ["PSOE", "UP", "FA"]
                 }
             },
             "smap": {
@@ -75,8 +75,8 @@
                     "Separatista": ["ERC", "JxCat", "EHB", "CUP"]
                 },
                 "vs": {
-                    "Derecha": ["PP", "VOX"],
-                    "Izquierda": ["PSOE", "SUMAR"]
+                    "Derecha": ["PP", "VOX", "Cs"],
+                    "Izquierda": ["PSOE", "UP", "SUMAR", "MP"]
                 }
             },
             "smap": {
@@ -148,7 +148,7 @@
                 },
                 "vs": {
                     "Derecha": ["PP", "VOX", "Cs"],
-                    "Izquierda": ["PSOE", "UP"]
+                    "Izquierda": ["PSOE", "UP", "PACMA"]
                 }
             },
             "smap": {
