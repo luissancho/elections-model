@@ -195,3 +195,76 @@ def test_format_data_with_extra_columns_raises_no_setting_with_copy_warning():
         out = format_data(frame, meta=meta)
     assert [w for w in caught if type(w.message).__name__ == 'SettingWithCopyWarning'] == []
     assert list(out.columns) == ['pollster_id', 'pollster', 'points'] and list(frame.columns)[-1] == 'manual'
+
+
+# --- derivación de parties y bmaps de una elección (`derive_event_params`) ---
+
+from mtpy.lib.data import agg_names, derive_event_params  # noqa: E402
+
+
+def _matrix(polls_by_party, results_by_party, dates=('2023-07-23',)):
+    """Matriz de un ciclo: `polls_by_party` {name: [valores por sondeo]} y `results_by_party` {name: pct o nan}."""
+    names = list(dict.fromkeys(list(results_by_party) + list(polls_by_party)))
+    n = max((len(v) for v in polls_by_party.values()), default=0)
+    index = pd.MultiIndex.from_arrays([[dates[0]] * n, list(range(1, n + 1)), ['H{}'.format(i) for i in range(n)]],
+                                      names=['event_date', 'days', 'pollster'])
+    polls = pd.DataFrame({name: polls_by_party.get(name, [float('nan')] * n) for name in names}, index=index, dtype=float)
+    events = pd.DataFrame({name: [results_by_party.get(name, float('nan'))] for name in names},
+                          index=pd.Index([dates[0]], name='date'))
+    parties = pd.DataFrame({'name': names})
+    return get_event_dmat('es', dates[0], polls, events, parties)
+
+
+PARTIES = pd.DataFrame({'name': ['PP', 'PSOE', 'VOX', 'SUMAR', 'Cs', 'ERC', 'PNV', '-', 'NEW'],
+                        'block': ['Derecha', 'Izquierda', 'Derecha', 'Izquierda', 'Derecha', 'Separatista',
+                                  'Regionalista', 'Otros', None]})
+
+
+def test_derive_event_params_past_election():
+    df = _matrix({'PP': [33, 34, 32, 33], 'PSOE': [30, 29, 31, 30], 'VOX': [12, 13, 12, 12], 'SUMAR': [12, 11, 12, 11],
+                  'Cs': [1, float('nan'), float('nan'), float('nan')], 'ERC': [2, 2, 2, 2], 'PNV': [1, 1, 1, 1]},
+                 {'PP': 33.1, 'PSOE': 31.7, 'VOX': 12.4, 'SUMAR': 12.3, 'ERC': 1.9, 'PNV': 1.1, 'Cs': 0.7})
+    out = derive_event_params(df, PARTIES)
+    assert out['parties']['event'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'ERC', 'PNV', 'Cs']
+    assert out['parties']['polls'] == out['parties']['event']
+    assert out['bmaps']['main'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'ERC', 'PNV']  # Cs está en 1 de 4 sondeos
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR'],
+                                      'Separatista': ['ERC'], 'Regionalista': ['PNV']}
+    assert out['bmaps']['vs'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR']}
+    assert list(out['bmaps']) == ['main', 'blocks', 'vs'] and list(out['parties']) == ['event', 'polls']
+
+
+def test_derive_event_params_future_election_drops_agg_names():
+    nan = float('nan')
+    df = _matrix({'PP': [33, 34], 'PSOE': [30, 29], 'SUMAR': [12, 11], 'VOX': [12, nan], 'Cs': [1, 1]},
+                 {'PP': nan, 'PSOE': nan, 'SUMAR': nan, 'VOX': nan, 'Cs': nan}, dates=('2026-11-29',))
+    smap = {'PSOE': {'type': 'agg', 'names': ['SUMAR']}, 'VOX': [{'type': 'sub', 'names': ['PP']},
+            {'type': 'agg', 'names': ['Cs']}], 'NEW': [], 'PP': {'type': 'sub'}}
+    assert agg_names(smap) == ['SUMAR', 'Cs']
+    out = derive_event_params(df, PARTIES, smap=smap)
+    assert out['parties']['polls'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'Cs']  # por media del ciclo: VOX 12 > SUMAR 11,5
+    assert out['parties']['event'] == ['PP', 'PSOE', 'VOX']
+    assert out['bmaps']['main'] == ['PP', 'PSOE']  # VOX está en 1 de 2 sondeos
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR']}
+    assert out['bmaps']['vs'] == out['bmaps']['blocks']
+
+
+def test_derive_event_params_ignores_parties_without_a_block():
+    df = _matrix({'PP': [33, 34], '-': [3, 4], 'NEW': [1, 1]}, {'PP': 33.0, '-': 3.5, 'NEW': 1.0})
+    out = derive_event_params(df, PARTIES)
+    assert out['parties']['polls'] == ['PP', '-', 'NEW']
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP']} and out['bmaps']['vs'] == {'Derecha': ['PP']}
+
+
+def test_derive_event_params_result_only_election():
+    df = _matrix({}, {'PSOE': 35.3, 'PP': 17.5})
+    out = derive_event_params(df, PARTIES)
+    assert out['parties'] == {'event': ['PSOE', 'PP'], 'polls': ['PSOE', 'PP']}
+    assert out['bmaps'] == {'main': [], 'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']},
+                            'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}
+
+
+def test_derive_event_params_empty_matrix():
+    df = _matrix({}, {'PSOE': float('nan')}, dates=('2030-06-16',))
+    assert derive_event_params(df, PARTIES) == {'parties': {'event': [], 'polls': []},
+                                                'bmaps': {'main': [], 'blocks': {}, 'vs': {}}}
