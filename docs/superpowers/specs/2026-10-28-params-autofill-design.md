@@ -40,10 +40,9 @@ Por elección, con la matriz del ciclo de `get_event_dmat` (sondeos del ciclo + 
 - `parties.polls`: todo partido con columna en los sondeos del ciclo o en el resultado, con las candidaturas
   primero (en su orden) y después los nombres sólo encuestados (Sumar, UPN, AC en 2026), como Luis los ordena a
   mano (añadido 2026-10-28 tarde).
-- Listas manuales (añadidas 2026-10-28 tarde, tras la retirada de AC y la vuelta de Compromís): `parties.exclude`
-  (nombres que nunca son candidatura aunque tengan sondeos; siguen en `polls`) y `parties.include` (candidaturas
-  aunque aún no tengan sondeos; se añaden a `event` y `polls`). El job las conserva y la derivación las aplica,
-  en elecciones pasadas y futuras.
+- Sin listas manuales: `parties.include`/`exclude` se construyeron y se retiraron el mismo 2026-10-28 a petición
+  de Luis. La fuente manual es `event` tal cual está en el fichero (un partido fuera de `event` no es candidatura,
+  AC en 2026); `load params` lo reescribe con lo derivado y sólo se lanza a mano, así que Luis revisa el diff.
 - `parties.event`: los partidos con resultado. En una elección sin resultado (futura), `polls` menos los
   nombres que el `smap` de esa elección absorbe con una regla `agg` (en 2026 quita SUMAR y UPN y reproduce la
   lista manual de Luis).

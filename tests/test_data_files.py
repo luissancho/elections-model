@@ -176,10 +176,9 @@ def test_params_2026_general_election_line_up():
     conf = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))['es']['2026-11-29']
     # Since 2026-10-28 Compromís runs apart in Alicante (3), Castellón (12) and Valencia (46), where Frente Amplio
     # (Sumar's new name) does not: each inherits Sumar's 2023 base in its own provinces; the curated polls of
-    # data/polls/es/2026-11-29.csv give Compromís its series. AC withdrew: polled, never a candidacy.
+    # database gives Compromís its series. AC withdrew: polled, never a candidacy (not in `event`).
     valencia = ['3', '12', '46']
     assert 'COMPROMIS' in conf['parties']['event'] and 'COMPROMIS' in conf['parties']['polls']
-    assert conf['parties']['include'] == ['COMPROMIS'] and conf['parties']['exclude'] == ['AC']
     assert 'AC' not in conf['parties']['event'] and 'AC' in conf['parties']['polls']
     assert {'PNV', 'CC', 'BNG', 'COMPROMIS'} <= set(conf['bmaps']['blocks']['Regionalista'])
     assert conf['smap']['COMPROMIS'] == {'type': 'agg', 'names': ['SUMAR'], 'regions': valencia}

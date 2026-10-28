@@ -427,21 +427,7 @@ def test_derive_event_params_lists_the_candidacies_first_in_polls():
     assert out['bmaps']['blocks']['Izquierda'] == ['PSOE', 'SUMAR']
 
 
-def test_derive_event_params_manual_exclude_and_include():
-    nan = float('nan')
-    df, polls = _matrix({'PP': [33, 34], 'PSOE': [30, 29], 'Cs': [1, 1]}, {'PP': nan, 'PSOE': nan, 'Cs': nan},
-                        dates=('2026-11-29',))
-    out = derive_event_params(df, PARTIES, polls=polls, exclude=['Cs'], include=['ERC'])
-    assert out['parties']['event'] == ['PP', 'PSOE', 'ERC']  # Cs withdrew; ERC runs without a poll yet
-    assert out['parties']['polls'] == ['PP', 'PSOE', 'ERC', 'Cs']  # candidacies first, Cs keeps its polls
-    assert out['bmaps']['blocks'] == {'Derecha': ['PP', 'Cs'], 'Izquierda': ['PSOE'], 'Separatista': ['ERC']}
-    # an included party that already has polls is not duplicated; a past election also honours `exclude`
-    df, polls = _matrix({'PP': [33, 34], 'PSOE': [30, 29]}, {'PP': 33.0, 'PSOE': 31.0})
-    out = derive_event_params(df, PARTIES, polls=polls, exclude=['PSOE'], include=['PP'])
-    assert out['parties'] == {'event': ['PP'], 'polls': ['PP', 'PSOE']}
-
-
-def test_derive_scope_params_passes_the_manual_lists_of_the_file(monkeypatch):
+def test_derive_scope_params_passes_the_smap_of_the_file(monkeypatch):
     nan = float('nan')
     index = pd.MultiIndex.from_arrays([['2026-11-29'] * 2, [1, 2], ['H0', 'H1']], names=['event_date', 'days', 'pollster'])
     polls = pd.DataFrame({'PP': [33.0, 34.0], 'PSOE': [30.0, 29.0], 'Cs': [1.0, 1.0]}, index=index)
@@ -450,6 +436,6 @@ def test_derive_scope_params_passes_the_manual_lists_of_the_file(monkeypatch):
     monkeypatch.setattr(data, 'get_poll_series', lambda scope, dates: polls.reset_index())
     monkeypatch.setattr(data, 'get_event_series', lambda scope, dates: events.reset_index())
     monkeypatch.setattr(data, 'get_parties', lambda: PARTIES)
-    overrides = {'2026-11-29': {'parties': {'exclude': ['Cs'], 'include': ['ERC']}, 'smap': {}}}
+    overrides = {'2026-11-29': {'smap': {'PP': {'type': 'agg', 'names': ['Cs']}}}}
     out = data.derive_scope_params('es', overrides=overrides)['2026-11-29']
-    assert out['parties'] == {'event': ['PP', 'PSOE', 'ERC'], 'polls': ['PP', 'PSOE', 'ERC', 'Cs']}
+    assert out['parties'] == {'event': ['PP', 'PSOE'], 'polls': ['PP', 'PSOE', 'Cs']}  # Cs absorbed by PP

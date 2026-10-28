@@ -435,9 +435,7 @@ def derive_event_params(
     df: pd.DataFrame,
     parties: pd.DataFrame,
     smap: Optional[dict] = None,
-    polls: Optional[pd.DataFrame] = None,
-    exclude: Optional[list[str]] = None,
-    include: Optional[list[str]] = None
+    polls: Optional[pd.DataFrame] = None
 ) -> dict:
     """
     Derive the ``parties`` and ``bmaps`` of an election from its cycle matrix and the block of each party.
@@ -455,19 +453,12 @@ def derive_event_params(
         candidacies (`agg_names`); and for `main_parties`.
     polls : pd.DataFrame, optional
         Polls of the cycle indexed by ``(days, pollster)``, for `main_parties`; without them ``main`` is empty.
-    exclude : list of str, optional
-        Manual list of the file (``parties.exclude``): names that are not candidacies whatever the data say (a
-        withdrawn party); they stay in ``polls``.
-    include : list of str, optional
-        Manual list of the file (``parties.include``): candidacies whatever the data say (a party without a poll
-        yet); appended to ``event`` and ``polls`` when missing.
-
     Returns
     -------
     dict
         ``{'parties': {'event', 'polls'}, 'bmaps': {'main', 'blocks', 'vs'}}``: ``event`` the parties with a
-        result, or the polled names minus the absorbed ones when there is none, minus ``exclude`` plus
-        ``include``; ``polls`` the candidacies first, in that order, then every other column of the matrix;
+        result, or the polled names minus the absorbed ones when there is none; ``polls`` the candidacies first,
+        in that order, then every other column of the matrix;
         ``main`` the `main_parties` of ``event``; ``blocks`` the parties of ``polls`` by `BLOCKS` (empty blocks
         left out, parties without one of those blocks in none); ``vs`` the `VS_BLOCKS` entries of ``blocks``.
     """
@@ -481,7 +472,6 @@ def derive_event_params(
     if not event:
         absorbed = agg_names(smap)
         event = [p for p in names if p not in absorbed]
-    event = [p for p in event if p not in (exclude or [])] + [p for p in (include or []) if p not in event]
     listed = event + [p for p in names if p not in event]  # candidacies first, then the names only polled
     main = main_parties(polls, event, smap)
 
@@ -509,8 +499,7 @@ def derive_scope_params(
         Elections to derive (``YYYY-MM-DD``); all the elections of the scope by default.
     overrides : dict, optional
         Entries of ``params.json`` of the scope (``{date: entry}``): the ``smap`` of each election tells which
-        polled names are not candidacies in an election without results, and its ``parties.exclude`` and
-        ``parties.include`` are the manual lists of `derive_event_params`.
+        polled names are not candidacies in an election without results.
 
     Returns
     -------
@@ -541,10 +530,7 @@ def derive_scope_params(
         # takes pandas' linear path and raises a PerformanceWarning per lookup.
         df = get_event_dmat(scope, dt, polls, events, parties).sort_index()
         cycle = polls.loc[dt] if dt in polls.index.get_level_values(0) else None
-        entry = overrides.get(dt) or {}
-        manual = entry.get('parties') or {}
-        params = derive_event_params(df, parties, smap=entry.get('smap'), polls=cycle,
-                                     exclude=manual.get('exclude'), include=manual.get('include'))
+        params = derive_event_params(df, parties, smap=(overrides.get(dt) or {}).get('smap'), polls=cycle)
 
         new_parties = []
         if all_event_dates.index(dt) > 0:

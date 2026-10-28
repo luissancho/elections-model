@@ -304,15 +304,13 @@ def merge_event_params(entry: dict, derived: dict) -> dict:
     -------
     dict
         ``parties`` and ``bmaps`` first, then the other keys of ``entry`` in their order. ``parties`` holds
-        ``event`` and ``polls`` and then the manual lists of the entry (``include``, ``exclude``...) in their
-        order; ``bmaps`` keeps first the manual maps of the entry (``max``, ``min``...) in their order and then
-        ``main``, ``blocks`` and ``vs``.
+        ``event`` and ``polls``; ``bmaps`` keeps first the manual maps of the entry (``max``, ``min``...) in
+        their order and then ``main``, ``blocks`` and ``vs``.
     """
     derived_bmaps = {key: derived['bmaps'][key] for key in ('main', 'blocks', 'vs')}
     manual_bmaps = {key: value for key, value in (entry.get('bmaps') or {}).items() if key not in derived_bmaps}
-    derived_parties = {key: derived['parties'][key] for key in ('event', 'polls')}
-    manual_parties = {key: value for key, value in (entry.get('parties') or {}).items() if key not in derived_parties}
-    merged = {'parties': derived_parties | manual_parties, 'bmaps': manual_bmaps | derived_bmaps}
+    merged = {'parties': {key: derived['parties'][key] for key in ('event', 'polls')},
+              'bmaps': manual_bmaps | derived_bmaps}
     merged.update({key: value for key, value in entry.items() if key not in merged})
     return merged
 

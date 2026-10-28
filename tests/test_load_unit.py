@@ -376,11 +376,3 @@ def test_load_params_fails_without_elections():
     with pytest.raises(ValueError, match=NO_EVENTS.format('es-xx')):
         load_params('es-xx', deriver=lambda scope, overrides: {}, reader=lambda: {}, writer=lambda data: None)
 
-
-def test_merge_event_params_keeps_the_manual_party_lists():
-    entry = {'parties': {'event': ['PP'], 'polls': ['PP', 'AC'], 'include': ['COMPROMIS'], 'exclude': ['AC']},
-             'bmaps': DERIVED['bmaps']}
-    merged = merge_event_params(entry, DERIVED)
-    assert list(merged['parties']) == ['event', 'polls', 'include', 'exclude']
-    assert merged['parties']['exclude'] == ['AC'] and merged['parties']['include'] == ['COMPROMIS']
-    assert changed_keys(entry, merged) == ['parties.event', 'parties.polls']
