@@ -81,7 +81,10 @@ def inherited_results(results: Optional[dict], meta: dict) -> Optional[dict]:
         sources = []
 
         for rule in rules if isinstance(rules, list) else [rules]:
-            if not isinstance(rule, dict) or rule.get('type') != 'agg' or rule.get('regions') is not None:
+            regions = rule.get('regions') if isinstance(rule, dict) else None
+            # nationwide rules only: without `regions`, or leaving out a few provinces (`Simulator.poll_blocks`)
+            regional = regions is not None and not (isinstance(regions, dict) and 'exclude' in regions)
+            if not isinstance(rule, dict) or rule.get('type') != 'agg' or regional:
                 continue
 
             for source in rule.get('names') or []:

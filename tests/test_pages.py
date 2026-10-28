@@ -4388,6 +4388,9 @@ def test_inherited_results_sum_the_parties_a_run_party_absorbs():
     # sin escaños ni voto en ninguna de las partes, la diferencia queda sin valor
     bare = pages.inherited_results({'parties': {'SUMAR': {'seats': None, 'pct': None}}}, meta)
     assert bare['parties']['FA'] == {'seats': None, 'pct': None, 'inherited': ['SUMAR']}
+    # a rule that only leaves out some provinces is still the lineage of the party (FA without Valencia, 2026-10-28)
+    meta_exclude = {'parties': meta['parties'], 'smap': {'FA': {'type': 'agg', 'names': ['SUMAR'], 'regions': {'exclude': ['3']}}}}
+    assert pages.inherited_results(results, meta_exclude)['parties']['FA'] == {'seats': 31, 'pct': 12.33, 'inherited': ['SUMAR']}
 
 
 def test_result_rows_and_cards_carry_whom_a_party_is_compared_with():

@@ -174,15 +174,14 @@ def test_poll_fixes_files_are_well_formed():
 
 def test_params_2026_general_election_line_up():
     conf = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))['es']['2026-11-29']
-    # Since 2026-10-28 Compromís runs apart in Alicante (3), Castellón (12) and Valencia (46), where Frente Amplio
-    # (Sumar's new name) does not: each inherits Sumar's 2023 base in its own provinces; the curated polls of
-    # database gives Compromís its series. AC withdrew: polled, never a candidacy (not in `event`).
-    valencia = ['3', '12', '46']
-    assert 'COMPROMIS' in conf['parties']['event'] and 'COMPROMIS' in conf['parties']['polls']
+    # 2026-10-28 (Luis): Compromís is part of Frente Amplio, Sumar's new name, everywhere: not a candidacy, not in
+    # the polls list; FA continues Sumar's polls. AC withdrew.
+    assert 'COMPROMIS' not in conf['parties']['event'] and 'COMPROMIS' not in conf['parties']['polls']
+    assert 'COMPROMIS' not in [p for names in conf['bmaps']['blocks'].values() for p in names]
     assert 'AC' not in conf['parties']['event'] and 'AC' in conf['parties']['polls']
-    assert {'PNV', 'CC', 'BNG', 'COMPROMIS'} <= set(conf['bmaps']['blocks']['Regionalista'])
-    assert conf['smap']['COMPROMIS'] == {'type': 'agg', 'names': ['SUMAR'], 'regions': valencia}
-    assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR'], 'regions': {'exclude': valencia}}
+    assert {'PNV', 'CC', 'BNG'} <= set(conf['bmaps']['blocks']['Regionalista'])
+    assert 'COMPROMIS' not in conf['smap']
+    assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR']}
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
 
 

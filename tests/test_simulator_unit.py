@@ -144,6 +144,14 @@ def test_poll_blocks_from_smap_agg_rules():
     assert blocks['NA+'] == ['NA+'] and blocks['ERC'] == ['ERC']
 
 
+def test_poll_blocks_counts_a_rule_that_only_excludes_some_provinces():
+    # FA does not run in Valencia (Compromís does) but still continues Sumar's polls everywhere else
+    smap = {'FA': [{'type': 'agg', 'names': ['SUMAR'], 'regions': {'exclude': ['3', '12', '46']}}],
+            'COMPROMIS': [{'type': 'agg', 'names': ['SUMAR'], 'regions': ['3', '12', '46']}]}
+    blocks = Simulator.poll_blocks(['FA', 'COMPROMIS'], smap)
+    assert blocks == {'FA': ['FA', 'SUMAR'], 'COMPROMIS': ['COMPROMIS']}
+
+
 def test_poll_blocks_never_absorbs_a_simulated_party():
     blocks = Simulator.poll_blocks(['A', 'B'], {'A': {'type': 'agg', 'names': ['B', 'C']}})
     assert blocks == {'A': ['A', 'C'], 'B': ['B']}
