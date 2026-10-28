@@ -18,6 +18,7 @@ from ..core.app import App
 from ..models.elections import Pollsters, Sponsors
 from .compute import _phase
 from .computer import Computer
+from .data import derive_scope_params, read_params, write_params
 from .loader import WikipediaLoader
 from .quality import load_criteria, quality_from_points
 
@@ -27,6 +28,14 @@ LOAD_STEPS = ('read', 'names', 'series', 'save', 'weights')
 NAME_CLASSES = ('parties', 'pollsters', 'sponsors')
 # Failure reason of an event without a polls article in `wp-urls.json` (formatted with the event date)
 NO_POLLS_ARTICLE = 'no polls article for {}'
+
+NO_EVENTS = 'no elections for {}'
+
+# Phases of `load_params`
+PARAMS_STEPS = ('read', 'derive', 'save')
+
+# Keys of an election that `load_params` rewrites, as (section, key)
+PARAMS_KEYS = (('parties', 'event'), ('parties', 'polls'), ('bmaps', 'main'), ('bmaps', 'blocks'), ('bmaps', 'vs'))
 # Refusal of `years` with `overwrite`: the overwrite deletes the whole cycle and reinserts only the years read
 YEARS_WITH_OVERWRITE = ('load: "years" cannot be combined with "overwrite" '
                         '(the other years of the cycle would be deleted)')
@@ -278,3 +287,123 @@ def load_polls(
         _phase('weights', weights, seconds, progress)
 
     return finish('loaded' if save else 'checked')
+
+
+def merge_event_params(entry: dict, derived: dict) -> dict:
+    """
+    Rewrite the derived keys of an election entry of ``params.json``, keeping everything else.
+
+    Parameters
+    ----------
+    entry : dict
+        Current entry of the election (``{}`` when the file has none).
+    derived : dict
+        ``{'parties': {'event', 'polls'}, 'bmaps': {'main', 'blocks', 'vs'}}`` (`data.derive_event_params`).
+
+    Returns
+    -------
+    dict
+        ``parties`` and ``bmaps`` first, then the other keys of ``entry`` in their order. ``parties`` holds
+        ``event`` and ``polls``; ``bmaps`` keeps first the manual maps of the entry (``max``, ``min``...) in
+        their order and then ``main``, ``blocks`` and ``vs``.
+    """
+    derived_bmaps = {key: derived['bmaps'][key] for key in ('main', 'blocks', 'vs')}
+    manual_bmaps = {key: value for key, value in (entry.get('bmaps') or {}).items() if key not in derived_bmaps}
+    merged = {'parties': {key: derived['parties'][key] for key in ('event', 'polls')},
+              'bmaps': manual_bmaps | derived_bmaps}
+    merged.update({key: value for key, value in entry.items() if key not in merged})
+    return merged
+
+
+def changed_keys(entry: dict, merged: dict) -> list[str]:
+    """The ``section.key`` paths of `PARAMS_KEYS` whose value differs between ``entry`` and ``merged``."""
+    return ['{}.{}'.format(section, key) for section, key in PARAMS_KEYS
+            if (entry.get(section) or {}).get(key) != (merged.get(section) or {}).get(key)]
+
+
+def load_params(
+    scope: str,
+    save: bool = True,
+    verbose: int = 0,
+    progress: Optional[Callable] = None,
+    report: Optional[Callable] = None,
+    deriver: Optional[Callable] = None,
+    reader: Optional[Callable] = None,
+    writer: Optional[Callable] = None
+) -> dict:
+    """
+    Rewrite the ``parties`` and ``bmaps`` of every election of a scope in ``data/params.json``.
+
+    Reads the file, derives the parameters of every election of the scope from the database
+    (`data.derive_scope_params`, with the ``smap`` of the file as a hint for the elections without results),
+    merges them into the entries (`merge_event_params`: only ``parties.event``, ``parties.polls``,
+    ``bmaps.main``, ``bmaps.blocks`` and ``bmaps.vs`` change) and writes the file back. Elections without polls
+    nor results are skipped and their entries left as they are; the elections of the scope end sorted by date
+    descending; a scope missing from the file is added at the end.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    save : bool, default True
+        Write the file; ``False`` only reports what would change.
+    verbose : int, default 0
+        Unused for now (kept for symmetry with `load_polls`).
+    progress : callable, optional
+        ``progress(step, seconds)`` reported after each phase (keys of `PARAMS_STEPS`).
+    report : callable, optional
+        ``report(text, level)``: one line per changed key, ``'{scope} {date}: {key} {old} -> {new}'``, at level 1.
+    deriver, reader, writer : callable, optional
+        ``deriver(scope, overrides)``, ``reader()`` and ``writer(data)``; `data.derive_scope_params`,
+        `data.read_params` and `data.write_params` by default (for tests).
+
+    Returns
+    -------
+    dict
+        ``{'status': 'loaded' | 'checked', 'n_events', 'n_changed', 'n_skipped', 'changed': {date: [keys]},
+        'skipped': [dates], 'seconds': {phase: s, 'total': s}}``.
+
+    Raises
+    ------
+    ValueError
+        `NO_EVENTS` when the scope has no elections in the database.
+    """
+    deriver = deriver or (lambda scope, overrides: derive_scope_params(scope, overrides=overrides))
+    reader = reader or read_params
+    writer = writer or write_params
+    start = time.perf_counter()
+    seconds = {}
+
+    data = _phase('read', reader, seconds, progress)
+    overrides = data.get(scope) or {}
+    entries = dict(overrides)  # the file entries are read-only hints for the deriver; the copy is what changes
+
+    derived = _phase('derive', lambda: deriver(scope, overrides), seconds, progress)
+    if not derived:
+        raise ValueError(NO_EVENTS.format(scope))
+
+    changed, skipped = {}, []
+    for date, params in derived.items():
+        if not params['parties']['polls'] and not params['parties']['event']:
+            skipped.append(date)
+            continue
+        entry = entries.get(date) or {}
+        merged = merge_event_params(entry, params)
+        keys = changed_keys(entry, merged)
+        if keys:
+            changed[date] = keys
+            if report is not None:
+                for key in keys:
+                    section, name = key.split('.')
+                    old = (entry.get(section) or {}).get(name)
+                    report('{} {}: {} {} -> {}'.format(scope, date, key, json.dumps(old, ensure_ascii=False),
+                                                       json.dumps(merged[section][name], ensure_ascii=False)), 1)
+        entries[date] = merged
+    data[scope] = {date: entries[date] for date in sorted(entries, reverse=True)}
+
+    if save:
+        _phase('save', lambda: writer(data), seconds, progress)
+    seconds['total'] = time.perf_counter() - start
+
+    return {'status': 'loaded' if save else 'checked', 'n_events': len(derived), 'n_changed': len(changed),
+            'n_skipped': len(skipped), 'changed': changed, 'skipped': skipped, 'seconds': seconds}
