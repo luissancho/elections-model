@@ -3,6 +3,7 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
+import numpy as np
 import pandas as pd
 
 from .. import bundle
@@ -10,7 +11,7 @@ from ..bundle import BundleWriter
 from ...core.app import App
 from ..data import get_district_communities
 from ..simulator import Simulator
-from ..utils import norm_range
+from ..utils import REST_BLOCK, norm_range, web_blocks
 from .common import (
     db_stats, ISO_DAY_RE, latest_entry, NothingToPublish, PCT_DECIMALS, PROB_DECIMALS, provenance, records,
     REPO_ROOT, round_cols, _today
@@ -55,6 +56,70 @@ def _summary_table(sim, names=None):
     return table
 
 
+def _web_bmap(sim):
+    """Return the Izquierda / Derecha / Otros map of the scope, or ``None`` if its ``vs`` lacks a side."""
+    return web_blocks(sim.model.bmaps.get('vs') or {}, list(sim.params['names']))
+
+
+def _blocks_summary_table(sim, bmap):
+    """Summary of Izquierda, Derecha and Otros (the rest) for publication.
+
+    Otros takes the vote as the complement of Izquierda + Derecha (the residual ``'-'`` is not in the simulated
+    shares, so a member sum would miss it) and the seats of its members, which are the complement of the chamber
+    in a split run. Without members its seats are 0 and its probabilities null. It has no ``p_majority``.
+
+    Parameters
+    ----------
+    sim : Simulator
+        Simulator already run.
+    bmap : dict
+        Output of ``web_blocks``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per block (Izquierda, Derecha, Otros), as ``_summary_table``.
+    """
+    sides = {k: bmap[k] for k in ('Izquierda', 'Derecha')}
+    union = _summary_table(sim, {'union': bmap['Izquierda'] + bmap['Derecha']}).loc['union']
+    table = _summary_table(sim, {**sides, **({REST_BLOCK: bmap[REST_BLOCK]} if bmap[REST_BLOCK] else {})})
+    if REST_BLOCK not in table.index:
+        table = table.reindex([*table.index, REST_BLOCK])
+        zeros = [c for c in table.columns if c.startswith('seats')]
+        table.loc[REST_BLOCK, zeros] = 0
+        table['seats'] = table['seats'].astype('Int64')
+    table.loc[REST_BLOCK, ['pct', 'pct_mean']] = (100 - union[['pct', 'pct_mean']]).round(PCT_DECIMALS).values
+    table.loc[REST_BLOCK, ['pct_lo', 'pct_hi']] = (100 - union[['pct_hi', 'pct_lo']]).round(PCT_DECIMALS).values
+    table.loc[REST_BLOCK, 'p_majority'] = np.nan
+    return table.loc[list(bmap)]
+
+
+def _blocks_projection(sim, bmap):
+    """Projected vote of Izquierda, Derecha and Otros, the last as the complement of the first two.
+
+    Parameters
+    ----------
+    sim : Simulator
+        Simulator already run.
+    bmap : dict
+        Output of ``web_blocks``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Same layout as ``sim.projection``; the band of Otros is clipped to 0-100.
+    """
+    union_key = '__vs__'
+    out = sim.projection({'Izquierda': bmap['Izquierda'], 'Derecha': bmap['Derecha'],
+                          union_key: bmap['Izquierda'] + bmap['Derecha']})
+    rest = pd.DataFrame({'mean': 100 - out[('mean', union_key)], 'lo': (100 - out[('hi', union_key)]).clip(lower=0),
+                         'hi': (100 - out[('lo', union_key)]).clip(upper=100)})
+    for stat in ('mean', 'lo', 'hi'):
+        out[(stat, REST_BLOCK)] = rest[stat]
+    columns = [(stat, name) for stat in ('mean', 'lo', 'hi') for name in (*bmap,)]
+    return out[columns]
+
+
 def _p_majority(sim):
     """Return the probability of an absolute majority per block, rounded."""
     return sim.probabilities('vs').round(PROB_DECIMALS)
@@ -92,8 +157,9 @@ def export_summary(sim):
     tuple of (dict, pandas.DataFrame)
         Data for the ``summary`` schema and its CSV twin (tables stacked with a ``group`` column).
     """
+    web = _web_bmap(sim)
     tables = {'parties': _summary_table(sim), 'vs': _summary_table(sim, 'vs'),
-              'blocks': _summary_table(sim, 'blocks')}
+              'blocks': _blocks_summary_table(sim, web) if web is not None else _summary_table(sim, 'blocks')}
     data = {
         'n_seats': int(sim.n_seats),
         'majority': int(sim.n_seats) // 2 + 1,
@@ -203,8 +269,10 @@ def export_projection(sim):
         Data for the ``projection`` schema and its long-format CSV twin.
     """
     groups, dates, long = {}, None, []
+    web = _web_bmap(sim)
     for group, names in (('parties', None), ('vs', 'vs'), ('blocks', 'blocks')):
-        out = sim.projection(names).round(PCT_DECIMALS)
+        out = (_blocks_projection(sim, web) if group == 'blocks' and web is not None
+               else sim.projection(names)).round(PCT_DECIMALS)
         if dates is None:
             dates = list(out.index.strftime('%Y-%m-%d'))
         columns = list(out['mean'].columns)
@@ -548,6 +616,7 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
     n_seats = int(sim.n_seats)
     polls, pollsters = n_polls(fc)
     drift = sim.v2drift
+    web = _web_bmap(sim)
     regions = [{'id': int(r), 'name': sim.region_names.get(r, r), 'seats': int(sim.reg_totals.loc[r, 'seats'])}
                for r in sim.regions]
     return {
@@ -559,7 +628,7 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
         'seed': None if sim.seed is None else int(sim.seed), 'drange': list(sim.drange), 'max_fc': int(max_fc),
         'alpha': float(sim.alpha), 'correctors': correctors, 'n_polls': polls, 'n_pollsters': pollsters,
         'db_polls': db_polls, 'db_last_poll': db_last_poll, 'n_seats': n_seats, 'majority': n_seats // 2 + 1,
-        'parties': _meta_parties(sim), 'bmaps': fc.bmaps, 'smap': sim.smap, 'regions': regions,
+        'parties': _meta_parties(sim), 'bmaps': {**fc.bmaps, 'blocks': web} if web is not None else fc.bmaps, 'smap': sim.smap, 'regions': regions,
         'diagnostics': {'drift_k': float(drift.k) if drift is not None else None,
                         'multiplier': float(drift.multiplier) if drift is not None else None,
                         'ages': sim.ages.round(PCT_DECIMALS).to_dict(), 'composition': float(sim.composition_ratio),

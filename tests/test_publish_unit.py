@@ -154,7 +154,7 @@ def test_export_projection_follows_the_mode():
     data, frame = publish.export_projection(synthetic_simulator(mode='forecast'))
     data = valid('projection', data, mode='forecast')
     assert len(data['dates']) == 56 and data['dates'][-1] == '2026-11-29'
-    assert list(frame.columns) == ['date', 'group', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 56 * (3 + 2 + 2)
+    assert list(frame.columns) == ['date', 'group', 'name', 'mean', 'lo', 'hi'] and frame.shape[0] == 56 * (3 + 2 + 3)
 
 
 def test_headline_mode_combines_vote_and_seats():
@@ -373,6 +373,64 @@ def test_export_meta_and_headline():
                                    {'parties': [], 'p_majority': {}})
     head = valid('headline', head, mode=None)
     assert head['as_of'] == '2026-10-05' and head['n_polls'] == 6 and head['event_date'] == '2026-11-29'
+
+
+def test_web_blocks_puts_everything_outside_vs_in_otros():
+    from mtpy.lib.utils import web_blocks
+    vs = {'Derecha': ['PP', 'VOX', 'SALF'], 'Izquierda': ['PSOE', 'FA']}
+    assert web_blocks(vs, ['PP', 'PSOE', 'VOX', 'FA', 'PNV', 'ERC']) == {
+        'Izquierda': ['PSOE', 'FA'], 'Derecha': ['PP', 'VOX'], 'Otros': ['PNV', 'ERC']}
+    assert list(web_blocks(vs, ['PP', 'PSOE'])) == ['Izquierda', 'Derecha', 'Otros']
+    assert web_blocks({'Derecha': ['PP']}, ['PP']) is None and web_blocks({}, ['PP']) is None
+
+
+def test_export_summary_blocks_are_left_right_and_the_rest():
+    sim = synthetic_simulator()
+    sim.model.bmaps = {**sim.model.bmaps, 'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}
+    data = valid('summary', publish.export_summary(sim)[0])
+    rows = {r['name']: r for r in data['blocks']}
+    assert [r['name'] for r in data['blocks']] == ['Izquierda', 'Derecha', 'Otros']
+    assert rows['Otros']['p_majority'] is None
+    for key in ('pct', 'pct_mean'):
+        assert sum(r[key] for r in data['blocks']) == pytest.approx(100, abs=0.05)
+    assert rows['Otros']['pct_lo'] < rows['Otros']['pct'] < rows['Otros']['pct_hi']   # a real range, residual included
+    assert rows['Otros']['pct'] == pytest.approx(30.0, abs=0.01)   # VOX (15) + the residual '-' (15), not VOX alone
+    assert sum(r['seats'] for r in data['blocks']) == 10
+    assert set(data['p_majority']) == {'Derecha', 'Izquierda'}
+
+
+def test_export_summary_otros_without_members_has_no_seats():
+    data = valid('summary', publish.export_summary(synthetic_simulator())[0])
+    rows = {r['name']: r for r in data['blocks']}
+    assert rows['Otros']['seats'] == 0 and rows['Otros']['p_majority'] is None
+    assert sum(r['seats'] for r in data['blocks']) == 10
+    assert sum(r['pct'] for r in data['blocks']) == pytest.approx(100, abs=0.05)
+
+
+def test_export_projection_otros_is_the_complement_of_left_and_right():
+    sim = synthetic_simulator(mode='forecast')
+    sim.model.bmaps = {**sim.model.bmaps, 'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}
+    data = valid('projection', publish.export_projection(sim)[0], mode='forecast')
+    blocks = data['groups']['blocks']
+    assert blocks['names'] == ['Izquierda', 'Derecha', 'Otros']
+    for i in range(len(data['dates'])):
+        assert sum(blocks['mean'][n][i] for n in blocks['names']) == pytest.approx(100, abs=0.05)
+        assert 0 <= blocks['lo']['Otros'][i] <= blocks['mean']['Otros'][i] <= blocks['hi']['Otros'][i] <= 100
+
+
+def test_export_meta_writes_the_three_block_map():
+    sim = synthetic_simulator()
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False)
+    assert meta['bmaps']['blocks'] == {'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX'], 'Otros': []}
+    assert meta['bmaps']['vs'] == BMAPS['vs'] and meta['bmaps']['main'] == BMAPS['main']
+
+
+def test_export_summary_keeps_the_model_blocks_without_left_and_right():
+    sim = synthetic_simulator()
+    sim.model.bmaps = {**sim.model.bmaps, 'vs': {'Derecha': ['PP', 'VOX'], 'Nadie': ['UP']}}
+    data = valid('summary', publish.export_summary(sim)[0])
+    assert [r['name'] for r in data['blocks']] == list(BMAPS['blocks'])
 
 
 def test_export_meta_and_headline_carry_the_backfill_keys():

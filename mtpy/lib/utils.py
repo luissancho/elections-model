@@ -6,6 +6,37 @@ from typing import Any, Optional
 from ..core.utils.dataviz import get_color, palette
 
 
+REST_BLOCK = 'Otros'
+
+
+def web_blocks(vs: dict, names: list) -> Optional[dict]:
+    """
+    Blocks published by the web: Izquierda, Derecha and the rest (Otros).
+
+    Parameters
+    ----------
+    vs : dict
+        The `vs` bmap of the model; it must hold `'Izquierda'` and `'Derecha'`.
+    names : list
+        Simulated parties of the scope.
+
+    Returns
+    -------
+    dict or None
+        `{'Izquierda': [...], 'Derecha': [...], 'Otros': [...]}` where the members of the first two keep the
+        order of `vs` (filtered to `names`) and Otros holds every other name of `names`, in its order. `None`
+        when `vs` lacks Izquierda or Derecha.
+    """
+    if 'Izquierda' not in vs or 'Derecha' not in vs:
+        return None
+
+    left = [n for n in vs['Izquierda'] if n in names]
+    right = [n for n in vs['Derecha'] if n in names]
+    rest = [n for n in names if n not in left and n not in right]
+
+    return {'Izquierda': left, 'Derecha': right, REST_BLOCK: rest}
+
+
 def build_blocks(
     bmap: Optional[dict[str, Any]] = None,
     parties: Optional[tuple | list | dict] = None
