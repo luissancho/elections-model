@@ -1409,9 +1409,10 @@ class Simulator(Core):
     ) -> dict[str, list[str]]:
         """
         Blocks used to build the poll average of the simulated parties: each party plus the poll labels of
-        the parties it inherits according to the `agg` rules of the source map (`smap`) that have no
-        regional restriction. The polls of a predecessor (UP and MP before SUMAR, Cs for PP in 2023,
-        PDeCAT for JxCat in 2019) then count for the successor instead of falling into the residual `'-'`.
+        the parties it inherits according to the nationwide `agg` rules of the source map (`smap`): without
+        `regions`, or with `regions.exclude` (everywhere but a few provinces, FA without Valencia in 2026). The
+        polls of a predecessor (UP and MP before SUMAR, Cs for PP in 2023, PDeCAT for JxCat in 2019, SUMAR before
+        FA) then count for the successor instead of falling into the residual `'-'`.
 
         Parameters
         ----------
@@ -1432,7 +1433,8 @@ class Simulator(Core):
                 continue
 
             for rule in (rules if isinstance(rules, list) else [rules]):
-                if rule.get('type') != 'agg' or rule.get('regions') is not None:
+                regions = rule.get('regions')
+                if rule.get('type') != 'agg' or (regions is not None and not (isinstance(regions, dict) and 'exclude' in regions)):
                     continue
 
                 for source in rule.get('names', []):
