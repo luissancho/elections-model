@@ -324,6 +324,14 @@ def write_params(data: dict) -> str:
 
 BLOCKS = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
 VS_BLOCKS = ('Derecha', 'Izquierda')
+# The `main` parties of an election: polled by almost every house in the final stretch and big enough to measure.
+# Window: the polls of the last `MAIN_WINDOW` days, widened to the `MAIN_MIN_POLLS` most recent polls when there are
+# fewer (an election in progress); presence of at least `MAIN_PRESENCE` percent of those polls (the party or the
+# names it absorbs nationwide, so a renamed party keeps its history) and a mean share of at least `MAIN_SHARE`.
+MAIN_WINDOW = 42
+MAIN_MIN_POLLS = 30
+MAIN_PRESENCE = 90
+MAIN_SHARE = 1.0
 
 
 def agg_names(smap: Optional[dict]) -> list[str]:
@@ -349,7 +357,83 @@ def agg_names(smap: Optional[dict]) -> list[str]:
     return names
 
 
-def derive_event_params(df: pd.DataFrame, parties: pd.DataFrame, smap: Optional[dict] = None) -> dict:
+def nationwide_agg_names(smap: Optional[dict]) -> dict[str, list[str]]:
+    """
+    Names each party absorbs through its ``agg`` rules without ``regions`` (the whole scope).
+
+    Parameters
+    ----------
+    smap : dict, optional
+        ``smap`` of an election (see `agg_names`).
+
+    Returns
+    -------
+    dict
+        ``{party: [absorbed names]}`` for the parties with such rules.
+    """
+    out = {}
+    for party, rules in (smap or {}).items():
+        for rule in (rules if isinstance(rules, list) else [rules]):
+            if isinstance(rule, dict) and rule.get('type') == 'agg' and rule.get('names') and not rule.get('regions'):
+                out.setdefault(party, []).extend(n for n in rule['names'] if n not in out.get(party, []))
+    return out
+
+
+def main_parties(
+    polls: Optional[pd.DataFrame],
+    event: list[str],
+    smap: Optional[dict],
+    window: int = MAIN_WINDOW,
+    min_polls: int = MAIN_MIN_POLLS,
+    presence: float = MAIN_PRESENCE,
+    share: float = MAIN_SHARE
+) -> list[str]:
+    """
+    The ``main`` parties of an election (see `MAIN_WINDOW`).
+
+    Parameters
+    ----------
+    polls : pd.DataFrame, optional
+        Polls of the cycle, indexed by ``(days, pollster)`` with one column per party; ``None`` or empty gives
+        no main party.
+    event : list of str
+        Candidacies of the election (``parties.event``); the result keeps their order.
+    smap : dict, optional
+        ``smap`` of the election: a party counts as present in a poll that lists a name it absorbs nationwide.
+    window, min_polls, presence, share
+        The constants of the rule (`MAIN_WINDOW`, `MAIN_MIN_POLLS`, `MAIN_PRESENCE`, `MAIN_SHARE`).
+
+    Returns
+    -------
+    list of str
+        Parties of ``event`` present in at least ``presence`` percent of the polls of the window with a mean
+        share of at least ``share`` there.
+    """
+    if polls is None or polls.shape[0] == 0:
+        return []
+    recent = polls.sort_index()
+    frame = recent.loc[1:window]
+    if frame.shape[0] < min_polls:
+        frame = recent.iloc[:min_polls]
+    absorbed = nationwide_agg_names(smap)
+    main = []
+    for party in event:
+        if party not in frame.columns:
+            continue
+        family = [party] + [n for n in absorbed.get(party, []) if n in frame.columns]
+        present = frame[family].notna().any(axis=1).mean() * 100
+        mean = frame[party].mean()
+        if present >= presence and pd.notna(mean) and mean >= share:
+            main.append(party)
+    return main
+
+
+def derive_event_params(
+    df: pd.DataFrame,
+    parties: pd.DataFrame,
+    smap: Optional[dict] = None,
+    polls: Optional[pd.DataFrame] = None
+) -> dict:
     """
     Derive the ``parties`` and ``bmaps`` of an election from its cycle matrix and the block of each party.
 
@@ -363,36 +447,36 @@ def derive_event_params(df: pd.DataFrame, parties: pd.DataFrame, smap: Optional[
         Party catalogue with ``name`` and ``block``.
     smap : dict, optional
         ``smap`` of the election, for an election without results: the names its ``agg`` rules absorb are not
-        candidacies (`agg_names`).
+        candidacies (`agg_names`); and for `main_parties`.
+    polls : pd.DataFrame, optional
+        Polls of the cycle indexed by ``(days, pollster)``, for `main_parties`; without them ``main`` is empty.
 
     Returns
     -------
     dict
         ``{'parties': {'event', 'polls'}, 'bmaps': {'main', 'blocks', 'vs'}}``: ``polls`` every column; ``event``
         the parties with a result, or ``polls`` minus the absorbed names when there is none; ``main`` the
-        parties of ``event`` with ``count > 95``; ``blocks`` the parties of ``polls`` by `BLOCKS` (empty blocks
+        `main_parties` of ``event``; ``blocks`` the parties of ``polls`` by `BLOCKS` (empty blocks
         left out, parties without one of those blocks in none); ``vs`` the `VS_BLOCKS` entries of ``blocks``.
     """
-    polls = df.columns.tolist()
-    if polls:
+    names = df.columns.tolist()
+    if names:
         # `.loc[[key]]` keeps a frame whatever the index looks like; its first row is the series by party
         result = df.loc[[(0, 'result')]].iloc[0]
-        count = df.loc[[(0, 'count')]].iloc[0]
         event = result.dropna().index.tolist()
     else:
-        result = count = pd.Series(dtype=float)
         event = []
     if not event:
         absorbed = agg_names(smap)
-        event = [p for p in polls if p not in absorbed]
-    main = [p for p in event if count.get(p, float('nan')) > 95]
+        event = [p for p in names if p not in absorbed]
+    main = main_parties(polls, event, smap)
 
     block_of = dict(zip(parties['name'], parties['block']))
-    blocks = {b: [p for p in polls if block_of.get(p) == b] for b in BLOCKS}
-    blocks = {b: names for b, names in blocks.items() if names}
+    blocks = {b: [p for p in names if block_of.get(p) == b] for b in BLOCKS}
+    blocks = {b: members for b, members in blocks.items() if members}
     vs = {b: blocks[b] for b in VS_BLOCKS if b in blocks}
 
-    return {'parties': {'event': event, 'polls': polls}, 'bmaps': {'main': main, 'blocks': blocks, 'vs': vs}}
+    return {'parties': {'event': event, 'polls': names}, 'bmaps': {'main': main, 'blocks': blocks, 'vs': vs}}
 
 
 def derive_scope_params(
@@ -441,7 +525,8 @@ def derive_scope_params(
         # Sorted index: `.loc[(0, ...)]` on the unsorted, non-unique (days, pollster) index
         # takes pandas' linear path and raises a PerformanceWarning per lookup.
         df = get_event_dmat(scope, dt, polls, events, parties).sort_index()
-        params = derive_event_params(df, parties, smap=(overrides.get(dt) or {}).get('smap'))
+        cycle = polls.loc[dt] if dt in polls.index.get_level_values(0) else None
+        params = derive_event_params(df, parties, smap=(overrides.get(dt) or {}).get('smap'), polls=cycle)
 
         new_parties = []
         if all_event_dates.index(dt) > 0:

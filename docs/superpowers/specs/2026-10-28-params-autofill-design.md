@@ -41,8 +41,15 @@ Por elección, con la matriz del ciclo de `get_event_dmat` (sondeos del ciclo + 
 - `parties.event`: los partidos con resultado. En una elección sin resultado (futura), `polls` menos los
   nombres que el `smap` de esa elección absorbe con una regla `agg` (en 2026 quita SUMAR y UPN y reproduce la
   lista manual de Luis).
-- `bmaps.main`: partidos de `event` presentes en más del 95 % de los sondeos del ciclo (la regla actual,
-  `df_count > 95`).
+- `bmaps.main` (regla revisada el 2026-10-28 a petición de Luis, criterio estadístico en vez de editorial): partidos
+  de `event` encuestados por casi todas las casas en el tramo final y con peso medible. Ventana: los sondeos de
+  los últimos 42 días, ampliada a los 30 más recientes cuando hay menos (elección en curso). Presencia ≥ 90 % de
+  esos sondeos, contando como presente al partido o a los nombres que absorbe con una regla `agg` sin `regions`
+  (FA hereda los sondeos de SUMAR), y media de voto en la ventana ≥ 1 %. Sustituye al «> 95 % de los sondeos a
+  1-42 días», que con 6 sondeos a un mes del 29-N dejaba fuera a UP (5 de 6) y bailaba con cada sondeo. El rating
+  no usa `main`; sí el error y sesgo medios publicados, las tarjetas, la parrilla de efectos de casa y las
+  métricas por provincia del backtest, siempre dentro de cada elección (el `Computer` anula en cada elección los
+  partidos que no están en su propio `main`).
 - `bmaps.blocks`: Derecha, Izquierda, Regionalista y Separatista según `parties.block` del catálogo, sobre los
   partidos de `polls`. Sin bloques vacíos. El partido comodín de bloque «Otros» (id 528, nombre `-`) no entra.
 - `bmaps.vs`: Derecha e Izquierda completas, idénticas a las de `blocks`.
