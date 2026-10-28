@@ -1,11 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo simulamos los escaños?{% endblock %}
-{% block description %}Cómo pasa el modelo del promedio de encuestas a los escaños: el sorteo del voto, la diferencia entre Hoy y Elección, el reparto por circunscripciones, la regla D'Hondt, las barreras de cada ámbito y qué significa cada cifra publicada.{% endblock %}
+{% block description %}Cómo pasa el modelo del promedio de encuestas a los escaños: el sorteo del voto con sus dos errores, la deriva de la opinión que separa Hoy de Elección, el swing proporcional y las oscilaciones por comunidad y provincia, la regla D'Hondt y las barreras de cada ámbito, qué significa cada cifra publicada y cómo lo comprobamos, con las fórmulas y los supuestos en seis notas técnicas.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
+{#- The six technical notes, in order of appearance: their calls are numbered by their position here. -#}
+{% set note_keys = ['error', 'conjunto', 'deriva', 'swing', 'oscilaciones', 'reparto'] %}
 {#- A barrier of the catalogue as a percentage, without decimals when it is whole; a dash when there is none. -#}
 {% macro barrier(value) -%}
 {% if value is none %}–{% else %}{{ value|pct(0 if value == value|round else 1) }}{% endif %}
@@ -14,7 +16,7 @@
 {% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
     {% include '_metodo_nav.html' +%}
     <div id="content" class="stack">
-      {{ m.headline('El modelo sortea muchas elecciones posibles a partir del promedio y reparte los escaños de cada una por circunscripciones; las cifras publicadas cuentan lo que pasa en todas ellas.') }}
+      {{ m.headline(self.title(), tag='h1') }}
       <nav class="section-nav toc" aria-label="Secciones">
         <a href="#sorteo">Del promedio al sorteo del voto</a>
         <a href="#hoy-y-eleccion">Hoy y Elección</a>
@@ -23,61 +25,135 @@
         <a href="#dhondt">El reparto D'Hondt</a>
         <a href="#barreras">Las barreras</a>
         <a href="#cifras">Qué es cada cifra</a>
+        <a href="#comprobacion">Cómo lo comprobamos</a>
+        <a href="#limites">Límites</a>
+        <a href="#notas">Notas</a>
       </nav>
-      {{ m.card_start('resumen', 'En resumen', 'La simulación de escaños en cuatro ideas.') }}
-        <ul>
-          <li>Cada simulación sortea el voto de cada partido alrededor del promedio, con su error y el histórico de los sondeos.</li>
-          <li>El modo Elección suma la deriva de la opinión hasta la votación, mayor en los partidos jóvenes.</li>
-          <li>El voto pasa a cada circunscripción con el swing proporcional y oscilaciones por comunidad y provincia.</li>
-          <li>Los escaños se reparten con D'Hondt y la barrera de cada ámbito; el titular es el reparto del voto central y los rangos y probabilidades resumen las simulaciones.</li>
-        </ul>
+      {{ m.card_start('resumen', 'Qué nos dice la simulación', 'Cómo pasamos del promedio de encuestas a los escaños y a las probabilidades que publicamos, en cuatro pasos.') }}
+        <p>
+          El promedio sitúa a un partido en el 33% del voto. ¿Cuántos escaños son? Depende de cómo se reparta ese
+          voto entre 52 circunscripciones, de cómo les vaya a los demás partidos y de cuánto se equivoquen las
+          encuestas, que ya lo han hecho antes.
+        </p>
+        <p>
+          Una sola cuenta no basta para responder. El modelo no reparte escaños una vez, sino
+          {% if figures.n_sim %}{{ figures.n_sim|int }} veces en cada modo (en las generales){% else %}muchas veces en cada modo{% endif %},
+          cada una con un voto sorteado distinto, y cuenta lo que pasa en todas ellas.
+        </p>
+        <p>
+          El proceso tiene cuatro pasos: sorteamos el voto de cada partido alrededor del promedio, con un margen que
+          sale de lo que se han equivocado las encuestas; llevamos ese voto a cada circunscripción a partir de la
+          elección anterior, con oscilaciones por comunidad y por provincia; repartimos los escaños con la regla
+          D'Hondt y la barrera de cada ámbito; y resumimos las simulaciones en rangos y probabilidades.
+        </p>
+        <p>
+          Hay una distinción que conviene tener presente: <strong>el titular de escaños es un reparto, no una
+          media</strong>: el titular es el reparto del voto central, lo que da D'Hondt al promedio proyectado a cada
+          circunscripción, el mismo en Hoy y en Elección. Los rangos y las probabilidades sí resumen las
+          simulaciones: cuentan en cuántas ocurre cada cosa.
+        </p>
+        <h3>De un porcentaje a una distribución</h3>
+        <p>
+          Imaginemos un histograma con los escaños de un partido en el eje horizontal y, en el vertical, en cuántas
+          simulaciones saca cada cifra. Si las encuestas acertaran siempre, sería una sola barra. Como no es así, es
+          una campana, más ancha cuanto más grande es el partido y cuanto más lejos queda la votación.
+        </p>
+        <p>
+          Lo que publicamos sale de esa campana: el intervalo que deja fuera el 2,5% más bajo y el 2,5% más alto, la
+          probabilidad de que un partido sea el primero o de que un bloque sume los 176 escaños. Veamos qué entra en
+          cada paso y por qué.
+        </p>
       {{ m.card_end() }}
       {{ m.card_start('sorteo', 'Del promedio al sorteo del voto', 'Cada simulación es una elección posible: el voto de cada partido se sortea alrededor de su voto estimado, con un margen que suma dos errores.') }}
         <p>
           El punto de partida es el voto estimado de cada partido, el promedio corregido leído en la fecha de la
           estimación (ver <a href="{{ method_href('promedio') }}">¿Cómo promediamos las encuestas?</a>). No es el
-          resultado: el promedio tiene su incertidumbre y las encuestas se han equivocado antes. Por eso el modelo
-          no reparte escaños una sola vez, sino
-          {% if figures.n_sim %}{{ figures.n_sim|int }} veces en cada modo (en las generales){% else %}muchas veces en cada modo{% endif %},
-          cada una con un voto sorteado distinto.
+          resultado: el promedio tiene su incertidumbre y las encuestas se han equivocado antes. En cada simulación, el
+          voto <var>v</var> de un partido es su voto estimado <var>p</var> más un error al azar de tamaño σ:
         </p>
-        <p>
-          En cada simulación, el voto <var>v</var> de un partido es su voto estimado <var>p</var> más un error al
-          azar de tamaño σ:
-        </p>
-        <math display="block" aria-label="v igual a p más sigma por t, con sigma igual a la raíz de s al cuadrado más e al cuadrado">
-          <mrow>
-            <mi>v</mi><mo>=</mo><mi>p</mi><mo>+</mo><mi>σ</mi><mo>·</mo><mi>t</mi><mo>,</mo><mspace width="1em"></mspace>
-            <mi>σ</mi><mo>=</mo>
-            <msqrt><msup><mi>s</mi><mn>2</mn></msup><mo>+</mo><msup><mi>e</mi><mn>2</mn></msup></msqrt>
-          </mrow>
-        </math>
+        <div class="math-wrap">
+          <math display="block" aria-label="v igual a p más sigma por t, con sigma igual a la raíz de s al cuadrado más e al cuadrado"><mrow><mi>v</mi><mo>=</mo><mi>p</mi><mo>+</mo><mi>σ</mi><mo>·</mo><mi>t</mi><mo>,</mo><mspace width="1.5em"/><mi>σ</mi><mo>=</mo><msqrt><mrow><msup><mi>s</mi><mn>2</mn></msup><mo>+</mo><msup><mi>e</mi><mn>2</mn></msup></mrow></msqrt></mrow></math>
+        </div>
+        <h3 id="dos-errores">Dos errores que se suman en cuadratura</h3>
         <ul>
           <li><var>s</var> es el error del propio promedio: dice cuánto puede equivocarse la línea al resumir los
-            sondeos.</li>
+            sondeos. Es la precisión de la curva de
+            <a href="{{ method_href('promedio') }}#banda">¿Cómo promediamos las encuestas?</a>, unas décimas de punto
+            en un partido grande.</li>
           <li><var>e</var> es el error histórico: lo que se equivocaron los sondeos de la última semana frente al
             resultado en las elecciones pasadas, para un partido de ese tamaño y según sea de ámbito estatal o
-            regional. Suele ser el mayor de los dos.</li>
+            regional. Suele ser el mayor de los dos, varias veces <var>s</var>.</li>
           <li><var>t</var> sale de una t de Student, una campana con las colas algo más gruesas que la normal,
             tanto más cuantos menos sondeos recientes tiene el partido: las sorpresas grandes son algo más
             probables.</li>
         </ul>
         <p>
-          Un voto sorteado por debajo de cero se queda en cero, y lo que falta hasta 100 es «otros»: las
-          candidaturas que el modelo no sigue por separado y el voto en blanco.
+          Se suman en cuadratura, la raíz de la suma de los cuadrados, como dos fuentes de error independientes.
+          Varias encuestas pueden coincidir y equivocarse juntas: por eso la precisión con la que conocemos su
+          promedio, <var>s</var>, no basta para anticipar el voto, y hace falta <var>e</var>.
         </p>
+        <h3 id="historico">El error histórico: lo que se equivocaron los sondeos</h3>
         <p>
-          Cada partido se sortea por su lado. Se ha probado un sorteo conjunto, en el que cuando un partido sube
-          los demás tienden a bajar. En el backtest no cambia el
-          error del voto, pero a pocos días de la votación da probabilidades de mayoría algo peores, y el modo
-          Hoy, que simula una votación inmediata, es justo ese caso. Por eso queda desactivado.
+          Para medirlo tomamos, en cada elección general pasada con sondeos suficientes, el último sondeo de cada
+          encuestadora publicado a seis días o más de la votación, y su distancia al resultado en cada partido. Esa
+          distancia crece con el tamaño del partido y es mucho menor en los partidos de ámbito regional, cuyo voto
+          nacional es pequeño y estable. Ajustamos una recta a esos errores, y la recta da el error esperado para
+          cualquier partido:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Error histórico esperado, en puntos de voto, según el tamaño y el ámbito del partido, con el ajuste de septiembre de 2026 (1.634 pares de sondeo y partido en las generales desde 1982).</caption>
+            <thead><tr><th scope="col" class="f l">Voto del partido</th><th scope="col">2%</th><th scope="col">5%</th><th scope="col">10%</th><th scope="col">20%</th><th scope="col">30%</th><th scope="col">40%</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">De ámbito estatal</td><td>1,36</td><td>1,49</td><td>1,70</td><td>2,14</td><td>2,57</td><td>3,00</td></tr>
+              <tr><td class="f l">De ámbito regional</td><td>0,16</td><td>0,29</td><td>0,51</td><td>0,94</td><td>1,37</td><td>1,81</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Todas las elecciones pesan igual, con sus fallos grandes dentro: 2023, cuando casi todas las encuestadoras
+          dieron a la derecha más de lo que sacó, cuenta tanto como 2016. Es un error promedio, sin dirección: el modelo
+          no sabe hacia qué lado se equivocarán los sondeos esta vez, sólo cuánto suelen hacerlo, y el sorteo reparte
+          ese error a los dos lados del voto estimado. La nota{{ m.note('error', note_keys) }} recoge la regresión, la
+          t de Student y sus grados de libertad.
         </p>
         <p>
           En las autonómicas, el error histórico y la deriva de la opinión (abajo) se estiman con las elecciones
-          generales: estimarlos con las de cada comunidad no mejoró el backtest.
+          generales: estimarlos con las de cada comunidad no mejoró las pruebas históricas. Un voto sorteado por
+          debajo de cero se queda en cero, y lo que falta hasta 100 es «otros»: las candidaturas que el modelo no
+          sigue por separado y el voto en blanco.
+        </p>
+        <h3 id="conjunto">Por qué cada partido se sortea por su lado</h3>
+        <p>
+          Cuando una encuesta da a un partido más de lo que saca, suele dar a otros menos, porque todo suma 100. Lo
+          hemos medido en las elecciones pasadas: la varianza de la suma de los errores de los partidos principales
+          es alrededor de una cuarta parte de lo que sería si fueran independientes. El modelo puede sortear los
+          partidos estatales de forma conjunta, con una correlación negativa común que reproduce esa cifra, sin
+          cambiar el margen de cada partido por separado:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Sorteo independiente frente a conjunto en las generales, cálculo de septiembre de 2026 con 10.000 simulaciones. La razón de la varianza de la suma medida en las elecciones pasadas era 0,225, que con seis partidos estatales equivale a una correlación de −0,17.</caption>
+            <thead><tr><th scope="col" class="f l">Medida</th><th scope="col">Independiente</th><th scope="col">Conjunto</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">Desviación típica de la suma de los partidos estatales, en puntos</td><td>4,80</td><td>2,36</td></tr>
+              <tr><td class="f l">Desviación típica de la diferencia PP − PSOE, en puntos</td><td>3,62</td><td>3,95</td></tr>
+              <tr><td class="f l">Simulaciones en que «otros» se queda en cero</td><td>12,6%</td><td>1,1%</td></tr>
+              <tr><td class="f l">Escaños del PP (intervalo del 95%)</td><td>137 (114-156)</td><td>138 (113-158)</td></tr>
+              <tr><td class="f l">Probabilidad de mayoría absoluta de la derecha</td><td>0,984</td><td>0,974</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          El sorteo conjunto cambia las sumas, no las cifras de cada partido: las diferencias entre partidos se
+          abren algo y las mayorías son un poco menos seguras. En las pruebas históricas no cambia el error del
+          voto, pero a pocos días de la votación da probabilidades de mayoría algo peores, y el modo Hoy, que simula
+          una votación inmediata, es justo ese caso. Por eso queda desactivado: cada partido se sortea por su lado.
+          La nota{{ m.note('conjunto', note_keys) }} recoge la medida y la cópula con que se sortearía.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('hoy-y-eleccion', 'Hoy y Elección', 'Los dos modos parten del mismo voto estimado; Elección añade lo que la opinión puede moverse hasta el día de la votación.') }}
+      {{ m.card_start('hoy-y-eleccion', 'Hoy y Elección: la deriva de la opinión', 'Los dos modos parten del mismo voto estimado; Elección añade lo que la opinión puede moverse hasta el día de la votación.') }}
+        <h3 id="ancla">El día en que se lee el promedio</h3>
         <p>
           <strong>Hoy</strong> responde a qué pasaría si se votara ahora: la elección simulada se celebra en la
           fecha de la estimación, el día del cálculo. El promedio se lee ese día, nunca después, aunque la recta
@@ -85,51 +161,92 @@
         </p>
         <p>
           <strong>Elección</strong> simula la votación en la fecha de la elección: la convocada o, si aún no lo
-          está, el final de la legislatura. Entre hoy y ese día la opinión puede moverse,
-          y el modelo lo añade como un tercer error, la deriva <var>d</var>, medida en los ciclos electorales
-          pasados:
+          está, el final de la legislatura. Entre hoy y ese día la opinión puede moverse, y el modelo lo añade como
+          un tercer error, la deriva <var>d</var>, medida en los ciclos electorales pasados:
         </p>
-        <math display="block" aria-label="sigma igual a la raíz de s al cuadrado más e al cuadrado más d al cuadrado, con d igual a m por p por la raíz de k por h">
-          <mrow>
-            <mi>σ</mi><mo>=</mo>
-            <msqrt><msup><mi>s</mi><mn>2</mn></msup><mo>+</mo><msup><mi>e</mi><mn>2</mn></msup><mo>+</mo><msup><mi>d</mi><mn>2</mn></msup></msqrt>
-            <mo>,</mo><mspace width="1em"></mspace>
-            <mi>d</mi><mo>=</mo><mi>m</mi><mo>·</mo><mi>p</mi><mo>·</mo>
-            <msqrt><mi>k</mi><mo>·</mo><mi>h</mi></msqrt>
-          </mrow>
-        </math>
+        <div class="math-wrap">
+          <math display="block" aria-label="sigma igual a la raíz de s al cuadrado más e al cuadrado más d al cuadrado, con d igual a m por p por la raíz de k por h"><mrow><mi>σ</mi><mo>=</mo><msqrt><mrow><msup><mi>s</mi><mn>2</mn></msup><mo>+</mo><msup><mi>e</mi><mn>2</mn></msup><mo>+</mo><msup><mi>d</mi><mn>2</mn></msup></mrow></msqrt><mo>,</mo><mspace width="1.5em"/><mi>d</mi><mo>=</mo><mi>m</mi><mo>·</mo><mi>p</mi><mo>·</mo><msqrt><mrow><mi>k</mi><mo>·</mo><mi>h</mi></mrow></msqrt></mrow></math>
+        </div>
+        <h3 id="deriva">Un paseo al azar proporcional al tamaño</h3>
+        <p>
+          Para medir la deriva reconstruimos el promedio diario de cada partido en cada ciclo pasado y miramos cuánto
+          cambió entre dos fechas separadas por 7, 14, 30 días y así hasta un año. En los partidos principales de los
+          ciclos desde 2011:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Cambio típico del promedio de un partido principal entre dos fechas, en puntos de voto, según los días que las separan; ciclos de las generales desde 2011, medido en septiembre de 2026.</caption>
+            <thead><tr><th scope="col" class="f l">Días</th><th scope="col">7</th><th scope="col">14</th><th scope="col">30</th><th scope="col">60</th><th scope="col">90</th><th scope="col">180</th><th scope="col">365</th></tr></thead>
+            <tbody><tr><td class="f l">Cambio típico</td><td>0,25</td><td>0,47</td><td>0,92</td><td>1,61</td><td>2,13</td><td>3,19</td><td>4,48</td></tr></tbody>
+          </table>
+        </div>
         <ul>
-          <li><strong>Crece con los días.</strong> <var>h</var> son los días que faltan; la deriva crece con su
-            raíz cuadrada, como un paseo al azar: a cuatro veces más días, el doble de deriva.</li>
+          <li><strong>Crece con los días.</strong> <var>h</var> son los días que faltan; de dos meses en adelante,
+            la deriva crece con su raíz cuadrada, como un paseo al azar: a cuatro veces más días, el doble de
+            deriva. No se satura hasta un año.</li>
           <li><strong>Es proporcional al tamaño.</strong> Se multiplica por el voto <var>p</var> del partido: en un
             mes, uno al 30% puede moverse alrededor de un punto; uno al 1%, unas centésimas (y en cuatro meses,
-            el doble). La constante <var>k</var> sale de cuánto se movieron los promedios de los partidos en los
-            ciclos anteriores, con más peso para los recientes, porque el sistema de muchos partidos se mueve más
-            que el bipartidismo.</li>
-          <li><strong>Es mayor en los partidos jóvenes.</strong> <var>m</var> vale 1, salvo en los partidos que las
-            encuestas listan desde hace menos de cuatro años: para ellos es un factor de 1 o más, estimado con
-            los partidos jóvenes del pasado, que derivaron bastante más que los asentados.</li>
+            el doble). Lo medimos con todos los partidos encuestados: la varianza de la deriva crece con el
+            cuadrado de la cuota.</li>
+          <li><strong>Depende de la época.</strong> La constante <var>k</var> sale de cuánto se movieron los
+            promedios en los ciclos anteriores, con más peso para los recientes, porque el sistema de muchos
+            partidos se mueve de tres a diez veces más que el bipartidismo: en el ciclo de 2008 la constante era
+            0,7, en 2011 2,9 y en 2015 12,1, en cienmilésimas; en 2019 y 2023, 5,5 y 5,7.</li>
         </ul>
         <p>
-          La deriva no tiene dirección: no mueve el voto estimado, que es el mismo en los dos modos, sólo abre
-          los intervalos. Es lo que dibuja el abanico de voto en la página de escaños: en el horizonte 0 está la
-          estimación de hoy, y cuanto más lejos, más ancho.
+          Con la constante de hoy, ajustada con los ciclos hasta 2023 y con cada ciclo pesando 0,9 por año de
+          antigüedad, la deriva de un partido asentado es esta parte de su voto:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Deriva de un partido asentado según los días que faltan, como parte de su voto y en puntos para un partido al 30%, con la constante ajustada en septiembre de 2026.</caption>
+            <thead><tr><th scope="col" class="f l">Días que faltan</th><th scope="col">7</th><th scope="col">30</th><th scope="col">90</th><th scope="col">180</th><th scope="col">342</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">Parte del voto</td><td>1,7%</td><td>3,4%</td><td>6,0%</td><td>8,4%</td><td>11,6%</td></tr>
+              <tr><td class="f l">Puntos, partido al 30%</td><td>0,5</td><td>1,0</td><td>1,8</td><td>2,5</td><td>3,5</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 id="jovenes">Los partidos jóvenes</h3>
+        <p>
+          <var>m</var> vale 1, salvo en los partidos que las encuestas listan desde hace menos de cuatro años. Los
+          hemos medido aparte: derivaron unas tres veces más que los asentados, y el efecto es un escalón, no una
+          pendiente: desaparece a los cuatro años.
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Deriva a 90 días de los partidos según su edad en cada elección, contada desde la primera encuesta que los lista, frente a la de los partidos de cuatro años o más; 23 partidos en los ciclos de las generales, medido en septiembre de 2026.</caption>
+            <thead><tr><th scope="col" class="f l">Edad del partido</th><th scope="col">Menos de 1 año</th><th scope="col">1 a 2</th><th scope="col">2 a 4</th><th scope="col">4 a 8</th><th scope="col">Más de 8</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">Deriva frente a los asentados</td><td>×3,0</td><td>×4,5</td><td>×3,2</td><td>×1,1</td><td>×0,9</td></tr>
+              <tr><td class="f l">Casos</td><td>5</td><td>2</td><td>10</td><td>13</td><td>58</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Con pocos casos jóvenes, lo honesto es un escalón con un solo parámetro: su deriva se multiplica por un
+          factor estimado con los partidos jóvenes del pasado, 2,15 en el ciclo actual de las generales. Unidas
+          Podemos en 2015, VOX en 2019 o Sumar en 2023 son los casos que lo motivan: en ellos los intervalos a
+          meses vista eran demasiado estrechos.
         </p>
         <p>
-          Mira Hoy para saber cómo están las cosas y Elección para saber qué puede pasar el día de la votación.
-          Un aviso para Hoy: el error histórico es el de los sondeos de la última semana de campaña, aunque la
-          votación quede lejos.
+          La deriva no tiene dirección: no mueve el voto estimado, que es el mismo en los dos modos, sólo abre los
+          intervalos. Es lo que dibuja el abanico de voto en la página de escaños: en el horizonte 0 está la
+          estimación de hoy, y cuanto más lejos, más ancho. Mira Hoy para saber cómo están las cosas y Elección para
+          saber qué puede pasar el día de la votación. Un aviso para Hoy: el error histórico es el de los sondeos de
+          la última semana de campaña, aunque la votación quede lejos. La nota{{ m.note('deriva', note_keys) }}
+          recoge cómo se ajusta <var>k</var> y el factor de los jóvenes.
         </p>
       {{ m.card_end() }}
       {% if errors %}
       {{ m.card_start('errores', 'Un ejemplo con datos publicados: los tres errores del ' ~ (errors.published|date),
                       'Las tres piezas del margen de cada partido principal en el último cálculo de las generales, en puntos de voto.') }}
         <div class="table-wrap">
-          <table id="errors-table">
+          <table class="et et-fit" id="errors-table">
             <caption>Error del promedio, error histórico y deriva de cada partido principal, con el margen total de cada modo.</caption>
             <thead>
               <tr>
-                <th scope="col">Partido</th>
+                <th scope="col" class="f l">Partido</th>
                 <th scope="col">Voto</th>
                 <th scope="col">Promedio (s)</th>
                 <th scope="col">Histórico (e)</th>
@@ -142,7 +259,7 @@
             <tbody>
               {% for row in errors.rows %}
               <tr>
-                <th scope="row">{{ row.name }}</th>
+                <td class="f l">{{ row.name }}</td>
                 <td>{{ row.pct|pct(1) }}</td>
                 <td>{{ row.err|num(2) }}</td>
                 <td>{{ row.pct_err|num(2) }}</td>
@@ -155,6 +272,7 @@
             </tbody>
           </table>
         </div>
+        <p class="scroll-hint">Desliza para ver más →</p>
         <p>
           Cada fila descompone el margen de un partido: <var>s</var> es la precisión del promedio; <var>e</var>, lo que
           se equivocaron los sondeos de la última semana en las elecciones pasadas para un partido de ese tamaño; y
@@ -176,36 +294,84 @@
         <p>
           <strong>Las colas.</strong> El sorteo usa una t de Student cuyos grados de libertad salen del número de
           sondeos del partido, muchos en los grandes, así que sus colas son casi las de una campana normal.
+          {% if errors.drift_k %}
+          <strong>La deriva.</strong> Con la constante <var>k</var> de este cálculo, un partido asentado deriva el
+          {{ ((errors.drift_k * 30) ** 0.5 * 100)|pct(1) }} de su voto en 30 días
+          {%- if errors.horizon %} y el {{ ((errors.drift_k * errors.horizon) ** 0.5 * 100)|pct(1) }} en los
+          {{ errors.horizon|int }} días que faltan{% endif %}
+          {%- if errors.multiplier and errors.multiplier > 1 %}; el factor de los partidos jóvenes es
+          {{ errors.multiplier|num(2) }}{% if errors.young %} y se aplica a {{ errors.young|join(', ') }}{% endif %}
+          {%- endif %}.
+          {% endif %}
         </p>
       {{ m.card_end() }}
       {% endif %}
       {{ m.card_start('circunscripciones', 'De España a las circunscripciones', 'El voto sorteado es el del conjunto; para repartir escaños hace falta el de cada circunscripción, y el modelo lo deduce de la elección anterior.') }}
+        <h3 id="swing">El swing proporcional</h3>
         <p>
-          <strong>El swing proporcional.</strong> Cada partido conserva la geografía de su voto en la elección
-          anterior y la escala en la misma proporción que su voto en el conjunto. Si pasa del 20% al 22%, un
-          10% más, su voto crece un 10% en cada circunscripción: del 30% al 33% donde era fuerte, del 10% al
-          11% donde era débil. «Otros» se escala igual; el voto en blanco mantiene el porcentaje que tuvo en cada
-          circunscripción. Al final, cada circunscripción se reajusta para sumar 100.
+          Cada partido conserva la geografía de su voto en la elección anterior y la escala en la misma proporción
+          que su voto en el conjunto. Si pasa del 20% al 22%, un 10% más, su voto crece un 10% en cada
+          circunscripción: del 30% al 33% donde era fuerte, del 10% al 11% donde era débil.
+        </p>
+        <div class="math-wrap">
+          <math display="block" aria-label="v sub r igual a v sub r anterior por v entre v anterior"><mrow><msub><mi>v</mi><mi>r</mi></msub><mo>=</mo><msubsup><mi>v</mi><mi>r</mi><mtext>ant</mtext></msubsup><mo>·</mo><mfrac><mi>v</mi><msup><mi>v</mi><mtext>ant</mtext></msup></mfrac></mrow></math>
+        </div>
+        <p>
+          <var>v</var><sub><var>r</var></sub> es el voto del partido en la circunscripción <var>r</var>,
+          <var>v</var> su voto en el conjunto y «ant» la elección anterior. Es un swing proporcional, no uniforme:
+          un partido que sube dos puntos no sube dos puntos en todas partes, sino un 10% en todas partes. «Otros» se
+          escala igual; el voto en blanco mantiene el porcentaje que tuvo en cada circunscripción. Al final, cada
+          circunscripción se reajusta para sumar 100.
+        </p>
+        <h3 id="herencias">Las herencias</h3>
+        <p>
+          Un partido que no existía en la elección anterior no tiene geografía propia. Cuando el catálogo dice de qué
+          partidos procede, hereda su voto: si es la suma de varios, toma el de todos; si se escinde de otro, se
+          reparten el voto previo en proporción a lo que estima hoy cada uno; si una marca desaparece, su voto pasa
+          a sus sucesores. Las mismas reglas valen para las encuestas: las que listaban a Unidas Podemos y Más País
+          antes de que existiera Sumar cuentan para Sumar en su promedio, en vez de perderse en «otros». Un partido
+          sin resultado previo ni partido del que heredar no obtiene escaños en la simulación. La
+          nota{{ m.note('swing', note_keys) }} recoge las reglas, el tratamiento de «otros» y del voto en blanco y
+          cómo se convierten las cuotas en votos.
+        </p>
+        <h3 id="oscilaciones">Las oscilaciones por comunidad y provincia</h3>
+        <p>
+          No todas las circunscripciones se mueven como el conjunto: Andalucía, Cataluña o Galicia pueden ir por su
+          lado, y las provincias de una comunidad tienden a moverse juntas. Lo hemos medido comparando, entre
+          elecciones generales consecutivas, el voto real de cada partido en cada provincia con el que daba el
+          swing proporcional:
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit">
+            <caption>Desviación típica del voto real de cada partido en cada provincia frente al swing proporcional, entre elecciones generales consecutivas de 1993 a 2023 (diez pares, 1.877 celdas con cuota previa de al menos el 1%); medido en septiembre de 2026.</caption>
+            <thead><tr><th scope="col" class="f l">Voto previsto en la provincia</th><th scope="col">1-3%</th><th scope="col">3-10%</th><th scope="col">10-20%</th><th scope="col">Más del 20%</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">Desviación, como parte del voto</td><td>32%</td><td>22%</td><td>12%</td><td>11%</td></tr>
+              <tr><td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,7</td></tr>
+              <tr><td class="f l">Celdas</td><td>112</td><td>354</td><td>390</td><td>1.021</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Unas tres cuartas partes de esa desviación es de toda la comunidad autónoma, y el resto, propia de cada
+          provincia. Por eso cada simulación añade a cada partido un empujón al azar por comunidad autónoma y otro,
+          menor, por provincia; en las autonómicas, sólo el de cada circunscripción. Su tamaño depende del voto
+          previsto del partido allí, y es relativamente mayor en los partidos pequeños. Los empujones se compensan:
+          el voto del partido en el conjunto no cambia, sólo dónde lo saca.
         </p>
         <p>
-          <strong>Las herencias.</strong> Un partido que no existía en la elección anterior no tiene geografía
-          propia. Cuando el catálogo dice de qué partidos procede, hereda su voto: si es la suma de varios, toma
-          el de todos; si se escinde de otro, se reparten el voto previo en proporción a lo que estima hoy cada
-          uno; si una marca desaparece, su voto pasa a sus sucesores. Un partido sin resultado previo ni partido
-          del que heredar no obtiene escaños en la simulación.
+          El efecto se ve en las provincias y en las mayorías. En las generales, en el cálculo de septiembre de
+          2026, el intervalo del 95% del PP en Madrid pasaba de ±5 puntos a ±8 al añadir las oscilaciones; el de
+          ERC en Barcelona apenas se movía, porque su oscilación de comunidad la deshace el reajuste a su voto en
+          el conjunto. Los escaños totales se mueven poco, porque las oscilaciones de unas comunidades se compensan
+          con las de otras. La nota{{ m.note('oscilaciones', note_keys) }} recoge las curvas y cómo se aplican los
+          empujones.
         </p>
+        <h3 id="participacion">Lo que no se modela</h3>
         <p>
-          <strong>Las oscilaciones.</strong> No todas las circunscripciones se mueven como el conjunto: Andalucía,
-          Cataluña o Galicia pueden ir por su lado, y las provincias de una comunidad tienden a moverse juntas.
-          Por eso cada simulación añade a cada partido un empujón al azar por comunidad autónoma y otro, menor,
-          por provincia; en las autonómicas, sólo el de cada circunscripción. Su tamaño sale de cuánto se
-          apartaron las provincias del swing proporcional entre elecciones generales consecutivas, y es
-          relativamente mayor en los partidos pequeños. Los empujones se compensan: el voto del partido en el
-          conjunto no cambia, sólo dónde lo saca.
-        </p>
-        <p>
-          La participación no se modela: cada circunscripción conserva los votos válidos de la elección
-          anterior, y con ellos su peso en el voto del conjunto.
+          La participación no se modela: cada circunscripción conserva los votos válidos de la elección anterior, y
+          con ellos su peso en el voto del conjunto. Una candidatura local que el modelo no sigue por separado forma
+          parte de «otros» y no puede sacar escaño en la simulación, aunque lo saque en las urnas.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('dhondt', 'El reparto D\'Hondt', 'En cada circunscripción y en cada simulación, los escaños se reparten con la regla D\'Hondt, como en el recuento oficial.') }}
@@ -218,11 +384,11 @@
           32.000 y C con 22.000. Los cinco cocientes más altos, en negrita, se llevan los escaños:
         </p>
         <div class="table-wrap" id="dhondt-example">
-          <table>
+          <table class="et et-fit">
             <caption>Ejemplo de reparto D'Hondt de 5 escaños entre tres partidos (cifras inventadas).</caption>
             <thead>
               <tr>
-                <th scope="col">Partido</th>
+                <th scope="col" class="f l">Partido</th>
                 <th scope="col">÷ 1</th>
                 <th scope="col">÷ 2</th>
                 <th scope="col">÷ 3</th>
@@ -230,9 +396,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr><th scope="row">A</th><td><strong>46.000</strong></td><td><strong>23.000</strong></td><td>15.333</td><td>2</td></tr>
-              <tr><th scope="row">B</th><td><strong>32.000</strong></td><td><strong>16.000</strong></td><td>10.667</td><td>2</td></tr>
-              <tr><th scope="row">C</th><td><strong>22.000</strong></td><td>11.000</td><td>7.333</td><td>1</td></tr>
+              <tr><td class="f l">A</td><td><strong>46.000</strong></td><td><strong>23.000</strong></td><td>15.333</td><td>2</td></tr>
+              <tr><td class="f l">B</td><td><strong>32.000</strong></td><td><strong>16.000</strong></td><td>10.667</td><td>2</td></tr>
+              <tr><td class="f l">C</td><td><strong>22.000</strong></td><td>11.000</td><td>7.333</td><td>1</td></tr>
             </tbody>
           </table>
         </div>
@@ -242,8 +408,9 @@
           En las circunscripciones pequeñas, pocos votos cambian un escaño.
         </p>
         <p>
-          Antes del reparto se aplica la barrera: las candidaturas que no la superan quedan fuera. «Otros» nunca
-          recibe escaños, porque no es una candidatura.
+          Los votos de cada candidatura en cada simulación son su cuota sorteada por los votos válidos que tuvo esa
+          circunscripción en la elección anterior. Antes del reparto se aplica la barrera: las candidaturas que no
+          la superan quedan fuera. «Otros» nunca recibe escaños, porque no es una candidatura.
         </p>
       {{ m.card_end() }}
       {{ m.card_start('barreras', 'Las barreras', 'Una candidatura sólo entra en el reparto si supera un mínimo de votos, la barrera, que fija la ley de cada ámbito.') }}
@@ -254,9 +421,15 @@
           {%- else -%}
           la que fija la ley electoral,
           {%- endif %} de los votos válidos (los de las candidaturas más el voto en blanco) de cada circunscripción.
-          Con los votos oficiales, D'Hondt con esa barrera reproduce escaño a escaño los repartos de las cinco
-          elecciones generales de 2015 a 2023; sin ella fallaría en uno: en Barcelona, en abril de 2019, Front
-          Republicà, con el 2,72%, se habría llevado el escaño que fue a Unidas Podemos.
+          Con los votos oficiales, D'Hondt con esa barrera reproduce escaño a escaño los 260 repartos provinciales de
+          las cinco elecciones generales de 2015 a 2023; sin ella fallaría en uno: en Barcelona, en abril de 2019,
+          Front Republicà, con el 2,72%, se habría llevado el escaño que fue a Unidas Podemos.
+        </p>
+        <p>
+          En el escenario central la barrera apenas actúa, pero en las simulaciones sí: en el cálculo de septiembre
+          de 2026, con 200 simulaciones, cambiaba 64 de los 10.400 repartos provinciales, casi todos en Madrid y
+          Barcelona, donde un partido pequeño roza el 3%. Es lo que mueve los rangos de esos partidos y, con ellos,
+          las probabilidades de los bloques.
         </p>
         <p>
           Algunas comunidades tienen una segunda barrera, sobre los votos de toda la comunidad. Una candidatura
@@ -303,9 +476,11 @@
       {{ m.card_start('cifras', 'Qué es cada cifra', 'El titular es un reparto; las demás cifras resumen todas las simulaciones: cuentan en cuántas ocurre cada cosa.') }}
         <ul>
           <li><strong>Los escaños de cada partido</strong> son su reparto central: proyectamos el promedio de
-            sondeos a cada circunscripción con el swing proporcional, sin sorteo, y aplicamos D'Hondt y la barrera.
-            La suma de las circunscripciones es el titular y los bloques suman sus partidos. Es el mismo titular
-            en el nowcast y en el forecast: la deriva sólo abre los rangos.</li>
+            sondeos a cada circunscripción con el swing proporcional, sin sorteo ni oscilaciones, y aplicamos
+            D'Hondt y la barrera. La suma de las circunscripciones es el titular y los bloques suman sus partidos. Es
+            el mismo titular en el nowcast y en el forecast, Hoy y Elección: la deriva sólo abre los rangos. No es la mediana de las
+            simulaciones: las medianas de cada partido no tienen por qué sumar los escaños de la cámara, y un
+            reparto sí.</li>
           <li><strong>El intervalo del 95%</strong> de los escaños deja fuera el 2,5% de las simulaciones más
             bajas y el 2,5% de las más altas. El del voto que acompaña a cada partido se calcula directamente
             con los errores del sorteo, sin pasar por el reparto.</li>
@@ -315,18 +490,275 @@
             cámara, así que lo que gana un partido lo pierde otro.</li>
           <li><strong>Dónde cae el reparto</strong> dentro del rango: en un partido que a veces saca escaño y a
             veces no, el reparto central puede quedar lejos del centro de su rango.</li>
+          <li><strong>Las provincias</strong>: cada circunscripción muestra su reparto central y, por partido, la
+            mediana y el intervalo de su voto y de sus escaños en las simulaciones, y la probabilidad de que saque
+            al menos un escaño allí.</li>
         </ul>
         <p>
+          La nota{{ m.note('reparto', note_keys) }} recoge la barrera en el reparto, el reparto central y cómo se
+          resumen las simulaciones.
+        </p>
+      {{ m.card_end() }}
+      {{ m.card_start('comprobacion', 'Cómo lo comprobamos', 'El modelo se repite en las elecciones generales pasadas, con los sondeos publicados hasta cada fecha, y se mira si sus intervalos contienen el resultado tantas veces como anuncian.') }}
+        <p>
+          Un intervalo del 95% sólo sirve si acierta alrededor del 95% de las veces. Para comprobarlo repetimos
+          el modelo en las cinco elecciones generales de 2015 a 2023, leído a 6, 14, 30, 60, 90 y 180 días de la
+          votación, con los sondeos, los ratings y los estimadores que se conocían en cada fecha.
           {% if figures.coverage %}{% set first = figures.coverage[0] %}
-          En el <a href="{{ method_href('backtest') }}">backtest</a> de las generales, el intervalo del 95% del voto
-          contiene el resultado el {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de
-          la votación.
+          En la evaluación publicada, el intervalo del 95% del voto contiene el resultado el
+          {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de la votación.
           {% else %}
-          Si los intervalos contienen el resultado tantas veces como anuncian se comprueba en
+          Si los intervalos aciertan tantas veces como anuncian se comprueba en
           <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
           {% endif %}
         </p>
+        <div class="table-wrap">
+          <table class="et et-fit" id="seats-backtest-table">
+            <caption>Pruebas históricas de las cinco elecciones generales de 2015 a 2023 (cuatro con escaños), en el modo Hoy, ejecución de referencia del 24 de octubre de 2026 con mil simulaciones por caso. Partidos principales; los errores, en puntos de voto y en escaños.</caption>
+            <thead><tr><th scope="col" class="f l">Medida</th><th scope="col">6 días</th><th scope="col">30 días</th><th scope="col">90 días</th></tr></thead>
+            <tbody>
+              <tr><td class="f l">Error medio del voto</td><td>1,70</td><td>2,18</td><td>2,85</td></tr>
+              <tr><td class="f l">Cobertura del intervalo del 95% del voto</td><td>96%</td><td>84%</td><td>76%</td></tr>
+              <tr><td class="f l">Error medio de los escaños</td><td>7,1</td><td>9,4</td><td>12,8</td></tr>
+              <tr><td class="f l">Cobertura del intervalo del 95% de los escaños</td><td>100%</td><td>90%</td><td>80%</td></tr>
+              <tr><td class="f l">Cobertura del 95% del voto por provincia</td><td>94%</td><td>92%</td><td>88%</td></tr>
+              <tr><td class="f l">Brier de la mayoría absoluta de bloque</td><td>0,038</td><td>0,067</td><td>0,105</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A una semana, los intervalos están bien calibrados: el del voto cubre el 96% y el de los escaños, el 100%,
+          algo ancho. Lejos de la votación, el modo Hoy se queda corto, como debe: no incluye la deriva. Con ella, el
+          modo Elección sube la cobertura del 95% del voto a 90 días del 76% al 84%, y la de los escaños del 80% al
+          85%; lo que falta son los fallos compartidos de las encuestas, que ningún término de horizonte corrige.
+        </p>
+        <p>
+          Cada pieza del modelo se ha juzgado con estas pruebas antes de activarse. Las oscilaciones por comunidad y
+          provincia subieron la cobertura del 95% del voto por provincia a 6 días del 86% al 94% y mejoraron las
+          probabilidades de mayoría (Brier de 0,041 a 0,033); el factor de los partidos jóvenes subió la cobertura
+          del 50% del voto a 60 días del 33% al 37%, sin coste; el sorteo conjunto las empeoró a 6 y 14 días y quedó
+          desactivado. Los periodos, las métricas y los cortes de evaluación se detallan en
+          <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
+        </p>
       {{ m.card_end() }}
+      {{ m.card_start('limites', 'Qué límites tiene la simulación', 'Simular muchas elecciones posibles ayuda a leer el promedio en escaños, pero la simulación hereda los fallos de las encuestas y simplifica la geografía del voto.') }}
+        <p>
+          El margen del sorteo sale de lo que se han equivocado las encuestas en elecciones pasadas, no de un
+          conocimiento de cómo se equivocarán esta vez. Si todas las encuestadoras dejan fuera al mismo tipo de
+          votante, el promedio comparte ese error y el sorteo sólo lo reparte a los dos lados. Lejos de la votación,
+          el error histórico de la última semana de campaña puede ser incluso algo estrecho.
+        </p>
+        <p>
+          Los partidos nuevos derivan más de lo que dice el factor de los jóvenes, estimado con pocos casos, y los que
+          se disuelven en el ciclo no se modelan. Cinco elecciones, cuatro con escaños, son pocas para juzgar cada
+          pieza: las diferencias de unas centésimas en las pruebas históricas están dentro del ruido.
+        </p>
+        <p>
+          La geografía del voto es la de la elección anterior, escalada y perturbada: no hay participación
+          diferencial, ni candidaturas locales fuera del catálogo, ni correlación explícita entre partidos dentro
+          de una provincia. Las oscilaciones usan una sola curva para todos los partidos y comunidades: los de
+          implantación desigual se desvían más de lo que la curva recoge. Un partido que se escinde de otro hereda
+          su geografía en proporción a lo que estima hoy cada uno, pero las encuestas anteriores a la escisión no
+          se reparten.
+        </p>
+        <p>
+          El modelo también contiene decisiones que deben poder revisarse: el error como media de las distancias
+          absolutas y no como desviación típica, los grados de libertad de la t, los 60 días a partir de los que se
+          mide la deriva, los cuatro años que hacen joven a un partido, las dos pasadas de reajuste de las
+          oscilaciones y el sorteo independiente. Algunas se apoyan en las pruebas históricas; otras son reglas
+          razonadas que todavía no se han comparado sistemáticamente con alternativas.
+        </p>
+        <p>
+          Por eso explicamos los pasos, publicamos las tres piezas del margen de cada partido y mostramos las limitaciones. La
+          simulación ofrece una lectura del promedio en escaños, con rangos y probabilidades que podemos examinar y
+          mejorar a medida que disponemos de más elecciones.
+        </p>
+      {{ m.card_end() }}
+      {% call m.notes_card(note_keys) %}
+        {% call m.note_item('error') %}<strong>El error histórico, la t de Student y el sorteo.</strong>
+          <p>
+            El estimador del error se ajusta con los sondeos de las elecciones generales pasadas con resultado y al
+            menos diez sondeos útiles: el último de cada encuestadora con fin de campo a seis días o más de la
+            votación. Para cada par de sondeo y partido con voto positivo, la variable es el error absoluto
+            |<var>p</var><sub><var>i</var></sub> − <var>r</var><sub><var>i</var></sub>|, en puntos, y la regresión,
+            por mínimos cuadrados ponderados con el peso <var>o</var><sub><var>i</var></sub>·<var>M</var><sub><var>i</var></sub>
+            del sondeo (solapamiento por muestra), es:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="esperanza del valor absoluto del error igual a beta cero más beta uno por p más beta dos por regional más beta tres por semanas"><mrow><mi>E</mi><mo>|</mo><mi>e</mi><mo>|</mo><mo>=</mo><msub><mi>β</mi><mn>0</mn></msub><mo>+</mo><msub><mi>β</mi><mn>1</mn></msub><mi>p</mi><mo>+</mo><msub><mi>β</mi><mn>2</mn></msub><mo>·</mo><mtext>regional</mtext><mo>+</mo><msub><mi>β</mi><mn>3</mn></msub><mo>·</mo><mtext>semanas</mtext></mrow></math></div>
+          <p>
+            «Regional» vale 1 para los partidos de ámbito regional y «semanas» es la distancia a la votación del
+            sondeo, que el modelo fija siempre en 1 al predecir: el error es el terminal, el de la última semana, y
+            la deriva se añade aparte. En el ajuste de septiembre de 2026 (1.634 pares, <var>R</var>² = 0,39) los
+            coeficientes eran 1,259, 0,0432, −1,194 y 0,0131: un partido estatal al 32% tiene un error esperado de
+            2,65 puntos y uno regional al 1%, de 0,12. El coeficiente de las semanas es pequeño: el error de un sondeo
+            a 25 semanas apenas es 0,3 puntos mayor que a una, porque la covariable nunca recogió la deriva. Es la
+            media del error absoluto, no una desviación típica: si los errores fueran normales, la desviación típica
+            sería 1,25 veces mayor, y esa conversión depende de la distribución. Se usa tal cual como escala, y es
+            la cobertura de las pruebas históricas la que la valida.
+          </p>
+          <p>
+            El sorteo es <var>v</var> = max(0, <var>p</var> + σ·<var>T</var><sub>ν</sub>), con
+            <var>T</var><sub>ν</sub> una t de Student estándar de ν = <var>n</var><sub>obs</sub> − 2 grados de
+            libertad, como mínimo 3, y <var>n</var><sub>obs</sub> los sondeos de la recta del promedio el día leído
+            (con unos setenta sondeos en un partido grande, casi una normal; con muy pocos, colas muy pesadas). La
+            desviación típica real del sorteo es σ·√(ν/(ν − 2)), no σ. El intervalo del voto que se publica es el
+            analítico, <var>p</var> ± <var>t</var><sub>0,975;ν</sub>·σ, acotado en 0 por abajo: el gemelo del
+            sorteo antes del reparto. «Otros» es el residuo, 100 menos la suma de los partidos sorteados, acotado en
+            cero; en el cálculo de septiembre de 2026 se quedaba en cero en el 12,6% de las simulaciones con el
+            sorteo independiente, y entonces las cuotas se reajustan en cada circunscripción. En las autonómicas, el
+            estimador se ajusta con las generales, porque con una a tres elecciones por comunidad no se puede
+            estimar, y la validación de octubre de 2026 no encontró mejora al estimarlo con las propias.
+          </p>
+        {% endcall %}
+        {% call m.note_item('conjunto') %}<strong>La razón de composición y el sorteo conjunto.</strong>
+          <p>
+            Con <var>e</var><sub><var>p</var></sub> el error medio del sector en el partido <var>p</var> en una
+            elección pasada (el sesgo compartido de las encuestas, medido en los efectos de casa), la razón de
+            composición es:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="r igual a la suma sobre las elecciones de w sub e por la suma de e sub p, al cuadrado, entre la suma sobre las elecciones de w sub e por la suma de e sub p al cuadrado"><mrow><mi>r</mi><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mi>e</mi></munder><msub><mi>w</mi><mi>e</mi></msub><msup><mrow><mo>(</mo><munder><mo>∑</mo><mi>p</mi></munder><msub><mi>e</mi><mi>p</mi></msub><mo>)</mo></mrow><mn>2</mn></msup></mrow><mrow><munder><mo>∑</mo><mi>e</mi></munder><msub><mi>w</mi><mi>e</mi></msub><munder><mo>∑</mo><mi>p</mi></munder><msubsup><mi>e</mi><mi>p</mi><mn>2</mn></msubsup></mrow></mfrac></mrow></math></div>
+          <p>
+            sobre los partidos principales estatales de cada elección anterior, con <var>w</var><sub><var>e</var></sub>
+            = 0,9 por año de antigüedad, acotada entre 0,05 y 1. Vale 1 con errores independientes y 0 cuando se
+            compensan exactamente; en las generales de 2026 era 0,225. El sorteo conjunto impone a los partidos
+            estatales una correlación común ρ = (<var>r</var> − 1)·Σσ²/((Σσ)² − Σσ²), exacta para la varianza de la
+            suma sean cuales sean los márgenes, con un suelo de −1/(<var>k</var> − 1) para que la matriz sea
+            definida positiva (−0,168 con seis partidos). Se sortea con una cópula gaussiana: normales correladas por
+            Cholesky, transformadas a la t de cada partido, de modo que las marginales son exactamente las del sorteo
+            independiente. Los partidos regionales se sortean aparte: sus errores son de décimas. Con pocos grados de
+            libertad la correlación de las t queda atenuada frente a la de las normales. En las pruebas históricas el
+            sorteo conjunto empeora el Brier de las mayorías un 15-30% a 6 y 14 días, es neutro a 30 y 60 y mejora
+            un poco a 90 y 180: el titular es el modo Hoy, donde pierde, y por eso queda disponible pero desactivado.
+          </p>
+        {% endcall %}
+        {% call m.note_item('deriva') %}<strong>La deriva de la opinión y el ancla del pronóstico.</strong>
+          <p>
+            Para cada ciclo pasado se ajusta el promedio diario μ(<var>t</var>) de cada partido encuestado y se miden
+            los incrementos μ(<var>t</var> + <var>h</var>) − μ(<var>t</var>) sobre todos los días <var>t</var>, para
+            <var>h</var> de 7 a 365 días: por ciclo, partido y horizonte se guarda la raíz del cuadrado medio
+            (<var>rms</var>) y el nivel medio del partido. La constante es la media geométrica ponderada de
+            <var>rms</var>²/(<var>h</var>·nivel²) sobre las filas con <var>h</var> ≥ 60 días, con el peso
+            <var>n</var>·0,9<sup>años</sup>:
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="sigma de la deriva igual a m por p por la raíz de k por h; k igual a la media geométrica de rms al cuadrado entre h por nivel al cuadrado"><mrow><msub><mi>σ</mi><mtext>der</mtext></msub><mo>=</mo><mi>m</mi><mo>·</mo><mi>p</mi><mo>·</mo><msqrt><mrow><mi>k</mi><mo>·</mo><mi>h</mi></mrow></msqrt><mo>,</mo><mspace width="1.5em"/><mi>k</mi><mo>=</mo><mtext>media geométrica de </mtext><mfrac><msup><mi>rms</mi><mn>2</mn></msup><mrow><mi>h</mi><mo>·</mo><msup><mtext>nivel</mtext><mn>2</mn></msup></mrow></mfrac></mrow></math></div>
+          <p>
+            Por debajo de 60 días la varianza de los incrementos crece como <var>h</var>², un artefacto del suavizado
+            (la serie ajustada es localmente lineal), no una propiedad de la opinión; por eso esos horizontes no
+            entran en el ajuste, y en ellos la ley √(<var>k</var>·<var>h</var>) queda por encima de la curva
+            empírica (1,9% frente a 0,8% de la cuota a siete días): conservadora. La media geométrica es la deriva
+            del partido asentado típico; la media cuadrática, dominada por los partidos nacidos o disueltos en el
+            ciclo, sería unas 2,5 veces mayor. Con los ciclos hasta 2023, <var>k</var> = 3,96·10<sup>−5</sup> para
+            los asentados y 18,3·10<sup>−5</sup> para los jóvenes (filas con menos de cuatro años de edad, contada
+            desde la primera encuesta que lista al partido, por etiqueta y antes de agrupar por bloques: Sumar nace
+            en 2023 aunque herede las encuestas de Unidas Podemos), de donde
+            <var>m</var> = √(<var>k</var><sub>jóvenes</sub>/<var>k</var>) = 2,15, nunca menor que 1 y sólo con seis
+            filas jóvenes o más. Cada cálculo publica su <var>k</var> y su factor. En las pruebas históricas cada
+            elección usa sólo los ciclos anteriores: 1,4·10<sup>−5</sup> en 2015, cuando sólo había ciclos
+            bipartidistas, y 4,0 a 4,5 desde 2016.
+          </p>
+          <p>
+            <em>El ancla.</em> El promedio se lee en el día del cálculo o, si es anterior, en el último día ajustado
+            de la recta (el último sondeo más diez días) o en la fecha límite del cálculo. Hoy sortea con
+            <var>h</var> = 0; Elección con <var>h</var> los días desde ese ancla hasta la fecha de la elección, la
+            convocada o el final de la legislatura. El modelo admite también una fecha incierta, sorteando
+            <var>h</var> de las duraciones de las legislaturas pasadas, pero no se publica: la fecha y el resultado
+            no son independientes, y esa dependencia no se modela. La deriva se suma en cuadratura con el mismo
+            sorteo t, y en el sorteo conjunto, si se activa, con la misma razón de composición, que se declara como
+            supuesto: la correlación de la deriva entre partidos cambia de ciclo en ciclo.
+          </p>
+        {% endcall %}
+        {% call m.note_item('swing') %}<strong>Las herencias, «otros», el voto en blanco y los votos de cada circunscripción.</strong>
+          <p>
+            Antes del swing se aplican a los resultados de la elección anterior las reglas del catálogo de cada
+            elección, en orden: <em>agg</em> suma al partido el voto previo de los partidos que hereda (Sumar de
+            Unidas Podemos y Más País; Frente Amplio de Sumar); <em>sub</em> le asigna una parte del voto previo de
+            los partidos de los que se escinde, en proporción a las estimaciones actuales,
+            <var>v</var><sup>ant</sup>·<var>v</var><sub><var>k</var></sub>/(<var>v</var><sub><var>k</var></sub> + Σ<var>v</var><sub>fuentes</sub>),
+            de modo que origen y escisión comparten el mismo swing conjunto (en una simulación, con las cuotas
+            sorteadas); <em>split</em> reparte a partes iguales el voto previo de una marca desaparecida entre sus
+            sucesores. Una regla con restricción de provincias actúa sólo en ellas, y el voto del partido en el
+            conjunto se recalcula desde las provincias, ponderadas por sus votos válidos, para que el swing
+            reproduzca la estimación dentro de ellas. Las reglas <em>agg</em> sin restricción de provincias agrupan
+            también las encuestas del ciclo (el sucesor suma las de sus predecesores en cada sondeo); las reglas
+            <em>sub</em> no, y es una limitación declarada.
+          </p>
+          <p>
+            La cuota previa de «otros» en cada circunscripción es 100 menos la suma de los partidos simulados menos el
+            voto en blanco; su cuota simulada es el residuo del sorteo menos el blanco del conjunto, escalado como
+            cualquier partido (plana si no había «otros» antes). El voto en blanco conserva su cuota previa en cada
+            circunscripción: no es una candidatura y no sigue el residuo de las encuestas. Las cuotas de cada
+            circunscripción, con «otros» y el blanco, se reajustan para sumar 100, de modo que sólo se corrigen las
+            pequeñas incoherencias del swing. Los votos de cada candidatura son su cuota por los votos válidos de la
+            circunscripción en la elección anterior, redondeados; la media provincial ponderada por esos votos
+            reproduce la cuota del conjunto (en septiembre de 2026, PP 31,81 frente a 31,91; PSOE 27,13 frente a
+            27,10). Un partido con estimación positiva pero sin voto previo ni regla aplicable queda sin escaños, con
+            aviso en el cálculo. La participación entra sólo como escala: D'Hondt es invariante a ella dentro de una
+            circunscripción.
+          </p>
+        {% endcall %}
+        {% call m.note_item('oscilaciones') %}<strong>Las oscilaciones por comunidad y provincia.</strong>
+          <p>
+            Para cada par de elecciones generales consecutivas, partido y provincia, el residuo del swing
+            proporcional es <var>z</var> = ln(real / (anterior · razón del conjunto)), con cuota previa de al menos
+            el 1%. Se descompone en la media de su comunidad autónoma (para ese par y partido) y la desviación dentro
+            de ella. Las dos varianzas decrecen con el voto previsto <var>L</var> del partido en la comunidad o en
+            la provincia según <var>a</var> + <var>b</var>/<var>L</var>, ajustada por mínimos cuadrados ponderados
+            sobre tramos de nivel con <var>a</var>, <var>b</var> ≥ 0, con dos correcciones: la desviación dentro de
+            una comunidad de <var>k</var> provincias se escala por √(<var>k</var>/(<var>k</var> − 1)) y sólo entran
+            las comunidades con dos o más; y a la varianza de la media de la comunidad se le resta la parte
+            provincial, σ<sub>prov</sub>²/<var>k</var>. Los partidos presentes en una sola comunidad quedan fuera del
+            ajuste autonómico, porque su media de comunidad es nula por construcción. Con las elecciones anteriores
+            a 2026 (trece pares, 2.415 celdas): comunidad 0,0095 + 0,158/<var>L</var> (desviación relativa 0,12 al
+            30%, 0,16 al 10%, 0,25 al 3%) y provincia 0,0047 + 0,035/<var>L</var> (0,08, 0,09 y 0,13); unas tres
+            cuartas partes de la varianza es de comunidad.
+          </p>
+          <div class="math-wrap"><math display="block" aria-label="cuota con oscilación igual a cuota del swing por la exponencial de épsilon de la comunidad y el partido más eta de la provincia y el partido; épsilon y eta normales de media menos sigma al cuadrado entre dos"><mrow><msubsup><mi>v</mi><mi>r</mi><mo>′</mo></msubsup><mo>=</mo><msub><mi>v</mi><mi>r</mi></msub><mo>·</mo><msup><mi>e</mi><mrow><msub><mi>ε</mi><mrow><mi>c</mi><mo>,</mo><mi>p</mi></mrow></msub><mo>+</mo><msub><mi>η</mi><mrow><mi>r</mi><mo>,</mo><mi>p</mi></mrow></msub></mrow></msup><mo>,</mo><mspace width="1.5em"/><mi>ε</mi><mo>,</mo><mi>η</mi><mo>∼</mo><mi>N</mi><mrow><mo>(</mo><mo>−</mo><msup><mi>σ</mi><mn>2</mn></msup><mo>/</mo><mn>2</mn><mo>,</mo><msup><mi>σ</mi><mn>2</mn></msup><mo>)</mo></mrow></mrow></math></div>
+          <p>
+            En cada simulación, sobre las cuotas provinciales del swing ya reajustadas a 100 con «otros», cada
+            partido recibe un choque multiplicativo por comunidad y otro por provincia, con las desviaciones de las
+            curvas al nivel previsto allí; los choques se centran en −σ²/2 para que su multiplicador tenga media 1,
+            porque si no el reajuste comprimiría sistemáticamente a los partidos que absorben los choques positivos
+            de los demás. Después, en dos pasadas, cada partido se reescala a su cuota del conjunto, ponderada por
+            los votos válidos, y cada provincia se reajusta a 100 con «otros»: el error sobre la cuota del conjunto
+            es del orden de 0,05 puntos. Los choques salen de un generador propio, así que el sorteo del conjunto es
+            idéntico con o sin ellos. En las comunidades uniprovinciales los dos choques se suman, como en los datos;
+            en un ámbito de una sola circunscripción no hay nada que redistribuir, y en las autonómicas no hay choque
+            de comunidad, que sería un desplazamiento de todo el ámbito. La lista autonómica canaria, que vota todo
+            el archipiélago, queda fuera de los choques. Como los choques se centran en la media, la mediana
+            provincial simulada queda algo por debajo del swing determinista: un 5-7% de la cuota en un partido al
+            1-2%, un 0,2-0,5% en los grandes.
+          </p>
+        {% endcall %}
+        {% call m.note_item('reparto') %}<strong>La barrera, el reparto central y el resumen de las simulaciones.</strong>
+          <p>
+            En cada circunscripción y simulación, una candidatura entra en el reparto si sus votos alcanzan la
+            barrera de la circunscripción sobre los votos válidos (candidaturas más blanco) de la elección anterior,
+            o si su cuota sorteada en el conjunto alcanza la barrera de todo el ámbito; una barrera vacía no se
+            puede superar, y sin ninguna no hay barrera. Las barreras salen del catálogo de ámbitos, con la
+            excepción de cada elección pasada registrada en sus parámetros. D'Hondt reparte entre las que entran;
+            si ninguna entra, la circunscripción se queda sin repartir, a propósito. Los empates en un cociente se
+            resuelven por el orden de los partidos, no por el criterio legal de más votos, que con votos iguales es
+            indiferente.
+          </p>
+          <p>
+            <em>El reparto central</em> es una pasada determinista del mismo camino, sin sorteo, sin deriva y sin
+            oscilaciones: D'Hondt con la barrera sobre el voto central proyectado con el swing proporcional, en cada
+            circunscripción; la suma es el titular, idéntico en Hoy y en Elección. Las medianas o las medias de las
+            simulaciones no se publican como titular: las medianas por partido no suman los escaños de la cámara y
+            exigirían una expansión proporcional redondeada por restos mayores, y la simulación más cercana a ellas
+            es una elección posible más. Los intervalos de escaños son los cuantiles empíricos 2,5% y 97,5% de las
+            simulaciones; los de voto, los analíticos de la nota del error. Las probabilidades son fracciones de
+            simulaciones: la de escaño, las que dan al partido al menos uno; la de ser primero, las que le dan más
+            que a ningún otro (un empate va al primero en el orden del catálogo); la de mayoría absoluta de un bloque
+            o coalición, las que suman al menos la mitad más uno de la cámara, 176 en el Congreso. Por provincia se
+            publican el reparto central y, por partido, la mediana y el intervalo del 95% de su cuota y de sus escaños
+            y la probabilidad de escaño. Cada cálculo publicado corre
+            {% if figures.n_sim %}{{ figures.n_sim|int }}{% else %}miles de{% endif %} simulaciones por modo con una
+            semilla fija, de modo que es reproducible, y registra la parte de simulaciones en que «otros» se quedó
+            en cero.
+          </p>
+        {% endcall %}
+      {% endcall %}
       {{ m.closing('¿Cómo calculamos el rating de las encuestadoras?', method_href('rating'),
                    'Cómo se mide el acierto de cada encuestadora en las elecciones pasadas y cuánto pesa ese rating en el promedio.',
                    [{'href': '/es/escanos', 'label': 'Escaños de las elecciones generales'},

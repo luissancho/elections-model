@@ -2403,7 +2403,7 @@ def test_metodo_renders_the_sections_without_data(api):
     assert re.findall(r'<script type="module" src="([^"]+)"', page) == ['/dist/js/pages/metodo.js']
     assert re.findall(r'/dist/js/pages/[a-z]+\.js', page) == ['/dist/js/pages/metodo.js']
     sections = re.findall(r'<section id="([a-z-]+)" class="card">(.*?)</section>', page, re.S)
-    assert [section_id for section_id, _ in sections] == ['intro', 'datos', 'publicacion', 'limitaciones']
+    assert [section_id for section_id, _ in sections] == ['intro', 'limitaciones']  # «Los datos» y «La publicación» se retiraron el 2026-10-28
     assert all('<p>' in body for _, body in sections)  # ninguna sección sin texto en la plantilla
     for section_id, title in pages.SECTIONS:
         assert 'id="{}"'.format(section_id) in page and title in page
@@ -2469,7 +2469,7 @@ def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     assert 'Las preguntas del método' in page and 'Las cuatro preguntas' not in page
     text = re.sub(r'\s+', ' ', page)
     assert 'viendo sólo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
-    assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
+    assert 'id="datos"' not in page and 'id="publicacion"' not in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
 
@@ -2489,40 +2489,114 @@ def test_metodo_promedio_text(api):
 
 
 def test_metodo_escanos_text(api):
+    """/metodo/escanos in the style of /metodo/promedio (2026-10-27): the title as h1, the cards in order, the
+    dated tables of the measurements, the six technical notes linked both ways and the sentences the rest of
+    the site relies on."""
     page = html(call(api, '/metodo/escanos')[2])
-    for anchor in ('sorteo', 'hoy-y-eleccion', 'circunscripciones', 'dhondt', 'barreras', 'cifras'):
+    cards = ('resumen', 'sorteo', 'hoy-y-eleccion', 'errores', 'circunscripciones', 'dhondt', 'barreras', 'cifras',
+             'comprobacion', 'limites', 'notas', 'closing')
+    for anchor in cards:
         assert 'id="' + anchor + '"' in page, anchor
+    assert [page.index('id="' + anchor + '"') for anchor in cards] == sorted(page.index('id="' + anchor + '"') for anchor in cards)
+    assert '<h1 class="headline">¿Cómo simulamos los escaños?</h1>' in page
+    for h3 in ('dos-errores', 'historico', 'conjunto', 'ancla', 'deriva', 'jovenes', 'swing', 'herencias',
+               'oscilaciones', 'participacion'):
+        assert '<h3 id="' + h3 + '">' in page, h3
     assert 'id="thresholds-table"' in page and 'Canarias' in page and 'Comunidad Valenciana' in page
     assert str(fixture_data('meta')['n_sim']) in page.replace('.', '') and '1.000 simulaciones' not in page
-    assert '<math' in page and 'Ejemplo' in page
+    assert page.count('<math display="block"') >= 7 and 'Ejemplo' in page
     text = re.sub(r'\s+', ' ', page)
-    assert 'en un mes, uno al 30% puede moverse alrededor de un punto' in text and 'en unos meses' not in text
-    assert 'suben y bajan a la vez' not in text and 'lo que gana un partido lo pierde otro' in text
+    for phrase in ('en un mes, uno al 30% puede moverse alrededor de un punto', 'lo que gana un partido lo pierde otro',
+                   'el titular de escaños es un reparto, no una media', 'es la precisión del promedio',
+                   'la elección simulada se celebra en la fecha de la estimación, el día del cálculo',
+                   'Por qué cada partido se sortea por su lado', 'Un paseo al azar proporcional al tamaño',
+                   'Las oscilaciones por comunidad y provincia', 'Qué límites tiene la simulación',
+                   'en las generales, el 3% de los votos válidos', 'cambiaba 64 de los 10.400 repartos provinciales'):
+        assert phrase in text, phrase
+    for phrase in ('en unos meses', 'suben y bajan a la vez', 'el de su banda', 'la banda del promedio', 'En resumen',
+                   'que se prolonga unos días tras el último sondeo', 'lo que se sabía'):
+        assert phrase not in text, phrase
+    # the dated tables: the error by size, the drift by horizon and by age, the swing residuals, the joint draw and
+    # the backtest of the reference run
+    for row in ('<td class="f l">De ámbito estatal</td><td>1,36</td><td>1,49</td><td>1,70</td><td>2,14</td><td>2,57</td><td>3,00</td>',
+                '<td class="f l">Parte del voto</td><td>1,7%</td><td>3,4%</td><td>6,0%</td><td>8,4%</td><td>11,6%</td>',
+                '<td class="f l">Deriva frente a los asentados</td><td>×3,0</td><td>×4,5</td><td>×3,2</td><td>×1,1</td><td>×0,9</td>',
+                '<td class="f l">Desviación, en puntos</td><td>0,8</td><td>1,3</td><td>1,9</td><td>3,7</td>',
+                '<td class="f l">Probabilidad de mayoría absoluta de la derecha</td><td>0,984</td><td>0,974</td>',
+                '<td class="f l">Error medio de los escaños</td><td>7,1</td><td>9,4</td><td>12,8</td>'):
+        assert row in page, row
+    assert 'id="seats-backtest-table"' in page and 'ejecución de referencia del 24 de octubre de 2026' in text
+    # the six notes, numbered by their order and linked both ways
+    keys = ['error', 'conjunto', 'deriva', 'swing', 'oscilaciones', 'reparto']
+    assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 7)]
+    for target in re.findall(r'href="#(nota-[a-z]+)"', page):
+        assert 'id="{}"'.format(target) in page, target
+    assert page.index('id="notas"') < page.index('id="closing"')
+    assert_public_wording(page, '/metodo/escanos')
 
 
 def test_metodo_rating_text(api):
+    """/metodo/rating in the style of /metodo/promedio (2026-10-27): the title as h1, the cards of the method in
+    order, the dated tables of the snapshot of 20 October, the six technical notes linked both ways and the
+    sentences the other pages of the site rely on."""
     page = html(call(api, '/metodo/rating')[2])
-    for anchor in ('que-se-mide', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global', 'herding'):
+    cards = ('resumen', 'que-se-mide', 'diferencial', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global',
+             'herding', 'comprobacion', 'limites', 'notas', 'closing')
+    for anchor in cards:
         assert 'id="' + anchor + '"' in page, anchor
+    assert [page.index('id="' + anchor + '"') for anchor in cards] == sorted(page.index('id="' + anchor + '"') for anchor in cards)
+    assert '<h1 class="headline">¿Cómo calculamos el rating de las encuestadoras?</h1>' in page
+    # the sections inside the cards, in order
+    for h3 in ('elecciones', 'partes', 'escala', 'generales', 'prior', 'por-elecciones', 'pesos',
+               'diferencial-encuestadora', 'nota', 'mezcla', 'cuentas', 'promedio'):
+        assert '<h3 id="' + h3 + '">' in page, h3
+    assert page.index('id="cuentas"') < page.index('id="promedio"') < page.index('id="ranking-global"')
     assert 'la mitad' in page or '50%' in page  # rating_weight 0,5 leído del catálogo
-    assert '<math' in page
+    assert page.count('<math display="block"') >= 12
     landing = html(call(api, '/metodo')[2])
     assert 'Cómo funciona el modelo' not in landing and 'href="/metodo/rating"' in landing
     text = re.sub(r'\s+', ' ', page)
-    assert 'la desviación de cada encuestadora apenas cambia' in text and 'no cambia:' not in text
-    assert 'el denominador es la calidad previa media de las encuestadoras, no el rating medio' in text
-    assert 'muestra multiplicada por <var>h</var>′<sup>2</sup>' in text
-    assert 'viendo sólo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
-    assert 'Trabajo de campo' in text and 'Implantación' in text and '<table id="rubric-table">' in page
-    assert '<strong>Diferencial</strong>' in text and 'Sesgo bloques' in text and 'Calidad</strong>' not in text
-    assert 'cada punto vale 8 de calidad, con un mínimo de 5' in text and 'nadie pasa de 80 antes de los datos' in text
-    assert 'los puntos que faltan se ganan acertando' in text and 'de la que apenas se sabe nada' in text
-    assert 'En las tablas del sitio aparece como «Confianza»' in text and 'es la columna «Confianza»' in text
-    assert 'cuentan como una elección' in text and 'pesa en torno al 10% de su rating' in text
-    assert 'la calidad previa pesa dos tercios del rating' in text and 'entre 3 y 4' not in text
-    assert 'Por su cercanía a la votación' not in text and 'multiplica el peso por 0,7' not in text
-    assert 'puesta a mano' not in text and 'rúbrica pública' in text
-    assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', html(call(api, '/metodo')[2]))
+    # what the method says, in the words the rest of the site quotes
+    for phrase in ('el rating no mide cuánto acierta una encuestadora, sino cuánto acierta más o menos que las demás',
+                   'la desviación de cada encuestadora apenas cambia', 'un fallo compartido no penaliza a nadie',
+                   'el denominador es la calidad previa media de las encuestadoras, no el rating medio',
+                   'muestra multiplicada por <var>h</var>′<sup>2</sup>',
+                   'viendo sólo los sondeos publicados hasta cada fecha',
+                   'Trabajo de campo', 'Implantación', '<table id="rubric-table">',
+                   '<strong>Diferencial</strong>', 'Sesgo bloques',
+                   'cada punto vale 8 de calidad, con un mínimo de 5', 'nadie pasa de 80 antes de los datos',
+                   'los puntos que faltan se ganan acertando', 'de la que apenas se sabe nada',
+                   'En las tablas del sitio aparece como «Confianza»', 'es la columna «Confianza»',
+                   'cuentan como una elección', 'pesa en torno al 10% de su rating',
+                   'la calidad previa pesa dos tercios del rating', 'rúbrica pública',
+                   'Un sondeo de tres meses antes cuenta tanto como uno de la última semana',
+                   'Las cuentas de cuatro encuestadoras reales', 'El rebaño, aparte', 'Qué límites tiene el rating'):
+        assert phrase in text, phrase
+    for phrase in ('Por su cercanía a la votación', 'multiplica el peso por 0,7', 'puesta a mano', 'Calidad</strong>',
+                   'entre 3 y 4', 'no cambia:', 'lo que se sabía', 'En resumen'):
+        assert phrase not in text, phrase
+    # the dated snapshot: the ratings of 20 October 2026 and their factors, the herding by cycle, the backtest
+    assert 'id="ratings-example-table"' in page and 'Datos del cálculo de los ratings del 20 de octubre de 2026' in text
+    for row in ('<td class="f l">GAD3</td><td>51</td><td>14,48</td><td>−0,84</td><td>80,0</td><td>56</td><td>12%</td><td><strong>77,1</strong></td>',
+                '<td class="f l">CENTRA</td><td>2</td><td>0,83</td><td>−0,95</td><td>83,1</td><td>48</td><td>70%</td><td><strong>58,4</strong></td>',
+                '<td class="f l">CIS</td><td>17,2</td><td>0,65</td>', '<td class="f l">GAD3</td><td>77,1</td><td>2,35</td>'):
+        assert row in page, row
+    assert 'id="herding-table"' in page and 'análisis del 7 de octubre de 2026' in text
+    assert 'id="rating-backtest-table"' in page and '<td class="f l">Error de los escaños (CRPS)</td><td>7,23</td><td>7,27</td>' in page
+    # the shrink and the scale tables derive from the parameters: 1 election keeps 34%, −τ gives 84
+    assert '<td class="f l">Diferencial conservado</td><td>34%</td><td>51%</td><td>72%</td><td>84%</td><td>90%</td>' in page
+    assert '<td class="f l">Rating ajustado</td><td>2</td><td>16</td><td>50</td><td>69</td><td>84</td><td>93</td><td>98</td>' in page
+    # the six notes, numbered by their order and linked both ways
+    keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano']
+    assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
+    assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 7)]
+    for target in re.findall(r'href="#(nota-[a-z]+)"', page):
+        assert 'id="{}"'.format(target) in page, target
+    assert page.index('id="notas"') < page.index('id="closing"')
+    assert_public_wording(page, '/metodo/rating')
 
 
 def test_metodo_rating_explains_evidence_by_election(api):
@@ -2564,17 +2638,17 @@ def test_metodo_rating_reads_the_scope_weights_from_the_catalogue(api, monkeypat
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
     assert 'cada elección autonómica pesa la mitad que unas generales' in page
     assert 'href="/metodo/promedio#peso"' in page and 'href="/casas?scope=es"' in page and 'href="/metodo/backtest"' in page
-    assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'En resumen' in page
+    assert 'id="metodo-nav"' in page and 'aria-current="page"' in page and 'Qué nos dice el rating de una encuestadora' in page
     changed = webapi.catalogue().copy()
     changed.loc[changed.index != 'es', 'rating_weight'] = 0.25
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: changed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa el 25% de unas generales' in page and 'la mitad' not in page
+    assert 'pesa el 25% de unas generales' in page and 'pesa la mitad que unas generales' not in page
     mixed = changed.copy()
     mixed.loc['es-md', 'rating_weight'] = 0.5
     monkeypatch.setattr(pages.metodo, 'catalogue', lambda: mixed)
     page = re.sub(r'\s+', ' ', html(call(api, '/metodo/rating')[2]))
-    assert 'pesa menos que unas generales' in page and 'la mitad' not in page
+    assert 'pesa menos que unas generales' in page and 'pesa la mitad que unas generales' not in page
 
 
 def test_metodo_escanos_reads_the_barriers_from_the_catalogue(api, monkeypatch):
@@ -2894,11 +2968,15 @@ def test_promedios_legend_is_the_party_selector_and_the_house_chart_has_its_own_
 
 
 def test_series_charts_say_the_axis_follows_what_is_shown(events_site):
-    """El eje vertical del promedio ya no arranca en cero (Luis, 2026-10-19): lo dicen las tres tarjetas que lo dibujan."""
+    """El eje vertical del promedio ya no arranca en cero (Luis, 2026-10-19): lo dicen las tres tarjetas que lo dibujan;
+    con marcas de 5 en 5 y la misma escala en las tres capas, y el rating de la casa en cada punto (2026-10-28)."""
     promedios = re.sub(r'\s+', ' ', html(call(events_site, '/es')[2]))
     detail = re.sub(r'\s+', ' ', html(call(events_site, '/elecciones/es/generales/2023-07')[2]))
     assert promedios.count('El eje vertical no empieza en cero') == 1 and 'el eje vertical se ajusta a lo que queda a la vista' in promedios
     assert detail.count('El eje vertical no empieza en cero') == 1
+    for page in (promedios, detail):
+        assert 'con marcas de 5 en 5 puntos y la misma escala con Sondeos, Promedio o Ambos' in page
+        assert 'se ve entero, con la muestra y el rating de la casa' in page
 
 
 def test_poll_name_follows_the_loader_rule():

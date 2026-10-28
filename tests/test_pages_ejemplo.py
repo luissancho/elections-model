@@ -515,6 +515,8 @@ def test_error_example_reads_the_three_errors_of_the_main_parties(api):
     assert example['rows'] == [{'name': 'PP', 'fullname': pp['fullname'], 'color': pp['color'], 'pct': 33.1, 'err': 0.5,
                                 'pct_err': 0.87, 'drift': 0.8, 'sd_now': 1.0, 'sd_election': 1.28, 'lo': 30.5, 'hi': 35.7,
                                 'dof': 38}]
+    # the drift diagnostics of the run (2026-10-27): its constant, the multiplier and the young parties (PP is 40)
+    assert example['drift_k'] == 1.0 and example['multiplier'] == 2.15 and example['young'] == []
 
 
 def test_error_example_is_none_without_the_components_and_skips_parties_without_a_fit(api, monkeypatch):
@@ -564,6 +566,7 @@ def test_metodo_escanos_shows_the_three_errors_of_the_latest_run(api):
     text = re.sub(r'\s+', ' ', page)
     assert 'las 5 elecciones generales con sondeos celebradas de 2015 a 2023' in text
     assert 'No tiene dirección' in text and 'los 52 días que faltan hasta el 29 nov 2026' in text
+    assert 'el factor de los partidos jóvenes es 2,15' in text and 'se aplica a' not in text  # no young party in the fixture
     assert_public_wording(page, '/metodo/escanos')
 
 

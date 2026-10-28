@@ -155,11 +155,12 @@
         {% endif %}
         {% call m.how() %}
         <p>
-          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero); la línea es el
-          promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos deja a la vista sólo los puntos,
-          sólo la línea, o las dos cosas. El punto marcado del final,
-          en la fecha de la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se
-          ajusta a la ventana y a los partidos visibles.
+          Cada punto es un sondeo publicado (al pasar por encima, o al tocarlo, se ve entero, con la muestra y el
+          rating de la casa); la línea es el promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos
+          deja a la vista sólo los puntos, sólo la línea, o las dos cosas. El punto marcado del final, en la fecha de
+          la elección, es el resultado oficial de cada partido. El eje vertical no empieza en cero: se ajusta a la
+          ventana y a los partidos visibles, con marcas de 5 en 5 puntos y la misma escala con Sondeos, Promedio o
+          Ambos.
         </p>
         <p>
           El hueco entre el final de la línea y el resultado es la veda: la línea se congeló a {{ series_horizon|int }}

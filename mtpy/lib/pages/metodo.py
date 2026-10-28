@@ -28,12 +28,14 @@ ISLAND_ROW_KEYS = ('date', 'pollster', 'sponsor', 'sample_size', 'pct', 'pct_adj
 # date (the CIS from September 2018, when its vote estimate changed), against the result, in these two blocks
 # (``left`` is counted as overestimated, ``right`` as underestimated).
 HOUSE_EXAMPLE = {'pollster': 'CIS', 'since': '2018-09-01', 'left': 'Izquierda', 'right': 'Derecha'}
+# Age (years since the first poll listing it) below which a party is young for the drift of the opinion: its
+# drift is multiplied (``DriftEstimator.age_max``), and the live example of the seats subpage names them.
+YOUNG_PARTY_YEARS = 4
 # Keys of a row of the house effects example that its bullseye needs, plus the two blocks.
 HOUSE_ROW_KEYS = ('event', 'event_date', 'days', 'scope', 'name')
-# Cross-cutting sections of the landing page, which belong to no question of the method.
+# Cross-cutting sections of the landing page, which belong to no question of the method (the cards of the data
+# and of the publication were removed on 2026-10-28).
 SECTIONS = (
-    ('datos', 'Los datos'),
-    ('publicacion', 'La publicación'),
     ('limitaciones', 'Limitaciones'),
 )
 # Subpages of the method (``/metodo/{id}``), in menu order. A subpage without ``template`` has no text yet: it
@@ -173,7 +175,10 @@ def error_example() -> Optional[dict]:
         estimator scope) and ``rows``, one per party of ``bmaps.main`` with a fit, by vote descending: ``name``,
         ``fullname``, ``color``, ``pct``, ``err`` (``s``), ``pct_err`` (``e``), ``dof``, ``sd_now`` (``σ`` at
         horizon 0), ``drift`` (``d`` at ``horizon``), ``sd_election``, ``lo`` and ``hi`` (the 95 % interval at
-        ``horizon``). ``None`` without a national run, when its fan lacks the pieces (published before 2026-10-25)
+        ``horizon``), plus the diagnostics of the drift of the run (``meta.diagnostics``): ``drift_k`` (the
+        constant of the relative random walk), ``multiplier`` (the drift multiplier of the young parties) and
+        ``young`` (the simulated parties younger than four years at the anchor, by ``ages``; empty without
+        ages). ``None`` without a national run, when its fan lacks the pieces (published before 2026-10-25)
         or when its meta lacks ``error_events``.
 
     Raises
@@ -212,10 +217,15 @@ def error_example() -> Optional[dict]:
         })
     out.sort(key=lambda row: -(row['pct'] or 0))
 
+    diagnostics = meta.get('diagnostics') or {}
+    ages = diagnostics.get('ages') or {}
+
     return {
         'published': meta.get('run_at'), 'event_date': meta.get('event_date'), 'horizon': horizon,
         'n_events': len(events), 'first_year': str(events[0])[:4], 'last_year': str(events[-1])[:4],
-        'scope': (meta.get('diagnostics') or {}).get('error_scope'), 'rows': out,
+        'scope': diagnostics.get('error_scope'), 'rows': out,
+        'drift_k': diagnostics.get('drift_k'), 'multiplier': diagnostics.get('multiplier'),
+        'young': [name for name, age in ages.items() if age is not None and age < YOUNG_PARTY_YEARS],
     }
 
 
