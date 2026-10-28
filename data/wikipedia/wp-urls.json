@@ -9,7 +9,6 @@
             "results": "https://en.wikipedia.org/wiki/2023_Spanish_general_election",
             "polls": [
                 "https://en.wikipedia.org/wiki/Opinion_polling_for_the_2023_Spanish_general_election",
-                "https://en.wikipedia.org/wiki/Nationwide_opinion_polling_for_the_2023_Spanish_general_election_(2022)",
                 "https://en.wikipedia.org/wiki/Nationwide_opinion_polling_for_the_2023_Spanish_general_election_(2019%E2%80%932021)"
             ],
             "years": ["2019", "2020", "2021", "2022", "2023"]
