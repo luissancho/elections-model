@@ -240,6 +240,88 @@ def get_event_dmat(
 
     return df
 
+PARAMS_FILE = 'params.json'
+# Width of a line of a wrapped list of `params.json` (indentation included)
+PARAMS_WIDTH = 100
+# Sections of an election whose direct lists are written as wrapped blocks (`event`, `polls`, `max`, `main`...)
+PARAMS_LIST_SECTIONS = ('parties', 'bmaps')
+
+
+def read_params() -> dict:
+    """Read ``data/params.json`` (the whole file: ``{scope: {date: entry}}``)."""
+    return json.loads(App.get_().data.read(PARAMS_FILE))
+
+
+def _format_inline(value) -> str:
+    """JSON of a value on one line, as the file writes rules and short lists."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _format_block_list(items: list, indent: str) -> str:
+    """A list as a block: items joined by ``, `` on lines of at most `PARAMS_WIDTH` columns, one more level in."""
+    if not items:
+        return '[]'
+    inner = indent + ' ' * 4
+    lines, current = [], ''
+    for item in items:
+        text = _format_inline(item)
+        candidate = text if not current else current + ', ' + text
+        # the trailing comma of a continued line counts too
+        if current and len(inner + candidate + ',') > PARAMS_WIDTH:
+            lines.append(current)
+            current = text
+        else:
+            current = candidate
+    lines.append(current)
+    return '[\n' + ',\n'.join(inner + line for line in lines) + '\n' + indent + ']'
+
+
+def _format_value(value, keys: tuple, indent: str) -> str:
+    """
+    Format a value of the file at the path ``keys`` (scope, date, section, ...), with ``indent`` as the indentation
+    of the line that holds its key.
+    """
+    depth = len(keys)
+    if isinstance(value, dict):
+        if not value or (depth >= 4 and keys[2] == 'smap'):
+            return _format_inline(value)
+        inner = indent + ' ' * 4
+        lines = ['{}{}: {}'.format(inner, _format_inline(key), _format_value(item, keys + (key,), inner))
+                 for key, item in value.items()]
+        return '{\n' + ',\n'.join(lines) + '\n' + indent + '}'
+    if isinstance(value, list):
+        if depth == 4 and keys[2] in PARAMS_LIST_SECTIONS:
+            return _format_block_list(value, indent)
+        return _format_inline(value)
+    return _format_inline(value)
+
+
+def format_params(data: dict) -> str:
+    """
+    Text of ``params.json`` in the style of the file.
+
+    Four-space indentation; dicts one key per line except the rules of ``smap`` (and empty dicts), written inline;
+    lists inline except the direct lists of ``parties`` and ``bmaps`` (``event``, ``polls``, ``max``, ``main``),
+    written as blocks wrapped at `PARAMS_WIDTH` columns. The text ends with a single newline.
+
+    Parameters
+    ----------
+    data : dict
+        ``{scope: {date: entry}}``.
+
+    Returns
+    -------
+    str
+        The file text.
+    """
+    return _format_value(data, (), '') + '\n'
+
+
+def write_params(data: dict) -> str:
+    """Write ``data`` as ``data/params.json`` (`format_params`); returns the path written."""
+    return App.get_().data.write(format_params(data), PARAMS_FILE)
+
+
 BLOCKS = ('Derecha', 'Izquierda', 'Separatista', 'Regionalista')
 VS_BLOCKS = ('Derecha', 'Izquierda')
 
@@ -404,9 +486,7 @@ def get_event_params(
         event_dates = [event_dates]
 
     if path is not None:
-        params = json.loads(
-            App.get_().data.read('params.json')
-        ).get(scope, {})
+        params = read_params().get(scope, {})
     else:
         params = {}
 

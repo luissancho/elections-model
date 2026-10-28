@@ -268,3 +268,86 @@ def test_derive_event_params_empty_matrix():
     df = _matrix({}, {'PSOE': float('nan')}, dates=('2030-06-16',))
     assert derive_event_params(df, PARTIES) == {'parties': {'event': [], 'polls': []},
                                                 'bmaps': {'main': [], 'blocks': {}, 'vs': {}}}
+
+
+# --- lectura, formato y escritura de params.json ---
+
+import json  # noqa: E402
+
+from mtpy.lib.data import format_params, read_params, write_params  # noqa: E402
+
+SAMPLE = {'es': {'2026-11-29': {
+    'parties': {'event': ['PP', 'PSOE'], 'polls': ['PP', 'PSOE', 'SUMAR']},
+    'bmaps': {'min': {'PP': 'PP', 'VOX+SALF': ['VOX', 'SALF']}, 'main': ['PP', 'PSOE'],
+              'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'SUMAR']}, 'vs': {'Derecha': ['PP']}},
+    'smap': {'FA': {'type': 'agg', 'names': ['SUMAR']}, 'MP': [{'type': 'sub', 'names': ['UP']}, {'type': 'agg', 'names': ['C']}],
+             'UP': []}},
+    '2011-05-22': {'threshold': None, 'threshold_scope': 5}}}
+
+EXPECTED = '''{
+    "es": {
+        "2026-11-29": {
+            "parties": {
+                "event": [
+                    "PP", "PSOE"
+                ],
+                "polls": [
+                    "PP", "PSOE", "SUMAR"
+                ]
+            },
+            "bmaps": {
+                "min": {
+                    "PP": "PP",
+                    "VOX+SALF": ["VOX", "SALF"]
+                },
+                "main": [
+                    "PP", "PSOE"
+                ],
+                "blocks": {
+                    "Derecha": ["PP"],
+                    "Izquierda": ["PSOE", "SUMAR"]
+                },
+                "vs": {
+                    "Derecha": ["PP"]
+                }
+            },
+            "smap": {
+                "FA": {"type": "agg", "names": ["SUMAR"]},
+                "MP": [{"type": "sub", "names": ["UP"]}, {"type": "agg", "names": ["C"]}],
+                "UP": []
+            }
+        },
+        "2011-05-22": {
+            "threshold": null,
+            "threshold_scope": 5
+        }
+    }
+}
+'''
+
+
+def test_format_params_reproduces_the_file_style():
+    assert format_params(SAMPLE) == EXPECTED
+
+
+def test_format_params_wraps_long_lists_at_100_columns():
+    names = ['PARTIDO{:02d}'.format(i) for i in range(20)]
+    text = format_params({'es': {'2023-07-23': {'parties': {'event': names, 'polls': []}}}})
+    lines = text.split('\n')
+    body = [line for line in lines if line.startswith(' ' * 20 + '"PARTIDO')]
+    assert len(body) > 1 and all(len(line) <= 100 for line in body)
+    assert all(line.endswith(',') for line in body[:-1]) and not body[-1].endswith(',')
+    assert json.loads(text)['es']['2023-07-23']['parties'] == {'event': names, 'polls': []}
+
+
+def test_format_params_round_trips_the_repository_file():
+    data = json.loads(open('data/params.json', encoding='utf-8').read())
+    assert json.loads(format_params(data)) == data
+
+
+def test_read_and_write_params_use_the_data_file_system(fresh_app, tmp_path):
+    from mtpy.core.io import FileSystem
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    path = write_params(SAMPLE)
+    assert path == str(tmp_path / 'params.json') and open(path, encoding='utf-8').read() == EXPECTED
+    assert read_params() == SAMPLE
