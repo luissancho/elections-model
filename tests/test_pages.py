@@ -661,6 +661,8 @@ def test_escanos_table_histograms_blocks_and_pills(api):
     assert 'id="blocks-chart"' not in page and 'id="blocks"' not in page and 'id="seats"' in page
     assert '<fieldset class="pills" id="coalition-parties">' in page
     assert 'class="pill"' in page and 'name="coalition"' in page
+    assert re.search(r'Izquierda y Derecha, con todos sus\s+partidos; Otros es el resto de la cámara\.', page)
+    assert 'Bloques ideológicos' not in page
 
 
 def test_escanos_is_rendered_with_tables_links_and_initial(api):
