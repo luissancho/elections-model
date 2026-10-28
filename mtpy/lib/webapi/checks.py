@@ -58,7 +58,7 @@ def event_params(scope: str, date: str) -> dict:
     _PARAMS.ttl = settings()['cache_ttl']
 
     def load():
-        return json.loads(data.read('params.json')) if data.exists('params.json') else {}
+        return json.loads(data.read('params.json', encoding='utf-8')) if data.exists('params.json') else {}
 
     params = _PARAMS.get('params', load)
     entry = (params.get(scope) or {}).get(date) if isinstance(params, dict) else None

@@ -249,7 +249,7 @@ PARAMS_LIST_SECTIONS = ('parties', 'bmaps')
 
 def read_params() -> dict:
     """Read ``data/params.json`` (the whole file: ``{scope: {date: entry}}``)."""
-    return json.loads(App.get_().data.read(PARAMS_FILE))
+    return json.loads(App.get_().data.read(PARAMS_FILE, encoding='utf-8'))
 
 
 def _format_inline(value) -> str:
@@ -318,8 +318,8 @@ def format_params(data: dict) -> str:
 
 
 def write_params(data: dict) -> str:
-    """Write ``data`` as ``data/params.json`` (`format_params`); returns the path written."""
-    return App.get_().data.write(format_params(data), PARAMS_FILE)
+    """Write ``data`` as ``data/params.json`` (`format_params`, UTF-8 whatever the locale); returns the path written."""
+    return App.get_().data.write_bytes(format_params(data).encode('utf-8'), PARAMS_FILE)
 
 
 BLOCKS = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')

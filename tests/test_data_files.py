@@ -10,7 +10,7 @@ DATA = os.path.join(ROOT, 'data')
 
 
 def test_params_regions_are_valid_province_codes():
-    params = json.load(open(os.path.join(DATA, 'params.json')))
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
     districts = pd.read_csv(os.path.join(DATA, 'es-districts.csv'))
 
     for scope, events in params.items():
@@ -30,7 +30,7 @@ def test_params_regions_are_valid_province_codes():
 
 def test_scoped_json_files_only_use_known_scopes():
     scopes = set(pd.read_csv(os.path.join(DATA, 'es-scopes.csv'))['scode'])
-    params = json.load(open(os.path.join(DATA, 'params.json')))
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
     urls = json.load(open(os.path.join(DATA, 'wikipedia', 'wp-urls.json')))
     maps = json.load(open(os.path.join(DATA, 'wikipedia', 'wp-maps.json')))
     assert {'parties', 'pollsters', 'sponsors', 'scopes'} <= set(maps)
@@ -103,7 +103,7 @@ def test_regions_use_ine_codes():
 
 def test_threshold_overrides_are_valid():
     """M11: los umbrales históricos por evento de `params.json` son nulos o están en (0, 100]."""
-    params = json.load(open(os.path.join(DATA, 'params.json')))
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
     found = 0
     for scope, events in params.items():
         for event_date, conf in events.items():
@@ -173,7 +173,7 @@ def test_poll_fixes_files_are_well_formed():
 
 
 def test_params_2026_general_election_line_up():
-    conf = json.load(open(os.path.join(DATA, 'params.json')))['es']['2026-11-29']
+    conf = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))['es']['2026-11-29']
     # Since 2026-10-26 Compromís is not simulated apart: Wikipedia folds it into Frente Amplio, the new name of
     # Sumar, so FA inherits Sumar's base everywhere (Alicante, Castellón and Valencia included)
     assert 'COMPROMIS' not in conf['parties']['event'] and 'COMPROMIS' not in conf['parties']['polls']

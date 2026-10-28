@@ -353,3 +353,22 @@ def test_read_and_write_params_use_the_data_file_system(fresh_app, tmp_path):
     path = write_params(SAMPLE)
     assert path == str(tmp_path / 'params.json') and open(path, encoding='utf-8').read() == EXPECTED
     assert read_params() == SAMPLE
+
+
+def test_read_and_write_params_are_utf8_whatever_the_locale(fresh_app, tmp_path, monkeypatch):
+    # Foco: el fichero lleva nombres con tilde (JxSí); ni la lectura ni la escritura dependen del locale
+    import mtpy.core.io as core_io
+    from mtpy.core.io import FileSystem
+    real_open = open
+
+    def strict_open(path, mode='r', *args, **kwargs):
+        if 'b' not in mode and kwargs.get('encoding') != 'utf-8':
+            raise AssertionError('text open without utf-8: {} {}'.format(path, mode))
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(core_io, 'open', strict_open, raising=False)
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    data = {'es-ct': {'2024-05-12': {'parties': {'event': ['JxSí'], 'polls': ['JxSí']}}}}
+    path = write_params(data)
+    assert 'JxSí'.encode('utf-8') in real_open(path, 'rb').read()
+    assert read_params() == data
