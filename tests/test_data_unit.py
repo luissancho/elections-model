@@ -232,6 +232,8 @@ def test_derive_event_params_past_election():
                                       'Separatista': ['ERC'], 'Regionalista': ['PNV']}
     assert out['bmaps']['vs'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR']}
     assert list(out['bmaps']) == ['main', 'blocks', 'vs'] and list(out['parties']) == ['event', 'polls']
+    # the order of the file and of the web (`pages.promedios.BLOCK_ORDER`)
+    assert list(out['bmaps']['blocks']) == ['Derecha', 'Izquierda', 'Regionalista', 'Separatista']
 
 
 def test_derive_event_params_future_election_drops_agg_names():

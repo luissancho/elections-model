@@ -322,7 +322,7 @@ def write_params(data: dict) -> str:
     return App.get_().data.write(format_params(data), PARAMS_FILE)
 
 
-BLOCKS = ('Derecha', 'Izquierda', 'Separatista', 'Regionalista')
+BLOCKS = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
 VS_BLOCKS = ('Derecha', 'Izquierda')
 
 

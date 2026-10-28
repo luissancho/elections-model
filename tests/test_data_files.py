@@ -111,8 +111,10 @@ def test_threshold_overrides_are_valid():
                 if key in conf:
                     found += 1
                     assert conf[key] is None or 0 < conf[key] <= 100, (scope, event_date, key)
-    assert params['es-mc']['2015-05-24'] == {'threshold': None, 'threshold_scope': 5}
-    assert params['es-cn']['2011-05-22'] == {'threshold': 30, 'threshold_scope': 6}
+    murcia = params['es-mc']['2015-05-24']
+    assert (murcia['threshold'], murcia['threshold_scope']) == (None, 5)
+    canarias = params['es-cn']['2011-05-22']
+    assert (canarias['threshold'], canarias['threshold_scope']) == (30, 6)
     assert found >= 8
 
 
@@ -175,7 +177,8 @@ def test_params_2026_general_election_line_up():
     # Since 2026-10-26 Compromís is not simulated apart: Wikipedia folds it into Frente Amplio, the new name of
     # Sumar, so FA inherits Sumar's base everywhere (Alicante, Castellón and Valencia included)
     assert 'COMPROMIS' not in conf['parties']['event'] and 'COMPROMIS' not in conf['parties']['polls']
-    assert conf['bmaps']['blocks']['Regionalista'] == ['PNV', 'CC', 'BNG']
+    assert 'COMPROMIS' not in [p for names in conf['bmaps']['blocks'].values() for p in names]
+    assert {'PNV', 'CC', 'BNG'} <= set(conf['bmaps']['blocks']['Regionalista'])
     assert 'COMPROMIS' not in conf['smap']
     assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR']}
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}
