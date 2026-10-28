@@ -159,5 +159,67 @@ def test_load_isolates_a_failing_scope_and_reports_the_exception(fresh_app, scop
 
 
 def test_load_unknown_action(fresh_app, scopes, events):
-    with pytest.raises(ValueError, match=r'load: unknown what "x" \(expected one of polls\)'):
+    with pytest.raises(ValueError, match=r'load: unknown what "x" \(expected one of polls, params\)'):
         run(FakeLoader(), what=['x'], scopes=['es'])
+
+
+# --- acción `params` ---
+
+PARAMS_RESULT = {'status': 'loaded', 'n_events': 3, 'n_changed': 2, 'n_skipped': 1, 'changed': {}, 'skipped': [],
+                 'seconds': {'read': 0.1, 'derive': 0.2, 'save': 0.1, 'total': 0.4}}
+
+
+class FakeParamsLoader:
+    def __init__(self, fail=None):
+        self.calls = []
+        self.fail = fail or {}
+
+    def __call__(self, scope, save=True, verbose=0, progress=None, report=None, **kwargs):
+        self.calls.append((scope, save, verbose))
+        if scope in self.fail:
+            raise self.fail[scope]
+        if report is not None:
+            report('{} 2023-07-23: bmaps.vs null -> {{}}'.format(scope), 1)
+        return dict(PARAMS_RESULT, status='loaded' if save else 'checked')
+
+
+def test_load_params_runs_every_scope_and_prints_the_summary(fresh_app, scopes, events, capsys):
+    loader = FakeParamsLoader()
+    out = Load().run(what='params', scopes='all', params_loader=loader, verbose=1)
+    text = capsys.readouterr().out
+    assert [call[0] for call in loader.calls] == ['es', 'es-md'] and all(call[1] for call in loader.calls)
+    assert 'load params: 2 ámbitos' in text
+    assert 'es: params loaded (3 elections, 2 changed, 1 skipped) in 0 s' in text
+    assert 'es 2023-07-23: bmaps.vs null -> {}' in text
+    assert out['es']['status'] == 'loaded'
+
+
+def test_load_params_dry_run_checks_and_flags_the_header(fresh_app, scopes, events, capsys):
+    loader = FakeParamsLoader()
+    Load().run(what='params', scopes=['es'], dry_run=True, params_loader=loader)
+    text = capsys.readouterr().out
+    assert loader.calls == [('es', False, 0)]
+    assert 'load params: 1 ámbito · dry run' in text and 'es: params checked (3 elections, 2 changed, 1 skipped, dry run)' in text
+
+
+def test_load_params_scope_without_elections_is_skipped_with_all_and_fails_when_named(fresh_app, scopes, events, capsys):
+    loader = FakeParamsLoader(fail={'es-md': ValueError(module.NO_EVENTS.format('es-md'))})
+    out = Load().run(what='params', scopes='all', params_loader=loader)
+    assert out['es-md']['status'] == 'skipped' and 'es-md: params skipped (no elections for es-md)' in capsys.readouterr().out
+    with pytest.raises(RuntimeError, match=r'es-md \(params\)'):
+        Load().run(what='params', scopes=['es-md'], params_loader=loader)
+
+
+def test_load_params_isolates_an_exception(fresh_app, scopes, events, capsys):
+    loader = FakeParamsLoader(fail={'es': KeyError('boom')})
+    with pytest.raises(RuntimeError, match=r'es \(params\)'):
+        Load().run(what='params', scopes='all', params_loader=loader)
+    text = capsys.readouterr().out
+    assert "es: params failed (KeyError: 'boom')" in text and 'es-md: params loaded' in text
+
+
+def test_load_both_actions_run_polls_first(fresh_app, scopes, events, capsys):
+    loader = FakeParamsLoader()
+    run(FakeLoader(), what=['polls', 'params'], scopes=['es'], params_loader=loader)
+    text = capsys.readouterr().out
+    assert text.index('load polls: 1 ámbito') < text.index('load params: 1 ámbito') and loader.calls == [('es', True, 0)]
