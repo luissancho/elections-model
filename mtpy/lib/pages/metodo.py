@@ -33,10 +33,9 @@ HOUSE_EXAMPLE = {'pollster': 'CIS', 'since': '2018-09-01', 'left': 'Izquierda', 
 YOUNG_PARTY_YEARS = 4
 # Keys of a row of the house effects example that its bullseye needs, plus the two blocks.
 HOUSE_ROW_KEYS = ('event', 'event_date', 'days', 'scope', 'name')
-# Cross-cutting sections of the landing page, which belong to no question of the method.
+# Cross-cutting sections of the landing page, which belong to no question of the method (the cards of the data
+# and of the publication were removed on 2026-10-28).
 SECTIONS = (
-    ('datos', 'Los datos'),
-    ('publicacion', 'La publicación'),
     ('limitaciones', 'Limitaciones'),
 )
 # Subpages of the method (``/metodo/{id}``), in menu order. A subpage without ``template`` has no text yet: it

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Método{% endblock %}
-{% block description %}El método del modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, cómo se califica a las encuestadoras, cuánto acierta, de dónde salen sus datos y dónde están sus límites.{% endblock %}
+{% block description %}El método del modelo: sus dos partes, el promedio de encuestas y la simulación de escaños, cómo se califica a las encuestadoras, cuánto acierta y dónde están sus límites.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
@@ -58,39 +58,7 @@
       {% for section in sections %}
       <section id="{{ section.id }}" class="card">
         <h2>{{ section.title }}</h2>
-        {% if section.id == 'datos' %}
-        <p>
-          El modelo parte de tres fuentes. Los sondeos son los que recoge Wikipedia, con su licencia
-          CC BY-SA 4.0: las tablas de intención de voto de cada elección general y autonómica. Los
-          resultados oficiales de las generales son los del Ministerio del Interior; los de las
-          autonómicas salen de los artículos de cada elección en Wikipedia. A ello se suma un catálogo
-          propio de cada ámbito con sus partidos, sus bloques (como derecha e izquierda) y sus
-          circunscripciones, con los escaños que reparte cada una.
-        </p>
-        <p>
-          Los datos se curan a mano: cada partido que aparece en un sondeo se asigna a uno del catálogo,
-          se anotan las herencias entre partidos que se fusionan o se refundan y cada encuestadora
-          recibe una calidad previa según una rúbrica pública (ver <a href="/metodo/rating#calidad-previa">El rating</a>).
-          No se cargan los sondeos firmados por un propio partido.
-        </p>
-        {% elif section.id == 'publicacion' %}
-        <p>
-          Cada publicación es un run: una ejecución completa del modelo identificada por su fecha y hora y
-          por la versión del código (commit) con que se hizo. El pie de cada página muestra el identificador y la fecha de
-          la publicación; el commit de cada run consta en su <code>meta.json</code>, que sirve la API en <code>/api/v1/forecast/{scope}</code>. Un run
-          publicado no se modifica nunca; el siguiente pasa a ser el más reciente. Los runs retrospectivos
-          son reconstrucciones de días pasados con el modelo de hoy y sólo los sondeos publicados hasta
-          ese día, y van marcados como tales: en los gráficos de evolución, con puntos huecos.
-        </p>
-        <p>
-          Todos los datos del sitio están en la API pública, bajo <code>/api/v1</code>, en JSON y, en las
-          tablas, también en CSV con <code>?format=csv</code>; el <a href="/api/v1/manifest">manifiesto de
-          datos</a> enumera lo publicado.
-          {% for key in ['polls', 'results', 'model'] if manifest.attribution.get(key) -%}
-          {{ manifest.attribution[key] }}.
-          {% endfor %}
-        </p>
-        {% elif section.id == 'limitaciones' %}
+        {% if section.id == 'limitaciones' %}
         <p>Lo que el modelo no puede hacer, o hace sólo en parte:</p>
         <ul>
           <li>Pocas elecciones para calibrar: el error histórico, la deriva y el backtest se apoyan en un

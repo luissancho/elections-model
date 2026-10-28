@@ -2403,7 +2403,7 @@ def test_metodo_renders_the_sections_without_data(api):
     assert re.findall(r'<script type="module" src="([^"]+)"', page) == ['/dist/js/pages/metodo.js']
     assert re.findall(r'/dist/js/pages/[a-z]+\.js', page) == ['/dist/js/pages/metodo.js']
     sections = re.findall(r'<section id="([a-z-]+)" class="card">(.*?)</section>', page, re.S)
-    assert [section_id for section_id, _ in sections] == ['intro', 'datos', 'publicacion', 'limitaciones']
+    assert [section_id for section_id, _ in sections] == ['intro', 'limitaciones']  # «Los datos» y «La publicación» se retiraron el 2026-10-28
     assert all('<p>' in body for _, body in sections)  # ninguna sección sin texto en la plantilla
     for section_id, title in pages.SECTIONS:
         assert 'id="{}"'.format(section_id) in page and title in page
@@ -2469,7 +2469,7 @@ def test_metodo_landing_has_the_index_and_only_links_available_sections(api):
     assert 'Las preguntas del método' in page and 'Las cuatro preguntas' not in page
     text = re.sub(r'\s+', ' ', page)
     assert 'viendo sólo los sondeos publicados hasta cada fecha' in text and 'lo que se sabía' not in text
-    assert 'id="datos"' in page and 'id="publicacion"' in page and 'id="limitaciones"' in page
+    assert 'id="datos"' not in page and 'id="publicacion"' not in page and 'id="limitaciones"' in page
     assert 'se congela' in page and 'fuera de España' in page
     assert '1.000 simulaciones' not in page and 'id="scope-filter"' not in page
 
@@ -2596,7 +2596,6 @@ def test_metodo_rating_text(api):
     for target in re.findall(r'href="#(nota-[a-z]+)"', page):
         assert 'id="{}"'.format(target) in page, target
     assert page.index('id="notas"') < page.index('id="closing"')
-    assert 'calidad previa según una rúbrica pública' in re.sub(r'\s+', ' ', landing)
     assert_public_wording(page, '/metodo/rating')
 
 
