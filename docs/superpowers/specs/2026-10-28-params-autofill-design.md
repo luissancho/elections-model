@@ -1,6 +1,7 @@
 # Relleno automático de `parties` y `bmaps` en `data/params.json`
 
-Fecha: 2026-10-28. Estado: pendiente de aprobación de Luis.
+Fecha: 2026-10-28. Estado: aprobado y CONSTRUIDO en dev el 2026-10-28 (acción `params` del job `load`, 18 ámbitos,
+108 elecciones); `data/params.json` reescrito y pendiente de revisión de Luis antes de su commit.
 
 ## Intención
 
