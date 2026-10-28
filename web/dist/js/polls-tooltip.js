@@ -1,4 +1,5 @@
-// Tooltip boxes of the poll average: one poll (name, date, sample and its values in descending order), one
+// Tooltip boxes of the poll average: one poll (name, date, sample, rating of the house and its values in
+// descending order), one
 // point of the average or of its projection and the official result of a past election. Pure functions, without
 // ECharts or the DOM, testable in node.
 import {fmtDate, fmtInt, fmtNum, fmtPct, fmtRange} from './format.js';
@@ -32,19 +33,26 @@ function present(value) {
 }
 
 /**
- * Lines of the box of one poll: its name in bold, the date and the sample, and one line per name of `parties`
- * with a value in the poll, in descending order of value, with its colour marker and `{name} {value}`.
+ * Lines of the box of one poll: its name in bold, the date, the sample and, when the record carries the field,
+ * the rating of the house (0-100 at one decimal, as the badge of the polls table; a dash for the houses without
+ * one, aggregators and online panels; Luis, 2026-10-28), and one line per name of `parties` with a value in the
+ * poll, in descending order of value, with its colour marker and `{name} {value}`. The polls of the runs and of
+ * the elections always carry `rating`; the live example of the method (`weights.js`) passes none and names the
+ * rating factor itself.
  *
- * @param {object} poll poll record (`name` or else `pollster`, `date`, `sample_size` and one value per name)
+ * @param {object} poll poll record (`name` or else `pollster`, `date`, `sample_size`, `rating` and one value per
+ *   name)
  * @param {string[]} parties names of the view (parties or blocks); those without a value are left out
  * @param {Object<string, string>} colors colour of each name (the marker of a name without one is grey)
- * @returns {string[]} HTML lines, escaped: `<strong>{name}</strong>`, `{date} · muestra {sample}` (dashes when
- *   missing) and the values
+ * @returns {string[]} HTML lines, escaped: `<strong>{name}</strong>`, `{date} · muestra {sample}[ · rating
+ *   {rating}]` (dashes when missing) and the values
  */
 export function pollTooltipLines(poll, parties, colors) {
   const name = poll.name || poll.pollster || DASH;
   const date = poll.date ? fmtDate(poll.date) : DASH;
-  const lines = [`<strong>${escapeText(name)}</strong>`, escapeText(`${date} · muestra ${fmtInt(poll.sample_size)}`)];
+  const rating = 'rating' in poll ? ` · rating ${fmtNum(poll.rating, 1)}` : '';
+  const facts = `${date} · muestra ${fmtInt(poll.sample_size)}${rating}`;
+  const lines = [`<strong>${escapeText(name)}</strong>`, escapeText(facts)];
   const rows = parties
     .filter((party) => present(poll[party]))
     .map((party) => ({party, value: poll[party]}))

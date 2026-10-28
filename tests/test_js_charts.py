@@ -252,11 +252,48 @@ def test_series_window_of_three_months_keeps_the_result_in_view():
 
 def test_series_axis_follows_the_window_and_the_parties_shown():
     """El eje vertical no arranca en cero: se ajusta a los datos de la ventana y de los partidos visibles (Luis,
-    2026-10-19), y sus marcas llevan un decimal cuando el tramo es tan estrecho que lo necesitan."""
+    2026-10-19), con marcas de 5 en 5 puntos sobre múltiplos de 5 (Luis, 2026-10-28): `min` y `max` son funciones
+    del tramo visible (se pierden en el JSON) que resuelve `axisBounds`."""
     option = run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))
-    assert option['yAxis']['scale'] is True and 'min' not in option['yAxis'] and 'max' not in option['yAxis']
+    assert option['yAxis']['interval'] == 5 and 'scale' not in option['yAxis']
     assert option['dataZoom'][0]['filterMode'] == 'filter'  # la ventana recorta los datos y el eje se recalcula
+    assert run_js('[s.axisBounds({min: 27.3, max: 33.1}), s.axisBounds({min: 30, max: 33}), s.axisBounds({min: 25, max: 35}), '
+                  's.axisBounds({min: 31, max: 31}), s.axisBounds({min: 30, max: 30}), s.axisBounds({min: Infinity, max: -Infinity})]') == \
+        [[25, 35], [30, 35], [25, 35], [30, 35], [30, 35], [None, None]]
     assert run_js('[s.axisPctLabel(32), s.axisPctLabel(32.2), s.axisPctLabel(0), s.axisPctLabel(32.000000001)]') == ['32%', '32,2%', '0%', '32%']
+
+
+PROBE_DATA = """{
+    series: {dates: ['2026-10-01', '2026-10-02', '2026-10-03'], parties: ['PP', 'PSOE'], mean: {PP: [30, 31, 31], PSOE: [26, 26, 27]},
+             lo: {PP: [29, 30, 30], PSOE: [25, 25, 26]}, hi: {PP: [31, 32, 32], PSOE: [27, 27, 28]}},
+    polls: {parties: ['PP', 'PSOE'], polls: [{date: '2026-10-02', pollster: 'A', PP: 30.5, PSOE: 26.5}]},
+    projection: {dates: ['2026-10-03', '2026-10-04', '2026-10-05'], groups: {parties: {mean: {PP: [31, 31, 31], PSOE: [27, 27, 27]},
+                lo: {PP: [29, 28, 27], PSOE: [25, 24, 23]}, hi: {PP: [33, 34, 35], PSOE: [29, 30, 31]}}}},
+    parties: ['PP', 'PSOE'], selected: null, colors: {PP: '#1d84ce', PSOE: '#ef1c27'}, asOf: '2026-10-03', when: '2026-10-05',
+    window: 'all', legend: 'hidden', layers: 'ambos', result: {date: '2026-10-05', values: {PSOE: 27.5}},
+  }"""
+
+AXIS_PROBE = """(() => {
+  const data = %s;
+  const axisOf = (layers, selected = null) => {
+    const chart = echarts.init(null, null, {renderer: 'svg', ssr: true, width: 600, height: 300});
+    chart.setOption(s.seriesOption({...data, layers, selected}));
+    const axis = chart.getModel().getComponent('yAxis').axis;
+    return {extent: axis.scale.getExtent(), ticks: axis.scale.getTicks().map((t) => t.value)};
+  };
+  return {ambos: axisOf('ambos'), sondeos: axisOf('sondeos'), promedio: axisOf('promedio'),
+          pp: [axisOf('ambos', ['PP']), axisOf('sondeos', ['PP']), axisOf('promedio', ['PP'])]};
+})()""" % PROBE_DATA
+
+
+def test_series_axis_ticks_every_five_points_with_the_same_span_in_every_layer():
+    """Luis, 2026-10-28: marcas de 5 en 5 y la misma escala con Sondeos, Promedio o Ambos. En el motor real, el eje
+    abarca los mismos valores (sondeos, promedio, proyección y rango) en los tres modos y sigue a la leyenda: sólo
+    el PP, de 27 a 35, da 25–35 en los tres."""
+    probe = run_js(AXIS_PROBE)
+    assert probe['ambos'] == {'extent': [20, 35], 'ticks': [20, 25, 30, 35]}
+    assert probe['sondeos'] == probe['ambos'] and probe['promedio'] == probe['ambos']
+    assert probe['pp'] == [{'extent': [25, 35], 'ticks': [25, 30, 35]}] * 3
 
 LAYER_ARGS = (SERIES_ARGS % "'hidden', projection: {dates: ['2026-10-02', '2026-10-03'], groups: {parties: {mean: {PP: [31, 31.5]}, "
               "lo: {PP: [30, 30]}, hi: {PP: [32, 33]}}}}, result: {date: '2026-10-08', values: {PP: 31.5}}, layers: %s")
@@ -274,6 +311,8 @@ def series_roles(option):
             roles.add('result' if entry.get('symbol') == 'diamond' else 'poll')
         elif entry['type'] == 'custom':
             roles.add('range')  # the bar of the 95 % range at the election (2026-10-26)
+        elif entry.get('silent') and entry['type'] == 'line':
+            roles.add('extent')  # the invisible series that keeps the axis span of the hidden layer (2026-10-28)
         elif entry.get('lineStyle', {}).get('type') == 'dashed':
             roles.add('projection')
         else:
@@ -281,23 +320,35 @@ def series_roles(option):
     return sorted(roles)
 
 
+def extent_series(option):
+    """Las series invisibles que guardan el tramo de la capa oculta: líneas silenciosas que no son la de las marcas."""
+    return [entry for entry in option['series'] if entry.get('silent') and entry['type'] == 'line' and entry['name'] != 'marks']
+
+
 def test_series_layers_draw_the_polls_the_average_or_both():
     """«Sondeos / Promedio / Ambos» (Luis, 2026-10-23): la capa elegida decide qué se dibuja. Sólo sondeos: los
     puntos, el resultado y las marcas, sin líneas, barras ni proyección; sólo promedio: sin puntos; ambas (por
-    defecto): todo. El tooltip sigue a las series que quedan, y la imagen respeta la capa."""
+    defecto): todo. El tooltip sigue a las series que quedan, y la imagen respeta la capa. La capa oculta deja una
+    serie invisible por partido con sus valores (`extent`), para que el eje no cambie de escala (2026-10-28)."""
     everything = ['marks', 'mean', 'poll', 'projection', 'range', 'result']
     assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'ambos'"))) == everything
     assert series_roles(run_js('s.seriesOption(%s)' % (SERIES_ARGS % "'hidden'"))) == ['marks', 'mean', 'poll']
     polls_only = run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'sondeos'"))
-    assert series_roles(polls_only) == ['marks', 'poll', 'result']
+    assert series_roles(polls_only) == ['extent', 'marks', 'poll', 'result']
     assert [len(entry['data']) for entry in polls_only['series'] if entry['type'] == 'scatter'] == [1, 1]
-    assert series_roles(run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'promedio'"))) == ['marks', 'mean', 'projection', 'range', 'result']
+    # the hidden average: the mean, the projection and the range of the election, in a silent line without symbols
+    extent = extent_series(polls_only)
+    assert [(e['name'], e['symbol'], e['lineStyle'], [v for _, v in e['data']]) for e in extent] == [('PP', 'none', {'opacity': 0}, [30, 31, 31, 31.5, 30, 33])]
+    assert polls_only['series'].index(extent[0]) > max(i for i, e in enumerate(polls_only['series']) if e['type'] == 'scatter')
+    average_only = run_js('s.seriesOption(%s)' % (LAYER_ARGS % "'promedio'"))
+    assert series_roles(average_only) == ['extent', 'marks', 'mean', 'projection', 'range', 'result']
+    assert [[v for _, v in e['data']] for e in extent_series(average_only)] == [[30.5]]
     # the first series is now the poll points: its tooltip is the box of the poll, not a day of the average
     box = run_js("(() => { const o = s.seriesOption(%s); return o.tooltip.formatter({seriesIndex: 0, seriesName: 'PP', "
                  "dataIndex: 0, data: o.series[0].data[0]}); })()" % (LAYER_ARGS % "'sondeos'"))
     assert '<strong>Casa A</strong>' in box and 'PP 30,5' in box
     image = run_js('s.seriesImageOption(%s)' % (LAYER_ARGS % "'sondeos'"))
-    assert series_roles(image) == ['marks', 'poll', 'result'] and image['legend']['data'] == ['PP']
+    assert series_roles(image) == ['extent', 'marks', 'poll', 'result'] and image['legend']['data'] == ['PP']
 
 
 def test_series_draws_the_election_range_as_a_bar_instead_of_the_bands():

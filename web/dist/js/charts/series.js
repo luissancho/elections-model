@@ -2,7 +2,8 @@
 // each party at the election drawn as a bar (the band of the average and the fan of the projection are no longer
 // drawn: seen together they read as one band with a step, Luis 2026-10-26) and, in the detail of a past election,
 // the official result marked at the election date. The vertical axis follows what is on screen (the window and the
-// parties the legend shows) instead of starting at zero, so the curves keep their shape (Luis, 2026-10-19).
+// parties the legend shows) instead of starting at zero, so the curves keep their shape (Luis, 2026-10-19), with a
+// tick every 5 points and the same span whichever layers are drawn (Luis, 2026-10-28).
 import {axisLabelStyle, baseOption, mountChart, THEME, timeAxisLabel, tooltipStyle} from './base.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtPct} from '../format.js';
@@ -12,6 +13,7 @@ import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
 export {meanTooltipLine, pollTooltipLines, resultTooltipLine};
 
 const DAY_MS = 24 * 3600 * 1000;
+const AXIS_STEP = 5;  // the ticks of the vertical axis, in points of vote share (Luis, 2026-10-28)
 const BAND_OPACITY = 0.15;  // `bandSeries`, still drawn by the live example of the method (`weights.js`)
 const RANGE_OPACITY = 0.45;  // the range bar at the election; full opacity when hovered
 const RANGE_BLUR_OPACITY = 0.15;  // the other bars while one is hovered
@@ -102,8 +104,26 @@ export function pollPoints(polls, name) {
 }
 
 /**
- * Label of a tick of the vertical axis: whole percentages without decimals and, when the axis is so tight that
- * the ticks fall between them, one decimal (`32%`, `32,2%`).
+ * Bounds of the vertical axis for the extent `{min, max}` of the data on screen: the multiples of `AXIS_STEP`
+ * just outside it (a value on a multiple stays on it), at least one step apart, so the ticks fall on 20, 25,
+ * 30… whatever the window, the parties shown or the layers drawn. ECharts calls `min` and `max` of the axis
+ * separately, each with the whole extent, and both read their end here. Without data (every party hidden) the
+ * extent is infinite and the bounds are null, which leaves the axis to ECharts.
+ *
+ * @param {{min: number, max: number}} extent the extent of the visible data
+ * @returns {Array<number|null>} `[low, high]`
+ */
+export function axisBounds({min, max}) {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return [null, null];
+  }
+  const low = Math.floor(min / AXIS_STEP) * AXIS_STEP;
+  return [low, Math.max(Math.ceil(max / AXIS_STEP) * AXIS_STEP, low + AXIS_STEP)];
+}
+
+/**
+ * Label of a tick of the vertical axis: whole percentages without decimals (the ticks are multiples of
+ * `AXIS_STEP`) and, should a tick ever fall between them, one decimal (`32%`, `32,2%`).
  *
  * @param {number} value the tick value
  * @returns {string} the label
@@ -175,6 +195,30 @@ export function rangeBarSeries(name, time, lo, hi, mean, color) {
 }
 
 /**
+ * Invisible series of one party with the values of the layer not drawn, so the vertical axis spans the same
+ * values whichever layers are on screen (Luis, 2026-10-28): a silent line without symbols at opacity 0, named
+ * after the party, so the legend hides it with the party and the window filters it like the rest. It goes after
+ * the drawn series, which keep the legend icon and the tooltip.
+ *
+ * @param {string} name party or block
+ * @param {Array<[number, number]>} points `[time, value]` of the hidden layer
+ * @returns {object} the ECharts series
+ */
+export function extentSeries(name, points) {
+  return {
+    type: 'line',
+    name,
+    z: 0,
+    silent: true,
+    symbol: 'none',
+    legendHoverLink: false,
+    lineStyle: {opacity: 0},
+    emphasis: {disabled: true},
+    data: points,
+  };
+}
+
+/**
  * ISO dates of the time axis: the fitted series plus, in forecast, the projected days after it and, with an
  * official result later than the last of them, its date (the detail of a past election: the series stops where
  * the model was frozen and the result sits at the election).
@@ -214,8 +258,10 @@ export function setWindow(chart, choice, {series, projection, anchor = null, res
  * dashed projection from `asOf` to `when` with the bar of its 95 % range at the election (`rangeBarSeries`), with
  * mark lines at both dates. Neither the band of the average nor the fan of the projection are drawn. The initial
  * zoom is the `window` choice (a key of `WINDOW_DAYS`: the last days before `anchor`; `all`: the whole axis).
- * The window filters the data (`filterMode: 'filter'`) and the vertical axis is scaled to the visible data of
- * the series the legend shows, without a fixed zero, so a tight race fills the height.
+ * The window filters the data (`filterMode: 'filter'`) and the vertical axis spans the visible data of the
+ * series the legend shows, without a fixed zero, so a tight race fills the height; its ticks fall on multiples
+ * of 5 (`axisBounds`) and the layers not drawn still count for it (`extentSeries`), so choosing a layer never
+ * changes the scale.
  * The Promedios page also draws the blocks with it, passing the block series, polls and projection as parties.
  * The tooltip follows the item under the pointer: a poll shows its box (`pollTooltipLines`), a day of the
  * average its value, a day of the projection or the range bar its value and range (`meanTooltipLine`), the
@@ -312,6 +358,27 @@ export function seriesOption({
       ...KEEP_POINTS_ON_BLUR(0.8),
       data: [[dayTime(result.date), result.values[name]]],
     }));
+  // The layer not drawn, as invisible points per party, so the axis spans the same values in every layer.
+  const finite = (points) => points.filter(([, value]) => Number.isFinite(value));
+  const hiddenPoints = (name) => {
+    if (!withAverage) {
+      // the mean, the projection and the range at the election (`ranges` is empty in this layer)
+      const electionTime = withProjection ? dayTime(lastDay) : null;
+      return finite([
+        ...seriesTimes.map((t, i) => [t, (series.mean[name] || [])[i] ?? null]),
+        ...projectionTimes.map((t, i) => [t, (groups.mean[name] || [])[i] ?? null]),
+        ...(withProjection ? [[electionTime, lastOf(groups.lo[name])], [electionTime, lastOf(groups.hi[name])]] : []),
+      ]);
+    }
+    if (!withPolls) {
+      return pollPoints(pollRecords, name).map(([date, value]) => [dayTime(date), value]);
+    }
+    return [];
+  };
+  const extents = parties.flatMap((name) => {
+    const points = hiddenPoints(name);
+    return points.length ? [extentSeries(name, points)] : [];
+  });
   const marks = [markAt(dayTime(asOf), asOfLabel, 'right')];
   if (result) {
     marks.push(markAt(dayTime(result.date), 'Elección', 'left'));
@@ -337,7 +404,7 @@ export function seriesOption({
   const axisDates = axisDatesOf(series, projection, result);
   const zoom = seriesWindow(windowChoice, axisDates, anchor);
 
-  const allSeries = [...means, ...points, ...projected, ...ranges, ...results, markSeries];
+  const allSeries = [...means, ...points, ...projected, ...ranges, ...results, ...extents, markSeries];
 
   /** Box of the item under the pointer: a poll, a day of the average or of the projection, or the result. */
   function tooltip(params) {
@@ -389,9 +456,12 @@ export function seriesOption({
       axisLabel: timeAxisLabel(),
       splitLine: {show: false},
     },
+    // Ticks every `AXIS_STEP` points on multiples of it, around the data on screen (`axisBounds`).
     yAxis: {
       type: 'value',
-      scale: true,
+      min: (extent) => axisBounds(extent)[0],
+      max: (extent) => axisBounds(extent)[1],
+      interval: AXIS_STEP,
       splitLine: {lineStyle: {color: THEME.gridColor}},
       axisLabel: {...axisLabelStyle(), formatter: axisPctLabel},
     },

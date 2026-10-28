@@ -40,9 +40,21 @@ def test_poll_tooltip_lines_show_the_date_the_sample_the_colour_and_escape_the_t
     assert '1200' in lines[1].replace('.', '') and 'undefined' not in ''.join(lines) and 'null' not in ''.join(lines)
     assert 'background-color:#123456' in lines[2] and lines[2].endswith('PP 30,0')
     assert lines[3].endswith('X&lt;1&gt; 2,0')
-    # sin nombre ni encuestadora, ni fecha: guiones, nunca "undefined"
+    # sin nombre ni encuestadora, ni fecha: guiones, nunca "undefined"; sin el campo `rating`, nada de rating
     bare = run_js('s.pollTooltipLines(poll, ["PP"], {})', poll={'PP': None})
     assert bare == ['<strong>–</strong>', '– · muestra –']
+
+
+def test_poll_tooltip_lines_show_the_rating_of_the_house():
+    """Luis, 2026-10-28: el recuadro de cada punto lleva también el rating de la casa (0-100, un decimal, como la
+    insignia de la tabla); un guión para las casas sin rating (agregadores y paneles, con el campo a null). El
+    ejemplo vivo del método no pasa el campo y conserva su línea de factores."""
+    poll = {'date': '2026-10-01', 'pollster': 'GAD3', 'sample_size': 1200, 'rating': 59.07, 'PP': 30.0}
+    lines = run_js('s.pollTooltipLines(poll, ["PP"], {})', poll=poll)
+    assert lines[1] == '1 oct 2026 · muestra 1200 · rating 59,1'
+    assert run_js('s.pollTooltipLines(poll, ["PP"], {})', poll={**poll, 'rating': None})[1] == '1 oct 2026 · muestra 1200 · rating –'
+    without = {key: value for key, value in poll.items() if key != 'rating'}
+    assert run_js('s.pollTooltipLines(poll, ["PP"], {})', poll=without)[1] == '1 oct 2026 · muestra 1200'
 
 
 def test_mean_tooltip_line_shows_the_average_its_interval_and_the_date():

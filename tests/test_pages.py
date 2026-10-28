@@ -2968,11 +2968,15 @@ def test_promedios_legend_is_the_party_selector_and_the_house_chart_has_its_own_
 
 
 def test_series_charts_say_the_axis_follows_what_is_shown(events_site):
-    """El eje vertical del promedio ya no arranca en cero (Luis, 2026-10-19): lo dicen las tres tarjetas que lo dibujan."""
+    """El eje vertical del promedio ya no arranca en cero (Luis, 2026-10-19): lo dicen las tres tarjetas que lo dibujan;
+    con marcas de 5 en 5 y la misma escala en las tres capas, y el rating de la casa en cada punto (2026-10-28)."""
     promedios = re.sub(r'\s+', ' ', html(call(events_site, '/es')[2]))
     detail = re.sub(r'\s+', ' ', html(call(events_site, '/elecciones/es/generales/2023-07')[2]))
     assert promedios.count('El eje vertical no empieza en cero') == 1 and 'el eje vertical se ajusta a lo que queda a la vista' in promedios
     assert detail.count('El eje vertical no empieza en cero') == 1
+    for page in (promedios, detail):
+        assert 'con marcas de 5 en 5 puntos y la misma escala con Sondeos, Promedio o Ambos' in page
+        assert 'se ve entero, con la muestra y el rating de la casa' in page
 
 
 def test_poll_name_follows_the_loader_rule():
