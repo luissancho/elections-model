@@ -693,3 +693,25 @@ def test_read_cols_records_unknown_names_only_for_poll_rows():
     poll = loader.read_cols(fake_cols(table, pollster='GAD3', sponsor='New Medium'), parties, lead, '2023')
     assert poll['pollster_id'] == 1 and poll['sponsor_id'] == 0
     assert loader.sponsors_missing == ['Unknown Medium', 'New Medium']
+
+
+def test_a_cell_shared_by_two_parties_goes_to_the_first_only():
+    # Since the FA–Compromís split (2026-10) Wikipedia gives a joint figure as one cell with colspan=2 when a
+    # pollster does not separate them: the first party takes the figure, the second has no value in that poll
+    # (Luis, 2026-10-28). Here the first poll row of a real table gets its first two party cells merged.
+    table = WikipediaLoader.find_poll_table(load('Next_Madrilenian_regional_election'))
+    loader = bare_loader('es-md')
+    before = loader.read_table(table, '2026')[0]
+    parties, _ = WikipediaLoader.read_header(table)
+    first, second = sorted(parties)[:2]
+    tr = next(tr for tr in table.xpath('.//tr') if tr.xpath('./td') and before['pollster'] in tr.xpath('./td[1]//text()')[0])
+    tds = tr.xpath('./td')
+    tds[first].set('colspan', '2')
+    tr.remove(tds[second])
+
+    after = bare_loader('es-md').read_table(table, '2026')[0]
+    got = {r['party']: r['pct'] for r in after['results']}
+    was = {r['party']: r['pct'] for r in before['results']}
+    assert got[parties[first]] == was[parties[first]]
+    assert parties[second] not in got
+    assert {p: v for p, v in got.items() if p != parties[first]} == {p: v for p, v in was.items() if p not in (parties[first], parties[second])}
