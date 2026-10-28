@@ -359,7 +359,8 @@ def agg_names(smap: Optional[dict]) -> list[str]:
 
 def nationwide_agg_names(smap: Optional[dict]) -> dict[str, list[str]]:
     """
-    Names each party absorbs through its ``agg`` rules without ``regions`` (the whole scope).
+    Names each party absorbs through its ``agg`` rules that cover the whole scope: without ``regions``, or with
+    ``regions.exclude`` (everywhere but a few provinces). A rule listing the provinces it applies to is regional.
 
     Parameters
     ----------
@@ -374,7 +375,9 @@ def nationwide_agg_names(smap: Optional[dict]) -> dict[str, list[str]]:
     out = {}
     for party, rules in (smap or {}).items():
         for rule in (rules if isinstance(rules, list) else [rules]):
-            if isinstance(rule, dict) and rule.get('type') == 'agg' and rule.get('names') and not rule.get('regions'):
+            regions = rule.get('regions') if isinstance(rule, dict) else None
+            regional = regions is not None and not (isinstance(regions, dict) and 'exclude' in regions)
+            if isinstance(rule, dict) and rule.get('type') == 'agg' and rule.get('names') and not regional:
                 out.setdefault(party, []).extend(n for n in rule['names'] if n not in out.get(party, []))
     return out
 
@@ -450,13 +453,13 @@ def derive_event_params(
         candidacies (`agg_names`); and for `main_parties`.
     polls : pd.DataFrame, optional
         Polls of the cycle indexed by ``(days, pollster)``, for `main_parties`; without them ``main`` is empty.
-
     Returns
     -------
     dict
-        ``{'parties': {'event', 'polls'}, 'bmaps': {'main', 'blocks', 'vs'}}``: ``polls`` every column; ``event``
-        the parties with a result, or ``polls`` minus the absorbed names when there is none; ``main`` the
-        `main_parties` of ``event``; ``blocks`` the parties of ``polls`` by `BLOCKS` (empty blocks
+        ``{'parties': {'event', 'polls'}, 'bmaps': {'main', 'blocks', 'vs'}}``: ``event`` the parties with a
+        result, or the polled names minus the absorbed ones when there is none; ``polls`` the candidacies first,
+        in that order, then every other column of the matrix;
+        ``main`` the `main_parties` of ``event``; ``blocks`` the parties of ``polls`` by `BLOCKS` (empty blocks
         left out, parties without one of those blocks in none); ``vs`` the `VS_BLOCKS` entries of ``blocks``.
     """
     names = df.columns.tolist()
@@ -469,14 +472,15 @@ def derive_event_params(
     if not event:
         absorbed = agg_names(smap)
         event = [p for p in names if p not in absorbed]
+    listed = event + [p for p in names if p not in event]  # candidacies first, then the names only polled
     main = main_parties(polls, event, smap)
 
     block_of = dict(zip(parties['name'], parties['block']))
-    blocks = {b: [p for p in names if block_of.get(p) == b] for b in BLOCKS}
+    blocks = {b: [p for p in listed if block_of.get(p) == b] for b in BLOCKS}
     blocks = {b: members for b, members in blocks.items() if members}
     vs = {b: blocks[b] for b in VS_BLOCKS if b in blocks}
 
-    return {'parties': {'event': event, 'polls': names}, 'bmaps': {'main': main, 'blocks': blocks, 'vs': vs}}
+    return {'parties': {'event': event, 'polls': listed}, 'bmaps': {'main': main, 'blocks': blocks, 'vs': vs}}
 
 
 def derive_scope_params(

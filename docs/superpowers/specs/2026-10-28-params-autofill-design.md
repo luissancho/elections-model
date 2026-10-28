@@ -37,15 +37,21 @@ partir de `vs` (no forma parte de este diseño).
 
 Por elección, con la matriz del ciclo de `get_event_dmat` (sondeos del ciclo + resultado):
 
-- `parties.polls`: todo partido con columna en los sondeos del ciclo o en el resultado.
+- `parties.polls`: todo partido con columna en los sondeos del ciclo o en el resultado, con las candidaturas
+  primero (en su orden) y después los nombres sólo encuestados (Sumar, UPN, AC en 2026), como Luis los ordena a
+  mano (añadido 2026-10-28 tarde).
+- Sin listas manuales: `parties.include`/`exclude` se construyeron y se retiraron el mismo 2026-10-28 a petición
+  de Luis. La fuente manual es `event` tal cual está en el fichero (un partido fuera de `event` no es candidatura,
+  AC en 2026); `load params` lo reescribe con lo derivado y sólo se lanza a mano, así que Luis revisa el diff.
 - `parties.event`: los partidos con resultado. En una elección sin resultado (futura), `polls` menos los
   nombres que el `smap` de esa elección absorbe con una regla `agg` (en 2026 quita SUMAR y UPN y reproduce la
   lista manual de Luis).
 - `bmaps.main` (regla revisada el 2026-10-28 a petición de Luis, criterio estadístico en vez de editorial): partidos
   de `event` encuestados por casi todas las casas en el tramo final y con peso medible. Ventana: los sondeos de
   los últimos 42 días, ampliada a los 30 más recientes cuando hay menos (elección en curso). Presencia ≥ 90 % de
-  esos sondeos, contando como presente al partido o a los nombres que absorbe con una regla `agg` sin `regions`
-  (FA hereda los sondeos de SUMAR), y media de voto en la ventana ≥ 1 %. Sustituye al «> 95 % de los sondeos a
+  esos sondeos, contando como presente al partido o a los nombres que absorbe con una regla `agg` nacional: sin
+  `regions` o con `regions.exclude` (FA hereda los sondeos de SUMAR aunque no se presente en Valencia); una regla
+  que lista sus provincias es regional y no cuenta, y media de voto en la ventana ≥ 1 %. Sustituye al «> 95 % de los sondeos a
   1-42 días», que con 6 sondeos a un mes del 29-N dejaba fuera a UP (5 de 6) y bailaba con cada sondeo. El rating
   no usa `main`; sí el error y sesgo medios publicados, las tarjetas, la parrilla de efectos de casa y las
   métricas por provincia del backtest, siempre dentro de cada elección (el `Computer` anula en cada elección los

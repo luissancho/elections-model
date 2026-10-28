@@ -303,6 +303,9 @@ def test_main_parties_counts_the_names_a_party_absorbs_nationwide():
                                         'COMPROMIS': [1, 1, 1, nan, nan, nan], 'UP': [3] * 6})
     smap = {'FA': {'type': 'agg', 'names': ['SUMAR']}, 'COMPROMIS': {'type': 'agg', 'names': ['UP'], 'regions': ['3', '12', '46']}}
     assert main_parties(polls, ['PP', 'FA', 'UP', 'COMPROMIS'], smap, min_polls=6) == ['PP', 'FA', 'UP']
+    # a rule that only leaves out a few provinces (`regions.exclude`) is still nationwide: FA keeps SUMAR's polls
+    smap['FA'] = {'type': 'agg', 'names': ['SUMAR'], 'regions': {'exclude': ['3', '12', '46']}}
+    assert main_parties(polls, ['PP', 'FA', 'UP', 'COMPROMIS'], smap, min_polls=6) == ['PP', 'FA', 'UP']
 
 
 def test_main_parties_without_polls_is_empty():
@@ -410,3 +413,29 @@ def test_read_and_write_params_are_utf8_whatever_the_locale(fresh_app, tmp_path,
     path = write_params(data)
     assert 'JxSí'.encode('utf-8') in real_open(path, 'rb').read()
     assert read_params() == data
+
+
+def test_derive_event_params_lists_the_candidacies_first_in_polls():
+    nan = float('nan')
+    # SUMAR polls above VOX but is absorbed by PSOE: it goes after the candidacies, with Cs
+    df, polls = _matrix({'PP': [33, 34], 'PSOE': [30, 29], 'SUMAR': [20, 19], 'VOX': [12, 13], 'Cs': [1, 1]},
+                        {'PP': nan, 'PSOE': nan, 'SUMAR': nan, 'VOX': nan, 'Cs': nan}, dates=('2026-11-29',))
+    smap = {'PSOE': {'type': 'agg', 'names': ['SUMAR']}, 'VOX': {'type': 'agg', 'names': ['Cs']}}
+    out = derive_event_params(df, PARTIES, smap=smap, polls=polls)
+    assert out['parties']['event'] == ['PP', 'PSOE', 'VOX']
+    assert out['parties']['polls'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'Cs']
+    assert out['bmaps']['blocks']['Izquierda'] == ['PSOE', 'SUMAR']
+
+
+def test_derive_scope_params_passes_the_smap_of_the_file(monkeypatch):
+    nan = float('nan')
+    index = pd.MultiIndex.from_arrays([['2026-11-29'] * 2, [1, 2], ['H0', 'H1']], names=['event_date', 'days', 'pollster'])
+    polls = pd.DataFrame({'PP': [33.0, 34.0], 'PSOE': [30.0, 29.0], 'Cs': [1.0, 1.0]}, index=index)
+    events = pd.DataFrame({'PP': [nan], 'PSOE': [nan], 'Cs': [nan]}, index=pd.Index(['2026-11-29'], name='date'))
+    monkeypatch.setattr(data, 'get_event_dates', lambda scope: ['2026-11-29'])
+    monkeypatch.setattr(data, 'get_poll_series', lambda scope, dates: polls.reset_index())
+    monkeypatch.setattr(data, 'get_event_series', lambda scope, dates: events.reset_index())
+    monkeypatch.setattr(data, 'get_parties', lambda: PARTIES)
+    overrides = {'2026-11-29': {'smap': {'PP': {'type': 'agg', 'names': ['Cs']}}}}
+    out = data.derive_scope_params('es', overrides=overrides)['2026-11-29']
+    assert out['parties'] == {'event': ['PP', 'PSOE'], 'polls': ['PP', 'PSOE', 'Cs']}  # Cs absorbed by PP

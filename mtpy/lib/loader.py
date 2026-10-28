@@ -918,10 +918,13 @@ class WikipediaLoader(Core):
                 rowspan = int(array_shift(td.xpath('./@rowspan')) or 1)
                 colspan = int(array_shift(td.xpath('./@colspan')) or 1)
 
-                for _ in range(colspan):
-                    cols.append(td)
+                # A cell shared by several columns (a joint figure of two parties, `colspan=2`) belongs to the
+                # first of them; the others get an empty cell, so the figure is never counted twice
+                for position in range(colspan):
+                    cell = td if position == 0 else html.Element('td')
+                    cols.append(cell)
                     if rowspan > 1:
-                        next_remainder.append((index, td, rowspan - 1))
+                        next_remainder.append((index, cell, rowspan - 1))
                     index += 1
 
             for prev_i, prev_text, prev_rowspan in remainder:

@@ -3,12 +3,13 @@
         "2026-11-29": {
             "parties": {
                 "event": [
-                    "PP", "PSOE", "VOX", "FA", "UP", "SALF", "ERC", "JxCat", "EHB", "PNV", "BNG",
-                    "AC", "ADELANTE", "CC"
+                    "PP", "PSOE", "VOX", "FA", "UP", "SALF",
+                    "ERC", "JxCat", "EHB", "PNV", "BNG", "CC", "ADELANTE", "COMPROMIS"
                 ],
                 "polls": [
-                    "PP", "PSOE", "VOX", "SUMAR", "FA", "UP", "SALF", "ERC", "JxCat", "EHB", "PNV",
-                    "BNG", "AC", "ADELANTE", "CC", "UPN"
+                    "PP", "PSOE", "VOX", "FA", "UP", "SALF",
+                    "ERC", "JxCat", "EHB", "PNV", "BNG", "CC", "ADELANTE", "COMPROMIS",
+                    "SUMAR", "UPN", "AC"
                 ]
             },
             "bmaps": {
@@ -27,7 +28,7 @@
                 "blocks": {
                     "Derecha": ["PP", "VOX", "SALF"],
                     "Izquierda": ["PSOE", "SUMAR", "FA", "UP"],
-                    "Regionalista": ["PNV", "BNG", "ADELANTE", "CC", "UPN"],
+                    "Regionalista": ["PNV", "BNG", "ADELANTE", "CC", "UPN", "COMPROMIS"],
                     "Separatista": ["ERC", "JxCat", "EHB", "AC"]
                 },
                 "vs": {
@@ -36,7 +37,8 @@
                 }
             },
             "smap": {
-                "FA": {"type": "agg", "names": ["SUMAR"]},
+                "FA": {"type": "agg", "names": ["SUMAR"], "regions": {"exclude": ["3", "12", "46"]}},
+                "COMPROMIS": {"type": "agg", "names": ["SUMAR"], "regions": ["3", "12", "46"]},
                 "UP": {"type": "sub", "names": ["FA"], "regions": {"exclude": ["8", "17", "25", "43"]}},
                 "PP": {"type": "agg", "names": ["UPN"]},
                 "SALF": {"type": "sub", "names": ["VOX"]}

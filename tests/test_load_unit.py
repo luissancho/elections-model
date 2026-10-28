@@ -375,3 +375,4 @@ def test_load_params_creates_a_missing_scope_with_dates_descending():
 def test_load_params_fails_without_elections():
     with pytest.raises(ValueError, match=NO_EVENTS.format('es-xx')):
         load_params('es-xx', deriver=lambda scope, overrides: {}, reader=lambda: {}, writer=lambda data: None)
+
