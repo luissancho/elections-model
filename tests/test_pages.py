@@ -4480,6 +4480,37 @@ def test_lineage_blocks_follow_the_heirs_and_count_each_previous_party_once():
     assert out['Otros']['seats'] == 349 - 170 - 152 and out['Otros']['pct'] == round(100 - 45.6 - 44.0, 2)
 
 
+def test_escanos_block_deltas_follow_the_lineage_of_a_two_sided_vs(events_site, fresh_app):
+    """Con un `vs` de dos lados en la meta del run, la columna «vs 2023» de los bloques (celdas y `deltas.blocks`)
+    compara con el resultado de 2023 reagrupado por ese `vs`: Izquierda, Derecha y Otros (el resto)."""
+    writer = bundle.BundleWriter(fresh_app.fs)
+    meta = fixture_data('meta')
+    meta['bmaps']['vs'] = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}
+    writer.write_json(bundle.path_part('es', RUN, 'meta'), 'meta', meta, 'es', run_id=RUN)
+    summary = fixture_data('summary')
+    summary['blocks'] = [dict(summary['blocks'][0], name=name, pct=pct, seats=seats)
+                         for name, pct, seats in (('Izquierda', 30.0, 120), ('Derecha', 33.1, 135), ('Otros', 36.9, 95))]
+    for mode in bundle.MODES:
+        writer.write_json(bundle.path_part('es', RUN, 'summary', mode), 'summary', summary, 'es', run_id=RUN, mode=mode)
+    body = call(events_site, '/es/escanos')[2]
+    blocks = re.search(r'<table id="blocks-table">(.*?)</table>', html(body), re.S).group(1)
+    assert re.findall(r'class="dlt (?:up|down|flat)">([^<]*)<', blocks) == ['▼ 30', '▼ 65', '▲ 95']
+    assert initial(body)['deltas']['blocks'] == {'Izquierda': -30, 'Derecha': -65, 'Otros': 95}
+
+
+def test_lineage_blocks_without_a_mapped_party_or_without_seats_have_no_value():
+    """`lineage_blocks`: un lado sin ningún partido previo, o sin escaños en ellos, no tiene valor (no 0) y Otros
+    tampoco lo tiene."""
+    vs = {'Derecha': ['PP'], 'Izquierda': ['PSOE']}
+    no_left = pages.lineage_blocks({'PP': {'pct': 40.0, 'seats': 150}, 'ERC': {'pct': 2.0, 'seats': 7}}, {}, vs)
+    assert no_left['Izquierda'] == {'pct': None, 'seats': None} and no_left['Otros'] == {'pct': None, 'seats': None}
+    assert no_left['Derecha'] == {'pct': 40.0, 'seats': 150}
+    no_seats = pages.lineage_blocks({'PP': {'pct': 40.0, 'seats': None}, 'PSOE': {'pct': 30.0, 'seats': 100},
+                                     'ERC': {'pct': 2.0, 'seats': 7}}, {}, vs)
+    assert no_seats['Derecha'] == {'pct': 40.0, 'seats': None} and no_seats['Izquierda'] == {'pct': 30.0, 'seats': 100}
+    assert no_seats['Otros'] == {'pct': 30.0, 'seats': None}
+
+
 def test_inherited_results_replace_the_blocks_with_the_lineage_of_the_run_vs():
     """`inherited_results`: con `bmaps.vs` de dos lados los bloques del resultado previo siguen el linaje del smap."""
     results = {'date': '2023-07-23', 'year': 2023,
