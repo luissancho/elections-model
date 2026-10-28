@@ -195,3 +195,218 @@ def test_format_data_with_extra_columns_raises_no_setting_with_copy_warning():
         out = format_data(frame, meta=meta)
     assert [w for w in caught if type(w.message).__name__ == 'SettingWithCopyWarning'] == []
     assert list(out.columns) == ['pollster_id', 'pollster', 'points'] and list(frame.columns)[-1] == 'manual'
+
+
+# --- derivación de parties y bmaps de una elección (`derive_event_params`) ---
+
+from mtpy.lib.data import agg_names, derive_event_params, main_parties  # noqa: E402
+
+
+def _matrix(polls_by_party, results_by_party, dates=('2023-07-23',)):
+    """Matriz de un ciclo: `polls_by_party` {name: [valores por sondeo]} y `results_by_party` {name: pct o nan}."""
+    names = list(dict.fromkeys(list(results_by_party) + list(polls_by_party)))
+    n = max((len(v) for v in polls_by_party.values()), default=0)
+    index = pd.MultiIndex.from_arrays([[dates[0]] * n, list(range(1, n + 1)), ['H{}'.format(i) for i in range(n)]],
+                                      names=['event_date', 'days', 'pollster'])
+    polls = pd.DataFrame({name: polls_by_party.get(name, [float('nan')] * n) for name in names}, index=index, dtype=float)
+    events = pd.DataFrame({name: [results_by_party.get(name, float('nan'))] for name in names},
+                          index=pd.Index([dates[0]], name='date'))
+    parties = pd.DataFrame({'name': names})
+    return get_event_dmat('es', dates[0], polls, events, parties), polls.loc[dates[0]] if n else polls.droplevel(0)
+
+
+PARTIES = pd.DataFrame({'name': ['PP', 'PSOE', 'VOX', 'SUMAR', 'Cs', 'ERC', 'PNV', '-', 'NEW'],
+                        'block': ['Derecha', 'Izquierda', 'Derecha', 'Izquierda', 'Derecha', 'Separatista',
+                                  'Regionalista', 'Otros', None]})
+
+
+def test_derive_event_params_past_election():
+    df, polls = _matrix({'PP': [33, 34, 32, 33], 'PSOE': [30, 29, 31, 30], 'VOX': [12, 13, 12, 12], 'SUMAR': [12, 11, 12, 11],
+                         'Cs': [1, float('nan'), float('nan'), float('nan')], 'ERC': [2, 2, 2, 2], 'PNV': [1, 1, 1, 1]},
+                        {'PP': 33.1, 'PSOE': 31.7, 'VOX': 12.4, 'SUMAR': 12.3, 'ERC': 1.9, 'PNV': 1.1, 'Cs': 0.7})
+    out = derive_event_params(df, PARTIES, polls=polls)
+    assert out['parties']['event'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'ERC', 'PNV', 'Cs']
+    assert out['parties']['polls'] == out['parties']['event']
+    assert out['bmaps']['main'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'ERC', 'PNV']  # Cs está en 1 de 4 sondeos
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR'],
+                                      'Separatista': ['ERC'], 'Regionalista': ['PNV']}
+    assert out['bmaps']['vs'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR']}
+    assert list(out['bmaps']) == ['main', 'blocks', 'vs'] and list(out['parties']) == ['event', 'polls']
+    # the order of the file and of the web (`pages.promedios.BLOCK_ORDER`)
+    assert list(out['bmaps']['blocks']) == ['Derecha', 'Izquierda', 'Regionalista', 'Separatista']
+
+
+def test_derive_event_params_future_election_drops_agg_names():
+    nan = float('nan')
+    df, polls = _matrix({'PP': [33, 34], 'PSOE': [30, 29], 'SUMAR': [12, 11], 'VOX': [12, nan], 'Cs': [1, 1]},
+                        {'PP': nan, 'PSOE': nan, 'SUMAR': nan, 'VOX': nan, 'Cs': nan}, dates=('2026-11-29',))
+    smap = {'PSOE': {'type': 'agg', 'names': ['SUMAR']}, 'VOX': [{'type': 'sub', 'names': ['PP']},
+            {'type': 'agg', 'names': ['Cs']}], 'NEW': [], 'PP': {'type': 'sub'}}
+    assert agg_names(smap) == ['SUMAR', 'Cs']
+    out = derive_event_params(df, PARTIES, smap=smap, polls=polls)
+    assert out['parties']['polls'] == ['PP', 'PSOE', 'VOX', 'SUMAR', 'Cs']  # por media del ciclo: VOX 12 > SUMAR 11,5
+    assert out['parties']['event'] == ['PP', 'PSOE', 'VOX']
+    assert out['bmaps']['main'] == ['PP', 'PSOE', 'VOX']  # VOX sale en 1 de 2, pero absorbe a Cs, que sale en los 2
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP', 'VOX', 'Cs'], 'Izquierda': ['PSOE', 'SUMAR']}
+    assert out['bmaps']['vs'] == out['bmaps']['blocks']
+
+
+def test_derive_event_params_ignores_parties_without_a_block():
+    df, polls = _matrix({'PP': [33, 34], '-': [3, 4], 'NEW': [1, 1]}, {'PP': 33.0, '-': 3.5, 'NEW': 1.0})
+    out = derive_event_params(df, PARTIES, polls=polls)
+    assert out['parties']['polls'] == ['PP', '-', 'NEW']
+    assert out['bmaps']['blocks'] == {'Derecha': ['PP']} and out['bmaps']['vs'] == {'Derecha': ['PP']}
+
+
+def test_derive_event_params_result_only_election():
+    df, polls = _matrix({}, {'PSOE': 35.3, 'PP': 17.5})
+    out = derive_event_params(df, PARTIES, polls=polls)
+    assert out['parties'] == {'event': ['PSOE', 'PP'], 'polls': ['PSOE', 'PP']}
+    assert out['bmaps'] == {'main': [], 'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE']},
+                            'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE']}}
+
+
+def test_derive_event_params_empty_matrix():
+    df, polls = _matrix({}, {'PSOE': float('nan')}, dates=('2030-06-16',))
+    assert derive_event_params(df, PARTIES, polls=polls) == {'parties': {'event': [], 'polls': []},
+                                                'bmaps': {'main': [], 'blocks': {}, 'vs': {}}}
+
+
+def _polls(days, values):
+    """Sondeos de un ciclo: `days` por sondeo y `values` {name: [valor por sondeo]} (índice days, pollster)."""
+    index = pd.MultiIndex.from_arrays([days, ['H{}'.format(i) for i in range(len(days))]], names=['days', 'pollster'])
+    return pd.DataFrame(values, index=index, dtype=float)
+
+
+def test_main_parties_window_is_the_last_42_days_widened_to_the_minimum_polls():
+    nan = float('nan')
+    # 2 polls inside 42 days, 4 older: with min_polls=4 the window takes the 4 most recent ones
+    polls = _polls([10, 30, 50, 60, 70, 80], {'PP': [30] * 6, 'UP': [3, 3, 3, nan, nan, nan], 'OLD': [nan, nan, nan, 5, 5, 5]})
+    assert main_parties(polls, ['PP', 'UP', 'OLD'], None, min_polls=4) == ['PP']  # UP 3 de 4 = 75 %, OLD 1 de 4
+    assert main_parties(polls, ['PP', 'UP', 'OLD'], None, min_polls=2) == ['PP', 'UP']  # sólo los 2 de la ventana
+    assert main_parties(polls, ['PP', 'UP', 'OLD'], None, min_polls=4, presence=75) == ['PP', 'UP']
+
+
+def test_main_parties_needs_presence_and_a_minimum_share():
+    nan = float('nan')
+    polls = _polls([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], {'PP': [30] * 10, 'UP': [3] * 9 + [nan], 'SALF': [2] * 6 + [nan] * 4,
+                                                     'TINY': [0.5] * 10})
+    assert main_parties(polls, ['PP', 'UP', 'SALF', 'TINY'], None, min_polls=5) == ['PP', 'UP']
+    # the order of `event` is kept, and a party outside `event` never enters
+    assert main_parties(polls, ['UP', 'PP'], None, min_polls=5) == ['UP', 'PP']
+
+
+def test_main_parties_counts_the_names_a_party_absorbs_nationwide():
+    nan = float('nan')
+    # FA is the new name of SUMAR: the old polls list SUMAR, the new ones FA
+    polls = _polls([1, 2, 3, 4, 5, 6], {'PP': [30] * 6, 'FA': [7, 7, nan, nan, nan, nan], 'SUMAR': [nan, nan, 7, 7, 7, 7],
+                                        'COMPROMIS': [1, 1, 1, nan, nan, nan], 'UP': [3] * 6})
+    smap = {'FA': {'type': 'agg', 'names': ['SUMAR']}, 'COMPROMIS': {'type': 'agg', 'names': ['UP'], 'regions': ['3', '12', '46']}}
+    assert main_parties(polls, ['PP', 'FA', 'UP', 'COMPROMIS'], smap, min_polls=6) == ['PP', 'FA', 'UP']
+
+
+def test_main_parties_without_polls_is_empty():
+    assert main_parties(_polls([], {'PP': []}), ['PP'], None) == []
+    assert main_parties(None, ['PP'], None) == []
+
+
+# --- lectura, formato y escritura de params.json ---
+
+import json  # noqa: E402
+
+from mtpy.lib.data import format_params, read_params, write_params  # noqa: E402
+
+SAMPLE = {'es': {'2026-11-29': {
+    'parties': {'event': ['PP', 'PSOE'], 'polls': ['PP', 'PSOE', 'SUMAR']},
+    'bmaps': {'min': {'PP': 'PP', 'VOX+SALF': ['VOX', 'SALF']}, 'main': ['PP', 'PSOE'],
+              'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'SUMAR']}, 'vs': {'Derecha': ['PP']}},
+    'smap': {'FA': {'type': 'agg', 'names': ['SUMAR']}, 'MP': [{'type': 'sub', 'names': ['UP']}, {'type': 'agg', 'names': ['C']}],
+             'UP': []}},
+    '2011-05-22': {'threshold': None, 'threshold_scope': 5}}}
+
+EXPECTED = '''{
+    "es": {
+        "2026-11-29": {
+            "parties": {
+                "event": [
+                    "PP", "PSOE"
+                ],
+                "polls": [
+                    "PP", "PSOE", "SUMAR"
+                ]
+            },
+            "bmaps": {
+                "min": {
+                    "PP": "PP",
+                    "VOX+SALF": ["VOX", "SALF"]
+                },
+                "main": [
+                    "PP", "PSOE"
+                ],
+                "blocks": {
+                    "Derecha": ["PP"],
+                    "Izquierda": ["PSOE", "SUMAR"]
+                },
+                "vs": {
+                    "Derecha": ["PP"]
+                }
+            },
+            "smap": {
+                "FA": {"type": "agg", "names": ["SUMAR"]},
+                "MP": [{"type": "sub", "names": ["UP"]}, {"type": "agg", "names": ["C"]}],
+                "UP": []
+            }
+        },
+        "2011-05-22": {
+            "threshold": null,
+            "threshold_scope": 5
+        }
+    }
+}
+'''
+
+
+def test_format_params_reproduces_the_file_style():
+    assert format_params(SAMPLE) == EXPECTED
+
+
+def test_format_params_wraps_long_lists_at_100_columns():
+    names = ['PARTIDO{:02d}'.format(i) for i in range(20)]
+    text = format_params({'es': {'2023-07-23': {'parties': {'event': names, 'polls': []}}}})
+    lines = text.split('\n')
+    body = [line for line in lines if line.startswith(' ' * 20 + '"PARTIDO')]
+    assert len(body) > 1 and all(len(line) <= 100 for line in body)
+    assert all(line.endswith(',') for line in body[:-1]) and not body[-1].endswith(',')
+    assert json.loads(text)['es']['2023-07-23']['parties'] == {'event': names, 'polls': []}
+
+
+def test_format_params_round_trips_the_repository_file():
+    data = json.loads(open('data/params.json', encoding='utf-8').read())
+    assert json.loads(format_params(data)) == data
+
+
+def test_read_and_write_params_use_the_data_file_system(fresh_app, tmp_path):
+    from mtpy.core.io import FileSystem
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    path = write_params(SAMPLE)
+    assert path == str(tmp_path / 'params.json') and open(path, encoding='utf-8').read() == EXPECTED
+    assert read_params() == SAMPLE
+
+
+def test_read_and_write_params_are_utf8_whatever_the_locale(fresh_app, tmp_path, monkeypatch):
+    # Foco: el fichero lleva nombres con tilde (JxSí); ni la lectura ni la escritura dependen del locale
+    import mtpy.core.io as core_io
+    from mtpy.core.io import FileSystem
+    real_open = open
+
+    def strict_open(path, mode='r', *args, **kwargs):
+        if 'b' not in mode and kwargs.get('encoding') != 'utf-8':
+            raise AssertionError('text open without utf-8: {} {}'.format(path, mode))
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(core_io, 'open', strict_open, raising=False)
+    fresh_app.set('data', FileSystem(str(tmp_path)))
+    data = {'es-ct': {'2024-05-12': {'parties': {'event': ['JxSí'], 'polls': ['JxSí']}}}}
+    path = write_params(data)
+    assert 'JxSí'.encode('utf-8') in real_open(path, 'rb').read()
+    assert read_params() == data

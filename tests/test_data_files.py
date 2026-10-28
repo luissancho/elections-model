@@ -10,7 +10,7 @@ DATA = os.path.join(ROOT, 'data')
 
 
 def test_params_regions_are_valid_province_codes():
-    params = json.load(open(os.path.join(DATA, 'params.json')))
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
     districts = pd.read_csv(os.path.join(DATA, 'es-districts.csv'))
 
     for scope, events in params.items():
@@ -30,7 +30,7 @@ def test_params_regions_are_valid_province_codes():
 
 def test_scoped_json_files_only_use_known_scopes():
     scopes = set(pd.read_csv(os.path.join(DATA, 'es-scopes.csv'))['scode'])
-    params = json.load(open(os.path.join(DATA, 'params.json')))
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
     urls = json.load(open(os.path.join(DATA, 'wikipedia', 'wp-urls.json')))
     maps = json.load(open(os.path.join(DATA, 'wikipedia', 'wp-maps.json')))
     assert {'parties', 'pollsters', 'sponsors', 'scopes'} <= set(maps)
@@ -103,7 +103,7 @@ def test_regions_use_ine_codes():
 
 def test_threshold_overrides_are_valid():
     """M11: los umbrales históricos por evento de `params.json` son nulos o están en (0, 100]."""
-    params = json.load(open(os.path.join(DATA, 'params.json')))
+    params = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))
     found = 0
     for scope, events in params.items():
         for event_date, conf in events.items():
@@ -111,8 +111,10 @@ def test_threshold_overrides_are_valid():
                 if key in conf:
                     found += 1
                     assert conf[key] is None or 0 < conf[key] <= 100, (scope, event_date, key)
-    assert params['es-mc']['2015-05-24'] == {'threshold': None, 'threshold_scope': 5}
-    assert params['es-cn']['2011-05-22'] == {'threshold': 30, 'threshold_scope': 6}
+    murcia = params['es-mc']['2015-05-24']
+    assert (murcia['threshold'], murcia['threshold_scope']) == (None, 5)
+    canarias = params['es-cn']['2011-05-22']
+    assert (canarias['threshold'], canarias['threshold_scope']) == (30, 6)
     assert found >= 8
 
 
@@ -171,11 +173,12 @@ def test_poll_fixes_files_are_well_formed():
 
 
 def test_params_2026_general_election_line_up():
-    conf = json.load(open(os.path.join(DATA, 'params.json')))['es']['2026-11-29']
+    conf = json.load(open(os.path.join(DATA, 'params.json'), encoding='utf-8'))['es']['2026-11-29']
     # Since 2026-10-26 Compromís is not simulated apart: Wikipedia folds it into Frente Amplio, the new name of
     # Sumar, so FA inherits Sumar's base everywhere (Alicante, Castellón and Valencia included)
     assert 'COMPROMIS' not in conf['parties']['event'] and 'COMPROMIS' not in conf['parties']['polls']
-    assert conf['bmaps']['blocks']['Regionalista'] == ['PNV', 'CC', 'BNG']
+    assert 'COMPROMIS' not in [p for names in conf['bmaps']['blocks'].values() for p in names]
+    assert {'PNV', 'CC', 'BNG'} <= set(conf['bmaps']['blocks']['Regionalista'])
     assert 'COMPROMIS' not in conf['smap']
     assert conf['smap']['FA'] == {'type': 'agg', 'names': ['SUMAR']}
     assert conf['smap']['UP'] == {'type': 'sub', 'names': ['FA'], 'regions': {'exclude': ['8', '17', '25', '43']}}

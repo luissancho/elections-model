@@ -1,4 +1,5 @@
 """Tests de `mtpy.lib.load`: la secuencia de carga de sondeos de Wikipedia, con un loader y un `Computer` falsos."""
+import json
 import warnings
 
 import pandas as pd
@@ -284,3 +285,93 @@ def test_load_polls_survives_a_failing_parties_check():
         result, loader, computer, *_ = run(BrokenChecks())
     assert result['status'] == 'loaded' and computer.calls == [(True, True)]
     assert [str(w.message) for w in record] == ["parties checks failed: KeyError: 'PP'"]
+
+
+# --- parties y bmaps de params.json (`load_params`) ---
+
+from mtpy.lib.load import NO_EVENTS, changed_keys, load_params, merge_event_params  # noqa: E402
+
+DERIVED = {'parties': {'event': ['PP', 'PSOE'], 'polls': ['PP', 'PSOE', 'SUMAR']},
+           'bmaps': {'main': ['PP', 'PSOE'], 'blocks': {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'SUMAR']},
+                     'vs': {'Derecha': ['PP'], 'Izquierda': ['PSOE', 'SUMAR']}}, 'smap': {'SUMAR': []}}
+FILE = {'es': {'2026-11-29': {'parties': {'event': ['PP'], 'polls': ['PP']},
+                              'bmaps': {'max': ['PP'], 'min': {'PP': 'PP'}, 'main': ['PP', 'PSOE'], 'blocks': {}, 'vs': {}},
+                              'smap': {'FA': {'type': 'agg', 'names': ['SUMAR']}}},
+               '2011-05-22': {'threshold': None, 'threshold_scope': 5}},
+        'es-pv': {'2024-04-21': {'smap': {}}}}
+
+
+class FakeParamsStore:
+    def __init__(self, data):
+        self.data = json.loads(json.dumps(data))
+        self.written = None
+
+    def read(self):
+        return json.loads(json.dumps(self.data))
+
+    def write(self, data):
+        self.written = data
+
+
+def test_merge_event_params_keeps_manual_keys_and_their_order():
+    merged = merge_event_params(FILE['es']['2026-11-29'], DERIVED)
+    assert list(merged) == ['parties', 'bmaps', 'smap']
+    assert list(merged['bmaps']) == ['max', 'min', 'main', 'blocks', 'vs']
+    assert merged['bmaps']['max'] == ['PP'] and merged['smap'] == FILE['es']['2026-11-29']['smap']
+    assert merged['parties'] == DERIVED['parties'] and merged['bmaps']['vs'] == DERIVED['bmaps']['vs']
+    assert list(merge_event_params({'threshold': 3}, DERIVED)) == ['parties', 'bmaps', 'threshold']
+    assert changed_keys(FILE['es']['2026-11-29'], merged) == ['parties.event', 'parties.polls', 'bmaps.blocks', 'bmaps.vs']
+    assert changed_keys({}, merged) == ['parties.event', 'parties.polls', 'bmaps.main', 'bmaps.blocks', 'bmaps.vs']
+
+
+def test_load_params_rewrites_the_scope_and_reports_each_change():
+    store = FakeParamsStore(FILE)
+    seen = []
+    derived = {'2026-11-29': DERIVED, '2023-07-23': DERIVED}
+
+    def deriver(scope, overrides):
+        seen.append((scope, overrides))
+        return derived
+
+    out = load_params('es', deriver=deriver, reader=store.read, writer=store.write,
+                      report=lambda text, level=1: seen.append((level, text)))
+    assert seen[0] == ('es', FILE['es'])
+    assert out['status'] == 'loaded' and out['n_events'] == 2 and out['n_changed'] == 2 and out['n_skipped'] == 0
+    assert out['changed'] == {'2026-11-29': ['parties.event', 'parties.polls', 'bmaps.blocks', 'bmaps.vs'],
+                              '2023-07-23': ['parties.event', 'parties.polls', 'bmaps.main', 'bmaps.blocks', 'bmaps.vs']}
+    assert set(out['seconds']) == {'read', 'derive', 'save', 'total'}
+    assert list(store.written['es']) == ['2026-11-29', '2023-07-23', '2011-05-22']
+    assert store.written['es']['2011-05-22'] == FILE['es']['2011-05-22'] and store.written['es-pv'] == FILE['es-pv']
+    assert store.written['es']['2023-07-23'] == {'parties': DERIVED['parties'], 'bmaps': DERIVED['bmaps']}
+    assert (1, 'es 2023-07-23: bmaps.main null -> ["PP", "PSOE"]') in seen
+    assert (1, 'es 2026-11-29: parties.event ["PP"] -> ["PP", "PSOE"]') in seen
+
+
+def test_load_params_dry_run_writes_nothing():
+    store = FakeParamsStore(FILE)
+    out = load_params('es', save=False, deriver=lambda scope, overrides: {'2026-11-29': DERIVED},
+                      reader=store.read, writer=store.write)
+    assert out['status'] == 'checked' and store.written is None and 'save' not in out['seconds']
+
+
+def test_load_params_skips_an_election_without_matrix_and_keeps_its_entry():
+    store = FakeParamsStore(FILE)
+    empty = {'parties': {'event': [], 'polls': []}, 'bmaps': {'main': [], 'blocks': {}, 'vs': {}}, 'smap': {}}
+    out = load_params('es', deriver=lambda scope, overrides: {'2026-11-29': empty, '2011-05-22': empty},
+                      reader=store.read, writer=store.write)
+    assert out['n_skipped'] == 2 and out['skipped'] == ['2026-11-29', '2011-05-22'] and out['n_changed'] == 0
+    assert store.written['es'] == FILE['es']
+
+
+def test_load_params_creates_a_missing_scope_with_dates_descending():
+    store = FakeParamsStore(FILE)
+    load_params('es-md', deriver=lambda scope, overrides: {'2023-05-28': DERIVED, '2027-05-23': DERIVED},
+                reader=store.read, writer=store.write)
+    assert list(store.written) == ['es', 'es-pv', 'es-md']
+    assert list(store.written['es-md']) == ['2027-05-23', '2023-05-28']
+    assert store.written['es-md']['2027-05-23'] == {'parties': DERIVED['parties'], 'bmaps': DERIVED['bmaps']}
+
+
+def test_load_params_fails_without_elections():
+    with pytest.raises(ValueError, match=NO_EVENTS.format('es-xx')):
+        load_params('es-xx', deriver=lambda scope, overrides: {}, reader=lambda: {}, writer=lambda data: None)
