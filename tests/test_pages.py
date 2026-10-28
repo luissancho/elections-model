@@ -1917,14 +1917,14 @@ def test_eleccion_detail_without_cycle_part_shows_a_notice(events_site, monkeypa
 
 
 def test_eleccion_detail_hides_the_results_beyond_fifteen_without_params(events_site, monkeypatch):
-    """Sin lista de partidos en los parámetros (o sin ninguno de sus partidos en ella), la tabla enseña los 15
-    primeros; sin bloques en ninguna fuente, ni selector ni tabla por bloques."""
+    """Sin lista de partidos en los parámetros (o sin ninguno de sus partidos en ella) y sin partidos con escaño,
+    la tabla enseña los 15 primeros; sin bloques en ninguna fuente, ni selector ni tabla por bloques."""
     real = pages.elecciones.event_part
 
     def part(scope, date, name):
         data = real(scope, date, name)
         if name == 'results':
-            rows = [dict(data['rows'][0], party=f'P{i:02d}', seats=1) for i in range(23)]
+            rows = [dict(data['rows'][0], party=f'P{i:02d}', seats=0) for i in range(23)]
             data = {**data, 'rows': rows}
         if name == 'meta':
             data = {**data, 'blocks': {}}
