@@ -848,3 +848,10 @@ def test_bullseye_draws_only_the_rings_asked_for():
 def test_scatter_diagonal_and_fixed_axes():
     option = run_js('sc.scatterOption([{x: 1, y: 2, name: "a"}], {x: "x", y: "y", name: "name", diagonal: true, axes: {xMin: -10, xMax: 15, yMin: -5, yMax: 15, interval: 5}})')
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
+
+
+def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():
+    cat = 'new c.Catalog({parties: [{name: "PNV", color: "#00ff00"}], bmaps: {blocks: {Otros: ["PNV"]}}})'
+    assert run_js('%s.orderBlocks(["Derecha", "Otros", "Izquierda", "Separatista"])' % cat) == [
+        'Izquierda', 'Otros', 'Derecha', 'Separatista']
+    assert run_js('%s.blockColor("Otros")' % cat) == '#9e9e9e'

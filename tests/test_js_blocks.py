@@ -40,8 +40,8 @@ def test_block_series_sums_means_and_adds_half_widths_in_quadrature():
 
 
 def test_block_series_without_any_party_of_the_block_is_null():
-    out = run_js('b.blockSeries(series, {Otros: ["CUP"], Derecha: ["PP", "CUP"]})')
-    assert out['mean']['Otros'] == [None, None] and out['lo']['Otros'] == [None, None]
+    out = run_js('b.blockSeries(series, {Nadie: ["CUP"], Derecha: ["PP", "CUP"]})')
+    assert out['mean']['Nadie'] == [None, None] and out['lo']['Nadie'] == [None, None]
     assert out['mean']['Derecha'] == [30, 31] and out['lo']['Derecha'] == [28, 29]
 
 
@@ -108,3 +108,22 @@ def test_series_hash_carries_the_layers_only_when_one_is_left():
     assert run_js('b.seriesHash({window: "3m", view: "partidos", selected: null})') == '#ventana=3m&vista=partidos'
     back = run_js(f'b.parseSeriesHash(b.seriesHash({{window: "3m", view: "bloques", selected: ["Derecha"], layers: "sondeos"}}), {ctx})')
     assert back == {'window': '3m', 'view': 'bloques', 'selected': ['Derecha'], 'layers': 'sondeos'}
+
+
+REST = {'Izquierda': ['PSOE'], 'Derecha': ['PP', 'VOX'], 'Otros': ['PNV']}
+
+
+def test_rest_block_series_is_the_complement_with_the_band_of_the_others():
+    out = run_js('b.blockSeries(series, %s)' % json.dumps(REST))
+    assert out['mean']['Otros'] == [100 - 28 - 40, 100 - 28 - 31]
+    half = (2 ** 2 + 2 ** 2 + 2 ** 2) ** 0.5          # PSOE, PP, VOX on day one
+    assert out['lo']['Otros'][0] == pytest.approx(32 - half) and out['hi']['Otros'][0] == pytest.approx(32 + half)
+
+
+def test_rest_block_needs_every_other_block():
+    out = run_js('b.blockPolls(polls, %s)' % json.dumps(REST))
+    assert out['polls'][0]['Otros'] == 100 - 28 - 40
+    assert 'Otros' not in out['polls'][1]                # poll B has no Derecha
+    res = run_js('b.blockResult({date: "d", values: {PP: 33, VOX: 12, PSOE: 32, PNV: 1}}, %s)' % json.dumps(REST))
+    assert res['values'] == {'Izquierda': 32, 'Derecha': 45, 'Otros': 23}
+    assert 'Otros' not in run_js('b.blockResult({date: "d", values: {PSOE: 32}}, %s)' % json.dumps(REST))['values']
