@@ -8,14 +8,14 @@ from typing import Optional
 
 from .. import bundle
 from ..webapi import site
-from .common import OTHERS_COLOR, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
+from .common import OTHERS_COLOR, REST_BLOCK, Catalog, api_url, block_color, bundle_part, common_context, ink_color, part
 from .filters import (DASH, _is_missing, _parse_datetime, delta_text, fmt_date, fmt_date_short, fmt_int, fmt_num, fmt_pct,
                       fmt_prob, fmt_range, gradient)
 from .slugs import pollster_href
 
 PAGE_SIZE = 15
 MONTH_LABELS = ('Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic')
-BLOCK_ORDER = ('Derecha', 'Izquierda', 'Regionalista', 'Separatista')
+BLOCK_ORDER = ('Izquierda', 'Derecha', REST_BLOCK)
 
 
 def _deltas(row: dict, before: Optional[dict]) -> dict:
@@ -62,14 +62,16 @@ def inherited_results(results: Optional[dict], meta: dict) -> Optional[dict]:
     results : dict or None
         ``last_results`` of the scope, or ``None`` without a published election.
     meta : dict
-        Data of the meta part (``parties``, ``smap``).
+        Data of the meta part (``parties``, ``smap``, ``bmaps``).
 
     Returns
     -------
     dict or None
         A copy of ``results`` whose ``parties`` has, for every party with sources in the results, ``{'seats', 'pct',
         'inherited'}``: the sums (``None`` when no part has a value, the vote with two decimals) and the parties
-        summed, the party itself first when it had a result; the other entries untouched. ``None`` without results.
+        summed, the party itself first when it had a result; the other entries untouched. When ``meta.bmaps.vs``
+        has both ``Izquierda`` and ``Derecha``, ``blocks`` is replaced by ``lineage_blocks(...)``, the previous
+        election regrouped by today's ``vs``; otherwise it stays as it was. ``None`` without results.
     """
     if results is None:
         return None
@@ -107,7 +109,60 @@ def inherited_results(results: Optional[dict], meta: dict) -> Optional[dict]:
 
         parties[name] = {'seats': total('seats'), 'pct': total('pct', 2), 'inherited': members}
 
-    return results | {'parties': parties}
+    vs = (meta.get('bmaps') or {}).get('vs') or {}
+    if not (vs.get('Izquierda') and vs.get('Derecha')):
+        return results | {'parties': parties}
+
+    return results | {'parties': parties, 'blocks': lineage_blocks(results.get('parties') or {}, parties, vs)}
+
+
+def lineage_blocks(previous: dict, inherited: dict, vs: dict) -> dict:
+    """
+    The blocks of the last election regrouped by today's ``vs`` through the lineage of the source map: a previous
+    party goes to the block that lists it or that lists the party which inherits it, and counts once.
+
+    Parameters
+    ----------
+    previous : dict
+        Original ``results['parties']``, ``{name: {'pct', 'seats'}}``.
+    inherited : dict
+        The same parties after ``inherited_results``; ``inherited[name]['inherited']`` lists the parties summed.
+    vs : dict
+        ``meta.bmaps.vs``: ``{'Izquierda': [names], 'Derecha': [names]}``.
+
+    Returns
+    -------
+    dict
+        ``{'Izquierda'|'Derecha'|REST_BLOCK: {'pct', 'seats'}}``; the rest block is what is left up to 100 % and
+        up to the seats of all the previous parties. A side with no mapped party (or none with a value) has ``None``
+        and so does the rest block, which needs both sides.
+    """
+    sides = ('Izquierda', 'Derecha')
+    mapped = {side: [] for side in sides}
+
+    for name, result in previous.items():
+        for side in sides:
+            members = vs.get(side) or []
+            if name in members or any(name in ((inherited.get(heir) or {}).get('inherited') or []) for heir in members):
+                mapped[side].append(result)
+                break
+
+    def total(results, key, digits=None):
+        values = [result.get(key) for result in results if result.get(key) is not None]
+        if not values:
+            return None
+        return sum(values) if digits is None else round(sum(values), digits)
+
+    blocks = {side: {'pct': total(mapped[side], 'pct', 2), 'seats': total(mapped[side], 'seats')} for side in sides}
+    everything = list(previous.values())
+    left, right = blocks['Izquierda'], blocks['Derecha']
+    blocks[REST_BLOCK] = {
+        'pct': None if left['pct'] is None or right['pct'] is None else round(100 - left['pct'] - right['pct'], 2),
+        'seats': None if None in (left['seats'], right['seats'], total(everything, 'seats'))
+        else total(everything, 'seats') - left['seats'] - right['seats'],
+    }
+
+    return blocks
 
 
 def result_rows(summary: dict, results: Optional[dict] = None) -> list:

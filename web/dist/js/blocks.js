@@ -1,5 +1,7 @@
 // Block view of the poll average (series, polls, projection and official result) and the state of its controls in the URL hash.
 // Pure functions without DOM nor ECharts, shared by the Promedios page and the parity test.
+// A block map with `REST_BLOCK` (Otros) gets that block as the rest: 100 minus the other blocks, whatever
+// parties the map lists under it; a map without it (runs published with four blocks) is summed as it comes.
 import {DEFAULT_WINDOW} from './range.js';
 
 const WINDOW_KEY = 'ventana';
@@ -10,6 +12,8 @@ const SELECTED_KEY = 'sel';
 const LAYERS_KEY = 'mostrar';
 const LAYERS = ['sondeos', 'promedio', 'ambos'];
 const DEFAULT_LAYERS = 'ambos';
+/** Name of the block that holds the rest of the vote (what Izquierda and Derecha leave out). */
+export const REST_BLOCK = 'Otros';
 const PARTIES_VIEW = 'partidos';
 const BLOCKS_VIEW = 'bloques';
 
@@ -19,11 +23,23 @@ function present(value) {
 }
 
 /**
+ * Value of the rest block: 100 minus the other blocks, only when there are others and all of them have a value.
+ *
+ * @param {Array<number|null|undefined>} others values of the blocks other than the rest block
+ * @returns {number|null} the complement to 100, null when any value is missing
+ */
+function restOf(others) {
+  return others.length && others.every(present) ? 100 - others.reduce((total, value) => total + value, 0) : null;
+}
+
+/**
  * Poll average of every block: the sum of the means of its parties and a band that adds their half-widths in
  * quadrature (independent draws, as the notebook does: the blocks add the variances of their parties).
  *
  * Per date and block, `mean` is the sum of the non-null means of its parties (null when none has one) and
- * `lo`/`hi` are `mean ∓ sqrt(Σ((hi_i − lo_i) / 2)²)` over the parties with a band on that date.
+ * `lo`/`hi` are `mean ∓ sqrt(Σ((hi_i − lo_i) / 2)²)` over the parties with a band on that date. The `REST_BLOCK`,
+ * if the map has one, is `100 − Σ` of the other blocks' means (null on a date when any of them is null) with
+ * a half-width of `sqrt(Σ half²)` over them.
  *
  * @param {{dates: string[], mean: object, lo: object, hi: object}} series `data` of the series part
  * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)
@@ -33,7 +49,8 @@ function present(value) {
 export function blockSeries(series, blocks) {
   const names = Object.keys(blocks);
   const out = {dates: series.dates, parties: names, mean: {}, lo: {}, hi: {}};
-  for (const block of names) {
+  const others = names.filter((block) => block !== REST_BLOCK);
+  for (const block of others) {
     const members = blocks[block];
     out.mean[block] = [];
     out.lo[block] = [];
@@ -58,13 +75,26 @@ export function blockSeries(series, blocks) {
       out.hi[block].push(mean === null ? null : mean + half);
     });
   }
+  if (names.includes(REST_BLOCK)) {
+    out.mean[REST_BLOCK] = [];
+    out.lo[REST_BLOCK] = [];
+    out.hi[REST_BLOCK] = [];
+    series.dates.forEach((date, i) => {
+      const mean = restOf(others.map((block) => out.mean[block][i]));
+      const half = Math.sqrt(others.reduce((total, block) => total + ((out.hi[block][i] ?? 0) - (out.mean[block][i] ?? 0)) ** 2, 0));
+      out.mean[REST_BLOCK].push(mean);
+      out.lo[REST_BLOCK].push(mean === null ? null : mean - half);
+      out.hi[REST_BLOCK].push(mean === null ? null : mean + half);
+    });
+  }
   return out;
 }
 
 /**
  * Polls by block: each poll keeps `date`, `pollster`, `pollster_id`, `name` and `sample_size` (the box of the
  * poll) and gets, per block, the sum of the values of its parties present in the poll; a poll with none of the
- * parties of a block has no key for it.
+ * parties of a block has no key for it. The `REST_BLOCK` is `100 −` the other blocks of the poll, only when
+ * the poll has all of them.
  *
  * @param {{polls: object[]}} polls the polls of the page (`chart_polls`)
  * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)
@@ -79,10 +109,16 @@ export function blockPolls(polls, blocks) {
         date: poll.date, pollster: poll.pollster, pollster_id: poll.pollster_id, name: poll.name,
         sample_size: poll.sample_size,
       };
-      for (const block of names) {
+      for (const block of names.filter((name) => name !== REST_BLOCK)) {
         const values = blocks[block].map((name) => poll[name]).filter(present);
         if (values.length) {
           row[block] = values.reduce((total, value) => total + value, 0);
+        }
+      }
+      if (names.includes(REST_BLOCK)) {
+        const rest = restOf(names.filter((name) => name !== REST_BLOCK).map((name) => row[name]));
+        if (rest !== null) {
+          row[REST_BLOCK] = rest;
         }
       }
       return row;
@@ -104,7 +140,7 @@ export function blockProjection(projection) {
 
 /**
  * Official result by block: the sum of the shares of the parties of each block present in `values`; a block
- * with none of them has no key.
+ * with none of them has no key. The `REST_BLOCK` is `100 −` the other blocks, only when all of them have a value.
  *
  * @param {{date: string, values: Object<string, number>}} result the result marked on the series chart
  * @param {Object<string, string[]>} blocks block → party names
@@ -114,8 +150,14 @@ export function blockResult(result, blocks) {
   const values = {};
   for (const [block, members] of Object.entries(blocks)) {
     const found = members.map((name) => result.values[name]).filter(present);
-    if (found.length) {
+    if (block !== REST_BLOCK && found.length) {
       values[block] = found.reduce((total, value) => total + value, 0);
+    }
+  }
+  if (REST_BLOCK in blocks) {
+    const rest = restOf(Object.keys(blocks).filter((block) => block !== REST_BLOCK).map((block) => values[block]));
+    if (rest !== null) {
+      values[REST_BLOCK] = rest;
     }
   }
   return {date: result.date, values};

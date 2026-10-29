@@ -1,7 +1,13 @@
 // Party catalogue built from the data of the meta part.
+// The blocks view is ordered Izquierda, Otros, Derecha (BLOCK_VIEW_ORDER; unknown names last) and the rest block
+// Otros is always painted grey (OTHERS_COLOR); parties keep their own block order (BLOCK_ORDER).
+import {REST_BLOCK} from './blocks.js';
 
 export const OTHERS_COLOR = '#9e9e9e';
+// Order of the parties by block
 export const BLOCK_ORDER = ['Izquierda', 'Separatista', 'Regionalista', 'Derecha'];
+// Order of the blocks view (hemicycle, stacked bar): the rest sits between the two sides
+export const BLOCK_VIEW_ORDER = ['Izquierda', REST_BLOCK, 'Derecha'];
 
 export class Catalog {
   /** @param {object} meta the `data` member of the meta envelope */
@@ -26,8 +32,11 @@ export class Catalog {
     return party ? party.block : null;
   }
 
-  /** Colour of the first party listed for the block in `bmaps.vs`, then `bmaps.blocks`. */
+  /** Colour of the first party listed for the block in `bmaps.vs`, then `bmaps.blocks`; the rest block is always grey. */
   blockColor(block) {
+    if (block === REST_BLOCK) {
+      return OTHERS_COLOR;
+    }
     for (const key of ['vs', 'blocks']) {
       const names = (this.bmaps[key] || {})[block];
       if (names && names.length) {
@@ -37,11 +46,11 @@ export class Catalog {
     return OTHERS_COLOR;
   }
 
-  /** Sort block names by BLOCK_ORDER; unknown blocks go last, in input order. */
+  /** Sort block names by BLOCK_VIEW_ORDER (Izquierda, Otros, Derecha); unknown blocks go last, in input order. */
   orderBlocks(names) {
     const rank = (name) => {
-      const index = BLOCK_ORDER.indexOf(name);
-      return index < 0 ? BLOCK_ORDER.length : index;
+      const index = BLOCK_VIEW_ORDER.indexOf(name);
+      return index < 0 ? BLOCK_VIEW_ORDER.length : index;
     };
     return [...names].sort((a, b) => rank(a) - rank(b));
   }

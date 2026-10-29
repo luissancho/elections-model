@@ -53,7 +53,7 @@
           rating de la casa); la línea es el promedio ponderado del modelo. El selector Sondeos / Promedio / Ambos
           deja a la vista sólo los puntos, sólo la línea, o las dos cosas, para leer mejor cada una en el móvil. En el modo Elección, la línea discontinua
           lleva el voto estimado hasta el día de la votación y la barra del final es el rango del 95% de cada partido
-          ese día: pasa por el punto para ver las cifras. En la vista Bloques, cada bloque suma sus partidos.
+          ese día: pasa por el punto para ver las cifras. En la vista Bloques, cada bloque suma sus partidos y Otros es lo que falta hasta 100.
           Pulsa un partido de la leyenda para ocultarlo o mostrarlo.
         </p>
         <p>
@@ -168,15 +168,16 @@
           </div>
           {% call m.how() %}
           <p>
-            Cada bloque suma el voto y los escaños de sus partidos; los pactos entre bloques no cuentan aquí. La
-            probabilidad de mayoría absoluta de cada bloque y la calculadora de mayorías están en la pestaña
+            Izquierda y Derecha suman el voto y los escaños de sus partidos; Otros es el resto hasta 100 y hasta la
+            cámara. Los pactos entre bloques no cuentan aquí. La
+            probabilidad de mayoría absoluta de Izquierda y Derecha y la calculadora de mayorías están en la pestaña
             Escaños.
           </p>
           {% if results_year %}
           <p>
-            Las columnas «vs {{ results_year }}» comparan con el resultado oficial del {{ results_date|date }}, sumando en
-            cada bloque los partidos de entonces, también los que ya no existen: flecha verde si el bloque sube y roja
-            si baja.
+            Las columnas «vs {{ results_year }}» comparan con el resultado oficial del {{ results_date|date }}, reagrupado con los
+            bloques de hoy: cada partido de entonces suma en el bloque de su heredero, como en los partidos, y el que no
+            tiene heredero en Izquierda ni en Derecha va a Otros. Flecha verde si el bloque sube y roja si baja.
           </p>
           {% endif %}
           {% endcall %}
