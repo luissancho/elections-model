@@ -90,6 +90,12 @@ incluye el total del ámbito, `id` 0, que es la cámara entera),
 simulaciones y `export` suma la escritura de ambos modos y de los ficheros del ciclo), `freeze` y
 `limit_date`.
 
+Enmienda 2026-10-29 (bloques Izquierda, Derecha y Otros): `bmaps.blocks` es el mapa web de tres bloques, no el de
+cuatro del modelo: `Izquierda` y `Derecha` son los partidos de `bmaps.vs` y `Otros` lista los partidos simulados que
+quedan fuera de `vs`. Si a `vs` le falta un lado, `bmaps` es el del modelo sin cambios. `bmaps.vs` y `bmaps.main` no
+cambian. Los runs anteriores llevan `bmaps.blocks` con los cuatro bloques del modelo (se reconocen por la ausencia de
+`Otros`).
+
 `freeze` aquí significa que el run se publicó dentro de la ventana LOREG con `force`; no es el interruptor
 editorial de `manifest.freeze`.
 
@@ -226,6 +232,13 @@ Cada registro de `parties`, `vs` y `blocks` tiene 15 columnas: `name`, `pct`, `p
 `p_seats`, `p_majority`, `p_first`. Aquí `seats` es el titular entero (`totals()`), `null` en un bloque
 sin partidos. CSV: las tres tablas apiladas con una columna inicial `group` (`parties`, `vs`, `blocks`).
 
+Enmienda 2026-10-29 (bloques Izquierda, Derecha y Otros): los registros de `blocks` son `Izquierda`, `Derecha` y
+`Otros`, y ya no los cuatro bloques del modelo. `Otros` es el complemento, calculado en cada simulación: su voto es
+100 menos el de Izquierda y el de Derecha (incluido el residuo de partidos sin simular) y sus escaños, el resto de la
+cámara, de modo que Izquierda + Derecha + Otros suma 100 y `n_seats`. Su `p_majority` es `null` (no es una coalición
+posible), y todos los `p_*` y `seats` son `null` en un bloque sin partidos. `vs`, `parties`, `p_majority` y `totals`
+no cambian. Los runs anteriores a esa fecha conservan los cuatro bloques del modelo.
+
 ### `dist`
 
 Distribución de escaños por simulación (base de histogramas y coaliciones en el navegador). Fuente:
@@ -262,6 +275,10 @@ Proyección del voto en el tiempo. Fuente: `sim.projection()` (también con `vs`
 
 `data`: `dates` y `groups`, con las claves `parties`, `vs` y `blocks`; cada grupo es `{names, mean, lo,
 hi}` y cada estadística `{nombre: [valor por fecha]}`. CSV largo: `date, group, name, mean, lo, hi`.
+
+Enmienda 2026-10-29 (bloques Izquierda, Derecha y Otros): `groups.blocks` trae `Izquierda`, `Derecha` y `Otros`;
+`Otros` es el complemento (media 100 menos Izquierda y Derecha en cada fecha, con la banda de las dos). Los runs
+anteriores conservan los cuatro bloques del modelo.
 
 ## Análisis
 

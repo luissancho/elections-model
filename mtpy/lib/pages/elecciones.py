@@ -6,8 +6,8 @@ from typing import Callable, Optional, Sequence
 
 from ...core.api import HttpError
 from ..webapi import check_date, event_params, site
-from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color, bundle_part,
-                     common_context, ink_color)
+from .common import (NATIONAL_SCOPE, OTHERS_COLOR, REST_BLOCK, Catalog, analysis_part, api_url, block_color,
+                     bundle_part, common_context, ink_color)
 from .filters import _madrid_tz, fmt_date, fmt_num
 from .promedios import (BLOCK_ORDER, _leaders, chart_polls, poll_months, polls_table,
                         pollster_options, round_series)
@@ -197,21 +197,23 @@ def published_events(scope: str) -> list:
 
 def last_results(scope: str, catalog: Optional[Catalog] = None) -> Optional[dict]:
     """
-    Official results of the most recent published election of a scope, by party and, with a catalogue, by block.
+    Official results of the most recent published election of a scope, by party and, optionally, by block.
 
     Parameters
     ----------
     scope : str
         Scope code.
     catalog : Catalog, optional
-        Party catalogue of the run; with it, the results are also summed by block.
+        Switch only: with a catalogue the results also carry ``blocks``; the blocks themselves come from the
+        ``vs`` of the election (``party_blocks``), not from the catalogue.
 
     Returns
     -------
     dict or None
         ``{'date': ISO date, 'year': int, 'parties': {name: {'seats', 'pct'}}}`` of the newest published election
         with a ``results`` part, plus ``blocks`` (``{name: {'seats', 'pct'}}``, the sums of ``event_block_rows``
-        with each party of that election in the block of its ``vs``, ``party_blocks``) when a catalogue is given; ``None`` without a published election.
+        with each party of that election in the block of its ``vs``, ``party_blocks``) when a catalogue is given;
+        ``None`` without a published election.
     """
     for event in published_events(scope):
         results = event_part(scope, event['date'], 'results')
@@ -674,7 +676,8 @@ def event_block_rows(rows: list, blocks: dict, color: Callable) -> list:
     rows : list of dict
         Results rows with ``party``, ``pct`` and ``seats``.
     blocks : dict
-        Block of each party (``party_blocks``); a party without one counts for no block.
+        Block of each party (``party_blocks``, Izquierda or Derecha); a party without one counts toward Otros,
+        through the totals of the table.
     color : callable
         ``block -> colour``.
 
@@ -682,9 +685,9 @@ def event_block_rows(rows: list, blocks: dict, color: Callable) -> list:
     -------
     list of dict
         ``{'name', 'pct', 'seats', 'color'}`` for Izquierda, Derecha and Otros, in ``BLOCK_ORDER`` (empty when
-        no party is in Izquierda or Derecha). Izquierda and Derecha are the sums of their parties (``pct`` to 2 decimals;
-        ``None`` when no party has the value); Otros is the rest: ``pct`` 100 minus both, ``seats`` the seats of
-        every row minus both, and ``None`` when Izquierda or Derecha has no value.
+        no party is in Izquierda or Derecha). Izquierda and Derecha are the sums of their parties (``pct`` to 2
+        decimals; ``None`` when no party has the value); Otros is the rest: ``pct`` 100 minus both, ``seats`` the
+        seats of every row minus both, and ``None`` when Izquierda or Derecha has no value.
     """
     totals = {block: {'pct': None, 'seats': None} for block in BLOCK_ORDER}
     whole = None
@@ -931,7 +934,8 @@ def curve_block_colors(blocks_map: dict, block_colors: dict, catalog: Catalog) -
     -------
     dict
         ``{block: colour}``: the colour the page uses for the block when it has one, else the colour of the
-        first party of the block, so the curve, the hemicycle and the results by block agree.
+        first party of the block (grey for a block with no parties, such as Otros), so the curve, the hemicycle
+        and the results by block agree.
     """
     return {block: block_colors.get(block) or (catalog[parties[0]]['color'] if parties else OTHERS_COLOR)
             for block, parties in blocks_map.items()}
@@ -1037,9 +1041,10 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         The common context plus ``event`` (its ``meta``), ``results_rows`` (as published, with the
         ``fullname`` and ``color`` of the run catalogue, or the fallback of an unknown party, and ``shown``:
         ``mark_shown`` with the ``parties.event`` of the election in ``data/params.json`` plus every party with a
-        seat, else the first ``RESULTS_SHOWN``), ``results_hidden`` (the rows not shown, behind "Ver más"), ``block_result_rows``
-        (``event_block_rows``: the results by block, ``party_blocks`` from the parameters, the event meta and the
-        run catalogue, coloured by ``block_color``; empty when no party has a block), ``n_seats``,
+        seat, else the first ``RESULTS_SHOWN``), ``results_hidden`` (the rows not shown, behind "Ver más"),
+        ``block_result_rows`` (``event_block_rows``: the results by block, ``party_blocks`` from the parameters,
+        the event meta and the run catalogue, coloured by ``block_color``; empty when no party is in Izquierda
+        or Derecha), ``n_seats``,
         ``last_rows`` (``last_poll_rows``: the last poll of each pollster, from the smallest block error),
         ``last_table_rows`` (``with_model_row``: the same rows with the model among them, scored at its shortest
         horizon; the table only, the charts keep ``last_rows``),
@@ -1054,7 +1059,7 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         ``has_series`` (whether the ``series`` part is published), ``series_horizon`` (the horizon of the
         series, else of the shortest horizon of the model), ``series_blocks`` (the blocks of the curve: those
         of ``party_blocks`` over the parties of the series, the table and the results, the same assignment the
-        hemicycle uses), ``model_last`` (``model_last``), ``fixed_rows`` (``fixed_rows``: the model and the
+        hemicycle uses; Otros has no parties, so its list is empty and it is the rest up to 100), ``model_last`` (``model_last``), ``fixed_rows`` (``fixed_rows``: the model and the
         result at the foot of the polls table), ``csv_links`` (the model ones only with a backtest, the series
         one only when published), the keys of the "Todas las encuestas" table of
         Promedios drawn from the ``cycle`` part (``has_cycle``, ``table``, ``table_parties``, ``table_total``,
@@ -1082,8 +1087,8 @@ def eleccion_context(state: dict, date: str, active: str = '/elecciones') -> dic
         400 for an invalid date; 404 for an unpublished election, scope or missing run; 503 without a bundle.
         A scope without a published forecast (just voted, or with too few polls) still has the detail of its
         elections: the common part of the page (party catalogue, footer, menus and ``state``) is then the
-        national run's, and each block takes the colour of its first party in the election: the two of its margin
-        (``blocks`` of the meta), and the others of the national map (``Regionalista``…) by the results.
+        national run's, and Izquierda and Derecha take the colour of their first party in the election (the two
+        of its margin, ``blocks`` of the meta); Otros is always grey.
     """
     scope = state['scope']
     has_run = scope in site().manifest_data()['scopes']

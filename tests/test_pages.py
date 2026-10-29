@@ -4409,7 +4409,8 @@ def test_promedios_tables_compare_with_the_previous_election(events_site, fresh_
     rows = re.findall(r'<tr>(.*?)</tr>', blocks, re.S)[1:]
     assert cells(rows[0]) == [('down', '▼ 12,4'), ('down', '▼ 65')]
     cards = re.sub(r'\s+', ' ', page[page.index('id="hemicycle-card"'):page.index('id="evolution-card"')])
-    assert 'frente al resultado oficial' in cards and 'un guion' in cards and 'ya no existen' in cards
+    assert 'frente al resultado oficial' in cards and 'un guion' in cards and 'ya no existen' not in cards
+    assert 'reagrupado con los bloques de hoy' in cards and 'Otros es el resto hasta 100' in cards
     assert 'flecha verde si sube y roja si baja' in cards and 'cuánto cambia frente a 2023' in cards  # el hemiciclo también lo dice
     # el hemiciclo recibe sólo las diferencias que existen (XX no concurrió), con el año
     assert initial(call(events_site, '/es')[2])['deltas'] == {'parties': {'PP': -25}, 'blocks': {'Derecha': -65}, 'year': 2023}

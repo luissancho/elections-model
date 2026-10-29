@@ -617,6 +617,7 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
     polls, pollsters = n_polls(fc)
     drift = sim.v2drift
     web = _web_bmap(sim)
+    bmaps = {**fc.bmaps, 'blocks': web} if web is not None else fc.bmaps
     regions = [{'id': int(r), 'name': sim.region_names.get(r, r), 'seats': int(sim.reg_totals.loc[r, 'seats'])}
                for r in sim.regions]
     return {
@@ -628,7 +629,7 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
         'seed': None if sim.seed is None else int(sim.seed), 'drange': list(sim.drange), 'max_fc': int(max_fc),
         'alpha': float(sim.alpha), 'correctors': correctors, 'n_polls': polls, 'n_pollsters': pollsters,
         'db_polls': db_polls, 'db_last_poll': db_last_poll, 'n_seats': n_seats, 'majority': n_seats // 2 + 1,
-        'parties': _meta_parties(sim), 'bmaps': {**fc.bmaps, 'blocks': web} if web is not None else fc.bmaps, 'smap': sim.smap, 'regions': regions,
+        'parties': _meta_parties(sim), 'bmaps': bmaps, 'smap': sim.smap, 'regions': regions,
         'diagnostics': {'drift_k': float(drift.k) if drift is not None else None,
                         'multiplier': float(drift.multiplier) if drift is not None else None,
                         'ages': sim.ages.round(PCT_DECIMALS).to_dict(), 'composition': float(sim.composition_ratio),

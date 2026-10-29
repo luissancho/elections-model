@@ -113,8 +113,7 @@
             </table>
           </div>
           {% call m.how() %}
-          <p>Cada fila es un bloque: la suma del voto y de los escaños de sus partidos en el resultado oficial.</p>
-          <p>Un partido sin bloque no suma en ninguno; está en la tabla de partidos.</p>
+          <p>Izquierda y Derecha suman el voto y los escaños de sus partidos; Otros es el resto hasta 100 y hasta la cámara.</p>
           {% endcall %}
         {{ m.card_end() }}
         {% endif %}
