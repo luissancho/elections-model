@@ -74,11 +74,18 @@ def test_evolution_points_skip_the_runs_without_the_party_and_carry_the_run_inde
     assert run_js('e.evolutionPoints(e.dailyRuns(runs), ["PP"], "seats")[0].points.map((p) => p[1])') == [140, 139, 138, 137]
 
 
-def test_evolution_bounds_round_to_whole_units_around_the_visible_data():
-    assert run_js('e.evolutionBounds({min: 31.53, max: 32.71})') == [31, 33]
-    assert run_js('e.evolutionBounds({min: 8, max: 8})') == [8, 9]
-    assert run_js('e.evolutionBounds({min: 32, max: 33})') == [32, 33]
-    assert run_js('e.evolutionBounds({min: Infinity, max: -Infinity})') == [None, None]
+def test_evolution_axis_follows_the_rule_of_the_average_multiples_of_five():
+    # Luis, 2026-10-30: ticks every 5 on multiples of 5, as the average (2 → 0, 33 → 35); every 20 in seats, so the
+    # whole chamber (0 to 145) keeps about as many lines as the vote axis
+    bounds = lambda extent, field='pct': run_js('[e.evolutionOption({...%s, runs: e.dailyRuns(runs), field: "%s"}).yAxis.min(%s), '
+                                                'e.evolutionOption({...%s, runs: e.dailyRuns(runs), field: "%s"}).yAxis.max(%s)]'
+                                                % (json.dumps(DATA), field, extent, json.dumps(DATA), field, extent))
+    assert bounds('{min: 1.9, max: 33.2}') == [0, 35]
+    assert bounds('{min: 26.37, max: 26.77}') == [25, 30]
+    assert bounds('{min: 107, max: 110}', 'seats') == [100, 120]
+    assert bounds('{min: 8, max: 8}', 'seats') == [0, 20]
+    assert bounds('{min: Infinity, max: -Infinity}') == [None, None]
+    assert option()['yAxis']['interval'] == 5 and option(field='seats')['yAxis']['interval'] == 20
 
 
 def test_evolution_option_draws_a_line_per_party_with_hollow_retrospective_points():
@@ -93,7 +100,6 @@ def test_evolution_option_draws_a_line_per_party_with_hollow_retrospective_point
                              'selected': {'PP': True, 'PSOE': True, 'VOX': False}}
     assert opt['dataZoom'][0]['type'] == 'slider' and opt['xAxis']['type'] == 'time'
     assert run_js('typeof e.evolutionOption({...%s, runs: e.dailyRuns(runs)}).yAxis.min' % json.dumps(DATA)) == 'function'
-    assert 'minInterval' not in opt['yAxis'] and option(field='seats')['yAxis']['minInterval'] == 1
     assert run_js('e.evolutionOption({runs: [], parties: []}).series') == []
 
 

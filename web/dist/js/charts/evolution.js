@@ -1,13 +1,16 @@
 // Evolution of the publications: what the model published each day (the vote or the seats of each party, or of
 // each block), one point per day joined by a line, the retrospective runs hollow. A sibling of the poll average
 // (`series.js`): same height on the page, a hidden legend driven by the pill legend (`pages/evolution-wire.js`)
-// and a vertical axis fitted to the names shown, so marking a single party zooms on its changes.
+// and a vertical axis fitted to the names shown with the rule of the average (ticks every `AXIS_STEP` points on
+// multiples of it; every `SEATS_STEP` seats, Luis 2026-10-30), so marking a single party zooms on its changes.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
-import {axisPctLabel, dayTime, isoDay} from './series.js';
+import {AXIS_STEP, axisBounds, axisPctLabel, dayTime, isoDay} from './series.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
 
 const DAY_MS = 24 * 3600 * 1000;
+/** Tick step of the seats axis: the whole chamber keeps about as many lines as the vote axis (Luis, 2026-10-30). */
+export const SEATS_STEP = 20;
 
 /**
  * Day of a run: `as_of` (the day the model read) or, for headlines without it, the day of `run_at`.
@@ -69,21 +72,6 @@ export function evolutionPoints(runs, parties, field = 'pct') {
 }
 
 /**
- * Bounds of the vertical axis: whole units around the visible data (not multiples of five, as the average: the
- * changes between publications are tiny), at least one unit high.
- *
- * @param {{min: number, max: number}} extent the extent of the visible data
- * @returns {Array<number|null>} `[low, high]`, nulls when the extent is not finite (no data on screen)
- */
-export function evolutionBounds({min, max}) {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    return [null, null];
-  }
-  const low = Math.floor(min);
-  return [low, Math.max(Math.ceil(max), low + 1)];
-}
-
-/**
  * ECharts option of the evolution: a line per name over the daily runs, the retrospective points hollow, an
  * axis tooltip per day and the slider of the zoom under the chart.
  *
@@ -116,6 +104,7 @@ export function evolutionOption({
     emphasis: {focus: 'series'},
   }));
   const hidden = legend === 'hidden';
+  const step = field === 'seats' ? SEATS_STEP : AXIS_STEP;
 
   /** Box of a day: the run (its time, or its day with the retrospective tag) and every name shown, highest first. */
   function tooltip(params) {
@@ -151,12 +140,12 @@ export function evolutionOption({
       axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(isoDay(value))},
       splitLine: {show: false},
     },
-    // Whole units around the data on screen (`evolutionBounds`); whole ticks for seats.
+    // Ticks every `step` on multiples of it, around the data on screen (`axisBounds`, as the average).
     yAxis: {
       type: 'value',
-      min: (extent) => evolutionBounds(extent)[0],
-      max: (extent) => evolutionBounds(extent)[1],
-      ...(field === 'seats' ? {minInterval: 1} : {}),
+      min: (extent) => axisBounds(extent, step)[0],
+      max: (extent) => axisBounds(extent, step)[1],
+      interval: step,
       splitLine: {lineStyle: {color: THEME.gridColor}},
       axisLabel: {...axisLabelStyle(), formatter: field === 'pct' ? axisPctLabel : (value) => formatter(value)},
     },

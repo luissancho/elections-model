@@ -69,9 +69,11 @@ Dos hallazgos que cambian la tarjeta:
   (los mismos que el promedio), todos si no hay. Bloques (sólo si el ámbito tiene `bmaps.blocks`): cada bloque
   suma sus partidos y Otros (`REST_BLOCK`) es el resto hasta 100 (hasta la cámara en escaños), en el orden
   `orderBlocks`, colores `blockColor`; todos marcados por defecto. El cambio de vista reinicia la selección.
-- **Eje vertical** sin cero fijo: mínimo y máximo redondeados a puntos enteros alrededor de lo visible (no a
-  múltiplos de 5 como el promedio), con al menos un punto de recorrido; marcas enteras en escaños. El PP solo
-  va de 31 a 33 y su bajada ocupa más de la mitad del alto.
+- **Eje vertical** sin cero fijo, con la regla del promedio (`axisBounds`): mínimo y máximo en múltiplos de 5
+  alrededor de lo visible y marcas de 5 en 5 en voto (Luis, 2026-10-30, tras ver la primera versión a unidades
+  enteras: «si el bajo es el 2% sigue hasta 0 y si el alto es 33 sigue a 35»); en escaños, de 20 en 20, para que
+  la cámara entera (0 a 145) tenga tantas líneas como el eje del voto. El PSOE solo va de 25 a 30 en voto y de 100
+  a 120 en escaños.
 - **Eje de fechas** con todos los días publicados; deslizador de zoom abajo como en el promedio.
 - **Un solo gráfico para ambos modos:** se dibuja el titular `nowcast` siempre y el subtítulo de la tarjeta deja
   de nombrar el modo («· voto de cada publicación» / «· escaños de cada publicación»).
