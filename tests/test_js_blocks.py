@@ -19,13 +19,20 @@ POLLS = {'parties': ['PP', 'VOX', 'PSOE'],
          'polls': [{'date': '2026-01-01', 'pollster': 'A', 'PP': 30, 'VOX': 10, 'PSOE': 28},
                    {'date': '2026-01-02', 'pollster': 'B', 'PSOE': 27}]}
 
+RUNS = [{'run_id': 'a', 'run_at': '2026-10-05T12:00:00Z', 'as_of': '2026-10-05', 'backfill': True, 'n_polls': 311,
+         'nowcast': {'parties': [{'name': 'PP', 'pct': 32.7, 'seats': 140}, {'name': 'VOX', 'pct': 17.9, 'seats': 63},
+                                 {'name': 'PSOE', 'pct': 26.4, 'seats': 107}]}},
+        {'run_id': 'b', 'run_at': '2026-10-06T09:30:00Z', 'as_of': '2026-10-06',
+         'nowcast': {'parties': [{'name': 'PP', 'pct': 32.6, 'seats': 139}, {'name': 'PSOE', 'pct': 26.5, 'seats': 108}]}}]
+BLOCKS_REST = {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE'], 'Otros': []}
+
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
 
 def run_js(expr):
-    script = ('import * as b from "{}"; const series = {}; const blocks = {}; const polls = {}; '
+    script = ('import * as b from "{}"; const series = {}; const blocks = {}; const polls = {}; const runs = {}; '
               'console.log(JSON.stringify({}));').format(BLOCKS_JS, json.dumps(SERIES), json.dumps(BLOCKS),
-                                                         json.dumps(POLLS), expr)
+                                                         json.dumps(POLLS), json.dumps(RUNS), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
 
@@ -138,3 +145,25 @@ def test_rest_block_series_has_no_value_on_a_date_missing_a_side():
     assert out['mean']['Otros'] == [32, None]
     assert out['lo']['Otros'][1] is None and out['hi']['Otros'][1] is None
     assert out['lo']['Otros'][0] is not None
+
+
+def test_block_runs_sum_the_parties_of_each_block_and_the_rest_to_the_total():
+    rows = run_js('b.blockRuns(runs, %s, "pct", 100).map((run) => run.nowcast.parties)' % json.dumps(BLOCKS_REST))
+    assert rows[0] == [{'name': 'Derecha', 'pct': pytest.approx(50.6)}, {'name': 'Izquierda', 'pct': 26.4},
+                       {'name': 'Otros', 'pct': pytest.approx(23.0)}]
+    seats = run_js('b.blockRuns(runs, %s, "seats", 350).map((run) => run.nowcast.parties)' % json.dumps(BLOCKS_REST))
+    assert seats[0] == [{'name': 'Derecha', 'seats': 203}, {'name': 'Izquierda', 'seats': 107}, {'name': 'Otros', 'seats': 40}]
+
+
+def test_block_runs_keep_the_run_fields_and_sum_only_the_parties_present():
+    runs = run_js('b.blockRuns(runs, %s, "pct")' % json.dumps(BLOCKS_REST))
+    assert [r['run_id'] for r in runs] == ['a', 'b'] and runs[0]['backfill'] is True and runs[0]['n_polls'] == 311
+    # VOX is missing from the second run: Derecha is PP alone, as `blockPolls` does
+    assert runs[1]['nowcast']['parties'][0] == {'name': 'Derecha', 'pct': 32.6}
+
+
+def test_block_runs_without_rest_block_and_with_an_empty_block():
+    rows = run_js('b.blockRuns(runs, %s, "pct").map((run) => run.nowcast.parties)' % json.dumps({'Derecha': ['PP', 'VOX'], 'Sep': ['ERC']}))
+    assert rows[0] == [{'name': 'Derecha', 'pct': pytest.approx(50.6)}]  # Sep has no party in the run: no row, no rest
+    with_rest = run_js('b.blockRuns(runs, %s, "pct").map((run) => run.nowcast.parties)' % json.dumps({'Derecha': ['PP'], 'Sep': ['ERC'], 'Otros': []}))
+    assert with_rest[0] == [{'name': 'Derecha', 'pct': 32.7}]  # a block without row: no rest either

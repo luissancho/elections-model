@@ -1,98 +1,199 @@
-// Evolution of a published estimate (vote or seats), one line per party over the run timestamps.
+// Evolution of the publications: what the model published each day (the vote or the seats of each party, or of
+// each block), one point per day joined by a line, the retrospective runs hollow. A sibling of the poll average
+// (`series.js`): same height on the page, a hidden legend driven by the pill legend (`pages/evolution-wire.js`)
+// and a vertical axis fitted to the names shown with the rule of the average (ticks every `AXIS_STEP` points on
+// multiples of it; every `SEATS_STEP` seats, Luis 2026-10-30), so marking a single party zooms on its changes.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
+import {AXIS_STEP, axisBounds, axisPctLabel, dayTime, isoDay} from './series.js';
 import {OTHERS_COLOR} from '../catalog.js';
 import {fmtDate, fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
 
 const DAY_MS = 24 * 3600 * 1000;
-const ZOOM_FROM = 20;
+/** Tick step of the seats axis: the whole chamber keeps about as many lines as the vote axis (Luis, 2026-10-30). */
+export const SEATS_STEP = 20;
 
 /**
- * Points `[run_at, value, backfill]` of each party in the `mode` headline of every run (runs without the party or
- * the value are skipped).
+ * Day of a run: `as_of` (the day the model read) or, for headlines without it, the day of `run_at`.
+ *
+ * @param {object} run a run of the history part
+ * @returns {string} ISO date
+ */
+export function runDay(run) {
+  return run.as_of || String(run.run_at).slice(0, 10);
+}
+
+/** Whether `run` replaces `kept` on the same day: a live run beats a retrospective one, then the later `run_at`. */
+function beats(run, kept) {
+  const live = !run.backfill;
+  if (live !== !kept.backfill) {
+    return live;
+  }
+  return String(run.run_at) > String(kept.run_at);
+}
+
+/**
+ * One run per day, ascending by day: the live run over the retrospective one (`backfill`) and, among several of
+ * the same kind, the last `run_at`. The original objects, not copies.
  *
  * @param {object[]} runs `runs` list of the history part
- * @param {string} mode `nowcast` or `forecast`
- * @param {string[]} parties party names, in legend order
- * @param {string} field party field drawn (`pct` or `seats`)
- * @returns {{name: string, points: Array}[]} one entry per party
+ * @returns {object[]} the runs kept
  */
-export function evolutionSeries(runs, mode, parties, field = 'pct') {
+export function dailyRuns(runs) {
+  const byDay = new Map();
+  for (const run of runs || []) {
+    const day = runDay(run);
+    const kept = byDay.get(day);
+    if (!kept || beats(run, kept)) {
+      byDay.set(day, run);
+    }
+  }
+  return [...byDay.keys()].sort().map((day) => byDay.get(day));
+}
+
+/**
+ * Points `[time, value, index]` of each party in the `nowcast` headline of the runs: `time` the day of the run at
+ * local midnight, `index` the position of the run in `runs` (the tooltip reads the run from it). A run without
+ * the party, or with a null value, gives no point.
+ *
+ * @param {object[]} runs daily runs (`dailyRuns`)
+ * @param {string[]} parties party or block names, in legend order
+ * @param {string} [field='pct'] party field drawn (`pct` or `seats`)
+ * @returns {{name: string, points: Array<[number, number, number]>}[]} one entry per name
+ */
+export function evolutionPoints(runs, parties, field = 'pct') {
   return parties.map((name) => ({
     name,
-    points: runs.flatMap((run) => {
-      const block = run[mode] || {};
-      const party = (block.parties || []).find((row) => row.name === name);
-      return party && party[field] !== null && party[field] !== undefined ? [[run.run_at, party[field], Boolean(run.backfill)]] : [];
+    points: runs.flatMap((run, index) => {
+      const party = ((run.nowcast || {}).parties || []).find((row) => row.name === name);
+      const value = party ? party[field] : null;
+      return value === null || value === undefined ? [] : [[dayTime(runDay(run)), value, index]];
     }),
   }));
 }
 
 /**
- * Render the evolution chart of the `mode` headline across `runs`.
+ * ECharts option of the evolution: a line per name over the daily runs, the retrospective points hollow, an
+ * axis tooltip per day and the slider of the zoom under the chart.
  *
- * @param {HTMLElement} el chart container
- * @param {object[]} runs `runs` list of the history part (ascending by run)
- * @param {string} mode `nowcast` or `forecast`
- * @param {object} opts `colors` ({name: colour}), `parties` (names), `fullnames` ({name: full name}),
- *   `field` (party field drawn), `formatter` (value → text; the axis passes 0 digits as second argument)
- * @returns {object} the ECharts instance
+ * @param {object} data `runs` (daily runs, `dailyRuns`), `parties` (names, legend order), `selected` (names shown
+ *   at first; all when null), `colors` ({name: colour}), `fullnames` ({name: full name}, for the tooltip),
+ *   `field` (party field drawn: `pct` or `seats`), `formatter` (value → text), `legend` (`'hidden'`: no legend
+ *   drawn but a selectable one kept, for the HTML pill legend that drives it with `legendToggleSelect`; `true`:
+ *   the legend drawn)
+ * @returns {object} the ECharts option
  */
-export function renderEvolution(el, runs, mode, {
-  colors = {}, parties = [], fullnames = {}, field = 'pct', formatter = fmtPct,
+export function evolutionOption({
+  runs = [], parties = [], selected = null, colors = {}, fullnames = {}, field = 'pct', formatter = fmtPct,
+  legend = 'hidden',
 } = {}) {
-  const zoom = runs.length > ZOOM_FROM;
-  const series = evolutionSeries(runs, mode, parties, field).map((entry) => ({
+  const colorOf = (name) => colors[name] || OTHERS_COLOR;
+  const series = evolutionPoints(runs, parties, field).map((entry) => ({
     type: 'line',
     name: entry.name,
-    data: entry.points.map((point) => (point[2] ? {
+    data: entry.points.map((point) => (runs[point[2]].backfill ? {
       value: point,
       symbolSize: 8,
-      itemStyle: {color: '#fff', borderColor: colors[entry.name] || OTHERS_COLOR, borderWidth: 2},
+      itemStyle: {color: '#fff', borderColor: colorOf(entry.name), borderWidth: 2},
     } : point)),
+    // a filled circle: the default `emptyCircle` strokes with `color`, so a white hollow point would vanish
+    symbol: 'circle',
     showSymbol: true,
     symbolSize: 6,
-    color: colors[entry.name] || OTHERS_COLOR,
+    color: colorOf(entry.name),
     lineStyle: {width: 2},
     emphasis: {focus: 'series'},
   }));
-  const option = {
+  const hidden = legend === 'hidden';
+  const step = field === 'seats' ? SEATS_STEP : AXIS_STEP;
+
+  /** Box of a day: the run (its time, or its day with the retrospective tag) and every name shown, highest first. */
+  function tooltip(params) {
+    const items = (Array.isArray(params) ? params : [params]).filter((item) => Array.isArray(item.value));
+    if (!items.length) {
+      return '';
+    }
+    const run = runs[items[0].value[2]];
+    const head = run.backfill ? `${fmtDate(runDay(run))} · estimación retrospectiva` : fmtDateTime(run.run_at);
+    const lines = [`<strong>${escapeHtml(head)}</strong>`];
+    for (const item of [...items].sort((a, b) => b.value[1] - a.value[1])) {
+      const name = fullnames[item.seriesName] || item.seriesName;
+      lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}`);
+    }
+    return lines.join('<br>');
+  }
+
+  return {
     ...baseOption(),
-    legend: {type: 'scroll', top: 0},
-    grid: {left: 8, right: 24, top: 40, bottom: zoom ? 56 : 8, containLabel: true},
+    legend: {
+      show: !hidden,
+      selectedMode: true,
+      type: 'scroll',
+      top: 0,
+      data: parties,
+      selected: Object.fromEntries(parties.map((name) => [name, !selected || selected.includes(name)])),
+    },
+    grid: {left: 8, right: 24, top: hidden ? 24 : 40, bottom: 56, containLabel: true},
     xAxis: {
       type: 'time',
       minInterval: DAY_MS,
-      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(new Date(value).toISOString())},
+      axisLine: {lineStyle: {color: THEME.axisColor}},
+      axisLabel: {...axisLabelStyle(), formatter: (value) => fmtDateShort(isoDay(value))},
       splitLine: {show: false},
     },
+    // Ticks every `step` on multiples of it, around the data on screen (`axisBounds`, as the average).
     yAxis: {
       type: 'value',
-      min: 0,
+      min: (extent) => axisBounds(extent, step)[0],
+      max: (extent) => axisBounds(extent, step)[1],
+      interval: step,
       splitLine: {lineStyle: {color: THEME.gridColor}},
-      axisLabel: {...axisLabelStyle(), formatter: (value) => formatter(value, 0)},
+      axisLabel: {...axisLabelStyle(), formatter: field === 'pct' ? axisPctLabel : (value) => formatter(value)},
     },
     tooltip: {
       ...tooltipStyle(),
       trigger: 'axis',
-      formatter(params) {
-        if (!params.length) {
-          return '';
-        }
-        const rows = [...params].sort((a, b) => b.value[1] - a.value[1]);
-        // A retrospective run has a conventional noon `run_at`: show its day only
-        const head = params[0].value[2]
-          ? `${fmtDate(params[0].value[0])} · estimación retrospectiva`
-          : fmtDateTime(params[0].value[0]);
-        const lines = [`<strong>${escapeHtml(head)}</strong>`];
-        for (const item of rows) {
-          const name = fullnames[item.seriesName] || item.seriesName;
-          lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}`);
-        }
-        return lines.join('<br>');
-      },
+      confine: true,
+      formatter: tooltip,
     },
-    dataZoom: zoom ? [{type: 'inside'}, {type: 'slider', bottom: 8}] : [],
+    dataZoom: [{
+      type: 'slider',
+      bottom: 8,
+      filterMode: 'filter',
+      labelFormatter: (value) => fmtDate(isoDay(value)),
+    }],
     series,
   };
-  return mountChart(el, option);
+}
+
+/**
+ * Option of the image of the evolution (`share.js`): the chart as shown, with a static legend of the names shown
+ * only (the others are left out) and, instead of the slider, an invisible zoom at `zoom` (`chartZoom` of the
+ * chart on screen), so the image keeps the days and the names of the screen.
+ *
+ * @param {object} data the arguments of `evolutionOption`
+ * @param {object|null} [zoom=null] `{startValue, endValue}` of the chart on screen (null: every day)
+ * @returns {object} the ECharts option
+ */
+export function evolutionImageOption(data, zoom = null) {
+  const option = evolutionOption({...data, legend: true});
+  const parties = data.parties || [];
+  const shown = data.selected ? parties.filter((name) => data.selected.includes(name)) : parties;
+  return {
+    ...option,
+    legend: {show: true, type: 'plain', selectedMode: false, top: 0, data: shown},
+    grid: {...option.grid, top: 40, bottom: 8},
+    dataZoom: [{type: 'inside', filterMode: 'filter', disabled: true, ...(zoom || {})}],
+    series: option.series.filter((entry) => shown.includes(entry.name)),
+  };
+}
+
+/**
+ * Render the evolution in `el` (see `evolutionOption` for the data).
+ *
+ * @param {HTMLElement} el chart container
+ * @param {object} data the arguments of `evolutionOption`
+ * @returns {object} the ECharts instance
+ */
+export function renderEvolution(el, data) {
+  return mountChart(el, evolutionOption(data));
 }

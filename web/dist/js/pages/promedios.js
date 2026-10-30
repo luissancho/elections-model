@@ -5,12 +5,12 @@
 // the pill legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
 import {parseSeriesHash} from '../blocks.js';
-import {renderEvolution} from '../charts/evolution.js';
 import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
 import {chartZoom, renderSeries, seriesImageOption, setWindow} from '../charts/series.js';
 import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend} from './legend-dom.js';
+import {wireEvolution} from './evolution-wire.js';
 import {wirePollsTable} from './polls-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
@@ -26,7 +26,7 @@ const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
  * @param {Catalog} catalog party catalogue of the run
  */
 function paintResults(initial, catalog) {
-  const {meta, headline, summary, runs} = initial;
+  const {meta, headline, summary} = initial;
   const mode = initial.state.mode;
   const current = headline[mode];
   const names = [...new Set([
@@ -93,9 +93,8 @@ function paintResults(initial, catalog) {
     });
   }
 
-  tryDraw(() => renderEvolution(document.getElementById('evolution'), runs.runs, mode, {
-    colors, parties: current.parties.map((party) => party.name),
-  }), 'the evolution');
+  // the same parties, in the same order, as the legend of the average (Luis, 2026-10-30)
+  tryDraw(() => wireEvolution(initial, catalog, {parties: initial.series.parties}), 'the evolution');
 }
 
 /**
@@ -263,6 +262,31 @@ function paintCards(initial) {
   }
 }
 
+/**
+ * Wire the arrows of the party carousel (`#pcards`): shown when the strip overflows, each scrolls one view, the one
+ * at an end disabled. Touch and trackpads scroll the strip on their own.
+ */
+function wireCardsCarousel() {
+  const strip = document.getElementById('pcards');
+  const prev = document.querySelector('.pcarousel .pc-arrow.prev');
+  const next = document.querySelector('.pcarousel .pc-arrow.next');
+  if (!strip || !prev || !next) {
+    return;
+  }
+  const update = () => {
+    const overflow = strip.scrollWidth > strip.clientWidth + 1;
+    prev.hidden = !overflow;
+    next.hidden = !overflow;
+    prev.disabled = strip.scrollLeft <= 0;
+    next.disabled = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1;
+  };
+  prev.addEventListener('click', () => strip.scrollBy({left: -strip.clientWidth, behavior: 'smooth'}));
+  next.addEventListener('click', () => strip.scrollBy({left: strip.clientWidth, behavior: 'smooth'}));
+  strip.addEventListener('scroll', update, {passive: true});
+  new ResizeObserver(update).observe(strip);
+  update();
+}
+
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
@@ -270,6 +294,7 @@ function paint() {
   // last election, named and coloured by the published catalogue), with the bmaps of the run
   const catalog = new Catalog(initial.catalog || initial.meta);
   tryDraw(() => paintCards(initial), 'the party cards');
+  tryDraw(wireCardsCarousel, 'the party carousel');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');

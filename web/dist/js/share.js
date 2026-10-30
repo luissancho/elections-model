@@ -119,9 +119,9 @@ export function imageLayout({
 
 /**
  * The cells of a site table (`<table>` with a `thead` and a `tbody`), with what `tableDrawing` needs to draw
- * them: the header labels (the first column aligned left, the others right) and per cell its text, whether it
- * is bold, its colour (the arrows of a difference) and its party dot (`.pn`) or range bar (`.rng`, its
- * percentages from the inline styles the server writes).
+ * them: the header labels (the first column and those marked `.l` aligned left, the others right) and per cell
+ * its text, whether it is bold, its colour (the arrows of a difference) and its party dot (`.pn`) or range bar
+ * (`.rng`, its percentages from the inline styles the server writes).
  *
  * @param {HTMLTableElement} table the table
  * @returns {{columns: {label: string, align: string}[], rows: object[][]}} the table
@@ -132,7 +132,7 @@ export function readTable(table) {
     return match ? Number(match[1]) : null;
   };
   const columns = [...table.querySelectorAll('thead th')].map((th, i) => ({
-    label: th.textContent.trim(), align: i === 0 ? 'left' : 'right',
+    label: th.textContent.trim(), align: i === 0 || th.classList.contains('l') ? 'left' : 'right',
   }));
   const rows = [...table.querySelectorAll('tbody tr')].filter((tr) => !tr.hidden).map((tr) => [...tr.cells].map((td) => {
     const party = td.querySelector('.pn');
@@ -193,8 +193,8 @@ export function tableDrawing({columns, rows}, measure) {
   const rect = (x, y, w, h, r, color, opacity = 1) => items.push({type: 'rect', x, y, width: w, height: h, r, color, opacity});
 
   /** Draw `cell` in the row centred on `cy`, from `left` (its content's left edge; a range bar starts at the left
-   * of its column, so the bars of a column line up, and its numbers end at `right`). */
-  function drawCell(cell, left, right, cy) {
+   * of its column, so the bars of a column line up, and its numbers follow it). */
+  function drawCell(cell, left, cy) {
     if (cell.range) {
       const {left: from, width: span, mark, line, color} = cell.range;
       const at = (pct) => left + (pct / 100) * TABLE.barWidth;
@@ -210,7 +210,7 @@ export function tableDrawing({columns, rows}, measure) {
         items.push({type: 'line', x1: at(line), y1: top - 3, x2: at(line), y2: top + TABLE.barHeight + 3, color: TABLE.faintColor, width: 1.5, dash: [3, 2]});
       }
       if (cell.text) {
-        text(cell.text, right, cy, 'right', TABLE.smallFont, THEME.mutedColor);
+        text(cell.text, left + TABLE.barWidth + TABLE.barGap, cy, 'left', TABLE.smallFont, THEME.mutedColor);
       }
       return;
     }
@@ -231,7 +231,7 @@ export function tableDrawing({columns, rows}, measure) {
       const cell = row[i] || {};
       const cy = TABLE.headRow + r * TABLE.row + TABLE.row / 2;
       const right = x + widths[i] - TABLE.padX;
-      drawCell(cell, left || cell.range ? x + TABLE.padX : right - contentWidth(cell), right, cy);
+      drawCell(cell, left || cell.range ? x + TABLE.padX : right - contentWidth(cell), cy);
     });
     x += widths[i];
   });

@@ -626,14 +626,14 @@ def kpi_rows(summary: dict, meta: dict, parties: Catalog, polls: list) -> list:
 
 def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[dict]) -> list:
     """
-    The party cards of Promedios: the main parties of the run with their seats, vote and deltas.
+    The party cards of Promedios: every party of the run with its seats, vote and deltas, slid in a carousel.
 
     Parameters
     ----------
     summary : dict
         Data of the summary part of the mode shown.
     meta : dict
-        Data of the meta part (``bmaps.main``).
+        Data of the meta part. Unused since the cards cover every party (2026-10-30); kept for the callers.
     parties : Catalog
         Party catalogue of the run.
     results : dict or None
@@ -642,22 +642,19 @@ def party_cards(summary: dict, meta: dict, parties: Catalog, results: Optional[d
     Returns
     -------
     list of dict
-        One card per party of ``bmaps.main`` present in the summary (the six with most seats without the map):
-        ``name``, ``fullname``, ``color``, ``rank`` (by seats, ties by vote), ``seats``, ``pct``, ``delta_seats``
-        and ``delta_pct`` (``_deltas``: the differences against the last election, ``None`` without results or for
-        a party that was not in them).
+        One card per party of the summary (all the parties in contention, Luis 2026-10-30), by seats and then by
+        vote, as the territory table: ``name``, ``fullname``, ``color``, ``rank`` (its position, 1-based),
+        ``seats``, ``pct``, ``delta_seats`` and ``delta_pct`` (``_deltas``: the differences against the last
+        election, ``None`` without results or for a party that was not in them).
     """
     rows = summary.get('parties') or []
-    by_name = {row['name']: row for row in rows}
     ranked = sorted(rows, key=lambda row: (-(row.get('seats') or 0), -(row.get('pct') or 0)))
     ranks = {row['name']: index + 1 for index, row in enumerate(ranked)}
-    main = [name for name in ((meta.get('bmaps') or {}).get('main') or []) if name in by_name]
-    names = main or [row['name'] for row in ranked[:6]]
     previous = (results or {}).get('parties') or {}
     cards = []
 
-    for name in names:
-        row = by_name[name]
+    for row in ranked:
+        name = row['name']
         deltas = _deltas(row, previous.get(name))
         cards.append({
             'name': name,

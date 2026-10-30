@@ -74,6 +74,7 @@ class Publish(ScopeReporter, Job):
 
         python job.py publish '{"what":["forecast"],"scopes":["es"]}'
         python job.py publish '{"what":["forecast"],"scopes":"all"}'
+        python job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}'
         python job.py publish '{"what":["analysis"],"scopes":["es"]}'
         python job.py publish '{"what":["backtest"],"scopes":["es"]}'
         python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2023-07-23"}'

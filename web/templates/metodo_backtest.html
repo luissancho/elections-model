@@ -333,7 +333,7 @@
           demasiado estrechos.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('params', 'Parámetros', 'Los ajustes con que se ejecutó el backtest publicado.') }}
+      {{ m.card_start('params', 'Parámetros', 'Los ajustes con que se ejecutó el último backtest.') }}
         <dl>
           {% set params = backtest.params or {} %}
           <dt>Simulaciones</dt><dd>{{ params.get('n_sim')|int if params.get('n_sim') is not none else '—' }}</dd>

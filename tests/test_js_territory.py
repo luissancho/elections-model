@@ -43,12 +43,13 @@ def run_js(expr, districts=DISTRICTS):
     return json.loads(out.stdout)
 
 
-def test_territory_rows_by_province_in_seats_drop_parties_without_seats_and_carry_ranges():
+def test_territory_rows_by_province_in_seats_keep_every_party_and_carry_ranges():
+    """VOX no saca escaño en ningún sitio y aun así es columna (Luis, 2026-10-30): ceros, no ausencias."""
     out = run_js('t.territoryRows(d, s, u, {level: "prov", mode: "esc"})')
-    assert out['parties'] == ['PP', 'PSOE']
+    assert out['parties'] == ['PP', 'PSOE', 'VOX']
     madrid = next(row for row in out['rows'] if row['id'] == 28)
-    assert madrid['values'] == {'PP': 3, 'PSOE': 3} and madrid['total'] == 6 and madrid['ranges']['PP'] == '2–4'
-    assert out['total'] == {'values': {'PP': 7, 'PSOE': 5}, 'total': 12}
+    assert madrid['values'] == {'PP': 3, 'PSOE': 3, 'VOX': 0} and madrid['total'] == 6 and madrid['ranges']['PP'] == '2–4'
+    assert out['total'] == {'values': {'PP': 7, 'PSOE': 5, 'VOX': 0}, 'total': 12}
 
 
 def test_territory_rows_by_community_weight_the_vote_by_the_votes_of_each_province():
@@ -60,10 +61,25 @@ def test_territory_rows_by_community_weight_the_vote_by_the_votes_of_each_provin
     assert out['total'] == {'values': {'PP': 33, 'PSOE': 30, 'VOX': 7}, 'total': '100%'}
 
 
+def test_territory_columns_keep_the_seats_order_in_the_vote_view_and_break_ties_by_vote():
+    """Las mismas columnas en el mismo orden en Escaños y en % Voto (Luis, 2026-10-30): por escaños del reparto
+    central y, entre los que no sacan ninguno, por voto."""
+    # VOX vota más que PSOE y aun así va detrás en % Voto, porque tiene menos escaños
+    summary = '{parties: [{name: "PP", pct: 33}, {name: "PSOE", pct: 5}, {name: "VOX", pct: 7}]}'
+    for mode in ('pct', 'esc'):
+        out = run_js('t.territoryRows(d, s, %s, {level: "prov", mode: "%s"}).parties' % (summary, mode))
+        assert out == ['PP', 'PSOE', 'VOX'], mode
+    # sin escaños para PSOE ni VOX, el voto desempata: VOX antes
+    scenario = '{...s, rows: s.rows.map((r) => ({...r, seats: [r.seats[0], 0, 0]}))}'
+    for mode in ('pct', 'esc'):
+        out = run_js('t.territoryRows(d, %s, %s, {level: "prov", mode: "%s"}).parties' % (scenario, summary, mode))
+        assert out == ['PP', 'VOX', 'PSOE'], mode
+
+
 def test_territory_rows_by_community_add_up_the_seats():
     out = run_js('t.territoryRows(d, s, u, {level: "ccaa", mode: "esc"})')
     catalonia = next(row for row in out['rows'] if row['name'] == 'Cataluña')
-    assert catalonia['values'] == {'PP': 4, 'PSOE': 2} and catalonia['total'] == 6
+    assert catalonia['values'] == {'PP': 4, 'PSOE': 2, 'VOX': 0} and catalonia['total'] == 6
 
 
 def test_territory_rows_fall_back_to_provinces_without_communities_or_votes():
@@ -76,7 +92,7 @@ def test_territory_rows_leave_the_seats_empty_when_the_scenario_lacks_a_region()
     lonely = dict(DISTRICTS, regions=REGIONS + [{'id': 1, 'name': 'Álava', 'seats': 1}])
     out = run_js('t.territoryRows(d, s, u, {level: "prov", mode: "esc"})', districts=lonely)
     alava = next(row for row in out['rows'] if row['id'] == 1)
-    assert alava['values'] == {'PP': None, 'PSOE': None} and alava['total'] == 1
+    assert alava['values'] == {'PP': None, 'PSOE': None, 'VOX': None} and alava['total'] == 1
 
 
 def test_winner_tint_and_sort():
@@ -94,7 +110,7 @@ def test_can_group_needs_votes_and_two_communities_and_ranking_and_ranges_are_de
     assert run_js('t.canGroup(d.regions)') is True
     assert run_js('t.canGroup(d.regions.map(r => ({...r, votes: undefined})))') is False
     assert run_js('t.canGroup(d.regions.slice(0, 1))') is False
-    # sin ranking (partido ausente del resumen): orden por nombre, sin NaN
+    # sin resumen (voto desconocido): por escaños y luego por nombre, sin NaN
     out = run_js('t.territoryRows(d, s, {parties: []}, {level: "prov", mode: "pct"}).parties')
     assert out == ['PP', 'PSOE', 'VOX']
     # sin límites del rango, la celda no lleva rango

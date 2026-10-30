@@ -13,10 +13,16 @@
       {{ m.kpis(kpis, id='kpis') }}
       {% endif %}
       {% if cards %}
+      {#- every party in a carousel (Luis, 2026-10-30): the arrows only work with JavaScript, which shows them when the
+          strip overflows -#}
+      <div class="pcarousel">
+        <button type="button" class="pc-arrow prev" aria-label="Partidos anteriores" aria-controls="pcards" hidden>&lsaquo;</button>
       <div class="pcards" id="pcards">
         {% for card in cards %}
         <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado {% if card.prev_from %}de {{ card.prev_from|join(' + ') }} el {% else %}del {% endif %}{{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
         {% endfor %}
+      </div>
+        <button type="button" class="pc-arrow next" aria-label="Partidos siguientes" aria-controls="pcards" hidden>&rsaquo;</button>
       </div>
       {% endif %}
       {% set series_title = 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección' %}
@@ -101,7 +107,7 @@
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
-                  <th scope="col">Rango 95%</th>
+                  <th scope="col" class="l">Rango 95%</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,7 +121,7 @@
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1, whom) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats, 0, whom) }}</td>{% endif %}
-                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
+                  <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -148,7 +154,7 @@
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
-                  <th scope="col">Rango 95%</th>
+                  <th scope="col" class="l">Rango 95%</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,7 +166,7 @@
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
-                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
+                  <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -183,14 +189,38 @@
           {% endcall %}
         {{ m.card_end() }}
       </div>
-      {{ m.card_start('evolution-card', 'Evolución de las publicaciones', 'El voto de cada partido en cada publicación del modelo, de la primera a la última.', '· ' ~ ('estimación' if state.mode == 'nowcast' else 'pronóstico') ~ ' de cada publicación') }}
-        <div class="chart" id="evolution" role="img" aria-label="Evolución de las publicaciones: estimación de cada publicación"></div>
+      {#- the evolution shares its controls, legend and chart ids with Escaños (`pages/evolution-wire.js`) -#}
+      {{ m.card_start('evolution-card', 'Evolución de las actualizaciones', 'El voto de cada partido en cada actualización del modelo, de la primera a la última.', '· voto de cada actualización',
+                      tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las actualizaciones · ' ~ title_suffix,
+                                              site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-evolucion-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
+        {% if blocks %}
+        <div class="series-controls">
+          <fieldset id="evolution-view" class="seg" hidden>
+            <legend>Vista</legend>
+            <label><input type="radio" name="evview" value="partidos" checked> Partidos</label>
+            <label><input type="radio" name="evview" value="bloques"> Bloques</label>
+          </fieldset>
+        </div>
+        {% endif %}
+        <div class="legend" id="evolution-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
+        <div class="chart chart-tall" id="evolution-chart" role="img" aria-label="Evolución de las actualizaciones: el voto de cada partido en cada actualización"></div>
         {% call m.how() %}
         <p>
-          Un punto por cada publicación. Los puntos huecos son estimaciones retrospectivas: el modelo de hoy
-          con los sondeos publicados hasta ese día.
+          Cada punto es la actualización de ese día: el voto de cada partido con los sondeos conocidos hasta
+          entonces. Si un día hubo varias actualizaciones, se muestra la última. Los puntos huecos son estimaciones
+          retrospectivas: el modelo de hoy con los sondeos publicados hasta aquel día.
         </p>
-        <p>No es una serie de sondeos: cada punto es lo que el modelo publicó ese día.</p>
+        <p>
+          Esto no es una serie de sondeos ni la curva del promedio. La curva del promedio revisa el pasado: el valor
+          de cada día usa también los sondeos que llegaron después, así que cambia con cada sondeo nuevo. Estos
+          puntos no se revisan: cada uno es la actualización de ese día. Por eso pueden no coincidir.
+        </p>
+        <p>
+          Los puntos se mueven de un día a otro porque entran sondeos nuevos, no porque cambie el modelo: mira la
+          tendencia, no cada salto. Pulsa un partido de la leyenda para ocultarlo o mostrarlo; el eje vertical se
+          ajusta a lo que queda a la vista, así que con pocos partidos marcados se ven mejor los cambios pequeños.
+          En la vista Bloques, cada bloque suma sus partidos y Otros es lo que falta hasta 100.
+        </p>
         {% endcall %}
       {{ m.card_end() }}
       {% if pollsters %}

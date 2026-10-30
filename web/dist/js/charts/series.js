@@ -13,7 +13,7 @@ import {DEFAULT_WINDOW, seriesWindow} from '../range.js';
 export {meanTooltipLine, pollTooltipLines, resultTooltipLine};
 
 const DAY_MS = 24 * 3600 * 1000;
-const AXIS_STEP = 5;  // the ticks of the vertical axis, in points of vote share (Luis, 2026-10-28)
+export const AXIS_STEP = 5;  // the ticks of the vertical axis, in points of vote share (Luis, 2026-10-28); the evolution shares it
 const BAND_OPACITY = 0.15;  // `bandSeries`, still drawn by the live example of the method (`weights.js`)
 const RANGE_OPACITY = 0.45;  // the range bar at the election; full opacity when hovered
 const RANGE_BLUR_OPACITY = 0.15;  // the other bars while one is hovered
@@ -111,14 +111,15 @@ export function pollPoints(polls, name) {
  * extent is infinite and the bounds are null, which leaves the axis to ECharts.
  *
  * @param {{min: number, max: number}} extent the extent of the visible data
+ * @param {number} [step=AXIS_STEP] the tick step the bounds snap to (the evolution of the seats uses 20)
  * @returns {Array<number|null>} `[low, high]`
  */
-export function axisBounds({min, max}) {
+export function axisBounds({min, max}, step = AXIS_STEP) {
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
     return [null, null];
   }
-  const low = Math.floor(min / AXIS_STEP) * AXIS_STEP;
-  return [low, Math.max(Math.ceil(max / AXIS_STEP) * AXIS_STEP, low + AXIS_STEP)];
+  const low = Math.floor(min / step) * step;
+  return [low, Math.max(Math.ceil(max / step) * step, low + step)];
 }
 
 /**

@@ -469,6 +469,7 @@ th { font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spac
 th[title] { cursor: help; }  /* the header explains its column in a tooltip */
 tbody tr:hover td { background: var(--color-row-hover); }
 th:first-child, td:first-child { text-align: left; }
+th.l, td.l { text-align: left; }  /* a column aligned left: the range bars (`.rng`), so they line up */
 td b, td strong { font-weight: 700; }
 /* Long text columns of the quality rubric (profile «Nivel», «Fuente»; method «Niveles»): they wrap, left-aligned */
 #quality-table :is(th, td):nth-child(n+3),
@@ -481,7 +482,8 @@ td b, td strong { font-weight: 700; }
 /* Bar cell: a value as a bar on a grey track, in the colour of the party */
 .bar { display: inline-block; position: relative; width: 90px; height: 8px; border-radius: 4px; background: var(--color-soft2); vertical-align: middle; overflow: hidden; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
-/* Range cell: the 95 % interval as a band, the median as a mark, the majority as a dashed line */
+/* Range cell: the 95 % interval as a band, the median as a mark, the majority as a dashed line; its column
+   is aligned left (`.l`) so the bars line up whatever the digits of the numbers beside them */
 .rng { display: inline-block; position: relative; width: 110px; height: 12px; border-radius: 6px; background: var(--color-soft2); vertical-align: middle; }
 .rng i { position: absolute; top: 0; bottom: 0; border-radius: 6px; opacity: .45; }
 .rng b { position: absolute; top: -2px; width: 3px; height: 16px; border-radius: 2px; }
@@ -503,8 +505,18 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .kpi .s { margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .s.ok { color: var(--color-ok); }
 
-/* Party cards: the main parties in their colour (darkened, so that white text reads on every colour) */
-.pcards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-3); }
+/* Party cards: every party in its colour (darkened, so that white text reads on every colour), slid sideways in a
+   carousel (Luis, 2026-10-30): six per view on desktop, snapping card by card, the scrollbar hidden and two arrows
+   at the sides that the script shows when the strip overflows */
+.pcarousel { position: relative; }
+.pcards { display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: 2px 0; scrollbar-width: none; }
+.pcards::-webkit-scrollbar { display: none; }
+.pc { flex: 0 0 calc((100% - 5 * var(--space-3)) / 6); scroll-snap-align: start; }
+.pc-arrow { position: absolute; top: 50%; z-index: 2; width: 36px; height: 36px; padding: 0; justify-content: center; border-radius: 50%; font: 700 24px/1 var(--font-head); background: var(--color-card); box-shadow: var(--shadow); transform: translateY(-50%); }
+.pc-arrow.prev { left: -18px; }
+.pc-arrow.next { right: -18px; }
+.pc-arrow[hidden] { display: none; }
+.pc-arrow:disabled { opacity: .35; cursor: default; }
 .pc {
   position: relative;
   overflow: hidden;
@@ -763,7 +775,6 @@ ol.notes > li:target { color: var(--color-text); }
 .et th .pd { display: block; width: 10px; height: 10px; margin: 0 0 3px auto; border-radius: 50%; }
 /* A second, smaller line under a header label: «Elecciones» with «(generales)», the count in brackets in its cells */
 .et th .th-sub { display: block; font-size: 0.85em; text-transform: none; letter-spacing: 0; }
-.et th.l, .et td.l { text-align: left; }
 .et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .et td.f { white-space: normal; }
 .et tbody tr:hover td.f { background: var(--color-row-hover); }
@@ -947,7 +958,7 @@ td.blk { font-weight: 700; }
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .kpi:nth-child(n+4) { border-top: 1px solid var(--color-line); }
   .kpi:nth-child(4)::before { display: none; }
-  .pcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pc { flex-basis: calc((100% - 2 * var(--space-3)) / 3); }
   .hemi-grid, .split { grid-template-columns: 1fr; }
   .steps, .grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rows-2 { grid-template-columns: 1fr; }
@@ -1036,9 +1047,9 @@ td.blk { font-weight: 700; }
   .kpi:last-child:nth-child(odd)::after { display: none; }
   .kpi .v { font-size: 20px; }
   /* The party cards slide sideways, bleeding to the edges, 16 px under the KPIs like every block of the stack */
-  .pcards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: var(--space-4) calc(-1 * var(--band-pad)) 0; padding: 2px var(--band-pad) var(--space-2); scrollbar-width: none; }
-  .pcards::-webkit-scrollbar { display: none; }
-  .pc { flex: 0 0 210px; scroll-snap-align: start; }
+  .pcards { gap: 10px; margin: 0 calc(-1 * var(--band-pad)); padding: 2px var(--band-pad) var(--space-2); scroll-padding-left: var(--band-pad); }
+  .pc { flex-basis: 210px; }
+  .pc-arrow { display: none; }
 
   /* Larger tap targets for the chart controls and the pills */
   .seg label, .seg > span, .seg > a, .event-tabs a, .pills .pill { min-height: 40px; display: inline-flex; align-items: center; }

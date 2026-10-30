@@ -77,10 +77,10 @@ ROUTES = [
 ]
 NOT_FOUND = [('/api/', 'base'), ('/', 'page')]
 MESSAGES = {
-    'no bundle published yet': 'Todavía no hay ningún pronóstico publicado.',
-    'scope not published': 'Este ámbito no tiene pronóstico publicado.',
+    'no bundle published yet': 'Todavía no hay ninguna actualización del modelo.',
+    'scope not published': 'Este ámbito no tiene actualizaciones del modelo.',
     'run not found': 'Ese run no existe.',
-    'no runs published': 'Este ámbito no tiene runs publicados.',
+    'no runs published': 'Este ámbito no tiene ningún run.',
     'invalid scope': 'Ámbito no válido.',
     'invalid run': 'Run no válido.',
     'invalid mode': 'Modo no válido.',
@@ -679,7 +679,7 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool,
     str
         In nowcast mode ``'Estimación a {today}'`` for the latest run and ``'Estimación del {run_at}'`` for
         an older pinned run or while frozen (never today's date over a run read before the veda); in forecast mode ``'Pronóstico definitivo para el {event_date}'`` only while
-        frozen and showing the latest run, ``'Pronóstico publicado el {run_at}'`` for an older pinned run and
+        frozen and showing the latest run, ``'Pronóstico actualizado el {run_at}'`` for an older pinned run and
         ``'Pronóstico para el {event_date}'`` otherwise.
     """
     if mode == 'nowcast':
@@ -695,7 +695,7 @@ def title_of(mode: str, meta: dict, frozen: bool, pinned: bool, is_latest: bool,
         return 'Pronóstico definitivo para el {}'.format(fmt_date(meta.get('event_date')))
 
     if pinned and not is_latest:
-        return 'Pronóstico publicado el {}'.format(fmt_date(meta.get('run_at')))
+        return 'Pronóstico actualizado el {}'.format(fmt_date(meta.get('run_at')))
 
     return 'Pronóstico para el {}'.format(fmt_date(meta.get('event_date')))
 

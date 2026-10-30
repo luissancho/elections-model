@@ -81,7 +81,7 @@ def test_image_layout_leaves_room_for_a_side_panel_and_centres_the_shorter():
 
 TABLE = {
     'columns': [{'label': 'Partido', 'align': 'left'}, {'label': '% Voto', 'align': 'right'},
-                {'label': 'vs 2023', 'align': 'right'}, {'label': 'Rango 95%', 'align': 'right'}],
+                {'label': 'vs 2023', 'align': 'right'}, {'label': 'Rango 95%', 'align': 'left'}],
     'rows': [
         [{'text': 'PP', 'bold': True, 'dot': '#1d84ce'}, {'text': '32,7%', 'bold': False},
          {'text': '▼ 0,4', 'bold': True, 'color': 'rgb(214, 39, 40)'},
@@ -106,12 +106,13 @@ def test_table_drawing_sizes_the_columns_to_their_widest_cell_and_draws_the_site
     heads = [t for t in texts if t['y'] == 15]
     assert [t['text'] for t in heads] == ['PARTIDO', '% VOTO', 'VS 2023', 'RANGO 95%']
     assert heads[0]['align'] == 'left' and heads[1]['align'] == 'right' and heads[1]['x'] == widths[0] + widths[1] - 8
+    assert heads[3]['align'] == 'left' and heads[3]['x'] == sum(widths[:3]) + 8  # the range column is aligned left
     assert all(t['baseline'] == 'middle' for t in texts)
     pp = {t['text']: t for t in texts if t['y'] == 45}
     assert pp['PP']['x'] == 8 + 9 + 7 and pp['PP']['font'].startswith('700 13px')
     assert pp['32,7%']['font'].startswith('400 13px') and pp['32,7%']['color'] == '#1a1c22'
     assert pp['▼ 0,4']['color'] == 'rgb(214, 39, 40)'
-    assert pp['118–160']['align'] == 'right' and pp['118–160']['x'] == sum(widths) - 8
+    assert pp['118–160']['align'] == 'left' and pp['118–160']['x'] == sum(widths[:3]) + 8 + 110 + 8  # after its bar
     circles = [item for item in drawing['items'] if item['type'] == 'circle']
     assert circles == [{'type': 'circle', 'x': 12.5, 'y': 45, 'r': 4.5, 'color': '#1d84ce'},
                        {'type': 'circle', 'x': 12.5, 'y': 75, 'r': 4.5, 'color': '#0a5ca8'}]

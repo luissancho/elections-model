@@ -838,9 +838,15 @@ llamada: los dos leen `backtest/results` del disco (o `source`), no el paquete.
 
 Rutina, por situación:
 
-- **Campaña (a diario, hasta el 23 de noviembre)**: cargar los sondeos y lanzar
-  `{"what":["forecast","analysis"],"scopes":"all"}` (o la lista de ámbitos con sondeos nuevos; `es` tarda unos
-  2 min). Comprobar en el resumen que cada ámbito termina `published` y mirar los "· n avisos".
+- **Campaña (a diario, hasta el 23 de noviembre)**: cargar los sondeos y lanzar dos llamadas: `es` con 10.000
+  simulaciones, `{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}` (unos 10 min), y los autonómicos
+  con las 1.000 por defecto, `{"what":["forecast","analysis"],"scopes":["es-an","es-ar","es-as","es-ib","es-cn",
+  "es-cb","es-cl","es-cm","es-ct","es-vc","es-ex","es-ga","es-md","es-mc","es-nc","es-pv","es-ri"]}` (o sólo los
+  ámbitos con sondeos nuevos; en ECS son dos `run-task`). Desde el 30 de octubre de 2026 `es` va con 10.000
+  porque su P(mayoría) es el titular y con 1.000 depende de la semilla (±0,5 pp y extremos del rango 95 % que
+  bailan hasta 3 escaños, medido con 10 semillas); con 10.000 el error baja a ±0,15 pp y ±0,3 escaños. Los
+  autonómicos no llevan probabilidades en titular y multiplicar por 5 su tiempo no compensa. Comprobar en el
+  resumen que cada ámbito termina `published` y mirar los "· n avisos".
 - **Veda (del 24 al 28)**: no se publica nada; `manifest` con `freeze` el 23 y la noche del 29 (ver "Veda"). La
   guarda rechaza `forecast` y `analysis` en todos los ámbitos hasta el 29 incluido.
 - **Tras una elección**: cargar los resultados oficiales y lanzar `event` de esa fecha (no pasa por la guarda, así
@@ -908,7 +914,7 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `what` | `["forecast"]` | Acciones a ejecutar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
 | `event_date` | siguiente evento del ámbito | Fecha de la elección (`YYYY-MM-DD`; si no es una fecha ISO, el ámbito queda `failed`). Para `event` es obligatorio y admite una cadena, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy); una fecha no ISO deja el ámbito `failed` (enmienda 2026-10-11) |
-| `n_sim` | `1000` | Simulaciones por modo |
+| `n_sim` | `1000` | Simulaciones por modo; `es` se publica con `10000` desde el 30-10-2026 (ver "Campaña") |
 | `seed` | `42` | Semilla |
 | `drange` | `6` | Ventana de sondeos del pronóstico |
 | `max_fc` | `10` | Pasos máximos del pronóstico |
@@ -1191,7 +1197,8 @@ aws ecs run-task --cli-input-json file://deploy/ecs/run-task.example.json
 El override de `RUN_JOB` lleva el nombre del job (la primera palabra) y después el JSON, que puede llevar espacios
 (por ejemplo el mensaje de la congelación): `init.sh` pasa todo lo que sigue al primer espacio como un solo
 argumento (enmienda 2026-10-13, revisión final; antes había que escribirlo sin espacios). Cambia `what`, `scopes` y
-el resto de parámetros en ese valor. La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
+el resto de parámetros en ese valor; el ejemplo lleva la llamada diaria de `es` con 10.000 simulaciones, y los
+autonómicos van en un segundo `run-task` con su lista de ámbitos y sin `n_sim` (ver "Campaña"). La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
 prefijo `job`). El rol de jobs (`<task-role-write>`) escribe en `site/*` y `site-dry/*`; la web, con el rol de
 lectura, no puede escribir. Mide la memoria de `publish forecast all` antes de fiarte de los 4 GB de la plantilla
 (la tarea 4 de la fase 6 lo mide en local). (Enmienda 2026-10-13: en local solo se midió `publish backtest`, que no
@@ -1351,6 +1358,10 @@ Primer paquete local de `es` (2026-10-08, contra la RDS, `n_sim=1000`): 121 s en
 42,5; nowcast 21,0; forecast 21,5; exportación 0,8). Ensayo con `n_sim=20`: 86 s. La duración de
 `scopes: "all"` contra la RDS está pendiente de medir. El análisis de casas de `es` (`what: ["analysis"]`)
 tardó 44 s en el test de integración contra la RDS (2026-10-10).
+
+`es` con `n_sim=10000` (2026-10-30, contra la RDS, portátil): 673 s en total (init 17,6; ajuste 57,4; nowcast
+276; forecast 310; exportaciones 11). Las dos fases de simulación escalan lineales con `n_sim` (22 s cada una con
+1.000); `dist.json` pasa de 34 a 336 KB por modo (87 KB comprimido en la página Escaños).
 
 Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
 tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los

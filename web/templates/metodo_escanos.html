@@ -505,7 +505,7 @@
           el modelo en las cinco elecciones generales de 2015 a 2023, leído a 6, 14, 30, 60, 90 y 180 días de la
           votación, con los sondeos, los ratings y los estimadores que se conocían en cada fecha.
           {% if figures.coverage %}{% set first = figures.coverage[0] %}
-          En la evaluación publicada, el intervalo del 95% del voto contiene el resultado el
+          En la última evaluación, el intervalo del 95% del voto contiene el resultado el
           {{ (first.cov95 * 100)|pct(0) }} de las veces a {{ first.horizon|int }} días de la votación.
           {% else %}
           Si los intervalos aciertan tantas veces como anuncian se comprueba en
@@ -752,7 +752,7 @@
             que a ningún otro (un empate va al primero en el orden del catálogo); la de mayoría absoluta de un bloque
             o coalición, las que suman al menos la mitad más uno de la cámara, 176 en el Congreso. Por provincia se
             publican el reparto central y, por partido, la mediana y el intervalo del 95% de su cuota y de sus escaños
-            y la probabilidad de escaño. Cada cálculo publicado corre
+            y la probabilidad de escaño. Cada actualización corre
             {% if figures.n_sim %}{{ figures.n_sim|int }}{% else %}miles de{% endif %} simulaciones por modo con una
             semilla fija, de modo que es reproducible, y registra la parte de simulaciones en que «otros» se quedó
             en cero.

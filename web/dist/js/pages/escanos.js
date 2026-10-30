@@ -4,7 +4,6 @@
 import {fmtInt} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {THEME} from '../charts/base.js';
-import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {histogramOption, renderHistogram} from '../charts/histogram.js';
 import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
@@ -12,6 +11,7 @@ import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked, stackedOption} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
+import {wireEvolution} from './evolution-wire.js';
 import {coalitionCaption, coalitionHash, coalitionSeats, coalitionText, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireForm} from './common.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
@@ -269,18 +269,33 @@ function wireSeats(initial, catalog, colors) {
   };
   const barEl = document.getElementById('seats-bar');
   const ridgeEl = document.getElementById('ridge-chart');
+  const toggle = document.getElementById('ridge-toggle');
   const cache = {};
   let shown = views.partidos;  // the view drawn, the one the download button exports
+  let current = 'partidos';
+  let ridgeOpen = false;  // the distributions open on demand (Luis, 2026-10-30)
 
   /** Options of the bar of `view`. */
   const barOf = (view) => ({
     colors: view.colors, fullnames: view.fullnames, majority, total: nSeats, deltas: view.deltas, year: deltas.year,
   });
 
-  /** Draw the bar and the ridges of `view` and show its table. */
+  /** Draw the ridges of `view` (computed once per view). */
+  function drawRidge(view) {
+    const chosen = views[view];
+    cache[view] = cache[view] || chosen.ridges();
+    if (cache[view].length) {
+      tryDraw(() => renderRidge(ridgeEl, cache[view], {
+        colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: ridgeRowHeight(window.innerWidth),
+      }), `the ${view} distributions`);
+    }
+  }
+
+  /** Draw the bar of `view`, show its table and, when they are open, its ridges. */
   function draw(view) {
     const chosen = views[view];
     shown = chosen;
+    current = view;
     for (const [name, item] of Object.entries(views)) {
       const container = document.getElementById(item.container);
       if (container) {
@@ -290,17 +305,24 @@ function wireSeats(initial, catalog, colors) {
     if (barEl) {
       tryDraw(() => renderStacked(barEl, chosen.bar, barOf(chosen)), `the ${view} bar`);
     }
-    if (ridgeEl) {
-      cache[view] = cache[view] || chosen.ridges();
-      if (cache[view].length) {
-        tryDraw(() => renderRidge(ridgeEl, cache[view], {
-          colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: ridgeRowHeight(window.innerWidth),
-        }), `the ${view} distributions`);
-      }
+    if (ridgeEl && ridgeOpen) {
+      drawRidge(view);
     }
   }
 
   draw('partidos');
+  if (toggle && ridgeEl) {
+    toggle.hidden = false;
+    toggle.addEventListener('click', () => {
+      ridgeOpen = !ridgeOpen;
+      ridgeEl.hidden = !ridgeOpen;
+      toggle.setAttribute('aria-expanded', String(ridgeOpen));
+      toggle.textContent = ridgeOpen ? 'Ocultar las distribuciones' : 'Ver las distribuciones';
+      if (ridgeOpen) {
+        drawRidge(current);
+      }
+    });
+  }
   wireDownload(document.getElementById('seats-download'), () => stackedOption(shown.bar, barOf(shown)), showError, {
     chartHeight: BAR_IMAGE_HEIGHT, bottom: () => tableImage(document.querySelector(`#${shown.container} table`)),
   });
@@ -319,7 +341,7 @@ function wireSeats(initial, catalog, colors) {
 /** Draw the seats card, the fan and the evolution, and wire the majority calculator and the territory table. */
 function paint() {
   const initial = readInitial();
-  const {state, meta, summary, dist, fan, runs} = initial;
+  const {state, meta, summary, dist, fan} = initial;
 
   const catalog = new Catalog(meta);
   const majority = meta.majority ?? summary.majority;
@@ -343,9 +365,10 @@ function paint() {
     markLabel: state.mode === 'nowcast' ? 'Hoy' : 'Elección',
   }), 'the fan');
 
-  tryDraw(() => renderEvolution(document.getElementById('seats-evolution'), runs.runs, state.mode, {
-    colors, field: 'seats', formatter: fmtInt, parties: partyRows.map((row) => row.name),
-  }), 'the seat evolution');
+  // the parties of the summary, in its order: the same list and order as the average of Promedios
+  tryDraw(() => wireEvolution(initial, catalog, {
+    parties: partyRows.map((row) => row.name), field: 'seats', formatter: fmtInt, total: nSeats,
+  }), 'the evolution');
 }
 
 wireControls();

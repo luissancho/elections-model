@@ -19,3 +19,6 @@ env.*
 *.crt
 *.key
 .superpowers/
+
+# git worktrees of feature branches (superpowers)
+.worktrees/
