@@ -23,13 +23,14 @@ function present(value) {
 }
 
 /**
- * Value of the rest block: 100 minus the other blocks, only when there are others and all of them have a value.
+ * Value of the rest block: `total` minus the other blocks, only when there are others and all of them have a value.
  *
  * @param {Array<number|null|undefined>} others values of the blocks other than the rest block
- * @returns {number|null} the complement to 100, null when any value is missing
+ * @param {number} [total=100] what the blocks add up to (100 for shares, the chamber for seats)
+ * @returns {number|null} the complement to `total`, null when any value is missing
  */
-function restOf(others) {
-  return others.length && others.every(present) ? 100 - others.reduce((total, value) => total + value, 0) : null;
+function restOf(others, total = 100) {
+  return others.length && others.every(present) ? total - others.reduce((sum, value) => sum + value, 0) : null;
 }
 
 /**
@@ -124,6 +125,46 @@ export function blockPolls(polls, blocks) {
       return row;
     }),
   };
+}
+
+/**
+ * Published runs by block, for the evolution of the publications: each run keeps its fields (`run_id`, `run_at`,
+ * `as_of`, `backfill`, `n_polls`...) and gets, in `nowcast.parties`, one row `{name, [field]}` per block with the
+ * sum of the `field` of its parties present in the run's headline; a block with none of them has no row. The
+ * `REST_BLOCK` is `total −` the other blocks, only when every one of them has a row.
+ *
+ * @param {object[]} runs runs of the history part (`headline` of each, with `nowcast.parties`)
+ * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)
+ * @param {string} [field='pct'] party field summed (`pct` or `seats`)
+ * @param {number} [total=100] what the blocks add up to (100 for shares, the chamber for seats)
+ * @returns {object[]} the runs with the block rows as `nowcast.parties`, in the order of `blocks`
+ */
+export function blockRuns(runs, blocks, field = 'pct', total = 100) {
+  const names = Object.keys(blocks);
+  const others = names.filter((name) => name !== REST_BLOCK);
+  return runs.map((run) => {
+    const parties = ((run.nowcast || {}).parties || []);
+    const valueOf = (party) => {
+      const row = parties.find((item) => item.name === party);
+      return row ? row[field] : undefined;
+    };
+    const rows = [];
+    const sums = {};
+    for (const block of others) {
+      const values = blocks[block].map(valueOf).filter(present);
+      if (values.length) {
+        sums[block] = values.reduce((sum, value) => sum + value, 0);
+        rows.push({name: block, [field]: sums[block]});
+      }
+    }
+    if (names.includes(REST_BLOCK)) {
+      const rest = restOf(others.map((name) => sums[name]), total);
+      if (rest !== null) {
+        rows.push({name: REST_BLOCK, [field]: rest});
+      }
+    }
+    return {...run, nowcast: {...run.nowcast, parties: rows}};
+  });
 }
 
 /**
