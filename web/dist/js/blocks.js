@@ -131,7 +131,9 @@ export function blockPolls(polls, blocks) {
  * Published runs by block, for the evolution of the publications: each run keeps its fields (`run_id`, `run_at`,
  * `as_of`, `backfill`, `n_polls`...) and gets, in `nowcast.parties`, one row `{name, [field]}` per block with the
  * sum of the `field` of its parties present in the run's headline; a block with none of them has no row. The
- * `REST_BLOCK` is `total −` the other blocks, only when every one of them has a row.
+ * `REST_BLOCK` is `total −` the other blocks, only when every one of them has a row. The blocks follow the current
+ * map: a run from before a party rename (SUMAR → FA) has no row for the new name, so that share falls into the
+ * rest block; the histories are republished with the current line-up, which keeps this latent.
  *
  * @param {object[]} runs runs of the history part (`headline` of each, with `nowcast.parties`)
  * @param {Object<string, string[]>} blocks block → party names (`meta.bmaps.blocks`)

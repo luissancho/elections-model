@@ -320,10 +320,12 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels`` (``has_communities``),
         ``deltas`` (``seat_deltas`` against the last published election, for the «vs {year}» column of the tables),
-        ``results_year`` and ``results_date`` (of that election; ``None`` without one) and ``initial`` (``state``, ``meta``, ``summary``,
-        ``dist``, ``fan``, ``districts``, ``scenario``, ``runs`` and ``deltas`` (``seat_deltas`` against the last
-        published election, for the seats bar), the data the charts, the calculator and the territory table are
-        drawn from).
+        ``results_year`` and ``results_date`` (of that election; ``None`` without one), ``blocks`` (the names of
+        ``meta['bmaps']['blocks']``, the Bloques view of the evolution; ``[]`` without a block map) and ``initial``
+        (``state``, ``meta``, ``summary``, ``dist``, ``fan``, ``districts``, ``scenario``, ``runs``, ``deltas``
+        (``seat_deltas`` against the last published election, for the seats bar) and ``inks`` (the text colour over
+        the colour of each party and block, for the pills of the evolution legend), the data the charts, the
+        calculator and the territory table are drawn from).
 
     Raises
     ------
