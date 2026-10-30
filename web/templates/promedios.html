@@ -101,7 +101,7 @@
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
-                  <th scope="col">Rango 95%</th>
+                  <th scope="col" class="l">Rango 95%</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,7 +115,7 @@
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1, whom) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats, 0, whom) }}</td>{% endif %}
-                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
+                  <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -148,7 +148,7 @@
                   {% if results_year %}<th scope="col" title="Diferencia en puntos frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
                   <th scope="col">Escaños</th>
                   {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
-                  <th scope="col">Rango 95%</th>
+                  <th scope="col" class="l">Rango 95%</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,7 +160,7 @@
                   {% if results_year %}<td>{{ m.badge(row.delta_pct, 1) }}</td>{% endif %}
                   <td><strong>{{ row.seats|int }}</strong></td>
                   {% if results_year %}<td>{{ m.badge(row.delta_seats) }}</td>{% endif %}
-                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
+                  <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 </tr>
                 {% endfor %}
               </tbody>

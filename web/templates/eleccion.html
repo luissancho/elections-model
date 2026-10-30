@@ -195,7 +195,7 @@
                   <th scope="col">Error</th>
                   <th scope="col">Escaños modelo</th>
                   <th scope="col">Escaños reales</th>
-                  <th scope="col">Rango 95%</th>
+                  <th scope="col" class="l">Rango 95%</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,11 +210,11 @@
                   {% if table.seats_valid %}
                   <td><strong>{{ row.model_seats|int }}</strong></td>
                   <td>{{ row.official_seats|int }}</td>
-                  <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
+                  <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                   {% else %}
                   <td class="na">—</td>
                   <td class="na">—</td>
-                  <td class="na">—</td>
+                  <td class="na l">—</td>
                   {% endif %}
                 </tr>
                 {% endfor %}
@@ -232,7 +232,7 @@
                 <th scope="col">Error</th>
                 <th scope="col">Escaños modelo</th>
                 <th scope="col">Escaños reales</th>
-                <th scope="col">Rango 95%</th>
+                <th scope="col" class="l">Rango 95%</th>
                 <th scope="col">Prob. de mayoría</th>
               </tr>
             </thead>
@@ -248,12 +248,12 @@
                 {% if table.seats_valid %}
                 <td><strong>{{ row.model_seats|int }}</strong></td>
                 <td>{{ row.official_seats|int }}</td>
-                <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
+                <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}–{% endif %}</td>
                 <td>{{ row.p_majority|prob }}</td>
                 {% else %}
                 <td class="na">—</td>
                 <td class="na">—</td>
-                <td class="na">—</td>
+                <td class="na l">—</td>
                 <td class="na">—</td>
                 {% endif %}
               </tr>

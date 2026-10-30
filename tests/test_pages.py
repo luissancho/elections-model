@@ -649,7 +649,7 @@ def test_promedios_polls_table_renders_fifteen_of_many_polls_and_the_island_carr
 
 def test_escanos_table_histograms_blocks_and_pills(api):
     page = html(call(api, '/es/escanos')[2])
-    assert '<th scope="col">Rango 95%</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
+    assert '<th scope="col" class="l">Rango 95%</th>' in page and 'Mín–máx' not in page and '<th scope="col">Media</th>' not in page
     # Una sola tarjeta: vista Partidos/Bloques, la barra, la tabla de la vista y un solo gráfico de crestas
     assert 'id="ridge-chart"' in page and 'data-party=' not in page and 'id="histograms"' not in page
     assert re.search(r'cada una con su\s+propio eje', page) and 'grid-small' not in page
@@ -852,6 +852,9 @@ def test_district_table_and_region_rows():
     assert table['rows'][1]['cells'] == [{'seats': 16, 'range': '14–18'}, {'seats': 9, 'range': '8–11'}]
     assert table['total'] == {'seats': 246, 'cells': [{'seats': 140, 'range': '–'}, {'seats': 106, 'range': '–'}]}
     assert pages.district_table({'parties': [], 'regions': [], 'rows': []}, SCENARIO) is None
+    # un partido en liza ausente del reparto central es columna sin escaños, no queda fuera (2026-10-30)
+    three = pages.district_table(DISTRICTS | {'parties': ['VOX', 'PP', 'PSOE']}, SCENARIO)
+    assert three['parties'] == ['PP', 'PSOE', 'VOX'] and three['rows'][1]['cells'][2] == {'seats': None, 'range': '–'}
     assert [r['name'] for r in pages.region_rows(DISTRICTS, 28)] == ['PP', 'PSOE']
     absent = DISTRICTS['rows'][2] | {'name': 'VOX', 'pct': None, 'pct_lo': None, 'pct_hi': None, 'seats': 0.0}
     assert [r['name'] for r in pages.region_rows(DISTRICTS | {'rows': DISTRICTS['rows'] + [absent]}, 28)] == ['PP', 'PSOE']
@@ -864,14 +867,21 @@ def test_district_table_rows_are_alphabetical_with_the_accents_folded():
     assert [r['name'] for r in table['rows']] == ['A Coruña', 'Álava', 'Ávila', 'Zamora']
 
 
-def test_district_table_keeps_scenario_parties_ordered_by_total_and_has_communities_needs_votes():
+def test_district_table_keeps_every_party_ordered_by_total_and_has_communities_needs_votes():
     districts = DISTRICTS | {'parties': ['PP', 'PSOE', 'VOX']}
     scenario = {'parties': ['PP', 'PSOE', 'VOX'], 'rows': [
         {'region_id': 0, 'region': 'es', 'seats': [10, 30, 0]},
         {'region_id': 8, 'region': 'Barcelona', 'seats': [10, 0, 0]}, {'region_id': 28, 'region': 'Madrid', 'seats': [0, 30, 0]}]}
     table = pages.district_table(districts, scenario)
-    assert table['parties'] == ['PSOE', 'PP']  # VOX sin escaños fuera, PSOE antes por su total
-    assert [c['seats'] for c in table['rows'][0]['cells']] == [0, 10]
+    # VOX sin escaños también es columna (Luis, 2026-10-30), al final; PSOE antes que PP por su total
+    assert table['parties'] == ['PSOE', 'PP', 'VOX']
+    assert [c['seats'] for c in table['rows'][0]['cells']] == [0, 10, 0] and table['total']['cells'][2] == {'seats': 0, 'range': '–'}
+    # entre los que no sacan escaño, el voto del resumen desempata (y sin resumen, el orden del run)
+    districts = DISTRICTS | {'parties': ['PP', 'PSOE', 'VOX', 'UPN']}
+    scenario = {'parties': ['PP', 'PSOE', 'VOX', 'UPN'], 'rows': [dict(r, seats=r['seats'] + [0]) for r in scenario['rows']]}
+    assert pages.district_table(districts, scenario)['parties'] == ['PSOE', 'PP', 'VOX', 'UPN']
+    summary = {'parties': [{'name': 'UPN', 'pct': 1.2}, {'name': 'VOX', 'pct': 0.9}, {'name': 'PP', 'pct': 30.0}]}
+    assert pages.district_table(districts, scenario, summary)['parties'] == ['PSOE', 'PP', 'UPN', 'VOX']
     regions = [dict(r, community={'code': r['id'], 'name': 'X'}, votes=10) for r in DISTRICTS['regions']]
     assert pages.has_communities(regions) is True
     assert pages.has_communities([dict(regions[0], votes=None), regions[1]]) is False
@@ -936,9 +946,9 @@ def test_promedios_central_block_is_three_cards_with_ranges(api):
     page = html(call(api, '/es')[2])
     order = [page.index(m) for m in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"', 'id="evolution-card"')]
     assert order == sorted(order)
-    heads = re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="parties-table"'):page.index('id="blocks-result-table"')])
+    heads = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', page[page.index('id="parties-table"'):page.index('id="blocks-result-table"')])
     assert heads == ['Partido', '% Voto', 'Escaños', 'Rango 95%']  # the probabilities live in Escaños (2026-10-17)
-    assert re.findall(r'<th scope="col">([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'Rango 95%']
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', page[page.index('id="blocks-result-table"'):page.index('id="evolution-card"')]) == ['Bloque', '% Voto', 'Escaños', 'Rango 95%']
     for gone in ('id="vote-chart"', 'id="seats-chart"', 'id="majority"', 'id="headline-table"'):
         assert gone not in page
 
@@ -1902,7 +1912,7 @@ def test_eleccion_detail_draws_the_average_with_the_result_and_what_the_model_sa
     assert '<fieldset id="model-horizon" class="seg" hidden>' in page and '<input type="radio" name="horizon" value="6" checked>' in page
     assert 'data-horizon="6">' in page and 'data-horizon="30" hidden>' in page
     table = re.search(r'<table id="model-table-6">(.*?)</table>', page, re.S).group(1)
-    assert re.findall(r'<th scope="col">(.*?)</th>', table) == ['Partido', 'Promedio (%)', 'Resultado (%)', 'Error', 'Escaños modelo', 'Escaños reales', 'Rango 95%']
+    assert re.findall(r'<th scope="col"[^>]*>(.*?)</th>', table) == ['Partido', 'Promedio (%)', 'Resultado (%)', 'Error', 'Escaños modelo', 'Escaños reales', 'Rango 95%']
     assert table.index('<td>PP</td>') < table.index('<td>32,4</td>') < table.index('<td><strong>140</strong></td>')
     # la horquilla del 95 % como en Promedios: banda sobre los 350, marca en los escaños del modelo, línea en la mayoría
     pp = table[table.index('<td>PP</td>'):table.index('</tr>', table.index('<td>PP</td>'))]
@@ -2252,7 +2262,7 @@ def test_eleccion_detail_scores_the_model_like_the_pollsters(events_site):
     model = page[page.index('id="model"'):page.index('id="last-errors"')]
     assert re.search(r'<p class="muted model-score">Error medio: [0-9,]+ · Sesgo bloques: -?[0-9,]+</p>', model)
     blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', model, re.S).group(1)
-    assert re.findall(r'<th scope="col">([^<]*)</th>', blocks) == ['Bloque', 'Promedio (%)', 'Resultado (%)', 'Error',
+    assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', blocks) == ['Bloque', 'Promedio (%)', 'Resultado (%)', 'Error',
                                                                   'Escaños modelo', 'Escaños reales', 'Rango 95%', 'Prob. de mayoría']
     table = re.search(r'<table id="last-table">(.*?)</table>', page, re.S).group(1)
     row = re.search(r'<tr class="model-row">(.*?)</tr>', table, re.S).group(1)
@@ -2283,7 +2293,9 @@ def test_eleccion_detail_replaces_the_seats_of_an_invalid_horizon_by_a_notice(ev
     # la tabla de bloques sigue (el voto vale) con los escaños en raya, como la de partidos
     assert 'id="model-blocks-6"' in page and 'id="model-blocks-30"' in page
     thirty = page[page.index('<table id="model-table-30">'):page.index('</table>', page.index('<table id="model-blocks-30">'))]
-    assert 'class="rng"' not in thirty and thirty.count('<td class="na">—</td>') == 3 * 3 + 2 * 4  # 3 partidos, 2 bloques
+    # 3 partidos, 2 bloques; la celda del rango de cada fila lleva además la clase `l` de su columna
+    assert 'class="rng"' not in thirty and thirty.count('<td class="na">—</td>') == 3 * 2 + 2 * 3
+    assert thirty.count('<td class="na l">—</td>') == 3 + 2
 
 
 def test_eleccion_detail_shows_a_dash_for_a_block_range_the_part_does_not_carry(events_site, monkeypatch):
@@ -2302,7 +2314,7 @@ def test_eleccion_detail_shows_a_dash_for_a_block_range_the_part_does_not_carry(
     page = html(call(events_site, '/elecciones/es/generales/2023-07')[2])
     blocks = re.search(r'<table id="model-blocks-6">(.*?)</table>', page, re.S).group(1)
     table = re.search(r'<table id="model-table-6">(.*?)</table>', page, re.S).group(1)
-    assert 'class="rng"' not in blocks and blocks.count('<td>–</td>') == 2 and table.count('<span class="rng">') == 3
+    assert 'class="rng"' not in blocks and blocks.count('<td class="l">–</td>') == 2 and table.count('<span class="rng">') == 3
 
 
 def test_eleccion_detail_orders_houses_by_the_absolute_block_error_of_their_last_poll(events_site, monkeypatch):
@@ -3346,7 +3358,7 @@ def test_promedios_party_table_draws_the_seat_range_without_a_vote_bar(api):
     # la barra del voto era redundante con la cifra (Luis, 2026-10-19); tampoco en la tabla de bloques
     assert 'class="bar"' not in table and 'Barra del voto' not in page
     assert 'class="rng"' in table and 'left: 34.3%; width: 8.6%' in table and 'calc(38.6% - 1px)' in table and '<u style="left: 50.3%"></u>' in table
-    assert '120–150' in table and '<th scope="col">Rango 95%</th>' in table
+    assert '120–150' in table and '<th scope="col" class="l">Rango 95%</th>' in table
 
 
 def three_block_summary(otros_seats=200):

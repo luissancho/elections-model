@@ -169,7 +169,7 @@ def _sort_name(name: str) -> str:
     return ''.join(char for char in decomposed if not unicodedata.combining(char)).casefold()
 
 
-def district_table(districts: dict, scenario: dict) -> Optional[dict]:
+def district_table(districts: dict, scenario: dict, summary: Optional[dict] = None) -> Optional[dict]:
     """
     Overview table of the central allocation by district and party.
 
@@ -179,12 +179,15 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
         Data of the ``districts`` part.
     scenario : dict
         Data of the ``scenario`` part.
+    summary : dict, optional
+        Data of the ``summary`` part: the vote (``pct``) of its ``parties`` breaks the ties in seats.
 
     Returns
     -------
     dict or None
-        ``None`` without districts. Otherwise ``parties`` (names with any seat in the central allocation, by
-        central total descending; ties in the order of ``districts['parties']``), ``rows`` (``id``,
+        ``None`` without districts. Otherwise ``parties`` (every party of the run, ``districts['parties']``,
+        with or without seats, by central total descending, then by vote descending, then in that
+        order; the script keeps this order in the vote view too), ``rows`` (``id``,
         ``name``, ``seats`` and ``cells`` per district) and ``total`` (the central row of the
         whole scope, or ``None``). Each cell is ``{'seats': int or None, 'range': str}``: the
         central seats (``None`` when the district is not in the ``scenario`` part) and the 95 % interval.
@@ -213,8 +216,10 @@ def district_table(districts: dict, scenario: dict) -> Optional[dict]:
 
         return sum((seats_of(region_id, name) or 0) for region_id in scenario_rows)
 
-    shown = [name for name in names if any((seats_of(region_id, name) or 0) > 0 for region_id in scenario_rows)]
-    shown.sort(key=lambda name: -total_of(name))
+    # every party of the run, with or without seats (2026-10-30): a column of dashes says it wins none;
+    # the same order in both views of the table, so the vote breaks the ties among the seatless
+    votes = {row['name']: row.get('pct') for row in (summary or {}).get('parties') or []}
+    shown = sorted(names, key=lambda name: (-total_of(name), -(votes.get(name) or 0)))
 
     def cells(region_id):
         out = []
@@ -360,7 +365,7 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     ]
     context['csv_links'] = csv_links(scope, mode, run)
     context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
-    context['district_table'] = district_table(districts, scenario)
+    context['district_table'] = district_table(districts, scenario, summary)
     context['regions'] = districts.get('regions') or []
     context['territory_levels'] = has_communities(context['regions'])
     context['region'] = current

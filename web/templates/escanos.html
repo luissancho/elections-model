@@ -29,7 +29,7 @@
                 <th scope="col">Partido</th>
                 <th scope="col">Escaños</th>
                 {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
-                <th scope="col">Rango 95%</th>
+                <th scope="col" class="l">Rango 95%</th>
                 <th scope="col">P(escaño)</th>
                 <th scope="col">P(primero)</th>
                 <th scope="col">P(mayoría)</th>
@@ -43,7 +43,7 @@
                 <td title="{{ catalog[row.name].fullname }}"><span class="pn"><span class="dot" style="background-color: {{ color }}"></span>{{ row.name }}</span></td>
                 <td><strong>{{ row.seats|int }}</strong></td>
                 {% if results_year %}<td>{{ m.badge(deltas.parties.get(row.name), 0, ('Frente a ' ~ inherited[row.name]|join(' + ') ~ ' en ' ~ results_year) if row.name in inherited else None) }}</td>{% endif %}
-                <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
+                <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_seats|prob }}</td>
                 <td>{{ row.p_first|prob }}</td>
                 <td>{{ row.p_majority|prob }}</td>
@@ -62,7 +62,7 @@
                 <th scope="col">Bloque</th>
                 <th scope="col">Escaños</th>
                 {% if results_year %}<th scope="col" title="Diferencia en escaños frente al resultado oficial del {{ results_date|date }}">vs {{ results_year }}</th>{% endif %}
-                <th scope="col">Rango 95%</th>
+                <th scope="col" class="l">Rango 95%</th>
                 <th scope="col">P(mayoría)</th>
               </tr>
             </thead>
@@ -73,7 +73,7 @@
                 <td><span class="pn"><span class="dot" style="background-color: {{ row.color }}"></span>{{ row.name }}</span></td>
                 <td><strong>{{ row.seats|int }}</strong></td>
                 {% if results_year %}<td>{{ m.badge(deltas.blocks.get(row.name)) }}</td>{% endif %}
-                <td>{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
+                <td class="l">{% if r %}<span class="rng"><i style="left: {{ r.left }}%; width: {{ r.width }}%; background: {{ row.color }}"></i><b style="left: calc({{ r.mark }}% - 1px); background: {{ row.color }}"></b>{% if r.line is not none %}<u style="left: {{ r.line }}%"></u>{% endif %}</span> <span class="mut">{{ row.seats_lo|range(row.seats_hi, 0) }}</span>{% else %}{{ row.seats_lo|range(row.seats_hi, 0) }}{% endif %}</td>
                 <td>{{ row.p_majority|prob }}</td>
               </tr>
               {% endfor %}
@@ -242,7 +242,9 @@
           La tabla reparte los escaños de cada circunscripción con D'Hondt sobre el voto central: la suma de las
           circunscripciones es el titular de la página y la de los partidos de cada bloque, la cifra del bloque.
           Al elegir una circunscripción, el detalle muestra ese reparto con el rango del 95% y la probabilidad de
-          escaño de las simulaciones.
+          escaño de las simulaciones. Están todos los partidos en liza, con escaños o sin ellos, en el mismo orden
+          en las dos vistas: por escaños y, a igual número, por voto. El guion dice que ahí no sacan ninguno o
+          que no se presentan.
         </p>
         <p>
           Los intervalos del detalle, y el ratón sobre cada casilla, dicen cuánto puede variar el reparto.

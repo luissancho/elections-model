@@ -102,7 +102,9 @@ export function groupByCommunity(rows, parties, mode) {
  * @param {object} summary the summary part (`parties` with `pct`)
  * @param {{level: string, mode: string}} [options] `prov` or `ccaa` (falls back to `prov` without communities);
  *   `esc` or `pct`
- * @returns {{parties: string[], rows: Array, total: object}} columns, rows and the TOTAL row
+ * @returns {{parties: string[], rows: Array, total: object}} columns (every party of `districts`, with or
+ *   without seats, by central seats, then by vote, then by name: the same order in both modes), rows and the
+ *   TOTAL row
  */
 export function territoryRows(districts, scenario, summary, {level = 'prov', mode = 'esc'} = {}) {
   const scenarioRows = scenario.rows || [];
@@ -114,11 +116,11 @@ export function territoryRows(districts, scenario, summary, {level = 'prov', mod
     seatTotals[name] = whole ? whole.seats[i] : regionRows.reduce((sum, row) => sum + (row.seats[i] || 0), 0);
   });
   const voteTotals = Object.fromEntries((summary.parties || []).map((row) => [row.name, row.pct]));
-  const rank = (name) => (mode === 'pct' ? voteTotals[name] : seatTotals[name]);
-  const parties = mode === 'pct'
-    ? [...(districts.parties || [])]
-    : scenarioParties.filter((name, i) => regionRows.some((row) => (row.seats[i] || 0) > 0));
-  parties.sort((a, b) => ((rank(b) ?? 0) - (rank(a) ?? 0)) || a.localeCompare(b, 'es'));
+  // every party of the run, with or without seats (2026-10-30): a column of dashes says it wins none; the
+  // same columns in the same order whatever the mode: by seats, the vote breaking the ties among the seatless
+  const parties = [...(districts.parties || [])];
+  parties.sort((a, b) => ((seatTotals[b] ?? 0) - (seatTotals[a] ?? 0))
+    || ((voteTotals[b] ?? 0) - (voteTotals[a] ?? 0)) || a.localeCompare(b, 'es'));
 
   let rows = provinceRows(districts, scenario, parties, mode);
   if (level === 'ccaa' && canGroup(districts.regions || [])) {

@@ -21,7 +21,7 @@
         "environment": [
           {
             "name": "RUN_JOB",
-            "value": "publish {\"what\":[\"forecast\"],\"scopes\":\"all\"}"
+            "value": "publish {\"what\":[\"forecast\",\"analysis\"],\"scopes\":[\"es\"],\"n_sim\":10000}"
           }
         ]
       }

@@ -469,6 +469,7 @@ th { font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spac
 th[title] { cursor: help; }  /* the header explains its column in a tooltip */
 tbody tr:hover td { background: var(--color-row-hover); }
 th:first-child, td:first-child { text-align: left; }
+th.l, td.l { text-align: left; }  /* a column aligned left: the range bars (`.rng`), so they line up */
 td b, td strong { font-weight: 700; }
 /* Long text columns of the quality rubric (profile «Nivel», «Fuente»; method «Niveles»): they wrap, left-aligned */
 #quality-table :is(th, td):nth-child(n+3),
@@ -481,7 +482,8 @@ td b, td strong { font-weight: 700; }
 /* Bar cell: a value as a bar on a grey track, in the colour of the party */
 .bar { display: inline-block; position: relative; width: 90px; height: 8px; border-radius: 4px; background: var(--color-soft2); vertical-align: middle; overflow: hidden; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
-/* Range cell: the 95 % interval as a band, the median as a mark, the majority as a dashed line */
+/* Range cell: the 95 % interval as a band, the median as a mark, the majority as a dashed line; its column
+   is aligned left (`.l`) so the bars line up whatever the digits of the numbers beside them */
 .rng { display: inline-block; position: relative; width: 110px; height: 12px; border-radius: 6px; background: var(--color-soft2); vertical-align: middle; }
 .rng i { position: absolute; top: 0; bottom: 0; border-radius: 6px; opacity: .45; }
 .rng b { position: absolute; top: -2px; width: 3px; height: 16px; border-radius: 2px; }
@@ -763,7 +765,6 @@ ol.notes > li:target { color: var(--color-text); }
 .et th .pd { display: block; width: 10px; height: 10px; margin: 0 0 3px auto; border-radius: 50%; }
 /* A second, smaller line under a header label: «Elecciones» with «(generales)», the count in brackets in its cells */
 .et th .th-sub { display: block; font-size: 0.85em; text-transform: none; letter-spacing: 0; }
-.et th.l, .et td.l { text-align: left; }
 .et .f { position: sticky; left: 0; z-index: 1; background: var(--color-card); box-shadow: 1px 0 0 var(--color-line); }
 .et td.f { white-space: normal; }
 .et tbody tr:hover td.f { background: var(--color-row-hover); }
