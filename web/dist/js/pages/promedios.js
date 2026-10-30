@@ -93,7 +93,8 @@ function paintResults(initial, catalog) {
     });
   }
 
-  tryDraw(() => wireEvolution(initial, catalog), 'the evolution');
+  // the same parties, in the same order, as the legend of the average (Luis, 2026-10-30)
+  tryDraw(() => wireEvolution(initial, catalog, {parties: initial.series.parties}), 'the evolution');
 }
 
 /**

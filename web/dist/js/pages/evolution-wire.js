@@ -15,22 +15,23 @@ import {chosenNames, fillLegend} from './series-wire.js';
 const present = (value) => value !== null && value !== undefined;
 
 /**
- * Data of the two views of the evolution: the parties of the last daily run (those with a value of `field`, in
- * catalogue order, the ones of `bmaps.main` shown by default) and, when the scope has blocks, the blocks summed
- * in the browser (`blockRuns`), all shown by default.
+ * Data of the two views of the evolution: the parties of the page, in its order (`parties`: the same names and
+ * order as the legend of the average, Luis 2026-10-30; without it, the parties of the last daily run with a value
+ * of `field`, in the order of the run), the ones of `bmaps.main` shown by default, and, when the scope has
+ * blocks, the blocks summed in the browser (`blockRuns`), all shown by default.
  *
  * @param {object[]} runs `runs` list of the history part
  * @param {Catalog} catalog party catalogue of the run
- * @param {object} [options] `field` (party field drawn: `pct` or `seats`) and `total` (what the blocks add up
- *   to: 100 for shares, the chamber for seats)
+ * @param {object} [options] `parties` (party names, legend order), `field` (party field drawn: `pct` or
+ *   `seats`) and `total` (what the blocks add up to: 100 for shares, the chamber for seats)
  * @returns {object} `partidos` and `bloques` (null without blocks): `runs` (daily), `parties`, `colors`,
  *   `fullnames` and `defaults` (names shown by default, null for all), as `fillLegend` and `chosenNames` read them
  */
-export function evolutionViews(runs, catalog, {field = 'pct', total = 100} = {}) {
+export function evolutionViews(runs, catalog, {parties = null, field = 'pct', total = 100} = {}) {
   const daily = dailyRuns(runs);
   const last = daily[daily.length - 1];
   const rows = last ? (last.nowcast || {}).parties || [] : [];
-  const names = catalog.order(rows.filter((row) => present(row[field])).map((row) => row.name));
+  const names = parties ? [...parties] : rows.filter((row) => present(row[field])).map((row) => row.name);
   const main = catalog.bmaps.main || [];
   const defaults = names.filter((name) => main.includes(name));
   const blocks = catalog.bmaps.blocks && !Array.isArray(catalog.bmaps.blocks) ? catalog.bmaps.blocks : {};
@@ -62,17 +63,17 @@ export function evolutionViews(runs, catalog, {field = 'pct', total = 100} = {})
  * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
  *   the colour of each name for the pills)
  * @param {Catalog} catalog party catalogue of the run
- * @param {object} [options] `field` (party field drawn), `formatter` (value → text) and `total` (what the blocks
- *   add up to)
+ * @param {object} [options] `parties` (party names, legend order: the list of the page), `field` (party field
+ *   drawn), `formatter` (value → text) and `total` (what the blocks add up to)
  */
-export function wireEvolution(initial, catalog, {field = 'pct', formatter = fmtPct, total = 100} = {}) {
+export function wireEvolution(initial, catalog, {parties = null, field = 'pct', formatter = fmtPct, total = 100} = {}) {
   const chartEl = document.getElementById('evolution-chart');
   if (!chartEl) {
     return;
   }
   const legendEl = document.getElementById('evolution-legend');
   const viewSet = document.getElementById('evolution-view');
-  const views = evolutionViews((initial.runs || {}).runs || [], catalog, {field, total});
+  const views = evolutionViews((initial.runs || {}).runs || [], catalog, {parties, field, total});
   const state = {view: 'partidos', selected: null};
   let chart = null;
 

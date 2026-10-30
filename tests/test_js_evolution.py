@@ -104,10 +104,14 @@ def test_evolution_image_option_shows_a_plain_legend_of_the_names_shown_and_free
     assert img['grid']['bottom'] == 8 and img['grid']['top'] == 40
 
 
-def test_evolution_views_take_the_parties_of_the_last_run_in_catalogue_order_with_the_main_ones_by_default():
+def test_evolution_views_take_the_parties_given_in_their_order_with_the_main_ones_by_default():
+    # the same names and order as the legend of the average (Luis, 2026-10-30): the list of the page, as given
+    views = run_js('ew.evolutionViews(runs, new c.Catalog(%s), {parties: ["PP", "VOX", "PSOE"]})' % (json.dumps(META)))
+    assert views['partidos']['parties'] == ['PP', 'VOX', 'PSOE'] and views['partidos']['defaults'] == ['PP', 'PSOE']
+    assert views['partidos']['fullnames'] == {'PP': 'Partido Popular', 'VOX': 'VOX', 'PSOE': 'PSOE'} and views['partidos']['colors']['PP'] == '#1e5aa8'
+    # without a list: the parties of the last run with a value, in the order of the run (VOX is null there)
     views = run_js('ew.evolutionViews(runs, new c.Catalog(%s))' % json.dumps(META))
-    assert views['partidos']['parties'] == ['PSOE', 'PP'] and views['partidos']['defaults'] == ['PSOE', 'PP']  # VOX is null in the last run
-    assert views['partidos']['fullnames'] == {'PSOE': 'PSOE', 'PP': 'Partido Popular'} and views['partidos']['colors']['PP'] == '#1e5aa8'
+    assert views['partidos']['parties'] == ['PP', 'PSOE'] and views['partidos']['defaults'] == ['PP', 'PSOE']
     assert [r['run_id'] for r in views['partidos']['runs']] == ['b05', 'l06', 'l07b', 'x08']
     assert views['bloques']['parties'] == ['Izquierda', 'Otros', 'Derecha'] and views['bloques']['defaults'] is None
     assert views['bloques']['colors'] == {'Izquierda': '#e3001b', 'Otros': '#9e9e9e', 'Derecha': '#1e5aa8'}

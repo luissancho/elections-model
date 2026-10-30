@@ -64,7 +64,8 @@ Dos hallazgos que cambian la tarjeta:
   2 px uniendo los puntos de cada nombre.
 - **Tooltip por día** (eje): fecha (fecha y hora si el run es en vivo, «· estimación retrospectiva» si no) y el
   valor de cada nombre visible, de mayor a menor, como ahora.
-- **Vistas.** Partidos: los partidos del titular, colores del catálogo, marcados por defecto los de `bmaps.main`
+- **Vistas.** Partidos: los mismos partidos y en el mismo orden que la leyenda del promedio (la lista de la parte
+  `series` en Promedios y la del resumen en Escaños; Luis, 2026-10-30), colores del catálogo, marcados por defecto los de `bmaps.main`
   (los mismos que el promedio), todos si no hay. Bloques (sólo si el ámbito tiene `bmaps.blocks`): cada bloque
   suma sus partidos y Otros (`REST_BLOCK`) es el resto hasta 100 (hasta la cámara en escaños), en el orden
   `orderBlocks`, colores `blockColor`; todos marcados por defecto. El cambio de vista reinicia la selección.

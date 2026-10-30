@@ -343,7 +343,10 @@ function paint() {
     markLabel: state.mode === 'nowcast' ? 'Hoy' : 'Elección',
   }), 'the fan');
 
-  tryDraw(() => wireEvolution(initial, catalog, {field: 'seats', formatter: fmtInt, total: nSeats}), 'the evolution');
+  // the parties of the summary, in its order: the same list and order as the average of Promedios
+  tryDraw(() => wireEvolution(initial, catalog, {
+    parties: partyRows.map((row) => row.name), field: 'seats', formatter: fmtInt, total: nSeats,
+  }), 'the evolution');
 }
 
 wireControls();
