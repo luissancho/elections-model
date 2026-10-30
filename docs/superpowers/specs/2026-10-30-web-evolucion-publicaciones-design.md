@@ -97,3 +97,25 @@ Dos hallazgos que cambian la tarjeta:
 - Pruebas: `node` para `dailyRuns`, `blockRuns` y el eje de `evolutionOption`; de página para el marcado, los
   subtítulos sin modo y el texto; `assert_public_wording` en los textos nuevos.
 - Sin cambios en Python salvo `inks` en Escaños. Sin republicar nada.
+
+## Estado al cierre (2026-10-30)
+
+- Construido en la rama `web-evolucion-publicaciones` (worktree `.worktrees/`, desde dev `bab1720`), plan
+  `docs/superpowers/plans/2026-10-30-web-evolucion-publicaciones.md`: `blockRuns` (b2b3638), `charts/evolution.js`
+  (e47cccc), `pages/evolution-wire.js` (201dad4), plantillas, `escanos.py` y páginas (520c8a3), círculos rellenos
+  (84d57ff). Suite completa en verde tras la tarea 4: 1478 pasan, 76 saltadas; 7 pruebas nuevas en
+  `tests/test_js_evolution.py`, 3 en `tests/test_js_blocks.py`, prueba de página reescrita.
+- Comprobado en navegador (Chrome headless por CDP sobre un bundle local con el histórico de producción de 26
+  runs): un punto por día, eje de 1 a 33 por defecto y de 26 a 27 con el PSOE solo, vista Bloques, descarga PNG de
+  1600 × 1144 con la leyenda de lo marcado, sin errores de consola. Hallazgo arreglado: los puntos retrospectivos
+  se dibujaban como huecos en la línea (el símbolo por defecto `emptyCircle` traza con `color`); ahora
+  `symbol: 'circle'`, con prueba.
+- Revisión independiente de toda la rama: sin críticos; corregido el docstring de `escanos_context`. Menores
+  diferidos: (a) la vista Bloques a través de un cambio de nombre de partido (SUMAR → FA): los runs anteriores al
+  cambio no tienen fila del nombre nuevo y esa parte cae en Otros, un escalón artificial; hoy latente porque todo
+  el histórico se republicó el 30-10 con la candidatura actual, y una solución real necesita el linaje del smap;
+  (b) con un run anclado (`?run=`), el fichero y el subtítulo de la descarga llevan la fecha del run anclado
+  mientras el gráfico dibuja todo el histórico, como los demás botones de descarga; (c) `charts/evolution.js`
+  importa tres ayudas de `series.js` (Escaños carga ahora ese módulo): subirlas a `base.js` como seguimiento.
+- Queda a Luis: commitear su lote del árbol principal, fusionar la rama en dev (avance rápido) y desplegar. Nada
+  que republicar.

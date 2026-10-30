@@ -4,7 +4,6 @@
 import {fmtInt} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {THEME} from '../charts/base.js';
-import {renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {histogramOption, renderHistogram} from '../charts/histogram.js';
 import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
@@ -12,6 +11,7 @@ import {ridgeBlocks, ridgeData} from '../kde.js';
 import {renderStacked, stackedOption} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
+import {wireEvolution} from './evolution-wire.js';
 import {coalitionCaption, coalitionHash, coalitionSeats, coalitionText, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireForm} from './common.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
@@ -319,7 +319,7 @@ function wireSeats(initial, catalog, colors) {
 /** Draw the seats card, the fan and the evolution, and wire the majority calculator and the territory table. */
 function paint() {
   const initial = readInitial();
-  const {state, meta, summary, dist, fan, runs} = initial;
+  const {state, meta, summary, dist, fan} = initial;
 
   const catalog = new Catalog(meta);
   const majority = meta.majority ?? summary.majority;
@@ -343,9 +343,7 @@ function paint() {
     markLabel: state.mode === 'nowcast' ? 'Hoy' : 'Elección',
   }), 'the fan');
 
-  tryDraw(() => renderEvolution(document.getElementById('seats-evolution'), runs.runs, state.mode, {
-    colors, field: 'seats', formatter: fmtInt, parties: partyRows.map((row) => row.name),
-  }), 'the seat evolution');
+  tryDraw(() => wireEvolution(initial, catalog, {field: 'seats', formatter: fmtInt, total: nSeats}), 'the evolution');
 }
 
 wireControls();

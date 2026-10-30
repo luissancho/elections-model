@@ -674,13 +674,13 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
     assert 'id="parties-table"' in page and '<th scope="col">P(mayoría)</th>' in page
     assert 'id="blocks-table"' in page and 'id="vs-table"' not in page and 'id="seats-bar"' in page
     assert 'name="coalition" value="PP" checked' in page and 'id="coalition-result"' in page
-    assert 'id="fan-chart"' in page and 'id="seats-evolution"' in page
+    assert 'id="fan-chart"' in page and 'id="evolution-chart"' in page
     assert 'href="/api/v1/forecast/es/forecast/summary?run={}&amp;format=csv"'.format(RUN) in page
     assert 'href="/api/v1/forecast/es/fan?run={}&amp;format=csv"'.format(RUN) in page
     assert page.count('format=csv') == 5 and 'id="districts"' in page
     assert '/dist/js/pages/escanos.js' in page
     data = initial(body)
-    assert list(data) == ['state', 'meta', 'summary', 'dist', 'fan', 'districts', 'scenario', 'runs', 'deltas']
+    assert list(data) == ['state', 'meta', 'summary', 'dist', 'fan', 'districts', 'scenario', 'runs', 'deltas', 'inks']
     assert data['state'] == {'scope': 'es', 'mode': 'forecast', 'run': RUN, 'pinned': False}
     assert data['dist']['parties'] == ['PP'] and data['summary']['majority'] == 176
 
@@ -890,10 +890,22 @@ def test_district_table_keeps_every_party_ordered_by_total_and_has_communities_n
     assert pages.has_communities([]) is False
 
 
-def test_evolution_cards_explain_the_retrospective_points(api):
-    for path in ('/es', '/es/escanos'):
-        page = html(call(api, path)[2])
-        assert 'Evolución de las publicaciones' in page and 'estimaciones retrospectivas' in page
+def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
+    for path, pill in (('/es', 'voto de cada publicación'), ('/es/escanos', 'escaños de cada publicación')):
+        for query in ('', 'mode=forecast'):
+            page = html(call(api, path, query=query)[2])
+            # from the card's section: the download button repeats the title in its data attributes before the h2
+            card = page[page.index('<section class="card" id="evolution'):page.index('id="evolution-chart"')]
+            assert '<span class="pill">%s</span>' % pill in card
+            assert 'de cada publicación' not in card.replace(pill, '')  # no mode in the subtitle: both modes publish the same figures
+            assert 'id="evolution-download"' in card and 'id="evolution-view"' in card and 'name="evview"' in card
+            assert 'id="evolution-legend"' in card and '<div class="chart chart-tall" id="evolution-chart"' in page
+            text = re.sub(r'\s+', ' ', page[page.index('id="evolution-chart"'):])
+            text = text[:text.index('</section>')]
+            assert 'estimaciones retrospectivas' in text and 'revisa el pasado' in text and 'no se revisan' in text
+            assert 'Si un día hubo varias publicaciones, se muestra la última' in text
+            assert_public_wording(page, path)
+    assert 'hasta completar la cámara' in html(call(api, '/es/escanos')[2]) and 'hasta 100' in html(call(api, '/es')[2])
 
 
 def test_result_rows_and_block_result_rows_follow_the_summary_and_the_block_order():
@@ -956,7 +968,7 @@ def test_promedios_central_block_is_three_cards_with_ranges(api):
 def test_promedios_orders_the_story_and_carries_the_controls(api):
     page = html(call(api, '/es')[2])
     order = [page.index(marker) for marker in ('id="series"', 'id="hemicycle-card"', 'id="parties-card"', 'id="blocks-card"',
-                                              'id="evolution"', 'id="pollster"', 'id="polls"', 'id="closing"')]
+                                              'id="evolution-card"', 'id="pollster"', 'id="polls"', 'id="closing"')]
     assert order == sorted(order)
     assert 'name="window" value="all" checked' in page.replace('\n', ' ') and 'value="3m"' in page and 'value="1a"' in page
     assert 'name="view" value="partidos"' in page and 'name="view" value="bloques"' in page

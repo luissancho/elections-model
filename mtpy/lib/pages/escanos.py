@@ -7,7 +7,7 @@ from typing import Optional
 from ...core.api import HttpError
 from .. import bundle
 from ..webapi import check_region, site
-from .common import Catalog, api_url, block_color, common_context, part
+from .common import Catalog, api_url, block_color, common_context, ink_color, part
 from .elecciones import last_results
 from .filters import DASH, _is_missing, fmt_int, fmt_prob, fmt_range
 from .promedios import inherited_results, seat_deltas
@@ -325,10 +325,12 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
         (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels`` (``has_communities``),
         ``deltas`` (``seat_deltas`` against the last published election, for the «vs {year}» column of the tables),
-        ``results_year`` and ``results_date`` (of that election; ``None`` without one) and ``initial`` (``state``, ``meta``, ``summary``,
-        ``dist``, ``fan``, ``districts``, ``scenario``, ``runs`` and ``deltas`` (``seat_deltas`` against the last
-        published election, for the seats bar), the data the charts, the calculator and the territory table are
-        drawn from).
+        ``results_year`` and ``results_date`` (of that election; ``None`` without one), ``blocks`` (the names of
+        ``meta['bmaps']['blocks']``, the Bloques view of the evolution; ``[]`` without a block map) and ``initial``
+        (``state``, ``meta``, ``summary``, ``dist``, ``fan``, ``districts``, ``scenario``, ``runs``, ``deltas``
+        (``seat_deltas`` against the last published election, for the seats bar) and ``inks`` (the text colour over
+        the colour of each party and block, for the pills of the evolution legend), the data the charts, the
+        calculator and the territory table are drawn from).
 
     Raises
     ------
@@ -373,6 +375,9 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     context['deltas'] = deltas
     context['results_year'] = results['year'] if results else None
     context['results_date'] = results['date'] if results else None
+    # the Bloques view of the evolution, summed in the browser from the block map
+    blocks = (meta.get('bmaps') or {}).get('blocks')
+    context['blocks'] = list(blocks) if isinstance(blocks, dict) else []
     context['initial'] = {
         'state': full,
         'meta': meta,
@@ -383,6 +388,9 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         'scenario': scenario,
         'runs': bundle.loads(site().history(scope))['data'],
         'deltas': deltas,
+        # ink of every party and block of the evolution, for the pills of its legend when they are on
+        'inks': {**{party['name']: ink_color(party.get('color')) for party in meta.get('parties') or []},
+                 **{block: ink_color(block_color(block, meta, parties)) for block in context['blocks']}},
     }
 
     return context
