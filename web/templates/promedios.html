@@ -13,10 +13,16 @@
       {{ m.kpis(kpis, id='kpis') }}
       {% endif %}
       {% if cards %}
+      {#- every party in a carousel (Luis, 2026-10-30): the arrows only work with JavaScript, which shows them when the
+          strip overflows -#}
+      <div class="pcarousel">
+        <button type="button" class="pc-arrow prev" aria-label="Partidos anteriores" aria-controls="pcards" hidden>&lsaquo;</button>
       <div class="pcards" id="pcards">
         {% for card in cards %}
         <article class="pc" style="--c: {{ card.color }}" data-name="{{ card.name }}"><span class="rk">{{ card.rank }}.º</span><div class="nm">{{ card.name }}</div><div class="fl" title="{{ card.fullname }}">{{ card.fullname }}</div><div class="fig"{% if results_year %} title="Flechas: frente al resultado {% if card.prev_from %}de {{ card.prev_from|join(' + ') }} el {% else %}del {% endif %}{{ results_date|date }}"{% endif %}><div class="big"><b>{{ card.seats|int }}</b>{% if results_year %}{{ m.badge(card.delta_seats) }}{% endif %}</div><div class="big"><span>{{ card.pct|pct }}</span>{% if results_year %}{{ m.badge(card.delta_pct, 1) }}{% endif %}</div><div class="lb">escaños</div><div class="lb">voto</div></div><span class="sl">Último año</span><svg class="spark" viewBox="0 0 180 28" preserveAspectRatio="none" aria-hidden="true"></svg></article>
         {% endfor %}
+      </div>
+        <button type="button" class="pc-arrow next" aria-label="Partidos siguientes" aria-controls="pcards" hidden>&rsaquo;</button>
       </div>
       {% endif %}
       {% set series_title = 'Promedio de sondeos' if state.mode == 'nowcast' else 'Promedio de sondeos y proyección' %}

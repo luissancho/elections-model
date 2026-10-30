@@ -505,8 +505,18 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .kpi .s { margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .s.ok { color: var(--color-ok); }
 
-/* Party cards: the main parties in their colour (darkened, so that white text reads on every colour) */
-.pcards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-3); }
+/* Party cards: every party in its colour (darkened, so that white text reads on every colour), slid sideways in a
+   carousel (Luis, 2026-10-30): six per view on desktop, snapping card by card, the scrollbar hidden and two arrows
+   at the sides that the script shows when the strip overflows */
+.pcarousel { position: relative; }
+.pcards { display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: 2px 0; scrollbar-width: none; }
+.pcards::-webkit-scrollbar { display: none; }
+.pc { flex: 0 0 calc((100% - 5 * var(--space-3)) / 6); scroll-snap-align: start; }
+.pc-arrow { position: absolute; top: 50%; z-index: 2; width: 36px; height: 36px; padding: 0; justify-content: center; border-radius: 50%; font: 700 24px/1 var(--font-head); background: var(--color-card); box-shadow: var(--shadow); transform: translateY(-50%); }
+.pc-arrow.prev { left: -18px; }
+.pc-arrow.next { right: -18px; }
+.pc-arrow[hidden] { display: none; }
+.pc-arrow:disabled { opacity: .35; cursor: default; }
 .pc {
   position: relative;
   overflow: hidden;
@@ -948,7 +958,7 @@ td.blk { font-weight: 700; }
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .kpi:nth-child(n+4) { border-top: 1px solid var(--color-line); }
   .kpi:nth-child(4)::before { display: none; }
-  .pcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pc { flex-basis: calc((100% - 2 * var(--space-3)) / 3); }
   .hemi-grid, .split { grid-template-columns: 1fr; }
   .steps, .grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rows-2 { grid-template-columns: 1fr; }
@@ -1037,9 +1047,9 @@ td.blk { font-weight: 700; }
   .kpi:last-child:nth-child(odd)::after { display: none; }
   .kpi .v { font-size: 20px; }
   /* The party cards slide sideways, bleeding to the edges, 16 px under the KPIs like every block of the stack */
-  .pcards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: var(--space-4) calc(-1 * var(--band-pad)) 0; padding: 2px var(--band-pad) var(--space-2); scrollbar-width: none; }
-  .pcards::-webkit-scrollbar { display: none; }
-  .pc { flex: 0 0 210px; scroll-snap-align: start; }
+  .pcards { gap: 10px; margin: 0 calc(-1 * var(--band-pad)); padding: 2px var(--band-pad) var(--space-2); scroll-padding-left: var(--band-pad); }
+  .pc { flex-basis: 210px; }
+  .pc-arrow { display: none; }
 
   /* Larger tap targets for the chart controls and the pills */
   .seg label, .seg > span, .seg > a, .event-tabs a, .pills .pill { min-height: 40px; display: inline-flex; align-items: center; }

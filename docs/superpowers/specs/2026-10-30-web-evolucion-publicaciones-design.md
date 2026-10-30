@@ -131,3 +131,7 @@ Dos hallazgos que cambian la tarjeta:
 - Escaños: las curvas de «Reparto de escaños» quedan ocultas tras el botón «Ver las distribuciones» (se dibujan al
   abrirlas y se redibujan al cambiar de vista) y «Evolución de las publicaciones» pasa debajo de «Calculadora de
   mayorías».
+- Promedios: las tarjetas de partido de la cabecera son todos los partidos del resumen, por escaños (y voto para
+  los empates, como el listado de territorios), en un carrusel: tira horizontal con ajuste tarjeta a tarjeta, seis por vista en
+  escritorio y flechas a los lados cuando no caben (en móvil ya era una tira deslizable). Antes eran sólo los de
+  `bmaps.main`.

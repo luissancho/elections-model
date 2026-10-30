@@ -3353,9 +3353,26 @@ def test_error_page_has_no_tabbar(api):
     assert status == 404 and 'class="tabbar"' not in html(body) and '<svg hidden aria-hidden="true"' not in html(body)
 
 
+def test_party_cards_cover_every_party_of_the_summary_by_seats():
+    """Luis, 2026-10-30: las tarjetas son todos los partidos en liza (los del resumen), no sólo los de `bmaps.main`,
+    por escaños y el voto para los empates, como el listado de territorios; van en un carrusel."""
+    summary = {'parties': [{'name': 'PP', 'seats': 135, 'pct': 33.1}, {'name': 'CC', 'seats': 1, 'pct': 0.4},
+                           {'name': 'BNG', 'seats': 1, 'pct': 0.9}, {'name': 'PSOE', 'seats': 110, 'pct': 26.4}]}
+    meta = fixture_data('meta') | {'parties': [{'name': n, 'fullname': n, 'color': '#123456', 'block': 'Derecha'} for n in ('PP', 'CC', 'BNG', 'PSOE')],
+                                   'bmaps': {'main': ['PP']}}
+    cards = pages.party_cards(summary, meta, pages.Catalog(meta), None)
+    assert [card['name'] for card in cards] == ['PP', 'PSOE', 'BNG', 'CC'] and [card['rank'] for card in cards] == [1, 2, 3, 4]
+    assert cards[3]['seats'] == 1 and cards[3]['pct'] == 0.4 and cards[3]['delta_seats'] is None
+
+
 def test_promedios_opens_with_the_kpis_and_the_party_cards(events_site):
     page = html(call(events_site, '/es')[2])
     assert page.index('id="kpis"') < page.index('id="pcards"') < page.index('id="series"')
+    # the cards slide sideways in a carousel with two arrows, hidden until the script finds an overflow
+    carousel = page[page.index('<div class="pcarousel"'):page.index('id="series"')]
+    assert carousel.index('class="pc-arrow prev"') < carousel.index('id="pcards"') < carousel.index('class="pc-arrow next"')
+    assert re.search(r'<button type="button" class="pc-arrow prev" aria-label="Partidos anteriores"[^>]*\bhidden\b', carousel)
+    assert re.search(r'<button type="button" class="pc-arrow next" aria-label="Partidos siguientes"[^>]*\bhidden\b', carousel)
     kpis = re.findall(r'<div class="kpi"><div class="l">([^<]+)</div>', page)
     assert kpis == ['Primer partido', 'Escaños del líder', 'Mayoría absoluta', 'Sondeos del ciclo', 'Último sondeo']
     flat = page.replace('\n', '')
@@ -3442,7 +3459,7 @@ def test_promedios_without_polls_part_and_with_an_unknown_party_still_renders(ap
     status, _, body = call(api, '/es')
     page = html(body)
     assert status == 200 and '<div class="l">Último sondeo</div>' not in page and 'id="kpis"' in page  # the footer keeps the date
-    assert 'data-name="XX"' not in page  # fuera de bmaps.main
+    assert 'style="--c: #9e9e9e" data-name="XX"' in page  # every party has a card since 2026-10-30; the unknown one in grey
     assert 'background: #9e9e9e' in re.search(r'<table id="parties-table">(.*?)</table>', page, re.S).group(1)
 
 

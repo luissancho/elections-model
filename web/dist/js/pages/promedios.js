@@ -262,6 +262,31 @@ function paintCards(initial) {
   }
 }
 
+/**
+ * Wire the arrows of the party carousel (`#pcards`): shown when the strip overflows, each scrolls one view, the one
+ * at an end disabled. Touch and trackpads scroll the strip on their own.
+ */
+function wireCardsCarousel() {
+  const strip = document.getElementById('pcards');
+  const prev = document.querySelector('.pcarousel .pc-arrow.prev');
+  const next = document.querySelector('.pcarousel .pc-arrow.next');
+  if (!strip || !prev || !next) {
+    return;
+  }
+  const update = () => {
+    const overflow = strip.scrollWidth > strip.clientWidth + 1;
+    prev.hidden = !overflow;
+    next.hidden = !overflow;
+    prev.disabled = strip.scrollLeft <= 0;
+    next.disabled = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1;
+  };
+  prev.addEventListener('click', () => strip.scrollBy({left: -strip.clientWidth, behavior: 'smooth'}));
+  next.addEventListener('click', () => strip.scrollBy({left: strip.clientWidth, behavior: 'smooth'}));
+  strip.addEventListener('scroll', update, {passive: true});
+  new ResizeObserver(update).observe(strip);
+  update();
+}
+
 /** Draw the page from the embedded data. */
 function paint() {
   const initial = readInitial();
@@ -269,6 +294,7 @@ function paint() {
   // last election, named and coloured by the published catalogue), with the bmaps of the run
   const catalog = new Catalog(initial.catalog || initial.meta);
   tryDraw(() => paintCards(initial), 'the party cards');
+  tryDraw(wireCardsCarousel, 'the party carousel');
   tryDraw(() => wireSeries(initial, catalog), 'the poll average and its controls');
   paintResults(initial, catalog);
   tryDraw(() => wirePollsTable(initial.polls.polls, catalog), 'the polls table');
