@@ -107,6 +107,8 @@ export function evolutionOption({
       symbolSize: 8,
       itemStyle: {color: '#fff', borderColor: colorOf(entry.name), borderWidth: 2},
     } : point)),
+    // a filled circle: the default `emptyCircle` strokes with `color`, so a white hollow point would vanish
+    symbol: 'circle',
     showSymbol: true,
     symbolSize: 6,
     color: colorOf(entry.name),

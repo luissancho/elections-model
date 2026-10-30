@@ -84,6 +84,8 @@ def test_evolution_bounds_round_to_whole_units_around_the_visible_data():
 def test_evolution_option_draws_a_line_per_party_with_hollow_retrospective_points():
     opt = option()
     assert [s['name'] for s in opt['series']] == PARTIES and all(s['type'] == 'line' for s in opt['series'])
+    # a filled circle: ECharts' default `emptyCircle` strokes with `color`, so a white hollow point would vanish
+    assert all(s['symbol'] == 'circle' for s in opt['series'])
     first = opt['series'][0]['data'][0]
     assert first['value'][1] == 32.71 and first['itemStyle'] == {'color': '#fff', 'borderColor': '#1e5aa8', 'borderWidth': 2}
     assert opt['series'][0]['data'][1][1:] == [32.6, 1]  # a live point is a plain `[time, value, index]`
