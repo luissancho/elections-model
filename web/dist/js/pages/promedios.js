@@ -5,7 +5,7 @@
 // the pill legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
 import {parseSeriesHash} from '../blocks.js';
-import {renderEvolution} from '../charts/evolution.js';
+import {dailyRuns, renderEvolution} from '../charts/evolution.js';
 import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
 import {chartZoom, renderSeries, seriesImageOption, setWindow} from '../charts/series.js';
 import {sparklineSvg} from '../sparkline.js';
@@ -93,8 +93,8 @@ function paintResults(initial, catalog) {
     });
   }
 
-  tryDraw(() => renderEvolution(document.getElementById('evolution'), runs.runs, mode, {
-    colors, parties: current.parties.map((party) => party.name),
+  tryDraw(() => renderEvolution(document.getElementById('evolution'), {
+    runs: dailyRuns(runs.runs), parties: current.parties.map((party) => party.name), colors,
   }), 'the evolution');
 }
 

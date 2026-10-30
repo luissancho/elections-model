@@ -4,7 +4,7 @@
 import {fmtInt} from '../format.js';
 import {Catalog} from '../catalog.js';
 import {THEME} from '../charts/base.js';
-import {renderEvolution} from '../charts/evolution.js';
+import {dailyRuns, renderEvolution} from '../charts/evolution.js';
 import {renderFan} from '../charts/fan.js';
 import {histogramOption, renderHistogram} from '../charts/histogram.js';
 import {renderRidge, ridgeRowHeight} from '../charts/ridge.js';
@@ -343,8 +343,8 @@ function paint() {
     markLabel: state.mode === 'nowcast' ? 'Hoy' : 'Elección',
   }), 'the fan');
 
-  tryDraw(() => renderEvolution(document.getElementById('seats-evolution'), runs.runs, state.mode, {
-    colors, field: 'seats', formatter: fmtInt, parties: partyRows.map((row) => row.name),
+  tryDraw(() => renderEvolution(document.getElementById('seats-evolution'), {
+    runs: dailyRuns(runs.runs), parties: partyRows.map((row) => row.name), colors, field: 'seats', formatter: fmtInt,
   }), 'the seat evolution');
 }
 
