@@ -688,9 +688,9 @@ def test_escanos_is_rendered_with_tables_links_and_initial(api):
 def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(api):
     page = html(call(api, '/es/escanos')[2])
     assert 'bloque con más probabilidad de mayoría absoluta' not in page  # sin titular desde 2026-10-14
-    fan = page[page.index('id="fan"'):page.index('id="evolution"')]
+    fan = page[page.index('id="fan"'):page.index('id="downloads"')]
     assert 'deriva' in fan and 'horizonte 0' in fan and 'no es una predicción de trayectoria' in fan
-    evolution = page[page.index('id="evolution"'):page.index('id="downloads"')]
+    evolution = page[page.index('id="evolution"'):page.index('id="districts"')]
     assert 'run' in evolution and 'huecos' in evolution and 'no es una serie de sondeos' in evolution
     assert '¿Cómo simulamos los escaños?' in page and 'href="/elecciones?scope=es"' in page
     assert 'href="/casas?scope=es"' in page
@@ -698,6 +698,21 @@ def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(a
     assert 'suben y bajan a la vez' not in coalition  # los partidos se sortean por separado
     assert ('La suma se hace en cada simulación: en cada una los escaños suman el total de la cámara, así que lo '
             'que gana un partido lo pierde otro') in coalition
+
+
+def test_escanos_hides_the_seat_distributions_behind_a_button_and_puts_the_evolution_after_the_calculator(api):
+    """Luis, 2026-10-30: las curvas de «Reparto de escaños» se abren con un botón (la tarjeta queda en la barra y la
+    tabla) y «Evolución de las publicaciones» va debajo de «Calculadora de mayorías»."""
+    page = html(call(api, '/es/escanos')[2])
+    card = page[page.index('<section class="card" id="seats"'):page.index('<section class="card" id="coalition"')]
+    toggle = re.search(r'<button[^>]*id="ridge-toggle"[^>]*>([^<]*)</button>', card)
+    assert toggle and 'hidden' in toggle.group(0) and 'aria-expanded="false"' in toggle.group(0)
+    assert 'aria-controls="ridge-chart"' in toggle.group(0) and toggle.group(1) == 'Ver las distribuciones'
+    assert re.search(r'<div class="chart" id="ridge-chart"[^>]*\bhidden\b', card)
+    assert card.index('id="ridge-toggle"') < card.index('id="ridge-chart"')
+    assert 'Ver las distribuciones' in re.sub(r'\s+', ' ', card[card.index('class="how"'):])  # the text names the button
+    order = [page.index('<section class="card" id="%s"' % name) for name in ('seats', 'coalition', 'evolution', 'districts', 'fan', 'downloads')]
+    assert order == sorted(order)
 
 
 def test_escanos_region_lives_in_the_district_form_not_in_the_event_bar(api, fresh_app):

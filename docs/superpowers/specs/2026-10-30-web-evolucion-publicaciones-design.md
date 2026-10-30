@@ -122,3 +122,12 @@ Dos hallazgos que cambian la tarjeta:
   importa tres ayudas de `series.js` (Escaños carga ahora ese módulo): subirlas a `base.js` como seguimiento.
 - Queda a Luis: commitear su lote del árbol principal, fusionar la rama en dev (avance rápido) y desplegar. Nada
   que republicar.
+
+## Retoques de Luis tras el merge (2026-10-30)
+
+- Las pastillas de la evolución llevan los mismos partidos, y en el mismo orden, que la leyenda del promedio
+  (`series.parties` en Promedios, el resumen en Escaños; 936bbb5).
+- Eje con la regla del promedio: múltiplos de 5 y marcas de 5 en 5 en voto; de 20 en 20 en escaños (bd1c2f9).
+- Escaños: las curvas de «Reparto de escaños» quedan ocultas tras el botón «Ver las distribuciones» (se dibujan al
+  abrirlas y se redibujan al cambiar de vista) y «Evolución de las publicaciones» pasa debajo de «Calculadora de
+  mayorías».

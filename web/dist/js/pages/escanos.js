@@ -269,18 +269,33 @@ function wireSeats(initial, catalog, colors) {
   };
   const barEl = document.getElementById('seats-bar');
   const ridgeEl = document.getElementById('ridge-chart');
+  const toggle = document.getElementById('ridge-toggle');
   const cache = {};
   let shown = views.partidos;  // the view drawn, the one the download button exports
+  let current = 'partidos';
+  let ridgeOpen = false;  // the distributions open on demand (Luis, 2026-10-30)
 
   /** Options of the bar of `view`. */
   const barOf = (view) => ({
     colors: view.colors, fullnames: view.fullnames, majority, total: nSeats, deltas: view.deltas, year: deltas.year,
   });
 
-  /** Draw the bar and the ridges of `view` and show its table. */
+  /** Draw the ridges of `view` (computed once per view). */
+  function drawRidge(view) {
+    const chosen = views[view];
+    cache[view] = cache[view] || chosen.ridges();
+    if (cache[view].length) {
+      tryDraw(() => renderRidge(ridgeEl, cache[view], {
+        colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: ridgeRowHeight(window.innerWidth),
+      }), `the ${view} distributions`);
+    }
+  }
+
+  /** Draw the bar of `view`, show its table and, when they are open, its ridges. */
   function draw(view) {
     const chosen = views[view];
     shown = chosen;
+    current = view;
     for (const [name, item] of Object.entries(views)) {
       const container = document.getElementById(item.container);
       if (container) {
@@ -290,17 +305,24 @@ function wireSeats(initial, catalog, colors) {
     if (barEl) {
       tryDraw(() => renderStacked(barEl, chosen.bar, barOf(chosen)), `the ${view} bar`);
     }
-    if (ridgeEl) {
-      cache[view] = cache[view] || chosen.ridges();
-      if (cache[view].length) {
-        tryDraw(() => renderRidge(ridgeEl, cache[view], {
-          colors: chosen.colors, majority, fullnames: chosen.fullnames, rowHeight: ridgeRowHeight(window.innerWidth),
-        }), `the ${view} distributions`);
-      }
+    if (ridgeEl && ridgeOpen) {
+      drawRidge(view);
     }
   }
 
   draw('partidos');
+  if (toggle && ridgeEl) {
+    toggle.hidden = false;
+    toggle.addEventListener('click', () => {
+      ridgeOpen = !ridgeOpen;
+      ridgeEl.hidden = !ridgeOpen;
+      toggle.setAttribute('aria-expanded', String(ridgeOpen));
+      toggle.textContent = ridgeOpen ? 'Ocultar las distribuciones' : 'Ver las distribuciones';
+      if (ridgeOpen) {
+        drawRidge(current);
+      }
+    });
+  }
   wireDownload(document.getElementById('seats-download'), () => stackedOption(shown.bar, barOf(shown)), showError, {
     chartHeight: BAR_IMAGE_HEIGHT, bottom: () => tableImage(document.querySelector(`#${shown.container} table`)),
   });
