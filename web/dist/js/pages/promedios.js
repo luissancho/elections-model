@@ -5,12 +5,12 @@
 // the pill legend of the average selects the parties.
 import {Catalog} from '../catalog.js';
 import {parseSeriesHash} from '../blocks.js';
-import {dailyRuns, renderEvolution} from '../charts/evolution.js';
 import {hemicycleOption, renderHemicycle} from '../charts/hemicycle.js';
 import {chartZoom, renderSeries, seriesImageOption, setWindow} from '../charts/series.js';
 import {sparklineSvg} from '../sparkline.js';
 import {mapNames, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 import {markLegend} from './legend-dom.js';
+import {wireEvolution} from './evolution-wire.js';
 import {wirePollsTable} from './polls-wire.js';
 import {WINDOWS, chosenNames, fillLegend, seriesViews, wireAverage} from './series-wire.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
@@ -26,7 +26,7 @@ const HEMICYCLE_IMAGE = {width: 1200, chartHeight: 360};
  * @param {Catalog} catalog party catalogue of the run
  */
 function paintResults(initial, catalog) {
-  const {meta, headline, summary, runs} = initial;
+  const {meta, headline, summary} = initial;
   const mode = initial.state.mode;
   const current = headline[mode];
   const names = [...new Set([
@@ -93,9 +93,7 @@ function paintResults(initial, catalog) {
     });
   }
 
-  tryDraw(() => renderEvolution(document.getElementById('evolution'), {
-    runs: dailyRuns(runs.runs), parties: current.parties.map((party) => party.name), colors,
-  }), 'the evolution');
+  tryDraw(() => wireEvolution(initial, catalog), 'the evolution');
 }
 
 /**

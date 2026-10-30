@@ -183,14 +183,38 @@
           {% endcall %}
         {{ m.card_end() }}
       </div>
-      {{ m.card_start('evolution-card', 'Evolución de las publicaciones', 'El voto de cada partido en cada publicación del modelo, de la primera a la última.', '· ' ~ ('estimación' if state.mode == 'nowcast' else 'pronóstico') ~ ' de cada publicación') }}
-        <div class="chart" id="evolution" role="img" aria-label="Evolución de las publicaciones: estimación de cada publicación"></div>
+      {#- the evolution shares its controls, legend and chart ids with Escaños (`pages/evolution-wire.js`) -#}
+      {{ m.card_start('evolution-card', 'Evolución de las publicaciones', 'El voto de cada partido en cada publicación del modelo, de la primera a la última.', '· voto de cada publicación',
+                      tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las publicaciones · ' ~ title_suffix,
+                                              site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-evolucion-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
+        {% if blocks %}
+        <div class="series-controls">
+          <fieldset id="evolution-view" class="seg" hidden>
+            <legend>Vista</legend>
+            <label><input type="radio" name="evview" value="partidos" checked> Partidos</label>
+            <label><input type="radio" name="evview" value="bloques"> Bloques</label>
+          </fieldset>
+        </div>
+        {% endif %}
+        <div class="legend" id="evolution-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
+        <div class="chart chart-tall" id="evolution-chart" role="img" aria-label="Evolución de las publicaciones: el voto de cada partido en cada publicación"></div>
         {% call m.how() %}
         <p>
-          Un punto por cada publicación. Los puntos huecos son estimaciones retrospectivas: el modelo de hoy
-          con los sondeos publicados hasta ese día.
+          Cada punto es lo que el modelo publicó ese día: el voto de cada partido con los sondeos conocidos hasta
+          entonces. Si un día hubo varias publicaciones, se muestra la última. Los puntos huecos son estimaciones
+          retrospectivas: el modelo de hoy con los sondeos publicados hasta aquel día.
         </p>
-        <p>No es una serie de sondeos: cada punto es lo que el modelo publicó ese día.</p>
+        <p>
+          Esto no es una serie de sondeos ni la curva del promedio. La curva del promedio revisa el pasado: el valor
+          de cada día usa también los sondeos que llegaron después, así que cambia con cada sondeo nuevo. Estos
+          puntos no se revisan: cada uno es lo que se publicó ese día. Por eso pueden no coincidir.
+        </p>
+        <p>
+          Los puntos se mueven de un día a otro porque entran sondeos nuevos, no porque cambie el modelo: mira la
+          tendencia, no cada salto. Pulsa un partido de la leyenda para ocultarlo o mostrarlo; el eje vertical se
+          ajusta a lo que queda a la vista, así que con pocos partidos marcados se ven mejor los cambios pequeños.
+          En la vista Bloques, cada bloque suma sus partidos y Otros es lo que falta hasta 100.
+        </p>
         {% endcall %}
       {{ m.card_end() }}
       {% if pollsters %}
