@@ -190,8 +190,8 @@
         {{ m.card_end() }}
       </div>
       {#- the evolution shares its controls, legend and chart ids with Escaños (`pages/evolution-wire.js`) -#}
-      {{ m.card_start('evolution-card', 'Evolución de las publicaciones', 'El voto de cada partido en cada publicación del modelo, de la primera a la última.', '· voto de cada publicación',
-                      tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las publicaciones · ' ~ title_suffix,
+      {{ m.card_start('evolution-card', 'Evolución de las actualizaciones', 'El voto de cada partido en cada actualización del modelo, de la primera a la última.', '· voto de cada actualización',
+                      tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las actualizaciones · ' ~ title_suffix,
                                               site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-evolucion-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
         {% if blocks %}
         <div class="series-controls">
@@ -203,17 +203,17 @@
         </div>
         {% endif %}
         <div class="legend" id="evolution-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
-        <div class="chart chart-tall" id="evolution-chart" role="img" aria-label="Evolución de las publicaciones: el voto de cada partido en cada publicación"></div>
+        <div class="chart chart-tall" id="evolution-chart" role="img" aria-label="Evolución de las actualizaciones: el voto de cada partido en cada actualización"></div>
         {% call m.how() %}
         <p>
-          Cada punto es lo que el modelo publicó ese día: el voto de cada partido con los sondeos conocidos hasta
-          entonces. Si un día hubo varias publicaciones, se muestra la última. Los puntos huecos son estimaciones
+          Cada punto es la actualización de ese día: el voto de cada partido con los sondeos conocidos hasta
+          entonces. Si un día hubo varias actualizaciones, se muestra la última. Los puntos huecos son estimaciones
           retrospectivas: el modelo de hoy con los sondeos publicados hasta aquel día.
         </p>
         <p>
           Esto no es una serie de sondeos ni la curva del promedio. La curva del promedio revisa el pasado: el valor
           de cada día usa también los sondeos que llegaron después, así que cambia con cada sondeo nuevo. Estos
-          puntos no se revisan: cada uno es lo que se publicó ese día. Por eso pueden no coincidir.
+          puntos no se revisan: cada uno es la actualización de ese día. Por eso pueden no coincidir.
         </p>
         <p>
           Los puntos se mueven de un día a otro porque entran sondeos nuevos, no porque cambie el modelo: mira la

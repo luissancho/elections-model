@@ -147,8 +147,8 @@
       {{ m.card_end() }}
       {% if district_table %}
       {#- the evolution shares its controls, legend and chart ids with Promedios (`pages/evolution-wire.js`) -#}
-      {{ m.card_start('evolution', 'Evolución de las publicaciones', 'Cómo han cambiado los escaños de cada partido de una publicación del modelo a la siguiente.', '· escaños de cada publicación',
-                      tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las publicaciones · ' ~ title_suffix,
+      {{ m.card_start('evolution', 'Evolución de las actualizaciones', 'Cómo han cambiado los escaños de cada partido de una actualización del modelo a la siguiente.', '· escaños de cada actualización',
+                      tools=m.download_button('evolution-download', event_bar.title ~ ' · ' ~ event_bar.date|date, 'Evolución de las actualizaciones · ' ~ title_suffix,
                                               site_host ~ ' · ' ~ author_handle, site_title|lower ~ '-evolucion-escanos-' ~ state.scope ~ '-' ~ meta.run_at[:10] ~ '.png')) }}
         {% if blocks %}
         <div class="series-controls">
@@ -160,18 +160,18 @@
         </div>
         {% endif %}
         <div class="legend" id="evolution-legend" role="group" aria-label="Partidos y bloques del gráfico" hidden></div>
-        <div class="chart chart-tall" id="evolution-chart" role="img" aria-label="Evolución de las publicaciones: los escaños de cada partido en cada publicación"></div>
+        <div class="chart chart-tall" id="evolution-chart" role="img" aria-label="Evolución de las actualizaciones: los escaños de cada partido en cada actualización"></div>
         {% call m.how() %}
         <p>
-          Cada publicación del modelo es un run: una ejecución completa con los sondeos conocidos ese día. Cada
-          punto es lo que ese run publicó: los escaños de cada partido con los sondeos conocidos hasta entonces. Si
-          un día hubo varias publicaciones, se muestra la última. Los puntos huecos son estimaciones retrospectivas:
+          Cada actualización del modelo es un run: una ejecución completa con los sondeos conocidos ese día. Cada
+          punto es lo que dijo ese run: los escaños de cada partido con los sondeos conocidos hasta entonces. Si
+          un día hubo varias actualizaciones, se muestra la última. Los puntos huecos son estimaciones retrospectivas:
           el modelo de hoy con los sondeos publicados hasta aquel día.
         </p>
         <p>
           Esto no es una serie de sondeos ni la curva del promedio. La curva del promedio revisa el pasado: el valor
           de cada día usa también los sondeos que llegaron después, así que cambia con cada sondeo nuevo. Estos
-          puntos no se revisan: cada uno es lo que se publicó ese día. Por eso pueden no coincidir.
+          puntos no se revisan: cada uno es la actualización de ese día. Por eso pueden no coincidir.
         </p>
         <p>
           Los puntos se mueven de un run a otro porque entran sondeos nuevos, no porque cambie el modelo: mira la

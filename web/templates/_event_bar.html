@@ -8,6 +8,6 @@
   <div class="run">
     <span class="pill brand">{{ title_suffix }}</span>
     {% if state.pinned %}<span class="pill event-run">Run del {{ meta.run_at|date }}</span>{% endif %}
-    <small>Publicación del {{ event_bar.run_at|date }}{% if event_bar.n_polls is not none %} · {{ event_bar.n_polls|int }} sondeos{% endif %}</small>
+    <small>Actualizado: {{ event_bar.run_at|date }}{% if event_bar.n_polls is not none %} · {{ event_bar.n_polls|int }} sondeos{% endif %}</small>
   </div>
 </div>

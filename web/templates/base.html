@@ -23,7 +23,7 @@
 <body>
   {% include '_svg.html' +%}
   {% if manifest.freeze.active %}
-  <div id="freeze-banner">{{ manifest.freeze.message or 'Publicación congelada.' }} <a href="/metodo#limitaciones">Más información</a></div>
+  <div id="freeze-banner">{{ manifest.freeze.message or 'Actualizaciones congeladas.' }} <a href="/metodo#limitaciones">Más información</a></div>
   {% endif %}
   {% include '_header.html' +%}
   {% if is_event %}

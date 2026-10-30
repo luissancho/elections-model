@@ -119,7 +119,7 @@ def test_promedio_page_shows_the_example_block(api):
     assert rows == ['5 oct', '1 oct', '24 sept']                                   # los más nuevos arriba
     assert '<td>32,4%</td>' in table and '<td>32,9%</td>' in table                  # publicada y corregida (GAD3)
     text = re.sub(r'\s+', ' ', page)
-    assert ('En el cálculo publicado el 8 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%, con '
+    assert ('En la actualización del 8 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%, con '
             'una banda del 32,4% al 33,8%.') in text
     assert 'Las fechas describen dos cosas distintas' not in text              # mismo día en la fixture
     assert 'En ese ajuste participaban 3 sondeos y la campana tenía una anchura de 42 días.' in text
@@ -186,7 +186,7 @@ def test_promedio_page_dates_the_example_by_its_publication(api, monkeypatch):
     text = re.sub(r'\s+', ' ', html(body))
     card = text[text.index('id="ejemplo"'):text.index('id="voto-estimado"')]
     # the run and the reading day are two dates: the figure is the one of the reading day
-    assert status == 200 and 'En el cálculo publicado el 9 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%' in card
+    assert status == 200 and 'En la actualización del 9 oct 2026, el promedio del PP leído en el 8 oct 2026 era del 33,1%' in card
     assert 'Las fechas describen dos cosas distintas' not in card     # leído antes que el cálculo: nada que explicar
     assert initial(body)['example']['date'] == '2026-10-08'    # el gráfico sigue centrado en el día leído
 

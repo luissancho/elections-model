@@ -49,7 +49,7 @@
         </article>
         {% endif %}
         {% if autonomics %}
-        <div class="sec-h"><h2>Autonómicas</h2><p>{{ autonomics|length }} {{ 'comunidad' if autonomics|length == 1 else 'comunidades' }} con pronóstico publicado, por fecha de elección.</p></div>
+        <div class="sec-h"><h2>Autonómicas</h2><p>{{ autonomics|length }} {{ 'comunidad' if autonomics|length == 1 else 'comunidades' }} con pronóstico actualizado, por fecha de elección.</p></div>
         <div class="card rows" id="auto-rows">
           {% for card in autonomics %}
           <a class="row" href="{{ card.href }}">

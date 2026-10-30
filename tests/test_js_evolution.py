@@ -1,4 +1,4 @@
-"""Evolución de las publicaciones (`web/dist/js/charts/evolution.js` y `pages/evolution-wire.js`): un run por día, los
+"""Evolución de las actualizaciones (`web/dist/js/charts/evolution.js` y `pages/evolution-wire.js`): un run por día, los
 puntos de cada partido, el eje redondeado a unidades y la opción ECharts, comprobados con `node` (se salta sin él).
 Los módulos de gráficos leen `window.echarts` al cargarse, así que el arnés carga el ECharts empaquetado antes."""
 import json

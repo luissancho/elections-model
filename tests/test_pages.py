@@ -141,7 +141,7 @@ def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tm
 
 
 @pytest.mark.parametrize('path, query, status, text', [
-    ('/', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
+    ('/', 'scope=es-md', 404, 'no tiene actualizaciones del modelo'),
     ('/', 'scope=es-xx', 400, 'Ámbito no válido'),
     ('/es', 'run=2026-10-08', 400, 'Run no válido'),
     ('/es', 'run=20200101-000000', 404, 'Ese run no existe'),
@@ -149,9 +149,9 @@ def test_frozen_manifest_written_before_phase_6_still_renders(api, fresh_app, tm
     ('/elecciones', 'scope=es-xx', 400, 'Ámbito no válido'),
     ('/nope', '', 404, 'Ámbito desconocido'),  # un segmento suelto casa con `/{scope}`
     ('/nope/deeper', '', 404, 'Página no encontrada'),
-    ('/promedio', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
-    ('/escanos', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
-    ('/casas', 'scope=es-md', 404, 'no tiene pronóstico publicado'),
+    ('/promedio', 'scope=es-md', 404, 'no tiene actualizaciones del modelo'),
+    ('/escanos', 'scope=es-md', 404, 'no tiene actualizaciones del modelo'),
+    ('/casas', 'scope=es-md', 404, 'no tiene actualizaciones del modelo'),
 ])
 def test_page_errors_are_html_and_not_cached(api, fresh_app, monkeypatch, path, query, status, text):
     use_database(fresh_app)
@@ -171,7 +171,7 @@ def test_without_bundle_the_home_is_a_503_page(fresh_app, tmp_path):
     fresh_app.set('fs', FileSystem(str(tmp_path)))
     fresh_app.set('data', FileSystem(os.path.join(ROOT, 'data')))
     status, headers, body = call(site_api(fresh_app), '/')
-    assert status == 503 and 'Todavía no hay ningún pronóstico publicado' in html(body)
+    assert status == 503 and 'Todavía no hay ninguna actualización del modelo' in html(body)
     assert headers['cache-control'] == 'no-store'
 
 
@@ -218,7 +218,7 @@ def test_frozen_site_defaults_to_the_forecast_and_an_older_pinned_run_is_not_def
     webapi.site().manifest_cache_clear()
     assert 'pronóstico definitivo para el' in html(call(api, '/es')[2])
     page = html(call(api, '/es', query='run=20261001-120000&mode=forecast')[2])
-    assert 'pronóstico publicado el' in page and 'definitivo' not in page
+    assert 'pronóstico actualizado el' in page and 'definitivo' not in page
 
 
 @pytest.mark.parametrize('path, query, location', [
@@ -243,7 +243,7 @@ def test_unknown_scopes_and_sections_are_html_404s(api, path):
 
 def test_unpublished_catalogue_scope_is_a_404(api):
     status, _, body = call(api, '/es-md')
-    assert status == 404 and 'no tiene pronóstico publicado' in html(body)
+    assert status == 404 and 'no tiene actualizaciones del modelo' in html(body)
 
 
 def test_global_pages_carry_the_scope_filter_and_no_event_bar(api):
@@ -327,8 +327,8 @@ def test_title_of_rules():
     assert pages.title_of('nowcast', meta, True, True, True, today=date(2026, 10, 20)) == 'Estimación del 13 oct 2026'
     assert pages.title_of('nowcast', meta, False, False, True, today=date(2026, 10, 20)) == 'Estimación a 20 oct 2026'
     assert pages.title_of('forecast', meta, True, False, True) == 'Pronóstico definitivo para el 29 nov 2026'
-    assert pages.title_of('forecast', meta, True, True, False) == 'Pronóstico publicado el 13 oct 2026'
-    assert pages.title_of('forecast', meta, False, True, False) == 'Pronóstico publicado el 13 oct 2026'
+    assert pages.title_of('forecast', meta, True, True, False) == 'Pronóstico actualizado el 13 oct 2026'
+    assert pages.title_of('forecast', meta, False, True, False) == 'Pronóstico actualizado el 13 oct 2026'
     assert pages.title_of('forecast', meta, False, False, True) == 'Pronóstico para el 29 nov 2026'
 
 def test_footer_names_the_publication_and_the_last_poll(api):
@@ -516,7 +516,7 @@ def test_without_a_published_catalogue_scope_the_home_is_a_503_page(fresh_app, t
     fresh_app.set('data', FileSystem(os.path.join(ROOT, 'data')))
     write_bundle(fresh_app.fs, scope='zz')
     status, headers, body = call(site_api(fresh_app), '/')
-    assert status == 503 and 'Todavía no hay ningún pronóstico publicado' in html(body)
+    assert status == 503 and 'Todavía no hay ninguna actualización del modelo' in html(body)
 
 
 def test_polls_table_marks_the_leader_formats_the_values_and_averages_all_the_polls():
@@ -702,7 +702,7 @@ def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(a
 
 def test_escanos_hides_the_seat_distributions_behind_a_button_and_puts_the_evolution_after_the_calculator(api):
     """Luis, 2026-10-30: las curvas de «Reparto de escaños» se abren con un botón (la tarjeta queda en la barra y la
-    tabla) y «Evolución de las publicaciones» va debajo de «Calculadora de mayorías»."""
+    tabla) y «Evolución de las actualizaciones» va debajo de «Calculadora de mayorías»."""
     page = html(call(api, '/es/escanos')[2])
     card = page[page.index('<section class="card" id="seats"'):page.index('<section class="card" id="coalition"')]
     toggle = re.search(r'<button[^>]*id="ridge-toggle"[^>]*>([^<]*)</button>', card)
@@ -906,19 +906,20 @@ def test_district_table_keeps_every_party_ordered_by_total_and_has_communities_n
 
 
 def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
-    for path, pill in (('/es', 'voto de cada publicación'), ('/es/escanos', 'escaños de cada publicación')):
+    for path, pill in (('/es', 'voto de cada actualización'), ('/es/escanos', 'escaños de cada actualización')):
         for query in ('', 'mode=forecast'):
             page = html(call(api, path, query=query)[2])
             # from the card's section: the download button repeats the title in its data attributes before the h2
             card = page[page.index('<section class="card" id="evolution'):page.index('id="evolution-chart"')]
             assert '<span class="pill">%s</span>' % pill in card
-            assert 'de cada publicación' not in card.replace(pill, '')  # no mode in the subtitle: both modes publish the same figures
+            assert 'de cada actualización' not in card.replace(pill, '')  # no mode in the subtitle: both modes publish the same figures
+            assert 'Evolución de las actualizaciones' in card and 'publicaci' not in card  # Luis, 2026-10-30: «actualizaciones», no «publicaciones»
             assert 'id="evolution-download"' in card and 'id="evolution-view"' in card and 'name="evview"' in card
             assert 'id="evolution-legend"' in card and '<div class="chart chart-tall" id="evolution-chart"' in page
             text = re.sub(r'\s+', ' ', page[page.index('id="evolution-chart"'):])
             text = text[:text.index('</section>')]
             assert 'estimaciones retrospectivas' in text and 'revisa el pasado' in text and 'no se revisan' in text
-            assert 'Si un día hubo varias publicaciones, se muestra la última' in text
+            assert 'Si un día hubo varias actualizaciones, se muestra la última' in text
             assert_public_wording(page, path)
     assert 'hasta completar la cámara' in html(call(api, '/es/escanos')[2]) and 'hasta 100' in html(call(api, '/es')[2])
 
@@ -2820,6 +2821,7 @@ def test_frozen_manifest_marks_every_page(api, fresh_app):
     assert 'estimación del' in html(body) and 'pronóstico definitivo' not in html(body)
     status, _, body = call(api, '/metodo', query='scope=es')
     assert 'freeze-banner' in html(body)
+    assert 'Las actualizaciones se congelan al empezar la veda' in re.sub(r'\s+', ' ', html(body))  # Limitaciones
     publish.update_manifest(writer, freeze={'active': False})
     webapi.site().manifest_cache_clear()
     status, _, body = call(api, '/es', query='mode=forecast')
@@ -3344,7 +3346,7 @@ def test_event_bar_names_the_chamber_and_the_publication(api):
     page = html(call(api, '/es')[2])
     assert '<h2>Elecciones generales<small>29 nov 2026 · ' in page and 'Congreso, 350 escaños</small></h2>' in page
     assert '<span class="pill brand">Pronóstico para el 29 nov 2026</span>' in page  # Elección: 52 days away
-    assert 'Publicación del 8 oct 2026 · 120 sondeos' in page
+    assert 'Actualizado: 8 oct 2026 · 120 sondeos' in page and 'Publicación del' not in page
     assert 'class="seg lg event-tabs"' in page and re.search(r'<a class="on" href="/es\?mode=forecast" aria-current="page"><svg', page)
 
 

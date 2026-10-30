@@ -135,3 +135,11 @@ Dos hallazgos que cambian la tarjeta:
   los empates, como el listado de territorios), en un carrusel: tira horizontal con ajuste tarjeta a tarjeta, seis por vista en
   escritorio y flechas a los lados cuando no caben (en móvil ya era una tira deslizable). Antes eran sólo los de
   `bmaps.main`.
+- Palabra pública «actualización» en vez de «publicación» para los runs del modelo (Luis, 2026-10-30: «publicaciones»
+  no se entiende; «actualizaciones» se sobreentiende como el modelo puesto al día tras nuevos sondeos): la tarjeta pasa
+  a llamarse «Evolución de las actualizaciones», la barra del evento dice «Actualizado: {fecha} · N sondeos» como
+  Inicio y el pie, el run anclado «Pronóstico actualizado el …», el aviso de veda por defecto «Actualizaciones
+  congeladas.» y Limitaciones «Las actualizaciones se congelan al empezar la veda»; también los «publicado» con
+  sentido de «disponible» (avisos de error, «con pronóstico actualizado» en Inicio, «la última actualización» y «Cada
+  actualización corre» en /metodo, «el último backtest», «la última evaluación»). No cambian los «publicado» que hablan
+  de sondeos, resultados o análisis, ni los nombres internos (`publish`, ids `evolution-*`, fichero `-evolucion-`).

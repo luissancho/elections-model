@@ -713,9 +713,9 @@
         </p>
       {{ m.card_end() }}
       {% if example %}
-      {{ m.card_start('ejemplo', 'Un cálculo completo, con datos publicados', 'Los sondeos que pesan en el promedio del ' ~ example.name ~ ' en el último cálculo publicado, el del ' ~ (example.published|date) ~ ', y la recta que se ajusta a ellos.') }}
+      {{ m.card_start('ejemplo', 'Un cálculo completo, con datos publicados', 'Los sondeos que pesan en el promedio del ' ~ example.name ~ ' en la última actualización, la del ' ~ (example.published|date) ~ ', y la recta que se ajusta a ellos.') }}
         <p>
-          En el cálculo publicado el {{ example.published|date }}, el promedio del {{ example.name }} leído en el
+          En la actualización del {{ example.published|date }}, el promedio del {{ example.name }} leído en el
           {{ example.date|date }} era del {{ example.stats.mean|pct }}, con una banda del {{ example.stats.lo|pct }} al
           {{ example.stats.hi|pct }}.
         </p>
