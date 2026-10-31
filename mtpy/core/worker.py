@@ -852,9 +852,12 @@ class Pipeline(Core):
                     getattr(self, fn)(**kwargs)
         except PipelineEnd as end:
             self.result = end.result
-            self.log('info', 'Pipeline {}.{} ended: {} ({})'.format(
-                self.name, self._action, self.result.get('status'), self.result.get('reason')
-            ))
+            if isinstance(self.result, dict):
+                self.log('info', 'Pipeline {}.{} ended: {} ({})'.format(
+                    self.name, self._action, self.result.get('status'), self.result.get('reason')
+                ))
+            else:
+                self.log('info', 'Pipeline {}.{} ended'.format(self.name, self._action))
 
         if self.result is not None and self.line is None:
             self.line = self.summary(chunk, **{k: v for k, v in kwargs.items() if k != 'chunk'})

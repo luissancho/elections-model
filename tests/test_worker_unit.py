@@ -75,6 +75,20 @@ def test_pipeline_end_keeps_the_result_and_skips_the_remaining_stages(fresh_app)
     assert p.calls == [('check', 'skip')]
 
 
+def test_pipeline_end_accepts_a_list_result(fresh_app):
+    class Listed(Counter):
+        def check_task(self, chunk=None, **kwargs):
+            self.calls.append(('check', chunk))
+            self.end([{'status': 'skipped', 'reason': 'x'}])
+
+        def summary(self, chunk, **kwargs):
+            return [r['status'] for r in self.result]
+    p = Listed()
+    p.run('update', chunk='a')
+    assert p.result == [{'status': 'skipped', 'reason': 'x'}] and p.line == ['skipped']
+    assert p.calls == [('check', 'a')]
+
+
 def test_pipeline_resets_result_and_line_on_each_run(fresh_app):
     p = Counter()
     p.run('update', chunk='a')

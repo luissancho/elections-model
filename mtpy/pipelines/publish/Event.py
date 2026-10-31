@@ -45,19 +45,17 @@ class Event(ScopePipeline):
 
         Notes
         -----
-        An invalid date, a failure resolving ``'all'`` or no past election with official results leave the scope
-        with a single ``failed`` or ``skipped`` result (in a list, with the ``event_date`` asked) and `publish_task`
-        does nothing. (`end` is not used: it logs its result as a dict and this one is a list.)
+        An invalid date, a failure resolving ``'all'`` or no past election with official results end the scope
+        with a single ``failed`` or ``skipped`` result (in a list, with the ``event_date`` asked).
         """
         self.start_progress(chunk, position)
         try:
             self.days = publish.event_dates_to_publish(chunk, event_date, today=today)
         except Exception as e:
-            self.result = [self.failed(chunk, e, event_date=str(event_date))]
-            return
+            self.end([self.failed(chunk, e, event_date=str(event_date))])
         if not self.days:
-            self.result = [{'status': 'skipped', 'event_date': str(event_date),
-                            'reason': 'no past elections with official results'}]
+            self.end([{'status': 'skipped', 'event_date': str(event_date),
+                       'reason': 'no past elections with official results'}])
 
     def publish_task(self, chunk=None, source=None, **kwargs):
         """
@@ -76,8 +74,6 @@ class Event(ScopePipeline):
         ``published`` with ``n_polls``, ``n_pollsters``, ``has_model`` and ``seconds``, ``skipped`` for
         ``publish.NothingToPublish`` and ``failed`` for any other exception, both with a ``reason``.
         """
-        if self.result is not None:
-            return
         outcomes = []
         for day in self.days:
             try:
