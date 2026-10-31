@@ -1,15 +1,9 @@
-from ..core.worker import Job
-from ..lib.load import NO_EVENTS, NO_POLLS_ARTICLE, YEARS_WITH_OVERWRITE, load_params, load_polls
-from ..lib.publish.common import next_event_date, resolve_scopes
-from .progress import ScopeReporter, collect_warnings, counted, notes_suffix
+from ..core.worker import SequenceJob
+from ..lib.load import YEARS_WITH_OVERWRITE
+from ..lib.publish.common import resolve_scopes
 
 
-# Labels of the phases reported at verbose 2 (keys of `load.LOAD_STEPS` and `load.PARAMS_STEPS`)
-STEPS = {'read': 'lectura', 'names': 'nombres', 'series': 'series', 'save': 'guardado', 'weights': 'pesos',
-         'derive': 'derivación'}
-
-
-class Load(ScopeReporter, Job):
+class Load(SequenceJob):
     """
     Load the Wikipedia polls of an election into the database (the sequence of
     ``notebooks/data-load/PollsLoadWikipedia.ipynb``), scope by scope: read the article, check that every name is
@@ -23,7 +17,7 @@ class Load(ScopeReporter, Job):
     ``overwrite``, which would delete the other years of the cycle. The event is the ``event_date`` given or, by
     default, the next election of each scope. With ``scopes`` ``'all'``, a scope without an upcoming event or whose
     event has no polls article is skipped; named explicitly, it fails. Scopes are isolated: one that fails never
-    stops the others, and the job exits with an error at the end if any failed.
+    stops the others (unless ``stop_on_error``), and the job exits with an error at the end if any failed.
 
     The action ``params`` rewrites, for every election of each scope, the ``parties`` (``event``, ``polls``) and
     the ``bmaps`` (``main``, ``blocks``, ``vs``) of ``data/params.json`` from the polls, the results and the block
@@ -53,11 +47,15 @@ class Load(ScopeReporter, Job):
         RUN_JOB='load {"scopes":["es"],"overwrite":true}'
     """
 
+    sequence = {'load': ['polls', 'params']}
+    default_action = 'update'
+    stop_on_error = False
+    chunk_noun = 'scopes'
     WHAT = ('polls', 'params')
-    verbose = 1
 
     def run(self, what=('polls',), scopes=('es',), event_date=None, overwrite=False, force=False, years=None,
-            dry_run=False, verbose=1, loader=None, computer=None, catalogues=None, params_loader=None, **kwargs):
+            dry_run=False, verbose=1, loader=None, computer=None, catalogues=None, params_loader=None,
+            stop_on_error=None, **kwargs):
         """
         Run the requested loads.
 
@@ -85,6 +83,8 @@ class Load(ScopeReporter, Job):
             Factories and helper passed to `load.load_polls`; the real ones by default (for tests).
         params_loader : callable, optional
             Replacement of `load.load_params` (for tests).
+        stop_on_error : bool, optional
+            Stop at the first failed scope instead of going on with the others; ``False`` by default.
         **kwargs
             Ignored extra job arguments.
 
@@ -103,7 +103,6 @@ class Load(ScopeReporter, Job):
         RuntimeError
             If any scope failed (raised after the summary and the alert).
         """
-        self.verbose = verbose
         whats = [what] if isinstance(what, str) else list(what)
         for item in whats:
             if item not in self.WHAT:
@@ -114,189 +113,18 @@ class Load(ScopeReporter, Job):
             years = [str(year) for year in years]
 
         targets = resolve_scopes(scopes)
-        skip_missing = scopes == 'all'
-        results, failures, lines = {}, [], []
-        for action in whats:
-            if action == 'polls':
-                outcome = self._run_polls(targets, event_date, overwrite, force, years, dry_run, verbose, loader,
-                                          computer, catalogues, skip_missing)
-            else:
-                outcome = self._run_params(targets, dry_run, verbose, params_loader or load_params, skip_missing)
-            for scope, result in outcome[0].items():
-                results.setdefault(scope, {})[action] = result
-            failures.extend(outcome[1])
-            lines.extend(outcome[2])
+        if not targets:
+            raise ValueError('load: no scopes to run')
 
-        for line in lines:
-            print(line)
-        if self.app.logger is not None:
-            self.alert('\n'.join(lines))
+        super().run(select=['load.' + item for item in whats], action='rebulk' if overwrite else 'update',
+                    chunks=targets, stop_on_error=stop_on_error, event_date=event_date, force=force, years=years,
+                    dry_run=dry_run, verbose=verbose, loader=loader, computer=computer, catalogues=catalogues,
+                    params_loader=params_loader, skip_missing=scopes == 'all')
 
-        if failures:
-            raise RuntimeError('load: failed scopes: ' + ', '.join(failures))
+        results = {}
+        for (key, scope), result in self.results.items():
+            results.setdefault(scope, {})[key.split('.', 1)[1]] = result
 
         if len(whats) == 1:
             return {scope: by_action[whats[0]] for scope, by_action in results.items()}
         return results
-
-    def _run_polls(self, targets, event_date, overwrite, force, years, dry_run, verbose, loader, computer, catalogues,
-                   skip_missing):
-        """Run the ``polls`` action on every scope; returns ``(results, failures, lines)``."""
-        flags = ''.join(text for active, text in ((overwrite, ' · overwrite'), (force, ' · force'),
-                                                   (dry_run, ' · dry run')) if active)
-        self._say('load polls: {}{}'.format(counted(len(targets), 'ámbito', 'ámbitos'), flags))
-        results, failures, lines = {}, [], []
-
-        for index, scope in enumerate(targets, 1):
-            progress = self._progress(scope, index, len(targets), steps=STEPS)
-            progress.start()
-            result = self._scope(scope, event_date, overwrite, force, years, dry_run, verbose, progress, loader,
-                                 computer, catalogues, skip_missing=skip_missing)
-            results[scope] = result
-            if result['status'] == 'failed':
-                failures.append('{} ({})'.format(scope, result['action']))
-            lines.append(self._line(scope, result))
-            progress.done(lines[-1])
-
-        return results, failures, lines
-
-    def _run_params(self, targets, dry_run, verbose, params_loader, skip_missing):
-        """Run the ``params`` action on every scope; returns ``(results, failures, lines)``."""
-        self._say('load params: {}{}'.format(counted(len(targets), 'ámbito', 'ámbitos'), ' · dry run' if dry_run else ''))
-        results, failures, lines = {}, [], []
-
-        for index, scope in enumerate(targets, 1):
-            progress = self._progress(scope, index, len(targets), steps=STEPS)
-            progress.start()
-            result = self._scope_params(scope, dry_run, verbose, progress, params_loader, skip_missing=skip_missing)
-            results[scope] = result
-            if result['status'] == 'failed':
-                failures.append('{} ({})'.format(scope, result['action']))
-            lines.append(self._line_params(scope, result))
-            progress.done(lines[-1])
-
-        return results, failures, lines
-
-    def _scope(self, scope, event_date, overwrite, force, years, dry_run, verbose, progress, loader, computer,
-               catalogues, skip_missing=False):
-        """
-        Load the polls of one scope, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        scope : str
-            Scope to load.
-        event_date : str or None
-            Election day, or ``None`` for the next election of the scope.
-        overwrite, force, years, dry_run
-            Options of the job (see `run`).
-        verbose : int
-            Verbosity of the job; the loader and the ``Computer`` receive ``verbose - 2``.
-        progress : ScopeProgress
-            Live progress of the scope (its phases).
-        loader, computer, catalogues : callable or None
-            Factories and helper passed to `load.load_polls`.
-        skip_missing : bool, default False
-            Turn a scope without an upcoming event or without a polls article into ``skipped`` instead of
-            ``failed`` (the job was asked for ``'all'``).
-
-        Returns
-        -------
-        dict
-            The result of `load.load_polls` or ``{'status': 'failed' | 'skipped', 'action': 'polls', 'reason'}``,
-            with the ``warnings`` raised.
-        """
-        notes = []
-        try:
-            event_date = event_date or next_event_date(scope)
-            if event_date is None:
-                result = {'status': 'failed', 'action': 'polls', 'reason': 'no upcoming event'}
-            else:
-                with collect_warnings(notes, progress.note):
-                    result = load_polls(scope, event_date, overwrite=overwrite, force=force, years=years,
-                                        save=not dry_run, verbose=max(0, verbose - 2), progress=progress,
-                                        report=lambda text, level=1: self._say(text, level), loader=loader,
-                                        computer=computer, catalogues=catalogues)
-        except Exception as e:
-            self._log_error(scope)
-            result = {'status': 'failed', 'action': 'polls', 'reason': '{}: {}'.format(type(e).__name__, e)}
-
-        if skip_missing and result['status'] == 'failed' and result['reason'] in (
-                'no upcoming event', NO_POLLS_ARTICLE.format(event_date)):
-            result['status'] = 'skipped'
-        result['warnings'] = notes
-        return result
-
-    @staticmethod
-    def _line(scope, result):
-        """Format the summary line of one scope result, with the count of its warnings."""
-        if result['status'] in ('failed', 'skipped'):
-            return '{}: polls {} ({})'.format(scope, result['status'], result['reason']) + notes_suffix(result)
-
-        added = result['added']
-        pollsters, sponsors = len(added['pollsters']), len(added['sponsors'])
-        seconds = result['seconds']['total']
-        if result['status'] == 'loaded':
-            line = '{}: polls loaded ({} read, {} saved, {}{}) in {:.0f} s'.format(
-                scope, result['n_read'], result['n_saved'], result['event_date'],
-                ', overwrite' if result['overwrite'] else '', seconds)
-            verb = 'added'
-        else:
-            line = '{}: polls checked ({} read, {} new, {}{}, dry run) in {:.0f} s'.format(
-                scope, result['n_read'], result['n_saved'], result['event_date'],
-                ', overwrite' if result['overwrite'] else '', seconds)
-            verb = 'to add'
-        nouns = [counted(n, one, many) + ' ' + verb for n, one, many in
-                 ((pollsters, 'pollster', 'pollsters'), (sponsors, 'sponsor', 'sponsors')) if n]
-        if nouns:
-            line += ' · ' + ', '.join(nouns)
-        return line + notes_suffix(result)
-
-    def _scope_params(self, scope, dry_run, verbose, progress, params_loader, skip_missing=False):
-        """
-        Rewrite the parameters of one scope, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        scope : str
-            Scope to rewrite.
-        dry_run : bool
-            Report without writing.
-        verbose : int
-            Verbosity of the job; the loader receives ``verbose - 2``.
-        progress : ScopeProgress
-            Live progress of the scope (its phases).
-        params_loader : callable
-            `load.load_params` or its replacement.
-        skip_missing : bool, default False
-            Turn a scope without elections into ``skipped`` instead of ``failed`` (the job was asked for ``'all'``).
-
-        Returns
-        -------
-        dict
-            The result of `load.load_params` or ``{'status': 'failed' | 'skipped', 'action': 'params', 'reason'}``,
-            with the ``warnings`` raised.
-        """
-        notes = []
-        try:
-            with collect_warnings(notes, progress.note):
-                result = params_loader(scope, save=not dry_run, verbose=max(0, verbose - 2), progress=progress,
-                                       report=lambda text, level=1: self._say(text, level))
-        except Exception as e:
-            self._log_error(scope)
-            result = {'status': 'failed', 'action': 'params', 'reason': '{}: {}'.format(type(e).__name__, e)}
-
-        if skip_missing and result['status'] == 'failed' and result['reason'] == 'ValueError: ' + NO_EVENTS.format(scope):
-            result['status'], result['reason'] = 'skipped', NO_EVENTS.format(scope)
-        result['warnings'] = notes
-        return result
-
-    @staticmethod
-    def _line_params(scope, result):
-        """Format the summary line of one scope result of the ``params`` action."""
-        if result['status'] in ('failed', 'skipped'):
-            return '{}: params {} ({})'.format(scope, result['status'], result['reason']) + notes_suffix(result)
-
-        return '{}: params {} ({} elections, {} changed, {} skipped{}) in {:.0f} s'.format(
-            scope, result['status'], result['n_events'], result['n_changed'], result['n_skipped'],
-            ', dry run' if result['status'] == 'checked' else '', result['seconds']['total']) + notes_suffix(result)
