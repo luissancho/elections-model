@@ -10,77 +10,29 @@
     "cpuArchitecture": "X86_64",
     "operatingSystemFamily": "LINUX"
   },
-  "taskRoleArn": "<task-role-write>",
+  "taskRoleArn": "<task-role>",
   "executionRoleArn": "<execution-role>",
   "containerDefinitions": [
     {
-      "name": "job",
-      "image": "<account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>",
+      "name": "Main",
+      "image": "<account>.dkr.ecr.<region>.amazonaws.com/elections-model:latest",
       "essential": true,
       "environment": [
-        {
-          "name": "APP_ENV",
-          "value": "production"
-        },
-        {
-          "name": "APP_VERBOSE",
-          "value": ""
-        },
-        {
-          "name": "DB_ADAPTER",
-          "value": "PostgreSQL"
-        },
-        {
-          "name": "DB_HOST",
-          "value": "<rds-host>"
-        },
-        {
-          "name": "DB_PORT",
-          "value": "5432"
-        },
-        {
-          "name": "DB_USERNAME",
-          "value": "<db-user>"
-        },
-        {
-          "name": "DB_DATABASE",
-          "value": "<db-name>"
-        },
-        {
-          "name": "DB_STATEMENT_TIMEOUT",
-          "value": ""
-        },
-        {
-          "name": "AWS_REGION",
-          "value": "<region>"
-        },
-        {
-          "name": "S3_BUCKET",
-          "value": "<bucket>"
-        },
-        {
-          "name": "CWL_GROUP",
-          "value": "<log-group>"
-        },
-        {
-          "name": "GIT_COMMIT",
-          "value": "<git-sha>"
-        },
         {
           "name": "RUN_JOB",
           "value": ""
         }
       ],
-      "secrets": [
+      "environmentFiles": [
         {
-          "name": "DB_PASSWORD",
-          "valueFrom": "<secret-arn>"
+          "value": "arn:aws:s3:::<bucket>/elections.env",
+          "type": "s3"
         }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "<log-group>",
+          "awslogs-group": "/ecs/elections-model",
           "awslogs-region": "<region>",
           "awslogs-stream-prefix": "job"
         }

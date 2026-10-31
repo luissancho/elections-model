@@ -4,7 +4,7 @@ if [ -n "$RUN_JOB" ] ; then
     echo "Run job [$RUN_JOB]..."
     # the job name is the first word; everything after the first space is one argument (JSON with spaces)
     read -r job_name job_params <<< "$RUN_JOB"
-    python /app/job.py "$job_name" ${job_params:+"$job_params"}
+    exec python /app/job.py "$job_name" ${job_params:+"$job_params"}
 else
     SERVICES=()
     APP_CRONTAB=$(echo "$APP_CRONTAB" | xargs)
@@ -18,6 +18,11 @@ else
     APP_QUEUE=$(echo "$APP_QUEUE" | xargs)
     if [ -n "$APP_QUEUE" ] ; then
         SERVICES+=("worker")
+    fi
+
+    if [ ${#SERVICES[@]} -eq 0 ] ; then
+        echo "Nothing to run: set RUN_JOB, APP_API, APP_CRONTAB or APP_QUEUE" >&2
+        exit 1
     fi
 
     if [ ${#SERVICES[@]} -gt 0 ] ; then

@@ -19,26 +19,33 @@ def load(path):
     return json.loads(read(path))
 
 
-def test_ecs_templates_are_valid_and_consistent():
-    """Las plantillas de ECS son JSON puro y coherentes entre sí."""
+def test_ecs_templates_describe_the_live_infrastructure():
+    """Las plantillas son JSON puro y reflejan la infraestructura real: configuración por fichero de entorno en S3,
+    contenedor `Main`, definición de jobs derivada de la web (2 vCPU, 4 GB, sin puertos, prefijo `job`)."""
     web = load('deploy/ecs/task-web.example.json'); job = load('deploy/ecs/task-job.example.json'); run = load('deploy/ecs/run-task.example.json')
-    env = {e['name']: e['value'] for e in web['containerDefinitions'][0]['environment']}
-    assert env['GUNICORN_WORKERS'] == '2' and env['DB_STATEMENT_TIMEOUT'] == '10000' and 'AWS_KEY' not in env
-    assert web['containerDefinitions'][0]['portMappings'][0]['containerPort'] == 8042
-    assert job['memory'] == '4096' and all(e['name'] != 'APP_API' for e in job['containerDefinitions'][0]['environment'])
-    assert run['overrides']['containerOverrides'][0]['environment'][0]['name'] == 'RUN_JOB'
-    # Nombres fijados por Luis (2026-10-14): clúster y definición de la web `elections-model`, definición del job
-    # `elections-model-job`, imagen de ECR `elections-model:<tag>`
-    assert web['family'] == 'elections-model' and run['cluster'] == 'elections-model'
-    assert job['family'] == 'elections-model-job' and run['taskDefinition'] == 'elections-model-job'
     for template in (web, job):
-        assert template['containerDefinitions'][0]['image'].endswith('.amazonaws.com/elections-model:<tag>')
-    for template in (web, job):
-        adapter = {e['name']: e['value'] for e in template['containerDefinitions'][0]['environment']}['DB_ADAPTER']
-        # `mtpy.run()` resuelve el adaptador con `getattr(dal, DB_ADAPTER)`: debe nombrar un módulo de `mtpy/core/dal/`
-        assert (ROOT / 'mtpy' / 'core' / 'dal' / '{}.py'.format(adapter)).is_file(), adapter
-    job_env = {e['name']: e['value'] for e in job['containerDefinitions'][0]['environment']}
-    assert job_env['GIT_COMMIT'] == '<git-sha>' and 'GIT_COMMIT' not in env
+        container = template['containerDefinitions'][0]
+        assert container['name'] == 'Main' and 'secrets' not in container
+        assert container['environmentFiles'] == [{'value': 'arn:aws:s3:::<bucket>/elections.env', 'type': 's3'}]
+        assert container['image'].endswith('.amazonaws.com/elections-model:latest')
+        assert container['logConfiguration']['options']['awslogs-group'] == '/ecs/elections-model'
+    assert 'environment' not in web['containerDefinitions'][0] and web['containerDefinitions'][0]['portMappings'][0]['containerPort'] == 8042
+    assert web['family'] == 'elections-model-cluster-elections-model-service' and web['cpu'] == '1024'
+    assert job['family'] == 'elections-model-job' and job['cpu'] == '2048' and job['memory'] == '4096'
+    assert 'portMappings' not in job['containerDefinitions'][0]
+    assert job['containerDefinitions'][0]['environment'] == [{'name': 'RUN_JOB', 'value': ''}]
+    assert job['containerDefinitions'][0]['logConfiguration']['options']['awslogs-stream-prefix'] == 'job'
+    assert run['cluster'] == 'elections-model-cluster' and run['taskDefinition'] == 'elections-model-job'
+    assert run['networkConfiguration']['awsvpcConfiguration']['assignPublicIp'] == 'ENABLED'
+    override = run['overrides']['containerOverrides'][0]
+    assert override['name'] == 'Main' and override['environment'][0]['name'] == 'RUN_JOB'
+    assert override['environment'][0]['value'].startswith('publish {"what":["forecast","analysis"]')
+
+
+def test_dockerfile_bakes_the_commit():
+    """La imagen lleva el commit como variable de entorno (no hay `.git` dentro)."""
+    dockerfile = read('Dockerfile')
+    assert 'ARG GIT_COMMIT=' in dockerfile and 'ENV GIT_COMMIT=${GIT_COMMIT}' in dockerfile
 
 
 def test_supervisord_and_init_take_the_workers_from_the_environment():
@@ -49,13 +56,38 @@ def test_supervisord_and_init_take_the_workers_from_the_environment():
     assert subprocess.run(['bash', '-n', 'deploy/docker/init.sh'], cwd=ROOT).returncode == 0
 
 
-def test_init_passes_the_run_job_parameters_as_one_argument():
-    """`init.sh` separa el nombre del job (primera palabra) y pasa el resto como un solo argumento (JSON con
-    espacios)."""
+def fake_python(tmp_path, code=0):
+    """Un `python` falso en el PATH que anota sus argumentos y termina con `code`."""
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    script = bin_dir / 'python'
+    script.write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "{}"\nexit {}\n'.format(tmp_path / 'args', code))
+    script.chmod(0o755)
+    return bin_dir
+
+
+def run_init(tmp_path, env):
+    """Ejecuta `init.sh` con el `python` falso delante en el PATH y solo las variables dadas."""
+    import os
+    bin_dir = fake_python(tmp_path, code=3)
+    full = {'PATH': '{}:{}'.format(bin_dir, os.environ['PATH']), **env}
+    return subprocess.run(['bash', 'deploy/docker/init.sh'], cwd=ROOT, env=full, capture_output=True, text=True)
+
+
+def test_init_execs_the_job_with_the_json_as_one_argument_and_returns_its_exit_code(tmp_path):
+    """El nombre del job es la primera palabra, el resto un solo argumento (JSON con espacios) y el contenedor
+    termina con el código de salida del job."""
     init = read('deploy/docker/init.sh')
-    assert 'read -r job_name job_params <<< "$RUN_JOB"' in init
-    assert 'python /app/job.py "$job_name" ${job_params:+"$job_params"}' in init
-    assert 'python /app/job.py $RUN_JOB' not in init
+    assert 'exec python /app/job.py "$job_name" ${job_params:+"$job_params"}' in init
+    done = run_init(tmp_path, {'RUN_JOB': 'publish {"what":["manifest"],"freeze":{"active":true,"message":"Veda electoral"}}'})
+    assert done.returncode == 3
+    assert (tmp_path / 'args').read_text().splitlines() == ['/app/job.py', 'publish', '{"what":["manifest"],"freeze":{"active":true,"message":"Veda electoral"}}']
+
+
+def test_init_refuses_an_idle_container(tmp_path):
+    """Sin `RUN_JOB` ni servicios el contenedor termina con 1 en vez de quedarse ocioso."""
+    done = run_init(tmp_path, {})
+    assert done.returncode == 1 and 'Nothing to run' in done.stderr
     assert subprocess.run(['bash', '-n', 'deploy/docker/init.sh'], cwd=ROOT).returncode == 0
 
 

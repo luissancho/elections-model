@@ -1,23 +1,25 @@
 {
-  "cluster": "elections-model",
+  "cluster": "elections-model-cluster",
   "taskDefinition": "elections-model-job",
   "launchType": "FARGATE",
   "count": 1,
   "networkConfiguration": {
     "awsvpcConfiguration": {
       "subnets": [
+        "<subnet-id>",
+        "<subnet-id>",
         "<subnet-id>"
       ],
       "securityGroups": [
         "<security-group-id>"
       ],
-      "assignPublicIp": "DISABLED"
+      "assignPublicIp": "ENABLED"
     }
   },
   "overrides": {
     "containerOverrides": [
       {
-        "name": "job",
+        "name": "Main",
         "environment": [
           {
             "name": "RUN_JOB",

@@ -52,6 +52,10 @@ ENV APP_PATH /app
 RUN mkdir -p ${APP_PATH}
 WORKDIR ${APP_PATH}
 
+# Commit baked into the image (the app reads it when there is no .git)
+ARG GIT_COMMIT=
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # App source code
 COPY . .
 RUN mkdir -p files log
