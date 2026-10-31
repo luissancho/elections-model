@@ -140,6 +140,20 @@ class Core(object):
     def __init__(self):
         self.app = App.get_()
 
+    def log(self, level: str, message: str) -> None:
+        """
+        Write a message to the app logger, if there is one.
+
+        Parameters
+        ----------
+        level : str
+            Logger level: ``'info'``, ``'error'`` or ``'debug'``.
+        message : str
+            Message to write.
+        """
+        if self.app.logger is not None:
+            getattr(self.app.logger, level)(message)
+
 
 class Log(object):
 

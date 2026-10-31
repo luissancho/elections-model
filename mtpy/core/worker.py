@@ -6,7 +6,7 @@ import signal
 import time
 from types import ModuleType
 
-from typing import Optional
+from typing import NoReturn, Optional
 from typing_extensions import Self
 
 from .app import Core
@@ -271,6 +271,21 @@ class SequenceJob(Job):
         )
 
 
+class PipelineEnd(Exception):
+    """
+    Raised by a task to end the pipeline run early, skipping the remaining stages.
+
+    Attributes
+    ----------
+    result : dict
+        Result of the run, with at least a ``status`` and, optionally, a ``reason``.
+    """
+
+    def __init__(self, result: dict):
+        super().__init__(result)
+        self.result = result
+
+
 class Pipeline(Core):
     """
     Pipeline base class to manage data processing tasks.
@@ -319,9 +334,19 @@ class Pipeline(Core):
         Source model to read data from.
     target : str or Model
         Target model to write data to.
+    chunked : bool
+        Whether the pipeline runs once per chunk (default) or only once.
+    label : str, optional
+        Short label of the pipeline, used to name its failures.
+    result : dict or list, optional
+        Result of the last run (``None`` at the start of every run).
+    line : str or list of str, optional
+        Summary line(s) of the last run (``None`` at the start of every run).
     """
 
     pipes: dict = {}
+    chunked: bool = True
+    label: Optional[str] = None
 
     source: str | Model = None
     target: str | Model = None
@@ -335,11 +360,16 @@ class Pipeline(Core):
         # Name of the pipeline
         self.name = self.get_name()
         # Compression method to use when staging data
-        self.compression = self.app.config.app.compression
+        self.compression = getattr(getattr(self.app.config, 'app', None), 'compression', None)
 
         # Action and stages to be executed
         self._action = None
         self._stages = None
+
+        # Result and summary line of the last run, and whether `start` was already called
+        self.result = None
+        self.line = None
+        self._started = False
 
         # The dataframe that stores the data which will be processed by the pipeline:
         #   - First, it will be loaded from the source model in the Extract phase
@@ -392,6 +422,75 @@ class Pipeline(Core):
         """
         return self.target.get_update_ts(filters)
 
+    def start(self, **kwargs) -> None:
+        """
+        Hook called once, on the first run, after the action is set and before the first stage.
+
+        Parameters
+        ----------
+        **kwargs
+            Keyword arguments of that first run, except ``chunk``.
+        """
+        pass
+
+    def finish(self, **kwargs) -> Optional[str]:
+        """
+        Hook called by the caller once all chunks are done.
+
+        Returns
+        -------
+        str or None
+            A failure label if the closing failed; otherwise ``None``.
+        """
+        return None
+
+    def end(self, result: dict) -> NoReturn:
+        """
+        End the run early, skipping the remaining stages.
+
+        Parameters
+        ----------
+        result : dict
+            Result of the run, with a ``status`` and, optionally, a ``reason``.
+        """
+        raise PipelineEnd(result)
+
+    def summary(self, chunk, **kwargs) -> Optional[str | list[str]]:
+        """
+        Hook that builds the summary line(s) of a run that left a result and no line.
+
+        Parameters
+        ----------
+        chunk : str, optional
+            Chunk of the run.
+
+        Returns
+        -------
+        str or list of str or None
+            The summary line(s), or ``None`` for no line.
+        """
+        return None
+
+    def failure_name(self, chunk) -> str:
+        """
+        Name to report a failure of this pipeline.
+
+        Parameters
+        ----------
+        chunk : str, optional
+            Chunk that failed.
+
+        Returns
+        -------
+        str
+            ``'chunk (label)'`` with chunk and label, the chunk without label,
+            or the label (or pipeline name) without chunk.
+        """
+        if chunk is not None:
+            return f'{chunk} ({self.label})' if self.label else str(chunk)
+
+        return self.label or self.name
+
     def run(
         self,
         action: Optional[str] = None,
@@ -406,114 +505,132 @@ class Pipeline(Core):
             Action to be executed.
             If not provided, the first action found in `pipes` dictionary will be executed.
         """
+        self.result = None
+        self.line = None
+
         self._action = action if action in self.pipes else list(self.pipes)[0]
         self._stages = self.pipes[self._action]
 
+        if not self._started:
+            self.start(**{k: v for k, v in kwargs.items() if k != 'chunk'})
+            self._started = True
+
         chunk = kwargs.get('chunk', None)
         if chunk is not None:
-            self.app.logger.info(f'Run {self.name}.{self._action}.{chunk} pipeline...')
+            self.log('info', f'Run {self.name}.{self._action}.{chunk} pipeline...')
         else:
-            self.app.logger.info(f'Run {self.name}.{self._action} pipeline...')
+            self.log('info', f'Run {self.name}.{self._action} pipeline...')
 
         tstart = datetime.now()
 
-        # Setup stage -> tasks that must be executed before the data is loaded from the source
-        if 'Setup' in self._stages and len(self._stages['Setup']) > 0:
-            self.app.logger.info('--> Setup...')
+        try:
+            # Setup stage -> tasks that must be executed before the data is loaded from the source
+            if 'Setup' in self._stages and len(self._stages['Setup']) > 0:
+                self.log('info', '--> Setup...')
 
-            for task in self._stages['Setup']:
-                self.app.logger.info(f'{to_camel(task)}...')
-
-                fn = f'{task}_task'
-                getattr(self, fn)(**kwargs)
-
-        
-        # Extract stage -> tasks needed to load data from the source
-        if 'Extract' in self._stages and len(self._stages['Extract']) > 0:
-            self.app.logger.info('--> Extract...')
-
-            for task in self._stages['Extract']:
-                self.app.logger.info(f'{to_camel(task)}...')
-
-                fn = f'{task}_task'
-                getattr(self, fn)(**kwargs)
-
-            # Once the data is loaded, it will be formatted using the source model meta definitions
-            if self.source is not None:
-                self.data = self.source.format_data(
-                    self.data,
-                    int_type='nullable', bin_type='nullable'
-                )
-
-        # Transform stage -> tasks that process the data in order to be loaded into the target table
-        if 'Transform' in self._stages and len(self._stages['Transform']) > 0:
-            self.app.logger.info('--> Transform {:,} rows...'.format(self.rows))
-
-            for task in self._stages['Transform']:
-                self.app.logger.info(f'{to_camel(task)}...')
-
-                fn = f'{task}_task'
-                getattr(self, fn)(**kwargs)
-
-            # Once the data is transformed, it will be formatted using the target model meta definitions
-            if self.target is not None:
-                self.data = self.target.format_data(
-                    self.data,
-                    int_type='nullable', bin_type='nullable',
-                    obj_type='json', sort=True
-                )
-
-        # Load stage -> tasks needed to load the data into the target database table
-        if 'Load' in self._stages and len(self._stages['Load']) > 0:
-            if self.rows > 0:
-                self.app.logger.info('--> Load {:,} rows...'.format(self.rows))
-            else:
-                self.app.logger.info('--> Load staged data...')
-
-            for task in self._stages['Load']:
-                self.app.logger.info('{}...'.format(to_camel(task)))
-
-                fn = f'{task}_task'
-                getattr(self, fn)(**kwargs)
-
-        # Build stage -> tasks needed to build the query to be executed in the target database
-        # The `query` must be a SELECT query that returns the data to be loaded into the target table
-        if 'Build' in self._stages and len(self._stages['Build']) > 0:
-            self.app.logger.info('--> Build...')
-
-            self.target.begin()
-            try:
-                for task in self._stages['Build']:
-                    self.app.logger.info('{}...'.format(to_camel(task)))
+                for task in self._stages['Setup']:
+                    self.log('info', f'{to_camel(task)}...')
 
                     fn = f'{task}_task'
                     getattr(self, fn)(**kwargs)
-            except Exception as e:
-                self.target.rollback()
-                raise e
-            else:
-                self.target.commit()
 
-        # Set stage -> tasks that must be executed after the data is loaded into the target table
-        # This stage is used to perform additional operations in the target table (eg: vacuum, analyze, etc.)
-        if 'Set' in self._stages and len(self._stages['Set']) > 0:
-            self.app.logger.info('--> Set...')
+        
+            # Extract stage -> tasks needed to load data from the source
+            if 'Extract' in self._stages and len(self._stages['Extract']) > 0:
+                self.log('info', '--> Extract...')
 
-            for task in self._stages['Set']:
-                self.app.logger.info('{}...'.format(to_camel(task)))
+                for task in self._stages['Extract']:
+                    self.log('info', f'{to_camel(task)}...')
 
-                fn = f'{task}_task'
-                getattr(self, fn)(**kwargs)
+                    fn = f'{task}_task'
+                    getattr(self, fn)(**kwargs)
+
+                # Once the data is loaded, it will be formatted using the source model meta definitions
+                if self.source is not None:
+                    self.data = self.source.format_data(
+                        self.data,
+                        int_type='nullable', bin_type='nullable'
+                    )
+
+            # Transform stage -> tasks that process the data in order to be loaded into the target table
+            if 'Transform' in self._stages and len(self._stages['Transform']) > 0:
+                self.log('info', '--> Transform {:,} rows...'.format(self.rows))
+
+                for task in self._stages['Transform']:
+                    self.log('info', f'{to_camel(task)}...')
+
+                    fn = f'{task}_task'
+                    getattr(self, fn)(**kwargs)
+
+                # Once the data is transformed, it will be formatted using the target model meta definitions
+                if self.target is not None:
+                    self.data = self.target.format_data(
+                        self.data,
+                        int_type='nullable', bin_type='nullable',
+                        obj_type='json', sort=True
+                    )
+
+            # Load stage -> tasks needed to load the data into the target database table
+            if 'Load' in self._stages and len(self._stages['Load']) > 0:
+                if self.rows > 0:
+                    self.log('info', '--> Load {:,} rows...'.format(self.rows))
+                elif self.target is None:
+                    self.log('info', '--> Load...')
+                else:
+                    self.log('info', '--> Load staged data...')
+
+                for task in self._stages['Load']:
+                    self.log('info', '{}...'.format(to_camel(task)))
+
+                    fn = f'{task}_task'
+                    getattr(self, fn)(**kwargs)
+
+            # Build stage -> tasks needed to build the query to be executed in the target database
+            # The `query` must be a SELECT query that returns the data to be loaded into the target table
+            if 'Build' in self._stages and len(self._stages['Build']) > 0:
+                self.log('info', '--> Build...')
+
+                self.target.begin()
+                try:
+                    for task in self._stages['Build']:
+                        self.log('info', '{}...'.format(to_camel(task)))
+
+                        fn = f'{task}_task'
+                        getattr(self, fn)(**kwargs)
+                except Exception as e:
+                    self.target.rollback()
+                    raise e
+                else:
+                    self.target.commit()
+
+            # Set stage -> tasks that must be executed after the data is loaded into the target table
+            # This stage is used to perform additional operations in the target table (eg: vacuum, analyze, etc.)
+            if 'Set' in self._stages and len(self._stages['Set']) > 0:
+                self.log('info', '--> Set...')
+
+                for task in self._stages['Set']:
+                    self.log('info', '{}...'.format(to_camel(task)))
+
+                    fn = f'{task}_task'
+                    getattr(self, fn)(**kwargs)
+        except PipelineEnd as end:
+            self.result = end.result
+            self.log('info', 'Pipeline {}.{} ended: {} ({})'.format(
+                self.name, self._action, self.result.get('status'), self.result.get('reason')
+            ))
+
+        if self.result is not None and self.line is None:
+            self.line = self.summary(chunk, **{k: v for k, v in kwargs.items() if k != 'chunk'})
 
         tend = datetime.now()
         delta = (tend - tstart).seconds
 
         if self._loaded_rows > 0:
-            self.app.logger.info('Pipeline {}.{} executed loading {:,} rows in {} :-)'.format(
+            self.log('info', 'Pipeline {}.{} executed loading {:,} rows in {} :-)'.format(
                 self.name, action, self._loaded_rows, strfdelta(delta)
             ))
         else:
-            self.app.logger.info('Pipeline {}.{} executed in {} :-)'.format(
+            self.log('info', 'Pipeline {}.{} executed in {} :-)'.format(
                 self.name, action, strfdelta(delta)
             ))
     
