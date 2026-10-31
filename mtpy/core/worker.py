@@ -239,10 +239,22 @@ class SequenceJob(Job):
         Dictionary with the sequence of pipelines to be executed.
     default_action : str
         Default action to be executed.
+    stop_on_error : bool
+        Whether the first failure stops the job (default) or the remaining
+        chunks and pipelines still run and the failures are reported at the end.
+    chunk_noun : str
+        Plural noun used in the final failure message (``failed <noun>: ...``).
+    results : dict
+        Results of the pipeline runs, keyed by ``('group.pipeline', chunk)`` in
+        execution order.
+    lines : list of str
+        Summary lines of the pipeline runs and hooks, in execution order.
     """
 
     sequence = {}
     default_action = 'update'
+    stop_on_error = True
+    chunk_noun = 'chunks'
 
     def __init__(self):
         if type(self) is Job:
@@ -250,66 +262,244 @@ class SequenceJob(Job):
 
         super().__init__()
 
+        self.results = {}
+        self.lines = []
+        self._failed_lines = []
+
+    def select_pipelines(self, select) -> list[tuple[str, str, str]]:
+        """
+        Resolve which pipelines of the sequence to run.
+
+        Parameters
+        ----------
+        select : str or list or tuple, optional
+            Groups (``group``) or single pipelines (``group.pipeline``), as a
+            comma-separated string or a list. Empty or None selects everything.
+
+        Returns
+        -------
+        list of tuple
+            ``(group, pipeline, 'group.Camel')`` in the order of ``sequence``.
+
+        Raises
+        ------
+        ValueError
+            If an entry is neither a group nor a ``group.pipeline`` of the sequence.
+        """
+        if isinstance(select, (list, tuple)):
+            entries = [str(e).strip() for e in select]
+        elif isinstance(select, str):
+            entries = [e.strip() for e in select.split(',')]
+        else:
+            entries = []
+        entries = [e for e in entries if e != '']
+
+        known = set(self.sequence)
+        for group, pipelines in self.sequence.items():
+            known.update(group + '.' + p for p in pipelines)
+        for entry in entries:
+            if entry not in known:
+                raise ValueError('{}: unknown select "{}"'.format(self.name.lower(), entry))
+
+        return [
+            (group, pname, group + '.' + to_camel(pname))
+            for group, pipelines in self.sequence.items()
+            for pname in pipelines
+            if len(entries) == 0 or group in entries or group + '.' + pname in entries
+        ]
+
     def run(
         self,
         select: Optional[str] = None,
         action: Optional[str] = None,
         chunks: Optional[str] = None,
+        stop_on_error: Optional[bool] = None,
         **kwargs
-    ):
+    ) -> dict:
         """
         Run the sequence of pipelines with the selected action.
 
         Parameters
         ----------
-        select : str, optional
-            Sequence of pipelines to be executed.
+        select : str or list, optional
+            Groups or ``group.pipeline`` entries to be executed.
         action : str, optional
             Action within each pipeline to be executed.
             If not provided, the default action will be executed.
-        chunks : str, optional
-            Chunks to be processed.
+        chunks : str or list, optional
+            Chunks to be processed by the chunked pipelines.
+        stop_on_error : bool, optional
+            Overrides the class attribute of the same name.
+
+        Returns
+        -------
+        dict
+            The results of the pipeline runs, keyed by ``('group.pipeline', chunk)``.
+
+        Raises
+        ------
+        ValueError
+            If ``stop_on_error`` is not a boolean or ``select`` is unknown.
+        RuntimeError
+            When some chunk or hook failed and the job did not stop on the
+            original exception.
         """
-        action = action or self.default_action
-
-        tstart = datetime.now()
-
-        if isinstance(select, (list, tuple)):
-            sequence = {k: self.sequence[k] for k in select}
-        elif isinstance(select, str) and select.strip() != '':
-            sequence = {k.strip(): self.sequence[k.strip()] for k in select.strip().split(',')}
+        if stop_on_error is None:
+            stop = self.stop_on_error
+        elif isinstance(stop_on_error, bool):
+            stop = stop_on_error
         else:
-            sequence = self.sequence
+            raise ValueError('{}: stop_on_error must be true or false'.format(self.name.lower()))
+
+        action = action or self.default_action
+        plan = self.select_pipelines(select)
 
         if isinstance(chunks, str) and chunks.strip() != '':
             chunks = [c.strip() for c in chunks.strip().split(',')]
         elif not isinstance(chunks, (list, tuple)) or len(chunks) == 0:
             chunks = []
 
-        for group, pipelines in sequence.items():
-            try:
-                for pname in pipelines:
-                    cname = group + '.' + to_camel(pname)
-                    pipeline = getattr(self.namespace, cname)()
-                    if len(chunks) > 0:
-                        for chunk in chunks:
-                            pipeline.run(action, chunk=chunk, **kwargs)
-                    else:
-                        pipeline.run(action, chunk=None, **kwargs)
-            except Exception as e:
-                self.app.logger.error(e)
-                self.alert(
-                    f'{self.name} job [{cname}] executed with errors: {e}'
+        tstart = datetime.now()
+        self.results, self.lines, self._failed_lines = {}, [], []
+        failures = []
+        key, chunk = None, None
+
+        try:
+            for group, pname, cname in plan:
+                key = group + '.' + pname
+                pipeline = getattr(self.namespace, cname)()
+                runs = list(chunks) if pipeline.chunked and len(chunks) > 0 else [None]
+                for index, chunk in enumerate(runs, 1):
+                    self._run_chunk(
+                        pipeline, key, action, chunk, (index, len(runs)), failures, stop, kwargs
+                    )
+                chunk = None
+                self._finish(pipeline, key, failures, stop, kwargs)
+        except BaseException as e:
+            if isinstance(e, Exception):
+                self._summary(tstart, failures)
+            else:
+                line = 'interrumpido en {}{}: {}'.format(
+                    key, '' if chunk is None else '.' + chunk, e
                 )
+                self.lines.append(line)
+                self._failed_lines.append(line)
+                self._summary(tstart, failures, interrupted=e)
+            raise
 
-                return
+        self._summary(tstart, failures)
 
-        tend = datetime.now()
-        delta = (tend - tstart).seconds
+        if failures:
+            raise RuntimeError(self._failure_message(failures))
 
-        self.alert(
-            f'{self.name} job executed in {strfdelta(delta)} :-)'
-        )
+        return self.results
+
+    def _run_chunk(self, pipeline, key, action, chunk, position, failures, stop, kwargs) -> None:
+        """
+        Run one chunk of a pipeline, record its result and line, and handle its failure.
+
+        An exception of the chunk is logged and turned into a failed result.
+        A failure is added to ``failures``; in stop mode the pipeline is
+        finished and the original exception (or a ``RuntimeError`` if the
+        failure came from a status) is raised.
+        """
+        error = None
+        try:
+            pipeline.run(action, chunk=chunk, position=position, **kwargs)
+        except Exception as e:
+            error = e
+            self.log('error', '{} {}: {}: {}'.format(key, chunk, type(e).__name__, e))
+            result = {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
+            line = '{}: failed ({})'.format(chunk if chunk is not None else key, result['reason'])
+        else:
+            result, line = pipeline.result, pipeline.line
+
+        failed = self._is_failed(result)
+
+        if result is not None:
+            self.results[(key, chunk)] = result
+        self._add_lines(line, failed)
+
+        if not failed:
+            return
+
+        failures.append(pipeline.failure_name(chunk))
+
+        if stop:
+            self._finish(pipeline, key, failures, stop, kwargs)
+            if error is not None:
+                raise error
+            raise RuntimeError(self._failure_message(failures))
+
+    def _finish(self, pipeline, key, failures, stop, kwargs) -> None:
+        """
+        Call the ``finish`` hook of a pipeline once and register its failure, if any.
+        """
+        pipeline.result = pipeline.line = None
+        try:
+            name = pipeline.finish(**kwargs)
+        except Exception as e:
+            self.log('error', '{} finish: {}: {}'.format(key, type(e).__name__, e))
+            name = key
+            pipeline.line = '{}: finish failed ({}: {})'.format(key, type(e).__name__, e)
+
+        self._add_lines(pipeline.line, bool(name))
+
+        if name:
+            failures.append(name)
+            if stop:
+                raise RuntimeError(self._failure_message(failures))
+
+    def _add_lines(self, line, failed: bool) -> None:
+        """
+        Append a line (or list of lines) to the job lines, and to the failed ones if ``failed``.
+        """
+        if not line:
+            return
+
+        lines = list(line) if isinstance(line, (list, tuple)) else [line]
+        self.lines.extend(lines)
+        if failed:
+            self._failed_lines.extend(lines)
+
+    @staticmethod
+    def _is_failed(result) -> bool:
+        """
+        Tell whether a pipeline result (dict or list of dicts) holds a failed status.
+        """
+        items = result if isinstance(result, list) else [result]
+
+        return any(isinstance(r, dict) and r.get('status') == 'failed' for r in items)
+
+    def _failure_message(self, failures: list[str]) -> str:
+        """
+        Build the final error message listing the failed chunks or hooks.
+        """
+        return '{}: failed {}: {}'.format(self.name.lower(), self.chunk_noun, ', '.join(failures))
+
+    def _summary(self, tstart: datetime, failures: list[str], interrupted=None) -> None:
+        """
+        Print the lines (unless the logger echoes them) and alert the final summary.
+
+        Failed lines come first, then the rest in execution order.
+        """
+        delta = strfdelta((datetime.now() - tstart).seconds)
+        if interrupted is not None:
+            header = '{} job interrupted after {}'.format(self.name, delta)
+        elif failures:
+            header = '{} job executed in {} with {} failure{}'.format(
+                self.name, delta, len(failures), '' if len(failures) == 1 else 's'
+            )
+        else:
+            header = '{} job executed in {} :-)'.format(self.name, delta)
+
+        body = self._failed_lines + [ln for ln in self.lines if ln not in self._failed_lines]
+
+        if not self.app.verbose:
+            for line in self.lines:
+                print(line)
+
+        self.alert('\n'.join([header] + body))
 
 
 class PipelineEnd(Exception):
