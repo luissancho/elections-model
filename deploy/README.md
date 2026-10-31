@@ -448,8 +448,8 @@ Lo que hay hoy (leído con la CLI el 2026-10-31):
   HTTP) con health check en `/api/v1/health`, detrás de un listener del ALB (HTTPS 443, host raíz).
 - La configuración sale del fichero de entorno `s3://<bucket>/elections.env`, que ECS inyecta con
   `environmentFiles` al arrancar el contenedor. Las definiciones no llevan `secrets` ni `environment` (salvo
-  `RUN_JOB` en la de jobs): la contraseña de la base y el resto de claves están en ese fichero. El rol de ejecución
-  necesita leer ese objeto (`s3:GetObject`).
+  `RUN_JOB` y `DB_STATEMENT_TIMEOUT`, vacíos, en la de jobs): la contraseña de la base y el resto de claves están en
+  ese fichero. El rol de ejecución necesita leer ese objeto (`s3:GetObject`).
 - El mismo rol, `ecsTaskExecutionRole`, hace de rol de tarea y de rol de ejecución. La app escribe en S3 con las
   `AWS_KEY` y `AWS_SECRET` del fichero de entorno, no con el rol.
 - La VPC por defecto, con tres subredes públicas y `assignPublicIp: ENABLED` (las tareas llegan a Pushover y a
@@ -460,7 +460,8 @@ Lo que hay hoy (leído con la CLI el 2026-10-31):
   vez.
 - La definición de jobs `elections-model-job` no la crea nadie a mano: `python deploy/ecs/job.py --register` la
   deriva de la definición viva del servicio web (mismo fichero de entorno, roles, imagen y grupo de logs; 2 vCPU y
-  4 GB; sin puertos; `RUN_JOB` vacío; prefijo de logs `job`).
+  4 GB; sin puertos; `RUN_JOB` vacío y `DB_STATEMENT_TIMEOUT` vacío; prefijo de logs `job`). El `environment` de una
+  definición gana al `environmentFiles`, así que el timeout de las consultas de la web nunca se aplica a los jobs.
 
 ### Marcadores de las plantillas
 
@@ -474,8 +475,9 @@ Lo que hay hoy (leído con la CLI el 2026-10-31):
 El lanzador no necesita las plantillas: las usa quien registre las definiciones a mano.
 `DB_ADAPTER` es `PostgreSQL`, el nombre exacto del módulo `mtpy/core/dal/PostgreSQL.py` (enmienda 2026-10-13,
 revisión final: las plantillas decían `postgres` y la web no arrancaba). El fichero de entorno es el mismo para la
-web y para los jobs: `DB_STATEMENT_TIMEOUT=10000` (ver "La web") limitaría también a los jobs, que lo necesitan
-vacío si hacen consultas largas.
+web y para los jobs, pero la definición de jobs lleva `RUN_JOB` vacío y `DB_STATEMENT_TIMEOUT` vacío en su
+`environment`, que gana al fichero: un `DB_STATEMENT_TIMEOUT=10000` de la web (ver "La web") nunca limita las
+consultas largas de los jobs.
 
 ### Procedimiento
 
@@ -490,9 +492,10 @@ bash deploy/check-api.sh https://<host>
 ```
 
 Las plantillas apuntan a la imagen `elections-model:latest`: sube también la imagen nueva con esa etiqueta
-antes de forzar el despliegue. `--register` va
-después del despliegue porque deriva la definición de jobs de la que tiene el servicio en ese momento, y hay que
-repetirlo con cada imagen nueva. `check-api.sh` imprime `info cliente según nginx: <ip>`: detrás del ALB debe ser tu
+antes de forzar el despliegue. `--register` va después del despliegue porque deriva la definición de jobs de la que
+tiene el servicio en ese momento. Con la etiqueta `latest` cada tarea arranca con la última imagen subida, así que no
+hace falta repetirlo con cada imagen: sólo cuando cambia la definición de la web (el ARN del fichero de entorno, los
+roles o el nombre de la imagen). `check-api.sh` imprime `info cliente según nginx: <ip>`: detrás del ALB debe ser tu
 IP pública; si es una IP privada avisa con `WARN`. nginx confía en `127.0.0.1` y en los rangos privados
 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) para leer `X-Forwarded-For` del ALB; así `limit_req` y los logs ven
 al cliente real.
@@ -747,6 +750,9 @@ opciones (ahí
 - Dónde escribe: sin `out`, en el sistema de ficheros de la app. Con `S3_BUCKET` fijo es S3, tanto en una tarea de
   ECS como en el portátil con `deploy/elections.env`; sin él, `files/` en local. `out` sigue siendo una carpeta
   local: `"out":"backtest/results"` escribe la copia del repositorio y `"out":"backtest/results_comp"` una variante.
+  `backtest/run_backtest.py` escribe siempre en la copia del repositorio (o en `--out`), y `publish` lee el sistema
+  de ficheros de la app: tras una ejecución local, `push` (el script imprime la orden al terminar) o
+  `"source":"backtest/results"` en `publish`.
 - Cuándo: tras un cambio del método, antes de `publish` con `backtest` y `event` (ver "Publicar", "Tras un cambio
   del modelo"); comparar `by_horizon.csv` con la ejecución anterior es el criterio de aceptación de cada cambio del
   modelo. Necesita la base de datos (sondeos, resultados, ratings, deriva) y es el job más lento: `es` evalúa cinco
@@ -838,14 +844,22 @@ En Docker: `RUN_JOB='backtest {"scopes":"all"}'`; en ECS, `python deploy/ecs/job
 ### Tras un cambio del modelo
 
 1. `python deploy/ecs/job.py backtest '{"scopes":"all"}'`: la tarea de ECS escribe las tablas en S3.
-2. `python job.py backtest '{"action":"pull","scopes":"all"}'`: desde el portátil (con `deploy/elections.env`),
-   las trae a la copia del repositorio. Revisar `by_horizon.csv` frente a la ejecución anterior y hacer commit.
+2. `set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"pull","scopes":"all"}'`: desde el
+   portátil, las trae a la copia del repositorio (el `.env` de la raíz, que carga `mtpy.run()`, sirve igual si
+   tiene `S3_BUCKET`). Revisar `by_horizon.csv` frente a la ejecución anterior y hacer commit.
 3. `python deploy/ecs/job.py publish '{"what":["backtest","event"],"scopes":"all","event_date":"all"}'`.
 
 **Siembra inicial**: con el código nuevo, antes de cualquier `publish backtest` o `publish event` (desde ECS o desde el
-portátil con `S3_BUCKET` fijo), hay que sembrar S3 desde el portátil con `python job.py backtest
-'{"action":"push","scopes":"all"}'`, que lee `backtest/results` del repositorio y escribe en S3. Sin ella S3 no tiene
-tablas y `publish event` republicaría los eventos en vivo sin la parte del modelo (`has_model: false`).
+portátil con `S3_BUCKET` fijo), hay que sembrar S3 desde el portátil con
+
+```
+set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":"all"}'
+```
+
+que lee `backtest/results` del repositorio y escribe en S3 (el `.env` de la raíz, que carga `mtpy.run()`, sirve
+igual si tiene `S3_BUCKET`). Sin ella S3 no tiene tablas: `publish event` rehúsa (`refused`, «run backtest push (or
+force)») las fechas publicadas con modelo o serie en vez de republicarlas sin ellos; con `force` las publicaría con
+`has_model: false`.
 
 ## Publicar
 
@@ -974,11 +988,11 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` |
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
-| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20) |
+| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20); con `event`, publicar aunque las tablas del backtest no tengan el corte del modelo o la serie de la publicación en vivo (enmienda 2026-10-31) |
 | `study` | `null` | Slug del estudio (hoy solo `voto-cera`). Obligatorio para `study` (enmienda 2026-10-20) |
 | `register` | `false` | Con `study`, registrar la predicción del estudio (`registered_at`, `registered_commit`, `registered`); exige el árbol de git limpio y que no hubiera registro, salvo `force` (enmienda 2026-10-20; ver "Estudios") |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what`. Con `"replace": true` (enmienda 2026-10-17), un día cuyo run ya existe se borra antes (como `unpublish`) y se recalcula en vez de saltarse |
-| `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
+| `source` | `backtest/results` del sistema de ficheros de la app | Carpeta local de resultados del backtest que leen `backtest` y el corte del modelo y la serie de `event`: `source` para `es` y `source/{ámbito}` para los demás; `"source":"backtest/results"` lee la copia del repositorio (enmiendas 2026-10-11 y 2026-10-31) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, el tope de `backfill` y el ancla `as_of` del promedio, que se lee ese día y nunca después, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`, pero un `today` pasado publica un run leído en el pasado) |
 | `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
@@ -1142,15 +1156,21 @@ error del sector en `meta.summary`:
   incompleta y la API responde 404 `event not published`. Al republicar se borran los gemelos `model-*` cuyas tablas
   ya no están. No toca el manifest ni los punteros, no tiene guarda LOREG y con `dry_run` escribe en
   `site-dry/v1/events/`.
+- Lee las tablas del backtest antes de escribir nada. Si la publicación en vivo de la fecha tiene el corte del
+  modelo (`has_model`) o la serie y las tablas encontradas no los tienen (casi siempre, un S3 sin `push`), la fecha
+  queda `refused` (`backtest tables for {ámbito} missing in {carpeta}: run backtest push (or force)`) y no se toca;
+  `"force":true` la publica igualmente, sin modelo ni serie.
 - Cada fecha termina `published`, `skipped` (no es una elección `featured` del ámbito, no tiene resultados oficiales
-  o no tiene sondeos) o `failed`; el resto continúa y el job termina con error si alguna falla.
+  o no tiene sondeos), `refused` o `failed`; el resto continúa y el job termina con error si alguna falla.
 - Una elección de `es` tardó 15 s en el test de integración contra la RDS (2026-10-11).
 - Cuándo relanzar: tras cargar los resultados oficiales de una elección (y tras corregir sus sondeos) y tras un
-  nuevo `run_backtest`, porque el corte del modelo sale de los resultados del backtest. Y una vez con
-  `"event_date":"all"` en cada ámbito tras desplegar la fase 7e, para que las elecciones ya publicadas tengan la
-  parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados); y otra vez, tras
-  correr el backtest con la serie (2026-10-19), para que tengan la parte `series` (hasta entonces el detalle avisa de
-  que el promedio del ciclo no está publicado).
+  nuevo backtest, porque el corte del modelo y la serie salen de sus tablas. Las del job `backtest` en ECS ya están
+  en S3; las de `backtest/run_backtest.py` van a la copia del repositorio, así que antes `push` (con `S3_BUCKET`) o
+  `"source":"backtest/results"` en `publish`. `series.csv` ya no ata `publish event` a la máquina del backtest. Y
+  una vez con `"event_date":"all"` en cada ámbito tras desplegar la fase 7e, para que las elecciones ya publicadas
+  tengan la parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados); y otra
+  vez, tras correr el backtest con la serie (2026-10-19), para que tengan la parte `series` (hasta entonces el
+  detalle avisa de que el promedio del ciclo no está publicado).
 
 ### Backtest
 
@@ -1278,12 +1298,15 @@ python deploy/ecs/job.py backtest '{"scopes":"all"}'
 
 - `--register` crea la definición `elections-model-job` (o una revisión nueva) derivándola de la definición viva del
   servicio web: mismo fichero de entorno, roles, imagen y grupo de logs, 2 vCPU y 4 GB, sin puertos, `RUN_JOB`
-  vacío y prefijo de logs `job`. Imprime `registered elections-model-job:<revisión>`. Se ejecuta la primera vez y
-  después de cada imagen nueva.
+  vacío, `DB_STATEMENT_TIMEOUT` vacío (el timeout de la web nunca se aplica a los jobs) y prefijo de logs `job`.
+  Imprime `registered elections-model-job:<revisión>`. Se ejecuta la primera vez y, con la etiqueta `latest`, sólo
+  cuando cambia la definición de la web (el ARN del fichero de entorno, los roles o el nombre de la imagen), no con
+  cada imagen nueva. Si el clúster no tiene el servicio sale con código 1 (`service … not found in cluster …`).
 - El lanzador exige el nombre del job; el JSON, en una sola línea (`init.sh` pasa a Python todo lo que sigue al
-  primer espacio como un solo argumento). Rechaza con código 2 un job vacío, un JSON mal formado o de varias líneas y
-  `load` con `params` en `what`: ese objetivo reescribe `data/params.json` y se lanza en el portátil con `python
-  job.py load '{"what":["params"]}'`.
+  primer espacio como un solo argumento). Rechaza con código 2 un job vacío, un JSON mal formado o de varias líneas,
+  `load` con `params` en `what` (reescribe `data/params.json` y se lanza en el portátil con `python job.py load
+  '{"what":["params"]}'`), `backtest` con `action` `push` o `pull` o con `out` (usan la copia del repositorio) y el
+  job `pipeline` con `select` `load.params`, o `backtest.backtest` con esas acciones o con `out`.
 - Toma la red (subredes, grupos de seguridad e IP pública) del despliegue actual del servicio; `ECS_SUBNETS`,
   `ECS_SECURITY_GROUPS` y `ECS_PUBLIC_IP` de `deploy/ecs.env` la sustituyen si se rellenan. Lanza la tarea con el
   override `RUN_JOB='<job> <json>'` y la definición `ECS_TASK_FAMILY` (`elections-model-job`).
@@ -1311,8 +1334,9 @@ python deploy/ecs/job.py backtest '{"scopes":"all"}'
   (`init.sh` usa `exec`), que cierra con el aviso `interrumpido` y código 1. Un run a medias queda sin `headline.json`: se retira
   con `unpublish` (ver "Retirada de un run").
 - **Qué corre en ECS y qué no**: `compute`, `backtest` y `publish`, y `load` salvo `params`, corren en ECS. Lo que
-  escribe el repositorio queda en el portátil: `load params` (reescribe `data/params.json`) y `backtest` con `pull`,
-  que trae las tablas a la copia del repositorio para el commit.
+  usa la copia del repositorio queda en el portátil: `load params` (reescribe `data/params.json`) y `backtest` con
+  `push`, `pull` u `out` (`pull` trae las tablas a la copia del repositorio para el commit, `push` siembra S3 con
+  ella).
 - Un `run-task` de `elections-model-job` sin el override de `RUN_JOB` (por ejemplo, a mano) ya no se queda esperando:
   `init.sh` imprime `Nothing to run: set RUN_JOB, APP_API, APP_CRONTAB or APP_QUEUE` y sale con código 1.
 - **Coste**: del orden de 10 céntimos por hora de tarea (2 vCPU y 4 GB en eu-west-1). La memoria de `publish forecast
@@ -1327,10 +1351,16 @@ Pasos de Luis, una sola vez:
    infraestructura).
 2. `python deploy/ecs/job.py --register`.
 3. Construir la imagen con `GIT_COMMIT` y subirla (ver "Procedimiento" en "Despliegue en ECS"); repetir
-   `--register` si cambia la definición del servicio.
+   `--register` sólo si cambia la definición del servicio web (fichero de entorno, roles, nombre de la imagen).
 4. Sembrar S3 desde el portátil, antes de cualquier `publish backtest` o `publish event` con el código nuevo:
-   `python job.py backtest '{"action":"push","scopes":"all"}'` (ver "Backtest del modelo", "Tras un cambio del modelo").
-5. Primera tarea: `python deploy/ecs/job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":10000}' --follow`,
+   `set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":"all"}'` (el `.env`
+   de la raíz, que carga `mtpy.run()`, sirve igual si tiene `S3_BUCKET`; ver "Backtest del modelo", "Tras un cambio
+   del modelo").
+5. Rehacer el backtest de `es-md` antes de republicar sus elecciones: su `series.csv` local quedó sólo con la
+   cabecera tras un incidente, así que la siembra no le lleva serie. `python deploy/ecs/job.py backtest
+   '{"scopes":["es-md"]}'` y, al terminar, `set -a; . deploy/elections.env; set +a; python job.py backtest
+   '{"action":"pull","scopes":["es-md"]}'` para la copia del repositorio.
+6. Primera tarea: `python deploy/ecs/job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":10000}' --follow`,
    anotando la duración y la memoria en "Duraciones medidas".
 
 ### Veda

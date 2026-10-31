@@ -334,7 +334,7 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
-| `meta` | `backtest-meta@1` | `scope`, `run_at`, `commit` (de la ejecución del backtest, `null` sin `run.json`), `params` (el resto de `run.json`: `n_sim`, `seed`, `max_fc`, correctores, `db_polls`, `db_last_poll`...), `events`, `horizons`, `n_cases`, `n_seats_cases`, `source` (carpeta de origen: relativa al repositorio si está dentro de él, absoluta si no), `published` (`commit`, `dirty`, `versions` de la publicación), `seconds` |
+| `meta` | `backtest-meta@1` | `scope`, `run_at`, `commit` (de la ejecución del backtest, `null` sin `run.json`), `params` (el resto de `run.json`: `n_sim`, `seed`, `max_fc`, correctores, `db_polls`, `db_last_poll`...), `events`, `horizons`, `n_cases`, `n_seats_cases`, `source` (carpeta de las tablas: relativa al repositorio en local si está dentro de él, absoluta si no, o el prefijo del sistema de ficheros de la app en producción, p. ej. `backtest/results/es-md`, nunca el bucket), `published` (`commit`, `dirty`, `versions` de la publicación), `seconds` |
 | `metrics` | `backtest-metrics@1` | `columns`, `rows` |
 | `by-horizon` | `backtest-by-horizon@1` | `columns`, `rows` |
 | `blocks` | `backtest-blocks@1` | `columns`, `rows` |
