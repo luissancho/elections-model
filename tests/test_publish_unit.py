@@ -996,12 +996,6 @@ def test_publish_backtest_without_results_is_nothing_to_publish(tmp_path):
         publish.publish_backtest('es-cb', make_writer(tmp_path), source=str(tmp_path / 'empty'))
 
 
-def test_backtest_source_follows_the_backtest_script():
-    assert publish.backtest_source('es', '/x') == '/x'
-    assert publish.backtest_source('es-cb', '/x') == os.path.join('/x', 'es-cb')
-    assert publish.backtest_source('es') == os.path.join(publish.REPO_ROOT, 'backtest', 'results')
-
-
 def test_export_backtest_table_keeps_a_missing_boolean_as_null():
     frame = pd.DataFrame({'event_date': ['a', 'b', 'c'], 'seats_valid': [True, np.nan, False],
                           'majority': [False, True, np.nan]})
@@ -1072,12 +1066,33 @@ def test_publish_backtest_converts_the_repository_results(tmp_path):
     if not os.path.isfile(os.path.join(root, 'metrics.csv')):
         pytest.skip('backtest/results no está en el repositorio')
     writer = make_writer(tmp_path)
-    out = publish.publish_backtest('es', writer, prov=fake_prov)
+    out = publish.publish_backtest('es', writer, source=root, prov=fake_prov)
     meta = writer.read_json(bundle.path_backtest('es', 'meta'))['data']
     assert out['n_events'] == len(meta['events']) == 5 and meta['source'] == 'backtest/results'
     assert sorted(meta['horizons']) == [6, 14, 30, 60, 90, 180]
     official = [row['official'] for row in writer.read_json(bundle.path_backtest('es', 'seats'))['data']['rows']]
     assert official and all(value is None or type(value) is int for value in official)
+
+
+def test_publish_backtest_and_event_read_the_app_fs_without_source(fresh_app, tmp_path):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))
+    write_backtest_source(str(tmp_path / 'files' / 'backtest' / 'results'))
+    writer = make_writer(tmp_path)
+    out = publish.publish_backtest('es', writer, prov=fake_prov)
+    assert out['n_cases'] == 4 and writer.read_json(bundle.path_backtest('es', 'meta'))['data']['source'] == str(tmp_path / 'files' / 'backtest' / 'results')
+    with pytest.raises(publish.NothingToPublish, match='no backtest results for es-cb'):
+        publish.publish_backtest('es-cb', writer, prov=fake_prov)
+    ev = synthetic_event()
+    result = publish.publish_event('es-cb', '2023-07-23', writer, computer=FakeComputer(), prov=fake_prov, **event_readers(ev))
+    assert result['has_model'] is False and result['has_series'] is False
+
+
+def test_export_event_model_accepts_a_file_system_and_a_folder(tmp_path):
+    folder = write_backtest_source(str(tmp_path / 'bt'))
+    by_path, _ = publish.export_event_model(folder, '2023-07-23')
+    by_fs, _ = publish.export_event_model((FileSystem(str(tmp_path / 'bt')), ''), '2023-07-23')
+    assert repr(by_path) == repr(by_fs) and by_fs['horizons'] == [6, 30]  # repr: the NaN of a missing value is never equal
+    assert publish.export_event_series((FileSystem(str(tmp_path / 'bt')), ''), '2023-07-23') == (None, None)
 
 
 def event_readers(ev):
@@ -1131,7 +1146,7 @@ def test_publish_event_without_backtest_has_an_empty_model(tmp_path):
                           prov=fake_prov, **event_readers(ev))
     assert writer.exists(bundle.path_event_csv('es', '2023-07-23', 'model-shares'))
     out = publish.publish_event('es', '2023-07-23', writer, computer=FakeComputer(), source=str(tmp_path / 'none'),
-                                prov=fake_prov, **event_readers(ev))
+                                prov=fake_prov, force=True, **event_readers(ev))
     assert out['has_model'] is False
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['data'] == {
         'horizons': [], 'shares': [], 'seats': [], 'blocks': []}
@@ -1151,9 +1166,10 @@ def test_publish_event_skips_what_cannot_be_published(tmp_path, date, reason):
     assert not (tmp_path / 'site').exists()
 
 
-def test_publish_event_publishes_an_election_with_results_that_is_not_featured(tmp_path):
+def test_publish_event_publishes_an_election_with_results_that_is_not_featured(fresh_app, tmp_path):
     """Una elección con resultado oficial pero menos de 10 sondeos útiles (no destacada) se publica: sus errores y
     su ciclo salen de la selección 'results' del Computer y la meta dice que no está analizada."""
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     ev = synthetic_event()
     ev.events.loc[ev.events['date'] == '2023-07-23', 'featured'] = False
     factory = FakeComputer()
@@ -1179,12 +1195,28 @@ def test_publish_event_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, mo
     publish.publish_event('es', '2023-07-23', writer, **args)
     first = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at']
     writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)
-    monkeypatch.setattr(publish.events, 'export_event_model', lambda source, event_date: (_ for _ in ()).throw(RuntimeError('boom')))
+    monkeypatch.setattr(publish.events, 'event_summary', lambda frame, blocks: (_ for _ in ()).throw(RuntimeError('boom')))
     with pytest.raises(RuntimeError):
         publish.publish_event('es', '2023-07-23', writer, **args)
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at'] == first
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'results'))['generated_at'] == '2030-01-01T00:00:00Z'
-    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['generated_at'] == first
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'model'))['generated_at'] == '2030-01-01T00:00:00Z'
+
+
+def test_publish_event_reads_the_backtest_before_writing_anything(tmp_path, monkeypatch):
+    """Las tablas del backtest se leen antes de la primera escritura: si fallan, la publicación viva queda intacta."""
+    ev = synthetic_event()
+    write_backtest_source(str(tmp_path / 'bt'))
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    args = dict(computer=FakeComputer(), source=str(tmp_path / 'bt'), prov=fake_prov, **event_readers(ev))
+    publish.publish_event('es', '2023-07-23', writer, **args)
+    first = writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['generated_at']
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(publish.events, 'export_event_model', lambda source, event_date: (_ for _ in ()).throw(RuntimeError('boom')))
+    with pytest.raises(RuntimeError):
+        publish.publish_event('es', '2023-07-23', writer, **args)
+    for part in ('pollsters', 'results', 'model', 'meta'):
+        assert writer.read_json(bundle.path_event('es', '2023-07-23', part))['generated_at'] == first
 
 
 def write_series_source(folder):
@@ -1229,11 +1261,49 @@ def test_publish_event_writes_the_series_and_removes_it_when_the_backtest_lacks_
     assert written[-1].endswith('/meta.json')
     assert written.index(next(p for p in written if p.endswith('/series.json'))) > written.index(next(p for p in written if p.endswith('/model.json')))
     os.remove(os.path.join(folder, 'series.csv'))
-    out = publish.publish_event('es', '2023-07-23', writer, **args)
+    out = publish.publish_event('es', '2023-07-23', writer, force=True, **args)
     assert out['has_series'] is False
     assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))
     assert not writer.exists(bundle.path_event_csv('es', '2023-07-23', 'series'))
     assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']['has_model'] is True
+
+
+def test_publish_event_refuses_to_drop_a_live_model_slice_unless_forced(tmp_path):
+    """Sin las tablas del backtest (una fuente vacía, p. ej. un S3 sin `push`) no se borra la lámina del modelo ni la
+    serie vivas: se rehúsa sin escribir nada, salvo `force`, que publica sin modelo y retira los gemelos viejos."""
+    ev = synthetic_event()
+    folder = write_backtest_source(str(tmp_path / 'bt'))
+    write_series_source(folder)
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    args = dict(computer=FakeComputer(), prov=fake_prov, **event_readers(ev))
+    publish.publish_event('es', '2023-07-23', writer, source=str(tmp_path / 'bt'), **args)
+    parts = ('meta', 'model', 'series')
+    twins = ('model-shares', 'model-seats', 'model-blocks', 'series')
+    first = {part: writer.read_json(bundle.path_event('es', '2023-07-23', part))['generated_at'] for part in parts}
+    before = {name: (tmp_path / 'site' / writer.prefix / bundle.path_event_csv('es', '2023-07-23', name)).read_bytes() for name in twins}
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(publish.PublishRefused, match='run backtest push'):
+        publish.publish_event('es', '2023-07-23', writer, source=str(tmp_path / 'empty'), **args)
+    assert {part: writer.read_json(bundle.path_event('es', '2023-07-23', part))['generated_at'] for part in parts} == first
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'results'))['generated_at'] == first['meta']
+    assert {name: (tmp_path / 'site' / writer.prefix / bundle.path_event_csv('es', '2023-07-23', name)).read_bytes() for name in twins} == before
+    out = publish.publish_event('es', '2023-07-23', writer, source=str(tmp_path / 'empty'), force=True, **args)
+    assert out['has_model'] is False and out['has_series'] is False
+    assert writer.read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']['has_model'] is False
+    assert not writer.exists(bundle.path_event('es', '2023-07-23', 'series'))
+    for name in twins:
+        assert not writer.exists(bundle.path_event_csv('es', '2023-07-23', name))
+
+
+def test_publish_event_without_a_live_model_publishes_has_model_false(tmp_path):
+    """Un ámbito nunca publicado con modelo se publica sin él aunque la fuente esté vacía: no hay nada que perder."""
+    ev = synthetic_event()
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path / 'site')))
+    args = dict(computer=FakeComputer(), source=str(tmp_path / 'empty'), prov=fake_prov, **event_readers(ev))
+    for _ in range(2):  # la segunda vez hay meta viva, pero sin modelo
+        out = publish.publish_event('es-cb', '2023-07-23', writer, **args)
+        assert out['has_model'] is False and out['has_series'] is False
+    assert writer.read_json(bundle.path_event('es-cb', '2023-07-23', 'meta'))['data']['has_model'] is False
 
 
 def test_event_dates_to_publish():

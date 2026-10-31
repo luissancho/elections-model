@@ -1,19 +1,19 @@
 from ..core.worker import SequenceJob
 
-from ..core.utils.strings import to_camel
-
 
 class Pipeline(SequenceJob):
+    """
+    Launch a single pipeline as a sequence of one.
+
+    Run it with ``python job.py pipeline '{"select": "group.pipeline", "chunks": "a,b"}'``;
+    ``action`` and the rest of the parameters are passed on to the pipeline.
+    """
 
     def run(self, select=None, action=None, chunks=None, **kwargs):
-        if '.' in select:
-            module, name = select.split('.')
-            name = '{}.{}'.format(module, to_camel(name))
-        else:
-            name = to_camel(select)
-        
-        self.sequence = {
-            module: [name]
-        }
+        if not select or '.' not in select:
+            raise ValueError('pipeline: "select" must be "group.pipeline"')
+
+        group, name = select.split('.', 1)
+        self.sequence = {group: [name]}
 
         return super().run(action=action, chunks=chunks, **kwargs)

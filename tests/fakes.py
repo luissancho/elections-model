@@ -282,9 +282,10 @@ def synthetic_backtest():
 
 
 def write_backtest_source(root, scope='es'):
-    """Escribe en `publish.backtest_source(scope, root)` los cinco CSV de `synthetic_backtest` (`by_horizon.csv`
+    """Escribe en `backtest.results_dir(root, scope)` los cinco CSV de `synthetic_backtest` (`by_horizon.csv`
     incluido) y su `run.json`; devuelve esa carpeta."""
-    folder = publish.backtest_source(scope, root)
+    from mtpy.lib import backtest
+    folder = backtest.results_dir(root, scope)
     os.makedirs(folder, exist_ok=True)
     tables = synthetic_backtest()
     for part, name in publish.BACKTEST_FILES.items():

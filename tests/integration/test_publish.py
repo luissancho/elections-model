@@ -101,7 +101,9 @@ def test_publish_analysis_against_the_database(app, tmp_path):
 def test_publish_event_against_the_database(app, tmp_path):
     """Las cinco partes de una elección pasada de `es` se escriben, validan y son coherentes entre sí."""
     writer = bundle.BundleWriter(FileSystem(str(tmp_path)))
-    out = publish.publish_event('es', '2023-07-23', writer)
+    # the repository copy of the backtest, the one `has_backtest` looks at (never the app file system from a test)
+    source = os.path.join(publish.REPO_ROOT, 'backtest', 'results')
+    out = publish.publish_event('es', '2023-07-23', writer, source=source)
     parts = {}
     for part in bundle.EVENT_PARTS:
         env = writer.read_json(bundle.path_event('es', '2023-07-23', part))
@@ -112,5 +114,5 @@ def test_publish_event_against_the_database(app, tmp_path):
     assert parts['polls']['rows'] and all(r['days'] >= 0 for r in parts['polls']['rows'])
     houses = {r['pollster'] for r in parts['pollsters']['rows']}
     assert {r['pollster'] for r in parts['polls']['rows']} <= houses
-    has_backtest = os.path.isfile(os.path.join(publish.REPO_ROOT, 'backtest', 'results', 'shares.csv'))
+    has_backtest = os.path.isfile(os.path.join(source, 'shares.csv'))
     assert parts['meta']['has_model'] is has_backtest

@@ -23,7 +23,14 @@ python job.py <job> '{"param": "valor", ...}'
 
 En Docker, con la variable `RUN_JOB` (el nombre del job y después el JSON):
 `docker run --rm --env-file deploy/elections.env -e RUN_JOB='compute {"what":["ratings"],"scopes":"all"}' elections-model:<tag>`;
-ver `deploy/README.md`.
+ver `deploy/README.md`. Como tarea de ECS Fargate se lanzan desde el portátil con
+`python deploy/ecs/job.py <job> '{...}' [--follow]` (ver "Jobs desde ECS" en `deploy/README.md`).
+
+Cada acción de un job es un pipeline de MTpy en `mtpy/pipelines/<job>/` y los jobs son `SequenceJob`s. Con
+`"stop_on_error": true` el job para en el primer ámbito que falla; por defecto sigue con todos. Al final envía un
+único aviso con el resumen y el proceso sale con código 1 si algo falló. Una acción se puede lanzar sola con
+`python job.py pipeline '{"select":"publish.backtest","chunks":"es,es-md"}'`; los detalles están en
+`deploy/README.md`.
 
 ### `compute`: series de sondeos y ratings
 

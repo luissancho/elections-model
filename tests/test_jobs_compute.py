@@ -130,8 +130,20 @@ def test_compute_catalogues_failure_fails_the_job_at_the_end(fresh_app, scopes, 
         raise ValueError('pollsters-quality.csv: standards must be between 0 and 1')
 
     factory = FakeComputer()
-    with pytest.raises(RuntimeError, match=r'compute: failed scopes: catalogues \(catálogos\)'):
+    with pytest.raises(RuntimeError, match=r'catalogues \(catálogos\)'):
         run(factory, catalogues=catalogues, what=['catalogues', 'ratings'], scopes=['es'], verbose=0)
     out = capsys.readouterr().out
     assert 'catalogues: catálogos failed (ValueError: pollsters-quality.csv: standards' in out
     assert 'es: ratings computed' in out  # las acciones siguientes siguen
+
+
+def test_compute_stop_on_error_stops_before_the_ratings(fresh_app, scopes):
+    factory = FakeComputer(fail_at='errors', fail_scope='es')
+    with pytest.raises(RuntimeError, match=r'compute: failed scopes: es \(series\)'):
+        run(factory, what=['compute', 'ratings'], scopes=['es', 'es-md'], stop_on_error=True)
+    assert [scope for scope, _ in factory.inits] == ['es'] * 2  # la serie de es se corta en los errores; ni es-md ni los ratings
+
+
+def test_compute_refuses_an_empty_scope_list(fresh_app, scopes):
+    with pytest.raises(ValueError, match='compute: no scopes to run'):
+        run(FakeComputer(), scopes=[])

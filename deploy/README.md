@@ -18,7 +18,7 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
 7. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
 8. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
    estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, estudios (el del voto CERA y su
-   registro), publicar en local, en S3 y desde ECS, "Veda" (runbook del 23 de noviembre y ensayo), leer el
+   registro), publicar en local, en S3 y "Jobs desde ECS", "Veda" (runbook del 23 de noviembre y ensayo), leer el
    manifest, retirada de un run y "Guarda LOREG".
 9. "Ensayos de operación": carga, `point`/`unpublish`, congelación y copia de la base.
 10. "Duraciones medidas": publicación, carga de sondeos, carga local, arranque de un worker y memoria del job.
@@ -30,22 +30,34 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
   `.dockerignore`; se inyecta en tiempo de ejecución con `--env-file`.
 - Plantilla con todas las claves (valores vacíos): `.env.example` en la raíz del repositorio.
 - `GUNICORN_WORKERS` fija los workers de gunicorn (4 si se deja vacío; `init.sh` lo exporta antes de arrancar
-  supervisord). En ECS, `AWS_KEY` y `AWS_SECRET` se dejan vacíos: `S3` pasa entonces `None` a `s3fs` y se usa la
-  cadena de credenciales de botocore (el rol de la tarea). `deploy/elections.env` sigue siendo el entorno del
-  portátil (y de `docker run` en local), no el de la web en ECS.
+  supervisord). En ECS el entorno no sale de este fichero local sino de una copia en S3
+  (`s3://<bucket>/elections.env`, ver "Despliegue en ECS"), con las mismas claves; la app escribe en S3 con las
+  `AWS_KEY` y `AWS_SECRET` de ese fichero.
+- El lanzador de jobs `deploy/ecs/job.py` (ver "Jobs desde ECS") lee de este mismo fichero sus claves `ECS_*`:
+  clúster y servicio de ECS, familia de la definición de jobs y grupo de logs (`ECS_CLUSTER`, `ECS_SERVICE`,
+  `ECS_TASK_FAMILY`, `ECS_LOG_GROUP`), la región (`AWS_REGION`) y, de forma opcional, las subredes, los grupos de
+  seguridad y la IP pública (`ECS_SUBNETS`, `ECS_SECURITY_GROUPS`, `ECS_PUBLIC_IP`; vacías, toma la red del
+  despliegue actual del servicio). Los contenedores las reciben también y no las usan. `ECS_ENV_FILE` apunta a otra
+  ruta. Las credenciales de AWS del lanzador son las de la cadena normal de boto3 (el perfil de la CLI de AWS), no
+  las de este fichero.
 
 ## Construir la imagen
 
 Desde la raíz del repositorio:
 
 ```
-docker build --platform linux/amd64 -t elections-model:<tag> .
+docker build --platform linux/amd64 --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) -t elections-model:<tag> .
 ```
+
+`GIT_COMMIT` queda en la imagen como variable de entorno: la imagen no lleva `.git`, así que la procedencia de lo
+que se publica desde ella (`meta.commit`, el commit del pie de la web) sale de esa variable. Sin el argumento queda
+vacía y los runs salen con `commit: null`.
 
 La imagen copia el repositorio completo (`COPY . .`) salvo lo excluido en `.dockerignore`; `deploy/elections.env`,
 `.git` y el material de claves nunca entran en ella. Servicios según variables de entorno: `APP_API` arranca
 nginx + gunicorn, `APP_CRONTAB` arranca supercronic con `deploy/docker/crontab`, `APP_QUEUE` el worker;
-`RUN_JOB` ejecuta un job y termina.
+`RUN_JOB` ejecuta un job y termina (con el código de salida del job). Sin `RUN_JOB` y sin ninguna de las tres
+variables, `init.sh` imprime `Nothing to run: …` y sale con código 1.
 
 ## Arrancar el contenedor
 
@@ -422,73 +434,73 @@ estado al cierre de su spec.
 
 ## Despliegue en ECS
 
-La web corre como un servicio de ECS Fargate detrás de un ALB (host raíz, sin prefijo de ruta); las publicaciones
-se lanzan como tareas puntuales (ver "Publicar desde ECS"). Las plantillas están en `deploy/ecs/` (JSON puro, sin
-comentarios; los valores entre `<>` son marcadores que hay que sustituir):
-`task-web.example.json` (servicio web), `task-job.example.json` (jobs) y `run-task.example.json` (argumentos de
-`aws ecs run-task`).
+La web corre como un servicio de ECS Fargate detrás de un ALB (host raíz, sin prefijo de ruta); los jobs se lanzan
+como tareas puntuales con `deploy/ecs/job.py` (ver "Jobs desde ECS"). Las plantillas están en `deploy/ecs/` (JSON
+puro, sin comentarios; los valores entre `<>` son marcadores). Son la referencia de lo que ya existe en AWS y de lo
+que generan `--register` y el lanzador: `task-web.example.json` (servicio web), `task-job.example.json` (jobs) y
+`run-task.example.json` (los argumentos de `aws ecs run-task` que construye el lanzador).
 
 ### Qué debe existir en AWS
 
-- Un clúster de ECS `elections-model` y un repositorio de ECR `elections-model`.
-- Un servicio de ECS Fargate con la definición `elections-model`, con 2 tareas como mínimo, registrado en un target
-  group (puerto 8042, protocolo HTTP) con health check en `/api/v1/health`, cada 30 s y 2 fallos para marcarlo
-  no sano. Detrás, un listener del ALB (HTTPS 443, host raíz) que reenvía a ese target group. (La spec de la
-  fase 6 decía que una tarea basta; con dos, cada tarea tiene su caché de nginx y de la API y el despliegue no
-  deja el servicio sin tareas. Lo decide Luis; el p95 de la prueba de carga es el criterio para escalar.)
-- Grupos de seguridad: el del ALB (entrada 443 desde internet), el de las tareas (entrada 8042 solo desde el
-  ALB) y acceso desde el de las tareas al puerto 5432 de la RDS. Las tareas necesitan salida a internet
-  o endpoints de VPC para ECR, S3, CloudWatch Logs y Secrets Manager.
-- Rol de tarea de lectura (`<task-role-read>`): `s3:GetObject` sobre `arn:aws:s3:::<bucket>/site/*` y
-  `s3:ListBucket` sobre `arn:aws:s3:::<bucket>` (condición de prefijo `site/*`). Es el que lee la web.
-- Rol de tarea de escritura (`<task-role-write>`): lo anterior más `s3:PutObject` y `s3:DeleteObject` sobre
-  `site/*` y `site-dry/*`. Solo para la definición `elections-model-job`.
-- Los dos roles de tarea, además, `logs:CreateLogStream` y `logs:PutLogEvents` sobre el grupo de logs
-  (`arn:aws:logs:<region>:<account>:log-group:<log-group>:*`): el logger de la aplicación (`CWL_GROUP`) escribe con
-  el rol de la tarea, mientras que el driver `awslogs` usa el rol de ejecución. (Enmienda 2026-10-13, revisión
-  final: sin estos permisos el logger no escribe, pero un fallo de CloudWatch ya no interrumpe el job ni la web;
-  va a la salida de errores del contenedor.)
-- Rol de ejecución (`<execution-role>`): `AmazonECSTaskExecutionRolePolicy` (incluye `logs:CreateLogStream` y
-  `logs:PutLogEvents` para `awslogs`) más `secretsmanager:GetSecretValue` sobre el secreto de `DB_PASSWORD`.
-- Un grupo de logs de CloudWatch (`<log-group>`), usado por `awslogs` y por `CWL_GROUP` (logger de la aplicación).
-- Un secreto con la contraseña de la base (`<secret-arn>`), que ECS inyecta como `DB_PASSWORD`.
+Lo que hay hoy (leído con la CLI el 2026-10-31):
+
+- Un clúster de ECS `elections-model-cluster`, un servicio Fargate `elections-model-service` y la definición de tarea
+  `elections-model-cluster-elections-model-service` (1 vCPU y 2 GB, un contenedor `Main`, puerto 8042), y un
+  repositorio de ECR `elections-model`. El servicio está registrado en un target group (puerto 8042, protocolo
+  HTTP) con health check en `/api/v1/health`, detrás de un listener del ALB (HTTPS 443, host raíz).
+- La configuración sale del fichero de entorno `s3://<bucket>/elections.env`, que ECS inyecta con
+  `environmentFiles` al arrancar el contenedor. Las definiciones no llevan `secrets` ni `environment` (salvo
+  `RUN_JOB` y `DB_STATEMENT_TIMEOUT`, vacíos, en la de jobs): la contraseña de la base y el resto de claves están en
+  ese fichero. El rol de ejecución necesita leer ese objeto (`s3:GetObject`).
+- El mismo rol, `ecsTaskExecutionRole`, hace de rol de tarea y de rol de ejecución. La app escribe en S3 con las
+  `AWS_KEY` y `AWS_SECRET` del fichero de entorno, no con el rol.
+- La VPC por defecto, con tres subredes públicas y `assignPublicIp: ENABLED` (las tareas llegan a Pushover y a
+  Wikipedia sin NAT). El lanzador de jobs toma subredes y grupos de seguridad del despliegue actual del servicio.
+- El grupo de logs `/ecs/elections-model`, escrito por el driver `awslogs` (prefijo `ecs` en la web y `job` en los
+  jobs). `CWL_GROUP` queda vacío: la aplicación no escribe en CloudWatch por su cuenta y `awslogs` captura la salida
+  estándar; con `APP_VERBOSE=1` el `logger` repite por consola lo que registra, de modo que cada línea sale una sola
+  vez.
+- La definición de jobs `elections-model-job` no la crea nadie a mano: `python deploy/ecs/job.py --register` la
+  deriva de la definición viva del servicio web (mismo fichero de entorno, roles, imagen y grupo de logs; 2 vCPU y
+  4 GB; sin puertos; `RUN_JOB` vacío y `DB_STATEMENT_TIMEOUT` vacío; prefijo de logs `job`). El `environment` de una
+  definición gana al `environmentFiles`, así que el timeout de las consultas de la web nunca se aplica a los jobs.
 
 ### Marcadores de las plantillas
 
 | Marcador | Significado |
 | --- | --- |
 | `<account>`, `<region>`, `<tag>` | Cuenta de AWS, región y etiqueta de la imagen en ECR |
-| `<rds-host>`, `<db-user>`, `<db-name>` | Host, usuario y base de datos de la RDS (`DB_HOST`, `DB_USERNAME`, `DB_DATABASE`) |
-| `<bucket>` | Bucket de S3 (`S3_BUCKET`) |
-| `<log-group>` | Grupo de logs de CloudWatch (`awslogs-group` y `CWL_GROUP`) |
-| `<secret-arn>` | ARN del secreto con la contraseña (`DB_PASSWORD`) |
-| `<task-role-read>`, `<task-role-write>` | Roles de tarea de la web (lectura) y de los jobs (escritura) |
-| `<execution-role>` | Rol de ejecución (descarga la imagen, escribe logs, lee el secreto) |
-| `<subnet-id>`, `<security-group-id>` | Subred y grupo de seguridad de la tarea de job (necesita acceso a la RDS) |
-| `<git-sha>` | Commit de la imagen registrada (`GIT_COMMIT` de la tarea de jobs; ver "Publicar desde ECS") |
+| `<bucket>` | Bucket de S3 (el del fichero de entorno `elections.env` y el que usa la app) |
+| `<task-role>`, `<execution-role>` | Rol de tarea y de ejecución (hoy el mismo, `ecsTaskExecutionRole`) |
+| `<subnet-id>`, `<security-group-id>` | Subredes y grupo de seguridad de la tarea (el lanzador toma los del servicio) |
 
-La web usa 1 vCPU y 2 GB con `GUNICORN_WORKERS=2` y `DB_STATEMENT_TIMEOUT=10000`; el job usa 2 vCPU y 4 GB y deja
-`DB_STATEMENT_TIMEOUT` vacío (sin límite). Ninguna plantilla lleva `AWS_KEY` ni `AWS_SECRET`: las credenciales
-salen del rol de la tarea. `DB_ADAPTER` es `PostgreSQL`, el nombre exacto del módulo `mtpy/core/dal/PostgreSQL.py`
-(enmienda 2026-10-13, revisión final: las plantillas decían `postgres` y la web no arrancaba).
+El lanzador no necesita las plantillas: las usa quien registre las definiciones a mano.
+`DB_ADAPTER` es `PostgreSQL`, el nombre exacto del módulo `mtpy/core/dal/PostgreSQL.py` (enmienda 2026-10-13,
+revisión final: las plantillas decían `postgres` y la web no arrancaba). El fichero de entorno es el mismo para la
+web y para los jobs, pero la definición de jobs lleva `RUN_JOB` vacío y `DB_STATEMENT_TIMEOUT` vacío en su
+`environment`, que gana al fichero: un `DB_STATEMENT_TIMEOUT=10000` de la web (ver "La web") nunca limita las
+consultas largas de los jobs.
 
 ### Procedimiento
 
 ```
 aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
-docker build --platform linux/amd64 -t elections-model:<tag> .
+docker build --platform linux/amd64 --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) -t elections-model:<tag> .
 docker tag elections-model:<tag> <account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>
 docker push <account>.dkr.ecr.<region>.amazonaws.com/elections-model:<tag>
-aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-web.example.json
-aws ecs update-service --cluster elections-model --service elections-model --task-definition elections-model --force-new-deployment
+aws ecs update-service --cluster elections-model-cluster --service elections-model-service --force-new-deployment
+python deploy/ecs/job.py --register
 bash deploy/check-api.sh https://<host>
 ```
 
-Copia la plantilla a un fichero local con los marcadores ya sustituidos antes de registrarla (los
-`*.example.json` del repositorio no se editan con datos reales). `check-api.sh` imprime
-`info cliente según nginx: <ip>`: detrás del ALB debe ser tu IP pública; si es una IP privada avisa con `WARN`.
-nginx confía en `127.0.0.1` y en los rangos privados (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) para
-leer `X-Forwarded-For` del ALB; así `limit_req` y los logs ven al cliente real.
+Las plantillas apuntan a la imagen `elections-model:latest`: sube también la imagen nueva con esa etiqueta
+antes de forzar el despliegue. `--register` va después del despliegue porque deriva la definición de jobs de la que
+tiene el servicio en ese momento. Con la etiqueta `latest` cada tarea arranca con la última imagen subida, así que no
+hace falta repetirlo con cada imagen: sólo cuando cambia la definición de la web (el ARN del fichero de entorno, los
+roles o el nombre de la imagen). `check-api.sh` imprime `info cliente según nginx: <ip>`: detrás del ALB debe ser tu
+IP pública; si es una IP privada avisa con `WARN`. nginx confía en `127.0.0.1` y en los rangos privados
+(`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) para leer `X-Forwarded-For` del ALB; así `limit_req` y los logs ven
+al cliente real.
 
 ## Comprobar S3
 
@@ -598,6 +610,7 @@ python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
 | `force` | `false` | Dar de alta las encuestadoras y los medios nuevos y seguir, en vez de parar el ámbito; los partidos no se dan de alta nunca |
 | `years` | `null` | Lista de años del artículo que se leen (`["2026"]`; los números se convierten), todos por defecto. No se combina con `overwrite`: el job falla con `ValueError` antes de empezar, porque `overwrite` borraría los demás años del ciclo |
 | `dry_run` | `false` | Leer, resolver nombres e informar sin escribir nada (ni altas, ni sondeos, ni pesos) |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -628,8 +641,8 @@ es-ex: polls skipped (no upcoming event)
 
 Sin `overwrite` y sin sondeos nuevos no se escribe nada y la línea dice `0 saved`. Un ámbito fallido no detiene a los
 demás; al final el job termina con `RuntimeError: load: failed scopes: es (polls)`. Los `skipped` no cuentan como
-fallo. El resumen va también al logger y al servicio de avisos si está configurado (`alert`), como en `compute` y
-`publish`.
+fallo. El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
+en "Publicar".
 
 En Docker: `RUN_JOB='load {"scopes":["es"],"overwrite":true}'`. El contenedor necesita salida HTTPS a Wikipedia.
 
@@ -679,6 +692,7 @@ python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"ve
 | `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
 | `dry_run` | `false` | Calcular sin escribir nada: `catalogues` solo valida los ficheros de la calidad y la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -707,17 +721,20 @@ es-ar: series failed (RuntimeError: ...)
 
 Un ámbito fallido no detiene a los demás ni a la acción siguiente (sus ratings se calculan igual); al final el job
 termina con `RuntimeError: compute: failed scopes: es-ar (series)` (o `catalogues (catálogos)` si fallan los
-catálogos, por ejemplo con un CSV de la calidad mal formado). El resumen va también al logger y al servicio
-de avisos si está configurado (`alert`), como en `publish`.
+catálogos, por ejemplo con un CSV de la calidad mal formado).
+El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
+en "Publicar".
 
 En Docker: `RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'`.
 
 ## Backtest del modelo
 
 Enmienda 2026-10-17. `python job.py backtest '{...}'` (`mtpy/jobs/Backtest.py`) ejecuta el backtest del modelo sobre
-las elecciones pasadas y deja sus tablas en `backtest/results/` (`es`) o `backtest/results/{ámbito}/` (los demás),
-que después convierte `publish backtest` y de las que `publish event` saca el corte del modelo de cada elección. Es
-la forma job de `backtest/run_backtest.py`, que sigue funcionando como envoltorio con las mismas opciones (ahí
+las elecciones pasadas y deja sus tablas en el sistema de ficheros de la app (S3 si `S3_BUCKET` está fijo, `files/`
+si no) bajo `backtest/results/` (`es`) o `backtest/results/{ámbito}/` (los demás), que después convierte `publish
+backtest` y de las que `publish event` saca el corte del modelo de cada elección. Es la forma job de
+`backtest/run_backtest.py`, que sigue escribiendo en la carpeta `backtest/results` del repositorio, con las mismas
+opciones (ahí
 `--scopes all` son solo los autonómicos; en el job `"scopes": "all"` es `es` más los autonómicos, como en `publish` y
 `compute`). Protocolo, métricas y ficheros en `backtest/README.md`; lógica en `mtpy/lib/backtest.py`
 (`backtest_scope`, que ejecuta un ámbito y escribe su carpeta).
@@ -729,7 +746,15 @@ la forma job de `backtest/run_backtest.py`, que sigue funcionando como envoltori
   ocho tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon`) y `run.json`
   (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
   sobrescribiendo la ejecución anterior del ámbito. `series.csv` (la serie diaria del promedio del horizonte más corto
-  de cada elección, desde 2026-10-19) no va en git: `publish event` la necesita en la máquina donde corrió el backtest.
+  de cada elección, desde 2026-10-19) no va en git (la copia del repositorio la excluye), pero vive con las demás
+  tablas en el sistema de ficheros de la app, así que `publish event` ya no depende de la máquina que corrió el
+  backtest.
+- Dónde escribe: sin `out`, en el sistema de ficheros de la app. Con `S3_BUCKET` fijo es S3, tanto en una tarea de
+  ECS como en el portátil con `deploy/elections.env`; sin él, `files/` en local. `out` sigue siendo una carpeta
+  local: `"out":"backtest/results"` escribe la copia del repositorio y `"out":"backtest/results_comp"` una variante.
+  `backtest/run_backtest.py` escribe siempre en la copia del repositorio (o en `--out`), y `publish` lee el sistema
+  de ficheros de la app: tras una ejecución local, `push` (el script imprime la orden al terminar) o
+  `"source":"backtest/results"` en `publish`.
 - Cuándo: tras un cambio del método, antes de `publish` con `backtest` y `event` (ver "Publicar", "Tras un cambio
   del modelo"); comparar `by_horizon.csv` con la ejecución anterior es el criterio de aceptación de cada cambio del
   modelo. Necesita la base de datos (sondeos, resultados, ratings, deriva) y es el job más lento: `es` evalúa cinco
@@ -744,12 +769,19 @@ python job.py backtest
 python job.py backtest '{"scopes":"all","horizons":[6,30]}'
 python job.py backtest '{"scopes":["es-md"],"events":["2023-05-28"],"n_sim":200,"verbose":2}'
 python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/results_comp"}'
+python job.py backtest '{"action":"push","scopes":"all"}'
+python job.py backtest '{"action":"pull","scopes":"all"}'
 ```
 
 1. Todo el backtest de `es`: las cinco generales desde 2015 a los seis horizontes, 1000 simulaciones por caso y modo.
 2. `es` y todos los autonómicos a 6 y 30 días, cada uno en su carpeta.
 3. Una elección de `es-md` con pocas simulaciones y la línea de cada caso: un ensayo.
-4. Una variante del método (sorteo conjunto, M7) en otra carpeta, para compararla sin pisar `backtest/results`.
+4. Una variante del método (sorteo conjunto, M7) en otra carpeta local, para compararla sin pisar las tablas de la app.
+5. `push`: copia las nueve tablas y ficheros de cada ámbito de la copia del repositorio (`backtest/results`) al
+   sistema de ficheros de la app, y borra en el destino los que la copia no tiene; siembra S3. No ejecuta el modelo
+   ni necesita la base.
+6. `pull`: lo contrario, del sistema de ficheros de la app a la copia del repositorio, para revisar `by_horizon.csv`
+   y hacer commit. Un ámbito sin tablas en el origen queda `skipped` y no toca nada.
 
 ### Parámetros
 
@@ -769,14 +801,16 @@ python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/re
 | `composition` | `null` | Sorteo conjunto de los partidos nacionales (M7): `"auto"` o una razón en (0, 1]; otro valor falla con `ValueError` antes de empezar |
 | `regional_noise` | `true` | Oscilaciones por comunidad y provincia (M9) |
 | `min_events` | `null` | Elecciones `featured` que necesita un autonómico para ajustar los estimadores con las propias en vez de con `es` (M11); `1` fuerza las propias |
-| `out` | `backtest/results` del repositorio | Carpeta de resultados (`es` en la raíz, los demás en `out/{ámbito}`) |
+| `action` | `run` | `run` evalúa y escribe las tablas; `push` las copia de `out` (la copia del repositorio) al sistema de ficheros de la app; `pull`, al revés; otro valor falla con `ValueError` antes de empezar |
+| `out` | sistema de ficheros de la app (`backtest/results`) | Carpeta local de resultados (`es` en la raíz, los demás en `out/{ámbito}`); con `push` y `pull` es la copia del repositorio y por defecto `backtest/results` |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Solo la cabecera (`backtest: 18 ámbitos · 1000 simulaciones · backtest/results`) y el resumen final |
+| 0 | Solo la cabecera (`backtest: 18 ámbitos · 1000 simulaciones · <destino>`; con `push` o `pull`, `backtest push: 18 ámbitos · backtest/results → s3://…/backtest/results`) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento, los avisos en vivo (`· aviso:`, los casos omitidos) y la tabla `by_horizon` |
 | 2 | Lo anterior más la línea de cada caso del backtest (`Backtest 2023-07-23 at 6 days...`) |
 
@@ -795,11 +829,39 @@ es-ri: skipped (no elections to evaluate)
 es-ar: failed (KeyError: 'x')
 ```
 
-Un ámbito fallido no detiene a los demás; al final el job termina con `RuntimeError: backtest: failed scopes: es-ar`.
-El resumen va también al logger y al servicio de avisos si está configurado (`alert`), como en `publish`.
+Con `push` y `pull` la línea de cada ámbito dice cuántos ficheros copió y cuántos borró en el destino:
 
-En Docker: `RUN_JOB='backtest {"scopes":"all"}'`. Después hay que publicar:
-`{"what":["backtest","event"],"scopes":"all","event_date":"all"}`.
+```
+es-md: backtest pushed (8 files, 1 removed) to s3://…/backtest/results/es-md
+es-md: backtest pulled (9 files) to backtest/results/es-md
+```
+
+Un ámbito fallido no detiene a los demás; al final el job termina con `RuntimeError: backtest: failed scopes: es-ar`.
+El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
+en "Publicar".
+
+En Docker: `RUN_JOB='backtest {"scopes":"all"}'`; en ECS, `python deploy/ecs/job.py backtest '{"scopes":"all"}'`
+(ver "Jobs desde ECS").
+
+### Tras un cambio del modelo
+
+1. `python deploy/ecs/job.py backtest '{"scopes":"all"}'`: la tarea de ECS escribe las tablas en S3.
+2. `set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"pull","scopes":"all"}'`: desde el
+   portátil, las trae a la copia del repositorio (el `.env` de la raíz, que carga `mtpy.run()`, sirve igual si
+   tiene `S3_BUCKET`). Revisar `by_horizon.csv` frente a la ejecución anterior y hacer commit.
+3. `python deploy/ecs/job.py publish '{"what":["backtest","event"],"scopes":"all","event_date":"all"}'`.
+
+**Siembra inicial**: con el código nuevo, antes de cualquier `publish backtest` o `publish event` (desde ECS o desde el
+portátil con `S3_BUCKET` fijo), hay que sembrar S3 desde el portátil con
+
+```
+set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":"all"}'
+```
+
+que lee `backtest/results` del repositorio y escribe en S3 (el `.env` de la raíz, que carga `mtpy.run()`, sirve
+igual si tiene `S3_BUCKET`). Sin ella S3 no tiene tablas: `publish event` rehúsa (`refused`, «run backtest push (or
+force)») las fechas publicadas con modelo o serie en vez de republicarlas sin ellos; con `force` las publicaría con
+`has_model: false`.
 
 ## Publicar
 
@@ -826,7 +888,7 @@ así que un recálculo de ratings se ve sin publicar nada. Todo lo demás sale d
 | `forecast` | Un run inmutable por ámbito en `runs/{ámbito}/{run_id}/`: promedio de hoy, pronóstico de la elección, sondeos del ciclo y titular (páginas Promedios y Escaños, portada) | Cada vez que se cargan sondeos nuevos de un ámbito; a diario en campaña. Con `scopes: "all"` se publica un run nuevo en todos los ámbitos con sondeos (los que no tienen bastantes quedan `skipped`); con una lista, solo en esos | Sí | Mueve `latest` al run nuevo |
 | `analysis` | `analysis/{ámbito}/`: efectos de casa del ciclo, herding, errores por sondeo de las elecciones pasadas y datos del estimador de error (tarjetas de `/casas`; histograma, diana y tabla de `/elecciones`) | Con cada `forecast`, en la misma llamada (`"what":["forecast","analysis"]`); también tras un recálculo de ratings y tras cargar los resultados de una elección, porque entra en los errores históricos | Sí | No |
 | `event` | `events/{ámbito}/{fecha}/`: error de cada encuestadora y de cada sondeo frente al resultado, los sondeos del ciclo tal como se publicaron, resultado oficial y lo que el modelo habría dicho a cada horizonte (detalle de `/elecciones?date=`) | Una vez por elección celebrada, con los resultados oficiales cargados (`event_date` obligatorio). De nuevo, con `"event_date":"all"`, si se corrigen sondeos de elecciones pasadas o se rehace el backtest, porque su parte "modelo" sale de `backtest/results` | No | No |
-| `backtest` | `backtest/{ámbito}/`: las tablas de `backtest/results` convertidas al paquete (`/metodo/backtest`) | Tras cada ejecución del job `backtest` (ver "Backtest del modelo"), es decir, cuando cambia el método. No ejecuta el modelo ni lee la base: solo convierte ficheros | No | No |
+| `backtest` | `backtest/{ámbito}/`: las tablas de `backtest/results` (sistema de ficheros de la app, o la carpeta `source`) convertidas al paquete (`/metodo/backtest`) | Tras cada ejecución del job `backtest` (ver "Backtest del modelo"), es decir, cuando cambia el método. No ejecuta el modelo ni lee la base: solo convierte ficheros | No | No |
 | `study` | `studies/{estudio}/`: las ocho partes del estudio con sus gemelos CSV (`meta`, `census`, `participation`, `vote`, `placement`, `prediction`, `sensitivity`, `check`), que leen `/analisis`, `/analisis/{estudio}` y la banda de Inicio. Hoy solo `voto-cera` | Cada mes, tras bajar el libro del INE (`run_load --what cera`); una vez, con `register`, para registrar la predicción antes del 29-N; y tras el escrutinio CERA, con los ficheros del 29-N cargados, para que aparezca la comprobación (ver "Estudios") | No | No |
 | `manifest` | Solo `manifest.json` | Congelar y descongelar la web en la veda (`freeze`). `forecast` ya reescribe el manifest, así que sola solo hace falta para eso | No | Sí |
 | `point` | Solo `manifest.json` | Volver a un run anterior sin borrar nada (`latest` nunca retrocede por sí solo) | No | Mueve `latest` al run indicado |
@@ -834,7 +896,7 @@ así que un recálculo de ratings se ve sin publicar nada. Todo lo demás sale d
 
 `what` admite las acciones de la tabla y las ejecuta en ese orden; `event` exige `event_date` y no se combina con
 `forecast`, y `study` exige `study` (las tres cosas fallan con `ValueError` antes de empezar). `backtest` y `event` pueden ir en la misma
-llamada: los dos leen `backtest/results` del disco (o `source`), no el paquete.
+llamada: los dos leen `backtest/results` del sistema de ficheros de la app (o de la carpeta local `source`), no el paquete.
 
 Rutina, por situación:
 
@@ -842,7 +904,9 @@ Rutina, por situación:
   simulaciones, `{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}` (unos 10 min), y los autonómicos
   con las 1.000 por defecto, `{"what":["forecast","analysis"],"scopes":["es-an","es-ar","es-as","es-ib","es-cn",
   "es-cb","es-cl","es-cm","es-ct","es-vc","es-ex","es-ga","es-md","es-mc","es-nc","es-pv","es-ri"]}` (o sólo los
-  ámbitos con sondeos nuevos; en ECS son dos `run-task`). Desde el 30 de octubre de 2026 `es` va con 10.000
+  ámbitos con sondeos nuevos). En ECS son dos tareas, la segunda cuando termine la primera (ver "Jobs desde ECS"):
+  `python deploy/ecs/job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow` y
+  después la del segundo JSON con `--follow`. Desde el 30 de octubre de 2026 `es` va con 10.000
   porque su P(mayoría) es el titular y con 1.000 depende de la semilla (±0,5 pp y extremos del rango 95 % que
   bailan hasta 3 escaños, medido con 10 semillas); con 10.000 el error baja a ±0,15 pp y ±0,3 escaños. Los
   autonómicos no llevan probabilidades en titular y multiplicar por 5 su tiempo no compensa. Comprobar en el
@@ -852,8 +916,11 @@ Rutina, por situación:
 - **Tras una elección**: cargar los resultados oficiales y lanzar `event` de esa fecha (no pasa por la guarda, así
   que puede ir la misma noche); desde el día siguiente (la guarda cubre el propio día de la elección), `analysis`
   para que sus errores entren en el histórico, y `forecast` cuando haya sondeos del ciclo siguiente.
-- **Tras un cambio del modelo**: `python job.py backtest '{"scopes":"all"}'` (ver "Backtest del modelo"), después
-  `{"what":["backtest","event"],"scopes":"all","event_date":"all"}` y por último `forecast`, para que `latest` lleve
+- **Tras un cambio del modelo** (ver "Backtest del modelo", "Tras un cambio del modelo"): con el código nuevo y S3
+  todavía sin sembrar, primero `python job.py backtest '{"action":"push","scopes":"all"}'` desde el portátil. Después
+  `python deploy/ecs/job.py backtest '{"scopes":"all"}'`, `python job.py backtest '{"action":"pull","scopes":"all"}'`
+  (revisar `by_horizon.csv` y hacer commit), `python deploy/ecs/job.py publish
+  '{"what":["backtest","event"],"scopes":"all","event_date":"all"}'` y por último `forecast`, para que `latest` lleve
   el modelo nuevo.
 - **Tras recalcular ratings** (`python job.py compute '{"what":["ratings"],"scopes":"all"}'`, `run_load --what
   ratings` o los notebooks de carga): el ranking de `/casas` cambia solo; `forecast` y `analysis` para que el paquete
@@ -923,12 +990,13 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `freeze` | `null` | Aviso del manifest: `{"active": bool, "message": str}` |
 | `run` | `null` | `run_id` para `point` y `unpublish` (obligatorio en ambos) |
 | `dry_run` | `false` | Escribir en `site-dry/v1` sin punteros |
-| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20) |
+| `force` | `false` | Publicar `forecast`/`analysis` dentro de la ventana LOREG; con `study` y `register`, sustituir un registro que ya existía (enmienda 2026-10-20); con `event`, publicar una fecha aunque falten las tablas del backtest y el evento en vivo tuviera el corte del modelo o la serie, que entonces se retiran (sin `force` la fecha queda `refused`; enmienda 2026-10-31) |
 | `study` | `null` | Slug del estudio (hoy solo `voto-cera`). Obligatorio para `study` (enmienda 2026-10-20) |
 | `register` | `false` | Con `study`, registrar la predicción del estudio (`registered_at`, `registered_commit`, `registered`); exige el árbol de git limpio y que no hubiera registro, salvo `force` (enmienda 2026-10-20; ver "Estudios") |
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what`. Con `"replace": true` (enmienda 2026-10-17), un día cuyo run ya existe se borra antes (como `unpublish`) y se recalcula en vez de saltarse |
-| `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
+| `source` | `backtest/results` del sistema de ficheros de la app | Carpeta local de resultados del backtest que leen `backtest` y el corte del modelo y la serie de `event`: `source` para `es` y `source/{ámbito}` para los demás; `"source":"backtest/results"` lee la copia del repositorio (enmiendas 2026-10-11 y 2026-10-31) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, el tope de `backfill` y el ancla `as_of` del promedio, que se lee ese día y nunca después, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`, pero un `today` pasado publica un run leído en el pasado) |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -944,8 +1012,7 @@ Niveles de `verbose`:
 
 Cada ámbito termina en `published`, `skipped` (sin evento próximo, sin sondeos o promedio no ajustable),
 `refused` (guarda LOREG) o `failed` (cualquier otro error, incluido un fallo de validación del paquete; el
-resto de ámbitos continúa). El job imprime, escribe en
-`app.logger` y avisa con `alert()` un resumen de una línea por ámbito:
+resto de ámbitos continúa). El job reúne un resumen de una línea por ámbito (el aviso final, más abajo):
 
 ```
 es: published 20261008-181100 (as_of 2026-10-13, 315 polls) in 121 s
@@ -982,6 +1049,29 @@ al repetir se informa `failed 2026-10-05 (incomplete run exists; unpublish it fi
 error: hay que retirarlo antes con `unpublish` (`{"what":["unpublish"],"scopes":["es"],"run":"20261005-120000"}`)
 y volver a lanzar el relleno, o repetirlo con `"replace": true`, que lo retira y lo recalcula (enmienda 2026-10-17).
 Los días completos se informan `skipped (run exists)`, o `published ... replaced` con `replace`.
+
+#### Aviso final y código de salida
+
+Los cuatro jobs (`load`, `compute`, `backtest` y `publish`) cierran igual. Con `stop_on_error` en `false` (por
+defecto) un ámbito o una acción que falla no detiene a los demás y el fallo se informa al final; con `true` el job
+para en el primero, y `publish` escribe igualmente el manifest de los ámbitos ya publicados.
+
+El aviso (`alert`) es uno solo y final. Su primera línea es la cabecera: `<Job> job executed in <duración> :-)` si
+todo fue bien, `<Job> job executed in <duración> with n failure(s)` si algo falló, o
+`<Job> job interrupted after <duración>` si la tarea se detuvo. Siguen las líneas del resumen: primero las de los
+ámbitos o acciones fallidos y después las demás, en el orden de ejecución. Pushover recibe como mucho 1.024
+caracteres: si el texto se recorta, la última línea lo dice y remite al log
+(`… (resumen recortado; el texto completo está en el log)`); el texto entero va siempre al `logger`. Un error de
+Pushover se registra y nunca interrumpe el job.
+
+Las líneas del resumen se imprimen por consola cuando el `logger` no las repite (`APP_VERBOSE` vacío); con
+`APP_VERBOSE=1` salen una sola vez, por el `logger`.
+
+El proceso termina con código de salida 1 si algún ámbito o acción falló, si el job reventó antes de empezar
+(un `what` desconocido, un JSON mal formado, un `stop_on_error` que no es booleano: `ValueError: <job>:
+stop_on_error must be true or false`) o si lo pararon con `SIGTERM` (la línea del resumen y del aviso es
+`interrumpido en <pipeline>.<ámbito>: SIGTERM`); en cualquier otro caso, 0. Los `skipped` y los `refused` no son
+fallos.
 
 ### Relleno retroactivo
 
@@ -1053,10 +1143,13 @@ elección pasada que lee `/elecciones?date=` bajo `events/{ámbito}/{fecha}/` de
 `docs/web/contrato.md`): el error de cada casa y de cada sondeo frente al resultado (un `Computer` de esa elección
 sola, como `notebooks/PollstersEvent.ipynb`), los sondeos del ciclo tal como se publicaron, con los escaños de las casas
 que los dan (parte `cycle`, desde 2026-10-14: la tabla "Todas las encuestas" del detalle), el resultado oficial
-(región 0), el corte del backtest del modelo de esa elección (de `source`; vacío si el backtest no la tiene) y la serie
+(región 0), el corte del backtest del modelo de esa elección (del sistema de ficheros de la app, o de `source`;
+vacío si el backtest no la tiene) y la serie
 diaria del promedio del modelo del horizonte más corto del backtest (parte `series`, desde 2026-10-19: la curva
-"Promedio de sondeos" del detalle), solo si `backtest/results` tiene `series.csv` (fuera de git: publicar desde la
-máquina que corrió el backtest; sin ella la parte no se escribe y se borra la de una publicación anterior), con el
+"Promedio de sondeos" del detalle), solo si las tablas del backtest (sistema de ficheros de la app, o la carpeta
+local `source`) tienen `series.csv`
+(fuera de git, pero ya no ata la publicación a la máquina del backtest; sin ella la parte no se escribe y se borra la
+de una publicación anterior), con el
 error del sector en `meta.summary`:
 
 - `event_date` es una fecha, una lista de fechas o `"all"` (las elecciones `featured` del ámbito anteriores a hoy).
@@ -1065,25 +1158,31 @@ error del sector en `meta.summary`:
   incompleta y la API responde 404 `event not published`. Al republicar se borran los gemelos `model-*` cuyas tablas
   ya no están. No toca el manifest ni los punteros, no tiene guarda LOREG y con `dry_run` escribe en
   `site-dry/v1/events/`.
+- Lee las tablas del backtest antes de escribir nada. Si la publicación en vivo de la fecha tiene el corte del
+  modelo (`has_model`) o la serie y las tablas encontradas no los tienen (casi siempre, un S3 sin `push`), la fecha
+  queda `refused` (`backtest tables for {ámbito} missing in {carpeta}: run backtest push (or force)`) y no se toca;
+  `"force":true` la publica igualmente, sin modelo ni serie.
 - Cada fecha termina `published`, `skipped` (no es una elección `featured` del ámbito, no tiene resultados oficiales
-  o no tiene sondeos) o `failed`; el resto continúa y el job termina con error si alguna falla.
+  o no tiene sondeos), `refused` o `failed`; el resto continúa y el job termina con error si alguna falla.
 - Una elección de `es` tardó 15 s en el test de integración contra la RDS (2026-10-11).
 - Cuándo relanzar: tras cargar los resultados oficiales de una elección (y tras corregir sus sondeos) y tras un
-  nuevo `run_backtest`, porque el corte del modelo sale de los resultados del backtest. Y una vez con
-  `"event_date":"all"` en cada ámbito tras desplegar la fase 7e, para que las elecciones ya publicadas tengan la
-  parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados); y otra vez, tras
-  correr el backtest con la serie (2026-10-19), para que tengan la parte `series` (hasta entonces el detalle avisa de
-  que el promedio del ciclo no está publicado).
+  nuevo backtest, porque el corte del modelo y la serie salen de sus tablas. Las del job `backtest` en ECS ya están
+  en S3; las de `backtest/run_backtest.py` van a la copia del repositorio, así que antes `push` (con `S3_BUCKET`) o
+  `"source":"backtest/results"` en `publish`. `series.csv` ya no ata `publish event` a la máquina del backtest. Y
+  una vez con `"event_date":"all"` en cada ámbito tras desplegar la fase 7e, para que las elecciones ya publicadas
+  tengan la parte `cycle` (hasta entonces su detalle avisa de que los sondeos del ciclo no están publicados); y otra
+  vez, tras correr el backtest con la serie (2026-10-19), para que tengan la parte `series` (hasta entonces el
+  detalle avisa de que el promedio del ciclo no está publicado).
 
 ### Backtest
 
 Enmienda 2026-10-11 (fase 5). `{"what":["backtest"],"scopes":["es"]}` convierte las tablas que deja
-el job `backtest` (`backtest/results/` para `es`, `backtest/results/{ámbito}/` para los autonómicos, o la
-carpeta `source`; ver "Backtest del modelo") en `backtest/{ámbito}/` del paquete (`meta`, `metrics`, `by-horizon`, `blocks`, `shares` y `seats`,
+el job `backtest` (`backtest/results/` del sistema de ficheros de la app para `es`, `backtest/results/{ámbito}/`
+para los autonómicos, o la carpeta local `source`; ver "Backtest del modelo") en `backtest/{ámbito}/` del paquete (`meta`, `metrics`, `by-horizon`, `blocks`, `shares` y `seats`,
 con sus gemelos CSV; formato en "Backtest" de `docs/web/contrato.md`), que lee `/modelo`:
 
-- **No necesita base de datos** ni ejecuta el modelo: solo lee ficheros del repositorio y tarda menos de un segundo
-  por ámbito.
+- **No necesita base de datos** ni ejecuta el modelo: solo lee las tablas del backtest (del sistema de ficheros de la app
+  o de `source`) y tarda menos de un segundo por ámbito.
 - Sobrescribe el backtest anterior del ámbito y escribe `meta.json` el último. No toca el manifest ni los punteros y
   con `dry_run` escribe en `site-dry/v1/backtest/`.
 - Cada ámbito termina `published`, `skipped` (sin `metrics.csv` en su carpeta: `no backtest results for {ámbito}`) o
@@ -1091,10 +1190,12 @@ con sus gemelos CSV; formato en "Backtest" de `docs/web/contrato.md`), que lee `
 - Cuándo relanzar: tras cada nueva ejecución del job `backtest` (ver "Backtest del modelo"), y
   después `publish event` de las elecciones afectadas para refrescar su corte del modelo.
 
-Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante):
+Publicar en local o en S3 funciona como para `forecast` (en local, `S3_BUCKET=` delante; sin `source`, `publish
+backtest` y `publish event` leen las tablas del mismo sistema de ficheros que escribe el job `backtest`, y con
+`S3_BUCKET=` vacío salen de `files/`, no de la copia del repositorio: para eso, `source`):
 
 ```
-S3_BUCKET= python job.py publish '{"what":["backtest"],"scopes":["es"]}'
+S3_BUCKET= python job.py publish '{"what":["backtest"],"scopes":["es"],"source":"backtest/results"}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["backtest"],"scopes":"all"}'
 set -a; . deploy/elections.env; set +a; python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
 ```
@@ -1184,34 +1285,86 @@ docker run --rm --env-file deploy/elections.env -e RUN_JOB='publish {"what":["fo
 
 Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pasos.
 
-### Publicar desde ECS
+### Jobs desde ECS
 
-Registra la definición `elections-model-job` desde `deploy/ecs/task-job.example.json` (marcadores sustituidos) y lanza
-la tarea con `deploy/ecs/run-task.example.json` (también con los marcadores sustituidos):
+Cualquier job (`load`, `compute`, `backtest`, `publish`) corre como una tarea puntual de ECS Fargate que lanza
+`deploy/ecs/job.py` desde el portátil, con las credenciales de AWS de tu perfil (la cadena normal de boto3; no
+importa `mtpy`). Sus claves `ECS_*` van en `deploy/elections.env`, el fichero de configuración general (ver
+"Fichero de configuración").
 
 ```
-aws ecs register-task-definition --cli-input-json file://deploy/ecs/task-job.example.json
-aws ecs run-task --cli-input-json file://deploy/ecs/run-task.example.json
+python deploy/ecs/job.py --register
+python deploy/ecs/job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow
+python deploy/ecs/job.py backtest '{"scopes":"all"}'
 ```
 
-El override de `RUN_JOB` lleva el nombre del job (la primera palabra) y después el JSON, que puede llevar espacios
-(por ejemplo el mensaje de la congelación): `init.sh` pasa todo lo que sigue al primer espacio como un solo
-argumento (enmienda 2026-10-13, revisión final; antes había que escribirlo sin espacios). Cambia `what`, `scopes` y
-el resto de parámetros en ese valor; el ejemplo lleva la llamada diaria de `es` con 10.000 simulaciones, y los
-autonómicos van en un segundo `run-task` con su lista de ámbitos y sin `n_sim` (ver "Campaña"). La salida del job está en el grupo de logs `awslogs` (`<log-group>`, flujo con
-prefijo `job`). El rol de jobs (`<task-role-write>`) escribe en `site/*` y `site-dry/*`; la web, con el rol de
-lectura, no puede escribir. Mide la memoria de `publish forecast all` antes de fiarte de los 4 GB de la plantilla
-(la tarea 4 de la fase 6 lo mide en local). (Enmienda 2026-10-13: en local solo se midió `publish backtest`, que no
-necesita la base; la memoria de `forecast` queda para la primera tarea de jobs en ECS, ver "Duraciones medidas".)
+- `--register` crea la definición `elections-model-job` (o una revisión nueva) derivándola de la definición viva del
+  servicio web: mismo fichero de entorno, roles, imagen y grupo de logs, 2 vCPU y 4 GB, sin puertos, `RUN_JOB`
+  vacío, `DB_STATEMENT_TIMEOUT` vacío (el timeout de la web nunca se aplica a los jobs) y prefijo de logs `job`.
+  Imprime `registered elections-model-job:<revisión>`. Se ejecuta la primera vez y, con la etiqueta `latest`, sólo
+  cuando cambia la definición de la web (el ARN del fichero de entorno, los roles o el nombre de la imagen), no con
+  cada imagen nueva. Si el clúster no tiene el servicio sale con código 1 (`service … not found in cluster …`).
+- El lanzador exige el nombre del job; el JSON, en una sola línea (`init.sh` pasa a Python todo lo que sigue al
+  primer espacio como un solo argumento). Rechaza con código 2 un job vacío, un JSON mal formado o de varias líneas,
+  `load` con `params` en `what` (reescribe `data/params.json` y se lanza en el portátil con `python job.py load
+  '{"what":["params"]}'`), `backtest` con `action` `push` o `pull` o con `out` (usan la copia del repositorio) y el
+  job `pipeline` con `select` `load.params`, o `backtest.backtest` con esas acciones o con `out`.
+- Toma la red (subredes, grupos de seguridad e IP pública) del despliegue actual del servicio; `ECS_SUBNETS`,
+  `ECS_SECURITY_GROUPS` y `ECS_PUBLIC_IP` de `deploy/elections.env` la sustituyen si se rellenan. Lanza la tarea con el
+  override `RUN_JOB='<job> <json>'` y la definición `ECS_TASK_FAMILY` (`elections-model-job`).
+- Imprime `task <id>`, el comando `aws logs tail /ecs/elections-model --log-stream-names job/Main/<id> --follow
+  --since 1h` y, si `AWS_REGION` está definida, el enlace a la tarea en la consola de ECS. Si ECS no puede arrancarla
+  (`failures` en la respuesta) o AWS devuelve un error del cliente, imprime el motivo y sale con código 1.
+- Sin `--follow` termina al lanzar la tarea (código 0). Con `--follow` sigue el flujo `job/Main/<id>` hasta que la
+  tarea se detiene, imprime `stopped: <motivo>` y sale con el código de salida del contenedor, que es el del job
+  (1 si ECS no lo da). Se puede cerrar la terminal sin `--follow`: la tarea sigue y el aviso llega igual.
+- **Dónde está el log**: grupo `/ecs/elections-model`, flujo `job/Main/<id>`. Hay una sola copia de cada línea:
+  `CWL_GROUP` está vacío y `awslogs` captura la salida estándar (ver "Despliegue en ECS").
+- **El aviso**: el job envía un único aviso de Pushover al final, con la cabecera y los fallos delante y como mucho
+  1.024 caracteres; un job que no puede ni construirse (nombre desconocido, JSON roto) avisa igualmente. Las reglas
+  están en "Aviso final y código de salida".
+- **Códigos de salida**: el job termina con 1 si algún ámbito o acción falló, si reventó antes de empezar o si lo
+  pararon con `SIGTERM`, y con 0 en otro caso; ECS lo recoge como código del contenedor. El lanzador sale con 2 por un
+  error de uso o de configuración (`deploy/elections.env` ausente o sin `ECS_CLUSTER` y `ECS_SERVICE`), con 1 si la tarea no
+  arranca y, con `--follow`, con el del contenedor.
+- **`stop_on_error`** va dentro del JSON del job, como en local: con `true` la tarea para en el primer ámbito que
+  falla (y `publish` escribe igualmente el manifest de los ya publicados).
+- **Una publicación cada vez**: el manifest es un leer-modificar-escribir sin bloqueo, así que dos tareas de
+  `publish` a la vez pueden pisarse. Lanza la segunda cuando termine la primera (`--follow` en la primera, o espera
+  al aviso).
+- **Parar una tarea**: `aws ecs stop-task --cluster elections-model-cluster --task <id>` manda `SIGTERM` a Python
+  (`init.sh` usa `exec`), que cierra con el aviso `interrumpido` y código 1. Un run a medias queda sin `headline.json`: se retira
+  con `unpublish` (ver "Retirada de un run").
+- **Qué corre en ECS y qué no**: `compute`, `backtest` y `publish`, y `load` salvo `params`, corren en ECS. Lo que
+  usa la copia del repositorio queda en el portátil: `load params` (reescribe `data/params.json`) y `backtest` con
+  `push`, `pull` u `out` (`pull` trae las tablas a la copia del repositorio para el commit, `push` siembra S3 con
+  ella).
+- Un `run-task` de `elections-model-job` sin el override de `RUN_JOB` (por ejemplo, a mano) ya no se queda esperando:
+  `init.sh` imprime `Nothing to run: set RUN_JOB, APP_API, APP_CRONTAB or APP_QUEUE` y sale con código 1.
+- **Coste**: del orden de 10 céntimos por hora de tarea (2 vCPU y 4 GB en eu-west-1). La memoria de `publish forecast
+  es` con 10.000 simulaciones se mide en la primera tarea (ver "Duraciones medidas").
 
-`GIT_COMMIT` de `task-job` es el sha de la imagen que registraste (`git rev-parse --short HEAD` del commit con el
-que hiciste el `docker build`): la imagen no lleva `.git`, así que la procedencia de los runs publicados desde ECS
-(`meta.commit`, el commit del pie de la web) sale de esa variable, con `dirty: false`. Sin ella el run queda con
-`commit: null`. Actualízala cada vez que registres una imagen nueva.
+La procedencia de los runs publicados desde ECS (`meta.commit`, el commit del pie de la web) sale de `GIT_COMMIT`,
+que la imagen lleva desde el `docker build` (ver "Construir la imagen"), con `dirty: false`.
 
-**Aviso**: un `run-task` de `elections-model-job` sin el override de `RUN_JOB` arranca `init.sh` sin nada que hacer (la
-definición no lleva `APP_API`, `APP_CRONTAB` ni `APP_QUEUE`) y se queda esperando en `tail -f /dev/null`, con 2 vCPU
-y 4 GB facturándose, hasta que la pares (`aws ecs stop-task --cluster elections-model --task <task-id>`).
+Pasos de Luis, una sola vez:
+
+1. Añadir a `deploy/elections.env` las claves `ECS_*` de `.env.example` con los valores reales (`ECS_CLUSTER=elections-model-cluster`,
+   `ECS_SERVICE=elections-model-service`, `ECS_TASK_FAMILY=elections-model-job`, `ECS_LOG_GROUP=/ecs/elections-model`;
+   las de red vacías) y volver a subir el fichero a S3 (los contenedores no las usan).
+2. `python deploy/ecs/job.py --register`.
+3. Construir la imagen con `GIT_COMMIT` y subirla (ver "Procedimiento" en "Despliegue en ECS"); repetir
+   `--register` sólo si cambia la definición del servicio web (fichero de entorno, roles, nombre de la imagen).
+4. Sembrar S3 desde el portátil, antes de cualquier `publish backtest` o `publish event` con el código nuevo:
+   `set -a; . deploy/elections.env; set +a; python job.py backtest '{"action":"push","scopes":"all"}'` (el `.env`
+   de la raíz, que carga `mtpy.run()`, sirve igual si tiene `S3_BUCKET`; ver "Backtest del modelo", "Tras un cambio
+   del modelo").
+5. Rehacer el backtest de `es-md` antes de republicar sus elecciones: su `series.csv` local quedó sólo con la
+   cabecera tras un incidente, así que la siembra no le lleva serie. `python deploy/ecs/job.py backtest
+   '{"scopes":["es-md"]}'` y, al terminar, `set -a; . deploy/elections.env; set +a; python job.py backtest
+   '{"action":"pull","scopes":["es-md"]}'` para la copia del repositorio.
+6. Primera tarea: `python deploy/ecs/job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":10000}' --follow`,
+   anotando la duración y la memoria en "Duraciones medidas".
 
 ### Veda
 
@@ -1219,22 +1372,24 @@ Plan de la elección general del 2026-11-29: la veda de sondeos va del 24 al 28 
 
 **23 de noviembre** (con los sondeos del día cargados como siempre):
 
-1. `python job.py publish '{"what":["forecast"],"scopes":"all"}'` publica el pronóstico definitivo de todos los
-   ámbitos (con `S3_BUCKET` y la RDS, como en "Publicar en S3 contra la RDS", o como tarea de ECS con ese
-   `RUN_JOB`, ver "Publicar desde ECS"; lo mismo para los pasos 3 y el descongelado). Lanzarlo con margen, mucho
+1. `python deploy/ecs/job.py publish '{"what":["forecast"],"scopes":"all"}' --follow` publica el pronóstico
+   definitivo de todos los ámbitos como tarea de ECS (ver "Jobs desde ECS"). La alternativa local es
+   `python job.py publish '{"what":["forecast"],"scopes":"all"}'` con `S3_BUCKET` y la RDS, como en "Publicar en S3
+   contra la RDS"; lo mismo para el paso 3 y el descongelado. Lanzarlo con margen, mucho
    antes de medianoche: la guarda lee la fecha de hoy (Europe/Madrid) al llegar a cada ámbito, así que los ámbitos
    que se publiquen pasadas las 00:00 del 24 quedan `refused` y el manifest queda mezclado (unos ámbitos con el
    run del 23 y otros con el anterior).
 2. Comprobar el manifest (ver "Leer el manifest publicado").
-3. `python job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}'` congela la web;
-   `manifest.freeze.since` queda con la fecha del día. Texto sugerido: "Pronóstico definitivo, publicado el 23
+3. `python deploy/ecs/job.py publish '{"what":["manifest"],"freeze":{"active":true,"message":"<texto>"}}' --follow`
+   congela la web (en local, `python job.py publish '{...}'`); `manifest.freeze.since` queda con la fecha del día. Texto sugerido: "Pronóstico definitivo, publicado el 23
    de noviembre. Durante la veda electoral no se publican sondeos nuevos ni se actualiza el pronóstico."
 4. `bash deploy/check-api.sh https://<host>` comprueba el manifest y, congelado, la cabecera `x-freeze: active` y
    el banner.
 
-**Noche del 29**: `python job.py publish '{"what":["manifest"],"freeze":{"active":false}}'` (`since` vuelve a
-`null`). **Después**, con los resultados oficiales cargados, `python job.py publish
-'{"what":["event"],"scopes":["es"],"event_date":"2026-11-29"}'` (`event` no pasa por la guarda).
+**Noche del 29**: `python deploy/ecs/job.py publish '{"what":["manifest"],"freeze":{"active":false}}' --follow` (`since`
+vuelve a `null`; en local, `python job.py publish '{...}'`). **Después**, con los resultados oficiales cargados,
+`python deploy/ecs/job.py publish '{"what":["event"],"scopes":["es"],"event_date":"2026-11-29"}' --follow` (`event` no
+pasa por la guarda).
 
 **Sondeos durante la veda**: cargarlos es seguro. El cargador marca los de prohibición (`wban`) y los de
 boca de urna (`exit`) y el modelo y la API los excluyen. No recalcular ratings ni publicar (`forecast`,
@@ -1293,6 +1448,30 @@ por la guarda.
 deja marca (su `meta` no la tiene). La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y
 ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con `what: ["manifest"]` (ver
 "Veda").
+
+### Un pipeline suelto
+
+Cada acción de un job es un pipeline de MTpy en `mtpy/pipelines/<job>/` y los jobs son `SequenceJob`s que los
+encadenan. Uno solo se puede lanzar con el `Pipeline` genérico de `job.py`, donde `select` es `grupo.pipeline` y
+`chunks` la lista de ámbitos separados por comas:
+
+```bash
+python job.py pipeline '{"select":"publish.backtest","chunks":"es,es-md"}'
+python pipeline.py publish.backtest publish es es-md    # nombre, acción y ámbitos
+```
+
+El segundo lanzador imprime las líneas del resumen y no envía ningún aviso. `job.py pipeline` para al primer ámbito
+que falla (el valor por defecto del framework), salvo que se pase `"stop_on_error": false` en el JSON; `pipeline.py`
+no tiene aviso y termina con 1 si algún ámbito falló. Ninguno de los dos resuelve `"all"`
+(los ámbitos van nombrados) ni valida lo que cruza entre acciones, como sí hace el job; ese cuidado es de quien lo
+lanza. Los quince pipelines, por grupo:
+
+| Grupo | Pipelines |
+| --- | --- |
+| `load` | `load.polls`, `load.params` |
+| `compute` | `compute.catalogues`, `compute.compute`, `compute.ratings` |
+| `backtest` | `backtest.backtest` |
+| `publish` | `publish.forecast`, `publish.analysis`, `publish.event`, `publish.backtest`, `publish.study`, `publish.parties`, `publish.manifest`, `publish.point`, `publish.unpublish` |
 
 ## Ensayos de operación
 
@@ -1381,5 +1560,9 @@ Arranque de un worker (2026-10-13, `S3_BUCKET= DB_HOST= python -X importtime -c 
 arrancar; `scipy` sí, a través de `dask`, que importa `mtpy.core.data` desde `PostgreSQL.py`).
 
 `S3_BUCKET= /usr/bin/time -l python job.py publish '{"what":["backtest"],"scopes":["es"]}'` (único job sin base):
-2,3 s y 360 MB de RSS máximo (343 MiB). La memoria de `publish forecast all` la mide Luis desde ECS con
-`/usr/bin/time -v` (o la métrica de memoria de la tarea) para ajustar `memory` de `task-job`.
+2,3 s y 360 MB de RSS máximo (343 MiB). La memoria de `publish forecast es` con 10.000 simulaciones la mide Luis con
+la primera tarea de ECS (la métrica de memoria de la tarea en CloudWatch) para ajustar los 4 GB de la definición de
+jobs.
+
+Primera tarea de ECS (`python deploy/ecs/job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":10000}' --follow`):
+duración ___ y memoria máxima ___ (pendiente de anotar).

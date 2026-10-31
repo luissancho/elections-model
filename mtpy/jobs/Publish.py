@@ -1,23 +1,14 @@
-import sys
-from datetime import date, timedelta
-
-from ..core.worker import Job
-from ..lib import bundle, publish
-from .progress import ScopeReporter, collect_warnings, counted, notes_suffix
+from ..core.worker import SequenceJob
+from ..lib import publish
 
 
-STEPS = {'init': 'simulador listo', 'fit': 'promedio ajustado', 'nowcast': 'simulación de hoy',
-         'export-nowcast': 'exportación de hoy', 'forecast': 'simulación de la elección', 'export': 'exportación',
-         'meta': 'meta y titular'}
-
-
-class Publish(ScopeReporter, Job):
+class Publish(SequenceJob):
     """
     Publish the model results to the web bundle (``site/v1``) of the file system.
 
     Runs the forecast of each scope, writes its run folder and moves the pointers
     (``latest``, ``history`` and the manifest). Scopes are isolated: one that fails
-    never stops the others, and the job exits with an error at the end if any failed.
+    never stops the others (unless ``stop_on_error``), and the job exits with an error at the end if any failed.
 
     Each scope ends ``published``, ``skipped`` (no upcoming event, or
     ``publish.NothingToPublish``: no polls or an average that cannot be fitted),
@@ -50,11 +41,13 @@ class Publish(ScopeReporter, Job):
     ``published``, ``refused`` (``publish.PublishRefused``: the registration was refused) or ``failed``.
 
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
-    results and the slice of the model backtest of the election), overwriting them. It needs ``event_date`` (a date,
-    a list of dates or ``'all'``: the elections of the scope with an official result before today), cannot be combined with
-    ``forecast``, has no LOREG guard, never touches the manifest and, with ``dry_run``, writes under
-    ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not an election of the scope
-    with official results, or no polls: ``publish.NothingToPublish``) or ``failed``.
+    results and the slice and daily series of the model backtest of the election), overwriting them. It needs
+    ``event_date`` (a date, a list of dates or ``'all'``: the elections of the scope with an official result before
+    today), cannot be combined with ``forecast``, has no LOREG guard, never touches the manifest and, with
+    ``dry_run``, writes under ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not
+    an election of the scope with official results, or no polls: ``publish.NothingToPublish``), ``refused``
+    (``publish.PublishRefused``: the live event has the model slice or the series but the backtest tables are
+    missing in the file system; ``force`` publishes it anyway, and they are removed) or ``failed``.
 
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
@@ -94,15 +87,16 @@ class Publish(ScopeReporter, Job):
     """
 
     WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point', 'unpublish')
-    verbose = 1
-    _collect_warnings = staticmethod(collect_warnings)
-    _notes_suffix = staticmethod(notes_suffix)
-    RUN_EXISTS = 'run exists'
-    RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
+    CHUNKED = ('forecast', 'analysis', 'event', 'backtest', 'point', 'unpublish')
+    sequence = {'publish': ['forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point',
+                            'unpublish']}
+    default_action = 'publish'
+    stop_on_error = False
+    chunk_noun = 'scopes'
 
     def run(self, what=('forecast',), scopes=('es',), event_date=None, n_sim=1000, seed=42, drange=6, max_fc=10,
             alpha=0.05, correctors=None, freeze=None, run=None, dry_run=False, force=False, fs=None, today=None,
-            backfill=None, source=None, study=None, register=False, verbose=1, **kwargs):
+            backfill=None, source=None, study=None, register=False, verbose=1, stop_on_error=None, **kwargs):
         """
         Run the requested publication actions.
 
@@ -115,7 +109,9 @@ class Publish(ScopeReporter, Job):
             ``forecast`` and ``analysis`` rewrite it too, once per run of the job, so the pages always colour and
             name every party.
         scopes : str or list of str, default ('es',)
-            Scopes to act on, or ``'all'``.
+            Scopes to act on, or ``'all'``. They are resolved (``publish.resolve_scopes``, which reads the scope
+            catalogue) only when some action works scope by scope (`CHUNKED`); ``study``, ``parties`` and
+            ``manifest`` alone run once and never read it.
         event_date : str or list of str, optional
             Election date (ISO 8601, normalised to ``YYYY-MM-DD``). Defaults to the next
             event of each scope. A value that is not a date fails each scope. For ``event``, it is required and
@@ -140,7 +136,9 @@ class Publish(ScopeReporter, Job):
             Write under ``site-dry/v1`` (runs, analysis and backtest) and leave the pointers and manifest
             alone.
         force : bool, default False
-            Publish inside the LOREG window anyway.
+            Publish inside the LOREG window anyway; with ``event``, publish a date even when the backtest tables
+            are missing and the live event had the model slice or the series (which are then removed); with
+            ``study`` and ``register``, replace an existing registration.
         fs : FileSystem, optional
             File system to write to. Defaults to ``self.app.fs``.
         today : str, optional
@@ -167,6 +165,9 @@ class Publish(ScopeReporter, Job):
             ``[i/n] scope: empezando``, the result line and the model warnings of each scope as they happen;
             2, also the phase lines of the forecast; 3, also the own output of the model (``Simulator`` and
             ``Computer`` receive ``verbose - 2``).
+        stop_on_error : bool, optional
+            Stop at the first failed scope instead of going on with the others (the manifest entries of the
+            scopes already published are still written); ``False`` by default.
         **kwargs
             Ignored extra job arguments.
 
@@ -185,13 +186,12 @@ class Publish(ScopeReporter, Job):
             If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``, or ``study`` for
             ``study``), ``event`` is
             combined with ``forecast``, or ``backfill`` is given without ``forecast`` in ``what``, its range is
-            invalid or its ``replace`` is not a boolean.
+            invalid or its ``replace`` is not a boolean, an action of `CHUNKED` has no scopes to run (``publish:
+            no scopes to run``) or ``stop_on_error`` is not true or false.
         RuntimeError
             If no file system is configured, or any scope failed (raised after the
             manifest, the summary and the alert).
         """
-        self.verbose = verbose
-        model_verbose = max(0, verbose - 2)
         whats = [what] if isinstance(what, str) else list(what)
         for item in whats:
             if item not in self.WHAT:
@@ -216,645 +216,25 @@ class Publish(ScopeReporter, Job):
             raise RuntimeError(
                 'publish: no file system configured (set S3_BUCKET or run with a local files/ root)'
             )
-        writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
-        run_id = bundle.run_id()
+
+        select = ['publish.' + w for w in self.WHAT
+                  if w in whats or (w == 'parties' and ('forecast' in whats or 'analysis' in whats))]
+        # only the actions that work scope by scope need the scope catalogue (and the database behind it)
+        chunked = any(w in self.CHUNKED for w in whats)
+        targets = publish.resolve_scopes(scopes) if chunked else []
+        if chunked and not targets:
+            raise ValueError('publish: no scopes to run')
+
+        super().run(select=select, chunks=targets, stop_on_error=stop_on_error, fs=fs, dry_run=dry_run, today=today,
+                    days=days, replace=replace, event_date=event_date, force=force, n_sim=n_sim, seed=seed,
+                    drange=drange, max_fc=max_fc, alpha=alpha, correctors=correctors, freeze=freeze, run=run,
+                    source=source, study=study, register=register, verbose=verbose)
 
         results = {}
-        failures = []
-        lines = []
-
-        national = None
-        if 'forecast' in whats or 'analysis' in whats:
-            # the day before today: the national window also covers the election day itself
-            eve = (publish.common._today(today) - timedelta(days=1)).isoformat()
-            national = publish.next_event_date('es', date_from=eve)
-
-        if 'forecast' in whats:
-            entries = {}
-            if days is None:
-                plan = [(None, run_id, {})]
-            else:
-                plan = [(day, publish.backfill_run_id(day),
-                         {'limit_date': day, 'run_at': publish.backfill_run_at(day)}) for day in days]
-            params = dict(n_sim=n_sim, seed=seed, drange=drange, max_fc=max_fc, alpha=alpha,
-                          correctors=correctors, verbose=model_verbose)
-            targets = publish.resolve_scopes(scopes)
-            n_scopes = counted(len(targets), 'ámbito', 'ámbitos')
-            if days is None:
-                self._say('publish forecast: {} · run {}'.format(n_scopes, run_id))
-            else:
-                self._say('publish forecast: {} · backfill {}..{} ({})'.format(
-                    n_scopes, days[0], days[-1], counted(len(days), 'día', 'días')))
-            for index, scope in enumerate(targets, 1):
-                outcomes, entry = self._forecast_runs(scope, writer, plan, event_date, today, force, dry_run,
-                                                      national=national, index=index, total=len(targets),
-                                                      replace=replace, **params)
-                results[scope] = outcomes if days is not None else outcomes[0]
-                if any(result['status'] == 'failed' for result in outcomes):
-                    failures.append('{} ({})'.format(scope, 'forecast'))
-                if entry is not None:
-                    entries[scope] = entry
-                lines.extend(self._line(scope, result) for result in outcomes)
-            if dry_run:
-                lines.append('manifest: not written (dry run)')
-            elif entries:
-                lines.append(self._write_manifest(writer, failures, scopes=entries))
-
-        if 'analysis' in whats:
-            targets = publish.resolve_scopes(scopes)
-            for index, scope in enumerate(targets, 1):
-                progress = self._progress(scope, index, len(targets))
-                progress.start()
-                result = self._analysis_scope(scope, writer, model_verbose, today, force, national)
-                results[scope] = result
-                if result['status'] == 'failed':
-                    failures.append('{} ({})'.format(scope, 'analysis'))
-                lines.append(self._analysis_line(scope, result))
-                progress.done(lines[-1])
-
-        if 'event' in whats:
-            targets = publish.resolve_scopes(scopes)
-            for index, scope in enumerate(targets, 1):
-                progress = self._progress(scope, index, len(targets))
-                progress.start()
-                outcomes = self._event_scope(scope, writer, event_date, today, source, model_verbose)
-                results[scope] = outcomes
-                if any(result['status'] == 'failed' for result in outcomes):
-                    failures.append('{} ({})'.format(scope, 'event'))
-                for result in outcomes:
-                    lines.append(self._event_line(scope, result))
-                    progress.done(lines[-1])
-
-        if 'backtest' in whats:
-            targets = publish.resolve_scopes(scopes)
-            for index, scope in enumerate(targets, 1):
-                progress = self._progress(scope, index, len(targets))
-                progress.start()
-                result = self._backtest_scope(scope, writer, source)
-                results[scope] = result
-                if result['status'] == 'failed':
-                    failures.append('{} ({})'.format(scope, 'backtest'))
-                lines.append(self._backtest_line(scope, result))
-                progress.done(lines[-1])
-
-        if 'study' in whats:
-            progress = self._progress(study, 1, 1)
-            progress.start()
-            result = self._study_scope(study, writer, register, force)
-            results[study] = result
-            if result['status'] == 'failed':
-                failures.append('{} ({})'.format(study, 'study'))
-            lines.append(self._study_line(study, result))
-            progress.done(lines[-1])
-
-        if 'parties' in whats or 'forecast' in whats or 'analysis' in whats:
-            lines.append(self._write_parties(writer, failures))
-
-        if 'manifest' in whats:
-            if dry_run:
-                lines.append('manifest: not written (dry run)')
-            else:
-                lines.append(self._write_manifest(writer, failures, freeze=freeze))
-
-        for action in ('point', 'unpublish'):
-            if action not in whats:
-                continue
-            for scope in publish.resolve_scopes(scopes):
-                result = self._pointer_scope(action, writer, scope, run)
-                results[scope] = result
-                if result['status'] == 'failed':
-                    failures.append('{} ({})'.format(scope, action))
-                lines.append(self._line(scope, result, run))
-
-        for line in lines:
-            print(line)
-        if self.app.logger is not None:
-            self.alert('\n'.join(lines))
-
-        if failures:
-            raise RuntimeError('publish: failed scopes: ' + ', '.join(failures))
-
+        for (key, chunk), result in self.results.items():
+            what = key.split('.', 1)[1]
+            if what in self.CHUNKED:
+                results[chunk] = result
+            elif what == 'study':
+                results[study] = result
         return results
-
-    def _progress(self, scope, index, total, day=None, steps=None):
-        """Live progress of one scope (and day), with the phase labels of ``forecast`` (`STEPS`)."""
-        return super()._progress(scope, index, total, day, STEPS if steps is None else steps)
-
-    def _forecast_runs(self, scope, writer, plan, event_date, today, force, dry_run, national=None, index=1, total=1,
-                       replace=False, **params):
-        """
-        Publish the runs of one scope and rebuild its history.
-
-        The history is rebuilt and the manifest entry chosen when some run was published or,
-        with ``backfill``, some day was skipped because its run exists (so a retry repairs the
-        pointers of a backfill whose history or manifest write failed) or had its run removed to
-        be replaced (also when computing it again failed, so the history never lists it).
-
-        Parameters
-        ----------
-        scope : str
-            Scope to publish.
-        writer : BundleWriter
-            Bundle writer.
-        plan : list of tuple
-            ``(day, run_id, extra)`` of each run: ``day`` is ``None`` for a normal run and
-            ``extra`` holds the additional ``publish_forecast`` parameters of a retrospective
-            one (``limit_date`` and ``run_at``).
-        event_date : str or None
-            Forced election date, or ``None`` for the next event of the scope.
-        today : str or None
-            Date taken as today by the LOREG guard.
-        force : bool
-            Publish inside the LOREG window anyway.
-        dry_run : bool
-            Leave the history alone.
-        national : str or None
-            Date of the next election of ``es``, for the LOREG guard of every scope.
-        index, total : int, default 1
-            Position of the scope (from 1) and number of scopes, for the live progress lines
-            (``_progress``): the start, the phases and the result of each run print as they happen.
-        replace : bool, default False
-            Remove the existing run of each retrospective day before computing it again; see
-            ``_forecast_scope``.
-        **params
-            Forecast parameters.
-
-        Returns
-        -------
-        tuple
-            ``(outcomes, entry)``: the result of each run of ``plan`` (with its ``day`` when
-            there is one) and the new manifest entry of the scope (see ``_manifest_entry``),
-            ``None`` when the manifest must not change for the scope, there is nothing to point
-            to or this is a dry run. If rebuilding the history or reading the manifest fails,
-            every ``published`` result and every day skipped because its run exists turns
-            ``failed``.
-        """
-        outcomes = []
-        for day, rid, extra in plan:
-            progress = self._progress(scope, index, total, day)
-            progress.start()
-            result = self._forecast_scope(scope, writer, rid, event_date, today, force, skip_existing=day is not None,
-                                          replace=replace and day is not None, dry_run=dry_run, national=national,
-                                          progress=progress, **params, **extra)
-            progress.done(self._line(scope, result if day is None else {'day': day, **result}))
-            outcomes.append(result)
-        entry = None
-        run_ids = [rid for _, rid, _ in plan]
-        involved = [i for i, result in enumerate(outcomes) if result['status'] == 'published' or result.get('replaced')
-                    or (result['status'] == 'skipped' and result.get('reason') == self.RUN_EXISTS)]
-        if involved and not dry_run:
-            try:
-                runs = {head['run_id']: head for head in publish.rebuild_history(writer, scope)['runs']}
-                candidates = [outcomes[i] if outcomes[i]['status'] == 'published' else
-                              {'run_id': run_ids[i], 'entry': publish.latest_entry(runs[run_ids[i]])}
-                              for i in involved if outcomes[i]['status'] == 'published' or run_ids[i] in runs]
-                if candidates:
-                    entry = self._manifest_entry(writer, scope, candidates, backfill=plan[0][0] is not None)
-            except Exception as e:
-                self._log_error(scope)
-                failed = {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-                outcomes = [{**failed, 'warnings': result.get('warnings', [])} if i in involved else result
-                            for i, result in enumerate(outcomes)]
-        days = [day for day, _, _ in plan]
-        return [result if day is None else {'day': day, **result} for day, result in zip(days, outcomes)], entry
-
-    @staticmethod
-    def _manifest_entry(writer, scope, published, backfill):
-        """
-        Choose the manifest entry of a scope after publishing (or finding) some runs.
-
-        A normal publish always points to the run just produced. A backfill only moves the
-        pointer forward: its newest run becomes ``latest`` when the scope has no entry yet
-        or the run id is greater than the current ``latest``; otherwise the manifest keeps
-        its entry, so neither a newer run nor a run that ``point`` stepped back from is
-        promoted by a backfill.
-
-        Parameters
-        ----------
-        writer : BundleWriter
-            Bundle writer, to read the current manifest.
-        scope : str
-            Scope published.
-        published : list of dict
-            ``published`` results of this invocation, in plan order (ascending days); with
-            ``backfill``, also ``{'run_id', 'entry'}`` of the days whose run already existed.
-        backfill : bool
-            Whether the runs are retrospective.
-
-        Returns
-        -------
-        dict or None
-            The new entry, or ``None`` to leave the scope of the manifest untouched.
-        """
-        newest = max(published, key=lambda result: result['run_id'])
-        if not backfill:
-            return newest['entry']
-        current = (publish.read_manifest(writer)['scopes'].get(scope) or {}).get('latest')
-        if current is None or newest['run_id'] > current:
-            return newest['entry']
-        return None
-
-    def _forecast_scope(self, scope, writer, run_id, event_date, today, force, skip_existing=False, replace=False,
-                        dry_run=False, national=None, progress=None, **params):
-        """
-        Publish the forecast of one scope, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        scope : str
-            Scope to publish.
-        writer : BundleWriter
-            Bundle writer.
-        run_id : str
-            Run id of this invocation.
-        event_date : str or None
-            Forced election date, or ``None`` for the next event of the scope. It is
-            normalised with ``date.fromisoformat``; an invalid value fails the scope.
-        today : str or None
-            Date taken as today by the LOREG guard.
-        force : bool
-            Publish inside the LOREG window anyway.
-        skip_existing : bool, default False
-            Check the run first: a complete one (with ``headline.json``) is ``skipped``
-            (``run exists``) and an incomplete one is ``failed`` (``incomplete run exists;
-            unpublish it first``), after the event and the LOREG guard are resolved and without
-            running the model. Without it, an existing run (``FileExistsError``) is ``failed``.
-        replace : bool, default False
-            With ``skip_existing``, remove an existing run (complete or not) and run the model
-            instead: ``publish.unpublish`` rebuilds the history and repoints ``latest`` when it was
-            that run, so the pointers stay consistent even if the new run fails; in a dry run only
-            the folder is removed. It happens after the event and the LOREG guard are resolved, so
-            a refused day keeps its run.
-        dry_run : bool, default False
-            Whether the bundle is the dry one (``replace`` then removes the folder alone).
-        national : str or None
-            Date of the next election of ``es``, for the LOREG guard of every scope.
-        progress : ScopeProgress, optional
-            Live progress of the scope: passed to ``publish.publish_forecast`` for its phases and,
-            used to print each model warning (level 1). ``None`` prints nothing.
-        **params
-            Forecast parameters.
-
-        Returns
-        -------
-        dict
-            Result with a ``status`` and its details: ``skipped`` for no upcoming event,
-            ``publish.NothingToPublish`` or (with ``skip_existing``) a complete existing run,
-            ``refused`` for the LOREG guard and ``failed`` for an incomplete existing run (with
-            ``skip_existing``) or any other exception. Every result carries the ``warnings``
-            emitted while the model ran (unique messages, in order of appearance), which never
-            reach stderr; each one is also printed live as a progress line (level 1). With
-            ``skip_existing``, every result also carries ``replaced``: whether an existing run was
-            removed first.
-        """
-        notes = []
-        replaced = False
-        note = progress.note if progress is not None else None
-
-        def done(result):
-            return {**result, 'replaced': replaced} if skip_existing else result
-
-        try:
-            value = event_date or publish.next_event_date(scope)
-            if value is None:
-                return done({'status': 'skipped', 'reason': 'no upcoming event', 'warnings': notes})
-            event = date.fromisoformat(value).isoformat()
-            in_window = publish.loreg_guard(scope, event, today, force, national)
-            if skip_existing and writer.exists(bundle.path_run(scope, run_id)):
-                if not replace:
-                    if writer.exists(bundle.path_part(scope, run_id, 'headline')):
-                        return done({'status': 'skipped', 'reason': self.RUN_EXISTS, 'warnings': notes})
-                    return done({'status': 'failed', 'reason': self.RUN_INCOMPLETE, 'warnings': notes})
-                self._remove_run(writer, scope, run_id, dry_run)
-                replaced = True
-            with self._collect_warnings(notes, note):
-                out = publish.publish_forecast(scope, writer, run_id, event, freeze=in_window, progress=progress,
-                                               today=today, **params)
-        except publish.PublishRefused as e:
-            return done({'status': 'refused', 'reason': str(e), 'warnings': notes})
-        except publish.NothingToPublish as e:
-            return done({'status': 'skipped', 'reason': str(e), 'warnings': notes})
-        except Exception as e:
-            self._log_error(scope)
-            return done({'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e), 'warnings': notes})
-        return done({'status': 'published', 'run_id': run_id, 'entry': out['entry'], 'seconds': out['seconds'],
-                     'warnings': notes})
-
-    @staticmethod
-    def _remove_run(writer, scope, run_id, dry_run):
-        """
-        Remove an existing run that is about to be computed again.
-
-        Parameters
-        ----------
-        writer : BundleWriter
-            Bundle writer.
-        scope : str
-            Scope of the run.
-        run_id : str
-            Run to remove.
-        dry_run : bool
-            In a dry run only the folder goes, since the dry bundle has no pointers; otherwise
-            ``publish.unpublish`` also rebuilds the history and repoints ``latest`` when it was
-            this run, so nothing points to a run that no longer exists while the model runs.
-        """
-        if dry_run:
-            writer.remove(bundle.path_run(scope, run_id))
-        else:
-            publish.unpublish(writer, scope, run_id)
-
-    def _analysis_scope(self, scope, writer, verbose, today=None, force=False, national=None):
-        """
-        Publish the houses analysis of one scope, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        scope : str
-            Scope to publish.
-        writer : BundleWriter
-            Bundle writer.
-        verbose : int
-            Verbosity of the model (``max(0, verbose - 2)`` of the job), passed to the analysis.
-        today : str or None
-            Date taken as today by the LOREG guard.
-        force : bool
-            Publish inside the LOREG window anyway; the analysis carries no mark of it.
-        national : str or None
-            Date of the next election of ``es``, for the LOREG guard of every scope.
-
-        Returns
-        -------
-        dict
-            Result with a ``status``: ``published`` with ``event_date``, ``n_pollsters``,
-            ``seconds`` and ``house_effects`` (whether they were published), ``skipped`` for ``publish.NothingToPublish``, ``refused`` for the LOREG
-            guard and ``failed`` for any other exception, all but ``published`` with a ``reason``.
-            A scope without an upcoming event is still published (the analysis then works from
-            its last election) and only the national window guards it. A scope whose current cycle has
-            no polls is published without house effects (``meta.house_effects`` false).
-        """
-        try:
-            publish.loreg_guard(scope, publish.next_event_date(scope), today, force, national)
-            out = publish.publish_analysis(scope, writer, verbose=verbose)
-        except publish.PublishRefused as e:
-            return {'status': 'refused', 'reason': str(e)}
-        except publish.NothingToPublish as e:
-            return {'status': 'skipped', 'reason': str(e)}
-        except Exception as e:
-            self._log_error(scope)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-        return {'status': 'published', 'event_date': out['event_date'], 'n_pollsters': out['n_pollsters'],
-                'seconds': out['seconds'], 'house_effects': out.get('house_effects', True)}
-
-    def _event_scope(self, scope, writer, event_date, today, source, verbose):
-        """
-        Publish the past elections of one scope, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        scope : str
-            Scope to publish.
-        writer : BundleWriter
-            Bundle writer.
-        event_date : str or list of str
-            Date, list of dates or ``'all'`` (see ``publish.event_dates_to_publish``).
-        today : str or None
-            Date taken as today to resolve ``'all'``.
-        source : str or None
-            Results folder of the backtest (see ``publish.backtest_source``).
-        verbose : int
-            Verbosity of the model (``max(0, verbose - 2)`` of the job), passed to the computer.
-
-        Returns
-        -------
-        list of dict
-            One result per date, each with its ``event_date`` and a ``status``: ``published`` with ``n_polls``,
-            ``n_pollsters``, ``has_model`` and ``seconds``, ``skipped`` for ``publish.NothingToPublish`` and
-            ``failed`` for any other exception (an invalid date or a failure resolving ``'all'`` included),
-            both with a ``reason``. ``'all'`` with no past election with official results gives one ``skipped`` result.
-        """
-        try:
-            days = publish.event_dates_to_publish(scope, event_date, today=today)
-        except Exception as e:
-            self._log_error(scope)
-            return [{'status': 'failed', 'event_date': str(event_date), 'reason': '{}: {}'.format(type(e).__name__, e)}]
-        if not days:
-            return [{'status': 'skipped', 'event_date': str(event_date), 'reason': 'no past elections with official results'}]
-
-        outcomes = []
-        for day in days:
-            try:
-                out = publish.publish_event(scope, day, writer, source=source, verbose=verbose)
-            except publish.NothingToPublish as e:
-                outcomes.append({'status': 'skipped', 'event_date': day, 'reason': str(e)})
-            except Exception as e:
-                self._log_error(scope)
-                outcomes.append({'status': 'failed', 'event_date': day, 'reason': '{}: {}'.format(type(e).__name__, e)})
-            else:
-                outcomes.append({'status': 'published', 'event_date': day, 'n_polls': out['n_polls'],
-                                 'n_pollsters': out['n_pollsters'], 'has_model': out['has_model'],
-                                 'seconds': out['seconds']})
-        return outcomes
-
-    def _backtest_scope(self, scope, writer, source):
-        """
-        Publish the model backtest of one scope, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        scope : str
-            Scope to publish.
-        writer : BundleWriter
-            Bundle writer.
-        source : str or None
-            Results folder (see ``publish.backtest_source``).
-
-        Returns
-        -------
-        dict
-            Result with a ``status``: ``published`` with ``n_cases``, ``n_events`` and ``seconds``,
-            ``skipped`` for ``publish.NothingToPublish`` and ``failed`` for any other exception,
-            both with a ``reason``.
-        """
-        try:
-            out = publish.publish_backtest(scope, writer, source=source)
-        except publish.NothingToPublish as e:
-            return {'status': 'skipped', 'reason': str(e)}
-        except Exception as e:
-            self._log_error(scope)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-        return {'status': 'published', 'n_cases': out['n_cases'], 'n_events': out['n_events'],
-                'seconds': out['seconds']}
-
-    def _study_scope(self, study, writer, register, force):
-        """
-        Publish a study, converting every outcome into a result dict.
-
-        Parameters
-        ----------
-        study : str
-            Slug of the study.
-        writer : BundleWriter
-            Bundle writer.
-        register : bool
-            Register the prediction of the study.
-        force : bool
-            Replace an existing registration.
-
-        Returns
-        -------
-        dict
-            Result with a ``status``: ``published`` with ``registered_at``, ``checked`` and ``seconds``,
-            ``refused`` for ``publish.PublishRefused`` (a registration refused) and ``failed`` for any other
-            exception, both with a ``reason``.
-        """
-        try:
-            out = publish.publish_study(study, writer, register=register, force=force)
-        except publish.PublishRefused as e:
-            return {'status': 'refused', 'reason': str(e)}
-        except Exception as e:
-            self._log_error(study)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-        return {'status': 'published', 'registered_at': out['registered_at'], 'checked': out['checked'],
-                'seconds': out['seconds']}
-
-    def _pointer_scope(self, action, writer, scope, run):
-        """
-        Point a scope to a run or remove a run, converting the outcome into a result dict.
-
-        Parameters
-        ----------
-        action : str
-            ``point`` or ``unpublish``.
-        writer : BundleWriter
-            Bundle writer.
-        scope : str
-            Scope to act on.
-        run : str
-            Run id.
-
-        Returns
-        -------
-        dict
-            Result with a ``status`` and its details.
-        """
-        try:
-            if action == 'point':
-                publish.point(writer, scope, run)
-                return {'status': 'published', 'latest': run}
-            return {'status': 'published', **publish.unpublish(writer, scope, run)}
-        except ValueError as e:
-            return {'status': 'failed', 'reason': str(e)}
-        except Exception as e:
-            self._log_error(scope)
-            return {'status': 'failed', 'reason': '{}: {}'.format(type(e).__name__, e)}
-
-    def _write_manifest(self, writer, failures, **kwargs):
-        """
-        Update the manifest, converting an exception into a failure and a summary line.
-
-        Parameters
-        ----------
-        writer : BundleWriter
-            Bundle writer.
-        failures : list of str
-            Failures of the run; ``manifest`` is appended when the write fails.
-        **kwargs
-            Arguments of ``publish.update_manifest`` (``scopes`` or ``freeze``).
-
-        Returns
-        -------
-        str
-            Summary line of the manifest.
-        """
-        try:
-            return self._manifest_line(publish.update_manifest(writer, **kwargs))
-        except Exception as e:
-            self._log_error('manifest')
-            failures.append('manifest')
-            return 'manifest: failed ({}: {})'.format(type(e).__name__, e)
-
-    def _write_parties(self, writer, failures):
-        """
-        Write the party catalogue (``publish.publish_parties``), converting an exception into a failure and a
-        summary line.
-
-        Parameters
-        ----------
-        writer : BundleWriter
-            Bundle writer (under the dry-run prefix in a dry run).
-        failures : list of str
-            Failures of the run; ``parties`` is appended when the write fails.
-
-        Returns
-        -------
-        str
-            Summary line of the catalogue.
-        """
-        try:
-            out = publish.publish_parties(writer)
-        except Exception as e:
-            self._log_error('parties')
-            failures.append('parties')
-            return 'parties: failed ({}: {})'.format(type(e).__name__, e)
-        return 'parties: {}'.format(counted(out['n_parties'], 'partido', 'partidos'))
-
-    @staticmethod
-    def _manifest_line(data):
-        """Format the summary line of the manifest data."""
-        return 'manifest: {} scopes, freeze {}'.format(
-            len(data.get('scopes', {})), 'on' if (data.get('freeze') or {}).get('active') else 'off')
-
-    @staticmethod
-    def _analysis_line(scope, result):
-        """Format the summary line of one scope result of ``analysis``."""
-        if result['status'] == 'published':
-            line = '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
-                scope, result['event_date'], result['n_pollsters'], result['seconds']['total'])
-            return line if result.get('house_effects', True) else line + '; sin efectos de casa'
-        return '{}: analysis {} ({})'.format(scope, result['status'], result['reason'])
-
-    @staticmethod
-    def _event_line(scope, result):
-        """Format the summary line of one date result of ``event``."""
-        if result['status'] == 'published':
-            return '{}: event {} published ({} polls, {} pollsters) in {:.0f} s'.format(
-                scope, result['event_date'], result['n_polls'], result['n_pollsters'], result['seconds']['total'])
-        return '{}: event {} {} ({})'.format(scope, result['event_date'], result['status'], result['reason'])
-
-    @staticmethod
-    def _backtest_line(scope, result):
-        """Format the summary line of one scope result of ``backtest``."""
-        if result['status'] == 'published':
-            return '{}: backtest published ({} cases, {} elections) in {:.0f} s'.format(
-                scope, result['n_cases'], result['n_events'], result['seconds']['total'])
-        return '{}: backtest {} ({})'.format(scope, result['status'], result['reason'])
-
-    @staticmethod
-    def _study_line(study, result):
-        """Format the summary line of the result of ``study``."""
-        if result['status'] == 'published':
-            registered = result['registered_at']
-            registered = 'registrado el {}'.format(registered) if registered else 'sin registro'
-            return '{}: study published ({}, {}) in {:.0f} s'.format(
-                study, registered, 'comprobado' if result['checked'] else 'sin comprobar', result['seconds']['total'])
-        return '{}: study {} ({})'.format(study, result['status'], result['reason'])
-
-    @staticmethod
-    def _line(scope, result, run=None):
-        """Format the summary line of one scope result (of one day, with ``backfill``)."""
-        status = result['status']
-        day = result.get('day')
-        if status == 'published' and 'entry' in result:
-            entry = result['entry']
-            return '{}: published {} (as_of {}, {} polls{}) in {:.0f} s{}'.format(
-                scope, result['run_id'], entry.get('as_of'), entry.get('n_polls'),
-                '' if day is None else ', backfill {}{}'.format(day, ', replaced' if result.get('replaced') else ''),
-                result['seconds']['total'],
-                Publish._notes_suffix(result))
-        if status == 'published':
-            return '{}: published {}'.format(scope, result.get('latest') or result.get('removed') or run)
-        if day is not None:
-            line = '{}: {} {} ({})'.format(scope, status, day, result['reason'])
-        else:
-            line = '{}: {} ({})'.format(scope, status, result['reason'])
-        return line + Publish._notes_suffix(result)
