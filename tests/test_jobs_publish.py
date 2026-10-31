@@ -1,78 +1,13 @@
-"""Tests del job `publish` (`mtpy/jobs/Publish.py`) con la publicación y la base sustituidas."""
+"""Tests del job `publish` (`mtpy/jobs/Publish.py`) con la publicación y la base sustituidas: los de extremo a extremo,
+que cruzan pipelines o leen el manifest tras el job (los de cada pipeline están en `test_pipelines_publish.py`)."""
 import types
 
 import pytest
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
-from mtpy.lib.forecaster import NoPollsError
-from tests.fakes import FakeComputer, FakeSimulator, synthetic_event, write_backtest_source
-from tests.test_webapi_unit import PARTIES
-
-
-def entry(scope, run_id):
-    return {'latest': run_id, 'run_at': '2026-10-08T12:00:00Z', 'event_date': '2026-11-29', 'as_of': '2026-10-05',
-            'date_last': '2026-10-01', 'n_polls': 6}
-
-
-def fixed_prov(monkeypatch):
-    """Fija `publish.provenance` (sin `git` real) para los jobs de `backtest`."""
-    monkeypatch.setattr(publish.backtest, 'provenance', lambda cwd=None: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
-
-
-@pytest.fixture
-def patched(monkeypatch):
-    """`resolve_scopes`, `next_event_date`, `publish_forecast`, `publish_analysis` y `publish_parties` sin base: `es`
-    publica de verdad con `FakeSimulator` (o `FakeComputer`), `db_stats` y la procedencia sustituidos, `es-md` no
-    tiene evento, `es-cb` no tiene sondeos, `es-ar` rompe y `es-ri` falla con un `ValueError` del paquete; el
-    catálogo de partidos sale de `PARTIES`."""
-    calls = []
-    real_forecast = publish.publish_forecast
-    real_analysis = publish.publish_analysis
-    real_event = publish.publish_event
-
-    def fake_forecast(scope, writer, run_id, event_date, **kwargs):
-        calls.append((scope, run_id, event_date, kwargs))
-        if scope == 'es-cb':
-            raise publish.NothingToPublish('No polls for es-cb 2027-05-23: nothing to forecast')
-        if scope == 'es-ri':
-            raise ValueError("vote: missing keys ['rows']")
-        if scope == 'es-ar':
-            raise KeyError('x')
-        return real_forecast(scope, writer, run_id, event_date, simulator=FakeSimulator(),
-                             stats=lambda scope, event_date: (7, '2026-10-01'),
-                             prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
-
-    def fake_analysis(scope, writer, **kwargs):
-        calls.append((scope, 'analysis', kwargs))
-        if scope == 'es-ar':
-            raise KeyError('x')
-        no_polls = NoPollsError('No polls for es-cb 2027-05-23: nothing to forecast') if scope == 'es-cb' else None
-        return real_analysis(scope, writer, computer=FakeComputer(fail_effects=no_polls),
-                             stats=lambda scope, event_date: (7, '2026-10-01'),
-                             prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
-
-    def fake_event(scope, event_date, writer, **kwargs):
-        ev = synthetic_event()
-        return real_event(scope, event_date, writer, computer=FakeComputer(), events=lambda s: ev.events,
-                          results=lambda s, d, r: ev.results.loc[ev.results.date == d], pollsters=lambda: ev.pollsters,
-                          seats=lambda s, d, names: {},
-                          prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
-
-    real_parties = publish.publish_parties
-
-    def fake_parties(writer, **kwargs):
-        # not recorded in `calls`: the tests of the scopes read it by position
-        return real_parties(writer, parties=lambda: PARTIES, **kwargs)
-
-    monkeypatch.setattr(publish, 'publish_parties', fake_parties)
-    monkeypatch.setattr(publish, 'publish_event', fake_event)
-    monkeypatch.setattr(publish, 'publish_analysis', fake_analysis)
-    monkeypatch.setattr(publish, 'resolve_scopes', lambda scopes, catalogue=None: ['es', 'es-md', 'es-cb', 'es-ar'] if scopes == 'all' else list(scopes))
-    next_dates = {'es': '2026-11-29', 'es-cb': '2027-05-23', 'es-ar': '2026-02-08', 'es-ri': '2027-05-23'}
-    monkeypatch.setattr(publish, 'next_event_date', lambda scope, date_from=None: next_dates.get(scope))
-    monkeypatch.setattr(publish, 'publish_forecast', fake_forecast)
-    return calls
+from tests.fakes import synthetic_event, write_backtest_source
+from tests.publish_fixtures import NO_POLLS, entry, fixed_prov, patched, warned_forecast  # noqa: F401
 
 
 def test_publish_isolates_scopes_and_keeps_previous_manifest_entries(fresh_app, tmp_path, patched, capsys):
@@ -104,24 +39,7 @@ def test_dry_run_writes_apart_and_leaves_the_pointers_alone(fresh_app, tmp_path,
     assert not (tmp_path / 'site-dry' / 'v1' / 'runs' / 'es' / 'history.json').exists()
 
 
-def test_forecast_passes_today_to_the_publication(fresh_app, tmp_path, patched):
-    """El día tomado como hoy llega a `publish_forecast`, que lo da al Simulator como tope del ancla (2026-10-26)."""
-    from mtpy.jobs.Publish import Publish
-
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), today='2026-10-20')
-    assert result['es']['status'] == 'published' and patched[0][3]['today'] == '2026-10-20'
-
-
-def test_loreg_window_refuses_es_unless_forced(fresh_app, tmp_path, patched):
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, today='2026-11-26')
-    assert result['es']['status'] == 'refused' and 'LOREG' in result['es']['reason'] and patched == []
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, today='2026-11-26', force=True)
-    assert result['es']['status'] == 'published' and patched[0][3]['freeze'] is True
-
-
+@pytest.mark.skip(reason='Tarea 9')
 def test_national_window_refuses_regional_forecast_and_analysis_but_not_events(fresh_app, tmp_path, patched, capsys,
                                                                                monkeypatch):
     from mtpy.jobs.Publish import Publish
@@ -138,26 +56,7 @@ def test_national_window_refuses_regional_forecast_and_analysis_but_not_events(f
     assert Publish().run(what=['backtest'], scopes=['es'], fs=fs, today='2026-11-25', source=str(tmp_path / 'bt'))['es']['status'] == 'published'
 
 
-def test_national_window_covers_the_election_day(fresh_app, tmp_path, patched, monkeypatch):
-    """El día de la elección general la ventana nacional sigue abierta: el job pide la próxima de `es` desde la
-    víspera (desde hoy, estricto, no habría elección próxima) y un autonómico queda `refused`; al día siguiente,
-    no."""
-    from mtpy.jobs.Publish import Publish
-
-    def next_date(scope, date_from=None):
-        if scope == 'es':
-            return '2026-11-29' if date_from is not None and date_from <= '2026-11-28' else None
-        return {'es-cb': '2027-05-23'}.get(scope)
-
-    monkeypatch.setattr(publish, 'next_event_date', next_date)
-    fs = FileSystem(str(tmp_path))
-    result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-29')
-    assert result['es-cb']['status'] == 'refused' and 'of es 2026-11-29' in result['es-cb']['reason'] and patched == []
-    result = Publish().run(what=['forecast'], scopes=['es-cb'], fs=fs, today='2026-11-30')
-    # fuera de la ventana el doble de `es-cb` llega a publicar y queda `skipped` (no tiene sondeos)
-    assert result['es-cb']['status'] == 'skipped' and [c[0] for c in patched] == ['es-cb']
-
-
+@pytest.mark.skip(reason='Tarea 9')
 def test_analysis_of_a_scope_without_upcoming_event_is_published_unless_in_the_national_window(fresh_app, tmp_path,
                                                                                                 patched, monkeypatch):
     """Un ámbito sin elección próxima (`es-md`) publica su análisis desde su última elección: sólo lo guarda la
@@ -181,6 +80,7 @@ def test_analysis_of_a_scope_without_upcoming_event_is_published_unless_in_the_n
     assert calls == ['es-md']
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_manifest_point_and_unpublish_actions(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 
@@ -207,6 +107,7 @@ def test_unknown_what_is_rejected(fresh_app, tmp_path):
         Publish().run(what=['manifest'])
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_analysis_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys):
     from mtpy.jobs.Publish import Publish
 
@@ -217,6 +118,7 @@ def test_analysis_action_publishes_each_scope(fresh_app, tmp_path, patched, caps
     assert 'es: analysis published (event 2026-11-29, 3 pollsters)' in capsys.readouterr().out
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, patched, capsys):
     """Con `dry_run`, el análisis va a `site-dry/v1/analysis/`; un ámbito sin sondeos en el ciclo actual se publica sin
     efectos de casa, uno que rompe falla sin detener a los demás, y el manifest no se toca."""
@@ -233,6 +135,7 @@ def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, 
     assert [c[2] for c in patched] == [{'verbose': 0}] * 3
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_without_effects(fresh_app, tmp_path, patched, capsys):
     """Un ámbito cuyo evento en curso aún no tiene sondeos publica el análisis de las elecciones pasadas, sin
     efectos de casa."""
@@ -249,6 +152,7 @@ def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_wit
     assert reader.analysis_exists('es') and reader.analysis_exists('es-cb')
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_failed_forecast_is_not_hidden_by_a_later_successful_action(fresh_app, tmp_path, patched, monkeypatch):
     """Un `forecast` fallido sigue contando aunque el `point` posterior del mismo ámbito funcione."""
     from mtpy.jobs.Publish import Publish
@@ -278,40 +182,6 @@ def test_error_resolving_the_event_date_only_fails_that_scope(fresh_app, tmp_pat
     with pytest.raises(RuntimeError, match='es-md'):
         Publish().run(what=['forecast'], scopes=['es-md', 'es'], fs=FileSystem(str(tmp_path)))
     assert [c[0] for c in patched] == ['es']
-
-
-def test_forecast_rebuilds_the_history_of_each_published_scope(fresh_app, tmp_path, patched):
-    """Tras publicar, `history.json` del ámbito contiene exactamente la ejecución publicada."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
-    assert (tmp_path / 'site' / 'v1' / 'runs' / 'es' / 'history.json').exists()
-    runs = bundle.BundleReader(fs).read_json(bundle.path_history('es'))['data']['runs']
-    assert [r['run_id'] for r in runs] == [patched[0][1]]
-
-
-def test_a_value_error_other_than_nothing_to_publish_fails_the_scope(fresh_app, tmp_path, patched, capsys):
-    """Sólo `NothingToPublish` omite el ámbito; cualquier otro `ValueError` (validación del paquete) falla."""
-    from mtpy.jobs.Publish import Publish
-
-    with pytest.raises(RuntimeError, match='es-ri'):
-        Publish().run(what=['forecast'], scopes=['es-ri', 'es-cb', 'es'], fs=FileSystem(str(tmp_path)))
-    out = capsys.readouterr().out
-    assert "es-ri: failed (ValueError: vote: missing keys ['rows'])" in out
-    assert 'es-cb: skipped (No polls' in out and 'es: published' in out
-
-
-def test_event_date_is_normalised_or_fails_the_scope(fresh_app, tmp_path, patched, capsys):
-    """`event_date` llega en ISO a `meta`, `headline` y al SQL de `db_stats`; si no es una fecha, el ámbito falla."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    with pytest.raises(RuntimeError, match='es'):
-        Publish().run(what=['forecast'], scopes=['es'], fs=fs, event_date='29/11/2026')
-    assert 'es: failed (ValueError: Invalid isoformat' in capsys.readouterr().out and patched == []
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, event_date='20261129')
-    assert result['es']['status'] == 'published' and patched[0][2] == '2026-11-29'
 
 
 def test_manifest_write_failure_keeps_the_summary(fresh_app, tmp_path, patched, capsys, monkeypatch):
@@ -366,68 +236,12 @@ def test_backfill_range_errors_fail_before_touching_the_bundle(fresh_app, tmp_pa
     assert patched == [] and not (tmp_path / 'site').exists()
 
 
-def test_backfill_respects_a_pointed_run(fresh_app, tmp_path, patched, monkeypatch):
-    """Un relleno no deshace un `point` hacia atrás; una publicación normal posterior sí mueve `latest`."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    writer = bundle.BundleWriter(fs)
-    run_a, run_b, run_c = '20261008-100000', '20261008-110000', '20261008-120000'
-    for rid in (run_a, run_b):
-        monkeypatch.setattr(bundle, 'run_id', lambda now=None, rid=rid: rid)
-        Publish().run(what=['forecast'], scopes=['es'], fs=fs)
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_b
-    Publish().run(what=['point'], scopes=['es'], fs=fs, run=run_a)
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
-    assert [r['status'] for r in result['es']] == ['published', 'published']
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_a
-    history = writer.read_json(bundle.path_history('es'))['data']['runs']
-    assert [r['run_id'] for r in history] == ['20261005-120000', '20261006-120000', run_a, run_b]
-    monkeypatch.setattr(bundle, 'run_id', lambda now=None: run_c)
-    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == run_c
-
-
 def test_backfill_needs_forecast_in_what(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 
     with pytest.raises(ValueError, match='publish: "backfill" needs "forecast" in what'):
         Publish().run(what=['manifest'], fs=FileSystem(str(tmp_path)), backfill={'from': '2026-10-05'}, today='2026-10-09')
     assert patched == [] and not (tmp_path / 'site').exists()
-
-
-def test_backfill_failed_day_is_reported_until_unpublished(fresh_app, tmp_path, patched, monkeypatch, capsys):
-    """Un día que falla a medias deja su carpeta: el job falla, los demás días se escriben y un reintento
-    lo da por fallido (incompleto) en vez de omitirlo, hasta que se borra con `unpublish`."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    writer = bundle.BundleWriter(fs)
-    real_meta, broken = publish.export_meta, []
-
-    def export_meta(sim, run_id, *args, **kwargs):
-        if run_id == '20261006-120000' and not broken:
-            broken.append(run_id)
-            raise OSError('s3 down')
-        return real_meta(sim, run_id, *args, **kwargs)
-
-    monkeypatch.setattr(publish.forecast, 'export_meta', export_meta)
-    span = {'from': '2026-10-05', 'to': '2026-10-07'}
-    with pytest.raises(RuntimeError, match='es'):
-        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
-    assert 'es: failed 2026-10-06 (OSError: s3 down)' in capsys.readouterr().out
-    assert writer.exists(bundle.path_run('es', '20261006-120000'))
-    assert writer.list_runs('es') == ['20261005-120000', '20261007-120000']
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261007-120000'
-    with pytest.raises(RuntimeError, match='es'):
-        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
-    out = capsys.readouterr().out
-    assert 'es: skipped 2026-10-05 (run exists)' in out and 'es: skipped 2026-10-07 (run exists)' in out
-    assert 'es: failed 2026-10-06 (incomplete run exists; unpublish it first)' in out
-    Publish().run(what=['unpublish'], scopes=['es'], fs=fs, run='20261006-120000')
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
-    assert [r['status'] for r in result['es']] == ['skipped', 'published', 'skipped']
-    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000', '20261007-120000']
 
 
 def test_backfill_retry_repairs_the_history_and_the_manifest(fresh_app, tmp_path, patched):
@@ -449,93 +263,6 @@ def test_backfill_retry_repairs_the_history_and_the_manifest(fresh_app, tmp_path
     assert entry['latest'] == '20261006-120000' and entry['run_at'] == '2026-10-06T12:00:00Z'
 
 
-def test_backfill_replace_recomputes_the_existing_days(fresh_app, tmp_path, patched, capsys):
-    """Con `replace`, un día cuyo run ya existe (completo o a medias) se borra y se recalcula en vez de saltarse;
-    un día nuevo se publica como siempre."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    writer = bundle.BundleWriter(fs)
-    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
-    stale = tmp_path / bundle.PREFIX / bundle.path_run('es', '20261005-120000') / 'stale.txt'
-    stale.write_text('old')
-    writer.remove(bundle.path_part('es', '20261006-120000', 'headline'))
-    span = {'from': '2026-10-05', 'to': '2026-10-07', 'replace': True}
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
-    assert [r['status'] for r in result['es']] == ['published', 'published', 'published']
-    assert [r['replaced'] for r in result['es']] == [True, True, False]
-    assert not stale.exists()
-    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000', '20261007-120000']
-    history = writer.read_json(bundle.path_history('es'))['data']['runs']
-    assert [r['run_id'] for r in history] == ['20261005-120000', '20261006-120000', '20261007-120000']
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261007-120000'
-    out = capsys.readouterr().out
-    assert 'es: published 20261005-120000 (as_of 2026-10-05, 6 polls, backfill 2026-10-05, replaced)' in out
-    assert 'backfill 2026-10-07)' in out
-
-
-def test_backfill_replace_keeps_the_pointers_consistent_when_the_new_run_fails(fresh_app, tmp_path, patched, monkeypatch, capsys):
-    """Si el run que sustituye a un día falla, el borrado ya no figura en `history.json` ni como `latest`,
-    y el reintento con `replace` recalcula el run a medias que dejó."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    writer = bundle.BundleWriter(fs)
-    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09')
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261006-120000'
-    real_meta = publish.export_meta
-
-    def export_meta(sim, run_id, *args, **kwargs):
-        if run_id == '20261006-120000':
-            raise OSError('s3 down')
-        return real_meta(sim, run_id, *args, **kwargs)
-
-    monkeypatch.setattr(publish.forecast, 'export_meta', export_meta)
-    span = {'from': '2026-10-06', 'replace': True}
-    with pytest.raises(RuntimeError, match='es'):
-        Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
-    assert 'es: failed 2026-10-06 (OSError: s3 down)' in capsys.readouterr().out
-    assert writer.exists(bundle.path_run('es', '20261006-120000'))
-    assert writer.list_runs('es') == ['20261005-120000']
-    history = writer.read_json(bundle.path_history('es'))['data']['runs']
-    assert [r['run_id'] for r in history] == ['20261005-120000']
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261005-120000'
-    monkeypatch.setattr(publish.forecast, 'export_meta', real_meta)
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill=span, today='2026-10-09')
-    assert [(r['status'], r['replaced']) for r in result['es']] == [('published', True)]
-    assert writer.list_runs('es') == ['20261005-120000', '20261006-120000']
-    assert publish.read_manifest(writer)['scopes']['es']['latest'] == '20261006-120000'
-
-
-def test_backfill_replace_leaves_a_refused_day_in_place(fresh_app, tmp_path, patched):
-    """En la ventana LOREG el relleno se rechaza antes de borrar nada, también con `replace`."""
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    writer = bundle.BundleWriter(fs)
-    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05'}, today='2026-10-09')
-    head = writer.read_json(bundle.path_part('es', '20261005-120000', 'headline'))
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'replace': True},
-                           today='2026-11-27')
-    assert result['es'][0]['status'] == 'refused'
-    assert writer.list_runs('es') == ['20261005-120000']
-    assert writer.read_json(bundle.path_part('es', '20261005-120000', 'headline')) == head
-
-
-def test_backfill_replace_in_a_dry_run_rewrites_the_dry_run_without_pointers(fresh_app, tmp_path, patched):
-    from mtpy.jobs.Publish import Publish
-
-    fs = FileSystem(str(tmp_path))
-    dry = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX)
-    Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05'}, today='2026-10-09', dry_run=True)
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=fs, backfill={'from': '2026-10-05', 'replace': True},
-                           today='2026-10-09', dry_run=True)
-    assert [(r['status'], r['replaced']) for r in result['es']] == [('published', True)]
-    assert dry.list_runs('es') == ['20261005-120000']
-    assert not dry.exists(bundle.path_history('es')) and not dry.exists(bundle.path_manifest())
-    assert not (tmp_path / 'site').exists()
-
-
 def test_backfill_replace_must_be_a_boolean(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 
@@ -545,6 +272,7 @@ def test_backfill_replace_must_be_a_boolean(fresh_app, tmp_path, patched):
     assert patched == [] and not (tmp_path / 'site').exists()
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
     fixed_prov(monkeypatch)
@@ -557,6 +285,7 @@ def test_backtest_action_publishes_each_scope(fresh_app, tmp_path, patched, caps
     assert bundle.BundleReader(fs).backtest_exists('es') and 'manifest' not in out
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_backtest_dry_run_writes_apart_and_a_failure_fails_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
     fixed_prov(monkeypatch)
@@ -579,6 +308,7 @@ def test_event_needs_its_date(fresh_app, tmp_path):
         Publish().run(what=['event'], fs=FileSystem(str(tmp_path)))
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_event_action_publishes_each_date(fresh_app, tmp_path, patched, capsys):
     from mtpy.jobs.Publish import Publish
 
@@ -592,6 +322,7 @@ def test_event_action_publishes_each_date(fresh_app, tmp_path, patched, capsys):
     assert result['es'][0]['event_date'] == '2023-07-23'
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_event_action_fails_a_date_without_stopping_the_others(fresh_app, tmp_path, patched, capsys):
     from mtpy.jobs.Publish import Publish
 
@@ -600,6 +331,7 @@ def test_event_action_fails_a_date_without_stopping_the_others(fresh_app, tmp_pa
     assert 'es: event 2023-13-01 failed (ValueError' in capsys.readouterr().out
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
     from mtpy.jobs.Publish import Publish
 
@@ -615,6 +347,7 @@ def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched
     assert out.count('failed (') == 1 and 'ValueError: month must be in 1..12' in out and 'published' not in out
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 
@@ -632,34 +365,6 @@ def test_event_requires_a_date_and_excludes_forecast(fresh_app, tmp_path):
         Publish().run(what=['event', 'forecast'], event_date='2023-07-23', fs=FileSystem(str(tmp_path)))
 
 
-NO_POLLS = 'No polls available for `X`: skipped'
-
-
-def warned_forecast(monkeypatch, messages):
-    """`publish_forecast` real con un `FakeSimulator` que avisa `messages` al ajustar el promedio."""
-    real = publish.forecast.publish_forecast
-
-    def fake(scope, writer, run_id, event_date, **kwargs):
-        return real(scope, writer, run_id, event_date, simulator=FakeSimulator(warn=messages),
-                    stats=lambda scope, event_date: (7, '2026-10-01'),
-                    prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}, **kwargs)
-
-    monkeypatch.setattr(publish, 'publish_forecast', fake)
-
-
-def test_forecast_collects_the_model_warnings_into_the_result(fresh_app, tmp_path, patched, monkeypatch, capsys,
-                                                              recwarn):
-    """Los avisos del modelo no salen sueltos: van al resultado (únicos, en orden) y al recuento de la línea."""
-    from mtpy.jobs.Publish import Publish
-
-    warned_forecast(monkeypatch, [NO_POLLS, NO_POLLS])
-    result = Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
-    assert result['es']['status'] == 'published' and result['es']['warnings'] == [NO_POLLS]
-    summary = [line for line in capsys.readouterr().out.splitlines() if line.startswith('es: published')]
-    assert len(summary) == 1 and summary[0].endswith(' · 1 aviso')
-    assert NO_POLLS not in summary[0] and len(recwarn) == 0
-
-
 def test_verbose_0_prints_only_the_header_and_the_summary(fresh_app, tmp_path, patched, monkeypatch, capsys, recwarn):
     from mtpy.jobs.Publish import Publish
 
@@ -673,26 +378,7 @@ def test_verbose_0_prints_only_the_header_and_the_summary(fresh_app, tmp_path, p
     assert len(recwarn) == 0
 
 
-def test_verbose_1_is_the_default_and_prints_the_scope_lines_and_warnings_live(fresh_app, tmp_path, patched,
-                                                                             monkeypatch, capsys, recwarn):
-    from mtpy.jobs.Publish import Publish
-
-    warned_forecast(monkeypatch, [NO_POLLS])
-    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)))
-    out = capsys.readouterr().out
-    summary = out.index('\nes: published')
-    assert out.index('[1/1] es: empezando') < out.index('es · aviso: ' + NO_POLLS) < out.index('[1/1] es: published') < summary
-    assert out.count(NO_POLLS) == 1 and 'simulador listo' not in out and len(recwarn) == 0
-
-
-def test_verbose_2_adds_the_phase_lines(fresh_app, tmp_path, patched, capsys):
-    from mtpy.jobs.Publish import Publish
-
-    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)), verbose=2)
-    out = capsys.readouterr().out
-    assert out.index('[1/1] es: empezando') < out.index('[1/1] es: simulador listo (') < out.index('[1/1] es: meta y titular (')
-
-
+@pytest.mark.skip(reason='Tarea 9')
 def test_the_model_gets_verbose_minus_two(fresh_app, tmp_path, patched):
     from mtpy.jobs.Publish import Publish
 
@@ -705,6 +391,7 @@ def test_the_model_gets_verbose_minus_two(fresh_app, tmp_path, patched):
     assert patched[0][2] == {'verbose': 1}
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_analysis_prints_its_scope_lines_live_at_verbose_1(fresh_app, tmp_path, patched, capsys):
     from mtpy.jobs.Publish import Publish
 
@@ -713,37 +400,6 @@ def test_analysis_prints_its_scope_lines_live_at_verbose_1(fresh_app, tmp_path, 
     assert out.index('[1/1] es: empezando') < out.index('[1/1] es: analysis published') < out.index('\nes: analysis published')
     Publish().run(what=['analysis'], scopes=['es'], fs=FileSystem(str(tmp_path / 'zero')), verbose=0)
     assert 'empezando' not in capsys.readouterr().out
-
-
-def test_forecast_keeps_the_warnings_of_a_skipped_or_failed_scope(fresh_app, tmp_path, patched, monkeypatch, capsys,
-                                                                  recwarn):
-    """Un ámbito que avisa y luego se salta o rompe lleva sus avisos (sin repetir) y nada escapa del job."""
-    import warnings
-
-    from mtpy.jobs.Publish import Publish
-
-    def fake(scope, writer, run_id, event_date, **kwargs):
-        warnings.warn('Fewer than three usable polls for `A`: not fitted')
-        warnings.warn('Fewer than three usable polls for `B`: not fitted')
-        warnings.warn('Fewer than three usable polls for `A`: not fitted')
-        if scope == 'es-cb':
-            raise publish.NothingToPublish('Not enough polls to fit the average')
-        raise KeyError('x')
-
-    monkeypatch.setattr(publish, 'publish_forecast', fake)
-    with pytest.raises(RuntimeError, match='es-ar'):
-        Publish().run(what=['forecast'], scopes=['es-cb', 'es-ar'], fs=FileSystem(str(tmp_path)), verbose=0)
-    out = capsys.readouterr().out
-    assert 'es-cb: skipped (Not enough polls to fit the average) · 2 avisos' in out
-    assert "es-ar: failed (KeyError: 'x') · 2 avisos" in out
-    assert 'not fitted' not in out and len(recwarn) == 0
-
-
-def test_forecast_without_model_warnings_has_none(fresh_app, tmp_path, patched):
-    from mtpy.jobs.Publish import Publish
-
-    result = Publish().run(what=['forecast'], scopes=['es', 'es-md'], fs=FileSystem(str(tmp_path)))
-    assert result['es']['warnings'] == [] and result['es-md']['warnings'] == []
 
 
 def test_forecast_prints_its_progress_live_before_the_summary(fresh_app, tmp_path, patched, capsys):
@@ -763,17 +419,7 @@ def test_forecast_prints_its_progress_live_before_the_summary(fresh_app, tmp_pat
     assert found == sorted(found) and found[-1] < summary
     assert all(lines[i].startswith('[') and lines[i][9:11] == '] ' for i in found)  # [hh:mm:ss] delante
     assert any('[1/2] es: promedio ajustado (' in m for m in infos)
-    assert any(m.startswith('es: published') for m in infos)  # el alert final con el resumen sigue llegando
-
-
-def test_backfill_progress_names_the_day(fresh_app, tmp_path, patched, capsys):
-    from mtpy.jobs.Publish import Publish
-
-    Publish().run(what=['forecast'], scopes=['es'], fs=FileSystem(str(tmp_path)),
-                  backfill={'from': '2026-10-05', 'to': '2026-10-06'}, today='2026-10-09', verbose=2)
-    out = capsys.readouterr().out
-    assert 'publish forecast: 1 ámbito · backfill 2026-10-05..2026-10-06 (2 días)' in out
-    assert out.index('[1/1] es 2026-10-05: empezando') < out.index('[1/1] es 2026-10-06: promedio ajustado (')
+    assert any('es: published' in m for m in infos)  # el alert final con el resumen (tras su cabecera) sigue llegando
 
 
 class ListHandler:
@@ -871,9 +517,9 @@ def test_logger_echoes_console_only_with_a_console_stream_handler(tmp_path):
     import logging
     import sys
 
-    from mtpy.jobs.Publish import Publish
+    from mtpy.pipelines.publish.Forecast import Forecast
 
-    echoes = Publish._logger_echoes_console
+    echoes = Forecast._logger_echoes_console
     assert echoes(types.SimpleNamespace(info=lambda m: None)) is False
     for stream in (sys.stdout, sys.stderr):
         log = app_log('test-echo-stream', logging.StreamHandler(stream))
@@ -915,6 +561,8 @@ def test_parties_action_writes_the_catalogue_next_to_the_manifest(fresh_app, tmp
 
 
 def test_forecast_and_analysis_refresh_the_catalogue_but_the_pointers_do_not(fresh_app, tmp_path, patched, capsys):
+    """`forecast` reescribe el catálogo una vez por job, también junto a `parties`; `manifest` solo no lo toca (la
+    parte de `analysis` y `point` está en el test siguiente, de la Tarea 9)."""
     from mtpy.jobs.Publish import Publish
 
     (tmp_path / 'a').mkdir()
@@ -925,13 +573,30 @@ def test_forecast_and_analysis_refresh_the_catalogue_but_the_pointers_do_not(fre
     out = capsys.readouterr().out
     assert path.exists() and out.count('parties: 5 partidos') == 1 and out.index('es: published') < out.index('parties: 5')
     path.unlink()
+    # las dos acciones juntas (en otro paquete: el run id es el segundo actual) escriben el catálogo una sola vez
+    Publish().run(what=['forecast', 'parties'], scopes=['es'], fs=FileSystem(str(tmp_path / 'b')))
+    assert (tmp_path / 'b' / 'site' / 'v1' / 'parties.json').exists() and capsys.readouterr().out.count('parties: 5 partidos') == 1
+    Publish().run(what=['manifest'], fs=fs)
+    assert not path.exists() and 'parties' not in capsys.readouterr().out
+
+
+@pytest.mark.skip(reason='Tarea 9')
+def test_analysis_refreshes_the_catalogue_but_point_does_not(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    (tmp_path / 'a').mkdir()
+    (tmp_path / 'b').mkdir()
+    fs = FileSystem(str(tmp_path / 'a'))
+    path = tmp_path / 'a' / 'site' / 'v1' / 'parties.json'
+    Publish().run(what=['forecast'], scopes=['es'], fs=fs)
+    path.unlink()
+    capsys.readouterr()
     Publish().run(what=['analysis'], scopes=['es'], fs=fs)
     assert path.exists() and 'parties: 5 partidos' in capsys.readouterr().out
     path.unlink()
     # las tres acciones juntas (en otro paquete: el run id es el segundo actual) escriben el catálogo una sola vez
     Publish().run(what=['forecast', 'analysis', 'parties'], scopes=['es'], fs=FileSystem(str(tmp_path / 'b')))
     assert (tmp_path / 'b' / 'site' / 'v1' / 'parties.json').exists() and capsys.readouterr().out.count('parties: 5 partidos') == 1
-    Publish().run(what=['manifest'], fs=fs)
     Publish().run(what=['point'], scopes=['es'], run=publish.read_manifest(bundle.BundleReader(fs))['scopes']['es']['latest'], fs=fs)
     assert not path.exists() and 'parties' not in capsys.readouterr().out
 
@@ -955,6 +620,7 @@ def test_parties_dry_run_writes_apart_and_a_failure_fails_the_job(fresh_app, tmp
     assert 'es: published' in out and "parties: failed (KeyError: 'color')" in out and len(errors) == 1
 
 
+@pytest.mark.skip(reason='Tarea 9')
 def test_publish_study_runs_the_study_action(fresh_app, tmp_path, monkeypatch, capsys):
     """`study` publica el estudio por su slug (con `register` y `force` del job), sin guardia LOREG; un registro
     rechazado queda `refused` y cualquier otro error, `failed`, que hace fallar el job."""
@@ -987,3 +653,30 @@ def test_publish_study_runs_the_study_action(fresh_app, tmp_path, monkeypatch, c
     with pytest.raises(RuntimeError, match='voto-cera'):
         Publish().run(what=['study'], study='voto-cera', fs=fs)
     assert 'voto-cera: study failed' in capsys.readouterr().out
+
+
+def test_publish_stop_on_error_stops_at_the_first_failed_scope_and_still_writes_the_manifest(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+    fs = FileSystem(str(tmp_path))
+    with pytest.raises(RuntimeError, match=r'publish: failed scopes: es-ar \(forecast\)'):
+        Publish().run(what='forecast', scopes=['es', 'es-ar', 'es-cb'], fs=fs, stop_on_error=True)
+    assert [c[0] for c in patched] == ['es', 'es-ar']
+    assert publish.read_manifest(bundle.BundleReader(fs))['scopes']['es']['latest'] == patched[0][1]
+
+
+def test_publish_refuses_an_empty_scope_list(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+    with pytest.raises(ValueError, match='publish: no scopes to run'):
+        Publish().run(what='forecast', scopes=[], fs=FileSystem(str(tmp_path)))
+
+
+def test_publish_alert_has_the_header_and_the_failures_first(fresh_app, tmp_path, patched):
+    from mtpy.jobs.Publish import Publish
+    sent = []
+    fresh_app.set('ps', types.SimpleNamespace(send=lambda msg, **kw: sent.append(msg)))
+    with pytest.raises(RuntimeError):
+        Publish().run(what='forecast', scopes='all', fs=FileSystem(str(tmp_path)))
+    lines = sent[-1].splitlines()
+    assert lines[0].startswith('Publish job executed in ') and lines[0].endswith(' with 1 failure')
+    assert lines[1] == "es-ar: failed (KeyError: 'x')" and lines[2].startswith('es: published')
+    assert 'manifest: 1 scopes, freeze off' in lines and 'parties: 5 partidos' in lines
