@@ -1,10 +1,11 @@
 """
-Live progress lines of the jobs that work scope by scope (`publish`, `compute`).
+Live progress lines of the pipelines that work scope by scope (`load`, `compute`, `backtest`, `publish`).
 
-`ScopeReporter` is a mixin for a `Job`: `_say` prints one line now (and logs it) when the run is verbose enough,
-`_progress` builds the `ScopeProgress` of one scope and `_log_error` logs the traceback being handled under the
-job name. `ScopeProgress` prints the start, the phases, the warnings and the result of one scope with the prefix
-``[i/n] scope[ day]``; `counted` writes a number with its noun.
+The pipelines use it (`mtpy/pipelines/base.py`, `ScopePipeline`), not only the jobs.
+`ScopeReporter` is a mixin for a `Job` or a pipeline: `_say` prints one line now (and logs it) when the run is
+verbose enough, `_progress` builds the `ScopeProgress` of one scope and `_log_error` logs the traceback being
+handled under the job name. `ScopeProgress` prints the start, the phases, the warnings and the result of one
+scope with the prefix ``[i/n] scope[ day]``; `counted` writes a number with its noun.
 
 Verbosity levels (``verbose`` of the job): 0, only the header of each action and the final summary; 1, also the
 start, the result line and the warnings of each scope; 2, also the phase lines with their seconds; 3, also the own

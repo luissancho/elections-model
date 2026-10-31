@@ -598,6 +598,7 @@ python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
 | `force` | `false` | Dar de alta las encuestadoras y los medios nuevos y seguir, en vez de parar el ámbito; los partidos no se dan de alta nunca |
 | `years` | `null` | Lista de años del artículo que se leen (`["2026"]`; los números se convierten), todos por defecto. No se combina con `overwrite`: el job falla con `ValueError` antes de empezar, porque `overwrite` borraría los demás años del ciclo |
 | `dry_run` | `false` | Leer, resolver nombres e informar sin escribir nada (ni altas, ni sondeos, ni pesos) |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -628,8 +629,8 @@ es-ex: polls skipped (no upcoming event)
 
 Sin `overwrite` y sin sondeos nuevos no se escribe nada y la línea dice `0 saved`. Un ámbito fallido no detiene a los
 demás; al final el job termina con `RuntimeError: load: failed scopes: es (polls)`. Los `skipped` no cuentan como
-fallo. El resumen va también al logger y al servicio de avisos si está configurado (`alert`), como en `compute` y
-`publish`.
+fallo. El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
+en "Publicar".
 
 En Docker: `RUN_JOB='load {"scopes":["es"],"overwrite":true}'`. El contenedor necesita salida HTTPS a Wikipedia.
 
@@ -679,6 +680,7 @@ python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"ve
 | `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
 | `dry_run` | `false` | Calcular sin escribir nada: `catalogues` solo valida los ficheros de la calidad y la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -707,8 +709,9 @@ es-ar: series failed (RuntimeError: ...)
 
 Un ámbito fallido no detiene a los demás ni a la acción siguiente (sus ratings se calculan igual); al final el job
 termina con `RuntimeError: compute: failed scopes: es-ar (series)` (o `catalogues (catálogos)` si fallan los
-catálogos, por ejemplo con un CSV de la calidad mal formado). El resumen va también al logger y al servicio
-de avisos si está configurado (`alert`), como en `publish`.
+catálogos, por ejemplo con un CSV de la calidad mal formado).
+El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
+en "Publicar".
 
 En Docker: `RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'`.
 
@@ -770,6 +773,7 @@ python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/re
 | `regional_noise` | `true` | Oscilaciones por comunidad y provincia (M9) |
 | `min_events` | `null` | Elecciones `featured` que necesita un autonómico para ajustar los estimadores con las propias en vez de con `es` (M11); `1` fuerza las propias |
 | `out` | `backtest/results` del repositorio | Carpeta de resultados (`es` en la raíz, los demás en `out/{ámbito}`) |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -796,7 +800,8 @@ es-ar: failed (KeyError: 'x')
 ```
 
 Un ámbito fallido no detiene a los demás; al final el job termina con `RuntimeError: backtest: failed scopes: es-ar`.
-El resumen va también al logger y al servicio de avisos si está configurado (`alert`), como en `publish`.
+El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
+en "Publicar".
 
 En Docker: `RUN_JOB='backtest {"scopes":"all"}'`. Después hay que publicar:
 `{"what":["backtest","event"],"scopes":"all","event_date":"all"}`.
@@ -929,6 +934,7 @@ python job.py publish '{"what":["study"],"study":"voto-cera","register":true}'
 | `backfill` | `null` | Relleno retroactivo (enmienda 2026-10-09): `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`; `to` es opcional (por defecto `from`), `from <= to` y `to` anterior a hoy (Europe/Madrid): como mucho ayer, porque el pronóstico de hoy es la publicación normal. Con `backfill`, `forecast` publica un run por día en vez de uno de hoy; exige `forecast` en `what`. Con `"replace": true` (enmienda 2026-10-17), un día cuyo run ya existe se borra antes (como `unpublish`) y se recalcula en vez de saltarse |
 | `source` | `backtest/results` del repositorio | Carpeta de resultados del backtest que leen `backtest` y el corte del modelo de `event`: `source` para `es` y `source/{ámbito}` para los demás (enmienda 2026-10-11) |
 | `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fija la fecha de la guarda LOREG, el tope de `backfill` y el ancla `as_of` del promedio, que se lee ese día y nunca después, `YYYY-MM-DD`; a diferencia de `force`, no deja huella en `meta.freeze`, pero un `today` pasado publica un run leído en el pasado) |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -944,8 +950,7 @@ Niveles de `verbose`:
 
 Cada ámbito termina en `published`, `skipped` (sin evento próximo, sin sondeos o promedio no ajustable),
 `refused` (guarda LOREG) o `failed` (cualquier otro error, incluido un fallo de validación del paquete; el
-resto de ámbitos continúa). El job imprime, escribe en
-`app.logger` y avisa con `alert()` un resumen de una línea por ámbito:
+resto de ámbitos continúa). El job reúne un resumen de una línea por ámbito (el aviso final, más abajo):
 
 ```
 es: published 20261008-181100 (as_of 2026-10-13, 315 polls) in 121 s
@@ -982,6 +987,29 @@ al repetir se informa `failed 2026-10-05 (incomplete run exists; unpublish it fi
 error: hay que retirarlo antes con `unpublish` (`{"what":["unpublish"],"scopes":["es"],"run":"20261005-120000"}`)
 y volver a lanzar el relleno, o repetirlo con `"replace": true`, que lo retira y lo recalcula (enmienda 2026-10-17).
 Los días completos se informan `skipped (run exists)`, o `published ... replaced` con `replace`.
+
+#### Aviso final y código de salida
+
+Los cuatro jobs (`load`, `compute`, `backtest` y `publish`) cierran igual. Con `stop_on_error` en `false` (por
+defecto) un ámbito o una acción que falla no detiene a los demás y el fallo se informa al final; con `true` el job
+para en el primero, y `publish` escribe igualmente el manifest de los ámbitos ya publicados.
+
+El aviso (`alert`) es uno solo y final. Su primera línea es la cabecera: `<Job> job executed in <duración> :-)` si
+todo fue bien, `<Job> job executed in <duración> with n failure(s)` si algo falló, o
+`<Job> job interrupted after <duración>` si la tarea se detuvo. Siguen las líneas del resumen: primero las de los
+ámbitos o acciones fallidos y después las demás, en el orden de ejecución. Pushover recibe como mucho 1.024
+caracteres: si el texto se recorta, la última línea lo dice y remite al log
+(`… (resumen recortado; el texto completo está en el log)`); el texto entero va siempre al `logger`. Un error de
+Pushover se registra y nunca interrumpe el job.
+
+Las líneas del resumen se imprimen por consola cuando el `logger` no las repite (`APP_VERBOSE` vacío); con
+`APP_VERBOSE=1` salen una sola vez, por el `logger`.
+
+El proceso termina con código de salida 1 si algún ámbito o acción falló, si el job reventó antes de empezar
+(un `what` desconocido, un JSON mal formado, un `stop_on_error` que no es booleano: `ValueError: <job>:
+stop_on_error must be true or false`) o si lo pararon con `SIGTERM` (la línea del resumen y del aviso es
+`interrumpido en <pipeline>.<ámbito>: SIGTERM`); en cualquier otro caso, 0. Los `skipped` y los `refused` no son
+fallos.
 
 ### Relleno retroactivo
 
@@ -1293,6 +1321,28 @@ por la guarda.
 deja marca (su `meta` no la tiene). La fecha de hoy es la de Europe/Madrid; `today` la fija solo para pruebas y
 ensayos. `manifest.freeze` es otra cosa: el interruptor editorial que se fija con `what: ["manifest"]` (ver
 "Veda").
+
+### Un pipeline suelto
+
+Cada acción de un job es un pipeline de MTpy en `mtpy/pipelines/<job>/` y los jobs son `SequenceJob`s que los
+encadenan. Uno solo se puede lanzar con el `Pipeline` genérico de `job.py`, donde `select` es `grupo.pipeline` y
+`chunks` la lista de ámbitos separados por comas:
+
+```bash
+python job.py pipeline '{"select":"publish.backtest","chunks":"es,es-md"}'
+python pipeline.py publish.backtest publish es es-md    # nombre, acción y ámbitos
+```
+
+El segundo lanzador imprime las líneas del resumen y no envía ningún aviso. Ninguno de los dos resuelve `"all"`
+(los ámbitos van nombrados) ni valida lo que cruza entre acciones, como sí hace el job; ese cuidado es de quien lo
+lanza. Los quince pipelines, por grupo:
+
+| Grupo | Pipelines |
+| --- | --- |
+| `load` | `load.polls`, `load.params` |
+| `compute` | `compute.catalogues`, `compute.compute`, `compute.ratings` |
+| `backtest` | `backtest.backtest` |
+| `publish` | `publish.forecast`, `publish.analysis`, `publish.event`, `publish.backtest`, `publish.study`, `publish.parties`, `publish.manifest`, `publish.point`, `publish.unpublish` |
 
 ## Ensayos de operación
 
