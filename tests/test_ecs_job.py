@@ -38,8 +38,11 @@ class FakeEcs:
 
     def describe_services(self, **kw):
         self.calls.append(('describe_services', kw))
-        return {'services': [{'taskDefinition': LIVE_TASKDEF['taskDefinitionArn'],
-                              'deployments': [{'networkConfiguration': {'awsvpcConfiguration': dict(NETWORK)}}]}]}
+        # like the live web service: `taskDefinition` is null at the top level and lives in the PRIMARY deployment
+        return {'services': [{'taskDefinition': None,
+                              'deployments': [{'status': 'ACTIVE', 'taskDefinition': 'arn:old', 'networkConfiguration': {'awsvpcConfiguration': {'subnets': ['subnet-old'], 'securityGroups': ['sg-old'], 'assignPublicIp': 'DISABLED'}}},
+                                              {'status': 'PRIMARY', 'taskDefinition': LIVE_TASKDEF['taskDefinitionArn'],
+                                               'networkConfiguration': {'awsvpcConfiguration': dict(NETWORK)}}]}]}
 
     def run_task(self, **kw):
         self.calls.append(('run_task', kw))
@@ -269,3 +272,19 @@ def test_empty_region_omits_the_console_link_and_passes_none_to_boto3(env_file):
     assert code == 0 and 'task abc123' in out and 'aws logs tail' in out and 'console.aws.amazon.com' not in out
     assert ecs_job.region_of({'AWS_REGION': ''}) is None and ecs_job.region_of({}) is None
     assert ecs_job.region_of({'AWS_REGION': 'eu-west-1'}) == 'eu-west-1'
+
+
+def test_task_definition_and_network_come_from_the_primary_deployment(env_file):
+    """La web viva no lleva `taskDefinition` en el servicio: se toma del despliegue PRIMARY, igual que la red."""
+    ecs = FakeEcs()
+    assert run(['--register'], ecs)[0] == 0
+    described = next(kw for name, kw in ecs.calls if name == 'describe_task_definition')
+    assert described['taskDefinition'] == LIVE_TASKDEF['taskDefinitionArn']
+    assert run(['backtest'], ecs)[0] == 0
+    request = next(kw for name, kw in ecs.calls if name == 'run_task')
+    assert request['networkConfiguration']['awsvpcConfiguration'] == NETWORK
+    description = {'taskDefinition': None, 'deployments': [{'status': 'PRIMARY'}]}
+    with pytest.raises(ecs_job.LaunchError, match='has no task definition'):
+        ecs_job.live_task_definition(description, 'c', 's')
+    with pytest.raises(ecs_job.LaunchError, match='has no deployments'):
+        ecs_job.primary_deployment({'deployments': []}, 'c', 's')

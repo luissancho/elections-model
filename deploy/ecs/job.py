@@ -130,13 +130,43 @@ def live_service(ecs, cluster: str, service: str) -> dict:
     return services[0]
 
 
+def primary_deployment(description: dict, cluster: str, service: str) -> dict:
+    """Return the PRIMARY deployment of a service description (the first one when none is marked).
+
+    Raises
+    ------
+    LaunchError
+        If the service has no deployments.
+    """
+    deployments = description.get('deployments') or []
+    if not deployments:
+        raise LaunchError(f'service {service} in cluster {cluster} has no deployments')
+    return next((d for d in deployments if d.get('status') == 'PRIMARY'), deployments[0])
+
+
 def service_network(ecs, cluster: str, service: str) -> dict:
-    """Return the ``awsvpcConfiguration`` of the service's current deployment."""
-    description = live_service(ecs, cluster, service)
-    if not description.get('deployments'):
-        raise LaunchError(f'service {service} not found in cluster {cluster}')
-    deployment = description['deployments'][0]
+    """Return the ``awsvpcConfiguration`` of the service's current (PRIMARY) deployment."""
+    deployment = primary_deployment(live_service(ecs, cluster, service), cluster, service)
     return deployment['networkConfiguration']['awsvpcConfiguration']
+
+
+def live_task_definition(description: dict, cluster: str, service: str) -> str:
+    """Return the ARN of the task definition the service runs.
+
+    ECS reports it at the service level or, for services whose top-level ``taskDefinition`` is null (the
+    live web service, deployment controller ``ECS``), only inside the PRIMARY deployment.
+
+    Raises
+    ------
+    LaunchError
+        If neither the service nor its deployments name a task definition.
+    """
+    arn = description.get('taskDefinition')
+    if not arn:
+        arn = primary_deployment(description, cluster, service).get('taskDefinition')
+    if not arn:
+        raise LaunchError(f'service {service} in cluster {cluster} has no task definition')
+    return arn
 
 
 def network_from(config: dict, live: dict) -> dict:
@@ -338,11 +368,10 @@ def register(ecs, cluster: str, service: str, family: str) -> str:
     Raises
     ------
     LaunchError
-        If the cluster lacks the service (or it has no task definition) or an AWS call fails.
+        If the cluster lacks the service, the service names no task definition (neither at its top level nor
+        in its PRIMARY deployment) or an AWS call fails.
     """
-    live = live_service(ecs, cluster, service).get('taskDefinition')
-    if not live:
-        raise LaunchError(f'service {service} not found in cluster {cluster}')
+    live = live_task_definition(live_service(ecs, cluster, service), cluster, service)
     web = aws_call('describe_task_definition', ecs.describe_task_definition, taskDefinition=live)['taskDefinition']
     definition = derive_job_definition(web, family)
     registered = aws_call('register_task_definition', ecs.register_task_definition, **definition)['taskDefinition']
