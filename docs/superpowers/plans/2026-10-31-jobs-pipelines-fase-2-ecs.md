@@ -39,6 +39,15 @@ v2 (`aws ecs`, `aws logs`), `python3` para construir JSON en el lanzador (sin `j
 - Identificadores en inglés; textos de consola en castellano o como los de hoy; README en castellano.
 - Luis hace commits en paralelo: `git status` antes de cada commit y añadir sólo los ficheros de la tarea.
 
+## Pendientes heredados de la revisión final de la fase 1
+
+- `job.py`: un nombre de job desconocido o un JSON mal formado revientan antes de construir el job, con salida 1 pero
+  sin aviso de Pushover (hoy el aviso sale de `Job.dispatch`). En ECS sin `--follow` el aviso es la única señal:
+  mover `getattr`/`json.loads` dentro del `try` de `main` y avisar por `app.ps` cuando no hay instancia de job.
+  Entra en la Tarea 3 (junto a `init.sh`), con un test en `tests/test_launchers.py`.
+- `backtest '{"action":"pull"}'` hoy ignora `action` por `**kwargs` y corre un backtest entero: la validación de
+  `action` de la Tarea 2 es obligatoria antes de documentar `push`/`pull`.
+
 ## Review Focus
 
 - `push`/`pull` con un `series.csv` que falta en el origen (clon fresco, o S3 sin serie): el destino no debe

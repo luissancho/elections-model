@@ -1,6 +1,6 @@
 # Jobs como pipelines de MTpy y tarea de jobs en ECS
 
-Fecha: 2026-10-31. Estado: aprobado por Luis el 2026-10-31. Planes: uno por fase, en `docs/superpowers/plans/`. Fase 1 construida el 2026-10-31 (8e30900..7d0441e, 1.648 tests).
+Fecha: 2026-10-31. Estado: aprobado por Luis el 2026-10-31. Planes: uno por fase, en `docs/superpowers/plans/`. Fase 1 construida el 2026-10-31 (8e30900..2bbd057, 1.653 tests; revisión final de la rama limpia; libro de a bordo en `docs/superpowers/plans/2026-10-31-jobs-pipelines-fase-1-ledger.md`).
 
 Revisión del constructor (2026-10-31): cinco preguntas. Tres resueltas en este documento (el manifest se
 escribe una vez al final, como hoy, con un gancho `finish`; `SIGTERM` pasa por el aviso; el worker de cola
