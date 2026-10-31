@@ -264,7 +264,7 @@ class SequenceJob(Job):
 
         self.results = {}
         self.lines = []
-        self._failed_lines = []
+        self._failed = []
 
     def select_pipelines(self, select) -> list[tuple[str, str, str]]:
         """
@@ -360,7 +360,7 @@ class SequenceJob(Job):
             chunks = []
 
         tstart = datetime.now()
-        self.results, self.lines, self._failed_lines = {}, [], []
+        self.results, self.lines, self._failed = {}, [], []
         failures = []
         key, chunk = None, None
 
@@ -382,8 +382,7 @@ class SequenceJob(Job):
                 line = 'interrumpido en {}{}: {}'.format(
                     key, '' if chunk is None else '.' + chunk, e
                 )
-                self.lines.append(line)
-                self._failed_lines.append(line)
+                self._add_lines(line, True)
                 self._summary(tstart, failures, interrupted=e)
             raise
 
@@ -458,9 +457,8 @@ class SequenceJob(Job):
             return
 
         lines = list(line) if isinstance(line, (list, tuple)) else [line]
+        self._failed.extend(range(len(self.lines), len(self.lines) + len(lines)) if failed else [])
         self.lines.extend(lines)
-        if failed:
-            self._failed_lines.extend(lines)
 
     @staticmethod
     def _is_failed(result) -> bool:
@@ -493,7 +491,9 @@ class SequenceJob(Job):
         else:
             header = '{} job executed in {} :-)'.format(self.name, delta)
 
-        body = self._failed_lines + [ln for ln in self.lines if ln not in self._failed_lines]
+        failed = set(self._failed)
+        body = [ln for i, ln in enumerate(self.lines) if i in failed]
+        body += [ln for i, ln in enumerate(self.lines) if i not in failed]
 
         if not self.app.verbose:
             for line in self.lines:

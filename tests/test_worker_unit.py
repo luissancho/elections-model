@@ -384,3 +384,20 @@ def test_existing_sequence_jobs_keep_their_behaviour(fresh_app):
     job = Old()
     assert job.stop_on_error is True and job.run(chunks='a, b') == {}
     assert len(ps.sent) == 1 and ps.sent[0].startswith('Old job executed in ') and ps.sent[0].endswith(' :-)')
+
+
+def test_identical_lines_of_different_chunks_all_reach_the_alert(fresh_app):
+    class Same(Counter):
+        def summary(self, chunk, **kwargs):
+            return 'same'
+
+        def finish(self, **kwargs):
+            self.line = None
+
+    ps = Recorder()
+    fresh_app.set('ps', ps)
+    job = Seq()
+    job.namespace = types.SimpleNamespace(**{'grp.Alpha': Same})
+    job.run(select='grp.alpha', chunks=['a', 'b'])
+    assert job.lines == ['same', 'same']
+    assert ps.sent[-1].splitlines()[1:] == ['same', 'same']
