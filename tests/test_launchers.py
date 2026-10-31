@@ -7,6 +7,7 @@ import pytest
 import job
 import pipeline
 from mtpy.core.worker import Job, JobInterrupted, Pipeline as CorePipeline, SequenceJob
+from tests.test_worker_unit import Recorder
 
 
 @pytest.fixture
@@ -35,6 +36,23 @@ def test_job_main_returns_1_with_the_traceback_when_the_job_fails(booted, capsys
             raise ValueError('bad')
     assert job.main('boom', '{}', namespace=types.SimpleNamespace(Boom=Boom)) == 1
     assert 'ValueError: bad' in capsys.readouterr().err
+
+
+def test_job_main_alerts_when_the_job_cannot_be_built(booted, capsys):
+    """Un nombre desconocido o un JSON roto fallan antes de que exista el job: aun así avisa por Pushover, que en
+    una tarea de ECS sin `--follow` es la única señal."""
+    ps = Recorder()
+    booted.set('ps', ps)
+
+    class FakeJob(Job):
+        def run(self, **kwargs):
+            pass
+    assert job.main('nope', '{}', namespace=types.SimpleNamespace()) == 1
+    assert ps.sent[0].startswith('nope job failed: AttributeError')
+    assert job.main('fake_job', '{bad', namespace=types.SimpleNamespace(FakeJob=FakeJob)) == 1
+    assert ps.sent[1].startswith('fake_job job failed: JSONDecodeError')
+    assert len(ps.sent) == 2
+    assert 'Traceback' in capsys.readouterr().err
 
 
 def test_job_main_installs_a_sigterm_handler_that_interrupts(booted, capsys):

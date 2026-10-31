@@ -7,7 +7,11 @@ import traceback
 
 from mtpy import jobs, mtpy
 from mtpy.core.utils.strings import to_camel
-from mtpy.core.worker import JobInterrupted
+from mtpy.core.worker import Job, JobInterrupted
+
+
+class Launcher(Job):
+    """Minimal job used to log and alert when the requested job cannot even be built."""
 
 
 def interrupt(signum, frame):
@@ -36,15 +40,22 @@ def main(name, params, namespace=None):
     mtpy.run()
     signal.signal(signal.SIGTERM, interrupt)
 
-    job = getattr(namespace if namespace is not None else jobs, to_camel(name))()
-    kwargs = json.loads(params) if params else {}
+    job = None
 
     try:
+        job_class = getattr(namespace if namespace is not None else jobs, to_camel(name))
+        kwargs = json.loads(params) if params else {}
+        job = job_class()
         job.dispatch(**kwargs)
     except JobInterrupted as e:
         print('{}: interrupted ({})'.format(name, e), file=sys.stderr)
         return 1
-    except Exception:
+    except Exception as e:
+        if job is None:
+            # `dispatch` never ran, so nobody alerted: do it here (the alert may be the only signal of a detached task)
+            launcher = Launcher()
+            launcher.log('error', '{} job failed'.format(name))
+            launcher.alert('{} job failed: {}: {}'.format(name, type(e).__name__, e))
         traceback.print_exc()
         return 1
 
