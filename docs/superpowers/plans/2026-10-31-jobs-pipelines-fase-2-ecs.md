@@ -3,19 +3,19 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Lanzar cualquier job desde el portátil como tarea puntual de ECS Fargate con un comando
-(`deploy/run-job.sh <job> '<json>' [--follow]`), con los logs una sola vez en CloudWatch, el aviso de Pushover al
+(`python deploy/ecs/job.py <job> '<json>' [--follow]`, Python con boto3), con los logs una sola vez en CloudWatch, el aviso de Pushover al
 final y el código de salida del job; y que el backtest corra en ECS con sus tablas en S3, de donde las leen
 `publish backtest` y `publish event` sin reconstruir la imagen.
 
 **Architecture:** Las tablas del backtest pasan a leerse y escribirse por la API de `FileSystem` (local o `S3`)
 bajo `backtest/results/` del sistema de ficheros de la app; `out`/`source` siguen aceptando una carpeta local. El
 pipeline `backtest.Backtest` gana `push` y `pull` para sembrar S3 y bajar la copia que se commitea. La definición
-de tarea de jobs se deriva de la viva del servicio web (`run-job.sh --register`) y el `run-task` toma la red del
+de tarea de jobs se deriva de la viva del servicio web (`deploy/ecs/job.py --register`) y el `run-task` toma la red del
 despliegue actual; `init.sh` hace `exec` del job y rechaza un contenedor sin nada que hacer; `GIT_COMMIT` se
 hornea en la imagen.
 
-**Tech Stack:** Python 3.11, pandas, `mtpy.core.io.FileSystem` / `mtpy.core.services.s3.S3` (s3fs), bash, AWS CLI
-v2 (`aws ecs`, `aws logs`), `python3` para construir JSON en el lanzador (sin `jq`), pytest.
+**Tech Stack:** Python 3.11, pandas, `mtpy.core.io.FileSystem` / `mtpy.core.services.s3.S3` (s3fs), bash (`init.sh`),
+boto3 (lanzador `deploy/ecs/job.py`, con clientes falsos en los tests), pytest.
 
 **Spec:** `docs/superpowers/specs/2026-10-31-jobs-pipelines-ecs-design.md` (secciones «Diseño de la fase 2»:
 «Infraestructura real», «Qué corre en ECS», «Backtest en S3», puntos 1-5).
@@ -56,7 +56,7 @@ v2 (`aws ecs`, `aws logs`), `python3` para construir JSON en el lanzador (sin `j
 - `publish backtest`/`publish event` en ECS para un ámbito sin tablas en S3: `skipped`
   (`no backtest results for …`) y el evento sin lámina del modelo, nunca una excepción de s3fs. Test en la Tarea 1.
 - El valor de `RUN_JOB` con espacios y comillas (`"message":"Veda electoral"`): llega intacto al override del
-  `run-task` y de ahí a `init.sh`. Test en la Tarea 4.
+  `run-task` y de ahí a `init.sh`. Test en la Tarea 4 (`test_launch_builds_the_run_task_from_the_service_network`).
 - `run-task` que no arranca (sin capacidad, subred mal): la respuesta trae `failures` y ninguna tarea; el lanzador
   imprime la razón y termina con 1 en vez de esperar un log que no llegará. Test en la Tarea 4.
 - `init.sh` con `exec`: el código de salida del job es el del contenedor (3 → 3), y sin `RUN_JOB` ni servicios el
@@ -335,7 +335,7 @@ git commit -m "backtest: acciones push y pull entre la copia del repositorio y e
   `exec python /app/job.py "$job_name" ${job_params:+"$job_params"}`; en la otra rama, si `SERVICES` está vacío,
   `echo "Nothing to run: set RUN_JOB, APP_API, APP_CRONTAB or APP_QUEUE" >&2` y `exit 1`; con servicios, como
   hoy (`supervisord`, `tail -f /dev/null`).
-- `task-job.example.json` = lo que registra `run-job.sh --register` (Tarea 4): `family` `elections-model-job`,
+- `task-job.example.json` = lo que registra `deploy/ecs/job.py --register` (Tarea 4): `family` `elections-model-job`,
   `networkMode` `awsvpc`, `requiresCompatibilities` `["FARGATE"]`, `cpu` `"2048"`, `memory` `"4096"`,
   `runtimePlatform` X86_64/LINUX, `taskRoleArn` `<task-role>`, `executionRoleArn` `<execution-role>`, un
   contenedor `Main` con `image` `<account>.dkr.ecr.<region>.amazonaws.com/elections-model:latest`,
@@ -442,75 +442,93 @@ git commit -m "deploy: GIT_COMMIT en la imagen, init.sh con exec y salida 1, pla
 
 ---
 
-### Task 4: Lanzador `deploy/run-job.sh` con `--register` y `--follow`
+### Task 4: Lanzador `deploy/ecs/job.py` (Python con boto3) con `--register` y `--follow`
+
+Decidido por Luis el 2026-10-31: lanzador en Python con boto3, fichero `deploy/ecs/job.py` (sustituye al
+`deploy/run-job.sh` de la spec). No importa `mtpy` (corre en el portátil con las credenciales de la CLI por la
+cadena normal de boto3) y toda la lógica es inyectable con clientes falsos, así que los tests no necesitan red ni
+un `aws` de mentira.
 
 **Files:**
-- Create: `deploy/run-job.sh` (ejecutable), `deploy/ecs.env.example`
-- Test: `tests/test_run_job.py` (nuevo)
+- Create: `deploy/ecs/job.py`, `deploy/ecs.env.example`
+- Test: `tests/test_ecs_job.py` (nuevo)
 
 **Interfaces:**
 - `deploy/ecs.env.example` (claves con comentario de una línea): `ECS_CLUSTER=elections-model-cluster`,
   `ECS_SERVICE=elections-model-service`, `ECS_TASK_FAMILY=elections-model-job`, `AWS_REGION=eu-west-1`,
   `ECS_LOG_GROUP=/ecs/elections-model`, y vacías para sobreescribir la red del servicio: `ECS_SUBNETS=`
-  (separadas por comas), `ECS_SECURITY_GROUPS=`, `ECS_PUBLIC_IP=` (`ENABLED`/`DISABLED`).
-- `deploy/run-job.sh`:
-  - Uso: `run-job.sh <job> ['<json>'] [--follow]` o `run-job.sh --register`; sin argumentos o con `-h`, uso y
-    salida 2. Lee `deploy/ecs.env` (ruta del script) o `$ECS_ENV_FILE`; sin fichero, mensaje y salida 2.
-  - Rechazos con salida 2 y mensaje en stderr: job vacío; JSON que no parsea (`python3 -c 'import json,sys; json.loads(sys.argv[1])'`);
-    `load` cuyo `what` (cadena o lista) contiene `params` → `load params runs on the laptop (it rewrites data/params.json)`.
-  - Red: `aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE --output json --query 'services[0].deployments[0].networkConfiguration.awsvpcConfiguration'`,
-    sobreescrita por `ECS_SUBNETS`/`ECS_SECURITY_GROUPS`/`ECS_PUBLIC_IP` cuando no están vacías.
-  - Construye el JSON del `run-task` con `python3` (la forma de `run-task.example.json`, override `RUN_JOB`
-    = `'<job> <json>'` o `'<job>'` sin JSON, contenedor `Main`), lo escribe en un fichero temporal y lanza
-    `aws ecs run-task --cli-input-json file://...  --output json`. Si la respuesta trae `failures` no vacío o
-    ninguna tarea: imprime `reason`/`detail` y sale con 1. Si no, imprime el id de la tarea (último segmento
-    del ARN), `aws logs tail $ECS_LOG_GROUP --log-stream-name-prefix job/Main/<id> --follow --since 1h` y
-    `https://$AWS_REGION.console.aws.amazon.com/ecs/v2/clusters/$ECS_CLUSTER/tasks/<id>`.
-  - `--follow`: lanza ese `aws logs tail` en segundo plano; cada 15 s `aws ecs describe-tasks --cluster ... --tasks <arn> --output json`
-    hasta `tasks[0].lastStatus == "STOPPED"`; mata el `tail`; imprime `stoppedReason` y sale con
-    `tasks[0].containers[0].exitCode` (vacío → 1). `ECS_POLL_SECONDS` (por defecto 15) para los tests.
-  - `--register`: `describe-services` → `services[0].taskDefinition`; `aws ecs describe-task-definition --task-definition <arn> --output json`;
-    `python3` deriva la de jobs: `family` `$ECS_TASK_FAMILY`, `cpu` `"2048"`, `memory` `"4096"`, conserva
-    `networkMode`, `requiresCompatibilities`, `runtimePlatform`, `taskRoleArn`, `executionRoleArn`; en el
-    contenedor conserva `name`, `image`, `essential`, `environmentFiles`, `logConfiguration` (con
-    `awslogs-stream-prefix` `job`), pone `environment` `[{"name": "RUN_JOB", "value": ""}]` y quita
-    `portMappings`; quita las claves de sólo lectura (`taskDefinitionArn`, `revision`, `status`,
-    `requiresAttributes`, `compatibilities`, `registeredAt`, `registeredBy`); `aws ecs register-task-definition --cli-input-json file://...`
-    e imprime `family:revision`.
+  (separadas por comas), `ECS_SECURITY_GROUPS=`, `ECS_PUBLIC_IP=` (`ENABLED`/`DISABLED`). `AWS_PROFILE` se deja a la
+  cadena de boto3 (variable de entorno del shell).
+- `deploy/ecs/job.py` (sólo `argparse`, `json`, `os`, `sys`, `time` y `boto3`, importado dentro de `clients`):
+  - `class UsageError(Exception)`, `class ConfigError(Exception)`, `class LaunchError(Exception)`.
+  - `load_config(path: str) -> dict`: `KEY=VALUE` por línea, líneas vacías y `#` ignoradas, valores con `strip`;
+    sin fichero, `ConfigError('no ecs.env at {path} (copy deploy/ecs.env.example)')`.
+  - `run_job_value(job: Optional[str], params: Optional[str]) -> str`: job vacío →
+    `UsageError('job name is required')`; `params` que no parsea con `json.loads` → `UsageError('invalid JSON: {e}')`;
+    `job == 'load'` con `'params'` en `what` (cadena o lista) →
+    `UsageError('load params runs on the laptop (it rewrites data/params.json)')`; devuelve `'{job} {params}'`
+    con el JSON tal cual se recibió (sin reformatear) o `job` solo.
+  - `service_network(ecs, cluster: str, service: str) -> dict`: `ecs.describe_services(cluster=cluster, services=[service])`
+    → `services[0]['deployments'][0]['networkConfiguration']['awsvpcConfiguration']`.
+  - `network_from(config: dict, live: dict) -> dict`: copia de `live` con `subnets` (`ECS_SUBNETS` partida por
+    comas), `securityGroups` (`ECS_SECURITY_GROUPS`) y `assignPublicIp` (`ECS_PUBLIC_IP`) sobreescritos cuando la
+    clave no está vacía.
+  - `run_task_request(config: dict, network: dict, run_job: str) -> dict`: los kwargs de `ecs.run_task`:
+    `cluster`, `taskDefinition` (`ECS_TASK_FAMILY`, por defecto `elections-model-job`), `launchType='FARGATE'`,
+    `count=1`, `networkConfiguration={'awsvpcConfiguration': network}`,
+    `overrides={'containerOverrides': [{'name': 'Main', 'environment': [{'name': 'RUN_JOB', 'value': run_job}]}]}`.
+  - `launch(ecs, request: dict) -> str`: `ecs.run_task(**request)`; con `failures` no vacío o sin `tasks` →
+    `LaunchError('{reason}: {detail}')` (`detail` puede ser `None`); devuelve `tasks[0]['taskArn']`.
+  - `task_id(arn: str) -> str`: el último segmento del ARN.
+  - `log_stream(task_arn: str) -> str`: `'job/Main/{id}'`.
+  - `follow(ecs, logs, cluster: str, task_arn: str, log_group: str, poll: float = 15, sleep=time.sleep, out=print) -> int`:
+    bucle: imprime los eventos nuevos del flujo con `logs.filter_log_events(logGroupName=log_group, logStreamNames=[stream], startTime=last + 1)`
+    (paginando con `nextToken`; `logs.exceptions.ResourceNotFoundException` mientras el flujo no existe se ignora);
+    `ecs.describe_tasks(cluster=cluster, tasks=[task_arn])`; cuando `tasks[0]['lastStatus'] == 'STOPPED'`: vuelca
+    el log una última vez, imprime `stoppedReason` y devuelve `tasks[0]['containers'][0].get('exitCode')`, o `1`
+    si no hay código; si no, `sleep(poll)` y repite.
+  - `derive_job_definition(web: dict, family: str) -> dict`: a partir de la definición viva (`describe_task_definition(...)['taskDefinition']`):
+    `family`, `cpu='2048'`, `memory='4096'`; conserva `networkMode`, `requiresCompatibilities`, `runtimePlatform`,
+    `taskRoleArn`, `executionRoleArn`; el contenedor conserva `name`, `image`, `essential`, `environmentFiles`,
+    `logConfiguration` (con `awslogs-stream-prefix` `job`), lleva `environment=[{'name': 'RUN_JOB', 'value': ''}]` y
+    pierde `portMappings`; se quitan `taskDefinitionArn`, `revision`, `status`, `requiresAttributes`,
+    `compatibilities`, `registeredAt`, `registeredBy`.
+  - `register(ecs, cluster: str, service: str, family: str) -> str`: `describe_services` → `services[0]['taskDefinition']`
+    → `describe_task_definition(taskDefinition=arn)` → `derive_job_definition` → `register_task_definition(**definition)`
+    → `'{family}:{revision}'`.
+  - `clients(region: Optional[str]) -> tuple`: `(boto3.client('ecs', region_name=region), boto3.client('logs', region_name=region))`
+    (el único sitio que importa `boto3`).
+  - `main(argv: list, ecs=None, logs=None, out=print, err=None) -> int`: `argparse` con `job` y `params` posicionales
+    opcionales, `--follow`, `--register`; config de `ECS_ENV_FILE` o `deploy/ecs.env` (junto a `deploy/`, resuelto
+    desde `__file__`); `UsageError`/`ConfigError` → mensaje en stderr + uso, salida 2; `--register` → imprime
+    `registered {family:revision}`, salida 0; lanzamiento: `run_job_value`, red (`service_network` + `network_from`),
+    `launch` (`LaunchError` → stderr, salida 1), imprime `task {id}`, `aws logs tail {log_group} --log-stream-names {stream} --follow --since 1h`
+    y `https://{region}.console.aws.amazon.com/ecs/v2/clusters/{cluster}/tasks/{id}`; sin `--follow` salida 0; con
+    `--follow` devuelve lo que devuelva `follow`. Los clientes se crean con `clients(config.get('AWS_REGION'))` sólo
+    cuando no se inyectan. `if __name__ == '__main__': sys.exit(main(sys.argv[1:]))`.
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
-`tests/test_run_job.py`:
+`tests/test_ecs_job.py` (el módulo se carga por ruta porque `deploy/ecs/` no es un paquete y el nombre `job`
+choca con el `job.py` de la raíz):
 
 ```python
-"""Tests del lanzador `deploy/run-job.sh` con un `aws` falso en el PATH."""
+"""Tests del lanzador `deploy/ecs/job.py` con clientes de boto3 falsos (sin red, sin mtpy)."""
+import importlib.util
+import io
 import json
-import os
-import subprocess
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = ROOT / 'deploy' / 'run-job.sh'
+SPEC = importlib.util.spec_from_file_location('ecs_job', ROOT / 'deploy' / 'ecs' / 'job.py')
+ecs_job = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ecs_job)
 
-FAKE_AWS = r'''#!/bin/bash
-echo "$*" >> "$AWS_FAKE_LOG"
-for ((i = 1; i <= $#; i++)); do
-  if [ "${!i}" = "--cli-input-json" ]; then j=$((i + 1)); cp "${!j#file://}" "$AWS_FAKE_INPUT.$1.$2"; fi
-done
-case "$1 $2" in
-  "ecs describe-services") echo '{"subnets": ["subnet-1", "subnet-2"], "securityGroups": ["sg-1"], "assignPublicIp": "ENABLED"}' ;;
-  "ecs run-task") if [ -n "$AWS_FAKE_FAIL" ]; then echo '{"tasks": [], "failures": [{"arn": "x", "reason": "RESOURCE:CPU", "detail": null}]}';
-                  else echo '{"tasks": [{"taskArn": "arn:aws:ecs:eu-west-1:1:task/c/abc123"}], "failures": []}'; fi ;;
-  "ecs describe-tasks") echo '{"tasks": [{"lastStatus": "STOPPED", "stoppedReason": "Essential container in task exited", "containers": [{"exitCode": 3}]}]}' ;;
-  "ecs describe-task-definition") cat "$AWS_FAKE_TASKDEF" ;;
-  "ecs register-task-definition") echo '{"taskDefinition": {"family": "elections-model-job", "revision": 2}}' ;;
-  "logs tail") sleep 30 ;;
-esac
-'''
-
-LIVE_TASKDEF = {'taskDefinition': {
+LIVE_TASKDEF = {
     'taskDefinitionArn': 'arn:aws:ecs:eu-west-1:1:task-definition/elections-model-cluster-elections-model-service:33',
     'family': 'elections-model-cluster-elections-model-service', 'revision': 33, 'status': 'ACTIVE',
     'networkMode': 'awsvpc', 'requiresCompatibilities': ['FARGATE'], 'cpu': '1024', 'memory': '2048',
@@ -520,107 +538,187 @@ LIVE_TASKDEF = {'taskDefinition': {
     'containerDefinitions': [{'name': 'Main', 'image': '1.dkr.ecr.eu-west-1.amazonaws.com/elections-model:latest',
                               'essential': True, 'portMappings': [{'containerPort': 8042, 'protocol': 'tcp'}],
                               'environment': [], 'environmentFiles': [{'value': 'arn:aws:s3:::elections-s3-bucket/elections.env', 'type': 's3'}],
-                              'logConfiguration': {'logDriver': 'awslogs', 'options': {'awslogs-group': '/ecs/elections-model', 'awslogs-region': 'eu-west-1', 'awslogs-stream-prefix': 'ecs'}}}]}}
+                              'logConfiguration': {'logDriver': 'awslogs', 'options': {'awslogs-group': '/ecs/elections-model', 'awslogs-region': 'eu-west-1', 'awslogs-stream-prefix': 'ecs'}}}]}
+NETWORK = {'subnets': ['subnet-1', 'subnet-2'], 'securityGroups': ['sg-1'], 'assignPublicIp': 'ENABLED'}
+
+
+class ResourceNotFound(Exception):
+    pass
+
+
+class FakeEcs:
+    """Cliente ECS falso: anota las llamadas; `fail` simula un run-task sin capacidad."""
+    def __init__(self, fail=False):
+        self.calls, self.fail, self.statuses = [], fail, ['RUNNING', 'STOPPED']
+
+    def describe_services(self, **kw):
+        self.calls.append(('describe_services', kw))
+        return {'services': [{'taskDefinition': LIVE_TASKDEF['taskDefinitionArn'],
+                              'deployments': [{'networkConfiguration': {'awsvpcConfiguration': dict(NETWORK)}}]}]}
+
+    def run_task(self, **kw):
+        self.calls.append(('run_task', kw))
+        if self.fail:
+            return {'tasks': [], 'failures': [{'arn': 'x', 'reason': 'RESOURCE:CPU', 'detail': None}]}
+        return {'tasks': [{'taskArn': 'arn:aws:ecs:eu-west-1:1:task/c/abc123'}], 'failures': []}
+
+    def describe_tasks(self, **kw):
+        self.calls.append(('describe_tasks', kw))
+        status = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+        return {'tasks': [{'lastStatus': status, 'stoppedReason': 'Essential container in task exited',
+                           'containers': [{'exitCode': 3}]}]}
+
+    def describe_task_definition(self, **kw):
+        self.calls.append(('describe_task_definition', kw))
+        return {'taskDefinition': json.loads(json.dumps(LIVE_TASKDEF))}
+
+    def register_task_definition(self, **kw):
+        self.calls.append(('register_task_definition', kw))
+        return {'taskDefinition': {'family': kw['family'], 'revision': 2}}
+
+
+class FakeLogs:
+    """Cliente de logs falso: el flujo no existe en la primera llamada, luego devuelve dos eventos."""
+    exceptions = types.SimpleNamespace(ResourceNotFoundException=ResourceNotFound)
+
+    def __init__(self):
+        self.calls = []
+
+    def filter_log_events(self, **kw):
+        self.calls.append(kw)
+        if len(self.calls) == 1:
+            raise ResourceNotFound('no stream yet')
+        if len(self.calls) == 2:
+            return {'events': [{'timestamp': 10, 'message': 'Run job [backtest]...'}, {'timestamp': 11, 'message': 'es: backtest completed'}]}
+        return {'events': []}
 
 
 @pytest.fixture
-def launcher(tmp_path):
-    bin_dir = tmp_path / 'bin'
-    bin_dir.mkdir()
-    (bin_dir / 'aws').write_text(FAKE_AWS)
-    (bin_dir / 'aws').chmod(0o755)
-    (tmp_path / 'ecs.env').write_text('ECS_CLUSTER=elections-model-cluster\nECS_SERVICE=elections-model-service\nAWS_REGION=eu-west-1\n')
-    (tmp_path / 'taskdef.json').write_text(json.dumps(LIVE_TASKDEF))
-    env = {**os.environ, 'PATH': '{}:{}'.format(bin_dir, os.environ['PATH']), 'ECS_ENV_FILE': str(tmp_path / 'ecs.env'),
-           'AWS_FAKE_LOG': str(tmp_path / 'aws.log'), 'AWS_FAKE_INPUT': str(tmp_path / 'input'),
-           'AWS_FAKE_TASKDEF': str(tmp_path / 'taskdef.json'), 'ECS_POLL_SECONDS': '0'}
-
-    def run(*args, **extra):
-        return subprocess.run(['bash', str(SCRIPT), *args], cwd=ROOT, env={**env, **extra}, capture_output=True, text=True)
-    run.inputs = lambda call: json.loads((tmp_path / 'input.ecs.{}'.format(call)).read_text())
-    run.tmp_path = tmp_path
-    return run
+def env_file(tmp_path, monkeypatch):
+    path = tmp_path / 'ecs.env'
+    path.write_text('# cluster\nECS_CLUSTER=elections-model-cluster\nECS_SERVICE=elections-model-service\nAWS_REGION=eu-west-1\nECS_LOG_GROUP=/ecs/elections-model\nECS_SUBNETS=\n')
+    monkeypatch.setenv('ECS_ENV_FILE', str(path))
+    return path
 
 
-def test_run_job_refuses_without_job_bad_json_and_load_params(launcher):
-    assert launcher().returncode == 2 and 'Usage' in launcher().stderr
-    assert launcher('publish', '{not json').returncode == 2
-    done = launcher('load', '{"what":["polls","params"],"scopes":"all"}')
-    assert done.returncode == 2 and 'load params runs on the laptop' in done.stderr
-    assert launcher('load', '{"what":"params"}').returncode == 2
-    assert not list(launcher.tmp_path.glob('input.ecs.*'))  # el `aws` falso no recibió ningún run-task
+def run(argv, ecs=None, logs=None):
+    out, err = io.StringIO(), io.StringIO()
+    code = ecs_job.main(argv, ecs=ecs if ecs is not None else FakeEcs(), logs=logs if logs is not None else FakeLogs(), out=out.write, err=err.write)
+    return code, out.getvalue(), err.getvalue()
 
 
-def test_run_job_builds_the_run_task_from_the_service_network(launcher):
-    done = launcher('publish', '{"what":["manifest"],"freeze":{"active":true,"message":"Veda electoral"}}')
-    assert done.returncode == 0, done.stderr
-    task = launcher.inputs('run-task')
-    assert task['cluster'] == 'elections-model-cluster' and task['taskDefinition'] == 'elections-model-job' and task['launchType'] == 'FARGATE'
-    net = task['networkConfiguration']['awsvpcConfiguration']
-    assert net == {'subnets': ['subnet-1', 'subnet-2'], 'securityGroups': ['sg-1'], 'assignPublicIp': 'ENABLED'}
-    override = task['overrides']['containerOverrides'][0]
-    assert override['name'] == 'Main'
-    assert override['environment'] == [{'name': 'RUN_JOB', 'value': 'publish {"what":["manifest"],"freeze":{"active":true,"message":"Veda electoral"}}'}]
-    assert 'abc123' in done.stdout and 'aws logs tail /ecs/elections-model --log-stream-name-prefix job/Main/abc123' in done.stdout
-    assert 'console.aws.amazon.com/ecs/v2/clusters/elections-model-cluster/tasks/abc123' in done.stdout
+def test_module_loads_without_mtpy_nor_boto3():
+    assert 'mtpy' not in sys.modules and not any(name.startswith('mtpy.') for name in sys.modules)
+    assert 'boto3' not in sys.modules or sys.modules['boto3'] is not None  # boto3 only inside clients()
+    source = (ROOT / 'deploy' / 'ecs' / 'job.py').read_text()
+    assert 'import mtpy' not in source and 'from mtpy' not in source
+    assert source.count('import boto3') == 1 and 'def clients(' in source
 
 
-def test_run_job_overrides_the_network_from_the_env_file(launcher):
-    assert launcher('backtest', '{"scopes":"all"}', ECS_SUBNETS='subnet-9', ECS_PUBLIC_IP='DISABLED').returncode == 0
-    net = launcher.inputs('run-task')['networkConfiguration']['awsvpcConfiguration']
-    assert net == {'subnets': ['subnet-9'], 'securityGroups': ['sg-1'], 'assignPublicIp': 'DISABLED'}
-    assert launcher.inputs('run-task')['overrides']['containerOverrides'][0]['environment'][0]['value'] == 'backtest {"scopes":"all"}'
+def test_run_job_value_refuses_empty_bad_json_and_load_params():
+    with pytest.raises(ecs_job.UsageError, match='job name is required'):
+        ecs_job.run_job_value('', None)
+    with pytest.raises(ecs_job.UsageError, match='invalid JSON'):
+        ecs_job.run_job_value('publish', '{not json')
+    with pytest.raises(ecs_job.UsageError, match='load params runs on the laptop'):
+        ecs_job.run_job_value('load', '{"what":["polls","params"],"scopes":"all"}')
+    with pytest.raises(ecs_job.UsageError, match='load params runs on the laptop'):
+        ecs_job.run_job_value('load', '{"what":"params"}')
+    assert ecs_job.run_job_value('backtest', None) == 'backtest'
+    assert ecs_job.run_job_value('load', '{"scopes":["es"]}') == 'load {"scopes":["es"]}'
 
 
-def test_run_job_reports_a_placement_failure(launcher):
-    done = launcher('backtest', AWS_FAKE_FAIL='1')
-    assert done.returncode == 1 and 'RESOURCE:CPU' in done.stderr + done.stdout
+def test_usage_errors_exit_2_without_launching(env_file):
+    ecs = FakeEcs()
+    assert run([], ecs)[0] == 2 and 'usage' in run([], ecs)[2].lower()
+    code, _, err = run(['load', '{"what":["params"]}'], ecs)
+    assert code == 2 and 'load params runs on the laptop' in err
+    assert run(['publish', '{bad'], ecs)[0] == 2
+    assert not [c for c in ecs.calls if c[0] == 'run_task']
 
 
-def test_run_job_follow_exits_with_the_container_exit_code(launcher):
-    done = launcher('backtest', '{"scopes":["es"]}', '--follow')
-    assert done.returncode == 3 and 'Essential container in task exited' in done.stdout
+def test_missing_env_file_exits_2(tmp_path, monkeypatch):
+    monkeypatch.setenv('ECS_ENV_FILE', str(tmp_path / 'none.env'))
+    code, _, err = run(['backtest'])
+    assert code == 2 and 'ecs.env.example' in err
 
 
-def test_run_job_register_derives_the_job_definition_from_the_live_web_one(launcher):
-    done = launcher('--register')
-    assert done.returncode == 0 and 'elections-model-job:2' in done.stdout
-    job = launcher.inputs('register-task-definition')
-    assert job['family'] == 'elections-model-job' and job['cpu'] == '2048' and job['memory'] == '4096'
-    assert job['taskRoleArn'].endswith('ecsTaskExecutionRole') and job['requiresCompatibilities'] == ['FARGATE']
-    assert not {'taskDefinitionArn', 'revision', 'status', 'requiresAttributes', 'compatibilities', 'registeredAt', 'registeredBy'} & set(job)
-    container = job['containerDefinitions'][0]
+def test_launch_builds_the_run_task_from_the_service_network(env_file):
+    ecs = FakeEcs()
+    params = '{"what":["manifest"],"freeze":{"active":true,"message":"Veda electoral"}}'
+    code, out, _ = run(['publish', params], ecs)
+    assert code == 0, out
+    request = next(kw for name, kw in ecs.calls if name == 'run_task')
+    assert request['cluster'] == 'elections-model-cluster' and request['taskDefinition'] == 'elections-model-job'
+    assert request['launchType'] == 'FARGATE' and request['count'] == 1
+    assert request['networkConfiguration'] == {'awsvpcConfiguration': NETWORK}
+    override = request['overrides']['containerOverrides'][0]
+    assert override['name'] == 'Main' and override['environment'] == [{'name': 'RUN_JOB', 'value': 'publish ' + params}]
+    assert 'task abc123' in out and 'aws logs tail /ecs/elections-model --log-stream-names job/Main/abc123' in out
+    assert 'console.aws.amazon.com/ecs/v2/clusters/elections-model-cluster/tasks/abc123' in out
+
+
+def test_env_file_overrides_the_network(env_file, monkeypatch):
+    env_file.write_text(env_file.read_text() + 'ECS_SUBNETS=subnet-9\nECS_PUBLIC_IP=DISABLED\n')
+    ecs = FakeEcs()
+    assert run(['backtest', '{"scopes":"all"}'], ecs)[0] == 0
+    request = next(kw for name, kw in ecs.calls if name == 'run_task')
+    assert request['networkConfiguration']['awsvpcConfiguration'] == {'subnets': ['subnet-9'], 'securityGroups': ['sg-1'], 'assignPublicIp': 'DISABLED'}
+    assert request['overrides']['containerOverrides'][0]['environment'][0]['value'] == 'backtest {"scopes":"all"}'
+
+
+def test_placement_failure_exits_1_with_the_reason(env_file):
+    code, out, err = run(['backtest'], FakeEcs(fail=True))
+    assert code == 1 and 'RESOURCE:CPU' in err
+
+
+def test_follow_prints_the_log_and_exits_with_the_container_exit_code(env_file, monkeypatch):
+    ecs, logs = FakeEcs(), FakeLogs()
+    monkeypatch.setattr(ecs_job.time, 'sleep', lambda s: None)
+    code, out, _ = run(['backtest', '{"scopes":["es"]}', '--follow'], ecs, logs)
+    assert code == 3
+    assert 'Run job [backtest]...' in out and 'es: backtest completed' in out and 'Essential container in task exited' in out
+    assert logs.calls[0]['logStreamNames'] == ['job/Main/abc123'] and logs.calls[0]['logGroupName'] == '/ecs/elections-model'
+    assert [name for name, _ in ecs.calls if name == 'describe_tasks'] == ['describe_tasks', 'describe_tasks']
+
+
+def test_register_derives_the_job_definition_from_the_live_web_one(env_file):
+    ecs = FakeEcs()
+    code, out, _ = run(['--register'], ecs)
+    assert code == 0 and 'registered elections-model-job:2' in out
+    definition = next(kw for name, kw in ecs.calls if name == 'register_task_definition')
+    assert definition['family'] == 'elections-model-job' and definition['cpu'] == '2048' and definition['memory'] == '4096'
+    assert definition['taskRoleArn'].endswith('ecsTaskExecutionRole') and definition['requiresCompatibilities'] == ['FARGATE']
+    assert not {'taskDefinitionArn', 'revision', 'status', 'requiresAttributes', 'compatibilities', 'registeredAt', 'registeredBy'} & set(definition)
+    container = definition['containerDefinitions'][0]
     assert container['name'] == 'Main' and 'portMappings' not in container
     assert container['environment'] == [{'name': 'RUN_JOB', 'value': ''}]
-    assert container['environmentFiles'] == LIVE_TASKDEF['taskDefinition']['containerDefinitions'][0]['environmentFiles']
+    assert container['environmentFiles'] == LIVE_TASKDEF['containerDefinitions'][0]['environmentFiles']
     assert container['logConfiguration']['options']['awslogs-stream-prefix'] == 'job'
-
-
-def test_run_job_is_valid_bash_and_executable():
-    assert os.access(SCRIPT, os.X_OK) and subprocess.run(['bash', '-n', str(SCRIPT)], cwd=ROOT).returncode == 0
+    assert not [c for c in ecs.calls if c[0] == 'run_task']
 ```
 
 - [ ] **Step 2: Comprobar que fallan**
 
-Run: `python -m pytest tests/test_run_job.py -q`
-Expected: FAIL (`run-job.sh` no existe).
+Run: `python -m pytest tests/test_ecs_job.py -q`
+Expected: FAIL (`deploy/ecs/job.py` no existe).
 
-- [ ] **Step 3: Escribir `deploy/run-job.sh` y `deploy/ecs.env.example`**
+- [ ] **Step 3: Escribir `deploy/ecs/job.py` y `deploy/ecs.env.example`**
 
-`set -euo pipefail`; `chmod +x deploy/run-job.sh`. El JSON del `run-task` y la derivación de la definición
-van en dos bloques `python3 - "$@" <<'PY' … PY` dentro del script (sin `jq`).
+Según Interfaces; docstring de módulo con el uso y los tres comandos de ejemplo. El fichero no es ejecutable
+directo (`python deploy/ecs/job.py ...`); no hace falta `chmod`.
 
 - [ ] **Step 4: Comprobar que pasan**
 
-Run: `python -m pytest tests/test_run_job.py tests/test_deploy_files.py -q`
+Run: `python -m pytest tests/test_ecs_job.py tests/test_deploy_files.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git status
-git add deploy/run-job.sh deploy/ecs.env.example tests/test_run_job.py
-git commit -m "deploy: run-job.sh lanza un job como tarea de ECS (--register, --follow) desde el portátil"
+git add deploy/ecs/job.py deploy/ecs.env.example tests/test_ecs_job.py
+git commit -m "deploy: deploy/ecs/job.py lanza un job como tarea de ECS (--register, --follow) desde el portátil"
 ```
 
 ---
@@ -648,7 +746,7 @@ plantilla `deploy/ecs.env.example`).
 
 - [ ] **Step 2: «Jobs desde ECS» en lugar de «Publicar desde ECS»**
 
-Contenido: `bash deploy/run-job.sh --register` la primera vez y tras cada imagen nueva; `bash deploy/run-job.sh publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow`;
+Contenido: `python deploy/ecs/job.py --register` la primera vez y tras cada imagen nueva; `python deploy/ecs/job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow`;
 qué imprime (id, `aws logs tail`, enlace), dónde está el log (grupo `/ecs/elections-model`, flujo
 `job/Main/<id>`, una sola copia: `CWL_GROUP` vacío), el aviso de Pushover (cabecera + fallos delante, 1.024
 caracteres), códigos de salida (0 / 1; con `--follow` el del contenedor), `stop_on_error`, publicaciones una
@@ -661,9 +759,9 @@ lanzador), coste del orden de 10 céntimos por hora de tarea (2 vCPU, 4 GB, eu-w
 
 En «Backtest del modelo»: las tablas viven en `backtest/results/` del sistema de ficheros de la app (S3 en ECS
 y en el portátil con `.env`; `files/` sin bucket), `out` sigue siendo una carpeta local; acciones `push` y
-`pull` con sus ejemplos; el flujo tras un cambio del método: `run-job.sh backtest '{"scopes":"all"}'` →
+`pull` con sus ejemplos; el flujo tras un cambio del método: `python deploy/ecs/job.py backtest '{"scopes":"all"}'` →
 `python job.py backtest '{"action":"pull","scopes":"all"}'` → revisar `by_horizon.csv`, commit →
-`run-job.sh publish '{"what":["backtest","event"],"scopes":"all","event_date":"all"}'`; la siembra inicial
+`python deploy/ecs/job.py publish '{"what":["backtest","event"],"scopes":"all","event_date":"all"}'`; la siembra inicial
 `python job.py backtest '{"action":"push","scopes":"all"}'` (paso de Luis). En «Publicar» › «Backtest» y en la
 rutina «Tras un cambio del modelo», `source` pasa a ser opcional (por defecto el sistema de ficheros de la
 app) y `series.csv` ya no obliga a publicar desde la máquina del backtest. Quitar la frase de que `publish
@@ -671,13 +769,13 @@ backtest` «solo lee ficheros del repositorio».
 
 - [ ] **Step 4: «Veda» y «Campaña» apuntando al lanzador**
 
-Los pasos 1 y 3 de «Veda», el descongelado y las dos llamadas diarias de «Campaña» con `run-job.sh` (y la
+Los pasos 1 y 3 de «Veda», el descongelado y las dos llamadas diarias de «Campaña» con `deploy/ecs/job.py` (y la
 forma local como alternativa). En «Duraciones medidas», una línea para que Luis anote la primera tarea de ECS
 (duración y memoria).
 
 - [ ] **Step 5: `README.md` y cierre**
 
-En «Jobs» del `README.md`: una línea con `deploy/run-job.sh` y el enlace a `deploy/README.md`. En la spec,
+En «Jobs» del `README.md`: una línea con `deploy/ecs/job.py` y el enlace a `deploy/README.md`. En la spec,
 línea de estado: «Fase 2 construida el <fecha> (<commits>); pasos de Luis: `--register`, `backtest push`, medir
 memoria».
 
@@ -687,5 +785,5 @@ Expected: todos en verde.
 ```bash
 git status
 git add deploy/README.md README.md docs/superpowers/specs/2026-10-31-jobs-pipelines-ecs-design.md
-git commit -m "docs: jobs desde ECS con run-job.sh, backtest en S3 y veda/campaña con el lanzador"
+git commit -m "docs: jobs desde ECS con deploy/ecs/job.py, backtest en S3 y veda/campaña con el lanzador"
 ```

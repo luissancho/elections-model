@@ -329,9 +329,9 @@ Diseño:
   hoy y las ejecuciones del portátil) y `pull` (bajar la carpeta del ámbito de `app.fs` al árbol del
   repositorio, para revisar `by_horizon.csv` contra la ejecución anterior y commitear). `push` y `pull`
   sobrescriben los nueve ficheros del ámbito y no tocan los demás ámbitos.
-- **Flujo tras un cambio del método**: `run-job.sh backtest '{"scopes":"all"}'` en ECS → S3; en el portátil
+- **Flujo tras un cambio del método**: `deploy/ecs/job.py backtest '{"scopes":"all"}'` en ECS → S3; en el portátil
   `python job.py backtest '{"action":"pull","scopes":"all"}'`, revisar el `diff` y commitear; después
-  `run-job.sh publish '{"what":["backtest","event"],...}'` lee S3 directamente. La limitación de hoy (`series.csv`
+  `deploy/ecs/job.py publish '{"what":["backtest","event"],...}'` lee S3 directamente. La limitación de hoy (`series.csv`
   sólo en la máquina del backtest) desaparece.
 - **Decidido (Luis, 2026-10-31)**: la copia del repositorio sigue siendo el registro que se commitea y `pull`
   es un paso del flujo, porque el repositorio es el registro científico y los `diff` de `by_horizon.csv`
@@ -340,7 +340,7 @@ Diseño:
 - Permisos: la app escribe en S3 con las claves del fichero de entorno, las mismas de `site/`; no hace falta
   ningún permiso nuevo.
 
-1. **Definición de tarea de jobs** derivada de la viva (ver "Infraestructura real"): `run-job.sh --register`
+1. **Definición de tarea de jobs** derivada de la viva (ver "Infraestructura real"): `deploy/ecs/job.py --register`
    la registra o la actualiza; las plantillas de `deploy/ecs/` pasan a ser la referencia de lo que genera.
    `GIT_COMMIT` se hornea en la imagen (`ARG GIT_COMMIT` → `ENV GIT_COMMIT` en el `Dockerfile`, y el `docker
    build` del README lleva `--build-arg GIT_COMMIT=$(git rev-parse --short HEAD)`).
@@ -348,7 +348,8 @@ Diseño:
 2. **`deploy/docker/init.sh`**: `exec python /app/job.py ...` (la señal de `stop-task` llega a Python y el
    código de salida del job es el del contenedor); sin `RUN_JOB` y sin ningún servicio, mensaje y salida 1 en
    vez de `tail -f /dev/null`.
-3. **Lanzador `deploy/run-job.sh <job> '<json>' [--follow]`**: lee el clúster y el servicio de
+3. **Lanzador `python deploy/ecs/job.py <job> '<json>' [--follow]`** (en Python con boto3, decidido por Luis el
+   2026-10-31 en lugar del `deploy/run-job.sh` en bash que se había previsto; misma función): lee el clúster y el servicio de
    `deploy/ecs.env` (ignorado por git y por `.dockerignore` como todo `*.env`; plantilla
    `deploy/ecs.env.example`; subredes, grupo de seguridad e IP pública salen del servicio y se pueden
    sobreescribir ahí), rechaza un job vacío y `load params` (ver "Qué corre en ECS"), construye el `run-task` con el
@@ -359,7 +360,7 @@ Diseño:
    está el log, el aviso, códigos de salida, `stop_on_error`, publicaciones una tras otra, una tarea parada a
    medias deja un run incompleto que hay que retirar con `unpublish`, coste del orden de 10 céntimos por hora
    de tarea), el `build` con `GIT_COMMIT`, y los pasos de «Veda» y «Campaña» apuntando al lanzador.
-5. **Pasos de Luis** (fuera de la construcción): `run-job.sh --register` la primera vez, `backtest push` de
+5. **Pasos de Luis** (fuera de la construcción): `deploy/ecs/job.py --register` la primera vez, `backtest push` de
    todos los ámbitos para sembrar S3 con los resultados de hoy, y medir la memoria de `publish forecast es`
    con 10.000 simulaciones en la primera tarea (4 GB sin medir).
 
