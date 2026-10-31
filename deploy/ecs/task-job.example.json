@@ -21,6 +21,10 @@
         {
           "name": "RUN_JOB",
           "value": ""
+        },
+        {
+          "name": "DB_STATEMENT_TIMEOUT",
+          "value": ""
         }
       ],
       "environmentFiles": [

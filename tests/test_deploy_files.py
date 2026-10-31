@@ -33,7 +33,8 @@ def test_ecs_templates_describe_the_live_infrastructure():
     assert web['family'] == 'elections-model-cluster-elections-model-service' and web['cpu'] == '1024'
     assert job['family'] == 'elections-model-job' and job['cpu'] == '2048' and job['memory'] == '4096'
     assert 'portMappings' not in job['containerDefinitions'][0]
-    assert job['containerDefinitions'][0]['environment'] == [{'name': 'RUN_JOB', 'value': ''}]
+    assert job['containerDefinitions'][0]['environment'] == [{'name': 'RUN_JOB', 'value': ''},
+                                                             {'name': 'DB_STATEMENT_TIMEOUT', 'value': ''}]
     assert job['containerDefinitions'][0]['logConfiguration']['options']['awslogs-stream-prefix'] == 'job'
     assert run['cluster'] == 'elections-model-cluster' and run['taskDefinition'] == 'elections-model-job'
     assert run['networkConfiguration']['awsvpcConfiguration']['assignPublicIp'] == 'ENABLED'

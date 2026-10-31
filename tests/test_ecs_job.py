@@ -113,6 +113,22 @@ def test_run_job_value_refuses_empty_bad_json_and_load_params():
     assert ecs_job.run_job_value('load', '{"scopes":["es"]}') == 'load {"scopes":["es"]}'
 
 
+def test_run_job_value_refuses_laptop_only_backtest_actions():
+    """`push`/`pull`/`out` del backtest y `load params` (también por `pipeline`) usan la copia del repositorio."""
+    for job, params in (('backtest', '{"action":"pull","scopes":"all"}'), ('backtest', '{"action":"push"}'),
+                        ('backtest', '{"out":"backtest/results"}')):
+        with pytest.raises(ecs_job.UsageError, match='backtest push/pull/out run on the laptop'):
+            ecs_job.run_job_value(job, params)
+    for params in ('{"select":"load.params"}', '{"select":"backtest.backtest","action":"push"}',
+                   '{"select":"backtest.backtest","out":"x"}'):
+        with pytest.raises(ecs_job.UsageError, match='this pipeline runs on the laptop'):
+            ecs_job.run_job_value('pipeline', params)
+    assert ecs_job.run_job_value('backtest', '{"scopes":"all"}') == 'backtest {"scopes":"all"}'
+    assert ecs_job.run_job_value('pipeline', '{"select":"publish.backtest","chunks":"es"}') == (
+        'pipeline {"select":"publish.backtest","chunks":"es"}')
+    assert ecs_job.run_job_value('pipeline', '{"select":"backtest.backtest","chunks":"es"}').startswith('pipeline ')
+
+
 def test_usage_errors_exit_2_without_launching(env_file):
     ecs = FakeEcs()
     assert run([], ecs)[0] == 2 and 'usage' in run([], ecs)[2].lower()
@@ -177,7 +193,7 @@ def test_register_derives_the_job_definition_from_the_live_web_one(env_file):
     assert not {'taskDefinitionArn', 'revision', 'status', 'requiresAttributes', 'compatibilities', 'registeredAt', 'registeredBy'} & set(definition)
     container = definition['containerDefinitions'][0]
     assert container['name'] == 'Main' and 'portMappings' not in container
-    assert container['environment'] == [{'name': 'RUN_JOB', 'value': ''}]
+    assert container['environment'] == [{'name': 'RUN_JOB', 'value': ''}, {'name': 'DB_STATEMENT_TIMEOUT', 'value': ''}]
     assert container['environmentFiles'] == LIVE_TASKDEF['containerDefinitions'][0]['environmentFiles']
     assert container['logConfiguration']['options']['awslogs-stream-prefix'] == 'job'
     assert not [c for c in ecs.calls if c[0] == 'run_task']
@@ -198,6 +214,10 @@ def test_unknown_service_exits_1_with_a_message(env_file):
 
     code, _, err = run(['backtest'], NoService())
     assert code == 1 and 'service elections-model-service not found in cluster elections-model-cluster' in err
+    ecs = NoService()
+    code, _, err = run(['--register'], ecs)
+    assert code == 1 and 'service elections-model-service not found in cluster elections-model-cluster' in err
+    assert not [name for name, _ in ecs.calls if name in ('describe_task_definition', 'register_task_definition')]
 
 
 def test_aws_client_errors_exit_1_with_a_message(env_file):
@@ -215,6 +235,32 @@ def test_aws_client_errors_exit_1_with_a_message(env_file):
     assert code == 1 and 'run_task failed: TaskDefinition not found' in err
     code, _, err = run(['--register'], Failing())
     assert code == 1 and 'register_task_definition failed: denied' in err
+
+    class FailingDescribe(FakeEcs):
+        def describe_services(self, **kw):
+            raise ClientError('AccessDenied')
+
+        def describe_task_definition(self, **kw):
+            raise ClientError('no such revision')
+
+        def describe_tasks(self, **kw):
+            raise ClientError('throttled')
+
+    for argv in (['backtest'], ['--register']):
+        code, _, err = run(argv, FailingDescribe())
+        assert code == 1 and 'describe_services failed: AccessDenied' in err
+
+    class FailingDefinition(FakeEcs):
+        describe_task_definition = FailingDescribe.describe_task_definition
+
+    code, _, err = run(['--register'], FailingDefinition())
+    assert code == 1 and 'describe_task_definition failed: no such revision' in err
+
+    class FailingTasks(FakeEcs):
+        describe_tasks = FailingDescribe.describe_tasks
+
+    code, _, err = run(['backtest', '--follow'], FailingTasks())
+    assert code == 1 and 'describe_tasks failed: throttled' in err
 
 
 def test_empty_region_omits_the_console_link_and_passes_none_to_boto3(env_file):

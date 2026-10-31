@@ -87,7 +87,9 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
     Raises
     ------
     UsageError
-        For an empty job, invalid JSON or ``load`` with the ``params`` target.
+        For an empty job, invalid JSON or what must run on the laptop: ``load`` with the ``params`` target,
+        ``backtest`` with ``action`` ``push``/``pull`` or an ``out`` folder (they use the repository copy) and
+        the ``pipeline`` job selecting ``load.params`` or such a ``backtest.backtest``.
     """
     if not job:
         raise UsageError('job name is required')
@@ -104,16 +106,35 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
         targets = what if isinstance(what, list) else [what]
         if 'params' in targets:
             raise UsageError('load params runs on the laptop (it rewrites data/params.json)')
+    if job == 'backtest' and laptop_backtest(parsed):
+        raise UsageError('backtest push/pull/out run on the laptop (they use the repository copy)')
+    if job == 'pipeline' and isinstance(parsed, dict):
+        select = parsed.get('select')
+        if select == 'load.params' or (select == 'backtest.backtest' and laptop_backtest(parsed)):
+            raise UsageError('this pipeline runs on the laptop')
     return f'{job} {params}'
+
+
+def laptop_backtest(parsed) -> bool:
+    """Tell whether backtest parameters copy tables or write to a folder (``push``, ``pull`` or ``out``)."""
+    return isinstance(parsed, dict) and (parsed.get('action') in ('push', 'pull') or 'out' in parsed)
+
+
+def live_service(ecs, cluster: str, service: str) -> dict:
+    """Return the description of the service, or raise ``LaunchError`` when the cluster lacks it."""
+    response = aws_call('describe_services', ecs.describe_services, cluster=cluster, services=[service])
+    services = response.get('services') or []
+    if not services:
+        raise LaunchError(f'service {service} not found in cluster {cluster}')
+    return services[0]
 
 
 def service_network(ecs, cluster: str, service: str) -> dict:
     """Return the ``awsvpcConfiguration`` of the service's current deployment."""
-    response = ecs.describe_services(cluster=cluster, services=[service])
-    services = response.get('services') or []
-    if not services or not services[0].get('deployments'):
+    description = live_service(ecs, cluster, service)
+    if not description.get('deployments'):
         raise LaunchError(f'service {service} not found in cluster {cluster}')
-    deployment = services[0]['deployments'][0]
+    deployment = description['deployments'][0]
     return deployment['networkConfiguration']['awsvpcConfiguration']
 
 
@@ -259,7 +280,7 @@ def follow(ecs, logs, cluster: str, task_arn: str, log_group: str, poll: float =
     last = None
     while True:
         last = dump_log(logs, log_group, stream, last, out)
-        task = ecs.describe_tasks(cluster=cluster, tasks=[task_arn])['tasks'][0]
+        task = aws_call('describe_tasks', ecs.describe_tasks, cluster=cluster, tasks=[task_arn])['tasks'][0]
         if task.get('lastStatus') == 'STOPPED':
             dump_log(logs, log_group, stream, last, out)
             say(out, f"stopped: {task.get('stoppedReason')}")
@@ -272,7 +293,9 @@ def derive_job_definition(web: dict, family: str) -> dict:
     """Derive the job task definition from the live web one.
 
     Keeps roles, platform and network mode, drops the port mappings, empties
-    ``RUN_JOB``, uses 2 vCPU / 4 GB and the ``job`` log stream prefix.
+    ``RUN_JOB`` and ``DB_STATEMENT_TIMEOUT`` (the ``environment`` of the definition beats its
+    ``environmentFiles``, so the jobs never inherit the statement timeout of the web from the shared env
+    file), uses 2 vCPU / 4 GB and the ``job`` log stream prefix.
 
     Parameters
     ----------
@@ -293,7 +316,7 @@ def derive_job_definition(web: dict, family: str) -> dict:
     containers = []
     for container in web['containerDefinitions']:
         derived = {key: container[key] for key in ('name', 'image', 'essential', 'environmentFiles') if key in container}
-        derived['environment'] = [{'name': 'RUN_JOB', 'value': ''}]
+        derived['environment'] = [{'name': 'RUN_JOB', 'value': ''}, {'name': 'DB_STATEMENT_TIMEOUT', 'value': ''}]
         if 'logConfiguration' in container:
             log = json.loads(json.dumps(container['logConfiguration']))
             log.setdefault('options', {})['awslogs-stream-prefix'] = STREAM_PREFIX
@@ -310,9 +333,16 @@ def register(ecs, cluster: str, service: str, family: str) -> str:
     -------
     str
         ``'<family>:<revision>'``.
+
+    Raises
+    ------
+    LaunchError
+        If the cluster lacks the service (or it has no task definition) or an AWS call fails.
     """
-    live = ecs.describe_services(cluster=cluster, services=[service])['services'][0]['taskDefinition']
-    web = ecs.describe_task_definition(taskDefinition=live)['taskDefinition']
+    live = live_service(ecs, cluster, service).get('taskDefinition')
+    if not live:
+        raise LaunchError(f'service {service} not found in cluster {cluster}')
+    web = aws_call('describe_task_definition', ecs.describe_task_definition, taskDefinition=live)['taskDefinition']
     definition = derive_job_definition(web, family)
     registered = aws_call('register_task_definition', ecs.register_task_definition, **definition)['taskDefinition']
     return f"{registered['family']}:{registered['revision']}"
@@ -408,7 +438,11 @@ def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
         say(out, f'https://{region}.console.aws.amazon.com/ecs/v2/clusters/{cluster}/tasks/{task_id(arn)}')
     if not args.follow:
         return 0
-    return follow(ecs, logs, cluster, arn, log_group, out=out)
+    try:
+        return follow(ecs, logs, cluster, arn, log_group, out=out)
+    except LaunchError as e:
+        say(err, str(e))
+        return 1
 
 
 if __name__ == '__main__':
