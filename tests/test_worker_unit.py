@@ -1,9 +1,10 @@
 """Tests del worker sin cola ni base de datos."""
+import json
 import types
 
 import pytest
 
-from mtpy.core.worker import Pipeline, PipelineEnd, Worker
+from mtpy.core.worker import Job, JobInterrupted, Pipeline, PipelineEnd, Worker
 
 
 def test_job_class_unwraps_a_module_bound_on_the_namespace():
@@ -106,3 +107,100 @@ def test_default_hooks_do_nothing(fresh_app):
     p = Plain()
     p.run('update')
     assert p.result is None and p.line is None and p.finish() is None and p.chunked is True
+
+
+class Recorder:
+    """Pushover falso: guarda los mensajes o rompe."""
+    def __init__(self, fail=False):
+        self.sent, self.fail = [], fail
+
+    def send(self, msg, **kwargs):
+        if self.fail:
+            raise RuntimeError('pushover down')
+        self.sent.append(msg)
+
+
+def quiet_logger(infos=None, errors=None):
+    return types.SimpleNamespace(info=(infos if infos is not None else []).append,
+                                 error=(errors if errors is not None else []).append)
+
+
+class Noop(Job):
+    def run(self, **kwargs):
+        pass
+
+
+def test_alert_truncates_pushover_to_1024_and_logs_the_whole_text(fresh_app):
+    ps, infos = Recorder(), []
+    fresh_app.set('ps', ps)
+    fresh_app.set('logger', quiet_logger(infos))
+    text = '\n'.join('line {:03d} {}'.format(i, 'x' * 40) for i in range(40))
+    job = Noop()
+    job.alert(text)
+    assert infos == [text] and len(ps.sent[0]) <= Job.ALERT_LIMIT and ps.sent[0].endswith('\n' + Job.TRUNCATED)
+    assert ps.sent[0].startswith('line 000') and job.alerted
+    job.alert('short')
+    assert ps.sent[1] == 'short'
+
+
+def test_alert_never_raises_when_pushover_fails(fresh_app):
+    errors = []
+    fresh_app.set('ps', Recorder(fail=True))
+    fresh_app.set('logger', quiet_logger(errors=errors))
+    Noop().alert('hi')
+    assert len(errors) == 1 and 'pushover down' in errors[0]
+
+
+def test_alert_without_logger_nor_pushover_is_silent(fresh_app):
+    Noop().alert('hi')
+
+
+def test_dispatch_alerts_when_run_raises_and_reraises(fresh_app):
+    ps = Recorder()
+    fresh_app.set('ps', ps)
+
+    class Boom(Job):
+        def run(self, **kwargs):
+            raise ValueError('bad params')
+    with pytest.raises(ValueError, match='bad params'):
+        Boom().dispatch(x=1)
+    assert ps.sent == ['Boom job failed: ValueError: bad params']
+
+
+def test_dispatch_does_not_alert_twice(fresh_app):
+    ps = Recorder()
+    fresh_app.set('ps', ps)
+
+    class Alerted(Job):
+        def run(self, **kwargs):
+            self.alert('summary')
+            raise RuntimeError('failed')
+    with pytest.raises(RuntimeError):
+        Alerted().dispatch()
+    assert ps.sent == ['summary']
+
+
+def test_dispatch_names_an_interruption(fresh_app):
+    ps = Recorder()
+    fresh_app.set('ps', ps)
+
+    class Stopped(Job):
+        def run(self, **kwargs):
+            raise JobInterrupted('SIGTERM')
+    with pytest.raises(JobInterrupted):
+        Stopped().dispatch()
+    assert ps.sent == ['Stopped job interrupted: SIGTERM']
+
+
+def test_worker_logs_a_failing_job_and_goes_on(fresh_app):
+    errors = []
+    fresh_app.set('logger', quiet_logger(errors=errors))
+
+    class Boom(Job):
+        def run(self, **kwargs):
+            raise ValueError('x')
+    worker = Worker.__new__(Worker)
+    worker.app = fresh_app
+    worker.namespace = types.SimpleNamespace(Boom=Boom)
+    worker.handle_message(json.dumps({'job': 'boom', 'params': {}}))
+    assert any('Boom' in e and 'x' in e for e in errors)

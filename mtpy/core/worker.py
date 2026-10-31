@@ -17,6 +17,10 @@ from .utils.strings import to_camel
 from .utils.helpers import is_empty
 
 
+class JobInterrupted(BaseException):
+    """Stop signal of a job turned into an exception (not an `Exception`, so no chunk handler swallows it)."""
+
+
 class Worker(Core):
     """
     Worker class to manage jobs execution. Listens to a queue and dispatches jobs.
@@ -125,13 +129,19 @@ class Worker(Core):
         job = self.job_class(data['job'])()
         params = data['params'] if 'params' in data and isinstance(data['params'], dict) else {}
 
-        job.dispatch(**params)
+        try:
+            job.dispatch(**params)
+        except Exception as e:
+            self.log('error', 'job {} failed: {}'.format(job.name, e))
 
 
 class Job(Core):
     """
     Job base class for job execution.
     """
+
+    ALERT_LIMIT = 1024
+    TRUNCATED = '… (resumen recortado; el texto completo está en el log)'
 
     def __init__(self):
         if type(self) is Job:
@@ -143,16 +153,31 @@ class Job(Core):
         self.name = self.__class__.__name__
 
         self.params = {}
+        self.alerted = False
 
     def dispatch(self, **kwargs):
         """
         Dispatch the job with the selected parameters.
+
+        If `run` raises anything and the job has not alerted yet, an alert naming the failure
+        (or the interruption) is sent before the exception propagates. `after_dispatch` only
+        runs when `run` finishes normally.
         """
         self.params = dict(kwargs)
+        self.alerted = False
 
         self.before_dispatch()
 
-        self.run(**self.params)
+        try:
+            self.run(**self.params)
+        except BaseException as e:
+            if not self.alerted:
+                self.log('error', '{} job failed'.format(self.name))
+                if isinstance(e, (JobInterrupted, KeyboardInterrupt)):
+                    self.alert('{} job interrupted: {}'.format(self.name, e))
+                else:
+                    self.alert('{} job failed: {}: {}'.format(self.name, type(e).__name__, e))
+            raise
 
         self.after_dispatch()
 
@@ -177,15 +202,31 @@ class Job(Core):
         """
         pass
 
-    def alert(self, msg: str):
+    def alert(self, msg: str) -> None:
         """
         Send an alert message to the configured push service and to the logging system.
+
+        The whole text goes to the log. The push message is cut to `ALERT_LIMIT` characters,
+        and a failing push service is logged, never raised. Marks the job as `alerted`.
+
+        Parameters
+        ----------
+        msg : str
+            Alert text.
         """
+        self.log('info', msg)
+
         ps = self.app.ps  # Pushover Service
         if ps:
-            ps.send(msg)
+            text = msg
+            if len(msg) > self.ALERT_LIMIT:
+                text = msg[:self.ALERT_LIMIT - len(self.TRUNCATED) - 1].rstrip() + '\n' + self.TRUNCATED
+            try:
+                ps.send(text)
+            except Exception as e:
+                self.log('error', 'alert: {}: {}'.format(type(e).__name__, e))
 
-        self.app.logger.info(msg)
+        self.alerted = True
 
 
 class SequenceJob(Job):
