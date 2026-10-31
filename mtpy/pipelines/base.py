@@ -5,7 +5,7 @@ Base of the pipelines that work scope by scope (``load``, ``compute``, ``backtes
 `mtpy.jobs.progress.ScopeReporter`: each chunk is a scope, its outcome is a result dict (a failure is a result with
 ``status`` ``failed``, not an exception) and its summary line is built by `line_of`.
 """
-from ..core.worker import Pipeline
+from ..core.worker import Pipeline, PipelineEnd
 from ..jobs.progress import ScopeProgress, ScopeReporter, collect_warnings
 
 
@@ -93,6 +93,9 @@ class ScopePipeline(ScopeReporter, Pipeline):
         """
         Run the unit of work of one chunk, collecting its warnings and turning an exception into a failed result.
 
+        A `PipelineEnd` raised by the work is not a failure and goes through untouched; a pipeline without
+        progress object (``self.progress`` is ``None``) collects the warnings without printing them.
+
         Parameters
         ----------
         chunk : str
@@ -109,8 +112,10 @@ class ScopePipeline(ScopeReporter, Pipeline):
         """
         notes = []
         try:
-            with collect_warnings(notes, self.progress.note):
+            with collect_warnings(notes, self.progress.note if self.progress is not None else None):
                 result = work()
+        except PipelineEnd:
+            raise
         except Exception as e:
             result = self.failed(chunk, e, **extra)
         result['warnings'] = notes
