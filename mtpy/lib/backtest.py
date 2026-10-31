@@ -724,6 +724,46 @@ def describe_source(fs, folder: str) -> str:
     return path
 
 
+def copy_results(scope: str, src: tuple, dst: tuple) -> dict:
+    """
+    Copy the backtest tables of a scope from one results folder to another, mirroring the source.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code (only for messages).
+    src, dst : tuple[FileSystem, str]
+        File system and folder of the source and the destination, as `results_fs` returns them.
+
+    Returns
+    -------
+    dict
+        `copied`: names of `RESULT_FILES` written to the destination; `removed`: names the source does not
+        have that were deleted from the destination.
+
+    Raises
+    ------
+    NothingToEvaluate
+        If the source has no `metrics.csv` (nothing is touched).
+    """
+    src_fs, src_folder = src
+    dst_fs, dst_folder = dst
+    if not src_fs.exists(results_path(src_folder, 'metrics.csv')):
+        raise NothingToEvaluate('no backtest results for {} in {}'.format(scope, describe_source(src_fs, src_folder)))
+    copied, removed = [], []
+    for name in RESULT_FILES:
+        src_path = results_path(src_folder, name)
+        dst_path = results_path(dst_folder, name)
+        if src_fs.exists(src_path):
+            dst_fs.write_bytes(src_fs.read_bytes(src_path), dst_path)
+            copied.append(name)
+        elif dst_fs.exists(dst_path):
+            dst_fs.remove(dst_path)
+            removed.append(name)
+
+    return {'copied': copied, 'removed': removed}
+
+
 def poll_stats(scope: str) -> dict:
     """
     State of the polls of a scope in the database, recorded in `run.json`.

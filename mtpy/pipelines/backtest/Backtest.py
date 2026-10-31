@@ -1,22 +1,19 @@
-import os
-
 from ...jobs.progress import counted, notes_suffix
 from ...lib import backtest
-from ...lib.publish import REPO_ROOT
 from ..base import ScopePipeline
-
-
-def shown(out):
-    """Results folder as shown in the header: relative to the repository when inside it, absolute otherwise."""
-    path = os.path.abspath(out or backtest.RESULTS_ROOT)
-    if path == REPO_ROOT or path.startswith(REPO_ROOT + os.sep):
-        return os.path.relpath(path, REPO_ROOT)
-    return path
 
 
 class Backtest(ScopePipeline):
     """
-    Run the model backtest of one scope on past elections and write its tables (`backtest.backtest_scope`).
+    Run the model backtest of one scope on past elections and write its tables (`backtest.backtest_scope`), or
+    copy them between the repository copy and the app file system (S3 in ECS).
+
+    Actions: ``run`` (default) evaluates and writes to ``out`` (the app file system when ``out`` is not given);
+    ``push`` copies the tables of ``out`` (``backtest/results`` of the repository by default) to the app file
+    system, to seed S3 with the repository copy; ``pull`` copies them from the app file system to ``out``, to
+    review ``by_horizon.csv`` and commit what a backtest run in ECS left in S3. Both mirror the source: files it
+    lacks are removed from the destination. From the job: ``{"action":"push","scopes":"all"}`` and
+    ``{"action":"pull","scopes":"all"}``.
 
     The chunk is the scope; every outcome is a result dict (see `evaluate_task`) and a failure never raises. At
     verbose 1 or more, the ``by_horizon`` table of a completed scope is printed after its result line.
@@ -29,13 +26,23 @@ class Backtest(ScopePipeline):
 
     label = None
     steps = None
-    pipes = {'run': {'Setup': ['prepare'], 'Load': ['evaluate']}}
+    pipes = {'run': {'Setup': ['prepare'], 'Load': ['evaluate']},
+             'push': {'Setup': ['prepare'], 'Load': ['push']},
+             'pull': {'Setup': ['prepare'], 'Load': ['pull']}}
 
     def start(self, n_sim=1000, out=None, **kwargs) -> None:
-        """Set the run and print the header ``backtest: n ámbitos · n simulaciones · folder``."""
+        """Set the run and print its header: ``backtest: n ámbitos · n simulaciones · folder`` or, for push and
+        pull, ``backtest push|pull: n ámbitos · origin → destination``."""
         super().start(**kwargs)
-        self._say('backtest: {} · {} · {}'.format(counted(self.total, 'ámbito', 'ámbitos'),
-                                                  counted(n_sim, 'simulación', 'simulaciones'), shown(out)))
+        scopes = counted(self.total, 'ámbito', 'ámbitos')
+        if self._action == 'run':
+            self._say('backtest: {} · {} · {}'.format(scopes, counted(n_sim, 'simulación', 'simulaciones'),
+                                                      backtest.describe_source(*backtest.results_fs(out, 'es'))))
+            return
+        local = backtest.describe_source(*backtest.results_fs(out or backtest.RESULTS_ROOT, 'es'))
+        remote = backtest.describe_source(*backtest.results_fs(None, 'es'))
+        origin, target = (local, remote) if self._action == 'push' else (remote, local)
+        self._say('backtest {}: {} · {} → {}'.format(self._action, scopes, origin, target))
 
     def prepare_task(self, chunk=None, position=(1, 1), **kwargs):
         """Create and start the progress of the scope."""
@@ -82,9 +89,35 @@ composition, regional_noise, min_events, recompute_ratings
 
         self.result = self.collect(chunk, work)
 
+    def push_task(self, chunk=None, out=None, **kwargs):
+        """Copy the tables of the scope from ``out`` (the repository copy by default) to the app file system."""
+        self._copy(chunk, backtest.results_fs(out or backtest.RESULTS_ROOT, chunk), backtest.results_fs(None, chunk),
+                   'pushed')
+
+    def pull_task(self, chunk=None, out=None, **kwargs):
+        """Copy the tables of the scope from the app file system to ``out`` (the repository copy by default)."""
+        self._copy(chunk, backtest.results_fs(None, chunk), backtest.results_fs(out or backtest.RESULTS_ROOT, chunk),
+                   'pulled')
+
+    def _copy(self, chunk, source, destination, status) -> None:
+        """Run `backtest.copy_results` for one scope and keep its result dict (``skipped`` without source tables)."""
+        def work():
+            try:
+                done = backtest.copy_results(chunk, source, destination)
+            except backtest.NothingToEvaluate as e:
+                return {'status': 'skipped', 'reason': str(e)}
+            return {'status': status, 'n_files': len(done['copied']), 'n_removed': len(done['removed']),
+                    'folder': backtest.describe_source(*destination)}
+
+        self.result = self.collect(chunk, work)
+
     def line_of(self, chunk, result, **kwargs):
         """Format the summary line of one scope result, with the count of its warnings."""
-        if result['status'] != 'completed':
+        if result['status'] in ('pushed', 'pulled'):
+            line = '{}: backtest {} ({}{}) to {}'.format(
+                chunk, result['status'], counted(result['n_files'], 'file', 'files'),
+                ', {} removed'.format(result['n_removed']) if result['n_removed'] else '', result['folder'])
+        elif result['status'] != 'completed':
             line = '{}: {} ({})'.format(chunk, result['status'], result['reason'])
         else:
             line = '{}: backtest completed ({} cases, {} events, {} horizons) in {:.0f} s'.format(

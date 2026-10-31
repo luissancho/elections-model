@@ -28,6 +28,15 @@ class Backtest(SequenceJob):
         python job.py backtest '{"scopes":["es-md"],"events":["2023-05-28"],"n_sim":200,"verbose":2}'
         python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/results_comp"}'
 
+    Copy the tables between the repository and the app file system (S3 in ECS)::
+
+        python job.py backtest '{"action":"push","scopes":"all"}'
+        python job.py backtest '{"action":"pull","scopes":"all"}'
+
+    The flow: the backtest runs in ECS and writes its tables to S3; ``pull`` brings them to the repository copy
+    (``backtest/results``) to review ``by_horizon.csv`` and commit; ``push`` seeds S3 with the repository copy.
+    Both mirror the source and touch nothing for a scope without tables to copy (``skipped``).
+
     In Docker (JSON without spaces)::
 
         RUN_JOB='backtest {"scopes":"all"}'
@@ -41,7 +50,7 @@ class Backtest(SequenceJob):
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
             regional_noise=True, min_events=None, recompute_ratings=False, out=None, verbose=1, runner=None, stats=None,
-            stop_on_error=None, **kwargs):
+            stop_on_error=None, action='run', **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -90,6 +99,9 @@ class Backtest(SequenceJob):
             Replacements of `backtest.run_backtest` and `backtest.poll_stats` (for tests).
         stop_on_error : bool, optional
             Stop at the first failed scope instead of going on with the others; ``False`` by default.
+        action : {'run', 'push', 'pull'}, default 'run'
+            ``run`` evaluates and writes the tables; ``push`` copies them from ``out`` (the repository copy) to
+            the app file system; ``pull`` copies them from the app file system to ``out``.
         **kwargs
             Ignored extra job arguments.
 
@@ -104,17 +116,19 @@ class Backtest(SequenceJob):
         ------
         ValueError
             If ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, there are no scopes to run
-            (``backtest: no scopes to run``) or ``stop_on_error`` is not true or false
+            (``backtest: no scopes to run``), ``action`` is not ``run``, ``push`` or ``pull`` or ``stop_on_error`` is not true or false
             (``stop_on_error must be true or false``).
         RuntimeError
             If any scope failed (raised after the summary and the alert).
         """
+        if action not in ('run', 'push', 'pull'):
+            raise ValueError('backtest: unknown action "{}" (expected run, push or pull)'.format(action))
         composition = self._composition(composition)
         targets = resolve_scopes(scopes)
         if not targets:
             raise ValueError('backtest: no scopes to run')
 
-        super().run(select='backtest', chunks=targets, stop_on_error=stop_on_error, events=events, horizons=horizons,
+        super().run(select='backtest', chunks=targets, action=action, stop_on_error=stop_on_error, events=events, horizons=horizons,
                     n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, recompute_ratings=recompute_ratings,

@@ -73,3 +73,18 @@ def test_backtest_stop_on_error_stops_at_the_first_failure(fresh_app, patched, t
 def test_backtest_refuses_an_empty_scope_list(fresh_app, patched, tmp_path):
     with pytest.raises(ValueError, match='backtest: no scopes to run'):
         Backtest().run(scopes=[], out=str(tmp_path), verbose=0, runner=FakeRunner(), stats=stats)
+
+
+def test_backtest_action_must_be_run_push_or_pull(fresh_app, patched, tmp_path):
+    with pytest.raises(ValueError, match='backtest: unknown action "sync"'):
+        Backtest().run(scopes=['es'], action='sync', out=str(tmp_path))
+
+
+def test_backtest_pull_through_the_job(fresh_app, patched, tmp_path):
+    from mtpy.core.io import FileSystem
+    from tests.test_pipelines_backtest import seeded
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'remote')))
+    local = seeded(tmp_path, 'es')
+    Backtest().run(scopes=['es'], action='push', out=str(local), verbose=0)
+    results = Backtest().run(scopes=['es'], action='pull', out=str(tmp_path / 'copy'), verbose=0)
+    assert results['es']['status'] == 'pulled' and (tmp_path / 'copy' / 'run.json').exists()

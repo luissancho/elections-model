@@ -107,3 +107,53 @@ def test_backtest_passes_every_parameter_through_and_records_it(fresh_app, patch
     assert run['seed'] == 7 and run['nowcast_only'] is True and run['house_effects'] is False and run['min_events'] == 1
     assert run['recompute_ratings'] is False
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
+
+
+def seeded(tmp_path, scope='es-md'):
+    """Una carpeta local con los nueve ficheros de `scope` (por `backtest_scope` con el runner falso)."""
+    from mtpy.lib import backtest
+    from tests.test_backtest_unit import fake_results
+    local = tmp_path / 'local'
+    backtest.backtest_scope(scope, out=str(local), events=['2023-05-28'], runner=lambda **kwargs: fake_results(),
+                            stats=stats, prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    return local
+
+
+def test_push_copies_the_nine_files_and_removes_the_stale_ones(fresh_app, tmp_path, capsys):
+    from mtpy.core.io import FileSystem
+    remote = tmp_path / 'remote'
+    fresh_app.set('fs', FileSystem(str(remote)))
+    local = seeded(tmp_path)
+    (local / 'es-md' / 'series.csv').unlink()
+    stale = remote / 'backtest' / 'results' / 'es-md'
+    stale.mkdir(parents=True)
+    (stale / 'series.csv').write_text('old')
+    p = Backtest()
+    p.run('push', chunk='es-md', position=(1, 1), out=str(local), verbose=0)
+    assert p.result['status'] == 'pushed' and p.result['n_files'] == 8 and p.result['n_removed'] == 1
+    assert p.line == 'es-md: backtest pushed (8 files, 1 removed) to {}'.format(stale)
+    assert sorted(f.name for f in stale.iterdir()) == ['blocks.csv', 'by_horizon.csv', 'meta.csv', 'metrics.csv', 'provinces.csv', 'run.json', 'seats.csv', 'shares.csv']
+    assert 'backtest push: 1 ámbito · {} → {}'.format(local, remote / 'backtest' / 'results') in capsys.readouterr().out
+
+
+def test_pull_brings_the_files_back_to_the_local_copy(fresh_app, tmp_path):
+    from mtpy.core.io import FileSystem
+    remote = tmp_path / 'remote'
+    fresh_app.set('fs', FileSystem(str(remote)))
+    local = seeded(tmp_path)
+    Backtest().run('push', chunk='es-md', position=(1, 1), out=str(local), verbose=0)
+    (local / 'es-md' / 'metrics.csv').write_text('changed')
+    p = Backtest()
+    p.run('pull', chunk='es-md', position=(1, 1), out=str(local), verbose=0)
+    assert p.result['status'] == 'pulled' and p.result['n_files'] == 9 and p.result['n_removed'] == 0
+    assert p.line == 'es-md: backtest pulled (9 files) to {}'.format(local / 'es-md')
+    assert (local / 'es-md' / 'metrics.csv').read_text() != 'changed'
+
+
+def test_push_without_local_results_is_skipped_and_touches_nothing(fresh_app, tmp_path):
+    from mtpy.core.io import FileSystem
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'remote')))
+    p = Backtest()
+    p.run('push', chunk='es-xx', position=(1, 1), out=str(tmp_path / 'local'), verbose=0)
+    assert p.result['status'] == 'skipped' and p.line == 'es-xx: skipped (no backtest results for es-xx in {})'.format(tmp_path / 'local' / 'es-xx')
+    assert not (tmp_path / 'remote').exists()
