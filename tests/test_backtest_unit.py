@@ -192,17 +192,40 @@ def fake_results():
             'meta': pd.DataFrame(), 'metrics': tables.metrics, 'by_horizon': tables.by_horizon}
 
 
-def test_results_dir_keeps_es_at_the_root():
-    """M11: los resultados de `es` siguen en la raíz (`backtest/results` del repositorio por defecto); cada ámbito
-    autonómico tiene su carpeta. `publish` lee de donde escribe el backtest."""
-    import os
+def test_results_fs_keeps_es_at_the_root_locally_and_under_the_prefix_in_the_app_fs(fresh_app, tmp_path):
+    from mtpy.core.io import FileSystem
     from mtpy.lib import backtest, publish
-    assert backtest.results_dir('backtest/results', 'es') == 'backtest/results'
-    assert backtest.results_dir('backtest/results', 'es-md') == os.path.join('backtest/results', 'es-md')
-    assert backtest.results_dir(None, 'es') == backtest.RESULTS_ROOT
-    assert backtest.RESULTS_ROOT.endswith(os.path.join('backtest', 'results')) and os.path.isabs(backtest.RESULTS_ROOT)
-    assert publish.backtest_source('es-md', 'x') == backtest.results_dir('x', 'es-md')
-    assert publish.backtest_source('es') == backtest.results_dir(None, 'es')
+    fs, folder = backtest.results_fs(str(tmp_path), 'es')
+    assert isinstance(fs, FileSystem) and fs.path == str(tmp_path) and folder == ''
+    assert backtest.results_fs(str(tmp_path), 'es-md')[1] == 'es-md'
+    assert backtest.results_path('', 'metrics.csv') == 'metrics.csv' and backtest.results_path('es-md', 'run.json') == 'es-md/run.json'
+    with pytest.raises(RuntimeError, match='no file system configured'):
+        backtest.results_fs(None, 'es')
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))
+    fs, folder = backtest.results_fs(None, 'es-md')
+    assert fs is fresh_app.fs and folder == 'backtest/results/es-md' and backtest.results_fs(None, 'es')[1] == 'backtest/results'
+    assert publish.backtest_source('es-md', 'x')[1] == 'es-md' and publish.backtest_source('es')[1] == 'backtest/results'
+    assert backtest.describe_source(fs, folder) == str(tmp_path / 'files' / 'backtest' / 'results' / 'es-md')
+    assert backtest.describe_source(FileSystem(backtest.RESULTS_ROOT), '') == 'backtest/results'
+
+
+def test_describe_source_names_the_bucket_of_an_s3_file_system():
+    from mtpy.core.services.s3 import S3
+    from mtpy.lib import backtest
+    fs = S3.__new__(S3)
+    fs.bucket = 'elections-s3-bucket'
+    assert backtest.describe_source(fs, 'backtest/results/es-md') == 's3://elections-s3-bucket/backtest/results/es-md'
+
+
+def test_backtest_scope_writes_into_the_app_fs_without_out(fresh_app, tmp_path):
+    from mtpy.core.io import FileSystem
+    from mtpy.lib import backtest
+    fresh_app.set('fs', FileSystem(str(tmp_path)))
+    figures = backtest.backtest_scope('es-md', events=['2023-05-28'], runner=lambda **kwargs: fake_results(),
+                                      stats=lambda scope: {'db_polls': 1, 'db_last_poll': None},
+                                      prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    folder = tmp_path / 'backtest' / 'results' / 'es-md'
+    assert (folder / 'metrics.csv').exists() and (folder / 'run.json').exists() and figures['folder'] == str(folder)
 
 
 def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):

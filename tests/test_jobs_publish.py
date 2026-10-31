@@ -300,6 +300,7 @@ def test_event_needs_its_date(fresh_app, tmp_path):
 
 
 def test_event_action_publishes_each_date(fresh_app, tmp_path, patched, capsys):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     from mtpy.jobs.Publish import Publish
 
     fs = FileSystem(str(tmp_path / 'site'))
@@ -321,6 +322,7 @@ def test_event_action_fails_a_date_without_stopping_the_others(fresh_app, tmp_pa
 
 
 def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched, capsys, monkeypatch):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     from mtpy.jobs.Publish import Publish
 
     monkeypatch.setattr(publish.events, 'get_events', lambda scope: synthetic_event().events)
@@ -336,6 +338,7 @@ def test_event_all_and_invalid_list_through_the_job(fresh_app, tmp_path, patched
 
 
 def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     from mtpy.jobs.Publish import Publish
 
     Publish().run(what=['event'], scopes=['es'], event_date='2023-07-23', fs=FileSystem(str(tmp_path)), dry_run=True)

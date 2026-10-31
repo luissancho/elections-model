@@ -30,6 +30,15 @@ DEFAULT_HORIZONS = [6, 14, 30, 60, 90, 180]
 LEVELS = [0.5, 0.8, 0.95]
 # Results folder by default: `backtest/results` of the repository (`es` at its root, the other scopes in a
 # subdirectory each; see `results_dir`)
+RESULTS_PREFIX = 'backtest/results'
+
+# Files of the results of a scope in its folder
+RESULT_FILES = ('shares.csv', 'seats.csv', 'blocks.csv', 'provinces.csv', 'series.csv', 'meta.csv', 'metrics.csv',
+                'by_horizon.csv', 'run.json')
+
+# Root of the repository (to show local folders relative to it)
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 RESULTS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backtest', 'results'))
 
 
@@ -633,6 +642,88 @@ def results_dir(root: Optional[str], scope: str) -> str:
     return root if scope == 'es' else os.path.join(root, scope)
 
 
+def results_fs(root: Optional[str], scope: str) -> tuple:
+    """
+    File system and folder where the tables of the backtest of a scope live.
+
+    Parameters
+    ----------
+    root : str or None
+        Local results folder. Without it the file system of the app (`App.get_().fs`: local or S3) and the
+        `RESULTS_PREFIX` folder are used.
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    tuple of (FileSystem, str)
+        The file system and the folder in it: `''` (the root of the file system) for `es` with `root`, the
+        scope code for the others; `RESULTS_PREFIX` (plus `/{scope}` for the regional scopes) without `root`.
+
+    Raises
+    ------
+    RuntimeError
+        There is no `root` and the app has no file system.
+    """
+    from ..core.io import FileSystem
+
+    if root:
+        return FileSystem(os.path.abspath(root)), '' if scope == 'es' else scope
+    from ..core.app import App
+
+    fs = App.get_().fs
+    if fs is None:
+        raise RuntimeError('backtest: no file system configured (set S3_BUCKET or run with a local files/ root)')
+
+    return fs, RESULTS_PREFIX if scope == 'es' else RESULTS_PREFIX + '/' + scope
+
+
+def results_path(folder: str, name: str) -> str:
+    """
+    Path of a file of the results inside the file system.
+
+    Parameters
+    ----------
+    folder : str
+        Folder in the file system (`''` for its root).
+    name : str
+        File name.
+
+    Returns
+    -------
+    str
+        `name` when `folder` is empty, `folder/name` otherwise.
+    """
+    return name if folder == '' else folder + '/' + name
+
+
+def describe_source(fs, folder: str) -> str:
+    """
+    Human-readable location of a results folder.
+
+    Parameters
+    ----------
+    fs : FileSystem
+        File system of the results (`S3` or local).
+    folder : str
+        Folder in the file system (`''` for its root).
+
+    Returns
+    -------
+    str
+        `s3://{bucket}/{folder}` for S3; the absolute path otherwise, relative to the repository when inside it.
+    """
+    from ..core.services.s3 import S3  # lazy: it pulls s3fs
+
+    if isinstance(fs, S3):
+        return 's3://{}/{}'.format(fs.bucket, folder)
+    path = os.path.abspath(fs.path if folder == '' else fs.get_path(folder))
+    if path == REPO_ROOT or path.startswith(REPO_ROOT + os.sep):
+        path = os.path.relpath(path, REPO_ROOT)
+
+    return path
+
+
 def poll_stats(scope: str) -> dict:
     """
     State of the polls of a scope in the database, recorded in `run.json`.
@@ -679,7 +770,7 @@ def backtest_scope(
     prov=None
 ) -> dict:
     """
-    Run the backtest of one scope and write its tables and `run.json` to `results_dir(out, scope)`.
+    Run the backtest of one scope and write its tables and `run.json` to `results_fs(out, scope)`.
 
     Parameters
     ----------
@@ -733,21 +824,19 @@ def backtest_scope(
         raise NothingToEvaluate('no case could be evaluated')
     seconds = {'run': time.perf_counter() - start}
 
-    folder = results_dir(out, scope)
-    os.makedirs(folder, exist_ok=True)
+    fs, folder = results_fs(out, scope)
     for key, frame in results.items():
-        frame.to_csv(os.path.join(folder, '{}.csv'.format(key)), index=False)
+        fs.write_csv(frame, results_path(folder, '{}.csv'.format(key)))
     if prov is None:
         from .publish.common import provenance as prov
     evaluated = results['metrics']['event_date'].unique().tolist()
     spans = sorted(results['metrics']['horizon'].unique().tolist())
     record = {'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': prov()['commit'], 'scope': scope,
               **params, 'recompute_ratings': recompute_ratings, 'events': evaluated, 'horizons': spans, **(stats or poll_stats)(scope)}
-    with open(os.path.join(folder, 'run.json'), 'w', encoding='utf-8') as fh:
-        json.dump(record, fh, indent=1)
+    fs.write_bytes(json.dumps(record, indent=1).encode('utf-8'), results_path(folder, 'run.json'))
     seconds['write'] = time.perf_counter() - start - seconds['run']
     seconds['total'] = time.perf_counter() - start
 
     return {'n_cases': int(results['metrics'].shape[0]), 'n_events': len(evaluated), 'n_horizons': len(spans),
-            'events': evaluated, 'horizons': spans, 'folder': folder, 'by_horizon': results['by_horizon'],
+            'events': evaluated, 'horizons': spans, 'folder': describe_source(fs, folder), 'by_horizon': results['by_horizon'],
             'seconds': seconds}

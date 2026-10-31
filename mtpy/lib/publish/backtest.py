@@ -25,24 +25,24 @@ BACKTEST_BOOL_COLS = ('seats_valid', 'majority', 'main')
 BACKTEST_RUN_EXCLUDED = ('run_at', 'commit', 'scope', 'events', 'horizons', 'note')
 
 
-def backtest_source(scope: str, root: Optional[str] = None) -> str:
-    """Folder of the backtest tables of a scope, as the ``backtest`` job writes them (``backtest.results_dir``).
+def backtest_source(scope: str, root: Optional[str] = None) -> tuple:
+    """File system and folder of the backtest tables of a scope, as the ``backtest`` job writes them.
 
     Parameters
     ----------
     scope : str
         Scope code.
     root : str, optional
-        Results folder. Defaults to ``backtest/results`` of the repository.
+        Local results folder. Defaults to ``backtest/results`` in the file system of the app.
 
     Returns
     -------
-    str
-        ``root`` for ``es`` and ``root/{scope}`` for the other scopes.
+    tuple of (FileSystem, str)
+        See ``backtest.results_fs``.
     """
-    from ..backtest import results_dir  # lazy: the backtest library loads the simulator
+    from ..backtest import results_fs  # lazy: the backtest library loads the simulator
 
-    return results_dir(root, scope)
+    return results_fs(root, scope)
 
 
 def export_backtest_table(frame: pd.DataFrame) -> tuple:
@@ -96,7 +96,7 @@ def export_backtest_meta(scope: str, run: dict, tables, source: str, prov: dict,
     tables : object
         Has the ``metrics`` table (with ``event_date``, ``horizon`` and ``seats_valid``).
     source : str
-        Folder the tables come from: relative to the repository when inside it, absolute otherwise.
+        Where the tables come from (``backtest.describe_source``), written as is.
     prov : dict
         Result of ``provenance`` at publication.
     seconds : dict
@@ -111,13 +111,9 @@ def export_backtest_meta(scope: str, run: dict, tables, source: str, prov: dict,
     events = run.get('events', sorted(metrics['event_date'].astype(str).unique()))
     horizons = run.get('horizons', sorted(int(h) for h in metrics['horizon'].unique()))
     params = {key: value for key, value in run.items() if key not in BACKTEST_RUN_EXCLUDED}
-    path = os.path.abspath(source)
-    if path == REPO_ROOT or path.startswith(REPO_ROOT + os.sep):
-        path = os.path.relpath(path, REPO_ROOT)
-
     return {'scope': scope, 'run_at': run.get('run_at'), 'commit': run.get('commit'), 'params': params,
             'events': list(events), 'horizons': list(horizons), 'n_cases': int(len(metrics)),
-            'n_seats_cases': int(metrics['seats_valid'].sum()), 'source': path, 'published': prov,
+            'n_seats_cases': int(metrics['seats_valid'].sum()), 'source': source, 'published': prov,
             'seconds': seconds}
 
 
@@ -137,7 +133,7 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
     writer : BundleWriter
         Bundle destination.
     source : str, optional
-        Results folder (see ``backtest_source``).
+        Local results folder (see ``backtest_source``); the app file system by default.
     prov : callable, optional
         Injectable replacement of ``provenance``.
 
@@ -152,16 +148,17 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
         There is no ``metrics.csv`` for the scope; nothing is written then.
     """
     start = time.perf_counter()
-    folder = backtest_source(scope, source)
-    if not os.path.isfile(os.path.join(folder, BACKTEST_FILES['metrics'])):
+    from ..backtest import describe_source, results_path  # lazy, as in ``backtest_source``
+
+    fs, folder = backtest_source(scope, source)
+    if not fs.exists(results_path(folder, BACKTEST_FILES['metrics'])):
         raise NothingToPublish(f'no backtest results for {scope}')
 
     run = {}
-    run_file = os.path.join(folder, 'run.json')
-    if os.path.isfile(run_file):
-        with open(run_file, encoding='utf-8') as fh:
-            run = json.load(fh)
-    frames = {part: pd.read_csv(os.path.join(folder, BACKTEST_FILES[part])) for part in bundle.BACKTEST_CSV}
+    run_file = results_path(folder, 'run.json')
+    if fs.exists(run_file):
+        run = json.loads(fs.read_bytes(run_file).decode('utf-8'))
+    frames = {part: fs.read_csv(results_path(folder, BACKTEST_FILES[part])) for part in bundle.BACKTEST_CSV}
     tables = types.SimpleNamespace(run=run, **{part.replace('-', '_'): frame for part, frame in frames.items()})
     read = time.perf_counter() - start
 
@@ -173,7 +170,7 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
     seconds = {'read': read, 'total': time.perf_counter() - start}
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    meta = export_backtest_meta(scope, run, tables, folder, prov(), seconds)
+    meta = export_backtest_meta(scope, run, tables, describe_source(fs, folder), prov(), seconds)
     writer.write_json(bundle.path_backtest(scope, 'meta'), bundle.BACKTEST_SCHEMAS['meta'], meta, scope)
     n_events = len(meta['events'])
 

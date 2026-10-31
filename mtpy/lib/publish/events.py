@@ -9,6 +9,7 @@ import pandas as pd
 from .. import bundle
 from ..bundle import BundleWriter
 from ..computer import Computer
+from ...core.io import FileSystem
 from ..data import get_event_results, get_events, get_pollsters
 from ..forecaster import published_seats
 from .analysis import export_poll_errors
@@ -166,13 +167,26 @@ def export_event_results(frame: pd.DataFrame) -> tuple:
     return {'n_seats': int(table['seats'].sum()), 'rows': _records(table)}, table
 
 
+def _source(source) -> Optional[tuple]:
+    """Normalise a backtest source: ``None``, a local folder (``str``) or a ``(fs, folder)`` pair."""
+    if isinstance(source, str):
+        return FileSystem(os.path.abspath(source)), ''
+
+    return source
+
+
+def _results_path(folder: str, name: str) -> str:
+    """Path of a results file in its folder (the one-liner of ``backtest.results_path``, not imported eagerly)."""
+    return name if folder == '' else folder + '/' + name
+
+
 def export_event_model(source: Optional[str], event_date: str) -> tuple:
     """Slice the model backtest (``shares``, ``seats`` and ``blocks``) to one election.
 
     Parameters
     ----------
-    source : str, optional
-        Folder of the backtest tables (see ``backtest_source``). A table whose file is missing, or a missing
+    source : str or tuple, optional
+        Local folder of the backtest tables or the ``(fs, folder)`` of ``backtest_source``. A table whose file is missing, or a missing
         folder, gives an empty slice.
     event_date : str
         Election date, ``YYYY-MM-DD``.
@@ -184,14 +198,15 @@ def export_event_model(source: Optional[str], event_date: str) -> tuple:
         twins ``model-shares``, ``model-seats`` and ``model-blocks`` of the tables found. Rounded as
         ``export_backtest_table``.
     """
+    source = _source(source)
     data = {'horizons': [], **{part: [] for part in EVENT_MODEL_PARTS}}
     frames = {}
     horizons = set()
     for part in EVENT_MODEL_PARTS:
-        path = os.path.join(source, BACKTEST_FILES[part]) if source else None
-        if path is None or not os.path.isfile(path):
+        path = _results_path(source[1], BACKTEST_FILES[part]) if source else None
+        if path is None or not source[0].exists(path):
             continue
-        table = pd.read_csv(path)
+        table = source[0].read_csv(path)
         table = table.loc[table['event_date'].astype(str) == event_date].reset_index(drop=True)
         slice_, frame = export_backtest_table(table)
         data[part] = slice_['rows']
@@ -207,8 +222,8 @@ def export_event_series(source: Optional[str], event_date: str) -> tuple:
 
     Parameters
     ----------
-    source : str, optional
-        Folder of the backtest tables (see ``backtest_source``). Without it, without the file or without rows
+    source : str or tuple, optional
+        Local folder of the backtest tables or the ``(fs, folder)`` of ``backtest_source``. Without it, without the file or without rows
         of the election there is nothing to publish.
     event_date : str
         Election date, ``YYYY-MM-DD``.
@@ -221,10 +236,11 @@ def export_event_series(source: Optional[str], event_date: str) -> tuple:
         to ``dates`` with ``None`` in the gaps, rounded to ``PCT_DECIMALS``) and its long-format CSV twin
         (``date``, ``name``, ``mean``, ``lo``, ``hi``, by party then date); ``(None, None)`` without a series.
     """
-    path = os.path.join(source, 'series.csv') if source else None
-    if path is None or not os.path.isfile(path):
+    source = _source(source)
+    path = _results_path(source[1], 'series.csv') if source else None
+    if path is None or not source[0].exists(path):
         return None, None
-    table = pd.read_csv(path)
+    table = source[0].read_csv(path)
     table = table.loc[table['event_date'].astype(str) == event_date]
     if table.empty:
         return None, None

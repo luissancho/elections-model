@@ -425,6 +425,7 @@ def event(fs, scope, event_date, **kwargs):
 
 
 def test_event_publishes_each_date_and_fails_a_date_without_stopping_the_others(fresh_app, tmp_path, patched):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     fs = FileSystem(str(tmp_path / 'site'))
     p = event(fs, 'es', ['2023-07-23', '2019-11-10'])
     assert [r['status'] for r in p.result] == ['published', 'skipped'] and [r['event_date'] for r in p.result][0] == '2023-07-23'
@@ -436,6 +437,7 @@ def test_event_publishes_each_date_and_fails_a_date_without_stopping_the_others(
 
 
 def test_event_without_dates_ends_in_setup(fresh_app, tmp_path, patched, monkeypatch):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     monkeypatch.setattr(publish.events, 'get_events', lambda scope: synthetic_event().events)
     fs = FileSystem(str(tmp_path / 'site'))
     p = event(fs, 'es', 'all', today='2026-10-13')
@@ -452,6 +454,7 @@ def test_event_without_dates_ends_in_setup(fresh_app, tmp_path, patched, monkeyp
 
 
 def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     event(FileSystem(str(tmp_path)), 'es', '2023-07-23', dry_run=True)
     assert (tmp_path / 'site-dry' / 'v1' / 'events' / 'es' / '2023-07-23' / 'meta.json').exists()
     assert not (tmp_path / 'site').exists()
