@@ -6,7 +6,7 @@ on:
       - master
 
 env:
-  NAME: Elections Model
+  NAME: Demoscopio
   ECR_REPOSITORY: elections-model
   IMAGE_TAG: latest
   SERVICE: elections-model-service
@@ -36,8 +36,8 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          docker build --build-arg GIT_COMMIT=${GITHUB_SHA::7} -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}-${{ env.GIT_COMMIT }} .
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}-${{ env.GIT_COMMIT }}
 
       - name: Deploy to ECS Express
         uses: aws-actions/amazon-ecs-deploy-express-service@v1
