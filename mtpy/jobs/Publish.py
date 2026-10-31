@@ -41,11 +41,13 @@ class Publish(SequenceJob):
     ``published``, ``refused`` (``publish.PublishRefused``: the registration was refused) or ``failed``.
 
     ``event`` publishes past elections of each scope into ``events/{scope}/{date}/`` (poll errors by house, official
-    results and the slice of the model backtest of the election), overwriting them. It needs ``event_date`` (a date,
-    a list of dates or ``'all'``: the elections of the scope with an official result before today), cannot be combined with
-    ``forecast``, has no LOREG guard, never touches the manifest and, with ``dry_run``, writes under
-    ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not an election of the scope
-    with official results, or no polls: ``publish.NothingToPublish``) or ``failed``.
+    results and the slice and daily series of the model backtest of the election), overwriting them. It needs
+    ``event_date`` (a date, a list of dates or ``'all'``: the elections of the scope with an official result before
+    today), cannot be combined with ``forecast``, has no LOREG guard, never touches the manifest and, with
+    ``dry_run``, writes under ``site-dry/v1/events/``. Each date of each scope ends ``published``, ``skipped`` (not
+    an election of the scope with official results, or no polls: ``publish.NothingToPublish``), ``refused``
+    (``publish.PublishRefused``: the live event has the model slice or the series but the backtest tables are
+    missing in the file system; ``force`` publishes it anyway, and they are removed) or ``failed``.
 
     With ``backfill``, ``forecast`` publishes retrospective runs instead: one per day of the
     range and scope, with the polls published up to that day, the run id and ``run_at`` of
@@ -134,7 +136,9 @@ class Publish(SequenceJob):
             Write under ``site-dry/v1`` (runs, analysis and backtest) and leave the pointers and manifest
             alone.
         force : bool, default False
-            Publish inside the LOREG window anyway.
+            Publish inside the LOREG window anyway; with ``event``, publish a date even when the backtest tables
+            are missing and the live event had the model slice or the series (which are then removed); with
+            ``study`` and ``register``, replace an existing registration.
         fs : FileSystem, optional
             File system to write to. Defaults to ``self.app.fs``.
         today : str, optional
