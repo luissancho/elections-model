@@ -229,7 +229,7 @@ class Publish(SequenceJob):
         results = {}
         for (key, chunk), result in self.results.items():
             what = key.split('.', 1)[1]
-            if what in ('forecast', 'analysis', 'event', 'backtest', 'point', 'unpublish'):
+            if what in self.CHUNKED:
                 results[chunk] = result
             elif what == 'study':
                 results[study] = result

@@ -3,10 +3,17 @@ import types
 
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
+from mtpy.pipelines.publish.Analysis import Analysis
+from mtpy.pipelines.publish.Backtest import Backtest
+from mtpy.pipelines.publish.Event import Event
 from mtpy.pipelines.publish.Forecast import Forecast
 from mtpy.pipelines.publish.Manifest import Manifest
 from mtpy.pipelines.publish.Parties import Parties
-from tests.publish_fixtures import NO_POLLS, patched, warned_forecast  # noqa: F401
+from mtpy.pipelines.publish.Point import Point
+from mtpy.pipelines.publish.Study import Study
+from mtpy.pipelines.publish.Unpublish import Unpublish
+from tests.fakes import synthetic_event, write_backtest_source
+from tests.publish_fixtures import NO_POLLS, fixed_prov, patched, warned_forecast  # noqa: F401
 
 
 def forecast(fs, scope, position=(1, 1), **kwargs):
@@ -364,3 +371,163 @@ def test_backfill_progress_names_the_day(fresh_app, tmp_path, patched, capsys):
     out = capsys.readouterr().out
     assert 'publish forecast: 1 ámbito · backfill 2026-10-05..2026-10-06 (2 días)' in out
     assert out.index('[1/1] es 2026-10-05: empezando') < out.index('[1/1] es 2026-10-06: promedio ajustado (')
+
+
+def analysis(fs, scope, **kwargs):
+    p = Analysis()
+    p.run('publish', chunk=scope, position=(1, 1), fs=fs, verbose=0, **kwargs)
+    return p
+
+
+def test_analysis_statuses_and_lines(fresh_app, tmp_path, patched):
+    fs = FileSystem(str(tmp_path))
+    p = analysis(fs, 'es')
+    assert p.result['status'] == 'published' and bundle.BundleReader(fs).analysis_exists('es')
+    assert p.line.startswith('es: analysis published (event 2026-11-29, 3 pollsters) in ')
+    # sin sondeos en el ciclo actual: se publica sin efectos de casa
+    assert analysis(fs, 'es-cb').result['house_effects'] is False
+    assert analysis(fs, 'es-cb').line.endswith('; sin efectos de casa')
+    p = analysis(fs, 'es-ar')
+    assert p.line == "es-ar: analysis failed (KeyError: 'x')" and p.failure_name('es-ar') == 'es-ar (analysis)'
+    assert [c[2] for c in patched if c[1] == 'analysis'][0] == {'verbose': 0}
+
+
+def test_analysis_national_window_refuses_a_regional_scope_unless_forced(fresh_app, tmp_path, patched):
+    fs = FileSystem(str(tmp_path))
+    p = analysis(fs, 'es-cb', today='2026-11-25')
+    assert p.result['status'] == 'refused' and p.line.startswith('es-cb: analysis refused (') and patched == []
+    assert analysis(fs, 'es-cb', today='2026-11-25', force=True).result['status'] == 'published'
+
+
+def test_analysis_without_upcoming_event_is_published_unless_in_the_national_window(fresh_app, tmp_path, patched,
+                                                                                    monkeypatch):
+    fs = FileSystem(str(tmp_path))
+    monkeypatch.setattr(publish, 'next_event_date', lambda scope, date_from=None: None if scope == 'es-md' else '2026-11-29')
+    assert analysis(fs, 'es-md').result['status'] == 'published'
+    assert analysis(fs, 'es-md', today='2026-11-25').result['status'] == 'refused'
+
+
+def test_analysis_dry_run_writes_apart_and_prints_live(fresh_app, tmp_path, patched, capsys):
+    fs = FileSystem(str(tmp_path))
+    p = Analysis()
+    p.run('publish', chunk='es', position=(1, 1), fs=fs, dry_run=True)
+    out = capsys.readouterr().out
+    assert bundle.BundleReader(fs, prefix=bundle.DRY_PREFIX).analysis_exists('es') and not (tmp_path / 'site').exists()
+    assert out.index('[1/1] es: empezando') < out.index('[1/1] es: analysis published')
+
+
+def event(fs, scope, event_date, **kwargs):
+    p = Event()
+    p.run('publish', chunk=scope, position=(1, 1), fs=fs, verbose=0, event_date=event_date, **kwargs)
+    return p
+
+
+def test_event_publishes_each_date_and_fails_a_date_without_stopping_the_others(fresh_app, tmp_path, patched):
+    fs = FileSystem(str(tmp_path / 'site'))
+    p = event(fs, 'es', ['2023-07-23', '2019-11-10'])
+    assert [r['status'] for r in p.result] == ['published', 'skipped'] and [r['event_date'] for r in p.result][0] == '2023-07-23'
+    assert p.line[0].startswith('es: event 2023-07-23 published (3 polls, 3 pollsters) in ')
+    assert p.line[1] == 'es: event 2019-11-10 skipped (no official results for es 2019-11-10)'
+    assert bundle.BundleReader(fs).event_exists('es', '2023-07-23')
+    p = event(fs, 'es', '2023-13-01')
+    assert [r['status'] for r in p.result] == ['failed'] and p.line[0].startswith('es: event 2023-13-01 failed (ValueError')
+
+
+def test_event_without_dates_ends_in_setup(fresh_app, tmp_path, patched, monkeypatch):
+    monkeypatch.setattr(publish.events, 'get_events', lambda scope: synthetic_event().events)
+    fs = FileSystem(str(tmp_path / 'site'))
+    p = event(fs, 'es', 'all', today='2026-10-13')
+    assert [(r['event_date'], r['status']) for r in p.result] == [('2019-11-10', 'skipped'), ('2023-07-23', 'published')]
+    monkeypatch.setattr(publish, 'event_dates_to_publish', lambda *a, **k: [])
+    p = event(fs, 'es', 'all')
+    assert p.result == [{'status': 'skipped', 'event_date': 'all', 'reason': 'no past elections with official results'}]
+    assert p.line == ['es: event all skipped (no past elections with official results)']
+    # una lista con una fecha inválida falla en la preparación, sin publicar nada
+    monkeypatch.undo()
+    p = event(fs, 'es', ['2023-07-23', '2023-13-01'])
+    assert [r['status'] for r in p.result] == ['failed'] and 'ValueError: month must be in 1..12' in p.line[0]
+    assert p.result[0]['event_date'] == "['2023-07-23', '2023-13-01']"
+
+
+def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):
+    event(FileSystem(str(tmp_path)), 'es', '2023-07-23', dry_run=True)
+    assert (tmp_path / 'site-dry' / 'v1' / 'events' / 'es' / '2023-07-23' / 'meta.json').exists()
+    assert not (tmp_path / 'site').exists()
+
+
+def backtest(fs, scope, source, **kwargs):
+    p = Backtest()
+    p.run('publish', chunk=scope, position=(1, 1), fs=fs, verbose=0, source=source, **kwargs)
+    return p
+
+
+def test_backtest_publishes_and_skips(fresh_app, tmp_path, patched, monkeypatch):
+    fixed_prov(monkeypatch)
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = FileSystem(str(tmp_path / 'site'))
+    p = backtest(fs, 'es', str(tmp_path / 'bt'))
+    assert p.result['status'] == 'published' and p.line.startswith('es: backtest published (4 cases, 2 elections) in ')
+    assert bundle.BundleReader(fs).backtest_exists('es')
+    p = backtest(fs, 'es-cb', str(tmp_path / 'bt'))
+    assert p.result == {'status': 'skipped', 'reason': 'no backtest results for es-cb'}
+    assert p.line == 'es-cb: backtest skipped (no backtest results for es-cb)'
+
+
+def test_backtest_dry_run_and_failure(fresh_app, tmp_path, patched, monkeypatch):
+    fixed_prov(monkeypatch)
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = FileSystem(str(tmp_path / 'site'))
+    backtest(fs, 'es', str(tmp_path / 'bt'), dry_run=True)
+    assert bundle.BundleReader(fs, prefix=bundle.DRY_PREFIX).backtest_exists('es')
+    assert not bundle.BundleReader(fs).backtest_exists('es')
+    monkeypatch.setattr(publish, 'publish_backtest', lambda *a, **k: (_ for _ in ()).throw(KeyError('x')))
+    p = backtest(fs, 'es', None)
+    assert p.line == "es: backtest failed (KeyError: 'x')" and p.failure_name('es') == 'es (backtest)'
+
+
+def test_study_statuses_and_failure_name(fresh_app, tmp_path, monkeypatch):
+    calls = []
+
+    def fake_study(study, writer, register=False, force=False, **kwargs):
+        calls.append((study, register, force))
+        if register and not force:
+            raise publish.PublishRefused('study: already registered on 2026-10-08')
+        return {'study': study, 'registered_at': '2026-10-08' if register else None, 'checked': False,
+                'seconds': {'total': 12.3}}
+
+    monkeypatch.setattr(publish, 'publish_study', fake_study)
+    fs = FileSystem(str(tmp_path))
+
+    def study(**kwargs):
+        p = Study()
+        p.run('publish', chunk=None, position=(1, 1), fs=fs, study='voto-cera', verbose=0, **kwargs)
+        return p
+
+    p = study()
+    assert p.chunked is False and p.line == 'voto-cera: study published (sin registro, sin comprobar) in 12 s'
+    p = study(register=True)
+    assert p.result == {'status': 'refused', 'reason': 'study: already registered on 2026-10-08'}
+    p = study(register=True, force=True)
+    assert p.line == 'voto-cera: study published (registrado el 2026-10-08, sin comprobar) in 12 s'
+    assert calls == [('voto-cera', False, False), ('voto-cera', True, False), ('voto-cera', True, True)]
+    monkeypatch.setattr(publish, 'publish_study', lambda *a, **k: {}['x'])
+    p = study()
+    assert p.line == "voto-cera: study failed (KeyError: 'x')" and p.failure_name(None) == 'voto-cera (study)'
+
+
+def test_point_and_unpublish_lines(fresh_app, tmp_path, patched):
+    fs = FileSystem(str(tmp_path))
+    run_id = forecast(fs, 'es').run_id
+
+    def act(cls, **kwargs):
+        p = cls()
+        p.run('publish', chunk='es', position=(1, 1), fs=fs, verbose=0, **kwargs)
+        return p
+
+    p = act(Point, run=run_id)
+    assert p.result == {'status': 'published', 'latest': run_id} and p.line == 'es: published {}'.format(run_id)
+    p = act(Point, run='20200101-000000')
+    assert p.result['status'] == 'failed' and p.line.startswith('es: failed (')
+    p = act(Unpublish, run=run_id)
+    assert p.result == {'status': 'published', 'removed': run_id, 'latest': None} and p.label == 'unpublish'
+    assert p.line == 'es: published {}'.format(run_id)

@@ -12,6 +12,63 @@ STEPS = {'init': 'simulador listo', 'fit': 'promedio ajustado', 'nowcast': 'simu
          'meta': 'meta y titular'}
 
 
+def result_line(scope, result, run=None):
+    """
+    Format the summary line of one scope result of a forecast (of one day, with ``backfill``), a ``point`` or an
+    ``unpublish``.
+
+    Parameters
+    ----------
+    scope : str
+        Scope of the result.
+    result : dict
+        Result with a ``status`` and its details.
+    run : str, optional
+        Run id of a ``point`` or ``unpublish`` result without ``latest`` or ``removed``.
+
+    Returns
+    -------
+    str
+        The summary line.
+    """
+    status = result['status']
+    day = result.get('day')
+    if status == 'published' and 'entry' in result:
+        entry = result['entry']
+        return '{}: published {} (as_of {}, {} polls{}) in {:.0f} s{}'.format(
+            scope, result['run_id'], entry.get('as_of'), entry.get('n_polls'),
+            '' if day is None else ', backfill {}{}'.format(day, ', replaced' if result.get('replaced') else ''),
+            result['seconds']['total'],
+            notes_suffix(result))
+    if status == 'published':
+        return '{}: published {}'.format(scope, result.get('latest') or result.get('removed') or run)
+    if day is not None:
+        line = '{}: {} {} ({})'.format(scope, status, day, result['reason'])
+    else:
+        line = '{}: {} ({})'.format(scope, status, result['reason'])
+    return line + notes_suffix(result)
+
+
+def national_event(today=None):
+    """
+    Date of the next general election (``es``) as the LOREG guard of every scope needs it.
+
+    The day before today is the starting point, so the national window also covers the election day itself.
+
+    Parameters
+    ----------
+    today : str, optional
+        Date taken as today.
+
+    Returns
+    -------
+    str or None
+        ISO date of the next election of ``es``, or ``None`` if there is none.
+    """
+    eve = (publish.common._today(today) - timedelta(days=1)).isoformat()
+    return publish.next_event_date('es', date_from=eve)
+
+
 class Forecast(ScopePipeline):
     """
     Publish the forecast of one scope to the web bundle (``site/v1``): its run folder and history, and (in `finish`,
@@ -44,6 +101,11 @@ class Forecast(ScopePipeline):
     RUN_EXISTS = 'run exists'
     RUN_INCOMPLETE = 'incomplete run exists; unpublish it first'
     pipes = {'publish': {'Load': ['publish']}}
+
+    def __init__(self, *args, **kwargs):
+        """Create the pipeline with no manifest entries, so `finish` is safe even if `start` failed."""
+        super().__init__(*args, **kwargs)
+        self.entries = {}
 
     def start(self, fs=None, dry_run=False, today=None, days=None, replace=False, event_date=None, force=False,
               n_sim=1000, seed=42, drange=6, max_fc=10, alpha=0.05, correctors=None, **kwargs) -> None:
@@ -89,10 +151,7 @@ class Forecast(ScopePipeline):
                           {'limit_date': day, 'run_at': publish.backfill_run_at(day)}) for day in days]
         self.params = dict(n_sim=n_sim, seed=seed, drange=drange, max_fc=max_fc, alpha=alpha,
                            correctors=correctors, verbose=self.model_verbose)
-        # the day before today: the national window also covers the election day itself
-        eve = (publish.common._today(today) - timedelta(days=1)).isoformat()
-        self.national = publish.next_event_date('es', date_from=eve)
-        self.entries = {}
+        self.national = national_event(today)
         n_scopes = counted(self.total, 'ámbito', 'ámbitos')
         if days is None:
             self._say('publish forecast: {} · run {}'.format(n_scopes, self.run_id))
@@ -306,23 +365,7 @@ class Forecast(ScopePipeline):
 
     def line_of(self, chunk, result, run=None, **kwargs):
         """Format the summary line of one scope result (of one day, with ``backfill``)."""
-        scope = chunk
-        status = result['status']
-        day = result.get('day')
-        if status == 'published' and 'entry' in result:
-            entry = result['entry']
-            return '{}: published {} (as_of {}, {} polls{}) in {:.0f} s{}'.format(
-                scope, result['run_id'], entry.get('as_of'), entry.get('n_polls'),
-                '' if day is None else ', backfill {}{}'.format(day, ', replaced' if result.get('replaced') else ''),
-                result['seconds']['total'],
-                notes_suffix(result))
-        if status == 'published':
-            return '{}: published {}'.format(scope, result.get('latest') or result.get('removed') or run)
-        if day is not None:
-            line = '{}: {} {} ({})'.format(scope, status, day, result['reason'])
-        else:
-            line = '{}: {} ({})'.format(scope, status, result['reason'])
-        return line + notes_suffix(result)
+        return result_line(chunk, result, run)
 
     def summary(self, chunk, **kwargs):
         """
