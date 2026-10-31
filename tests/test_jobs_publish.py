@@ -680,3 +680,20 @@ def test_publish_alert_has_the_header_and_the_failures_first(fresh_app, tmp_path
     assert lines[0].startswith('Publish job executed in ') and lines[0].endswith(' with 1 failure')
     assert lines[1] == "es-ar: failed (KeyError: 'x')" and lines[2].startswith('es: published')
     assert 'manifest: 1 scopes, freeze off' in lines and 'parties: 5 partidos' in lines
+
+
+def test_manifest_parties_and_study_do_not_resolve_scopes(fresh_app, tmp_path, patched, monkeypatch):
+    """`manifest`, `parties` y `study` solos no leen el catálogo de ámbitos (ni la base): el ensayo de la veda corre
+    `publish manifest` sin la RDS; una acción por ámbito sí lo resuelve."""
+    from mtpy.jobs.Publish import Publish
+
+    def no_db(scopes, catalogue=None):
+        raise RuntimeError('db')
+
+    monkeypatch.setattr(publish, 'resolve_scopes', no_db)
+    fs = FileSystem(str(tmp_path))
+    assert Publish().run(what=['manifest'], fs=fs, freeze={'active': False}) == {}
+    assert publish.read_manifest(bundle.BundleReader(fs))['freeze']['active'] is False
+    assert Publish().run(what=['parties'], fs=fs) == {} and (tmp_path / 'site' / 'v1' / 'parties.json').exists()
+    with pytest.raises(RuntimeError, match='db'):
+        Publish().run(what=['forecast'], scopes=['es'], fs=fs)

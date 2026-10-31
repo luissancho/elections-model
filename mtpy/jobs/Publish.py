@@ -85,6 +85,7 @@ class Publish(SequenceJob):
     """
 
     WHAT = ('forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point', 'unpublish')
+    CHUNKED = ('forecast', 'analysis', 'event', 'backtest', 'point', 'unpublish')
     sequence = {'publish': ['forecast', 'analysis', 'event', 'backtest', 'study', 'parties', 'manifest', 'point',
                             'unpublish']}
     default_action = 'publish'
@@ -106,7 +107,9 @@ class Publish(SequenceJob):
             ``forecast`` and ``analysis`` rewrite it too, once per run of the job, so the pages always colour and
             name every party.
         scopes : str or list of str, default ('es',)
-            Scopes to act on, or ``'all'``.
+            Scopes to act on, or ``'all'``. They are resolved (``publish.resolve_scopes``, which reads the scope
+            catalogue) only when some action works scope by scope (`CHUNKED`); ``study``, ``parties`` and
+            ``manifest`` alone run once and never read it.
         event_date : str or list of str, optional
             Election date (ISO 8601, normalised to ``YYYY-MM-DD``). Defaults to the next
             event of each scope. A value that is not a date fails each scope. For ``event``, it is required and
@@ -179,8 +182,8 @@ class Publish(SequenceJob):
             If ``what`` is unknown, ``run`` is missing (or ``event_date`` for ``event``, or ``study`` for
             ``study``), ``event`` is
             combined with ``forecast``, or ``backfill`` is given without ``forecast`` in ``what``, its range is
-            invalid or its ``replace`` is not a boolean, there are no scopes to run (``publish: no scopes to
-            run``) or ``stop_on_error`` is not true or false.
+            invalid or its ``replace`` is not a boolean, an action of `CHUNKED` has no scopes to run (``publish:
+            no scopes to run``) or ``stop_on_error`` is not true or false.
         RuntimeError
             If no file system is configured, or any scope failed (raised after the
             manifest, the summary and the alert).
@@ -212,8 +215,10 @@ class Publish(SequenceJob):
 
         select = ['publish.' + w for w in self.WHAT
                   if w in whats or (w == 'parties' and ('forecast' in whats or 'analysis' in whats))]
-        targets = publish.resolve_scopes(scopes)
-        if not targets:
+        # only the actions that work scope by scope need the scope catalogue (and the database behind it)
+        chunked = any(w in self.CHUNKED for w in whats)
+        targets = publish.resolve_scopes(scopes) if chunked else []
+        if chunked and not targets:
             raise ValueError('publish: no scopes to run')
 
         super().run(select=select, chunks=targets, stop_on_error=stop_on_error, fs=fs, dry_run=dry_run, today=today,
