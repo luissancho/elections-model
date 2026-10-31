@@ -14,7 +14,7 @@ from ..data import get_event_results, get_events, get_pollsters
 from ..forecaster import published_seats
 from .analysis import export_poll_errors
 from .backtest import BACKTEST_FILES, backtest_source, export_backtest_table
-from .common import NothingToPublish, provenance, REPO_ROOT, round_cols, _iso_dates, _iso_day, _today, _weighted_mean
+from .common import NothingToPublish, provenance, PublishRefused, REPO_ROOT, round_cols, _iso_dates, _iso_day, _today, _weighted_mean
 from .forecast import export_poll_rows, POLL_COLUMNS
 
 
@@ -368,7 +368,8 @@ def event_dates_to_publish(scope: str, event_date, events: Optional[Callable] = 
 def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: Optional[Callable] = None,
                   events: Optional[Callable] = None, results: Optional[Callable] = None,
                   pollsters: Optional[Callable] = None, seats: Optional[Callable] = None,
-                  source: Optional[str] = None, prov: Optional[Callable] = None, verbose: int = 0) -> dict:
+                  source: Optional[str] = None, prov: Optional[Callable] = None, verbose: int = 0,
+                  force: bool = False) -> dict:
     """Write one past election of a scope into the bundle, overwriting the previous publication.
 
     The parts are written in the order ``pollsters``, ``polls``, ``cycle``, ``results``, ``model`` and ``series`` (each JSON
@@ -378,7 +379,9 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     featured='results')``), the polls of the cycle as published from the same polls (``filter_polls('results')``,
     so every poll of the table has its error) with the seat projections of the loader, the results from the
     database and the model from the backtest tables (see ``export_event_model``). The manifest and the runs are
-    not touched.
+    not touched. The backtest tables are read before anything is written: when the live publication has a model
+    slice (``meta.has_model``) or a daily series and the tables found lack it, the publication is refused unless
+    ``force`` (missing tables are usually a source that was never pushed, not a model without backtest).
 
     Parameters
     ----------
@@ -401,6 +404,9 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         Injectable replacement of ``provenance``.
     verbose : int
         Computer verbosity.
+    force : bool, default False
+        Publish even when the backtest tables lack the model slice or the series of the live publication (they
+        are removed then).
 
     Returns
     -------
@@ -415,6 +421,9 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     NothingToPublish
         The date is not an election of the scope with official results, or the ``Computer`` raised
         ``ValueError`` or gave no polls; nothing is written then.
+    PublishRefused
+        The live publication has a model slice (or a series) that the backtest tables found lack, and not
+        ``force``; nothing is written then.
     ValueError
         The date is not a real ISO date.
     """
@@ -451,6 +460,19 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
         raise NothingToPublish(f'no polls for {scope} {event_date}')
     seconds = {'build': lap()}
 
+    src = backtest_source(scope, source)
+    model, model_frames = export_event_model(src, event_date)
+    seconds['model'] = lap()
+    series_data, series_frame = export_event_series(src, event_date)
+    seconds['series'] = lap()
+    live_meta = bundle.path_event(scope, event_date, 'meta')
+    live_model = writer.exists(live_meta) and bool(writer.read_json(live_meta)['data'].get('has_model'))
+    live_series = writer.exists(bundle.path_event(scope, event_date, 'series'))
+    if not force and ((live_model and not model['horizons']) or (live_series and series_data is None)):
+        from ..backtest import describe_source  # lazy, as in ``backtest_source``
+        raise PublishRefused('backtest tables for {} missing in {}: run backtest push (or force)'.format(
+            scope, describe_source(*src)))
+
     houses = (pollsters or get_pollsters)()
     ids = {str(pname): int(pid) for pid, pname in zip(houses['id'], houses['name'])}
 
@@ -471,21 +493,17 @@ def publish_event(scope: str, event_date: str, writer: BundleWriter, computer: O
     data, frame = export_event_results(official)
     write('results', data, {'results': frame})
     seconds['results'] = lap()
-    model, frames = export_event_model(backtest_source(scope, source), event_date)
-    write('model', model, frames)
+    write('model', model, model_frames)
     for csv_name in bundle.EVENT_CSV:  # twins of tables this publication lacks would describe an older one
         stale = bundle.path_event_csv(scope, event_date, csv_name)
-        if csv_name.startswith('model-') and csv_name not in frames and writer.exists(stale):
+        if csv_name.startswith('model-') and csv_name not in model_frames and writer.exists(stale):
             writer.remove(stale)
-    seconds['model'] = lap()
-    series_data, series_frame = export_event_series(backtest_source(scope, source), event_date)
     if series_data is not None:
         write('series', series_data, {'series': series_frame})
     else:  # a series of an older backtest would describe another model
         for stale in (bundle.path_event(scope, event_date, 'series'), bundle.path_event_csv(scope, event_date, 'series')):
             if writer.exists(stale):
                 writer.remove(stale)
-    seconds['series'] = lap()
 
     summary = event_summary(errors, list(blocks))
     seconds['total'] = time.perf_counter() - start

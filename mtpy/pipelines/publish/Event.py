@@ -9,8 +9,9 @@ class Event(PublishPipeline):
     The chunk is the scope and the result of a scope is the list of the results of its dates, each with its
     ``event_date``. The dates come from ``event_date`` (a date, a list of dates or ``'all'``, see
     ``publish.event_dates_to_publish``); when they cannot be resolved, or there are none, the scope ends in the
-    setup stage with a single result. Each date ends ``published``, ``skipped`` (``publish.NothingToPublish``) or
-    ``failed`` (any other error, an invalid date included); a failure never raises.
+    setup stage with a single result. Each date ends ``published``, ``skipped`` (``publish.NothingToPublish``),
+    ``refused`` (``publish.PublishRefused``: the backtest tables lack the live model slice or series, see
+    ``force``) or ``failed`` (any other error, an invalid date included); a failure never raises.
 
     Attributes
     ----------
@@ -57,7 +58,7 @@ class Event(PublishPipeline):
             self.end([{'status': 'skipped', 'event_date': str(event_date),
                        'reason': 'no past elections with official results'}])
 
-    def publish_task(self, chunk=None, source=None, **kwargs):
+    def publish_task(self, chunk=None, source=None, force=False, **kwargs):
         """
         Publish the past elections of one scope, converting every outcome into a result dict.
 
@@ -67,19 +68,25 @@ class Event(PublishPipeline):
             Scope to publish.
         source : str or None
             Results folder of the backtest (see ``publish.backtest_source``).
+        force : bool, default False
+            Publish even when the backtest tables lack the model slice or the series of the live publication.
 
         Notes
         -----
         ``self.result`` is a list with one result per date, each with its ``event_date`` and a ``status``:
         ``published`` with ``n_polls``, ``n_pollsters``, ``has_model`` and ``seconds``, ``skipped`` for
-        ``publish.NothingToPublish`` and ``failed`` for any other exception, both with a ``reason``.
+        ``publish.NothingToPublish``, ``refused`` for ``publish.PublishRefused`` and ``failed`` for any other
+        exception, the last three with a ``reason``.
         """
         outcomes = []
         for day in self.days:
             try:
-                out = publish.publish_event(chunk, day, self.writer, source=source, verbose=self.model_verbose)
+                out = publish.publish_event(chunk, day, self.writer, source=source, verbose=self.model_verbose,
+                                            force=force)
             except publish.NothingToPublish as e:
                 outcomes.append({'status': 'skipped', 'event_date': day, 'reason': str(e)})
+            except publish.PublishRefused as e:
+                outcomes.append({'status': 'refused', 'event_date': day, 'reason': str(e)})
             except Exception as e:
                 outcomes.append(self.failed(chunk, e, event_date=day))
             else:

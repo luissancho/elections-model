@@ -453,6 +453,21 @@ def test_event_without_dates_ends_in_setup(fresh_app, tmp_path, patched, monkeyp
     assert p.result[0]['event_date'] == "['2023-07-23', '2023-13-01']"
 
 
+def test_event_refuses_a_date_whose_live_model_would_vanish(fresh_app, tmp_path, patched):
+    """Con una fuente sin tablas, la fecha ya publicada con modelo se rehúsa (sin fallar el ámbito), salvo `force`."""
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
+    write_backtest_source(str(tmp_path / 'bt'))
+    fs = FileSystem(str(tmp_path / 'site'))
+    p = event(fs, 'es', '2023-07-23', source=str(tmp_path / 'bt'))
+    assert p.result[0]['status'] == 'published' and p.result[0]['has_model'] is True
+    p = event(fs, 'es', '2023-07-23', source=str(tmp_path / 'empty'))
+    assert p.result[0]['status'] == 'refused' and 'run backtest push' in p.result[0]['reason']
+    assert p.line[0].startswith('es: event 2023-07-23 refused (backtest tables for es missing in ')
+    assert bundle.BundleReader(fs).read_json(bundle.path_event('es', '2023-07-23', 'meta'))['data']['has_model'] is True
+    p = event(fs, 'es', '2023-07-23', source=str(tmp_path / 'empty'), force=True)
+    assert p.result[0]['status'] == 'published' and p.result[0]['has_model'] is False
+
+
 def test_event_dry_run_writes_apart(fresh_app, tmp_path, patched):
     fresh_app.set('fs', FileSystem(str(tmp_path / 'files')))  # app fs without backtest tables
     event(FileSystem(str(tmp_path)), 'es', '2023-07-23', dry_run=True)
