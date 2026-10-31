@@ -6,7 +6,7 @@ Base of the pipelines that work scope by scope (``load``, ``compute``, ``backtes
 ``status`` ``failed``, not an exception) and its summary line is built by `line_of`.
 """
 from ..core.worker import Pipeline
-from ..jobs.progress import ScopeProgress, ScopeReporter
+from ..jobs.progress import ScopeProgress, ScopeReporter, collect_warnings
 
 
 class ScopePipeline(ScopeReporter, Pipeline):
@@ -66,6 +66,55 @@ class ScopePipeline(ScopeReporter, Pipeline):
             Printer with the phase labels of the pipeline.
         """
         return self._progress(chunk, position[0], position[1], day, self.steps)
+
+    def start_progress(self, chunk, position=(1, 1), day=None) -> ScopeProgress:
+        """
+        Create the progress printer of one chunk, keep it in ``self.progress`` and report that the chunk starts.
+
+        Parameters
+        ----------
+        chunk : str
+            Scope being worked.
+        position : tuple of int, default (1, 1)
+            ``(index, total)`` of the chunk.
+        day : str, optional
+            Day of a retrospective run, added to the prefix.
+
+        Returns
+        -------
+        ScopeProgress
+            The started progress.
+        """
+        self.progress = self.progress_of(chunk, position, day)
+        self.progress.start()
+        return self.progress
+
+    def collect(self, chunk, work, **extra) -> dict:
+        """
+        Run the unit of work of one chunk, collecting its warnings and turning an exception into a failed result.
+
+        Parameters
+        ----------
+        chunk : str
+            Scope being worked.
+        work : callable
+            Zero-argument callable returning the result dict.
+        **extra
+            Further keys of the result when the work fails (see `failed`).
+
+        Returns
+        -------
+        dict
+            The result of ``work`` or the failed result, with the ``warnings`` raised.
+        """
+        notes = []
+        try:
+            with collect_warnings(notes, self.progress.note):
+                result = work()
+        except Exception as e:
+            result = self.failed(chunk, e, **extra)
+        result['warnings'] = notes
+        return result
 
     def failed(self, scope, e: Exception, **extra) -> dict:
         """

@@ -99,7 +99,9 @@ class Load(SequenceJob):
         Raises
         ------
         ValueError
-            If ``what`` holds an unknown action, or ``years`` comes with ``overwrite``.
+            If ``what`` holds an unknown action, ``years`` comes with ``overwrite``, there are no scopes to run
+            (``load: no scopes to run``) or ``stop_on_error`` is not true or false (``stop_on_error must be true or
+            false``).
         RuntimeError
             If any scope failed (raised after the summary and the alert).
         """

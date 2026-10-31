@@ -1,4 +1,4 @@
-from ...jobs.progress import collect_warnings, counted, notes_suffix
+from ...jobs.progress import counted, notes_suffix
 from ...lib import load
 from ...lib.publish.common import next_event_date
 from ..base import ScopePipeline
@@ -46,12 +46,11 @@ class Polls(ScopePipeline):
         skip_missing : bool, default False
             Turn a scope without an upcoming event into ``skipped`` instead of ``failed``.
         """
-        self.progress = self.progress_of(chunk, position)
-        self.progress.start()
+        self.start_progress(chunk, position)
         try:
             self.event = event_date or next_event_date(chunk)
         except Exception as e:
-            self.end({**self.failed(chunk, e), 'action': 'polls', 'warnings': []})
+            self.end(self.failed(chunk, e, action='polls', warnings=[]))
 
         if self.event is None:
             self.end({'status': 'skipped' if skip_missing else 'failed', 'action': 'polls',
@@ -78,21 +77,14 @@ class Polls(ScopePipeline):
         The result is that of `load.load_polls` or ``{'status': 'failed' | 'skipped', 'action': 'polls',
         'reason'}``, with the ``warnings`` raised.
         """
-        notes = []
-        try:
-            with collect_warnings(notes, self.progress.note):
-                result = load.load_polls(chunk, self.event, overwrite=self._action == 'rebulk', force=force,
-                                         years=years, save=not dry_run, verbose=self.model_verbose,
-                                         progress=self.progress,
-                                         report=lambda text, level=1: self._say(text, level), loader=loader,
-                                         computer=computer, catalogues=catalogues)
-        except Exception as e:
-            result = {**self.failed(chunk, e), 'action': 'polls'}
+        result = self.collect(chunk, lambda: load.load_polls(
+            chunk, self.event, overwrite=self._action == 'rebulk', force=force, years=years, save=not dry_run,
+            verbose=self.model_verbose, progress=self.progress, report=lambda text, level=1: self._say(text, level),
+            loader=loader, computer=computer, catalogues=catalogues), action='polls')
 
         if skip_missing and result['status'] == 'failed' and result['reason'] == load.NO_POLLS_ARTICLE.format(
                 self.event):
             result['status'] = 'skipped'
-        result['warnings'] = notes
         self.result = result
 
     def line_of(self, chunk, result, **kwargs):

@@ -79,6 +79,10 @@ def test_load_event_date_parameter_and_scope_without_upcoming_event(fresh_app, s
     assert results['es']['status'] == results['es-md']['status'] == 'skipped'
 
 
+def test_load_years_are_passed_as_strings(fresh_app, scopes, events):
+    loader = FakeLoader()
+    run(loader, scopes=['es'], years=[2025, '2026'], verbose=0)
+    assert loader.inits[0][2] == ['2025', '2026']
 
 
 def test_load_refuses_years_with_overwrite(fresh_app, scopes, events):
@@ -86,14 +90,6 @@ def test_load_refuses_years_with_overwrite(fresh_app, scopes, events):
     with pytest.raises(ValueError, match='cannot be combined'):
         run(loader, scopes=['es'], years=['2026'], overwrite=True, verbose=0)
     assert loader.inits == []
-
-
-
-
-
-
-
-
 
 
 def test_load_isolates_a_failing_scope_and_reports_the_exception(fresh_app, scopes, events, capsys, monkeypatch):
@@ -130,8 +126,6 @@ def test_load_params_runs_every_scope_and_prints_the_summary(fresh_app, scopes, 
     assert out['es']['status'] == 'loaded'
 
 
-
-
 def test_load_params_scope_without_elections_is_skipped_with_all_and_fails_when_named(fresh_app, scopes, events, capsys):
     loader = FakeParamsLoader(fail={'es-md': ValueError(NO_EVENTS.format('es-md'))})
     out = Load().run(what='params', scopes='all', params_loader=loader)
@@ -161,7 +155,7 @@ def test_load_translates_what_and_scopes_and_returns_by_action(fresh_app, scopes
     assert set(out['es']) == {'polls', 'params'} and out['es']['polls']['status'] == 'loaded'
 
 
-def test_load_stop_on_error_stops_at_the_first_failed_scope(fresh_app, scopes, events, monkeypatch):
+def test_load_stop_on_error_stops_at_the_first_failed_scope(fresh_app, scopes, events):
     loader = FakeParamsLoader(fail={'es': KeyError('boom')})
     with pytest.raises(RuntimeError, match=r'load: failed scopes: es \(params\)'):
         Load().run(what='params', scopes='all', params_loader=loader, stop_on_error=True)

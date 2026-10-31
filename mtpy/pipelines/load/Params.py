@@ -1,4 +1,4 @@
-from ...jobs.progress import collect_warnings, counted, notes_suffix
+from ...jobs.progress import counted, notes_suffix
 from ...lib import load
 from ..base import ScopePipeline
 from .Polls import STEPS
@@ -23,8 +23,7 @@ class Params(ScopePipeline):
 
     def prepare_task(self, chunk=None, position=(1, 1), **kwargs):
         """Create and start the progress of the scope."""
-        self.progress = self.progress_of(chunk, position)
-        self.progress.start()
+        self.start_progress(chunk, position)
 
     def load_task(self, chunk=None, dry_run=False, params_loader=None, skip_missing=False, **kwargs):
         """
@@ -46,19 +45,13 @@ class Params(ScopePipeline):
         The result is that of `load.load_params` or ``{'status': 'failed' | 'skipped', 'action': 'params',
         'reason'}``, with the ``warnings`` raised.
         """
-        notes = []
-        try:
-            with collect_warnings(notes, self.progress.note):
-                result = (params_loader or load.load_params)(
-                    chunk, save=not dry_run, verbose=self.model_verbose, progress=self.progress,
-                    report=lambda text, level=1: self._say(text, level))
-        except Exception as e:
-            result = {**self.failed(chunk, e), 'action': 'params'}
+        result = self.collect(chunk, lambda: (params_loader or load.load_params)(
+            chunk, save=not dry_run, verbose=self.model_verbose, progress=self.progress,
+            report=lambda text, level=1: self._say(text, level)), action='params')
 
         if skip_missing and result['status'] == 'failed' and result['reason'] == 'ValueError: ' + load.NO_EVENTS.format(
                 chunk):
             result['status'], result['reason'] = 'skipped', load.NO_EVENTS.format(chunk)
-        result['warnings'] = notes
         self.result = result
 
     def line_of(self, chunk, result, **kwargs):
