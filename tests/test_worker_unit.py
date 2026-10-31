@@ -401,3 +401,15 @@ def test_identical_lines_of_different_chunks_all_reach_the_alert(fresh_app):
     job.run(select='grp.alpha', chunks=['a', 'b'])
     assert job.lines == ['same', 'same']
     assert ps.sent[-1].splitlines()[1:] == ['same', 'same']
+
+
+def test_an_exception_outside_a_chunk_is_a_failure_in_the_only_alert(fresh_app):
+    ps = Recorder()
+    fresh_app.set('ps', ps)
+    job = Seq()
+    job.namespace = types.SimpleNamespace(**{'grp.Alpha': Alpha})
+    with pytest.raises(AttributeError):
+        job.run(select='grp', chunks=['a'])
+    assert len(ps.sent) == 1
+    text = ps.sent[0].splitlines()
+    assert text[0].endswith(' with 1 failure') and text[1].startswith('grp.beta: failed (AttributeError')

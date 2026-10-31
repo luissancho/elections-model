@@ -265,6 +265,7 @@ class SequenceJob(Job):
         self.results = {}
         self.lines = []
         self._failed = []
+        self._raised = None
 
     def select_pipelines(self, select) -> list[tuple[str, str, str]]:
         """
@@ -361,6 +362,7 @@ class SequenceJob(Job):
 
         tstart = datetime.now()
         self.results, self.lines, self._failed = {}, [], []
+        self._raised = None
         failures = []
         key, chunk = None, None
 
@@ -377,6 +379,10 @@ class SequenceJob(Job):
                 self._finish(pipeline, key, failures, stop, kwargs)
         except BaseException as e:
             if isinstance(e, Exception):
+                if e is not self._raised:
+                    line = '{}: failed ({}: {})'.format(key, type(e).__name__, e)
+                    self._add_lines(line, True)
+                    failures.append(key)
                 self._summary(tstart, failures)
             else:
                 line = 'interrumpido en {}{}: {}'.format(
@@ -426,9 +432,8 @@ class SequenceJob(Job):
 
         if stop:
             self._finish(pipeline, key, failures, stop, kwargs)
-            if error is not None:
-                raise error
-            raise RuntimeError(self._failure_message(failures))
+            self._raised = error or RuntimeError(self._failure_message(failures))
+            raise self._raised
 
     def _finish(self, pipeline, key, failures, stop, kwargs) -> None:
         """
@@ -447,7 +452,8 @@ class SequenceJob(Job):
         if name:
             failures.append(name)
             if stop:
-                raise RuntimeError(self._failure_message(failures))
+                self._raised = RuntimeError(self._failure_message(failures))
+                raise self._raised
 
     def _add_lines(self, line, failed: bool) -> None:
         """
