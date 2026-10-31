@@ -97,6 +97,8 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
         parsed = json.loads(params)
     except ValueError as e:
         raise UsageError(f'invalid JSON: {e}')
+    if '\n' in params:
+        raise UsageError('params must be on one line')
     if job == 'load' and isinstance(parsed, dict):
         what = parsed.get('what')
         targets = what if isinstance(what, list) else [what]
@@ -108,7 +110,10 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
 def service_network(ecs, cluster: str, service: str) -> dict:
     """Return the ``awsvpcConfiguration`` of the service's current deployment."""
     response = ecs.describe_services(cluster=cluster, services=[service])
-    deployment = response['services'][0]['deployments'][0]
+    services = response.get('services') or []
+    if not services or not services[0].get('deployments'):
+        raise LaunchError(f'service {service} not found in cluster {cluster}')
+    deployment = services[0]['deployments'][0]
     return deployment['networkConfiguration']['awsvpcConfiguration']
 
 
@@ -159,12 +164,35 @@ def launch(ecs, request: dict) -> str:
     LaunchError
         If AWS reports failures or returns no task.
     """
-    response = ecs.run_task(**request)
+    response = aws_call('run_task', ecs.run_task, **request)
     failures = response.get('failures') or []
     if failures or not response.get('tasks'):
         first = failures[0] if failures else {}
         raise LaunchError(f"{first.get('reason', 'no task started')}: {first.get('detail')}")
     return response['tasks'][0]['taskArn']
+
+
+def is_client_error(error: Exception) -> bool:
+    """Tell whether an exception is a botocore ``ClientError`` (without importing botocore)."""
+    return type(error).__name__ == 'ClientError' or hasattr(error, 'response')
+
+
+def aws_call(name: str, function, **kwargs):
+    """Call an AWS client method turning client errors into ``LaunchError``.
+
+    Anything that is not an AWS client error is raised unchanged.
+    """
+    try:
+        return function(**kwargs)
+    except Exception as e:
+        if not is_client_error(e):
+            raise
+        raise LaunchError(f'{name} failed: {e}')
+
+
+def region_of(config: dict) -> Optional[str]:
+    """Return ``AWS_REGION`` or None when empty or absent."""
+    return config.get('AWS_REGION') or None
 
 
 def task_id(arn: str) -> str:
@@ -285,7 +313,8 @@ def register(ecs, cluster: str, service: str, family: str) -> str:
     """
     live = ecs.describe_services(cluster=cluster, services=[service])['services'][0]['taskDefinition']
     web = ecs.describe_task_definition(taskDefinition=live)['taskDefinition']
-    registered = ecs.register_task_definition(**derive_job_definition(web, family))['taskDefinition']
+    definition = derive_job_definition(web, family)
+    registered = aws_call('register_task_definition', ecs.register_task_definition, **definition)['taskDefinition']
     return f"{registered['family']}:{registered['revision']}"
 
 
@@ -342,6 +371,8 @@ def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
         if args.register and args.job:
             raise UsageError('--register takes no job')
         config = load_config(default_env_file())
+        if not config.get('ECS_CLUSTER') or not config.get('ECS_SERVICE'):
+            raise ConfigError('ecs.env needs ECS_CLUSTER and ECS_SERVICE')
         if args.job:
             run_job = run_job_value(args.job, args.params)
     except UsageError as e:
@@ -352,24 +383,29 @@ def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
         say(err, str(e))
         return 2
     if ecs is None or logs is None:
-        made_ecs, made_logs = clients(config.get('AWS_REGION'))
+        made_ecs, made_logs = clients(region_of(config))
         ecs, logs = ecs or made_ecs, logs or made_logs
     cluster = config['ECS_CLUSTER']
     if args.register:
         family = config.get('ECS_TASK_FAMILY') or 'elections-model-job'
-        say(out, f'registered {register(ecs, cluster, config["ECS_SERVICE"], family)}')
+        try:
+            say(out, f'registered {register(ecs, cluster, config["ECS_SERVICE"], family)}')
+        except LaunchError as e:
+            say(err, str(e))
+            return 1
         return 0
-    network = network_from(config, service_network(ecs, cluster, config['ECS_SERVICE']))
     try:
+        network = network_from(config, service_network(ecs, cluster, config['ECS_SERVICE']))
         arn = launch(ecs, run_task_request(config, network, run_job))
     except LaunchError as e:
         say(err, str(e))
         return 1
     log_group = config.get('ECS_LOG_GROUP') or '/ecs/elections-model'
-    region = config.get('AWS_REGION')
+    region = region_of(config)
     say(out, f'task {task_id(arn)}')
     say(out, f'aws logs tail {log_group} --log-stream-names {log_stream(arn)} --follow --since 1h')
-    say(out, f'https://{region}.console.aws.amazon.com/ecs/v2/clusters/{cluster}/tasks/{task_id(arn)}')
+    if region:
+        say(out, f'https://{region}.console.aws.amazon.com/ecs/v2/clusters/{cluster}/tasks/{task_id(arn)}')
     if not args.follow:
         return 0
     return follow(ecs, logs, cluster, arn, log_group, out=out)

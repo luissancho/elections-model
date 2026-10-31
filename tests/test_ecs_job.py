@@ -107,6 +107,8 @@ def test_run_job_value_refuses_empty_bad_json_and_load_params():
         ecs_job.run_job_value('load', '{"what":["polls","params"],"scopes":"all"}')
     with pytest.raises(ecs_job.UsageError, match='load params runs on the laptop'):
         ecs_job.run_job_value('load', '{"what":"params"}')
+    with pytest.raises(ecs_job.UsageError, match='one line'):
+        ecs_job.run_job_value('publish', '{\n"scopes": "all"\n}')
     assert ecs_job.run_job_value('backtest', None) == 'backtest'
     assert ecs_job.run_job_value('load', '{"scopes":["es"]}') == 'load {"scopes":["es"]}'
 
@@ -179,3 +181,45 @@ def test_register_derives_the_job_definition_from_the_live_web_one(env_file):
     assert container['environmentFiles'] == LIVE_TASKDEF['containerDefinitions'][0]['environmentFiles']
     assert container['logConfiguration']['options']['awslogs-stream-prefix'] == 'job'
     assert not [c for c in ecs.calls if c[0] == 'run_task']
+
+
+def test_missing_required_config_keys_exit_2(tmp_path, monkeypatch):
+    path = tmp_path / 'ecs.env'
+    path.write_text('AWS_REGION=eu-west-1\n')
+    monkeypatch.setenv('ECS_ENV_FILE', str(path))
+    code, _, err = run(['backtest'])
+    assert code == 2 and 'ecs.env needs ECS_CLUSTER and ECS_SERVICE' in err
+
+
+def test_unknown_service_exits_1_with_a_message(env_file):
+    class NoService(FakeEcs):
+        def describe_services(self, **kw):
+            return {'services': [], 'failures': [{'arn': 'x', 'reason': 'MISSING'}]}
+
+    code, _, err = run(['backtest'], NoService())
+    assert code == 1 and 'service elections-model-service not found in cluster elections-model-cluster' in err
+
+
+def test_aws_client_errors_exit_1_with_a_message(env_file):
+    class ClientError(Exception):
+        response = {'Error': {'Code': 'ClientException'}}
+
+    class Failing(FakeEcs):
+        def run_task(self, **kw):
+            raise ClientError('TaskDefinition not found')
+
+        def register_task_definition(self, **kw):
+            raise ClientError('denied')
+
+    code, _, err = run(['backtest'], Failing())
+    assert code == 1 and 'run_task failed: TaskDefinition not found' in err
+    code, _, err = run(['--register'], Failing())
+    assert code == 1 and 'register_task_definition failed: denied' in err
+
+
+def test_empty_region_omits_the_console_link_and_passes_none_to_boto3(env_file):
+    env_file.write_text(env_file.read_text().replace('AWS_REGION=eu-west-1', 'AWS_REGION='))
+    code, out, _ = run(['backtest'])
+    assert code == 0 and 'task abc123' in out and 'aws logs tail' in out and 'console.aws.amazon.com' not in out
+    assert ecs_job.region_of({'AWS_REGION': ''}) is None and ecs_job.region_of({}) is None
+    assert ecs_job.region_of({'AWS_REGION': 'eu-west-1'}) == 'eu-west-1'
