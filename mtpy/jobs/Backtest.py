@@ -4,13 +4,18 @@ from ..lib.publish import resolve_scopes
 
 class Backtest(SequenceJob):
     """
-    Run the model backtest on past elections and write its tables to ``backtest/results`` (the job form of
-    ``backtest/run_backtest.py``), the input of ``publish backtest`` and of the model slice of ``publish event``.
+    Run the model backtest on past elections and write its tables to ``backtest/results`` of the app file system
+    (S3 in ECS; the job form of ``backtest/run_backtest.py``), the input of ``publish backtest`` and of the model
+    slice and series of ``publish event``.
 
     Scope by scope (`backtest.backtest_scope`), it evaluates every (election, horizon) case out of sample, writes
-    the seven tables (``shares``, ``seats``, ``blocks``, ``provinces``, ``meta``, ``metrics`` and ``by_horizon``)
-    and ``run.json`` (parameters, elections and horizons evaluated, commit and state of the polls in the database)
-    into ``out`` for ``es`` and ``out/{scope}`` for the other scopes, overwriting the previous run. Scopes are
+    the eight tables (``shares``, ``seats``, ``blocks``, ``provinces``, ``series``, ``meta``, ``metrics`` and
+    ``by_horizon``) and ``run.json`` (parameters, elections and horizons evaluated, commit and state of the polls
+    in the database) for ``es`` at the root of the results folder and for the other scopes in ``{scope}/``,
+    overwriting the previous run. The results folder of ``run`` is ``out`` when given (a local folder, as
+    ``run_backtest.py`` does with the repository copy) and ``backtest/results`` of the app file system
+    otherwise; ``push`` reads ``out`` (the repository copy by default) and writes the app file system, ``pull``
+    the reverse. Scopes are
     isolated: one that fails never stops the others (unless ``stop_on_error``), and the job exits with an error at the end if any failed. A
     scope without elections to evaluate, or none of whose cases could be evaluated, ends ``skipped`` and nothing
     is written for it. The cases the backtest skips (without usable polls) are reported as warnings of the scope.
@@ -91,8 +96,9 @@ class Backtest(SequenceJob):
             Recompute the pollster ratings in memory with the current code (once per scope) and use them in
             every case instead of the stored ones; nothing is saved to the database.
         out : str, optional
-            Results folder; ``backtest/results`` of the repository by default (a relative path is taken from
-            the working directory).
+            Local results folder (a relative path is taken from the working directory). For ``run`` the app
+            file system (``backtest/results``, S3 in ECS) by default; for ``push`` (its origin) and ``pull`` (its
+            destination) the repository copy (``backtest/results`` of the repository) by default.
         verbose : int, default 1
             Verbosity of the console output (see the class).
         runner, stats : callable, optional
@@ -108,9 +114,11 @@ class Backtest(SequenceJob):
         Returns
         -------
         dict[str, dict]
-            Result of each scope: ``status`` (``completed``, ``skipped`` or ``failed``) and, when completed,
-            ``n_cases``, ``n_events``, ``n_horizons``, ``events``, ``horizons``, ``folder`` and ``seconds``;
-            otherwise the ``reason``. Every result carries the ``warnings`` of the backtest (the cases skipped).
+            Result of each scope: ``status`` (``completed``, ``pushed``, ``pulled``, ``skipped`` or ``failed``);
+            when completed, ``n_cases``, ``n_events``, ``n_horizons``, ``events``, ``horizons``, ``folder`` and
+            ``seconds``; when pushed or pulled, ``n_files`` (copied), ``n_removed`` (deleted from the destination
+            because the source lacks them) and ``folder`` (the destination); otherwise the ``reason``. Every
+            result of ``run`` carries the ``warnings`` of the backtest (the cases skipped).
 
         Raises
         ------

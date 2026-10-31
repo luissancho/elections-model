@@ -217,6 +217,19 @@ def test_describe_source_names_the_bucket_of_an_s3_file_system():
     assert backtest.describe_source(fs, 'backtest/results/es-md') == 's3://elections-s3-bucket/backtest/results/es-md'
 
 
+def test_public_source_drops_the_bucket_of_s3_and_describes_a_local_folder(tmp_path):
+    """La fuente pública del meta del backtest: el prefijo sin el bucket en S3, la descripción local si no."""
+    from mtpy.core.io import FileSystem
+    from mtpy.core.services.s3 import S3
+    from mtpy.lib import backtest
+    fs = S3.__new__(S3)
+    fs.bucket = 'elections-s3-bucket'
+    assert backtest.public_source(fs, 'backtest/results/es-md') == 'backtest/results/es-md'
+    assert backtest.public_source(FileSystem(backtest.RESULTS_ROOT), 'es-md') == 'backtest/results/es-md'
+    local = FileSystem(str(tmp_path))
+    assert backtest.public_source(local, 'es-md') == backtest.describe_source(local, 'es-md') == str(tmp_path / 'es-md')
+
+
 def test_backtest_scope_writes_into_the_app_fs_without_out(fresh_app, tmp_path):
     from mtpy.core.io import FileSystem
     from mtpy.lib import backtest
@@ -413,7 +426,7 @@ def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(
     assert list(backtest.shortest_horizon(pd.DataFrame(columns=out['series'].columns)).columns) == list(out['series'].columns)
 
 
-def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch):
+def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys):
     """`backtest/run_backtest.py` es un envoltorio: traduce sus opciones a `Backtest.run` (la composición la normaliza
     el job) y `--scopes` sin `all` pasa tal cual."""
     import importlib.util
@@ -434,6 +447,11 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch):
     assert seen == {'scopes': ['es-md', 'es-cl'], 'events': None, 'horizons': [6, 30], 'n_sim': 20, 'seed': 42, 'max_fc': 10,
                     'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
                     'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None, 'recompute_ratings': False, 'out': 'x'}
+    hint = capsys.readouterr().out
+    assert hint.startswith('Tables written to x. publish backtest/event read the app file system: run python job.py backtest ')
+    assert '\'{"action":"push","scopes":["es-md","es-cl"],"out":"x"}\' (with S3_BUCKET set)' in hint
+    default = os.path.join(root, 'backtest', 'results')
+    assert '\'{"action":"push","scopes":["es"]}\'' in script.push_hint(default, ['es'], default)
 
 
 def test_backtest_simulates_a_thousand_times_by_default_like_the_forecast():

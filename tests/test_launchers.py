@@ -53,6 +53,7 @@ def test_job_main_alerts_when_the_job_cannot_be_built(booted, capsys):
     assert ps.sent[1].startswith('fake_job job failed: JSONDecodeError')
     assert len(ps.sent) == 2
     assert 'Traceback' in capsys.readouterr().err
+    assert issubclass(job.UnbuiltJob, Job) and not hasattr(job, 'Launcher')
 
 
 def test_job_main_installs_a_sigterm_handler_that_interrupts(booted, capsys):

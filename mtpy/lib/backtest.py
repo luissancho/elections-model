@@ -28,8 +28,8 @@ from .simulator import Simulator
 DEFAULT_EVENTS = ['2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10', '2023-07-23']
 DEFAULT_HORIZONS = [6, 14, 30, 60, 90, 180]
 LEVELS = [0.5, 0.8, 0.95]
-# Results folder by default: `backtest/results` of the repository (`es` at its root, the other scopes in a
-# subdirectory each; see `results_dir`)
+# Folder of the results in the file system of the app (local `files/` or S3) when no local folder is given:
+# `es` at its root, the other scopes in a subfolder each (see `results_fs`)
 RESULTS_PREFIX = 'backtest/results'
 
 # Files of the results of a scope in its folder
@@ -39,6 +39,8 @@ RESULT_FILES = ('shares.csv', 'seats.csv', 'blocks.csv', 'provinces.csv', 'serie
 # Root of the repository (to show local folders relative to it)
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
+# Repository copy of the results (`backtest/results`, committed): the local folder of `run_backtest.py`,
+# `results_dir` and the `push`/`pull` actions of the backtest job
 RESULTS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backtest', 'results'))
 
 
@@ -724,6 +726,31 @@ def describe_source(fs, folder: str) -> str:
     return path
 
 
+def public_source(fs, folder: str) -> str:
+    """
+    Location of a results folder fit for a public document (no bucket name).
+
+    Parameters
+    ----------
+    fs : FileSystem
+        File system of the results (`S3` or local).
+    folder : str
+        Folder in the file system (`''` for its root).
+
+    Returns
+    -------
+    str
+        `folder` alone for S3 (the prefix in the file system of the app, e.g. `backtest/results/es-md`);
+        `describe_source` otherwise (relative to the repository when inside it).
+    """
+    from ..core.services.s3 import S3  # lazy: it pulls s3fs
+
+    if isinstance(fs, S3):
+        return folder
+
+    return describe_source(fs, folder)
+
+
 def copy_results(scope: str, src: tuple, dst: tuple) -> dict:
     """
     Copy the backtest tables of a scope from one results folder to another, mirroring the source.
@@ -817,8 +844,8 @@ def backtest_scope(
     scope : str
         Scope code.
     out : str, optional
-        Results folder (`RESULTS_ROOT` by default): the national scope writes at its root, the others in
-        `out/{scope}`.
+        Local results folder: the national scope writes at its root, the others in `out/{scope}`. By default
+        the file system of the app (local `files/` or S3) under `RESULTS_PREFIX` (`backtest/results`).
     events : list of str, optional
         Elections to evaluate; by default `default_events(scope)` (`DEFAULT_EVENTS` for `es`, the featured
         elections held since 2019 for a regional scope).

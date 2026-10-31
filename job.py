@@ -10,8 +10,8 @@ from mtpy.core.utils.strings import to_camel
 from mtpy.core.worker import Job, JobInterrupted
 
 
-class Launcher(Job):
-    """Minimal job used to log and alert when the requested job cannot even be built."""
+class UnbuiltJob(Job):
+    """Bare job used only to log and alert when the requested job could not be built."""
 
 
 def interrupt(signum, frame):
@@ -53,9 +53,9 @@ def main(name, params, namespace=None):
     except Exception as e:
         if job is None:
             # `dispatch` never ran, so nobody alerted: do it here (the alert may be the only signal of a detached task)
-            launcher = Launcher()
-            launcher.log('error', '{} job failed'.format(name))
-            launcher.alert('{} job failed: {}: {}'.format(name, type(e).__name__, e))
+            unbuilt = UnbuiltJob()
+            unbuilt.log('error', '{} job failed'.format(name))
+            unbuilt.alert('{} job failed: {}: {}'.format(name, type(e).__name__, e))
         traceback.print_exc()
         return 1
 

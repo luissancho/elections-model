@@ -14,8 +14,13 @@ This script is a thin wrapper of the `backtest` job (`python job.py backtest '{.
 which does the work through `mtpy.lib.backtest.backtest_scope`; it only translates the command line options. Note
 that `--scopes all` here means every regional scope (not `es`), while `"scopes": "all"` in the job means `es` and
 every regional scope.
+
+The tables go to the repository copy (`backtest/results`, or `--out`), while `publish backtest` and `publish event`
+read the app file system (S3 with `S3_BUCKET`): after a local run, `push` the tables (the hint printed at the end) or
+pass `"source":"backtest/results"` to `publish`.
 """
 import argparse
+import json
 import os
 import sys
 
@@ -42,7 +47,8 @@ def main():
     parser.add_argument('--no-regional-noise', dest='regional_noise', action='store_false', help='deterministic proportional swing per province (no M9 shocks)')
     parser.add_argument('--min-events', type=int, default=None, help='featured elections of a regional scope needed to fit the estimators on the scope itself instead of on `es` (M11); by default always `es`, 1 forces the own ones')
     parser.add_argument('--recompute-ratings', action='store_true', help='recompute the pollster ratings in memory with the current code (nothing is saved) instead of using the stored ones')
-    parser.add_argument('--out', default=os.path.join(ROOT, 'backtest', 'results'))
+    default_out = os.path.join(ROOT, 'backtest', 'results')
+    parser.add_argument('--out', default=default_out)
     args = parser.parse_args()
 
     from mtpy import mtpy
@@ -67,6 +73,34 @@ def main():
         regional_noise=args.regional_noise, min_events=args.min_events,
         recompute_ratings=args.recompute_ratings, out=args.out
     )
+    print(push_hint(args.out, scopes, default_out))
+
+
+def push_hint(out, scopes, default_out):
+    """
+    Line telling where the tables went and how to make `publish` see them.
+
+    Parameters
+    ----------
+    out : str
+        Results folder of the run.
+    scopes : list of str
+        Scopes evaluated.
+    default_out : str
+        The repository copy (`backtest/results`), the folder `push` reads without `out`.
+
+    Returns
+    -------
+    str
+        The hint, with the `push` command of these scopes (and `out` when it is not the repository copy).
+    """
+    params = {'action': 'push', 'scopes': list(scopes)}
+    if os.path.abspath(out) != os.path.abspath(default_out):
+        params['out'] = out
+    command = "python job.py backtest '{}'".format(json.dumps(params, separators=(',', ':')))
+
+    return ('Tables written to {}. publish backtest/event read the app file system: run {} (with S3_BUCKET set) '
+            'or pass "source" to publish.'.format(out, command))
 
 
 if __name__ == '__main__':

@@ -96,7 +96,8 @@ def export_backtest_meta(scope: str, run: dict, tables, source: str, prov: dict,
     tables : object
         Has the ``metrics`` table (with ``event_date``, ``horizon`` and ``seats_valid``).
     source : str
-        Where the tables come from (``backtest.describe_source``), written as is.
+        Where the tables come from (``backtest.public_source``: the folder relative to the repository in local,
+        the prefix in the file system of the app for S3, never the bucket), written as is.
     prov : dict
         Result of ``provenance`` at publication.
     seconds : dict
@@ -148,7 +149,7 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
         There is no ``metrics.csv`` for the scope; nothing is written then.
     """
     start = time.perf_counter()
-    from ..backtest import describe_source, results_path  # lazy, as in ``backtest_source``
+    from ..backtest import public_source, results_path  # lazy, as in ``backtest_source``
 
     fs, folder = backtest_source(scope, source)
     if not fs.exists(results_path(folder, BACKTEST_FILES['metrics'])):
@@ -170,7 +171,7 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
     seconds = {'read': read, 'total': time.perf_counter() - start}
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
-    meta = export_backtest_meta(scope, run, tables, describe_source(fs, folder), prov(), seconds)
+    meta = export_backtest_meta(scope, run, tables, public_source(fs, folder), prov(), seconds)
     writer.write_json(bundle.path_backtest(scope, 'meta'), bundle.BACKTEST_SCHEMAS['meta'], meta, scope)
     n_events = len(meta['events'])
 
