@@ -1,9 +1,9 @@
-from ...lib import bundle, publish
-from ..base import ScopePipeline
+from ...lib import publish
+from .base import PublishPipeline
 from .Forecast import national_event
 
 
-class Analysis(ScopePipeline):
+class Analysis(PublishPipeline):
     """
     Publish the houses analysis of each scope to the web bundle (``publish.publish_analysis``).
 
@@ -38,7 +38,7 @@ class Analysis(ScopePipeline):
             ``verbose`` and ``position`` (see `ScopePipeline.start`); other arguments of the job are ignored.
         """
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
         self.national = national_event(today)
 
     def prepare_task(self, chunk=None, position=(1, 1), **kwargs):

@@ -1,8 +1,8 @@
-from ...lib import bundle, publish
-from ..base import ScopePipeline
+from ...lib import publish
+from .base import PublishPipeline
 
 
-class Event(ScopePipeline):
+class Event(PublishPipeline):
     """
     Publish the past elections of each scope to the web bundle (``publish.publish_event``).
 
@@ -26,7 +26,7 @@ class Event(ScopePipeline):
     def start(self, fs=None, dry_run=False, **kwargs) -> None:
         """Set the run and create the bundle writer (under the dry-run prefix in a dry run)."""
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
 
     def resolve_dates_task(self, chunk=None, position=(1, 1), event_date=None, today=None, **kwargs):
         """

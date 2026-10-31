@@ -3,7 +3,7 @@ from typing import Optional
 
 from ...jobs.progress import collect_warnings, counted, notes_suffix
 from ...lib import bundle, publish
-from ..base import ScopePipeline
+from .base import PublishPipeline
 from .Manifest import manifest_line
 
 
@@ -69,7 +69,7 @@ def national_event(today=None):
     return publish.next_event_date('es', date_from=eve)
 
 
-class Forecast(ScopePipeline):
+class Forecast(PublishPipeline):
     """
     Publish the forecast of one scope to the web bundle (``site/v1``): its run folder and history, and (in `finish`,
     once for every scope of the job) the manifest entries of the scopes published.
@@ -136,7 +136,7 @@ class Forecast(ScopePipeline):
             ``verbose`` and ``position`` (see `ScopePipeline.start`); other arguments of the job are ignored.
         """
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
         self.run_id = bundle.run_id()
         self.days = days
         self.replace = replace

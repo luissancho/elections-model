@@ -1,6 +1,8 @@
 """Tests de los pipelines del grupo `publish` ejecutados sueltos, sin base."""
 import types
 
+import pytest
+
 from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, publish
 from mtpy.pipelines.publish.Analysis import Analysis
@@ -531,3 +533,17 @@ def test_point_and_unpublish_lines(fresh_app, tmp_path, patched):
     p = act(Unpublish, run=run_id)
     assert p.result == {'status': 'published', 'removed': run_id, 'latest': None} and p.label == 'unpublish'
     assert p.line == 'es: published {}'.format(run_id)
+
+
+def test_publish_pipelines_fall_back_to_the_app_file_system(fresh_app, tmp_path):
+    fresh_app.set('fs', FileSystem(str(tmp_path)))
+    p = Manifest()
+    p.run('publish', chunk=None, position=(1, 1), freeze={'active': False})
+    assert p.result['status'] == 'published'
+    assert (tmp_path / 'site' / 'v1' / 'manifest.json').exists()
+
+
+def test_publish_pipeline_without_any_file_system_fails_with_the_job_message(fresh_app):
+    fresh_app.set('fs', None)
+    with pytest.raises(RuntimeError, match='no file system configured'):
+        Manifest().run('publish', chunk=None, position=(1, 1), freeze={'active': False})

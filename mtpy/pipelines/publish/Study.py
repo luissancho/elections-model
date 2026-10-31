@@ -1,8 +1,8 @@
-from ...lib import bundle, publish
-from ..base import ScopePipeline
+from ...lib import publish
+from .base import PublishPipeline
 
 
-class Study(ScopePipeline):
+class Study(PublishPipeline):
     """
     Publish a study to the web bundle (``publish.publish_study``).
 
@@ -24,7 +24,7 @@ class Study(ScopePipeline):
     def start(self, fs=None, dry_run=False, study=None, **kwargs) -> None:
         """Set the run: the bundle writer (under the dry-run prefix in a dry run) and the slug of the study."""
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
         self.study = study
 
     def prepare_task(self, **kwargs):

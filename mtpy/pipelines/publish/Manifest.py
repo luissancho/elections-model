@@ -1,5 +1,5 @@
-from ...lib import bundle, publish
-from ..base import ScopePipeline
+from ...lib import publish
+from .base import PublishPipeline
 
 
 def manifest_line(data):
@@ -8,7 +8,7 @@ def manifest_line(data):
         len(data.get('scopes', {})), 'on' if (data.get('freeze') or {}).get('active') else 'off')
 
 
-class Manifest(ScopePipeline):
+class Manifest(PublishPipeline):
     """
     Write the manifest of the web bundle (``publish.update_manifest``), with the ``freeze`` notice when given.
 
@@ -23,7 +23,7 @@ class Manifest(ScopePipeline):
     def start(self, fs=None, dry_run=False, **kwargs) -> None:
         """Set the run and create the bundle writer (under the dry-run prefix in a dry run)."""
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
 
     def write_task(self, dry_run=False, freeze=None, **kwargs):
         """

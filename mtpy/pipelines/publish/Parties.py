@@ -1,9 +1,9 @@
 from ...jobs.progress import counted
-from ...lib import bundle, publish
-from ..base import ScopePipeline
+from ...lib import publish
+from .base import PublishPipeline
 
 
-class Parties(ScopePipeline):
+class Parties(PublishPipeline):
     """
     Write the party catalogue of the database next to the manifest (``publish.publish_parties``).
 
@@ -19,7 +19,7 @@ class Parties(ScopePipeline):
     def start(self, fs=None, dry_run=False, **kwargs) -> None:
         """Set the run and create the bundle writer (under the dry-run prefix in a dry run)."""
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
 
     def write_task(self, **kwargs):
         """

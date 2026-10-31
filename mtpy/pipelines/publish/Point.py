@@ -1,9 +1,9 @@
-from ...lib import bundle, publish
-from ..base import ScopePipeline
+from ...lib import publish
+from .base import PublishPipeline
 from .Forecast import result_line
 
 
-class Point(ScopePipeline):
+class Point(PublishPipeline):
     """
     Point the manifest of each scope to a run of its history (``publish.point``).
 
@@ -22,7 +22,7 @@ class Point(ScopePipeline):
     def start(self, fs=None, dry_run=False, **kwargs) -> None:
         """Set the run and create the bundle writer (under the dry-run prefix in a dry run)."""
         super().start(**kwargs)
-        self.writer = bundle.BundleWriter(fs, prefix=bundle.DRY_PREFIX if dry_run else bundle.PREFIX)
+        self.writer = self.writer_for(fs, dry_run)
 
     def move_task(self, chunk=None, run=None, **kwargs):
         """
