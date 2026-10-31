@@ -1333,7 +1333,9 @@ python job.py pipeline '{"select":"publish.backtest","chunks":"es,es-md"}'
 python pipeline.py publish.backtest publish es es-md    # nombre, acción y ámbitos
 ```
 
-El segundo lanzador imprime las líneas del resumen y no envía ningún aviso. Ninguno de los dos resuelve `"all"`
+El segundo lanzador imprime las líneas del resumen y no envía ningún aviso. `job.py pipeline` para al primer ámbito
+que falla (el valor por defecto del framework), salvo que se pase `"stop_on_error": false` en el JSON; `pipeline.py`
+no tiene aviso y termina con 1 si algún ámbito falló. Ninguno de los dos resuelve `"all"`
 (los ámbitos van nombrados) ni valida lo que cruza entre acciones, como sí hace el job; ese cuidado es de quien lo
 lanza. Los quince pipelines, por grupo:
 

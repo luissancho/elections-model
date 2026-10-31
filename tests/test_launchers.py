@@ -83,3 +83,30 @@ def test_pipeline_main_runs_each_chunk_with_its_position_finishes_and_prints_the
     assert pipeline.main('grp.fake', 'update', ['a', 'b'], namespace=types.SimpleNamespace(**{'grp.Fake': Fake})) == 0
     assert seen == [('a', (1, 2)), ('b', (2, 2)), 'finish']
     assert capsys.readouterr().out.splitlines()[-2:] == ['a: done', 'b: done']
+
+
+def test_pipeline_job_runs_a_publish_pipeline_standalone_on_the_app_fs(booted, tmp_path):
+    from mtpy.core.io import FileSystem
+    from mtpy.jobs.Pipeline import Pipeline
+    booted.set('fs', FileSystem(str(tmp_path)))
+    job_ = Pipeline()
+    job_.run(select='publish.manifest', freeze={'active': False})
+    assert (tmp_path / 'site' / 'v1' / 'manifest.json').exists()
+    assert job_.results[('publish.manifest', None)]['status'] == 'published'
+
+
+def test_pipeline_main_returns_1_when_a_chunk_or_finish_failed(booted, capsys):
+    class BadChunk(CorePipeline):
+        def __init__(self):
+            super().__init__()
+            self.pipes = {'update': {'Setup': ['mark']}}
+
+        def mark_task(self, chunk=None, position=None, **kwargs):
+            self.result, self.line = {'status': 'failed' if chunk == 'bad' else 'done'}, '{}'.format(chunk)
+
+    class BadFinish(BadChunk):
+        def finish(self, **kwargs):
+            return 'closed-badly'
+    assert pipeline.main('grp.bad', 'update', ['a', 'bad'], namespace=types.SimpleNamespace(**{'grp.Bad': BadChunk})) == 1
+    assert pipeline.main('grp.bad', 'update', ['a'], namespace=types.SimpleNamespace(**{'grp.Bad': BadFinish})) == 1
+    assert pipeline.main('grp.bad', 'update', ['a'], namespace=types.SimpleNamespace(**{'grp.Bad': BadChunk})) == 0

@@ -380,6 +380,26 @@ def test_an_interruption_alerts_and_propagates_without_running_more_chunks(fresh
     assert job.alerted
 
 
+def test_an_interruption_line_accepts_a_non_string_chunk(fresh_app):
+    ps = Recorder()
+    fresh_app.set('ps', ps)
+
+    class Numbered(Alpha):
+        def work_task(self, chunk=None, **kwargs):
+            if chunk == 2:
+                raise JobInterrupted('SIGTERM')
+            self.result = {'status': 'done'}
+
+        def summary(self, chunk, **kwargs):
+            return '{}: done'.format(chunk)
+
+    job = Seq()
+    job.namespace.__dict__['grp.Alpha'] = lambda: job.made.append(Numbered()) or job.made[-1]
+    with pytest.raises(JobInterrupted):
+        job.run(select='grp.alpha', chunks=[1, 2])
+    assert 'interrumpido en grp.alpha.2: SIGTERM' in ps.sent[-1].splitlines()
+
+
 def test_existing_sequence_jobs_keep_their_behaviour(fresh_app):
     ps = Recorder()
     fresh_app.set('ps', ps)

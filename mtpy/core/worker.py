@@ -142,6 +142,7 @@ class Job(Core):
 
     ALERT_LIMIT = 1024
     TRUNCATED = '… (resumen recortado; el texto completo está en el log)'
+    INTERRUPTED = 'interrumpido en {key}: {error}'
 
     def __init__(self):
         if type(self) is Job:
@@ -385,8 +386,8 @@ class SequenceJob(Job):
                     failures.append(key)
                 self._summary(tstart, failures)
             else:
-                line = 'interrumpido en {}{}: {}'.format(
-                    key, '' if chunk is None else '.' + chunk, e
+                line = self.INTERRUPTED.format(
+                    key=key if chunk is None else '{}.{}'.format(key, chunk), error=e
                 )
                 self._add_lines(line, True)
                 self._summary(tstart, failures, interrupted=e)

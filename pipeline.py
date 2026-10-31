@@ -15,6 +15,12 @@ def collect(lines, pipeline):
         lines.extend(line)
 
 
+def failed_in(result):
+    """Tell whether a chunk result (a dict or a list of dicts) is a failure."""
+    results = result if isinstance(result, list) else [result]
+    return any(isinstance(r, dict) and r.get('status') == 'failed' for r in results)
+
+
 def main(name, action, chunks, namespace=None):
     """
     Run a pipeline chunk by chunk, finish it and print its summary lines.
@@ -33,7 +39,7 @@ def main(name, action, chunks, namespace=None):
     Returns
     -------
     int
-        0 when it ends.
+        0 when every chunk and the closing went well; 1 when a chunk result failed or `finish` returned a failure.
     """
     mtpy.run()
 
@@ -45,23 +51,26 @@ def main(name, action, chunks, namespace=None):
 
     pipeline = getattr(namespace if namespace is not None else pipelines, name)()
     lines = []
+    failed = False
 
     if len(chunks) > 0:
         for index, chunk in enumerate(chunks, 1):
             pipeline.run(action, chunk=chunk, position=(index, len(chunks)))
             collect(lines, pipeline)
+            failed = failed or failed_in(pipeline.result)
     else:
         pipeline.run(action, position=(1, 1))
         collect(lines, pipeline)
+        failed = failed or failed_in(pipeline.result)
 
     pipeline.line = None
-    pipeline.finish()
+    failed = bool(pipeline.finish()) or failed
     collect(lines, pipeline)
 
     for line in lines:
         print(line)
 
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':
