@@ -1,8 +1,9 @@
 """Launch an elections-model batch job as a one-off ECS Fargate task from the laptop.
 
 It runs with the AWS credentials of the owner (boto3 default chain) and does not
-import ``mtpy``. Configuration comes from ``deploy/ecs.env`` (see
-``deploy/ecs.env.example``) or from the file named by ``ECS_ENV_FILE``.
+import ``mtpy``. Its ``ECS_*`` keys (cluster, service, task family, log group, optional
+network overrides) and ``AWS_REGION`` live in the general environment file of the project,
+``deploy/elections.env`` (template ``.env.example``), or in the file named by ``ECS_ENV_FILE``.
 
 Usage::
 
@@ -57,7 +58,7 @@ def load_config(path: str) -> dict:
         If the file does not exist.
     """
     if not os.path.isfile(path):
-        raise ConfigError(f'no ecs.env at {path} (copy deploy/ecs.env.example)')
+        raise ConfigError(f'no env file at {path} (copy .env.example to deploy/elections.env and fill in the ECS_* keys)')
     config = {}
     with open(path) as handle:
         for line in handle:
@@ -365,9 +366,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def default_env_file() -> str:
-    """Return ``ECS_ENV_FILE`` or ``deploy/ecs.env``."""
+    """Return ``ECS_ENV_FILE`` or ``deploy/elections.env`` (the general env file of the project)."""
     here = os.path.dirname(os.path.abspath(__file__))
-    return os.environ.get('ECS_ENV_FILE') or os.path.join(os.path.dirname(here), 'ecs.env')
+    return os.environ.get('ECS_ENV_FILE') or os.path.join(os.path.dirname(here), 'elections.env')
 
 
 def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
@@ -400,9 +401,10 @@ def main(argv: list, ecs=None, logs=None, out=None, err=None) -> int:
             raise UsageError('job name is required')
         if args.register and args.job:
             raise UsageError('--register takes no job')
-        config = load_config(default_env_file())
+        env_file = default_env_file()
+        config = load_config(env_file)
         if not config.get('ECS_CLUSTER') or not config.get('ECS_SERVICE'):
-            raise ConfigError('ecs.env needs ECS_CLUSTER and ECS_SERVICE')
+            raise ConfigError(f'{env_file} needs ECS_CLUSTER and ECS_SERVICE')
         if args.job:
             run_job = run_job_value(args.job, args.params)
     except UsageError as e:

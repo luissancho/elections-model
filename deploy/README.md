@@ -33,11 +33,13 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
   supervisord). En ECS el entorno no sale de este fichero local sino de una copia en S3
   (`s3://<bucket>/elections.env`, ver "Despliegue en ECS"), con las mismas claves; la app escribe en S3 con las
   `AWS_KEY` y `AWS_SECRET` de ese fichero.
-- El lanzador de jobs `deploy/ecs/job.py` (ver "Jobs desde ECS") lee su propia configuración de `deploy/ecs.env`:
-  clúster y servicio de ECS, familia de la definición de jobs, región y grupo de logs, y de forma opcional las
-  subredes, los grupos de seguridad y la IP pública. Plantilla: `deploy/ecs.env.example`. Está ignorado por git
-  (patrón `*.env`); `ECS_ENV_FILE` apunta a otra ruta. Las credenciales de AWS del lanzador son las de la cadena
-  normal de boto3 (el perfil de la CLI de AWS), no las de este fichero.
+- El lanzador de jobs `deploy/ecs/job.py` (ver "Jobs desde ECS") lee de este mismo fichero sus claves `ECS_*`:
+  clúster y servicio de ECS, familia de la definición de jobs y grupo de logs (`ECS_CLUSTER`, `ECS_SERVICE`,
+  `ECS_TASK_FAMILY`, `ECS_LOG_GROUP`), la región (`AWS_REGION`) y, de forma opcional, las subredes, los grupos de
+  seguridad y la IP pública (`ECS_SUBNETS`, `ECS_SECURITY_GROUPS`, `ECS_PUBLIC_IP`; vacías, toma la red del
+  despliegue actual del servicio). Los contenedores las reciben también y no las usan. `ECS_ENV_FILE` apunta a otra
+  ruta. Las credenciales de AWS del lanzador son las de la cadena normal de boto3 (el perfil de la CLI de AWS), no
+  las de este fichero.
 
 ## Construir la imagen
 
@@ -1287,7 +1289,7 @@ Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pas
 
 Cualquier job (`load`, `compute`, `backtest`, `publish`) corre como una tarea puntual de ECS Fargate que lanza
 `deploy/ecs/job.py` desde el portátil, con las credenciales de AWS de tu perfil (la cadena normal de boto3; no
-importa `mtpy`). Configuración en `deploy/ecs.env` (plantilla `deploy/ecs.env.example`, ignorado por git; ver
+importa `mtpy`). Sus claves `ECS_*` van en `deploy/elections.env`, el fichero de configuración general (ver
 "Fichero de configuración").
 
 ```
@@ -1308,7 +1310,7 @@ python deploy/ecs/job.py backtest '{"scopes":"all"}'
   '{"what":["params"]}'`), `backtest` con `action` `push` o `pull` o con `out` (usan la copia del repositorio) y el
   job `pipeline` con `select` `load.params`, o `backtest.backtest` con esas acciones o con `out`.
 - Toma la red (subredes, grupos de seguridad e IP pública) del despliegue actual del servicio; `ECS_SUBNETS`,
-  `ECS_SECURITY_GROUPS` y `ECS_PUBLIC_IP` de `deploy/ecs.env` la sustituyen si se rellenan. Lanza la tarea con el
+  `ECS_SECURITY_GROUPS` y `ECS_PUBLIC_IP` de `deploy/elections.env` la sustituyen si se rellenan. Lanza la tarea con el
   override `RUN_JOB='<job> <json>'` y la definición `ECS_TASK_FAMILY` (`elections-model-job`).
 - Imprime `task <id>`, el comando `aws logs tail /ecs/elections-model --log-stream-names job/Main/<id> --follow
   --since 1h` y, si `AWS_REGION` está definida, el enlace a la tarea en la consola de ECS. Si ECS no puede arrancarla
@@ -1323,7 +1325,7 @@ python deploy/ecs/job.py backtest '{"scopes":"all"}'
   están en "Aviso final y código de salida".
 - **Códigos de salida**: el job termina con 1 si algún ámbito o acción falló, si reventó antes de empezar o si lo
   pararon con `SIGTERM`, y con 0 en otro caso; ECS lo recoge como código del contenedor. El lanzador sale con 2 por un
-  error de uso o de configuración (`deploy/ecs.env` ausente o sin `ECS_CLUSTER` y `ECS_SERVICE`), con 1 si la tarea no
+  error de uso o de configuración (`deploy/elections.env` ausente o sin `ECS_CLUSTER` y `ECS_SERVICE`), con 1 si la tarea no
   arranca y, con `--follow`, con el del contenedor.
 - **`stop_on_error`** va dentro del JSON del job, como en local: con `true` la tarea para en el primer ámbito que
   falla (y `publish` escribe igualmente el manifest de los ya publicados).
@@ -1347,8 +1349,9 @@ que la imagen lleva desde el `docker build` (ver "Construir la imagen"), con `di
 
 Pasos de Luis, una sola vez:
 
-1. Copiar `deploy/ecs.env.example` a `deploy/ecs.env` (los valores de la plantilla son los reales de la
-   infraestructura).
+1. Añadir a `deploy/elections.env` las claves `ECS_*` de `.env.example` con los valores reales (`ECS_CLUSTER=elections-model-cluster`,
+   `ECS_SERVICE=elections-model-service`, `ECS_TASK_FAMILY=elections-model-job`, `ECS_LOG_GROUP=/ecs/elections-model`;
+   las de red vacías) y volver a subir el fichero a S3 (los contenedores no las usan).
 2. `python deploy/ecs/job.py --register`.
 3. Construir la imagen con `GIT_COMMIT` y subirla (ver "Procedimiento" en "Despliegue en ECS"); repetir
    `--register` sólo si cambia la definición del servicio web (fichero de entorno, roles, nombre de la imagen).

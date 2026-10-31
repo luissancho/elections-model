@@ -141,7 +141,7 @@ def test_usage_errors_exit_2_without_launching(env_file):
 def test_missing_env_file_exits_2(tmp_path, monkeypatch):
     monkeypatch.setenv('ECS_ENV_FILE', str(tmp_path / 'none.env'))
     code, _, err = run(['backtest'])
-    assert code == 2 and 'ecs.env.example' in err
+    assert code == 2 and '.env.example' in err
 
 
 def test_launch_builds_the_run_task_from_the_service_network(env_file):
@@ -204,7 +204,7 @@ def test_missing_required_config_keys_exit_2(tmp_path, monkeypatch):
     path.write_text('AWS_REGION=eu-west-1\n')
     monkeypatch.setenv('ECS_ENV_FILE', str(path))
     code, _, err = run(['backtest'])
-    assert code == 2 and 'ecs.env needs ECS_CLUSTER and ECS_SERVICE' in err
+    assert code == 2 and 'needs ECS_CLUSTER and ECS_SERVICE' in err
 
 
 def test_unknown_service_exits_1_with_a_message(env_file):

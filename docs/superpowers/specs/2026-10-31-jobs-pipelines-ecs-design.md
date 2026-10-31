@@ -288,7 +288,7 @@ Consecuencias para el diseño:
   rellenar. Las plantillas de `deploy/ecs/` se reescriben como la salida de ese paso (referencia), con la
   nota de que la configuración va por fichero de entorno.
 - **Red y seguridad del `run-task`**: el lanzador toma las subredes, el grupo de seguridad y `assignPublicIp`
-  del despliegue actual del servicio (`describe-services`, `deployments[0].networkConfiguration`); `ecs.env`
+  del despliegue actual del servicio (`describe-services`, `deployments[0].networkConfiguration`); el fichero de entorno
   sólo necesita el clúster y el servicio, y admite sobreescribirlos.
 - **Pushover y la verbosidad** ya están en el fichero de entorno: la fase 2 no toca secretos ni variables.
   `RUN_JOB` del override gana al fichero de entorno (ECS: `environment` y los overrides tienen prioridad sobre
@@ -350,9 +350,9 @@ Diseño:
    vez de `tail -f /dev/null`.
 3. **Lanzador `python deploy/ecs/job.py <job> '<json>' [--follow]`** (en Python con boto3, decidido por Luis el
    2026-10-31 en lugar del `deploy/run-job.sh` en bash que se había previsto; misma función): lee el clúster y el servicio de
-   `deploy/ecs.env` (ignorado por git y por `.dockerignore` como todo `*.env`; plantilla
-   `deploy/ecs.env.example`; subredes, grupo de seguridad e IP pública salen del servicio y se pueden
-   sobreescribir ahí), rechaza un job vacío y `load params` (ver "Qué corre en ECS"), construye el `run-task` con el
+   las claves `ECS_*` de `deploy/elections.env`, el fichero de configuración general (decisión de Luis del
+   2026-10-31: sin un `deploy/ecs.env` aparte; plantilla `.env.example`; subredes, grupo de seguridad e IP pública
+   salen del servicio y se pueden sobreescribir ahí), rechaza un job vacío y `load params` (ver "Qué corre en ECS"), construye el `run-task` con el
    override `RUN_JOB='<job> <json>'`, lo lanza e imprime el id de la tarea, el comando `aws logs tail` del flujo
    y el enlace a la consola. Con `--follow` sigue el log hasta que la tarea para y termina con el código de
    salida del contenedor. `run-task.example.json` se queda como referencia de lo que genera.
