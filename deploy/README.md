@@ -598,7 +598,7 @@ python job.py load '{"scopes":"all","dry_run":true,"verbose":2}'
 | `force` | `false` | Dar de alta las encuestadoras y los medios nuevos y seguir, en vez de parar el ámbito; los partidos no se dan de alta nunca |
 | `years` | `null` | Lista de años del artículo que se leen (`["2026"]`; los números se convierten), todos por defecto. No se combina con `overwrite`: el job falla con `ValueError` antes de empezar, porque `overwrite` borraría los demás años del ciclo |
 | `dry_run` | `false` | Leer, resolver nombres e informar sin escribir nada (ni altas, ni sondeos, ni pesos) |
-| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -680,7 +680,7 @@ python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"ve
 | `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
 | `dry_run` | `false` | Calcular sin escribir nada: `catalogues` solo valida los ficheros de la calidad y la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
-| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
@@ -773,7 +773,7 @@ python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/re
 | `regional_noise` | `true` | Oscilaciones por comunidad y provincia (M9) |
 | `min_events` | `null` | Elecciones `featured` que necesita un autonómico para ajustar los estimadores con las propias en vez de con `es` (M11); `1` fuerza las propias |
 | `out` | `backtest/results` del repositorio | Carpeta de resultados (`es` en la raíz, los demás en `out/{ámbito}`) |
-| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final; el manifest de los ámbitos ya publicados se escribe igualmente |
+| `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
 Niveles de `verbose`:
