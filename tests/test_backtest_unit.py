@@ -571,8 +571,8 @@ def test_provinces_carry_the_pit_of_shares_and_seats(monkeypatch):
 
 def test_case_calibration_has_one_row_per_cell_kind_and_mode():
     """`_calibration`: cuotas y escaños nacionales en los dos modos (`h` sólo con la ejecución a horizonte), las
-    celdas provinciales sólo en `now` y las de escaños sólo con escaños válidos; un partido sin resultado oficial
-    lleva PIT NaN."""
+    celdas provinciales sólo en `now` y los escaños (nacionales y provinciales) sólo con escaños válidos, como en
+    `summarize_case`; un partido sin resultado oficial lleva PIT NaN."""
     from mtpy.lib.backtest import _calibration
     names = ['A', 'B']
     run = {'shares': pd.DataFrame({'A': [29., 31., 33.], 'B': [9., 10., 11.]}),
@@ -594,4 +594,5 @@ def test_case_calibration_has_one_row_per_cell_kind_and_mode():
     assert (prov['region_id'], prov['official'], prov['model'], prov['pit']) == (28, 12., 11., 0.75)
 
     only = _calibration('2023-07-23', 6, names, {'A'}, official, run, None, provinces, seats_valid=False)
-    assert set(only['mode']) == {'now'} and 'prov_seats' not in set(only['kind']) and 'seats' in set(only['kind'])
+    assert set(only['mode']) == {'now'} and set(only['kind']) == {'shares', 'prov_shares'}
+    assert 'seats' not in set(_calibration('2023-07-23', 6, names, {'A'}, official, run, run, provinces, False)['kind'])

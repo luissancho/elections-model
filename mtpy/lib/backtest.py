@@ -265,20 +265,23 @@ def _calibration(
     provinces : pandas.DataFrame
         Provincial rows of the nowcast run (`_provinces`), with `pit_pct` and `pit_seats`.
     seats_valid : bool
-        Whether the seats of the case are meaningful (no orphan party); otherwise the provincial seats are left out.
+        Whether the seats of the case are meaningful (no orphan party); otherwise the national and provincial seats
+        are left out (as `summarize_case` leaves them out of every seat metric).
 
     Returns
     -------
     pandas.DataFrame
         One row per cell: `event_date`, `horizon`, `kind` (`shares`, `seats`, `prov_shares`, `prov_seats`),
-        `mode` (`now`, or `h` for the horizon run; the provincial cells only `now`), `party`, `region_id`
+        `mode` (`now`, or `h` for the horizon run; the provincial cells only `now`; the seats only with valid
+        seats), `party`, `region_id`
         (the province, empty for the national cells), `main`, `official`, `model` and `pit`.
     """
     rows = []
     for mode, run in (('now', now), ('h', fwd)):
         if run is None:
             continue
-        for kind, samples, col in (('shares', run['shares'], 'pct'), ('seats', run['dist'], 'seats')):
+        kinds = [('shares', run['shares'], 'pct')] + ([('seats', run['dist'], 'seats')] if seats_valid else [])
+        for kind, samples, col in kinds:
             for n in names:
                 y = float(official.loc[n, col])
                 rows.append({'event_date': event_date, 'horizon': horizon, 'kind': kind, 'mode': mode, 'party': n,
