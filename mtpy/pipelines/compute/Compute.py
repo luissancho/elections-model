@@ -4,7 +4,8 @@ from ..base import ScopePipeline
 
 # Labels of the phases reported at verbose 2 (keys of `compute.COMPUTE_STEPS` and `compute.RATINGS_STEP`)
 STEPS = {'weights': 'pesos', 'featured': 'eventos destacados', 'errors': 'errores', 'deviations': 'desviaciones',
-         'drift': 'deriva', 'house_effects': 'efectos de casa', 'herding': 'rebaño', 'ratings': 'ratings'}
+         'drift': 'deriva', 'house_effects': 'efectos de casa', 'herding': 'rebaño',
+         'average_errors': 'errores del promedio', 'ratings': 'ratings'}
 # Public name of each action, in the headers and the summary lines
 ACTIONS = {'catalogues': 'catálogos', 'compute': 'series', 'ratings': 'ratings'}
 # Key of the result of the global `catalogues` action (the others are keyed by scope)
@@ -14,7 +15,7 @@ CATALOGUES = 'catalogues'
 class Compute(ScopePipeline):
     """
     Compute the poll series of a scope into the database: weights, featured events, errors, deviations, drift,
-    house effects and herding (`compute.compute_scope`).
+    house effects, herding and the errors of the poll average (`compute.compute_scope`).
 
     The chunk is the scope; every outcome is a result dict (see `compute_task`) and a failure never raises. The
     subclass `Ratings` changes the action and the unit of work; this class also formats the lines of all the

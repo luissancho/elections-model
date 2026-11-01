@@ -7,16 +7,17 @@ class Compute(SequenceJob):
     Compute the poll series and the pollster ratings of each scope into the database (the sequence of
     ``notebooks/data-load/PollsCompute.ipynb``), the counterpart of ``publish`` for the model tables.
 
-    ``compute`` runs, scope by scope, the weights, the featured events, the errors, the deviations, the drift, the
-    house effects and the herding (`compute.compute_scope`). ``ratings`` runs, scope by scope, the cross-scope
-    pollster ratings of its events (`compute.rate_scope`, with the polls of every scope). When both are requested,
-    the series of every scope go first and the ratings of every scope after, because each rating reads the errors
-    of all the scopes. ``catalogues`` replicates the versioned catalogues (scopes, districts and the prior quality
-    of the pollsters, `compute.replicate_catalogues`) once, before anything else: run it after editing the
-    rubric or the evaluations of `data/`, so the ratings take the new quality. Scopes are isolated: one that fails
-    never stops the others (unless ``stop_on_error``), and the job exits with an error at the end if any failed. With ``dry_run`` nothing is
-    written, ``catalogues`` only validates the files and the series stop after the deviations (drift, house
-    effects and herding read the stored errors).
+    ``compute`` runs, scope by scope, the weights, the featured events, the errors, the deviations, the drift, the house
+    effects, the herding and the errors of the poll average in the past elections (`compute.compute_scope`; the last one
+    fits the average once per election and horizon, the slowest phase). ``ratings`` runs, scope by scope, the
+    cross-scope pollster ratings of its events (`compute.rate_scope`, with the polls of every scope). When both are
+    requested, the series of every scope go first and the ratings of every scope after, because each rating reads the
+    errors of all the scopes. ``catalogues`` replicates the versioned catalogues (scopes, districts and the prior
+    quality of the pollsters, `compute.replicate_catalogues`) once, before anything else: run it after editing the
+    rubric or the evaluations of `data/`, so the ratings take the new quality. Scopes are isolated: one that fails never
+    stops the others (unless ``stop_on_error``), and the job exits with an error at the end if any failed. With
+    ``dry_run`` nothing is written, ``catalogues`` only validates the files and the series stop after the deviations
+    (drift, house effects, herding and the errors of the average read the stored errors).
 
     The console output has the four levels of ``publish``: 0, the header of each action and the final summary; 1,
     also ``[i/n] scope: empezando`` and the result line of each scope; 2, also one line per phase with its seconds;

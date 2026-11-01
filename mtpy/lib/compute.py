@@ -3,7 +3,8 @@ Computation of the poll series of a scope and of the pollster ratings: the seque
 `notebooks/data-load/PollsCompute.ipynb`, shared by the `compute` job (`mtpy/jobs/Compute.py`) and the batch
 loader of the regional scopes (`load/run_load.py`).
 
-`compute_scope` runs weights, featured events, errors, deviations, drift, house effects and herding of one scope;
+`compute_scope` runs weights, featured events, errors, deviations, drift, house effects, herding and the errors of the
+poll average of one scope;
 `rate_scope` the cross-scope pollster ratings of its events; `replicate_catalogues` the versioned catalogues
 (scopes, districts and the prior quality of the pollsters), once for every scope. The first two report each phase
 through an optional `progress(step, seconds)` callback; the three return the figures of the run, and a failure
@@ -17,7 +18,7 @@ from .data import save_catalogues, update_featured
 from .quality import load_criteria, read_quality
 
 # Phases of `compute_scope`, in order; the weights run twice (see `compute_scope`)
-COMPUTE_STEPS = ('weights', 'featured', 'errors', 'deviations', 'drift', 'house_effects', 'herding')
+COMPUTE_STEPS = ('weights', 'featured', 'errors', 'deviations', 'drift', 'house_effects', 'herding', 'average_errors')
 # Phase of `rate_scope`
 RATINGS_STEP = 'ratings'
 
@@ -61,12 +62,15 @@ def compute_scope(
     featured: Optional[Callable] = None
 ) -> dict:
     """
-    Compute the poll series of a scope: weights, featured events, errors, deviations, drift, house effects and
-    herding (the sequence of `notebooks/data-load/PollsCompute.ipynb` without the ratings).
+    Compute the poll series of a scope: weights, featured events, errors, deviations, drift, house effects,
+    herding (the sequence of `notebooks/data-load/PollsCompute.ipynb` without the ratings) and the errors of the
+    poll average (`Computer.compute_average_errors`).
 
     The weights are computed twice because `polls.featured` copies the flag of the event, which in turn needs
-    the weights; drift, house effects and herding read the errors stored by the previous phases, so they run on a
-    fresh series and only when `save` is set (a dry run stops after the deviations).
+    the weights; drift, house effects, herding and the errors of the average read the errors stored by the previous
+    phases, so they run on a fresh series and only when `save` is set (a dry run stops after the deviations). The
+    errors of the average go last: their Forecaster takes the prior of the house effects from the table the
+    house-effects phase has just saved, and they are the slowest phase (one fit per election and horizon).
 
     Parameters
     ----------
@@ -113,6 +117,7 @@ def compute_scope(
         _phase('drift', lambda: comp.compute_drift(save=save), seconds, progress)
         _phase('house_effects', lambda: comp.compute_house_effects(save=save), seconds, progress)
         _phase('herding', lambda: comp.compute_herding(save=save), seconds, progress)
+        _phase('average_errors', lambda: comp.compute_average_errors(save=save), seconds, progress)
 
     seconds['total'] = time.perf_counter() - start
 

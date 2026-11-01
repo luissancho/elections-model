@@ -671,3 +671,160 @@ def test_the_sample_median_of_an_event_ignores_the_excluded_pollsters():
     # mediana de A: 1500, no 2000 (la de los tres sondeos)
     assert out.loc[pd.Timestamp('2026-10-01'), 'weight_sample'] == pytest.approx(round(np.sqrt(1000 / 1500), 2))
     assert out.loc[pd.Timestamp('2026-10-08'), 'weight_sample'] == pytest.approx(round(np.sqrt(2000 / 1500), 2))
+
+
+# --- Calibración (parte B): error del promedio nowcast por elección, partido y horizonte (`average_errors`) ---
+
+def _computer_without_db(monkeypatch, events, main, smap=None, extra=None):
+    """Computer sin base de datos para `get_average_error_data`: `events` son sus elecciones `featured` (un sondeo
+    cada una, lo único que lee de `filter_polls`), `main` los partidos principales de cada una (también los
+    partidos del evento, salvo los de `extra`) y `smap` su mapa de fuentes; el catálogo de partidos es falso."""
+    from mtpy.lib import computer as computer_module
+
+    c = Computer.__new__(Computer)
+    c.scope, c.verbose, c.path, c.alpha = 'es', 0, '.', .05
+    c.drop_mtypes = ['aggr']
+    c.event_dates = list(events)
+    c.event_params = {
+        d: {'parties': {'event': list(main[d]) + list((extra or {}).get(d, []))}, 'bmaps': {'main': list(main[d])},
+            'smap': (smap or {}).get(d, {})}
+        for d in events
+    }
+    index = pd.MultiIndex.from_tuples(
+        [(pd.Timestamp(d), pd.Timestamp(d) - pd.Timedelta(days=10), 1, 0) for d in events],
+        names=['event_date', 'date', 'pollster_id', 'sponsor_id']
+    )
+    c.filter_polls = lambda featured=True, **kwargs: pd.DataFrame({'pollster': ['A'] * len(events)}, index=index)
+    monkeypatch.setattr(computer_module, 'get_parties', lambda: pd.DataFrame({
+        'id': [1, 2, 3, 4], 'name': ['PP', 'PSOE', 'VOX', 'ERC'], 'regional': [False, False, False, True]}))
+    return c
+
+
+def _fake_forecaster(level, err, date_fit_last, event_date='2023-07-23', n_polls=8, calls=None):
+    """Forecaster ajustado falso: promedio `level` y error `err` constantes por partido sobre todo el ciclo,
+    `n_polls` sondeos semanales que acaban en `date_fit_last` (`fc_series`) y ese último día ajustado; anota en
+    `calls` los argumentos de `fit_forecast`."""
+    import types
+
+    dates = pd.date_range(pd.Timestamp(event_date) - pd.Timedelta(days=400), event_date, freq='D', name='date')
+    names = list(level)
+    forecast = pd.DataFrame({n: float(v) for n, v in level.items()}, index=dates)
+    forecast['-'] = 100. - forecast[names].sum(axis=1)
+    fc_stat = pd.DataFrame({n: [{'mean': level[n], 'err': err[n]}] * len(dates) for n in names}, index=dates)
+    poll_dates = pd.date_range(end=date_fit_last, periods=n_polls, freq='7D', name='date')
+    fc = types.SimpleNamespace(names=names, forecast=forecast, fc_stat=fc_stat, date_fit_last=date_fit_last,
+                               fc_series=pd.DataFrame({'pollster': 'A', 'weight': 1.}, index=poll_dates))
+    fc.build_series = lambda: fc
+
+    def fit_forecast(names=None, max_fc=0, fillna=False):
+        if calls is not None:
+            calls.append({'names': names, 'max_fc': max_fc, 'fillna': fillna})
+        return fc.forecast
+
+    fc.fit_forecast = fit_forecast
+    return fc
+
+
+OFFICIAL_2023 = pd.DataFrame({'pct': [33.06, 31.68]}, index=['PP', 'PSOE'])
+
+
+def test_get_average_error_data_builds_one_row_per_main_party_and_horizon(monkeypatch):
+    c = _computer_without_db(monkeypatch, events=['2023-07-23'], main={'2023-07-23': ['PP', 'PSOE']})
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', lambda **kw: _fake_forecaster(
+        level={'PP': 33.5, 'PSOE': 28.2}, err={'PP': 0.4, 'PSOE': 0.5},
+        date_fit_last=pd.Timestamp('2023-07-23') - pd.Timedelta(days=kw['drange'])))
+    monkeypatch.setattr('mtpy.lib.backtest.official_results', lambda scope, d: OFFICIAL_2023)
+    df = c.get_average_error_data(horizons=(6, 30))
+    assert df.shape[0] == 4 and set(df.columns) >= {'event_date', 'event_scope', 'party_id', 'party', 'horizon', 'main',
+                                                    'level', 'official', 'error', 'err', 'n_polls', 'as_of'}
+    row = df.query("party == 'PSOE' and horizon == 6").iloc[0]
+    assert row['error'] == pytest.approx(28.2 - 31.68) and row['err'] == pytest.approx(0.5)
+    assert row['as_of'] == pd.Timestamp('2023-07-17')
+    assert row['event_date'] == pd.Timestamp('2023-07-23') and row['event_scope'] == 'es' and row['party_id'] == 2
+    assert row['level'] == pytest.approx(28.2) and row['official'] == pytest.approx(31.68) and row['n_polls'] == 8
+    assert bool(row['main']) and not bool(row['regional'])
+    assert df.query("party == 'PP' and horizon == 30").iloc[0]['as_of'] == pd.Timestamp('2023-06-23')
+
+
+def test_get_average_error_data_fits_the_simulator_average(monkeypatch):
+    """El promedio es el del Simulator (y del backtest): las series de los partidos del evento con los sondeos de
+    sus predecesores (`poll_blocks` del `smap`), efectos de casa, muestra efectiva y rebaño, y sólo se leen los
+    principales; el ancla es el último día ajustado cuando cae antes de `event − horizonte`."""
+    calls = []
+    c = _computer_without_db(monkeypatch, events=['2023-07-23'], main={'2023-07-23': ['PP', 'PSOE']},
+                             smap={'2023-07-23': {'PP': {'type': 'agg', 'names': ['Cs']}}},
+                             extra={'2023-07-23': ['ERC']})
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', lambda **kw: calls.append(kw) or _fake_forecaster(
+        level={'PP': 33.5, 'PSOE': 28.2}, err={'PP': 0.4, 'PSOE': 0.5}, date_fit_last=pd.Timestamp('2023-07-10'),
+        calls=calls))
+    monkeypatch.setattr('mtpy.lib.backtest.official_results', lambda scope, d: OFFICIAL_2023)
+    df = c.get_average_error_data(horizons=(6,), max_fc=7, house_effects=False, dispersion=True, herding=False)
+    init, fit = calls
+    assert init['scope'] == 'es' and init['event_date'] == '2023-07-23' and init['drange'] == 6
+    assert init['bmap'] == {'PP': ['PP', 'Cs'], 'PSOE': ['PSOE'], 'ERC': ['ERC']}
+    assert init['house_effects'] is False and init['dispersion'] is True and init['disp_params'] == {'herding': False}
+    assert init['drop_mtypes'] == ['aggr'] and init['alpha'] == .05
+    assert fit == {'names': ['PP', 'PSOE'], 'max_fc': 7, 'fillna': True}
+    assert (df['as_of'] == pd.Timestamp('2023-07-10')).all()
+
+
+def test_get_average_error_data_skips_what_cannot_be_measured(monkeypatch):
+    """Sin resultado oficial la elección no entra; un partido sin resultado o sin promedio, tampoco; un caso con
+    menos de `min_polls` sondeos o sin sondeos (el Forecaster lo rechaza) se salta con aviso."""
+    events = ['2019-11-10', '2023-07-23', '2026-11-29']
+    main = {'2019-11-10': ['PP', 'PSOE'], '2023-07-23': ['PP', 'PSOE', 'VOX'], '2026-11-29': ['PP', 'PSOE']}
+    c = _computer_without_db(monkeypatch, events=events, main=main)
+
+    def forecaster(**kw):
+        if kw['drange'] == 180:
+            raise ValueError('No polls for es {}: nothing to forecast'.format(kw['event_date']))
+        n_polls = 3 if kw['event_date'] == '2019-11-10' else 8
+        fit_last = pd.Timestamp(kw['event_date']) - pd.Timedelta(days=kw['drange'])
+        return _fake_forecaster(level={'PP': 33.5, 'VOX': 13.}, err={'PP': 0.4, 'VOX': 0.6}, n_polls=n_polls,
+                                event_date=kw['event_date'], date_fit_last=fit_last)
+
+    official = {'2019-11-10': pd.DataFrame({'pct': [20.8, 28.0]}, index=['PP', 'PSOE']), '2023-07-23': OFFICIAL_2023,
+                '2026-11-29': pd.DataFrame({'pct': []})}
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', forecaster)
+    monkeypatch.setattr('mtpy.lib.backtest.official_results', lambda scope, d: official[d])
+    with pytest.warns(UserWarning) as record:
+        df = c.get_average_error_data(horizons=(6, 180))
+    # 2019: 3 sondeos (< 5); 2023 a 180 días: sin sondeos; 2026: sin resultado (ni se intenta)
+    assert df[['event_date', 'party', 'horizon']].values.tolist() == [[pd.Timestamp('2023-07-23'), 'PP', 6]]
+    messages = ' | '.join(str(w.message) for w in record)
+    assert '2019-11-10' in messages and '180' in messages and '2026-11-29' not in messages
+
+
+def test_get_average_error_data_takes_the_given_events_and_keeps_the_columns_when_empty(monkeypatch):
+    c = _computer_without_db(monkeypatch, events=['2019-11-10', '2023-07-23'],
+                             main={'2019-11-10': ['PP'], '2023-07-23': ['PP', 'PSOE']})
+    seen = []
+
+    def forecaster(**kw):
+        seen.append(kw['event_date'])
+        return _fake_forecaster(level={'PP': 33.5}, err={'PP': 0.4}, date_fit_last=pd.Timestamp('2023-07-17'))
+
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', forecaster)
+    monkeypatch.setattr('mtpy.lib.backtest.official_results', lambda scope, d: OFFICIAL_2023)
+    df = c.get_average_error_data(horizons=(6,), events=['2023-07-23'])
+    assert seen == ['2023-07-23'] and df['party'].tolist() == ['PP']
+    empty = c.get_average_error_data(horizons=(6,), events=[])
+    assert empty.shape[0] == 0
+    assert {'level', 'official', 'error', 'err', 'n_polls', 'as_of', 'regional'} <= set(empty.columns)
+
+
+def test_compute_average_errors_saves_only_when_asked_and_load_reads_the_current_events(monkeypatch):
+    from mtpy.lib import computer as computer_module
+
+    c = _computer_without_db(monkeypatch, events=['2023-07-23'], main={'2023-07-23': ['PP']})
+    frame = pd.DataFrame({'event_date': [pd.Timestamp('2023-07-23')], 'party': ['PP']})
+    seen = {}
+    c.get_average_error_data = lambda **kwargs: seen.setdefault('kwargs', kwargs) and frame
+    monkeypatch.setattr(computer_module, 'save_average_errors_data', lambda df: seen.setdefault('saved', len(df)))
+    monkeypatch.setattr(computer_module, 'get_average_errors', lambda scope, event_dates: (
+        seen.setdefault('loaded', (scope, event_dates)) and frame))
+    assert c.compute_average_errors(horizons=(6,)) is frame and 'saved' not in seen
+    assert seen['kwargs'] == {'horizons': (6,)} and c.average_errors is frame
+    c.compute_average_errors(save=True)
+    assert seen['saved'] == 1
+    assert c.load_average_errors() is frame and seen['loaded'] == ('es', ['2023-07-23'])

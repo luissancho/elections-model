@@ -57,7 +57,8 @@ def test_compute_verbosity_levels(fresh_app, capsys):
     factory = FakeComputer()
     series(factory, position=(1, 1), verbose=2)
     out = capsys.readouterr().out
-    for label in ('pesos', 'eventos destacados', 'errores', 'desviaciones', 'deriva', 'efectos de casa', 'rebaño'):
+    for label in ('pesos', 'eventos destacados', 'errores', 'desviaciones', 'deriva', 'efectos de casa', 'rebaño',
+                  'errores del promedio'):
         assert '[1/1] es: {} ('.format(label) in out, label
     series(FakeComputer(), pipeline=Ratings, position=(1, 1), verbose=2)
     assert '[1/1] es: ratings (' in capsys.readouterr().out

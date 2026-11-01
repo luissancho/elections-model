@@ -48,6 +48,9 @@ class FakeComputer:
             def compute_herding(self, save=False):
                 return self._phase('herding', save)
 
+            def compute_average_errors(self, save=False):
+                return self._phase('average_errors', save)
+
             def compute_ratings(self, save=False, scopes=None):
                 # Como el real: devuelve la tabla de sondeos con sus columnas de rating (índice de `keys`) y deja
                 # la tabla de ratings en `self.ratings` (índice `event_date`/`pollster_id`), donde entra una casa
@@ -71,15 +74,19 @@ def test_compute_scope_runs_the_sequence_of_the_loader_and_reports_each_phase():
     result = compute.compute_scope('es-md', save=True, verbose=2, progress=lambda step, seconds: steps.append(step),
                                    computer=factory, featured=lambda scope: featured.append(scope) or 7)
     # pesos, destacados, pesos otra vez (el `featured` de los sondeos copia el del evento), errores, desviaciones;
-    # y con una serie fresca (leen los errores guardados) deriva, efectos de casa y rebaño
-    assert phases(factory) == ['weights', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding']
-    assert steps == ['weights', 'featured', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding']
+    # y con una serie fresca (leen los errores guardados) deriva, efectos de casa, rebaño y, al final (su prior de
+    # efectos de casa es la tabla que acaba de guardarse), los errores del promedio
+    assert phases(factory) == ['weights', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding',
+                               'average_errors']
+    assert steps == ['weights', 'featured', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding',
+                     'average_errors']
+    assert tuple(dict.fromkeys(steps)) == compute.COMPUTE_STEPS  # el orden declarado es el que corre
     assert featured == ['es-md'] and factory.inits == [('es-md', 2)] * 3
     assert all(call[1] is True for call in factory.calls if call[0] != 'build_series')
     assert [call for call in factory.calls if call[0] == 'weights'] == [('weights', True, ('overwrite', True))] * 2
     assert result['featured'] == 7 and result['n_polls'] == 2 and result['n_events'] == 2
     assert set(result['seconds']) == {'weights', 'featured', 'errors', 'deviations', 'drift', 'house_effects',
-                                      'herding', 'total'}
+                                      'herding', 'average_errors', 'total'}
     assert result['seconds']['total'] >= 0
 
 
@@ -90,7 +97,7 @@ def test_compute_scope_dry_run_stops_after_the_deviations_and_saves_nothing():
     assert phases(factory) == ['weights', 'weights', 'errors', 'deviations'] and featured == []
     assert steps == ['weights', 'weights', 'errors', 'deviations']
     assert all(call[1] is False for call in factory.calls if call[0] != 'build_series')
-    assert result['featured'] is None and 'drift' not in result['seconds']
+    assert result['featured'] is None and 'drift' not in result['seconds'] and 'average_errors' not in result['seconds']
 
 
 def test_compute_scope_lets_a_failure_propagate():

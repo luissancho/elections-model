@@ -23,7 +23,7 @@ from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
     get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
-    get_herding, save_herding_data,
+    get_herding, save_herding_data, get_average_errors, save_average_errors_data,
     get_scope_parent, get_event_data, get_national_events
 )
 from .mtypes import DROP_MTYPES
@@ -478,6 +478,7 @@ class Computer(Core):
         self.biases = None
         self.ratings = None
         self.drift = None  # Drift table of the current events (see `get_drift_data`)
+        self.average_errors = None  # Errors of the poll average of the current events (`get_average_error_data`)
         self.house_effects = None  # House effects table of the current events (see `get_house_effects_data`)
         self.herding = None  # Herding table of the current events (see `get_herding_data`)
 
@@ -2425,6 +2426,192 @@ class Computer(Core):
         self.drift = get_drift(scope=self.scope, event_dates=self.event_dates)
 
         return self.drift
+
+    def get_average_error_data(
+        self,
+        horizons: tuple[int, ...] = (6, 14, 30, 60, 90, 180),
+        min_polls: int = 5,
+        max_fc: int = 10,
+        house_effects: bool = True,
+        dispersion: bool = True,
+        herding: bool = True,
+        events: Optional[list[str]] = None
+    ) -> pd.DataFrame:
+        """
+        Measure the out-of-sample error of the nowcast poll average in the past elections: for each featured
+        event with an official result and each horizon `d`, the average is fitted with the polls published at
+        least `d` days before the election, read at the anchor of the Simulator and compared with the official
+        share of each main party.
+
+        The average is the one of the Simulator and the backtest (`backtest.run_case`): a `Forecaster` with
+        `drange=d` over the series of the parties of the event, each with the polls of the parties it inherits
+        (`Simulator.poll_blocks` of the source map), with house effects, effective sample and herding as set,
+        and its default regression parameters. The anchor is `as_of = min(event - d, date_fit_last)`
+        (`Simulator._set_anchor`; the cap at today is irrelevant for a past election).
+
+        Parameters
+        ----------
+        horizons : tuple of int, optional
+            Horizons in days before the election.
+        min_polls : int, optional
+            Minimum number of polls of the cycle up to the anchor; a case with fewer is skipped with a warning,
+            and so is a case the `Forecaster` rejects (no polls at all).
+        max_fc : int, optional
+            Days forecast after the last poll (`Forecaster.fit_forecast`).
+        house_effects : bool, optional
+            Subtract the house effects before averaging (M6).
+        dispersion : bool, optional
+            Weigh each pollster by its effective sample (M12).
+        herding : bool, optional
+            Also reduce the weight of the pollsters less dispersed than their samples allow (M13).
+        events : list of str, optional
+            Elections to measure; by default the featured events of the series with an official result.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event, main party and horizon: `event_date`, `event_scope`, `party_id`, `party`,
+            `horizon`, `main` (always true), `regional` (flag of the parties catalogue), `level` (the average at
+            the anchor), `official` (official share), `error` (`level - official`, percentage points), `err`
+            (standard error of the local regression at the anchor), `n_polls` and `as_of` (the anchor). Parties
+            without an official result, an id in the catalogue or an average at the anchor are left out.
+        """
+        # Local imports: the three modules import this one (circular at module level)
+        from .backtest import official_results
+        from .forecaster import Forecaster
+        from .simulator import Simulator
+
+        if events is None:
+            polls = self.filter_polls(featured=True, drange=None, n_last=None)
+            if 'event_date' in polls.index.names:
+                dates = pd.Series(polls.index.get_level_values('event_date'))
+            else:
+                dates = polls['event_date']
+            events = sorted(pd.to_datetime(dates.unique()).strftime('%Y-%m-%d'))
+
+        parties = get_parties().set_index('name')
+        columns = ['event_date', 'event_scope', 'party_id', 'party', 'horizon', 'main', 'regional', 'level',
+                   'official', 'error', 'err', 'n_polls', 'as_of']
+
+        rows = []
+        events_ = tqdm(events) if self.verbose > 0 else events
+        for event_date in events_:
+            official = official_results(self.scope, event_date)
+            if official.shape[0] == 0:
+                continue
+
+            params = self.event_params[event_date]
+            main = list(params['bmaps']['main'])
+            # The series of the Simulator: every party of the event with the polls of its predecessors
+            bmap = Simulator.poll_blocks(params['parties']['event'], params.get('smap', {}))
+
+            for d in horizons:
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter('ignore')
+                        fc = Forecaster(
+                            scope=self.scope,
+                            event_date=event_date,
+                            drop_mtypes=self.drop_mtypes,
+                            drange=int(d),
+                            alpha=self.alpha,
+                            bmap=bmap,
+                            house_effects=house_effects,
+                            dispersion=dispersion,
+                            disp_params={'herding': bool(herding)},
+                            verbose=0,
+                            path=self.path
+                        ).build_series()
+                        fc.fit_forecast(names=[n for n in main if n in fc.names], max_fc=max_fc, fillna=True)
+                except ValueError as e:
+                    warnings.warn('Average error of {} {} at {} days skipped: {}'.format(self.scope, event_date, d, e))
+                    continue
+
+                if fc.date_fit_last is None:
+                    warnings.warn('Average error of {} {} at {} days skipped: nothing fitted'.format(
+                        self.scope, event_date, d))
+                    continue
+
+                as_of = min(pd.Timestamp(event_date) - pd.Timedelta(days=int(d)), pd.Timestamp(fc.date_fit_last))
+                n_polls = int((fc.fc_series.index <= as_of).sum())
+                if n_polls < min_polls:
+                    warnings.warn('Average error of {} {} at {} days skipped: only {} polls (minimum {})'.format(
+                        self.scope, event_date, d, n_polls, min_polls))
+                    continue
+
+                for name in main:
+                    if name not in parties.index or name not in official.index or name not in fc.forecast.columns:
+                        continue
+
+                    level = fc.forecast[name].get(as_of, np.nan)
+                    stat = fc.fc_stat[name].get(as_of) if name in fc.fc_stat.columns else None
+                    if pd.isnull(level) or pd.isnull(official.loc[name, 'pct']) or not isinstance(stat, dict):
+                        continue
+
+                    regional = parties.loc[name, 'regional']
+                    regional = bool(regional) if pd.notnull(regional) else False
+                    rows.append({
+                        'event_date': pd.Timestamp(event_date),
+                        'event_scope': self.scope,
+                        'party_id': int(parties.loc[name, 'id']),
+                        'party': name,
+                        'horizon': int(d),
+                        'main': True,
+                        'regional': regional,
+                        'level': float(level),
+                        'official': float(official.loc[name, 'pct']),
+                        'error': float(level) - float(official.loc[name, 'pct']),
+                        'err': float(stat['err']),
+                        'n_polls': n_polls,
+                        'as_of': as_of
+                    })
+
+        df = pd.DataFrame(rows, columns=columns)
+
+        return df.sort_values(['event_date', 'party_id', 'horizon'], ignore_index=True)
+
+    def compute_average_errors(
+        self,
+        save: bool = False,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Compute the errors of the poll average of the past elections (see `get_average_error_data`) and,
+        optionally, save them into the `average_errors` table of the database, replacing the rows of the same
+        events.
+
+        Parameters
+        ----------
+        save : bool, optional
+            Whether to save the data into the database.
+        **kwargs
+            Passed to `get_average_error_data`.
+        """
+        if self.verbose > 0:
+            print('Compute average errors...')
+
+        df = self.get_average_error_data(**kwargs)
+
+        if save:
+            if self.verbose > 0:
+                print('Save average errors data...')
+
+            nrows = save_average_errors_data(df)
+
+            if self.verbose > 0:
+                print('{} rows updated...'.format(nrows))
+
+        self.average_errors = df
+
+        return df
+
+    def load_average_errors(self) -> pd.DataFrame:
+        """
+        Load the errors of the poll average of the current events from the database (empty if never computed).
+        """
+        self.average_errors = get_average_errors(scope=self.scope, event_dates=self.event_dates)
+
+        return self.average_errors
 
     def party_first_polls(self) -> pd.Series:
         """

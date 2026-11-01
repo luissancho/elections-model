@@ -8,7 +8,7 @@ from typing import Any, Literal, Mapping, Optional
 from ..core.app import App
 from ..core.worker import Model
 from ..models.elections import (
-    Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
+    AverageErrors, Districts, Drift, Events, EventsData, EventsResults, Polls, PollsResults,
     Pollsters, PollstersHerding, PollstersParties, PollstersQuality, PollstersRatings, Parties, Scopes
 )
 from .mtypes import DROP_MTYPES
@@ -1148,6 +1148,73 @@ def save_drift_data(
         Number of rows updated.
     """
     model = Drift()
+    if not model.table_exists():
+        model.create(replace=False)
+
+    df = data.copy().reset_index(drop=True)
+    if df.shape[0] == 0:
+        return 0
+
+    # Use the model formatter to get the data in the correct types to be saved
+    df = model.format_data(df, int_type='nullable', bin_type='nullable', sort=True)
+
+    # Remove previous data for the same election events
+    model.execute("DELETE FROM {} WHERE event_scope IN ('{}') AND event_date IN ('{}')".format(
+        model.table,
+        "', '".join(df.event_scope.unique()),
+        "', '".join(df.event_date.dt.strftime('%Y-%m-%d').unique())
+    ))
+
+    return model.upsert(df)
+
+
+def get_average_errors(
+    scope: str = 'es',
+    event_dates: Optional[list[str]] = None
+) -> pd.DataFrame:
+    """
+    Load the table of errors of the poll average (see `Computer.get_average_error_data`): one row per past
+    election, main party and horizon. An empty frame with the model columns is returned when the table has not
+    been created yet.
+
+    Parameters
+    ----------
+    scope : str, default 'es'
+        Election scope.
+    event_dates : list of str, optional
+        Restrict to these elections (e.g. the ones before the event being forecast, for a backtest).
+
+    Returns
+    -------
+    pd.DataFrame
+        Errors of the poll average.
+    """
+    model = AverageErrors()
+    if not model.table_exists():
+        return pd.DataFrame(columns=model.columns)
+
+    filters = ["event_scope = '{}'".format(scope)]
+    if event_dates is not None:
+        if len(event_dates) == 0:
+            return pd.DataFrame(columns=model.columns)
+        filters.append("event_date IN ('{}')".format("', '".join(event_dates)))
+
+    return model.get_results(query=dict(filters=filters), formatted=True)
+
+
+def save_average_errors_data(
+    data: pd.DataFrame
+) -> int:
+    """
+    Save the errors of the poll average into the database, replacing the rows of the same elections. The table
+    is created when missing (never replaced: `create(replace=True)` would drop it).
+
+    Returns
+    -------
+    int
+        Number of rows updated.
+    """
+    model = AverageErrors()
     if not model.table_exists():
         model.create(replace=False)
 
