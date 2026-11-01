@@ -1,6 +1,6 @@
 {
- "run_at": "2026-10-28T14:37:36",
- "commit": "eef919e",
+ "run_at": "2026-11-01T22:31:33",
+ "commit": "45aaa8b",
  "scope": "es",
  "n_sim": 1000,
  "seed": 42,
