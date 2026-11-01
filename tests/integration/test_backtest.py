@@ -126,3 +126,30 @@ def test_run_case_records_the_scope_of_the_estimators(app):
 
     assert (own['est_scope'], own['n_featured'], own['min_events']) == ('es-md', 4, 3)
     assert (parent['est_scope'], parent['n_featured']) == ('es', 4) and pd.isnull(parent['min_events'])
+
+
+def test_run_case_reproduces_the_stored_backtest_2023_6_days(app):
+    """Guarda de regresión (spec 19): con los parámetros por defecto el caso 2023 a 6 días reproduce las filas de
+    `backtest/results/` (cuotas: modelo e intervalos del 50 y el 95 %; escaños: titular e intervalo del 95 %), y su
+    calibración trae un PIT finito para cada partido principal con resultado oficial."""
+    import os
+
+    import pandas as pd
+    from mtpy.lib.backtest import RESULTS_ROOT, run_case
+
+    case = run_case('es', '2023-07-23', 6, n_sim=1000, seed=42)
+    checks = {'shares': ['model', 'lo50', 'hi50', 'lo95', 'hi95'], 'seats': ['model', 'lo95', 'hi95']}
+    for kind, cols in checks.items():
+        stored = pd.read_csv(os.path.join(RESULTS_ROOT, kind + '.csv'))
+        stored = stored.query("event_date == '2023-07-23' and horizon == 6").set_index('party')[cols].astype(float)
+        got = case[kind].set_index('party').reindex(stored.index)[cols].astype(float)
+        assert np.allclose(got.to_numpy(), stored.to_numpy(), atol=1e-6, equal_nan=True), (kind, (got - stored).abs())
+
+    cal = case['calibration']
+    for kind in ('shares', 'seats'):
+        table = case[kind]
+        parties = table.loc[table['main'] & np.isfinite(table['official'].astype(float)), 'party']
+        for mode in ('now', 'h'):
+            rows = cal.query("kind == @kind and mode == @mode").set_index('party')
+            assert len(parties) > 0 and np.isfinite(rows.loc[parties, 'pit'].astype(float)).all()
+            assert ((rows['pit'] >= 0) & (rows['pit'] <= 1)).all()
