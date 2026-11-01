@@ -37,6 +37,10 @@ class Simulator(Core):
     # Fixed on purpose: the `drange` of the run only cuts the polls of the current cycle (a backfill or a
     # backtest raises it to freeze them) and must not shrink the training set to the far-out polls
     ERROR_DRANGE = (7 * TERMINAL_WEEKS - 1, None)
+    # Horizon (days) of the past errors of the poll average that fit its estimator with `error_model='average'`
+    # (`Computer.get_average_error_estimator`): the terminal one, as the polling error; the drift is added apart
+    AVERAGE_ERROR_HORIZON = 6
+    ERROR_MODELS = ('polls', 'average')  # Terminal error of the simulation, see `fit_error_estimator`
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
     MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
 
@@ -53,6 +57,7 @@ class Simulator(Core):
         mode: Literal['nowcast', 'forecast'] = 'nowcast',
         n_last: int = 1,
         add_errors: bool = True,
+        error_model: Literal['polls', 'average'] = 'polls',
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
         threshold: Optional[float] = None,
@@ -111,6 +116,13 @@ class Simulator(Core):
             If not provided, only each pollster's last poll will be included.
         add_errors: bool, optional
             Whether to include error margins and confidence intervals in the simulation.
+        error_model : {'polls', 'average'}, optional
+            Terminal error `e` added to the standard error of the average (see `fit_error_estimator`): `'polls'`
+            (default) the error of a single poll (`Computer.get_error_estimator`); `'average'` the error of the
+            poll average itself in the past elections, net of its standard error
+            (`Computer.get_average_error_estimator` at `AVERAGE_ERROR_HORIZON` days), which falls back to
+            `'polls'` with a warning when the `average_errors` table has too few rows. The model actually used
+            is `error_model_used`.
         reg_params : dict of str, optional
             Parameters for the regression estimator.
             If `None`, the default parameters will be used.
@@ -170,6 +182,8 @@ class Simulator(Core):
         """
         if mode not in self.MODES:
             raise ValueError('`mode` must be one of {}'.format(list(self.MODES)))
+        if error_model not in self.ERROR_MODELS:
+            raise ValueError('`error_model` must be one of {}'.format(list(self.ERROR_MODELS)))
 
         super().__init__()
 
@@ -193,6 +207,8 @@ class Simulator(Core):
         self.alpha = alpha
         self.n_last = n_last
         self.add_errors = add_errors
+        self.error_model = error_model
+        self.error_model_used = None  # Set by `fit_error_estimator`
         self.reg_params = reg_params
         self.smap = smap
         if threshold is None:
@@ -440,24 +456,40 @@ class Simulator(Core):
 
     def fit_error_estimator(self):
         """
-        Fit the polling-error estimator of the run (`Computer.get_error_estimator`) on the past elections of the
-        estimator scope: the last poll of each pollster (`n_last`) published within `ERROR_DRANGE`, the terminal
-        window at which the error is read (`TERMINAL_WEEKS`), whatever the `drange` of the run.
+        Fit the estimator of the terminal error of the run on the past elections of the estimator scope and set
+        `error_model_used` to the model it follows.
+
+        With `error_model='polls'`, the polling-error estimator (`Computer.get_error_estimator`): the last poll of
+        each pollster (`n_last`) published within `ERROR_DRANGE`, the terminal window at which the error is read
+        (`TERMINAL_WEEKS`), whatever the `drange` of the run. With `'average'`, the estimator of the error of the
+        poll average itself (`Computer.get_average_error_estimator` at `AVERAGE_ERROR_HORIZON` days); when the
+        `average_errors` table has too few rows it falls back to the polling error, with a warning.
 
         Returns
         -------
-        LeastSquaresEstimator or None
-            The fitted estimator; `None` without `add_errors` or without past elections (`computer` is `None`).
+        LeastSquaresEstimator, AverageErrorEstimator or None
+            The fitted estimator; `None` without `add_errors` or without past elections (`computer` is `None`),
+            with `error_model_used` `'polls'` (the simulation keeps only the standard error of the average).
         """
+        self.error_model_used = 'polls'
         if not self.add_errors or self.computer is None:
             return None
+
+        if self.error_model == 'average':
+            estimator = self.computer.get_average_error_estimator(horizon=self.AVERAGE_ERROR_HORIZON)
+            if estimator is not None:
+                self.error_model_used = 'average'
+                return estimator
+            warnings.warn("No average errors to fit `error_model='average'` for {} {}: using the polling error".format(
+                self.scope, self.event_date))
 
         return self.computer.get_error_estimator(drange=self.ERROR_DRANGE, n_last=self.n_last)
 
     def error_events(self) -> list[str]:
         """
-        Elections whose polls fit the polling-error estimator (`fit_error_estimator`): the distinct event dates
-        of the past polls of the estimator scope within `ERROR_DRANGE` (the last `n_last` of each pollster).
+        Elections that fit the terminal-error estimator (`fit_error_estimator`): with the polling error, the
+        distinct event dates of the past polls of the estimator scope within `ERROR_DRANGE` (the last `n_last` of
+        each pollster); with the error of the average (`error_model_used == 'average'`), the elections of its rows.
 
         Returns
         -------
@@ -466,6 +498,9 @@ class Simulator(Core):
         """
         if self.v2err is None:
             return []
+
+        if self.error_model_used == 'average':
+            return list(self.v2err.events)
 
         polls = self.computer.filter_polls(featured=True, drange=self.ERROR_DRANGE, n_last=self.n_last)
         if 'event_date' in polls.index.names:
@@ -770,7 +805,7 @@ class Simulator(Core):
                 fc.loc[names, ['mean', 'regional']].values,
                 np.repeat(weeks, len(names))
             ])
-            fc.loc[names, 'error'] = self.v2err.predict(p).values
+            fc.loc[names, 'error'] = np.asarray(self.v2err.predict(p))
         else:
             fc.loc[names, 'error'] = fc.loc[names, 'err']
 
@@ -2020,7 +2055,7 @@ class Simulator(Core):
                     df.loc[vind, ['pct', 'regional']].fillna(0).values,
                     np.repeat(weeks, df.loc[vind].shape[0])
                 ])
-                df.loc[vind, 'pct_err'] = self.v2err.predict(p).values
+                df.loc[vind, 'pct_err'] = np.asarray(self.v2err.predict(p))
                 df.loc[vind, 'std_err'] = np.sqrt(
                     np.square(df.loc[vind, 'err']) + np.square(df.loc[vind, 'pct_err']) + np.square(drift)
                 )

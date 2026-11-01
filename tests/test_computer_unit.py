@@ -828,3 +828,58 @@ def test_compute_average_errors_saves_only_when_asked_and_load_reads_the_current
     c.compute_average_errors(save=True)
     assert seen['saved'] == 1
     assert c.load_average_errors() is frame and seen['loaded'] == ('es', ['2023-07-23'])
+
+
+# --- Calibración (parte B): estimador del error del propio promedio (`AverageErrorEstimator`) ---
+
+def _average_error_rows(**overrides):
+    """Doce filas de `average_errors` a 6 días: dos elecciones con los mismos seis partidos (dos regionales)."""
+    rows = pd.DataFrame({'event_date': ['2019-04-28'] * 6 + ['2019-11-10'] * 6, 'horizon': 6,
+                         'party': list('ABCDEF') * 2, 'level': [30, 20, 10, 5, 3, 2] * 2, 'regional': [0, 0, 0, 0, 1, 1] * 2,
+                         'error': [2.5, 2.0, 1.0, 0.6, 0.4, 0.3] * 2, 'err': [0.5] * 12, 'main': True})
+    return rows.assign(**overrides)
+
+
+def test_average_error_estimator_fits_the_net_error_on_level_and_regional(monkeypatch):
+    c = Computer.__new__(Computer)
+    rows = _average_error_rows()
+    monkeypatch.setattr(c, 'load_average_errors', lambda: rows)
+    est = c.get_average_error_estimator(horizon=6)
+    assert est.n_rows == 12 and est.horizon == 6 and est.net
+    assert est.events == ['2019-04-28', '2019-11-10']
+    assert est.predict(np.array([[30., 0., 1.]]))[0] == pytest.approx(np.sqrt(2.5 ** 2 - 0.5 ** 2), abs=0.3)
+    assert est.predict(np.array([[30., 0., 1.]]))[0] > est.predict(np.array([[5., 0., 1.]]))[0]
+    # Drop-in de `LeastSquaresEstimator.predict` en el Simulator: un array de una predicción por fila
+    out = est.predict(np.array([[30., 0., 1.], [5., 1., 1.]]))
+    assert isinstance(out, np.ndarray) and out.shape == (2,)
+
+
+def test_average_error_estimator_without_net_fits_the_absolute_error(monkeypatch):
+    c = Computer.__new__(Computer)
+    rows = _average_error_rows(error=[-2.5, 2.0, -1.0, 0.6, -0.4, 0.3] * 2, err=1.)
+    monkeypatch.setattr(c, 'load_average_errors', lambda: rows)
+    net, gross = c.get_average_error_estimator(horizon=6), c.get_average_error_estimator(horizon=6, net=False)
+    assert gross.net is False
+    p = np.array([[30., 0., 1.]])
+    assert gross.predict(p)[0] > net.predict(p)[0]  # `|error|` sin restar `s`
+    assert gross.predict(p)[0] == pytest.approx(2.5, abs=0.3)
+
+
+def test_average_error_estimator_takes_only_the_main_rows_of_the_horizon(monkeypatch):
+    c = Computer.__new__(Computer)
+    rows = pd.concat([_average_error_rows(), _average_error_rows(horizon=30, error=9.),
+                      _average_error_rows(main=False)], ignore_index=True)
+    monkeypatch.setattr(c, 'load_average_errors', lambda: rows)
+    est = c.get_average_error_estimator(horizon=6)
+    assert est.n_rows == 12 and est.predict(np.array([[30., 0., 1.]]))[0] < 3.
+
+
+def test_average_error_estimator_needs_twelve_rows(monkeypatch):
+    c = Computer.__new__(Computer)
+    monkeypatch.setattr(c, 'load_average_errors', lambda: pd.DataFrame(
+        columns=['event_date', 'horizon', 'party', 'level', 'regional', 'error', 'err', 'main']))
+    with pytest.warns(UserWarning, match='average_errors'):
+        assert c.get_average_error_estimator() is None
+    monkeypatch.setattr(c, 'load_average_errors', lambda: _average_error_rows().iloc[:11])
+    with pytest.warns(UserWarning, match='average_errors'):
+        assert c.get_average_error_estimator(horizon=6) is None

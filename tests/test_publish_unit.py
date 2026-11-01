@@ -366,7 +366,7 @@ def test_export_meta_and_headline():
     assert meta['regions'][1] == {'id': 28, 'name': 'Madrid', 'seats': 6}
     assert meta['diagnostics'] == {'drift_k': None, 'multiplier': None, 'ages': {'PP': 40.0, 'PSOE': 40.0, 'VOX': 12.0},
                                    'composition': 1.0, 'clip_rate': {'nowcast': 0.0, 'forecast': 0.01},
-                                   'error_events': [], 'error_scope': 'es'}
+                                   'error_events': [], 'error_scope': 'es', 'error_model': 'polls'}
     assert meta['smap'] == {'UP': [{'agg': ['UP', 'MP']}]} and 'vs' in meta['bmaps']
 
     head = publish.export_headline(sim, '20261008-120000', '2026-10-08T12:00:00Z', {'parties': [], 'p_majority': {}},
@@ -459,6 +459,19 @@ def test_export_summary_keeps_the_model_blocks_without_left_and_right():
     sim.model.bmaps = {**sim.model.bmaps, 'vs': {'Derecha': ['PP', 'VOX'], 'Nadie': ['UP']}}
     data = valid('summary', publish.export_summary(sim)[0])
     assert [r['name'] for r in data['blocks']] == list(BMAPS['blocks'])
+
+
+def test_export_meta_records_the_error_model_used():
+    """El diagnóstico del run lleva el modelo de error que se usó de verdad (`polls` también si `average` cayó)."""
+    sim = synthetic_simulator()
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False)
+    assert meta['diagnostics']['error_model'] == 'polls'
+    sim.error_model, sim.error_model_used = 'average', 'average'
+    sim.v2err = type('Average', (), {'events': ['2023-07-23']})()
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False)
+    assert meta['diagnostics']['error_model'] == 'average' and meta['diagnostics']['error_events'] == ['2023-07-23']
 
 
 def test_export_meta_and_headline_carry_the_backfill_keys():

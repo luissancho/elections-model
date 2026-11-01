@@ -360,6 +360,7 @@ def run_case(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    error_model: str = 'polls',
     weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
@@ -381,8 +382,11 @@ def run_case(
     them independently. `min_events` is the number of featured elections of the scope before the event from
     which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
     `None`, the default, always takes the parent); `meta` records the scope used (`est_scope`) and the count
-    (`n_featured`). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the polls with
-    ratings recomputed in memory.
+    (`n_featured`). `error_model` is the terminal error of the `Simulator` (`'polls'`, the default, a single
+    poll; `'average'`, the poll average itself, out of sample: its estimator Computer only holds the elections
+    before `event_date`); `meta` records the model actually used (`'average'` falls back to `'polls'` without
+    rows). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the polls with ratings
+    recomputed in memory.
 
     Returns
     -------
@@ -400,7 +404,7 @@ def run_case(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
             disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
-            weight_ratings=weight_ratings
+            error_model=error_model, weight_ratings=weight_ratings
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -519,7 +523,7 @@ def run_case(
         'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias), 'dispersion': bool(dispersion), 'herding': bool(herding),
         'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
         'regional_noise': bool(regional_noise),
-        'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured),
+        'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured), 'error_model': sim.error_model_used,
         'min_events': int(min_events) if min_events is not None else np.nan,
         'swing_ar': sim.v2swing.a_r if sim.v2swing is not None else np.nan, 'swing_br': sim.v2swing.b_r if sim.v2swing is not None else np.nan,
         'clip_rate': float(clip_rate),
@@ -755,12 +759,13 @@ def run_backtest(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    error_model: str = 'polls',
     weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `weight_ratings` is passed to every case.
+    `error_model` and `weight_ratings` are passed to every case.
 
     Returns
     -------
@@ -784,7 +789,7 @@ def run_backtest(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
-                    weight_ratings=weight_ratings
+                    error_model=error_model, weight_ratings=weight_ratings
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -1047,6 +1052,7 @@ def backtest_scope(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    error_model: str = 'polls',
     recompute_ratings: bool = False,
     verbose: int = 0,
     runner=None,
@@ -1068,8 +1074,10 @@ def backtest_scope(
         elections held since 2019 for a regional scope).
     horizons : list of int, optional
         Horizons in days; `DEFAULT_HORIZONS` by default.
-    n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, min_events
-        Parameters of `run_backtest`, recorded in `run.json`.
+    n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, \
+min_events, error_model
+        Parameters of `run_backtest`, recorded in `run.json` (`error_model` as requested; `meta.csv` has the one
+        each case used).
     recompute_ratings : bool, default False
         Recompute the ratings of the scope in memory once (`rating_overrides`) and use them in every case
         instead of the stored ones; recorded in `run.json`.
@@ -1100,7 +1108,7 @@ def backtest_scope(
 
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
-                  regional_noise=regional_noise, min_events=min_events)
+                  regional_noise=regional_noise, min_events=min_events, error_model=error_model)
     weight_ratings = rating_overrides(scope) if recompute_ratings else None
     results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose,
                                        weight_ratings=weight_ratings, **params)

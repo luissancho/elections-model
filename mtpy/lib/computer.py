@@ -356,6 +356,68 @@ class SwingNoise:
         return np.sqrt(self.var_province(level))
 
 
+class AverageErrorEstimator:
+    """
+    Terminal error of the poll average itself (part B of the calibration): a drop-in replacement of the
+    polling-error estimator of the Simulator (`Computer.get_error_estimator`, the error of a single poll) fitted
+    on the errors of the nowcast average of the past elections (`Computer.get_average_error_data`, table
+    `average_errors`) at one horizon.
+
+    The target of each row is `|e_net|` with `e_net² = max(error² − err², 0)` (`net`): the error of the average
+    minus the part already carried by the standard error `s` (`err`) of the local regression, which the
+    Simulator adds apart; without `net`, `|error|`. It is regressed with equal weights on the level of the
+    average and the regional flag (`LeastSquaresEstimator` over `['pct', 'regional']`).
+
+    Parameters
+    ----------
+    estimator : LeastSquaresEstimator
+        The fitted regression.
+    n_rows : int
+        Rows that fit it.
+    horizon : int
+        Horizon (days before the election) of those rows.
+    net : bool
+        Whether the target is net of `err`.
+    events : list of str
+        Elections (ISO dates, ascending) of those rows.
+    """
+
+    MIN_ROWS = 12  # Fewest rows that fit it (`Computer.get_average_error_estimator`)
+
+    def __init__(
+        self,
+        estimator: LeastSquaresEstimator,
+        n_rows: int,
+        horizon: int,
+        net: bool,
+        events: list[str]
+    ) -> None:
+        self.estimator = estimator
+        self.n_rows = int(n_rows)
+        self.horizon = int(horizon)
+        self.net = bool(net)
+        self.events = list(events)
+
+    def predict(self, p: np.ndarray) -> np.ndarray:
+        """
+        Predict the terminal error of the average, in percentage points.
+
+        Parameters
+        ----------
+        p : np.ndarray
+            One row per party with the columns `[pct, regional, weeks]` the Simulator passes to the polling-error
+            estimator; only the first two are used (the error is read at the horizon of the fit).
+
+        Returns
+        -------
+        np.ndarray
+            One prediction per row.
+        """
+        p = np.atleast_2d(np.asarray(p, dtype=np.float64))
+
+        return np.atleast_1d(np.asarray(self.estimator.predict(p[:, :2]), dtype=np.float64))
+
+
 class Computer(Core):
 
     def __init__(
@@ -2293,6 +2355,61 @@ class Computer(Core):
             y=df['error'],
             weights=df['weight']
         ).fit()
+
+    def get_average_error_estimator(
+        self,
+        horizon: int = 6,
+        net: bool = True
+    ) -> Optional[AverageErrorEstimator]:
+        """
+        Build the estimator of the terminal error of the poll average (`AverageErrorEstimator`) from the rows of
+        `load_average_errors` (the elections of this Computer: out of sample for the Simulator, whose estimator
+        Computer only holds the elections before the one simulated) of the main parties at `horizon` days.
+
+        Parameters
+        ----------
+        horizon : int, optional
+            Horizon of the rows (days before the election at which the average was read).
+        net : bool, optional
+            Fit `|e_net|`, `e_net² = max(error² − err², 0)`, the error net of the standard error of the local
+            regression (the Simulator adds that one apart); `|error|` otherwise.
+
+        Returns
+        -------
+        AverageErrorEstimator or None
+            The fitted estimator; `None`, with a warning, with fewer than `AverageErrorEstimator.MIN_ROWS` (12)
+            usable rows (also when the `average_errors` table has never been computed).
+        """
+        rows = self.load_average_errors()
+        if rows.shape[0] > 0:
+            flag = rows['main'].map(lambda v: bool(v) if pd.notnull(v) else False).astype(bool)
+            rows = rows.loc[(pd.to_numeric(rows['horizon']) == int(horizon)) & flag]
+
+        level = pd.to_numeric(rows['level'], errors='coerce').to_numpy(dtype=np.float64)
+        error = pd.to_numeric(rows['error'], errors='coerce').to_numpy(dtype=np.float64)
+        err = pd.to_numeric(rows['err'], errors='coerce').to_numpy(dtype=np.float64)
+        regional = np.array([float(bool(v)) if pd.notnull(v) else 0. for v in rows['regional']], dtype=np.float64)
+        if net:
+            target = np.sqrt(np.maximum(np.square(error) - np.square(err), 0.))
+        else:
+            target = np.abs(error)
+
+        valid = np.isfinite(level) & np.isfinite(target)
+        if int(valid.sum()) < AverageErrorEstimator.MIN_ROWS:
+            warnings.warn('Average error estimator of {} at {} days: only {} rows in `average_errors` '
+                          '(minimum {})'.format(getattr(self, 'scope', None), horizon, int(valid.sum()),
+                                                AverageErrorEstimator.MIN_ROWS))
+            return None
+
+        estimator = LeastSquaresEstimator(
+            x=np.column_stack([level[valid], regional[valid]]),
+            y=target[valid],
+            weights=np.ones(int(valid.sum()))
+        ).fit()
+        dates = pd.to_datetime(pd.Series(rows['event_date'].to_numpy()[valid]))
+        events = sorted(dates.dt.strftime('%Y-%m-%d').unique())
+
+        return AverageErrorEstimator(estimator, n_rows=int(valid.sum()), horizon=int(horizon), net=net, events=events)
 
     def get_drift_data(
         self,

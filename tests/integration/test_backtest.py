@@ -88,6 +88,7 @@ def test_run_case_records_composition(app):
     assert meta['drift_multiplier'] >= 1 and 'SUMAR' in str(meta['young_parties'])
     ref = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
     assert ref['meta'].iloc[0]['composition_ratio'] == 1   # independiente por defecto
+    assert ref['meta'].iloc[0]['error_model'] == 'polls'   # el error de un sondeo suelto por defecto
 
 
 def test_run_case_provincial_metrics(app):

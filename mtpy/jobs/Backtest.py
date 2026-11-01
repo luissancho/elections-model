@@ -32,6 +32,7 @@ class Backtest(SequenceJob):
         python job.py backtest '{"scopes":"all","horizons":[6,30]}'
         python job.py backtest '{"scopes":["es-md"],"events":["2023-05-28"],"n_sim":200,"verbose":2}'
         python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/results_comp"}'
+        python job.py backtest '{"scopes":["es"],"error_model":"average","out":"backtest/results_avg"}'
 
     Copy the tables between the repository and the app file system (S3 in ECS)::
 
@@ -54,8 +55,8 @@ class Backtest(SequenceJob):
 
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
-            regional_noise=True, min_events=None, recompute_ratings=False, out=None, verbose=1, runner=None, stats=None,
-            stop_on_error=None, action='run', **kwargs):
+            regional_noise=True, min_events=None, error_model='polls', recompute_ratings=False, out=None, verbose=1,
+            runner=None, stats=None, stop_on_error=None, action='run', **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -92,6 +93,10 @@ class Backtest(SequenceJob):
         min_events : int, optional
             Featured elections a regional scope needs to fit the estimators on itself instead of on ``es``
             (M11); by default always ``es``, 1 forces its own.
+        error_model : {'polls', 'average'}, default 'polls'
+            Terminal error of the simulation: the error of a single poll or that of the poll average itself in
+            the past elections (table ``average_errors``, filled by the ``compute`` job); ``average`` falls back to
+            ``polls`` with a warning when the table has too few rows (``meta.csv`` records the one used).
         recompute_ratings : bool, default False
             Recompute the pollster ratings in memory with the current code (once per scope) and use them in
             every case instead of the stored ones; nothing is saved to the database.
@@ -123,7 +128,8 @@ class Backtest(SequenceJob):
         Raises
         ------
         ValueError
-            If ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, there are no scopes to run
+            If ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
+            or ``'average'``, there are no scopes to run
             (``backtest: no scopes to run``), ``action`` is not ``run``, ``push`` or ``pull`` or ``stop_on_error`` is not true or false
             (``stop_on_error must be true or false``).
         RuntimeError
@@ -132,6 +138,7 @@ class Backtest(SequenceJob):
         if action not in ('run', 'push', 'pull'):
             raise ValueError('backtest: unknown action "{}" (expected run, push or pull)'.format(action))
         composition = self._composition(composition)
+        error_model = self._error_model(error_model)
         targets = resolve_scopes(scopes)
         if not targets:
             raise ValueError('backtest: no scopes to run')
@@ -139,8 +146,8 @@ class Backtest(SequenceJob):
         super().run(select='backtest', chunks=targets, action=action, stop_on_error=stop_on_error, events=events, horizons=horizons,
                     n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
-                    regional_noise=regional_noise, min_events=min_events, recompute_ratings=recompute_ratings,
-                    out=out, verbose=verbose, runner=runner, stats=stats)
+                    regional_noise=regional_noise, min_events=min_events, error_model=error_model,
+                    recompute_ratings=recompute_ratings, out=out, verbose=verbose, runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 
@@ -173,3 +180,27 @@ class Backtest(SequenceJob):
         if ratio is None or not 0 < ratio <= 1:
             raise ValueError('backtest: composition must be "auto", a ratio in (0, 1] or null (got {!r})'.format(value))
         return ratio
+
+    @staticmethod
+    def _error_model(value):
+        """
+        Validate the ``error_model`` argument.
+
+        Parameters
+        ----------
+        value : str
+            ``'polls'`` or ``'average'``.
+
+        Returns
+        -------
+        str
+            The same value.
+
+        Raises
+        ------
+        ValueError
+            Anything else (``None`` included).
+        """
+        if isinstance(value, str) and value in ('polls', 'average'):
+            return value
+        raise ValueError('backtest: error_model must be "polls" or "average" (got {!r})'.format(value))

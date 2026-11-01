@@ -575,6 +575,7 @@ def test_error_estimator_window_ignores_the_run_drange():
     comp = types.SimpleNamespace(get_error_estimator=lambda **kw: calls.append(kw) or 'estimator')
     sim = Simulator.__new__(Simulator)
     sim.drange, sim.n_last, sim.add_errors, sim.computer = (54, None), 1, True, comp
+    sim.error_model = 'polls'
     assert sim.fit_error_estimator() == 'estimator'
     assert calls == [{'drange': (6, None), 'n_last': 1}]
     assert Simulator.ERROR_DRANGE == (7 * Simulator.TERMINAL_WEEKS - 1, None)
@@ -739,3 +740,73 @@ def test_anchor_before_the_last_poll_warns_even_by_default():
     with pytest.warns(UserWarning, match='precedes the last poll'):
         sim = anchor_simulator(last='2026-10-26', today='2026-10-20')
     assert sim.as_of == pd.Timestamp('2026-10-20')
+
+
+# --- Calibración (parte B): `error_model`, el error del propio promedio frente al de un sondeo suelto ---
+
+POLLS_ESTIMATOR = object()  # centinela del estimador de sondeos (`Computer.get_error_estimator`)
+
+
+@pytest.fixture
+def fake_simulator():
+    """Fábrica de simuladores sintéticos (`tests.fakes.synthetic_simulator`) con `error_model` y un Computer de
+    juguete: su `get_average_error_estimator` devuelve `average_estimator` y su `get_error_estimator`, el centinela
+    `POLLS_ESTIMATOR`; anota las llamadas en `sim.computer.calls` y ajusta `v2err` con `fit_error_estimator`."""
+    import types
+
+    def build(error_model='average', average_estimator=None):
+        sim = synthetic_simulator()
+        sim.error_model, sim.error_model_used, sim.add_errors = error_model, None, True
+        calls = []
+
+        def get_average_error_estimator(horizon=6):
+            calls.append(('average', {'horizon': horizon}))
+            return average_estimator
+
+        def get_error_estimator(**kwargs):
+            calls.append(('polls', kwargs))
+            return POLLS_ESTIMATOR
+
+        sim.computer = types.SimpleNamespace(get_average_error_estimator=get_average_error_estimator,
+                                             get_error_estimator=get_error_estimator, calls=calls)
+        sim.v2err = sim.fit_error_estimator()
+        return sim
+
+    return build
+
+
+def test_simulator_error_model_average_falls_back_to_polls_without_rows(fake_simulator):
+    with pytest.warns(UserWarning, match='average'):
+        sim = fake_simulator(error_model='average', average_estimator=None)
+    assert sim.error_model_used == 'polls' and sim.v2err is POLLS_ESTIMATOR
+    assert sim.computer.calls == [('average', {'horizon': Simulator.AVERAGE_ERROR_HORIZON}),
+                                  ('polls', {'drange': Simulator.ERROR_DRANGE, 'n_last': 1})]
+
+
+def test_simulator_error_model_average_uses_the_average_error_estimator(fake_simulator):
+    import types
+    average = types.SimpleNamespace(predict=lambda p: np.full(len(p), 1.2), events=['2019-11-10', '2023-07-23'])
+    sim = fake_simulator(error_model='average', average_estimator=average)
+    assert Simulator.AVERAGE_ERROR_HORIZON == 6
+    assert sim.error_model_used == 'average' and sim.v2err is average
+    assert sim.computer.calls == [('average', {'horizon': 6})]
+    assert sim.error_events() == ['2019-11-10', '2023-07-23']  # las elecciones de las filas que lo ajustan
+
+
+def test_simulator_error_model_polls_keeps_the_poll_estimator(fake_simulator):
+    sim = fake_simulator(error_model='polls')
+    assert sim.error_model_used == 'polls' and sim.v2err is POLLS_ESTIMATOR
+    assert sim.computer.calls == [('polls', {'drange': Simulator.ERROR_DRANGE, 'n_last': 1})]
+
+
+def test_simulator_error_model_without_errors_or_past_elections_is_polls():
+    sim = synthetic_simulator()
+    sim.error_model, sim.error_model_used, sim.add_errors = 'average', None, False
+    assert sim.fit_error_estimator() is None and sim.error_model_used == 'polls'
+    sim.add_errors, sim.computer, sim.error_model_used = True, None, None
+    assert sim.fit_error_estimator() is None and sim.error_model_used == 'polls'
+
+
+def test_simulator_rejects_an_unknown_error_model():
+    with pytest.raises(ValueError, match='error_model'):
+        Simulator('es', '2026-11-29', error_model='house')
