@@ -235,6 +235,7 @@ def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: 
 
 
 def _calibration(
+    scope: str,
     event_date: str,
     horizon: int,
     names: list,
@@ -250,6 +251,8 @@ def _calibration(
 
     Parameters
     ----------
+    scope : str
+        Scope code (with the date, it identifies the election: several scopes vote on the same day).
     event_date : str
         Election date, `YYYY-MM-DD`.
     horizon : int
@@ -271,11 +274,12 @@ def _calibration(
     Returns
     -------
     pandas.DataFrame
-        One row per cell: `event_date`, `horizon`, `kind` (`shares`, `seats`, `prov_shares`, `prov_seats`),
+        One row per cell: `scope`, `event_date`, `horizon`, `kind` (`shares`, `seats`, `prov_shares`, `prov_seats`),
         `mode` (`now`, or `h` for the horizon run; the provincial cells only `now`; the seats only with valid
         seats), `party`, `region_id`
         (the province, empty for the national cells), `main`, `official`, `model` and `pit`.
     """
+    case = {'scope': scope, 'event_date': event_date, 'horizon': horizon}
     rows = []
     for mode, run in (('now', now), ('h', fwd)):
         if run is None:
@@ -284,17 +288,17 @@ def _calibration(
         for kind, samples, col in kinds:
             for n in names:
                 y = float(official.loc[n, col])
-                rows.append({'event_date': event_date, 'horizon': horizon, 'kind': kind, 'mode': mode, 'party': n,
-                             'region_id': None, 'main': n in main, 'official': y, 'model': float(run['summary'].loc[n, col]),
-                             'pit': pit(samples[n].to_numpy(dtype=float), y)})
+                rows.append(case | {'kind': kind, 'mode': mode, 'party': n, 'region_id': None, 'main': n in main,
+                                    'official': y, 'model': float(run['summary'].loc[n, col]),
+                                    'pit': pit(samples[n].to_numpy(dtype=float), y)})
     kinds = [('prov_shares', 'pct')] + ([('prov_seats', 'seats')] if seats_valid else [])
     for kind, col in kinds:
         for p in provinces.itertuples(index=False):
-            rows.append({'event_date': event_date, 'horizon': horizon, 'kind': kind, 'mode': 'now', 'party': p.party,
-                         'region_id': int(p.region), 'main': bool(p.main), 'official': float(getattr(p, 'official_' + col)),
-                         'model': float(getattr(p, 'model_' + col)), 'pit': float(getattr(p, 'pit_' + col))})
-    out = pd.DataFrame(rows, columns=['event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main', 'official',
-                                      'model', 'pit'])
+            rows.append(case | {'kind': kind, 'mode': 'now', 'party': p.party, 'region_id': int(p.region),
+                                'main': bool(p.main), 'official': float(getattr(p, 'official_' + col)),
+                                'model': float(getattr(p, 'model_' + col)), 'pit': float(getattr(p, 'pit_' + col))})
+    out = pd.DataFrame(rows, columns=['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main',
+                                      'official', 'model', 'pit'])
     out['region_id'] = out['region_id'].astype('Int64')
 
     return out
@@ -526,7 +530,7 @@ def run_case(
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1)
     }])
 
-    calibration = _calibration(event_date, horizon, names, main, official, now, fwd, provinces_df, len(orphans) == 0)
+    calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df, len(orphans) == 0)
 
     return {'shares': shares_df, 'seats': seats_df, 'blocks': blocks_df, 'provinces': provinces_df,
             'series': case_series(sim, event_date, horizon), 'calibration': calibration, 'meta': meta}
@@ -616,8 +620,8 @@ def summarize_calibration(
     """
     Histogram of the PIT of the cells of the backtest, per population, kind, mode and group of horizons.
 
-    Every election weighs the same inside its population: each cell weighs `1 / n` with `n` its cells of the same
-    election, population, kind, mode and group, so that an election with many parties does not dominate. The
+    Every election (its `scope`, when the frame has it, and its `event_date`) weighs the same inside its
+    population: each cell weighs `1 / n` with `n` its cells of the same election, population, kind, mode and group, so that an election with many parties does not dominate. The
     cells without a finite PIT (no official result) are left out, and so are the horizons outside every group.
 
     Parameters
@@ -651,8 +655,11 @@ def summarize_calibration(
         return pd.DataFrame(columns=columns)
 
     df['bin'] = np.minimum((df['pit'].astype(float) * bins).astype(int), bins - 1)
-    df['weight'] = 1. / df.groupby(keys + ['event_date'])['pit'].transform('size')
-    counts = df.groupby(keys).agg(n_cells=('pit', 'size'), n_events=('event_date', 'nunique'))
+    # An election is its scope and date (several scopes vote on the same day); a frame without `scope`, its date
+    election = [c for c in ('scope', 'event_date') if c in df.columns]
+    df['weight'] = 1. / df.groupby(keys + election)['pit'].transform('size')
+    counts = pd.concat({'n_cells': df.groupby(keys).size(),
+                        'n_events': df.drop_duplicates(keys + election).groupby(keys).size()}, axis=1)
     mass = df.groupby(keys + ['bin'])['weight'].sum()
 
     grid = pd.MultiIndex.from_tuples(

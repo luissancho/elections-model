@@ -582,17 +582,32 @@ def test_case_calibration_has_one_row_per_cell_kind_and_mode():
     provinces = pd.DataFrame({'region': [28], 'party': ['A'], 'main': [True], 'official_pct': [30.], 'model_pct': [29.],
                               'pit_pct': [0.25], 'official_seats': [12.], 'model_seats': [11.], 'pit_seats': [0.75]})
 
-    cal = _calibration('2023-07-23', 6, names, {'A'}, official, run, run, provinces, seats_valid=True)
-    assert list(cal.columns) == ['event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main', 'official', 'model', 'pit']
+    cal = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, seats_valid=True)
+    assert list(cal.columns) == ['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main', 'official', 'model', 'pit']
     assert sorted(set(zip(cal['kind'], cal['mode']))) == [('prov_seats', 'now'), ('prov_shares', 'now'), ('seats', 'h'),
                                                           ('seats', 'now'), ('shares', 'h'), ('shares', 'now')]
     a = cal.query("kind == 'shares' and mode == 'now' and party == 'A'").iloc[0]
     assert a['pit'] == pytest.approx(2 / 3) and a['model'] == 31. and a['official'] == 32. and bool(a['main'])
     assert cal.query("kind == 'seats' and party == 'A'")['pit'].tolist() == pytest.approx([0.5, 0.5])
-    assert cal.query("party == 'B'")['pit'].isna().all() and pd.isna(a['region_id'])
+    assert cal.query("party == 'B'")['pit'].isna().all() and pd.isna(a['region_id']) and cal['scope'].eq('es').all()
     prov = cal.query("kind == 'prov_seats'").iloc[0]
     assert (prov['region_id'], prov['official'], prov['model'], prov['pit']) == (28, 12., 11., 0.75)
 
-    only = _calibration('2023-07-23', 6, names, {'A'}, official, run, None, provinces, seats_valid=False)
+    only = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, None, provinces, seats_valid=False)
     assert set(only['mode']) == {'now'} and set(only['kind']) == {'shares', 'prov_shares'}
-    assert 'seats' not in set(_calibration('2023-07-23', 6, names, {'A'}, official, run, run, provinces, False)['kind'])
+    assert 'seats' not in set(_calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, False)['kind'])
+
+
+def test_summarize_calibration_tells_apart_two_scopes_voting_the_same_day():
+    """Una elección es su ámbito y su fecha: dos autonómicas del mismo día pesan cada una lo suyo (no se funden en una
+    pseudoelección) y `n_events` las cuenta por separado; sin columna `scope`, la fecha sola."""
+    cal = pd.DataFrame({
+        'population': ['autonomicas'] * 4, 'scope': ['es-md', 'es-md', 'es-md', 'es-cl'], 'kind': ['shares'] * 4,
+        'mode': ['now'] * 4, 'event_date': ['2023-05-28'] * 4, 'horizon': [6] * 4, 'pit': [0.05, 0.05, 0.05, 0.95],
+        'party': list('ABCD')})
+    row = summarize_calibration(cal).query("group == '6-14'")
+    assert row['n_events'].iloc[0] == 2 and row['n_cells'].iloc[0] == 4
+    assert row.loc[row.bin == 0, 'observed'].iloc[0] == pytest.approx(0.5)   # Madrid pesa 1/2 aunque tenga 3 celdas
+    assert row.loc[row.bin == 9, 'observed'].iloc[0] == pytest.approx(0.5)
+    same_day = summarize_calibration(cal.drop(columns='scope')).query("group == '6-14'")
+    assert same_day['n_events'].iloc[0] == 1 and same_day.loc[same_day.bin == 0, 'observed'].iloc[0] == pytest.approx(0.75)
