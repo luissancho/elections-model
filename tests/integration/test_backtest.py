@@ -90,6 +90,7 @@ def test_run_case_records_composition(app):
     assert ref['meta'].iloc[0]['composition_ratio'] == 1   # independiente por defecto
     assert ref['meta'].iloc[0]['error_model'] == 'polls'   # el error de un sondeo suelto por defecto
     assert (ref['meta'].iloc[0]['drift_scale'], ref['meta'].iloc[0]['drift_scale_rows']) == (1., 0)   # sin escala
+    assert np.isnan(ref['meta'].iloc[0]['tail_dof'])   # grados de libertad por partido, `nobs - 2`
 
 
 def test_run_case_provincial_metrics(app):

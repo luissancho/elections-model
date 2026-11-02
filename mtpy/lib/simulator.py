@@ -59,6 +59,7 @@ class Simulator(Core):
         add_errors: bool = True,
         error_model: Literal['polls', 'average'] = 'polls',
         drift_scale: Optional[str | float] = None,
+        tail_dof: Optional[int] = None,
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
         threshold: Optional[float] = None,
@@ -129,6 +130,9 @@ class Simulator(Core):
             `'auto'` fits it on the errors of the poll average of the past elections (table `average_errors`,
             1 with a warning without rows), a positive number fixes it, `None` (default) leaves 1. The value used
             is `v2drift.scale`.
+        tail_dof : int, optional
+            Degrees of freedom of the Student t of the draw (`build_frame`) and of the fan (`fan`), the same for
+            every party: an integer of at least 2. `None` (default) takes `nobs - 2` of each party, at least 3.
         reg_params : dict of str, optional
             Parameters for the regression estimator.
             If `None`, the default parameters will be used.
@@ -191,6 +195,7 @@ class Simulator(Core):
         if error_model not in self.ERROR_MODELS:
             raise ValueError('`error_model` must be one of {}'.format(list(self.ERROR_MODELS)))
         drift_scale = check_drift_scale(drift_scale)
+        tail_dof = self._check_tail_dof(tail_dof)
 
         super().__init__()
 
@@ -217,6 +222,7 @@ class Simulator(Core):
         self.error_model = error_model
         self.error_model_used = None  # Set by `fit_error_estimator`
         self.drift_scale = drift_scale
+        self.tail_dof = tail_dof
         self.reg_params = reg_params
         self.smap = smap
         if threshold is None:
@@ -296,7 +302,7 @@ class Simulator(Core):
 
         self.parties = get_parties()
         self.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']
-        self.cols_frame = self.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred']
+        self.cols_frame = self.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred', 'dof']
         self.cols_unit = ['prev_pct', 'vpred_pct']
 
         if self.verbose > 0:
@@ -1151,7 +1157,7 @@ class Simulator(Core):
         """
         Long fan of `fan` for the given horizons (clipped to `[0, horizon_max]`), with the three pieces of the
         margin of each party (`err`, `pct_err`, `drift`, percentage points) and the degrees of freedom of its
-        Student t (`dof`, the same as in `build_frame`).
+        Student t (`dof`, the same as in `build_frame`, see `degrees_of_freedom`).
         """
         alpha = self.alpha if alpha is None else alpha
         horizons = [int(h) for h in horizons if 0 <= int(h) <= self.horizon_max]
@@ -1168,7 +1174,7 @@ class Simulator(Core):
             else:
                 pct_err = 0.
 
-            dof = max((nobs if np.isfinite(nobs) else 3.) - 2, 3.)  # same degrees of freedom as `build_frame`
+            dof = float(self.degrees_of_freedom([nobs])[0])  # same degrees of freedom as `build_frame`
             q = float(student_t.ppf(1 - alpha / 2, dof))
             base = np.nan_to_num(err) ** 2 + pct_err ** 2
 
@@ -1183,6 +1189,50 @@ class Simulator(Core):
                 })
 
         return pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'err', 'pct_err', 'drift', 'sd', 'lo', 'hi', 'dof'])
+
+    @staticmethod
+    def _check_tail_dof(tail_dof: Optional[int]) -> Optional[int]:
+        """
+        Validate `tail_dof`: `None` or an integer of at least 2 (a boolean is not an integer here).
+
+        Returns
+        -------
+        int or None
+            `None` or the number as an `int`.
+
+        Raises
+        ------
+        ValueError
+            Anything else (zero, a negative or non-integer number, a string).
+        """
+        if tail_dof is None:
+            return None
+        if isinstance(tail_dof, (bool, np.bool_)) or not isinstance(tail_dof, (int, np.integer)) or tail_dof < 2:
+            raise ValueError('`tail_dof` must be None or an integer of at least 2 (got {!r})'.format(tail_dof))
+
+        return int(tail_dof)
+
+    def degrees_of_freedom(self, nobs) -> np.ndarray:
+        """
+        Degrees of freedom of the Student t of each party in the draw (`build_frame`) and the fan (`fan`):
+        `tail_dof` for every party when set, else `nobs - 2` (the polls of the party), at least 3 (3 without
+        `nobs`).
+
+        Parameters
+        ----------
+        nobs : array-like of float
+            Polls of each party (`forecast['nobs']`), NaN when unknown.
+
+        Returns
+        -------
+        np.ndarray
+            One float per party.
+        """
+        nobs = np.asarray(nobs, dtype=float)
+        if self.tail_dof is not None:
+            return np.full(nobs.shape, float(self.tail_dof))
+
+        return np.clip(np.where(np.isfinite(nobs), nobs, 3.) - 2, 3, None)
 
     def _require_forecast(self) -> None:
         if self.forecast is None or self.horizon_max is None:
@@ -2084,10 +2134,14 @@ class Simulator(Core):
                 df.loc[vind, 'std_err'] = np.sqrt(np.square(df.loc[vind, 'err']) + np.square(drift))
 
             # Add noise to the forecasted percentage, based on the calculated error: a Student t per party
-            # (`nobs - 2` degrees of freedom), drawn jointly for the national parties with the common negative
-            # correlation set by `composition_ratio` (Gaussian copula, so the marginals are the same), or
-            # independently when the ratio is 1
-            dof = np.clip(df.loc[vind, 'nobs'].fillna(3) - 2, 3, None).to_numpy(dtype=float)
+            # (`nobs - 2` degrees of freedom, or `tail_dof` for all, see `degrees_of_freedom`), drawn jointly for
+            # the national parties with the common negative correlation set by `composition_ratio` (Gaussian
+            # copula, so the marginals are the same), or independently when the ratio is 1. The frame keeps them
+            # (`dof`) for every category with a positive share: the residual, never drawn, carries the one it
+            # would have (3, without polls, or `tail_dof`)
+            positive = df['pct'] > 0
+            df.loc[positive, 'dof'] = self.degrees_of_freedom(df.loc[positive, 'nobs'])
+            dof = df.loc[vind, 'dof'].to_numpy(dtype=float)
             sig = df.loc[vind, 'std_err'].to_numpy(dtype=float)
             national = (df.loc[vind, 'regional'].to_numpy() == 0) & np.isfinite(sig)
             if self.composition_ratio < 1 and national.sum() >= 2:

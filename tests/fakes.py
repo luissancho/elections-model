@@ -104,7 +104,7 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.params = {'n_sim': n_sim, 'split': True, 'random': True, 'names': NAMES, 'regions': REGIONS,
                   'horizon': None, 'date_prior': 'historical'}
     sim.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']
-    sim.cols_frame = sim.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred']
+    sim.cols_frame = sim.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred', 'dof']
     sim.cols_unit = ['prev_pct', 'vpred_pct']
     sim.forecast = pd.DataFrame({'mean': [40., 30., 15., 15.], 'regional': [0, 0, 0, 0], 'err': [1.5, 1.2, 1.0, np.nan],
                                  'nobs': [40., 40., 30., np.nan], 'error': [2.0, 1.8, 1.5, np.nan]}, index=NAMES + ['-'])
@@ -114,6 +114,7 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.computer, sim.est_scope, sim.n_last = None, 'es', 1  # no past elections: no error estimator
     sim.error_model = sim.error_model_used = 'polls'  # error terminal de un sondeo suelto (por defecto)
     sim.drift_scale = None  # deriva sin escalar (por defecto)
+    sim.tail_dof = None  # grados de libertad de la t por partido, `nobs - 2` (por defecto)
     sim.composition_ratio, sim.composition_rho = 1.0, 0.
     sim.house_effects = sim.dispersion = sim.regional_noise = True
     sim.industry_bias, sim.composition, sim.smap = False, None, {'UP': [{'agg': ['UP', 'MP']}]}

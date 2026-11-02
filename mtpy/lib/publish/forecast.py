@@ -640,7 +640,9 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
                         'error_model': sim.error_model_used,
                         # the multiplier of the drift variance used and the rows of its fit (0 when not fitted)
                         'drift_scale': float(drift.scale) if drift is not None else None,
-                        'drift_scale_rows': int(drift.scale_rows) if drift is not None else None},
+                        'drift_scale_rows': int(drift.scale_rows) if drift is not None else None,
+                        # the degrees of freedom of the t of the draw, the same for every party (`None`: `nobs - 2`)
+                        'tail_dof': sim.tail_dof},
         'seconds': seconds, 'freeze': bool(freeze), 'limit_date': limit_date,
     }
 

@@ -107,6 +107,22 @@ def test_backtest_rejects_a_bad_drift_scale_before_running(fresh_app, patched, t
     assert runner.calls == [] and not (tmp_path / 'run.json').exists()
 
 
+@pytest.mark.parametrize('value, expected', [(None, None), (5, 5), ('8', 8), (2, 2)])
+def test_backtest_job_passes_the_tail_dof_to_the_runner(fresh_app, patched, tmp_path, value, expected):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), tail_dof=value, verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['tail_dof'] == expected
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['tail_dof'] == expected
+
+
+@pytest.mark.parametrize('bad', [0, 1, -3, 2.5, True, 'x', [5]])
+def test_backtest_rejects_a_bad_tail_dof_before_running(fresh_app, patched, tmp_path, bad):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='backtest: tail_dof must be an integer of at least 2 or null'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), tail_dof=bad, runner=runner, stats=stats)
+    assert runner.calls == [] and not (tmp_path / 'run.json').exists()
+
+
 def test_backtest_stop_on_error_stops_at_the_first_failure(fresh_app, patched, tmp_path):
     runner = FakeRunner(fail_scope='es-ar')
     with pytest.raises(RuntimeError, match='backtest: failed scopes: es-ar'):

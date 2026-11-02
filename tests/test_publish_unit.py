@@ -367,7 +367,7 @@ def test_export_meta_and_headline():
     assert meta['diagnostics'] == {'drift_k': None, 'multiplier': None, 'ages': {'PP': 40.0, 'PSOE': 40.0, 'VOX': 12.0},
                                    'composition': 1.0, 'clip_rate': {'nowcast': 0.0, 'forecast': 0.01},
                                    'error_events': [], 'error_scope': 'es', 'error_model': 'polls',
-                                   'drift_scale': None, 'drift_scale_rows': None}
+                                   'drift_scale': None, 'drift_scale_rows': None, 'tail_dof': None}
     assert meta['smap'] == {'UP': [{'agg': ['UP', 'MP']}]} and 'vs' in meta['bmaps']
 
     head = publish.export_headline(sim, '20261008-120000', '2026-10-08T12:00:00Z', {'parties': [], 'p_majority': {}},
@@ -487,6 +487,15 @@ def test_export_meta_records_the_drift_scale_used():
     meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
                                {'commit': None, 'dirty': False, 'versions': {}}, False)
     assert (meta['diagnostics']['drift_scale'], meta['diagnostics']['drift_scale_rows']) == (1., 0)
+
+
+def test_export_meta_records_the_tail_dof():
+    """El diagnóstico del run lleva los grados de libertad fijos de la t del sorteo (`None`: `nobs - 2` por partido)."""
+    sim = synthetic_simulator()
+    sim.tail_dof = 5
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False)
+    assert meta['diagnostics']['tail_dof'] == 5
 
 
 def test_export_meta_and_headline_carry_the_backfill_keys():
