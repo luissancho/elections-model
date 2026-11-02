@@ -722,6 +722,8 @@ class LeastSquaresEstimator(Estimator):
         self.wexog = None
         self.wendog = None
         self.wresid = None
+        self.xvars = None  # Variables of the observations, before the polynomial design (`exog`)
+        self.points = None  # Prediction points, before the polynomial design (`pred`): the index of the result
 
         self.dof = None  # Degrees of freedom
         self.dof_t = None  # Degrees of freedom of the t reference of the bands (`G - 1` with cluster covariance)
@@ -758,10 +760,11 @@ class LeastSquaresEstimator(Estimator):
             self.neff = np.square(np.sum(self.weights)) / np.sum(np.square(self.weights))
             self.weights *= self.neff / self.weights.sum()
 
+        self.xvars = self.exog
         if self.poly_deg == 1:
             exog = np.column_stack([np.ones(self.exog.shape[0]), self.exog])
         else:
-            exog = np.ones(self.exog.shape[0])
+            exog = np.ones((self.exog.shape[0], 1))  # a column also with poly_deg 0 (the weighted mean)
             for p in np.arange(1, self.poly_deg + 1):
                 for combination in itertools.combinations_with_replacement(np.arange(self.exog.shape[1]), p):
                     term = np.prod(self.exog[:, combination], axis=1)
@@ -786,11 +789,19 @@ class LeastSquaresEstimator(Estimator):
     ) -> Self:
         super().build_pred(p)
 
-        if self.pred.shape[1] <= self.kvar:
+        # Without points the prediction is on the observations, whose design matrix `exog` already is; points given
+        # as a design matrix keep their linear terms
+        if p is None:
+            self.points = self.xvars
+        elif self.pred.shape[1] > self.kvar:
+            self.points = self.pred[:, 1:(self.kvar + 1)]
+        else:
+            self.points = self.pred
+        if p is not None and self.pred.shape[1] <= self.kvar:
             if self.poly_deg == 1:
                 pred = np.column_stack([np.ones(self.pred.shape[0]), self.pred])
             else:
-                pred = np.ones(self.pred.shape[0])
+                pred = np.ones((self.pred.shape[0], 1))
                 for p in np.arange(1, self.poly_deg + 1):
                     for combination in itertools.combinations_with_replacement(np.arange(self.pred.shape[1]), p):
                         term = np.prod(self.pred[:, combination], axis=1)
@@ -900,7 +911,7 @@ class LeastSquaresEstimator(Estimator):
 
         y_hat = np.dot(self.pred, self.coef).squeeze()
 
-        result = pd.Series(y_hat, index=pd.MultiIndex.from_arrays(self.pred[:, 1:(self.kvar + 1)].T), name='mean')
+        result = pd.Series(y_hat, index=pd.MultiIndex.from_arrays(self.points.T), name='mean')
 
         if alpha is not None:
             # self.perr = np.sqrt(np.diag(self.pred @ self.mcov @ self.pred.T))

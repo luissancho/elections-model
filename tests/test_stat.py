@@ -285,3 +285,29 @@ def test_isj_bandwidth_of_few_poll_dates_is_finite_and_silent():
         bw = Kernel.get_bw_isj(x, np.ones(len(x)))
     assert isinstance(bw, float) and np.isfinite(bw) and bw > 0
     assert bw == pytest.approx(2 * np.pi * np.mean(np.diff(x)))
+
+
+def test_wls_of_degree_zero_is_the_weighted_mean(rng):
+    """Grado 0 (afinado del promedio, método 14): una sola columna de unos, la media ponderada en cada punto; antes
+    la matriz de diseño quedaba en una dimensión y el ajuste fallaba con `tuple index out of range`."""
+    x = np.arange(40.)
+    y = 30 + 0.1 * x + rng.normal(size=40)
+    w = rng.uniform(0.5, 2., size=40)
+    est = LeastSquaresEstimator(x[:, None], y[:, None], weights=w, poly_deg=0)
+    assert est.exog.shape == (40, 1) and np.isclose(est.dof, est.neff - 1)
+    result = est.fit(x[:3, None], alpha=0.05)
+    assert np.allclose(result['mean'].astype(float), np.average(y, weights=w))
+    assert (result['cmin'] < result['mean']).all() and (result['mean'] < result['cmax']).all()
+
+
+def test_local_regression_of_degree_zero_is_a_kernel_weighted_mean(rng):
+    """Grado 0 en la regresión local: el estimador de Nadaraya-Watson (media ponderada por el núcleo)."""
+    x = np.arange(40.)
+    y = 30 + 0.1 * x + rng.normal(size=40)
+    est = LocalKernelEstimator(x[:, None], y[:, None], bw_type='fixed', bw=10, poly_deg=0)
+    result = est.fit(x[[0, 20, 39], None], alpha=0.05)
+    kws = est.get_kernel().get_weights(np.array([[0.], [20.], [39.]]))
+    for row, point in enumerate([0, 20, 39]):
+        keep = est.local_mask(kws, row)
+        expected = np.average(y[keep], weights=kws[row][keep])
+        assert np.isclose(float(result['mean'].iloc[row]), expected)

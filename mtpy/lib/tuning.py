@@ -683,6 +683,65 @@ def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def setting_of(config: dict[str, Any], key: str) -> Any:
+    """
+    Value of a key of the grid in a configuration whose keys are all explicit (`normalize_config`), as `GRID` writes it.
+
+    Parameters
+    ----------
+    config : dict
+        Normalised configuration of the average.
+    key : str
+        Key of `GRID`.
+
+    Returns
+    -------
+    Any
+        The value, read where `apply_setting` puts it: `bw` as `(bw_type, bw)` or `('adaptive', n_iter)`.
+    """
+    reg_params = config.get('reg_params') or {}
+    if key == 'bw':
+        if reg_params.get('bw_type') == 'fixed':
+            return 'fixed', reg_params.get('bw')
+        return 'adaptive', (reg_params.get('bw_kwargs') or {}).get('n_iter')
+    if key in ('bw_cap', 'poly_deg'):
+        return reg_params.get(key)
+    if key == 'wspan':
+        return (config.get('weights') or {}).get('wspan')
+    if key in ('tau', 'he_n_iter'):
+        return (config.get('he_params') or {}).get('n_iter' if key == 'he_n_iter' else key)
+    if key == 'herd_prior':
+        disp_params = config.get('disp_params') or {}
+        return disp_params.get('herd_prior', disp_params.get('n_prior'))
+    return config.get(key)
+
+
+def best_label(config: dict[str, Any]) -> str:
+    """
+    Label of a configuration kept by the search: every key of the grid whose value differs from the live default.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration of the average.
+
+    Returns
+    -------
+    str
+        `'key=value'` of each setting that differs from `DEFAULTS`, in the order of `GRID`, joined by `'; '` (the cap
+        of the adaptive bandwidth is left out under a fixed bandwidth, where it does nothing); `'default'` when none
+        differs.
+    """
+    config = normalize_config(effective_config(config))
+    settings = []
+    for key in GRID:
+        value = setting_of(config, key)
+        if value != DEFAULTS[key]:
+            settings.append('{}={}'.format(key, value))
+
+    return '; '.join(settings) or 'default'
+
+
 def config_key(config: dict[str, Any]) -> str:
     """
     Canonical key of a configuration, for the memo of the search: the configuration without its `label`.
@@ -1802,8 +1861,9 @@ def tuning_scope(
 
     Each run rewrites `TUNING_FILES` in the folder of the scope. The search modes also write `trials-{mode}.csv`
     and `scores-{mode}.csv` (kept per phase, so the scores of the search survive the check) and, in `smoothing`
-    and `shrinkage`, `best.json`: the configuration kept with `house_effects`, `dispersion` and `herding` on, as
-    the next phase and the check read it (the shrinkage one overwrites the smoothing one).
+    and `shrinkage`, `best.json`: the configuration kept with `house_effects`, `dispersion` and `herding` on and
+    labelled with every setting that differs from the default (`best_label`), as the next phase and the check read
+    it (the shrinkage one overwrites the smoothing one).
 
     The shrinkage phase can be split into parts (one per cycle, for example, in separate tasks): a run with `part`
     writes only `cuts-`, `scores-` and `trials-shrinkage-{part}.csv` and `run-shrinkage-{part}.json`, and never
@@ -1920,7 +1980,7 @@ def tuning_scope(
                 fs.write_csv(result[name], results_path(folder, '{}-{}.csv'.format(name, mode)))
             best = result['best']
         if mode in ('smoothing', 'shrinkage'):
-            best = best | {'house_effects': True, 'dispersion': True, 'herding': True}
+            best = best | {'house_effects': True, 'dispersion': True, 'herding': True, 'label': best_label(best)}
             fs.write_bytes(json.dumps(best, indent=1).encode('utf-8'), results_path(folder, 'best.json'))
 
     record = run_record(scope, mode, prov, stats, configs=result['configs'], cycles=result['cycles'],
@@ -2033,7 +2093,8 @@ def merge_scope(
         n_cuts += int(own.drop_duplicates('event_date')['n_cuts'].sum())
     seconds = {'run': time.perf_counter() - began}
 
-    best = result['best'] | {'house_effects': True, 'dispersion': True, 'herding': True}
+    best = result['best'] | {'house_effects': True, 'dispersion': True, 'herding': True,
+                             'label': best_label(result['best'])}
     fs.write_bytes(json.dumps(best, indent=1).encode('utf-8'), results_path(folder, 'best.json'))
     fs.write_csv(result['trials'], results_path(folder, 'trials-shrinkage.csv'))
     fs.write_csv(scores, results_path(folder, 'scores-shrinkage.csv'))

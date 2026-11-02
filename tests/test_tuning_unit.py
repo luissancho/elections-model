@@ -1131,3 +1131,31 @@ def test_boot_worker_boots_the_app_and_makes_the_queries_interruptible(monkeypat
     monkeypatch.setattr(psycopg2.extensions, 'set_wait_callback', callbacks.append)
     tuning.boot_worker()
     assert booted == [True] and callbacks == [psycopg2.extras.wait_select]
+
+
+# --- Label of the configuration kept ---------------------------------------------------------------------------------
+
+def test_best_label_lists_every_setting_that_differs_from_the_defaults():
+    config = apply_setting(apply_setting(default_config(), 'max_fc', 0), 'bw_cap', 1.0)
+    assert tuning.best_label(config) == 'bw_cap=1.0; max_fc=0'
+    assert tuning.best_label(normalize_config(default_config())) == 'default'
+    fixed = apply_setting(apply_setting(default_config(), 'bw_cap', 1.5), 'bw', ('fixed', 45))
+    assert tuning.best_label(fixed) == "bw=('fixed', 45)"   # the cap is a no-op under a fixed bandwidth
+    shrunk = apply_setting(apply_setting(default_config(), 'tau', 0.04), 'he_n_iter', 1)
+    assert tuning.best_label(shrunk) == 'tau=0.04; he_n_iter=1'
+
+
+def test_tuning_scope_saves_the_best_with_the_label_of_all_its_settings(fresh_app, tmp_path, monkeypatch):
+    class Prolonged(FakeCut):
+        def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+            out = super().__call__(scope, event_date, cut, config, horizons=horizons)
+            if config['max_fc'] == 0:
+                out['scores'] = [s | {'rmse': s['rmse'] - 0.2} for s in out['scores']]
+            return out
+
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': []})
+    figures = tuning_scope('es-md', out=str(tmp_path), mode='smoothing', runner=Prolonged(), rounds=1,
+                           grid={'bw': [('fixed', 45)], 'max_fc': [0, 10]}, stats=lambda scope: {},
+                           prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    best = json.load(open(tmp_path / 'es-md' / 'best.json', encoding='utf-8'))
+    assert best['label'] == "bw=('fixed', 45); max_fc=0" and figures['best']['label'] == best['label']
