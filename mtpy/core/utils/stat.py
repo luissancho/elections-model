@@ -263,6 +263,7 @@ class Kernel(object):
         bw: list | int | float | Literal['scott', 'silverman', 'isj'] = 'isj',
         n_iter: int = 1,
         min_delta: Optional[float] = None,
+        bw_cap: Optional[float] = None,
         verbose: int = 0
     ) -> None:
         self.verbose = verbose  # Print progress
@@ -274,6 +275,9 @@ class Kernel(object):
         self.bw = bw
         self.n_iter = n_iter
         self.min_delta = min_delta
+        # Cap of the adaptive bandwidth of each point, in pilot (fixed) bandwidths: where the density of the data
+        # falls (the edges of the series) the adaptive bandwidth widens without limit; `None` leaves it free
+        self.bw_cap = bw_cap
 
         self.nobs, self.kvar = array_shape(self.data)
         self.data = array_adjust(self.data, self.kvar)
@@ -483,6 +487,8 @@ class Kernel(object):
         kbw = bw * np.ones(p.shape[0])
         kbws = np.empty((n_iter + 1, p.shape[0]))
         kbws[0, :] = kbw
+        # Cap of the bandwidth of each point (`bw_cap` times the pilot), applied after each iteration
+        kbw_max = self.bw_cap * np.asarray(bw, dtype=float) if self.bw_cap is not None else None
 
         n = 0
         for n in np.arange(1, n_iter + 1):
@@ -490,6 +496,8 @@ class Kernel(object):
 
             gm = gmean(pdf)
             kbws[n, :] = kbws[n - 1, :] * np.sqrt(gm / pdf)
+            if kbw_max is not None:
+                kbws[n, :] = np.minimum(kbws[n, :], kbw_max)
 
             delta = np.sqrt(np.mean(np.square(kbws[n] - kbws[n - 1])))
 
@@ -936,6 +944,7 @@ class LocalKernelEstimator(Estimator):
         bw_type: Literal['fixed', 'adaptive'] = 'adaptive',
         bw: int | float | tuple[int | float] | Literal['scott', 'silverman', 'isj'] = 'isj',
         bw_kwargs: Optional[dict[str, Any]] = None,
+        bw_cap: Optional[float] = None,
         poly_deg: int = 1,
         cov_type: Optional[Literal['hac', 'hc1', 'cluster']] = 'hac',
         cov_kwargs: Optional[dict[str, Any]] = None,
@@ -945,12 +954,14 @@ class LocalKernelEstimator(Estimator):
         Local polynomial regression with kernel weights (`Kernel`): at each prediction point a
         `LeastSquaresEstimator` is fitted on the observations with a non-negligible kernel weight, with the
         robust covariance `cov_type` (`'cluster'` needs `groups`, one per observation; the local fit gets
-        the groups of its window).
+        the groups of its window). `bw_cap` caps the adaptive bandwidth of each point at `bw_cap` times the
+        pilot bandwidth (see `Kernel`); `None` leaves it free.
         """
         self.kernel = kernel
         self.bw_type = bw_type
         self.bw = bw
         self.bw_kwargs = bw_kwargs if bw_kwargs is not None else dict()
+        self.bw_cap = bw_cap
 
         self.poly_deg = poly_deg
         self.cov_type = cov_type
@@ -980,6 +991,7 @@ class LocalKernelEstimator(Estimator):
             kernel=self.kernel,
             bw_type=self.bw_type,
             bw=self.bw,
+            bw_cap=self.bw_cap,
             **self.bw_kwargs
         )
 

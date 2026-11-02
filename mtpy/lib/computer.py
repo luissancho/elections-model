@@ -1075,66 +1075,11 @@ class Computer(Core):
         df['mtype'] = df['pollster'].map(self.pollsters.set_index('name')['mtype'])
 
         if self.verbose > 0:
-            print('Compute sample...')
+            print('Compute sample and overweights...')
 
-        # We need to fix the sample size of the polls that didn't report it
-        df['sample_size'] = df['sample_size'].where(df['sample_size'] > 0, np.nan)
-        # First, we compute the median sample size of the polls published by the same pollster for the same event
-        msizes_loc = df.groupby(['event_date', 'pollster'])['sample_size'].median().dropna()
-        # If there are no polls published by the same pollster for the same event, we compute the median sample size
-        # of the polls published by the same pollster for any event
-        msizes_tot = df.groupby('pollster')['sample_size'].median().dropna()
-        # Finally, if there are no polls published by the same pollster, we compute the median sample size of all polls
-        msizes_all = df.loc[~df['mtype'].isin(self.drop_mtypes)]['sample_size'].median()
-
-        # First, fill missing values with the median sample size computed above
-        proc_sample = df['sample_size'].fillna(
-            df[['event_date', 'pollster']].apply(tuple, axis=1).map(msizes_loc)
-        ).fillna(
-            df['pollster'].map(msizes_tot)
-        ).fillna(
-            msizes_all
-        )
-        # Then, winsorize the sample sizes to prevent outliers
-        df['proc_sample'] = Stat(
-            proc_sample.clip(0, self.ol_max),
-            dropna=True,
-            outliers='group',
-            n_dev=self.ol_dev
-        ).data.round().astype(int)
-
-        # Compute the weight based on the sample size of the polls, using the square root of the ratio between
-        # each poll's sample size and the median sample size of all the polls published for the same event (those of
-        # the dropped methodology types do not count: a big online panel would lower the weight of every other poll).
-        counted = df.loc[~df['mtype'].isin(self.drop_mtypes)]
-        sample_medians = counted.groupby('event_date')['proc_sample'].median().reindex(df['event_date'].unique())
-        sample_medians = sample_medians.fillna(df.groupby('event_date')['proc_sample'].median())
-        df['weight_sample'] = df.apply(
-            lambda x: np.sqrt(x['proc_sample'] / sample_medians.loc[x['event_date']]),
-            axis=1
-        ).round(2).astype(float)
-
-        if self.verbose > 0:
-            print('Compute overweights...')
-
-        # Compute the days range between the poll start/end date and the final event date
-        df['wrange'] = df.apply(lambda dr: (
-            (dr['start_date'] - dr['event_date']).days,
-            (dr['end_date'] - dr['event_date']).days
-        ), axis=1)
-        df['wtype'] = pd.factorize(df[['mtype', 'ctype']].astype(str).apply('-'.join, axis=1))[0]
-        # Group polls by pollster/sponsor and compute the overlap/overflow weight for each group's polls
-        df = df.merge(
-            apply_agg_func(
-                df,
-                by=['event_date', 'pollster_id', 'wtype'],
-                func=self.poll_overweights,
-                columns='wrange',
-                sort=['date', 'sponsor_id']
-            ).round(2).astype(float).rename('weight_over').reset_index(),
-            on=['event_date', 'pollster_id', 'wtype', 'date', 'sponsor_id'],
-            how='left'
-        )
+        # Sample (`proc_sample`, `weight_sample`) and overlap/overflow (`weight_over`) weights, see `reweight`
+        df = df.join(self.reweight(df, wspan=self.wspan, ol_max=self.ol_max, ol_dev=self.ol_dev,
+                                   drop_mtypes=self.drop_mtypes))
 
         if self.verbose > 0:
             print('Merge ratings...')
@@ -1171,6 +1116,104 @@ class Computer(Core):
         self.series[columns + ['computed', 'featured']] = df.reindex(self.series.index)
 
         return df
+
+    @classmethod
+    def reweight(
+        cls,
+        polls: pd.DataFrame,
+        wspan: Optional[int],
+        ol_max: int = 5000,
+        ol_dev: int = 3,
+        drop_mtypes: Optional[list[str]] = None
+    ) -> pd.DataFrame:
+        """
+        Compute the sample and overlap/overflow weights of a set of polls, without the database.
+
+        The logic of `compute_weights` (which calls this method), so that the weights can be recomputed in memory
+        with other parameters (see `Forecaster`, `weight_overrides`): `proc_sample` (the sample size with the
+        missing values filled with the median of the pollster at the event, then of the pollster, then of all the
+        polls, capped at `ol_max` and winsorized at `ol_dev` deviations), `weight_sample` (the square root of the
+        ratio between `proc_sample` and its median at the event) and `weight_over` (see `poll_overweights`).
+
+        Parameters
+        ----------
+        polls : pd.DataFrame
+            Polls of one or several events, as in `get_poll_series`: `sample_size`, `mtype`, `ctype`,
+            `start_date`, `end_date`, `event_date`, `pollster`, `pollster_id`, `sponsor_id` and `date` columns,
+            one row per poll.
+        wspan : int, optional
+            Days range within which the polls of a pollster share the weight of a single poll. If `None`, only the
+            overlap rule applies.
+        ol_max : int, optional
+            Cap of the sample size (`Computer.ol_max`).
+        ol_dev : int, optional
+            Deviations beyond which a sample size is winsorized (`Computer.ol_dev`).
+        drop_mtypes : list of str, optional
+            Methodology types whose polls do not count in the overall and event sample medians.
+
+        Returns
+        -------
+        pd.DataFrame
+            The `proc_sample`, `weight_sample` and `weight_over` columns, with the index of `polls`.
+        """
+        drop_mtypes = drop_mtypes if drop_mtypes is not None else list()
+        df = polls.copy()
+
+        # We need to fix the sample size of the polls that didn't report it
+        df['sample_size'] = df['sample_size'].where(df['sample_size'] > 0, np.nan)
+        # First, we compute the median sample size of the polls published by the same pollster for the same event
+        msizes_loc = df.groupby(['event_date', 'pollster'])['sample_size'].median().dropna()
+        # If there are no polls published by the same pollster for the same event, we compute the median sample size
+        # of the polls published by the same pollster for any event
+        msizes_tot = df.groupby('pollster')['sample_size'].median().dropna()
+        # Finally, if there are no polls published by the same pollster, we compute the median sample size of all polls
+        msizes_all = df.loc[~df['mtype'].isin(drop_mtypes)]['sample_size'].median()
+
+        # First, fill missing values with the median sample size computed above
+        proc_sample = df['sample_size'].fillna(
+            df[['event_date', 'pollster']].apply(tuple, axis=1).map(msizes_loc)
+        ).fillna(
+            df['pollster'].map(msizes_tot)
+        ).fillna(
+            msizes_all
+        )
+        # Then, winsorize the sample sizes to prevent outliers
+        df['proc_sample'] = Stat(
+            proc_sample.clip(0, ol_max),
+            dropna=True,
+            outliers='group',
+            n_dev=ol_dev
+        ).data.round().astype(int)
+
+        # Compute the weight based on the sample size of the polls, using the square root of the ratio between
+        # each poll's sample size and the median sample size of all the polls published for the same event (those of
+        # the dropped methodology types do not count: a big online panel would lower the weight of every other poll).
+        counted = df.loc[~df['mtype'].isin(drop_mtypes)]
+        sample_medians = counted.groupby('event_date')['proc_sample'].median().reindex(df['event_date'].unique())
+        sample_medians = sample_medians.fillna(df.groupby('event_date')['proc_sample'].median())
+        df['weight_sample'] = df.apply(
+            lambda x: np.sqrt(x['proc_sample'] / sample_medians.loc[x['event_date']]),
+            axis=1
+        ).round(2).astype(float)
+
+        # Compute the days range between the poll start/end date and the final event date
+        df['wrange'] = df.apply(lambda dr: (
+            (dr['start_date'] - dr['event_date']).days,
+            (dr['end_date'] - dr['event_date']).days
+        ), axis=1)
+        df['wtype'] = pd.factorize(df[['mtype', 'ctype']].astype(str).apply('-'.join, axis=1))[0]
+        # Group polls by pollster/sponsor and compute the overlap/overflow weight for each group's polls
+        keys = ['event_date', 'pollster_id', 'wtype', 'date', 'sponsor_id']
+        weight_over = apply_agg_func(
+            df,
+            by=['event_date', 'pollster_id', 'wtype'],
+            func=lambda x: cls.poll_overweights(x, wspan),
+            columns='wrange',
+            sort=['date', 'sponsor_id']
+        ).round(2).astype(float).rename('weight_over').reset_index()
+        df['weight_over'] = df[keys].merge(weight_over, on=keys, how='left')['weight_over'].to_numpy()
+
+        return df[['proc_sample', 'weight_sample', 'weight_over']]
 
     def compute_errors(
         self,
@@ -2111,9 +2154,10 @@ class Computer(Core):
 
         return np.log((x / 100) + 1)
 
+    @staticmethod
     def poll_overweights(
-        self,
-        x: np.ndarray
+        x: np.ndarray,
+        wspan: Optional[int]
     ) -> np.ndarray:
         """
         Compute the overlap/overflow weight of a set of polls.
@@ -2121,7 +2165,10 @@ class Computer(Core):
         Parameters
         ----------
         x : np.ndarray
-            Polls series to be computed.
+            Polls series to be computed: the (start, end) days of each poll relative to the event.
+        wspan : int, optional
+            Days range within which the polls share the weight of a single poll (`Computer.wspan`). If `None`,
+            only the overlap rule applies.
 
         Returns
         -------
@@ -2148,14 +2195,14 @@ class Computer(Core):
                     break
 
         # Polls published in a short period of time should be assigned a lower weight
-        if self.wspan is not None:
+        if wspan is not None:
             # The first remaining poll opens a group with every remaining poll ending within the next `wspan` days,
             # the first poll left outside opens the next one: each of the N polls of a group weighs 1/N, so every
             # group weighs as much as a single poll
             keep = sind[w[sind] > 0]
             i = 0
             while i < len(keep):
-                group = keep[i:][x[keep[i:], 1] <= x[keep[i], 1] + self.wspan]
+                group = keep[i:][x[keep[i:], 1] <= x[keep[i], 1] + wspan]
                 w[group] = 1 / len(group)
                 i += len(group)
 

@@ -110,6 +110,7 @@ class Forecaster(Core):
         dispersion: bool = True,
         disp_params: Optional[dict[str, Any]] = None,
         weight_ratings: Optional[pd.Series] = None,
+        weight_overrides: Optional[pd.DataFrame] = None,
         verbose: int = 0,
         path: Optional[str] = None
     ) -> None:
@@ -175,6 +176,12 @@ class Forecaster(Core):
             `weight_rating` stored with the polls: the rating of each poll is the one of its own `event_date`,
             computed with previous elections only (it does not look into the future). Polls of a pollster
             missing from the index keep no rating and fall back to the quality prior, as usual.
+        weight_overrides : pd.DataFrame, optional
+            Weights of the polls recomputed in memory (e.g. `Computer.reweight` with other parameters), indexed by
+            (`date`, `pollster_id`, `sponsor_id`), with any of the `weight_over`, `weight_sample` and
+            `weight_rating` columns. They replace those columns in the matching polls before the weight of each
+            poll is computed (see `apply_weight_overrides`); the other polls, and the official results, keep their
+            stored weights. `None` (default) uses the stored ones.
         verbose : int, optional
             Level of verbosity.
         path : str, optional
@@ -197,6 +204,7 @@ class Forecaster(Core):
         self.disp_params = self.set_disp_params(disp_params)
 
         self.weight_ratings = weight_ratings
+        self.weight_overrides = weight_overrides
         self.verbose = verbose
         self.path = path or '.'  # Path to the model files, relative to the app file system root (files/)
 
@@ -280,6 +288,9 @@ class Forecaster(Core):
                 'n_iter': 3,  # Number of iterations
                 'min_delta': None  # Minimum change in bandwidth estimate to be achieved in order to stop iterations
             }),
+            # Cap of the adaptive bandwidth of each day, in pilot bandwidths: limits the widening at the edges of the
+            # series, where the polls thin out (`None`: no cap)
+            'bw_cap': reg_params.get('bw_cap', None),
             'poly_deg': reg_params.get('poly_deg', 1),  # Degree of the polynomial used to fit the local data
             # Robust covariance of the local fit: 'cluster' by pollster (the residuals of a house are correlated;
             # M10), 'hc1' or 'hac' (Newey-West over the row order, the former default)
@@ -350,15 +361,19 @@ class Forecaster(Core):
             - herding : also reduce the weight of the pollsters less dispersed than their samples allow, by
               their herding ratio (True, M13). See `measure_herding` and `dispersion_factor`.
             - herd_series : main series (by mean level) on which the herding is measured (4).
+            - herd_prior : shrinkage of the herding ratio toward 1, in polls (`n_prior` by default), apart from the
+              one of the dispersion ratio. See `shrink_ratio`.
         """
         disp_params = disp_params if disp_params is not None else dict()
+        n_prior = float(disp_params.get('n_prior', 5.))
 
         return {
             'min_polls': int(disp_params.get('min_polls', 5)),
-            'n_prior': float(disp_params.get('n_prior', 5.)),
+            'n_prior': n_prior,
             'max_ratio': float(disp_params.get('max_ratio', 10.)),
             'herding': bool(disp_params.get('herding', True)),
-            'herd_series': int(disp_params.get('herd_series', 4))
+            'herd_series': int(disp_params.get('herd_series', 4)),
+            'herd_prior': float(disp_params.get('herd_prior', n_prior))
         }
 
     def load_events(self) -> pd.DataFrame:
@@ -437,6 +452,44 @@ class Forecaster(Core):
 
         return polls.merge(ratings, on=['event_date', 'pollster_id'], how='left')['weight_rating'].to_numpy()
 
+    @staticmethod
+    def apply_weight_overrides(
+        series: pd.DataFrame,
+        overrides: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Replace the weights of the polls of `series` with the ones of `overrides` (see `weight_overrides`).
+
+        Parameters
+        ----------
+        series : pd.DataFrame
+            Polls and results indexed by (`date`, `pollster_id`, `sponsor_id`), with a `pollster` column (null in
+            the results) and the weight columns.
+        overrides : pd.DataFrame
+            Indexed like `series`, with any of the `weight_over`, `weight_sample` and `weight_rating` columns.
+
+        Returns
+        -------
+        pd.DataFrame
+            A copy of `series` where the polls found in `overrides` take its values in the columns it carries;
+            the other polls, the results, the other columns and the missing values of `overrides` keep the ones
+            of `series`.
+        """
+        out = series.copy()
+        columns = [col for col in ('weight_over', 'weight_sample', 'weight_rating') if col in overrides.columns]
+        rows = np.flatnonzero(out['pollster'].notnull().to_numpy())
+        if len(columns) == 0 or len(rows) == 0:
+            return out
+
+        new = overrides[columns].reindex(out.index[rows])
+        for col in columns:
+            pos = out.columns.get_loc(col)
+            values = new[col].to_numpy(dtype=float)
+            current = out.iloc[rows, pos].to_numpy(dtype=float)
+            out.iloc[rows, pos] = np.where(np.isnan(values), current, values)
+
+        return out
+
     def build_series(self) -> Self:
         """
         Build the series of polls, weights and results for the election event.
@@ -495,6 +548,9 @@ class Forecaster(Core):
         if self.weight_ratings is not None:
             series.loc[series.pollster.notnull(), 'weight_rating'] = self.override_weight_rating(series)
         series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(weight_quality))
+        if self.weight_overrides is not None:
+            index_cols = ['date', 'pollster_id', 'sponsor_id']
+            series = self.apply_weight_overrides(series.set_index(index_cols), self.weight_overrides).reset_index()
         series['weight'] = series.weight_over * series.weight_sample * series.weight_rating
 
         # Sort index and columns
@@ -936,7 +992,8 @@ class Forecaster(Core):
             )
             if p['herding']:
                 herd = self.measure_herding(n_series=p['herd_series'], min_polls=p['min_polls'])
-                disp['herd_ratio'] = self.shrink_ratio(herd['ratio'], herd['n'], n_prior=p['n_prior']).reindex(disp.index)
+                herd_ratio = self.shrink_ratio(herd['ratio'], herd['n'], n_prior=p['herd_prior'])
+                disp['herd_ratio'] = herd_ratio.reindex(disp.index)
                 disp['factor'] = self.dispersion_factor(disp['ratio'], disp['herd_ratio'], max_ratio=p['max_ratio'])
             self.series_raw = self.apply_dispersion(self.series_raw, disp)
             self.series = self.apply_dispersion(self.series, disp)
@@ -1864,7 +1921,8 @@ class Forecaster(Core):
             x, weights=weights,
             bw=bw or self.reg_params['bw'],
             n_iter=plt_params['n_iter'] or self.reg_params['bw_kwargs']['n_iter'],
-            min_delta=plt_params['min_delta'] or self.reg_params['bw_kwargs']['min_delta']
+            min_delta=plt_params['min_delta'] or self.reg_params['bw_kwargs']['min_delta'],
+            bw_cap=self.reg_params.get('bw_cap')
         )
         bw = kernel.get_bw_fixed()
         kbw = kernel.get_bw_adaptive(p=z)

@@ -72,6 +72,7 @@ class Simulator(Core):
         regional_noise: bool = True,
         min_events: Optional[int] = None,
         weight_ratings: Optional[pd.Series] = None,
+        weight_overrides: Optional[pd.DataFrame] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
         path: str = None
@@ -182,6 +183,10 @@ class Simulator(Core):
         weight_ratings : pd.Series, optional
             For the backtest: ratings recomputed in memory, indexed by (`event_date`, `pollster_id`), that
             replace the stored `weight_rating` of the polls (see `Forecaster`). `None` (default) uses the stored ones.
+        weight_overrides : pd.DataFrame, optional
+            Weights of the polls recomputed in memory, indexed by (`date`, `pollster_id`, `sponsor_id`), that
+            replace the stored `weight_over`, `weight_sample` or `weight_rating` of the matching polls (see
+            `Forecaster`). `None` (default) uses the stored ones.
         seed : int, optional
             Base random seed.
         verbose : int, optional
@@ -212,6 +217,7 @@ class Simulator(Core):
         self.regional_noise = bool(regional_noise)
         self.min_events = None if min_events is None else int(min_events)
         self.weight_ratings = weight_ratings
+        self.weight_overrides = weight_overrides
         self.industry_bias_table = None  # Bias applied to each party when `industry_bias` is on, see `build_forecast`
         self.drop_mtypes = drop_mtypes
 
@@ -277,6 +283,7 @@ class Simulator(Core):
             dispersion=self.dispersion,
             disp_params=self.disp_params,
             weight_ratings=self.weight_ratings,
+            weight_overrides=self.weight_overrides,
             verbose=self.verbose,
             path=self.path
         ).build_series()
