@@ -22,7 +22,8 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
-from .data import get_event_dates, get_event_results
+from .data import get_event_dates, get_event_results, get_poll_series
+from .mtypes import DROP_MTYPES
 from .simulator import Simulator
 
 DEFAULT_EVENTS = ['2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10', '2023-07-23']
@@ -46,6 +47,10 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 # Repository copy of the results (`backtest/results`, committed): the local folder of `run_backtest.py`,
 # `results_dir` and the `push`/`pull` actions of the backtest job
 RESULTS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backtest', 'results'))
+
+# Keys of a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search) that are
+# also loose arguments of the backtest: with a configuration, its values win (see `run_case` and `backtest_scope`)
+CONFIG_SWITCHES = ('house_effects', 'dispersion', 'herding', 'max_fc')
 
 
 # --- Metrics ----------------------------------------------------------------------------------------
@@ -364,6 +369,7 @@ def run_case(
     drift_scale: Optional[str | float] = None,
     tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series] = None,
+    config: Optional[dict[str, Any]] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
@@ -395,6 +401,15 @@ def run_case(
     (`tail_dof`, NaN when unset). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the
     polls with ratings recomputed in memory.
 
+    `config` is a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search,
+    validated by the backtest job): its `reg_params`, `he_params` and `disp_params` (with its `herding`) go to the
+    `Simulator`, its `house_effects`, `dispersion`, `herding` and `max_fc` replace the loose arguments of the same
+    name (the configuration wins), and its `weights` (`wspan`, optionally `ol_max`), when set, recompute the
+    `weight_over` and `weight_sample` of the polls of the freeze on those polls alone (`tuning.reweighted_overrides`
+    on the polls published at least `horizon` days before the election, without the excluded methodology types, as
+    the search does at a cut); `meta` records its `label` (`config`, NaN without one). `None`, the default, runs
+    the model as it is.
+
     Returns
     -------
     dict
@@ -405,13 +420,26 @@ def run_case(
         every party and province, `_calibration`) and `meta` (one row).
     """
     t0 = time.time()
+    tuned = {}
+    disp_params = {}
+    if config is not None:
+        house_effects, dispersion, herding, max_fc = (config[key] for key in CONFIG_SWITCHES)
+        tuned = {'reg_params': dict(config['reg_params']), 'he_params': dict(config['he_params']),
+                 'weight_overrides': None}
+        disp_params = dict(config['disp_params'])
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
+        if config is not None and config.get('weights'):
+            # Imported here: `tuning` imports this module
+            from .tuning import reweighted_overrides
+            polls = get_poll_series(scope, [event_date], drange=(horizon, None), drop_mtypes=list(DROP_MTYPES))
+            tuned['weight_overrides'] = reweighted_overrides(polls, config['weights'])
         sim = Simulator(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
-            disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
-            error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings
+            disp_params=disp_params | {'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
+            error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings,
+            **tuned
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -541,7 +569,8 @@ def run_case(
         'he_mean_abs': float(he_active['effect'].abs().mean()) if he_active is not None and len(he_active) else np.nan,
         'he_max_abs': float(he_active['effect'].abs().max()) if he_active is not None and len(he_active) else np.nan,
         'n_polls': int(polls.shape[0]), 'last_poll': str(last_date.date()), 'n_parties': len(names),
-        'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1)
+        'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1),
+        'config': config['label'] if config is not None else np.nan
     }])
 
     calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,
@@ -786,11 +815,12 @@ def run_backtest(
     drift_scale: Optional[str | float] = None,
     tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series] = None,
+    config: Optional[dict[str, Any]] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `error_model`, `drift_scale`, `tail_dof` and `weight_ratings` are passed to every case.
+    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings` and `config` are passed to every case.
 
     Returns
     -------
@@ -815,7 +845,7 @@ def run_backtest(
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
                     error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
-                    weight_ratings=weight_ratings
+                    weight_ratings=weight_ratings, config=config
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -1081,6 +1111,7 @@ def backtest_scope(
     error_model: str = 'polls',
     drift_scale: Optional[str | float] = None,
     tail_dof: Optional[int] = None,
+    config: Optional[dict[str, Any]] = None,
     recompute_ratings: bool = False,
     verbose: int = 0,
     runner=None,
@@ -1106,6 +1137,10 @@ def backtest_scope(
 min_events, error_model, drift_scale, tail_dof
         Parameters of `run_backtest`, recorded in `run.json` (`error_model` and `drift_scale` as requested;
         `meta.csv` has the ones each case used).
+    config : dict, optional
+        Tuned configuration of the average passed to every case (see `run_case`), recorded whole in `run.json`
+        (its `label` and settings; `meta.csv` carries the label). Its `house_effects`, `dispersion`, `herding` and
+        `max_fc` replace the arguments of the same name, here and in `run.json`. `None` runs the model as it is.
     recompute_ratings : bool, default False
         Recompute the ratings of the scope in memory once (`rating_overrides`) and use them in every case
         instead of the stored ones; recorded in `run.json`.
@@ -1137,7 +1172,9 @@ min_events, error_model, drift_scale, tail_dof
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                   regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                  drift_scale=drift_scale, tail_dof=tail_dof)
+                  drift_scale=drift_scale, tail_dof=tail_dof, config=config)
+    if config is not None:
+        params.update({key: config[key] for key in CONFIG_SWITCHES})
     weight_ratings = rating_overrides(scope) if recompute_ratings else None
     results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose,
                                        weight_ratings=weight_ratings, **params)
