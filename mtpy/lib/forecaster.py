@@ -947,6 +947,31 @@ class Forecaster(Core):
 
         return {'polls': polls, 'line': line, 'kernel': bell, 'stats': stats}
 
+    def house_effect_of(self, pollster_id: int, name: str) -> float:
+        """
+        House effect fitted for a pollster on a party or block.
+
+        Parameters
+        ----------
+        pollster_id : int
+            Id of the pollster.
+        name : str
+            Name of the party or block.
+
+        Returns
+        -------
+        float
+            The `effect` of `house_effects` for that pair, 0 when no house effects are fitted (none yet, or
+            switched off) or the pair is absent.
+        """
+        if self.house_effects is None:
+            return 0.0
+
+        try:
+            return float(self.house_effects.loc[(pollster_id, name), 'effect'])
+        except KeyError:
+            return 0.0
+
     def fit_dispersion(self) -> pd.DataFrame:
         """
         Measure the dispersion of the polls of each pollster around the average, relative to the sampling
