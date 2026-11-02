@@ -63,15 +63,15 @@ PIT de los partidos principales (`summarize_calibration`; colas = las cajas 0 y 
 
 Con todos los partidos, la cola del voto a 6-14 días pasa de 0,26 a 0,53 (L1 de 0,22 a 0,69): el colapso de los regionales.
 
-Puntuaciones por caso, sobre los 22 casos con escaños válidos (más bajo es mejor; casos mejor / peor):
+Puntuaciones por caso, sobre los 22 casos con escaños válidos (más bajo es mejor; casos mejor / peor). «Nowcast» es la ejecución con la elección en el ancla (columnas sin sufijo de `metrics.csv`); «horizonte», la ejecución con la deriva hasta la elección (columnas `_h`):
 
-| Grupo | CRPS escaños | Log-score mayorías | Brier mayorías | CRPS escaños provinciales |
-|---|---|---|---|---|
-| 6-14 (8 casos) | 5,19 → 5,19 (3 / 5) | 0,171 → 0,149 (8 / 0) | 0,042 → 0,038 (8 / 0) | 0,146 → 0,146 (4 / 4) |
-| 30-60 (8) | 7,55 → 7,70 (1 / 7) | 0,267 → 0,259 (6 / 2) | 0,083 → 0,082 (6 / 2) | 0,182 → 0,183 (3 / 5) |
-| 90-180 (6) | 9,56 → 9,77 (0 / 6) | 0,343 → 0,344 (4 / 2) | 0,118 → 0,120 (4 / 2) | 0,215 → 0,217 (1 / 5) |
+| Grupo | CRPS escaños, nowcast | CRPS escaños, horizonte | Log-score mayorías, nowcast | Log-score mayorías, horizonte | Brier mayorías, nowcast | CRPS escaños provinciales, nowcast |
+|---|---|---|---|---|---|---|
+| 6-14 (8 casos) | 5,19 → 5,19 (3 / 5) | 5,17 → 5,15 (3 / 5) | 0,171 → 0,149 (8 / 0) | 0,175 → 0,156 (8 / 0) | 0,042 → 0,038 (8 / 0) | 0,146 → 0,146 (4 / 4) |
+| 30-60 (8) | 7,55 → 7,70 (1 / 7) | 7,44 → 7,53 (2 / 6) | 0,267 → 0,259 (6 / 2) | 0,282 → 0,271 (6 / 2) | 0,083 → 0,082 (6 / 2) | 0,182 → 0,183 (3 / 5) |
+| 90-180 (6) | 9,56 → 9,77 (0 / 6) | 9,32 → 9,44 (0 / 6) | 0,343 → 0,344 (4 / 2) | 0,356 → 0,350 (4 / 2) | 0,118 → 0,120 (4 / 2) | 0,215 → 0,217 (1 / 5) |
 
-Lo único que mejora es la probabilidad de mayoría a 6-14 días: un 13 % de log-score, en los 8 casos. Pero es una mejora por estrechar. En ninguna de las cinco elecciones hubo mayoría absoluta de bloque, y con bandas más estrechas baja casi siempre la probabilidad de una mayoría que no llegó (la Izquierda en 2019-04, del 17 al 13 % a 6 días). En esta muestra, más confianza puntúa mejor; no dice nada de una elección con la mayoría en el aire, como la de 2015 para la Derecha (del 64 al 66 %). El CRPS de escaños queda igual a 6-14 días y empeora a 30 días o más en casi todos los casos.
+Lo único que mejora es la probabilidad de mayoría a 6-14 días: un 13 % de log-score en el nowcast y un 11 % con horizonte, en los 8 casos. Pero es una mejora por estrechar. En ninguna de las cinco elecciones hubo mayoría absoluta de bloque, y con bandas más estrechas baja casi siempre la probabilidad de una mayoría que no llegó (la Izquierda en 2019-04, del 17 al 13 % a 6 días). En esta muestra, más confianza puntúa mejor; no dice nada de una elección con la mayoría en el aire, como la de 2015 para la Derecha (del 64 al 66 %). El CRPS de escaños queda igual a 6-14 días en las dos ejecuciones (3 casos mejor y 5 peor en cada una) y empeora a 30 días o más en casi todos los casos: 7 de 8 en el nowcast y 6 de 8 con horizonte a 30-60 días, 6 de 6 en las dos a 90-180.
 
 ### Autonómicas (17 ámbitos, 167 casos)
 
@@ -91,15 +91,15 @@ PIT de los partidos principales (colas nominal 0,20; L1 a la uniforme):
 | 30-60 | 0,31 → 0,39 | 0,22 → 0,37 | 0,32 → 0,38 | 0,26 → 0,39 |
 | 90-180 | 0,33 → 0,41 | 0,32 → 0,42 | 0,35 → 0,41 | 0,35 → 0,43 |
 
-Puntuaciones por caso, sobre los 147 casos con escaños válidos (casos mejor / peor):
+Puntuaciones por caso, sobre los 147 casos con escaños válidos (casos mejor / peor; nowcast y horizonte como en las generales):
 
-| Grupo | CRPS escaños | Log-score mayorías | Brier mayorías | CRPS escaños provinciales |
-|---|---|---|---|---|
-| 6-14 (49 casos) | 1,294 → 1,309 (18 / 31) | 0,172 → 0,173 (24 / 9) | 0,057 → 0,059 (25 / 9) | 0,564 → 0,567 (18 / 31) |
-| 30-60 (51) | 1,794 → 1,830 (13 / 38) | 0,157 → 0,160 (29 / 8) | 0,050 → 0,053 (30 / 8) | 0,864 → 0,876 (14 / 37) |
-| 90-180 (47) | 2,358 → 2,410 (11 / 36) | 0,124 → 0,123 (27 / 6) | 0,036 → 0,038 (28 / 6) | 1,348 → 1,370 (10 / 37) |
+| Grupo | CRPS escaños, nowcast | CRPS escaños, horizonte | Log-score mayorías, nowcast | Log-score mayorías, horizonte | Brier mayorías, nowcast | CRPS escaños provinciales, nowcast |
+|---|---|---|---|---|---|---|
+| 6-14 (49 casos) | 1,294 → 1,309 (18 / 31) | 1,294 → 1,306 (18 / 31) | 0,172 → 0,173 (24 / 9) | 0,173 → 0,173 (24 / 9) | 0,057 → 0,059 (25 / 9) | 0,564 → 0,567 (18 / 31) |
+| 30-60 (51) | 1,794 → 1,830 (13 / 38) | 1,777 → 1,804 (15 / 36) | 0,157 → 0,160 (29 / 8) | 0,161 → 0,163 (29 / 8) | 0,050 → 0,053 (30 / 8) | 0,864 → 0,876 (14 / 37) |
+| 90-180 (47) | 2,358 → 2,410 (11 / 36) | 2,309 → 2,342 (13 / 34) | 0,124 → 0,123 (27 / 6) | 0,142 → 0,140 (27 / 8) | 0,036 → 0,038 (28 / 6) | 1,348 → 1,370 (10 / 37) |
 
-En las autonómicas no hay ningún grupo en el que la calibración mejore. Las bandas, que a 6-14 días cubrían casi el nominal (0,95 la del 95 %, 0,77 la del 80 %), se quedan cortas en todos los horizontes. El PIT se aleja de la uniforme: a 6-14 días, el L1 del voto pasa de 0,13 a 0,25. El CRPS de escaños empeora en dos de cada tres casos o más. Las mayorías ganan algún caso más de los que pierden, pero la media no mejora: más casos con una ganancia pequeña y unos pocos con una pérdida mayor. El MAE del voto es el mismo antes y después, como debe ser: el promedio no cambia, sólo cambian las bandas.
+En las autonómicas no hay ningún grupo en el que la calibración mejore. Las bandas, que a 6-14 días cubrían casi el nominal (0,95 la del 95 %, 0,77 la del 80 %), se quedan cortas en todos los horizontes. El PIT se aleja de la uniforme: a 6-14 días, el L1 del voto pasa de 0,13 a 0,25. El CRPS de escaños empeora en dos de cada tres casos o más, en el nowcast y con horizonte. Las mayorías ganan más casos de los que pierden, pero la media apenas se mueve (de 0,172 a 0,173 a 6-14 días, de 0,142 a 0,140 con horizonte a 90-180): muchos casos con una ganancia pequeña y unos pocos con una pérdida mayor. El MAE del voto es el mismo antes y después, como debe ser: el promedio no cambia, sólo cambian las bandas.
 
 ### Por qué no cubre
 
@@ -109,7 +109,7 @@ A eso se suma, en las generales, el colapso de los partidos regionales descrito 
 
 ### Decisión (criterio 17)
 
-**No se cumple el criterio.** Las coberturas no se acercan al nominal donde faltaban: a 30 días o más, en las generales y en las autonómicas, bajan más. Donde ya cubrían, a 6-14 días, empeoran: en las autonómicas la del 95 % del voto pasa de 0,95 a 0,88 y la del 50 % de 0,51 a 0,41. El PIT se aleja de la uniforme en las dos poblaciones que deciden y en todos los grupos. El CRPS de escaños empeora más allá del ruido a 30 días o más: en las generales, 1 caso mejor y 7 peor a 30-60 días, 0 y 6 a 90-180. La única mejora, el log-score de las mayorías en las generales a 6-14 días (−13 %, 8 de 8 casos), sale de estrechar las bandas en una muestra en la que ningún bloque llegó a la mayoría absoluta, y no se repite en las autonómicas.
+**No se cumple el criterio.** Las coberturas no se acercan al nominal donde faltaban: a 30 días o más, en las generales y en las autonómicas, bajan más. Donde ya cubrían, a 6-14 días, empeoran: en las autonómicas la del 95 % del voto pasa de 0,95 a 0,88 y la del 50 % de 0,51 a 0,41. El PIT se aleja de la uniforme en las dos poblaciones que deciden y en todos los grupos. El CRPS de escaños empeora más allá del ruido a 30 días o más, en el nowcast y con horizonte: en las generales, 1 caso mejor y 7 peor a 30-60 días en el nowcast (2 y 6 con horizonte), 0 y 6 a 90-180 en las dos; en las autonómicas, unos dos de cada tres casos peor en todos los grupos. La única mejora, el log-score de las mayorías en las generales a 6-14 días (−13 % en el nowcast y −11 % con horizonte, 8 de 8 casos en las dos), sale de estrechar las bandas en una muestra en la que ningún bloque llegó a la mayoría absoluta, y no se repite en las autonómicas.
 
 `error_model='average'` queda como opción documentada y `'polls'` sigue siendo el valor por defecto. **La decisión sobre los valores por defecto del modelo vivo está pendiente y es de Luis.** Lo que el backtest señala para los pasos siguientes:
 
