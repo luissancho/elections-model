@@ -51,8 +51,8 @@ class Backtest(ScopePipeline):
 
     def evaluate_task(self, chunk=None, out=None, events=None, horizons=None, n_sim=1000, seed=42, max_fc=10,
                       nowcast_only=False, house_effects=True, industry_bias=False, dispersion=True, herding=True,
-                      composition=None, regional_noise=True, min_events=None, recompute_ratings=False, runner=None,
-                      stats=None, **kwargs):
+                      composition=None, regional_noise=True, min_events=None, error_model='polls',
+                      drift_scale=None, tail_dof=None, recompute_ratings=False, runner=None, stats=None, **kwargs):
         """
         Run the backtest of one scope, converting every outcome into a result dict (``self.result``).
 
@@ -63,7 +63,7 @@ class Backtest(ScopePipeline):
         out : str, optional
             Results folder.
         events, horizons, n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, \
-composition, regional_noise, min_events, recompute_ratings
+composition, regional_noise, min_events, error_model, drift_scale, tail_dof, recompute_ratings
             Arguments of `backtest.backtest_scope`.
         runner, stats : callable, optional
             Replacements of `backtest.run_backtest` and `backtest.poll_stats` (for tests).
@@ -80,7 +80,8 @@ composition, regional_noise, min_events, recompute_ratings
                     chunk, out=out, events=events, horizons=horizons, n_sim=n_sim, seed=seed, max_fc=max_fc,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias,
                     dispersion=dispersion, herding=herding, composition=composition,
-                    regional_noise=regional_noise, min_events=min_events, recompute_ratings=recompute_ratings,
+                    regional_noise=regional_noise, min_events=min_events, error_model=error_model,
+                    drift_scale=drift_scale, tail_dof=tail_dof, recompute_ratings=recompute_ratings,
                     verbose=max(0, self.verbose - 1), runner=runner, stats=stats)
             except backtest.NothingToEvaluate as e:
                 return {'status': 'skipped', 'reason': str(e)}

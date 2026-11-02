@@ -634,8 +634,15 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
                         'multiplier': float(drift.multiplier) if drift is not None else None,
                         'ages': sim.ages.round(PCT_DECIMALS).to_dict(), 'composition': float(sim.composition_ratio),
                         'clip_rate': clip_rate,
-                        # the elections whose polls fit the polling-error estimator, and the scope they belong to
-                        'error_events': sim.error_events(), 'error_scope': sim.est_scope},
+                        # the elections that fit the terminal-error estimator, and the scope they belong to
+                        'error_events': sim.error_events(), 'error_scope': sim.est_scope,
+                        # the terminal error actually used: a single poll (`polls`) or the poll average (`average`)
+                        'error_model': sim.error_model_used,
+                        # the multiplier of the drift variance used and the rows of its fit (0 when not fitted)
+                        'drift_scale': float(drift.scale) if drift is not None else None,
+                        'drift_scale_rows': int(drift.scale_rows) if drift is not None else None,
+                        # the degrees of freedom of the t of the draw, the same for every party (`None`: `nobs - 2`)
+                        'tail_dof': sim.tail_dof},
         'seconds': seconds, 'freeze': bool(freeze), 'limit_date': limit_date,
     }
 

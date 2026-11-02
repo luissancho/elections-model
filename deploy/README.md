@@ -660,7 +660,7 @@ para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
 | `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
-| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa y rebaño. Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
+| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio (`average_errors`). Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
 
 `what` admite las tres acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los
@@ -701,7 +701,7 @@ Niveles de `verbose`:
 | --- | --- |
 | 0 | Solo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `dry_run`, `· dry run`) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") |
-| 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño`, `ratings`) |
+| 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño`, `errores del promedio`, `ratings`) |
 | 3 | Lo anterior más la salida propia del `Computer` (que recibe `verbose - 2`) |
 
 ### Estados y resumen
@@ -725,6 +725,17 @@ catálogos, por ejemplo con un CSV de la calidad mal formado).
 El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
 en "Publicar".
 
+El paso `average_errors` (método 15, desde 2026-11-01) rellena la tabla `elections.average_errors` (la crea al guardar
+por primera vez, `save_average_errors_data` con `create(replace=False)`, así que no hay paso de migración que lanzar
+antes): para cada elección destacada del ámbito y cada horizonte del backtest, el error del promedio (modelo menos
+resultado) de cada partido principal, con su nivel y el error estándar `s` de la regresión local, ajustado sin simular
+con la configuración del `Simulator` (`Computer.compute_average_errors`). Va el último, después de los efectos de casa,
+porque el promedio lee su prior, y sólo con escritura (con `dry_run` no corre). Es lento: unos 37 minutos en `es` (14
+generales desde 1982 por seis horizontes). Sólo la leen `error_model='average'` y `drift_scale='auto'` del `Simulator` y
+del backtest; el modelo publicado no la usa mientras sus valores por defecto sean `'polls'` y `None` (decisión del
+02-11-2026, ver `docs/analisis-2026-09/metodo-15-calibracion.md`), así que hasta entonces su tiempo es el único efecto
+del paso.
+
 En Docker: `RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'`.
 
 ## Backtest del modelo
@@ -742,13 +753,19 @@ opciones (ahí
 ### Qué hace y cuándo lanzarlo
 
 - Ámbito a ámbito evalúa fuera de muestra cada caso (elección × horizonte): congela el modelo en la fecha de corte,
-  ajusta el promedio, simula el nowcast y la ejecución a horizonte y compara con el resultado oficial. Escribe las
-  ocho tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon`) y `run.json`
-  (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
-  sobrescribiendo la ejecución anterior del ámbito. `series.csv` (la serie diaria del promedio del horizonte más corto
-  de cada elección, desde 2026-10-19) no va en git (la copia del repositorio la excluye), pero vive con las demás
-  tablas en el sistema de ficheros de la app, así que `publish event` ya no depende de la máquina que corrió el
-  backtest.
+  ajusta el promedio, simula el nowcast y la ejecución a horizonte y compara con el resultado oficial. Escribe las nueve
+  tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon` y, desde 2026-11-01,
+  `calibration`, el PIT de cada celda) y `run.json` (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT`
+  en Docker— y estado de los sondeos en la base), sobrescribiendo la ejecución anterior del ámbito. La copia del
+  repositorio no está al día con esto: la referencia de `es` en `backtest/results` es anterior a `error_model`,
+  `drift_scale` y `tail_dof` (commit `45aaa8b`; su `meta.csv` no tiene esas columnas ni `drift_scale_rows`, y su
+  `run.json` no tiene las claves, así que el `meta.params` de `publish backtest` sale de `BACKTEST_RUN_DEFAULTS`:
+  `polls`, `None`, `None`, justo la configuración con que corrió), y las carpetas de los autonómicos no traen
+  `calibration.csv` (ni las claves) hasta un `backtest` con `"scopes":"all"` en ECS, `backtest push` y `publish
+  backtest`; hasta entonces la tarjeta «Fiabilidad de las bandas» de `/metodo/backtest` sólo enseña las generales y las
+  provincias de `es`. `series.csv` (la serie diaria del promedio del horizonte más corto de cada elección, desde
+  2026-10-19) no va en git (la copia del repositorio la excluye), pero vive con las demás tablas en el sistema de
+  ficheros de la app, así que `publish event` ya no depende de la máquina que corrió el backtest.
 - Dónde escribe: sin `out`, en el sistema de ficheros de la app. Con `S3_BUCKET` fijo es S3, tanto en una tarea de
   ECS como en el portátil con `deploy/elections.env`; sin él, `files/` en local. `out` sigue siendo una carpeta
   local: `"out":"backtest/results"` escribe la copia del repositorio y `"out":"backtest/results_comp"` una variante.
@@ -777,7 +794,7 @@ python job.py backtest '{"action":"pull","scopes":"all"}'
 2. `es` y todos los autonómicos a 6 y 30 días, cada uno en su carpeta.
 3. Una elección de `es-md` con pocas simulaciones y la línea de cada caso: un ensayo.
 4. Una variante del método (sorteo conjunto, M7) en otra carpeta local, para compararla sin pisar las tablas de la app.
-5. `push`: copia las nueve tablas y ficheros de cada ámbito de la copia del repositorio (`backtest/results`) al
+5. `push`: copia las diez tablas y ficheros de cada ámbito de la copia del repositorio (`backtest/results`) al
    sistema de ficheros de la app, y borra en el destino los que la copia no tiene; siembra S3. No ejecuta el modelo
    ni necesita la base.
 6. `pull`: lo contrario, del sistema de ficheros de la app a la copia del repositorio, para revisar `by_horizon.csv`
@@ -801,6 +818,9 @@ python job.py backtest '{"action":"pull","scopes":"all"}'
 | `composition` | `null` | Sorteo conjunto de los partidos nacionales (M7): `"auto"` o una razón en (0, 1]; otro valor falla con `ValueError` antes de empezar |
 | `regional_noise` | `true` | Oscilaciones por comunidad y provincia (M9) |
 | `min_events` | `null` | Elecciones `featured` que necesita un autonómico para ajustar los estimadores con las propias en vez de con `es` (M11); `1` fuerza las propias |
+| `error_model` | `"polls"` | El error terminal `e` (método 15): `"polls"`, el de los sondeos sueltos, o `"average"`, el del propio promedio (lee la tabla `average_errors`, que rellena el paso del mismo nombre de `compute`; sin ella avisa y usa `"polls"`); otro valor falla con `ValueError` antes de empezar |
+| `drift_scale` | `null` | Factor de la varianza de la deriva (método 15): `null` (1), `"auto"` (ajustado sobre `average_errors` con las elecciones anteriores) o un número positivo |
+| `tail_dof` | `null` | Grados de libertad fijos de la t del sorteo y del abanico (método 15): `null` (los de la regresión) o un entero de al menos 2 |
 | `action` | `run` | `run` evalúa y escribe las tablas; `push` las copia de `out` (la copia del repositorio) al sistema de ficheros de la app; `pull`, al revés; otro valor falla con `ValueError` antes de empezar |
 | `out` | sistema de ficheros de la app (`backtest/results`) | Carpeta local de resultados (`es` en la raíz, los demás en `out/{ámbito}`); con `push` y `pull` es la copia del repositorio y por defecto `backtest/results` |
 | `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
@@ -1178,8 +1198,8 @@ error del sector en `meta.summary`:
 
 Enmienda 2026-10-11 (fase 5). `{"what":["backtest"],"scopes":["es"]}` convierte las tablas que deja
 el job `backtest` (`backtest/results/` del sistema de ficheros de la app para `es`, `backtest/results/{ámbito}/`
-para los autonómicos, o la carpeta local `source`; ver "Backtest del modelo") en `backtest/{ámbito}/` del paquete (`meta`, `metrics`, `by-horizon`, `blocks`, `shares` y `seats`,
-con sus gemelos CSV; formato en "Backtest" de `docs/web/contrato.md`), que lee `/modelo`:
+para los autonómicos, o la carpeta local `source`; ver "Backtest del modelo") en `backtest/{ámbito}/` del paquete (`meta`, `metrics`, `by-horizon`, `blocks`, `shares`, `seats` y, si la carpeta
+trae `calibration.csv`, `calibration`, con sus gemelos CSV; formato en "Backtest" de `docs/web/contrato.md`), que lee `/modelo`:
 
 - **No necesita base de datos** ni ejecuta el modelo: solo lee las tablas del backtest (del sistema de ficheros de la app
   o de `source`) y tarda menos de un segundo por ámbito.

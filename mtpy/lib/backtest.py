@@ -28,13 +28,17 @@ from .simulator import Simulator
 DEFAULT_EVENTS = ['2015-12-20', '2016-06-26', '2019-04-28', '2019-11-10', '2023-07-23']
 DEFAULT_HORIZONS = [6, 14, 30, 60, 90, 180]
 LEVELS = [0.5, 0.8, 0.95]
+# Quantiles of the simulated distributions exported by every table, from 5 % to 95 % in steps of 5 (`q05`…`q95`)
+QUANTILES = [round(0.05 * k, 2) for k in range(1, 20)]
+# Horizon groups of the calibration summary (`summarize_calibration`): name -> (first, last) horizon, inclusive
+HORIZON_GROUPS = {'6-14': (6, 14), '30-60': (30, 60), '90-180': (90, 180)}
 # Folder of the results in the file system of the app (local `files/` or S3) when no local folder is given:
 # `es` at its root, the other scopes in a subfolder each (see `results_fs`)
 RESULTS_PREFIX = 'backtest/results'
 
 # Files of the results of a scope in its folder
 RESULT_FILES = ('shares.csv', 'seats.csv', 'blocks.csv', 'provinces.csv', 'series.csv', 'meta.csv', 'metrics.csv',
-                'by_horizon.csv', 'run.json')
+                'by_horizon.csv', 'calibration.csv', 'run.json')
 
 # Root of the repository (to show local folders relative to it)
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -80,6 +84,33 @@ def covered(lo: float, hi: float, y: float) -> bool:
     return bool(np.isfinite(lo) and np.isfinite(hi) and lo <= y <= hi)
 
 
+def pit(samples: np.ndarray, y: float) -> float:
+    """
+    Probability integral transform of an outcome under an empirical distribution.
+
+    Parameters
+    ----------
+    samples : numpy.ndarray
+        Simulated values; the missing ones (NaN) are ignored.
+    y : float
+        Observed outcome.
+
+    Returns
+    -------
+    float
+        Fraction of the samples strictly below `y` plus half the fraction equal to it (uniform on [0, 1] when the
+        distribution is calibrated); NaN when `y` is not finite or there is no finite sample.
+    """
+    if not np.isfinite(y):
+        return np.nan
+    x = np.asarray(samples, dtype=float)
+    x = x[np.isfinite(x)]
+    if len(x) == 0:
+        return np.nan
+
+    return float((np.sum(x < y) + 0.5 * np.sum(x == y)) / len(x))
+
+
 def default_events(scope: str, since: str = '2019-01-01') -> list[str]:
     """
     Elections evaluated by default in the backtest of a scope: `DEFAULT_EVENTS` in the national one; in the
@@ -117,12 +148,17 @@ def official_results(scope: str, event_date: str) -> pd.DataFrame:
 # --- One case ---------------------------------------------------------------------------------------
 
 def _quantile_cols(x: np.ndarray, suffix: str = '') -> dict[str, float]:
-    """Bounds of the central intervals of `LEVELS` of a sample, as `lo{level}` / `hi{level}` columns."""
+    """
+    Bounds of the central intervals of `LEVELS` of a sample, as `lo{level}` / `hi{level}` columns, followed by its
+    `QUANTILES` as `q05`…`q95` columns (all with `suffix` appended).
+    """
     out = {}
     for level in LEVELS:
         lo, hi = np.nanquantile(x, [(1 - level) / 2, 1 - (1 - level) / 2])
         out['lo{}{}'.format(int(level * 100), suffix)] = lo
         out['hi{}{}'.format(int(level * 100), suffix)] = hi
+    for q, value in zip(QUANTILES, np.nanquantile(x, QUANTILES)):
+        out['q{:02d}{}'.format(int(round(q * 100)), suffix)] = value
 
     return out
 
@@ -158,8 +194,9 @@ def _block_quantiles(dist: pd.DataFrame, parties: list, suffix: str = '') -> dic
 def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: set) -> pd.DataFrame:
     """
     Provincial evaluation of the nowcast run: one row per province and party with the official and simulated
-    share (median, intervals) and seats (central allocation, median, intervals, CRPS), for the cells with an
-    official or simulated share of at least 1 %.
+    share (median, intervals, PIT) and seats (central allocation, median, intervals, CRPS, PIT), for the cells with
+    an official or simulated share of at least 1 %. A cell without an official share is recorded with a share of 0
+    but a NaN `pit_pct`; one without official seats counts as 0 seats.
     """
     off_pct, off_seats = official_provinces(scope, event_date)
     names = sim.params['names']
@@ -175,6 +212,7 @@ def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: 
             seats = sim.results[:, ri, names.index(n)].astype(float)
             y_pct = float(off_pct.loc[r, n]) if (r in off_pct.index and n in off_pct.columns) else np.nan
             y_seats = float(off_seats.loc[r, n]) if (r in off_seats.index and n in off_seats.columns) else 0.
+            pit_pct = pit(pct, y_pct)  # Before filling a missing official share with 0
             if not np.isfinite(y_pct):
                 y_pct = 0.
             med = float(np.nanmedian(pct)) if np.isfinite(pct).any() else np.nan
@@ -186,13 +224,84 @@ def _provinces(sim: Simulator, scope: str, event_date: str, horizon: int, main: 
                 'official_seats': y_seats, 'model_seats': (
                     float(central.loc[sim.region_names.get(r, r), n]) if central is not None else float(np.median(seats))
                 ),
-                'median_seats': float(np.median(seats)), 'crps_seats': crps_from_samples(seats, y_seats)
+                'median_seats': float(np.median(seats)), 'crps_seats': crps_from_samples(seats, y_seats),
+                'pit_pct': pit_pct, 'pit_seats': pit(seats, y_seats)
             }
             row.update({k + '_pct': v for k, v in _quantile_cols(pct).items()})
             row.update({k + '_seats': v for k, v in _quantile_cols(seats).items()})
             rows.append(row)
 
     return pd.DataFrame(rows)
+
+
+def _calibration(
+    scope: str,
+    event_date: str,
+    horizon: int,
+    names: list,
+    main: set,
+    official: pd.DataFrame,
+    now: dict[str, Any],
+    fwd: Optional[dict[str, Any]],
+    provinces: pd.DataFrame,
+    seats_valid: bool
+) -> pd.DataFrame:
+    """
+    PIT of every cell of a case: the official result placed in its simulated distribution.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code (with the date, it identifies the election: several scopes vote on the same day).
+    event_date : str
+        Election date, `YYYY-MM-DD`.
+    horizon : int
+        Days before the election the model was frozen at.
+    names : list of str
+        Simulated parties.
+    main : set of str
+        Main parties of the election.
+    official : pandas.DataFrame
+        Official national `pct` and `seats` indexed by party (NaN for a party without official result).
+    now, fwd : dict
+        Outputs of the nowcast and the horizon runs (`_collect`); `fwd` is `None` without the horizon run.
+    provinces : pandas.DataFrame
+        Provincial rows of the nowcast run (`_provinces`), with `pit_pct` and `pit_seats`.
+    seats_valid : bool
+        Whether the seats of the case are meaningful (no orphan party); otherwise the national and provincial seats
+        are left out (as `summarize_case` leaves them out of every seat metric).
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per cell: `scope`, `event_date`, `horizon`, `kind` (`shares`, `seats`, `prov_shares`, `prov_seats`),
+        `mode` (`now`, or `h` for the horizon run; the provincial cells only `now`; the seats only with valid
+        seats), `party`, `region_id`
+        (the province, empty for the national cells), `main`, `official`, `model` and `pit`.
+    """
+    case = {'scope': scope, 'event_date': event_date, 'horizon': horizon}
+    rows = []
+    for mode, run in (('now', now), ('h', fwd)):
+        if run is None:
+            continue
+        kinds = [('shares', run['shares'], 'pct')] + ([('seats', run['dist'], 'seats')] if seats_valid else [])
+        for kind, samples, col in kinds:
+            for n in names:
+                y = float(official.loc[n, col])
+                rows.append(case | {'kind': kind, 'mode': mode, 'party': n, 'region_id': None, 'main': n in main,
+                                    'official': y, 'model': float(run['summary'].loc[n, col]),
+                                    'pit': pit(samples[n].to_numpy(dtype=float), y)})
+    kinds = [('prov_shares', 'pct')] + ([('prov_seats', 'seats')] if seats_valid else [])
+    for kind, col in kinds:
+        for p in provinces.itertuples(index=False):
+            rows.append(case | {'kind': kind, 'mode': 'now', 'party': p.party, 'region_id': int(p.region),
+                                'main': bool(p.main), 'official': float(getattr(p, 'official_' + col)),
+                                'model': float(getattr(p, 'model_' + col)), 'pit': float(getattr(p, 'pit_' + col))})
+    out = pd.DataFrame(rows, columns=['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main',
+                                      'official', 'model', 'pit'])
+    out['region_id'] = out['region_id'].astype('Int64')
+
+    return out
 
 
 def _collect(sim: Simulator, vs: dict[str, Any]) -> dict[str, Any]:
@@ -251,6 +360,9 @@ def run_case(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    error_model: str = 'polls',
+    drift_scale: Optional[str | float] = None,
+    tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
@@ -272,8 +384,16 @@ def run_case(
     them independently. `min_events` is the number of featured elections of the scope before the event from
     which its estimators are fitted on the scope itself instead of its parent (M11, `Simulator.estimator_scope`;
     `None`, the default, always takes the parent); `meta` records the scope used (`est_scope`) and the count
-    (`n_featured`). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the polls with
-    ratings recomputed in memory.
+    (`n_featured`). `error_model` is the terminal error of the `Simulator` (`'polls'`, the default, a single
+    poll; `'average'`, the poll average itself, out of sample: its estimator Computer only holds the elections
+    before `event_date`); `meta` records the model actually used (`'average'` falls back to `'polls'` without
+    rows). `drift_scale` multiplies the drift variance of the `Simulator` (`'auto'`: fitted on the errors of the
+    poll average of the elections before `event_date`, see `DriftEstimator.fit_scale`; a number fixes it; `None`,
+    the default, leaves 1); `meta` records the scale used (`drift_scale`) and the rows of its fit
+    (`drift_scale_rows`, 0 when not fitted). `tail_dof` fixes the degrees of freedom of the Student t of the draw
+    of the `Simulator` for every party (`None`, the default, `nobs - 2` per party, at least 3); `meta` records it
+    (`tail_dof`, NaN when unset). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the
+    polls with ratings recomputed in memory.
 
     Returns
     -------
@@ -281,7 +401,8 @@ def run_case(
         `shares` (one row per party: forecast, intervals, baselines and official share), `seats` (one row
         per party: headline, intervals, CRPS and official seats), `blocks` (one row per block of the `vs`
         map: probability of absolute majority and outcome), `provinces` (one row per province and party),
-        `series` (the daily series of the average up to the anchor, `case_series`) and `meta` (one row).
+        `series` (the daily series of the average up to the anchor, `case_series`), `calibration` (the PIT of
+        every party and province, `_calibration`) and `meta` (one row).
     """
     t0 = time.time()
     with warnings.catch_warnings():
@@ -290,7 +411,7 @@ def run_case(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
             disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
-            weight_ratings=weight_ratings
+            error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof, weight_ratings=weight_ratings
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -403,13 +524,16 @@ def run_case(
         'as_of': str(sim.as_of.date()), 'horizon_max': sim.horizon_max,
         'drift_k': sim.v2drift.k if sim.v2drift is not None else np.nan,
         'drift_multiplier': sim.v2drift.multiplier if sim.v2drift is not None else np.nan,
+        'drift_scale': sim.v2drift.scale if sim.v2drift is not None else np.nan,
+        'drift_scale_rows': sim.v2drift.scale_rows if sim.v2drift is not None else np.nan,
+        'tail_dof': int(sim.tail_dof) if sim.tail_dof is not None else np.nan,
         'young_parties': '+'.join(sorted(
             n for n in names if sim.v2drift is not None and sim.ages is not None and sim.ages.get(n, np.nan) < sim.v2drift.age_max
         )),
         'house_effects': bool(house_effects), 'industry_bias': bool(industry_bias), 'dispersion': bool(dispersion), 'herding': bool(herding),
         'composition_ratio': float(sim.composition_ratio), 'composition_rho': composition_rho,
         'regional_noise': bool(regional_noise),
-        'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured),
+        'est_scope': sim.est_scope, 'n_featured': int(sim.n_featured), 'error_model': sim.error_model_used,
         'min_events': int(min_events) if min_events is not None else np.nan,
         'swing_ar': sim.v2swing.a_r if sim.v2swing is not None else np.nan, 'swing_br': sim.v2swing.b_r if sim.v2swing is not None else np.nan,
         'clip_rate': float(clip_rate),
@@ -420,8 +544,11 @@ def run_case(
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1)
     }])
 
+    calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,
+                               len(orphans) == 0)
+
     return {'shares': shares_df, 'seats': seats_df, 'blocks': blocks_df, 'provinces': provinces_df,
-            'series': case_series(sim, event_date, horizon), 'meta': meta}
+            'series': case_series(sim, event_date, horizon), 'calibration': calibration, 'meta': meta}
 
 
 # --- Aggregation ------------------------------------------------------------------------------------
@@ -500,6 +627,123 @@ def summarize_case(
     return out
 
 
+def summarize_calibration(
+    calibration: pd.DataFrame,
+    bins: int = 10,
+    groups: dict[str, tuple[int, int]] = HORIZON_GROUPS,
+    main_only: bool = True
+) -> pd.DataFrame:
+    """
+    Histogram of the PIT of the cells of the backtest, per population, kind, mode and group of horizons.
+
+    Every election (its `scope`, when the frame has it, and its `event_date`) weighs the same inside its
+    population: each cell weighs `1 / n` with `n` its cells of the same election, population, kind, mode and
+    group, so that an election with many parties does not dominate. The cells without a finite PIT (no official
+    result) are left out, and so are the horizons outside every group.
+
+    Parameters
+    ----------
+    calibration : pandas.DataFrame
+        Rows of `calibration.csv` (`_calibration`) with a `population` column set by the caller (`'generales'`,
+        `'autonomicas'`); the rows whose `kind` starts with `prov_` always go to the `'provincias'` population.
+    bins : int, default 10
+        Number of equal bins of [0, 1]; a PIT goes to `min(int(pit * bins), bins - 1)`.
+    groups : dict of str to (int, int), default HORIZON_GROUPS
+        Groups of horizons: name -> (first, last) horizon, both included.
+    main_only : bool, default True
+        Keep only the cells of the main parties (column `main`) of the national kinds `shares` and `seats`: the
+        populations of the generales and autonómicas are their main parties (spec 11); the provincial kinds keep
+        every cell. A frame without the `main` column counts every cell as main.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per population, kind, mode, group and bin (every bin, empty ones at 0): `expected` (`1 / bins`),
+        `observed` (weighted fraction of the elections in the bin; the bins of a group sum to 1), `n_cells`
+        (cells of the group) and `n_events` (elections of the group).
+    """
+    keys = ['population', 'kind', 'mode', 'group']
+    columns = keys + ['bin', 'expected', 'observed', 'n_cells', 'n_events']
+    df = calibration.loc[np.isfinite(calibration['pit'].astype(float))].copy()
+    if main_only and 'main' in df.columns:
+        df = df.loc[df['main'].eq(True) | ~df['kind'].isin(['shares', 'seats'])]
+    if 'population' not in df.columns:
+        df['population'] = None
+    df.loc[df['kind'].astype(str).str.startswith('prov_'), 'population'] = 'provincias'
+
+    parts = [df.loc[df['horizon'].between(first, last)].assign(group=name) for name, (first, last) in groups.items()]
+    df = pd.concat(parts, ignore_index=True) if parts else df.iloc[:0].assign(group=None)
+    df = df.loc[df['population'].notnull()]
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+
+    df['bin'] = np.minimum((df['pit'].astype(float) * bins).astype(int), bins - 1)
+    # An election is its scope and date (several scopes vote on the same day); a frame without `scope`, its date
+    election = [c for c in ('scope', 'event_date') if c in df.columns]
+    df['weight'] = 1. / df.groupby(keys + election)['pit'].transform('size')
+    counts = pd.concat({'n_cells': df.groupby(keys).size(),
+                        'n_events': df.drop_duplicates(keys + election).groupby(keys).size()}, axis=1)
+    mass = df.groupby(keys + ['bin'])['weight'].sum()
+
+    grid = pd.MultiIndex.from_tuples(
+        [key + (b,) for key in counts.index for b in range(bins)], names=keys + ['bin']
+    )
+    out = mass.reindex(grid, fill_value=0.).rename('observed').reset_index()
+    out = out.join(counts, on=keys)
+    out['observed'] = out['observed'] / out['n_events']
+    out['expected'] = 1. / bins
+    # Groups in the order given (not alphabetical)
+    out['group'] = pd.Categorical(out['group'], categories=list(groups), ordered=True)
+    out = out.sort_values(keys + ['bin']).reset_index(drop=True)
+    out['group'] = out['group'].astype(str)
+
+    return out[columns]
+
+
+def majority_reliability(blocks: pd.DataFrame, bins: tuple = (0, .1, .3, .5, .7, .9, 1.)) -> pd.DataFrame:
+    """
+    Reliability of the probabilities of absolute majority of the blocks: how often the outcome happened among
+    the cases given each range of probability.
+
+    Parameters
+    ----------
+    blocks : pandas.DataFrame
+        Rows of `blocks.csv`: `p_majority`, `majority` and, with the horizon run, `p_majority_h`; the rows with
+        `seats_valid` false (orphan parties) are left out.
+    bins : tuple of float, default (0, .1, .3, .5, .7, .9, 1.)
+        Edges of the bins of probability: `[lo, hi)`, the last one closed.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per mode (`now`, and `h` when `p_majority_h` exists) and bin (every bin): `bin` (its position),
+        `lo`, `hi`, `p_mean` (mean probability), `observed` (fraction of `majority`; NaN in an empty bin) and `n`.
+    """
+    edges = np.asarray(bins, dtype=float)
+    if 'seats_valid' in blocks.columns:
+        # A missing flag (NaN read from the CSV) is not valid: `astype(bool)` alone would read it as true
+        valid = blocks['seats_valid'].astype('boolean').fillna(False).astype(bool)
+    else:
+        valid = pd.Series(True, index=blocks.index)
+    rows = []
+    for mode, col in (('now', 'p_majority'), ('h', 'p_majority_h')):
+        if col not in blocks.columns:
+            continue
+        p = blocks.loc[valid, col].astype(float)
+        y = blocks.loc[valid, 'majority'].astype(float)
+        finite = np.isfinite(p)
+        p, y = p.loc[finite], y.loc[finite]
+        position = np.clip(np.searchsorted(edges, p.to_numpy(), side='right') - 1, 0, len(edges) - 2)
+        for b in range(len(edges) - 1):
+            inside = position == b
+            n = int(inside.sum())
+            rows.append({'mode': mode, 'bin': b, 'lo': edges[b], 'hi': edges[b + 1],
+                         'p_mean': float(p.loc[inside].mean()) if n else np.nan,
+                         'observed': float(y.loc[inside].mean()) if n else np.nan, 'n': n})
+
+    return pd.DataFrame(rows, columns=['mode', 'bin', 'lo', 'hi', 'p_mean', 'observed', 'n'])
+
+
 def shortest_horizon(series: pd.DataFrame) -> pd.DataFrame:
     """
     Rows of the shortest horizon of each election of a `series` table.
@@ -538,24 +782,27 @@ def run_backtest(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    error_model: str = 'polls',
+    drift_scale: Optional[str | float] = None,
+    tail_dof: Optional[int] = None,
     weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `weight_ratings` is passed to every case.
+    `error_model`, `drift_scale`, `tail_dof` and `weight_ratings` are passed to every case.
 
     Returns
     -------
     dict
-        `shares`, `seats`, `blocks`, `provinces`, `meta` (concatenated per case), `series` (the daily series of
-        the average of the shortest horizon that ran of each election, `shortest_horizon`), `metrics` (one row
-        per case) and `by_horizon` (means over the events, per horizon).
+        `shares`, `seats`, `blocks`, `provinces`, `calibration`, `meta` (concatenated per case), `series` (the
+        daily series of the average of the shortest horizon that ran of each election, `shortest_horizon`),
+        `metrics` (one row per case) and `by_horizon` (means over the events, per horizon).
     """
     events = events or default_events(scope)
     horizons = horizons or DEFAULT_HORIZONS
 
-    parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'series': [], 'meta': []}
+    parts = {'shares': [], 'seats': [], 'blocks': [], 'provinces': [], 'calibration': [], 'series': [], 'meta': []}
     metrics = []
     for event_date in events:
         for horizon in horizons:
@@ -567,6 +814,7 @@ def run_backtest(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
+                    error_model=error_model, drift_scale=drift_scale, tail_dof=tail_dof,
                     weight_ratings=weight_ratings
                 )
             except Exception as e:
@@ -830,6 +1078,9 @@ def backtest_scope(
     composition: Optional[float | str] = None,
     regional_noise: bool = True,
     min_events: Optional[int] = None,
+    error_model: str = 'polls',
+    drift_scale: Optional[str | float] = None,
+    tail_dof: Optional[int] = None,
     recompute_ratings: bool = False,
     verbose: int = 0,
     runner=None,
@@ -851,8 +1102,10 @@ def backtest_scope(
         elections held since 2019 for a regional scope).
     horizons : list of int, optional
         Horizons in days; `DEFAULT_HORIZONS` by default.
-    n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, min_events
-        Parameters of `run_backtest`, recorded in `run.json`.
+    n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, \
+min_events, error_model, drift_scale, tail_dof
+        Parameters of `run_backtest`, recorded in `run.json` (`error_model` and `drift_scale` as requested;
+        `meta.csv` has the ones each case used).
     recompute_ratings : bool, default False
         Recompute the ratings of the scope in memory once (`rating_overrides`) and use them in every case
         instead of the stored ones; recorded in `run.json`.
@@ -883,7 +1136,8 @@ def backtest_scope(
 
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
-                  regional_noise=regional_noise, min_events=min_events)
+                  regional_noise=regional_noise, min_events=min_events, error_model=error_model,
+                  drift_scale=drift_scale, tail_dof=tail_dof)
     weight_ratings = rating_overrides(scope) if recompute_ratings else None
     results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose,
                                        weight_ratings=weight_ratings, **params)

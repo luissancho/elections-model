@@ -690,6 +690,25 @@ def test_grouped_option_one_bar_series_per_entry_over_the_categories():
     assert totals['data'][0]['label']['position'] == 'top' and option['legend']['data'] == ['Latinoamérica', 'Resto']
 
 
+def test_grouped_option_draws_the_reliability_bars_with_a_reference_line():
+    """`references`: las diez barras del PIT de un grupo de horizontes y la línea de 0,10 (lo que espera una banda
+    calibrada), colgada de una serie auxiliar sin datos y fuera de la leyenda, como en `renderLines`."""
+    deciles = [f'{10 * k}-{10 * (k + 1)}' for k in range(10)]
+    series = [{'name': '6-14 días', 'data': [0.2, 0.1, 0.05, 0.1, 0.1, 0.05, 0.1, 0.1, 0.05, 0.15], 'color': '#1f4e79',
+               'labels': [''] * 10}]
+    option = run_js(f'g.groupedOption({json.dumps(deciles)}, rows, {{references: [0.1], max: 0.4}})', rows=series)
+    bars = [entry for entry in option['series'] if entry['type'] == 'bar']
+    lines = [entry for entry in option['series'] if entry['type'] == 'line']
+    assert len(bars) == 1 and len(bars[0]['data']) == 10 and bars[0]['data'][0]['value'] == 0.2
+    assert len(lines) == 1 and lines[0]['data'] == [] and lines[0]['silent'] is True and lines[0]['name'] == ''
+    assert lines[0]['markLine']['data'] == [{'yAxis': 0.1}] and lines[0]['markLine']['symbol'] == 'none'
+    assert lines[0]['markLine']['lineStyle']['type'] == 'dashed'
+    assert option['legend']['data'] == ['6-14 días'] and option['yAxis']['max'] == 0.4
+    # sin `references`, ninguna serie auxiliar
+    plain = run_js(f'g.groupedOption({json.dumps(deciles)}, rows)', rows=series)
+    assert [entry['type'] for entry in plain['series']] == ['bar']
+
+
 def test_bullseye_highlights_one_point_over_the_others():
     """`highlight`: un punto destacado (el modelo en el detalle de una elección), del tamaño de los demás y en su
     color, sin etiqueta, por encima de todos (también de los grupos destacados) y contado en la escala de los ejes;

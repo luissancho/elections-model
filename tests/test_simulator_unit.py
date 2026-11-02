@@ -1,4 +1,6 @@
 """Tests del Simulator que no necesitan base de datos."""
+import types
+
 from mtpy.lib.simulator import Simulator
 
 
@@ -575,6 +577,7 @@ def test_error_estimator_window_ignores_the_run_drange():
     comp = types.SimpleNamespace(get_error_estimator=lambda **kw: calls.append(kw) or 'estimator')
     sim = Simulator.__new__(Simulator)
     sim.drange, sim.n_last, sim.add_errors, sim.computer = (54, None), 1, True, comp
+    sim.error_model = 'polls'
     assert sim.fit_error_estimator() == 'estimator'
     assert calls == [{'drange': (6, None), 'n_last': 1}]
     assert Simulator.ERROR_DRANGE == (7 * Simulator.TERMINAL_WEEKS - 1, None)
@@ -739,3 +742,147 @@ def test_anchor_before_the_last_poll_warns_even_by_default():
     with pytest.warns(UserWarning, match='precedes the last poll'):
         sim = anchor_simulator(last='2026-10-26', today='2026-10-20')
     assert sim.as_of == pd.Timestamp('2026-10-20')
+
+
+# --- Calibración (parte B): `error_model`, el error del propio promedio frente al de un sondeo suelto ---
+
+# Centinela del estimador de sondeos (`Computer.get_error_estimator`): un error terminal fijo de 2 puntos, para
+# que `build_frame` y `_fan` corran sobre el simulador del fixture
+POLLS_ESTIMATOR = types.SimpleNamespace(predict=lambda p: np.full(len(p), 2.))
+
+
+@pytest.fixture
+def fake_simulator():
+    """Fábrica de simuladores sintéticos (`tests.fakes.synthetic_simulator`) con `error_model`, `tail_dof` (validado
+    con `Simulator._check_tail_dof`, como en el constructor) y un Computer de juguete: su
+    `get_average_error_estimator` devuelve `average_estimator` y su `get_error_estimator`, el centinela
+    `POLLS_ESTIMATOR`; anota las llamadas en `sim.computer.calls` y ajusta `v2err` con `fit_error_estimator`.
+    Sin `error_model`, el de un sondeo suelto (`'polls'`, el de producción)."""
+
+    def build(error_model='polls', average_estimator=None, tail_dof=None):
+        sim = synthetic_simulator()
+        sim.tail_dof = Simulator._check_tail_dof(tail_dof)
+        sim.error_model, sim.error_model_used, sim.add_errors = error_model, None, True
+        calls = []
+
+        def get_average_error_estimator(horizon=6):
+            calls.append(('average', {'horizon': horizon}))
+            return average_estimator
+
+        def get_error_estimator(**kwargs):
+            calls.append(('polls', kwargs))
+            return POLLS_ESTIMATOR
+
+        sim.computer = types.SimpleNamespace(get_average_error_estimator=get_average_error_estimator,
+                                             get_error_estimator=get_error_estimator, calls=calls)
+        sim.v2err = sim.fit_error_estimator()
+        return sim
+
+    return build
+
+
+def test_simulator_error_model_average_falls_back_to_polls_without_rows(fake_simulator):
+    with pytest.warns(UserWarning, match='average'):
+        sim = fake_simulator(error_model='average', average_estimator=None)
+    assert sim.error_model_used == 'polls' and sim.v2err is POLLS_ESTIMATOR
+    assert sim.computer.calls == [('average', {'horizon': Simulator.AVERAGE_ERROR_HORIZON}),
+                                  ('polls', {'drange': Simulator.ERROR_DRANGE, 'n_last': 1})]
+
+
+def test_simulator_error_model_average_uses_the_average_error_estimator(fake_simulator):
+    import types
+    average = types.SimpleNamespace(predict=lambda p: np.full(len(p), 1.2), events=['2019-11-10', '2023-07-23'])
+    sim = fake_simulator(error_model='average', average_estimator=average)
+    assert Simulator.AVERAGE_ERROR_HORIZON == 6
+    assert sim.error_model_used == 'average' and sim.v2err is average
+    assert sim.computer.calls == [('average', {'horizon': 6})]
+    assert sim.error_events() == ['2019-11-10', '2023-07-23']  # las elecciones de las filas que lo ajustan
+
+
+def test_simulator_error_model_polls_keeps_the_poll_estimator(fake_simulator):
+    sim = fake_simulator(error_model='polls')
+    assert sim.error_model_used == 'polls' and sim.v2err is POLLS_ESTIMATOR
+    assert sim.computer.calls == [('polls', {'drange': Simulator.ERROR_DRANGE, 'n_last': 1})]
+
+
+def test_simulator_error_model_without_errors_or_past_elections_is_polls():
+    sim = synthetic_simulator()
+    sim.error_model, sim.error_model_used, sim.add_errors = 'average', None, False
+    assert sim.fit_error_estimator() is None and sim.error_model_used == 'polls'
+    sim.add_errors, sim.computer, sim.error_model_used = True, None, None
+    assert sim.fit_error_estimator() is None and sim.error_model_used == 'polls'
+
+
+def test_simulator_rejects_an_unknown_error_model():
+    with pytest.raises(ValueError, match='error_model'):
+        Simulator('es', '2026-11-29', error_model='house')
+
+
+# --- Calibración (parte B): `drift_scale`, el crecimiento del error del promedio con el horizonte ---
+
+def test_simulator_passes_the_drift_scale_to_the_drift_estimator():
+    import types
+    calls = []
+    sim = synthetic_simulator()
+    sim.add_errors, sim.drift_scale = True, 'auto'
+    sim.computer = types.SimpleNamespace(get_drift_estimator=lambda **kw: calls.append(kw) or 'drift')
+    assert sim.fit_drift_estimator() == 'drift' and calls == [{'scale': 'auto'}]
+    sim.drift_scale = None
+    assert sim.fit_drift_estimator() == 'drift' and calls[-1] == {'scale': None}
+    sim.add_errors = False
+    assert sim.fit_drift_estimator() is None
+    sim.add_errors, sim.computer = True, None
+    assert sim.fit_drift_estimator() is None
+
+
+@pytest.mark.parametrize('bad', ['x', 0, -1., float('nan'), True])
+def test_simulator_rejects_a_bad_drift_scale(bad):
+    with pytest.raises(ValueError, match='drift_scale'):
+        Simulator('es', '2026-11-29', drift_scale=bad)
+
+
+# --- Calibración (parte C): `tail_dof`, los grados de libertad fijos de la t del sorteo ---
+
+def test_tail_dof_fixes_the_degrees_of_freedom_of_the_draw_and_the_fan(fake_simulator):
+    sim = fake_simulator(tail_dof=5)
+    frame = sim.build_frame()
+    # `build_frame` guarda `dof` en el frame (columna nueva de `cols_frame`)
+    assert (frame.loc[frame['pct'] > 0, 'dof'] == 5).all()
+    assert (sim._fan([0])['dof'] == 5).all()
+    assert fake_simulator(tail_dof=None).build_frame()['dof'].min() >= 3
+
+
+@pytest.mark.parametrize('bad', [0, -1, 2.5, 'x'])
+def test_tail_dof_rejects_bad_values(fake_simulator, bad):
+    with pytest.raises(ValueError, match='tail_dof'):
+        fake_simulator(tail_dof=bad)
+
+
+def test_tail_dof_none_keeps_the_degrees_of_freedom_of_the_polls_and_the_draw(fake_simulator):
+    """Sin `tail_dof`, `nobs - 2` con mínimo 3 (3 sin `nobs`), como hasta ahora, y el mismo sorteo: la columna `dof`
+    sólo guarda lo que ya se usaba (spec 19, el camino `None` reproduce el backtest)."""
+    sim = fake_simulator(tail_dof=None)
+    frame = sim.build_frame()
+    assert frame.loc[['PP', 'PSOE', 'VOX'], 'dof'].tolist() == [38., 38., 28.]
+    assert sim._fan([0]).set_index('party')['dof'].to_dict() == {'PP': 38., 'PSOE': 38., 'VOX': 28.}
+    sim.rng = np.random.default_rng(42)
+    rand = sim.build_frame().loc[['PP', 'PSOE', 'VOX'], 'rand'].to_numpy()
+    noise = np.random.default_rng(42).standard_t([38., 38., 28.])
+    std_err = frame.loc[['PP', 'PSOE', 'VOX'], 'std_err'].to_numpy()
+    assert rand == pytest.approx(np.clip([40., 30., 15.] + std_err * noise, 0, None))
+
+
+@pytest.mark.parametrize('good', [None, 2, 5, np.int64(8)])
+def test_tail_dof_accepts_none_or_an_integer_of_at_least_two(good):
+    assert Simulator._check_tail_dof(good) == good and (good is None or type(Simulator._check_tail_dof(good)) is int)
+
+
+@pytest.mark.parametrize('bad', [1, True, 5., float('nan')])
+def test_tail_dof_rejects_one_booleans_and_floats(bad):
+    with pytest.raises(ValueError, match='tail_dof'):
+        Simulator._check_tail_dof(bad)
+
+
+def test_simulator_rejects_a_bad_tail_dof_before_touching_data():
+    with pytest.raises(ValueError, match='tail_dof'):
+        Simulator('es', '2026-11-29', tail_dof=0)

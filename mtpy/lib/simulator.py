@@ -17,7 +17,7 @@ from ..core.utils.helpers import unset_categorical
 from ..core.utils.dataviz import plot_kde_1d
 
 from .forecaster import Forecaster
-from .computer import Computer
+from .computer import Computer, check_drift_scale
 from .data import (
     get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
     get_districts, get_scope_parent
@@ -37,6 +37,10 @@ class Simulator(Core):
     # Fixed on purpose: the `drange` of the run only cuts the polls of the current cycle (a backfill or a
     # backtest raises it to freeze them) and must not shrink the training set to the far-out polls
     ERROR_DRANGE = (7 * TERMINAL_WEEKS - 1, None)
+    # Horizon (days) of the past errors of the poll average that fit its estimator with `error_model='average'`
+    # (`Computer.get_average_error_estimator`): the terminal one, as the polling error; the drift is added apart
+    AVERAGE_ERROR_HORIZON = 6
+    ERROR_MODELS = ('polls', 'average')  # Terminal error of the simulation, see `fit_error_estimator`
     DEFAULT_FAN = (0, 7, 14, 30, 60, 90, 180)  # Default horizons (days) of the fan of intervals, see `fan`
     MODES = {'nowcast': None, 'forecast': 'deadline'}  # Default `horizon` param of each mode, see `run`
 
@@ -53,6 +57,9 @@ class Simulator(Core):
         mode: Literal['nowcast', 'forecast'] = 'nowcast',
         n_last: int = 1,
         add_errors: bool = True,
+        error_model: Literal['polls', 'average'] = 'polls',
+        drift_scale: Optional[str | float] = None,
+        tail_dof: Optional[int] = None,
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
         threshold: Optional[float] = None,
@@ -111,6 +118,21 @@ class Simulator(Core):
             If not provided, only each pollster's last poll will be included.
         add_errors: bool, optional
             Whether to include error margins and confidence intervals in the simulation.
+        error_model : {'polls', 'average'}, optional
+            Terminal error `e` added to the standard error of the average (see `fit_error_estimator`): `'polls'`
+            (default) the error of a single poll (`Computer.get_error_estimator`); `'average'` the error of the
+            poll average itself in the past elections, net of its standard error
+            (`Computer.get_average_error_estimator` at `AVERAGE_ERROR_HORIZON` days), which falls back to
+            `'polls'` with a warning when the `average_errors` table has too few rows. The model actually used
+            is `error_model_used`.
+        drift_scale : {'auto'} or float, optional
+            Multiplier of the drift variance (`Computer.get_drift_estimator`, see `DriftEstimator.fit_scale`):
+            `'auto'` fits it on the errors of the poll average of the past elections (table `average_errors`,
+            1 with a warning without rows), a positive number fixes it, `None` (default) leaves 1. The value used
+            is `v2drift.scale`.
+        tail_dof : int, optional
+            Degrees of freedom of the Student t of the draw (`build_frame`) and of the fan (`fan`), the same for
+            every party: an integer of at least 2. `None` (default) takes `nobs - 2` of each party, at least 3.
         reg_params : dict of str, optional
             Parameters for the regression estimator.
             If `None`, the default parameters will be used.
@@ -170,6 +192,10 @@ class Simulator(Core):
         """
         if mode not in self.MODES:
             raise ValueError('`mode` must be one of {}'.format(list(self.MODES)))
+        if error_model not in self.ERROR_MODELS:
+            raise ValueError('`error_model` must be one of {}'.format(list(self.ERROR_MODELS)))
+        drift_scale = check_drift_scale(drift_scale)
+        tail_dof = self._check_tail_dof(tail_dof)
 
         super().__init__()
 
@@ -193,6 +219,10 @@ class Simulator(Core):
         self.alpha = alpha
         self.n_last = n_last
         self.add_errors = add_errors
+        self.error_model = error_model
+        self.error_model_used = None  # Set by `fit_error_estimator`
+        self.drift_scale = drift_scale
+        self.tail_dof = tail_dof
         self.reg_params = reg_params
         self.smap = smap
         if threshold is None:
@@ -272,7 +302,7 @@ class Simulator(Core):
 
         self.parties = get_parties()
         self.cols_forecast = ['mean', 'regional', 'err', 'nobs', 'error']
-        self.cols_frame = self.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred']
+        self.cols_frame = self.cols_forecast + ['pct', 'pct_err', 'drift', 'std_err', 'rand', 'vpred', 'dof']
         self.cols_unit = ['prev_pct', 'vpred_pct']
 
         if self.verbose > 0:
@@ -291,11 +321,8 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load drift estimator...')
 
-        # Drift of the opinion with the horizon (random walk fitted on the past cycles), see `Computer.get_drift_estimator`
-        if self.add_errors and self.computer is not None:
-            self.v2drift = self.computer.get_drift_estimator()
-        else:
-            self.v2drift = None
+        # Drift of the opinion with the horizon (random walk fitted on the past cycles), see `fit_drift_estimator`
+        self.v2drift = self.fit_drift_estimator()
 
         if self.verbose > 0:
             print('Load swing noise estimator...')
@@ -440,24 +467,55 @@ class Simulator(Core):
 
     def fit_error_estimator(self):
         """
-        Fit the polling-error estimator of the run (`Computer.get_error_estimator`) on the past elections of the
-        estimator scope: the last poll of each pollster (`n_last`) published within `ERROR_DRANGE`, the terminal
-        window at which the error is read (`TERMINAL_WEEKS`), whatever the `drange` of the run.
+        Fit the estimator of the terminal error of the run on the past elections of the estimator scope and set
+        `error_model_used` to the model it follows.
+
+        With `error_model='polls'`, the polling-error estimator (`Computer.get_error_estimator`): the last poll of
+        each pollster (`n_last`) published within `ERROR_DRANGE`, the terminal window at which the error is read
+        (`TERMINAL_WEEKS`), whatever the `drange` of the run. With `'average'`, the estimator of the error of the
+        poll average itself (`Computer.get_average_error_estimator` at `AVERAGE_ERROR_HORIZON` days); when the
+        `average_errors` table has too few rows it falls back to the polling error, with a warning.
 
         Returns
         -------
-        LeastSquaresEstimator or None
+        LeastSquaresEstimator, AverageErrorEstimator or None
+            The fitted estimator; `None` without `add_errors` or without past elections (`computer` is `None`),
+            with `error_model_used` `'polls'` (the simulation keeps only the standard error of the average).
+        """
+        self.error_model_used = 'polls'
+        if not self.add_errors or self.computer is None:
+            return None
+
+        if self.error_model == 'average':
+            estimator = self.computer.get_average_error_estimator(horizon=self.AVERAGE_ERROR_HORIZON)
+            if estimator is not None:
+                self.error_model_used = 'average'
+                return estimator
+            warnings.warn("No average errors to fit `error_model='average'` for {} {}: using the polling error".format(
+                self.scope, self.event_date))
+
+        return self.computer.get_error_estimator(drange=self.ERROR_DRANGE, n_last=self.n_last)
+
+    def fit_drift_estimator(self):
+        """
+        Fit the drift estimator of the run on the past cycles of the estimator scope
+        (`Computer.get_drift_estimator`), with the multiplier `drift_scale` of its variance.
+
+        Returns
+        -------
+        DriftEstimator or None
             The fitted estimator; `None` without `add_errors` or without past elections (`computer` is `None`).
         """
         if not self.add_errors or self.computer is None:
             return None
 
-        return self.computer.get_error_estimator(drange=self.ERROR_DRANGE, n_last=self.n_last)
+        return self.computer.get_drift_estimator(scale=self.drift_scale)
 
     def error_events(self) -> list[str]:
         """
-        Elections whose polls fit the polling-error estimator (`fit_error_estimator`): the distinct event dates
-        of the past polls of the estimator scope within `ERROR_DRANGE` (the last `n_last` of each pollster).
+        Elections that fit the terminal-error estimator (`fit_error_estimator`): with the polling error, the
+        distinct event dates of the past polls of the estimator scope within `ERROR_DRANGE` (the last `n_last` of
+        each pollster); with the error of the average (`error_model_used == 'average'`), the elections of its rows.
 
         Returns
         -------
@@ -466,6 +524,9 @@ class Simulator(Core):
         """
         if self.v2err is None:
             return []
+
+        if self.error_model_used == 'average':
+            return list(self.v2err.events)
 
         polls = self.computer.filter_polls(featured=True, drange=self.ERROR_DRANGE, n_last=self.n_last)
         if 'event_date' in polls.index.names:
@@ -770,7 +831,7 @@ class Simulator(Core):
                 fc.loc[names, ['mean', 'regional']].values,
                 np.repeat(weeks, len(names))
             ])
-            fc.loc[names, 'error'] = self.v2err.predict(p).values
+            fc.loc[names, 'error'] = np.asarray(self.v2err.predict(p))
         else:
             fc.loc[names, 'error'] = fc.loc[names, 'err']
 
@@ -1096,7 +1157,7 @@ class Simulator(Core):
         """
         Long fan of `fan` for the given horizons (clipped to `[0, horizon_max]`), with the three pieces of the
         margin of each party (`err`, `pct_err`, `drift`, percentage points) and the degrees of freedom of its
-        Student t (`dof`, the same as in `build_frame`).
+        Student t (`dof`, the same as in `build_frame`, see `degrees_of_freedom`).
         """
         alpha = self.alpha if alpha is None else alpha
         horizons = [int(h) for h in horizons if 0 <= int(h) <= self.horizon_max]
@@ -1113,7 +1174,7 @@ class Simulator(Core):
             else:
                 pct_err = 0.
 
-            dof = max((nobs if np.isfinite(nobs) else 3.) - 2, 3.)  # same degrees of freedom as `build_frame`
+            dof = float(self.degrees_of_freedom([nobs])[0])  # same degrees of freedom as `build_frame`
             q = float(student_t.ppf(1 - alpha / 2, dof))
             base = np.nan_to_num(err) ** 2 + pct_err ** 2
 
@@ -1128,6 +1189,50 @@ class Simulator(Core):
                 })
 
         return pd.DataFrame(rows, columns=['party', 'horizon', 'mean', 'err', 'pct_err', 'drift', 'sd', 'lo', 'hi', 'dof'])
+
+    @staticmethod
+    def _check_tail_dof(tail_dof: Optional[int]) -> Optional[int]:
+        """
+        Validate `tail_dof`: `None` or an integer of at least 2 (a boolean is not an integer here).
+
+        Returns
+        -------
+        int or None
+            `None` or the number as an `int`.
+
+        Raises
+        ------
+        ValueError
+            Anything else (zero, a negative or non-integer number, a string).
+        """
+        if tail_dof is None:
+            return None
+        if isinstance(tail_dof, (bool, np.bool_)) or not isinstance(tail_dof, (int, np.integer)) or tail_dof < 2:
+            raise ValueError('`tail_dof` must be None or an integer of at least 2 (got {!r})'.format(tail_dof))
+
+        return int(tail_dof)
+
+    def degrees_of_freedom(self, nobs) -> np.ndarray:
+        """
+        Degrees of freedom of the Student t of each party in the draw (`build_frame`) and the fan (`fan`):
+        `tail_dof` for every party when set, else `nobs - 2` (the polls of the party), at least 3 (3 without
+        `nobs`).
+
+        Parameters
+        ----------
+        nobs : array-like of float
+            Polls of each party (`forecast['nobs']`), NaN when unknown.
+
+        Returns
+        -------
+        np.ndarray
+            One float per party.
+        """
+        nobs = np.asarray(nobs, dtype=float)
+        if self.tail_dof is not None:
+            return np.full(nobs.shape, float(self.tail_dof))
+
+        return np.clip(np.where(np.isfinite(nobs), nobs, 3.) - 2, 3, None)
 
     def _require_forecast(self) -> None:
         if self.forecast is None or self.horizon_max is None:
@@ -2020,7 +2125,7 @@ class Simulator(Core):
                     df.loc[vind, ['pct', 'regional']].fillna(0).values,
                     np.repeat(weeks, df.loc[vind].shape[0])
                 ])
-                df.loc[vind, 'pct_err'] = self.v2err.predict(p).values
+                df.loc[vind, 'pct_err'] = np.asarray(self.v2err.predict(p))
                 df.loc[vind, 'std_err'] = np.sqrt(
                     np.square(df.loc[vind, 'err']) + np.square(df.loc[vind, 'pct_err']) + np.square(drift)
                 )
@@ -2029,10 +2134,14 @@ class Simulator(Core):
                 df.loc[vind, 'std_err'] = np.sqrt(np.square(df.loc[vind, 'err']) + np.square(drift))
 
             # Add noise to the forecasted percentage, based on the calculated error: a Student t per party
-            # (`nobs - 2` degrees of freedom), drawn jointly for the national parties with the common negative
-            # correlation set by `composition_ratio` (Gaussian copula, so the marginals are the same), or
-            # independently when the ratio is 1
-            dof = np.clip(df.loc[vind, 'nobs'].fillna(3) - 2, 3, None).to_numpy(dtype=float)
+            # (`nobs - 2` degrees of freedom, or `tail_dof` for all, see `degrees_of_freedom`), drawn jointly for
+            # the national parties with the common negative correlation set by `composition_ratio` (Gaussian
+            # copula, so the marginals are the same), or independently when the ratio is 1. The frame keeps them
+            # (`dof`) for every category with a positive share: the residual, never drawn, carries the one it
+            # would have (3, without polls, or `tail_dof`)
+            positive = df['pct'] > 0
+            df.loc[positive, 'dof'] = self.degrees_of_freedom(df.loc[positive, 'nobs'])
+            dof = df.loc[vind, 'dof'].to_numpy(dtype=float)
             sig = df.loc[vind, 'std_err'].to_numpy(dtype=float)
             national = (df.loc[vind, 'regional'].to_numpy() == 0) & np.isfinite(sig)
             if self.composition_ratio < 1 and national.sum() >= 2:

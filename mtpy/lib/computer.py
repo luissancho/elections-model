@@ -23,7 +23,7 @@ from .data import (
     get_event_dates, get_event_series, get_poll_series, get_parties, get_pollsters,
     get_next_event_date, get_ratings, save_model_data, save_ratings_data, get_event_params,
     get_drift, save_drift_data, get_house_effects, save_house_effects_data, get_event_results, get_scopes,
-    get_herding, save_herding_data,
+    get_herding, save_herding_data, get_average_errors, save_average_errors_data,
     get_scope_parent, get_event_data, get_national_events
 )
 from .mtypes import DROP_MTYPES
@@ -55,6 +55,10 @@ class DriftEstimator:
     poll), a second constant `k_young` is fitted on the rows with `age < age_max` and the drift of a young party
     is multiplied by `multiplier = sqrt(k_young / k)` (never below 1): parties less than four years old drift
     about three times more than the established ones, and the effect vanishes afterwards.
+
+    `scale` multiplies the whole variance (`var = scale · k · d · p²`): the growth of the error of the poll average
+    itself with the horizon, measured in the past elections against what `k` already models (`fit_scale`, table
+    `average_errors`). It is 1 by default; `scale_rows` counts the rows of that fit (0 when it was not fitted).
     """
 
     def __init__(
@@ -66,7 +70,9 @@ class DriftEstimator:
         curve: Optional[pd.Series] = None,
         k_young: float = np.nan,
         age_max: float = 4.,
-        n_young: int = 0
+        n_young: int = 0,
+        scale: float = 1.,
+        scale_rows: int = 0
     ) -> None:
         self.k = float(k)
         self.d_min = int(d_min)
@@ -78,6 +84,8 @@ class DriftEstimator:
         self.n_young = int(n_young)
         ratio = self.k_young / self.k if (np.isfinite(self.k_young) and np.isfinite(self.k) and self.k > 0) else np.nan
         self.multiplier = float(np.sqrt(ratio)) if np.isfinite(ratio) and ratio > 1 else 1.
+        self.scale = float(scale)
+        self.scale_rows = int(scale_rows)
 
     @classmethod
     def fit(
@@ -162,6 +170,68 @@ class DriftEstimator:
 
         return cls(k, d_min=d_min, decay=decay, agg=agg, curve=curve, k_young=k_young, age_max=age_max, n_young=n_young)
 
+    @staticmethod
+    def fit_scale(
+        errors: pd.DataFrame,
+        k: float,
+        d_min: int = 30,
+        d_ref: int = 6,
+        bounds: tuple = (1., 4.)
+    ) -> tuple[float, int]:
+        """
+        Measure how much the error of the poll average grows with the horizon in the past elections, relative to
+        the growth the drift constant `k` already models.
+
+        For each election and party with a row at `d_ref` days and at `d >= d_min` days, the excess variance of
+        the average beyond its own standard error,
+        `excess = (error_d² − err_d²) − (error_ref² − err_ref²)`, is compared with the drift variance over the
+        same span, `expected = k · (d − d_ref) · level_d²` (the convention of `var`: the level of the average at
+        `d` days, in percentage points). The scale is
+        `Σ excess / Σ expected`, clipped to `bounds`.
+
+        Parameters
+        ----------
+        errors : pd.DataFrame
+            Rows of `average_errors` (see `Computer.get_average_error_data`), with columns `event_date`, `party`,
+            `horizon`, `level`, `error` and `err` (percentage points).
+        k : float
+            Drift constant (see `fit`).
+        d_min : int, optional
+            Minimum horizon (days) of the far rows.
+        d_ref : int, optional
+            Horizon (days) of the reference row of each election and party (the terminal error).
+        bounds : tuple of float, optional
+            Bounds of the scale; a value outside them is clipped with a warning that states the unclipped value.
+
+        Returns
+        -------
+        tuple of (float, int)
+            The scale and the number of far rows used; `(1., 0)`, with a warning, without rows (or without a
+            finite positive `k`).
+        """
+        columns = ['event_date', 'party', 'horizon', 'level', 'error', 'err']
+        df = errors.reindex(columns=columns).dropna()
+        keys = ['event_date', 'party']
+        df = df.assign(excess=df['error'].astype(float) ** 2 - df['err'].astype(float) ** 2)
+        ref = df.loc[df['horizon'] == d_ref].drop_duplicates(keys).set_index(keys)['excess'].rename('excess_ref')
+        far = df.loc[df['horizon'] >= d_min].join(ref, on=keys, how='inner')
+        n_rows = int(far.shape[0])
+
+        days = far['horizon'].astype(float) - float(d_ref)
+        expected = float((float(k) * days * np.square(far['level'].astype(float))).sum()) if np.isfinite(k) else np.nan
+        if n_rows == 0 or not np.isfinite(expected) or expected <= 0:
+            warnings.warn('No rows of the poll-average errors at {} and {}+ days (or no drift constant): '
+                          'the drift scale is set to 1'.format(d_ref, d_min))
+            return 1., 0
+
+        raw = float((far['excess'] - far['excess_ref']).sum()) / expected
+        scale = float(np.clip(raw, bounds[0], bounds[1]))
+        if scale != raw:
+            warnings.warn('Drift scale {:.3f} outside the bounds {} ({} rows): recortada (clipped) to {:g}'.format(
+                raw, tuple(bounds), n_rows, scale))
+
+        return scale, n_rows
+
     def var(
         self,
         d: int | float | np.ndarray,
@@ -169,12 +239,13 @@ class DriftEstimator:
         age: Optional[float | np.ndarray | pd.Series] = None
     ) -> float | np.ndarray:
         """
-        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted);
-        parties younger than `age_max` (years, `age`) get `multiplier²` times more. A missing age counts as
-        established.
+        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted),
+        times `scale`; parties younger than `age_max` (years, `age`) get `multiplier²` times more. A missing age
+        counts as established.
         """
         days = np.clip(np.asarray(d, dtype=float), 0, None)
-        var = (self.k if np.isfinite(self.k) else 0.) * days * np.square(np.asarray(level, dtype=float))
+        k = self.scale * self.k if np.isfinite(self.k) else 0.
+        var = k * days * np.square(np.asarray(level, dtype=float))
         if age is not None and self.multiplier > 1:
             a = np.asarray(age, dtype=float)
             var = var * np.where(np.isfinite(a) & (a < self.age_max), np.square(self.multiplier), 1.)
@@ -189,9 +260,32 @@ class DriftEstimator:
     ) -> float | np.ndarray:
         """
         Standard deviation of the drift after `d` days of a share at `level`, in percentage points
-        (`level · sqrt(k · d)`, times `multiplier` for a party younger than `age_max`).
+        (`level · sqrt(scale · k · d)`, times `multiplier` for a party younger than `age_max`).
         """
         return np.sqrt(self.var(d, level, age=age))
+
+
+def check_drift_scale(scale: Optional[str | float]) -> Optional[str | float]:
+    """
+    Validate a drift scale (see `Computer.get_drift_estimator`): `None`, `'auto'` or a positive finite number.
+
+    Returns
+    -------
+    str, float or None
+        `None`, `'auto'` or the number as a float.
+
+    Raises
+    ------
+    ValueError
+        Anything else (a boolean or a numeric string included).
+    """
+    if scale is None or (isinstance(scale, str) and scale == 'auto'):
+        return scale
+    if isinstance(scale, (bool, np.bool_)) or not isinstance(scale, (int, float, np.number)) \
+            or not np.isfinite(scale) or scale <= 0:
+        raise ValueError("`drift_scale` must be None, 'auto' or a positive number (got {!r})".format(scale))
+
+    return float(scale)
 
 
 class SwingNoise:
@@ -356,6 +450,68 @@ class SwingNoise:
         return np.sqrt(self.var_province(level))
 
 
+class AverageErrorEstimator:
+    """
+    Terminal error of the poll average itself (part B of the calibration): a drop-in replacement of the
+    polling-error estimator of the Simulator (`Computer.get_error_estimator`, the error of a single poll) fitted
+    on the errors of the nowcast average of the past elections (`Computer.get_average_error_data`, table
+    `average_errors`) at one horizon.
+
+    The target of each row is `|e_net|` with `e_net² = max(error² − err², 0)` (`net`): the error of the average
+    minus the part already carried by the standard error `s` (`err`) of the local regression, which the
+    Simulator adds apart; without `net`, `|error|`. It is regressed with equal weights on the level of the
+    average and the regional flag (`LeastSquaresEstimator` over `['pct', 'regional']`).
+
+    Parameters
+    ----------
+    estimator : LeastSquaresEstimator
+        The fitted regression.
+    n_rows : int
+        Rows that fit it.
+    horizon : int
+        Horizon (days before the election) of those rows.
+    net : bool
+        Whether the target is net of `err`.
+    events : list of str
+        Elections (ISO dates, ascending) of those rows.
+    """
+
+    MIN_ROWS = 12  # Fewest rows that fit it (`Computer.get_average_error_estimator`)
+
+    def __init__(
+        self,
+        estimator: LeastSquaresEstimator,
+        n_rows: int,
+        horizon: int,
+        net: bool,
+        events: list[str]
+    ) -> None:
+        self.estimator = estimator
+        self.n_rows = int(n_rows)
+        self.horizon = int(horizon)
+        self.net = bool(net)
+        self.events = list(events)
+
+    def predict(self, p: np.ndarray) -> np.ndarray:
+        """
+        Predict the terminal error of the average, in percentage points.
+
+        Parameters
+        ----------
+        p : np.ndarray
+            One row per party with the columns `[pct, regional, weeks]` the Simulator passes to the polling-error
+            estimator; only the first two are used (the error is read at the horizon of the fit).
+
+        Returns
+        -------
+        np.ndarray
+            One prediction per row.
+        """
+        p = np.atleast_2d(np.asarray(p, dtype=np.float64))
+
+        return np.atleast_1d(np.asarray(self.estimator.predict(p[:, :2]), dtype=np.float64))
+
+
 class Computer(Core):
 
     def __init__(
@@ -478,6 +634,7 @@ class Computer(Core):
         self.biases = None
         self.ratings = None
         self.drift = None  # Drift table of the current events (see `get_drift_data`)
+        self.average_errors = None  # Errors of the poll average of the current events (`get_average_error_data`)
         self.house_effects = None  # House effects table of the current events (see `get_house_effects_data`)
         self.herding = None  # Herding table of the current events (see `get_herding_data`)
 
@@ -2293,6 +2450,61 @@ class Computer(Core):
             weights=df['weight']
         ).fit()
 
+    def get_average_error_estimator(
+        self,
+        horizon: int = 6,
+        net: bool = True
+    ) -> Optional[AverageErrorEstimator]:
+        """
+        Build the estimator of the terminal error of the poll average (`AverageErrorEstimator`) from the rows of
+        `load_average_errors` (the elections of this Computer: out of sample for the Simulator, whose estimator
+        Computer only holds the elections before the one simulated) of the main parties at `horizon` days.
+
+        Parameters
+        ----------
+        horizon : int, optional
+            Horizon of the rows (days before the election at which the average was read).
+        net : bool, optional
+            Fit `|e_net|`, `e_net² = max(error² − err², 0)`, the error net of the standard error of the local
+            regression (the Simulator adds that one apart); `|error|` otherwise.
+
+        Returns
+        -------
+        AverageErrorEstimator or None
+            The fitted estimator; `None`, with a warning, with fewer than `AverageErrorEstimator.MIN_ROWS` (12)
+            usable rows (also when the `average_errors` table has never been computed).
+        """
+        rows = self.load_average_errors()
+        if rows.shape[0] > 0:
+            flag = rows['main'].map(lambda v: bool(v) if pd.notnull(v) else False).astype(bool)
+            rows = rows.loc[(pd.to_numeric(rows['horizon']) == int(horizon)) & flag]
+
+        level = pd.to_numeric(rows['level'], errors='coerce').to_numpy(dtype=np.float64)
+        error = pd.to_numeric(rows['error'], errors='coerce').to_numpy(dtype=np.float64)
+        err = pd.to_numeric(rows['err'], errors='coerce').to_numpy(dtype=np.float64)
+        regional = np.array([float(bool(v)) if pd.notnull(v) else 0. for v in rows['regional']], dtype=np.float64)
+        if net:
+            target = np.sqrt(np.maximum(np.square(error) - np.square(err), 0.))
+        else:
+            target = np.abs(error)
+
+        valid = np.isfinite(level) & np.isfinite(target)
+        if int(valid.sum()) < AverageErrorEstimator.MIN_ROWS:
+            warnings.warn('Average error estimator of {} at {} days: only {} rows in `average_errors` '
+                          '(minimum {})'.format(getattr(self, 'scope', None), horizon, int(valid.sum()),
+                                                AverageErrorEstimator.MIN_ROWS))
+            return None
+
+        estimator = LeastSquaresEstimator(
+            x=np.column_stack([level[valid], regional[valid]]),
+            y=target[valid],
+            weights=np.ones(int(valid.sum()))
+        ).fit()
+        dates = pd.to_datetime(pd.Series(rows['event_date'].to_numpy()[valid]))
+        events = sorted(dates.dt.strftime('%Y-%m-%d').unique())
+
+        return AverageErrorEstimator(estimator, n_rows=int(valid.sum()), horizon=int(horizon), net=net, events=events)
+
     def get_drift_data(
         self,
         horizons: tuple[int, ...] = (7, 14, 30, 60, 90, 180, 365),
@@ -2426,6 +2638,193 @@ class Computer(Core):
 
         return self.drift
 
+    def get_average_error_data(
+        self,
+        horizons: tuple[int, ...] = (6, 14, 30, 60, 90, 180),
+        min_polls: int = 5,
+        max_fc: int = 10,
+        house_effects: bool = True,
+        dispersion: bool = True,
+        herding: bool = True,
+        events: Optional[list[str]] = None
+    ) -> pd.DataFrame:
+        """
+        Measure the out-of-sample error of the nowcast poll average in the past elections: for each featured
+        event with an official result and each horizon `d`, the average is fitted with the polls published at
+        least `d` days before the election, read at the anchor of the Simulator and compared with the official
+        share of each main party.
+
+        The average is the one of the Simulator and the backtest (`backtest.run_case`): a `Forecaster` with
+        `drange=d` over the series of the parties of the event, each with the polls of the parties it inherits
+        (`Simulator.poll_blocks` of the source map), with house effects, effective sample and herding as set,
+        and its default regression parameters. The anchor is `as_of = min(event - d, date_fit_last)`
+        (`Simulator._set_anchor`; the cap at today is irrelevant for a past election).
+
+        Parameters
+        ----------
+        horizons : tuple of int, optional
+            Horizons in days before the election.
+        min_polls : int, optional
+            Minimum number of polls of the cycle up to the anchor; a case with fewer is skipped with a warning,
+            and so is a case whose fit fails (the `Forecaster` rejects it for lack of polls, or any other error
+            of one odd cycle), so that one case never loses the whole phase.
+        max_fc : int, optional
+            Days forecast after the last poll (`Forecaster.fit_forecast`).
+        house_effects : bool, optional
+            Subtract the house effects before averaging (M6).
+        dispersion : bool, optional
+            Weigh each pollster by its effective sample (M12).
+        herding : bool, optional
+            Also reduce the weight of the pollsters less dispersed than their samples allow (M13).
+        events : list of str, optional
+            Elections to measure; by default the featured events of the series with an official result.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per event, main party and horizon: `event_date`, `event_scope`, `party_id`, `party`,
+            `horizon`, `main` (always true), `regional` (flag of the parties catalogue), `level` (the average at
+            the anchor), `official` (official share), `error` (`level - official`, percentage points), `err`
+            (standard error of the local regression at the anchor), `n_polls` and `as_of` (the anchor). Parties
+            without an official result, an id in the catalogue or an average at the anchor are left out.
+        """
+        # Local imports: the three modules import this one (circular at module level)
+        from .backtest import official_results
+        from .forecaster import Forecaster
+        from .simulator import Simulator
+
+        if events is None:
+            polls = self.filter_polls(featured=True, drange=None, n_last=None)
+            if 'event_date' in polls.index.names:
+                dates = pd.Series(polls.index.get_level_values('event_date'))
+            else:
+                dates = polls['event_date']
+            events = sorted(pd.to_datetime(dates.unique()).strftime('%Y-%m-%d'))
+
+        parties = get_parties().set_index('name')
+        columns = ['event_date', 'event_scope', 'party_id', 'party', 'horizon', 'main', 'regional', 'level',
+                   'official', 'error', 'err', 'n_polls', 'as_of']
+
+        rows = []
+        events_ = tqdm(events) if self.verbose > 0 else events
+        for event_date in events_:
+            official = official_results(self.scope, event_date)
+            if official.shape[0] == 0:
+                continue
+
+            params = self.event_params[event_date]
+            main = list(params['bmaps']['main'])
+            # The series of the Simulator: every party of the event with the polls of its predecessors
+            bmap = Simulator.poll_blocks(params['parties']['event'], params.get('smap', {}))
+
+            for d in horizons:
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter('ignore')
+                        fc = Forecaster(
+                            scope=self.scope,
+                            event_date=event_date,
+                            drop_mtypes=self.drop_mtypes,
+                            drange=int(d),
+                            alpha=self.alpha,
+                            bmap=bmap,
+                            house_effects=house_effects,
+                            dispersion=dispersion,
+                            disp_params={'herding': bool(herding)},
+                            verbose=0,
+                            path=self.path
+                        ).build_series()
+                        fc.fit_forecast(names=[n for n in main if n in fc.names], max_fc=max_fc, fillna=True)
+                except Exception as e:  # one odd cycle must not lose the whole phase: skip the case, say which
+                    warnings.warn('Average error of {} {} at {} days skipped: {}'.format(self.scope, event_date, d, e))
+                    continue
+
+                if fc.date_fit_last is None:
+                    warnings.warn('Average error of {} {} at {} days skipped: nothing fitted'.format(
+                        self.scope, event_date, d))
+                    continue
+
+                as_of = min(pd.Timestamp(event_date) - pd.Timedelta(days=int(d)), pd.Timestamp(fc.date_fit_last))
+                n_polls = int((fc.fc_series.index <= as_of).sum())
+                if n_polls < min_polls:
+                    warnings.warn('Average error of {} {} at {} days skipped: only {} polls (minimum {})'.format(
+                        self.scope, event_date, d, n_polls, min_polls))
+                    continue
+
+                for name in main:
+                    if name not in parties.index or name not in official.index or name not in fc.forecast.columns:
+                        continue
+
+                    level = fc.forecast[name].get(as_of, np.nan)
+                    stat = fc.fc_stat[name].get(as_of) if name in fc.fc_stat.columns else None
+                    if pd.isnull(level) or pd.isnull(official.loc[name, 'pct']) or not isinstance(stat, dict):
+                        continue
+
+                    regional = parties.loc[name, 'regional']
+                    regional = bool(regional) if pd.notnull(regional) else False
+                    rows.append({
+                        'event_date': pd.Timestamp(event_date),
+                        'event_scope': self.scope,
+                        'party_id': int(parties.loc[name, 'id']),
+                        'party': name,
+                        'horizon': int(d),
+                        'main': True,
+                        'regional': regional,
+                        'level': float(level),
+                        'official': float(official.loc[name, 'pct']),
+                        'error': float(level) - float(official.loc[name, 'pct']),
+                        'err': float(stat['err']),
+                        'n_polls': n_polls,
+                        'as_of': as_of
+                    })
+
+        df = pd.DataFrame(rows, columns=columns)
+
+        return df.sort_values(['event_date', 'party_id', 'horizon'], ignore_index=True)
+
+    def compute_average_errors(
+        self,
+        save: bool = False,
+        **kwargs
+    ) -> pd.DataFrame:
+        """
+        Compute the errors of the poll average of the past elections (see `get_average_error_data`) and,
+        optionally, save them into the `average_errors` table of the database, replacing the rows of the same
+        events.
+
+        Parameters
+        ----------
+        save : bool, optional
+            Whether to save the data into the database.
+        **kwargs
+            Passed to `get_average_error_data`.
+        """
+        if self.verbose > 0:
+            print('Compute average errors...')
+
+        df = self.get_average_error_data(**kwargs)
+
+        if save:
+            if self.verbose > 0:
+                print('Save average errors data...')
+
+            nrows = save_average_errors_data(df)
+
+            if self.verbose > 0:
+                print('{} rows updated...'.format(nrows))
+
+        self.average_errors = df
+
+        return df
+
+    def load_average_errors(self) -> pd.DataFrame:
+        """
+        Load the errors of the poll average of the current events from the database (empty if never computed).
+        """
+        self.average_errors = get_average_errors(scope=self.scope, event_dates=self.event_dates)
+
+        return self.average_errors
+
     def party_first_polls(self) -> pd.Series:
         """
         Birth date of each party in the data: the first poll listing it (over the polls of the current events
@@ -2458,13 +2857,22 @@ class Computer(Core):
         self,
         d_min: int = 60,
         agg: Literal['geometric', 'quadratic'] = 'geometric',
-        age_max: float = 4.
+        age_max: float = 4.,
+        scale: Optional[str | float] = None
     ) -> DriftEstimator:
         """
         Build the drift estimator from the drift table of the current events, discounting the older cycles
         with `year_decay` (the same decay used for the pollster ratings). When the table is empty the data
         is computed on the fly (slower, not saved); when no event has rows at `d_min` days or more (the
         first cycles), the whole table is used with a warning (in-sample constant).
+
+        The drift variance is multiplied by `scale` (see `DriftEstimator.fit_scale`): with `'auto'` it is fitted on
+        the errors of the poll average of the current events (`load_average_errors`; the Computer of a
+        `Simulator` only holds the elections before the simulated one, so the fit is out of sample) without the
+        rows of the parties younger than `age_max` at their election (their drift already carries the multiplier;
+        a party without a first poll, or first polled within `age_max` years of the first poll of the database,
+        has an unknown age and is kept), falling back to 1 with a warning when the table has no usable rows;
+        a positive number fixes it; `None` (default) leaves 1 without reading the table.
 
         Parameters
         ----------
@@ -2475,7 +2883,15 @@ class Computer(Core):
         age_max : float, optional
             Parties younger than this (years since their first poll, at each election) get their own constant
             and a drift multiplier (M8, see `DriftEstimator`).
+        scale : {'auto'} or float, optional
+            Multiplier of the drift variance: `'auto'` (fitted), a positive number (fixed) or `None` (1).
+
+        Raises
+        ------
+        ValueError
+            If `scale` is not `None`, `'auto'` or a positive finite number.
         """
+        scale = check_drift_scale(scale)
         df = self.load_drift()
 
         if df.shape[0] == 0:
@@ -2491,7 +2907,21 @@ class Computer(Core):
         df = df.copy()
         df['age'] = (pd.to_datetime(df['event_date']) - df['party'].map(first)).dt.days / 365.25
 
-        return DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg, age_max=age_max)
+        estimator = DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg, age_max=age_max)
+        if scale == 'auto':
+            # The young parties already get `multiplier²` (M8): their rows would be counted twice in the scale.
+            # A party without a first poll counts as established, as in `DriftEstimator.var`, and so does a party
+            # first polled within `age_max` years of the first poll of the database: its age is unknown (the data
+            # cannot tell a party founded just before the first polls from an old one, e.g. every party of 1982)
+            errors = self.load_average_errors()
+            known = first.loc[first > first.min() + pd.DateOffset(days=int(round(365.25 * age_max)))]
+            age = (pd.to_datetime(errors['event_date']) - errors['party'].map(known)).dt.days / 365.25
+            errors = errors.loc[~(age < age_max).to_numpy()]
+            estimator.scale, estimator.scale_rows = DriftEstimator.fit_scale(errors, k=estimator.k)
+        elif scale is not None:
+            estimator.scale = scale
+
+        return estimator
 
 
     def get_house_effects_data(

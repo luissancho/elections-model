@@ -62,6 +62,67 @@ def test_backtest_rejects_a_bad_composition_before_running(fresh_app, patched, t
     assert runner.calls == [] and not (tmp_path / 'run.json').exists()
 
 
+def test_backtest_job_passes_error_model_to_the_runner(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), error_model='average', verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['error_model'] == 'average'
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['error_model'] == 'average'
+
+
+def test_backtest_job_defaults_to_the_polls_error_model(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['error_model'] == 'polls'
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['error_model'] == 'polls'
+
+
+@pytest.mark.parametrize('bad', ['house', None, 1, ['average']])
+def test_backtest_rejects_a_bad_error_model_before_running(fresh_app, patched, tmp_path, bad):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='backtest: error_model must be "polls" or "average"'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), error_model=bad, runner=runner, stats=stats)
+    assert runner.calls == [] and not (tmp_path / 'run.json').exists()
+
+
+def test_backtest_job_passes_drift_scale_to_the_runner(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), drift_scale='auto', verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['drift_scale'] == 'auto'
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['drift_scale'] == 'auto'
+
+
+@pytest.mark.parametrize('value, expected', [(None, None), ('auto', 'auto'), (1.5, 1.5), ('2', 2.), (3, 3.)])
+def test_backtest_job_normalises_the_drift_scale(fresh_app, patched, tmp_path, value, expected):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), drift_scale=value, verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['drift_scale'] == expected
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['drift_scale'] == expected
+
+
+@pytest.mark.parametrize('bad', ['house', 0, -1., True, float('nan'), ['auto']])
+def test_backtest_rejects_a_bad_drift_scale_before_running(fresh_app, patched, tmp_path, bad):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='backtest: drift_scale must be "auto", a positive number or null'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), drift_scale=bad, runner=runner, stats=stats)
+    assert runner.calls == [] and not (tmp_path / 'run.json').exists()
+
+
+@pytest.mark.parametrize('value, expected', [(None, None), (5, 5), ('8', 8), (2, 2)])
+def test_backtest_job_passes_the_tail_dof_to_the_runner(fresh_app, patched, tmp_path, value, expected):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), tail_dof=value, verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['tail_dof'] == expected
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['tail_dof'] == expected
+
+
+@pytest.mark.parametrize('bad', [0, 1, -3, 2.5, True, 'x', [5]])
+def test_backtest_rejects_a_bad_tail_dof_before_running(fresh_app, patched, tmp_path, bad):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='backtest: tail_dof must be an integer of at least 2 or null'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), tail_dof=bad, runner=runner, stats=stats)
+    assert runner.calls == [] and not (tmp_path / 'run.json').exists()
+
+
 def test_backtest_stop_on_error_stops_at_the_first_failure(fresh_app, patched, tmp_path):
     runner = FakeRunner(fail_scope='es-ar')
     with pytest.raises(RuntimeError, match='backtest: failed scopes: es-ar'):

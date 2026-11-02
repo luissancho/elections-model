@@ -88,6 +88,9 @@ def test_run_case_records_composition(app):
     assert meta['drift_multiplier'] >= 1 and 'SUMAR' in str(meta['young_parties'])
     ref = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
     assert ref['meta'].iloc[0]['composition_ratio'] == 1   # independiente por defecto
+    assert ref['meta'].iloc[0]['error_model'] == 'polls'   # el error de un sondeo suelto por defecto
+    assert (ref['meta'].iloc[0]['drift_scale'], ref['meta'].iloc[0]['drift_scale_rows']) == (1., 0)   # sin escala
+    assert np.isnan(ref['meta'].iloc[0]['tail_dof'])   # grados de libertad por partido, `nobs - 2`
 
 
 def test_run_case_provincial_metrics(app):
@@ -126,3 +129,53 @@ def test_run_case_records_the_scope_of_the_estimators(app):
 
     assert (own['est_scope'], own['n_featured'], own['min_events']) == ('es-md', 4, 3)
     assert (parent['est_scope'], parent['n_featured']) == ('es', 4) and pd.isnull(parent['min_events'])
+
+
+def test_run_case_reproduces_the_stored_backtest_2023_6_days(app):
+    """Guarda de regresión (spec 19): con los parámetros por defecto el caso 2023 a 6 días reproduce las filas de
+    `backtest/results/` (cada columna que ya había en `shares.csv` y `seats.csv`, con los mismos partidos, y las
+    métricas de `metrics.csv`; las columnas nuevas no cuentan), y su calibración trae un PIT finito para cada partido
+    principal con resultado oficial."""
+    import os
+
+    import pandas as pd
+    from mtpy.lib.backtest import RESULTS_ROOT, run_case, summarize_case
+
+    def stored_rows(name):
+        table = pd.read_csv(os.path.join(RESULTS_ROOT, name + '.csv'))
+        return table.query("event_date == '2023-07-23' and horizon == 6")
+
+    def assert_same(got, stored, label):
+        """Las columnas numéricas iguales a 1e-6 (NaN con NaN) y las demás idénticas."""
+        types = pd.api.types
+        numeric = [c for c in stored.columns
+                   if types.is_numeric_dtype(stored[c]) and not types.is_bool_dtype(stored[c])]
+        a, b = got[numeric].astype(float), stored[numeric].astype(float)
+        close = np.isclose(a.to_numpy(), b.to_numpy(), atol=1e-6, equal_nan=True)
+        assert close.all(), (label, {c: (a[c][~close[:, i]].tolist(), b[c][~close[:, i]].tolist())
+                                     for i, c in enumerate(numeric) if not close[:, i].all()})
+        rest = [c for c in stored.columns if c not in numeric]
+        assert got[rest].astype(str).equals(stored[rest].astype(str)), (label, rest)
+
+    case = run_case('es', '2023-07-23', 6, n_sim=1000, seed=42)
+    for kind in ('shares', 'seats'):
+        stored = stored_rows(kind).set_index('party')
+        got = case[kind].set_index('party')
+        assert set(got.index) == set(stored.index), (kind, set(got.index) ^ set(stored.index))
+        assert set(stored.columns) <= set(got.columns), (kind, set(stored.columns) - set(got.columns))
+        assert_same(got.loc[stored.index, stored.columns], stored, kind)
+
+    stored = stored_rows('metrics').reset_index(drop=True)
+    metrics = summarize_case(case['shares'], case['seats'], case['blocks'], case['provinces'])
+    got = pd.DataFrame([{'event_date': '2023-07-23', 'horizon': 6} | metrics])
+    assert set(stored.columns) <= set(got.columns), set(stored.columns) - set(got.columns)
+    assert_same(got[stored.columns], stored, 'metrics')
+
+    cal = case['calibration']
+    for kind in ('shares', 'seats'):
+        table = case[kind]
+        parties = table.loc[table['main'] & np.isfinite(table['official'].astype(float)), 'party']
+        for mode in ('now', 'h'):
+            rows = cal.query("kind == @kind and mode == @mode").set_index('party')
+            assert len(parties) > 0 and np.isfinite(rows.loc[parties, 'pit'].astype(float)).all()
+            assert ((rows['pit'] >= 0) & (rows['pit'] <= 1)).all()

@@ -67,7 +67,7 @@ ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
                     'poll-errors': 'poll-errors', 'error-data': 'error-data'}
 ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data')
-BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
+BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
 EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')
@@ -910,6 +910,22 @@ class BundleReader:
             If the scope is invalid.
         """
         return self.exists(path_backtest(scope, 'meta'))
+
+    def list_backtests(self) -> list:
+        """
+        List the scopes with a published backtest, a backtest being published when it has its ``meta.json``.
+
+        Returns
+        -------
+        list of str
+            The scope codes, sorted. Empty if there is no backtest folder.
+        """
+        try:
+            names = self.fs.listdir(self.path('backtest'))
+        except FileNotFoundError:
+            return []
+
+        return sorted(name for name in names if ROUTE_ALIAS_RE.fullmatch(name) and self.backtest_exists(name))
 
     def list_events(self, scope: str) -> list:
         """

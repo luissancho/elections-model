@@ -1,9 +1,12 @@
 """Tests de las métricas del backtest (sin base de datos)."""
+import io
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from mtpy.lib.backtest import brier, covered, crps_from_samples, log_score, summarize_case
+from mtpy.lib.backtest import (_quantile_cols, brier, covered, crps_from_samples, log_score, majority_reliability, pit,
+                               summarize_calibration, summarize_case)
 
 
 def test_crps_point_mass_equals_absolute_error():
@@ -114,10 +117,11 @@ def test_block_quantiles_are_those_of_the_summed_simulations():
 
     dist = pd.DataFrame({'A': [100, 120, 140, 160], 'B': [60, 40, 20, 0], 'C': [10, 10, 10, 10]})
     out = _block_quantiles(dist, ['A', 'B'])
-    assert set(out) == {'lo50', 'hi50', 'lo80', 'hi80', 'lo95', 'hi95'}
+    grid = {'q{:02d}'.format(5 * i) for i in range(1, 20)}   # más los cuantiles de 5 en 5 (calibración)
+    assert set(out) == {'lo50', 'hi50', 'lo80', 'hi80', 'lo95', 'hi95'} | grid
     assert out['lo95'] == out['hi95'] == 160  # A y B se compensan: el bloque suma 160 en toda simulación
     out = _block_quantiles(dist, ['A', 'C', 'Z'], suffix='_h')
-    assert set(out) == {'lo50_h', 'hi50_h', 'lo80_h', 'hi80_h', 'lo95_h', 'hi95_h'}
+    assert set(out) == {'lo50_h', 'hi50_h', 'lo80_h', 'hi80_h', 'lo95_h', 'hi95_h'} | {q + '_h' for q in grid}
     assert out['lo95_h'] == pytest.approx(111.5) and out['hi95_h'] == pytest.approx(168.5)  # cuantiles de 110..170
     assert _block_quantiles(dist, ['Z']) == {}
 
@@ -264,9 +268,13 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     run = json.load(open(folder / 'run.json', encoding='utf-8'))
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
-                        'recompute_ratings', 'events', 'horizons', 'db_polls', 'db_last_poll'}
+                        'error_model', 'drift_scale', 'tail_dof', 'recompute_ratings', 'events', 'horizons',
+                        'db_polls', 'db_last_poll'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
+    assert run['error_model'] == 'polls' and seen['error_model'] == 'polls'
+    assert run['drift_scale'] is None and seen['drift_scale'] is None
+    assert run['tail_dof'] is None and seen['tail_dof'] is None
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
     assert run['db_polls'] == 12 and run['db_last_poll'] == '2026-10-03'
     assert seen['scope'] == 'es-md' and seen['events'] == ['2019-11-10', '2023-07-23'] and seen['horizons'] == [30, 6]
@@ -413,8 +421,11 @@ def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(
         shares, seats, blocks = (t.assign(event_date=event_date, horizon=horizon) for t in summary_frames())
         series = pd.DataFrame({'event_date': [event_date] * 2, 'horizon': [horizon] * 2, 'date': ['2023-07-01', '2023-07-02'],
                                'name': ['PP', 'PP'], 'mean': [30.0, 30.5], 'lo': [29.0, 29.5], 'hi': [31.0, 31.5]})
+        calibration = pd.DataFrame({'event_date': [event_date], 'horizon': [horizon], 'kind': ['shares'],
+                                    'mode': ['now'], 'party': ['A'], 'pit': [0.5]})
         return {'shares': shares, 'seats': seats, 'blocks': blocks, 'provinces': pd.DataFrame(),
-                'meta': pd.DataFrame([{'event_date': event_date, 'horizon': horizon}]), 'series': series}
+                'meta': pd.DataFrame([{'event_date': event_date, 'horizon': horizon}]), 'series': series,
+                'calibration': calibration}
 
     monkeypatch.setattr(backtest, 'run_case', case)
     with warnings.catch_warnings():
@@ -423,22 +434,26 @@ def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(
     kept = out['series'][['event_date', 'horizon']].drop_duplicates()
     assert sorted(map(tuple, kept.itertuples(index=False))) == [('2019-11-10', 30), ('2023-07-23', 6)]
     assert out['series'].shape[0] == 4 and out['metrics'].shape[0] == 3
+    assert out['calibration'].shape[0] == 3   # la calibración de cada caso que corrió, concatenada
     assert list(backtest.shortest_horizon(pd.DataFrame(columns=out['series'].columns)).columns) == list(out['series'].columns)
 
 
 def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys):
     """`backtest/run_backtest.py` es un envoltorio: traduce sus opciones a `Backtest.run` (la composición la normaliza
     el job) y `--scopes` sin `all` pasa tal cual."""
+    import importlib
     import importlib.util
     import os
     import sys
     from mtpy import mtpy as app
-    from mtpy.jobs import Backtest as job_module
+    job_module = importlib.import_module('mtpy.jobs.Backtest')   # the module: `mtpy.jobs.Backtest` may be the class
     seen = {}
     monkeypatch.setattr(app, 'run', lambda *args, **kwargs: None)
     monkeypatch.setattr(job_module.Backtest, 'run', lambda self, **kwargs: seen.update(kwargs))
     monkeypatch.setattr(sys, 'argv', ['run_backtest.py', '--scopes', 'es-md', 'es-cl', '--horizons', '6', '30',
-                                      '--n-sim', '20', '--composition', 'auto', '--no-herding', '--out', 'x'])
+                                      '--n-sim', '20', '--composition', 'auto', '--no-herding',
+                                      '--error-model', 'average', '--drift-scale', 'auto', '--tail-dof', '5',
+                                      '--out', 'x'])
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
     script = importlib.util.module_from_spec(spec)
@@ -446,7 +461,9 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
     script.main()
     assert seen == {'scopes': ['es-md', 'es-cl'], 'events': None, 'horizons': [6, 30], 'n_sim': 20, 'seed': 42, 'max_fc': 10,
                     'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
-                    'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None, 'recompute_ratings': False, 'out': 'x'}
+                    'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None,
+                    'error_model': 'average', 'drift_scale': 'auto', 'tail_dof': 5, 'recompute_ratings': False,
+                    'out': 'x'}
     hint = capsys.readouterr().out
     assert hint.startswith('Tables written to x. publish backtest/event read the app file system: run python job.py backtest ')
     assert '\'{"action":"push","scopes":["es-md","es-cl"],"out":"x"}\' (with S3_BUCKET set)' in hint
@@ -463,3 +480,178 @@ def test_backtest_simulates_a_thousand_times_by_default_like_the_forecast():
     assert inspect.signature(lib.run_backtest).parameters['n_sim'].default == 1000
     script = open(os.path.join(os.path.dirname(__file__), '..', 'backtest', 'run_backtest.py'), encoding='utf-8').read()
     assert "add_argument('--n-sim', type=int, default=1000)" in script and '[--n-sim 1000]' in script
+
+
+def test_pit_counts_the_mass_below_the_outcome_with_half_the_ties():
+    assert pit(np.array([1., 2., 3., 4.]), 2.5) == pytest.approx(0.5)
+    assert pit(np.array([1., 2., 2., 4.]), 2.) == pytest.approx(0.5)   # 1 por debajo + 2 empates / 2 = 2 de 4
+    assert np.isnan(pit(np.array([1., 2.]), np.nan))
+
+
+def test_pit_ignores_missing_samples():
+    """Las simulaciones sin valor (una celda provincial sin proyección) no cuentan; sin ninguna, el PIT es NaN."""
+    assert pit(np.array([1., np.nan, 3.]), 2.) == pytest.approx(0.5)
+    assert np.isnan(pit(np.array([np.nan, np.nan]), 2.))
+
+
+def test_quantile_cols_carry_the_five_percent_grid():
+    cols = _quantile_cols(np.arange(1., 101.))
+    assert cols['lo95'] < cols['q05'] < cols['q50'] < cols['q95'] < cols['hi95']
+    assert 'q50_h' in _quantile_cols(np.arange(3.), suffix='_h')
+
+
+def test_quantile_cols_keep_the_intervals_and_add_nineteen_quantiles():
+    """Las columnas de hoy (`lo`/`hi` de `LEVELS`) siguen igual y se añaden `q05`…`q95`, también con sufijo."""
+    from mtpy.lib.backtest import QUANTILES
+    x = np.arange(1., 101.)
+    cols = _quantile_cols(x)
+    assert QUANTILES[0] == pytest.approx(0.05) and QUANTILES[-1] == pytest.approx(0.95) and len(QUANTILES) == 19
+    assert [k for k in cols if k.startswith('q')] == ['q{:02d}'.format(5 * i) for i in range(1, 20)]
+    assert cols['lo95'] == pytest.approx(np.quantile(x, 0.025)) and cols['hi50'] == pytest.approx(np.quantile(x, 0.75))
+    assert cols['q10'] == pytest.approx(np.quantile(x, 0.10))
+    assert set(_quantile_cols(x, suffix='_h')) == {k + '_h' for k in cols}
+
+
+def test_summarize_calibration_weights_each_election_equally_and_bins_by_horizon_group():
+    cal = pd.DataFrame({
+        'population': ['generales'] * 6, 'kind': ['shares'] * 6, 'mode': ['now'] * 6,
+        'event_date': ['2023-07-23'] * 4 + ['2019-11-10'] * 2, 'horizon': [6, 6, 6, 6, 14, 14],
+        'pit': [0.05, 0.05, 0.05, 0.05, 0.95, 0.95], 'official': 1., 'model': 1., 'main': True,
+        'party': list('ABCDEF')})
+    out = summarize_calibration(cal, bins=10)
+    row = out.query("group == '6-14'")
+    assert row.loc[row.bin == 0, 'observed'].iloc[0] == pytest.approx(0.5)   # 2023 pesa 1/2 aunque tenga 4 celdas
+    assert row.loc[row.bin == 9, 'observed'].iloc[0] == pytest.approx(0.5)
+    assert row['n_events'].iloc[0] == 2 and row['n_cells'].iloc[0] == 6 and out['expected'].eq(0.1).all()
+
+
+def test_summarize_calibration_drops_nan_pit_and_keeps_only_now_without_h():
+    cal = pd.DataFrame({'population': ['generales'] * 2, 'kind': ['shares'] * 2, 'mode': ['now'] * 2,
+                        'event_date': ['2023-07-23'] * 2, 'horizon': [6, 6], 'pit': [0.5, np.nan],
+                        'official': [1., np.nan], 'model': 1., 'main': True, 'party': ['A', 'B']})
+    out = summarize_calibration(cal)
+    assert out['n_cells'].iloc[0] == 1 and set(out['mode']) == {'now'}
+
+
+def test_summarize_calibration_lists_every_bin_and_sends_provincial_cells_to_their_population():
+    """Cada grupo trae sus `bins` cajas (vacías a 0) que suman 1; las filas `prov_*` van a `provincias` sea cual sea
+    la población que traigan; un PIT de 1 cae en la última caja y los horizontes fuera de los grupos no cuentan."""
+    cal = pd.DataFrame({
+        'population': ['autonomicas'] * 4, 'kind': ['shares', 'shares', 'prov_shares', 'shares'],
+        'mode': ['h', 'h', 'now', 'h'], 'event_date': ['2023-05-28'] * 4, 'horizon': [30, 60, 30, 20],
+        'pit': [1.0, 0.31, 0.5, 0.5], 'party': list('ABCD')})
+    out = summarize_calibration(cal, bins=5)
+    assert list(out.columns) == ['population', 'kind', 'mode', 'group', 'bin', 'expected', 'observed', 'n_cells',
+                                 'n_events']
+    auto = out.query("population == 'autonomicas'")
+    assert auto['group'].unique().tolist() == ['30-60'] and auto['bin'].tolist() == [0, 1, 2, 3, 4]
+    assert auto['observed'].tolist() == pytest.approx([0., 0.5, 0., 0., 0.5]) and auto['n_cells'].eq(2).all()
+    prov = out.query("population == 'provincias'")
+    assert set(prov['kind']) == {'prov_shares'} and prov.loc[prov.bin == 2, 'observed'].iloc[0] == pytest.approx(1.)
+    assert summarize_calibration(cal.iloc[:0]).empty
+
+
+def test_majority_reliability_bins_probabilities():
+    blocks = pd.DataFrame({'p_majority': [0.05, 0.95, 0.6], 'majority': [False, True, False], 'seats_valid': True})
+    out = majority_reliability(blocks)
+    assert out.loc[out.n > 0, 'observed'].tolist() == [0., 0., 1.] and out['mode'].eq('now').all()
+
+
+def test_majority_reliability_adds_the_horizon_run_and_skips_invalid_seats():
+    """Con `p_majority_h` sale también el modo `h`; los casos con escaños no válidos (huérfanos) no cuentan."""
+    blocks = pd.DataFrame({'p_majority': [0.05, 0.95, 0.6], 'p_majority_h': [0.2, 0.8, 0.0],
+                           'majority': [False, True, True], 'seats_valid': [True, True, False]})
+    out = majority_reliability(blocks)
+    assert out['mode'].unique().tolist() == ['now', 'h'] and out.groupby('mode')['bin'].count().eq(6).all()
+    h = out.query("mode == 'h' and n > 0")
+    assert h['p_mean'].tolist() == pytest.approx([0.2, 0.8]) and h['observed'].tolist() == [0., 1.]
+    assert h['n'].sum() == 2
+
+
+def test_majority_reliability_takes_a_missing_seats_valid_as_invalid():
+    """Un `seats_valid` vacío en el CSV (NaN) no cuenta como válido: `astype(bool)` lo leería como verdadero."""
+    blocks = pd.read_csv(io.StringIO('p_majority,majority,seats_valid\n0.95,True,\n'))
+    assert majority_reliability(blocks)['n'].sum() == 0
+
+
+def test_provinces_carry_the_pit_of_shares_and_seats(monkeypatch):
+    """Cada celda provincial lleva el PIT de su cuota y de sus escaños; sin cuota oficial el PIT de la cuota es NaN
+    (aunque la tabla la anote como 0) y sin escaños oficiales cuentan 0."""
+    from mtpy.lib import backtest
+    from tests.fakes import synthetic_simulator
+    sim = synthetic_simulator()
+    pct = pd.DataFrame({'PP': [40., 41.], 'PSOE': [30., 31.]}, index=pd.Index([28, 8], name='region_id'))
+    seats = pd.DataFrame({'PP': [4., 2.], 'PSOE': [3., 2.]}, index=pd.Index([28, 8], name='region_id'))
+    monkeypatch.setattr(backtest, 'official_provinces', lambda scope, event_date: (pct, seats))
+    rows = backtest._provinces(sim, 'es', '2026-11-29', 30, {'PP'}).set_index(['region', 'party'])
+    samples = sim.units[:, 1, 0, sim.cols_unit.index('vpred_pct')].astype(float)
+    assert rows.loc[(28, 'PP'), 'pit_pct'] == pytest.approx(pit(samples, 40.))
+    assert rows.loc[(28, 'PP'), 'pit_seats'] == pytest.approx(pit(sim.results[:, 1, 0].astype(float), 4.))
+    assert rows.loc[(28, 'VOX'), 'official_pct'] == 0 and np.isnan(rows.loc[(28, 'VOX'), 'pit_pct'])
+    assert rows.loc[(28, 'VOX'), 'pit_seats'] == pytest.approx(pit(sim.results[:, 1, 2].astype(float), 0.))
+    assert {'q05_pct', 'q95_pct', 'q50_seats'} <= set(rows.columns)
+
+
+def test_case_calibration_has_one_row_per_cell_kind_and_mode():
+    """`_calibration`: cuotas y escaños nacionales en los dos modos (`h` sólo con la ejecución a horizonte), las
+    celdas provinciales sólo en `now` y los escaños (nacionales y provinciales) sólo con escaños válidos, como en
+    `summarize_case`; un partido sin resultado oficial lleva PIT NaN."""
+    from mtpy.lib.backtest import _calibration
+    names = ['A', 'B']
+    run = {'shares': pd.DataFrame({'A': [29., 31., 33.], 'B': [9., 10., 11.]}),
+           'dist': pd.DataFrame({'A': [100., 110., 120.], 'B': [5., 6., 7.]}),
+           'summary': pd.DataFrame({'pct': [31., 10.], 'seats': [110., 6.]}, index=names)}
+    official = pd.DataFrame({'pct': [32., np.nan], 'seats': [110., np.nan]}, index=names)
+    provinces = pd.DataFrame({'region': [28], 'party': ['A'], 'main': [True], 'official_pct': [30.], 'model_pct': [29.],
+                              'pit_pct': [0.25], 'official_seats': [12.], 'model_seats': [11.], 'pit_seats': [0.75]})
+
+    cal = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, seats_valid=True)
+    assert list(cal.columns) == ['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main',
+                                 'official', 'model', 'pit']
+    assert sorted(set(zip(cal['kind'], cal['mode']))) == [('prov_seats', 'now'), ('prov_shares', 'now'), ('seats', 'h'),
+                                                          ('seats', 'now'), ('shares', 'h'), ('shares', 'now')]
+    a = cal.query("kind == 'shares' and mode == 'now' and party == 'A'").iloc[0]
+    assert a['pit'] == pytest.approx(2 / 3) and a['model'] == 31. and a['official'] == 32. and bool(a['main'])
+    assert cal.query("kind == 'seats' and party == 'A'")['pit'].tolist() == pytest.approx([0.5, 0.5])
+    assert cal.query("party == 'B'")['pit'].isna().all() and pd.isna(a['region_id']) and cal['scope'].eq('es').all()
+    prov = cal.query("kind == 'prov_seats'").iloc[0]
+    assert (prov['region_id'], prov['official'], prov['model'], prov['pit']) == (28, 12., 11., 0.75)
+
+    only = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, None, provinces, seats_valid=False)
+    assert set(only['mode']) == {'now'} and set(only['kind']) == {'shares', 'prov_shares'}
+    invalid = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, False)
+    assert 'seats' not in set(invalid['kind'])
+
+
+def test_summarize_calibration_tells_apart_two_scopes_voting_the_same_day():
+    """Una elección es su ámbito y su fecha: dos autonómicas del mismo día pesan cada una lo suyo (no se funden en
+    una pseudoelección) y `n_events` las cuenta por separado; sin columna `scope`, la fecha sola."""
+    cal = pd.DataFrame({
+        'population': ['autonomicas'] * 4, 'scope': ['es-md', 'es-md', 'es-md', 'es-cl'], 'kind': ['shares'] * 4,
+        'mode': ['now'] * 4, 'event_date': ['2023-05-28'] * 4, 'horizon': [6] * 4, 'pit': [0.05, 0.05, 0.05, 0.95],
+        'party': list('ABCD')})
+    row = summarize_calibration(cal).query("group == '6-14'")
+    assert row['n_events'].iloc[0] == 2 and row['n_cells'].iloc[0] == 4
+    assert row.loc[row.bin == 0, 'observed'].iloc[0] == pytest.approx(0.5)   # Madrid pesa 1/2 aunque tenga 3 celdas
+    assert row.loc[row.bin == 9, 'observed'].iloc[0] == pytest.approx(0.5)
+    same_day = summarize_calibration(cal.drop(columns='scope')).query("group == '6-14'")
+    assert same_day['n_events'].iloc[0] == 1
+    assert same_day.loc[same_day.bin == 0, 'observed'].iloc[0] == pytest.approx(0.75)
+
+
+def test_summarize_calibration_keeps_only_the_main_parties_of_the_national_kinds_by_default():
+    """Spec 11: las poblaciones (generales, autonómicas) son los partidos principales; con `main_only` (por defecto)
+    las celdas no principales de `shares`/`seats` no cuentan y las provinciales se quedan todas; sin él, todas."""
+    cal = pd.DataFrame({
+        'population': ['generales'] * 6, 'kind': ['shares', 'shares', 'seats', 'seats', 'prov_shares', 'prov_shares'],
+        'mode': ['now'] * 6, 'event_date': ['2023-07-23'] * 6, 'horizon': [6] * 6,
+        'pit': [0.05, 0.95, 0.05, 0.95, 0.05, 0.95], 'main': [True, False, True, False, True, False],
+        'party': ['A', 'B', 'A', 'B', 'A', 'B']})
+    out = summarize_calibration(cal)
+    for kind in ('shares', 'seats'):
+        rows = out.query("population == 'generales' and kind == @kind")
+        assert rows['n_cells'].eq(1).all() and rows.loc[rows.bin == 0, 'observed'].iloc[0] == pytest.approx(1.)
+    assert out.query("population == 'provincias'")['n_cells'].eq(2).all()
+    every = summarize_calibration(cal, main_only=False)
+    assert every.query("population == 'generales'")['n_cells'].eq(2).all()
+    assert every.query("population == 'generales' and bin == 9")['observed'].tolist() == pytest.approx([0.5, 0.5])

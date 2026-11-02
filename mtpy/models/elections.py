@@ -218,6 +218,37 @@ class Drift(Model):
     }
 
 
+class AverageErrors(Model):
+    """
+    Out-of-sample error of the nowcast poll average of each main party `horizon` days before each past election
+    (see `Computer.get_average_error_data`): the average `level` read at the anchor `as_of` with the polls published
+    up to `horizon` days before the election, the `official` share, their difference `error` (average minus
+    official, percentage points), the standard error `err` of the local regression at the anchor and the `n_polls`
+    of the cycle up to it. `regional` is the flag of the party in the parties catalogue.
+    """
+
+    table = 'elections.average_errors'
+
+    key = ['event_date', 'event_scope', 'party_id', 'horizon']
+    sort = ['event_date', 'event_scope', 'party_id', 'horizon']
+
+    meta = {
+        'event_date': 'dtd',
+        'event_scope': 'cat',
+        'party_id': ['int', 3],
+        'horizon': ['int', 2],
+        'party': 'cat',
+        'main': 'bin',
+        'regional': 'bin',
+        'level': ['num', [10, 4]],
+        'official': ['num', [10, 4]],
+        'error': ['num', [10, 4]],
+        'err': ['num', [10, 4]],
+        'n_polls': ['int', 3],
+        'as_of': 'dtd'
+    }
+
+
 class PollstersHerding(Model):
     """
     Herding of each pollster in each election cycle (M13, see `Computer.get_herding_data`): dispersion of its

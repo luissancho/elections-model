@@ -227,8 +227,8 @@ def test_begin_run_refuses_an_existing_run(tmp_path):
 
 
 def test_backtest_paths_follow_the_published_layout_and_reject_bad_input():
-    assert bundle.BACKTEST_PARTS == ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
-    assert bundle.BACKTEST_CSV == ('metrics', 'by-horizon', 'blocks', 'shares', 'seats')
+    assert bundle.BACKTEST_PARTS == ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
+    assert bundle.BACKTEST_CSV == ('metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
     assert bundle.path_backtest('es', 'meta') == 'backtest/es/meta.json'
     assert bundle.path_backtest('es-md', 'by-horizon') == 'backtest/es-md/by-horizon.json'
     assert bundle.path_backtest_csv('es', 'seats') == 'backtest/es/csv/seats.csv'
@@ -238,6 +238,35 @@ def test_backtest_paths_follow_the_published_layout_and_reject_bad_input():
         bundle.path_backtest('es/..', 'meta')
     with pytest.raises(ValueError):
         bundle.path_backtest_csv('es', 'meta')
+
+
+def test_backtest_calibration_part_has_its_schema_and_its_csv_twin(tmp_path):
+    """La parte `calibration` (el PIT de cada celda del backtest) se escribe y se lee como las demás tablas."""
+    assert bundle.BACKTEST_SCHEMAS['calibration'] == 'backtest-calibration'
+    assert bundle.path_backtest('es-md', 'calibration') == 'backtest/es-md/calibration.json'
+    assert bundle.path_backtest_csv('es', 'calibration') == 'backtest/es/csv/calibration.csv'
+    obj = load_fixture('backtest-calibration')
+    assert bundle.validate('backtest-calibration', obj) is obj
+    columns = set(obj['data']['columns'])
+    assert {'event_date', 'horizon', 'kind', 'mode', 'party', 'main', 'official', 'model', 'pit'} <= columns
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)), clock=fixed_clock)
+    writer.write_json(bundle.path_backtest('es', 'calibration'), 'backtest-calibration', obj['data'], 'es')
+    assert writer.read_json(bundle.path_backtest('es', 'calibration'))['data'] == obj['data']
+    bad = copy.deepcopy(obj)
+    del bad['data']['rows']
+    with pytest.raises(ValueError):
+        bundle.validate('backtest-calibration', bad)
+
+
+def test_list_backtests_lists_the_scopes_with_a_meta(tmp_path):
+    reader = bundle.BundleReader(FileSystem(str(tmp_path)))
+    assert reader.list_backtests() == []
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)), clock=fixed_clock)
+    meta, seats = load_fixture('backtest-meta')['data'], load_fixture('backtest-seats')['data']
+    for scope in ('es-md', 'es'):
+        writer.write_json(bundle.path_backtest(scope, 'meta'), 'backtest-meta', meta, scope)
+    writer.write_json(bundle.path_backtest('es-an', 'seats'), 'backtest-seats', seats, 'es-an')
+    assert reader.list_backtests() == ['es', 'es-md']  # es-an, sin `meta`, está a medio publicar
 
 
 def test_backtest_exists_needs_the_meta(tmp_path):
