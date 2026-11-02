@@ -39,7 +39,7 @@ Calcula en la base de datos las tablas del modelo de cada ámbito (la secuencia 
 
 | Parámetro | Valores | Por defecto |
 |---|---|---|
-| `what` | `compute` (pesos, eventos destacados, errores, desviaciones, deriva, efectos de casa y rebaño de cada ámbito) y/o `ratings` (los ratings de las encuestadoras de cada ámbito, con los sondeos de todos los ámbitos). Con los dos, primero la serie de todos los ámbitos y después los ratings de todos | `["compute", "ratings"]` |
+| `what` | `compute` (pesos, eventos destacados, errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio de cada ámbito; el último, `average_errors`, sólo lo leen las opciones del método 15 y tarda unos 37 minutos en `es`) y/o `ratings` (los ratings de las encuestadoras de cada ámbito, con los sondeos de todos los ámbitos). Con los dos, primero la serie de todos los ámbitos y después los ratings de todos | `["compute", "ratings"]` |
 | `scopes` | Lista de ámbitos (`es`, `es-md`, …) o `"all"`: `es` y todos los autonómicos | `["es"]` |
 | `dry_run` | `true` calcula sin escribir nada; la serie se detiene tras las desviaciones (deriva, efectos y rebaño leen los errores guardados) | `false` |
 | `verbose` | 0 cabecera de cada acción y resumen final; 1 además `[i/n] ámbito: empezando`, la línea de resultado y los avisos del modelo de cada ámbito; 2 además una línea por fase con sus segundos; 3 además la salida propia del `Computer` | 1 |

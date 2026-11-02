@@ -1011,7 +1011,7 @@ def test_publish_backtest_writes_the_parts_and_meta_last(tmp_path):
     assert out['scope'] == 'es' and out['n_cases'] == 4 and out['n_events'] == 2
     written = [p for p in fs.written if p.startswith('site/v1/backtest/es/')]
     assert written[-1].endswith('/meta.json')
-    assert sum(p.endswith('.json') for p in written) == 6 and sum(p.endswith('.csv') for p in written) == 5
+    assert sum(p.endswith('.json') for p in written) == 7 and sum(p.endswith('.csv') for p in written) == 6
     meta = writer.read_json(bundle.path_backtest('es', 'meta'))
     assert meta['schema'] == 'backtest-meta@1' and meta['run_id'] is None and meta['mode'] is None
     assert meta['data']['events'] == ['2019-11-10', '2023-07-23'] and meta['data']['horizons'] == [6, 30]
@@ -1026,6 +1026,58 @@ def test_publish_backtest_writes_the_parts_and_meta_last(tmp_path):
     assert '120.0' not in (tmp_path / 'site' / 'site' / 'v1' / 'backtest' / 'es' / 'csv' / 'seats.csv').read_text()
     assert seats[-1]['lo50'] is None
     assert bundle.BundleReader(fs).backtest_exists('es')
+
+
+def test_publish_backtest_writes_the_calibration_part_and_its_csv(tmp_path):
+    """La parte `calibration` lleva las filas de `calibration.csv` (el PIT de cada celda) con su CSV gemelo; el PIT sin
+    redondear (redondeado, una celda podría cruzar el borde de una décima)."""
+    write_backtest_source(str(tmp_path / 'bt'))
+    writer = make_writer(tmp_path)
+    publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
+    data = valid('backtest-calibration', writer.read_json(bundle.path_backtest('es', 'calibration'))['data'], mode=None)
+    assert data['columns'] == ['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main',
+                               'official', 'model', 'pit']
+    first = data['rows'][0]
+    assert first['kind'] == 'shares' and first['mode'] == 'now' and first['main'] is True and first['pit'] == 0.61234
+    assert first['region_id'] is None and isinstance(first['horizon'], int)
+    assert any(row['kind'] == 'prov_shares' and row['pit'] is None for row in data['rows'])
+    assert writer.exists(bundle.path_backtest_csv('es', 'calibration'))
+
+
+def test_publish_backtest_of_an_older_folder_without_calibration_removes_the_stale_part(tmp_path):
+    """Una carpeta de antes del PIT (sin `calibration.csv`) se publica sin la parte, y borra la de una publicación
+    anterior: la tarjeta «Fiabilidad» no mezcla un PIT viejo con un backtest nuevo."""
+    folder = write_backtest_source(str(tmp_path / 'bt'))
+    writer = make_writer(tmp_path)
+    publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
+    assert writer.exists(bundle.path_backtest('es', 'calibration'))
+    os.remove(os.path.join(folder, 'calibration.csv'))
+    out = publish.publish_backtest('es', writer, source=str(tmp_path / 'bt'), prov=fake_prov)
+    assert out['n_cases'] == 4 and writer.exists(bundle.path_backtest('es', 'meta'))
+    assert not writer.exists(bundle.path_backtest('es', 'calibration'))
+    assert not writer.exists(bundle.path_backtest_csv('es', 'calibration'))
+
+
+def test_export_backtest_table_drops_the_quantile_columns():
+    """Las 38 columnas `q*` de los cuantiles (`q05`…`q95` y sus `_h`) no se publican: la web no las usa y el PIT
+    va en la parte `calibration`; los CSV de `backtest/results` las conservan."""
+    blocks = synthetic_backtest().blocks
+    data, table = publish.export_backtest_table(blocks)
+    assert {'q05', 'q50', 'q95', 'q50_h'} <= set(blocks.columns)
+    assert not any(column.startswith('q') for column in data['columns']) and list(table.columns) == data['columns']
+    assert 'p_majority_h' in data['columns'] and 'hi95' in data['columns'] and 'q05' in blocks.columns
+
+
+def test_export_backtest_meta_carries_the_calibration_parameters():
+    """`meta.params` lleva `error_model`, `drift_scale` y `tail_dof` del `run.json`; un `run.json` anterior a ellos
+    los lleva con el comportamiento de entonces (`polls`, sin escala, grados de la regresión)."""
+    tables = synthetic_backtest()
+    run = {**tables.run, 'error_model': 'average', 'drift_scale': 'auto', 'tail_dof': 5}
+    params = publish.export_backtest_meta('es', run, tables, 'x', fake_prov(), {})['params']
+    assert (params['error_model'], params['drift_scale'], params['tail_dof']) == ('average', 'auto', 5)
+    older = publish.export_backtest_meta('es', tables.run, tables, 'x', fake_prov(), {})['params']
+    assert (older['error_model'], older['drift_scale'], older['tail_dof']) == ('polls', None, None)
+    valid('backtest-meta', publish.export_backtest_meta('es', run, tables, 'x', fake_prov(), {'total': 1.0}), mode=None)
 
 
 def test_publish_backtest_without_results_is_nothing_to_publish(tmp_path):

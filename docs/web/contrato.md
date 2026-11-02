@@ -330,7 +330,8 @@ manifest y de `history.json`. Un ámbito sin `metrics.csv` queda `skipped` (`no 
 de verdad en código es `bundle.BACKTEST_PARTS`, `BACKTEST_SCHEMAS` y `BACKTEST_CSV` (`path_backtest`,
 `path_backtest_csv`) y `publish.publish_backtest`.
 
-Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Seis partes:
+Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema` `{nombre}@1`). Siete partes (la
+séptima, `calibration`, desde la enmienda 2026-11-02):
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
@@ -340,6 +341,7 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
 | `blocks` | `backtest-blocks@1` | `columns`, `rows` |
 | `shares` | `backtest-shares@1` | `columns`, `rows` |
 | `seats` | `backtest-seats@1` | `columns`, `rows` |
+| `calibration` | `backtest-calibration@1` | `columns`, `rows` |
 
 - Las cinco tablas son `metrics.csv` (una fila por elección y horizonte), `by_horizon.csv` (agregado por horizonte),
   `blocks.csv`, `shares.csv` y `seats.csv` de `backtest/results`; `columns` conserva el orden de las columnas del CSV
@@ -352,7 +354,22 @@ Mismo sobre que el resto (`scope` informado, `run_id` y `mode` a `null`, `schema
   `n_cases = len(metrics)` y `n_seats_cases` son los casos con escaños válidos (`seats_valid`).
 
 `meta.json` se escribe el último: un backtest sin él está incompleto. Los CSV (`csv/{nombre}.csv`) son los gemelos
-redondeados de las cinco tablas; `meta` no tiene gemelo.
+redondeados de las tablas; `meta` no tiene gemelo.
+
+Enmienda 2026-11-02 (método 15, la tarjeta «Fiabilidad»):
+
+- Parte `calibration`: las filas de `calibration.csv` (el PIT de cada celda del backtest; columnas `scope`,
+  `event_date`, `horizon`, `kind`, `mode`, `party`, `region_id`, `main`, `official`, `model` y `pit`, ver
+  `backtest/README.md`), con su gemelo `csv/calibration.csv`. `pit` se publica sin redondear (redondeado, una celda
+  podría cruzar el borde de una décima del histograma). Es opcional: una carpeta de resultados anterior al PIT, sin
+  `calibration.csv`, se publica sin ella, y la publicación borra la `calibration` (y su gemelo) que hubiera de una
+  publicación anterior del ámbito. La web la lee de todos los ámbitos para la tarjeta «Fiabilidad de las bandas» de
+  `/metodo/backtest`, que no aparece si ningún ámbito la tiene.
+- `meta.params` lleva siempre `error_model`, `drift_scale` y `tail_dof` cuando hay `run.json`; uno escrito antes de
+  ellos los lleva con el comportamiento de entonces: `"polls"`, `null` y `null`. Sin `run.json`, `params` sigue vacío.
+- Las columnas de los cuantiles (`q05`…`q95` y sus `_h`, 38 en total) que el backtest añade a `shares.csv`,
+  `seats.csv` y `blocks.csv` **no se publican**: salen de las partes `shares`, `seats` y `blocks`, de sus gemelos y
+  del corte `model` de cada elección (ver "Eventos"). Los CSV de `backtest/results` las conservan.
 
 ## Eventos
 

@@ -2421,7 +2421,8 @@ def backtest_site(api, fresh_app):
 def test_backtest_renders_the_backtest_tables_and_initial(backtest_site):
     status, _, body = call(backtest_site, '/metodo/backtest', query='scope=es')
     page = html(body)
-    assert status == 200 and '1,69' in page and page.count('/api/v1/backtest/es/') == 5
+    # los cinco CSV de siempre y el del PIT, en Descargas y en la tarjeta «Fiabilidad»
+    assert status == 200 and '1,69' in page and page.count('/api/v1/backtest/es/') == 7
     assert 'id="mae-chart"' in page and 'id="coverage-chart"' in page and 'aria-label=' in page
     data = initial(body)
     assert data['horizons'] == [6, 30] and data['mae']['model'][0] == 1.69 and data['coverage']['95'][0] == 0.957
@@ -2494,6 +2495,66 @@ def test_backtest_without_backtest_shows_a_notice(api):
     assert status == 200 and 'Backtest no publicado todavía' in page and 'initial-data' not in page
     assert '/dist/js/pages/metodo.js' in page and '<title>Demoscopio · Cuánto acierta el modelo</title>' in page
     assert 'action="/metodo/backtest"' in page and 'aria-current="page">Método</a>' in page
+
+
+FIABILIDAD_LEAD = ('Si las bandas dicen la verdad, el resultado cae en cada décima de la banda una de cada diez veces; '
+                   'las barras muestran cuántas veces cayó en cada una.')
+
+
+def test_reliability_context_pools_the_calibration_of_every_scope(api, fresh_app):
+    """El PIT de todos los ámbitos con backtest, por población (generales = `es`, autonómicas = el resto, provincias =
+    las celdas `prov_*`), en modo Elección salvo las provincias (sólo el nowcast, a 6-14 días), y la fiabilidad de
+    las mayorías; un ámbito sin la parte no cuenta."""
+    write_backtest(fresh_app.fs)
+    write_backtest(fresh_app.fs, scope='es-md')
+    reliability = pages.backtest.reliability_context(['es', 'es-md', 'es-an'])
+    assert reliability['mode'] == 'h' and list(reliability['pit']) == ['generales', 'autonomicas', 'provincias']
+    assert list(reliability['pit']['generales']) == ['6-14', '30-60']
+    assert list(reliability['pit']['provincias']) == ['6-14']
+    for population, groups in reliability['pit'].items():
+        for group, observed in groups.items():
+            assert len(observed) == 10 and abs(sum(observed) - 1) < 1e-3, (population, group)  # a 4 decimales
+    # 6 días, modo Elección, partidos principales (CUP fuera): PP y PSOE 0,14 y 0,49 en 2019, 0,93 y 0,24 en 2023; VOX
+    # 0,85 y 0,38: un tercio de cada elección en las décimas 1, 2, 3, 4, 8 y 9 (cada elección pesa lo mismo)
+    sixth = 1 / 6
+    expected = [0, sixth, sixth, sixth, sixth, 0, 0, 0, sixth, sixth]
+    assert reliability['pit']['generales']['6-14'] == pytest.approx(expected, abs=1e-4)
+    # las provincias de los dos ámbitos: cada elección es su ámbito y su fecha
+    assert reliability['n_events'] == {'generales': 2, 'autonomicas': 2, 'provincias': 4}
+    majority = reliability['majority']
+    assert majority and all(set(row) == {'p_mean', 'observed', 'n'} and row['n'] > 0 for row in majority)
+    assert sum(row['n'] for row in majority) == 10  # 2 ámbitos x 5 bloques con escaños válidos y probabilidad
+    assert pages.backtest.reliability_context(['es-an']) is None
+
+
+def test_backtest_page_shows_the_reliability_card_after_the_coverage(backtest_site):
+    status, _, body = call(backtest_site, '/metodo/backtest', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'id="fiabilidad"' in page and 'Fiabilidad de las bandas' in page
+    assert page.index('id="coverage"') < page.index('id="fiabilidad"') < page.index('id="seats"')
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert FIABILIDAD_LEAD in text
+    assert 'id="pit-generales-chart"' in page and 'id="pit-provincias-chart"' in page
+    assert 'id="pit-autonomicas-chart"' not in page and 'id="majority-reliability-chart"' in page
+    card = text[text.index('Fiabilidad de las bandas'):text.index('Escaños y mayorías')]
+    assert 'demasiado estrechas' in card and 'demasiado anchas' in card and 'reparto territorial' in card
+    assert 'No mide si el centro acierta, sólo si la anchura de la banda es la que debe' in card
+    assert '/api/v1/backtest/es/calibration?format=csv' in page
+    data = initial(body)['reliability']
+    assert data['mode'] == 'h' and set(data['pit']) == {'generales', 'provincias'} and data['majority']
+    assert_public_wording(page, '/metodo/backtest')
+
+
+def test_backtest_page_without_the_calibration_part_has_no_reliability_card(api, fresh_app):
+    """Un paquete anterior al PIT (sin la parte `calibration`) se pinta sin la tarjeta, sin error."""
+    write_backtest(fresh_app.fs)
+    writer = bundle.BundleWriter(fresh_app.fs)
+    writer.remove(bundle.path_backtest('es', 'calibration'))
+    writer.remove(bundle.path_backtest_csv('es', 'calibration'))
+    status, _, body = call(api, '/metodo/backtest', query='scope=es')
+    page = html(body)
+    assert status == 200 and 'id="fiabilidad"' not in page and 'id="coverage"' in page
+    assert 'reliability' not in initial(body) and '/api/v1/backtest/es/calibration' not in page
 
 
 def test_backtest_rows_are_ordered_and_projected():

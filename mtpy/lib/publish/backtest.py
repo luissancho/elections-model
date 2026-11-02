@@ -1,6 +1,7 @@
 """Converter of the model backtest tables and ``publish_backtest``."""
 import json
 import os
+import re
 import time
 import types
 from typing import Callable, Optional
@@ -13,16 +14,34 @@ from .common import NothingToPublish, provenance, REPO_ROOT, round_cols
 
 
 BACKTEST_FILES = {'metrics': 'metrics.csv', 'by-horizon': 'by_horizon.csv', 'blocks': 'blocks.csv',
-                  'shares': 'shares.csv', 'seats': 'seats.csv'}
+                  'shares': 'shares.csv', 'seats': 'seats.csv', 'calibration': 'calibration.csv'}
+
+
+# Tables a results folder may lack (written by a later version of the backtest): the part is then not published
+BACKTEST_OPTIONAL = ('calibration',)
 
 
 PROB_PREFIXES = ('cov_', 'brier', 'log_score', 'p_majority')
+
+
+# Columns published as they are, without rounding: a rounded PIT could cross the edge of a bin of the histogram
+EXACT_COLS = ('pit',)
+
+
+# The quantiles of the simulated distributions (`q05`…`q95` and their `_h`), kept in the CSVs of the results but not
+# published: the web does not read them, and the `calibration` part carries the PIT
+QUANTILE_COL = re.compile(r'^q\d{2}(_h)?$')
 
 
 BACKTEST_BOOL_COLS = ('seats_valid', 'majority', 'main')
 
 
 BACKTEST_RUN_EXCLUDED = ('run_at', 'commit', 'scope', 'events', 'horizons', 'note')
+
+
+# The parameters of the uncertainty of the backtest (method 15) in `meta.params`, with the value that reproduces a
+# `run.json` written before they existed (the behaviour of the code then)
+BACKTEST_RUN_DEFAULTS = {'error_model': 'polls', 'drift_scale': None, 'tail_dof': None}
 
 
 def backtest_source(scope: str, root: Optional[str] = None) -> tuple:
@@ -48,11 +67,12 @@ def backtest_source(scope: str, root: Optional[str] = None) -> tuple:
 def export_backtest_table(frame: pd.DataFrame) -> tuple:
     """Convert a table of the backtest into the ``columns``/``rows`` form of the ``backtest-*`` schemas.
 
-    A float column with some value, all of them integral and a name not starting with one of
-    ``PROB_PREFIXES`` becomes nullable integer (``Int64``: ``int`` in the JSON, ``null`` for NaN, no ``.0`` in
-    the CSV); the other float columns are rounded to ``PCT_DECIMALS`` (``PROB_DECIMALS`` those starting with
-    one of ``PROB_PREFIXES``), integer columns stay ``int`` and ``seats_valid``, ``majority`` and ``main`` are
-    nullable booleans (a missing value stays missing, never ``True``). Missing values are ``None`` in the rows.
+    The quantile columns (``QUANTILE_COL``) are dropped. A float column with some value, all of them integral and a
+    name not starting with one of ``PROB_PREFIXES`` becomes nullable integer (``Int64``: ``int`` in the JSON,
+    ``null`` for NaN, no ``.0`` in the CSV); the other float columns are rounded to ``PCT_DECIMALS``
+    (``PROB_DECIMALS`` those starting with one of ``PROB_PREFIXES``) except those of ``EXACT_COLS``, kept as they
+    are; integer columns stay ``int`` and ``seats_valid``, ``majority`` and ``main`` are nullable booleans (a missing
+    value stays missing, never ``True``). Missing values are ``None`` in the rows.
 
     Parameters
     ----------
@@ -62,10 +82,11 @@ def export_backtest_table(frame: pd.DataFrame) -> tuple:
     Returns
     -------
     tuple
-        ``(data, table)``: the data of the schema, ``{'columns', 'rows'}``, and the rounded table, its CSV twin.
+        ``(data, table)``: the data of the schema, ``{'columns', 'rows'}``, and the rounded table without the
+        quantiles, its CSV twin.
     """
-    table = frame.copy()
-    floats = [col for col in table.columns if pd.api.types.is_float_dtype(table[col])]
+    table = frame.drop(columns=[col for col in frame.columns if QUANTILE_COL.match(str(col))])
+    floats = [col for col in table.columns if pd.api.types.is_float_dtype(table[col]) and col not in EXACT_COLS]
     probs = [col for col in floats if str(col).startswith(PROB_PREFIXES)]
     for col in floats:
         values = table[col].dropna()
@@ -92,7 +113,7 @@ def export_backtest_meta(scope: str, run: dict, tables, source: str, prov: dict,
         Scope code.
     run : dict
         Content of the ``run.json`` of the backtest, or ``{}`` when there is none (then ``events`` and
-        ``horizons`` are the sorted values of ``tables.metrics``).
+        ``horizons`` are the sorted values of ``tables.metrics`` and ``params`` is empty).
     tables : object
         Has the ``metrics`` table (with ``event_date``, ``horizon`` and ``seats_valid``).
     source : str
@@ -106,12 +127,16 @@ def export_backtest_meta(scope: str, run: dict, tables, source: str, prov: dict,
     Returns
     -------
     dict
-        Data for the ``backtest-meta`` schema.
+        Data for the ``backtest-meta`` schema. ``params`` is the rest of ``run`` (``BACKTEST_RUN_EXCLUDED`` out), with
+        ``error_model``, ``drift_scale`` and ``tail_dof`` always present when there is a ``run.json``
+        (``BACKTEST_RUN_DEFAULTS`` for one written before them).
     """
     metrics = tables.metrics
     events = run.get('events', sorted(metrics['event_date'].astype(str).unique()))
     horizons = run.get('horizons', sorted(int(h) for h in metrics['horizon'].unique()))
     params = {key: value for key, value in run.items() if key not in BACKTEST_RUN_EXCLUDED}
+    if run:
+        params = {**BACKTEST_RUN_DEFAULTS, **params}
     return {'scope': scope, 'run_at': run.get('run_at'), 'commit': run.get('commit'), 'params': params,
             'events': list(events), 'horizons': list(horizons), 'n_cases': int(len(metrics)),
             'n_seats_cases': int(metrics['seats_valid'].sum()), 'source': source, 'published': prov,
@@ -122,10 +147,12 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
                      prov: Optional[Callable] = None) -> dict:
     """Convert the backtest tables of a scope into the bundle, overwriting the previous publication.
 
-    Reads ``metrics.csv``, ``by_horizon.csv``, ``blocks.csv``, ``shares.csv``, ``seats.csv`` and (when it
-    exists) ``run.json`` from ``backtest_source(scope, source)``. The five tables are written in the order of
-    ``bundle.BACKTEST_CSV`` (each JSON with its CSV twin) and ``meta`` last, so a failure halfway leaves the
-    previous ``meta.json`` in place. It reads no database; the manifest and the runs are not touched.
+    Reads ``metrics.csv``, ``by_horizon.csv``, ``blocks.csv``, ``shares.csv``, ``seats.csv`` and, when they
+    exist, ``calibration.csv`` and ``run.json`` from ``backtest_source(scope, source)``. The tables are written in
+    the order of ``bundle.BACKTEST_CSV`` (each JSON with its CSV twin) and ``meta`` last, so a failure halfway leaves
+    the previous ``meta.json`` in place. A folder without an optional table (``BACKTEST_OPTIONAL``: one written
+    before it existed) removes that part and its twin of a previous publication, so a new backtest never sits next to
+    an old PIT. It reads no database; the manifest and the runs are not touched.
 
     Parameters
     ----------
@@ -159,11 +186,17 @@ def publish_backtest(scope: str, writer: BundleWriter, source: Optional[str] = N
     run_file = results_path(folder, 'run.json')
     if fs.exists(run_file):
         run = json.loads(fs.read_bytes(run_file).decode('utf-8'))
-    frames = {part: fs.read_csv(results_path(folder, BACKTEST_FILES[part])) for part in bundle.BACKTEST_CSV}
+    frames = {part: fs.read_csv(results_path(folder, BACKTEST_FILES[part])) for part in bundle.BACKTEST_CSV
+              if part not in BACKTEST_OPTIONAL or fs.exists(results_path(folder, BACKTEST_FILES[part]))}
     tables = types.SimpleNamespace(run=run, **{part.replace('-', '_'): frame for part, frame in frames.items()})
     read = time.perf_counter() - start
 
     for part in bundle.BACKTEST_CSV:
+        if part not in frames:
+            for stale in (bundle.path_backtest(scope, part), bundle.path_backtest_csv(scope, part)):
+                if writer.exists(stale):
+                    writer.remove(stale)
+            continue
         data, frame = export_backtest_table(frames[part])
         writer.write_json(bundle.path_backtest(scope, part), bundle.BACKTEST_SCHEMAS[part], data, scope)
         writer.write_csv(bundle.path_backtest_csv(scope, part), frame)

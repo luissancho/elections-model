@@ -183,6 +183,40 @@
         </p>
         {% endcall %}
       {{ m.card_end() }}
+      {% if reliability %}
+      {% set population_names = {'generales': 'Generales', 'autonomicas': 'Autonómicas', 'provincias': 'Provincias'} %}
+      {{ m.card_start('fiabilidad', 'Fiabilidad de las bandas', 'Si las bandas dicen la verdad, el resultado cae en cada décima de la banda una de cada diez veces; las barras muestran cuántas veces cayó en cada una.') }}
+        {% for population, groups in reliability.pit.items() %}
+        {% set n = reliability.n_events[population] %}
+        <h3>{{ population_names[population] }} <span class="muted">· {{ n }} {{ 'elección' if n == 1 else 'elecciones' }}</span></h3>
+        <div class="chart" id="pit-{{ population }}-chart" role="img" aria-label="{{ population_names[population] }}: fracción de las elecciones en cada décima de la banda del modelo, por días de antelación, frente al 0,10 de una banda calibrada"></div>
+        {% endfor %}
+        {% if reliability.majority %}
+        <h3>Probabilidades de mayoría absoluta</h3>
+        <div class="chart" id="majority-reliability-chart" role="img" aria-label="Probabilidad de mayoría absoluta que daba el modelo frente a la frecuencia con que hubo mayoría, con la diagonal de unas probabilidades que dicen la verdad"></div>
+        {% endif %}
+        {% if reliability_csv %}
+        <p><a href="{{ reliability_csv }}">{{ reliability_csv_label }}</a> <span class="muted">CSV</span></p>
+        {% endif %}
+        {% call m.how() %}
+        <p>
+          Cada barra es la parte de las elecciones cuyo resultado cayó en esa décima de la banda del modelo, de la
+          cola baja (0-10) a la alta (90-100), en el modo Elección y para los partidos principales (en las provincias,
+          todos); cada elección pesa lo mismo, tenga los partidos que tenga. La línea discontinua marca 0,10, lo que
+          daría una banda calibrada. Si las barras son altas en los extremos, las bandas son demasiado estrechas: el
+          resultado se sale más de lo que dicen. Si son altas en el centro, son demasiado anchas. Si son planas, junto
+          a la línea, están calibradas. Debajo, la probabilidad de mayoría absoluta que daba el modelo a cada bloque
+          frente a la frecuencia con que la hubo: los puntos sobre la diagonal dicen la verdad.
+        </p>
+        <p>
+          No mide si el centro acierta, sólo si la anchura de la banda es la que debe: un modelo que falla el centro
+          con bandas anchas puede salir calibrado, y con pocas elecciones cada barra se mueve mucho. Las provincias
+          informan del reparto territorial del voto, el que decide los escaños, no del voto nacional, y sólo cuentan a
+          6-14 días: de ellas sólo hay modo Hoy, que tan cerca de la votación ya es una previsión de la elección.
+        </p>
+        {% endcall %}
+      {{ m.card_end() }}
+      {% endif %}
       {{ m.card_start('seats', 'Escaños y mayorías', 'El error de escaños de los partidos principales según los días que faltan para la elección y la calidad de la probabilidad de mayoría absoluta de cada bloque.') }}
         <div class="chart" id="seats-chart" role="img" aria-label="Error absoluto medio de escaños por horizonte"></div>
         <div class="table-wrap">

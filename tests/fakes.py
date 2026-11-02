@@ -232,8 +232,8 @@ BACKTEST_HORIZONS = [6, 30]
 def synthetic_backtest():
     """Tablas de `backtest/results` con la forma de las reales: 2 elecciones x 2 horizontes (4 casos; los escaños no
     son válidos en `2019-11-10 x 30`), los partidos `NAMES`, los bloques `vs`, decimales de sobra y algún NaN.
-    Devuelve `SimpleNamespace(run, metrics, by_horizon, blocks, shares, seats)`; `run` es el `run.json` del
-    repositorio con `events` y `horizons` sintéticos."""
+    Devuelve `SimpleNamespace(run, metrics, by_horizon, blocks, shares, seats, calibration)`; `run` es el `run.json`
+    del repositorio con `events` y `horizons` sintéticos."""
     run = {'run_at': '2026-10-07T13:35:53', 'commit': 'a59059f', 'scope': 'es', 'n_sim': 500, 'seed': 42, 'max_fc': 10,
            'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True, 'herding': True,
            'composition': None, 'regional_noise': True, 'min_events': None, 'events': list(BACKTEST_EVENTS),
@@ -260,7 +260,8 @@ def synthetic_backtest():
     blocks = pd.DataFrame([
         {'event_date': e, 'horizon': h, 'block': block, 'parties': '+'.join(parties), 'official_seats': official,
          'model_seats': model, 'p_majority': p, 'majority': official >= 176, 'brier': brier, 'log_score': log,
-         'seats_valid': ok, 'lo95': model - 11.0, 'hi95': model + 11.0}
+         'seats_valid': ok, 'lo95': model - 11.0, 'hi95': model + 11.0, 'q05': model - 9.0, 'q50': model,
+         'q95': model + 9.0, 'p_majority_h': p, 'q50_h': model}
         for (e, h), ok in zip(cases, valid)
         for block, parties, official, model, p, brier, log in (
             ('Derecha', ['PP', 'VOX'], 169, 171.0, 0.38412, 0.38412 ** 2, 0.4813),
@@ -281,12 +282,30 @@ def synthetic_backtest():
                          'hi50': mean + 3.1, 'lo95': mean - 9.5, 'hi95': mean + 9.5})
     seats = pd.DataFrame(rows)
     seats.loc[seats.index[-1], 'lo50'] = np.nan
-    return types.SimpleNamespace(run=run, metrics=metrics, by_horizon=by_horizon, blocks=blocks, shares=shares, seats=seats)
+    # the cells of the PIT (`calibration.csv`): national shares in both modes, seats only with valid seats, the
+    # provincial shares of the nowcast; a PIT of more decimals and a cell without result (NaN)
+    cells = []
+    for (e, h), ok in zip(cases, valid):
+        for party, official, model, pit in (('PP', 33.05, 32.41234, 0.61234), ('PSOE', 31.7, 30.98765, 0.27891)):
+            for mode in ('now', 'h'):
+                cells.append({'scope': 'es', 'event_date': e, 'horizon': h, 'kind': 'shares', 'mode': mode,
+                              'party': party, 'region_id': np.nan, 'main': True, 'official': official,
+                              'model': model, 'pit': pit})
+                if ok:
+                    cells.append({'scope': 'es', 'event_date': e, 'horizon': h, 'kind': 'seats', 'mode': mode,
+                                  'party': party, 'region_id': np.nan, 'main': True, 'official': 120.0,
+                                  'model': 118.0, 'pit': 0.45})
+        cells.append({'scope': 'es', 'event_date': e, 'horizon': h, 'kind': 'prov_shares', 'mode': 'now',
+                      'party': 'PP', 'region_id': 28.0, 'main': True, 'official': 30.1, 'model': 29.87654,
+                      'pit': np.nan if h == 30 else 0.05})
+    calibration = pd.DataFrame(cells)
+    return types.SimpleNamespace(run=run, metrics=metrics, by_horizon=by_horizon, blocks=blocks, shares=shares,
+                                 seats=seats, calibration=calibration)
 
 
 def write_backtest_source(root, scope='es'):
-    """Escribe en `backtest.results_dir(root, scope)` los cinco CSV de `synthetic_backtest` (`by_horizon.csv`
-    incluido) y su `run.json`; devuelve esa carpeta."""
+    """Escribe en `backtest.results_dir(root, scope)` los seis CSV de `synthetic_backtest` (`by_horizon.csv` y
+    `calibration.csv` incluidos) y su `run.json`; devuelve esa carpeta."""
     from mtpy.lib import backtest
     folder = backtest.results_dir(root, scope)
     os.makedirs(folder, exist_ok=True)

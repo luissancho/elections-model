@@ -67,7 +67,7 @@ ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
                     'poll-errors': 'poll-errors', 'error-data': 'error-data'}
 ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data')
-BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats')
+BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
 EVENT_PARTS = ('meta', 'pollsters', 'polls', 'cycle', 'results', 'model', 'series')

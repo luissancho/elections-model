@@ -1,12 +1,15 @@
 // Method pages: the controls; on the backtest subpage, the vote error, the coverage and the seat error of the
-// backtest by horizon; on the average subpage, the live examples: the weights of the polls (`charts/weights.js`)
-// and the bullseye of the last polls of one house before every election since a date (`charts/bullseye.js`), all
-// drawn from the data embedded by the server; on every page, the footnotes that unfold in place (`notes.js`). The
-// landing page has no data and draws nothing.
+// backtest by horizon and the reliability of its bands (the PIT by population and group of horizons, and the
+// probabilities of majority against how often there was one); on the average subpage, the live examples: the
+// weights of the polls (`charts/weights.js`) and the bullseye of the last polls of one house before every election
+// since a date (`charts/bullseye.js`), all drawn from the data embedded by the server; on every page, the footnotes
+// that unfold in place (`notes.js`). The landing page has no data and draws nothing.
 import {fmtNum} from '../format.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
+import {renderGrouped} from '../charts/grouped.js';
 import {renderLines} from '../charts/line.js';
+import {renderScatter} from '../charts/scatter.js';
 import {renderWeights} from '../charts/weights.js';
 import {wireNotes} from '../notes.js';
 import {wireBullseye} from './bullseye-wire.js';
@@ -24,6 +27,12 @@ const NATIONAL_SCOPE = 'es';
 const KIND_GENERAL = 'Generales';
 const KIND_REGIONAL = 'Autonómicas';
 const REGIONAL_COLOR = '#c0672e';
+// The reliability card: one colour per group of horizons (the server sends them in order, shortest first), the ten
+// tenths of the band and the share each one gets from a calibrated band.
+const PIT_COLORS = ['#1f4e79', '#e69f00', '#c0504d'];
+const PIT_BINS = 10;
+const PIT_EXPECTED = 1 / PIT_BINS;
+const PIT_TENTHS = Array.from({length: PIT_BINS}, (_, k) => `${10 * k}-${10 * (k + 1)}`);
 
 /** `[horizon, value]` pairs of an aligned list, without the missing values. */
 function pairs(horizons, values) {
@@ -51,6 +60,40 @@ export function wireWeightsField(el, example) {
       tryDraw(() => renderWeights(el, example, {field: value}), 'the weights example');
     }
   });
+}
+
+/**
+ * Draw the reliability card: per population, the ten bars of each group of horizons with the line of 0.10, and the
+ * probabilities of majority given by the model against the frequency observed, over the diagonal.
+ *
+ * @param {object} reliability the `reliability` of the page's initial data (`pit`, `majority`)
+ */
+function paintReliability({pit = {}, majority = []} = {}) {
+  Object.entries(pit).forEach(([population, groups]) => {
+    const el = document.getElementById(`pit-${population}-chart`);
+    const series = Object.entries(groups).map(([group, observed], index) => ({
+      name: `${group} días`, color: PIT_COLORS[index % PIT_COLORS.length], data: observed,
+      labels: observed.map(() => ''),  // thirty values would hide the bars: the tooltip gives them
+    }));
+    if (el && series.length) {
+      // from 0 (no room below it) to the next tenth above the highest bar, at least 0.2 so the line sits inside
+      tryDraw(() => renderGrouped(el, PIT_TENTHS, series, {
+        formatter: (x) => fmtNum(x, 2), references: [PIT_EXPECTED],
+        max: ({max}) => Math.max(2 * PIT_EXPECTED, Math.ceil(max * PIT_BINS) / PIT_BINS),
+      }), `the reliability of the ${population}`);
+    }
+  });
+
+  const majorityEl = document.getElementById('majority-reliability-chart');
+  if (majorityEl && majority.length) {
+    const rows = majority.map((row) => ({...row, name: `${row.n} ${row.n === 1 ? 'caso' : 'casos'}`}));
+    tryDraw(() => renderScatter(majorityEl, rows, {
+      x: 'p_mean', y: 'observed', name: 'name', diagonal: true,
+      axes: {xMin: 0, xMax: 1, yMin: 0, yMax: 1, interval: 0.2},
+      xFormatter: (v) => fmtNum(v, 2), yFormatter: (v) => fmtNum(v, 2),
+      xName: 'Probabilidad de mayoría que daba el modelo', xLabel: 'Probabilidad', yLabel: 'frecuencia',
+    }), 'the reliability of the majorities');
+  }
 }
 
 /**
@@ -89,7 +132,7 @@ function paint() {
     wireBullseye(data.bullseye, data.bullseye_blocks || []);
   }
 
-  const {horizons = [], mae = {}, coverage = {}, seats = {}} = data;
+  const {horizons = [], mae = {}, coverage = {}, seats = {}, reliability = null} = data;
 
   const maeEl = document.getElementById('mae-chart');
   if (maeEl && horizons.length) {
@@ -123,6 +166,10 @@ function paint() {
     if (series.length) {
       tryDraw(() => renderLines(seatsEl, series, {formatter: (x) => fmtNum(x, 1)}), 'the seat error by horizon');
     }
+  }
+
+  if (reliability) {
+    paintReliability(reliability);
   }
 }
 

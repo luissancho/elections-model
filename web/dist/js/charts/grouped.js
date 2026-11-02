@@ -1,5 +1,6 @@
 // Bars grouped (or stacked) by category, one series per measure, with the values written on the bars (the CERA
-// study: participation by origin, the change of the left vote, the additions per period, the gap to the last seat).
+// study: participation by origin, the change of the left vote, the additions per period, the gap to the last seat;
+// the method: the share of the results in each tenth of the band, against the line of a calibrated band).
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 
 // The stack of the stacked bars, shared by the series and by the helper series of the totals.
@@ -28,7 +29,9 @@ function labelPosition(value, horizontal, stacked) {
  * ECharts option of the grouped bars: one `bar` series per entry of `series` over the `categories`, side by side
  * (or in one stack per category with `stacked`), the value of each bar written on it, in the series' colour or,
  * for a data item `{value, color}`, in its own. With `totals` (stacked only), a text per category above its stack,
- * written by an empty helper series outside the legend.
+ * written by an empty helper series outside the legend. With `references`, labelled dashed lines across the chart
+ * at those values of the value axis, hung from another helper series without data and outside the legend (as in
+ * `renderLines`), so hiding a series never hides them.
  *
  * @param {string[]} categories the categories, in order (from the left, or from the top when horizontal)
  * @param {{name: string, data: Array, color?: string, labels?: string[], labelColor?: string, formatter?: Function}[]}
@@ -37,12 +40,12 @@ function labelPosition(value, horizontal, stacked) {
  *   colour outside, by default) and `formatter` the series' own number → text
  * @param {object} opts `formatter` (number → text of the labels and the tooltip), `axisFormatter` (value axis,
  *   `formatter` by default), `horizontal` (bars growing sideways), `stacked`, `max` (of the value axis), `totals`
- *   (text above each stack) and `legend` (`'top'` or `'bottom'`)
+ *   (text above each stack), `legend` (`'top'` or `'bottom'`) and `references` (values of the reference lines)
  * @returns {object} the option
  */
 export function groupedOption(categories, series, {
   formatter = String, axisFormatter = formatter, horizontal = false, stacked = false, max = null, totals = null,
-  legend = 'top',
+  legend = 'top', references = [],
 } = {}) {
   const bars = series.map((entry) => {
     const format = entry.formatter || formatter;
@@ -87,6 +90,23 @@ export function groupedOption(categories, series, {
       itemStyle: {color: 'transparent'},
       label: {show: true, color: THEME.textColor, fontSize: 12, fontWeight: 700},
       data: totals.map((text) => ({value: 0, label: {position: horizontal ? 'right' : 'top', formatter: text ?? ''}})),
+    });
+  }
+  if (references.length) {
+    bars.push({
+      type: 'line',
+      name: '',
+      data: [],
+      silent: true,
+      legendHoverLink: false,
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        lineStyle: {type: 'dashed', color: THEME.markColor},
+        // inside the grid, over the line at its end: past the end it would be cut by the edge of the chart
+        label: {position: 'insideEndTop', formatter: (params) => axisFormatter(params.value), color: THEME.textColor},
+        data: references.map((value) => (horizontal ? {xAxis: value} : {yAxis: value})),
+      },
     });
   }
 

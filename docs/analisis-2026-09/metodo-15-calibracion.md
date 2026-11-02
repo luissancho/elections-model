@@ -422,3 +422,49 @@ Límites de la prueba:
 - El log-score del voto sale de los cuantiles exportados, no de las simulaciones (ver «Cómo se midió»).
 
 Tiempos (1.000 simulaciones, en un Mac con cuatro ejecuciones a la vez): generales entre 3.082 y 3.200 s por candidato; autonómicas, 66 casos por candidato, entre 843 y 1.105 s por ámbito (entre 4.653 y 4.960 s en total).
+
+## La correlación entre partidos (`composition`)
+
+<!-- Sección del paso 15 de la especificación (Task 6 del plan): la reevaluación de `composition='auto'` (M7) con la
+escala y las colas nuevas. El backtest estaba en marcha el 02-11-2026; sus tablas y su decisión se añaden aquí cuando
+termine, con el formato de las secciones anteriores. Nada de lo que sigue depende de sus cifras. -->
+
+*Pendiente: el backtest de este paso no había terminado al cerrar el resto del documento (02-11-2026).*
+
+## La tarjeta «Fiabilidad» y la parte `calibration` (02-11-2026)
+
+Cambios:
+- Parte nueva `calibration` del backtest de cada ámbito (`bundle.BACKTEST_PARTS`, esquema `backtest-calibration@1`, gemelo `csv/calibration.csv`): las filas de `calibration.csv` tal cual, con el PIT sin redondear (redondeado, una celda podría cruzar el borde de una décima). Una carpeta de resultados anterior al PIT, sin `calibration.csv`, se publica sin la parte y borra la de una publicación anterior (`publish.backtest.BACKTEST_OPTIONAL`).
+- Las 38 columnas `q*` de los cuantiles (`q05`…`q95` y sus `_h`) salen de las partes publicadas `shares`, `seats` y `blocks` (y del corte `model` de cada elección), en `export_backtest_table`: la web no las lee y el PIT va en su parte. Los CSV de `backtest/results` las conservan.
+- `meta.params` del backtest lleva siempre `error_model`, `drift_scale` y `tail_dof` cuando hay `run.json`; uno escrito antes de ellos los lleva con el comportamiento de entonces, `'polls'`, `None` y `None` (`BACKTEST_RUN_DEFAULTS`).
+- `pages.backtest.reliability_context`: lee las partes `calibration` y `blocks` de todos los ámbitos con backtest publicado, pone la población (`generales` para `es`, `autonomicas` para los demás; las celdas `prov_*`, `provincias`) y resume con `summarize_calibration` y `majority_reliability`.
+- Tarjeta «Fiabilidad de las bandas» en `/metodo/backtest`, tras la de cobertura: un gráfico por población con las diez barras de cada grupo de horizontes y la línea de 0,10, el diagrama de fiabilidad de las mayorías con la diagonal, el enlace al CSV y «Cómo leerlo». Sin la parte en ningún ámbito (paquetes anteriores), no hay tarjeta. Las barras con línea de referencia son la opción `references` de `groupedOption` (`web/dist/js/charts/grouped.js`), como la de `renderLines`.
+
+Qué mide la tarjeta:
+- **Generales y autonómicas:** el voto de los partidos principales en modo Elección (la ejecución con horizonte, `mode == 'h'`), en los tres grupos de horizontes (6-14, 30-60 y 90-180 días). Cada elección pesa lo mismo dentro de su población, tenga los partidos que tenga.
+- **Provincias:** el voto de cada partido en cada provincia, de todos los ámbitos. El backtest sólo tiene el nowcast de las provincias, que es una previsión de la elección sólo cerca de ella, así que entran sólo a 6-14 días.
+- **Mayorías:** la probabilidad de mayoría absoluta de cada bloque en modo Elección frente a la frecuencia con que la hubo, en las cajas de `majority_reliability` con casos, juntando todos los ámbitos.
+
+Tests: `tests/test_bundle_unit.py` (la parte y su esquema), `tests/test_publish_unit.py` (la parte con su CSV, la carpeta sin `calibration.csv`, los `q*` fuera, `meta.params`), `tests/test_pages.py` (`reliability_context`, la tarjeta con el fixture `backtest-calibration.json`, sin ella sin la parte, redacción pública) y `tests/test_js_charts.py` (barras con referencia). Comprobada en Chrome sin cabeza sobre el paquete de pruebas: la tarjeta se dibuja sin errores de consola, y sin la parte no aparece.
+
+## Decisión sobre los valores por defecto (02-11-2026)
+
+**No entra ninguno.** El criterio 17 no se cumplió en ninguno de los tres pasos medidos: el error del propio promedio empeora coberturas y PIT, la escala de la deriva empeora las mayorías, y las colas fijas empeoran las mayorías y pasan del nominal donde ya cubrían. Los valores por defecto siguen siendo los de antes del método 15 y nada cambia en el modelo vivo: ni `backtest/results/` se reejecuta ni el job `compute` tiene que rellenar `average_errors` para el modelo publicado (sólo la lee `error_model='average'`). El paso 15 (`composition`) estaba en marcha al decidir; si su resultado cambiara esta decisión, se anotará en su sección.
+
+Las cuatro piezas quedan como opciones, con el valor de hoy por defecto:
+
+| Opción | Valores | Por defecto | Dónde se elige |
+|---|---|---|---|
+| `error_model` | `'polls'` (el error de los sondeos sueltos), `'average'` (el del propio promedio, tabla `average_errors`) | `'polls'` | `Simulator(error_model=...)`; job `backtest` `"error_model"`; `--error-model` |
+| `drift_scale` | `None` (1), `'auto'` (ajustada sobre `average_errors`), un número positivo | `None` | `Simulator(drift_scale=...)`; job `backtest` `"drift_scale"`; `--drift-scale` |
+| `tail_dof` | `None` (los grados de la regresión, `nobs − 2`), un entero de al menos 2 | `None` | `Simulator(tail_dof=...)`; job `backtest` `"tail_dof"`; `--tail-dof` |
+| `composition` | `None` (ruido independiente), `'auto'`, una razón en (0, 1] | `None` | `Simulator(composition=...)`; job `backtest` `"composition"` |
+
+**Revisión: tras el 29-N**, con la elección general como caso nuevo del backtest. La decisión es de Luis, que puede cambiarla en un commit suyo; para adoptar una configuración hacen falta, por este orden, el backtest completo de las 17 comunidades con ella, `backtest/results/` reejecutado, el job `compute` con el paso `average_errors` (si usa `'average'` o `drift_scale='auto'`) y las constantes de `tests/integration/test_model.py`.
+
+## Salvedades
+
+- **Pocas generales.** El backtest de `es` tiene cinco elecciones (28 casos); cada barra del PIT de las generales son cinco elecciones, y una sola elección rara la mueve. Las autonómicas tienen más casos, pero la escala, las colas y la correlación (pasos 13 a 15) se midieron sobre cinco de los diecisiete ámbitos.
+- **El estimador del error del promedio no ve las autonómicas.** Se ajusta sobre las filas del ámbito estimador (`es` para todos, la regla de M11), así que el `e` de una autonómica sale de las generales; y sólo ve partidos principales, por lo que los regionales de `es` (CiU y PNV en 1993-2004, siete filas) quedan casi sin error.
+- **`s` neto.** `e_net² = max(e² − s², 0)` quita del error del promedio la parte que ya pone `s`; cuando `s` es mayor que el error, el neto es cero y la fila empuja el estimador hacia abajo.
+- **Unidades.** Los dos estimadores de error predicen el error **absoluto** medio y el Simulator lo usa como desviación típica: para una normal, la media del valor absoluto es 0,8 veces la desviación típica, y con las colas del error del promedio la raíz del cuadrado medio es 1,3-1,5 veces la media absoluta. Es la causa de que `'average'` no cubra, y cualquier nueva prueba del error del promedio tiene que empezar por esa escala.

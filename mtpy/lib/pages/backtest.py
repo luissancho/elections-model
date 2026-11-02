@@ -9,6 +9,8 @@ from datetime import datetime
 from statistics import median
 from typing import Optional
 
+import pandas as pd
+
 from ..webapi import site
 from .casas import PART_READERS, block_bar_colors, effects_table, election_label
 from .common import api_url, bundle_part, common_context
@@ -198,6 +200,24 @@ CSV_LABELS = (
     ('shares', 'Voto por partido, elección y horizonte'),
     ('seats', 'Escaños por partido, elección y horizonte'),
 )
+# The download of the PIT, listed only when the scope publishes it (a backtest of before the PIT has no such part)
+CALIBRATION_CSV_LABEL = 'Posición del resultado en la banda (PIT) por celda'
+
+# The scope of the general elections: its cells are the population «generales», those of any other scope
+# «autonomicas»; the provincial cells of every scope are «provincias» (``backtest.summarize_calibration``)
+NATIONAL_SCOPE = 'es'
+POPULATIONS = ('generales', 'autonomicas', 'provincias')
+# The mode of the reliability card: Elección, the horizon run (``mode == 'h'`` in ``calibration.csv``), the honest
+# comparison at many days
+RELIABILITY_MODE = 'h'
+# What the card measures in each population: ``(kind, mode, groups)``, the vote of the main parties in mode Elección
+# at every group of horizons; the provinces have only the nowcast (the backtest runs no horizon run of them), which is
+# a forecast of the election only close to it, so they enter only at 6-14 days
+RELIABILITY_CELLS = {'generales': ('shares', RELIABILITY_MODE, None),
+                     'autonomicas': ('shares', RELIABILITY_MODE, None),
+                     'provincias': ('prov_shares', 'now', ('6-14',))}
+# Decimals of the fractions of the card
+RELIABILITY_DECIMALS = 4
 
 
 def backtest_part(scope: str, name: str) -> Optional[dict]:
@@ -262,6 +282,90 @@ def case_rows(rows: list) -> list:
     return sorted(by_horizon, key=lambda row: row['event_date'], reverse=True)
 
 
+def part_table(part: dict) -> pd.DataFrame:
+    """
+    Table of a ``columns``/``rows`` part of the backtest.
+
+    Parameters
+    ----------
+    part : dict
+        The data of the part.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per row of the part, with its columns in order.
+    """
+    return pd.DataFrame(part.get('rows') or [], columns=part.get('columns'))
+
+
+def reliability_context(scopes: list) -> Optional[dict]:
+    """
+    Reliability of the bands of the model in the published backtest of every scope, for the card «Fiabilidad».
+
+    Reads the ``calibration`` and ``blocks`` parts of each scope (one read of the bundle per part, cached under the TTL
+    afterwards); a scope without a published ``calibration`` (no backtest, or one of before the PIT) is left out.
+
+    Parameters
+    ----------
+    scopes : list of str
+        Scope codes to pool.
+
+    Returns
+    -------
+    dict or None
+        ``None`` when no scope carries the part. Otherwise ``pit`` (``{population: {group: [observed × 10]}}``, the
+        fraction of the elections in each tenth of the band, ``backtest.summarize_calibration`` of the cells of
+        ``RELIABILITY_CELLS``, the populations in the order of ``POPULATIONS`` and only those with cells), ``majority``
+        (``[{'p_mean', 'observed', 'n'}]``, the non-empty bins of ``backtest.majority_reliability`` of the blocks of
+        every pooled scope in mode Elección), ``n_events`` (``{population: elections}``, the most of any group),
+        ``mode`` (``RELIABILITY_MODE``) and ``scopes`` (the codes pooled, in the given order).
+    """
+    from ..backtest import majority_reliability, summarize_calibration  # lazy: the backtest library loads the model
+
+    wanted = [(scope, part) for scope in scopes for part in ('calibration', 'blocks')]
+    with ThreadPoolExecutor(max_workers=PART_READERS) as pool:
+        parts = dict(zip(wanted, pool.map(lambda key: backtest_part(*key), wanted)))
+
+    cells, blocks, pooled = [], [], []
+    for scope in scopes:
+        calibration = parts[(scope, 'calibration')]
+        if not calibration or not calibration.get('rows'):
+            continue
+        population = POPULATIONS[0] if scope == NATIONAL_SCOPE else POPULATIONS[1]
+        cells.append(part_table(calibration).assign(scope=scope, population=population))
+        pooled.append(scope)
+        if parts[(scope, 'blocks')]:
+            blocks.append(part_table(parts[(scope, 'blocks')]))
+
+    if not cells:
+        return None
+
+    summary = summarize_calibration(pd.concat(cells, ignore_index=True))
+    pit, n_events = {}, {}
+    for population in POPULATIONS:
+        kind, mode, groups = RELIABILITY_CELLS[population]
+        rows = summary.loc[summary['population'].eq(population) & summary['kind'].eq(kind) & summary['mode'].eq(mode)]
+        if groups:
+            rows = rows.loc[rows['group'].isin(groups)]
+        if rows.empty:
+            continue
+        # the summary keeps the groups in the order of ``HORIZON_GROUPS`` and the bins ascending
+        pit[population] = {group: [round(float(value), RELIABILITY_DECIMALS) for value in frame['observed']]
+                           for group, frame in rows.groupby('group', sort=False)}
+        n_events[population] = int(rows['n_events'].max())
+
+    majority = []
+    if blocks:
+        bins = majority_reliability(pd.concat(blocks, ignore_index=True))
+        bins = bins.loc[bins['mode'].eq(RELIABILITY_MODE) & bins['n'].gt(0)]
+        majority = [{'p_mean': round(float(row.p_mean), RELIABILITY_DECIMALS),
+                     'observed': round(float(row.observed), RELIABILITY_DECIMALS), 'n': int(row.n)}
+                    for row in bins.itertuples()]
+
+    return {'pit': pit, 'majority': majority, 'n_events': n_events, 'mode': RELIABILITY_MODE, 'scopes': pooled}
+
+
 def backtest_context(state: dict, active: str = '/metodo') -> dict:
     """
     Template context of the backtest subpage of the method.
@@ -283,7 +387,11 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         ``horizon_rows``, ``case_rows``, ``block_rows``, ``csv_links`` and ``initial`` (``state``,
         ``horizons`` and, aligned with them, the ``mae``, ``coverage`` and ``seats`` series; ``seats`` holds
         ``mae``, the mean absolute seat error, the same in both modes since the headline is the central
-        allocation, so the horizon run's ``mae_seats_h`` stays in the table rows and the CSV only).
+        allocation, so the horizon run's ``mae_seats_h`` stays in the table rows and the CSV only), ``reliability``
+        (``reliability_context`` of every catalogue scope, ``None`` when none publishes the PIT; when it is not,
+        also in ``initial``) and ``reliability_csv`` (the link to the CSV of the PIT of the scope, ``None`` when the
+        scope does not publish it; with it, ``reliability_csv_label``, and the link is also the last of
+        ``csv_links``).
 
     Raises
     ------
@@ -328,5 +436,16 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         'seats': {'mae': series('mae_seats')},
         **bullseye,
     }
+    reliability = reliability_context([row['code'] for row in site().scopes()['scopes']])
+    context['reliability'] = reliability
+    context['reliability_csv'] = None
+
+    if reliability:
+        context['initial']['reliability'] = reliability
+
+        if scope in reliability['scopes']:
+            context['reliability_csv'] = api_url(scope, 'calibration', fmt='csv', kind='backtest')
+            context['reliability_csv_label'] = CALIBRATION_CSV_LABEL
+            context['csv_links'].append({'label': CALIBRATION_CSV_LABEL, 'href': context['reliability_csv']})
 
     return context
