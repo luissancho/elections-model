@@ -487,8 +487,6 @@ class Kernel(object):
         kbw = bw * np.ones(p.shape[0])
         kbws = np.empty((n_iter + 1, p.shape[0]))
         kbws[0, :] = kbw
-        # Cap of the bandwidth of each point (`bw_cap` times the pilot), applied after each iteration
-        kbw_max = self.bw_cap * np.asarray(bw, dtype=float) if self.bw_cap is not None else None
 
         n = 0
         for n in np.arange(1, n_iter + 1):
@@ -496,8 +494,6 @@ class Kernel(object):
 
             gm = gmean(pdf)
             kbws[n, :] = kbws[n - 1, :] * np.sqrt(gm / pdf)
-            if kbw_max is not None:
-                kbws[n, :] = np.minimum(kbws[n, :], kbw_max)
 
             delta = np.sqrt(np.mean(np.square(kbws[n] - kbws[n - 1])))
 
@@ -509,6 +505,11 @@ class Kernel(object):
 
         if self.verbose > 1:
             print('Iterations performed: {}'.format(n))
+
+        # Cap of the final bandwidth of each point at `bw_cap` times the pilot, once, after the last iteration: only
+        # the points beyond the cap (the edges, where the data thins out) change; the iterations stay uncapped
+        if self.bw_cap is not None:
+            kbw = np.minimum(kbw, self.bw_cap * np.asarray(bw, dtype=float))
 
         if ret_iter:
             return kbw, kbws[:n + 1]
