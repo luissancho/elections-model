@@ -5,7 +5,8 @@ import pytest
 
 from mtpy.lib import tuning
 from mtpy.lib.forecaster import Forecaster
-from mtpy.lib.tuning import (autocorrelation, cycle_cuts, default_config, future_polls, predict_polls, roughness,
+from mtpy.lib.tuning import (GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, apply_setting, autocorrelation,
+                             coordinate_descent, cycle_cuts, default_config, future_polls, predict_polls, roughness,
                              run_cut, score_polls)
 
 
@@ -295,3 +296,105 @@ def test_run_cut_leaves_out_and_counts_the_cells_of_a_party_without_average(monk
     out = run_cut('es', EVENT, CUT, config=default_config(), horizons=(7,))
     assert out['polls']['party'].tolist() == ['PP'] and out['meta']['n_unpredicted'] == 1
     assert out['scores'][0]['rmse'] == pytest.approx(1.)
+
+
+def test_apply_setting_puts_each_parameter_where_it_lives():
+    c = apply_setting(default_config(), 'bw', ('fixed', 45))
+    assert c['reg_params'] == {'bw_type': 'fixed', 'bw': 45} and c['label'] == "bw=('fixed', 45)"
+    c = apply_setting(default_config(), 'bw', ('adaptive', 2))
+    assert c['reg_params']['bw_type'] == 'adaptive' and c['reg_params']['bw_kwargs']['n_iter'] == 2
+    assert apply_setting(default_config(), 'wspan', 7)['weights'] == {'wspan': 7}
+    assert apply_setting(default_config(), 'tau', 0.16)['he_params'] == {'tau': 0.16}
+    assert apply_setting(default_config(), 'he_n_iter', 1)['he_params'] == {'n_iter': 1}
+    assert apply_setting(default_config(), 'herd_prior', 10.)['disp_params'] == {'herd_prior': 10.}
+    with pytest.raises(ValueError):
+        apply_setting(default_config(), 'bw_cap', 0.5)
+    with pytest.raises(ValueError):
+        apply_setting(default_config(), 'wspan', 0)
+
+
+def test_coordinate_descent_picks_the_best_allowed_value_per_key_and_records_every_trial():
+    def evaluate(c):
+        a, b = c.get('a', 0), c.get('b', 0)
+        return {'rmse7': (a - 2) ** 2 + (b - 20) ** 2 / 100, 'rmse28': 1.0 if b != 30 else 2.0,
+                'roughness': 0.02 if a != 3 else 0.05}
+
+    def setter(c, k, v):
+        return {**c, k: v}
+
+    best, trials = coordinate_descent(evaluate, {'a': 0, 'b': 0}, {'a': [0, 1, 2, 3], 'b': [0, 20, 30]}, ['a', 'b'],
+                                      rounds=2, setter=setter)
+    assert best['a'] == 2 and best['b'] == 20
+    assert set(trials.columns) >= {'round', 'key', 'value', 'rmse7', 'rmse28', 'roughness', 'chosen'}
+    assert trials.loc[(trials.key == 'a') & (trials.value == 3), 'chosen'].eq(False).all()   # roughness 2.5x start
+    assert trials.loc[(trials.key == 'b') & (trials.value == 30), 'chosen'].eq(False).all()  # k = 28 worse than 2 %
+
+
+def test_grid_and_orders_are_the_fixed_search_space():
+    assert GRID == {
+        'bw': [('fixed', 'isj'), ('fixed', 30), ('fixed', 45), ('fixed', 60), ('fixed', 90), ('adaptive', 1),
+               ('adaptive', 2), ('adaptive', 3)],
+        'bw_cap': [None, 1.0, 1.5, 2.0], 'poly_deg': [0, 1], 'max_fc': [0, 3, 10], 'wspan': [2, 4, 7, 14],
+        'tau': [0.04, 0.08, 0.16], 'he_n_iter': [1, 3], 'herd_prior': [2., 5., 10.]
+    }
+    assert ORDER_SMOOTHING == ['bw', 'bw_cap', 'poly_deg', 'max_fc', 'wspan']
+    assert ORDER_SHRINKAGE == ['tau', 'he_n_iter', 'herd_prior']
+
+
+def test_apply_setting_maps_the_remaining_keys_and_never_mutates_its_input():
+    start = apply_setting(default_config(), 'bw', ('fixed', 45))
+    snapshot = {k: (dict(v) if isinstance(v, dict) else v) for k, v in start.items()}
+    c = apply_setting(start, 'bw', ('adaptive', 3))
+    assert c['reg_params'] == {'bw_type': 'adaptive', 'bw_kwargs': {'n_iter': 3, 'min_delta': None}}
+    assert apply_setting(default_config(), 'bw', ('fixed', 'isj'))['reg_params'] == {'bw_type': 'fixed', 'bw': 'isj'}
+    c = apply_setting(start, 'bw_cap', 1.5)
+    assert c['reg_params'] == {'bw_type': 'fixed', 'bw': 45, 'bw_cap': 1.5} and c['label'] == 'bw_cap=1.5'
+    assert apply_setting(start, 'bw_cap', None)['reg_params']['bw_cap'] is None
+    assert apply_setting(start, 'poly_deg', 0)['reg_params']['poly_deg'] == 0
+    assert apply_setting(default_config(), 'max_fc', 3)['max_fc'] == 3
+    assert start == snapshot and start['reg_params'] == {'bw_type': 'fixed', 'bw': 45}
+    assert apply_setting(start, 'bw_cap', 1.0)['reg_params']['bw_cap'] == 1.0   # x1 of the pilot is in the grid
+    with pytest.raises(ValueError):
+        apply_setting(default_config(), 'tau', 0.5)
+    with pytest.raises(ValueError):
+        apply_setting(default_config(), 'ol_max', 3)
+
+
+def test_coordinate_descent_evaluates_each_distinct_configuration_once():
+    calls = []
+
+    def evaluate(c):
+        calls.append(dict(c))
+        return {'rmse7': abs(c['a'] - 1) + abs(c['b'] - 1), 'rmse28': 1.0, 'roughness': 0.02}
+
+    def setter(c, k, v):
+        return {**c, k: v, 'label': f'{k}={v}'}
+
+    best, trials = coordinate_descent(evaluate, {'a': 0, 'b': 0, 'label': 'start'}, {'a': [0, 1], 'b': [0, 1]},
+                                      ['a', 'b'], rounds=2, setter=setter)
+    assert (best['a'], best['b']) == (1, 1)
+    distinct = {(c['a'], c['b']) for c in calls}
+    assert len(calls) == len(distinct) == 4   # (0, 0), (1, 0), (1, 1), (0, 1): the label never makes a new one
+    assert len(trials) == 1 + 2 * 2 * 2       # the start row plus every candidate of every key and round
+    start_row = trials.loc[trials['round'] == 0]
+    assert len(start_row) == 1 and start_row['chosen'].all()
+    memoised = trials.loc[(trials['round'] == 2) & (trials.key == 'a') & (trials.value == 1)]
+    assert memoised['rmse7'].iloc[0] == pytest.approx(0.) and memoised['chosen'].iloc[0]
+
+
+def test_coordinate_descent_keeps_the_current_value_on_ties_and_when_no_candidate_passes():
+    def evaluate(c):
+        rmse7 = {0: 1.0, 1: 1.0, 2: 0.5}[c['a']]
+        rmse28 = 5.0 if c['b'] == 1 else 1.0
+        return {'rmse7': rmse7 if c['b'] == 0 else 0.1, 'rmse28': rmse28, 'roughness': 0.02}
+
+    def setter(c, k, v):
+        return {**c, k: v}
+
+    best, trials = coordinate_descent(evaluate, {'a': 1, 'b': 0}, {'a': [0, 1], 'b': [1]}, ['a', 'b'], rounds=1,
+                                      setter=setter)
+    assert best == {'a': 1, 'b': 0}   # a: 0 ties with the current 1; b: the only candidate fails the k = 28 guard
+    assert trials.loc[(trials.key == 'a') & (trials.value == 1), 'chosen'].iloc[0]
+    assert not trials.loc[(trials.key == 'a') & (trials.value == 0), 'chosen'].iloc[0]
+    assert not trials.loc[trials.key == 'b', 'chosen'].any()
+    assert trials['value'].dtype == object

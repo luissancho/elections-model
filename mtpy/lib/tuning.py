@@ -6,10 +6,12 @@ average read at the date of each future poll, plus the house effect of its polls
 poll published. This module holds the pure functions of that harness and its orchestration: the pure functions
 read no database; `future_polls` and `run_cut` read it (read-only).
 """
+import copy
+import json
 import time
 import warnings
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -24,6 +26,29 @@ from .utils import group_results
 PREDICTION_COLUMNS = ['date', 'pollster_id', 'pollster', 'sample_size', 'party', 'published', 'predicted', 'residual']
 # Columns of a future poll that identify and describe it, besides its published figures (see `published_blocks`)
 POLL_COLUMNS = ['date', 'pollster_id', 'sponsor_id', 'pollster', 'sample_size']
+
+# Search space of the average (spec A5 after the review), fixed before the first run: `bw` is the bandwidth as
+# (`bw_type`, `bw` for a fixed one or the iterations of an adaptive one), `bw_cap` the cap of the adaptive bandwidth
+# in pilots, `poly_deg` the degree of the local fit, `max_fc` the prolongation, `wspan` the over-publication window,
+# `tau` and `he_n_iter` the prior deviation and backfitting iterations of the house effects and `herd_prior` the
+# shrinkage of the herding effect
+GRID = {
+    'bw': [('fixed', 'isj'), ('fixed', 30), ('fixed', 45), ('fixed', 60), ('fixed', 90), ('adaptive', 1),
+           ('adaptive', 2), ('adaptive', 3)],
+    'bw_cap': [None, 1.0, 1.5, 2.0],
+    'poly_deg': [0, 1],
+    'max_fc': [0, 3, 10],
+    'wspan': [2, 4, 7, 14],
+    'tau': [0.04, 0.08, 0.16],
+    'he_n_iter': [1, 3],
+    'herd_prior': [2., 5., 10.]
+}
+
+# Order of the keys in each phase of the search: the smoothing first, then the shrinkages
+ORDER_SMOOTHING = ['bw', 'bw_cap', 'poly_deg', 'max_fc', 'wspan']
+ORDER_SHRINKAGE = ['tau', 'he_n_iter', 'herd_prior']
+
+TRIAL_COLUMNS = ['round', 'key', 'value', 'label', 'rmse7', 'rmse28', 'roughness', 'chosen']
 
 
 def predict_polls(fc: Forecaster, polls: pd.DataFrame, names: list[str]) -> pd.DataFrame:
@@ -455,3 +480,174 @@ def run_cut(
         'roughness': roughness(fc.forecast, names),
         'seconds': time.time() - t0
     }
+
+
+def apply_setting(config: dict[str, Any], key: str, value: Any) -> dict[str, Any]:
+    """
+    Copy of a configuration with one value of the grid applied where the parameter lives.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration of the average (see `default_config`). Not modified.
+    key : str
+        Key of `GRID`: `bw` goes to `reg_params` as `bw_type` plus `bw` (fixed) or `bw_kwargs['n_iter']` (adaptive,
+        the pilot `bw` keeps its default), replacing any previous bandwidth; `bw_cap` and `poly_deg` go to
+        `reg_params`; `wspan` sets `weights` to `{'wspan': value}`; `tau` and `he_n_iter` (as `n_iter`) go to
+        `he_params`; `herd_prior` to `disp_params`; `max_fc` to the configuration itself.
+    value : Any
+        One of the values of `GRID[key]`.
+
+    Returns
+    -------
+    dict
+        A deep copy of `config` with the setting applied and `label` = `'{key}={value}'`.
+
+    Raises
+    ------
+    ValueError
+        If `key` is not in `GRID`, `value` is not in `GRID[key]`, `bw_cap` is below 1 (other than None) or
+        `wspan` is not positive.
+    """
+    if key not in GRID:
+        raise ValueError(f'Unknown tuning parameter: {key}')
+    if value not in GRID[key]:
+        raise ValueError(f'Value {value!r} of {key} is not in the grid {GRID[key]}')
+    if key == 'bw_cap' and value is not None and value < 1:
+        raise ValueError(f'bw_cap must be None or at least 1, got {value!r}')
+    if key == 'wspan' and value <= 0:
+        raise ValueError(f'wspan must be positive, got {value!r}')
+
+    out = copy.deepcopy(config)
+    if key == 'bw':
+        bw_type, setting = value
+        reg_params = {k: v for k, v in (out.get('reg_params') or {}).items() if k not in ('bw_type', 'bw', 'bw_kwargs')}
+        if bw_type == 'fixed':
+            reg_params.update({'bw_type': 'fixed', 'bw': setting})
+        else:
+            reg_params.update({'bw_type': 'adaptive', 'bw_kwargs': {'n_iter': setting, 'min_delta': None}})
+        out['reg_params'] = reg_params
+    elif key in ('bw_cap', 'poly_deg'):
+        out['reg_params'] = {**(out.get('reg_params') or {}), key: value}
+    elif key == 'wspan':
+        out['weights'] = {'wspan': value}
+    elif key in ('tau', 'he_n_iter'):
+        out['he_params'] = {**(out.get('he_params') or {}), ('n_iter' if key == 'he_n_iter' else key): value}
+    elif key == 'herd_prior':
+        out['disp_params'] = {**(out.get('disp_params') or {}), key: value}
+    else:
+        out[key] = value
+    out['label'] = f'{key}={value}'
+
+    return out
+
+
+def config_key(config: dict[str, Any]) -> str:
+    """
+    Canonical key of a configuration, for the memo of the search: the configuration without its `label`.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration.
+
+    Returns
+    -------
+    str
+        JSON dump with sorted keys (values that are not JSON by their `repr`), so the order in which the settings
+        were applied and the label naming the last of them do not make a new configuration.
+    """
+    return json.dumps({k: v for k, v in config.items() if k != 'label'}, sort_keys=True, default=repr)
+
+
+def coordinate_descent(
+    evaluate: Callable[[dict], dict],
+    start: dict[str, Any],
+    grid: dict[str, list],
+    order: list[str],
+    rounds: int = 2,
+    tolerance: float = 0.02,
+    roughness_ratio: float = 1.5,
+    setter: Callable[[dict, str, Any], dict] = apply_setting
+) -> tuple[dict[str, Any], pd.DataFrame]:
+    """
+    Coordinate descent over a grid: one key at a time, keeping the best allowed value of each.
+
+    The start is evaluated first (the roughness reference). In each round and for each key of `order`, every value
+    of the key is applied to the configuration in force and evaluated; the value kept is the one with the lowest
+    `rmse7` among those with `rmse28` at most `(1 + tolerance)` times the `rmse28` of the configuration in force
+    and `roughness` at most `roughness_ratio` times the roughness of the start. Only a strictly lower `rmse7` than
+    the configuration in force replaces it (ties keep the current value, and so does a key with no candidate
+    passing the guards); between candidates tied on `rmse7` the first in the grid wins. Every configuration is
+    evaluated once: a repeated one (the configuration in force, or one reached again in a later round) takes its
+    memoised figures. No key is skipped here (for example `bw_cap` under a fixed bandwidth): pruning the grid is
+    the caller's business.
+
+    Parameters
+    ----------
+    evaluate : callable
+        `evaluate(config)` returns a dict with `rmse7`, `rmse28` and `roughness`.
+    start : dict
+        Starting configuration. Not modified.
+    grid : dict
+        Values to try of each key.
+    order : list of str
+        Keys of `grid` in the order they are tried in each round.
+    rounds : int, optional
+        Number of rounds over `order`.
+    tolerance : float, optional
+        Largest relative worsening of `rmse28` allowed against the configuration in force.
+    roughness_ratio : float, optional
+        Largest roughness allowed, in times the roughness of the start.
+    setter : callable, optional
+        `setter(config, key, value)` returns a new configuration with the value applied (`apply_setting`).
+
+    Returns
+    -------
+    tuple of (dict, pandas.DataFrame)
+        The final configuration and the table of the trials (`round`, `key`, `value` as given in the grid,
+        `label`, `rmse7`, `rmse28`, `roughness`, `chosen`): a row of round 0 for the start and one per value of
+        each key in each round, with `chosen` True for the values that leave the configuration kept for that key in
+        that round (the current one included when it is in the grid).
+    """
+    memo: dict[str, dict] = {}
+
+    def figures(config: dict[str, Any]) -> dict:
+        """Figures of a configuration, evaluated once."""
+        key = config_key(config)
+        if key not in memo:
+            result = evaluate(config)
+            memo[key] = {name: float(result[name]) for name in ('rmse7', 'rmse28', 'roughness')}
+        return memo[key]
+
+    current = start
+    current_figures = figures(current)
+    roughness_ref = current_figures['roughness']
+    rows = [{'round': 0, 'key': None, 'value': None, 'label': current.get('label'), **current_figures,
+             'chosen': True}]
+
+    for round_number in range(1, rounds + 1):
+        for key in order:
+            rmse28_limit = (1 + tolerance) * current_figures['rmse28']
+            roughness_limit = roughness_ratio * roughness_ref
+            candidates = []
+            for value in grid[key]:
+                config = setter(current, key, value)
+                candidates.append((value, config, figures(config)))
+
+            best, best_figures = current, current_figures
+            for value, config, values in candidates:
+                allowed = values['rmse28'] <= rmse28_limit and values['roughness'] <= roughness_limit
+                if allowed and values['rmse7'] < best_figures['rmse7']:
+                    best, best_figures = config, values
+
+            kept = config_key(best)
+            for value, config, values in candidates:
+                rows.append({'round': round_number, 'key': key, 'value': value, 'label': config.get('label'),
+                             **values, 'chosen': config_key(config) == kept})
+            current, current_figures = best, best_figures
+
+    trials = pd.DataFrame(rows, columns=TRIAL_COLUMNS)
+    trials['value'] = pd.Series([row['value'] for row in rows], dtype=object)
+
+    return current, trials
