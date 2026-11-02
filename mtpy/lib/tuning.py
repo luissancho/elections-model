@@ -48,6 +48,15 @@ GRID = {
 ORDER_SMOOTHING = ['bw', 'bw_cap', 'poly_deg', 'max_fc', 'wspan']
 ORDER_SHRINKAGE = ['tau', 'he_n_iter', 'herd_prior']
 
+# Live default of each key of the grid, what the model uses when the configuration leaves it implicit:
+# `Forecaster.set_reg_params` (adaptive bandwidth with 3 iterations, no cap, degree 1), `fit_forecast` (`max_fc`
+# 10), `Computer` (`wspan` 4), `set_he_params` (`tau` 0.08, `n_iter` 3) and `set_disp_params` (`herd_prior` =
+# `n_prior` = 5)
+DEFAULTS = {
+    'bw': ('adaptive', 3), 'bw_cap': None, 'poly_deg': 1, 'max_fc': 10, 'wspan': 4, 'tau': 0.08, 'he_n_iter': 3,
+    'herd_prior': 5.
+}
+
 TRIAL_COLUMNS = ['round', 'key', 'value', 'label', 'rmse7', 'rmse28', 'roughness', 'chosen']
 
 
@@ -542,6 +551,73 @@ def apply_setting(config: dict[str, Any], key: str, value: Any) -> dict[str, Any
     return out
 
 
+def is_implicit(config: dict[str, Any], key: str) -> bool:
+    """
+    Whether a key of the grid is left implicit in a configuration (the model then uses its live default).
+
+    Parameters
+    ----------
+    config : dict
+        Configuration of the average.
+    key : str
+        Key of `GRID`.
+
+    Returns
+    -------
+    bool
+        True when the configuration does not set the key: `bw` when `reg_params` has none of `bw_type`, `bw` and
+        `bw_kwargs`; `wspan` when `weights` is None; `herd_prior` when `disp_params` has neither `herd_prior` nor
+        `n_prior` (with `n_prior` set, the implicit `herd_prior` follows it and is not a default to fill); the
+        other keys when they are absent from the dict where they live.
+    """
+    reg_params = config.get('reg_params') or {}
+    he_params = config.get('he_params') or {}
+    disp_params = config.get('disp_params') or {}
+    if key == 'bw':
+        return not any(name in reg_params for name in ('bw_type', 'bw', 'bw_kwargs'))
+    if key in ('bw_cap', 'poly_deg'):
+        return key not in reg_params
+    if key == 'wspan':
+        return config.get('weights') is None
+    if key in ('tau', 'he_n_iter'):
+        return ('n_iter' if key == 'he_n_iter' else key) not in he_params
+    if key == 'herd_prior':
+        return 'herd_prior' not in disp_params and 'n_prior' not in disp_params
+    return key not in config
+
+
+def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    Copy of a configuration with every key of the grid it leaves implicit set to its live default.
+
+    The model is the same, but the configuration is written as the search writes its candidates, so a candidate
+    equal to the live default is recognised as the configuration in force (see `coordinate_descent`). Normalising
+    `wspan` turns `weights` None (the weights stored with the polls) into `{'wspan': 4}`, the weights recomputed
+    at the cut with the live window: the baseline of the search.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration of the average (see `default_config`). Not modified.
+
+    Returns
+    -------
+    dict
+        A copy with `apply_setting(config, key, DEFAULTS[key])` for every implicit key (`is_implicit`); explicit
+        values and the `label` are kept as they are.
+    """
+    out = copy.deepcopy(config)
+    for key in GRID:
+        if is_implicit(out, key):
+            out = apply_setting(out, key, DEFAULTS[key])
+    if 'label' in config:
+        out['label'] = config['label']
+    else:
+        out.pop('label', None)
+
+    return out
+
+
 def config_key(config: dict[str, Any]) -> str:
     """
     Canonical key of a configuration, for the memo of the search: the configuration without its `label`.
@@ -568,7 +644,8 @@ def coordinate_descent(
     rounds: int = 2,
     tolerance: float = 0.02,
     roughness_ratio: float = 1.5,
-    setter: Callable[[dict, str, Any], dict] = apply_setting
+    setter: Callable[[dict, str, Any], dict] = apply_setting,
+    normalize: Optional[Callable[[dict], dict]] = None
 ) -> tuple[dict[str, Any], pd.DataFrame]:
     """
     Coordinate descent over a grid: one key at a time, keeping the best allowed value of each.
@@ -580,8 +657,10 @@ def coordinate_descent(
     the configuration in force replaces it (ties keep the current value, and so does a key with no candidate
     passing the guards); between candidates tied on `rmse7` the first in the grid wins. Every configuration is
     evaluated once: a repeated one (the configuration in force, or one reached again in a later round) takes its
-    memoised figures. No key is skipped here (for example `bw_cap` under a fixed bandwidth): pruning the grid is
-    the caller's business.
+    memoised figures. The memo compares configurations as written, so a start that leaves a parameter implicit
+    must be normalised (`normalize`, `normalize_config` for the configurations of the average) for a candidate
+    equal to the live default to be recognised as the configuration in force. No key is skipped here (for
+    example `bw_cap` under a fixed bandwidth): pruning the grid is the caller's business.
 
     Parameters
     ----------
@@ -601,6 +680,9 @@ def coordinate_descent(
         Largest roughness allowed, in times the roughness of the start.
     setter : callable, optional
         `setter(config, key, value)` returns a new configuration with the value applied (`apply_setting`).
+    normalize : callable, optional
+        `normalize(config)` applied to `start` before its evaluation (`normalize_config` for the configurations
+        of the average; note it turns `weights` None into `{'wspan': 4}`). None leaves `start` as it is.
 
     Returns
     -------
@@ -620,7 +702,7 @@ def coordinate_descent(
             memo[key] = {name: float(result[name]) for name in ('rmse7', 'rmse28', 'roughness')}
         return memo[key]
 
-    current = start
+    current = normalize(start) if normalize is not None else start
     current_figures = figures(current)
     roughness_ref = current_figures['roughness']
     rows = [{'round': 0, 'key': None, 'value': None, 'label': current.get('label'), **current_figures,

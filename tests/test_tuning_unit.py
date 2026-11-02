@@ -5,9 +5,9 @@ import pytest
 
 from mtpy.lib import tuning
 from mtpy.lib.forecaster import Forecaster
-from mtpy.lib.tuning import (GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, apply_setting, autocorrelation,
-                             coordinate_descent, cycle_cuts, default_config, future_polls, predict_polls, roughness,
-                             run_cut, score_polls)
+from mtpy.lib.tuning import (DEFAULTS, GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, apply_setting, autocorrelation,
+                             coordinate_descent, cycle_cuts, default_config, future_polls, normalize_config,
+                             predict_polls, roughness, run_cut, score_polls)
 
 
 def _fake_fitted_forecaster(effects=None):
@@ -398,3 +398,75 @@ def test_coordinate_descent_keeps_the_current_value_on_ties_and_when_no_candidat
     assert not trials.loc[(trials.key == 'a') & (trials.value == 0), 'chosen'].iloc[0]
     assert not trials.loc[trials.key == 'b', 'chosen'].any()
     assert trials['value'].dtype == object
+
+
+def test_normalize_config_fills_the_implicit_defaults_and_keeps_explicit_values_and_label():
+    start = default_config()
+    out = normalize_config(start)
+    assert start == default_config()   # input untouched
+    assert out['reg_params'] == {'bw_type': 'adaptive', 'bw_kwargs': {'n_iter': 3, 'min_delta': None},
+                                 'bw_cap': None, 'poly_deg': 1}
+    assert out['he_params'] == {'tau': 0.08, 'n_iter': 3} and out['disp_params'] == {'herd_prior': 5.}
+    assert out['weights'] == {'wspan': 4} and out['max_fc'] == 10 and out['label'] == 'default'
+    assert all(DEFAULTS[key] in GRID[key] for key in GRID) and set(DEFAULTS) == set(GRID)
+    explicit = apply_setting(apply_setting(default_config(), 'bw', ('fixed', 45)), 'tau', 0.16)
+    explicit['disp_params'] = {'n_prior': 7.}
+    out = normalize_config(explicit)
+    assert out['reg_params']['bw_type'] == 'fixed' and out['reg_params']['bw'] == 45
+    assert out['he_params'] == {'tau': 0.16, 'n_iter': 3}
+    assert out['disp_params'] == {'n_prior': 7.}   # herd_prior follows the explicit n_prior: left implicit
+    assert out['label'] == 'tau=0.16'
+
+
+def test_coordinate_descent_from_the_normalised_defaults_evaluates_the_live_model_once():
+    calls = []
+
+    def evaluate(c):
+        calls.append(c)
+        return {'rmse7': 1.0, 'rmse28': 1.0, 'roughness': 0.02}
+
+    grid = {key: [DEFAULTS[key]] for key in GRID}
+    order = ORDER_SMOOTHING + ORDER_SHRINKAGE
+    for start, normalize in ((normalize_config(default_config()), None), (default_config(), normalize_config)):
+        calls.clear()
+        best, trials = coordinate_descent(evaluate, start, grid, order, rounds=1, normalize=normalize)
+        assert len(calls) == 1
+        assert trials['chosen'].all() and len(trials) == 1 + len(order)
+        assert normalize_config(best) == {**normalize_config(default_config()), 'label': best['label']}
+
+
+def test_coordinate_descent_rejects_the_best_rmse7_candidate_when_only_its_roughness_is_too_high():
+    def evaluate(c):
+        figures = {0: (3.0, 0.02), 1: (1.0, 0.04), 2: (2.0, 0.025)}[c['a']]   # (rmse7, roughness)
+        return {'rmse7': figures[0], 'rmse28': 1.0, 'roughness': figures[1]}
+
+    def setter(c, k, v):
+        return {**c, k: v}
+
+    best, trials = coordinate_descent(evaluate, {'a': 0}, {'a': [0, 1, 2]}, ['a'], rounds=1, setter=setter)
+    assert best['a'] == 2   # a = 1 has the best rmse7 but twice the roughness of the start
+    assert not trials.loc[(trials.key == 'a') & (trials.value == 1), 'chosen'].iloc[0]
+    best, _ = coordinate_descent(evaluate, {'a': 0}, {'a': [0, 1, 2]}, ['a'], rounds=1, roughness_ratio=1e9,
+                                 setter=setter)
+    assert best['a'] == 1   # without the roughness guard it would win
+
+
+def test_coordinate_descent_guards_k28_against_the_current_and_roughness_against_the_start():
+    figures = {   # (a, b): (rmse7, rmse28, roughness)
+        (0, 0): (3.0, 1.0, 1.0), (1, 0): (2.0, 1.015, 1.4),
+        (1, 1): (1.0, 1.03, 1.2),   # k = 28 within 2 % of the current (1.015) but not of the start (1.0)
+        (1, 2): (0.5, 1.0, 1.6)     # roughness within 1.5 x the current (1.4) but not the start (1.0)
+    }
+
+    def evaluate(c):
+        rmse7, rmse28, rough = figures[(c['a'], c['b'])]
+        return {'rmse7': rmse7, 'rmse28': rmse28, 'roughness': rough}
+
+    def setter(c, k, v):
+        return {**c, k: v}
+
+    best, trials = coordinate_descent(evaluate, {'a': 0, 'b': 0}, {'a': [0, 1], 'b': [0, 1, 2]}, ['a', 'b'],
+                                      rounds=1, setter=setter)
+    # a k = 28 guard against the start would keep b = 0; a roughness guard against the current would take b = 2
+    assert (best['a'], best['b']) == (1, 1)
+    assert trials.loc[(trials.key == 'b') & (trials.value == 1), 'chosen'].iloc[0]
