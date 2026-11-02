@@ -703,6 +703,8 @@ Las cuatro piezas quedan como opciones, con el valor de hoy por defecto:
 
 **Revisión: tras el 29-N**, con la elección general como caso nuevo del backtest. La decisión es de Luis, que puede cambiarla en un commit suyo; para adoptar una configuración hacen falta, por este orden, el backtest completo de las 17 comunidades con ella, `backtest/results/` reejecutado, el job `compute` con el paso `average_errors` (si usa `'average'` o `drift_scale='auto'`) y las constantes de `tests/integration/test_model.py`.
 
+Estado de la referencia commiteada, mientras tanto: la de `es` (`backtest/results/`, commit `45aaa8b`, el primer paso de este método) es anterior a los tres parámetros. Trae `calibration.csv`, pero su `meta.csv` no tiene las columnas `error_model`, `drift_scale`, `drift_scale_rows` ni `tail_dof` y su `run.json` no tiene las claves, así que `meta.params` las toma de `BACKTEST_RUN_DEFAULTS` (`'polls'`, `None`, `None`), que son exactamente la configuración que la produjo. Las 17 carpetas autonómicas no traen `calibration.csv` (ni las claves) hasta un `backtest` con `"scopes":"all"` en ECS, `backtest push` y `publish backtest`; hasta entonces la tarjeta «Fiabilidad de las bandas» sólo enseña las generales y las provincias de `es`.
+
 ## Salvedades
 
 - **Pocas generales.** El backtest de `es` tiene cinco elecciones (28 casos); cada barra del PIT de las generales son cinco elecciones, y una sola elección rara la mueve. Las autonómicas tienen más casos, pero la escala, las colas y la correlación (pasos 13 a 15) se midieron sobre cinco de los diecisiete ámbitos.

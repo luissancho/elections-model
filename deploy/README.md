@@ -725,14 +725,16 @@ catálogos, por ejemplo con un CSV de la calidad mal formado).
 El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
 en "Publicar".
 
-El paso `average_errors` (método 15, desde 2026-11-01) rellena la tabla `elections.average_errors`: para cada elección
-destacada del ámbito y cada horizonte del backtest, el error del promedio (modelo menos resultado) de cada partido
-principal, con su nivel y el error estándar `s` de la regresión local, ajustado sin simular con la configuración del
-`Simulator` (`Computer.compute_average_errors`). Va el último, después de los efectos de casa, porque el promedio lee
-su prior, y sólo con escritura (con `dry_run` no corre). Es lento: unos 37 minutos en `es` (14 generales desde 1982
-por seis horizontes). Sólo la leen `error_model='average'` y `drift_scale='auto'` del `Simulator` y del backtest; el
-modelo publicado no la usa mientras sus valores por defecto sean `'polls'` y `None` (decisión del 02-11-2026, ver
-`docs/analisis-2026-09/metodo-15-calibracion.md`), así que hasta entonces su tiempo es el único efecto del paso.
+El paso `average_errors` (método 15, desde 2026-11-01) rellena la tabla `elections.average_errors` (la crea al guardar
+por primera vez, `save_average_errors_data` con `create(replace=False)`, así que no hay paso de migración que lanzar
+antes): para cada elección destacada del ámbito y cada horizonte del backtest, el error del promedio (modelo menos
+resultado) de cada partido principal, con su nivel y el error estándar `s` de la regresión local, ajustado sin simular
+con la configuración del `Simulator` (`Computer.compute_average_errors`). Va el último, después de los efectos de casa,
+porque el promedio lee su prior, y sólo con escritura (con `dry_run` no corre). Es lento: unos 37 minutos en `es` (14
+generales desde 1982 por seis horizontes). Sólo la leen `error_model='average'` y `drift_scale='auto'` del `Simulator` y
+del backtest; el modelo publicado no la usa mientras sus valores por defecto sean `'polls'` y `None` (decisión del
+02-11-2026, ver `docs/analisis-2026-09/metodo-15-calibracion.md`), así que hasta entonces su tiempo es el único efecto
+del paso.
 
 En Docker: `RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'`.
 
@@ -751,14 +753,19 @@ opciones (ahí
 ### Qué hace y cuándo lanzarlo
 
 - Ámbito a ámbito evalúa fuera de muestra cada caso (elección × horizonte): congela el modelo en la fecha de corte,
-  ajusta el promedio, simula el nowcast y la ejecución a horizonte y compara con el resultado oficial. Escribe las
-  nueve tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon` y, desde
-  2026-11-01, `calibration`, el PIT de cada celda) y `run.json`
-  (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT` en Docker— y estado de los sondeos en la base),
-  sobrescribiendo la ejecución anterior del ámbito. `series.csv` (la serie diaria del promedio del horizonte más corto
-  de cada elección, desde 2026-10-19) no va en git (la copia del repositorio la excluye), pero vive con las demás
-  tablas en el sistema de ficheros de la app, así que `publish event` ya no depende de la máquina que corrió el
-  backtest.
+  ajusta el promedio, simula el nowcast y la ejecución a horizonte y compara con el resultado oficial. Escribe las nueve
+  tablas (`shares`, `seats`, `blocks`, `provinces`, `series`, `meta`, `metrics`, `by_horizon` y, desde 2026-11-01,
+  `calibration`, el PIT de cada celda) y `run.json` (parámetros, elecciones y horizontes evaluados, commit —`GIT_COMMIT`
+  en Docker— y estado de los sondeos en la base), sobrescribiendo la ejecución anterior del ámbito. La copia del
+  repositorio no está al día con esto: la referencia de `es` en `backtest/results` es anterior a `error_model`,
+  `drift_scale` y `tail_dof` (commit `45aaa8b`; su `meta.csv` no tiene esas columnas ni `drift_scale_rows`, y su
+  `run.json` no tiene las claves, así que el `meta.params` de `publish backtest` sale de `BACKTEST_RUN_DEFAULTS`:
+  `polls`, `None`, `None`, justo la configuración con que corrió), y las carpetas de los autonómicos no traen
+  `calibration.csv` (ni las claves) hasta un `backtest` con `"scopes":"all"` en ECS, `backtest push` y `publish
+  backtest`; hasta entonces la tarjeta «Fiabilidad de las bandas» de `/metodo/backtest` sólo enseña las generales y las
+  provincias de `es`. `series.csv` (la serie diaria del promedio del horizonte más corto de cada elección, desde
+  2026-10-19) no va en git (la copia del repositorio la excluye), pero vive con las demás tablas en el sistema de
+  ficheros de la app, así que `publish event` ya no depende de la máquina que corrió el backtest.
 - Dónde escribe: sin `out`, en el sistema de ficheros de la app. Con `S3_BUCKET` fijo es S3, tanto en una tarea de
   ECS como en el portátil con `deploy/elections.env`; sin él, `files/` en local. `out` sigue siendo una carpeta
   local: `"out":"backtest/results"` escribe la copia del repositorio y `"out":"backtest/results_comp"` una variante.
