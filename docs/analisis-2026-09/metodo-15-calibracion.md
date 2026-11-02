@@ -425,11 +425,248 @@ Tiempos (1.000 simulaciones, en un Mac con cuatro ejecuciones a la vez): general
 
 ## La correlación entre partidos (`composition`)
 
-<!-- Sección del paso 15 de la especificación (Task 6 del plan): la reevaluación de `composition='auto'` (M7) con la
-escala y las colas nuevas. El backtest estaba en marcha el 02-11-2026; sus tablas y su decisión se añaden aquí cuando
-termine, con el formato de las secciones anteriores. Nada de lo que sigue depende de sus cifras. -->
+Cambios: ninguno en el código. `Simulator(composition=None | 'auto' | r)`, `Computer.get_composition_ratio` y `--composition auto` existen desde el método 7 (`docs/analisis-2026-09/metodo-7-composicion.md`). Este paso vuelve a medir la opción sobre la escala y las colas de las dos secciones anteriores.
 
-*Pendiente: el backtest de este paso no había terminado al cerrar el resto del documento (02-11-2026).*
+Tests: ninguno nuevo; los de M7 siguen en `tests/test_simulator_unit.py`, `tests/test_computer_unit.py` y `tests/integration/test_backtest.py`.
+
+**Qué cambia.** Con `composition='auto'`, los partidos nacionales (`regional = 0`) se sortean juntos, con una correlación común negativa `ρ`. `ρ` sale de una sola razón, `r = Var(Σ error) / Σ Var(error)`, estimada con el sesgo del sector por partido de las elecciones anteriores (`Computer.get_composition_ratio`), así que en el backtest está fuera de muestra. La cópula gaussiana conserva la distribución de cada partido. Lo que cambia es la estructura del sorteo: la suma de todos los nacionales se contrae hacia `√r` y las diferencias entre partidos se ensanchan. Los regionales siguen sorteándose por separado.
+
+**Por qué se repite.** La sección de la escala dejó una hipótesis. La deriva de cada partido se sortea por separado, así que con bandas más anchas la suma de un bloque se abre y su probabilidad de mayoría se va hacia el medio. La composición del ruido debía evitar que la deriva de un bloque creciera como la de partidos independientes. El método 7 dejó la composición desactivada con un criterio fijado de antemano: **entra si no empeora el CRPS de escaños, el Brier ni el log-score de las mayorías a 6-14 días.** Aquí se juzga con ese criterio y con el 17.
+
+**Cómo se midió.** Sobre las dos configuraciones de las secciones anteriores, cada una frente a sí misma sin composición:
+- (a) `error_model='average'`, `drift_scale='auto'` y `tail_dof=5`: de `backtest/results_dof5` a `backtest/results_comp2`;
+- (b) lo mismo con los grados de la regresión (`tail_dof=None`): de `backtest/results_avg_scale2` a `backtest/results_comp2_none`.
+
+No se repitió ningún «antes». 1.000 simulaciones, semilla 42, y la tabla `average_errors` leída del mismo CSV calculado en memoria (sigue vacía en la base). Las generales son los 28 casos de `es` (22 con escaños válidos; 2015 no tiene ninguno). Las autonómicas son los cinco ámbitos fijos de las secciones anteriores: Madrid, Andalucía, Cataluña, Comunitat Valenciana y Galicia, 11 elecciones y 66 casos. `meta.csv` confirma la configuración de cada caso: `error_model` `average` en todos, la misma escala de la deriva (entre 2,22 y 4,00 en `es`, entre 2,22 y 2,49 en los ámbitos), los grados pedidos, y `composition_ratio` 1 con `ρ` 0 en los dos «antes». La composición entra en los dos sorteos, el nowcast y el de horizonte, así que se tabulan los dos modos.
+
+**La razón ajustada.** `r` y `ρ` son las mismas en las dos configuraciones, caso a caso: `r` no depende de `e`, de la deriva ni de los grados, y `ρ` es la del último sorteo del nowcast (`composition_rho` de `meta.csv`), que no lleva deriva ni depende de los grados. `ρ` depende de los márgenes de cada partido y cambia algo con el horizonte.
+
+| Elección simulada | 2015-12 | 2016-06 | 2019-04 | 2019-11 | 2023-07 |
+|---|---|---|---|---|---|
+| `r` | 0,140 | 0,082 | 0,109 | 0,207 | 0,160 |
+| `ρ` | −0,18 | −0,24 | −0,18 a −0,19 | −0,16 a −0,17 | −0,29 |
+
+Cada autonómica toma la `r` de `es` con las generales anteriores a ella, como la escala: entre 0,109 y 0,223 en los cinco ámbitos. Su `ρ` va de −0,105 a −0,291 (la mediana por ámbito, de −0,12 en Cataluña a −0,20 en Galicia). El resto recortado (`clip_rate`, la fracción de sorteos en que los partidos suman más de 100) baja en todos los ámbitos: en `es`, de 0,29 a 0,11 de media en (a) y de 0,26 a 0,07 en (b); en las autonómicas, de entre 0,17 y 0,30 por ámbito a entre 0,02 y 0,16.
+
+### (a) Sobre `tail_dof=5`
+
+Coberturas de los partidos principales, media por grupo de horizontes ponderada por casos, antes → después. Con horizonte:
+
+| Grupo (casos) | Voto 50 % | Voto 80 % | Voto 95 % | Escaños 50 % | Escaños 80 % | Escaños 95 % |
+|---|---|---|---|---|---|---|
+| Generales 6-14 (10) | 0,54 → 0,54 | 0,77 → 0,77 | 0,98 → 0,98 | 0,63 → 0,60 | 0,93 → 0,93 | 1,00 → 1,00 |
+| Generales 30-60 (10) | 0,45 → 0,45 | 0,75 → 0,75 | 0,86 → 0,86 | 0,44 → 0,47 | 0,83 → 0,83 | 0,93 → 0,96 |
+| Generales 90-180 (8) | 0,41 → 0,38 | 0,75 → 0,72 | 0,95 → 0,95 | 0,44 → 0,44 | 0,78 → 0,78 | 0,88 → 0,94 |
+| Autonómicas 6-14 (22) | 0,47 → 0,50 | 0,76 → 0,76 | 0,94 → 0,93 | 0,61 → 0,65 | 0,77 → 0,80 | 0,93 → 0,92 |
+| Autonómicas 30-60 (22) | 0,38 → 0,39 | 0,66 → 0,67 | 0,88 → 0,88 | 0,53 → 0,54 | 0,72 → 0,75 | 0,89 → 0,92 |
+| Autonómicas 90-180 (22) | 0,37 → 0,40 | 0,67 → 0,68 | 0,84 → 0,86 | 0,50 → 0,50 | 0,75 → 0,79 | 0,87 → 0,92 |
+
+Nowcast:
+
+| Grupo (casos) | Voto 50 % | Voto 80 % | Voto 95 % | Escaños 50 % | Escaños 80 % | Escaños 95 % |
+|---|---|---|---|---|---|---|
+| Generales 6-14 (10) | 0,52 → 0,52 | 0,72 → 0,72 | 0,98 → 0,96 | 0,57 → 0,54 | 0,78 → 0,81 | 1,00 → 1,00 |
+| Generales 30-60 (10) | 0,37 → 0,38 | 0,68 → 0,68 | 0,84 → 0,84 | 0,31 → 0,35 | 0,75 → 0,75 | 0,90 → 0,90 |
+| Generales 90-180 (8) | 0,30 → 0,30 | 0,58 → 0,58 | 0,80 → 0,80 | 0,27 → 0,27 | 0,53 → 0,57 | 0,81 → 0,87 |
+| Autonómicas 6-14 (22) | 0,47 → 0,49 | 0,75 → 0,74 | 0,92 → 0,93 | 0,58 → 0,62 | 0,76 → 0,76 | 0,92 → 0,92 |
+| Autonómicas 30-60 (22) | 0,32 → 0,32 | 0,58 → 0,59 | 0,80 → 0,83 | 0,45 → 0,48 | 0,66 → 0,66 | 0,83 → 0,84 |
+| Autonómicas 90-180 (22) | 0,30 → 0,30 | 0,51 → 0,51 | 0,73 → 0,75 | 0,38 → 0,41 | 0,60 → 0,63 | 0,79 → 0,82 |
+
+Escaños de los bloques (`blocks.csv`: la Izquierda y la Derecha de cada caso con escaños válidos). Cobertura con horizonte y ancho medio de la banda del 80 %, en escaños:
+
+| Grupo (filas) | Bloque 50 %, horizonte | Bloque 80 %, horizonte | Bloque 95 %, horizonte | Ancho 80 %, horizonte | Ancho 80 %, nowcast |
+|---|---|---|---|---|---|
+| Generales 6-14 (16) | 0,62 → 0,81 | 1,00 → 1,00 | 1,00 → 1,00 | 34,0 → 37,5 | 32,0 → 35,0 |
+| Generales 30-60 (16) | 0,50 → 0,56 | 0,88 → 0,94 | 1,00 → 1,00 | 40,8 → 44,7 | 32,0 → 34,9 |
+| Generales 90-180 (12) | 0,50 → 0,50 | 0,92 → 0,92 | 1,00 → 1,00 | 47,4 → 53,3 | 31,2 → 34,5 |
+| Autonómicas 6-14 (44) | 0,57 → 0,61 | 0,91 → 0,89 | 0,93 → 0,93 | 9,7 → 9,9 | 9,2 → 9,5 |
+| Autonómicas 30-60 (44) | 0,57 → 0,55 | 0,75 → 0,80 | 0,91 → 0,93 | 12,2 → 12,7 | 10,0 → 10,4 |
+| Autonómicas 90-180 (44) | 0,55 → 0,66 | 0,86 → 0,89 | 0,95 → 0,95 | 16,0 → 16,9 | 10,2 → 10,7 |
+
+PIT de los partidos principales (`summarize_calibration(main_only=True)`; colas = las cajas 0 y 9, nominal 0,20; L1 = distancia a la uniforme). Entre paréntesis, las elecciones del voto y de los escaños. Con horizonte:
+
+| Grupo (elecciones) | Voto, colas | Voto, L1 | Escaños, colas | Escaños, L1 |
+|---|---|---|---|---|
+| Generales 6-14 (5 / 4) | 0,23 → 0,23 | 0,30 → 0,27 | 0,13 → 0,12 | 0,46 → 0,45 |
+| Generales 30-60 (5 / 4) | 0,25 → 0,25 | 0,28 → 0,28 | 0,17 → 0,17 | 0,50 → 0,42 |
+| Generales 90-180 (5 / 4) | 0,25 → 0,27 | 0,48 → 0,42 | 0,23 → 0,23 | 0,38 → 0,44 |
+| Autonómicas 6-14 (11 / 11) | 0,24 → 0,24 | 0,22 → 0,24 | 0,26 → 0,24 | 0,27 → 0,29 |
+| Autonómicas 30-60 (11 / 11) | 0,32 → 0,30 | 0,27 → 0,26 | 0,31 → 0,31 | 0,30 → 0,24 |
+| Autonómicas 90-180 (11 / 11) | 0,28 → 0,27 | 0,27 → 0,27 | 0,29 → 0,28 | 0,32 → 0,30 |
+
+Nowcast:
+
+| Grupo (elecciones) | Voto, colas | Voto, L1 | Escaños, colas | Escaños, L1 |
+|---|---|---|---|---|
+| Generales 6-14 (5 / 4) | 0,28 → 0,28 | 0,30 → 0,35 | 0,24 → 0,22 | 0,45 → 0,40 |
+| Generales 30-60 (5 / 4) | 0,32 → 0,32 | 0,57 → 0,46 | 0,33 → 0,25 | 0,53 → 0,42 |
+| Generales 90-180 (5 / 4) | 0,43 → 0,43 | 0,69 → 0,69 | 0,47 → 0,44 | 0,67 → 0,67 |
+| Autonómicas 6-14 (11 / 11) | 0,25 → 0,26 | 0,22 → 0,22 | 0,27 → 0,27 | 0,29 → 0,36 |
+| Autonómicas 30-60 (11 / 11) | 0,40 → 0,39 | 0,41 → 0,45 | 0,36 → 0,34 | 0,37 → 0,31 |
+| Autonómicas 90-180 (11 / 11) | 0,46 → 0,45 | 0,52 → 0,51 | 0,44 → 0,40 | 0,52 → 0,49 |
+
+Puntuaciones por caso. Más bajo es mejor; entre paréntesis, casos mejor / peor. En la primera columna, los casos con escaños válidos / con voto. El log-score del voto es el de la sección anterior, reconstruido con los cuantiles exportados. El Brier va con cuatro decimales.
+
+| Grupo | CRPS escaños, nowcast | CRPS escaños, horizonte | Log-score mayorías, nowcast | Log-score mayorías, horizonte | Brier mayorías, nowcast | Brier mayorías, horizonte | Log-score voto, nowcast | Log-score voto, horizonte |
+|---|---|---|---|---|---|---|---|---|
+| Generales 6-14 (8 / 10) | 5,231 → 5,221 (3 / 5) | 5,208 → 5,209 (3 / 5) | 0,176 → 0,194 (0 / 8) | 0,187 → 0,206 (0 / 8) | 0,0420 → 0,0461 (0 / 8) | 0,0449 → 0,0491 (0 / 8) | 2,236 → 2,202 (8 / 2) | 2,236 → 2,236 (7 / 3) |
+| Generales 30-60 (8 / 10) | 7,565 → 7,464 (5 / 3) | 7,396 → 7,347 (5 / 3) | 0,263 → 0,274 (3 / 5) | 0,297 → 0,305 (4 / 4) | 0,0789 → 0,0815 (3 / 5) | 0,0881 → 0,0900 (4 / 4) | 2,765 → 2,667 (7 / 3) | 2,607 → 2,603 (5 / 5) |
+| Generales 90-180 (6 / 8) | 9,407 → 9,330 (4 / 2) | 9,071 → 9,134 (2 / 4) | 0,339 → 0,341 (3 / 3) | 0,370 → 0,375 (3 / 3) | 0,1144 → 0,1132 (3 / 3) | 0,1201 → 0,1195 (3 / 3) | 2,943 → 2,936 (6 / 2) | 2,817 → 2,810 (5 / 3) |
+| Generales todos (22 / 28) | 7,219 → 7,157 (12 / 10) | 7,057 → 7,057 (10 / 12) | 0,252 → 0,263 (6 / 16) | 0,277 → 0,288 (7 / 15) | 0,0752 → 0,0773 (6 / 16) | 0,0811 → 0,0832 (7 / 15) | 2,627 → 2,578 (21 / 7) | 2,535 → 2,531 (17 / 11) |
+| Autonómicas 6-14 (22 / 22) | 1,784 → 1,778 (14 / 8) | 1,776 → 1,770 (14 / 8) | 0,116 → 0,117 (5 / 11) | 0,120 → 0,121 (7 / 9) | 0,0329 → 0,0332 (6 / 11) | 0,0339 → 0,0342 (7 / 11) | 2,235 → 2,243 (8 / 14) | 2,243 → 2,232 (13 / 9) |
+| Autonómicas 30-60 (22 / 22) | 2,709 → 2,686 (16 / 6) | 2,629 → 2,614 (15 / 7) | 0,073 → 0,076 (3 / 13) | 0,095 → 0,098 (8 / 8) | 0,0147 → 0,0152 (3 / 13) | 0,0209 → 0,0210 (9 / 9) | 2,802 → 2,774 (11 / 11) | 2,663 → 2,620 (15 / 7) |
+| Autonómicas 90-180 (22 / 22) | 3,531 → 3,507 (13 / 9) | 3,383 → 3,367 (12 / 10) | 0,067 → 0,070 (2 / 14) | 0,115 → 0,118 (6 / 10) | 0,0164 → 0,0167 (2 / 14) | 0,0269 → 0,0270 (8 / 11) | 3,139 → 3,082 (13 / 9) | 2,874 → 2,799 (18 / 4) |
+| Autonómicas todos (66 / 66) | 2,675 → 2,657 (43 / 23) | 2,596 → 2,583 (41 / 25) | 0,085 → 0,088 (10 / 38) | 0,110 → 0,112 (21 / 27) | 0,0214 → 0,0217 (11 / 38) | 0,0272 → 0,0274 (24 / 31) | 2,725 → 2,700 (32 / 34) | 2,593 → 2,550 (46 / 20) |
+
+El ruido se mide como en la sección anterior: la diferencia media por elección (generales) o por ámbito (autonómicas), ± su desviación entre ellos, y entre paréntesis en cuántos mejora. Una diferencia media menor que esa desviación cuenta como ruido.
+- Generales a 6-14 días: CRPS de escaños −0,009 ± 0,207 (1 de 4) en el nowcast y +0,001 ± 0,209 (1 de 4) con horizonte; log-score de las mayorías +0,018 ± 0,009 y +0,018 ± 0,010 (0 de 4 en los dos); Brier +0,0042 ± 0,0020 y +0,0042 ± 0,0022 (0 de 4 en los dos).
+- Autonómicas a 6-14 días: CRPS de escaños −0,008 ± 0,016 (4 de 5) y −0,008 ± 0,017 (3 de 5); log-score de las mayorías +0,001 ± 0,003 (1 de 5) en los dos; Brier +0,0001 ± 0,0014 (1 de 5) y +0,0001 ± 0,0015 (2 de 5).
+- Todos los casos: CRPS de escaños −0,072 ± 0,188 y −0,012 ± 0,172 en las generales, −0,018 ± 0,029 y −0,012 ± 0,032 en las autonómicas; log-score del voto −0,051 ± 0,040 (5 de 5) y −0,008 ± 0,091 (3 de 5) en las generales, −0,025 ± 0,025 (4 de 5) y −0,047 ± 0,037 (5 de 5) en las autonómicas.
+
+El centro no se mueve: el MAE del voto es idéntico en los 94 casos. Las bandas de escaños se acercan al nominal donde faltaban: con horizonte, la del 95 % pasa de 0,88 a 0,94 en las generales a 90-180 días y de 0,87 a 0,92 en las autonómicas. En el nowcast de las generales, las colas del PIT de escaños bajan de 0,33 a 0,25 a 30-60 días. El CRPS de escaños mejora en la mayoría de los casos de las autonómicas (43 mejor y 23 peor en el nowcast, 41 y 25 con horizonte), dentro del ruido. El log-score del voto mejora más allá del ruido en el nowcast de las generales y con horizonte en las autonómicas. La cópula conserva la distribución de cada partido, así que el voto sólo cambia porque el resto ya casi no se recorta y el sorteo es otro.
+
+A 6-14 días, las mayorías empeoran. En las generales empeoran en los 8 casos y en los dos modos, más allá del ruido: el log-score pasa de 0,176 a 0,194 en el nowcast y de 0,187 a 0,206 con horizonte. En las autonómicas empeoran algo y dentro del ruido (de 0,116 a 0,117 y de 0,120 a 0,121). Y donde ya pasaba del nominal, la banda del 50 % de escaños de las autonómicas a 6-14 días pasa más: de 0,61 a 0,65 con horizonte y de 0,58 a 0,62 en el nowcast.
+
+### (b) Sobre `tail_dof=None`
+
+Coberturas, antes → después. Con horizonte:
+
+| Grupo (casos) | Voto 50 % | Voto 80 % | Voto 95 % | Escaños 50 % | Escaños 80 % | Escaños 95 % |
+|---|---|---|---|---|---|---|
+| Generales 6-14 (10) | 0,51 → 0,54 | 0,75 → 0,72 | 0,94 → 0,96 | 0,54 → 0,57 | 0,79 → 0,85 | 0,98 → 1,00 |
+| Generales 30-60 (10) | 0,43 → 0,45 | 0,75 → 0,75 | 0,84 → 0,84 | 0,44 → 0,44 | 0,78 → 0,78 | 0,88 → 0,93 |
+| Generales 90-180 (8) | 0,38 → 0,38 | 0,70 → 0,70 | 0,85 → 0,85 | 0,41 → 0,44 | 0,70 → 0,75 | 0,87 → 0,91 |
+| Autonómicas 6-14 (22) | 0,47 → 0,50 | 0,73 → 0,73 | 0,86 → 0,88 | 0,57 → 0,60 | 0,75 → 0,75 | 0,88 → 0,89 |
+| Autonómicas 30-60 (22) | 0,36 → 0,35 | 0,66 → 0,64 | 0,80 → 0,81 | 0,50 → 0,52 | 0,69 → 0,70 | 0,84 → 0,87 |
+| Autonómicas 90-180 (22) | 0,34 → 0,37 | 0,67 → 0,66 | 0,79 → 0,79 | 0,47 → 0,49 | 0,73 → 0,74 | 0,87 → 0,87 |
+
+Nowcast:
+
+| Grupo (casos) | Voto 50 % | Voto 80 % | Voto 95 % | Escaños 50 % | Escaños 80 % | Escaños 95 % |
+|---|---|---|---|---|---|---|
+| Generales 6-14 (10) | 0,47 → 0,49 | 0,72 → 0,70 | 0,92 → 0,96 | 0,49 → 0,54 | 0,73 → 0,73 | 0,98 → 1,00 |
+| Generales 30-60 (10) | 0,34 → 0,34 | 0,57 → 0,52 | 0,80 → 0,82 | 0,28 → 0,31 | 0,55 → 0,63 | 0,84 → 0,88 |
+| Generales 90-180 (8) | 0,27 → 0,27 | 0,47 → 0,49 | 0,75 → 0,75 | 0,23 → 0,23 | 0,53 → 0,53 | 0,72 → 0,76 |
+| Autonómicas 6-14 (22) | 0,46 → 0,48 | 0,73 → 0,70 | 0,86 → 0,88 | 0,55 → 0,58 | 0,73 → 0,73 | 0,87 → 0,89 |
+| Autonómicas 30-60 (22) | 0,27 → 0,30 | 0,55 → 0,57 | 0,74 → 0,76 | 0,44 → 0,44 | 0,64 → 0,66 | 0,78 → 0,80 |
+| Autonómicas 90-180 (22) | 0,29 → 0,29 | 0,47 → 0,48 | 0,69 → 0,70 | 0,37 → 0,39 | 0,57 → 0,60 | 0,74 → 0,79 |
+
+Escaños de los bloques:
+
+| Grupo (filas) | Bloque 50 %, horizonte | Bloque 80 %, horizonte | Bloque 95 %, horizonte | Ancho 80 %, horizonte | Ancho 80 %, nowcast |
+|---|---|---|---|---|---|
+| Generales 6-14 (16) | 0,62 → 0,62 | 1,00 → 1,00 | 1,00 → 1,00 | 29,2 → 31,9 | 27,2 → 29,9 |
+| Generales 30-60 (16) | 0,56 → 0,56 | 0,88 → 0,88 | 1,00 → 1,00 | 34,5 → 38,0 | 27,2 → 29,6 |
+| Generales 90-180 (12) | 0,33 → 0,50 | 0,92 → 0,92 | 1,00 → 1,00 | 39,6 → 45,0 | 26,0 → 29,1 |
+| Autonómicas 6-14 (44) | 0,52 → 0,57 | 0,84 → 0,89 | 0,91 → 0,93 | 8,3 → 8,8 | 7,9 → 8,3 |
+| Autonómicas 30-60 (44) | 0,52 → 0,55 | 0,68 → 0,70 | 0,91 → 0,91 | 10,7 → 11,3 | 8,8 → 9,2 |
+| Autonómicas 90-180 (44) | 0,50 → 0,57 | 0,84 → 0,84 | 0,93 → 0,93 | 14,4 → 15,2 | 9,2 → 9,8 |
+
+PIT de los partidos principales. Con horizonte:
+
+| Grupo (elecciones) | Voto, colas | Voto, L1 | Escaños, colas | Escaños, L1 |
+|---|---|---|---|---|
+| Generales 6-14 (5 / 4) | 0,25 → 0,28 | 0,29 → 0,39 | 0,26 → 0,21 | 0,34 → 0,33 |
+| Generales 30-60 (5 / 4) | 0,25 → 0,25 | 0,32 → 0,28 | 0,22 → 0,22 | 0,35 → 0,29 |
+| Generales 90-180 (5 / 4) | 0,29 → 0,29 | 0,45 → 0,38 | 0,29 → 0,26 | 0,50 → 0,45 |
+| Autonómicas 6-14 (11 / 11) | 0,27 → 0,27 | 0,25 → 0,28 | 0,29 → 0,28 | 0,35 → 0,35 |
+| Autonómicas 30-60 (11 / 11) | 0,32 → 0,34 | 0,32 → 0,33 | 0,34 → 0,33 | 0,32 → 0,29 |
+| Autonómicas 90-180 (11 / 11) | 0,27 → 0,29 | 0,33 → 0,27 | 0,30 → 0,30 | 0,34 → 0,33 |
+
+Nowcast:
+
+| Grupo (elecciones) | Voto, colas | Voto, L1 | Escaños, colas | Escaños, L1 |
+|---|---|---|---|---|
+| Generales 6-14 (5 / 4) | 0,28 → 0,30 | 0,36 → 0,31 | 0,29 → 0,29 | 0,49 → 0,53 |
+| Generales 30-60 (5 / 4) | 0,43 → 0,48 | 0,52 → 0,59 | 0,48 → 0,40 | 0,60 → 0,64 |
+| Generales 90-180 (5 / 4) | 0,54 → 0,51 | 0,70 → 0,66 | 0,53 → 0,47 | 0,77 → 0,67 |
+| Autonómicas 6-14 (11 / 11) | 0,27 → 0,30 | 0,25 → 0,29 | 0,29 → 0,29 | 0,36 → 0,35 |
+| Autonómicas 30-60 (11 / 11) | 0,43 → 0,41 | 0,52 → 0,44 | 0,40 → 0,36 | 0,40 → 0,36 |
+| Autonómicas 90-180 (11 / 11) | 0,50 → 0,48 | 0,60 → 0,57 | 0,50 → 0,44 | 0,59 → 0,54 |
+
+Puntuaciones por caso:
+
+| Grupo | CRPS escaños, nowcast | CRPS escaños, horizonte | Log-score mayorías, nowcast | Log-score mayorías, horizonte | Brier mayorías, nowcast | Brier mayorías, horizonte | Log-score voto, nowcast | Log-score voto, horizonte |
+|---|---|---|---|---|---|---|---|---|
+| Generales 6-14 (8 / 10) | 5,191 → 5,208 (3 / 5) | 5,129 → 5,165 (3 / 5) | 0,149 → 0,162 (2 / 6) | 0,163 → 0,176 (2 / 6) | 0,0381 → 0,0395 (2 / 6) | 0,0407 → 0,0430 (2 / 6) | 2,258 → 2,251 (6 / 4) | 2,226 → 2,244 (5 / 5) |
+| Generales 30-60 (8 / 10) | 7,697 → 7,577 (6 / 2) | 7,427 → 7,355 (4 / 4) | 0,259 → 0,255 (3 / 5) | 0,282 → 0,285 (4 / 4) | 0,0822 → 0,0780 (3 / 5) | 0,0862 → 0,0855 (4 / 4) | 3,047 → 2,945 (6 / 4) | 2,807 → 2,708 (6 / 4) |
+| Generales 90-180 (6 / 8) | 9,767 → 9,548 (6 / 0) | 9,301 → 9,154 (5 / 1) | 0,344 → 0,332 (3 / 3) | 0,360 → 0,354 (3 / 3) | 0,1201 → 0,1126 (3 / 3) | 0,1192 → 0,1142 (3 / 3) | 3,490 → 3,366 (5 / 3) | 3,026 → 2,895 (5 / 3) |
+| Generales todos (22 / 28) | 7,350 → 7,253 (15 / 7) | 7,102 → 7,049 (12 / 10) | 0,242 → 0,242 (8 / 14) | 0,260 → 0,264 (9 / 13) | 0,0765 → 0,0734 (8 / 14) | 0,0787 → 0,0779 (9 / 13) | 2,892 → 2,817 (17 / 11) | 2,662 → 2,596 (16 / 12) |
+| Autonómicas 6-14 (22 / 22) | 1,788 → 1,794 (11 / 11) | 1,778 → 1,784 (11 / 11) | 0,106 → 0,107 (3 / 10) | 0,109 → 0,112 (3 / 10) | 0,0308 → 0,0310 (3 / 12) | 0,0316 → 0,0322 (3 / 11) | 2,340 → 2,365 (9 / 13) | 2,304 → 2,324 (10 / 12) |
+| Autonómicas 30-60 (22 / 22) | 2,739 → 2,723 (13 / 9) | 2,654 → 2,636 (12 / 10) | 0,064 → 0,066 (4 / 11) | 0,086 → 0,086 (7 / 9) | 0,0126 → 0,0128 (4 / 12) | 0,0186 → 0,0179 (7 / 9) | 2,979 → 2,992 (11 / 11) | 2,698 → 2,724 (9 / 13) |
+| Autonómicas 90-180 (22 / 22) | 3,571 → 3,536 (14 / 8) | 3,405 → 3,374 (14 / 8) | 0,060 → 0,064 (2 / 11) | 0,104 → 0,106 (5 / 11) | 0,0149 → 0,0155 (2 / 11) | 0,0242 → 0,0242 (5 / 11) | 3,354 → 3,350 (12 / 10) | 2,871 → 2,861 (10 / 12) |
+| Autonómicas todos (66 / 66) | 2,699 → 2,684 (38 / 28) | 2,613 → 2,598 (37 / 29) | 0,077 → 0,079 (9 / 32) | 0,100 → 0,101 (15 / 30) | 0,0194 → 0,0198 (9 / 35) | 0,0248 → 0,0247 (15 / 31) | 2,891 → 2,902 (32 / 34) | 2,624 → 2,636 (29 / 37) |
+
+Ruido:
+- Generales a 6-14 días: CRPS de escaños +0,016 ± 0,077 (1 de 4) en el nowcast y +0,036 ± 0,064 (1 de 4) con horizonte; log-score de las mayorías +0,013 ± 0,028 y +0,013 ± 0,020 (1 de 4 en los dos); Brier +0,0015 ± 0,0098 y +0,0024 ± 0,0077 (1 de 4 en los dos).
+- Autonómicas a 6-14 días: CRPS de escaños +0,004 ± 0,031 y +0,003 ± 0,032 (2 de 5 en los dos); log-score de las mayorías +0,001 ± 0,002 (1 de 5) y +0,002 ± 0,003 (0 de 5); Brier +0,0001 ± 0,0012 y +0,0004 ± 0,0012 (1 de 5 en los dos).
+- Todos los casos: CRPS de escaños −0,096 ± 0,075 (4 de 4) y −0,050 ± 0,078 (3 de 4) en las generales, −0,015 ± 0,028 y −0,013 ± 0,027 (4 de 5 en los dos) en las autonómicas; log-score del voto −0,076 ± 0,146 (3 de 5) y −0,071 ± 0,090 (4 de 5) en las generales, +0,010 ± 0,052 y +0,012 ± 0,031 (2 de 5 en los dos) en las autonómicas.
+
+Sobre `None` el patrón es el mismo, con otro tamaño. El CRPS de escaños del nowcast de las generales mejora más allá del ruido, sobre todo a 90-180 días (6 casos mejor y 0 peor). Las bandas de escaños se acercan al nominal donde faltaban: con horizonte, la del 95 % de las generales va de 0,88 a 0,93 a 30-60 días y de 0,87 a 0,91 a 90-180. En el nowcast de las autonómicas, las colas del PIT de escaños bajan de 0,50 a 0,44 a 90-180 días.
+
+Pero donde ya cubrían, a 6-14 días, las bandas pasan del nominal. En las generales con horizonte, la del 50 % de escaños va de 0,54 a 0,57 y la del 80 % de 0,79 a 0,85; en las autonómicas, la del 50 % de 0,57 a 0,60. El L1 del PIT del voto de las generales con horizonte a 6-14 días sube de 0,29 a 0,39. Las mayorías a 6-14 días empeoran en las dos poblaciones y en los dos modos, dentro del ruido. En las generales, el log-score pasa de 0,149 a 0,162 en el nowcast y de 0,163 a 0,176 con horizonte, con 2 casos mejor y 6 peor en los dos; en las autonómicas, de 0,106 a 0,107 y de 0,109 a 0,112, con 3 y 10. El log-score del voto de las autonómicas empeora algo, dentro del ruido.
+
+### Los bloques se ensanchan
+
+La composición no estrecha los bloques: los ensancha. El ancho medio de la banda del 80 % de los escaños de un bloque crece en todos los grupos, en los dos modos y sobre las dos configuraciones. En las generales crece entre un 8,7 y un 13,6 %: con horizonte, sobre 5 grados, de 34,0 a 37,5 escaños a 6-14 días y de 47,4 a 53,3 a 90-180; sobre `None`, de 29,2 a 31,9 y de 39,6 a 45,0. En las autonómicas crece entre un 1,6 y un 6,9 %. Con las bandas más anchas, la cobertura de los bloques sube o queda igual en 34 de las 36 celdas, también donde ya pasaba del nominal: sobre 5 grados, la del 50 % con horizonte de las generales a 6-14 días va de 0,62 a 0,81.
+
+Es lo que el método 7 ya había medido para 2027. La correlación común se reparte entre todos los nacionales. Contrae su suma, y por eso el resto deja de recortarse, pero apenas contrae la de un par (PP + VOX, un 7 %). Y ensancha las diferencias entre partidos: Derecha − Izquierda pasaba de 4,45 a 4,86 puntos. Los escaños de un bloque dependen de su diferencia con el otro, así que su banda se abre y la probabilidad de mayoría se va un poco más hacia el medio. La composición, tal como está construida, hace lo contrario de lo que pedía la sección de la escala.
+
+### ¿Se recuperan las mayorías?
+
+Para saber si la composición devuelve a las mayorías lo que les quitaron la escala y las colas, cada ejecución se compara también con la referencia sin escala, sin colas fijas y sin composición. Es la del error del promedio, `backtest/results_avg`, de la primera sección, en los mismos casos. Log-score de las mayorías con horizonte; entre paréntesis, casos mejor / peor que la referencia:
+
+| Grupo (casos) | Referencia | + escala | + escala + 5 | + escala + composición | + escala + 5 + composición |
+|---|---|---|---|---|---|
+| Generales 6-14 (8) | 0,156 | 0,163 (0 / 7) | 0,187 (2 / 6) | 0,176 (2 / 6) | 0,206 (2 / 6) |
+| Generales 30-60 (8) | 0,271 | 0,282 (2 / 6) | 0,297 (2 / 6) | 0,285 (3 / 5) | 0,305 (3 / 5) |
+| Generales 90-180 (6) | 0,350 | 0,360 (2 / 4) | 0,370 (2 / 4) | 0,354 (3 / 3) | 0,375 (2 / 4) |
+| Generales todos (22) | 0,251 | 0,260 (4 / 17) | 0,277 (6 / 16) | 0,264 (8 / 14) | 0,288 (7 / 15) |
+| Autonómicas 6-14 (22) | 0,107 | 0,109 (2 / 11) | 0,120 (1 / 15) | 0,112 (2 / 12) | 0,121 (1 / 15) |
+| Autonómicas 30-60 (22) | 0,075 | 0,086 (0 / 16) | 0,095 (0 / 16) | 0,086 (2 / 14) | 0,098 (0 / 16) |
+| Autonómicas 90-180 (22) | 0,082 | 0,104 (0 / 16) | 0,115 (1 / 17) | 0,106 (0 / 17) | 0,118 (0 / 18) |
+| Autonómicas todos (66) | 0,088 | 0,100 (2 / 43) | 0,110 (2 / 48) | 0,101 (4 / 43) | 0,112 (1 / 49) |
+
+Brier de las mayorías con horizonte:
+
+| Grupo (casos) | Referencia | + escala | + escala + 5 | + escala + composición | + escala + 5 + composición |
+|---|---|---|---|---|---|
+| Generales 6-14 (8) | 0,0391 | 0,0407 (0 / 7) | 0,0449 (2 / 6) | 0,0430 (2 / 6) | 0,0491 (2 / 6) |
+| Generales 30-60 (8) | 0,0840 | 0,0862 (2 / 6) | 0,0881 (2 / 6) | 0,0855 (3 / 5) | 0,0900 (3 / 5) |
+| Generales 90-180 (6) | 0,1180 | 0,1192 (2 / 4) | 0,1201 (2 / 4) | 0,1142 (3 / 3) | 0,1195 (3 / 3) |
+| Generales todos (22) | 0,0769 | 0,0787 (4 / 17) | 0,0811 (6 / 16) | 0,0779 (8 / 14) | 0,0832 (8 / 14) |
+| Autonómicas 6-14 (22) | 0,0310 | 0,0316 (2 / 11) | 0,0339 (1 / 15) | 0,0322 (2 / 13) | 0,0342 (1 / 17) |
+| Autonómicas 30-60 (22) | 0,0152 | 0,0186 (0 / 16) | 0,0209 (0 / 17) | 0,0179 (2 / 14) | 0,0210 (0 / 17) |
+| Autonómicas 90-180 (22) | 0,0191 | 0,0242 (1 / 16) | 0,0269 (1 / 19) | 0,0242 (1 / 16) | 0,0270 (1 / 17) |
+| Autonómicas todos (66) | 0,0218 | 0,0248 (3 / 43) | 0,0272 (2 / 51) | 0,0247 (5 / 43) | 0,0274 (2 / 51) |
+
+**No se recuperan.** Con horizonte, ninguna de las dos ejecuciones con composición vuelve al log-score de las mayorías de la referencia, en ningún grupo de ninguna de las dos poblaciones. Con el Brier pasa lo mismo, salvo en una celda: las generales a 90-180 días sobre `None` (0,1142 frente a 0,1180, con 3 casos mejor y 3 peor de 6). La composición no deshace el empeoramiento; lo aumenta un poco.
+- Sobre 5 grados, el log-score de todos los casos pasa de 0,277 a 0,288 en las generales y de 0,110 a 0,112 en las autonómicas; la referencia es 0,251 y 0,088.
+- Sobre `None`, de 0,260 a 0,264 y de 0,100 a 0,101.
+- El Brier sobre `None` baja algo con horizonte, de 0,0787 a 0,0779 en las generales y de 0,0248 a 0,0247 en las autonómicas, dentro del ruido. Queda lejos de la referencia (0,0769 y 0,0218).
+
+En el nowcast la escala no entra, así que la referencia coincide con el «antes» de (b). Ahí la composición sobre `None` deja la media del log-score de todos los casos de las generales donde estaba (0,242, con 8 casos mejor y 14 peor), pero la empeora a 6-14 días (de 0,149 a 0,162).
+
+### Decisión (criterio de M7 y criterio 17)
+
+**No se cumple ninguno de los dos criterios, y las mayorías no se recuperan.**
+- **Criterio de M7.** A 6-14 días, el log-score y el Brier de las mayorías empeoran sobre las dos configuraciones, en las dos poblaciones y en los dos modos: suben las 16 medias de las tablas. En las generales sobre 5 grados, el empeoramiento va más allá del ruido, con 0 casos mejor de 8 en las cuatro celdas (log-score +0,018 ± 0,009 en el nowcast y +0,018 ± 0,010 con horizonte). En el resto queda dentro del ruido. El CRPS de escaños a 6-14 días queda dentro del ruido: sobre 5 grados mejora algo o queda igual (de 5,208 a 5,209 en las generales con horizonte), y sobre `None` empeora algo. Es el resultado del método 7 (25-09-2026) y de su revisión del 07-10-2026: el sorteo conjunto pierde a corto plazo.
+- **Criterio 17.** La composición acerca al nominal algunas bandas de escaños a 30 días o más y mejora el CRPS de escaños en la mayoría de los casos a esos horizontes. Pero empeora las mayorías a 6-14 días: más allá del ruido en las generales sobre 5 grados. Y lleva más allá del nominal bandas de escaños que ya cubrían: la del 50 % de las autonómicas a 6-14 días sobre las dos configuraciones, y la del 80 % de las generales con horizonte sobre `None` (de 0,79 a 0,85). Ninguna de las dos combinaciones lo cumple.
+- **Las mayorías.** Con horizonte, ninguna combinación con composición vuelve al log-score de las mayorías de la referencia sin escala: en las autonómicas, 43 de 66 casos peor sobre `None` y 49 de 66 sobre 5 grados. La razón está en los bloques: la correlación común los ensancha en escaños, entre un 8,7 y un 13,6 % en las generales, en vez de estrecharlos.
+
+`composition` sigue como opción documentada y `None` sigue siendo el valor por defecto; nada cambia en el modelo vivo. **Es un hallazgo para Luis (02-11-2026), y la decisión es suya.** Lo que el backtest señala:
+- La prueba que pedía la sección de la escala, la escala junto con la composición, está hecha, y sale negativa: la composición no arregla las mayorías de la escala.
+- Si se quiere que la escala no abra las probabilidades de mayoría, hace falta otra pieza. Una correlación común entre todos los nacionales no la da. La candidata natural es una estructura por bloques, pero el método 7 la descartó porque la correlación dentro de un bloque cambia de un ciclo a otro (PP-VOX, +0,66 en 2023 y −0,69 en 2027). Queda como pregunta abierta, no como propuesta.
+- Sobre `None`, a 30 días o más, la composición mejora el CRPS de escaños en la mayoría de los casos y sube o deja igual las coberturas de escaños, que faltaban. Si Luis quisiera la composición para el modo Elección lejos de la elección, es ahí donde ayuda, a cambio de las mayorías a corto plazo.
+
+Límites de la prueba:
+- Las autonómicas son cinco de los diecisiete ámbitos, los que más casos tienen; las otras doce quedan para una ejecución completa de la configuración que se elija.
+- La tabla `average_errors` está vacía en la base: el backtest la leyó de un CSV calculado en memoria con el mismo código y la semántica de `load_average_errors`.
+- La prueba es acumulativa. Se hizo sobre `error_model='average'` con `drift_scale='auto'` (y con 5 grados o sin ellos), configuraciones que no cumplieron el criterio 17 y que Luis puede no adoptar. Sobre el modelo que se publica (`'polls'`, sin escala ni colas), la referencia de la composición siguen siendo las medidas del método 7.
+- Las generales con escaños válidos son cuatro elecciones: el ruido de las mayorías se mide con cuatro diferencias.
+- El log-score del voto sale de los cuantiles exportados, no de las simulaciones (ver la sección anterior), y `ρ` es la del último sorteo del nowcast de cada caso.
+
+Tiempos (1.000 simulaciones, en un Mac con cuatro ejecuciones a la vez): generales 3.065 s en (a) y 3.136 s en (b); autonómicas, 66 casos en cada configuración, entre 792 y 986 s por ámbito (4.408 y 4.322 s en total).
 
 ## La tarjeta «Fiabilidad» y la parte `calibration` (02-11-2026)
 
@@ -449,7 +686,7 @@ Tests: `tests/test_bundle_unit.py` (la parte y su esquema), `tests/test_publish_
 
 ## Decisión sobre los valores por defecto (02-11-2026)
 
-**No entra ninguno.** El criterio 17 no se cumplió en ninguno de los tres pasos medidos: el error del propio promedio empeora coberturas y PIT, la escala de la deriva empeora las mayorías, y las colas fijas empeoran las mayorías y pasan del nominal donde ya cubrían. Los valores por defecto siguen siendo los de antes del método 15 y nada cambia en el modelo vivo: ni `backtest/results/` se reejecuta ni el job `compute` tiene que rellenar `average_errors` para el modelo publicado (sólo la lee `error_model='average'`). El paso 15 (`composition`) estaba en marcha al decidir; si su resultado cambiara esta decisión, se anotará en su sección.
+**No entra ninguno.** El criterio 17 no se cumplió en ninguno de los tres pasos medidos: el error del propio promedio empeora coberturas y PIT, la escala de la deriva empeora las mayorías, y las colas fijas empeoran las mayorías y pasan del nominal donde ya cubrían. Los valores por defecto siguen siendo los de antes del método 15 y nada cambia en el modelo vivo: ni `backtest/results/` se reejecuta ni el job `compute` tiene que rellenar `average_errors` para el modelo publicado (sólo la lee `error_model='average'`). El paso 15 (`composition`) terminó después y no la cambia: tampoco cumple el criterio 17 ni el suyo del método 7 (ver su sección).
 
 Las cuatro piezas quedan como opciones, con el valor de hoy por defecto:
 
