@@ -8,7 +8,7 @@ import pytest
 from mtpy.lib import tuning
 from mtpy.lib.forecaster import Forecaster
 from mtpy.lib.tuning import (DEFAULTS, GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, TUNING_FILES, TUNING_PREFIX,
-                             NothingToTune, apply_setting, autocorrelation, coordinate_descent, cycle_cuts,
+                             NothingToTune, TuningFailed, apply_setting, autocorrelation, coordinate_descent, cycle_cuts,
                              default_config, future_polls, normalize_config, predict_polls, roughness, run_cut,
                              run_search, run_tuning, score_polls, search_cycles, tuning_fs, tuning_scope)
 
@@ -545,7 +545,7 @@ def test_run_tuning_weights_the_cuts_by_their_cells_and_keeps_one_row_per_cut_an
     assert row['n_cells'] == 40 and row['n_cuts'] == 2 and row['event_date'] == '2023-07-23'
     assert row['mae'] == pytest.approx((30 * 1 + 10 * 3) / 40)
     assert row['rmse'] == pytest.approx(np.sqrt((30 * 1 + 10 * 9) / 40))   # every cell weighs the same
-    assert row['roughness'] == pytest.approx((30 * 0.2 + 10 * 0.6) / 40)
+    assert row['roughness'] == pytest.approx((0.2 + 0.6) / 2)   # a property of each cut: plain mean, as the search
     cuts = out['cuts']
     assert cuts[['rmse7', 'rmse28']].iloc[0].tolist() == [1., 1.] and cuts['n_overrides'].tolist() == [5, 5]
     assert {'config', 'partition', 'event_date', 'cut', 'n_polls', 'seconds'} <= set(cuts.columns)
@@ -659,16 +659,19 @@ def test_search_cycles_adds_the_running_cycle_and_splits_at_2020(monkeypatch):
         calls.update(date_from=date_from, min_polls=min_polls, featured=featured)
         return ['2008-03-09', '2011-11-20', '2019-11-10', '2023-07-23']
 
+    asked = []
+
+    def fake_next(scope, date_from=None):
+        asked.append(date_from)
+        return '2026-11-29' if date_from < '2026-11-29' else None
+
     monkeypatch.setattr(tuning, 'get_event_dates', fake_dates)
-    monkeypatch.setattr(tuning, 'get_next_event_date', lambda scope, date_from=None: '2026-11-29')
-    cycles = search_cycles('es')
+    monkeypatch.setattr(tuning, 'get_next_event_date', fake_next)
+    cycles = search_cycles('es', today='2026-11-02')
     assert calls == {'date_from': '2008-01-01', 'min_polls': 10, 'featured': True}
     assert cycles == {'search': ['2008-03-09', '2011-11-20', '2019-11-10'], 'check': ['2023-07-23', '2026-11-29']}
-
-    monkeypatch.setattr(tuning, 'get_next_event_date', lambda scope, date_from=None: None)
-    assert search_cycles('es')['check'] == ['2023-07-23']
-    # a next election already past `today` is not a running cycle
-    monkeypatch.setattr(tuning, 'get_next_event_date', lambda scope, date_from=None: '2026-11-29')
+    # asked from today, not from the last featured election: a held election that is not featured cannot hide it
+    assert asked == ['2026-11-02']
     assert search_cycles('es', today='2026-12-01')['check'] == ['2023-07-23']
 
 
@@ -767,3 +770,107 @@ def test_tuning_fs_mirrors_the_backtest_layout_under_its_own_prefix(fresh_app, t
     if fresh_app.fs is not None:
         assert tuning_fs(None, 'es')[1] == TUNING_PREFIX == 'backtest/tuning'
         assert tuning_fs(None, 'es-md')[1] == 'backtest/tuning/es-md'
+
+
+class FailingCut(FakeCut):
+    """`FakeCut` that raises for some configurations and cycles (a fixed small bandwidth on a sparse cycle)."""
+    def __init__(self, fails, error=RuntimeError):
+        super().__init__()
+        self.fails, self.error = fails, error
+
+    def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+        self.calls.append((event_date, cut, config['label']))
+        if self.fails(event_date, config):
+            raise self.error('no polls in the window')
+        return super().__call__(scope, event_date, cut, config, horizons=horizons)
+
+
+def test_run_search_never_keeps_a_configuration_with_a_failed_cut(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20', '2019-11-10'], 'check': []})
+    # 45 days would win on the cycle it survives; it fails on the other one
+    runner = FailingCut(lambda event_date, config: config['reg_params'].get('bw') == 45 and event_date == '2015-12-20')
+    with pytest.warns(UserWarning):
+        out = run_search('es', phase='smoothing', grid={'bw': [('fixed', 45)]}, rounds=1, runner=runner)
+    assert out['best']['reg_params'].get('bw_type') == 'adaptive'
+    trial = out['trials'].query("key == 'bw'").iloc[0]
+    assert not trial['chosen'] and trial[['rmse7', 'rmse28', 'roughness']].astype(float).isna().all()
+    assert out['cuts']['error'].notna().sum() == 1
+
+
+def test_run_search_stops_when_its_start_has_a_failed_cut(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20', '2019-11-10'], 'check': []})
+    runner = FailingCut(lambda event_date, config: config['label'] == 'default' and event_date == '2019-11-10')
+    with pytest.warns(UserWarning), pytest.raises(TuningFailed):
+        run_search('es', phase='smoothing', grid={'bw': [('fixed', 45)]}, runner=runner)
+
+
+def test_run_search_check_stops_when_a_configuration_has_a_failed_cut(monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'], {'search': [], 'check': ['2023-07-23']})
+    runner = FailingCut(lambda event_date, config: config['label'] == 'default')
+    with pytest.warns(UserWarning), pytest.raises(TuningFailed):
+        run_search('es', phase='check', start=apply_setting(default_config(), 'bw', ('fixed', 45)), runner=runner)
+
+
+def test_tuning_scope_raises_tuning_failed_when_every_cut_fails(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'], {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    with pytest.warns(UserWarning), pytest.raises(TuningFailed):
+        tuning_scope('es-md', out=str(tmp_path), mode='evaluate', configs=[default_config()],
+                     runner=FailingCut(lambda event_date, config: True), stats=lambda scope: {},
+                     prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    assert not any(tmp_path.iterdir())
+
+
+def test_tuning_scope_without_cuts_still_raises_nothing_to_tune(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, [], {'search': ['2019-11-10'], 'check': []})
+    with pytest.raises(NothingToTune):
+        tuning_scope('es-md', out=str(tmp_path), mode='evaluate', configs=[default_config()], runner=FakeCut())
+
+
+def test_run_tuning_retries_a_cut_after_a_connection_error_only(monkeypatch):
+    from psycopg2 import OperationalError, ProgrammingError
+
+    _patch_cycle(monkeypatch, ['2023-06-23'])
+    monkeypatch.setattr(tuning, 'RETRY_SECONDS', 0)
+
+    class Flaky(FakeCut):
+        def __init__(self, failures, error):
+            super().__init__()
+            self.failures, self.error = failures, error
+
+        def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+            if self.failures > 0:
+                self.failures -= 1
+                self.calls.append(('failed', cut, config['label']))
+                raise self.error('server closed the connection unexpectedly')
+            return super().__call__(scope, event_date, cut, config, horizons=horizons)
+
+    cycles = {'search': [], 'check': ['2023-07-23']}
+    runner = Flaky(1, OperationalError)
+    with pytest.warns(UserWarning, match='retry 1 of 3'):
+        out = run_tuning('es', [default_config()], cycles=cycles, runner=runner)
+    assert len(runner.calls) == 2 and out['cuts']['error'].isna().all()
+
+    runner = Flaky(10, OperationalError)
+    with pytest.warns(UserWarning):
+        out = run_tuning('es', [default_config()], cycles=cycles, runner=runner)
+    assert len(runner.calls) == 1 + tuning.CUT_RETRIES and out['cuts']['error'].notna().all()
+
+    runner = Flaky(1, ProgrammingError)   # not a connection error: no retry
+    with pytest.warns(UserWarning, match='skipped'):
+        out = run_tuning('es', [default_config()], cycles=cycles, runner=runner)
+    assert len(runner.calls) == 1 and out['cuts']['error'].notna().all()
+
+
+def test_run_search_labels_an_unlabelled_start_so_its_tables_are_kept(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': []})
+    start = apply_setting(default_config(), 'bw', ('fixed', 45))
+    del start['label']
+    out = run_search('es', phase='smoothing', start=start, grid={'poly_deg': [1]}, rounds=1, runner=FakeCut())
+    assert out['configs'] == ['start'] and out['trials']['label'].iloc[0] == 'start'
+    assert set(out['cuts']['config']) == {'start'} and not out['scores'].empty
+
+
+def test_run_search_refuses_a_grid_without_the_keys_of_its_phase(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': []})
+    with pytest.raises(ValueError):
+        run_search('es', phase='shrinkage', grid={'bw': [('fixed', 45)]}, runner=FakeCut())

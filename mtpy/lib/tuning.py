@@ -21,6 +21,9 @@ from typing import Any, Callable, Optional
 import numpy as np
 import pandas as pd
 
+from psycopg2 import InterfaceError as DriverInterfaceError, OperationalError as DriverOperationalError
+from sqlalchemy.exc import InterfaceError as EngineInterfaceError, OperationalError as EngineOperationalError
+
 from .backtest import describe_source, poll_stats, results_path
 from .computer import Computer
 from .data import get_event_dates, get_event_params, get_next_event_date, get_poll_series
@@ -88,6 +91,14 @@ PHASES = {
 # running cycle of the generales, the autonómicas since 2020); the shrinkage phase only searches from `SHRINKAGE_SINCE`
 CHECK_SINCE = '2020-01-01'
 SHRINKAGE_SINCE = '2015-01-01'
+
+# Database errors a cut is retried on (a dropped or refused connection, a cancelled statement): the driver's, which
+# `mtpy.core.data` re-raises from the failed queries, and the engine's, raised when connecting. Programming errors and
+# the model's own errors are not retried
+CONNECTION_ERRORS = (DriverOperationalError, DriverInterfaceError, EngineOperationalError, EngineInterfaceError)
+# Retries of a cut after a connection error, and the seconds waited before each
+CUT_RETRIES = 3
+RETRY_SECONDS = 10.
 
 CUT_COLUMNS = ['config', 'partition', 'event_date', 'cut', 'n_polls', 'n_overrides', 'n_unpredicted', 'seconds',
                'autocorr', 'roughness', 'error']
@@ -777,7 +788,13 @@ def coordinate_descent(
 # --- Orchestration per scope ----------------------------------------------------------------------------------------
 
 class NothingToTune(Exception):
-    """A scope with no cycle to tune, or none of whose cuts could be evaluated: nothing is written."""
+    """A scope with no cycle to tune, or no cut with enough polls in its cycles: nothing is written."""
+
+
+class TuningFailed(Exception):
+    """The cuts of a scope exist but the tuning cannot be trusted: every cut failed, or a cut of the start of a search
+    or of the check failed (a configuration scored on fewer cuts than another is not comparable). Nothing is
+    written."""
 
 
 def weighted_mean(values: pd.Series, weights: pd.Series) -> float:
@@ -818,8 +835,9 @@ def aggregate_scores(rows: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         `SCORE_COLUMNS`: `n_cuts`, and `n_polls` and `n_cells` summed over the cuts; `rmse` the RMSE over every
         cell of the cycle (the square root of the mean of the squared RMSE of the cuts weighted by their cells,
-        so each cell weighs the same, spec A4); `mae`, `skill`, `autocorr` and `roughness` the means weighted by
-        the cells of each cut.
+        so each cell weighs the same, spec A4); `mae` and `skill` the means weighted by the cells of each cut;
+        `autocorr` and `roughness` the plain means over the cuts (one value per cut, whatever the horizon: the
+        definition of `search_figures`).
     """
     if rows.empty:
         return pd.DataFrame(columns=SCORE_COLUMNS)
@@ -833,7 +851,8 @@ def aggregate_scores(rows: pd.DataFrame) -> pd.DataFrame:
             'config': label, 'partition': partition, 'event_date': event_date, 'k': k, 'n_cuts': len(group),
             'n_polls': int(group['n_polls'].sum()), 'n_cells': int(cells.sum()), 'rmse': float(np.sqrt(mse)),
             'mae': weighted_mean(group['mae'], cells), 'skill': weighted_mean(group['skill'], cells),
-            'autocorr': weighted_mean(group['autocorr'], cells), 'roughness': weighted_mean(group['roughness'], cells)
+            'autocorr': float(group['autocorr'].astype(float).mean()),
+            'roughness': float(group['roughness'].astype(float).mean())
         })
 
     return pd.DataFrame(out, columns=SCORE_COLUMNS)
@@ -857,19 +876,20 @@ def search_cycles(
     min_polls : int, optional
         Polls an election needs (`get_event_dates(..., min_polls=min_polls, featured=True)`).
     today : str, optional
-        The current date by default: the next election is a running cycle only when it is after it.
+        The current date by default: the running cycle is the first election after it.
 
     Returns
     -------
     dict
         `search`: the featured elections with enough polls before `CHECK_SINCE`; `check`: those from `CHECK_SINCE`
-        on plus the next election of the scope (the running cycle, `get_next_event_date` after the last featured
-        one) when it has not been held yet. Dates as `YYYY-MM-DD`, in order.
+        on plus the next election of the scope after `today` (the running cycle, `get_next_event_date`; asked
+        from `today` so that a held election that is not featured cannot hide it). Dates as `YYYY-MM-DD`, in
+        order.
     """
     dates = list(get_event_dates(scope, date_from=since, min_polls=min_polls, featured=True))
     today = pd.Timestamp.today().normalize() if today is None else pd.Timestamp(today)
-    following = get_next_event_date(scope, date_from=dates[-1] if dates else since)
-    if following is not None and pd.Timestamp(following) > today and following not in dates:
+    following = get_next_event_date(scope, date_from=today.strftime('%Y-%m-%d'))
+    if following is not None and following not in dates:
         dates.append(following)
 
     return {
@@ -988,6 +1008,37 @@ def plan_cycles(
     return plan
 
 
+def run_with_retries(run: Callable, *args, **kwargs) -> dict[str, Any]:
+    """
+    Run one cut, again after a database connection error, up to `CUT_RETRIES` times.
+
+    Parameters
+    ----------
+    run : callable
+        `run_cut` or its replacement.
+    *args, **kwargs
+        Its arguments.
+
+    Returns
+    -------
+    dict
+        Its result.
+
+    Raises
+    ------
+    Exception
+        The last connection error after the retries, or any other error at once.
+    """
+    for attempt in range(CUT_RETRIES + 1):
+        try:
+            return run(*args, **kwargs)
+        except CONNECTION_ERRORS as e:
+            if attempt == CUT_RETRIES:
+                raise
+            warnings.warn('Tuning cut: connection error, retry {} of {}: {}'.format(attempt + 1, CUT_RETRIES, e))
+            time.sleep(RETRY_SECONDS)
+
+
 def run_tuning(
     scope: str,
     configs: list[dict],
@@ -1002,8 +1053,10 @@ def run_tuning(
     """
     Run every configuration on every cut of every cycle and aggregate its scores.
 
-    A cut that fails is warned about and recorded in `cuts` with its `error` (as the backtest records a case it
-    skips); it scores nothing.
+    A cut that fails on a database connection (`CONNECTION_ERRORS`) is retried up to `CUT_RETRIES` times,
+    `RETRY_SECONDS` apart. A cut that still fails, or fails otherwise, is warned about and recorded in `cuts` with
+    its `error` (as the backtest records a case it skips); it scores nothing. The callers decide what an errored
+    cut means (`search_figures`, `tuning_scope`).
 
     Parameters
     ----------
@@ -1057,8 +1110,8 @@ def run_tuning(
             for cut in cycle['cuts']:
                 keys = {'config': label, 'partition': partition, 'event_date': event_date, 'cut': pd.Timestamp(cut)}
                 try:
-                    result = run(scope, event_date, cut, config, horizons=horizons, max_fc=max_fc,
-                                 verbose=max(verbose - 1, 0))
+                    result = run_with_retries(run, scope, event_date, cut, config, horizons=horizons, max_fc=max_fc,
+                                              verbose=max(verbose - 1, 0))
                 except Exception as e:
                     warnings.warn('Tuning {} {} {} cut {:%Y-%m-%d} skipped: {}'.format(scope, label, event_date,
                                                                                        pd.Timestamp(cut), e))
@@ -1126,10 +1179,13 @@ def search_figures(out: dict[str, pd.DataFrame]) -> dict[str, float]:
     dict
         `rmse7` and `rmse28`: the mean over the cycles of the RMSE of each cycle at k = 7 and 28 (each cycle
         weighs the same, whatever its number of cuts and polls); `roughness`: the mean over the cycles of the
-        mean roughness of their cuts (a property of the fitted series, each cut weighing the same). NaN without
-        any value.
+        mean roughness of their cuts (a property of the fitted series, each cut weighing the same). All NaN when
+        any cut failed (the configuration would be scored on fewer cuts than the others: `coordinate_descent`
+        never allows NaN figures) or without any value.
     """
     scores, cuts = out['scores'], out['cuts']
+    if not cuts.empty and cuts['error'].notna().any():
+        return {'rmse7': np.nan, 'rmse28': np.nan, 'roughness': np.nan}
 
     def by_cycle(k: int) -> float:
         """Mean over the cycles of the RMSE at `k`."""
@@ -1190,6 +1246,10 @@ def run_search(
       on the `check` cycles. When they are the same configuration only the default runs; a `start` labelled
       `'default'` (or unlabelled) that differs from it is relabelled `'best'`.
 
+    An unlabelled start of a search is labelled `'start'`. A configuration with a failed cut gets NaN figures and
+    is never kept (`search_figures`); a failed cut of the start of a search, or of either configuration of the
+    check, stops the phase (`TuningFailed`): nothing could be compared with it.
+
     Only the keys of the phase present in `grid` are tried. Every distinct configuration runs once: the
     descent memoises its figures, and a candidate that only changes the cap of the adaptive bandwidth under a
     fixed bandwidth (`effective_config`, a no-op in the model) takes the figures of the configuration it equals
@@ -1224,9 +1284,11 @@ def run_search(
     Raises
     ------
     ValueError
-        Unknown phase, or horizons without 7 or 28.
+        Unknown phase, horizons without 7 or 28, or a search phase with none of its keys in `grid`.
     NothingToTune
         The phase has no cycle, or no cycle has a cut.
+    TuningFailed
+        A cut of the start of a search, or of a configuration of the check, failed.
     """
     if phase not in PHASES:
         raise ValueError('Unknown phase {!r}, expected one of {}'.format(phase, list(PHASES)))
@@ -1237,6 +1299,10 @@ def run_search(
     cycles = phase_cycles(search_cycles(scope) if cycles is None else cycles, phase)
     if not {7, 28} <= {int(k) for k in kwargs.get('horizons', (7, 28))}:
         raise ValueError('The search scores the horizons 7 and 28, got {}'.format(kwargs.get('horizons')))
+    order = [key for key in setup['order'] if key in grid]
+    if phase != 'check' and len(order) == 0:
+        raise ValueError('The grid has none of the keys of the {} phase {}, got {}'.format(
+            phase, setup['order'], list(grid)))
     if not any(cycles.values()):
         raise NothingToTune('no {} cycle to tune'.format(setup['partition']))
     plan = plan_cycles(scope, cycles, cut_days=cut_days, read_params=kwargs.get('runner') is None,
@@ -1246,8 +1312,11 @@ def run_search(
 
     switches = {name: setup['effects'] for name in ('house_effects', 'dispersion', 'herding')}
     start = normalize_config(start or default_config()) | switches
+    if phase != 'check' and start.get('label') is None:
+        start['label'] = 'start'
 
     runs: dict[str, tuple[int, dict]] = {}
+    failed: dict[str, str] = {}   # effective key of a run with a failed cut -> its first error
     tables: dict[str, list] = {'cuts': [], 'polls': [], 'scores': []}
     labels = []
 
@@ -1264,6 +1333,10 @@ def run_search(
                 for name, frame in own.items():
                     tables[name].append(frame.assign(evaluation=number))
                 runs[config_key(effective_config(config))] = (number, search_figures(own))
+                errors = own['cuts']['error'].dropna() if not own['cuts'].empty else pd.Series(dtype=object)
+                if len(errors) > 0:
+                    failed[config_key(effective_config(config))] = '{} of {} cuts failed, first: {}'.format(
+                        len(errors), len(own['cuts']), errors.iloc[0])
                 labels.append(label)
         return {config_key(config): runs[config_key(effective_config(config))][1] for config in configs}
 
@@ -1275,6 +1348,10 @@ def run_search(
                 start['label'] = 'best'
             configs = [start, default]
         evaluate_many(configs)
+        for config in configs:
+            reason = failed.get(config_key(effective_config(config)))
+            if reason is not None:
+                raise TuningFailed('check of {} on {}: {}'.format(config.get('label'), scope, reason))
         best = start
         trials = pd.DataFrame(columns=TRIAL_COLUMNS + ['evaluation'])
     else:
@@ -1286,11 +1363,16 @@ def run_search(
             trial_keys.append(config_key(effective_config(out)))
             return out
 
-        def evaluate(config: dict) -> dict:
-            """Figures of one configuration on the cycles of the phase."""
-            return evaluate_many([config])[config_key(config)]
+        start_key = config_key(effective_config(start))
 
-        order = [key for key in setup['order'] if key in grid]
+        def evaluate(config: dict) -> dict:
+            """Figures of one configuration on the cycles of the phase; a failed start stops the search."""
+            figures = evaluate_many([config])[config_key(config)]
+            if config_key(effective_config(config)) == start_key and start_key in failed:
+                raise TuningFailed('start {} of the {} search on {}: {}'.format(
+                    start.get('label'), phase, scope, failed[start_key]))
+            return figures
+
         best, trials = coordinate_descent(evaluate, start, grid, order, rounds=rounds, setter=setter,
                                           normalize=normalize_config)
         trials['evaluation'] = [runs[key][0] for key in trial_keys]
@@ -1372,7 +1454,10 @@ def tuning_scope(
     FileNotFoundError
         `'shrinkage'` or `'check'` without `start` nor a `best.json` in the folder.
     NothingToTune
-        No cycle to tune, or no cut could be evaluated; nothing is written.
+        No cycle to tune, or no cut with enough polls in its cycles; nothing is written.
+    TuningFailed
+        Cuts exist but every one failed, or a search could not trust its start or the check a configuration
+        (`run_search`); nothing is written.
     """
     began = time.perf_counter()
     if mode not in list(PHASES) + ['evaluate']:
@@ -1399,9 +1484,11 @@ def tuning_scope(
             start = json.loads(fs.read_bytes(path).decode('utf-8'))
         result = run_search(scope, phase=mode, start=start, grid=grid or GRID, rounds=rounds, cut_days=cut_days,
                             cycles=cycles, horizons=horizons, runner=runner, verbose=verbose)
-    evaluated = result['cuts'].loc[result['cuts']['error'].isnull()] if not result['cuts'].empty else result['cuts']
+    if result['cuts'].empty:
+        raise NothingToTune('no cut with enough polls in the cycles')
+    evaluated = result['cuts'].loc[result['cuts']['error'].isnull()]
     if evaluated.empty:
-        raise NothingToTune('no cut could be evaluated')
+        raise TuningFailed('every cut failed, first error: {}'.format(result['cuts']['error'].iloc[0]))
     seconds = {'run': time.perf_counter() - began}
 
     for name in ('cuts', 'polls', 'scores', 'trials'):
