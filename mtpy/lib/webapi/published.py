@@ -1,6 +1,6 @@
 """Reader of the published bundle: the ``Site`` service and the ``site()`` accessor."""
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import pandas as pd
 
@@ -448,6 +448,39 @@ class Site:
             The dates, ascending, cached under the TTL. Empty when the scope has none.
         """
         return self.pointers.get(('events', scope), lambda: self.reader.list_events(scope))
+
+    def backtests(self) -> list:
+        """
+        Scopes with a published backtest.
+
+        Returns
+        -------
+        list of str
+            The scope codes, sorted, cached under the TTL (``BundleReader.list_backtests``).
+        """
+        return self.pointers.get('backtests', self.reader.list_backtests)
+
+    def cached(self, key: tuple, loader: Callable[[], Any]) -> Any:
+        """
+        A value derived from several files of the bundle, cached under the TTL of the pointers.
+
+        For the pages that combine parts of many scopes: within the TTL the parts are not read again, missing ones
+        included (the read of a missing part raises, so the TTL never stores it); ``manifest_cache_clear`` drops the
+        value with the pointers.
+
+        Parameters
+        ----------
+        key : tuple
+            Cache key; its first member names the value (``('reliability', scopes)``).
+        loader : callable
+            Function without arguments that computes the value on a miss.
+
+        Returns
+        -------
+        object
+            The cached or freshly computed value (``None`` is cached too).
+        """
+        return self.pointers.get(('derived',) + tuple(key), loader)
 
     def event(self, scope: str, date: str, part: str) -> bytes:
         """

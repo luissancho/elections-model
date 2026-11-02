@@ -301,10 +301,13 @@ def part_table(part: dict) -> pd.DataFrame:
 
 def reliability_context(scopes: list) -> Optional[dict]:
     """
-    Reliability of the bands of the model in the published backtest of every scope, for the card «Fiabilidad».
+    Reliability of the bands of the model in the published backtest of several scopes, for the card «Fiabilidad».
 
-    Reads the ``calibration`` and ``blocks`` parts of each scope (one read of the bundle per part, cached under the TTL
-    afterwards); a scope without a published ``calibration`` (no backtest, or one of before the PIT) is left out.
+    The value is computed once and cached under the TTL of the site (``Site.cached``, keyed on the scope list), so
+    the parts are read at most once per TTL, the missing ones included (the TTL of the bundle reads never stores a
+    404). The reads: the ``calibration`` part of each scope and, only for the scopes that have it, the ``blocks``
+    part; a scope without a published ``calibration`` (no backtest, or one of before the PIT) is left out. Pass the
+    scopes with a published backtest (``Site.backtests``), as ``backtest_context`` does.
 
     Parameters
     ----------
@@ -319,28 +322,59 @@ def reliability_context(scopes: list) -> Optional[dict]:
         ``RELIABILITY_CELLS``, the populations in the order of ``POPULATIONS`` and only those with cells), ``majority``
         (``[{'p_mean', 'observed', 'n'}]``, the non-empty bins of ``backtest.majority_reliability`` of the blocks of
         every pooled scope in mode Elección), ``n_events`` (``{population: elections}``, the most of any group),
-        ``mode`` (``RELIABILITY_MODE``) and ``scopes`` (the codes pooled, in the given order).
+        ``mode`` (``RELIABILITY_MODE``) and ``scopes`` (the codes pooled, in the given order). The cached value is
+        shared by the requests: do not modify it.
+    """
+    scopes = tuple(scopes)
+
+    return site().cached(('reliability', scopes), lambda: reliability_summary(scopes))
+
+
+def read_backtest_parts(scopes: tuple, name: str) -> dict:
+    """
+    One part of the published backtest of several scopes, read in parallel.
+
+    Parameters
+    ----------
+    scopes : tuple of str
+        Scope codes.
+    name : str
+        Part name, one of ``bundle.BACKTEST_PARTS``.
+
+    Returns
+    -------
+    dict
+        Scope -> the ``data`` of its part, or ``None`` when it is not published.
+    """
+    with ThreadPoolExecutor(max_workers=PART_READERS) as pool:
+        return dict(zip(scopes, pool.map(lambda scope: backtest_part(scope, name), scopes)))
+
+
+def reliability_summary(scopes: tuple) -> Optional[dict]:
+    """
+    The value of ``reliability_context``, read from the bundle without the cache.
+
+    Parameters
+    ----------
+    scopes : tuple of str
+        Scope codes to pool.
+
+    Returns
+    -------
+    dict or None
+        See ``reliability_context``.
     """
     from ..backtest import majority_reliability, summarize_calibration  # lazy: the backtest library loads the model
 
-    wanted = [(scope, part) for scope in scopes for part in ('calibration', 'blocks')]
-    with ThreadPoolExecutor(max_workers=PART_READERS) as pool:
-        parts = dict(zip(wanted, pool.map(lambda key: backtest_part(*key), wanted)))
+    calibrations = read_backtest_parts(scopes, 'calibration')
+    pooled = tuple(scope for scope in scopes if (calibrations[scope] or {}).get('rows'))
 
-    cells, blocks, pooled = [], [], []
-    for scope in scopes:
-        calibration = parts[(scope, 'calibration')]
-        if not calibration or not calibration.get('rows'):
-            continue
-        population = POPULATIONS[0] if scope == NATIONAL_SCOPE else POPULATIONS[1]
-        cells.append(part_table(calibration).assign(scope=scope, population=population))
-        pooled.append(scope)
-        if parts[(scope, 'blocks')]:
-            blocks.append(part_table(parts[(scope, 'blocks')]))
-
-    if not cells:
+    if not pooled:
         return None
 
+    blocks = read_backtest_parts(pooled, 'blocks')
+    cells = [part_table(calibrations[scope]).assign(
+        scope=scope, population=POPULATIONS[0] if scope == NATIONAL_SCOPE else POPULATIONS[1]) for scope in pooled]
     summary = summarize_calibration(pd.concat(cells, ignore_index=True))
     pit, n_events = {}, {}
     for population in POPULATIONS:
@@ -356,14 +390,15 @@ def reliability_context(scopes: list) -> Optional[dict]:
         n_events[population] = int(rows['n_events'].max())
 
     majority = []
-    if blocks:
-        bins = majority_reliability(pd.concat(blocks, ignore_index=True))
+    tables = [part_table(blocks[scope]) for scope in pooled if blocks[scope]]
+    if tables:
+        bins = majority_reliability(pd.concat(tables, ignore_index=True))
         bins = bins.loc[bins['mode'].eq(RELIABILITY_MODE) & bins['n'].gt(0)]
         majority = [{'p_mean': round(float(row.p_mean), RELIABILITY_DECIMALS),
                      'observed': round(float(row.observed), RELIABILITY_DECIMALS), 'n': int(row.n)}
                     for row in bins.itertuples()]
 
-    return {'pit': pit, 'majority': majority, 'n_events': n_events, 'mode': RELIABILITY_MODE, 'scopes': pooled}
+    return {'pit': pit, 'majority': majority, 'n_events': n_events, 'mode': RELIABILITY_MODE, 'scopes': list(pooled)}
 
 
 def backtest_context(state: dict, active: str = '/metodo') -> dict:
@@ -388,10 +423,10 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         ``horizons`` and, aligned with them, the ``mae``, ``coverage`` and ``seats`` series; ``seats`` holds
         ``mae``, the mean absolute seat error, the same in both modes since the headline is the central
         allocation, so the horizon run's ``mae_seats_h`` stays in the table rows and the CSV only), ``reliability``
-        (``reliability_context`` of every catalogue scope, ``None`` when none publishes the PIT; when it is not,
-        also in ``initial``) and ``reliability_csv`` (the link to the CSV of the PIT of the scope, ``None`` when the
-        scope does not publish it; with it, ``reliability_csv_label``, and the link is also the last of
-        ``csv_links``).
+        (``reliability_context`` of the catalogue scopes with a published backtest, ``None`` when none publishes the
+        PIT; when it is not, also in ``initial``) and ``reliability_csv`` (the link to the CSV of the PIT of the
+        scope, ``None`` when the scope does not publish it; with it, ``reliability_csv_label``, and the link is also
+        the last of ``csv_links``).
 
     Raises
     ------
@@ -436,7 +471,9 @@ def backtest_context(state: dict, active: str = '/metodo') -> dict:
         'seats': {'mae': series('mae_seats')},
         **bullseye,
     }
-    reliability = reliability_context([row['code'] for row in site().scopes()['scopes']])
+    with_backtest = set(site().backtests())
+    scopes = [row['code'] for row in site().scopes()['scopes'] if row['code'] in with_backtest]
+    reliability = reliability_context(scopes)
     context['reliability'] = reliability
     context['reliability_csv'] = None
 

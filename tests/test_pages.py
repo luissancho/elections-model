@@ -2527,6 +2527,50 @@ def test_reliability_context_pools_the_calibration_of_every_scope(api, fresh_app
     assert pages.backtest.reliability_context(['es-an']) is None
 
 
+def counted_backtest_parts(monkeypatch):
+    """Sustituye `backtest_part` de la página por uno que apunta cada lectura `(ámbito, parte)` de `calibration` y
+    `blocks` en la lista que devuelve."""
+    reads, real = [], pages.backtest.backtest_part
+
+    def counted(scope, name):
+        if name in ('calibration', 'blocks'):
+            reads.append((scope, name))
+        return real(scope, name)
+
+    monkeypatch.setattr(pages.backtest, 'backtest_part', counted)
+    return reads
+
+
+def test_reliability_context_reads_each_part_once_per_ttl_and_blocks_only_with_calibration(api, fresh_app, monkeypatch):
+    """Un ámbito sin `calibration` (un backtest anterior al PIT) se lee una vez: no se le piden los bloques, y en el
+    segundo pintado, dentro del TTL, no se vuelve a leer nada (la lectura que falla no la guarda la caché de bytes, sí
+    la del resumen)."""
+    write_backtest(fresh_app.fs)
+    write_backtest(fresh_app.fs, scope='es-md')
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_backtest('es-md', 'calibration'))
+    reads = counted_backtest_parts(monkeypatch)
+    first = pages.backtest.reliability_context(['es', 'es-md'])
+    assert sorted(reads) == [('es', 'blocks'), ('es', 'calibration'), ('es-md', 'calibration')]
+    assert first['scopes'] == ['es']
+    reads.clear()
+    assert pages.backtest.reliability_context(['es', 'es-md']) is first and reads == []
+
+
+def test_backtest_page_reads_the_reliability_only_of_scopes_with_a_backtest_and_once_per_ttl(api, fresh_app,
+                                                                                             monkeypatch):
+    """La tarjeta sólo lee los ámbitos con backtest publicado (no los dieciocho del catálogo) y, dentro del TTL, el
+    segundo pintado de la página no vuelve a leer `calibration` ni `blocks`."""
+    write_backtest(fresh_app.fs)
+    write_backtest(fresh_app.fs, scope='es-md')
+    bundle.BundleWriter(fresh_app.fs).remove(bundle.path_backtest('es-md', 'calibration'))
+    reads = counted_backtest_parts(monkeypatch)
+    assert call(api, '/metodo/backtest', query='scope=es')[0] == 200
+    assert {scope for scope, _ in reads} == {'es', 'es-md'} and ('es-md', 'blocks') not in reads
+    reads.clear()
+    # sólo queda la tabla de bloques del propio ámbito (sus bytes, en la caché del TTL); nada de la tarjeta
+    assert call(api, '/metodo/backtest', query='scope=es')[0] == 200 and reads == [('es', 'blocks')]
+
+
 def test_backtest_page_shows_the_reliability_card_after_the_coverage(backtest_site):
     status, _, body = call(backtest_site, '/metodo/backtest', query='scope=es')
     page = html(body)

@@ -911,6 +911,22 @@ class BundleReader:
         """
         return self.exists(path_backtest(scope, 'meta'))
 
+    def list_backtests(self) -> list:
+        """
+        List the scopes with a published backtest, a backtest being published when it has its ``meta.json``.
+
+        Returns
+        -------
+        list of str
+            The scope codes, sorted. Empty if there is no backtest folder.
+        """
+        try:
+            names = self.fs.listdir(self.path('backtest'))
+        except FileNotFoundError:
+            return []
+
+        return sorted(name for name in names if ROUTE_ALIAS_RE.fullmatch(name) and self.backtest_exists(name))
+
     def list_events(self, scope: str) -> list:
         """
         List the published past elections of a scope, an election being published when it has its ``meta.json``.

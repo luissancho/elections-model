@@ -258,6 +258,17 @@ def test_backtest_calibration_part_has_its_schema_and_its_csv_twin(tmp_path):
         bundle.validate('backtest-calibration', bad)
 
 
+def test_list_backtests_lists_the_scopes_with_a_meta(tmp_path):
+    reader = bundle.BundleReader(FileSystem(str(tmp_path)))
+    assert reader.list_backtests() == []
+    writer = bundle.BundleWriter(FileSystem(str(tmp_path)), clock=fixed_clock)
+    meta, seats = load_fixture('backtest-meta')['data'], load_fixture('backtest-seats')['data']
+    for scope in ('es-md', 'es'):
+        writer.write_json(bundle.path_backtest(scope, 'meta'), 'backtest-meta', meta, scope)
+    writer.write_json(bundle.path_backtest('es-an', 'seats'), 'backtest-seats', seats, 'es-an')
+    assert reader.list_backtests() == ['es', 'es-md']  # es-an, sin `meta`, está a medio publicar
+
+
 def test_backtest_exists_needs_the_meta(tmp_path):
     writer = bundle.BundleWriter(FileSystem(str(tmp_path)), clock=fixed_clock)
     assert not writer.backtest_exists('es')
