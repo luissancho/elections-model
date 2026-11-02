@@ -326,8 +326,9 @@ def reweighted_overrides(polls: pd.DataFrame, weights: dict[str, Any]) -> pd.Dat
     """
     Weights of the polls of a cut recomputed in memory with `Computer.reweight`, as `weight_overrides`.
 
-    Only `weight_over` (the one `wspan` changes) replaces the stored weight, so that a configuration differs from
-    the live one in `wspan` alone; `weight_sample` is also replaced when `weights` sets `ol_max`.
+    Both stored weights, `weight_over` and `weight_sample`, are replaced: computed over the polls up to the cut
+    only, they carry no look-ahead (the stored ones depend on later waves and on full-cycle sample medians).
+    `proc_sample` is not overridable and stays the stored one.
 
     Parameters
     ----------
@@ -341,7 +342,7 @@ def reweighted_overrides(polls: pd.DataFrame, weights: dict[str, Any]) -> pd.Dat
     pd.DataFrame
         The recomputed columns indexed by (`date`, `pollster_id`, `sponsor_id`), with `date` as a timestamp.
     """
-    columns = ['weight_over'] + (['weight_sample'] if 'ol_max' in weights else [])
+    columns = ['weight_over', 'weight_sample']
     computed = Computer.reweight(polls, weights['wspan'], ol_max=weights.get('ol_max', 5000))
     index = pd.MultiIndex.from_arrays(
         [pd.to_datetime(polls['date']), polls['pollster_id'], polls['sponsor_id']],
@@ -380,8 +381,9 @@ def run_cut(
     config : dict
         Configuration of the average (see `default_config`): `reg_params`, `he_params` and `disp_params` go to
         the Forecaster, `house_effects` and `dispersion` are its switches, `herding` goes into `disp_params`,
-        `max_fc` to `fit_forecast` and `weights` (`wspan`, optionally `ol_max`), when set, recomputes the weights
-        of the polls of the cut (`reweighted_overrides`).
+        `max_fc` to `fit_forecast` and `weights` (`wspan`, optionally `ol_max`), when set, recomputes the
+        `weight_over` and `weight_sample` of the polls of the cut on those polls alone (`reweighted_overrides`;
+        `proc_sample` stays the stored one).
     horizons : tuple of int, optional
         Horizons in days.
     max_fc : int, optional

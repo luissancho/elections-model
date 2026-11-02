@@ -274,7 +274,8 @@ def test_run_cut_with_weights_passes_the_reweighted_polls_as_overrides(monkeypat
     overrides = FakeForecaster.instances[0].kwargs['weight_overrides']
     assert overrides.index.names == ['date', 'pollster_id', 'sponsor_id']
     assert isinstance(overrides.index[0][0], pd.Timestamp)
-    assert overrides.columns.tolist() == ['weight_over'] and (overrides['weight_over'] == 0.5).all()
+    assert overrides.columns.tolist() == ['weight_over', 'weight_sample']  # nunca proc_sample
+    assert (overrides['weight_over'] == 0.5).all() and (overrides['weight_sample'] == 1.5).all()
     assert out['meta']['n_overrides'] == 3
 
     run_cut('es', EVENT, CUT, config=default_config() | {'weights': {'wspan': 7, 'ol_max': 3000}})
