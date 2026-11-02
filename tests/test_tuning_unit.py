@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from mtpy.lib.forecaster import Forecaster
-from mtpy.lib.tuning import predict_polls
+from mtpy.lib.tuning import autocorrelation, predict_polls, roughness, score_polls
 
 
 def _fake_fitted_forecaster(effects=None):
@@ -51,3 +51,54 @@ def test_house_effect_of_is_zero_without_fitted_effects_or_for_an_unknown_house(
     assert fc.house_effect_of(1, 'PP') == 2.0
     assert fc.house_effect_of(1, 'PSOE') == 0.0
     assert fc.house_effect_of(9, 'PP') == 0.0
+
+
+def test_predict_polls_handles_party_names_that_are_not_python_identifiers():
+    fc = _fake_fitted_forecaster(effects={})
+    fc.forecast['EH Bildu'] = 5.
+    fc.forecast['UPN-PP'] = 2.
+    polls = pd.DataFrame({'date': [pd.Timestamp('2026-03-12')], 'pollster_id': [1], 'sponsor_id': [0], 'pollster': ['A'],
+                          'sample_size': [1000], 'EH Bildu': [6.], 'UPN-PP': [3.]})
+    out = predict_polls(fc, polls, ['EH Bildu', 'UPN-PP'])
+    assert out['party'].tolist() == ['EH Bildu', 'UPN-PP']
+    assert out['published'].tolist() == [6., 3.]
+    assert out['residual'].tolist() == pytest.approx([1., 1.])
+
+
+def test_score_polls_rmse_mae_skill_and_by_party():
+    pred = pd.DataFrame({'party': ['PP', 'PP', 'PSOE'], 'published': [32., 28., 20.], 'predicted': [30., 30., 20.],
+                         'residual': [2., -2., 0.], 'sample_size': [1000., 1000., np.nan], 'date': pd.to_datetime(['2026-01-02'] * 3)})
+    s = score_polls(pred, k=7)
+    assert s['k'] == 7 and s['n_cells'] == 3 and s['n_polls'] == 1
+    assert s['rmse'] == pytest.approx(np.sqrt(8 / 3)) and s['mae'] == pytest.approx(4 / 3)
+    assert s['rmse_by_party']['PP'] == pytest.approx(2.) and s['rmse_by_party']['PSOE'] == 0.
+    assert s['skill'] < 1
+
+
+def test_score_polls_without_cells_is_nan_not_an_error():
+    s = score_polls(pd.DataFrame(columns=['party', 'published', 'predicted', 'residual', 'sample_size', 'date']), k=28)
+    assert s['n_cells'] == 0 and np.isnan(s['rmse']) and np.isnan(s['skill'])
+
+
+def test_score_polls_skill_is_nan_without_any_sample_size():
+    pred = pd.DataFrame({'party': ['PP'], 'published': [30.], 'predicted': [29.], 'residual': [1.],
+                         'sample_size': [np.nan], 'date': pd.to_datetime(['2026-01-02'])})
+    s = score_polls(pred, k=7)
+    assert s['n_cells'] == 1 and s['rmse'] == pytest.approx(1.) and np.isnan(s['skill'])
+
+
+def test_autocorrelation_and_roughness():
+    pred = pd.DataFrame({'party': ['PP'] * 4, 'date': pd.to_datetime(['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04']),
+                         'residual': [1., 1., -1., -1.]})
+    assert autocorrelation(pred) > 0
+    days = pd.date_range('2026-01-01', periods=5, freq='D')
+    assert roughness(pd.DataFrame({'PP': [30., 30., 30., 30., 30.]}, index=days), ['PP']) == 0.
+    assert roughness(pd.DataFrame({'PP': [30., 31., 30., 31., 30.]}, index=days), ['PP']) == pytest.approx(1.)
+    assert roughness(pd.DataFrame({'PP': [np.nan, 30., 30.5, np.nan, np.nan]}, index=days), ['PP']) == pytest.approx(0.5)  # sin el relleno
+
+
+def test_autocorrelation_stays_within_each_party_and_is_nan_with_few_pairs():
+    dates = pd.to_datetime(['2026-01-01', '2026-01-02', '2026-01-03'])
+    pred = pd.DataFrame({'party': ['PP', 'PP', 'PSOE'], 'date': dates, 'residual': [1., 2., 5.]})
+    assert np.isnan(autocorrelation(pred))
+    assert np.isnan(autocorrelation(pred.iloc[:0]))
