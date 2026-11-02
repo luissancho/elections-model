@@ -14,6 +14,7 @@ import json
 import multiprocessing
 import os
 import re
+import signal
 import time
 import warnings
 
@@ -110,6 +111,9 @@ CONNECTION_ERRORS = (DriverOperationalError, DriverInterfaceError, EngineOperati
 # Retries of a cut after a connection error, and the seconds waited before each
 CUT_RETRIES = 3
 RETRY_SECONDS = 10.
+# Seconds a cut may run in a process of the pool before its watchdog stops it (`timed_call`): a cut takes 2-3 minutes
+# at most, so one past this hangs on a dead database link
+CUT_TIMEOUT = 15 * 60.
 
 CUT_COLUMNS = ['config', 'partition', 'event_date', 'cut', 'n_polls', 'n_overrides', 'n_unpredicted', 'seconds',
                'autocorr', 'roughness', 'error']
@@ -1019,9 +1023,71 @@ def plan_cycles(
     return plan
 
 
+class CutTimeout(Exception):
+    """A cut ran past `CUT_TIMEOUT` seconds in a process of the pool (a query hung on a dead database link). It is
+    retried as a connection error, on a fresh connection (`reset_connection`)."""
+
+
+def reset_connection() -> None:
+    """
+    Forget the database engine of this process without touching its sockets, so the next query opens a fresh one.
+
+    The engine is disposed with `close=False` (closing a connection on a dead link could hang again) and the adapter
+    drops it (`dispose`): its next `connect` builds a new engine. Nothing happens without an app or a database.
+    """
+    from ..core.app import App
+
+    if not App.has_():
+        return
+    db = App.get_().db
+    if db is None:
+        return
+    engine = getattr(db, '_client', None)
+    if engine is not None and hasattr(engine, 'dispose'):
+        engine.dispose(close=False)
+    db.dispose()
+
+
+def raise_cut_timeout(signum, frame):
+    """Handler of SIGALRM in `timed_call`."""
+    raise CutTimeout('the cut did not finish in {:g} s'.format(CUT_TIMEOUT))
+
+
+def timed_call(run: Callable, *args, **kwargs) -> Any:
+    """
+    Run one attempt of a cut under a watchdog of `CUT_TIMEOUT` seconds (SIGALRM, so only in the main thread of a
+    process: the processes of the pool run their tasks there).
+
+    Parameters
+    ----------
+    run : callable
+        `run_cut` or its replacement.
+    *args, **kwargs
+        Its arguments.
+
+    Returns
+    -------
+    Any
+        Its result.
+
+    Raises
+    ------
+    CutTimeout
+        The attempt ran past `CUT_TIMEOUT` seconds. The timer and the previous handler are restored in any case.
+    """
+    previous = signal.signal(signal.SIGALRM, raise_cut_timeout)
+    signal.setitimer(signal.ITIMER_REAL, CUT_TIMEOUT)
+    try:
+        return run(*args, **kwargs)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def run_with_retries(run: Callable, *args, **kwargs) -> dict[str, Any]:
     """
-    Run one cut, again after a database connection error, up to `CUT_RETRIES` times.
+    Run one cut, again after a database connection error or a `CutTimeout` (after `reset_connection`), up to
+    `CUT_RETRIES` times.
 
     Parameters
     ----------
@@ -1043,7 +1109,9 @@ def run_with_retries(run: Callable, *args, **kwargs) -> dict[str, Any]:
     for attempt in range(CUT_RETRIES + 1):
         try:
             return run(*args, **kwargs)
-        except CONNECTION_ERRORS as e:
+        except CONNECTION_ERRORS + (CutTimeout,) as e:
+            if isinstance(e, CutTimeout):
+                reset_connection()
             if attempt == CUT_RETRIES:
                 raise
             warnings.warn('Tuning cut: connection error, retry {} of {}: {}'.format(attempt + 1, CUT_RETRIES, e))
@@ -1055,15 +1123,22 @@ def boot_worker() -> None:
     Boot the app in a process of the pool of `run_tuning` (its default `initializer`).
 
     Every process of the pool owns its app and its SQLAlchemy engine: no connection is shared between processes.
+    The queries of psycopg2 wait in Python (`psycopg2.extras.wait_select`) instead of inside libpq, so the watchdog
+    of a cut (`timed_call`) can stop a query hung on a dead link.
     """
+    import psycopg2.extensions
+    import psycopg2.extras
+
     from .. import mtpy as app
 
     app.run()
+    psycopg2.extensions.set_wait_callback(psycopg2.extras.wait_select)
 
 
 def pool_cut(task: tuple) -> dict[str, Any]:
     """
-    Run one cut in a process of the pool of `run_tuning`, with the retries of `run_with_retries`.
+    Run one cut in a process of the pool of `run_tuning`, each attempt under the watchdog of `timed_call`, with the
+    retries of `run_with_retries`.
 
     Parameters
     ----------
@@ -1084,8 +1159,8 @@ def pool_cut(task: tuple) -> dict[str, Any]:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         try:
-            result = run_with_retries(run, scope, event_date, cut, config, horizons=horizons, max_fc=max_fc,
-                                      verbose=verbose)
+            result = run_with_retries(functools.partial(timed_call, run), scope, event_date, cut, config,
+                                      horizons=horizons, max_fc=max_fc, verbose=verbose)
         except Exception as e:
             error = str(e)
 

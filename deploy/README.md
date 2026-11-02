@@ -264,7 +264,10 @@ con las variables `DB_*` de `deploy/elections.env` (`DB_ADAPTER`, `DB_HOST`, `DB
 `DB_PASSWORD`, `DB_DATABASE`; ver `.env.example`): sin ellas (basta con `DB_HOST` vacío), esas rutas dan 503
 `no database configured` y `/casas` un 503 en HTML ("La base de datos no está disponible."); el resto del sitio
 funciona igual. Con las variables pero sin base alcanzable, 503 `database unavailable` (con la traza en el
-log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`); las consultas no tienen límite
+log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`), y una conexión abierta cuyo enlace
+muere falla en unos 2 minutos en vez de quedarse colgada: keepalives de TCP (`keepalives_idle` 60 s, sondas cada
+10 s, 5 sondas), en todo lo que use la base (web, jobs, cuadernos) e inertes con el enlace sano (enmienda
+2026-11-02, tras un `tune` colgado más de una hora en un enlace móvil); las consultas no tienen límite
 salvo que se fije `DB_STATEMENT_TIMEOUT` (milisegundos). Para el contenedor de la web, pon
 `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env`: una consulta colgada da 503 `database unavailable` a los
 10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío (enmienda 2026-10-13: en ECS va en

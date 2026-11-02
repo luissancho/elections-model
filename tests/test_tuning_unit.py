@@ -1052,3 +1052,82 @@ def test_copy_tuning_mirrors_the_tuning_files_of_the_scope_only(tmp_path):
     assert (dst / 'best.json').read_text() == 'best.json'
     with pytest.raises(NothingToTune):
         copy_tuning('es-xx', tuning_fs(str(src), 'es-xx'), tuning_fs(str(dst), 'es-xx'))
+
+
+# --- Watchdog of a cut in a process of the pool ----------------------------------------------------------------------
+
+class SleepyCut(FakeCut):
+    """`FakeCut` that hangs (sleeps 2 s) on its first `hangs` calls, as a cut on a dead database link."""
+    def __init__(self, hangs):
+        super().__init__()
+        self.hangs = hangs
+
+    def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+        if len(self.calls) < self.hangs:
+            self.calls.append((event_date, cut, config['label']))
+            time.sleep(2)
+        return super().__call__(scope, event_date, cut, config, horizons=horizons)
+
+
+def _watchdog(monkeypatch):
+    """A watchdog of 0.2 s, no wait between retries and the resets of the connection recorded."""
+    resets = []
+    monkeypatch.setattr(tuning, 'CUT_TIMEOUT', 0.2)
+    monkeypatch.setattr(tuning, 'RETRY_SECONDS', 0.)
+    monkeypatch.setattr(tuning, 'reset_connection', lambda: resets.append(True))
+    return resets
+
+
+def test_pool_cut_times_out_a_hung_cut_resets_the_connection_and_retries(monkeypatch):
+    resets = _watchdog(monkeypatch)
+    runner = SleepyCut(hangs=1)
+    began = time.perf_counter()
+    outcome = tuning.pool_cut((runner, 'es', '2019-11-10', pd.Timestamp('2019-10-11'), default_config(), (7, 28),
+                               None, 0, None))
+    assert time.perf_counter() - began < 1.5
+    assert outcome['error'] is None and outcome['result']['scores'][0]['k'] == 7
+    assert len(resets) == 1 and any('retry 1 of' in message for message, _ in outcome['warnings'])
+    assert signal_is_quiet()
+
+
+def test_pool_cut_records_a_cut_that_hangs_on_every_attempt_as_an_error(monkeypatch):
+    resets = _watchdog(monkeypatch)
+    outcome = tuning.pool_cut((SleepyCut(hangs=99), 'es', '2019-11-10', pd.Timestamp('2019-10-11'),
+                               default_config(), (7, 28), None, 0, None))
+    assert outcome['result'] is None and 'did not finish in 0.2 s' in outcome['error']
+    assert len(resets) == 1 + tuning.CUT_RETRIES and signal_is_quiet()
+
+
+def signal_is_quiet():
+    """No timer left armed and the default handler of SIGALRM back."""
+    import signal
+    return signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0) and signal.getsignal(signal.SIGALRM) == signal.SIG_DFL
+
+
+def test_reset_connection_forgets_the_engine_without_touching_its_sockets(fresh_app):
+    seen = []
+
+    class Engine:
+        def dispose(self, close=True):
+            seen.append(('engine', close))
+
+    class Adapter:
+        _client = Engine()
+
+        def dispose(self):
+            seen.append(('adapter',))
+
+    fresh_app.set('db', Adapter())
+    tuning.reset_connection()
+    assert seen == [('engine', False), ('adapter',)]
+
+
+def test_boot_worker_boots_the_app_and_makes_the_queries_interruptible(monkeypatch):
+    import psycopg2.extensions
+    import psycopg2.extras
+    from mtpy import mtpy as app_module
+    booted, callbacks = [], []
+    monkeypatch.setattr(app_module, 'run', lambda: booted.append(True))
+    monkeypatch.setattr(psycopg2.extensions, 'set_wait_callback', callbacks.append)
+    tuning.boot_worker()
+    assert booted == [True] and callbacks == [psycopg2.extras.wait_select]
