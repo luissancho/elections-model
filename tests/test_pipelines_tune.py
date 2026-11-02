@@ -1,0 +1,111 @@
+"""Tests del pipeline `tune.Tune` ejecutado suelto, con `tuning.tuning_scope` y la base sustituidos."""
+import warnings
+
+import pytest
+
+from mtpy.lib import tuning
+from mtpy.pipelines.tune.Tune import Tune
+
+
+class FakeScope:
+    """
+    `tuning.tuning_scope` sin modelo ni base: registra sus argumentos y devuelve las cifras.
+
+    `es-xx` no tiene ciclos (`NothingToTune`), `missing` es el ámbito sin `best.json` (`FileNotFoundError`),
+    `fail_scope` no puede puntuarse (`TuningFailed`) y `warn` avisa de un corte omitido.
+    """
+
+    def __init__(self, fail_scope=None, missing=None, warn=False):
+        self.calls = []
+        self.fail_scope = fail_scope
+        self.missing = missing
+        self.warn = warn
+
+    def __call__(self, scope, **kwargs):
+        self.calls.append({'scope': scope, **kwargs})
+        if scope == 'es-xx':
+            raise tuning.NothingToTune('no cycles to tune for es-xx')
+        if scope == self.missing:
+            raise FileNotFoundError('no best.json in {}: run the previous phase or pass start'.format(scope))
+        if scope == self.fail_scope:
+            raise tuning.TuningFailed('start start of the smoothing search on {}: 1 of 2 cuts failed'.format(scope))
+        if self.warn:
+            warnings.warn('cut 2019-10-01 of 2019-11-10 skipped: no future polls')
+        figures = {'n_configs': len(kwargs.get('configs') or [None]), 'n_cuts': 2,
+                   'cycles': {'search': ['2019-11-10'], 'check': []},
+                   'folder': '{}/{}'.format(kwargs.get('out'), scope), 'seconds': {'run': 0., 'write': 0., 'total': 0.}}
+        if kwargs.get('mode') != 'evaluate':
+            figures['best'] = {**tuning.default_config(), 'label': 'bw=(\'fixed\', 45)'}
+        return figures
+
+
+@pytest.fixture
+def patched(monkeypatch):
+    """`search_cycles` sin base: `es-md` tiene dos ciclos de búsqueda y uno de comprobación."""
+    monkeypatch.setattr(tuning, 'search_cycles',
+                        lambda scope: {'search': ['2011-05-22', '2015-05-24'], 'check': ['2023-05-28']})
+
+
+def stats(scope):
+    return {'db_polls': 7, 'db_last_poll': '2026-10-03'}
+
+
+def evaluate(runner=None, scope='es-md', tmp_path=None, position=(2, 2), **kwargs):
+    p = Tune()
+    p.run('run', chunk=scope, position=position, out=str(tmp_path), runner=runner or FakeScope(), stats=stats,
+          **{'mode': 'evaluate', 'configs': [tuning.default_config()], 'verbose': 0, **kwargs})
+    return p
+
+
+def test_tune_run_writes_the_folder_and_builds_its_line(fresh_app, patched, tmp_path, capsys):
+    p = evaluate(tmp_path=tmp_path)
+    assert p.result['status'] == 'completed' and p.result['n_configs'] == 1
+    assert p.result['folder'] == '{}/es-md'.format(tmp_path) and p.result['warnings'] == []
+    assert p.line == 'es-md: tune completed (1 configs, 2 cuts) in 0 s'
+    out = capsys.readouterr().out
+    assert 'tune: 2 ámbitos · evaluate · {}'.format(tmp_path) in out
+    assert 'empezando' not in out
+
+
+def test_tune_skips_a_scope_without_cycles(fresh_app, patched, tmp_path):
+    p = evaluate(tmp_path=tmp_path, scope='es-xx')
+    assert p.result['status'] == 'skipped' and 'no cycles' in p.result['reason']
+    assert p.line == 'es-xx: skipped (no cycles to tune for es-xx)'
+
+
+def test_tune_skips_a_scope_without_best_json(fresh_app, patched, tmp_path):
+    p = evaluate(FakeScope(missing='es-md'), tmp_path=tmp_path, mode='check', configs=None)
+    assert p.result['status'] == 'skipped' and 'no best.json' in p.result['reason']
+
+
+def test_tune_reports_a_failed_tuning_as_failed_not_skipped(fresh_app, patched, tmp_path):
+    p = evaluate(FakeScope(fail_scope='es-md'), tmp_path=tmp_path, mode='smoothing', configs=None)
+    assert p.result['status'] == 'failed' and p.result['reason'].startswith('TuningFailed: start start')
+    assert p.line.startswith('es-md: failed (TuningFailed: ')
+
+
+def test_tune_passes_every_parameter_through(fresh_app, patched, tmp_path):
+    runner = FakeScope()
+    grid = {'bw': [('fixed', 45), ('fixed', 60)]}
+    evaluate(runner, tmp_path=tmp_path, mode='smoothing', configs=None, grid=grid, cut_days=14, horizons=(7, 28, 56),
+             rounds=1, verbose=2)
+    call = runner.calls[0]
+    assert call == {'scope': 'es-md', 'out': str(tmp_path), 'mode': 'smoothing', 'configs': None, 'grid': grid,
+                    'cycles': None, 'cut_days': 14, 'horizons': (7, 28, 56), 'rounds': 1, 'verbose': 1,
+                    'stats': stats}
+
+
+def test_tune_restricts_the_cycles_of_the_scope_and_warns_of_the_unknown_ones(fresh_app, patched, tmp_path):
+    runner = FakeScope()
+    p = evaluate(runner, tmp_path=tmp_path, cycles=['2015-05-24', '2023-05-28', '2019-05-26'])
+    assert runner.calls[0]['cycles'] == {'search': ['2015-05-24'], 'check': ['2023-05-28']}
+    assert p.result['warnings'] == ['2019-05-26 is not a cycle of es-md (ignored)']
+    assert p.line == 'es-md: tune completed (1 configs, 2 cuts) in 0 s · 1 aviso'
+
+
+def test_tune_reports_the_warnings_of_the_scope(fresh_app, patched, tmp_path, capsys):
+    p = evaluate(FakeScope(warn=True), scope='es', tmp_path=tmp_path, position=(1, 1), verbose=1)
+    out = capsys.readouterr().out
+    assert '[1/1] es: empezando' in out
+    assert '[1/1] es · aviso: cut 2019-10-01 of 2019-11-10 skipped: no future polls' in out
+    assert p.line == 'es: tune completed (1 configs, 2 cuts) in 0 s · 1 aviso'
