@@ -69,7 +69,7 @@ def test_tune_job_normalises_horizons_cycles_and_grid(fresh_app, patched, tmp_pa
 
 
 @pytest.mark.parametrize('kwargs, message', [
-    ({'mode': 'search'}, 'tune: mode must be smoothing, shrinkage, check or evaluate'),
+    ({'mode': 'search'}, 'tune: mode must be smoothing, shrinkage, check, evaluate or merge'),
     ({'mode': 'evaluate'}, 'tune: the evaluate mode needs configs'),
     ({'mode': 'smoothing', 'configs': ['default']}, 'tune: configs only apply to the evaluate mode'),
     ({'mode': 'evaluate', 'configs': ['best']}, 'tune: a config must be "default" or'),
@@ -86,7 +86,13 @@ def test_tune_job_normalises_horizons_cycles_and_grid(fresh_app, patched, tmp_pa
     ({'cut_days': 0}, 'tune: cut_days'),
     ({'cut_days': True}, 'tune: cut_days'),
     ({'rounds': 1.5}, 'tune: rounds'),
-    ({'action': 'push'}, 'tune: unknown action "push"'),
+    ({'action': 'sync'}, 'tune: unknown action "sync"'),
+    ({'workers': 0}, 'tune: workers'),
+    ({'workers': True}, 'tune: workers'),
+    ({'workers': 2.5}, 'tune: workers'),
+    ({'workers': None}, 'tune: workers'),
+    ({'mode': 'merge', 'configs': ['default']}, 'tune: configs only apply to the evaluate mode'),
+    ({'mode': 'check', 'grid': {'tau': [0.04]}}, 'tune: grid only applies'),
     ({'scopes': []}, 'tune: no scopes to run'),
 ])
 def test_tune_job_rejects_bad_arguments_before_running(fresh_app, patched, tmp_path, kwargs, message):
@@ -112,6 +118,25 @@ def test_tune_job_stop_on_error_stops_at_the_first_failure(fresh_app, patched, t
     with pytest.raises(RuntimeError, match='tune: failed scopes: es-ar'):
         Tune().run(scopes=['es-ar', 'es'], out=str(tmp_path), verbose=0, runner=runner, stop_on_error=True)
     assert [c['scope'] for c in runner.calls] == ['es-ar']
+
+
+def test_tune_job_passes_the_workers_and_runs_the_merge(fresh_app, patched, tmp_path):
+    runner = FakeScope()
+    Tune().run(scopes=['es'], out=str(tmp_path), mode='merge', grid={'tau': [0.04, 0.08]}, workers=8, verbose=0,
+               runner=runner)
+    call = runner.calls[0]
+    assert call['mode'] == 'merge' and call['workers'] == 8 and call['grid'] == {'tau': [0.04, 0.08]}
+
+
+def test_tune_job_pushes_and_pulls_the_tables(fresh_app, patched, tmp_path):
+    from mtpy.core.io import FileSystem
+    from tests.test_pipelines_tune import seeded
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'remote')))
+    local = seeded(tmp_path, 'es')
+    results = Tune().run(scopes=['es'], action='push', out=str(local), verbose=0)
+    assert results['es']['status'] == 'pushed' and (tmp_path / 'remote' / 'backtest' / 'tuning' / 'best.json').exists()
+    results = Tune().run(scopes=['es'], action='pull', out=str(tmp_path / 'copy'), verbose=0)
+    assert results['es']['status'] == 'pulled' and (tmp_path / 'copy' / 'scores.csv').exists()
 
 
 @pytest.mark.parametrize('text, expected', [
@@ -142,11 +167,28 @@ def test_run_tuning_turns_its_options_into_the_job_arguments():
     assert script.job_arguments(args) == {
         'scopes': ['es', 'es-md'], 'mode': 'evaluate', 'configs': ['default', {'bw': ('fixed', 45)}],
         'cycles': ['2019-11-10'], 'cut_days': 28, 'horizons': (7, 28), 'rounds': 1, 'out': tuning.TUNING_ROOT,
-        'verbose': 1}
+        'verbose': 1, 'workers': 1}
     args = script.build_parser().parse_args([])
     assert script.job_arguments(args) == {
         'scopes': ['es'], 'mode': 'smoothing', 'configs': None, 'cycles': None, 'cut_days': None,
-        'horizons': (7, 28), 'rounds': None, 'out': tuning.TUNING_ROOT, 'verbose': 1}
+        'horizons': (7, 28), 'rounds': None, 'out': tuning.TUNING_ROOT, 'verbose': 1, 'workers': 1}
+    args = script.build_parser().parse_args(['--mode', 'merge', '--workers', '8'])
+    assert script.job_arguments(args)['mode'] == 'merge' and script.job_arguments(args)['workers'] == 8
+
+
+def test_run_tuning_reports_the_completed_scopes_when_another_one_fails(fresh_app, tmp_path, capsys):
+    script = load_script()
+
+    class FailingJob:
+        """The `tune` job after a run where `es-md` completed and `es-ar` failed."""
+        def run(self, **kwargs):
+            self.results = {('tune', 'es-md'): {'status': 'completed', 'folder': str(tmp_path / 'es-md')},
+                            ('tune', 'es-ar'): {'status': 'failed', 'reason': 'TuningFailed: start'}}
+            raise RuntimeError('tune: failed scopes: es-ar')
+
+    with pytest.raises(RuntimeError, match='es-ar'):
+        script.run_job(FailingJob(), {'scopes': ['es-md', 'es-ar']}, str(tmp_path))
+    assert 'es-md: tables written to {}'.format(tmp_path / 'es-md') in capsys.readouterr().out
 
 
 def test_run_tuning_reports_the_best_config_and_the_check_scores(fresh_app, tmp_path, capsys):

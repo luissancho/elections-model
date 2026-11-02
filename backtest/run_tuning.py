@@ -5,23 +5,26 @@ Tune the configuration of the poll average on the polls published after each cut
 
 Usage (from the repository root):
     python backtest/run_tuning.py [--scope es | --scopes es es-md ... | --scopes all]
-                                  [--mode smoothing|shrinkage|check|evaluate]
+                                  [--mode smoothing|shrinkage|check|evaluate|merge]
                                   [--config default] [--config bw=fixed,45 bw_cap=1.5] [--config house_effects=false]
                                   [--cycles 2019-11-10 ...] [--cut-days 7] [--horizons 7 28] [--rounds 2]
-                                  [--out backtest/tuning] [--verbose 1]
+                                  [--out backtest/tuning] [--verbose 1] [--workers 8]
 
 The search runs in three steps, each reading the `best.json` the previous one left in the folder of the scope:
 `--mode smoothing` (phase 1), `--mode shrinkage` (phase 2) and `--mode check` (the best configuration against
 the default on the held-out cycles). `--config` (repeatable, one configuration each: `default`, or settings
 `key=value` applied in order on the default, a comma making a tuple: `bw=fixed,45`) evaluates the configurations
-given (`--mode evaluate`, the mode when `--config` is given). The national scope (`es`) writes to
+given (`--mode evaluate`, the mode when `--config` is given). `--workers` spreads the cuts of each evaluation over
+that many processes, each with its own database connection (1, the default, runs them one after the other). The
+shrinkage phase can also run in parts, one per `--cycles` (each writes `trials-shrinkage-{cycles}.csv` and its
+companions, never `best.json`), joined afterwards by `--mode merge`. The national scope (`es`) writes to
 `backtest/tuning/`; every other scope to `backtest/tuning/{scope}/`; `--scopes all` is `es` and every regional
 scope.
 
 This script is a thin wrapper of the `tune` job (`python job.py tune '{...}'`, `mtpy/jobs/Tune.py`), which does
 the work through `mtpy.lib.tuning.tuning_scope`; it only translates the command line options and, at the end,
 prints the folder written and, in the search modes, the configuration kept and the scores of the `check`
-partition of `default` and `best` when the folder has them.
+partition of `default` and `best` when the folder has them (also for the completed scopes when another one fails).
 """
 import argparse
 import json
@@ -31,7 +34,7 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, ROOT)
 
-MODES = ['smoothing', 'shrinkage', 'check', 'evaluate']
+MODES = ['smoothing', 'shrinkage', 'check', 'evaluate', 'merge']
 
 
 def build_parser():
@@ -59,6 +62,8 @@ def build_parser():
     parser.add_argument('--rounds', type=int, default=None, help='rounds of the descent; the default of the phase')
     parser.add_argument('--out', default=os.path.join(ROOT, 'backtest', 'tuning'))
     parser.add_argument('--verbose', type=int, default=1)
+    parser.add_argument('--workers', type=int, default=1,
+                        help='processes running the cuts of each evaluation, each with its own database connection')
     return parser
 
 
@@ -141,7 +146,7 @@ def job_arguments(args):
     Returns
     -------
     dict
-        `scopes`, `mode`, `configs`, `cycles`, `cut_days`, `horizons`, `rounds`, `out` and `verbose`.
+        `scopes`, `mode`, `configs`, `cycles`, `cut_days`, `horizons`, `rounds`, `out`, `verbose` and `workers`.
 
     Raises
     ------
@@ -158,7 +163,7 @@ def job_arguments(args):
     return {
         'scopes': scopes, 'mode': args.mode or ('evaluate' if configs else 'smoothing'), 'configs': configs,
         'cycles': args.cycles, 'cut_days': args.cut_days, 'horizons': tuple(args.horizons), 'rounds': args.rounds,
-        'out': args.out, 'verbose': args.verbose
+        'out': args.out, 'verbose': args.verbose, 'workers': args.workers
     }
 
 
@@ -225,6 +230,30 @@ def report(results, out):
                 print(table.round(3).to_string(index=False))
 
 
+def run_job(job, arguments, out):
+    """
+    Run the `tune` job and report its scopes, also the completed ones when another scope failed.
+
+    Parameters
+    ----------
+    job : mtpy.jobs.Tune.Tune
+        The job.
+    arguments : dict
+        Its arguments (see `job_arguments`).
+    out : str
+        Local folder of the tables.
+
+    Raises
+    ------
+    RuntimeError
+        The error of the job when a scope failed, after the report.
+    """
+    try:
+        job.run(**arguments)
+    finally:
+        report({chunk: result for (key, chunk), result in getattr(job, 'results', {}).items()}, out)
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -238,8 +267,7 @@ def main():
 
     from mtpy.jobs.Tune import Tune
 
-    results = Tune().run(**arguments)
-    report(results, args.out)
+    run_job(Tune(), arguments, args.out)
 
 
 if __name__ == '__main__':

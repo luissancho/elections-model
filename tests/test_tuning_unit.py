@@ -1,5 +1,7 @@
 """Unit tests of the tuning harness of the average on future polls (no database)."""
 import json
+import time
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -8,9 +10,10 @@ import pytest
 from mtpy.lib import tuning
 from mtpy.lib.forecaster import Forecaster
 from mtpy.lib.tuning import (DEFAULTS, GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, TUNING_FILES, TUNING_PREFIX,
-                             NothingToTune, TuningFailed, apply_setting, autocorrelation, coordinate_descent, cycle_cuts,
-                             default_config, future_polls, normalize_config, predict_polls, roughness, run_cut,
-                             run_search, run_tuning, score_polls, search_cycles, tuning_fs, tuning_scope)
+                             NothingToTune, TuningFailed, apply_setting, autocorrelation, coordinate_descent,
+                             copy_tuning, cycle_cuts, default_config, future_polls, normalize_config, predict_polls,
+                             roughness, run_cut, run_search, run_tuning, score_polls, search_cycles, tuning_fs,
+                             tuning_scope)
 
 
 def _fake_fitted_forecaster(effects=None):
@@ -874,3 +877,178 @@ def test_run_search_refuses_a_grid_without_the_keys_of_its_phase(monkeypatch):
     _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': []})
     with pytest.raises(ValueError):
         run_search('es', phase='shrinkage', grid={'bw': [('fixed', 45)]}, runner=FakeCut())
+
+
+# --- Pool of processes, search tables per phase, parts and merge, push and pull ---------------------------------------
+
+def pool_fake_cut(scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+    """`run_cut` without model nor database, importable by a process of the pool: the first cut takes longer, so the
+    cuts end in another order than they were sent; the cut of 2019-10-25 warns and the one of 2019-11-01 fails."""
+    cut = pd.Timestamp(cut)
+    if cut == pd.Timestamp('2019-10-11'):
+        time.sleep(0.5)
+    if cut == pd.Timestamp('2019-11-01'):
+        raise ValueError('no future polls')
+    if cut == pd.Timestamp('2019-10-25'):
+        warnings.warn('cut {:%Y-%m-%d} warned'.format(cut))
+    out = FakeCut()(scope, event_date, cut, config, horizons=horizons)
+    shift = (cut - pd.Timestamp('2019-10-01')).days / 100
+    out['scores'] = [score | {'rmse': score['rmse'] + shift} for score in out['scores']]
+    out['seconds'] = 1.5
+
+    return out
+
+
+def test_run_tuning_with_a_pool_returns_the_tables_and_lines_of_the_sequential_run(monkeypatch, capsys):
+    _patch_cycle(monkeypatch, ['2019-10-11', '2019-10-18', '2019-10-25', '2019-11-01'])
+    cycles = {'search': ['2015-12-20', '2019-11-10'], 'check': []}
+    configs = [default_config(), apply_setting(default_config(), 'bw', ('fixed', 45))]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        sequential = run_tuning('es', configs, cycles=cycles, runner=pool_fake_cut, verbose=1)
+    sequential_out = capsys.readouterr().out
+    sequential_warnings = sorted(str(w.message) for w in caught)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        pooled = run_tuning('es', configs, cycles=cycles, runner=pool_fake_cut, verbose=1, workers=2,
+                            initializer=None)
+    assert capsys.readouterr().out == sequential_out and sequential_out.count('\n') == 2 * 2 * 3
+    assert sorted(str(w.message) for w in caught) == sequential_warnings
+    assert any('warned' in message for message in sequential_warnings)
+    for name in ('cuts', 'polls', 'scores'):
+        pd.testing.assert_frame_equal(pooled[name], sequential[name])
+    cuts = pooled['cuts']
+    assert cuts.shape[0] == 2 * 2 * 4 and cuts['error'].notna().sum() == 2 * 2
+    assert cuts['cut'].tolist() == [pd.Timestamp(c) for c in ['2019-10-11', '2019-10-18', '2019-10-25',
+                                                              '2019-11-01']] * 4
+
+
+def test_run_tuning_refuses_fewer_than_one_worker(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'])
+    with pytest.raises(ValueError, match='workers'):
+        run_tuning('es', [default_config()], cycles={'search': ['2019-11-10']}, runner=FakeCut(), workers=0)
+
+
+def test_tuning_scope_keeps_the_scores_of_each_search_phase_beside_its_trials(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    prov = lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}   # noqa: E731
+    tuning_scope('es-md', out=str(tmp_path), mode='smoothing', runner=FakeCut(), grid={'bw': [('fixed', 45)]},
+                 stats=lambda scope: {}, prov=prov)
+    folder = tmp_path / 'es-md'
+    smoothing = pd.read_csv(folder / 'scores-smoothing.csv')
+    pd.testing.assert_frame_equal(smoothing, pd.read_csv(folder / 'scores.csv'))
+    tuning_scope('es-md', out=str(tmp_path), mode='check', runner=FakeCut(), stats=lambda scope: {}, prov=prov)
+    pd.testing.assert_frame_equal(pd.read_csv(folder / 'scores-smoothing.csv'), smoothing)   # survives the check
+    assert set(pd.read_csv(folder / 'scores-check.csv')['partition']) == {'check'}
+
+
+class ShrinkCut(FakeCut):
+    """`FakeCut` whose RMSE depends on the cycle, the herding prior and tau: each cycle prefers other values."""
+    BASE = {'2015-12-20': {2.: 1.0, 5.: 2.0, 10.: 3.0}, '2019-11-10': {2.: 3.0, 5.: 2.5, 10.: 1.5}}
+
+    def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+        out = super().__call__(scope, event_date, cut, config, horizons=horizons)
+        base = self.BASE[event_date][config['disp_params']['herd_prior']]
+        if config['he_params']['tau'] == 0.04:
+            base += -0.5 if event_date == '2015-12-20' else 0.6
+        out['scores'] = [s | {'rmse': base + s['k'] / 100} for s in out['scores']]
+        return out
+
+
+def _shrinkage_parts(tmp_path, monkeypatch, grid):
+    """Smoothing best in `es-md`, one shrinkage part per cycle in `parts/` and the whole run in `whole/`."""
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20', '2019-11-10'], 'check': []})
+    prov = lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}}   # noqa: E731
+    best = {**apply_setting(default_config(), 'bw', ('fixed', 45)), 'house_effects': True, 'dispersion': True,
+            'herding': True}
+    for name in ('parts', 'whole'):
+        (tmp_path / name / 'es-md').mkdir(parents=True)
+        json.dump(best, open(tmp_path / name / 'es-md' / 'best.json', 'w'))
+    for date in ('2015-12-20', '2019-11-10'):
+        tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='shrinkage', runner=ShrinkCut(), grid=grid,
+                     cycles={'search': [date], 'check': []}, part=date, stats=lambda scope: {}, prov=prov)
+    tuning_scope('es-md', out=str(tmp_path / 'whole'), mode='shrinkage', runner=ShrinkCut(), grid=grid,
+                 stats=lambda scope: {}, prov=prov)
+    return best, prov
+
+
+def test_tuning_scope_shrinkage_part_writes_its_own_tables_and_leaves_the_best_alone(fresh_app, tmp_path,
+                                                                                   monkeypatch):
+    best, _ = _shrinkage_parts(tmp_path, monkeypatch, {'herd_prior': [2., 5., 10.]})
+    folder = tmp_path / 'parts' / 'es-md'
+    names = sorted(path.name for path in folder.iterdir())
+    assert names == ['best.json'] + sorted('{}-shrinkage-{}.{}'.format(table, date, ext)
+                                           for date in ('2015-12-20', '2019-11-10')
+                                           for table, ext in (('cuts', 'csv'), ('run', 'json'), ('scores', 'csv'),
+                                                              ('trials', 'csv')))
+    assert json.load(open(folder / 'best.json')) == best   # a part never decides
+    trials = pd.read_csv(folder / 'trials-shrinkage-2019-11-10.csv')
+    assert 'config_key' in trials.columns and trials['config_key'].notna().all()
+    run = json.load(open(folder / 'run-shrinkage-2019-11-10.json'))
+    assert run['mode'] == 'shrinkage' and run['part'] == '2019-11-10' and run['cycles'] == {'search': ['2019-11-10']}
+
+
+def test_tuning_scope_merge_repeats_the_descent_on_the_joined_parts_as_the_whole_run(fresh_app, tmp_path,
+                                                                                   monkeypatch):
+    _, prov = _shrinkage_parts(tmp_path, monkeypatch, {'herd_prior': [2., 5., 10.]})
+    figures = tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', grid={'herd_prior': [2., 5., 10.]},
+                           stats=lambda scope: {}, prov=prov)
+    parts, whole = tmp_path / 'parts' / 'es-md', tmp_path / 'whole' / 'es-md'
+    merged = json.load(open(parts / 'best.json'))
+    assert merged == json.load(open(whole / 'best.json')) and merged['disp_params']['herd_prior'] == 2.
+    assert figures['best'] == merged and figures['n_cuts'] == 2 and figures['n_configs'] == 3
+    columns = ['round', 'key', 'value', 'label', 'rmse7', 'rmse28', 'roughness', 'chosen', 'config_key']
+    pd.testing.assert_frame_equal(pd.read_csv(parts / 'trials-shrinkage.csv')[columns],
+                                  pd.read_csv(whole / 'trials-shrinkage.csv')[columns])
+    scores = pd.read_csv(parts / 'scores-shrinkage.csv')
+    assert set(scores['part']) == {'2015-12-20', '2019-11-10'}
+    run = json.load(open(parts / 'run.json'))
+    assert run['mode'] == 'merge' and run['parts'] == ['2015-12-20', '2019-11-10']
+    assert run['cycles'] == {'search': ['2015-12-20', '2019-11-10']}
+
+
+def test_tuning_scope_merge_never_keeps_a_configuration_missing_from_a_part(fresh_app, tmp_path, monkeypatch):
+    grid = {'tau': [0.04, 0.08], 'herd_prior': [2., 10.]}
+    _, prov = _shrinkage_parts(tmp_path, monkeypatch, grid)
+    with pytest.warns(UserWarning, match='missing from some part'):
+        tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', grid=grid, stats=lambda scope: {},
+                     prov=prov)
+    trials = pd.read_csv(tmp_path / 'parts' / 'es-md' / 'trials-shrinkage.csv')
+    herd = trials.loc[trials['key'] == 'herd_prior']
+    assert herd['rmse7'].isna().any() and not herd.loc[herd['rmse7'].isna(), 'chosen'].any()
+
+
+def test_tuning_scope_merge_needs_parts_and_the_best_of_the_smoothing_phase(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20'], 'check': []})
+    with pytest.raises(FileNotFoundError):
+        tuning_scope('es-md', out=str(tmp_path), mode='merge', stats=lambda scope: {})
+    (tmp_path / 'es-md').mkdir()
+    json.dump(default_config(), open(tmp_path / 'es-md' / 'best.json', 'w'))
+    with pytest.raises(NothingToTune, match='no shrinkage part'):
+        tuning_scope('es-md', out=str(tmp_path), mode='merge', stats=lambda scope: {})
+
+
+def test_tuning_scope_refuses_a_part_outside_the_shrinkage_mode(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20'], 'check': []})
+    with pytest.raises(ValueError, match='part'):
+        tuning_scope('es-md', out=str(tmp_path), mode='smoothing', part='2015-12-20', runner=FakeCut())
+
+
+def test_copy_tuning_mirrors_the_tuning_files_of_the_scope_only(tmp_path):
+    src = tmp_path / 'src'
+    (src / 'es-md').mkdir(parents=True)
+    names = ['cuts.csv', 'polls.csv', 'scores.csv', 'trials.csv', 'run.json', 'best.json', 'trials-smoothing.csv',
+             'scores-smoothing.csv', 'trials-shrinkage-2019-11-10.csv', 'run-shrinkage-2019-11-10.json']
+    for name in names + ['notes.txt']:
+        (src / name).write_text(name)
+    (src / 'es-md' / 'cuts.csv').write_text('regional')
+    dst = tmp_path / 'dst'
+    dst.mkdir()
+    (dst / 'trials-check.csv').write_text('stale')
+    (dst / 'keep.txt').write_text('not a tuning file')
+    done = copy_tuning('es', tuning_fs(str(src), 'es'), tuning_fs(str(dst), 'es'))
+    assert sorted(done['copied']) == sorted(names) and done['removed'] == ['trials-check.csv']
+    assert sorted(path.name for path in dst.iterdir()) == sorted(names + ['keep.txt'])
+    assert (dst / 'best.json').read_text() == 'best.json'
+    with pytest.raises(NothingToTune):
+        copy_tuning('es-xx', tuning_fs(str(src), 'es-xx'), tuning_fs(str(dst), 'es-xx'))

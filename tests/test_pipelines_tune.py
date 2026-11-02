@@ -92,7 +92,46 @@ def test_tune_passes_every_parameter_through(fresh_app, patched, tmp_path):
     call = runner.calls[0]
     assert call == {'scope': 'es-md', 'out': str(tmp_path), 'mode': 'smoothing', 'configs': None, 'grid': grid,
                     'cycles': None, 'cut_days': 14, 'horizons': (7, 28, 56), 'rounds': 1, 'verbose': 1,
-                    'stats': stats}
+                    'stats': stats, 'workers': 1, 'part': None}
+
+
+def test_tune_passes_the_workers_and_names_a_shrinkage_part_after_its_cycles(fresh_app, patched, tmp_path):
+    runner = FakeScope()
+    evaluate(runner, tmp_path=tmp_path, mode='shrinkage', configs=None, cycles=['2015-05-24', '2011-05-22'],
+             workers=8)
+    evaluate(runner, tmp_path=tmp_path, mode='smoothing', configs=None, cycles=['2015-05-24'])
+    evaluate(runner, tmp_path=tmp_path, mode='shrinkage', configs=None)
+    assert [(call['workers'], call['part']) for call in runner.calls] == [
+        (8, '2011-05-22_2015-05-24'), (1, None), (1, None)]
+
+
+def seeded(tmp_path, scope):
+    """A repository copy of the tuning tables of `scope` under `tmp_path/local`."""
+    local = tmp_path / 'local'
+    folder = local if scope == 'es' else local / scope
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ('scores.csv', 'trials-smoothing.csv', 'best.json'):
+        (folder / name).write_text(name)
+    return local
+
+
+def test_tune_push_and_pull_copy_the_tables_between_the_repository_and_the_app(fresh_app, patched, tmp_path,
+                                                                             capsys):
+    from mtpy.core.io import FileSystem
+    fresh_app.set('fs', FileSystem(str(tmp_path / 'remote')))
+    local = seeded(tmp_path, 'es-md')
+    p = Tune()
+    p.run('push', chunk='es-md', position=(1, 1), out=str(local), verbose=0)
+    assert p.result['status'] == 'pushed' and p.result['n_files'] == 3 and p.result['n_removed'] == 0
+    assert (tmp_path / 'remote' / 'backtest' / 'tuning' / 'es-md' / 'best.json').exists()
+    assert p.line.startswith('es-md: tune pushed (3 files) to ')
+    assert 'tune push: 1 ámbito · {} → '.format(local) in capsys.readouterr().out
+    p = Tune()
+    p.run('pull', chunk='es-md', position=(1, 1), out=str(tmp_path / 'copy'), verbose=0)
+    assert p.result['status'] == 'pulled' and (tmp_path / 'copy' / 'es-md' / 'trials-smoothing.csv').exists()
+    p = Tune()
+    p.run('pull', chunk='es-ar', position=(1, 1), out=str(tmp_path / 'copy'), verbose=0)
+    assert p.result['status'] == 'skipped' and 'no tuning tables' in p.result['reason']
 
 
 def test_tune_restricts_the_cycles_of_the_scope_and_warns_of_the_unknown_ones(fresh_app, patched, tmp_path):

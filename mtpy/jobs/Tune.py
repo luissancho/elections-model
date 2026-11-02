@@ -4,7 +4,10 @@ from ..core.worker import SequenceJob
 from ..lib import tuning
 from ..lib.publish import resolve_scopes
 
-MODES = ('smoothing', 'shrinkage', 'check', 'evaluate')
+MODES = ('smoothing', 'shrinkage', 'check', 'evaluate', 'merge')
+
+# Modes a grid of the search applies to
+GRID_MODES = ('smoothing', 'shrinkage', 'merge')
 
 # Switches of the average a configuration to evaluate may set besides the keys of the grid
 SWITCHES = ('house_effects', 'dispersion', 'herding')
@@ -21,11 +24,20 @@ class Tune(SequenceJob):
     search modes ``smoothing`` (phase 1: bandwidth, cap, degree, prolongation and window), ``shrinkage`` (phase 2:
     house effects and herding, from the ``best.json`` of phase 1) and ``check`` (the ``best.json`` against the
     default on the held-out cycles) also write ``trials-{mode}.csv`` and, the first two, ``best.json``;
-    ``evaluate`` scores the configurations given. Scopes are isolated: one that fails never stops the others
-    (unless ``stop_on_error``), and the job exits with an error at the end if any failed. A scope with nothing to
-    tune, or without the ``best.json`` that ``shrinkage`` and ``check`` start from, ends ``skipped`` and nothing
-    is written for it; a tuning that cannot be scored (a failed cut of the start of a search or of the check, or
-    every cut failed) ends ``failed``.
+    ``evaluate`` scores the configurations given. The search modes also keep ``scores-{mode}.csv`` beside
+    ``trials-{mode}.csv``. ``shrinkage`` with ``cycles`` is a part of the phase (named after its cycles: it writes
+    ``cuts-``, ``scores-`` and ``trials-shrinkage-{part}.csv`` and ``run-shrinkage-{part}.json``, never
+    ``best.json``), so the phase can run one cycle per task; ``merge`` joins the parts of the folder, repeats the
+    descent on the joined table and writes ``best.json`` (`tuning.merge_parts`). ``workers`` spreads the cuts of
+    each evaluation over that many processes, each with its own app and database engine (the tables are those of
+    the sequential run). Scopes are isolated: one that fails never stops the others (unless ``stop_on_error``),
+    and the job exits with an error at the end if any failed. A scope with nothing to tune, or without the
+    ``best.json`` that ``shrinkage``, ``check`` and ``merge`` start from, ends ``skipped`` and nothing is written
+    for it; a tuning that cannot be scored (a failed cut of the start of a search or of the check, or every cut
+    failed) ends ``failed``.
+
+    ``push`` copies the tables of ``out`` (``backtest/tuning`` of the repository by default) to the app file system
+    and ``pull`` the reverse, mirroring the tuning files of each scope (as the ``backtest`` job does).
 
     The console output has the levels of ``backtest``: 0, the header and the final summary; 1, also
     ``[i/n] scope: empezando``, the result line and the warnings as they happen; 2, also the line of each cut.
@@ -34,9 +46,11 @@ class Tune(SequenceJob):
     --------
     From the command line::
 
-        python job.py tune '{"scopes":["es"],"mode":"smoothing"}'
+        python job.py tune '{"scopes":["es"],"mode":"smoothing","workers":8}'
         python job.py tune '{"scopes":["es"],"mode":"shrinkage","cycles":["2019-11-10"]}'
+        python job.py tune '{"scopes":["es"],"mode":"merge"}'
         python job.py tune '{"scopes":["es"],"mode":"check"}'
+        python job.py tune '{"action":"pull","scopes":["es"]}'
         python job.py tune '{"scopes":["es"],"mode":"evaluate","configs":["default",{"bw":["fixed",45]}]}'
         python job.py tune '{"scopes":["es"],"mode":"smoothing","grid":{"bw":[["fixed",45],["adaptive",3]]}}'
 
@@ -52,7 +66,7 @@ class Tune(SequenceJob):
 
     def run(self, scopes=('es',), mode='smoothing', configs=None, grid=None, cycles=None, cut_days=None,
             horizons=(7, 28), rounds=None, out=None, verbose=1, runner=None, stats=None, stop_on_error=None,
-            action='run', **kwargs):
+            action='run', workers=1, **kwargs):
         """
         Run one mode of the tuning of the requested scopes.
 
@@ -60,8 +74,8 @@ class Tune(SequenceJob):
         ----------
         scopes : str or list of str, default ('es',)
             Scopes to tune, or ``'all'`` (``es`` and every regional scope, see ``publish.resolve_scopes``).
-        mode : {'smoothing', 'shrinkage', 'check', 'evaluate'}, default 'smoothing'
-            Phase of the search, or the evaluation of ``configs``.
+        mode : {'smoothing', 'shrinkage', 'check', 'evaluate', 'merge'}, default 'smoothing'
+            Phase of the search, the evaluation of ``configs`` or the merge of the parts of the shrinkage phase.
         configs : list, optional
             Configurations of the ``evaluate`` mode (required there, refused in the others): ``'default'`` (the
             live average, `tuning.default_config`) or a dict of settings applied in order on the default, each a
@@ -70,10 +84,11 @@ class Tune(SequenceJob):
             each setting, joined by commas.
         grid : dict, optional
             Values of each key of the search (``{key: [values]}``, a subset of `tuning.GRID`); the whole grid by
-            default. Only in ``smoothing`` and ``shrinkage``.
+            default. Only in ``smoothing``, ``shrinkage`` and ``merge``.
         cycles : list of str, optional
             Elections (``YYYY-MM-DD``) the tuning is restricted to, in their partition (search or check); every
-            cycle of the scope by default. A date that is not a cycle of a scope is ignored with a warning.
+            cycle of the scope by default. A date that is not a cycle of a scope is ignored with a warning. In
+            ``shrinkage`` they make the run a part of the phase.
         cut_days : int, optional
             Days between two cuts; the default of the mode.
         horizons : list of int, default (7, 28)
@@ -81,7 +96,8 @@ class Tune(SequenceJob):
         rounds : int, optional
             Rounds of the descent; the default of the phase.
         out : str, optional
-            Local folder of the tables; ``backtest/tuning`` of the app file system (S3 in ECS) by default.
+            Local folder of the tables. For ``run`` the app file system (``backtest/tuning``, S3 in ECS) by
+            default; for ``push`` (its origin) and ``pull`` (its destination) the repository copy by default.
         verbose : int, default 1
             Verbosity of the console output (see the class).
         runner : callable, optional
@@ -90,17 +106,22 @@ class Tune(SequenceJob):
             Replacement of `backtest.poll_stats` (for tests).
         stop_on_error : bool, optional
             Stop at the first failed scope instead of going on with the others; ``False`` by default.
-        action : {'run'}, default 'run'
-            The only action.
+        action : {'run', 'push', 'pull'}, default 'run'
+            ``run`` runs the mode; ``push`` copies the tables from ``out`` to the app file system; ``pull`` from
+            the app file system to ``out``.
+        workers : int, default 1
+            Processes running the cuts of each evaluation (a positive integer).
         **kwargs
             Ignored extra job arguments.
 
         Returns
         -------
         dict[str, dict]
-            Result of each scope: ``status`` (``completed``, ``skipped`` or ``failed``); when completed, the
-            figures of `tuning.tuning_scope` (``n_configs``, ``n_cuts``, ``cycles``, ``folder``, ``seconds`` and,
-            in the search modes, ``best``); otherwise the ``reason``. Every result carries its ``warnings``.
+            Result of each scope: ``status`` (``completed``, ``pushed``, ``pulled``, ``skipped`` or ``failed``);
+            when completed, the figures of `tuning.tuning_scope` (``n_configs``, ``n_cuts``, ``cycles``,
+            ``folder``, ``seconds`` and, in the search modes and ``merge``, ``best``); when pushed or pulled,
+            ``n_files``, ``n_removed`` and ``folder`` (the destination); otherwise the ``reason``. Every result
+            carries its ``warnings``.
 
         Raises
         ------
@@ -109,10 +130,12 @@ class Tune(SequenceJob):
         RuntimeError
             If any scope failed (raised after the summary and the alert).
         """
-        if action != 'run':
-            raise ValueError('tune: unknown action "{}" (expected run)'.format(action))
+        if action not in ('run', 'push', 'pull'):
+            raise ValueError('tune: unknown action "{}" (expected run, push or pull)'.format(action))
         if mode not in MODES:
             raise ValueError('tune: mode must be {} or {} (got {!r})'.format(', '.join(MODES[:-1]), MODES[-1], mode))
+        if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
+            raise ValueError('tune: workers must be a positive integer (got {!r})'.format(workers))
         configs = self._configs(configs, mode)
         grid = self._grid(grid, mode)
         cycles = self._cycles(cycles)
@@ -125,7 +148,7 @@ class Tune(SequenceJob):
 
         super().run(select='tune', chunks=targets, action=action, stop_on_error=stop_on_error, mode=mode,
                     configs=configs, grid=grid, cycles=cycles, cut_days=cut_days, horizons=horizons, rounds=rounds,
-                    out=out, verbose=verbose, runner=runner, stats=stats)
+                    out=out, verbose=verbose, runner=runner, stats=stats, workers=workers)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 
@@ -195,9 +218,9 @@ class Tune(SequenceJob):
         """
         if value is None:
             return None
-        if mode not in ('smoothing', 'shrinkage'):
-            raise ValueError('tune: grid only applies to the smoothing and shrinkage modes (got mode {!r})'
-                             .format(mode))
+        if mode not in GRID_MODES:
+            raise ValueError('tune: grid only applies to the {} modes (got mode {!r})'.format(
+                ', '.join(GRID_MODES), mode))
         if not isinstance(value, dict) or len(value) == 0:
             raise ValueError('tune: grid must be a non-empty {{key: [values]}} dict (got {!r})'.format(value))
         out = {}
