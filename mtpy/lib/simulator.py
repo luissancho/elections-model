@@ -17,7 +17,7 @@ from ..core.utils.helpers import unset_categorical
 from ..core.utils.dataviz import plot_kde_1d
 
 from .forecaster import Forecaster
-from .computer import Computer
+from .computer import Computer, check_drift_scale
 from .data import (
     get_event_dates, get_event_params, get_event_results, get_event_data, get_parties, get_thresholds,
     get_districts, get_scope_parent
@@ -58,6 +58,7 @@ class Simulator(Core):
         n_last: int = 1,
         add_errors: bool = True,
         error_model: Literal['polls', 'average'] = 'polls',
+        drift_scale: Optional[str | float] = None,
         reg_params: Optional[dict[str, Any]] = None,
         smap: Optional[dict[str, str]] = None,
         threshold: Optional[float] = None,
@@ -123,6 +124,11 @@ class Simulator(Core):
             (`Computer.get_average_error_estimator` at `AVERAGE_ERROR_HORIZON` days), which falls back to
             `'polls'` with a warning when the `average_errors` table has too few rows. The model actually used
             is `error_model_used`.
+        drift_scale : {'auto'} or float, optional
+            Multiplier of the drift variance (`Computer.get_drift_estimator`, see `DriftEstimator.fit_scale`):
+            `'auto'` fits it on the errors of the poll average of the past elections (table `average_errors`,
+            1 with a warning without rows), a positive number fixes it, `None` (default) leaves 1. The value used
+            is `v2drift.scale`.
         reg_params : dict of str, optional
             Parameters for the regression estimator.
             If `None`, the default parameters will be used.
@@ -184,6 +190,7 @@ class Simulator(Core):
             raise ValueError('`mode` must be one of {}'.format(list(self.MODES)))
         if error_model not in self.ERROR_MODELS:
             raise ValueError('`error_model` must be one of {}'.format(list(self.ERROR_MODELS)))
+        drift_scale = check_drift_scale(drift_scale)
 
         super().__init__()
 
@@ -209,6 +216,7 @@ class Simulator(Core):
         self.add_errors = add_errors
         self.error_model = error_model
         self.error_model_used = None  # Set by `fit_error_estimator`
+        self.drift_scale = drift_scale
         self.reg_params = reg_params
         self.smap = smap
         if threshold is None:
@@ -307,11 +315,8 @@ class Simulator(Core):
         if self.verbose > 0:
             print('Load drift estimator...')
 
-        # Drift of the opinion with the horizon (random walk fitted on the past cycles), see `Computer.get_drift_estimator`
-        if self.add_errors and self.computer is not None:
-            self.v2drift = self.computer.get_drift_estimator()
-        else:
-            self.v2drift = None
+        # Drift of the opinion with the horizon (random walk fitted on the past cycles), see `fit_drift_estimator`
+        self.v2drift = self.fit_drift_estimator()
 
         if self.verbose > 0:
             print('Load swing noise estimator...')
@@ -484,6 +489,21 @@ class Simulator(Core):
                 self.scope, self.event_date))
 
         return self.computer.get_error_estimator(drange=self.ERROR_DRANGE, n_last=self.n_last)
+
+    def fit_drift_estimator(self):
+        """
+        Fit the drift estimator of the run on the past cycles of the estimator scope
+        (`Computer.get_drift_estimator`), with the multiplier `drift_scale` of its variance.
+
+        Returns
+        -------
+        DriftEstimator or None
+            The fitted estimator; `None` without `add_errors` or without past elections (`computer` is `None`).
+        """
+        if not self.add_errors or self.computer is None:
+            return None
+
+        return self.computer.get_drift_estimator(scale=self.drift_scale)
 
     def error_events(self) -> list[str]:
         """

@@ -89,6 +89,7 @@ def test_run_case_records_composition(app):
     ref = run_case('es', '2023-07-23', 30, n_sim=10, seed=42, nowcast_only=True)
     assert ref['meta'].iloc[0]['composition_ratio'] == 1   # independiente por defecto
     assert ref['meta'].iloc[0]['error_model'] == 'polls'   # el error de un sondeo suelto por defecto
+    assert (ref['meta'].iloc[0]['drift_scale'], ref['meta'].iloc[0]['drift_scale_rows']) == (1., 0)   # sin escala
 
 
 def test_run_case_provincial_metrics(app):

@@ -637,7 +637,10 @@ def export_meta(sim, run_id: str, run_at: str, n_sim: int, max_fc: int, correcto
                         # the elections that fit the terminal-error estimator, and the scope they belong to
                         'error_events': sim.error_events(), 'error_scope': sim.est_scope,
                         # the terminal error actually used: a single poll (`polls`) or the poll average (`average`)
-                        'error_model': sim.error_model_used},
+                        'error_model': sim.error_model_used,
+                        # the multiplier of the drift variance used and the rows of its fit (0 when not fitted)
+                        'drift_scale': float(drift.scale) if drift is not None else None,
+                        'drift_scale_rows': int(drift.scale_rows) if drift is not None else None},
         'seconds': seconds, 'freeze': bool(freeze), 'limit_date': limit_date,
     }
 

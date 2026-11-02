@@ -55,6 +55,10 @@ class DriftEstimator:
     poll), a second constant `k_young` is fitted on the rows with `age < age_max` and the drift of a young party
     is multiplied by `multiplier = sqrt(k_young / k)` (never below 1): parties less than four years old drift
     about three times more than the established ones, and the effect vanishes afterwards.
+
+    `scale` multiplies the whole variance (`var = scale · k · d · p²`): the growth of the error of the poll average
+    itself with the horizon, measured in the past elections against what `k` already models (`fit_scale`, table
+    `average_errors`). It is 1 by default; `scale_rows` counts the rows of that fit (0 when it was not fitted).
     """
 
     def __init__(
@@ -66,7 +70,9 @@ class DriftEstimator:
         curve: Optional[pd.Series] = None,
         k_young: float = np.nan,
         age_max: float = 4.,
-        n_young: int = 0
+        n_young: int = 0,
+        scale: float = 1.,
+        scale_rows: int = 0
     ) -> None:
         self.k = float(k)
         self.d_min = int(d_min)
@@ -78,6 +84,8 @@ class DriftEstimator:
         self.n_young = int(n_young)
         ratio = self.k_young / self.k if (np.isfinite(self.k_young) and np.isfinite(self.k) and self.k > 0) else np.nan
         self.multiplier = float(np.sqrt(ratio)) if np.isfinite(ratio) and ratio > 1 else 1.
+        self.scale = float(scale)
+        self.scale_rows = int(scale_rows)
 
     @classmethod
     def fit(
@@ -162,6 +170,67 @@ class DriftEstimator:
 
         return cls(k, d_min=d_min, decay=decay, agg=agg, curve=curve, k_young=k_young, age_max=age_max, n_young=n_young)
 
+    @staticmethod
+    def fit_scale(
+        errors: pd.DataFrame,
+        k: float,
+        d_min: int = 30,
+        d_ref: int = 6,
+        bounds: tuple = (1., 4.)
+    ) -> tuple[float, int]:
+        """
+        Measure how much the error of the poll average grows with the horizon in the past elections, relative to
+        the growth the drift constant `k` already models.
+
+        For each election and party with a row at `d_ref` days and at `d >= d_min` days, the excess variance of
+        the average beyond its own standard error, `excess = (error_d² − err_d²) − (error_ref² − err_ref²)`, is
+        compared with the drift variance over the same span, `expected = k · (d − d_ref) · level_d²` (the
+        convention of `var`: the level of the average at `d` days, in percentage points). The scale is
+        `Σ excess / Σ expected`, clipped to `bounds`.
+
+        Parameters
+        ----------
+        errors : pd.DataFrame
+            Rows of `average_errors` (see `Computer.get_average_error_data`), with columns `event_date`, `party`,
+            `horizon`, `level`, `error` and `err` (percentage points).
+        k : float
+            Drift constant (see `fit`).
+        d_min : int, optional
+            Minimum horizon (days) of the far rows.
+        d_ref : int, optional
+            Horizon (days) of the reference row of each election and party (the terminal error).
+        bounds : tuple of float, optional
+            Bounds of the scale; a value outside them is clipped with a warning that states the unclipped value.
+
+        Returns
+        -------
+        tuple of (float, int)
+            The scale and the number of far rows used; `(1., 0)`, with a warning, without rows (or without a
+            finite positive `k`).
+        """
+        columns = ['event_date', 'party', 'horizon', 'level', 'error', 'err']
+        df = errors.reindex(columns=columns).dropna()
+        keys = ['event_date', 'party']
+        df = df.assign(excess=df['error'].astype(float) ** 2 - df['err'].astype(float) ** 2)
+        ref = df.loc[df['horizon'] == d_ref].drop_duplicates(keys).set_index(keys)['excess'].rename('excess_ref')
+        far = df.loc[df['horizon'] >= d_min].join(ref, on=keys, how='inner')
+        n_rows = int(far.shape[0])
+
+        days = far['horizon'].astype(float) - float(d_ref)
+        expected = float((float(k) * days * np.square(far['level'].astype(float))).sum()) if np.isfinite(k) else np.nan
+        if n_rows == 0 or not np.isfinite(expected) or expected <= 0:
+            warnings.warn('No rows of the poll-average errors at {} and {}+ days (or no drift constant): '
+                          'the drift scale is set to 1'.format(d_ref, d_min))
+            return 1., 0
+
+        raw = float((far['excess'] - far['excess_ref']).sum()) / expected
+        scale = float(np.clip(raw, bounds[0], bounds[1]))
+        if scale != raw:
+            warnings.warn('Drift scale {:.3f} outside the bounds {} ({} rows): recortada (clipped) to {:g}'.format(
+                raw, tuple(bounds), n_rows, scale))
+
+        return scale, n_rows
+
     def var(
         self,
         d: int | float | np.ndarray,
@@ -169,12 +238,13 @@ class DriftEstimator:
         age: Optional[float | np.ndarray | pd.Series] = None
     ) -> float | np.ndarray:
         """
-        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted);
-        parties younger than `age_max` (years, `age`) get `multiplier²` times more. A missing age counts as
-        established.
+        Variance of the drift after `d` days of a share at `level` (0 when the constant could not be fitted),
+        times `scale`; parties younger than `age_max` (years, `age`) get `multiplier²` times more. A missing age
+        counts as established.
         """
         days = np.clip(np.asarray(d, dtype=float), 0, None)
-        var = (self.k if np.isfinite(self.k) else 0.) * days * np.square(np.asarray(level, dtype=float))
+        k = self.scale * self.k if np.isfinite(self.k) else 0.
+        var = k * days * np.square(np.asarray(level, dtype=float))
         if age is not None and self.multiplier > 1:
             a = np.asarray(age, dtype=float)
             var = var * np.where(np.isfinite(a) & (a < self.age_max), np.square(self.multiplier), 1.)
@@ -189,9 +259,32 @@ class DriftEstimator:
     ) -> float | np.ndarray:
         """
         Standard deviation of the drift after `d` days of a share at `level`, in percentage points
-        (`level · sqrt(k · d)`, times `multiplier` for a party younger than `age_max`).
+        (`level · sqrt(scale · k · d)`, times `multiplier` for a party younger than `age_max`).
         """
         return np.sqrt(self.var(d, level, age=age))
+
+
+def check_drift_scale(scale: Optional[str | float]) -> Optional[str | float]:
+    """
+    Validate a drift scale (see `Computer.get_drift_estimator`): `None`, `'auto'` or a positive finite number.
+
+    Returns
+    -------
+    str, float or None
+        `None`, `'auto'` or the number as a float.
+
+    Raises
+    ------
+    ValueError
+        Anything else (a boolean or a numeric string included).
+    """
+    if scale is None or (isinstance(scale, str) and scale == 'auto'):
+        return scale
+    if isinstance(scale, (bool, np.bool_)) or not isinstance(scale, (int, float, np.number)) \
+            or not np.isfinite(scale) or scale <= 0:
+        raise ValueError("`drift_scale` must be None, 'auto' or a positive number (got {!r})".format(scale))
+
+    return float(scale)
 
 
 class SwingNoise:
@@ -2762,13 +2855,21 @@ class Computer(Core):
         self,
         d_min: int = 60,
         agg: Literal['geometric', 'quadratic'] = 'geometric',
-        age_max: float = 4.
+        age_max: float = 4.,
+        scale: Optional[str | float] = None
     ) -> DriftEstimator:
         """
         Build the drift estimator from the drift table of the current events, discounting the older cycles
         with `year_decay` (the same decay used for the pollster ratings). When the table is empty the data
         is computed on the fly (slower, not saved); when no event has rows at `d_min` days or more (the
         first cycles), the whole table is used with a warning (in-sample constant).
+
+        The drift variance is multiplied by `scale` (see `DriftEstimator.fit_scale`): with `'auto'` it is fitted on
+        the errors of the poll average of the current events (`load_average_errors`; the Computer of a
+        `Simulator` only holds the elections before the simulated one, so the fit is out of sample) without the
+        rows of the parties younger than `age_max` at their election (their drift already carries the multiplier;
+        a party without a first poll is kept), falling back to 1 with a warning when the table has no usable rows;
+        a positive number fixes it; `None` (default) leaves 1 without reading the table.
 
         Parameters
         ----------
@@ -2779,7 +2880,15 @@ class Computer(Core):
         age_max : float, optional
             Parties younger than this (years since their first poll, at each election) get their own constant
             and a drift multiplier (M8, see `DriftEstimator`).
+        scale : {'auto'} or float, optional
+            Multiplier of the drift variance: `'auto'` (fitted), a positive number (fixed) or `None` (1).
+
+        Raises
+        ------
+        ValueError
+            If `scale` is not `None`, `'auto'` or a positive finite number.
         """
+        scale = check_drift_scale(scale)
         df = self.load_drift()
 
         if df.shape[0] == 0:
@@ -2795,7 +2904,18 @@ class Computer(Core):
         df = df.copy()
         df['age'] = (pd.to_datetime(df['event_date']) - df['party'].map(first)).dt.days / 365.25
 
-        return DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg, age_max=age_max)
+        estimator = DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg, age_max=age_max)
+        if scale == 'auto':
+            # The young parties already get `multiplier²` (M8): their rows would be counted twice in the scale.
+            # A party without a first poll counts as established, as in `DriftEstimator.var`
+            errors = self.load_average_errors()
+            age = (pd.to_datetime(errors['event_date']) - errors['party'].map(first)).dt.days / 365.25
+            errors = errors.loc[~(age < age_max).to_numpy()]
+            estimator.scale, estimator.scale_rows = DriftEstimator.fit_scale(errors, k=estimator.k)
+        elif scale is not None:
+            estimator.scale = scale
+
+        return estimator
 
 
     def get_house_effects_data(

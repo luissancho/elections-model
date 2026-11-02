@@ -266,10 +266,12 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     run = json.load(open(folder / 'run.json', encoding='utf-8'))
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
-                        'error_model', 'recompute_ratings', 'events', 'horizons', 'db_polls', 'db_last_poll'}
+                        'error_model', 'drift_scale', 'recompute_ratings', 'events', 'horizons', 'db_polls',
+                        'db_last_poll'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
     assert run['error_model'] == 'polls' and seen['error_model'] == 'polls'
+    assert run['drift_scale'] is None and seen['drift_scale'] is None
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
     assert run['db_polls'] == 12 and run['db_last_poll'] == '2026-10-03'
     assert seen['scope'] == 'es-md' and seen['events'] == ['2019-11-10', '2023-07-23'] and seen['horizons'] == [30, 6]
@@ -446,7 +448,7 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
     monkeypatch.setattr(job_module.Backtest, 'run', lambda self, **kwargs: seen.update(kwargs))
     monkeypatch.setattr(sys, 'argv', ['run_backtest.py', '--scopes', 'es-md', 'es-cl', '--horizons', '6', '30',
                                       '--n-sim', '20', '--composition', 'auto', '--no-herding',
-                                      '--error-model', 'average', '--out', 'x'])
+                                      '--error-model', 'average', '--drift-scale', 'auto', '--out', 'x'])
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
     script = importlib.util.module_from_spec(spec)
@@ -455,7 +457,7 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
     assert seen == {'scopes': ['es-md', 'es-cl'], 'events': None, 'horizons': [6, 30], 'n_sim': 20, 'seed': 42, 'max_fc': 10,
                     'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
                     'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None,
-                    'error_model': 'average', 'recompute_ratings': False, 'out': 'x'}
+                    'error_model': 'average', 'drift_scale': 'auto', 'recompute_ratings': False, 'out': 'x'}
     hint = capsys.readouterr().out
     assert hint.startswith('Tables written to x. publish backtest/event read the app file system: run python job.py backtest ')
     assert '\'{"action":"push","scopes":["es-md","es-cl"],"out":"x"}\' (with S3_BUCKET set)' in hint
@@ -614,3 +616,21 @@ def test_summarize_calibration_tells_apart_two_scopes_voting_the_same_day():
     assert row.loc[row.bin == 9, 'observed'].iloc[0] == pytest.approx(0.5)
     same_day = summarize_calibration(cal.drop(columns='scope')).query("group == '6-14'")
     assert same_day['n_events'].iloc[0] == 1 and same_day.loc[same_day.bin == 0, 'observed'].iloc[0] == pytest.approx(0.75)
+
+
+def test_summarize_calibration_keeps_only_the_main_parties_of_the_national_kinds_by_default():
+    """Spec 11: las poblaciones (generales, autonómicas) son los partidos principales; con `main_only` (por defecto)
+    las celdas no principales de `shares`/`seats` no cuentan y las provinciales se quedan todas; sin él, todas."""
+    cal = pd.DataFrame({
+        'population': ['generales'] * 6, 'kind': ['shares', 'shares', 'seats', 'seats', 'prov_shares', 'prov_shares'],
+        'mode': ['now'] * 6, 'event_date': ['2023-07-23'] * 6, 'horizon': [6] * 6,
+        'pit': [0.05, 0.95, 0.05, 0.95, 0.05, 0.95], 'main': [True, False, True, False, True, False],
+        'party': ['A', 'B', 'A', 'B', 'A', 'B']})
+    out = summarize_calibration(cal)
+    for kind in ('shares', 'seats'):
+        rows = out.query("population == 'generales' and kind == @kind")
+        assert rows['n_cells'].eq(1).all() and rows.loc[rows.bin == 0, 'observed'].iloc[0] == pytest.approx(1.)
+    assert out.query("population == 'provincias'")['n_cells'].eq(2).all()
+    every = summarize_calibration(cal, main_only=False)
+    assert every.query("population == 'generales'")['n_cells'].eq(2).all()
+    assert every.query("population == 'generales' and bin == 9")['observed'].tolist() == pytest.approx([0.5, 0.5])

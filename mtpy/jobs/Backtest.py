@@ -1,3 +1,5 @@
+import math
+
 from ..core.worker import SequenceJob
 from ..lib.publish import resolve_scopes
 
@@ -33,6 +35,7 @@ class Backtest(SequenceJob):
         python job.py backtest '{"scopes":["es-md"],"events":["2023-05-28"],"n_sim":200,"verbose":2}'
         python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/results_comp"}'
         python job.py backtest '{"scopes":["es"],"error_model":"average","out":"backtest/results_avg"}'
+        python job.py backtest '{"scopes":["es"],"drift_scale":"auto","out":"backtest/results_scale"}'
 
     Copy the tables between the repository and the app file system (S3 in ECS)::
 
@@ -55,8 +58,8 @@ class Backtest(SequenceJob):
 
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
-            regional_noise=True, min_events=None, error_model='polls', recompute_ratings=False, out=None, verbose=1,
-            runner=None, stats=None, stop_on_error=None, action='run', **kwargs):
+            regional_noise=True, min_events=None, error_model='polls', drift_scale=None, recompute_ratings=False,
+            out=None, verbose=1, runner=None, stats=None, stop_on_error=None, action='run', **kwargs):
         """
         Run the backtest of the requested scopes.
 
@@ -97,6 +100,11 @@ class Backtest(SequenceJob):
             Terminal error of the simulation: the error of a single poll or that of the poll average itself in
             the past elections (table ``average_errors``, filled by the ``compute`` job); ``average`` falls back to
             ``polls`` with a warning when the table has too few rows (``meta.csv`` records the one used).
+        drift_scale : str, float or None, default None
+            Multiplier of the drift variance: ``'auto'`` fits it in each case on the errors of the poll average of
+            the elections before it (table ``average_errors``; 1 with a warning without rows), a positive number
+            (also as a numeric string) fixes it, ``None`` leaves 1 (``meta.csv`` records the one used and the
+            rows of its fit).
         recompute_ratings : bool, default False
             Recompute the pollster ratings in memory with the current code (once per scope) and use them in
             every case instead of the stored ones; nothing is saved to the database.
@@ -129,7 +137,8 @@ class Backtest(SequenceJob):
         ------
         ValueError
             If ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
-            or ``'average'``, there are no scopes to run
+            or ``'average'``, ``drift_scale`` is not ``'auto'``, a positive number or ``None``, there are no scopes
+            to run
             (``backtest: no scopes to run``), ``action`` is not ``run``, ``push`` or ``pull`` or ``stop_on_error`` is not true or false
             (``stop_on_error must be true or false``).
         RuntimeError
@@ -139,6 +148,7 @@ class Backtest(SequenceJob):
             raise ValueError('backtest: unknown action "{}" (expected run, push or pull)'.format(action))
         composition = self._composition(composition)
         error_model = self._error_model(error_model)
+        drift_scale = self._drift_scale(drift_scale)
         targets = resolve_scopes(scopes)
         if not targets:
             raise ValueError('backtest: no scopes to run')
@@ -147,7 +157,8 @@ class Backtest(SequenceJob):
                     n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                    recompute_ratings=recompute_ratings, out=out, verbose=verbose, runner=runner, stats=stats)
+                    drift_scale=drift_scale, recompute_ratings=recompute_ratings, out=out, verbose=verbose,
+                    runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 
@@ -204,3 +215,33 @@ class Backtest(SequenceJob):
         if isinstance(value, str) and value in ('polls', 'average'):
             return value
         raise ValueError('backtest: error_model must be "polls" or "average" (got {!r})'.format(value))
+
+    @staticmethod
+    def _drift_scale(value):
+        """
+        Normalise the ``drift_scale`` argument.
+
+        Parameters
+        ----------
+        value : str, float, int or None
+            ``None`` or ``'auto'`` (kept), or a positive number, also as a numeric string (``'1.5'``).
+
+        Returns
+        -------
+        str, float or None
+            ``None``, ``'auto'`` or the number as a float.
+
+        Raises
+        ------
+        ValueError
+            Anything else (a boolean, zero, a negative or non-finite number included).
+        """
+        if value is None or value == 'auto':
+            return value
+        try:
+            scale = None if isinstance(value, bool) else float(value)
+        except (TypeError, ValueError):
+            scale = None
+        if scale is None or not math.isfinite(scale) or scale <= 0:
+            raise ValueError('backtest: drift_scale must be "auto", a positive number or null (got {!r})'.format(value))
+        return scale

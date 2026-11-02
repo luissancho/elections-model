@@ -810,3 +810,26 @@ def test_simulator_error_model_without_errors_or_past_elections_is_polls():
 def test_simulator_rejects_an_unknown_error_model():
     with pytest.raises(ValueError, match='error_model'):
         Simulator('es', '2026-11-29', error_model='house')
+
+
+# --- Calibración (parte B): `drift_scale`, el crecimiento del error del promedio con el horizonte ---
+
+def test_simulator_passes_the_drift_scale_to_the_drift_estimator():
+    import types
+    calls = []
+    sim = synthetic_simulator()
+    sim.add_errors, sim.drift_scale = True, 'auto'
+    sim.computer = types.SimpleNamespace(get_drift_estimator=lambda **kw: calls.append(kw) or 'drift')
+    assert sim.fit_drift_estimator() == 'drift' and calls == [{'scale': 'auto'}]
+    sim.drift_scale = None
+    assert sim.fit_drift_estimator() == 'drift' and calls[-1] == {'scale': None}
+    sim.add_errors = False
+    assert sim.fit_drift_estimator() is None
+    sim.add_errors, sim.computer = True, None
+    assert sim.fit_drift_estimator() is None
+
+
+@pytest.mark.parametrize('bad', ['x', 0, -1., float('nan'), True])
+def test_simulator_rejects_a_bad_drift_scale(bad):
+    with pytest.raises(ValueError, match='drift_scale'):
+        Simulator('es', '2026-11-29', drift_scale=bad)

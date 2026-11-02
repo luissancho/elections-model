@@ -366,7 +366,8 @@ def test_export_meta_and_headline():
     assert meta['regions'][1] == {'id': 28, 'name': 'Madrid', 'seats': 6}
     assert meta['diagnostics'] == {'drift_k': None, 'multiplier': None, 'ages': {'PP': 40.0, 'PSOE': 40.0, 'VOX': 12.0},
                                    'composition': 1.0, 'clip_rate': {'nowcast': 0.0, 'forecast': 0.01},
-                                   'error_events': [], 'error_scope': 'es', 'error_model': 'polls'}
+                                   'error_events': [], 'error_scope': 'es', 'error_model': 'polls',
+                                   'drift_scale': None, 'drift_scale_rows': None}
     assert meta['smap'] == {'UP': [{'agg': ['UP', 'MP']}]} and 'vs' in meta['bmaps']
 
     head = publish.export_headline(sim, '20261008-120000', '2026-10-08T12:00:00Z', {'parties': [], 'p_majority': {}},
@@ -472,6 +473,20 @@ def test_export_meta_records_the_error_model_used():
     meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
                                {'commit': None, 'dirty': False, 'versions': {}}, False)
     assert meta['diagnostics']['error_model'] == 'average' and meta['diagnostics']['error_events'] == ['2023-07-23']
+
+
+def test_export_meta_records_the_drift_scale_used():
+    """El diagnóstico del run lleva la escala de la deriva usada y las filas con que se ajustó (0 si no se ajustó)."""
+    from mtpy.lib.computer import DriftEstimator
+    sim = synthetic_simulator()
+    sim.v2drift = DriftEstimator(k=4e-5, scale=1.8, scale_rows=27)
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False)
+    assert (meta['diagnostics']['drift_scale'], meta['diagnostics']['drift_scale_rows']) == (1.8, 27)
+    sim.v2drift = DriftEstimator(k=4e-5)
+    meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,
+                               {'commit': None, 'dirty': False, 'versions': {}}, False)
+    assert (meta['diagnostics']['drift_scale'], meta['diagnostics']['drift_scale_rows']) == (1., 0)
 
 
 def test_export_meta_and_headline_carry_the_backfill_keys():

@@ -113,6 +113,7 @@ def synthetic_simulator(mode='nowcast', n_sim=200, seed=0):
     sim.v2err = sim.v2drift = sim.v2seats = None
     sim.computer, sim.est_scope, sim.n_last = None, 'es', 1  # no past elections: no error estimator
     sim.error_model = sim.error_model_used = 'polls'  # error terminal de un sondeo suelto (por defecto)
+    sim.drift_scale = None  # deriva sin escalar (por defecto)
     sim.composition_ratio, sim.composition_rho = 1.0, 0.
     sim.house_effects = sim.dispersion = sim.regional_noise = True
     sim.industry_bias, sim.composition, sim.smap = False, None, {'UP': [{'agg': ['UP', 'MP']}]}

@@ -361,6 +361,7 @@ def run_case(
     regional_noise: bool = True,
     min_events: Optional[int] = None,
     error_model: str = 'polls',
+    drift_scale: Optional[str | float] = None,
     weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
@@ -385,8 +386,11 @@ def run_case(
     (`n_featured`). `error_model` is the terminal error of the `Simulator` (`'polls'`, the default, a single
     poll; `'average'`, the poll average itself, out of sample: its estimator Computer only holds the elections
     before `event_date`); `meta` records the model actually used (`'average'` falls back to `'polls'` without
-    rows). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the polls with ratings
-    recomputed in memory.
+    rows). `drift_scale` multiplies the drift variance of the `Simulator` (`'auto'`: fitted on the errors of the
+    poll average of the elections before `event_date`, see `DriftEstimator.fit_scale`; a number fixes it; `None`,
+    the default, leaves 1); `meta` records the scale used (`drift_scale`) and the rows of its fit
+    (`drift_scale_rows`, 0 when not fitted). `weight_ratings` (see `rating_overrides`) replaces the stored
+    ratings of the polls with ratings recomputed in memory.
 
     Returns
     -------
@@ -404,7 +408,7 @@ def run_case(
             scope=scope, event_date=event_date, drange=horizon, seed=seed, verbose=verbose,
             house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion, composition=composition,
             disp_params={'herding': bool(herding)}, regional_noise=regional_noise, min_events=min_events,
-            error_model=error_model, weight_ratings=weight_ratings
+            error_model=error_model, drift_scale=drift_scale, weight_ratings=weight_ratings
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
         vs = sim.event_params['bmaps']['vs']
@@ -517,6 +521,8 @@ def run_case(
         'as_of': str(sim.as_of.date()), 'horizon_max': sim.horizon_max,
         'drift_k': sim.v2drift.k if sim.v2drift is not None else np.nan,
         'drift_multiplier': sim.v2drift.multiplier if sim.v2drift is not None else np.nan,
+        'drift_scale': sim.v2drift.scale if sim.v2drift is not None else np.nan,
+        'drift_scale_rows': sim.v2drift.scale_rows if sim.v2drift is not None else np.nan,
         'young_parties': '+'.join(sorted(
             n for n in names if sim.v2drift is not None and sim.ages is not None and sim.ages.get(n, np.nan) < sim.v2drift.age_max
         )),
@@ -619,7 +625,8 @@ def summarize_case(
 def summarize_calibration(
     calibration: pd.DataFrame,
     bins: int = 10,
-    groups: dict[str, tuple[int, int]] = HORIZON_GROUPS
+    groups: dict[str, tuple[int, int]] = HORIZON_GROUPS,
+    main_only: bool = True
 ) -> pd.DataFrame:
     """
     Histogram of the PIT of the cells of the backtest, per population, kind, mode and group of horizons.
@@ -637,6 +644,10 @@ def summarize_calibration(
         Number of equal bins of [0, 1]; a PIT goes to `min(int(pit * bins), bins - 1)`.
     groups : dict of str to (int, int), default HORIZON_GROUPS
         Groups of horizons: name -> (first, last) horizon, both included.
+    main_only : bool, default True
+        Keep only the cells of the main parties (column `main`) of the national kinds `shares` and `seats`: the
+        populations of the generales and autonómicas are their main parties (spec 11); the provincial kinds keep
+        every cell. A frame without the `main` column counts every cell as main.
 
     Returns
     -------
@@ -648,6 +659,8 @@ def summarize_calibration(
     keys = ['population', 'kind', 'mode', 'group']
     columns = keys + ['bin', 'expected', 'observed', 'n_cells', 'n_events']
     df = calibration.loc[np.isfinite(calibration['pit'].astype(float))].copy()
+    if main_only and 'main' in df.columns:
+        df = df.loc[df['main'].eq(True) | ~df['kind'].isin(['shares', 'seats'])]
     if 'population' not in df.columns:
         df['population'] = None
     df.loc[df['kind'].astype(str).str.startswith('prov_'), 'population'] = 'provincias'
@@ -760,12 +773,13 @@ def run_backtest(
     regional_noise: bool = True,
     min_events: Optional[int] = None,
     error_model: str = 'polls',
+    drift_scale: Optional[str | float] = None,
     weight_ratings: Optional[pd.Series] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `error_model` and `weight_ratings` are passed to every case.
+    `error_model`, `drift_scale` and `weight_ratings` are passed to every case.
 
     Returns
     -------
@@ -789,7 +803,7 @@ def run_backtest(
                     scope, event_date, horizon, n_sim=n_sim, seed=seed, max_fc=max_fc, min_polls=min_polls,
                     nowcast_only=nowcast_only, house_effects=house_effects, industry_bias=industry_bias, dispersion=dispersion,
                     herding=herding, composition=composition, regional_noise=regional_noise, min_events=min_events,
-                    error_model=error_model, weight_ratings=weight_ratings
+                    error_model=error_model, drift_scale=drift_scale, weight_ratings=weight_ratings
                 )
             except Exception as e:
                 # A case without usable polls (e.g. a 6-month cycle at a 180-day horizon) is recorded, not fatal
@@ -1053,6 +1067,7 @@ def backtest_scope(
     regional_noise: bool = True,
     min_events: Optional[int] = None,
     error_model: str = 'polls',
+    drift_scale: Optional[str | float] = None,
     recompute_ratings: bool = False,
     verbose: int = 0,
     runner=None,
@@ -1075,9 +1090,9 @@ def backtest_scope(
     horizons : list of int, optional
         Horizons in days; `DEFAULT_HORIZONS` by default.
     n_sim, seed, max_fc, nowcast_only, house_effects, industry_bias, dispersion, herding, composition, regional_noise, \
-min_events, error_model
-        Parameters of `run_backtest`, recorded in `run.json` (`error_model` as requested; `meta.csv` has the one
-        each case used).
+min_events, error_model, drift_scale
+        Parameters of `run_backtest`, recorded in `run.json` (`error_model` and `drift_scale` as requested;
+        `meta.csv` has the ones each case used).
     recompute_ratings : bool, default False
         Recompute the ratings of the scope in memory once (`rating_overrides`) and use them in every case
         instead of the stored ones; recorded in `run.json`.
@@ -1108,7 +1123,8 @@ min_events, error_model
 
     params = dict(n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                   industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
-                  regional_noise=regional_noise, min_events=min_events, error_model=error_model)
+                  regional_noise=regional_noise, min_events=min_events, error_model=error_model,
+                  drift_scale=drift_scale)
     weight_ratings = rating_overrides(scope) if recompute_ratings else None
     results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose,
                                        weight_ratings=weight_ratings, **params)

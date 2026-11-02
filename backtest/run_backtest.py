@@ -6,7 +6,7 @@ Usage (from the repository root):
     python backtest/run_backtest.py [--scope es | --scopes es-md es-cl ... | --scopes all]
                                     [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 1000] [--seed 42] [--nowcast-only]
                                     [--no-house-effects] [--recompute-ratings] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
-                                    [--error-model polls|average]
+                                    [--error-model polls|average] [--drift-scale auto|1.5]
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
 Without `--events`, a regional scope evaluates its featured elections held since 2019.
@@ -50,6 +50,9 @@ def main():
     parser.add_argument('--error-model', choices=['polls', 'average'], default='polls',
                         help='terminal error of the simulation: a single poll (`polls`, default) or the poll average '
                              'itself in the past elections (`average`, table `average_errors`)')
+    parser.add_argument('--drift-scale', default=None,
+                        help="multiplier of the drift variance: 'auto' (fitted on the errors of the poll average of "
+                             "the past elections, table `average_errors`) or a positive number; 1 by default")
     parser.add_argument('--recompute-ratings', action='store_true', help='recompute the pollster ratings in memory with the current code (nothing is saved) instead of using the stored ones')
     default_out = os.path.join(ROOT, 'backtest', 'results')
     parser.add_argument('--out', default=default_out)
@@ -75,7 +78,7 @@ def main():
         nowcast_only=args.nowcast_only, house_effects=args.house_effects, industry_bias=args.industry_bias,
         dispersion=args.dispersion, herding=args.herding, composition=args.composition,
         regional_noise=args.regional_noise, min_events=args.min_events, error_model=args.error_model,
-        recompute_ratings=args.recompute_ratings, out=args.out
+        drift_scale=args.drift_scale, recompute_ratings=args.recompute_ratings, out=args.out
     )
     print(push_hint(args.out, scopes, default_out))
 
