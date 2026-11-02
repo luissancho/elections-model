@@ -243,13 +243,19 @@ Cambios:
 
 Tests: `tests/test_simulator_unit.py` (`tail_dof` fija los grados de libertad del sorteo y del abanico; con `None`, los `nobs − 2` y el mismo sorteo; valores no válidos en el fixture y en el constructor), `tests/test_publish_unit.py` (`diagnostics`), `tests/test_backtest_unit.py` (`run.json`, script), `tests/test_jobs_backtest.py` y `tests/test_pipelines_backtest.py`; la guarda de regresión `tests/integration/test_backtest.py` (con `tail_dof=None` el backtest reproduce `backtest/results/`).
 
-**Qué cambia.** Cada partido se sortea como `p + σ · t(ν)`, con `σ` el margen `sqrt(s² + e² + d²)` y `ν` sus grados de libertad. Hasta ahora `ν = nobs − 2` (mínimo 3), y con los sondeos de un ciclo es casi una normal. La especificación (punto 14) pide probar unas colas fijas para todos los partidos, `ν` = 3, 5, 8 o 15, frente a `None`, elegir por el log-score del voto dejando fuera cada elección por turno y, si las diferencias quedan dentro del ruido, quedarse con 5 (el precedente de 538) y decirlo.
+**Qué cambia.** Cada partido se sortea como `p + σ · t(ν)`, con `σ` el margen `sqrt(s² + e² + d²)` y `ν` sus grados de libertad. Hasta ahora `ν = nobs − 2` (mínimo 3). En las generales, con cientos de sondeos por ciclo, es casi una normal; en las autonómicas lejos de la elección, no (ver abajo). La especificación (punto 14) pide probar unas colas fijas para todos los partidos, `ν` = 3, 5, 8 o 15, frente a `None`, elegir por el log-score del voto dejando fuera cada elección por turno y, si las diferencias quedan dentro del ruido, quedarse con 5 (el precedente de 538) y decirlo.
 
 Hay un detalle del código que pesa en la lectura. `σ` es la escala de la t, no su desviación típica: la varianza de una t de `ν` grados es `ν / (ν − 2)`. Con `ν` fijo, el sorteo no sólo tiene colas más gruesas, también es más ancho. Frente a una normal, la desviación típica crece ×1,73 con 3 grados, ×1,29 con 5, ×1,15 con 8 y ×1,07 con 15. Y la banda del 95 % crece más que la del 50 %: con 5 grados, ×1,31 frente a ×1,08. Lo que se compara aquí son colas y ancho a la vez.
 
+Esa comparación con una normal vale para `None` en las generales, no en todas las autonómicas. Los grados que usó `None` están acotados por los sondeos de cada caso: los `nobs` de un partido no pasan de los sondeos del ciclo (`n_polls` de `meta.csv`), así que `ν ≤ n_polls − 2`, con mínimo 3.
+- Generales: la cota es de al menos 18 en todos los casos, y la mediana va de 258 a 311 según el grupo de horizontes. Ningún caso queda en 15 o menos.
+- Autonómicas: la mediana es de 44,5 a 6-14 días, 19 a 30-60 y 12 a 90-180. A 30-60 días, 7 de los 22 casos no pasan de 15 (1 no pasa de 8); a 90-180, 12 de 22 (3 no pasan de 8). En las gallegas de 2020, a 180 días, había 5 sondeos, así que `ν` era 3.
+
+Donde `None` ya usaba pocos grados, fijar 8 o 15 da un sorteo más estrecho y de colas más finas que `None`, no más ancho.
+
 **Cómo se midió.** Sobre la configuración de la sección anterior, `error_model='average'` con `drift_scale='auto'`. 1.000 simulaciones, semilla 42, y la tabla `average_errors` leída del mismo CSV calculado en memoria (sigue vacía en la base). El candidato `None` es esa misma ejecución, `backtest/results_avg_scale2` (sin repetirla). Los otros cuatro van en `backtest/results_dof3`, `_dof5`, `_dof8` y `_dof15`. Las generales son los 28 casos de `es` (22 con escaños válidos). Las autonómicas son los cinco ámbitos fijos de la sección anterior: Madrid, Andalucía, Cataluña, Comunitat Valenciana y Galicia, 11 elecciones y 66 casos. La escala de la deriva ajustada es idéntica en las cinco ejecuciones, porque no depende de `ν`. Los grados de libertad entran en los dos sorteos, el nowcast y el de horizonte, así que se tabulan los dos modos.
 
-El log-score del voto no está en `metrics.csv`, y lo calculamos aparte con las mismas tablas para los cinco candidatos. Para cada partido principal es menos el logaritmo de la densidad del sorteo en su resultado oficial. La densidad se reconstruye con los 21 cuantiles exportados en `shares.csv` (2,5 %, de 5 en 5 hasta el 95 % y 97,5 %): lineal a trozos entre ellos y, fuera del 2,5 % y del 97,5 %, una cola exponencial que lleva ese 2,5 % de masa y empieza con la densidad del último tramo. Es una aproximación: más allá del 97,5 % la cola es la misma forma para todos los candidatos, y lo que distingue a cada uno es el reparto de su masa dentro de ese intervalo. Por caso se hace la media de sus partidos principales; más bajo es mejor, como en el log-score de las mayorías.
+El log-score del voto no está en `metrics.csv`, y lo calculamos aparte con las mismas tablas para los cinco candidatos. Para cada partido principal es menos el logaritmo de la densidad del sorteo en su resultado oficial. La densidad se reconstruye con los 21 cuantiles exportados en `shares.csv` (2,5 %, de 5 en 5 hasta el 95 % y 97,5 %). La función de distribución es lineal a trozos entre ellos, así que la densidad es constante en cada tramo, con un ancho mínimo de 0,01 puntos por tramo para los cuantiles repetidos. Fuera del 2,5 % y del 97,5 %, una cola exponencial lleva ese 2,5 % de masa y empieza con la densidad del último tramo. Es una aproximación: más allá del 97,5 % la cola es la misma forma para todos los candidatos, y lo que distingue a cada uno es el reparto de su masa dentro de ese intervalo. Por caso se hace la media de sus partidos principales; más bajo es mejor, como en el log-score de las mayorías.
 
 ### Coberturas
 
@@ -329,7 +335,7 @@ Nowcast:
 
 ### Dejando fuera cada elección (punto 14)
 
-Cada celda es el log-score medio del voto del candidato en los casos de las otras cuatro elecciones (o de los otros cuatro ámbitos), y en negrita el que gana la fila. A la derecha, el candidato que ganaría la fila con el CRPS de escaños y con el log-score de las mayorías. Debajo de cada tabla, la diferencia con 5 elección a elección (o ámbito a ámbito): la media, la desviación entre las cinco y en cuántas gana a 5. Una diferencia media menor que esa desviación cuenta como ruido.
+Cada celda es el log-score medio del voto del candidato en los casos de las otras cuatro elecciones (o de los otros cuatro ámbitos), y en negrita el que gana la fila. A la derecha, el candidato que ganaría la fila con el CRPS de escaños y con el log-score de las mayorías. Debajo de cada tabla, la diferencia con 5 elección a elección (o ámbito a ámbito): la media, la desviación entre las cinco y en cuántas gana a 5. Una diferencia media menor que esa desviación cuenta como ruido. En las generales, 2015 no tiene casos con escaños válidos. En su fila, las dos columnas de la derecha salen por eso de las cinco elecciones, con las mismas cifras que con todas.
 
 Generales, con horizonte:
 
@@ -381,18 +387,31 @@ None +0,154 ± 0,116 (1 de 5); 3 −0,076 ± 0,139 (3 de 5); 8 +0,094 ± 0,097 (
 
 ### Decisión (punto 14 y criterio 17)
 
-**Por la regla del punto 14 sale 5, y por ruido.** Con horizonte, 5 gana cuatro de las cinco filas de las generales (3 gana la de 2023) y 3 gana las cinco de las autonómicas. En el nowcast, 3 gana todas las filas en las dos poblaciones. Pero ninguna ventaja sale de la desviación entre elecciones. 3 frente a 5 queda en +0,014 ± 0,082 en las generales con horizonte y en −0,023 ± 0,056 en las autonómicas; incluso `None` frente a 5 queda dentro, con +0,124 ± 0,150 y +0,028 ± 0,085. Con diferencias dentro del ruido, la especificación dice 5, y lo decimos: el log-score del voto no distingue los candidatos con cinco elecciones o cinco ámbitos.
+**Por la regla del punto 14 sale 5, y por ruido.** Con horizonte, 5 gana cuatro de las cinco filas de las generales (3 gana la de 2023) y 3 gana las cinco de las autonómicas. En el nowcast, 3 gana todas las filas en las dos poblaciones. Pero ningún candidato mejora a 5 más allá del ruido. 3, el único que le gana filas, queda en +0,014 ± 0,082 frente a 5 en las generales con horizonte y en −0,023 ± 0,056 en las autonómicas. En el nowcast queda en −0,035 ± 0,075 y −0,076 ± 0,139.
+
+Al revés, en el nowcast 5 sí mejora a algunos más allá del ruido: a `None` en las generales (+0,257 ± 0,241) y en las autonómicas (+0,154 ± 0,116), y a 8 en las generales (+0,152 ± 0,089). Con horizonte, ninguna diferencia con 5 sale del ruido (`None`, +0,124 ± 0,150 y +0,028 ± 0,085). Ningún candidato mejora a 5 más allá del ruido, así que la especificación dice 5, y lo decimos.
 
 **El criterio 17 no se cumple con 3, 5 ni 8.** Lo que el log-score del voto premia a 30 días o más es sobre todo el ancho. El nowcast no lleva deriva y se queda corto a esos horizontes; cualquier ensanchamiento le ayuda, y por eso 3 gana todas sus filas. Al lado empeoran tres cosas:
-- La probabilidad de mayoría absoluta empeora más allá del ruido en todos los grupos, y casi siempre más cuanto menos grados. Con horizonte y 5 grados, el log-score de las mayorías de las autonómicas pasa de 0,100 a 0,110 (+10 %), con 3 casos mejor y 46 peor de 66; el Brier, de 0,025 a 0,027, con 3 y 49. En las generales es de 0,260 a 0,277, con 5 y 17 de 22. Con 3 grados, 0,129 en las autonómicas y 0,309 en las generales.
+- La probabilidad de mayoría absoluta empeora más allá del ruido en las autonómicas.
+  - En los dos modos y en todos los grupos, y más cuanto menos grados. Con horizonte y 5 grados, el log-score de las mayorías pasa de 0,100 a 0,110 (+10 %), con 3 casos mejor y 46 peor de 66; el Brier, de 0,025 a 0,027, con 3 y 49. En el nowcast, el log-score pasa de 0,077 a 0,085, con 3 y 41.
+  - En las generales con horizonte empeora en la media de los tres grupos: de 0,260 a 0,277 en total, con 5 casos mejor y 17 peor de 22. A 90-180 días son 2 y 4 de 6, dentro del ruido.
+  - En el nowcast de las generales empeora a 6-14 días (de 0,149 a 0,176, 2 y 6 de 8). A 30 días o más queda plano o algo mejor: el log-score, de 0,259 a 0,263 a 30-60 días y de 0,344 a 0,339 a 90-180; el Brier, de 0,082 a 0,079 y de 0,120 a 0,114 (de 0,076 a 0,075 en total).
+  - Con 3 grados y horizonte, el log-score de las mayorías sube a 0,129 en las autonómicas y a 0,309 en las generales.
 - Donde ya cubrían, a 6-14 días, las bandas pasan del nominal. En las generales con horizonte, la del 80 % de escaños va de 0,79 a 0,93 con 5 grados (0,98 con 3) y la del 95 % del voto de 0,94 a 0,98 (1,00). Las colas del PIT de escaños se vacían: de 0,26 a 0,13 con 5 grados y a 0,02 con 3, frente a un nominal de 0,20.
 - El CRPS de escaños no mejora más allá del ruido. Con horizonte y 5 grados, 12 casos mejor y 10 peor en las generales, y 33 y 33 en las autonómicas.
 
-15 grados es casi neutro: coberturas y PIT apenas se mueven, y el log-score de las mayorías queda igual o algo mejor (de 0,260 a 0,260 en las generales; de 0,100 a 0,097 en las autonómicas, 29 casos mejor y 17 peor). Pero tampoco gana nada en el voto.
+15 grados queda cerca de `None` en las generales, donde los dos son casi una normal. Coberturas y PIT apenas se mueven, y el log-score de las mayorías queda igual (0,260 con horizonte).
+
+En las autonómicas no es neutro. A 90-180 días, en 12 de los 22 casos los grados de `None` no pasaban de 15, y ahí 15 da un sorteo más estrecho. A 90-180 días:
+- con horizonte, el log-score del voto empeora de 2,871 a 2,945, con 9 casos mejor y 13 peor;
+- con horizonte, la cobertura del 95 % del voto baja de 0,79 a 0,77;
+- en el nowcast, el log-score del voto pasa de 3,354 a 3,523.
+
+El log-score de las mayorías mejora algo (de 0,100 a 0,097 en total con horizonte, 29 casos mejor y 17 peor). Tampoco gana nada en el voto.
 
 `tail_dof` queda como opción documentada; `None` sigue siendo el valor por defecto y nada cambia en el modelo vivo. **La decisión es de Luis.** Lo que el backtest señala:
 
-- Por la regla de la especificación sale 5, sólo porque las diferencias del log-score del voto quedan dentro del ruido. Con el resto a la vista (mayorías, bandas cortas que se pasan, colas del PIT vacías), 5 no pasa el criterio 17 en esta configuración.
+- Por la regla de la especificación sale 5, porque ningún candidato le mejora más allá del ruido en el log-score del voto. Con el resto a la vista (mayorías, bandas cortas que se pasan, colas del PIT vacías), 5 no pasa el criterio 17 en esta configuración.
 - Esta prueba mezcla colas y ancho, porque `σ` es la escala de la t. Para probar sólo las colas, el sorteo tendría que usar `σ · sqrt((ν − 2) / ν) · t(ν)`, con la misma varianza que la normal y sólo otra forma. Es un cambio del sorteo, no de esta opción, y queda propuesto.
 - El ensanchamiento que el voto agradece a 30 días o más ya lo pedía la sección anterior. Es el mismo hueco del horizonte, y una t más ancha no lo arregla mejor que la escala de la deriva: empeora también las mayorías.
 
