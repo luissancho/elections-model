@@ -130,26 +130,28 @@ Cambios:
 - Backtest con `drift_scale`: `run_case`, `run_backtest` y `backtest_scope`, columnas `drift_scale` (la usada) y `drift_scale_rows` de `meta.csv`, clave `drift_scale` de `run.json` (la pedida) (`mtpy/lib/backtest.py`); job `backtest` (`mtpy/jobs/Backtest.py`), pipeline (`mtpy/pipelines/backtest/Backtest.py`) y `--drift-scale auto|1.5` (`backtest/run_backtest.py`).
 - `summarize_calibration(main_only=True)`: en las poblaciones de generales y autonómicas sólo cuentan las celdas de los partidos principales, como dice la especificación (punto 11); las provinciales, todas. Las tablas de PIT de esta sección y de la anterior son de partidos principales.
 
-Tests: `tests/test_computer_unit.py` (`fit_scale`, la escala en `var` y `sigma`, `get_drift_estimator` con `None`, un número, `'auto'`, la tabla vacía, los valores no válidos y la exclusión de los jóvenes), `tests/test_simulator_unit.py` (`drift_scale` hasta el estimador, valores no válidos), `tests/test_publish_unit.py` (`diagnostics`), `tests/test_backtest_unit.py` (`run.json`, script, `main_only`), `tests/test_jobs_backtest.py` y `tests/test_pipelines_backtest.py`; la guarda de regresión `tests/integration/test_backtest.py` (con `drift_scale=None` el backtest reproduce `backtest/results/`).
+Tests: `tests/test_computer_unit.py` (`fit_scale`, la escala en `var` y `sigma`, `get_drift_estimator` con `None`, un número, `'auto'`, la tabla vacía, los valores no válidos, la exclusión de los jóvenes y la edad desconocida de los partidos con sondeos desde el principio de la base), `tests/test_simulator_unit.py` (`drift_scale` hasta el estimador, valores no válidos), `tests/test_publish_unit.py` (`diagnostics`), `tests/test_backtest_unit.py` (`run.json`, script, `main_only`), `tests/test_jobs_backtest.py` y `tests/test_pipelines_backtest.py`; la guarda de regresión `tests/integration/test_backtest.py` (con `drift_scale=None` el backtest reproduce `backtest/results/`).
 
-**Qué cambia.** La deriva `d` es un paseo aleatorio relativo, `d² = k · días · p²`, con `k` ajustada sobre cómo se mueve la serie del promedio entre una fecha y otra. Lo que importa es otra cosa: cuánto crece el error del promedio frente al resultado cuando el ancla se aleja de la elección. `fit_scale` lo mide con la tabla `average_errors`. Para cada elección anterior y partido con fila a 6 días y a 30 días o más, el exceso de varianza del promedio sobre su propio error estándar, `(error_d² − s_d²) − (error_6² − s_6²)`, se compara con lo que ya pone la deriva en ese tramo, `k · (d − 6) · p_d²` (`p` es el nivel del promedio a `d` días, en puntos, como en `var`). La escala es la suma de los excesos entre la suma de lo esperado, recortada a [1, 4] con un aviso que dice el valor sin recortar. Los partidos con menos de `age_max` años (cuatro) en su elección no entran: su deriva ya va multiplicada por el multiplicador de edad (M8), y contarlos aquí también duplicaría su efecto. La edad sale de las mismas fechas del primer sondeo que usa la tabla de deriva, y un partido sin fecha cuenta como maduro. Como el Computer estimador sólo tiene las elecciones anteriores a la simulada, el ajuste está fuera de muestra.
+**Qué cambia.** La deriva `d` es un paseo aleatorio relativo, `d² = k · días · p²`, con `k` ajustada sobre cómo se mueve la serie del promedio entre una fecha y otra. Lo que importa es otra cosa: cuánto crece el error del promedio frente al resultado cuando el ancla se aleja de la elección. `fit_scale` lo mide con la tabla `average_errors`. Para cada elección anterior y partido con fila a 6 días y a 30 días o más, el exceso de varianza del promedio sobre su propio error estándar, `(error_d² − s_d²) − (error_6² − s_6²)`, se compara con lo que ya pone la deriva en ese tramo, `k · (d − 6) · p_d²` (`p` es el nivel del promedio a `d` días, en puntos, como en `var`). La escala es la suma de los excesos entre la suma de lo esperado, recortada a [1, 4] con un aviso que dice el valor sin recortar.
+
+No entran los partidos con menos de `age_max` años (cuatro) en su elección: su deriva ya va multiplicada por el multiplicador de edad (M8), y contarlos aquí también duplicaría su efecto. La edad sale de las mismas fechas del primer sondeo que usa la tabla de deriva. Un partido sin fecha cuenta como maduro, y también uno cuyo primer sondeo cae a menos de cuatro años del primer sondeo de la base. Los sondeos de la base empiezan en 1979, y la base no distingue un partido fundado en 1977 de uno de 1879: sin esa regla, todos los de 1982 (PSOE, AP, UCD, PCE) contarían como jóvenes y la elección de 1982 saldría entera del ajuste. Los jóvenes de verdad (CDS en 1986, IU en 1989, UP y Cs en 2015-2016, VOX en 2019, SUMAR en 2023) siguen fuera. Como el Computer estimador sólo tiene las elecciones anteriores a la simulada, el ajuste está fuera de muestra.
 
 **Cómo se midió.** Igual que en la sección anterior: la tabla `average_errors` sigue vacía en la base, así que el backtest leyó las filas de `es` calculadas en memoria con la semántica de `load_average_errors`. 1.000 simulaciones, semilla 42. Se midieron dos configuraciones, cada una contra su propio «antes»: (a) `error_model='average'` con `drift_scale='auto'` frente a `backtest/results_avg`, y (b) el modelo que se publica, `error_model='polls'` con `drift_scale='auto'`, frente a `backtest/results` (generales) y `backtest/results_polls` (autonómicas). Las generales son los 28 casos de `es`. Las autonómicas son un subconjunto fijo de cinco ámbitos, los que más casos tienen (Madrid, Andalucía, Cataluña, Comunitat Valenciana y Galicia: 11 elecciones, 66 casos). Las otras doce comunidades quedan para una ejecución completa.
 
-La deriva sólo entra en la ejecución con horizonte. El nowcast no cambia: las columnas sin sufijo de `metrics.csv` son idénticas antes y después en los 28 casos de las generales y en los 66 de las autonómicas, en las dos configuraciones. Todo lo que sigue es de la ejecución con horizonte (columnas `_h`, PIT del modo `h`).
+La deriva sólo entra en la ejecución con horizonte. El nowcast no cambia por construcción, y así sale: las columnas sin sufijo de `metrics.csv` son idénticas antes y después en los 28 casos de las generales y en los 66 de las autonómicas, en las dos configuraciones. Por eso no se tabulan. Todo lo que sigue es de la ejecución con horizonte (columnas `_h`, PIT del modo `h`).
 
 **La escala ajustada.** La misma en las dos configuraciones (no depende de `e`):
 
 | Elección simulada | 2015-12 | 2016-06 | 2019-04 | 2019-11 | 2023-07 |
 |---|---|---|---|---|---|
-| Escala | 1,69 | 1,00 | 1,00 | 1,00 | 1,34 |
-| Filas | 116 | 128 | 134 | 150 | 162 |
+| Escala | 4,00 (recortada) | 2,25 | 2,22 | 2,23 | 2,49 |
+| Filas | 136 | 148 | 154 | 170 | 182 |
 
-En 2016 y en abril de 2019 el valor sin recortar queda por debajo de 1 (0,80 y 0,81) y se recorta a 1; en noviembre de 2019 sale 1,001. Las autonómicas toman la escala de `es` de la última general anterior: 1,00 hasta 2019 y 1,34-1,36 desde 2023.
+En 2015 sólo había siete generales detrás, con el ciclo de 1982 pesando mucho, y el valor se recorta a 4. Desde 2016 la escala es estable, entre 2,2 y 2,5: el error del promedio crece con el horizonte algo más del doble de lo que pone la deriva de la serie. Cada autonómica toma la escala de `es` con las generales anteriores a ella: entre 2,22 y 2,49 en los cinco ámbitos (entre 154 y 194 filas).
 
-Hay que saber de dónde sale ese 1. Los sondeos de la base empiezan en 1979, así que en 1982 todos los partidos (PSOE, AP, UCD, PCE) tienen menos de cuatro años de «primer sondeo» y salen del ajuste como jóvenes, igual que salen de la tabla de deriva. Y 1982, con el hundimiento de UCD, es la elección cuyo promedio más se alejó del resultado con el horizonte. Con 1982 dentro y fuera sólo los jóvenes de verdad (CDS, IU, UP, Cs, VOX, SUMAR), la escala sería de 2,0-2,3 entre 2016 y 2023 (4,7 en 2015). Sin 1982, es de 0,8.
-
-Con los partidos jóvenes dentro del ajuste, la escala sale 2,4-3,1 (4,0 recortada en 2015). En (a) eso sube la cobertura del 95 % con horizonte a 90-180 días del voto de 0,78 a 0,85 y la de escaños de 0,80 a 0,87.
+Dos ajustes alternativos, como sensibilidad:
+- Con los partidos jóvenes dentro del ajuste, la escala sale 2,4-3,1 (4,0 recortada en 2015). En (a) eso sube la cobertura del 95 % con horizonte a 90-180 días del voto de 0,78 a 0,85 y la de escaños de 0,80 a 0,87, casi lo mismo que la regla elegida.
+- Sin 1982 (todos sus partidos cuentan como jóvenes para la base), la escala sale 1,69 / 1,00 recortada / 1,00 recortada / 1,00 / 1,34. Apenas mueve nada: en (b), la del 80 % del voto a 30-60 días de 0,72 a 0,77 y poco más. El CRPS de escaños mejora en unos pocos casos y el log-score de las mayorías autonómicas ya empeora (0 casos mejor y 11 peor a 90-180 días).
 
 ### (a) El error del promedio con la escala
 
@@ -157,33 +159,33 @@ Coberturas con horizonte de los partidos principales, antes → después (media 
 
 | Grupo | Voto 50 % | Voto 80 % | Voto 95 % | Escaños 50 % | Escaños 80 % | Escaños 95 % |
 |---|---|---|---|---|---|---|
-| Generales 6-14 | 0,49 → 0,49 | 0,72 → 0,72 | 0,92 → 0,92 | 0,49 → 0,49 | 0,73 → 0,73 | 0,98 → 0,98 |
-| Generales 30-60 | 0,38 → 0,38 | 0,68 → 0,68 | 0,82 → 0,82 | 0,34 → 0,34 | 0,69 → 0,72 | 0,88 → 0,88 |
-| Generales 90-180 | 0,30 → 0,33 | 0,58 → 0,61 | 0,78 → 0,80 | 0,31 → 0,31 | 0,57 → 0,61 | 0,80 → 0,80 |
-| Autonómicas 6-14 | 0,46 → 0,47 | 0,73 → 0,73 | 0,87 → 0,87 | 0,55 → 0,55 | 0,74 → 0,74 | 0,88 → 0,88 |
-| Autonómicas 30-60 | 0,31 → 0,33 | 0,60 → 0,60 | 0,78 → 0,78 | 0,46 → 0,47 | 0,65 → 0,65 | 0,83 → 0,84 |
-| Autonómicas 90-180 | 0,34 → 0,34 | 0,59 → 0,61 | 0,79 → 0,79 | 0,42 → 0,43 | 0,65 → 0,66 | 0,85 → 0,85 |
+| Generales 6-14 | 0,49 → 0,51 | 0,72 → 0,75 | 0,92 → 0,94 | 0,49 → 0,54 | 0,73 → 0,79 | 0,98 → 0,98 |
+| Generales 30-60 | 0,38 → 0,43 | 0,68 → 0,75 | 0,82 → 0,84 | 0,34 → 0,44 | 0,69 → 0,78 | 0,88 → 0,88 |
+| Generales 90-180 | 0,30 → 0,38 | 0,58 → 0,70 | 0,78 → 0,85 | 0,31 → 0,41 | 0,57 → 0,70 | 0,80 → 0,87 |
+| Autonómicas 6-14 | 0,46 → 0,47 | 0,73 → 0,73 | 0,87 → 0,87 | 0,55 → 0,57 | 0,74 → 0,75 | 0,88 → 0,88 |
+| Autonómicas 30-60 | 0,31 → 0,36 | 0,60 → 0,66 | 0,78 → 0,80 | 0,46 → 0,50 | 0,65 → 0,69 | 0,83 → 0,84 |
+| Autonómicas 90-180 | 0,34 → 0,34 | 0,59 → 0,67 | 0,79 → 0,79 | 0,42 → 0,47 | 0,65 → 0,73 | 0,85 → 0,87 |
 
 PIT del modo `h`, partidos principales (colas = las cajas 0 y 9, nominal 0,20; L1 = distancia a la uniforme):
 
 | Grupo | Voto, colas | Voto, L1 | Escaños, colas | Escaños, L1 |
 |---|---|---|---|---|
-| Generales 6-14 | 0,28 → 0,28 | 0,38 → 0,38 | 0,29 → 0,29 | 0,55 → 0,55 |
-| Generales 30-60 | 0,32 → 0,32 | 0,39 → 0,39 | 0,31 → 0,31 | 0,37 → 0,37 |
-| Generales 90-180 | 0,41 → 0,39 | 0,60 → 0,54 | 0,41 → 0,41 | 0,62 → 0,62 |
+| Generales 6-14 | 0,28 → 0,25 | 0,38 → 0,29 | 0,29 → 0,26 | 0,55 → 0,34 |
+| Generales 30-60 | 0,32 → 0,25 | 0,39 → 0,32 | 0,31 → 0,22 | 0,37 → 0,35 |
+| Generales 90-180 | 0,41 → 0,29 | 0,60 → 0,45 | 0,41 → 0,29 | 0,62 → 0,50 |
 | Autonómicas 6-14 | 0,28 → 0,28 | 0,25 → 0,25 | 0,29 → 0,29 | 0,35 → 0,35 |
-| Autonómicas 30-60 | 0,38 → 0,38 | 0,41 → 0,39 | 0,38 → 0,38 | 0,38 → 0,36 |
-| Autonómicas 90-180 | 0,37 → 0,35 | 0,42 → 0,39 | 0,42 → 0,40 | 0,50 → 0,43 |
+| Autonómicas 30-60 | 0,38 → 0,32 | 0,41 → 0,32 | 0,38 → 0,34 | 0,38 → 0,32 |
+| Autonómicas 90-180 | 0,37 → 0,27 | 0,42 → 0,33 | 0,42 → 0,30 | 0,50 → 0,34 |
 
 Puntuaciones por caso con horizonte, sobre los casos con escaños válidos (más bajo es mejor; casos mejor / peor):
 
 | Grupo | CRPS escaños, generales | Log-score mayorías, generales | CRPS escaños, autonómicas | Log-score mayorías, autonómicas |
 |---|---|---|---|---|
-| 6-14 | 5,155 → 5,155 (0 / 2; 8 casos) | 0,156 → 0,156 (0 / 1) | 1,783 → 1,782 (11 / 7; 22 casos) | 0,107 → 0,107 (0 / 6) |
-| 30-60 | 7,525 → 7,512 (3 / 1; 8) | 0,271 → 0,269 (2 / 0) | 2,692 → 2,682 (16 / 3; 22) | 0,075 → 0,077 (1 / 11) |
-| 90-180 | 9,443 → 9,424 (3 / 0; 6) | 0,350 → 0,347 (1 / 0) | 3,464 → 3,451 (12 / 7; 22) | 0,082 → 0,086 (1 / 10) |
+| 6-14 | 5,155 → 5,129 (4 / 4; 8 casos) | 0,156 → 0,163 (0 / 7) | 1,783 → 1,778 (15 / 7; 22 casos) | 0,107 → 0,109 (2 / 11) |
+| 30-60 | 7,525 → 7,427 (7 / 1; 8) | 0,271 → 0,282 (2 / 6) | 2,692 → 2,654 (16 / 6; 22) | 0,075 → 0,086 (0 / 16) |
+| 90-180 | 9,443 → 9,301 (5 / 1; 6) | 0,350 → 0,360 (2 / 4) | 3,464 → 3,405 (14 / 8; 22) | 0,082 → 0,104 (0 / 16) |
 
-La escala no arregla lo que le falta a `'average'`: el `e` corto y los partidos ausentes de la tabla (sección anterior) siguen ahí. El `e` de los regionales sigue en centésimas porque `AverageErrorEstimator.predict` no tiene suelo, y la escala, que sólo toca la deriva, no lo cambia.
+La escala no arregla lo que le falta a `'average'`: el `e` corto y los partidos ausentes de la tabla (sección anterior) siguen ahí. El `e` de los regionales sigue en centésimas porque `AverageErrorEstimator.predict` no tiene suelo, y la escala, que sólo toca la deriva, no lo cambia. A 6-14 días, donde la deriva es pequeña, lo que se ve es sobre todo el hueco del `e` corto tapado en parte por la deriva.
 
 ### (b) El modelo que se publica con la escala
 
@@ -191,42 +193,44 @@ Coberturas con horizonte de los partidos principales, antes → después:
 
 | Grupo | Voto 50 % | Voto 80 % | Voto 95 % | Escaños 50 % | Escaños 80 % | Escaños 95 % |
 |---|---|---|---|---|---|---|
-| Generales 6-14 | 0,51 → 0,51 | 0,75 → 0,75 | 0,96 → 0,96 | 0,60 → 0,60 | 0,85 → 0,85 | 1,00 → 1,00 |
-| Generales 30-60 | 0,40 → 0,40 | 0,72 → 0,77 | 0,84 → 0,84 | 0,41 → 0,41 | 0,72 → 0,75 | 0,88 → 0,88 |
-| Generales 90-180 | 0,33 → 0,33 | 0,67 → 0,67 | 0,85 → 0,85 | 0,34 → 0,34 | 0,66 → 0,66 | 0,83 → 0,83 |
+| Generales 6-14 | 0,51 → 0,54 | 0,75 → 0,75 | 0,96 → 0,96 | 0,60 → 0,63 | 0,85 → 0,88 | 1,00 → 1,00 |
+| Generales 30-60 | 0,40 → 0,48 | 0,72 → 0,77 | 0,84 → 0,86 | 0,41 → 0,47 | 0,72 → 0,81 | 0,88 → 0,90 |
+| Generales 90-180 | 0,33 → 0,38 | 0,67 → 0,75 | 0,85 → 0,85 | 0,34 → 0,45 | 0,66 → 0,75 | 0,83 → 0,87 |
 | Autonómicas 6-14 | 0,55 → 0,55 | 0,78 → 0,78 | 0,94 → 0,94 | 0,67 → 0,67 | 0,77 → 0,78 | 0,93 → 0,93 |
-| Autonómicas 30-60 | 0,40 → 0,40 | 0,67 → 0,67 | 0,86 → 0,86 | 0,52 → 0,52 | 0,69 → 0,70 | 0,87 → 0,87 |
-| Autonómicas 90-180 | 0,36 → 0,36 | 0,62 → 0,64 | 0,83 → 0,83 | 0,45 → 0,45 | 0,68 → 0,70 | 0,87 → 0,87 |
+| Autonómicas 30-60 | 0,40 → 0,41 | 0,67 → 0,69 | 0,86 → 0,87 | 0,52 → 0,55 | 0,69 → 0,73 | 0,87 → 0,89 |
+| Autonómicas 90-180 | 0,36 → 0,39 | 0,62 → 0,68 | 0,83 → 0,85 | 0,45 → 0,51 | 0,68 → 0,76 | 0,87 → 0,89 |
 
 PIT del modo `h`, partidos principales:
 
 | Grupo | Voto, colas | Voto, L1 | Escaños, colas | Escaños, L1 |
 |---|---|---|---|---|
-| Generales 6-14 | 0,25 → 0,25 | 0,26 → 0,26 | 0,21 → 0,21 | 0,25 → 0,25 |
-| Generales 30-60 | 0,28 → 0,23 | 0,29 → 0,29 | 0,28 → 0,28 | 0,37 → 0,37 |
-| Generales 90-180 | 0,33 → 0,33 | 0,47 → 0,47 | 0,35 → 0,35 | 0,56 → 0,56 |
-| Autonómicas 6-14 | 0,22 → 0,22 | 0,22 → 0,22 | 0,26 → 0,26 | 0,35 → 0,35 |
-| Autonómicas 30-60 | 0,31 → 0,30 | 0,26 → 0,25 | 0,34 → 0,33 | 0,27 → 0,26 |
-| Autonómicas 90-180 | 0,33 → 0,31 | 0,34 → 0,28 | 0,35 → 0,35 | 0,40 → 0,37 |
+| Generales 6-14 | 0,25 → 0,25 | 0,26 → 0,28 | 0,21 → 0,18 | 0,25 → 0,27 |
+| Generales 30-60 | 0,28 → 0,23 | 0,29 → 0,30 | 0,28 → 0,19 | 0,37 → 0,40 |
+| Generales 90-180 | 0,33 → 0,24 | 0,47 → 0,43 | 0,35 → 0,26 | 0,56 → 0,45 |
+| Autonómicas 6-14 | 0,22 → 0,22 | 0,22 → 0,21 | 0,26 → 0,26 | 0,35 → 0,36 |
+| Autonómicas 30-60 | 0,31 → 0,27 | 0,26 → 0,25 | 0,34 → 0,31 | 0,27 → 0,25 |
+| Autonómicas 90-180 | 0,33 → 0,26 | 0,34 → 0,25 | 0,35 → 0,28 | 0,40 → 0,28 |
 
 Puntuaciones por caso con horizonte (casos mejor / peor):
 
 | Grupo | CRPS escaños, generales | Log-score mayorías, generales | CRPS escaños, autonómicas | Log-score mayorías, autonómicas |
 |---|---|---|---|---|
-| 6-14 | 5,167 → 5,168 (1 / 2; 8 casos) | 0,175 → 0,175 (1 / 0) | 1,766 → 1,765 (10 / 8; 22 casos) | 0,115 → 0,115 (1 / 4) |
-| 30-60 | 7,435 → 7,427 (3 / 1; 8) | 0,282 → 0,282 (1 / 0) | 2,641 → 2,634 (15 / 5; 22) | 0,082 → 0,084 (1 / 9) |
-| 90-180 | 9,321 → 9,310 (3 / 0; 6) | 0,356 → 0,354 (1 / 1) | 3,408 → 3,398 (12 / 8; 22) | 0,086 → 0,090 (0 / 11) |
+| 6-14 | 5,167 → 5,154 (3 / 5; 8 casos) | 0,175 → 0,182 (1 / 7) | 1,766 → 1,764 (12 / 10; 22 casos) | 0,115 → 0,116 (0 / 13) |
+| 30-60 | 7,435 → 7,380 (6 / 2; 8) | 0,282 → 0,292 (3 / 5) | 2,641 → 2,613 (16 / 6; 22) | 0,082 → 0,091 (1 / 14) |
+| 90-180 | 9,321 → 9,227 (5 / 1; 6) | 0,356 → 0,367 (2 / 4) | 3,408 → 3,368 (14 / 9; 22) | 0,086 → 0,107 (0 / 16) |
 
-En las generales, con la escala a 1 en 2016 y 2019, sólo se mueven los casos de 2015 y 2023, y por eso cambia tan poco: a 30-60 días la del 80 % del voto pasa de 0,72 a 0,77 y la de escaños de 0,72 a 0,75. La del 95 % sigue en 0,83-0,85 a 30 días o más.
+El Brier de las mayorías va en la misma dirección que el log-score: en las autonómicas, 1 caso mejor y 16 peor a 90-180 días (de 0,020 a 0,025).
 
 ### Decisión (criterio 17)
 
-**No se cumple del todo.** En las dos configuraciones, coberturas y PIT con horizonte se acercan al nominal a 30 días o más, donde faltaban, y no empeoran a 6-14 días, donde ya cubrían. El CRPS de escaños mejora en la mayoría de los casos (en (b), 3 de 4 casos que cambian en las generales a 30-60 días, 15 mejor y 5 peor en las autonómicas). Pero el log-score de las mayorías en las autonómicas empeora de forma sistemática a 30 días o más: en (b), 1 caso mejor y 9 peor a 30-60 días, 0 y 11 a 90-180 (de 0,086 a 0,090). Es poco, pero no es ruido. Y el efecto es pequeño: la del 95 % con horizonte sigue en 0,83-0,86 a 30 días o más, lejos de 0,95. Con la escala a 1 en la mitad de las generales, el ajuste depende sobre todo de si 1982 entra o no, y 1982 sale por la censura del inicio de los datos, no por ser de partidos jóvenes.
+**No se cumple el criterio.** En las dos configuraciones, coberturas y PIT con horizonte se acercan al nominal a 30 días o más, donde faltaban: en el modelo que se publica, la del 80 % de escaños a 90-180 días pasa de 0,66 a 0,75 en las generales y de 0,68 a 0,76 en las autonómicas, y las colas del PIT del voto bajan de 0,33 a 0,24-0,26. El CRPS de escaños mejora en la mayoría de los casos a 30 días o más (generales 6 / 2 y 5 / 1; autonómicas 16 / 6 y 13 / 9). Pero la probabilidad de mayoría absoluta empeora más allá del ruido. En las autonómicas, el log-score empeora en casi todos los casos que cambian: 0 mejor y 13 peor a 6-14 días, 1 y 14 a 30-60, 0 y 16 a 90-180, con la media de 0,086 a 0,107 (+24 %). En las generales es 1 / 7, 3 / 5 y 2 / 4. Y donde ya cubrían, a 6-14 días, algunas bandas de las generales pasan del nominal (la del 50 % de escaños de 0,60 a 0,63, la del 80 % de 0,85 a 0,88). Las cifras de la ejecución sin 1982 dicen lo mismo con un efecto más pequeño.
+
+La lectura es que la escala ensancha bien cada partido por separado, pero la deriva de los partidos se sortea de forma independiente. Con bandas más anchas, la suma de un bloque se abre y su probabilidad de mayoría se va hacia el medio, también en las comunidades en las que la mayoría estaba clara. El ancho de cada partido mejora y la probabilidad conjunta empeora: la escala necesita la composición del ruido (paso 15, M7) para que la deriva de un bloque no crezca como la de partidos independientes.
 
 `drift_scale` queda como opción documentada; `None` (1) sigue siendo el valor por defecto y nada cambia en el modelo vivo. **La decisión es de Luis.** Lo que el backtest señala:
 
-- La edad de los partidos en 1982 es un artefacto: sus sondeos empiezan en 1979. Habría que tratar la edad de un partido presente desde el primer ciclo como desconocida (madura), en la tabla de deriva y aquí. Con eso, la escala sería de 2,0-2,3 entre 2016 y 2023, y su efecto se parecería al de la ejecución con todos los partidos dentro.
-- El log-score de las mayorías autonómicas empeora con bandas más anchas. Hay que mirarlo junto con las colas (paso 14) antes de dar la escala por buena.
+- La escala medida es estable, 2,2-2,5 desde 2016: la deriva de la serie se queda en menos de la mitad de lo que crece el error del promedio con el horizonte.
+- Antes de adoptarla, hay que probarla junto con la composición del ruido (paso 15), mirando el log-score y el Brier de las mayorías.
 - Una ejecución completa (las 17 comunidades) de la configuración que se elija; esta se hizo sobre cinco.
 
-Tiempos (1.000 simulaciones, en un Mac con hasta siete ejecuciones a la vez): generales 3.405 s en (a) y 3.500 s en (b); autonómicas, 66 casos en cada configuración, entre 727 y 1.084 s por ámbito.
+Tiempos (1.000 simulaciones, en un Mac con cuatro ejecuciones a la vez): generales 3.037 s en (a) y 3.104 s en (b); autonómicas, 66 casos en cada configuración, entre 770 y 977 s por ámbito (4.263 s y 4.429 s en total).

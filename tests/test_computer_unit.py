@@ -1000,3 +1000,23 @@ def test_get_drift_estimator_auto_fits_the_scale_without_the_young_parties(monke
     monkeypatch.setattr(c, 'load_average_errors', lambda: pd.DataFrame(rows))
     auto = c.get_drift_estimator(scale='auto')
     assert auto.scale == pytest.approx(2.) and auto.scale_rows == 2   # A y U; Y fuera
+
+
+def test_get_drift_estimator_auto_keeps_the_parties_polled_since_the_start_of_the_database(monkeypatch):
+    """La base no distingue un partido de 1977 de uno de 1879: si su primer sondeo cae a menos de `age_max` años del
+    primer sondeo de la base, su edad es desconocida y sus filas se quedan, aunque la elección sea de poco después
+    (1982 con sondeos desde 1979); el joven de verdad, que aparece más tarde, sigue fuera."""
+    c, _ = _drift_computer(monkeypatch, None)
+    k = c.get_drift_estimator().k
+    first = pd.Series({'A': pd.Timestamp('2000-01-01'), 'B': pd.Timestamp('2000-01-01'),
+                       'O': pd.Timestamp('2001-01-01'), 'Y': pd.Timestamp('2018-01-01')})
+    monkeypatch.setattr(c, 'party_first_polls', lambda: first)
+    rows = []
+    for event, party, scale in (('2003-01-01', 'O', 2.), ('2019-04-28', 'Y', 9.), ('2019-04-28', 'A', 2.)):
+        for d in (6, 60):
+            extra = scale * k * (d - 6) * 400.
+            rows.append({'event_date': event, 'party': party, 'horizon': d, 'level': 20., 'error': np.sqrt(1. + extra),
+                         'err': 0.})
+    monkeypatch.setattr(c, 'load_average_errors', lambda: pd.DataFrame(rows))
+    auto = c.get_drift_estimator(scale='auto')
+    assert auto.scale == pytest.approx(2.) and auto.scale_rows == 2   # O (2 años en 2003, desde el inicio) y A; Y fuera

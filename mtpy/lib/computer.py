@@ -2868,7 +2868,8 @@ class Computer(Core):
         the errors of the poll average of the current events (`load_average_errors`; the Computer of a
         `Simulator` only holds the elections before the simulated one, so the fit is out of sample) without the
         rows of the parties younger than `age_max` at their election (their drift already carries the multiplier;
-        a party without a first poll is kept), falling back to 1 with a warning when the table has no usable rows;
+        a party without a first poll, or first polled within `age_max` years of the first poll of the database,
+        has an unknown age and is kept), falling back to 1 with a warning when the table has no usable rows;
         a positive number fixes it; `None` (default) leaves 1 without reading the table.
 
         Parameters
@@ -2907,9 +2908,12 @@ class Computer(Core):
         estimator = DriftEstimator.fit(df, d_min=d_min, decay=self.year_decay, agg=agg, age_max=age_max)
         if scale == 'auto':
             # The young parties already get `multiplier²` (M8): their rows would be counted twice in the scale.
-            # A party without a first poll counts as established, as in `DriftEstimator.var`
+            # A party without a first poll counts as established, as in `DriftEstimator.var`, and so does a party
+            # first polled within `age_max` years of the first poll of the database: its age is unknown (the data
+            # cannot tell a party founded just before the first polls from an old one, e.g. every party of 1982)
             errors = self.load_average_errors()
-            age = (pd.to_datetime(errors['event_date']) - errors['party'].map(first)).dt.days / 365.25
+            known = first.loc[first > first.min() + pd.DateOffset(days=int(round(365.25 * age_max)))]
+            age = (pd.to_datetime(errors['event_date']) - errors['party'].map(known)).dt.days / 365.25
             errors = errors.loc[~(age < age_max).to_numpy()]
             estimator.scale, estimator.scale_rows = DriftEstimator.fit_scale(errors, k=estimator.k)
         elif scale is not None:
