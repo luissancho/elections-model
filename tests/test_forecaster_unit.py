@@ -634,3 +634,19 @@ def test_fit_dispersion_shrinks_the_herding_ratio_with_herd_prior_and_the_disper
     disp = fc.fit_dispersion()
     assert ref.loc[4, 'herd_ratio'] < 0.75 and disp.loc[4, 'herd_ratio'] == pytest.approx(1., abs=1e-6)
     pd.testing.assert_series_equal(disp['ratio'], ref['ratio'])
+
+
+def test_event_params_given_to_the_constructor_replace_the_derivation(monkeypatch):
+    from mtpy.lib import forecaster as forecaster_module
+
+    calls = []
+    derived = {'parties': {'polls': ['PP', 'PSOE']}, 'bmaps': {'main': ['PP']}}
+    monkeypatch.setattr(forecaster_module, 'get_event_params',
+                        lambda scope, event_date, path=None: calls.append((scope, event_date, path)) or derived)
+
+    fc = Forecaster('es', '2023-07-23')
+    assert calls == [('es', '2023-07-23', '.')] and fc.event_params is derived and fc.bmap == ['PP', 'PSOE']
+
+    given = {'parties': {'polls': ['PP', 'VOX']}, 'bmaps': {'main': ['VOX']}}
+    fc = Forecaster('es', '2023-07-23', event_params=given)
+    assert len(calls) == 1 and fc.event_params is given and fc.bmap == ['PP', 'VOX']

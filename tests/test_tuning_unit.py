@@ -1,13 +1,16 @@
 """Unit tests of the tuning harness of the average on future polls (no database)."""
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from mtpy.lib import tuning
 from mtpy.lib.forecaster import Forecaster
-from mtpy.lib.tuning import (DEFAULTS, GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, apply_setting, autocorrelation,
-                             coordinate_descent, cycle_cuts, default_config, future_polls, normalize_config,
-                             predict_polls, roughness, run_cut, score_polls)
+from mtpy.lib.tuning import (DEFAULTS, GRID, ORDER_SHRINKAGE, ORDER_SMOOTHING, TUNING_FILES, TUNING_PREFIX,
+                             NothingToTune, apply_setting, autocorrelation, coordinate_descent, cycle_cuts,
+                             default_config, future_polls, normalize_config, predict_polls, roughness, run_cut,
+                             run_search, run_tuning, score_polls, search_cycles, tuning_fs, tuning_scope)
 
 
 def _fake_fitted_forecaster(effects=None):
@@ -214,6 +217,7 @@ def test_run_cut_scores_cumulative_horizons_with_the_live_flags(monkeypatch):
     fc = FakeForecaster.instances[0]
     assert fc.kwargs['drange'] == 30 and fc.kwargs['house_effects'] is True and fc.kwargs['dispersion'] is True
     assert fc.kwargs['disp_params'] == {'herding': True} and fc.kwargs['weight_overrides'] is None
+    assert fc.kwargs['event_params'] is None   # the Forecaster derives the params unless they are given
     assert fc.max_fc == 10 and fc.fit_names == ['PP', 'PSOE']
     assert calls[-1]['drange'] == (2, 29)  # una sola lectura de los sondeos futuros, con el mayor k
 
@@ -249,6 +253,13 @@ def test_run_cut_without_future_polls_returns_a_complete_result(monkeypatch):
     assert out['polls'].empty and {'days_ahead', 'k', 'party', 'residual'} <= set(out['polls'].columns)
     assert [s['n_polls'] for s in out['scores']] == [0, 0] and all(np.isnan(s['rmse']) for s in out['scores'])
     assert np.isnan(out['autocorr']) and out['meta']['n_polls'] == 3
+
+
+def test_run_cut_passes_the_params_read_by_the_caller_to_the_forecaster(monkeypatch):
+    _patch_model(monkeypatch, future=_poll_rows(['2023-06-26'], PP=[31.], PSOE=[20.]))
+    params = FakeForecaster.params
+    run_cut('es', EVENT, CUT, config=default_config(), event_params=params)
+    assert FakeForecaster.instances[0].kwargs['event_params'] is params
 
 
 def test_run_cut_applies_the_succession_of_parties_to_the_average_and_the_future_polls(monkeypatch):
@@ -470,3 +481,289 @@ def test_coordinate_descent_guards_k28_against_the_current_and_roughness_against
     # a k = 28 guard against the start would keep b = 0; a roughness guard against the current would take b = 2
     assert (best['a'], best['b']) == (1, 1)
     assert trials.loc[(trials.key == 'b') & (trials.value == 1), 'chosen'].iloc[0]
+
+
+# --- Orchestration per scope (fake runner, no database) ------------------------------------------------------------
+
+def _polls_rows(label, cut):
+    """Predictions of a fake cut: one future poll a week after the cut, PP and PSOE."""
+    date = pd.Timestamp(cut) + pd.Timedelta(days=7)
+    return pd.DataFrame({'date': [date, date], 'pollster_id': [1, 1], 'pollster': ['P1', 'P1'],
+                         'sample_size': [1000, 1000], 'party': ['PP', 'PSOE'], 'published': [31., 20.],
+                         'predicted': [30., 20.], 'residual': [1., 0.], 'days_ahead': [7, 7], 'k': [7, 7]})
+
+
+class FakeCut:
+    """`run_cut` sin modelo: RMSE que depende de la configuración, para probar la agregación y la búsqueda."""
+    def __init__(self):
+        self.calls = []
+        self.configs = []
+
+    def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+        self.calls.append((event_date, cut, config['label']))
+        self.configs.append((event_date, cut, config))
+        base = 2.0 if config['reg_params'].get('bw') == 45 else 2.5
+        return {'meta': {'n_polls': 50, 'drange': 30}, 'polls': _polls_rows(config['label'], cut),
+                'scores': [{'k': k, 'n_polls': 4, 'n_cells': 12, 'rmse': base + k / 100, 'mae': base, 'skill': 0.3,
+                            'rmse_by_party': {}} for k in horizons],
+                'autocorr': 0.1, 'roughness': 0.4, 'seconds': 0.0}
+
+
+def _patch_cycle(monkeypatch, cuts, cycles=None):
+    """Patch the cuts of every cycle, the poll dates and, with `cycles`, the cycles of the scope."""
+    monkeypatch.setattr(tuning, 'cycle_cuts', lambda *a, **k: [pd.Timestamp(cut) for cut in cuts])
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(pd.to_datetime(['2019-09-01'])))
+    if cycles is not None:
+        monkeypatch.setattr(tuning, 'search_cycles', lambda scope, **k: cycles)
+
+
+def test_run_tuning_aggregates_scores_by_partition_cycle_and_k(monkeypatch):
+    monkeypatch.setattr(tuning, 'cycle_cuts', lambda *a, **k: [pd.Timestamp('2023-06-23'), pd.Timestamp('2023-06-30')])
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(pd.to_datetime(['2023-06-01'])))
+    cycles = {'search': ['2019-11-10'], 'check': ['2023-07-23']}
+    out = run_tuning('es', [default_config()], cycles=cycles, runner=FakeCut())
+    assert set(out['scores']['partition']) == {'search', 'check'} and set(out['scores']['k']) == {7, 28}
+    assert out['cuts'].shape[0] == 4 and (out['cuts']['config'] == 'default').all()
+    row = out['scores'].query("partition == 'check' and k == 7").iloc[0]
+    assert row['rmse'] == pytest.approx(2.57) and row['n_cells'] == 24
+
+
+def test_run_tuning_weights_the_cuts_by_their_cells_and_keeps_one_row_per_cut_and_prediction(monkeypatch):
+    class Uneven(FakeCut):
+        def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+            out = super().__call__(scope, event_date, cut, config, horizons=horizons)
+            first = pd.Timestamp(cut) == pd.Timestamp('2023-06-23')
+            error = 1. if first else 3.
+            out['scores'] = [s | {'n_cells': 30 if first else 10, 'rmse': error, 'mae': error} for s in out['scores']]
+            out['roughness'] = 0.2 if first else 0.6
+            out['meta'] = out['meta'] | {'n_overrides': 5}
+            return out
+
+    _patch_cycle(monkeypatch, ['2023-06-23', '2023-06-30'])
+    out = run_tuning('es', [default_config()], cycles={'search': [], 'check': ['2023-07-23']}, runner=Uneven())
+    row = out['scores'].query('k == 7').iloc[0]
+    assert row['n_cells'] == 40 and row['n_cuts'] == 2 and row['event_date'] == '2023-07-23'
+    assert row['mae'] == pytest.approx((30 * 1 + 10 * 3) / 40)
+    assert row['rmse'] == pytest.approx(np.sqrt((30 * 1 + 10 * 9) / 40))   # every cell weighs the same
+    assert row['roughness'] == pytest.approx((30 * 0.2 + 10 * 0.6) / 40)
+    cuts = out['cuts']
+    assert cuts[['rmse7', 'rmse28']].iloc[0].tolist() == [1., 1.] and cuts['n_overrides'].tolist() == [5, 5]
+    assert {'config', 'partition', 'event_date', 'cut', 'n_polls', 'seconds'} <= set(cuts.columns)
+    polls = out['polls']
+    assert polls.shape[0] == 4 and {'config', 'event_date', 'cut', 'party', 'residual'} <= set(polls.columns)
+
+
+def test_run_tuning_reads_the_params_of_each_cycle_once_for_every_cut_and_configuration(monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23', '2023-06-30'])
+    reads, seen = [], []
+    monkeypatch.setattr(tuning, 'get_event_params', lambda scope, event_date, path=None: reads.append(
+        (scope, event_date, path)) or {'event': event_date})
+
+    def fake_run_cut(scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0, event_params=None):
+        seen.append(event_params)
+        return FakeCut()(scope, event_date, cut, config, horizons=horizons)
+
+    monkeypatch.setattr(tuning, 'run_cut', fake_run_cut)
+    configs = [default_config(), apply_setting(default_config(), 'bw', ('fixed', 45))]
+    run_tuning('es', configs, cycles={'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    assert reads == [('es', '2019-11-10', '.'), ('es', '2023-07-23', '.')]
+    assert len(seen) == 8 and seen.count({'event': '2019-11-10'}) == 4
+
+
+def test_run_tuning_refuses_two_configurations_with_the_same_label(monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'])
+    with pytest.raises(ValueError):
+        run_tuning('es', [default_config(), default_config()], cycles={'search': ['2019-11-10']}, runner=FakeCut())
+
+
+def test_run_search_smoothing_prefers_the_fixed_45_day_bandwidth_with_effects_off(monkeypatch):
+    monkeypatch.setattr(tuning, 'cycle_cuts', lambda *a, **k: [pd.Timestamp('2019-10-11')])
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(pd.to_datetime(['2019-09-01'])))
+    monkeypatch.setattr(tuning, 'search_cycles', lambda scope, **k: {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    runner = FakeCut()
+    out = run_search('es', phase='smoothing', grid={'bw': [('fixed', 'isj'), ('fixed', 45)]}, runner=runner)
+    assert out['best']['reg_params']['bw'] == 45
+    # fase 1: todo apagado
+    assert all(not c['house_effects'] and not c['dispersion'] and not c['herding'] for _, _, c in runner.configs)
+    assert out['best']['house_effects'] is False
+
+
+def test_run_search_starts_from_the_normalised_default_and_scores_only_the_search_cycles(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20', '2019-11-10'], 'check': ['2023-07-23']})
+    runner = FakeCut()
+    out = run_search('es', phase='smoothing', grid={'bw': [('adaptive', 3), ('fixed', 45)]}, runner=runner)
+    start = runner.configs[0][2]
+    assert start['weights'] == {'wspan': 4} and start['label'] == 'default'   # never the stored weights
+    assert {event for event, _, _ in runner.configs} == {'2015-12-20', '2019-11-10'}
+    assert set(out['scores']['partition']) == {'search'}
+    # the start and ('adaptive', 3) are the same configuration: evaluated once per round, no more
+    assert len(runner.calls) == 2 * 2
+    assert out['trials']['evaluation'].tolist()[:3] == [0, 0, 1]
+
+
+def test_run_search_weighs_every_search_cycle_the_same(monkeypatch):
+    class Lopsided(FakeCut):
+        def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
+            out = super().__call__(scope, event_date, cut, config, horizons=horizons)
+            big = event_date == '2019-11-10'
+            fixed = config['reg_params'].get('bw') == 45
+            # 45 days is better in the big cycle and worse in the small one, by more: equal weights reject it
+            rmse = (1.0 if fixed else 1.5) if big else (3.0 if fixed else 2.0)
+            out['scores'] = [s | {'n_cells': 100 if big else 10, 'rmse': rmse} for s in out['scores']]
+            return out
+
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2015-12-20', '2019-11-10'], 'check': []})
+    out = run_search('es', phase='smoothing', grid={'bw': [('fixed', 45)]}, runner=Lopsided())
+    assert out['best']['reg_params'].get('bw_type') == 'adaptive'
+    trial = out['trials'].query("key == 'bw'").iloc[0]
+    assert trial['rmse7'] == pytest.approx((1.0 + 3.0) / 2)
+
+
+def test_run_search_never_runs_the_bandwidth_cap_under_a_fixed_bandwidth(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': []})
+    runner = FakeCut()
+    start = apply_setting(default_config(), 'bw', ('fixed', 45))
+    out = run_search('es', phase='smoothing', start=start, grid={'bw_cap': [None, 1.0, 1.5]}, rounds=1,
+                     runner=runner)
+    assert len(runner.calls) == 1   # the caps are no-ops under a fixed bandwidth
+    caps = out['trials'].query("key == 'bw_cap'")
+    assert caps['chosen'].tolist() == [True, False, False] and caps['evaluation'].tolist() == [0, 0, 0]
+
+
+def test_run_search_check_evaluates_start_and_default_with_everything_on(monkeypatch):
+    monkeypatch.setattr(tuning, 'cycle_cuts', lambda *a, **k: [pd.Timestamp('2023-06-23')])
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(pd.to_datetime(['2023-06-01'])))
+    monkeypatch.setattr(tuning, 'search_cycles', lambda scope, **k: {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    runner = FakeCut()
+    start = apply_setting(default_config(), 'bw', ('fixed', 45))
+    out = run_search('es', phase='check', start=start, runner=runner)
+    assert set(out['scores']['partition']) == {'check'}
+    assert set(out['scores']['config']) == {'default', "bw=('fixed', 45)"}
+    assert all(c['house_effects'] and c['dispersion'] and c['herding'] for _, _, c in runner.configs)
+
+
+def test_run_search_check_compares_with_the_normalised_default_not_the_stored_weights(monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'], {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    runner = FakeCut()
+    start = apply_setting(default_config(), 'wspan', 7) | {'house_effects': False}
+    out = run_search('es', phase='check', start=start, runner=runner)
+    default = next(c for _, _, c in runner.configs if c['label'] == 'default')
+    assert default == normalize_config(default_config()) and default['weights'] == {'wspan': 4}
+    assert out['best']['house_effects'] is True and out['trials'].empty
+
+
+def test_search_cycles_adds_the_running_cycle_and_splits_at_2020(monkeypatch):
+    calls = {}
+
+    def fake_dates(scope, date_from=None, date_to=None, skip=0, min_polls=0, featured=False):
+        calls.update(date_from=date_from, min_polls=min_polls, featured=featured)
+        return ['2008-03-09', '2011-11-20', '2019-11-10', '2023-07-23']
+
+    monkeypatch.setattr(tuning, 'get_event_dates', fake_dates)
+    monkeypatch.setattr(tuning, 'get_next_event_date', lambda scope, date_from=None: '2026-11-29')
+    cycles = search_cycles('es')
+    assert calls == {'date_from': '2008-01-01', 'min_polls': 10, 'featured': True}
+    assert cycles == {'search': ['2008-03-09', '2011-11-20', '2019-11-10'], 'check': ['2023-07-23', '2026-11-29']}
+
+    monkeypatch.setattr(tuning, 'get_next_event_date', lambda scope, date_from=None: None)
+    assert search_cycles('es')['check'] == ['2023-07-23']
+    # a next election already past `today` is not a running cycle
+    monkeypatch.setattr(tuning, 'get_next_event_date', lambda scope, date_from=None: '2026-11-29')
+    assert search_cycles('es', today='2026-12-01')['check'] == ['2023-07-23']
+
+
+def test_tuning_scope_writes_the_tables_and_run_json(fresh_app, tmp_path, monkeypatch):
+    monkeypatch.setattr(tuning, 'cycle_cuts', lambda *a, **k: [pd.Timestamp('2023-06-23')])
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(pd.to_datetime(['2023-06-01'])))
+    monkeypatch.setattr(tuning, 'search_cycles', lambda scope, **k: {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    figures = tuning_scope('es-md', out=str(tmp_path), mode='evaluate', configs=[default_config()], runner=FakeCut(),
+                           stats=lambda scope: {'db_polls': 7, 'db_last_poll': '2026-10-03'},
+                           prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    assert figures['n_configs'] == 1 and figures['n_cuts'] == 2 and figures['folder'] == str(tmp_path / 'es-md')
+    for name in ('cuts.csv', 'polls.csv', 'scores.csv', 'run.json'):
+        assert (tmp_path / 'es-md' / name).exists()
+    run = json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))
+    assert run['scope'] == 'es-md' and run['mode'] == 'evaluate' and run['commit'] == 'abc1234'
+    assert run['configs'] == ['default']
+
+
+def test_tuning_scope_run_json_records_the_run(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'], {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    tuning_scope('es', out=str(tmp_path), mode='evaluate', configs=[default_config()], runner=FakeCut(),
+                 stats=lambda scope: {'db_polls': 7, 'db_last_poll': '2026-10-03'},
+                 prov=lambda: {'commit': 'abc1234', 'dirty': True, 'versions': {}})
+    assert TUNING_FILES == ('cuts.csv', 'polls.csv', 'scores.csv', 'trials.csv', 'run.json')
+    assert all((tmp_path / name).exists() for name in TUNING_FILES)   # es at the root
+    run = json.load(open(tmp_path / 'run.json', encoding='utf-8'))
+    assert set(run) >= {'scope', 'mode', 'configs', 'cycles', 'cut_days', 'horizons', 'rounds', 'commit', 'dirty',
+                        'run_at', 'db_polls', 'db_last_poll', 'seconds'}
+    assert run['cycles'] == {'search': ['2019-11-10'], 'check': ['2023-07-23']} and run['dirty'] is True
+    assert run['cut_days'] == 7 and run['horizons'] == [7, 28] and run['db_polls'] == 7
+
+
+def test_tuning_scope_smoothing_saves_the_best_with_everything_on_and_its_trials(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11'], {'search': ['2019-11-10'], 'check': ['2023-07-23']})
+    figures = tuning_scope('es-md', out=str(tmp_path), mode='smoothing', runner=FakeCut(),
+                           grid={'bw': [('fixed', 'isj'), ('fixed', 45)]}, stats=lambda scope: {},
+                           prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    best = json.load(open(tmp_path / 'es-md' / 'best.json', encoding='utf-8'))
+    assert best['reg_params']['bw'] == 45 and figures['best'] == best
+    assert best['house_effects'] is True and best['dispersion'] is True and best['herding'] is True
+    trials = pd.read_csv(tmp_path / 'es-md' / 'trials-smoothing.csv')
+    assert trials.shape[0] == 1 + 2 * 2 and (tmp_path / 'es-md' / 'trials.csv').exists()
+    run = json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))
+    assert run['mode'] == 'smoothing' and run['rounds'] == 2 and run['cut_days'] == 7
+    assert run['cycles'] == {'search': ['2019-11-10']}
+
+
+def test_tuning_scope_shrinkage_reads_the_best_of_the_smoothing_phase(fresh_app, tmp_path, monkeypatch):
+    monkeypatch.setattr(tuning, 'cycle_cuts', lambda *a, **k: [pd.Timestamp('2023-06-23')])
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(pd.to_datetime(['2023-06-01'])))
+    monkeypatch.setattr(tuning, 'search_cycles',
+                        lambda scope, **k: {'search': ['2019-11-10', '2023-07-23'], 'check': []})
+    (tmp_path / 'es-md').mkdir()
+    json.dump(apply_setting(default_config(), 'bw', ('fixed', 45)), open(tmp_path / 'es-md' / 'best.json', 'w'))
+    runner = FakeCut()
+    tuning_scope('es-md', out=str(tmp_path), mode='shrinkage', runner=runner, grid={'herd_prior': [2., 5.]},
+                 stats=lambda scope: {}, prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+    assert all(c['reg_params']['bw'] == 45 and c['house_effects'] for _, _, c in runner.configs)  # del best, todo on
+    assert all(cut.year >= 2015 for _, cut, _ in runner.configs)                                    # ciclos desde 2015
+
+
+def test_run_search_shrinkage_keeps_the_search_cycles_since_2015_with_cuts_every_14_days(monkeypatch):
+    seen = {}
+
+    def fake_cuts(event_date, poll_dates, cut_days=7, **kwargs):
+        seen.setdefault('cut_days', set()).add(cut_days)
+        return [pd.Timestamp(event_date) - pd.Timedelta(days=30)]
+
+    monkeypatch.setattr(tuning, 'cycle_cuts', fake_cuts)
+    monkeypatch.setattr(tuning, 'poll_dates', lambda scope, event_date: pd.Series(dtype='datetime64[ns]'))
+    monkeypatch.setattr(tuning, 'search_cycles', lambda scope, **k: {'search': ['2011-11-20', '2015-12-20'],
+                                                                     'check': ['2023-07-23']})
+    runner = FakeCut()
+    out = run_search('es', phase='shrinkage', start=default_config(), grid={'herd_prior': [2., 5.]}, runner=runner)
+    assert {event for event, _, _ in runner.configs} == {'2015-12-20'} and seen['cut_days'] == {14}
+    assert out['trials']['round'].max() == 1
+
+
+def test_tuning_scope_shrinkage_without_the_best_of_the_smoothing_phase_refuses(fresh_app, tmp_path, monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'], {'search': ['2019-11-10'], 'check': []})
+    with pytest.raises(FileNotFoundError):
+        tuning_scope('es-md', out=str(tmp_path), mode='shrinkage', runner=FakeCut(), stats=lambda scope: {},
+                     prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
+
+
+def test_tuning_scope_without_cycles_raises_nothing_to_tune(fresh_app, tmp_path, monkeypatch):
+    monkeypatch.setattr(tuning, 'search_cycles', lambda scope, **k: {'search': [], 'check': []})
+    with pytest.raises(NothingToTune):
+        tuning_scope('es-xx', out=str(tmp_path), mode='evaluate', configs=[default_config()], runner=FakeCut())
+    assert not any(tmp_path.iterdir())
+
+
+def test_tuning_fs_mirrors_the_backtest_layout_under_its_own_prefix(fresh_app, tmp_path):
+    fs, folder = tuning_fs(str(tmp_path), 'es')
+    assert folder == '' and tuning_fs(str(tmp_path), 'es-md')[1] == 'es-md'
+    if fresh_app.fs is not None:
+        assert tuning_fs(None, 'es')[1] == TUNING_PREFIX == 'backtest/tuning'
+        assert tuning_fs(None, 'es-md')[1] == 'backtest/tuning/es-md'

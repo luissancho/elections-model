@@ -112,7 +112,8 @@ class Forecaster(Core):
         weight_ratings: Optional[pd.Series] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
         verbose: int = 0,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        event_params: Optional[dict] = None
     ) -> None:
         """
         Polls corresponding to a single election event.
@@ -187,6 +188,10 @@ class Forecaster(Core):
         path : str, optional
             Path where the model outputs (forecasts, figures) are stored, relative to the app file system root
             (`files/`). Input data (`params.json`, maps) is always read from the versioned `data/` directory.
+        event_params : dict, optional
+            The params of the election as `get_event_params(scope, event_date, path=path)` returns them, read
+            once by the caller and shared by several Forecasters of the same election (the tuning of the average
+            builds one per cut and configuration). Used as given, not copied. `None` (default) derives them here.
         """
         super().__init__()
 
@@ -210,7 +215,9 @@ class Forecaster(Core):
 
         # Event params: derived from the data (parties with results, blocks, new parties) and overridden by
         # the entries of `data/params.json` when the event is listed there
-        self.event_params = get_event_params(self.scope, self.event_date, path=self.path)
+        if event_params is None:
+            event_params = get_event_params(self.scope, self.event_date, path=self.path)
+        self.event_params = event_params
 
         if isinstance(self.bmap, str):
             self.bmap = self.event_params['bmaps'][self.bmap]
