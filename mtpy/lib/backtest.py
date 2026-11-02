@@ -544,7 +544,8 @@ def run_case(
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1)
     }])
 
-    calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df, len(orphans) == 0)
+    calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,
+                               len(orphans) == 0)
 
     return {'shares': shares_df, 'seats': seats_df, 'blocks': blocks_df, 'provinces': provinces_df,
             'series': case_series(sim, event_date, horizon), 'calibration': calibration, 'meta': meta}
@@ -636,8 +637,9 @@ def summarize_calibration(
     Histogram of the PIT of the cells of the backtest, per population, kind, mode and group of horizons.
 
     Every election (its `scope`, when the frame has it, and its `event_date`) weighs the same inside its
-    population: each cell weighs `1 / n` with `n` its cells of the same election, population, kind, mode and group, so that an election with many parties does not dominate. The
-    cells without a finite PIT (no official result) are left out, and so are the horizons outside every group.
+    population: each cell weighs `1 / n` with `n` its cells of the same election, population, kind, mode and
+    group, so that an election with many parties does not dominate. The cells without a finite PIT (no official
+    result) are left out, and so are the horizons outside every group.
 
     Parameters
     ----------
@@ -718,7 +720,11 @@ def majority_reliability(blocks: pd.DataFrame, bins: tuple = (0, .1, .3, .5, .7,
         `lo`, `hi`, `p_mean` (mean probability), `observed` (fraction of `majority`; NaN in an empty bin) and `n`.
     """
     edges = np.asarray(bins, dtype=float)
-    valid = blocks['seats_valid'].astype(bool) if 'seats_valid' in blocks.columns else pd.Series(True, index=blocks.index)
+    if 'seats_valid' in blocks.columns:
+        # A missing flag (NaN read from the CSV) is not valid: `astype(bool)` alone would read it as true
+        valid = blocks['seats_valid'].astype('boolean').fillna(False).astype(bool)
+    else:
+        valid = pd.Series(True, index=blocks.index)
     rows = []
     for mode, col in (('now', 'p_majority'), ('h', 'p_majority_h')):
         if col not in blocks.columns:

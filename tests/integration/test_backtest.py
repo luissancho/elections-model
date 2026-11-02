@@ -148,7 +148,8 @@ def test_run_case_reproduces_the_stored_backtest_2023_6_days(app):
     def assert_same(got, stored, label):
         """Las columnas numéricas iguales a 1e-6 (NaN con NaN) y las demás idénticas."""
         types = pd.api.types
-        numeric = [c for c in stored.columns if types.is_numeric_dtype(stored[c]) and not types.is_bool_dtype(stored[c])]
+        numeric = [c for c in stored.columns
+                   if types.is_numeric_dtype(stored[c]) and not types.is_bool_dtype(stored[c])]
         a, b = got[numeric].astype(float), stored[numeric].astype(float)
         close = np.isclose(a.to_numpy(), b.to_numpy(), atol=1e-6, equal_nan=True)
         assert close.all(), (label, {c: (a[c][~close[:, i]].tolist(), b[c][~close[:, i]].tolist())

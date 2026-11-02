@@ -2497,14 +2497,14 @@ def test_backtest_without_backtest_shows_a_notice(api):
     assert 'action="/metodo/backtest"' in page and 'aria-current="page">Método</a>' in page
 
 
-FIABILIDAD_LEAD = ('Si las bandas dicen la verdad, el resultado cae en cada décima de la banda una de cada diez veces; '
-                   'las barras muestran cuántas veces cayó en cada una.')
+FIABILIDAD_LEAD = ('Si las bandas dicen la verdad, el resultado cae en cada décima de la banda una de cada '
+                   'diez veces; las barras muestran cuántas veces cayó en cada una.')
 
 
 def test_reliability_context_pools_the_calibration_of_every_scope(api, fresh_app):
-    """El PIT de todos los ámbitos con backtest, por población (generales = `es`, autonómicas = el resto, provincias =
-    las celdas `prov_*`), en modo Elección salvo las provincias (sólo el nowcast, a 6-14 días), y la fiabilidad de
-    las mayorías; un ámbito sin la parte no cuenta."""
+    """El PIT de todos los ámbitos con backtest, por población (generales = `es`, autonómicas = el resto,
+    provincias = las celdas `prov_*`), en modo Elección salvo las provincias (sólo el nowcast, a 6-14 días), y la
+    fiabilidad de las mayorías; un ámbito sin la parte no cuenta."""
     write_backtest(fresh_app.fs)
     write_backtest(fresh_app.fs, scope='es-md')
     reliability = pages.backtest.reliability_context(['es', 'es-md', 'es-an'])

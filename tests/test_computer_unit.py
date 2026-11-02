@@ -795,6 +795,25 @@ def test_get_average_error_data_skips_what_cannot_be_measured(monkeypatch):
     assert '2019-11-10' in messages and '180' in messages and '2026-11-29' not in messages
 
 
+def test_get_average_error_data_skips_any_failure_of_one_case_with_a_warning(monkeypatch):
+    """Un ciclo raro que hace fallar el ajuste con algo que no es `ValueError` (aquí un `KeyError`) se salta con
+    aviso como los demás: la fase no se pierde entera y los otros casos siguen."""
+    c = _computer_without_db(monkeypatch, events=['2019-11-10', '2023-07-23'],
+                             main={'2019-11-10': ['PP'], '2023-07-23': ['PP', 'PSOE']})
+
+    def forecaster(**kw):
+        if kw['event_date'] == '2019-11-10':
+            raise KeyError('odd cycle')
+        fit_last = pd.Timestamp(kw['event_date']) - pd.Timedelta(days=kw['drange'])
+        return _fake_forecaster(level={'PP': 33.5}, err={'PP': 0.4}, date_fit_last=fit_last)
+
+    monkeypatch.setattr('mtpy.lib.forecaster.Forecaster', forecaster)
+    monkeypatch.setattr('mtpy.lib.backtest.official_results', lambda scope, d: OFFICIAL_2023)
+    with pytest.warns(UserWarning, match='2019-11-10 at 6 days skipped: .*odd cycle'):
+        df = c.get_average_error_data(horizons=(6,))
+    assert df[['event_date', 'party', 'horizon']].values.tolist() == [[pd.Timestamp('2023-07-23'), 'PP', 6]]
+
+
 def test_get_average_error_data_takes_the_given_events_and_keeps_the_columns_when_empty(monkeypatch):
     c = _computer_without_db(monkeypatch, events=['2019-11-10', '2023-07-23'],
                              main={'2019-11-10': ['PP'], '2023-07-23': ['PP', 'PSOE']})
@@ -835,7 +854,8 @@ def test_compute_average_errors_saves_only_when_asked_and_load_reads_the_current
 def _average_error_rows(**overrides):
     """Doce filas de `average_errors` a 6 días: dos elecciones con los mismos seis partidos (dos regionales)."""
     rows = pd.DataFrame({'event_date': ['2019-04-28'] * 6 + ['2019-11-10'] * 6, 'horizon': 6,
-                         'party': list('ABCDEF') * 2, 'level': [30, 20, 10, 5, 3, 2] * 2, 'regional': [0, 0, 0, 0, 1, 1] * 2,
+                         'party': list('ABCDEF') * 2, 'level': [30, 20, 10, 5, 3, 2] * 2,
+                         'regional': [0, 0, 0, 0, 1, 1] * 2,
                          'error': [2.5, 2.0, 1.0, 0.6, 0.4, 0.3] * 2, 'err': [0.5] * 12, 'main': True})
     return rows.assign(**overrides)
 
@@ -893,8 +913,10 @@ def test_fit_scale_recovers_a_known_multiplier():
         for party, level in [('A', 30.), ('B', 20.), ('C', 10.)]:
             rows.append({'event_date': ev, 'party': party, 'horizon': 6, 'level': level, 'error': 1.0, 'err': 0.})
             for d in (30, 60, 90):
-                extra = 2.0 * k * (d - 6) * level ** 2   # varianza extra en puntos² con escala 2 (`var` = k · d · level², nivel en puntos)
-                rows.append({'event_date': ev, 'party': party, 'horizon': d, 'level': level, 'error': np.sqrt(1.0 + extra), 'err': 0.})
+                # varianza extra en puntos² con escala 2 (`var` = k · d · level², nivel en puntos)
+                extra = 2.0 * k * (d - 6) * level ** 2
+                rows.append({'event_date': ev, 'party': party, 'horizon': d, 'level': level,
+                             'error': np.sqrt(1.0 + extra), 'err': 0.})
     scale, n = DriftEstimator.fit_scale(pd.DataFrame(rows), k=k)
     assert scale == pytest.approx(2.0, rel=1e-6) and n == 27
 
@@ -903,7 +925,8 @@ def test_fit_scale_without_rows_or_out_of_bounds_falls_back_with_a_warning():
     empty = pd.DataFrame(columns=['event_date', 'party', 'horizon', 'level', 'error', 'err'])
     with pytest.warns(UserWarning):
         assert DriftEstimator.fit_scale(empty, k=4e-5) == (1., 0)
-    rows = pd.DataFrame({'event_date': ['x'] * 2, 'party': ['A'] * 2, 'horizon': [6, 90], 'level': [30., 30.], 'error': [1., 1.], 'err': [0., 0.]})
+    rows = pd.DataFrame({'event_date': ['x'] * 2, 'party': ['A'] * 2, 'horizon': [6, 90], 'level': [30., 30.],
+                         'error': [1., 1.], 'err': [0., 0.]})
     with pytest.warns(UserWarning, match='recort'):
         scale, _ = DriftEstimator.fit_scale(rows, k=4e-5)   # sin exceso: 0, recortado a 1
     assert scale == 1.
@@ -924,14 +947,16 @@ def test_drift_scale_defaults_to_one_without_rows_and_reaches_the_sigma_and_the_
 
 
 def test_fit_scale_pairs_each_far_row_with_the_reference_of_its_election_and_party():
-    """Sólo cuentan los pares (elección, partido) con fila en `d_ref` y en `d ≥ d_min`; el exceso resta `s²` en los dos
-    extremos; el valor sin recortar sale en el aviso y una tabla sin columnas (la tabla no existe) también cae a 1."""
+    """Sólo cuentan los pares (elección, partido) con fila en `d_ref` y en `d ≥ d_min`; el exceso resta `s²` en los
+    dos extremos; el valor sin recortar sale en el aviso y una tabla sin columnas (la tabla no existe) también cae
+    a 1."""
     k = 4e-5
     rows = pd.DataFrame({
         'event_date': ['a', 'a', 'a', 'b', 'c'], 'party': ['A', 'A', 'A', 'A', 'A'], 'horizon': [6, 14, 60, 60, 6],
         'level': [20., 20., 20., 20., 20.], 'error': [1., 9., np.sqrt(1. + 0.25 + 3. * k * 54 * 400), 9., 1.],
         'err': [0., 0., 0.5, 0., 0.]})
-    scale, n = DriftEstimator.fit_scale(rows, k=k)   # 14 días < d_min; la fila de 'b' no tiene referencia; 'c' no tiene d ≥ 30
+    # 14 días < d_min; la fila de 'b' no tiene referencia; 'c' no tiene d ≥ 30
+    scale, n = DriftEstimator.fit_scale(rows, k=k)
     assert n == 1 and scale == pytest.approx(3.)
     with pytest.warns(UserWarning, match='3.0'):
         assert DriftEstimator.fit_scale(rows, k=k, bounds=(1., 2.)) == (2., 1)
@@ -967,7 +992,8 @@ def test_get_drift_estimator_scale_none_number_or_auto(monkeypatch):
     for ev in ['2015-12-20', '2016-06-26']:
         for d in (6, 60):
             extra = 2.5 * base.k * (d - 6) * 400.
-            k_rows.append({'event_date': ev, 'party': 'A', 'horizon': d, 'level': 20., 'error': np.sqrt(1. + extra), 'err': 0.})
+            k_rows.append({'event_date': ev, 'party': 'A', 'horizon': d, 'level': 20., 'error': np.sqrt(1. + extra),
+                           'err': 0.})
     c, seen = _drift_computer(monkeypatch, pd.DataFrame(k_rows))
     auto = c.get_drift_estimator(scale='auto')
     assert auto.scale == pytest.approx(2.5) and auto.scale_rows == 2 and seen['loaded'] == 1
@@ -975,7 +1001,8 @@ def test_get_drift_estimator_scale_none_number_or_auto(monkeypatch):
 
 
 def test_get_drift_estimator_auto_with_an_empty_table_keeps_one_and_rejects_bad_scales(monkeypatch):
-    c, _ = _drift_computer(monkeypatch, pd.DataFrame(columns=['event_date', 'party', 'horizon', 'level', 'error', 'err']))
+    empty = pd.DataFrame(columns=['event_date', 'party', 'horizon', 'level', 'error', 'err'])
+    c, _ = _drift_computer(monkeypatch, empty)
     with pytest.warns(UserWarning):
         est = c.get_drift_estimator(scale='auto')
     assert (est.scale, est.scale_rows) == (1., 0)
@@ -989,14 +1016,15 @@ def test_get_drift_estimator_auto_fits_the_scale_without_the_young_parties(monke
     de las mismas fechas del primer sondeo que la deriva; un partido sin fecha cuenta como maduro y se queda."""
     c, _ = _drift_computer(monkeypatch, None)
     k = c.get_drift_estimator().k
-    first = pd.Series({'A': pd.Timestamp('2000-01-01'), 'B': pd.Timestamp('2000-01-01'), 'Y': pd.Timestamp('2018-01-01')})
+    first = pd.Series({'A': pd.Timestamp('2000-01-01'), 'B': pd.Timestamp('2000-01-01'),
+                       'Y': pd.Timestamp('2018-01-01')})
     monkeypatch.setattr(c, 'party_first_polls', lambda: first)
     rows = []
     for party, scale in (('A', 2.), ('Y', 9.), ('U', 2.)):   # Y nació un año antes de 2019; U no tiene primer sondeo
         for d in (6, 60):
             extra = scale * k * (d - 6) * 400.
-            rows.append({'event_date': '2019-04-28', 'party': party, 'horizon': d, 'level': 20., 'error': np.sqrt(1. + extra),
-                         'err': 0.})
+            rows.append({'event_date': '2019-04-28', 'party': party, 'horizon': d, 'level': 20.,
+                         'error': np.sqrt(1. + extra), 'err': 0.})
     monkeypatch.setattr(c, 'load_average_errors', lambda: pd.DataFrame(rows))
     auto = c.get_drift_estimator(scale='auto')
     assert auto.scale == pytest.approx(2.) and auto.scale_rows == 2   # A y U; Y fuera
@@ -1019,4 +1047,5 @@ def test_get_drift_estimator_auto_keeps_the_parties_polled_since_the_start_of_th
                          'err': 0.})
     monkeypatch.setattr(c, 'load_average_errors', lambda: pd.DataFrame(rows))
     auto = c.get_drift_estimator(scale='auto')
-    assert auto.scale == pytest.approx(2.) and auto.scale_rows == 2   # O (2 años en 2003, desde el inicio) y A; Y fuera
+    # O (2 años en 2003, desde el inicio) y A; Y fuera
+    assert auto.scale == pytest.approx(2.) and auto.scale_rows == 2

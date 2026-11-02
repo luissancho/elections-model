@@ -67,10 +67,11 @@ def compute_scope(
     poll average (`Computer.compute_average_errors`).
 
     The weights are computed twice because `polls.featured` copies the flag of the event, which in turn needs
-    the weights; drift, house effects, herding and the errors of the average read the errors stored by the previous
-    phases, so they run on a fresh series and only when `save` is set (a dry run stops after the deviations). The
-    errors of the average go last: their Forecaster takes the prior of the house effects from the table the
-    house-effects phase has just saved, and they are the slowest phase (one fit per election and horizon).
+    the weights; drift, house effects and herding read the errors stored by the previous phases, and the errors
+    of the average read the stored weights and the prior of the house effects, so all four run on a fresh series
+    and only when `save` is set (a dry run stops after the deviations). The errors of the average go last: their
+    Forecaster takes the prior of the house effects from the table the house-effects phase has just saved, and
+    they are the slowest phase (one fit per election and horizon).
 
     Parameters
     ----------

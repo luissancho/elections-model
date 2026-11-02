@@ -1,4 +1,6 @@
 """Tests de las métricas del backtest (sin base de datos)."""
+import io
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -419,8 +421,8 @@ def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(
         shares, seats, blocks = (t.assign(event_date=event_date, horizon=horizon) for t in summary_frames())
         series = pd.DataFrame({'event_date': [event_date] * 2, 'horizon': [horizon] * 2, 'date': ['2023-07-01', '2023-07-02'],
                                'name': ['PP', 'PP'], 'mean': [30.0, 30.5], 'lo': [29.0, 29.5], 'hi': [31.0, 31.5]})
-        calibration = pd.DataFrame({'event_date': [event_date], 'horizon': [horizon], 'kind': ['shares'], 'mode': ['now'],
-                                    'party': ['A'], 'pit': [0.5]})
+        calibration = pd.DataFrame({'event_date': [event_date], 'horizon': [horizon], 'kind': ['shares'],
+                                    'mode': ['now'], 'party': ['A'], 'pit': [0.5]})
         return {'shares': shares, 'seats': seats, 'blocks': blocks, 'provinces': pd.DataFrame(),
                 'meta': pd.DataFrame([{'event_date': event_date, 'horizon': horizon}]), 'series': series,
                 'calibration': calibration}
@@ -439,11 +441,12 @@ def test_run_backtest_keeps_the_series_of_the_shortest_horizon_of_each_election(
 def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys):
     """`backtest/run_backtest.py` es un envoltorio: traduce sus opciones a `Backtest.run` (la composición la normaliza
     el job) y `--scopes` sin `all` pasa tal cual."""
+    import importlib
     import importlib.util
     import os
     import sys
     from mtpy import mtpy as app
-    from mtpy.jobs import Backtest as job_module
+    job_module = importlib.import_module('mtpy.jobs.Backtest')   # the module: `mtpy.jobs.Backtest` may be the class
     seen = {}
     monkeypatch.setattr(app, 'run', lambda *args, **kwargs: None)
     monkeypatch.setattr(job_module.Backtest, 'run', lambda self, **kwargs: seen.update(kwargs))
@@ -493,7 +496,8 @@ def test_pit_ignores_missing_samples():
 
 def test_quantile_cols_carry_the_five_percent_grid():
     cols = _quantile_cols(np.arange(1., 101.))
-    assert cols['lo95'] < cols['q05'] < cols['q50'] < cols['q95'] < cols['hi95'] and 'q50_h' in _quantile_cols(np.arange(3.), suffix='_h')
+    assert cols['lo95'] < cols['q05'] < cols['q50'] < cols['q95'] < cols['hi95']
+    assert 'q50_h' in _quantile_cols(np.arange(3.), suffix='_h')
 
 
 def test_quantile_cols_keep_the_intervals_and_add_nineteen_quantiles():
@@ -512,7 +516,8 @@ def test_summarize_calibration_weights_each_election_equally_and_bins_by_horizon
     cal = pd.DataFrame({
         'population': ['generales'] * 6, 'kind': ['shares'] * 6, 'mode': ['now'] * 6,
         'event_date': ['2023-07-23'] * 4 + ['2019-11-10'] * 2, 'horizon': [6, 6, 6, 6, 14, 14],
-        'pit': [0.05, 0.05, 0.05, 0.05, 0.95, 0.95], 'official': 1., 'model': 1., 'main': True, 'party': list('ABCDEF')})
+        'pit': [0.05, 0.05, 0.05, 0.05, 0.95, 0.95], 'official': 1., 'model': 1., 'main': True,
+        'party': list('ABCDEF')})
     out = summarize_calibration(cal, bins=10)
     row = out.query("group == '6-14'")
     assert row.loc[row.bin == 0, 'observed'].iloc[0] == pytest.approx(0.5)   # 2023 pesa 1/2 aunque tenga 4 celdas
@@ -521,8 +526,9 @@ def test_summarize_calibration_weights_each_election_equally_and_bins_by_horizon
 
 
 def test_summarize_calibration_drops_nan_pit_and_keeps_only_now_without_h():
-    cal = pd.DataFrame({'population': ['generales'] * 2, 'kind': ['shares'] * 2, 'mode': ['now'] * 2, 'event_date': ['2023-07-23'] * 2,
-                        'horizon': [6, 6], 'pit': [0.5, np.nan], 'official': [1., np.nan], 'model': 1., 'main': True, 'party': ['A', 'B']})
+    cal = pd.DataFrame({'population': ['generales'] * 2, 'kind': ['shares'] * 2, 'mode': ['now'] * 2,
+                        'event_date': ['2023-07-23'] * 2, 'horizon': [6, 6], 'pit': [0.5, np.nan],
+                        'official': [1., np.nan], 'model': 1., 'main': True, 'party': ['A', 'B']})
     out = summarize_calibration(cal)
     assert out['n_cells'].iloc[0] == 1 and set(out['mode']) == {'now'}
 
@@ -531,10 +537,12 @@ def test_summarize_calibration_lists_every_bin_and_sends_provincial_cells_to_the
     """Cada grupo trae sus `bins` cajas (vacías a 0) que suman 1; las filas `prov_*` van a `provincias` sea cual sea
     la población que traigan; un PIT de 1 cae en la última caja y los horizontes fuera de los grupos no cuentan."""
     cal = pd.DataFrame({
-        'population': ['autonomicas'] * 4, 'kind': ['shares', 'shares', 'prov_shares', 'shares'], 'mode': ['h', 'h', 'now', 'h'],
-        'event_date': ['2023-05-28'] * 4, 'horizon': [30, 60, 30, 20], 'pit': [1.0, 0.31, 0.5, 0.5], 'party': list('ABCD')})
+        'population': ['autonomicas'] * 4, 'kind': ['shares', 'shares', 'prov_shares', 'shares'],
+        'mode': ['h', 'h', 'now', 'h'], 'event_date': ['2023-05-28'] * 4, 'horizon': [30, 60, 30, 20],
+        'pit': [1.0, 0.31, 0.5, 0.5], 'party': list('ABCD')})
     out = summarize_calibration(cal, bins=5)
-    assert list(out.columns) == ['population', 'kind', 'mode', 'group', 'bin', 'expected', 'observed', 'n_cells', 'n_events']
+    assert list(out.columns) == ['population', 'kind', 'mode', 'group', 'bin', 'expected', 'observed', 'n_cells',
+                                 'n_events']
     auto = out.query("population == 'autonomicas'")
     assert auto['group'].unique().tolist() == ['30-60'] and auto['bin'].tolist() == [0, 1, 2, 3, 4]
     assert auto['observed'].tolist() == pytest.approx([0., 0.5, 0., 0., 0.5]) and auto['n_cells'].eq(2).all()
@@ -551,12 +559,19 @@ def test_majority_reliability_bins_probabilities():
 
 def test_majority_reliability_adds_the_horizon_run_and_skips_invalid_seats():
     """Con `p_majority_h` sale también el modo `h`; los casos con escaños no válidos (huérfanos) no cuentan."""
-    blocks = pd.DataFrame({'p_majority': [0.05, 0.95, 0.6], 'p_majority_h': [0.2, 0.8, 0.0], 'majority': [False, True, True],
-                           'seats_valid': [True, True, False]})
+    blocks = pd.DataFrame({'p_majority': [0.05, 0.95, 0.6], 'p_majority_h': [0.2, 0.8, 0.0],
+                           'majority': [False, True, True], 'seats_valid': [True, True, False]})
     out = majority_reliability(blocks)
     assert out['mode'].unique().tolist() == ['now', 'h'] and out.groupby('mode')['bin'].count().eq(6).all()
     h = out.query("mode == 'h' and n > 0")
-    assert h['p_mean'].tolist() == pytest.approx([0.2, 0.8]) and h['observed'].tolist() == [0., 1.] and h['n'].sum() == 2
+    assert h['p_mean'].tolist() == pytest.approx([0.2, 0.8]) and h['observed'].tolist() == [0., 1.]
+    assert h['n'].sum() == 2
+
+
+def test_majority_reliability_takes_a_missing_seats_valid_as_invalid():
+    """Un `seats_valid` vacío en el CSV (NaN) no cuenta como válido: `astype(bool)` lo leería como verdadero."""
+    blocks = pd.read_csv(io.StringIO('p_majority,majority,seats_valid\n0.95,True,\n'))
+    assert majority_reliability(blocks)['n'].sum() == 0
 
 
 def test_provinces_carry_the_pit_of_shares_and_seats(monkeypatch):
@@ -591,7 +606,8 @@ def test_case_calibration_has_one_row_per_cell_kind_and_mode():
                               'pit_pct': [0.25], 'official_seats': [12.], 'model_seats': [11.], 'pit_seats': [0.75]})
 
     cal = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, seats_valid=True)
-    assert list(cal.columns) == ['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main', 'official', 'model', 'pit']
+    assert list(cal.columns) == ['scope', 'event_date', 'horizon', 'kind', 'mode', 'party', 'region_id', 'main',
+                                 'official', 'model', 'pit']
     assert sorted(set(zip(cal['kind'], cal['mode']))) == [('prov_seats', 'now'), ('prov_shares', 'now'), ('seats', 'h'),
                                                           ('seats', 'now'), ('shares', 'h'), ('shares', 'now')]
     a = cal.query("kind == 'shares' and mode == 'now' and party == 'A'").iloc[0]
@@ -603,12 +619,13 @@ def test_case_calibration_has_one_row_per_cell_kind_and_mode():
 
     only = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, None, provinces, seats_valid=False)
     assert set(only['mode']) == {'now'} and set(only['kind']) == {'shares', 'prov_shares'}
-    assert 'seats' not in set(_calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, False)['kind'])
+    invalid = _calibration('es', '2023-07-23', 6, names, {'A'}, official, run, run, provinces, False)
+    assert 'seats' not in set(invalid['kind'])
 
 
 def test_summarize_calibration_tells_apart_two_scopes_voting_the_same_day():
-    """Una elección es su ámbito y su fecha: dos autonómicas del mismo día pesan cada una lo suyo (no se funden en una
-    pseudoelección) y `n_events` las cuenta por separado; sin columna `scope`, la fecha sola."""
+    """Una elección es su ámbito y su fecha: dos autonómicas del mismo día pesan cada una lo suyo (no se funden en
+    una pseudoelección) y `n_events` las cuenta por separado; sin columna `scope`, la fecha sola."""
     cal = pd.DataFrame({
         'population': ['autonomicas'] * 4, 'scope': ['es-md', 'es-md', 'es-md', 'es-cl'], 'kind': ['shares'] * 4,
         'mode': ['now'] * 4, 'event_date': ['2023-05-28'] * 4, 'horizon': [6] * 4, 'pit': [0.05, 0.05, 0.05, 0.95],
@@ -618,7 +635,8 @@ def test_summarize_calibration_tells_apart_two_scopes_voting_the_same_day():
     assert row.loc[row.bin == 0, 'observed'].iloc[0] == pytest.approx(0.5)   # Madrid pesa 1/2 aunque tenga 3 celdas
     assert row.loc[row.bin == 9, 'observed'].iloc[0] == pytest.approx(0.5)
     same_day = summarize_calibration(cal.drop(columns='scope')).query("group == '6-14'")
-    assert same_day['n_events'].iloc[0] == 1 and same_day.loc[same_day.bin == 0, 'observed'].iloc[0] == pytest.approx(0.75)
+    assert same_day['n_events'].iloc[0] == 1
+    assert same_day.loc[same_day.bin == 0, 'observed'].iloc[0] == pytest.approx(0.75)
 
 
 def test_summarize_calibration_keeps_only_the_main_parties_of_the_national_kinds_by_default():

@@ -17,7 +17,8 @@ class Compute(SequenceJob):
     rubric or the evaluations of `data/`, so the ratings take the new quality. Scopes are isolated: one that fails never
     stops the others (unless ``stop_on_error``), and the job exits with an error at the end if any failed. With
     ``dry_run`` nothing is written, ``catalogues`` only validates the files and the series stop after the deviations
-    (drift, house effects, herding and the errors of the average read the stored errors).
+    (drift, house effects and herding read the stored errors; the errors of the average read the stored weights and
+    the prior of the house effects, hence their place after the house effects).
 
     The console output has the four levels of ``publish``: 0, the header of each action and the final summary; 1,
     also ``[i/n] scope: empezando`` and the result line of each scope; 2, also one line per phase with its seconds;

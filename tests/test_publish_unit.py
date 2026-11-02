@@ -476,7 +476,8 @@ def test_export_meta_records_the_error_model_used():
 
 
 def test_export_meta_records_the_drift_scale_used():
-    """El diagnóstico del run lleva la escala de la deriva usada y las filas con que se ajustó (0 si no se ajustó)."""
+    """El diagnóstico del run lleva la escala de la deriva usada y las filas con que se ajustó (0 si no se
+    ajustó)."""
     from mtpy.lib.computer import DriftEstimator
     sim = synthetic_simulator()
     sim.v2drift = DriftEstimator(k=4e-5, scale=1.8, scale_rows=27)
@@ -490,7 +491,8 @@ def test_export_meta_records_the_drift_scale_used():
 
 
 def test_export_meta_records_the_tail_dof():
-    """El diagnóstico del run lleva los grados de libertad fijos de la t del sorteo (`None`: `nobs - 2` por partido)."""
+    """El diagnóstico del run lleva los grados de libertad fijos de la t del sorteo (`None`: `nobs - 2` por
+    partido)."""
     sim = synthetic_simulator()
     sim.tail_dof = 5
     meta = publish.export_meta(sim, RUN, '2026-10-05T12:00:00Z', 50, 10, publish.DEFAULT_CORRECTORS, {}, {}, 0, None,

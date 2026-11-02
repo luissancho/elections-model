@@ -1,4 +1,6 @@
 """Tests del Simulator que no necesitan base de datos."""
+import types
+
 from mtpy.lib.simulator import Simulator
 
 
@@ -744,8 +746,6 @@ def test_anchor_before_the_last_poll_warns_even_by_default():
 
 # --- Calibración (parte B): `error_model`, el error del propio promedio frente al de un sondeo suelto ---
 
-import types  # noqa: E402
-
 # Centinela del estimador de sondeos (`Computer.get_error_estimator`): un error terminal fijo de 2 puntos, para
 # que `build_frame` y `_fan` corran sobre el simulador del fixture
 POLLS_ESTIMATOR = types.SimpleNamespace(predict=lambda p: np.full(len(p), 2.))
@@ -846,7 +846,8 @@ def test_simulator_rejects_a_bad_drift_scale(bad):
 def test_tail_dof_fixes_the_degrees_of_freedom_of_the_draw_and_the_fan(fake_simulator):
     sim = fake_simulator(tail_dof=5)
     frame = sim.build_frame()
-    assert (frame.loc[frame['pct'] > 0, 'dof'] == 5).all()          # `build_frame` guarda `dof` en el frame (columna nueva de `cols_frame`)
+    # `build_frame` guarda `dof` en el frame (columna nueva de `cols_frame`)
+    assert (frame.loc[frame['pct'] > 0, 'dof'] == 5).all()
     assert (sim._fan([0])['dof'] == 5).all()
     assert fake_simulator(tail_dof=None).build_frame()['dof'].min() >= 3
 
@@ -867,7 +868,8 @@ def test_tail_dof_none_keeps_the_degrees_of_freedom_of_the_polls_and_the_draw(fa
     sim.rng = np.random.default_rng(42)
     rand = sim.build_frame().loc[['PP', 'PSOE', 'VOX'], 'rand'].to_numpy()
     noise = np.random.default_rng(42).standard_t([38., 38., 28.])
-    assert rand == pytest.approx(np.clip([40., 30., 15.] + frame.loc[['PP', 'PSOE', 'VOX'], 'std_err'].to_numpy() * noise, 0, None))
+    std_err = frame.loc[['PP', 'PSOE', 'VOX'], 'std_err'].to_numpy()
+    assert rand == pytest.approx(np.clip([40., 30., 15.] + std_err * noise, 0, None))
 
 
 @pytest.mark.parametrize('good', [None, 2, 5, np.int64(8)])

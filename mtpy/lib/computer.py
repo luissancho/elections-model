@@ -183,9 +183,10 @@ class DriftEstimator:
         the growth the drift constant `k` already models.
 
         For each election and party with a row at `d_ref` days and at `d >= d_min` days, the excess variance of
-        the average beyond its own standard error, `excess = (error_d² − err_d²) − (error_ref² − err_ref²)`, is
-        compared with the drift variance over the same span, `expected = k · (d − d_ref) · level_d²` (the
-        convention of `var`: the level of the average at `d` days, in percentage points). The scale is
+        the average beyond its own standard error,
+        `excess = (error_d² − err_d²) − (error_ref² − err_ref²)`, is compared with the drift variance over the
+        same span, `expected = k · (d − d_ref) · level_d²` (the convention of `var`: the level of the average at
+        `d` days, in percentage points). The scale is
         `Σ excess / Σ expected`, clipped to `bounds`.
 
         Parameters
@@ -2665,7 +2666,8 @@ class Computer(Core):
             Horizons in days before the election.
         min_polls : int, optional
             Minimum number of polls of the cycle up to the anchor; a case with fewer is skipped with a warning,
-            and so is a case the `Forecaster` rejects (no polls at all).
+            and so is a case whose fit fails (the `Forecaster` rejects it for lack of polls, or any other error
+            of one odd cycle), so that one case never loses the whole phase.
         max_fc : int, optional
             Days forecast after the last poll (`Forecaster.fit_forecast`).
         house_effects : bool, optional
@@ -2733,7 +2735,7 @@ class Computer(Core):
                             path=self.path
                         ).build_series()
                         fc.fit_forecast(names=[n for n in main if n in fc.names], max_fc=max_fc, fillna=True)
-                except ValueError as e:
+                except Exception as e:  # one odd cycle must not lose the whole phase: skip the case, say which
                     warnings.warn('Average error of {} {} at {} days skipped: {}'.format(self.scope, event_date, d, e))
                     continue
 
