@@ -22,3 +22,6 @@ env.*
 
 # git worktrees of feature branches (superpowers)
 .worktrees/
+
+# Carpetas de experimentos del backtest (results_avg, results_dof5, ...): scratch local; la referencia vive en backtest/results
+backtest/results_*/
