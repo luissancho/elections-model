@@ -221,3 +221,14 @@ def test_check_mode_accepts_the_three_modes_and_nothing_else():
     assert [compute.check_mode(m) for m in ('auto', 'light', 'full')] == ['auto', 'light', 'full']
     with pytest.raises(ValueError, match='compute: unknown mode "Light" \\(expected auto, light or full\\)'):
         compute.check_mode('Light')
+
+
+def test_resolve_mode_refuses_a_forced_light_with_a_pending_result():
+    # la noche del 29-N: resultado cargado y un `light` pedido; sin esta guardia el ámbito quedaría marcado como
+    # computado sin errores, destacados, deriva ni efectos de casa de esa elección, y el siguiente auto lo saltaría
+    with pytest.raises(ValueError, match=r'compute: light requested but a pending election has results '
+                                         r'\(2023-07-23\): use full or auto'):
+        compute.resolve_mode('light', False, ['2023-07-23', '2026-11-29'], ['2019-11-10', '2023-07-23'])
+    with pytest.raises(ValueError, match='light requested but a pending election has results'):
+        compute.resolve_mode('light', True, ['2023-07-23'], ['2023-07-23'])  # ni con overwrite
+    assert compute.resolve_mode('light', False, ['2026-11-29'], ['2023-07-23']) == ('light', 'requested')

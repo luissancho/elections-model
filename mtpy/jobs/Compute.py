@@ -15,7 +15,9 @@ class Compute(SequenceJob):
     ``auto``, the default, the pipeline picks: ``full`` with ``overwrite`` or when a pending election of the scope
     has an official result (its errors, featured flag, drift and house effects have to be computed), ``light`` when
     the pending elections are only cycles without a result (the daily routine). ``"mode": "light"`` or ``"full"``
-    forces the phases, but never avoids the skip of a scope with nothing pending (below). ``ratings`` runs, scope by
+    forces the phases, but never avoids the skip of a scope with nothing pending (below), and a ``light`` with a
+    pending election that has a result ends ``failed`` (it would stamp the scope as computed without the phases of
+    that result; use ``full`` or ``auto``). ``ratings`` runs, scope by
     scope, the cross-scope pollster ratings of its events (`compute.rate_scope`, with the polls of every scope).
     ``average_errors`` runs, scope by scope, the errors of the poll average in the past elections
     (`compute.average_errors_scope`, one fit of the average per election and horizon: about 37 minutes in ``es``),
@@ -84,7 +86,8 @@ class Compute(SequenceJob):
             code or parameters), in ``full`` mode with ``mode`` ``auto``; without it, such a scope ends ``skipped``.
         mode : {'auto', 'light', 'full'}, default 'auto'
             Phases of the series: ``auto`` lets the pipeline pick from what is pending (see the class), ``light`` or
-            ``full`` forces them. It never avoids the skip of a scope with nothing pending.
+            ``full`` forces them. It never avoids the skip of a scope with nothing pending, and ``light`` is refused
+            (``failed``) on a scope with a pending election that has a result.
         dry_run : bool, default False
             Compute without writing anything into the database (``catalogues`` only validates the files).
         verbose : int, default 1

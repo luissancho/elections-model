@@ -19,7 +19,9 @@ class Update(SequenceJob):
     default): ``light`` (weights and herding, what the polls of the current cycle can change: the daily routine) or
     ``full`` (every phase) with ``overwrite`` or when a pending election has an official result (one loaded with
     ``load`` or from the notebook). ``"mode": "full"`` forces the whole series on a day with new polls; with nothing
-    pending the compute is skipped all the same. ``overwrite`` is the only switch that redoes everything: it replaces
+    pending the compute is skipped all the same, and a forced ``light`` with a pending election that has a result
+    ends ``failed`` (nothing is published, with the default stop). ``overwrite`` is the only switch that redoes
+    everything: it replaces
     the whole cycle of polls (``load.rebulk``) and computes the series, in ``full``, whether or not anything was
     loaded; use it after a change of code or parameters. Right after the ``ALTER TABLE`` that adds the marks every
     election counts as pending, so the first ``update`` without ``overwrite`` computes everything once, in ``full``.

@@ -709,7 +709,7 @@ python job.py compute '{"what":["average_errors"],"scopes":"all"}'
 | `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute`, `ratings` y/o `average_errors`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
 | `overwrite` | `false` | Computar la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros), en modo `full` con `mode` `auto`; sin él, el ámbito termina skipped |
-| `mode` | `auto` | Fases de la serie: `auto` deja elegir al pipeline según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado oficial; `light` si no); `light` o `full` las fuerzan. No evita el salto de un ámbito sin nada pendiente; un valor desconocido falla con `ValueError` antes de empezar |
+| `mode` | `auto` | Fases de la serie: `auto` deja elegir al pipeline según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado oficial; `light` si no); `light` o `full` las fuerzan. No evita el salto de un ámbito sin nada pendiente; un `light` con una elección pendiente con resultado termina `failed` (`compute: light requested but a pending election has results (…): use full or auto`), porque marcaría el ámbito como computado sin los errores, el destacado, la deriva ni los efectos de casa de esa elección; un valor desconocido falla con `ValueError` antes de empezar |
 | `dry_run` | `false` | Calcular sin escribir nada: `catalogues` sólo valida los ficheros de la calidad, la serie `full` se detiene tras las desviaciones y la `light` tras los pesos (deriva, efectos de casa y rebaño leen lo que guardan las fases anteriores), y `ratings` y `average_errors` calculan sin guardar |
 | `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
@@ -744,7 +744,9 @@ es-md: series skipped (nothing loaded since the last compute)
 
 La serie dice su modo y la razón: `polls pending` (sólo hay pendientes ciclos sin resultado), `results pending`
 (alguna elección pendiente tiene resultado oficial), `overwrite` o `requested` (`mode` forzado); las elecciones
-destacadas sólo salen en `full`, que es la única que las recalcula. La última línea es la serie de un ámbito sin
+destacadas sólo salen en `full`, que es la única que las recalcula. Un `light` forzado con una elección pendiente con
+resultado no corre: `es: series failed (ValueError: compute: light requested but a pending election has results
+(2026-11-29): use full or auto)`. La última línea es la serie de un ámbito sin
 nada cargado desde su último compute y sin `overwrite`: no se computa y no es un fallo, sea cual sea `mode`.
 `ratings` y `average_errors` nunca se saltan. Tras el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp,
 ADD COLUMN computed_at timestamp;` que crea las marcas, todas las elecciones cuentan como pendientes, las que tienen
@@ -852,7 +854,7 @@ python job.py backtest '{"action":"pull","scopes":"all"}'
 | `composition` | `null` | Sorteo conjunto de los partidos nacionales (M7): `"auto"` o una razón en (0, 1]; otro valor falla con `ValueError` antes de empezar |
 | `regional_noise` | `true` | Oscilaciones por comunidad y provincia (M9) |
 | `min_events` | `null` | Elecciones `featured` que necesita un autonómico para ajustar los estimadores con las propias en vez de con `es` (M11); `1` fuerza las propias |
-| `error_model` | `"polls"` | El error terminal `e` (método 15): `"polls"`, el de los sondeos sueltos, o `"average"`, el del propio promedio (lee la tabla `average_errors`, que rellena el paso del mismo nombre de `compute`; sin ella avisa y usa `"polls"`); otro valor falla con `ValueError` antes de empezar |
+| `error_model` | `"polls"` | El error terminal `e` (método 15): `"polls"`, el de los sondeos sueltos, o `"average"`, el del propio promedio (lee la tabla `average_errors`, que rellena la acción del mismo nombre del job `compute`; sin ella avisa y usa `"polls"`); otro valor falla con `ValueError` antes de empezar |
 | `drift_scale` | `null` | Factor de la varianza de la deriva (método 15): `null` (1), `"auto"` (ajustado sobre `average_errors` con las elecciones anteriores) o un número positivo |
 | `tail_dof` | `null` | Grados de libertad fijos de la t del sorteo y del abanico (método 15): `null` (los de la regresión) o un entero de al menos 2 |
 | `config` | `null` | Configuración del promedio (método 14): un diccionario o la ruta de un JSON (el `best.json` del job `tune`), validada antes de empezar. Sus parámetros van al `Simulator`, y sus `house_effects`, `dispersion`, `herding` y `max_fc` mandan (un indicador que la contradiga falla con `ValueError`); con `weights`, los pesos se recalculan en cada corte. `run.json` la guarda y `meta.csv` registra `config` (la etiqueta) y `n_overrides`. La ruta se lee del disco de quien corre el job (ver "Afinar el promedio") |
@@ -1652,7 +1654,7 @@ python job.py update '{"scopes":["es"],"n_sim":20,"dry_run":true}'
 | --- | --- | --- |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
 | `overwrite` | `false` | Reemplazar el ciclo de sondeos y computar la serie (en `full`) aunque no haya nada cargado desde el último compute |
-| `mode` | `auto` | Fases de la serie donde corre el compute: `auto` elige según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado; `light` si no); `light` o `full` las fuerzan, sin evitar el salto de un ámbito sin nada pendiente |
+| `mode` | `auto` | Fases de la serie donde corre el compute: `auto` elige según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado; `light` si no); `light` o `full` las fuerzan, sin evitar el salto de un ámbito sin nada pendiente; un `light` con una elección pendiente con resultado termina `failed` y, con la parada por defecto, no se publica nada |
 | `dry_run` | `false` | No escribir nada: la carga lee y comprueba, la serie se detiene tras las desviaciones (`full`) o tras los pesos (`light`) y la publicación va a `site-dry/v1` |
 | `verbose` | `1` | Detalle de la salida por consola (los niveles de `publish`: 0 cabeceras y resumen, 1 líneas por ámbito, 2 fases, 3 salida del modelo) |
 | `stop_on_error` | `true` | Parar al primer fallo; `false` sigue con todo, publica lo que haya e informa al final |

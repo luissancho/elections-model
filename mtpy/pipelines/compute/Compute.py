@@ -28,10 +28,11 @@ class Compute(ScopePipeline):
 
     The `compute` action skips a scope with nothing loaded since its last compute (`compute.pending_events`)
     with a ``skipped`` result, unless ``overwrite`` is set, whatever the ``mode``. Then it picks the mode
-    (`compute.resolve_mode`): a requested ``light`` or ``full`` stands; with ``auto`` (the default), ``full`` with
-    ``overwrite`` or when a pending election has an official result (`compute.result_dates`), ``light`` otherwise.
-    ``pending`` and ``results`` replace those two queries (for tests) with callables ``scope -> list of dates``.
-    `Ratings` and `AverageErrors` never skip nor pick a mode.
+    (`compute.resolve_mode`): a requested ``light`` or ``full`` stands, except a ``light`` with a pending election
+    that has an official result, refused as ``failed`` (it would stamp the scope as computed without the phases of
+    that result); with ``auto`` (the default), ``full`` with ``overwrite`` or when a pending election has a result
+    (`compute.result_dates`), ``light`` otherwise. ``pending`` and ``results`` replace those two queries (for tests)
+    with callables ``scope -> list of dates``. `Ratings` and `AverageErrors` never skip nor pick a mode.
     """
 
     label = 'series'
@@ -67,23 +68,25 @@ class Compute(ScopePipeline):
         pending : callable, optional
             Replacement of `compute.pending_events` (for tests).
         results : callable, optional
-            Replacement of `compute.result_dates` (for tests); only consulted with ``auto``, without ``overwrite``
-            and with pending elections.
+            Replacement of `compute.result_dates` (for tests); only consulted with pending elections and ``auto``
+            without ``overwrite``, or ``light`` requested (to refuse it when a pending election has a result).
 
         Notes
         -----
-        A failure of either query, or an unknown mode, ends the scope as ``failed`` with its reason.
+        A failure of either query, an unknown mode or a ``light`` requested with a pending election that has a
+        result (`compute.resolve_mode`) ends the scope as ``failed`` with its reason.
         """
         self.start_progress(chunk, position)
         if self.ACTION != 'compute':
             return
 
         try:
-            dates = None if overwrite else (pending or compute.pending_events)(chunk)
-            if dates is not None and len(dates) == 0:
+            light = mode == 'light'
+            dates = None if overwrite and not light else (pending or compute.pending_events)(chunk)
+            if not overwrite and len(dates) == 0:
                 self.end({'status': 'skipped', 'action': ACTIONS[self.ACTION], 'reason': NOTHING_PENDING,
                           'warnings': []})
-            needs_results = mode == compute.AUTO and not overwrite
+            needs_results = bool(dates) and ((mode == compute.AUTO and not overwrite) or light)
             with_results = (results or compute.result_dates)(chunk) if needs_results else None
             self.mode, self.mode_reason = compute.resolve_mode(mode, overwrite, dates, with_results)
         except PipelineEnd:  # the skip is not a failure

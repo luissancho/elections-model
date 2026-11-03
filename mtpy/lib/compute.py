@@ -261,11 +261,14 @@ def resolve_mode(
     """
     Pick the mode of the compute of a scope and the reason, the rule of the pipeline.
 
-    A requested mode (``light`` or ``full``) stands. With ``auto``: `overwrite` is a full compute (everything is
-    redone); otherwise ``full`` when a pending election has an official result (its errors, featured flag, drift
-    and house effects have to be computed) and ``light`` when the pending elections are only cycles without a
-    result (new polls). The rule never avoids the skip of a scope with nothing pending, which is up to `overwrite`
-    only: with an empty `pending` and no `overwrite` it still answers ``light``, a case the pipeline never reaches.
+    A requested mode (``light`` or ``full``) stands, with one guard: ``light`` is refused when a pending election
+    has an official result, with or without `overwrite`, because the light compute would stamp the scope as
+    computed without the errors, featured flag, drift and house effects of that election, and the next ``auto``
+    compute would skip it. With ``auto``: `overwrite` is a full compute (everything is redone); otherwise ``full``
+    when a pending election has an official result and ``light`` when the pending elections are only cycles
+    without a result (new polls). The rule never avoids the skip of a scope with nothing pending, which is up to
+    `overwrite` only: with an empty `pending` and no `overwrite` it still answers ``light``, a case the pipeline
+    never reaches.
 
     Parameters
     ----------
@@ -274,11 +277,11 @@ def resolve_mode(
     overwrite : bool
         Whether the compute was asked for every scope, pending or not.
     pending : list of str, optional
-        Dates of the pending elections of the scope (`pending_events`); not read with `overwrite` or a requested
-        mode.
+        Dates of the pending elections of the scope (`pending_events`); not read with ``full`` requested, nor with
+        ``auto`` and `overwrite`.
     results : list of str, optional
-        Dates of the elections of the scope with an official result (`result_dates`); read only with ``auto``,
-        without `overwrite`.
+        Dates of the elections of the scope with an official result (`result_dates`); read with ``auto`` without
+        `overwrite` and with ``light`` requested.
 
     Returns
     -------
@@ -289,14 +292,19 @@ def resolve_mode(
     Raises
     ------
     ValueError
-        If `mode` is none of the three.
+        If `mode` is none of the three, or ``light`` is requested with a pending election that has a result
+        (``compute: light requested but a pending election has results (<dates>): use full or auto``).
     """
     mode = check_mode(mode)
+    with_results = sorted(set(pending or ()) & set(results or ()))
+    if mode == 'light' and with_results:
+        raise ValueError('compute: light requested but a pending election has results ({}): use full or auto'.format(
+            ', '.join(with_results)))
     if mode != AUTO:
         return mode, 'requested'
     if overwrite:
         return 'full', 'overwrite'
-    if set(pending or ()) & set(results or ()):
+    if with_results:
         return 'full', 'results pending'
 
     return 'light', 'polls pending'

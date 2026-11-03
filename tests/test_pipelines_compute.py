@@ -79,7 +79,7 @@ def test_compute_results_pending_makes_it_full(fresh_app):
     assert p.line == 'es: series computed (full, results pending: 2 polls, 2 events, 7 featured) in 0 s'
 
 
-def test_compute_consults_the_results_only_when_the_mode_is_auto(fresh_app, capsys):
+def test_compute_consults_the_results_only_when_the_mode_is_auto_or_light(fresh_app, capsys):
     asked = []
 
     def results(scope):
@@ -91,6 +91,8 @@ def test_compute_consults_the_results_only_when_the_mode_is_auto(fresh_app, caps
     series(FakeComputer(), results=results, mode='full')
     series(FakeComputer(), results=results, pending=lambda scope: [])
     assert asked == ['es']  # sólo la primera: auto, sin overwrite y con pendientes
+    series(FakeComputer(), results=results, mode='light')
+    assert asked == ['es', 'es']  # y un light forzado, para rechazarlo si una elección pendiente tiene resultado
 
 
 def test_a_forced_mode_sets_the_header_and_the_reason(fresh_app, capsys):
@@ -99,7 +101,7 @@ def test_a_forced_mode_sets_the_header_and_the_reason(fresh_app, capsys):
     assert p.result['mode_reason'] == 'requested' and factory.inits == [('es', 0)] * 3
     assert p.line == 'es: series computed (full, requested: 2 polls, 2 events, 7 featured) in 0 s'
     assert 'compute series: 1 ámbito · full' in capsys.readouterr().out
-    p = series(FakeComputer(), mode='light', position=(1, 1), pending=lambda scope: ['2023-07-23'], dry_run=True)
+    p = series(FakeComputer(), mode='light', position=(1, 1), dry_run=True)
     assert p.line == 'es: series computed (light, requested: 2 polls, 2 events, dry run) in 0 s'
     assert 'compute series: 1 ámbito · light · dry run' in capsys.readouterr().out
 
@@ -108,6 +110,16 @@ def test_a_forced_mode_does_not_avoid_the_skip(fresh_app):
     factory = FakeComputer()
     p = series(factory, mode='full', pending=lambda scope: [])
     assert p.result['status'] == 'skipped' and factory.inits == []
+
+
+def test_a_forced_light_with_a_pending_result_is_refused(fresh_app):
+    factory = FakeComputer()
+    p = series(factory, mode='light', pending=lambda scope: ['2023-07-23', '2026-11-29'])
+    assert p.result['status'] == 'failed' and factory.inits == []
+    assert p.result['reason'] == ('ValueError: compute: light requested but a pending election has results '
+                                  '(2023-07-23): use full or auto')
+    p = series(factory, mode='light', overwrite=True, pending=lambda scope: ['2023-07-23'])
+    assert p.result['status'] == 'failed' and factory.inits == []  # ni con overwrite
 
 
 def test_an_unknown_mode_is_a_failed_result(fresh_app):

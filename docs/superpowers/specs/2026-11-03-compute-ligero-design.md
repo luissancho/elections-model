@@ -23,7 +23,7 @@ Lo que mira cada fase, comprobado en el código el 2026-11-03:
 
 | Fase | ¿Lee los sondeos del ciclo en curso? | Quién la usa |
 | --- | --- | --- |
-| `weights` | Sí: `weight_over` (solape) depende de los vecinos del ciclo. El cargador sin `overwrite` sólo pesa los sondeos nuevos entre sí (`Loader.compute_series`, `Computer` de un solo evento con `overwrite=False`): la ola anterior de un tracking conserva su peso hasta que la fase recorre el ciclo entero | El Forecaster vivo, que además descarta los sondeos con `computed` falso |
+| `weights` | Sí: `weight_over` (solape) depende de los vecinos del ciclo. El cargador pesa el ciclo cargado con un `Computer` de un solo evento: el job `load` (`mtpy/lib/load.py`) con `overwrite=True`, el cuaderno (`Loader.compute_series`) con `overwrite=False`, que sólo pesa los sondeos nuevos entre sí y deja a la ola anterior de un tracking su peso; y en los dos casos los rellenos de `proc_sample` miran sólo ese ciclo. La pasada del `light` sobre el ámbito entero cierra los dos huecos (corrección del revisor final) | El Forecaster vivo, que además descarta los sondeos con `computed` falso |
 | `featured` | No por sí sola: `update_featured` exige resultado oficial y 10 sondeos útiles, así que un ciclo sin resultado nunca es destacado; cambia cuando entra un resultado o sondeos de un ciclo con resultado | Todo |
 | `errors`, `deviations` | No: sondeo contra resultado oficial | Ratings y web |
 | `drift` | No: ciclos destacados con resultado | El Simulator |
@@ -138,7 +138,8 @@ base: hay que lanzarlo después de un compute `full` del ámbito (documentado, n
 
 | `mode` | `overwrite` | pendientes con resultado | Resultado |
 | --- | --- | --- | --- |
-| `light` / `full` | cualquiera | cualquiera | `(mode, 'requested')` |
+| `light` | cualquiera | alguna | `ValueError` (`compute: light requested but a pending election has results (<fechas>): use full or auto`); guardia añadida tras la revisión final |
+| `light` / `full` | cualquiera | ninguna (o `full`) | `(mode, 'requested')` |
 | `auto` | `True` | cualquiera | `('full', 'overwrite')` |
 | `auto` | `False` | alguna (`set(pending) & set(results)`) | `('full', 'results pending')` |
 | `auto` | `False` | ninguna | `('light', 'polls pending')` |
@@ -269,6 +270,13 @@ Dos preguntas, resueltas como decisiones mías (Luis puede corregirlas):
    `light` sólo sale cuando ninguna elección pendiente lo tiene, así que esas dos fases no podían cambiar nada en
    el caso que importa. `light` = pesos (una pasada, ámbito entero) y rebaño: dos `Computer`. La tabla de fases de
    la intención corregida en consecuencia.
+
+**Revisión final de la rama (2026-11-03, tras construir):** sin fallos críticos; un punto importante, arreglado: un
+`light` forzado con una elección pendiente con resultado habría marcado el ámbito como computado sin los errores, el
+destacado, la deriva ni los efectos de casa de esa elección, y el siguiente `auto` lo habría saltado. Guardia en
+`resolve_mode` (con o sin `overwrite`): el ámbito termina `failed` con la razón de arriba; el pipeline consulta
+`result_dates` también con `light` forzado. Menores aplazados: los comentarios de `STEPS` y de `_phase` no nombran
+`AVERAGE_ERRORS_STEP`; los textos dicen «tras un compute `full`» sin aclarar que un `light` por medio no estorba.
 
 Decisiones menores del constructor, aceptadas: `get_events` compara fechas con `pd.to_datetime(result_dates(scope))`
 (con cadenas, pandas 3 daría todo falso y `update_featured` desmarcaría todas las elecciones); la variable local
