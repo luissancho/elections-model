@@ -389,6 +389,14 @@ class ForecastsResults(Model):
 
 
 class Events(Model):
+    """
+    One election of a scope.
+
+    `featured` is set by `update_featured`. `loaded_at` is the last write of polls or results of the election by
+    a loader; `computed_at` is the start instant of the last `compute_scope` of the scope. Any writer that
+    upserts this table has to carry over the columns it does not write (`featured`, `loaded_at`, `computed_at`),
+    because `format_data` fills the missing columns with nulls.
+    """
 
     table = 'elections.events'
 
@@ -399,7 +407,9 @@ class Events(Model):
         'date': 'dtd',
         'scope': 'cat',
         'name': ['str', None, False],
-        'featured': 'bin'
+        'featured': 'bin',
+        'loaded_at': 'dts',
+        'computed_at': 'dts'
     }
 
 
