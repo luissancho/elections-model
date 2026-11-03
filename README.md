@@ -78,6 +78,36 @@ los ámbitos están aislados como en `compute`. Protocolo y métricas en `backte
 ```bash
 python job.py backtest
 python job.py backtest '{"scopes":"all","horizons":[6,30]}'
+python job.py backtest '{"scopes":["es"],"config":"backtest/tuning/best.json","out":"backtest/results_tuned"}'
+```
+
+`config` corre el backtest con una configuración del promedio, como el `best.json` de `tune`, y conviene escribirlo
+en otra carpeta (`out`).
+
+### `tune`: afinar el promedio con los sondeos futuros
+
+Busca la configuración del promedio (ancho de banda, prolongación, ventana de sobrepublicación, contracciones de los
+efectos de casa y del rebaño) que mejor predice los sondeos publicados después de cada corte, y escribe sus tablas en
+`backtest/tuning/` (`es`) o `backtest/tuning/{ámbito}/`. El destino es el sistema de ficheros de la app, o la copia del
+repositorio con `backtest/run_tuning.py`, su envoltorio. Lee la base y no escribe en ella.
+
+Modos:
+
+- `smoothing` (fase 1);
+- `shrinkage` (fase 2, también por partes con `cycles`);
+- `merge` (une las partes);
+- `check` (la afinada frente a la vigente en los ciclos reservados);
+- `evaluate` (configuraciones dadas).
+
+Las acciones son `run`, `push` y `pull`, y `workers` reparte los cortes entre procesos. Los valores por defecto del
+modelo sólo cambian si se cumple el criterio A8, y a 03-11-2026 no se cumple. Protocolo y tablas en `backtest/README.md`
+("Sondeos futuros"); método y decisión en `docs/analisis-2026-09/metodo-14-sondeos-futuros.md`; parámetros en
+`deploy/README.md` ("Afinar el promedio").
+
+```bash
+python job.py tune '{"scopes":["es"],"mode":"smoothing","workers":8}'
+python job.py tune '{"scopes":["es"],"mode":"check","workers":8}'
+python backtest/run_tuning.py --mode shrinkage --workers 8
 ```
 
 ### Carga de los ámbitos autonómicos
