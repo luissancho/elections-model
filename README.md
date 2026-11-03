@@ -41,15 +41,19 @@ Calcula en la base de datos las tablas del modelo de cada ámbito (la secuencia 
 |---|---|---|
 | `what` | `compute` (pesos, eventos destacados, errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio de cada ámbito; el último, `average_errors`, sólo lo leen las opciones del método 15 y tarda unos 37 minutos en `es`) y/o `ratings` (los ratings de las encuestadoras de cada ámbito, con los sondeos de todos los ámbitos). Con los dos, primero la serie de todos los ámbitos y después los ratings de todos | `["compute", "ratings"]` |
 | `scopes` | Lista de ámbitos (`es`, `es-md`, …) o `"all"`: `es` y todos los autonómicos | `["es"]` |
+| `overwrite` | `true` computa la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros) | `false` |
 | `dry_run` | `true` calcula sin escribir nada; la serie se detiene tras las desviaciones (deriva, efectos y rebaño leen los errores guardados) | `false` |
 | `verbose` | 0 cabecera de cada acción y resumen final; 1 además `[i/n] ámbito: empezando`, la línea de resultado y los avisos del modelo de cada ámbito; 2 además una línea por fase con sus segundos; 3 además la salida propia del `Computer` | 1 |
 
 Un ámbito que falla no detiene a los demás: queda `failed` con su motivo en el resumen y el job termina con error.
+Sin `overwrite`, la serie sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y
+`computed_at` de `events`); el resto termina `skipped`. Tras un cambio de código o de parámetros, `"overwrite": true`.
 
 ```bash
 python job.py compute '{"what":["ratings"],"scopes":"all"}'
 python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'
 python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
+python job.py compute '{"what":["compute"],"scopes":"all","overwrite":true}'
 ```
 
 ### `publish`: el paquete de la web

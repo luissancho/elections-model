@@ -28,7 +28,29 @@ def scopes(monkeypatch):
 def run(factory, featured=None, **kwargs):
     seen = []
     featured = featured if featured is not None else (lambda scope: seen.append(scope) or 7)
-    return Compute().run(computer=factory, featured=featured, **kwargs), seen
+    return Compute().run(computer=factory, featured=featured,
+                         **{'pending': lambda scope: ['2026-11-29'], **kwargs}), seen
+
+
+def test_compute_skips_the_scopes_with_nothing_pending_unless_overwrite(fresh_app, scopes, capsys):
+    factory = FakeComputer()
+    results, featured = run(factory, what='compute', scopes='all', verbose=0,
+                            pending=lambda scope: ['2026-11-29'] if scope == 'es' else [])
+    assert [scope for scope, _ in factory.inits] == ['es'] * 3 and featured == ['es']
+    assert results['es-md'] == {'status': 'skipped', 'action': 'series',
+                                'reason': 'nothing loaded since the last compute', 'warnings': []}
+    out = capsys.readouterr().out
+    assert 'es-md: series skipped (nothing loaded since the last compute)' in out and 'compute series: 2 ámbitos' in out
+    factory = FakeComputer()
+    results, _ = run(factory, what='compute', scopes='all', overwrite=True, verbose=0, pending=lambda scope: [])
+    assert [scope for scope, _ in factory.inits] == ['es'] * 3 + ['es-md'] * 3
+    assert 'compute series: 2 ámbitos · overwrite' in capsys.readouterr().out
+
+
+def test_compute_skipped_scope_still_gets_its_ratings(fresh_app, scopes):
+    factory = FakeComputer()
+    results, _ = run(factory, what=['compute', 'ratings'], scopes=['es'], verbose=0, pending=lambda scope: [])
+    assert [scope for scope, _ in factory.inits] == ['es'] and results['es']['action'] == 'ratings'
 
 
 def test_compute_runs_the_series_of_every_scope_and_then_the_ratings(fresh_app, scopes, capsys):

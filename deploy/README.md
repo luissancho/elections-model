@@ -666,7 +666,7 @@ para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
 | `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
-| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio (`average_errors`). Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores |
+| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio (`average_errors`). Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores. Sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y `computed_at` de `events`, que escriben los cargadores y el propio compute), salvo con `overwrite`; el resto termina `skipped` |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
 
 `what` admite las tres acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los
@@ -682,6 +682,7 @@ python job.py compute '{"what":["ratings"],"scopes":"all"}'
 python job.py compute '{"what":["catalogues","ratings"],"scopes":"all"}'
 python job.py compute '{"what":["catalogues"],"dry_run":true}'
 python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
+python job.py compute '{"what":["compute"],"scopes":"all","overwrite":true}'
 ```
 
 1. Series y ratings de `es` y de todos los ámbitos autonómicos: la rutina completa tras una carga.
@@ -690,6 +691,8 @@ python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"ve
    ámbitos con la calidad nueva. Luego, `publish` con `analysis`, `event` y `forecast`, y reiniciar la web.
 4. Comprobar que la rúbrica y las evaluaciones son válidas sin escribir nada.
 5. Ensayo: la serie de `es-md` sin escribir nada, con una línea por fase.
+6. Recalcular las series de todos los ámbitos aunque no tengan nada cargado desde su último compute: tras un cambio
+   de código o de `params.json`.
 
 ### Parámetros
 
@@ -697,6 +700,7 @@ python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"ve
 | --- | --- | --- |
 | `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
+| `overwrite` | `false` | Computar la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros); sin él, el ámbito termina skipped |
 | `dry_run` | `false` | Calcular sin escribir nada: `catalogues` solo valida los ficheros de la calidad y la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
 | `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
@@ -712,7 +716,7 @@ Niveles de `verbose`:
 
 ### Estados y resumen
 
-Cada ámbito termina `computed` o `failed` en cada acción; `results[ámbito]` es el resultado de la última acción que
+Cada ámbito termina `computed`, `skipped` o `failed` en cada acción; `results[ámbito]` es el resultado de la última acción que
 corrió sobre él (`status`, `action`, las cifras y los `warnings`); el de los catálogos va en
 `results['catalogues']`. Las líneas del resumen tienen esta forma:
 
@@ -723,7 +727,13 @@ es: series computed (<sondeos> polls, <elecciones> events, <destacadas> featured
 es: ratings computed (<encuestadoras> pollsters, <elecciones> events) in <s> s
 es-md: series computed (<sondeos> polls, <elecciones> events, dry run) in <s> s
 es-ar: series failed (RuntimeError: ...)
+es-md: series skipped (nothing loaded since the last compute)
 ```
+
+La última línea es la serie de un ámbito sin nada cargado desde su último compute y sin `overwrite`: no se computa y
+no es un fallo. `ratings` nunca se salta. Tras el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD
+COLUMN computed_at timestamp;` que crea las marcas, todas las elecciones cuentan como pendientes: el primer `compute`
+sin `overwrite` computa todos los ámbitos una vez.
 
 Un ámbito fallido no detiene a los demás ni a la acción siguiente (sus ratings se calculan igual); al final el job
 termina con `RuntimeError: compute: failed scopes: es-ar (series)` (o `catalogues (catálogos)` si fallan los

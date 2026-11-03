@@ -20,6 +20,12 @@ class Compute(SequenceJob):
     (drift, house effects and herding read the stored errors; the errors of the average read the stored weights and
     the prior of the house effects, hence their place after the house effects).
 
+    With ``overwrite`` false, the default, ``compute`` only runs on the scopes with something loaded since their last
+    compute, read from ``loaded_at`` and ``computed_at`` of ``events`` (written by the loaders and by the compute
+    itself); the other scopes end ``skipped`` with that reason. ``catalogues`` and ``ratings`` are not affected. After
+    a change of code or parameters pass ``"overwrite": true``. Right after the ``ALTER TABLE`` that adds the marks
+    every election counts as pending, so the first ``compute`` computes everything once.
+
     The console output has the four levels of ``publish``: 0, the header of each action and the final summary; 1,
     also ``[i/n] scope: empezando`` and the result line of each scope; 2, also one line per phase with its seconds;
     3, also the own output of the ``Computer`` (which receives ``verbose - 2``).
@@ -31,6 +37,7 @@ class Compute(SequenceJob):
         python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'
         python job.py compute '{"what":["catalogues","ratings"],"scopes":"all"}'
         python job.py compute '{"what":["ratings"],"scopes":["es"]}'
+        python job.py compute '{"what":["compute"],"scopes":"all","overwrite":true}'
         python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
 
     In Docker (JSON without spaces)::
@@ -44,8 +51,8 @@ class Compute(SequenceJob):
     chunk_noun = 'scopes'
     WHAT = ('catalogues', 'compute', 'ratings')
 
-    def run(self, what=('compute', 'ratings'), scopes=('es',), dry_run=False, verbose=1, computer=None,
-            featured=None, catalogues=None, stop_on_error=None, **kwargs):
+    def run(self, what=('compute', 'ratings'), scopes=('es',), overwrite=False, dry_run=False, verbose=1,
+            computer=None, featured=None, catalogues=None, pending=None, stop_on_error=None, **kwargs):
         """
         Run the requested computations.
 
@@ -56,6 +63,9 @@ class Compute(SequenceJob):
             once, then the series of every scope, then the ratings of every scope.
         scopes : str or list of str, default ('es',)
             Scopes to compute, or ``'all'`` (``es`` and every regional scope, see ``publish.resolve_scopes``).
+        overwrite : bool, default False
+            Compute the series of every scope even if nothing was loaded since its last compute (after a change of
+            code or parameters); without it, such a scope ends ``skipped``.
         dry_run : bool, default False
             Compute without writing anything into the database (``catalogues`` only validates the files).
         verbose : int, default 1
@@ -69,6 +79,8 @@ class Compute(SequenceJob):
             ``update_featured(scope) -> int``; the real one by default (for tests).
         catalogues : callable, optional
             ``replicate_catalogues(save) -> dict``; the real one by default (for tests).
+        pending : callable, optional
+            ``pending_events(scope) -> list``; the real one by default (for tests).
         stop_on_error : bool, optional
             Stop at the first failed scope instead of going on with the others; ``False`` by default.
         **kwargs
@@ -77,7 +89,7 @@ class Compute(SequenceJob):
         Returns
         -------
         dict[str, dict]
-            Result of each scope (of the last action that ran on it): ``status`` (``computed`` or ``failed``),
+            Result of each scope (of the last action that ran on it): ``status`` (``computed``, ``skipped`` or ``failed``),
             ``action`` (``series`` or ``ratings``) and, when computed, the figures of `compute.compute_scope` or
             `compute.rate_scope`; when failed, the ``reason``. The ``catalogues`` action is keyed ``'catalogues'``,
             with the figures of `compute.replicate_catalogues`.
@@ -101,7 +113,7 @@ class Compute(SequenceJob):
 
         super().run(select=['compute.' + item for item in self.WHAT if item in whats], chunks=targets,
                     stop_on_error=stop_on_error, dry_run=dry_run, verbose=verbose, computer=computer,
-                    featured=featured, catalogues=catalogues)
+                    featured=featured, catalogues=catalogues, overwrite=overwrite, pending=pending)
 
         results = {}
         for (key, chunk), result in self.results.items():
