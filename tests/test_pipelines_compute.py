@@ -22,8 +22,37 @@ def marks(monkeypatch):
 def series(factory, scope='es', pipeline=Compute, position=(1, 2), **kwargs):
     p = pipeline()
     p.run('update', chunk=scope, position=position, computer=factory, featured=lambda scope: 7,
-          **{'verbose': 0, **kwargs})
+          **{'verbose': 0, 'pending': lambda scope: ['2026-11-29'], **kwargs})
     return p
+
+
+def test_compute_skips_a_scope_with_nothing_pending(fresh_app, capsys):
+    factory = FakeComputer()
+    p = series(factory, pending=lambda scope: [])
+    assert p.result == {'status': 'skipped', 'action': 'series', 'reason': 'nothing loaded since the last compute',
+                        'warnings': []}
+    assert p.line == 'es: series skipped (nothing loaded since the last compute)' and factory.inits == []
+
+
+def test_compute_overwrite_computes_anyway_and_says_so_in_the_header(fresh_app, capsys):
+    factory = FakeComputer()
+    p = series(factory, pending=lambda scope: [], overwrite=True)
+    assert p.result['status'] == 'computed' and factory.inits == [('es', 0)] * 3
+    assert 'compute series: 2 ámbitos · overwrite' in capsys.readouterr().out
+
+
+def test_ratings_never_skip(fresh_app):
+    factory = FakeComputer()
+    p = series(factory, 'es-md', Ratings, pending=lambda scope: [])
+    assert p.result['status'] == 'computed' and p.result['action'] == 'ratings'
+
+
+def test_the_real_pending_events_is_the_default(fresh_app, monkeypatch):
+    asked = []
+    monkeypatch.setattr(compute_lib, 'pending_events', lambda scope: asked.append(scope) or [])
+    p = Compute()
+    p.run('update', chunk='es-cl', position=(1, 1), computer=FakeComputer(), featured=lambda scope: 0, verbose=0)
+    assert asked == ['es-cl'] and p.result['status'] == 'skipped'
 
 
 def figures(save):

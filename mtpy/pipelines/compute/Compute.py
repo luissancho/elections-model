@@ -10,6 +10,8 @@ STEPS = {'weights': 'pesos', 'featured': 'eventos destacados', 'errors': 'errore
 ACTIONS = {'catalogues': 'catálogos', 'compute': 'series', 'ratings': 'ratings'}
 # Key of the result of the global `catalogues` action (the others are keyed by scope)
 CATALOGUES = 'catalogues'
+# Reason of the skipped result of a scope with nothing to compute
+NOTHING_PENDING = 'nothing loaded since the last compute'
 
 
 class Compute(ScopePipeline):
@@ -20,6 +22,10 @@ class Compute(ScopePipeline):
     The chunk is the scope; every outcome is a result dict (see `compute_task`) and a failure never raises. The
     subclass `Ratings` changes the action and the unit of work; this class also formats the lines of all the
     actions of the group (`line_of`).
+
+    The `compute` action skips a scope with nothing loaded since its last compute (`compute.pending_events`)
+    with a ``skipped`` result, unless ``overwrite`` is set; ``pending`` replaces that query (for tests) with a
+    callable ``scope -> list of dates``. `Ratings` never skips.
     """
 
     label = 'series'
@@ -27,15 +33,27 @@ class Compute(ScopePipeline):
     ACTION = 'compute'
     pipes = {'update': {'Setup': ['prepare'], 'Load': ['compute']}}
 
-    def start(self, dry_run=False, **kwargs) -> None:
-        """Set the run and print the header ``compute <action>: n ámbitos[ · dry run]``."""
+    def start(self, dry_run=False, overwrite=False, **kwargs) -> None:
+        """Set the run and print the header ``compute <action>: n ámbitos[ · overwrite][ · dry run]``."""
         super().start(**kwargs)
-        self._say('compute {}: {}{}'.format(ACTIONS[self.ACTION], counted(self.total, 'ámbito', 'ámbitos'),
-                                             ' · dry run' if dry_run else ''))
+        flags = (' · overwrite' if overwrite else '') + (' · dry run' if dry_run else '')
+        self._say('compute {}: {}{}'.format(ACTIONS[self.ACTION], counted(self.total, 'ámbito', 'ámbitos'), flags))
 
-    def prepare_task(self, chunk=None, position=(1, 1), **kwargs):
-        """Create and start the progress of the scope."""
+    def prepare_task(self, chunk=None, position=(1, 1), overwrite=False, pending=None, **kwargs):
+        """
+        Create and start the progress of the scope and end the run as skipped when there is nothing to compute.
+
+        Parameters
+        ----------
+        overwrite : bool
+            Compute even with nothing pending.
+        pending : callable, optional
+            Replacement of `compute.pending_events` (for tests).
+        """
         self.start_progress(chunk, position)
+        if self.ACTION == 'compute' and not overwrite and not (pending or compute.pending_events)(chunk):
+            self.end({'status': 'skipped', 'action': ACTIONS[self.ACTION], 'reason': NOTHING_PENDING,
+                      'warnings': []})
 
     def compute_task(self, chunk=None, dry_run=False, computer=None, featured=None, **kwargs):
         """
