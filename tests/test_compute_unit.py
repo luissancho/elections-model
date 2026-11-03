@@ -105,6 +105,23 @@ def test_compute_scope_lets_a_failure_propagate():
         compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='errors'), featured=lambda scope: 0)
 
 
+def test_compute_scope_marks_the_scope_with_the_instant_it_started():
+    marks, clocks = [], []
+    compute.compute_scope('es-md', save=True, computer=FakeComputer(), featured=lambda scope: 0,
+                          mark=lambda scope, at: marks.append((scope, at)), clock=lambda: clocks.append('T0') or 'T0')
+    assert clocks == ['T0'] and marks == [('es-md', 'T0')]
+
+
+def test_compute_scope_dry_run_and_failure_do_not_mark():
+    marks = []
+    compute.compute_scope('es', save=False, computer=FakeComputer(), featured=lambda scope: 0,
+                          mark=lambda scope, at: marks.append(scope), clock=lambda: marks.append('clock'))
+    with pytest.raises(RuntimeError, match='boom herding'):
+        compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='herding'), featured=lambda scope: 0,
+                              mark=lambda scope, at: marks.append(scope), clock=lambda: 'T0')
+    assert marks == []
+
+
 def test_rate_scope_rates_with_every_scope_and_counts_the_table():
     factory, steps = FakeComputer(), []
     result = compute.rate_scope('es', save=True, verbose=1, progress=lambda step, seconds: steps.append(step),
@@ -115,11 +132,15 @@ def test_rate_scope_rates_with_every_scope_and_counts_the_table():
 
 
 def test_the_real_computer_and_featured_updater_are_the_defaults(monkeypatch):
-    factory, featured = FakeComputer(), []
+    factory, featured, marks = FakeComputer(), [], []
     monkeypatch.setattr(compute, 'Computer', factory)
     monkeypatch.setattr(compute, 'update_featured', lambda scope: featured.append(scope) or 3)
+    monkeypatch.setattr(compute, 'db_now', lambda: 'T0')
+    monkeypatch.setattr(compute, 'mark_computed', lambda scope, at: marks.append((scope, at)))
     assert compute.compute_scope('es-cl', save=True)['featured'] == 3 and featured == ['es-cl']
+    assert marks == [('es-cl', 'T0')]
     assert compute.rate_scope('es-cl', save=False)['n_events'] == 1
+    assert marks == [('es-cl', 'T0')]
     assert factory.inits[0] == ('es-cl', 0)
 
 

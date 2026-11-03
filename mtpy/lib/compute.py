@@ -8,13 +8,14 @@ poll average of one scope;
 `rate_scope` the cross-scope pollster ratings of its events; `replicate_catalogues` the versioned catalogues
 (scopes, districts and the prior quality of the pollsters), once for every scope. The first two report each phase
 through an optional `progress(step, seconds)` callback; the three return the figures of the run, and a failure
-propagates to the caller, which decides how to isolate it.
+propagates to the caller, which decides how to isolate it. `pending_events` is imported only to be re-exported for
+`mtpy/pipelines/compute`.
 """
 import time
 from typing import Callable, Optional
 
 from .computer import Computer
-from .data import save_catalogues, update_featured
+from .data import db_now, mark_computed, pending_events, save_catalogues, update_featured  # noqa: F401
 from .quality import load_criteria, read_quality
 
 # Phases of `compute_scope`, in order; the weights run twice (see `compute_scope`)
@@ -59,7 +60,9 @@ def compute_scope(
     verbose: int = 0,
     progress: Optional[Callable] = None,
     computer: Optional[Callable] = None,
-    featured: Optional[Callable] = None
+    featured: Optional[Callable] = None,
+    mark: Optional[Callable] = None,
+    clock: Optional[Callable] = None
 ) -> dict:
     """
     Compute the poll series of a scope: weights, featured events, errors, deviations, drift, house effects,
@@ -72,6 +75,11 @@ def compute_scope(
     and only when `save` is set (a dry run stops after the deviations). The errors of the average go last: their
     Forecaster takes the prior of the house effects from the table the house-effects phase has just saved, and
     they are the slowest phase (one fit per election and horizon).
+
+    With `save`, once every phase has finished the events of the scope are marked as computed (`computed_at`) with
+    the instant the compute started, read from the database before the series is built: what is loaded while the
+    compute runs did not enter the series and must stay pending. A failure in any phase propagates before the mark,
+    so the scope stays pending. The mark is not a phase: it is not reported to `progress` nor added to `seconds`.
 
     Parameters
     ----------
@@ -87,6 +95,11 @@ def compute_scope(
         Factory with the signature ``Computer(scope=..., verbose=...)``; the real `Computer` by default.
     featured : callable, optional
         ``update_featured(scope) -> int``; the real one by default.
+    mark : callable, optional
+        ``mark_computed(scope, started_at)``; the real one by default. Not called without `save`.
+    clock : callable, optional
+        ``db_now() -> datetime`` that gives the instant the compute starts; the real one by default. Not called
+        without `save`.
 
     Returns
     -------
@@ -96,8 +109,11 @@ def compute_scope(
     """
     computer = Computer if computer is None else computer
     featured = update_featured if featured is None else featured
+    mark = mark_computed if mark is None else mark
+    clock = db_now if clock is None else clock
     seconds = {}
     start = time.perf_counter()
+    started_at = clock() if save else None
 
     def fresh():
         return computer(scope=scope, verbose=verbose).build_series()
@@ -119,6 +135,7 @@ def compute_scope(
         _phase('house_effects', lambda: comp.compute_house_effects(save=save), seconds, progress)
         _phase('herding', lambda: comp.compute_herding(save=save), seconds, progress)
         _phase('average_errors', lambda: comp.compute_average_errors(save=save), seconds, progress)
+        mark(scope, started_at)
 
     seconds['total'] = time.perf_counter() - start
 
