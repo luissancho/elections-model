@@ -20,8 +20,8 @@ class Update(SequenceJob):
     ``update`` without ``overwrite`` computes everything once.
 
     Unlike ``load``, ``compute`` and ``publish``, ``update`` stops at the first failure by default: a scope that fails
-    in a group stops the whole job before the next group, so a forecast is never published on polls that did not load
-    or series that did not compute. With ``stop_on_error`` false every group runs on every scope, the job publishes
+    stops the job in that very scope: neither the remaining scopes of that group nor the next groups run, so a
+    forecast is never published on polls that did not load or series that did not compute. With ``stop_on_error`` false every group runs on every scope, the job publishes
     what it has and it exits with an error at the end if anything failed. The alert is sent once, with the summary of
     the whole chain.
 

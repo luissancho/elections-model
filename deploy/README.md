@@ -1594,8 +1594,9 @@ su job. Los `ratings` y los catálogos no entran (se lanzan con `compute`).
 
 `overwrite` es el único interruptor de rehacerlo todo: reemplaza el ciclo de sondeos y computa la serie aunque no haya
 nada nuevo; se usa tras un cambio de código o de parámetros. `update` para en el primer fallo, a diferencia de los
-otros tres jobs: si un ámbito falla en un grupo, el job termina antes del siguiente, de modo que nunca se publica un
-pronóstico sobre sondeos que no se cargaron o series que no se calcularon. Con `"stop_on_error": false` corren todos
+otros tres jobs: si un ámbito falla, el job se detiene en ese ámbito: ni los ámbitos que faltan de ese grupo ni los
+grupos siguientes corren (con `"scopes":"all"`, una casa sin mapear en un autonómico deja también sin publicar a
+`es`). Así nunca se publica un pronóstico sobre sondeos que no se cargaron o series que no se calcularon. Con `"stop_on_error": false` corren todos
 los grupos en todos los ámbitos, se publica lo que haya y el job termina con error al final. El aviso final es uno
 solo, con el resumen de toda la cadena.
 
@@ -1634,7 +1635,7 @@ python job.py update '{"scopes":["es"],"n_sim":20,"dry_run":true}'
 | `drange` | `6` | Ventana de sondeos del pronóstico |
 | `max_fc` | `10` | Pasos máximos del pronóstico |
 | `alpha` | `0.05` | Nivel de los intervalos |
-| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fecha de la guarda LOREG y ancla `as_of` del promedio, `YYYY-MM-DD`) |
+| `today` | hoy (Europe/Madrid) | Sólo para pruebas y ensayos (fecha de la guarda LOREG y ancla `as_of` del promedio, `YYYY-MM-DD`) |
 | `years` | `null` | Años del artículo que lee la carga (`["2026"]`); no se combina con `overwrite` |
 
 ### Estados y resumen
@@ -1653,7 +1654,8 @@ parties: 112 partidos
 ```
 
 Con la parada por defecto, un fallo termina con `RuntimeError: update: failed scopes: es (polls)` (o `(series)`)
-sin que el grupo siguiente haya empezado; el aviso final, el recorte de Pushover y el código de salida son los de
+sin que el grupo siguiente haya empezado. Esa es la excepción cuando el pipeline deja un estado `failed` (lo que
+hacen hoy los pipelines); si un pipeline lanza una excepción, se relanza la original. El aviso final, el recorte de Pushover y el código de salida son los de
 "Aviso final y código de salida" en "Publicar".
 
 ### Pasos de Luis
