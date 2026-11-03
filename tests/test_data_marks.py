@@ -93,3 +93,28 @@ def test_update_featured_keeps_the_marks_of_each_event(monkeypatch):
     assert list(saved['featured']) == [True, False] and 'has_results' not in saved.columns
     assert list(saved['loaded_at']) == list(pd.to_datetime(['2026-11-01 09:00:00', '2026-11-03 09:00:00']))
     assert saved['computed_at'].iloc[0] == pd.Timestamp('2026-11-02 09:00:00') and pd.isna(saved['computed_at'].iloc[1])
+
+
+def test_result_dates_reads_the_whole_scope_rows_with_votes(monkeypatch):
+    fake = FakeEvents(rows=[{'date': pd.Timestamp('2023-07-23')}, {'date': pd.Timestamp('2019-11-10')},
+                            {'date': pd.Timestamp('2023-07-23')}])
+    monkeypatch.setattr(data, 'EventsData', lambda: fake)
+    assert data.result_dates('es') == ['2019-11-10', '2023-07-23']
+    assert fake.queries == [{'filters': ["scope = 'es'", 'region_id = 0', 'votes IS NOT NULL']}]
+
+
+def test_result_dates_without_rows_is_empty(monkeypatch):
+    monkeypatch.setattr(data, 'EventsData', lambda: FakeEvents())
+    assert data.result_dates('es-xx') == []
+
+
+def test_get_events_flags_the_results_through_result_dates(monkeypatch):
+    fake = FakeEvents(rows=[{'date': pd.Timestamp('2023-07-23'), 'scope': 'es', 'name': 'Julio 2023', 'featured': True,
+                             'loaded_at': None, 'computed_at': None},
+                            {'date': pd.Timestamp('2026-11-29'), 'scope': 'es', 'name': 'Próximas', 'featured': False,
+                             'loaded_at': None, 'computed_at': None}])
+    monkeypatch.setattr(data, 'Events', lambda: fake)
+    asked = []
+    monkeypatch.setattr(data, 'result_dates', lambda scope: asked.append(scope) or ['2023-07-23'])
+    events = data.get_events('es')
+    assert asked == ['es'] and list(events['has_results']) == [True, False]  # fechas contra fechas, no cadenas

@@ -914,17 +914,35 @@ def get_events(scope: str) -> pd.DataFrame:
     -------
     pd.DataFrame
         One row per election, with `date`, `scope`, `name`, `featured`, `loaded_at`, `computed_at` and
-        `has_results` (whether it has an official result: a row of the whole scope with votes in `events_data`).
+        `has_results` (whether it has an official result, see `result_dates`).
     """
     events = Events().get_results(query={
         'filters': ["scope = '{}'".format(scope)]
     }, formatted=True)
+    events['has_results'] = events['date'].isin(pd.to_datetime(result_dates(scope)))
+
+    return events
+
+
+def result_dates(scope: str) -> list[str]:
+    """
+    Elections of a scope with an official result: a row of the whole scope with votes in `events_data`.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    list of str
+        Election dates (`YYYY-MM-DD`), sorted ascending, without repeats.
+    """
     data = EventsData().get_results(query=dict(
         filters=["scope = '{}'".format(scope), 'region_id = 0', 'votes IS NOT NULL']
     ), formatted=True)
-    events['has_results'] = events['date'].isin(data['date'])
 
-    return events
+    return sorted(set(pd.to_datetime(data['date']).dt.strftime('%Y-%m-%d')))
 
 
 PENDING_FILTER = '(computed_at IS NULL OR loaded_at > computed_at)'
