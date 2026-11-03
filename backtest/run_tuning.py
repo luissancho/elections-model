@@ -24,7 +24,8 @@ scope.
 This script is a thin wrapper of the `tune` job (`python job.py tune '{...}'`, `mtpy/jobs/Tune.py`), which does
 the work through `mtpy.lib.tuning.tuning_scope`; it only translates the command line options and, at the end,
 prints the folder written and, in the search modes, the configuration kept and the scores of the `check`
-partition of `default` and `best` when the folder has them (also for the completed scopes when another one fails).
+partition of `default` and of the configuration checked against it when the folder has them (also for the
+completed scopes when another one fails).
 """
 import argparse
 import json
@@ -169,28 +170,29 @@ def job_arguments(args):
 
 def check_scores(scores):
     """
-    Scores of `default` and `best` on the `check` partition, one row each.
+    Scores of `default` and of the configuration checked against it on the `check` partition, one row each.
 
     Parameters
     ----------
     scores : pandas.DataFrame
-        `scores.csv` of a scope.
+        `scores.csv` of a scope. The checked configuration is stored under its own label (the settings that differ
+        from the default, as `best.json` names it, or `best`): every label of the partition other than `default`.
 
     Returns
     -------
     pandas.DataFrame
-        `config`, `n_cycles`, `rmse7` and `rmse28` (the mean over the cycles of the RMSE of each cycle, every
-        cycle weighing the same, as the search compares them) and `roughness` (the mean over the rows); empty
-        when the table has no such rows.
+        `config` (the label as `scores.csv` has it), `n_cycles`, `rmse7` and `rmse28` (the mean over the cycles of
+        the RMSE of each cycle, every cycle weighing the same, as the search compares them) and `roughness` (the
+        mean over the rows), `default` first; empty when the table has no such rows.
     """
     import pandas as pd
 
-    rows = scores.loc[(scores['partition'] == 'check') & scores['config'].isin(['default', 'best'])]
+    rows = scores.loc[scores['partition'] == 'check']
+    labels = list(rows['config'].drop_duplicates())
+    labels = [label for label in labels if label == 'default'] + [label for label in labels if label != 'default']
     out = []
-    for label in ('default', 'best'):
+    for label in labels:
         own = rows.loc[rows['config'] == label]
-        if own.empty:
-            continue
         out.append({'config': label, 'n_cycles': own['event_date'].nunique(),
                     'rmse7': own.loc[own['k'] == 7, 'rmse'].astype(float).mean(),
                     'rmse28': own.loc[own['k'] == 28, 'rmse'].astype(float).mean(),
@@ -201,7 +203,7 @@ def check_scores(scores):
 def report(results, out):
     """
     Print the folder written by each completed scope and, in the search modes, the configuration kept and the
-    scores of `default` and `best` on the `check` partition when its `scores.csv` has them.
+    scores of `default` and of the configuration checked on the `check` partition when its `scores.csv` has them.
 
     Parameters
     ----------

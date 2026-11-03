@@ -207,3 +207,17 @@ def test_run_tuning_reports_the_best_config_and_the_check_scores(fresh_app, tmp_
     lines = [line.split() for line in out.splitlines() if line.strip().startswith(('default', 'best '))]
     assert lines == [['default', '2', '2.0', '3.0', '0.1'], ['best', '2', '1.0', '2.0', '0.1']]
     assert 'es-xx' not in out
+
+
+def test_check_scores_lists_the_default_and_the_tuned_configuration_under_its_settings_label():
+    script = load_script()
+    label = 'bw_cap=1.0; max_fc=0; he_n_iter=1; herd_prior=2.0'
+    rows = [{'config': config, 'partition': 'check', 'event_date': event, 'k': k, 'rmse': base + k / 100,
+             'roughness': 0.01}
+            for config, base in ((label, 1.0), ('default', 1.2)) for event in ('2023-07-23', '2026-11-29')
+            for k in (7, 28)]
+    rows.append({'config': 'default', 'partition': 'search', 'event_date': '2019-11-10', 'k': 7, 'rmse': 9.,
+                 'roughness': 0.01})
+    table = script.check_scores(pd.DataFrame(rows))
+    assert table['config'].tolist() == ['default', label]
+    assert table['n_cycles'].tolist() == [2, 2] and table['rmse7'].round(2).tolist() == [1.27, 1.07]
