@@ -3,10 +3,20 @@ import importlib
 
 import pytest
 
-from tests.test_compute_unit import FakeComputer
+from mtpy.lib import compute as compute_lib
+from tests.test_compute_unit import FakeComputer, phases
 
 module = importlib.import_module('mtpy.jobs.Compute')
 Compute = module.Compute
+
+
+@pytest.fixture(autouse=True)
+def marks(monkeypatch):
+    """`compute_scope` sin base: el reloj y la marca de `computed_at` sustituidos (anota las marcas)."""
+    seen = []
+    monkeypatch.setattr(compute_lib, 'db_now', lambda: 'T0')
+    monkeypatch.setattr(compute_lib, 'mark_computed', lambda scope, at: seen.append((scope, at)))
+    return seen
 
 
 @pytest.fixture
@@ -16,33 +26,57 @@ def scopes(monkeypatch):
 
 
 def run(factory, featured=None, **kwargs):
+    """Por defecto, la rutina diaria: una elección pendiente sin resultado (`light`)."""
     seen = []
     featured = featured if featured is not None else (lambda scope: seen.append(scope) or 7)
-    return Compute().run(computer=factory, featured=featured, **kwargs), seen
+    return Compute().run(computer=factory, featured=featured,
+                         **{'pending': lambda scope: ['2026-11-29'], 'results': lambda scope: ['2023-07-23'],
+                            **kwargs}), seen
+
+
+def test_compute_skips_the_scopes_with_nothing_pending_unless_overwrite(fresh_app, scopes, capsys):
+    factory = FakeComputer()
+    results, featured = run(factory, what='compute', scopes='all', verbose=0,
+                            pending=lambda scope: ['2026-11-29'] if scope == 'es' else [])
+    assert [scope for scope, _ in factory.inits] == ['es'] * 2 and featured == []
+    assert results['es-md'] == {'status': 'skipped', 'action': 'series',
+                                'reason': 'nothing loaded since the last compute', 'warnings': []}
+    out = capsys.readouterr().out
+    assert 'es-md: series skipped (nothing loaded since the last compute)' in out and 'compute series: 2 ámbitos' in out
+    factory = FakeComputer()
+    results, _ = run(factory, what='compute', scopes='all', overwrite=True, verbose=0, pending=lambda scope: [])
+    assert [scope for scope, _ in factory.inits] == ['es'] * 3 + ['es-md'] * 3
+    assert 'compute series: 2 ámbitos · overwrite' in capsys.readouterr().out
+
+
+def test_compute_skipped_scope_still_gets_its_ratings(fresh_app, scopes):
+    factory = FakeComputer()
+    results, _ = run(factory, what=['compute', 'ratings'], scopes=['es'], verbose=0, pending=lambda scope: [])
+    assert [scope for scope, _ in factory.inits] == ['es'] and results['es']['action'] == 'ratings'
 
 
 def test_compute_runs_the_series_of_every_scope_and_then_the_ratings(fresh_app, scopes, capsys):
     factory = FakeComputer()
     results, featured = run(factory, what=['compute', 'ratings'], scopes='all', verbose=0)
-    # la serie de todos los ámbitos primero (tres Computer por ámbito) y los ratings después (uno por ámbito)
-    assert [scope for scope, _ in factory.inits] == ['es'] * 3 + ['es-md'] * 3 + ['es', 'es-md']
-    assert featured == ['es', 'es-md']
+    # la serie de todos los ámbitos primero (light: dos Computer por ámbito) y los ratings después (uno por ámbito)
+    assert [scope for scope, _ in factory.inits] == ['es'] * 2 + ['es-md'] * 2 + ['es', 'es-md']
+    assert featured == []
     assert results['es'] == {'status': 'computed', 'action': 'ratings', 'n_pollsters': 2, 'n_events': 1,
                              'seconds': results['es']['seconds'], 'warnings': []}
     out = capsys.readouterr().out
     assert 'compute series: 2 ámbitos' in out and 'compute ratings: 2 ámbitos' in out
-    assert 'es: series computed (2 polls, 2 events, 7 featured) in 0 s' in out
+    assert 'es: series computed (light, polls pending: 2 polls, 2 events) in 0 s' in out
     assert 'es-md: ratings computed (2 pollsters, 1 events) in 0 s' in out
     assert 'empezando' not in out and 'pesos' not in out  # nivel 0: cabecera y resumen
 
 
 def test_compute_isolates_a_failing_scope_and_fails_at_the_end(fresh_app, scopes, capsys):
-    factory = FakeComputer(fail_at='errors', fail_scope='es-ar')
+    factory = FakeComputer(fail_at='herding', fail_scope='es-ar')
     with pytest.raises(RuntimeError, match=r'compute: failed scopes: es-ar \(series\)'):
         run(factory, what=['compute', 'ratings'], scopes=['es', 'es-ar'], verbose=0)
     out = capsys.readouterr().out
-    assert 'es: series computed (2 polls, 2 events, 7 featured) in 0 s' in out
-    assert 'es-ar: series failed (RuntimeError: boom errors)' in out
+    assert 'es: series computed (light, polls pending: 2 polls, 2 events) in 0 s' in out
+    assert 'es-ar: series failed (RuntimeError: boom herding)' in out
     assert 'es-ar: ratings computed (2 pollsters, 1 events) in 0 s' in out  # las acciones siguientes siguen
 
 
@@ -52,7 +86,8 @@ def test_compute_dry_run_saves_nothing_and_says_so(fresh_app, scopes, capsys):
     assert all(call[1] is False for call in factory.calls if call[0] != 'build_series') and featured == []
     assert results['es']['status'] == 'computed' and results['es']['featured'] is None
     out = capsys.readouterr().out
-    assert 'compute series: 1 ámbito · dry run' in out and 'es: series computed (2 polls, 2 events, dry run) in 0 s' in out
+    assert 'compute series: 1 ámbito · dry run' in out
+    assert 'es: series computed (light, polls pending: 2 polls, 2 events, dry run) in 0 s' in out
 
 
 def test_compute_verbosity_levels(fresh_app, scopes, capsys):
@@ -64,8 +99,14 @@ def test_compute_verbosity_levels(fresh_app, scopes, capsys):
     factory = FakeComputer()
     run(factory, what=['compute', 'ratings'], scopes=['es'], verbose=2)
     out = capsys.readouterr().out
-    for label in ('pesos', 'eventos destacados', 'errores', 'desviaciones', 'deriva', 'efectos de casa', 'rebaño', 'ratings'):
+    for label in ('pesos', 'rebaño', 'ratings'):  # light
         assert '[1/1] es: {} ('.format(label) in out, label
+    assert 'errores (' not in out
+    run(FakeComputer(), what='compute', scopes=['es'], verbose=2, overwrite=True)
+    out = capsys.readouterr().out
+    for label in ('pesos', 'eventos destacados', 'errores', 'desviaciones', 'deriva', 'efectos de casa', 'rebaño'):
+        assert '[1/1] es: {} ('.format(label) in out, label
+    assert 'errores del promedio' not in out
     factory = FakeComputer()
     run(factory, what='ratings', scopes=['es'], verbose=3)
     assert factory.inits == [('es', 1)]  # el Computer recibe verbose - 2
@@ -88,19 +129,19 @@ def test_compute_reports_the_model_warnings_as_notes(fresh_app, scopes, capsys):
     class WarningComputer(FakeComputer):
         def __call__(self, scope, verbose=0, **kwargs):
             comp = super().__call__(scope, verbose, **kwargs)
-            errors = comp.compute_errors
+            weights = comp.compute_weights
 
-            def compute_errors(save=False):
+            def compute_weights(save=False, overwrite=False):
                 warnings.warn('serie corta', RuntimeWarning)
-                return errors(save=save)
-            comp.compute_errors = compute_errors
+                return weights(save=save, overwrite=overwrite)
+            comp.compute_weights = compute_weights
             return comp
 
     results, _ = run(WarningComputer(), what='compute', scopes=['es'], verbose=1)
     out, err = capsys.readouterr()
     assert '[1/1] es · aviso: serie corta' in out and 'serie corta' not in err
     assert results['es']['warnings'] == ['serie corta']
-    assert 'es: series computed (2 polls, 2 events, 7 featured) in 0 s · 1 aviso' in out
+    assert 'es: series computed (light, polls pending: 2 polls, 2 events) in 0 s · 1 aviso' in out
 
 
 def test_compute_catalogues_runs_first_once_and_dry_run_only_checks(fresh_app, scopes, capsys):
@@ -138,12 +179,39 @@ def test_compute_catalogues_failure_fails_the_job_at_the_end(fresh_app, scopes, 
 
 
 def test_compute_stop_on_error_stops_before_the_ratings(fresh_app, scopes):
-    factory = FakeComputer(fail_at='errors', fail_scope='es')
+    factory = FakeComputer(fail_at='herding', fail_scope='es')
     with pytest.raises(RuntimeError, match=r'compute: failed scopes: es \(series\)'):
         run(factory, what=['compute', 'ratings'], scopes=['es', 'es-md'], stop_on_error=True)
-    assert [scope for scope, _ in factory.inits] == ['es'] * 2  # la serie de es se corta en los errores; ni es-md ni los ratings
+    assert [scope for scope, _ in factory.inits] == ['es'] * 2  # la serie de es se corta en el rebaño; ni es-md ni los ratings
 
 
 def test_compute_refuses_an_empty_scope_list(fresh_app, scopes):
     with pytest.raises(ValueError, match='compute: no scopes to run'):
         run(FakeComputer(), scopes=[])
+
+
+def test_compute_average_errors_is_its_own_action_and_runs_last(fresh_app, scopes, capsys):
+    factory = FakeComputer()
+    results, featured = run(factory, what=['average_errors', 'compute'], scopes=['es'], verbose=0)
+    # la serie (light: dos Computer) y después los errores del promedio (uno), aunque el JSON los liste al revés
+    assert [scope for scope, _ in factory.inits] == ['es'] * 3 and phases(factory)[-1] == 'average_errors'
+    assert results['es']['action'] == 'errores del promedio' and results['es']['n_rows'] == 2
+    out = capsys.readouterr().out
+    assert out.index('compute series: 1 ámbito') < out.index('compute errores del promedio: 1 ámbito')
+    assert 'es: average errors computed (2 rows, 1 events) in 0 s' in out
+    factory = FakeComputer()
+    results, _ = run(factory, what='average_errors', scopes=['es'], verbose=0, pending=lambda scope: [])
+    assert phases(factory) == ['average_errors'] and results['es']['status'] == 'computed'  # nunca salta
+
+
+def test_compute_mode_full_and_an_unknown_mode(fresh_app, scopes, capsys):
+    factory = FakeComputer()
+    results, featured = run(factory, what='compute', scopes=['es'], mode='full', verbose=0)
+    assert [scope for scope, _ in factory.inits] == ['es'] * 3 and featured == ['es']
+    out = capsys.readouterr().out
+    assert 'compute series: 1 ámbito · full' in out
+    assert 'es: series computed (full, requested: 2 polls, 2 events, 7 featured) in 0 s' in out
+    factory = FakeComputer()
+    with pytest.raises(ValueError, match='compute: unknown mode "x" \\(expected auto, light or full\\)'):
+        run(factory, what='compute', scopes=['es'], mode='x')
+    assert factory.inits == []

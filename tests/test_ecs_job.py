@@ -114,6 +114,7 @@ def test_run_job_value_refuses_empty_bad_json_and_load_params():
         ecs_job.run_job_value('publish', '{\n"scopes": "all"\n}')
     assert ecs_job.run_job_value('backtest', None) == 'backtest'
     assert ecs_job.run_job_value('load', '{"scopes":["es"]}') == 'load {"scopes":["es"]}'
+    assert ecs_job.run_job_value('update', '{"scopes":["es"],"n_sim":10000}') == 'update {"scopes":["es"],"n_sim":10000}'
 
 
 def test_run_job_value_refuses_laptop_only_backtest_actions():

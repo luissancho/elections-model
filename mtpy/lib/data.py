@@ -2,7 +2,7 @@ import json
 import pandas as pd
 import warnings
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal, Mapping, Optional
 
 from ..core.app import App
@@ -913,18 +913,103 @@ def get_events(scope: str) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        One row per election, with `date`, `scope`, `name`, `featured` and `has_results` (whether it has an
-        official result: a row of the whole scope with votes in `events_data`).
+        One row per election, with `date`, `scope`, `name`, `featured`, `loaded_at`, `computed_at` and
+        `has_results` (whether it has an official result, see `result_dates`).
     """
     events = Events().get_results(query={
         'filters': ["scope = '{}'".format(scope)]
     }, formatted=True)
+    events['has_results'] = events['date'].isin(pd.to_datetime(result_dates(scope)))
+
+    return events
+
+
+def result_dates(scope: str) -> list[str]:
+    """
+    Elections of a scope with an official result: a row of the whole scope with votes in `events_data`.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    list of str
+        Election dates (`YYYY-MM-DD`), sorted ascending, without repeats.
+    """
     data = EventsData().get_results(query=dict(
         filters=["scope = '{}'".format(scope), 'region_id = 0', 'votes IS NOT NULL']
     ), formatted=True)
-    events['has_results'] = events['date'].isin(data['date'])
 
-    return events
+    return sorted(set(pd.to_datetime(data['date']).dt.strftime('%Y-%m-%d')))
+
+
+PENDING_FILTER = '(computed_at IS NULL OR loaded_at > computed_at)'
+
+
+def mark_loaded(scope: str, event_date: str) -> None:
+    """
+    Stamp an election with the instant of its last load of polls or results, using the clock of the database.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    event_date : str
+        Election date (`YYYY-MM-DD`).
+    """
+    Events().execute("UPDATE elections.events SET loaded_at = now() WHERE scope = '{}' AND date = '{}'".format(
+        scope, event_date))
+
+
+def db_now() -> datetime:
+    """
+    Current instant according to the clock of the database.
+
+    Returns
+    -------
+    datetime
+        Value of `now()` in the database.
+    """
+    return Events().get_var(query='SELECT now()')
+
+
+def mark_computed(scope: str, started_at: datetime) -> None:
+    """
+    Stamp every election of a scope with the instant a compute of the scope started.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+    started_at : datetime
+        Start instant of the compute (see `db_now`).
+    """
+    Events().execute("UPDATE elections.events SET computed_at = '{}' WHERE scope = '{}'".format(
+        started_at.strftime('%Y-%m-%d %H:%M:%S.%f'), scope))
+
+
+def pending_events(scope: str) -> list[str]:
+    """
+    Elections of a scope never computed or loaded after their last compute.
+
+    Parameters
+    ----------
+    scope : str
+        Scope code.
+
+    Returns
+    -------
+    list of str
+        Election dates (`YYYY-MM-DD`), sorted ascending.
+    """
+    events = Events().get_results(query={
+        'columns': ['date'],
+        'filters': ["scope = '{}'".format(scope), PENDING_FILTER]
+    }, formatted=True)
+
+    return sorted(pd.to_datetime(events['date']).dt.strftime('%Y-%m-%d'))
 
 
 def get_pollsters() -> pd.DataFrame:
@@ -1320,7 +1405,8 @@ def update_featured(
     """
     Mark as `featured` the events of a scope with an official result and at least `min_polls` useful polls:
     computed (see `Computer.compute_weights`), with a positive overlap weight and not of the dropped
-    methodology or context types. The other events of the scope are unmarked.
+    methodology or context types. The other events of the scope are unmarked. The `loaded_at` and
+    `computed_at` marks travel in the upserted frame unchanged (`format_data` would null them if missing).
 
     Parameters
     ----------

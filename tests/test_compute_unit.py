@@ -72,21 +72,20 @@ def phases(factory):
 def test_compute_scope_runs_the_sequence_of_the_loader_and_reports_each_phase():
     factory, featured, steps = FakeComputer(), [], []
     result = compute.compute_scope('es-md', save=True, verbose=2, progress=lambda step, seconds: steps.append(step),
-                                   computer=factory, featured=lambda scope: featured.append(scope) or 7)
+                                   computer=factory, featured=lambda scope: featured.append(scope) or 7,
+                                   mark=lambda scope, at: None, clock=lambda: 'T0')
     # pesos, destacados, pesos otra vez (el `featured` de los sondeos copia el del evento), errores, desviaciones;
-    # y con una serie fresca (leen los errores guardados) deriva, efectos de casa, rebaño y, al final (su prior de
-    # efectos de casa es la tabla que acaba de guardarse), los errores del promedio
-    assert phases(factory) == ['weights', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding',
-                               'average_errors']
-    assert steps == ['weights', 'featured', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding',
-                     'average_errors']
-    assert tuple(dict.fromkeys(steps)) == compute.COMPUTE_STEPS  # el orden declarado es el que corre
+    # y con una serie fresca (leen los errores guardados) deriva, efectos de casa y rebaño; los errores del promedio
+    # son una acción aparte (`average_errors_scope`)
+    assert phases(factory) == ['weights', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding']
+    assert steps == ['weights', 'featured', 'weights', 'errors', 'deviations', 'drift', 'house_effects', 'herding']
+    assert tuple(dict.fromkeys(steps)) == compute.COMPUTE_STEPS == compute.MODES['full']  # el orden declarado es el que corre
     assert featured == ['es-md'] and factory.inits == [('es-md', 2)] * 3
     assert all(call[1] is True for call in factory.calls if call[0] != 'build_series')
     assert [call for call in factory.calls if call[0] == 'weights'] == [('weights', True, ('overwrite', True))] * 2
-    assert result['featured'] == 7 and result['n_polls'] == 2 and result['n_events'] == 2
+    assert result['featured'] == 7 and result['n_polls'] == 2 and result['n_events'] == 2 and result['mode'] == 'full'
     assert set(result['seconds']) == {'weights', 'featured', 'errors', 'deviations', 'drift', 'house_effects',
-                                      'herding', 'average_errors', 'total'}
+                                      'herding', 'total'}
     assert result['seconds']['total'] >= 0
 
 
@@ -97,12 +96,30 @@ def test_compute_scope_dry_run_stops_after_the_deviations_and_saves_nothing():
     assert phases(factory) == ['weights', 'weights', 'errors', 'deviations'] and featured == []
     assert steps == ['weights', 'weights', 'errors', 'deviations']
     assert all(call[1] is False for call in factory.calls if call[0] != 'build_series')
-    assert result['featured'] is None and 'drift' not in result['seconds'] and 'average_errors' not in result['seconds']
+    assert result['featured'] is None and 'drift' not in result['seconds'] and result['mode'] == 'full'
 
 
 def test_compute_scope_lets_a_failure_propagate():
     with pytest.raises(RuntimeError, match='boom errors'):
-        compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='errors'), featured=lambda scope: 0)
+        compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='errors'), featured=lambda scope: 0,
+                              mark=lambda scope, at: None, clock=lambda: 'T0')
+
+
+def test_compute_scope_marks_the_scope_with_the_instant_it_started():
+    marks, clocks = [], []
+    compute.compute_scope('es-md', save=True, computer=FakeComputer(), featured=lambda scope: 0,
+                          mark=lambda scope, at: marks.append((scope, at)), clock=lambda: clocks.append('T0') or 'T0')
+    assert clocks == ['T0'] and marks == [('es-md', 'T0')]
+
+
+def test_compute_scope_dry_run_and_failure_do_not_mark():
+    marks = []
+    compute.compute_scope('es', save=False, computer=FakeComputer(), featured=lambda scope: 0,
+                          mark=lambda scope, at: marks.append(scope), clock=lambda: marks.append('clock'))
+    with pytest.raises(RuntimeError, match='boom herding'):
+        compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='herding'), featured=lambda scope: 0,
+                              mark=lambda scope, at: marks.append(scope), clock=lambda: 'T0')
+    assert marks == []
 
 
 def test_rate_scope_rates_with_every_scope_and_counts_the_table():
@@ -115,11 +132,15 @@ def test_rate_scope_rates_with_every_scope_and_counts_the_table():
 
 
 def test_the_real_computer_and_featured_updater_are_the_defaults(monkeypatch):
-    factory, featured = FakeComputer(), []
+    factory, featured, marks = FakeComputer(), [], []
     monkeypatch.setattr(compute, 'Computer', factory)
     monkeypatch.setattr(compute, 'update_featured', lambda scope: featured.append(scope) or 3)
+    monkeypatch.setattr(compute, 'db_now', lambda: 'T0')
+    monkeypatch.setattr(compute, 'mark_computed', lambda scope, at: marks.append((scope, at)))
     assert compute.compute_scope('es-cl', save=True)['featured'] == 3 and featured == ['es-cl']
+    assert marks == [('es-cl', 'T0')]
     assert compute.rate_scope('es-cl', save=False)['n_events'] == 1
+    assert marks == [('es-cl', 'T0')]
     assert factory.inits[0] == ('es-cl', 0)
 
 
@@ -136,3 +157,78 @@ def test_replicate_catalogues_saves_or_only_checks_the_rubric(monkeypatch):
     assert set(out['seconds']) == {'total'}
     out = compute.replicate_catalogues(save=False)
     assert saved == [1] and out['quality'] == 3 and 'scopes' not in out
+
+
+def test_compute_scope_light_runs_weights_and_herding_only():
+    factory, featured, steps, marks = FakeComputer(), [], [], []
+    result = compute.compute_scope('es', save=True, verbose=1, mode='light',
+                                   progress=lambda step, seconds: steps.append(step), computer=factory,
+                                   featured=lambda scope: featured.append(scope) or 7,
+                                   mark=lambda scope, at: marks.append((scope, at)), clock=lambda: 'T0')
+    # una pasada de pesos sobre el ámbito entero (copia a cada sondeo el destacado de su elección) y, con una serie
+    # fresca que lee esos pesos, el rebaño; sin destacados: exigen resultado oficial y en auto el light sólo sale sin él
+    assert phases(factory) == ['weights', 'herding'] and steps == ['weights', 'herding'] and featured == []
+    assert [call for call in factory.calls if call[0] == 'weights'] == [('weights', True, ('overwrite', True))]
+    assert factory.inits == [('es', 1)] * 2 and marks == [('es', 'T0')]
+    assert result['mode'] == 'light' and result['featured'] is None and result['n_polls'] == 2
+    assert set(result['seconds']) == {'weights', 'herding', 'total'}
+    assert tuple(dict.fromkeys(steps)) == compute.MODES['light']
+
+
+def test_compute_scope_light_dry_run_only_weighs_and_does_not_mark():
+    factory, steps, marks = FakeComputer(), [], []
+    result = compute.compute_scope('es-md', save=False, mode='light', progress=lambda step, seconds: steps.append(step),
+                                   computer=factory, featured=lambda scope: 0,
+                                   mark=lambda scope, at: marks.append(scope), clock=lambda: marks.append('clock'))
+    assert phases(factory) == ['weights'] and steps == ['weights'] and marks == []
+    assert factory.calls[1] == ('weights', False, ('overwrite', True)) and result['mode'] == 'light'
+
+
+def test_compute_scope_rejects_an_unknown_mode_before_building_anything():
+    factory = FakeComputer()
+    with pytest.raises(ValueError, match='compute: unknown mode "auto" \\(expected light or full\\)'):
+        compute.compute_scope('es', save=True, mode='auto', computer=factory, featured=lambda scope: 0,
+                              mark=lambda scope, at: None, clock=lambda: 'T0')
+    assert factory.inits == []
+
+
+def test_average_errors_scope_fits_the_table_once_and_never_marks(monkeypatch):
+    marks = []
+    monkeypatch.setattr(compute, 'mark_computed', lambda scope, at: marks.append(scope))
+    monkeypatch.setattr(compute, 'db_now', lambda: marks.append('clock'))
+    factory, steps = FakeComputer(), []
+    result = compute.average_errors_scope('es', save=True, verbose=2, progress=lambda step, seconds: steps.append(step),
+                                          computer=factory)
+    assert factory.calls == [('build_series',), ('average_errors', True)] and factory.inits == [('es', 2)]
+    assert steps == ['average_errors'] and set(result['seconds']) == {'average_errors', 'total'}
+    assert result['n_rows'] == 2 and result['n_events'] == 1 and marks == []
+    result = compute.average_errors_scope('es', save=False, computer=factory)
+    assert factory.calls[-1] == ('average_errors', False) and result['n_rows'] == 2  # en seco calcula sin guardar
+
+
+def test_resolve_mode_applies_the_auto_rule():
+    assert compute.resolve_mode('light', True, None, None) == ('light', 'requested')
+    assert compute.resolve_mode('full', False, [], []) == ('full', 'requested')
+    assert compute.resolve_mode('auto', True, None, None) == ('full', 'overwrite')
+    assert compute.resolve_mode('auto', False, ['2023-07-23', '2026-11-29'], ['2019-11-10', '2023-07-23']) == ('full', 'results pending')
+    assert compute.resolve_mode('auto', False, ['2026-11-29'], ['2019-11-10', '2023-07-23']) == ('light', 'polls pending')
+    assert compute.resolve_mode('auto', False, [], ['2023-07-23']) == ('light', 'polls pending')
+    with pytest.raises(ValueError, match='compute: unknown mode "x" \\(expected auto, light or full\\)'):
+        compute.resolve_mode('x', False, [], [])
+
+
+def test_check_mode_accepts_the_three_modes_and_nothing_else():
+    assert [compute.check_mode(m) for m in ('auto', 'light', 'full')] == ['auto', 'light', 'full']
+    with pytest.raises(ValueError, match='compute: unknown mode "Light" \\(expected auto, light or full\\)'):
+        compute.check_mode('Light')
+
+
+def test_resolve_mode_refuses_a_forced_light_with_a_pending_result():
+    # la noche del 29-N: resultado cargado y un `light` pedido; sin esta guardia el ámbito quedaría marcado como
+    # computado sin errores, destacados, deriva ni efectos de casa de esa elección, y el siguiente auto lo saltaría
+    with pytest.raises(ValueError, match=r'compute: light requested but a pending election has results '
+                                         r'\(2023-07-23\): use full or auto'):
+        compute.resolve_mode('light', False, ['2023-07-23', '2026-11-29'], ['2019-11-10', '2023-07-23'])
+    with pytest.raises(ValueError, match='light requested but a pending election has results'):
+        compute.resolve_mode('light', True, ['2023-07-23'], ['2023-07-23'])  # ni con overwrite
+    assert compute.resolve_mode('light', False, ['2026-11-29'], ['2023-07-23']) == ('light', 'requested')

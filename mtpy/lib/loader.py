@@ -15,7 +15,7 @@ from ..core.app import Core
 from ..models.elections import (
     Events, EventsData, EventsResults, Parties, Polls, PollsResults, Pollsters, Sponsors
 )
-from .data import get_districts, get_scopes
+from .data import get_districts, get_scopes, mark_loaded
 from ..core.utils.helpers import (
     array_shift, format_number, is_number
 )
@@ -427,6 +427,10 @@ class InfoElectoralLoader(Core):
         return self
 
     def save_results(self) -> Self:
+        """
+        Replace the results of the event and mark it as loaded (`events.loaded_at`); with no results
+        nothing is written and nothing is marked.
+        """
         if self.results.shape[0] == 0:
             return self
 
@@ -440,6 +444,7 @@ class InfoElectoralLoader(Core):
         nrows = self.m_results.upsert()
         self.m_results.stage_clean()
         self.m_results.vacuum()
+        mark_loaded(self.scope, self.event_date)
         if self.verbose > 0:
             print(f'{nrows} rows updated...')
 
@@ -1120,6 +1125,10 @@ class WikipediaLoader(Core):
         return self
 
     def save_polls(self, overwrite: bool = False) -> Self:
+        """
+        Write the polls of the event (replacing the existing ones if `overwrite`) and mark the event as loaded
+        (`events.loaded_at`); with no polls nothing is written and nothing is marked.
+        """
         if self.polls.shape[0] == 0:
             return self
 
@@ -1134,6 +1143,7 @@ class WikipediaLoader(Core):
         nrows = self.m_polls.upsert()
         self.m_polls.stage_clean()
         self.m_polls.vacuum()
+        mark_loaded(self.scope, self.event_date)
         if self.verbose > 0:
             print(f'{nrows} rows updated...')
 
@@ -1426,12 +1436,14 @@ class WikipediaResultsLoader(Core):
     def save_event(self) -> Self:
         """
         Create the row of the event in `events`, or update its name; `featured` of an existing row is kept
-        (it is set by `mtpy.lib.data.update_featured`).
+        (it is set by `mtpy.lib.data.update_featured`), and so are its `loaded_at` and `computed_at` marks.
         """
         current = self.m_events.get_results(query={'filters': self.filters}, formatted=True)
         event = self.event.copy()
         if current.shape[0] > 0:
             event['featured'] = bool(current['featured'].iloc[0])
+            event['loaded_at'] = current['loaded_at'].iloc[0]
+            event['computed_at'] = current['computed_at'].iloc[0]
 
         self.m_events.upsert(self.m_events.format_data(event, int_type='nullable', bin_type='nullable', sort=True))
 
@@ -1442,8 +1454,12 @@ class WikipediaResultsLoader(Core):
         return self._save(self.m_totals, self.totals)
 
     def save_results(self) -> Self:
-        """Replace the rows of the event in `events_results`."""
-        return self._save(self.m_results, self.results)
+        """Replace the rows of the event in `events_results` and mark it as loaded (only if there are results)."""
+        self._save(self.m_results, self.results)
+        if self.results is not None and self.results.shape[0] > 0:
+            mark_loaded(self.scope, self.event_date)
+
+        return self
 
     def _save(self, model: Any, data: pd.DataFrame) -> Self:
         """Delete the rows of the event from the table of `model` and write `data`."""
