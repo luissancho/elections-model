@@ -709,7 +709,7 @@ Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Solo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `dry_run`, `· dry run`) y el resumen final |
+| 0 | Solo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `overwrite`, `· overwrite`; con `dry_run`, `· dry run`) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") |
 | 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño`, `errores del promedio`, `ratings`) |
 | 3 | Lo anterior más la salida propia del `Computer` (que recibe `verbose - 2`) |
@@ -1386,7 +1386,7 @@ Antes de la primera publicación a S3, `check_s3` debe dar `OK` en todos los pas
 
 ### Jobs desde ECS
 
-Cualquier job (`load`, `compute`, `backtest`, `publish`) corre como una tarea puntual de ECS Fargate que lanza
+Cualquier job (`load`, `compute`, `backtest`, `publish`, `update`) corre como una tarea puntual de ECS Fargate que lanza
 `deploy/ecs/job.py` desde el portátil, con las credenciales de AWS de tu perfil (la cadena normal de boto3; no
 importa `mtpy`). Sus claves `ECS_*` van en `deploy/elections.env`, el fichero de configuración general (ver
 "Fichero de configuración").
@@ -1395,6 +1395,7 @@ importa `mtpy`). Sus claves `ECS_*` van en `deploy/elections.env`, el fichero de
 python deploy/ecs/job.py --register
 python deploy/ecs/job.py publish '{"what":["forecast","analysis"],"scopes":["es"],"n_sim":10000}' --follow
 python deploy/ecs/job.py backtest '{"scopes":"all"}'
+python deploy/ecs/job.py update '{"scopes":["es"],"n_sim":10000}' --follow
 ```
 
 - `--register` crea la definición `elections-model-job` (o una revisión nueva) derivándola de la definición viva del
@@ -1571,6 +1572,101 @@ lanza. Los quince pipelines, por grupo:
 | `compute` | `compute.catalogues`, `compute.compute`, `compute.ratings` |
 | `backtest` | `backtest.backtest` |
 | `publish` | `publish.forecast`, `publish.analysis`, `publish.event`, `publish.backtest`, `publish.study`, `publish.parties`, `publish.manifest`, `publish.point`, `publish.unpublish` |
+
+## Actualizar: carga, series y publicación de una vez
+
+`python job.py update '{...}'` (`mtpy/jobs/Update.py`) encadena en una sola tarea los tres jobs de la rutina diaria,
+`load`, `compute` y `publish`, para los ámbitos pedidos. Sirve para lanzar una actualización completa como tarea de
+ECS (ver "Jobs desde ECS") sin tener que esperar a cada paso desde el portátil.
+
+### Qué hace y cuándo lanzarlo
+
+Tres grupos, en este orden y cada uno sobre todos los ámbitos antes de empezar el siguiente:
+
+1. `load.polls`: carga los sondeos nuevos de Wikipedia (o, con `overwrite`, reemplaza el ciclo entero: `rebulk`).
+2. `compute.compute`: calcula las series del modelo. Sin `overwrite` se salta los ámbitos sin nada cargado desde su
+   último compute, que se lee de las marcas `loaded_at` y `computed_at` de `events` (las escriben los cargadores y el
+   propio compute); esos ámbitos terminan `skipped` y siguen a la publicación.
+3. `publish.forecast` y `publish.analysis` por ámbito, y `publish.parties` una vez al final (el catálogo de partidos).
+
+Son los mismos pipelines de los jobs `load`, `compute` y `publish`: cada línea, estado y nivel de `verbose` es el de
+su job. Los `ratings` y los catálogos no entran (se lanzan con `compute`).
+
+`overwrite` es el único interruptor de rehacerlo todo: reemplaza el ciclo de sondeos y computa la serie aunque no haya
+nada nuevo; se usa tras un cambio de código o de parámetros. `update` para en el primer fallo, a diferencia de los
+otros tres jobs: si un ámbito falla en un grupo, el job termina antes del siguiente, de modo que nunca se publica un
+pronóstico sobre sondeos que no se cargaron o series que no se calcularon. Con `"stop_on_error": false` corren todos
+los grupos en todos los ámbitos, se publica lo que haya y el job termina con error al final. El aviso final es uno
+solo, con el resumen de toda la cadena.
+
+`force` llega a la carga y a la publicación a la vez: en `update` es publicar dentro de la veda y, en la carga, dar de
+alta las encuestadoras y los medios que falten; para dar de alta casas se lanza antes `load` con `force`, solo.
+`event_date` se rechaza (forzaría a la vez la elección de la carga y la del pronóstico; usa `load` o `publish`) y
+`years` no se combina con `overwrite` (`ValueError` antes de empezar). Sin sistema de ficheros (ni `S3_BUCKET` ni un
+`files/` local) falla al empezar con `update: no file system configured`.
+
+### Ejemplos
+
+```
+python job.py update '{"scopes":["es"],"n_sim":10000,"verbose":3}'
+python job.py update '{"scopes":"all"}'
+python job.py update '{"scopes":["es"],"overwrite":true}'
+python job.py update '{"scopes":["es"],"n_sim":20,"dry_run":true}'
+```
+
+1. La actualización diaria de `es` con 10.000 simulaciones y toda la salida.
+2. Todos los ámbitos; los que no tienen artículo de sondeos terminan `skipped` en la carga y no cuentan como fallo.
+3. Tras un cambio de código o de parámetros: recarga el ciclo y recalcula la serie aunque no haya nada nuevo.
+4. Ensayo: la carga lee y comprueba sin escribir y la publicación va a `site-dry/`.
+
+### Parámetros
+
+| Parámetro | Por defecto | Significado |
+| --- | --- | --- |
+| `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
+| `overwrite` | `false` | Reemplazar el ciclo de sondeos y computar la serie aunque no haya nada cargado desde el último compute |
+| `dry_run` | `false` | No escribir nada: la carga lee y comprueba, la serie se detiene tras las desviaciones y la publicación va a `site-dry/v1` |
+| `verbose` | `1` | Detalle de la salida por consola (los niveles de `publish`: 0 cabeceras y resumen, 1 líneas por ámbito, 2 fases, 3 salida del modelo) |
+| `stop_on_error` | `true` | Parar al primer fallo; `false` sigue con todo, publica lo que haya e informa al final |
+| `force` | `false` | Publicar dentro de la veda y dar de alta las encuestadoras y los medios nuevos en la carga |
+| `n_sim` | `1000` | Simulaciones por modo; `es` se publica con `10000` |
+| `seed` | `42` | Semilla |
+| `drange` | `6` | Ventana de sondeos del pronóstico |
+| `max_fc` | `10` | Pasos máximos del pronóstico |
+| `alpha` | `0.05` | Nivel de los intervalos |
+| `today` | hoy (Europe/Madrid) | Solo para pruebas y ensayos (fecha de la guarda LOREG y ancla `as_of` del promedio, `YYYY-MM-DD`) |
+| `years` | `null` | Años del artículo que lee la carga (`["2026"]`); no se combina con `overwrite` |
+
+### Estados y resumen
+
+`results[ámbito]` agrupa los cuatro resultados del ámbito (`polls`, `compute`, `forecast`, `analysis`) y
+`results['parties']` el del catálogo de partidos; cada uno lleva los estados de su pipeline (`loaded`/`checked`,
+`computed`, `published`, y `skipped`, `refused` o `failed`). Un ejemplo de salida:
+
+```
+es: polls loaded (5 read, 2 saved, 2026-11-29) in 38 s
+es: series computed (4010 polls, 15 events, 7 featured) in 1500 s
+es: series skipped (nothing loaded since the last compute)
+es: published 20261104-101500 (...)
+es: analysis published (event 2026-11-29, 31 pollsters) in 12 s
+parties: 112 partidos
+```
+
+Con la parada por defecto, un fallo termina con `RuntimeError: update: failed scopes: es (polls)` (o `(series)`)
+sin que el grupo siguiente haya empezado; el aviso final, el recorte de Pushover y el código de salida son los de
+"Aviso final y código de salida" en "Publicar".
+
+### Pasos de Luis
+
+1. Crear las marcas en la base: `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD COLUMN computed_at
+   timestamp;`.
+2. Desplegar la imagen con el código nuevo (y `python deploy/ecs/job.py --register` sólo si cambió la definición de
+   la web, ver "Jobs desde ECS").
+3. Lanzar el primer `update` sin `overwrite`: como todas las elecciones cuentan como pendientes, computa todo una vez;
+   desde entonces la serie sólo se recalcula donde se cargó algo.
+
+En Docker: `RUN_JOB='update {"scopes":["es"],"n_sim":10000}'`. Como tarea de ECS:
+`python deploy/ecs/job.py update '{"scopes":["es"],"n_sim":10000}' --follow`.
 
 ## Ensayos de operación
 

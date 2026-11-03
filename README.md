@@ -27,10 +27,22 @@ ver `deploy/README.md`. Como tarea de ECS Fargate se lanzan desde el portátil c
 `python deploy/ecs/job.py <job> '{...}' [--follow]` (ver "Jobs desde ECS" en `deploy/README.md`).
 
 Cada acción de un job es un pipeline de MTpy en `mtpy/pipelines/<job>/` y los jobs son `SequenceJob`s. Con
-`"stop_on_error": true` el job para en el primer ámbito que falla; por defecto sigue con todos. Al final envía un
+`"stop_on_error": true` el job para en el primer ámbito que falla; por defecto sigue con todos, salvo `update`, que
+para al primer fallo por defecto (`"stop_on_error": false` para seguir). Al final envía un
 único aviso con el resumen y el proceso sale con código 1 si algo falló. Una acción se puede lanzar sola con
 `python job.py pipeline '{"select":"publish.backtest","chunks":"es,es-md"}'`; los detalles están en
 `deploy/README.md`.
+
+### `update`: carga, series y publicación de una vez
+
+Encadena `load.polls`, `compute.compute` y `publish.forecast`, `analysis` y `parties` de los ámbitos pedidos en una
+sola tarea. La serie sólo se computa en los ámbitos con algo cargado desde su último compute (`overwrite` recarga el
+ciclo y lo computa todo), y para al primer fallo. Parámetros y pasos en "Actualizar" de `deploy/README.md`.
+
+```bash
+python job.py update '{"scopes":["es"],"n_sim":10000}'
+python job.py update '{"scopes":["es"],"overwrite":true}'
+```
 
 ### `compute`: series de sondeos y ratings
 

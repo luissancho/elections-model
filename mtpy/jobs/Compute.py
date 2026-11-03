@@ -89,10 +89,10 @@ class Compute(SequenceJob):
         Returns
         -------
         dict[str, dict]
-            Result of each scope (of the last action that ran on it): ``status`` (``computed``, ``skipped`` or ``failed``),
-            ``action`` (``series`` or ``ratings``) and, when computed, the figures of `compute.compute_scope` or
-            `compute.rate_scope`; when failed, the ``reason``. The ``catalogues`` action is keyed ``'catalogues'``,
-            with the figures of `compute.replicate_catalogues`.
+            Result of each scope (of the last action that ran on it): ``status`` (``computed``, ``skipped`` or
+            ``failed``), ``action`` (``series`` or ``ratings``) and, when computed, the figures of
+            `compute.compute_scope` or `compute.rate_scope`; when failed, the ``reason``. The ``catalogues`` action is
+            keyed ``'catalogues'``, with the figures of `compute.replicate_catalogues`.
 
         Raises
         ------
