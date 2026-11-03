@@ -61,8 +61,10 @@ class Tune(ScopePipeline):
             Arguments of `tuning.tuning_scope`, already normalised by the job.
         cycles : list of str, optional
             Elections (``YYYY-MM-DD``) the tuning is restricted to (see `restrict_cycles`); every cycle of the
-            scope by default. In ``shrinkage`` they make the run a part of the phase, named after them (sorted,
-            joined by ``_``), for ``merge`` to join.
+            scope by default. In ``shrinkage`` they make the run a part of the phase, named after the cycles kept
+            (sorted, joined by ``_``), for ``merge`` to join: a part evaluates the whole product of the values of
+            ``tau``, ``he_n_iter`` and ``herd_prior`` (18 configurations with the grid of the spec, three times the
+            6 of the descent of the whole phase), so the merge is exactly the whole phase.
         workers : int, default 1
             Processes running the cuts.
         runner : callable, optional
@@ -75,13 +77,14 @@ class Tune(ScopePipeline):
         The result is ``{'status': 'completed', ...figures}`` (those of `tuning.tuning_scope`),
         ``{'status': 'skipped', 'reason'}`` or ``{'status': 'failed', 'reason'}``, each with its ``warnings``.
         """
-        part = '_'.join(sorted(cycles)) if mode == 'shrinkage' and cycles is not None else None
-
         def work():
+            kept = None if cycles is None else restrict_cycles(chunk, cycles)
+            part = None
+            if mode == 'shrinkage' and kept is not None:
+                part = '_'.join(sorted(date for dates in kept.values() for date in dates))
             try:
                 figures = (runner or tuning.tuning_scope)(
-                    chunk, out=out, mode=mode, configs=configs, grid=grid,
-                    cycles=None if cycles is None else restrict_cycles(chunk, cycles), cut_days=cut_days,
+                    chunk, out=out, mode=mode, configs=configs, grid=grid, cycles=kept, cut_days=cut_days,
                     horizons=horizons, rounds=rounds, verbose=max(0, self.verbose - 1), stats=stats,
                     workers=workers, part=part)
             except (tuning.NothingToTune, FileNotFoundError) as e:

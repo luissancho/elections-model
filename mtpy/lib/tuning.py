@@ -10,6 +10,7 @@ of the backtest, under `TUNING_PREFIX` instead of `backtest/results`.
 """
 import copy
 import functools
+import itertools
 import json
 import multiprocessing
 import os
@@ -1183,7 +1184,8 @@ def boot_worker() -> None:
 
     Every process of the pool owns its app and its SQLAlchemy engine: no connection is shared between processes.
     The queries of psycopg2 wait in Python (`psycopg2.extras.wait_select`) instead of inside libpq, so the watchdog
-    of a cut (`timed_call`) can stop a query hung on a dead link.
+    of a cut (`timed_call`) can stop a query hung on a dead link. That green mode refuses COPY and large objects:
+    the workers only read with plain queries, and must stay that way.
     """
     import psycopg2.extensions
     import psycopg2.extras
@@ -1254,6 +1256,58 @@ def pooled_outcomes(tasks: list[tuple], workers: int, initializer: Optional[Call
             for message, category in outcome['warnings']:
                 warnings.warn(message, category)
             yield outcome
+
+
+def record_cuts(cuts: list[tuple], outcomes, scope: str, runner: Optional[Callable], horizons: tuple[int, ...],
+                max_fc: Optional[int], verbose: int, cut_rows: list, prediction_frames: list, score_rows: list) -> None:
+    """
+    Run (or take from the pool) every cut of `run_tuning` and append its rows to the tables, in the order of `cuts`.
+
+    Parameters
+    ----------
+    cuts : list of tuple
+        `(config, cycle, cut)` of each cut, in order.
+    outcomes : iterator or None
+        The outcomes of the pool (`pooled_outcomes`), in the order of `cuts`; None runs each cut here.
+    scope, runner, horizons, max_fc, verbose
+        Those of `run_tuning`.
+    cut_rows, prediction_frames, score_rows : list
+        Rows of `cuts`, frames of `polls` and rows of the scores, appended to.
+    """
+    for config, cycle, cut in cuts:
+        label = config.get('label')
+        partition, event_date = cycle['partition'], cycle['event_date']
+        keys = {'config': label, 'partition': partition, 'event_date': event_date, 'cut': pd.Timestamp(cut)}
+        if outcomes is not None:
+            outcome = next(outcomes)
+            result, error = outcome['result'], outcome['error']
+        else:
+            run = runner or functools.partial(run_cut, event_params=cycle['event_params'])
+            try:
+                result, error = run_with_retries(run, scope, event_date, cut, config, horizons=horizons,
+                                                 max_fc=max_fc, verbose=max(verbose - 1, 0)), None
+            except Exception as e:
+                result, error = None, str(e)
+        if error is not None:
+            warnings.warn('Tuning {} {} {} cut {:%Y-%m-%d} skipped: {}'.format(scope, label, event_date,
+                                                                               pd.Timestamp(cut), error))
+            cut_rows.append(keys | {'error': error})
+            continue
+
+        meta = result['meta']
+        cut_rows.append(keys | {
+            'n_polls': meta.get('n_polls'), 'n_overrides': meta.get('n_overrides', 0),
+            'n_unpredicted': meta.get('n_unpredicted', 0), 'seconds': result['seconds'],
+            'autocorr': result['autocorr'], 'roughness': result['roughness'], 'error': None
+        } | {'rmse{}'.format(score['k']): score['rmse'] for score in result['scores']})
+        prediction_frames.append(result['polls'].assign(**keys)[list(keys) + list(result['polls'].columns)])
+        for score in result['scores']:
+            score_rows.append(keys | {name: score[name] for name in ('k', 'n_polls', 'n_cells', 'rmse', 'mae',
+                                                                      'skill')}
+                              | {'autocorr': result['autocorr'], 'roughness': result['roughness']})
+        if verbose > 0:
+            print('Tuning {} {} {} cut {:%Y-%m-%d} ({} days): {:.1f} s'.format(
+                scope, label, event_date, pd.Timestamp(cut), meta.get('drange'), result['seconds']), flush=True)
 
 
 def run_tuning(
@@ -1341,42 +1395,11 @@ def run_tuning(
         outcomes = None
 
     cut_rows, prediction_frames, score_rows = [], [], []
-    for config, cycle, cut in cuts:
-        label = config.get('label')
-        partition, event_date = cycle['partition'], cycle['event_date']
-        keys = {'config': label, 'partition': partition, 'event_date': event_date, 'cut': pd.Timestamp(cut)}
+    try:
+        record_cuts(cuts, outcomes, scope, runner, horizons, max_fc, verbose, cut_rows, prediction_frames, score_rows)
+    finally:
         if outcomes is not None:
-            outcome = next(outcomes)
-            result, error = outcome['result'], outcome['error']
-        else:
-            run = runner or functools.partial(run_cut, event_params=cycle['event_params'])
-            try:
-                result, error = run_with_retries(run, scope, event_date, cut, config, horizons=horizons,
-                                                 max_fc=max_fc, verbose=max(verbose - 1, 0)), None
-            except Exception as e:
-                result, error = None, str(e)
-        if error is not None:
-            warnings.warn('Tuning {} {} {} cut {:%Y-%m-%d} skipped: {}'.format(scope, label, event_date,
-                                                                               pd.Timestamp(cut), error))
-            cut_rows.append(keys | {'error': error})
-            continue
-
-        meta = result['meta']
-        cut_rows.append(keys | {
-            'n_polls': meta.get('n_polls'), 'n_overrides': meta.get('n_overrides', 0),
-            'n_unpredicted': meta.get('n_unpredicted', 0), 'seconds': result['seconds'],
-            'autocorr': result['autocorr'], 'roughness': result['roughness'], 'error': None
-        } | {'rmse{}'.format(score['k']): score['rmse'] for score in result['scores']})
-        prediction_frames.append(result['polls'].assign(**keys)[list(keys) + list(result['polls'].columns)])
-        for score in result['scores']:
-            score_rows.append(keys | {name: score[name] for name in ('k', 'n_polls', 'n_cells', 'rmse', 'mae',
-                                                                      'skill')}
-                              | {'autocorr': result['autocorr'], 'roughness': result['roughness']})
-        if verbose > 0:
-            print('Tuning {} {} {} cut {:%Y-%m-%d} ({} days): {:.1f} s'.format(
-                scope, label, event_date, pd.Timestamp(cut), meta.get('drange'), result['seconds']), flush=True)
-    if outcomes is not None:
-        outcomes.close()
+            outcomes.close()   # stops the pool also when the loop raises
 
     rmse_columns = ['rmse{}'.format(k) for k in horizons]
     cuts = pd.DataFrame(cut_rows, columns=CUT_COLUMNS + rmse_columns)
@@ -1472,6 +1495,7 @@ def run_search(
     grid: dict = GRID,
     rounds: Optional[int] = None,
     cut_days: Optional[int] = None,
+    product: bool = False,
     **kwargs
 ) -> dict[str, Any]:
     """
@@ -1490,6 +1514,12 @@ def run_search(
     - `'check'`: no search; `start` with everything on and the normalised default (label `'default'`) are scored
       on the `check` cycles. When they are the same configuration only the default runs; a `start` labelled
       `'default'` (or unlabelled) that differs from it is relabelled `'best'`.
+
+    With `product` (a part of a search phase, see `tuning_scope`) there is no descent: every configuration of the
+    product of the values of the keys of the phase is evaluated from `start` (the values of `grid` plus the value of
+    `start` when it is not among them, so every configuration a descent from `start` can visit is there; repeated
+    configurations once, by `config_key`), and `best` is `start`. Each trial is then one configuration (`key`
+    `'product'`), so `merge_parts` can repeat the descent of the whole phase on the joined parts.
 
     An unlabelled start of a search is labelled `'start'`. A configuration with a failed cut gets NaN figures and
     is never kept (`search_figures`); a failed cut of the start of a search, or of either configuration of the
@@ -1514,6 +1544,8 @@ def run_search(
         Rounds of the descent; 2 in phase 1 and 1 in phase 2 by default.
     cut_days : int, optional
         Days between two cuts; 7 in phase 1 and in the check, 14 in phase 2 by default.
+    product : bool, optional
+        Evaluate the product of the values of the keys of the phase instead of descending (not in the check).
     **kwargs
         `cycles` (`{'search': [...], 'check': [...]}`, `search_cycles(scope)` by default), and `horizons`
         (must include 7 and 28), `max_fc`, `runner`, `verbose`, `workers` and `initializer` of `run_tuning`.
@@ -1538,6 +1570,8 @@ def run_search(
     """
     if phase not in PHASES:
         raise ValueError('Unknown phase {!r}, expected one of {}'.format(phase, list(PHASES)))
+    if product and phase == 'check':
+        raise ValueError('The check has no product to evaluate')
     setup = PHASES[phase]
     rounds = setup['rounds'] if rounds is None else rounds
     cut_days = setup['cut_days'] if cut_days is None else cut_days
@@ -1600,6 +1634,20 @@ def run_search(
                 raise TuningFailed('check of {} on {}: {}'.format(config.get('label'), scope, reason))
         best = start
         trials = pd.DataFrame(columns=TRIAL_COLUMNS + ['evaluation', 'config_key'])
+    elif product:
+        configs = product_configs(start, grid, order)
+        figures = evaluate_many(configs)
+        start_key = config_key(effective_config(start))
+        if start_key in failed:
+            raise TuningFailed('start {} of the {} product on {}: {}'.format(start.get('label'), phase, scope,
+                                                                            failed[start_key]))
+        best = start
+        trials = pd.DataFrame([
+            {'round': 0, 'key': 'product', 'value': None, 'label': config.get('label'),
+             **figures[config_key(config)], 'chosen': config_key(effective_config(config)) == start_key,
+             'evaluation': runs[config_key(effective_config(config))][0],
+             'config_key': config_key(effective_config(config))} for config in configs
+        ], columns=TRIAL_COLUMNS + ['evaluation', 'config_key'])
     else:
         trial_keys = [config_key(effective_config(start))]
 
@@ -1627,7 +1675,47 @@ def run_search(
     concat = {name: pd.concat(frames, ignore_index=True) for name, frames in tables.items()}
 
     return {'best': best, 'trials': trials, **concat, 'configs': labels, 'cycles': cycles, 'cut_days': cut_days,
-            'rounds': rounds if phase != 'check' else None}
+            'rounds': rounds if phase != 'check' and not product else None}
+
+
+def product_configs(start: dict[str, Any], grid: dict, order: list[str]) -> list[dict]:
+    """
+    Every configuration of the product of the values of some keys, applied on a start.
+
+    Parameters
+    ----------
+    start : dict
+        Normalised starting configuration (`normalize_config`).
+    grid : dict
+        Values of each key.
+    order : list of str
+        Keys of the product, in the order they are applied.
+
+    Returns
+    -------
+    list of dict
+        `start` first, then each configuration of the product not seen yet (by the `config_key` of its effective
+        configuration), labelled `'key=value, ...'`. The values of each key are those of `grid` plus that of `start`
+        when it is not among them: every configuration a coordinate descent from `start` over `order` can visit.
+    """
+    values = {}
+    for key in order:
+        own = setting_of(start, key)
+        values[key] = list(grid[key]) + ([] if own in grid[key] else [own])
+
+    out, seen = [start], {config_key(effective_config(start))}
+    for combination in itertools.product(*(values[key] for key in order)):
+        config = start
+        for key, value in zip(order, combination):
+            if value != setting_of(config, key):
+                config = apply_setting(config, key, value)
+        config = {**config, 'label': ', '.join('{}={}'.format(key, value) for key, value in zip(order, combination))}
+        key = config_key(effective_config(config))
+        if key not in seen:
+            seen.add(key)
+            out.append(config)
+
+    return out
 
 
 def part_figures(trials: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
@@ -1672,9 +1760,10 @@ def merge_parts(
 
     The figures of a configuration are those `run_search` would give it on the cycles of every part together: the
     mean over the cycles of the RMSE of each cycle at k = 7 and 28 and of its roughness, every cycle weighing the
-    same. A configuration the joined descent tries that some cycle has not run (each part followed its own path)
-    has NaN figures and is never kept; it is warned about. The result is exact when every configuration the joined
-    descent tries ran in every part, as with a single key in the grid.
+    same. Parts that evaluated the product of the keys of the phase (`run_search` with `product`, what
+    `tuning_scope` runs for a part) hold every configuration the descent can visit, so the result is that of the
+    whole phase run at once. A configuration some cycle has not run (parts from a smaller grid, or from their own
+    descents) has NaN figures and is never kept; it is warned about.
 
     Parameters
     ----------
@@ -1866,10 +1955,17 @@ def tuning_scope(
     it (the shrinkage one overwrites the smoothing one).
 
     The shrinkage phase can be split into parts (one per cycle, for example, in separate tasks): a run with `part`
-    writes only `cuts-`, `scores-` and `trials-shrinkage-{part}.csv` and `run-shrinkage-{part}.json`, and never
-    `best.json`; the `merge` mode then joins the parts of the folder, repeats the descent on the joined table
-    (`merge_parts`) and writes `best.json`, `trials-shrinkage.csv`, `scores-shrinkage.csv` (the scores of every
-    part, with its `part`) and `run.json`.
+    does not descend but evaluates the whole product of the values of `tau`, `he_n_iter` and `herd_prior` from the
+    start (`run_search` with `product`: 18 configurations with the grid of the spec, three times the 6 of the
+    descent of the whole phase), writes only `cuts-`, `scores-` and `trials-shrinkage-{part}.csv` and
+    `run-shrinkage-{part}.json` (with `search` `'product'` and its `start`), and never `best.json`. The `merge`
+    mode then joins the parts of the folder and repeats the descent of the phase on the joined table
+    (`merge_parts`): the same result as the whole phase run at once, since every configuration that descent can
+    visit is in every part. It starts from the start the parts recorded (`best.json` only for parts without
+    one), so a second merge gives the same result, and writes `best.json`, `trials-shrinkage.csv` and
+    `trials.csv` (the joined descent), `scores-shrinkage.csv` and `scores.csv` (the scores of every part, with its
+    `part`), `cuts.csv` (the cuts of every part) and `run.json`, and removes the `polls.csv` of a previous run (the
+    parts keep no predictions).
 
     Parameters
     ----------
@@ -1960,7 +2056,8 @@ def tuning_scope(
                    'cycles': cycles, 'cut_days': cut_days, 'rounds': None}
     else:
         result = run_search(scope, phase=mode, start=start, grid=grid or GRID, rounds=rounds, cut_days=cut_days,
-                            cycles=cycles, horizons=horizons, runner=runner, verbose=verbose, workers=workers)
+                            cycles=cycles, horizons=horizons, runner=runner, verbose=verbose, workers=workers,
+                            product=part is not None)
     if result['cuts'].empty:
         raise NothingToTune('no cut with enough polls in the cycles')
     evaluated = result['cuts'].loc[result['cuts']['error'].isnull()]
@@ -1983,9 +2080,13 @@ def tuning_scope(
             best = best | {'house_effects': True, 'dispersion': True, 'herding': True, 'label': best_label(best)}
             fs.write_bytes(json.dumps(best, indent=1).encode('utf-8'), results_path(folder, 'best.json'))
 
+    if part is not None:
+        extra = {'search': 'product', 'part': part, 'start': start}
+    else:
+        extra = {} if mode == 'evaluate' else {'search': 'descent'}
     record = run_record(scope, mode, prov, stats, configs=result['configs'], cycles=result['cycles'],
                         cut_days=result['cut_days'], horizons=[int(k) for k in horizons], rounds=result['rounds'],
-                        seconds=round(seconds['run'], 1), **({} if part is None else {'part': part}))
+                        seconds=round(seconds['run'], 1), **extra)
     run_name = 'run.json' if part is None else 'run-shrinkage-{}.json'.format(part)
     fs.write_bytes(json.dumps(record, indent=1).encode('utf-8'), results_path(folder, run_name))
     seconds['write'] = time.perf_counter() - began - seconds['run']
@@ -2056,7 +2157,9 @@ def merge_scope(
     folder : str
         Folder of the scope.
     start : dict
-        Start of the parts (the `best.json` of the smoothing phase).
+        Start of the parts when they recorded none (the `best.json` of the folder); the start recorded in their
+        `run-shrinkage-{part}.json` otherwise, so a second merge (after the first rewrote `best.json`) repeats the
+        first.
     grid : dict, optional
         Values of each key (`GRID`).
     rounds : int, optional
@@ -2077,12 +2180,23 @@ def merge_scope(
     NothingToTune
         No part in the folder.
     TuningFailed
-        The start is missing from some cycle of the parts.
+        The start is missing from some cycle of the parts, or the parts recorded different starts.
     """
     began = time.perf_counter() if began is None else began
     parts = read_parts(fs, folder)
     if not parts:
         raise NothingToTune('no shrinkage part in {}'.format(describe_source(fs, folder)))
+    records = {}
+    for name in parts:
+        path = results_path(folder, 'run-shrinkage-{}.json'.format(name))
+        if fs.exists(path):
+            records[name] = json.loads(fs.read_bytes(path).decode('utf-8'))
+    starts = {name: record['start'] for name, record in records.items() if record.get('start') is not None}
+    if starts:
+        keys = {config_key(effective_config(normalize_config(own))) for own in starts.values()}
+        if len(keys) > 1:
+            raise TuningFailed('the shrinkage parts {} start from different configurations'.format(sorted(starts)))
+        start = next(iter(starts.values()))
     result = merge_parts(parts, start, grid=grid, rounds=rounds)
     start_key = result['trials']['config_key'].iloc[0]
     scores = pd.concat([part_scores.assign(part=name) for name, (_, part_scores) in parts.items()], ignore_index=True)
@@ -2096,8 +2210,19 @@ def merge_scope(
     best = result['best'] | {'house_effects': True, 'dispersion': True, 'herding': True,
                              'label': best_label(result['best'])}
     fs.write_bytes(json.dumps(best, indent=1).encode('utf-8'), results_path(folder, 'best.json'))
-    fs.write_csv(result['trials'], results_path(folder, 'trials-shrinkage.csv'))
-    fs.write_csv(scores, results_path(folder, 'scores-shrinkage.csv'))
+    cuts = []
+    for name in parts:
+        path = results_path(folder, 'cuts-shrinkage-{}.csv'.format(name))
+        if fs.exists(path):
+            cuts.append(fs.read_csv(path).assign(part=name))
+    for name in ('trials-shrinkage.csv', 'trials.csv'):
+        fs.write_csv(result['trials'], results_path(folder, name))
+    for name in ('scores-shrinkage.csv', 'scores.csv'):
+        fs.write_csv(scores, results_path(folder, name))
+    fs.write_csv(pd.concat(cuts, ignore_index=True) if cuts else pd.DataFrame(columns=CUT_COLUMNS + ['part']),
+                 results_path(folder, 'cuts.csv'))
+    if fs.exists(results_path(folder, 'polls.csv')):
+        fs.remove(results_path(folder, 'polls.csv'))
     rounds = PHASES['shrinkage']['rounds'] if rounds is None else rounds
     record = run_record(scope, 'merge', prov, stats, parts=sorted(parts), cycles=result['cycles'], rounds=rounds,
                         missing=result['missing'], seconds=round(seconds['run'], 1))

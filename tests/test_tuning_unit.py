@@ -943,7 +943,8 @@ def test_tuning_scope_keeps_the_scores_of_each_search_phase_beside_its_trials(fr
 
 
 class ShrinkCut(FakeCut):
-    """`FakeCut` whose RMSE depends on the cycle, the herding prior and tau: each cycle prefers other values."""
+    """`FakeCut` whose RMSE depends on the cycle, the herding prior, tau and the backfitting iterations: each cycle
+    prefers other values (2015 tau 0.04, 2019 tau 0.08, as the real cycles diverge after the first key)."""
     BASE = {'2015-12-20': {2.: 1.0, 5.: 2.0, 10.: 3.0}, '2019-11-10': {2.: 3.0, 5.: 2.5, 10.: 1.5}}
 
     def __call__(self, scope, event_date, cut, config, horizons=(7, 28), max_fc=None, verbose=0):
@@ -951,6 +952,8 @@ class ShrinkCut(FakeCut):
         base = self.BASE[event_date][config['disp_params']['herd_prior']]
         if config['he_params']['tau'] == 0.04:
             base += -0.5 if event_date == '2015-12-20' else 0.6
+        if config['he_params']['n_iter'] == 1:
+            base += -0.1 if event_date == '2015-12-20' else 0.05
         out['scores'] = [s | {'rmse': base + s['k'] / 100} for s in out['scores']]
         return out
 
@@ -1007,15 +1010,82 @@ def test_tuning_scope_merge_repeats_the_descent_on_the_joined_parts_as_the_whole
     assert run['cycles'] == {'search': ['2015-12-20', '2019-11-10']}
 
 
+def test_tuning_scope_merge_of_product_parts_is_the_whole_run_with_the_whole_shrinkage_grid(fresh_app, tmp_path,
+                                                                                        monkeypatch):
+    # each cycle on its own would descend elsewhere (2015 keeps tau 0.04, 2019 tau 0.08); the joined descent goes
+    # on to he_n_iter and herd_prior from tau 0.08, configurations a part only has because it ran the whole product
+    _, prov = _shrinkage_parts(tmp_path, monkeypatch, None)
+    figures = tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', stats=lambda scope: {}, prov=prov)
+    parts, whole = tmp_path / 'parts' / 'es-md', tmp_path / 'whole' / 'es-md'
+    merged = json.load(open(parts / 'best.json'))
+    assert merged == json.load(open(whole / 'best.json')) == figures['best']
+    assert merged['label'] == "bw=('fixed', 45); he_n_iter=1; herd_prior=2.0"
+    assert merged['he_params'] == {'tau': 0.08, 'n_iter': 1} and merged['disp_params']['herd_prior'] == 2.
+    columns = ['round', 'key', 'value', 'label', 'rmse7', 'rmse28', 'roughness', 'chosen', 'config_key']
+    pd.testing.assert_frame_equal(pd.read_csv(parts / 'trials-shrinkage.csv')[columns],
+                                  pd.read_csv(whole / 'trials-shrinkage.csv')[columns])
+    for name in ('2015-12-20', '2019-11-10'):
+        trials = pd.read_csv(parts / 'trials-shrinkage-{}.csv'.format(name))
+        assert len(trials) == 3 * 2 * 3 and set(trials['key']) == {'product'}
+        assert trials['chosen'].tolist() == [True] + [False] * 17   # the start, first; nothing is chosen in a part
+        run = json.load(open(parts / 'run-shrinkage-{}.json'.format(name)))
+        assert run['search'] == 'product' and run['rounds'] is None and run['start']['reg_params']['bw'] == 45
+    assert json.load(open(whole / 'run.json'))['search'] == 'descent'
+
+
 def test_tuning_scope_merge_never_keeps_a_configuration_missing_from_a_part(fresh_app, tmp_path, monkeypatch):
-    grid = {'tau': [0.04, 0.08], 'herd_prior': [2., 10.]}
-    _, prov = _shrinkage_parts(tmp_path, monkeypatch, grid)
+    _, prov = _shrinkage_parts(tmp_path, monkeypatch, {'tau': [0.04, 0.08]})   # parts without herd_prior
     with pytest.warns(UserWarning, match='missing from some part'):
-        tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', grid=grid, stats=lambda scope: {},
-                     prov=prov)
+        tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', grid={'tau': [0.04, 0.08],
+                                                                               'herd_prior': [2., 10.]},
+                     stats=lambda scope: {}, prov=prov)
     trials = pd.read_csv(tmp_path / 'parts' / 'es-md' / 'trials-shrinkage.csv')
     herd = trials.loc[trials['key'] == 'herd_prior']
-    assert herd['rmse7'].isna().any() and not herd.loc[herd['rmse7'].isna(), 'chosen'].any()
+    assert herd['rmse7'].isna().all() and not herd['chosen'].any()
+
+
+def test_tuning_scope_merge_writes_its_own_tables_and_a_second_merge_repeats_the_first(fresh_app, tmp_path,
+                                                                                      monkeypatch):
+    _, prov = _shrinkage_parts(tmp_path, monkeypatch, None)
+    folder = tmp_path / 'parts' / 'es-md'
+    (folder / 'polls.csv').write_text('stale')
+    tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', stats=lambda scope: {}, prov=prov)
+    first = json.load(open(folder / 'best.json'))
+    pd.testing.assert_frame_equal(pd.read_csv(folder / 'trials.csv'), pd.read_csv(folder / 'trials-shrinkage.csv'))
+    scores = pd.read_csv(folder / 'scores.csv')
+    assert set(scores['part']) == {'2015-12-20', '2019-11-10'} and scores['config'].nunique() == 18
+    cuts = pd.read_csv(folder / 'cuts.csv')
+    assert len(cuts) == 2 * 18 and set(cuts['part']) == {'2015-12-20', '2019-11-10'}
+    assert not (folder / 'polls.csv').exists()
+    tuning_scope('es-md', out=str(tmp_path / 'parts'), mode='merge', stats=lambda scope: {}, prov=prov)
+    assert json.load(open(folder / 'best.json')) == first   # from the start the parts recorded, not this best.json
+
+
+def test_run_search_refuses_a_product_in_the_check(monkeypatch):
+    _patch_cycle(monkeypatch, ['2023-06-23'], {'search': [], 'check': ['2023-07-23']})
+    with pytest.raises(ValueError, match='product'):
+        run_search('es', phase='check', product=True, runner=FakeCut())
+
+
+def test_run_tuning_stops_the_pool_when_recording_a_cut_raises(monkeypatch):
+    _patch_cycle(monkeypatch, ['2019-10-11', '2019-10-18'])
+    closed, alive = [], []
+
+    def generator(tasks):
+        try:
+            for _ in tasks:
+                yield {'result': {}, 'error': None, 'warnings': []}   # no 'meta': recording it raises
+        finally:
+            closed.append(True)
+
+    def outcomes(tasks, workers, initializer):
+        alive.append(generator(tasks))   # a reference held elsewhere: only an explicit close ends it
+        return alive[-1]
+
+    monkeypatch.setattr(tuning, 'pooled_outcomes', outcomes)
+    with pytest.raises(KeyError):
+        run_tuning('es', [default_config()], cycles={'search': ['2019-11-10']}, runner=FakeCut(), workers=2)
+    assert closed == [True]
 
 
 def test_tuning_scope_merge_needs_parts_and_the_best_of_the_smoothing_phase(fresh_app, tmp_path, monkeypatch):

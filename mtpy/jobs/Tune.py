@@ -25,12 +25,15 @@ class Tune(SequenceJob):
     house effects and herding, from the ``best.json`` of phase 1) and ``check`` (the ``best.json`` against the
     default on the held-out cycles) also write ``trials-{mode}.csv`` and, the first two, ``best.json``;
     ``evaluate`` scores the configurations given. The search modes also keep ``scores-{mode}.csv`` beside
-    ``trials-{mode}.csv``. ``shrinkage`` with ``cycles`` is a part of the phase (named after its cycles: it writes
-    ``cuts-``, ``scores-`` and ``trials-shrinkage-{part}.csv`` and ``run-shrinkage-{part}.json``, never
-    ``best.json``), so the phase can run one cycle per task; ``merge`` joins the parts of the folder, repeats the
-    descent on the joined table and writes ``best.json`` (`tuning.merge_parts`). ``workers`` spreads the cuts of
-    each evaluation over that many processes, each with its own app and database engine (the tables are those of
-    the sequential run). Scopes are isolated: one that fails never stops the others (unless ``stop_on_error``),
+    ``trials-{mode}.csv``. ``shrinkage`` with ``cycles`` is a part of the phase (named after the cycles kept: it
+    evaluates the whole product of the values of ``tau``, ``he_n_iter`` and ``herd_prior`` from the start, 18
+    configurations with the grid of the spec instead of the 6 of the descent, so a part costs three times its share
+    of the whole phase; it writes ``cuts-``, ``scores-`` and ``trials-shrinkage-{part}.csv`` and
+    ``run-shrinkage-{part}.json``, never ``best.json``), so the phase can run one cycle per task; ``merge`` joins the
+    parts of the folder, repeats the descent on the joined table from the start the parts recorded and writes
+    ``best.json`` (`tuning.merge_parts`): the same result as the whole phase run at once. ``workers`` spreads the
+    cuts of each evaluation over that many processes, each with its own app and database engine (the tables are
+    those of the sequential run). Scopes are isolated: one that fails never stops the others (unless ``stop_on_error``),
     and the job exits with an error at the end if any failed. A scope with nothing to tune, or without the
     ``best.json`` that ``shrinkage``, ``check`` and ``merge`` start from, ends ``skipped`` and nothing is written
     for it; a tuning that cannot be scored (a failed cut of the start of a search or of the check, or every cut

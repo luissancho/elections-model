@@ -105,6 +105,13 @@ def test_tune_passes_the_workers_and_names_a_shrinkage_part_after_its_cycles(fre
         (8, '2011-05-22_2015-05-24'), (1, None), (1, None)]
 
 
+def test_tune_names_a_shrinkage_part_after_the_cycles_kept(fresh_app, patched, tmp_path):
+    runner = FakeScope()
+    p = evaluate(runner, tmp_path=tmp_path, mode='shrinkage', configs=None, cycles=['2015-05-24', '2019-05-26'])
+    assert runner.calls[0]['part'] == '2015-05-24'   # 2019-05-26 is not a cycle of es-md
+    assert p.result['warnings'] == ['2019-05-26 is not a cycle of es-md (ignored)']
+
+
 def seeded(tmp_path, scope):
     """A repository copy of the tuning tables of `scope` under `tmp_path/local`."""
     local = tmp_path / 'local'
