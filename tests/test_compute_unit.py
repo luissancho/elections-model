@@ -72,7 +72,8 @@ def phases(factory):
 def test_compute_scope_runs_the_sequence_of_the_loader_and_reports_each_phase():
     factory, featured, steps = FakeComputer(), [], []
     result = compute.compute_scope('es-md', save=True, verbose=2, progress=lambda step, seconds: steps.append(step),
-                                   computer=factory, featured=lambda scope: featured.append(scope) or 7)
+                                   computer=factory, featured=lambda scope: featured.append(scope) or 7,
+                                   mark=lambda scope, at: None, clock=lambda: 'T0')
     # pesos, destacados, pesos otra vez (el `featured` de los sondeos copia el del evento), errores, desviaciones;
     # y con una serie fresca (leen los errores guardados) deriva, efectos de casa, rebaño y, al final (su prior de
     # efectos de casa es la tabla que acaba de guardarse), los errores del promedio
@@ -102,7 +103,8 @@ def test_compute_scope_dry_run_stops_after_the_deviations_and_saves_nothing():
 
 def test_compute_scope_lets_a_failure_propagate():
     with pytest.raises(RuntimeError, match='boom errors'):
-        compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='errors'), featured=lambda scope: 0)
+        compute.compute_scope('es', save=True, computer=FakeComputer(fail_at='errors'), featured=lambda scope: 0,
+                              mark=lambda scope, at: None, clock=lambda: 'T0')
 
 
 def test_compute_scope_marks_the_scope_with_the_instant_it_started():

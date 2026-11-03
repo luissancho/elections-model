@@ -3,10 +3,20 @@ import importlib
 
 import pytest
 
+from mtpy.lib import compute as compute_lib
 from tests.test_compute_unit import FakeComputer
 
 module = importlib.import_module('mtpy.jobs.Compute')
 Compute = module.Compute
+
+
+@pytest.fixture(autouse=True)
+def marks(monkeypatch):
+    """`compute_scope` sin base: el reloj y la marca de `computed_at` sustituidos (anota las marcas)."""
+    seen = []
+    monkeypatch.setattr(compute_lib, 'db_now', lambda: 'T0')
+    monkeypatch.setattr(compute_lib, 'mark_computed', lambda scope, at: seen.append((scope, at)))
+    return seen
 
 
 @pytest.fixture

@@ -1,10 +1,22 @@
 """Tests de los pipelines `compute.Compute`, `compute.Ratings` y `compute.Catalogues` ejecutados sueltos, sin base."""
 import warnings
 
+import pytest
+
+from mtpy.lib import compute as compute_lib
 from mtpy.pipelines.compute.Catalogues import Catalogues
 from mtpy.pipelines.compute.Compute import Compute
 from mtpy.pipelines.compute.Ratings import Ratings
 from tests.test_compute_unit import FakeComputer
+
+
+@pytest.fixture(autouse=True)
+def marks(monkeypatch):
+    """`compute_scope` sin base: el reloj y la marca de `computed_at` sustituidos (anota las marcas)."""
+    seen = []
+    monkeypatch.setattr(compute_lib, 'db_now', lambda: 'T0')
+    monkeypatch.setattr(compute_lib, 'mark_computed', lambda scope, at: seen.append((scope, at)))
+    return seen
 
 
 def series(factory, scope='es', pipeline=Compute, position=(1, 2), **kwargs):
