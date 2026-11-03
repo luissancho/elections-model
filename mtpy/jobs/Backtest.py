@@ -10,6 +10,18 @@ from ..lib.publish import resolve_scopes
 CONFIG_TYPES = {'reg_params': dict, 'house_effects': bool, 'he_params': dict, 'dispersion': bool, 'herding': bool,
                 'disp_params': dict, 'weights': None, 'max_fc': int, 'label': str}
 
+# Keys each dict of parameters of a configuration may hold: the keywords the Forecaster's `set_reg_params`,
+# `set_he_params` and `set_disp_params` read (anything else would be ignored, running the live value under a tuned
+# label); `herding` is left out of `disp_params` because the switch of the configuration overrides it
+CONFIG_PARAMS = {
+    'reg_params': ('kernel', 'bw_type', 'bw', 'bw_kwargs', 'bw_cap', 'poly_deg', 'cov_type', 'cov_kwargs'),
+    'he_params': ('n_iter', 'min_polls', 'tau', 'prior_events', 'n_cap', 'year_decay', 'n_days', 'level_floor',
+                  'rel_cap', 'err_floor', 'prior'),
+    'disp_params': ('min_polls', 'n_prior', 'max_ratio', 'herd_series', 'herd_prior')
+}
+# Keys of `reg_params['bw_kwargs']`, the parameters of the adaptive bandwidth
+BW_KWARGS = ('n_iter', 'min_delta')
+
 # Loose arguments of the job a configuration also sets, with their defaults: a flag left at its default yields to
 # the configuration, a flag set to anything else must agree with it
 CONFIG_SWITCHES = {'house_effects': True, 'dispersion': True, 'herding': True, 'max_fc': 10}
@@ -126,7 +138,9 @@ class Backtest(SequenceJob):
         config : dict, str or None, default None
             Tuned configuration of the average (``tuning.default_config``, the ``best.json`` of the ``tune`` job), or
             the path of a JSON file with it (a relative path is taken from the working directory): the keys
-            ``reg_params``, ``he_params`` and ``disp_params`` (dicts), ``house_effects``, ``dispersion`` and
+            ``reg_params``, ``he_params`` and ``disp_params`` (dicts with only the keys the Forecaster's
+            ``set_*_params`` read, ``CONFIG_PARAMS``; ``bw_kwargs`` with ``n_iter`` and ``min_delta``; ``herding``
+            never in ``disp_params``), ``house_effects``, ``dispersion`` and
             ``herding`` (booleans), ``weights`` (``None`` or ``{"wspan": n}`` with an optional ``"ol_max"``,
             positive integers), ``max_fc`` (an integer of at least 0) and ``label`` (a string), no other. Every case
             builds its model with it (``backtest.run_case``): the configuration wins over ``house_effects``,
@@ -327,8 +341,9 @@ class Backtest(SequenceJob):
         Raises
         ------
         ValueError
-            The file cannot be read or is not JSON, the value is not a dict, a key is missing or unknown, or a
-            value has the wrong type (see ``run``).
+            The file cannot be read or is not JSON, the value is not a dict, a key is missing or unknown, a
+            value has the wrong type, or ``reg_params``, ``he_params``, ``disp_params`` or ``bw_kwargs`` hold a
+            key the Forecaster does not read (``CONFIG_PARAMS``, ``BW_KWARGS``; see ``run``).
         """
         if value is None:
             return None
@@ -355,6 +370,16 @@ class Backtest(SequenceJob):
             if wrong or (key == 'max_fc' and item < 0):
                 raise ValueError('backtest: config {} must be {} (got {!r})'.format(
                     key, 'an integer of at least 0' if kind is int else 'a ' + kind.__name__, item))
+        for key, names in CONFIG_PARAMS.items():
+            unknown = sorted(set(value[key]) - set(names))
+            if unknown:
+                raise ValueError('backtest: config {} has unknown keys {} (expected some of {})'.format(
+                    key, unknown, ', '.join(names)))
+        bw_kwargs = value['reg_params'].get('bw_kwargs')
+        if bw_kwargs is not None:
+            if not isinstance(bw_kwargs, dict) or set(bw_kwargs) - set(BW_KWARGS):
+                raise ValueError('backtest: config reg_params bw_kwargs must be a dict with some of {} (got {!r})'
+                                 .format(', '.join(BW_KWARGS), bw_kwargs))
         weights = value['weights']
         if weights is not None:
             valid = isinstance(weights, dict) and 'wspan' in weights and set(weights) <= {'wspan', 'ol_max'} and all(

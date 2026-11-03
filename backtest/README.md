@@ -147,7 +147,7 @@ python job.py tune '{"action":"pull","scopes":["es"]}'
 
 - **Modos**:
   - `smoothing`, `shrinkage` y `check`: las fases y la comprobación;
-  - `evaluate`: puntúa las configuraciones dadas;
+  - `evaluate`: puntúa las configuraciones dadas. Su `"default"` es `default_config()` tal cual, con los pesos guardados en la base (que miran al futuro), mientras que la fila `default` de `check` es el default normalizado, con los pesos recalculados en el corte: las dos filas se llaman igual y no coinciden;
   - `merge`: une las partes.
 - **Dónde escribe**:
   - `backtest/run_tuning.py` escribe en la copia del repositorio.

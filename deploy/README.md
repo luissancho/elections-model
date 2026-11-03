@@ -268,7 +268,9 @@ funciona igual. Con las variables pero sin base alcanzable, 503 `database unavai
 log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`), y una conexión abierta cuyo enlace
 muere falla en unos 2 minutos en vez de quedarse colgada: keepalives de TCP (`keepalives_idle` 60 s, sondas cada
 10 s, 5 sondas), en todo lo que use la base (web, jobs, cuadernos) e inertes con el enlace sano (enmienda
-2026-11-02, tras un `tune` colgado más de una hora en un enlace móvil); las consultas no tienen límite
+2026-11-02, tras un `tune` colgado más de una hora en un enlace móvil). En los procesos del pool de `tune`
+(`workers`) psycopg2 espera con `wait_select` y conecta en asíncrono, así que libpq no aplica allí `connect_timeout`:
+lo que acota una conexión colgada es el vigilante de 15 minutos de cada corte. Las consultas no tienen límite
 salvo que se fije `DB_STATEMENT_TIMEOUT` (milisegundos). Para el contenedor de la web, pon
 `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env`: una consulta colgada da 503 `database unavailable` a los
 10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío (enmienda 2026-10-13: en ECS va en
@@ -902,7 +904,7 @@ force)») las fechas publicadas con modelo o serie en vez de republicarlas sin e
 | `shrinkage` | Fase 2: descenso sobre `tau`, `he_n_iter` y `herd_prior`, con todo encendido y desde el `best.json` de la fase 1. Con `cycles` es una parte de la fase: evalúa las 18 configuraciones del producto y no escribe `best.json` |
 | `merge` | Une las partes de la fase 2 de la carpeta y repite el descenso: el mismo `best.json` que la fase de una vez |
 | `check` | El `best.json` frente a la configuración vigente en los ciclos reservados (2023 y el ciclo en curso) |
-| `evaluate` | Puntúa las configuraciones de `configs` (`"default"` o ajustes de la rejilla) |
+| `evaluate` | Puntúa las configuraciones de `configs` (`"default"` o ajustes de la rejilla). Su `"default"` es `default_config()` tal cual, con los pesos guardados (miran al futuro); la fila `default` de `check` es el default normalizado, con los pesos recalculados en el corte: se llaman igual y no coinciden |
 
 Acciones:
 

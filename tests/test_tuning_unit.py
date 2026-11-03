@@ -1229,3 +1229,80 @@ def test_tuning_scope_saves_the_best_with_the_label_of_all_its_settings(fresh_ap
                            prov=lambda: {'commit': 'abc1234', 'dirty': False, 'versions': {}})
     best = json.load(open(tmp_path / 'es-md' / 'best.json', encoding='utf-8'))
     assert best['label'] == "bw=('fixed', 45); max_fc=0" and figures['best']['label'] == best['label']
+
+
+# --- Final fix wave: product from a hand-written start, late watchdog, unusable start ------------------------------
+
+def _hand_written_start():
+    """A start written by hand: `herd_prior` as an int and `bw_kwargs` without `min_delta` (same model, other form)."""
+    hand = {**default_config(), 'reg_params': {'bw_type': 'adaptive', 'bw_kwargs': {'n_iter': 3}},
+            'disp_params': {'herd_prior': 5}, 'label': 'start'}
+    return normalize_config(hand) | {'house_effects': True, 'dispersion': True, 'herding': True}
+
+
+def test_product_configs_writes_every_grid_value_as_the_descent_does_from_a_hand_written_start():
+    start = _hand_written_start()
+    order = ['bw', 'herd_prior']
+    products = {tuning.config_key(tuning.effective_config(config))
+                for config in tuning.product_configs(start, GRID, order)}
+    visited = []
+
+    def evaluate(config):
+        visited.append(tuning.config_key(tuning.effective_config(config)))
+        return {'rmse7': 1., 'rmse28': 1., 'roughness': 1.}
+
+    coordinate_descent(evaluate, start, GRID, order, rounds=2, normalize=normalize_config)
+    assert set(visited) <= products
+
+
+def test_merge_parts_finds_every_candidate_of_a_product_part_from_a_hand_written_start():
+    start = _hand_written_start()
+    configs = tuning.product_configs(start, GRID, ORDER_SHRINKAGE)
+    keys = [tuning.config_key(tuning.effective_config(config)) for config in configs]
+    trials = pd.DataFrame({'evaluation': range(len(keys)), 'config_key': keys, 'rmse7': 1., 'rmse28': 1.,
+                           'roughness': 1.})
+    scores = pd.DataFrame([{'evaluation': number, 'event_date': '2019-11-10', 'k': k, 'rmse': 1. + k / 100,
+                            'roughness': 1.} for number in range(len(keys)) for k in (7, 28)])
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        out = tuning.merge_parts({'2019-11-10': (trials, scores)}, start)
+    assert out['missing'] == [] and out['n_configs'] == 7   # start, tau 2, he_n_iter 1, herd_prior 3 (5.0 too)
+
+
+def test_timed_call_returns_the_result_when_the_watchdog_fires_after_the_cut_finished(monkeypatch):
+    import signal
+    real = signal.setitimer
+
+    def late_alarm(which, seconds, *args):
+        if seconds == 0:   # the alarm lands between `run` returning and the timer being stopped
+            signal.raise_signal(signal.SIGALRM)
+        return real(which, seconds, *args)
+
+    monkeypatch.setattr(signal, 'setitimer', late_alarm)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        assert tuning.timed_call(lambda value: {'value': value}, 3) == {'value': 3}
+    assert any('after the cut finished' in str(w.message) for w in caught)
+
+
+def test_timed_call_still_stops_a_cut_that_runs_past_the_watchdog(monkeypatch):
+    monkeypatch.setattr(tuning, 'CUT_TIMEOUT', 0.05)
+
+    def hang():
+        time.sleep(2)
+        return 'never'
+
+    with pytest.raises(tuning.CutTimeout):
+        tuning.timed_call(hang)
+
+
+@pytest.mark.parametrize('missing', ['rmse7', 'rmse28', 'roughness'])
+def test_coordinate_descent_refuses_a_start_without_figures(missing):
+    def evaluate(config):
+        figures = {'rmse7': 1., 'rmse28': 1., 'roughness': 1.}
+        return figures | ({missing: np.nan} if config.get('label') == 'start' else {})
+
+    start = {'a': 1, 'label': 'start'}
+    with pytest.raises(ValueError, match='start'):
+        coordinate_descent(evaluate, start, {'a': [1, 2]}, ['a'], rounds=1,
+                           setter=lambda config, key, value: {**config, key: value, 'label': f'{key}={value}'})

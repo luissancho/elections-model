@@ -209,7 +209,14 @@ def test_backtest_rejects_flags_that_contradict_the_config(fresh_app, patched, t
     tuned_config(max_fc=-1), tuned_config(max_fc=True), tuned_config(max_fc=2.5), tuned_config(label=3),
     tuned_config(weights={}), tuned_config(weights={'wspan': 0}), tuned_config(weights={'wspan': '7'}),
     tuned_config(weights={'wspan': 7, 'ol_max': 0}), tuned_config(weights={'wspan': 7, 'other': 1}),
-    tuned_config(weights=7)
+    tuned_config(weights=7),
+    # claves internas mal escritas: correrían el valor vivo con la etiqueta afinada
+    tuned_config(reg_params={'bw_typ': 'fixed', 'bw': 45}),
+    tuned_config(reg_params={'bw_type': 'adaptive', 'bw_kwargs': {'n_iters': 2}}),
+    tuned_config(reg_params={'bw_type': 'adaptive', 'bw_kwargs': 2}),
+    tuned_config(he_params={'tauu': 0.16}),
+    tuned_config(disp_params={'herd_priors': 10.}),
+    tuned_config(disp_params={'herding': False})   # el interruptor va arriba, no en disp_params
 ])
 def test_backtest_rejects_a_bad_config_before_running(fresh_app, patched, tmp_path, bad):
     runner = FakeRunner()
@@ -224,3 +231,22 @@ def test_backtest_rejects_a_config_file_that_is_not_json(fresh_app, patched, tmp
     path.write_text('{not json', encoding='utf-8')
     with pytest.raises(ValueError, match='backtest: config'):
         Backtest().run(scopes=['es'], out=str(tmp_path), config=str(path), runner=FakeRunner(), stats=stats)
+
+
+def test_backtest_config_inner_keys_are_those_of_the_forecaster_setters():
+    """Las claves admitidas en `reg_params`, `he_params` y `disp_params` son las que leen los `set_*_params`."""
+    from mtpy.lib.forecaster import Forecaster
+    fc = Forecaster.__new__(Forecaster)
+    assert set(module.CONFIG_PARAMS['reg_params']) == set(fc.set_reg_params())
+    assert set(module.CONFIG_PARAMS['he_params']) == set(fc.set_he_params())
+    assert set(module.CONFIG_PARAMS['disp_params']) == set(fc.set_disp_params()) - {'herding'}
+    assert set(module.BW_KWARGS) == set(fc.set_reg_params()['bw_kwargs'])
+
+
+def test_backtest_config_accepts_the_tuned_best_and_the_default():
+    """`backtest/tuning/best.json` y `tuning.default_config()` pasan la validación sin cambios."""
+    import os
+    from mtpy.lib.tuning import default_config
+    path = os.path.join(os.path.dirname(__file__), '..', 'backtest', 'tuning', 'best.json')
+    assert module.Backtest._config(path) == json.load(open(path, encoding='utf-8'))
+    assert module.Backtest._config(default_config()) == default_config()

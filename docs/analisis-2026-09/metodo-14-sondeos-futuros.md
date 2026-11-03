@@ -281,4 +281,8 @@ Las dos son decisiones de Luis.
 - **El arreglo de la regresión de grado 0 vive en el modelo** (`mtpy/core/utils/stat.py`). Antes todo ajuste con `poly_deg=0` fallaba; el grado 1, el que se usa, queda idéntico.
 - **La fase 2 movió dos ajustes por ganancias del nivel del ruido**: `he_n_iter` de 3 a 1 y `herd_prior` de 5 a 2, ≈ 0,05 % cada uno. El backtest lo confirma: T y P no se distinguen.
 - **La guarda de rugosidad (1,5 veces) compara con el punto de partida de cada fase.** En la fase 2 ese punto es el `best` de la fase 1, no la configuración vigente. En la comprobación la afinada queda en 1,03-1,05 veces la vigente.
+- **La configuración única se afinó sólo con `es`.**
+  - La spec cuenta las autonómicas como datos de la búsqueda (las anteriores a 2020) y de la comprobación (desde 2020), con una sola configuración para todos los ámbitos.
+  - Esas fases no se corrieron en los ámbitos autonómicos: la búsqueda, la comprobación y `best.json` son sólo de las generales.
+  - El paso pendiente es correrlas en los autonómicos y un `merge` entre ámbitos (hoy `merge` sólo une las partes de un ámbito) que repita el descenso con todos juntos.
 - **`mtpy/lib/tuning.py` tiene unas 2.200 líneas**: la búsqueda, los cortes, el pool, las partes y la copia a S3 en un solo módulo. Partirlo es una deuda pendiente, no un cambio de esta tarea.

@@ -127,8 +127,8 @@ def predict_polls(fc: Forecaster, polls: pd.DataFrame, names: list[str]) -> pd.D
     Predict the future polls of a cut with its fitted average and house effects.
 
     The average of a party is read at the date of the poll (`fit_forecast` leaves the straight prolongation up
-    to `date_fit_last + max_fc`; after that day the last value is held) and the house effect of the pollster
-    is added.
+    to `date_fit_last`, which already is the last poll plus `max_fc`; after that day the last value is held) and
+    the house effect of the pollster is added.
 
     Parameters
     ----------
@@ -146,6 +146,8 @@ def predict_polls(fc: Forecaster, polls: pd.DataFrame, names: list[str]) -> pd.D
         One row per poll and party with a published figure: `date`, `pollster_id`, `pollster`, `sample_size`,
         `party`, `published`, `predicted` and `residual` (published minus predicted).
     """
+    # The dates are capped `max_fc` days past `date_fit_last` (2 * `max_fc` past the last poll), beyond the end of the
+    # prolongation: the forward-filled average holds there the value of `date_fit_last`, so the cap changes nothing
     last = fc.date_fit_last + pd.Timedelta(days=fc.max_fc)
     average = {name: fc.forecast[name].ffill() for name in names}
 
@@ -816,6 +818,11 @@ def coordinate_descent(
         `label`, `rmse7`, `rmse28`, `roughness`, `chosen`): a row of round 0 for the start and one per value of
         each key in each round, with `chosen` True for the values that leave the configuration kept for that key in
         that round (the current one included when it is in the grid).
+
+    Raises
+    ------
+    ValueError
+        The start has a NaN `rmse7`, `rmse28` or `roughness`: no candidate could pass the guards against it.
     """
     memo: dict[str, dict] = {}
 
@@ -829,6 +836,10 @@ def coordinate_descent(
 
     current = normalize(start) if normalize is not None else start
     current_figures = figures(current)
+    if any(np.isnan(value) for value in current_figures.values()):
+        # every guard against a NaN is False: no candidate could ever be kept, and the descent would say nothing
+        raise ValueError('coordinate_descent: the start {} has no figures to compare with ({})'.format(
+            current.get('label'), ', '.join('{} {}'.format(name, value) for name, value in current_figures.items())))
     roughness_ref = current_figures['roughness']
     rows = [{'round': 0, 'key': None, 'value': None, 'label': current.get('label'), **current_figures,
              'chosen': True}]
@@ -1133,12 +1144,25 @@ def timed_call(run: Callable, *args, **kwargs) -> Any:
     Raises
     ------
     CutTimeout
-        The attempt ran past `CUT_TIMEOUT` seconds. The timer and the previous handler are restored in any case.
+        The attempt ran past `CUT_TIMEOUT` seconds. The timer and the previous handler are restored in any case. An
+        alarm that lands after `run` returned (before the timer is stopped) is only warned about: the finished cut
+        keeps its result instead of being retried.
     """
-    previous = signal.signal(signal.SIGALRM, raise_cut_timeout)
+    finished = False
+
+    def watchdog(signum, frame):
+        """Stop the cut, unless it has already returned (the alarm landed before the timer was stopped)."""
+        if finished:
+            warnings.warn('Tuning cut: the watchdog fired after the cut finished; its result is kept')
+            return
+        raise_cut_timeout(signum, frame)
+
+    previous = signal.signal(signal.SIGALRM, watchdog)
     signal.setitimer(signal.ITIMER_REAL, CUT_TIMEOUT)
     try:
-        return run(*args, **kwargs)
+        result = run(*args, **kwargs)
+        finished = True
+        return result
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
@@ -1185,7 +1209,8 @@ def boot_worker() -> None:
     Every process of the pool owns its app and its SQLAlchemy engine: no connection is shared between processes.
     The queries of psycopg2 wait in Python (`psycopg2.extras.wait_select`) instead of inside libpq, so the watchdog
     of a cut (`timed_call`) can stop a query hung on a dead link. That green mode refuses COPY and large objects:
-    the workers only read with plain queries, and must stay that way.
+    the workers only read with plain queries, and must stay that way. It also connects asynchronously, so libpq's
+    `connect_timeout` is not honoured in the workers: the watchdog of the cut is what bounds a hung connect.
     """
     import psycopg2.extensions
     import psycopg2.extras
@@ -1517,8 +1542,9 @@ def run_search(
 
     With `product` (a part of a search phase, see `tuning_scope`) there is no descent: every configuration of the
     product of the values of the keys of the phase is evaluated from `start` (the values of `grid` plus the value of
-    `start` when it is not among them, so every configuration a descent from `start` can visit is there; repeated
-    configurations once, by `config_key`), and `best` is `start`. Each trial is then one configuration (`key`
+    `start` in its own form when it is not among them or `start` writes it otherwise, so every configuration a
+    descent from `start` can visit is there, see `product_configs`; repeated configurations once, by `config_key`),
+    and `best` is `start`. Each trial is then one configuration (`key`
     `'product'`), so `merge_parts` can repeat the descent of the whole phase on the joined parts.
 
     An unlabelled start of a search is labelled `'start'`. A configuration with a failed cut gets NaN figures and
@@ -1682,6 +1708,14 @@ def product_configs(start: dict[str, Any], grid: dict, order: list[str]) -> list
     """
     Every configuration of the product of the values of some keys, applied on a start.
 
+    A descent from `start` writes each value of the grid with `apply_setting` (`coordinate_descent` applies its
+    candidates even when the value is the one in force), while a key it has not replaced keeps the form `start`
+    gives it. Both forms are in the product: the values of the grid as `apply_setting` writes them, plus the value
+    of `start` as `start` writes it when it is not in the grid or `start` writes it in another form (`herd_prior` 5
+    for 5.0, `bw_kwargs` without `min_delta`, a pilot `bw` the adaptive setting drops). So every candidate of the
+    descent has its `config_key` here, the one `merge_parts` looks up; a normalised start (whose values are written
+    as `apply_setting` writes them) adds nothing but the values outside the grid.
+
     Parameters
     ----------
     start : dict
@@ -1695,21 +1729,29 @@ def product_configs(start: dict[str, Any], grid: dict, order: list[str]) -> list
     -------
     list of dict
         `start` first, then each configuration of the product not seen yet (by the `config_key` of its effective
-        configuration), labelled `'key=value, ...'`. The values of each key are those of `grid` plus that of `start`
-        when it is not among them: every configuration a coordinate descent from `start` over `order` can visit.
+        configuration), labelled `'key=value, ...'` (`'key=value (start)'` for a value of the grid kept in the form
+        of `start`): every configuration a coordinate descent from `start` over `order` can visit.
     """
-    values = {}
+    options = {}
     for key in order:
         own = setting_of(start, key)
-        values[key] = list(grid[key]) + ([] if own in grid[key] else [own])
+        options[key] = [(value, True) for value in grid[key]]
+        if own not in grid[key]:
+            options[key].append((own, False))
+        else:
+            written = next(value for value in grid[key] if value == own)   # 5.0 of the grid for a 5 of the start
+            if config_key(apply_setting(start, key, written)) != config_key(start):
+                options[key].append((own, False))
 
     out, seen = [start], {config_key(effective_config(start))}
-    for combination in itertools.product(*(values[key] for key in order)):
+    for combination in itertools.product(*(options[key] for key in order)):
         config = start
-        for key, value in zip(order, combination):
-            if value != setting_of(config, key):
+        for key, (value, applied) in zip(order, combination):
+            if applied:
                 config = apply_setting(config, key, value)
-        config = {**config, 'label': ', '.join('{}={}'.format(key, value) for key, value in zip(order, combination))}
+        config = {**config, 'label': ', '.join(
+            '{}={}{}'.format(key, value, ' (start)' if not applied and value in grid[key] else '')
+            for key, (value, applied) in zip(order, combination))}
         key = config_key(effective_config(config))
         if key not in seen:
             seen.add(key)
