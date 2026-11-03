@@ -396,6 +396,12 @@ class Events(Model):
     a loader; `computed_at` is the start instant of the last `compute_scope` of the scope. Any writer that
     upserts this table has to carry over the columns it does not write (`featured`, `loaded_at`, `computed_at`),
     because `format_data` fills the missing columns with nulls.
+
+    The carry-over through `format_data` rewrites `loaded_at` and `computed_at` truncated to seconds (the stamps
+    themselves carry microseconds): only a load within the same second as the start of a compute, before its
+    `featured` phase, could be lost, a concurrent case that is not supported. Both columns are `timestamp` without
+    time zone, written with the session `TimeZone` of the database, so every client must keep the database default
+    for the two marks to be comparable.
     """
 
     table = 'elections.events'

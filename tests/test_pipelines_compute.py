@@ -26,7 +26,7 @@ def series(factory, scope='es', pipeline=Compute, position=(1, 2), **kwargs):
     return p
 
 
-def test_compute_skips_a_scope_with_nothing_pending(fresh_app, capsys):
+def test_compute_skips_a_scope_with_nothing_pending(fresh_app):
     factory = FakeComputer()
     p = series(factory, pending=lambda scope: [])
     assert p.result == {'status': 'skipped', 'action': 'series', 'reason': 'nothing loaded since the last compute',
@@ -41,10 +41,22 @@ def test_compute_overwrite_computes_anyway_and_says_so_in_the_header(fresh_app, 
     assert 'compute series: 2 ámbitos · overwrite' in capsys.readouterr().out
 
 
-def test_ratings_never_skip(fresh_app):
+def test_ratings_never_skip(fresh_app, capsys):
     factory = FakeComputer()
-    p = series(factory, 'es-md', Ratings, pending=lambda scope: [])
+    p = series(factory, 'es-md', Ratings, pending=lambda scope: [], overwrite=True)
     assert p.result['status'] == 'computed' and p.result['action'] == 'ratings'
+    header = capsys.readouterr().out
+    assert 'compute ratings: 2 ámbitos' in header and 'overwrite' not in header
+
+
+def test_a_failing_pending_events_is_a_failed_result(fresh_app):
+    def broken(scope):
+        raise RuntimeError('db down')
+
+    factory = FakeComputer()
+    p = series(factory, pending=broken)
+    assert p.result == {'status': 'failed', 'reason': 'RuntimeError: db down', 'action': 'series', 'warnings': []}
+    assert p.line == 'es: series failed (RuntimeError: db down)' and factory.inits == []
 
 
 def test_the_real_pending_events_is_the_default(fresh_app, monkeypatch):

@@ -21,17 +21,17 @@ class Update(SequenceJob):
 
     Unlike ``load``, ``compute`` and ``publish``, ``update`` stops at the first failure by default: a scope that fails
     stops the job in that very scope: neither the remaining scopes of that group nor the next groups run, so a
-    forecast is never published on polls that did not load or series that did not compute. With ``stop_on_error`` false every group runs on every scope, the job publishes
-    what it has and it exits with an error at the end if anything failed. The alert is sent once, with the summary of
-    the whole chain.
+    forecast is never published on polls that did not load or series that did not compute. With ``stop_on_error``
+    false every group runs on every scope, the job publishes what it has and it exits with an error at the end if
+    anything failed. The alert is sent once, with the summary of the whole chain.
 
     ``force`` reaches the load and the publication at once: in ``update`` it is the publication inside the veda (the
     LOREG freeze) and, in the load, the addition of the unmapped pollsters and sponsors to the catalogues. To add new
     pollsters, run ``load`` with ``force`` on its own first. ``event_date`` is not accepted (it would force the
-    election of the forecast and of the load alike; use ``load`` or ``publish``), and ``years`` cannot be combined with
-    ``overwrite``. With ``dry_run`` nothing is written: the load reads and checks, the compute stops after the
-    deviations and the publication goes under ``site-dry/``. Scopes ``'all'`` skip the scopes without a polls
-    article, as ``load`` does.
+    election of the forecast and of the load alike; use ``load`` or ``publish``), nor is ``what`` (use ``load``,
+    ``compute`` or ``publish``), and ``years`` cannot be combined with ``overwrite``. With ``dry_run`` nothing is
+    written: the load reads and checks, the compute stops after the deviations and the publication goes under
+    ``site-dry/``. Scopes ``'all'`` skip the scopes without a polls article, as ``load`` does.
 
     Examples
     --------
@@ -84,12 +84,15 @@ class Update(SequenceJob):
         Raises
         ------
         ValueError
-            If ``event_date`` is given, ``years`` is combined with ``overwrite`` or there are no scopes to run.
+            If ``event_date`` or ``what`` is given, ``years`` is combined with ``overwrite`` or there are no scopes to
+            run.
         RuntimeError
             If there is no file system, or if any scope failed (raised after the summary and the alert).
         """
         if 'event_date' in kwargs:
             raise ValueError('update: "event_date" is not accepted (use load)')
+        if 'what' in kwargs:
+            raise ValueError('update: "what" is not accepted (use load, compute or publish)')
 
         years = kwargs.get('years')
         if years:

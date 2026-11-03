@@ -120,6 +120,8 @@ def test_update_dry_run_touches_nothing(fresh_app, tmp_path, scopes, events, pat
 def test_update_rejects_event_date_and_years_with_overwrite(fresh_app, tmp_path, scopes, events):
     with pytest.raises(ValueError, match='update: "event_date" is not accepted'):
         run(tmp_path, scopes=['es'], event_date='2023-07-23')
+    with pytest.raises(ValueError, match='update: "what" is not accepted'):
+        run(tmp_path, scopes=['es'], what=['forecast'])
     with pytest.raises(ValueError, match='"years" cannot be combined with "overwrite"'):
         run(tmp_path, scopes=['es'], years=[2026], overwrite=True)
 

@@ -2,7 +2,7 @@
 
 Fecha: 2026-11-03. Estado: aprobada por Luis el 2026-11-03; construida el 2026-11-03 (plan docs/superpowers/plans/2026-11-03-job-update.md).
 
-Pendiente de Luis: el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD COLUMN computed_at timestamp;` en el RDS y en cualquier base local; desplegar la imagen con el código nuevo; y el primer `update` o `compute` sin `overwrite`, que computa una vez todos los ámbitos pedidos porque toda elección cuenta como pendiente.
+Pendiente de Luis: el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD COLUMN computed_at timestamp;` en el RDS y en cualquier base local, antes de desplegar la imagen y antes de usar `dev` contra cualquier base (local incluida), porque sin las columnas falla toda lectura de `events`, la web incluida (el orden inverso es inocuo); desplegar la imagen con el código nuevo; y el primer `update` o `compute` sin `overwrite`, que computa una vez todos los ámbitos pedidos porque toda elección cuenta como pendiente.
 
 Desviaciones de la construcción: ninguna en las decisiones. Dos añadidos en las pruebas: las suites de los pipelines y de los jobs que ejecutan `compute_scope` con `save=True` llevan un fixture autouse que sustituye `db_now` y `mark_computed`, de modo que ninguna prueba toca la base; y las precisiones de documentación (parada en el ámbito que falla, excepción original, «sólo»).
 

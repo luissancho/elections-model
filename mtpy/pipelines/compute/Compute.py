@@ -36,7 +36,7 @@ class Compute(ScopePipeline):
     def start(self, dry_run=False, overwrite=False, **kwargs) -> None:
         """Set the run and print the header ``compute <action>: n ámbitos[ · overwrite][ · dry run]``."""
         super().start(**kwargs)
-        flags = (' · overwrite' if overwrite else '') + (' · dry run' if dry_run else '')
+        flags = (' · overwrite' if overwrite and self.ACTION == 'compute' else '') + (' · dry run' if dry_run else '')
         self._say('compute {}: {}{}'.format(ACTIONS[self.ACTION], counted(self.total, 'ámbito', 'ámbitos'), flags))
 
     def prepare_task(self, chunk=None, position=(1, 1), overwrite=False, pending=None, **kwargs):
@@ -51,7 +51,15 @@ class Compute(ScopePipeline):
             Replacement of `compute.pending_events` (for tests).
         """
         self.start_progress(chunk, position)
-        if self.ACTION == 'compute' and not overwrite and not (pending or compute.pending_events)(chunk):
+        if self.ACTION != 'compute' or overwrite:
+            return
+
+        try:
+            has_pending = bool((pending or compute.pending_events)(chunk))
+        except Exception as e:
+            self.end(self.failed(chunk, e, action=ACTIONS[self.ACTION], warnings=[]))
+
+        if not has_pending:
             self.end({'status': 'skipped', 'action': ACTIONS[self.ACTION], 'reason': NOTHING_PENDING,
                       'warnings': []})
 

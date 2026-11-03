@@ -709,7 +709,7 @@ Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Solo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `overwrite`, `· overwrite`; con `dry_run`, `· dry run`) y el resumen final |
+| 0 | Sólo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `overwrite`, `· overwrite`; con `dry_run`, `· dry run`) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") |
 | 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño`, `errores del promedio`, `ratings`) |
 | 3 | Lo anterior más la salida propia del `Computer` (que recibe `verbose - 2`) |
@@ -849,7 +849,7 @@ Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Solo la cabecera (`backtest: 18 ámbitos · 1000 simulaciones · <destino>`; con `push` o `pull`, `backtest push: 18 ámbitos · backtest/results → s3://…/backtest/results`) y el resumen final |
+| 0 | Sólo la cabecera (`backtest: 18 ámbitos · 1000 simulaciones · <destino>`; con `push` o `pull`, `backtest push: 18 ámbitos · backtest/results → s3://…/backtest/results`) y el resumen final |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento, los avisos en vivo (`· aviso:`, los casos omitidos) y la tabla `by_horizon` |
 | 2 | Lo anterior más la línea de cada caso del backtest (`Backtest 2023-07-23 at 6 days...`) |
 
@@ -1102,7 +1102,7 @@ Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Solo la cabecera de la acción (`publish forecast: 18 ámbitos · run …`) y el resumen final (con "· n avisos" en cada línea) |
+| 0 | Sólo la cabecera de la acción (`publish forecast: 18 ámbitos · run …`) y el resumen final (con "· n avisos" en cada línea) |
 | 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (en todas las acciones que recorren ámbitos) |
 | 2 | Lo anterior más las líneas de fase del pronóstico (`simulador listo`, `promedio ajustado`, `simulación de hoy`, …) |
 | 3 | Lo anterior más la salida propia del modelo (`Simulator`/`Computer`, que reciben `verbose - 2`) |
@@ -1560,7 +1560,8 @@ python job.py pipeline '{"select":"publish.backtest","chunks":"es,es-md"}'
 python pipeline.py publish.backtest publish es es-md    # nombre, acción y ámbitos
 ```
 
-El segundo lanzador imprime las líneas del resumen y no envía ningún aviso. `job.py pipeline` para al primer ámbito
+Con `select: "compute.compute"` también se saltan los ámbitos sin nada cargado desde su último compute; con
+`"overwrite": true` en el JSON se fuerza. El segundo lanzador imprime las líneas del resumen y no envía ningún aviso. `job.py pipeline` para al primer ámbito
 que falla (el valor por defecto del framework), salvo que se pase `"stop_on_error": false` en el JSON; `pipeline.py`
 no tiene aviso y termina con 1 si algún ámbito falló. Ninguno de los dos resuelve `"all"`
 (los ámbitos van nombrados) ni valida lo que cruza entre acciones, como sí hace el job; ese cuidado es de quien lo
@@ -1596,14 +1597,14 @@ su job. Los `ratings` y los catálogos no entran (se lanzan con `compute`).
 nada nuevo; se usa tras un cambio de código o de parámetros. `update` para en el primer fallo, a diferencia de los
 otros tres jobs: si un ámbito falla, el job se detiene en ese ámbito: ni los ámbitos que faltan de ese grupo ni los
 grupos siguientes corren (con `"scopes":"all"`, una casa sin mapear en un autonómico deja también sin publicar a
-`es`). Así nunca se publica un pronóstico sobre sondeos que no se cargaron o series que no se calcularon. Con `"stop_on_error": false` corren todos
-los grupos en todos los ámbitos, se publica lo que haya y el job termina con error al final. El aviso final es uno
-solo, con el resumen de toda la cadena.
+`es`). Así nunca se publica un pronóstico sobre sondeos que no se cargaron o series que no se calcularon. Con
+`"stop_on_error": false` corren todos los grupos en todos los ámbitos, se publica lo que haya y el job termina con
+error al final. El aviso final es uno solo, con el resumen de toda la cadena.
 
 `force` llega a la carga y a la publicación a la vez: en `update` es publicar dentro de la veda y, en la carga, dar de
-alta las encuestadoras y los medios que falten; para dar de alta casas se lanza antes `load` con `force`, solo.
-`event_date` se rechaza (forzaría a la vez la elección de la carga y la del pronóstico; usa `load` o `publish`) y
-`years` no se combina con `overwrite` (`ValueError` antes de empezar). Sin sistema de ficheros (ni `S3_BUCKET` ni un
+alta las encuestadoras y los medios que falten; para dar de alta casas se lanza antes `load` con `force`, por separado.
+`event_date` se rechaza (forzaría a la vez la elección de la carga y la del pronóstico; usa `load` o `publish`), `what`
+también (usa `load`, `compute` o `publish`) y `years` no se combina con `overwrite` (`ValueError` antes de empezar). Sin sistema de ficheros (ni `S3_BUCKET` ni un
 `files/` local) falla al empezar con `update: no file system configured`.
 
 ### Ejemplos
@@ -1655,13 +1656,14 @@ parties: 112 partidos
 
 Con la parada por defecto, un fallo termina con `RuntimeError: update: failed scopes: es (polls)` (o `(series)`)
 sin que el grupo siguiente haya empezado. Esa es la excepción cuando el pipeline deja un estado `failed` (lo que
-hacen hoy los pipelines); si un pipeline lanza una excepción, se relanza la original. El aviso final, el recorte de Pushover y el código de salida son los de
-"Aviso final y código de salida" en "Publicar".
+hacen hoy los pipelines); si un pipeline lanza una excepción, se relanza la original. El aviso final, el recorte de
+Pushover y el código de salida son los de "Aviso final y código de salida" en "Publicar".
 
 ### Pasos de Luis
 
 1. Crear las marcas en la base: `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD COLUMN computed_at
-   timestamp;`.
+   timestamp;`. El `ALTER` va antes de desplegar la imagen y antes de usar `dev` contra cualquier base (la local
+   incluida): sin las columnas falla toda lectura de `events`, la web incluida; el orden inverso es inocuo.
 2. Desplegar la imagen con el código nuevo (y `python deploy/ecs/job.py --register` sólo si cambió la definición de
    la web, ver "Jobs desde ECS").
 3. Lanzar el primer `update` sin `overwrite`: como todas las elecciones cuentan como pendientes, computa todo una vez;
