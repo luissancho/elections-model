@@ -349,6 +349,20 @@ def case_series(sim: Simulator, event_date: str, horizon: int) -> pd.DataFrame:
     return frame
 
 
+def matched_overrides(model: Any, overrides: Optional[pd.DataFrame]) -> int:
+    """
+    Number of polls in the series of a fitted model (`Forecaster`, its raw series when there is one) whose
+    weights `overrides` replaced (`weight_overrides`, indexed by `date`, `pollster_id` and `sponsor_id`); rows
+    without a pollster (the results) do not count. 0 without overrides. `tuning.run_cut` counts the same.
+    """
+    if overrides is None:
+        return 0
+    raw = model.series_raw if model.series_raw is not None else model.series
+    series_polls = raw.index[raw['pollster'].notnull().to_numpy()]
+
+    return int(overrides.index.isin(series_polls).sum())
+
+
 def run_case(
     scope: str,
     event_date: str,
@@ -407,8 +421,9 @@ def run_case(
     name (the configuration wins), and its `weights` (`wspan`, optionally `ol_max`), when set, recompute the
     `weight_over` and `weight_sample` of the polls of the freeze on those polls alone (`tuning.reweighted_overrides`
     on the polls published at least `horizon` days before the election, without the excluded methodology types, as
-    the search does at a cut); `meta` records its `label` (`config`, NaN without one). `None`, the default, runs
-    the model as it is.
+    the search does at a cut); `meta` records its `label` (`config`, NaN without one) and the number of polls of the
+    average whose weights were recomputed (`n_overrides`, `matched_overrides`: 0 with `weights` unset, NaN without a
+    config). `None`, the default, runs the model as it is.
 
     Returns
     -------
@@ -442,6 +457,7 @@ def run_case(
             **tuned
         )
         sim.fit_forecast(names=sim.params['names'], max_fc=max_fc, fillna=True)
+        n_overrides = matched_overrides(sim.model, tuned['weight_overrides']) if config is not None else np.nan
         vs = sim.event_params['bmaps']['vs']
 
         sim.run(split=True, random=True, n_sim=n_sim)
@@ -570,7 +586,7 @@ def run_case(
         'he_max_abs': float(he_active['effect'].abs().max()) if he_active is not None and len(he_active) else np.nan,
         'n_polls': int(polls.shape[0]), 'last_poll': str(last_date.date()), 'n_parties': len(names),
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1),
-        'config': config['label'] if config is not None else np.nan
+        'config': config['label'] if config is not None else np.nan, 'n_overrides': n_overrides
     }])
 
     calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,

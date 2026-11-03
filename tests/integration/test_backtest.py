@@ -183,7 +183,8 @@ def test_run_case_reproduces_the_stored_backtest_2023_6_days(app):
 
 def test_run_case_with_a_tuned_config(app):
     """Sondeos futuros (Task 9): con la configuración por defecto el caso es el de siempre; con una afinada (ancho fijo y
-    pesos recalculados sobre los sondeos del corte con `wspan` 7) el promedio cambia y `meta` registra su etiqueta."""
+    pesos recalculados sobre los sondeos del corte con `wspan` 7) el promedio cambia y `meta` registra su etiqueta y los
+    sondeos del promedio con peso recalculado (`n_overrides`)."""
     from mtpy.lib.backtest import run_case
     from mtpy.lib.tuning import apply_setting, default_config
 
@@ -196,5 +197,8 @@ def test_run_case_with_a_tuned_config(app):
     tuned = apply_setting(apply_setting(default_config(), 'wspan', 7), 'bw', ('fixed', 45))
     case = run_case('es', '2023-07-23', 30, config=tuned, **options)
     assert case['meta'].loc[0, 'config'] == tuned['label']
+    # The recomputed weights reach the polls of the average (`default_config` keeps the stored ones: 0)
+    assert case['meta'].loc[0, 'n_overrides'] > 0
+    assert same['meta'].loc[0, 'n_overrides'] == 0 and np.isnan(ref['meta'].loc[0, 'n_overrides'])
     a, b = case['shares'].set_index('party'), ref['shares'].set_index('party')
     assert not np.allclose(a.loc[['PP', 'PSOE'], 'model'], b.loc[['PP', 'PSOE'], 'model'])

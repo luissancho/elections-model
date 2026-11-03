@@ -668,16 +668,21 @@ class StopCase(Exception):
 
 
 class RecordingSimulator:
-    """`Simulator` sin modelo: registra los argumentos de la construcción y de `fit_forecast` y detiene el caso."""
+    """`Simulator` sin modelo: registra los argumentos de la construcción y de `fit_forecast` y detiene el caso al
+    simular."""
 
     calls = []
 
     def __init__(self, **kwargs):
         self.params = {'names': ['A', 'B']}
+        self.model = object()
+        self.event_params = {'bmaps': {'vs': {}}}
         RecordingSimulator.calls.append({'init': kwargs})
 
     def fit_forecast(self, **kwargs):
         RecordingSimulator.calls[-1]['fit'] = kwargs
+
+    def run(self, **kwargs):
         raise StopCase()
 
 
@@ -698,8 +703,14 @@ def recording(monkeypatch):
         seen['reweighted'].append((frame, weights))
         return overrides
 
+    def matched_overrides(model, frame):
+        seen['matched'].append((model, frame))
+        return 0
+
+    seen['matched'] = []
     monkeypatch.setattr(backtest, 'get_poll_series', get_poll_series)
     monkeypatch.setattr(tuning, 'reweighted_overrides', reweighted_overrides)
+    monkeypatch.setattr(backtest, 'matched_overrides', matched_overrides)
     return {**seen, 'polls_frame': polls, 'overrides': overrides}
 
 
@@ -745,6 +756,42 @@ def test_run_case_keeps_the_stored_weights_with_a_config_without_weights(recordi
         backtest.run_case('es', '2023-07-23', 30, config={**TUNED, 'weights': None})
     assert RecordingSimulator.calls[0]['init']['weight_overrides'] is None
     assert recording['polls'] == [] and recording['reweighted'] == []
+
+
+def test_run_case_counts_the_overrides_matched_on_the_fitted_model(recording):
+    """`meta.n_overrides` (como en `tuning.run_cut`) cuenta los sondeos del promedio cuyos pesos ha recalculado la
+    configuración, sobre el modelo ya ajustado; sin configuración no se cuenta."""
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30, config=TUNED)
+    (model, frame), = recording['matched']
+    assert model is not None and frame is recording['overrides']
+    recording['matched'].clear()
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30)
+    assert recording['matched'] == []
+
+
+def test_matched_overrides_counts_the_polls_of_the_series_with_an_override():
+    """Cuenta las filas de sondeo (con `pollster`) de la serie cruda del modelo cuyo índice tiene peso recalculado;
+    las filas sin encuestadora (resultados) y los recálculos de sondeos que no están en la serie no cuentan; sin
+    recálculo, 0."""
+    from types import SimpleNamespace
+    from mtpy.lib.backtest import matched_overrides
+    names = ['date', 'pollster_id', 'sponsor_id']
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-06-01'), 1, 1), (pd.Timestamp('2023-06-02'), 2, 1),
+                                       (pd.Timestamp('2023-06-03'), 3, 1), (pd.Timestamp('2019-11-10'), 0, 0)],
+                                      names=names)
+    raw = pd.DataFrame({'pollster': ['a', 'b', 'c', None], 'A': [30., 31., 29., 28.]}, index=index)
+    overrides = pd.DataFrame({'weight_over': [1., 1., 1.], 'weight_sample': [1., 1., 1.]}, index=pd.MultiIndex.from_tuples(
+        [(pd.Timestamp('2023-06-01'), 1, 1), (pd.Timestamp('2023-06-03'), 3, 1), (pd.Timestamp('2023-07-01'), 4, 1)],
+        names=names))
+    assert matched_overrides(SimpleNamespace(series_raw=raw, series=None), overrides) == 2
+    assert matched_overrides(SimpleNamespace(series_raw=None, series=raw), overrides) == 2
+    assert matched_overrides(SimpleNamespace(series_raw=raw, series=None), None) == 0
+    # The result row's index is overridden too: it does not count, it is not a poll
+    overrides.loc[(pd.Timestamp('2019-11-10'), 0, 0), :] = 1.
+    assert matched_overrides(SimpleNamespace(series_raw=raw, series=None), overrides) == 2
 
 
 def test_run_backtest_passes_the_config_to_every_case(monkeypatch):
