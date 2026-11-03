@@ -284,7 +284,8 @@ def load_results(scope: str, event_date: str, save: bool, cache: Optional[str], 
 def compute_scope(scope: str, save: bool, verbose: int) -> dict:
     """
     Compute the poll series of a scope: weights, featured events, errors, deviations, drift, house effects and
-    herding (`mtpy.lib.compute.compute_scope`, the sequence shared with the `compute` job). The `Computer` runs one
+    herding (`mtpy.lib.compute.compute_scope` in its `full` mode, the sequence shared with the `compute` job; the
+    errors of the poll average are an action of their own, `average_errors`, of that job). The `Computer` runs one
     verbosity level below the loader's.
     """
     from mtpy.lib import compute
