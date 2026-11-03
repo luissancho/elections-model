@@ -946,7 +946,7 @@ Para correr en ECS el backtest de una configuración recién afinada, elige una 
 python deploy/ecs/job.py backtest '{"scopes":["es"],"config":{"reg_params":{"bw_cap":1.0},"house_effects":true,"he_params":{},"dispersion":true,"herding":true,"disp_params":{},"weights":{"wspan":4},"max_fc":0,"label":"bw_cap=1.0; max_fc=0"},"out":"backtest/results_phase1"}'
 ```
 
-Con `out` la tarea escribe en su disco efímero. Para conservar las tablas, quita `out` (escribe en la app bajo `backtest/results`, y pisa la referencia publicada) o córrelo en el portátil.
+Ojo: con `out` la tarea escribe en su disco efímero, y al terminar no queda nada. No quites `out` para conservarlas: sin `out` el job escribe en S3 bajo `backtest/results` y pisa la referencia publicada. Los backtests con `config` se corren en el portátil, con `backtest/run_backtest.py --config ... --out backtest/results_<nombre>` (unos 50 minutos en `es`), y sus tablas se quedan en esa carpeta. El ejemplo de ECS sólo sirve para comprobar que la configuración corre.
 
 Estado del 03-11-2026: la configuración afinada no cumple el criterio A8 y los valores por defecto no cambian. La siguiente revisión es tras el 29-N (método 14, «Decisión»).
 

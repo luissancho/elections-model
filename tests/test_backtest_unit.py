@@ -672,12 +672,14 @@ class RecordingSimulator:
     simular."""
 
     calls = []
+    instances = []
 
     def __init__(self, **kwargs):
         self.params = {'names': ['A', 'B']}
         self.model = object()
         self.event_params = {'bmaps': {'vs': {}}}
         RecordingSimulator.calls.append({'init': kwargs})
+        RecordingSimulator.instances.append(self)
 
     def fit_forecast(self, **kwargs):
         RecordingSimulator.calls[-1]['fit'] = kwargs
@@ -691,6 +693,7 @@ def recording(monkeypatch):
     """`run_case` con el `Simulator`, la lectura de sondeos y el recálculo de pesos sustituidos (sin base)."""
     from mtpy.lib import backtest, tuning
     RecordingSimulator.calls = []
+    RecordingSimulator.instances = []
     seen = {'polls': [], 'reweighted': []}
     polls, overrides = pd.DataFrame({'date': ['2023-06-01']}), pd.DataFrame({'weight_over': [1.]})
     monkeypatch.setattr(backtest, 'Simulator', RecordingSimulator)
@@ -765,7 +768,7 @@ def test_run_case_counts_the_overrides_matched_on_the_fitted_model(recording):
     with pytest.raises(StopCase):
         backtest.run_case('es', '2023-07-23', 30, config=TUNED)
     (model, frame), = recording['matched']
-    assert model is not None and frame is recording['overrides']
+    assert model is RecordingSimulator.instances[-1].model and frame is recording['overrides']
     recording['matched'].clear()
     with pytest.raises(StopCase):
         backtest.run_case('es', '2023-07-23', 30)

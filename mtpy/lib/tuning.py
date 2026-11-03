@@ -28,7 +28,7 @@ import pandas as pd
 from psycopg2 import InterfaceError as DriverInterfaceError, OperationalError as DriverOperationalError
 from sqlalchemy.exc import InterfaceError as EngineInterfaceError, OperationalError as EngineOperationalError
 
-from .backtest import describe_source, poll_stats, results_path
+from .backtest import describe_source, matched_overrides, poll_stats, results_path
 from .computer import Computer
 from .data import get_event_dates, get_event_params, get_next_event_date, get_poll_series
 from .forecaster import Forecaster
@@ -532,7 +532,7 @@ def run_cut(
 
     raw = fc.series_raw if fc.series_raw is not None else fc.series
     series_polls = raw.index[raw['pollster'].notnull().to_numpy()]
-    n_overrides = int(overrides.index.isin(series_polls).sum()) if overrides is not None else 0
+    n_overrides = matched_overrides(fc, overrides)
 
     targets = published_blocks(future_polls(scope, event_date, cut, max(horizons), drop_mtypes), fc.bmap, names)
     pred = predict_polls(fc, targets, names)

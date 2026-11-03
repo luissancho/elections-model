@@ -138,7 +138,7 @@ Columnas: los valores de `by_horizon.csv`, la media de las elecciones de cada ho
 | 6 | 5 | 1,699 | 1,681 | 1,674 | 1,676 | −1,3 % | −0,3 % | −0,4 % |
 | 14 | 5 | 1,976 | 1,900 | 1,889 | 1,896 | −4,0 % | −0,2 % | −0,6 % |
 | 30 | 5 | 2,168 | 2,070 | 2,041 | 2,046 | −5,6 % | −1,2 % | −1,4 % |
-| 60 | 5 | 2,803 | 2,832 | 2,871 | 2,859 | **+2,0 %** | +1,0 % | +1,4 % |
+| 60 | 5 | 2,803 | 2,832 | 2,871 | 2,859 | **+2,01 %** | +1,0 % | +1,4 % |
 | 90 | 5 | 2,838 | 2,813 | 2,795 | 2,770 | −2,4 % | −1,5 % | −0,6 % |
 | 180 | 3 | 3,015 | 2,973 | 3,017 | 3,013 | −0,1 % | +1,4 % | +1,5 % |
 | Todos | 28 | 2,374 | 2,335 | 2,336 | 2,331 | −1,8 % | −0,2 % | +0,0 % |
@@ -191,7 +191,7 @@ Columnas: los valores de `by_horizon.csv`, la media de las elecciones de cada ho
 | 180 | 2 | 0,675 | 0,675 | 0,675 | 0,675 | = | = | = |
 | Todos | 22 | 0,889 | 0,889 | 0,878 | 0,878 | **−0,011** | **−0,011** | **−0,011** |
 
-A horizonte (la ejecución `_h`, con la deriva hasta la elección), los cambios relativos y las diferencias de cobertura son:
+A horizonte (la ejecución `_h`, con la deriva hasta la elección), los cambios relativos y las diferencias de cobertura son los de abajo; la fila «Todos» es la media de los casos de `metrics.csv`. El MAE de voto no tiene columna `_h`: el promedio es el mismo en los dos modos y sólo cambia la banda.
 
 | Horizonte | CRPS T/(a) | CRPS T/(D) | Brier T/(a) | Brier T/(D) | Cob. 95 voto T−(a) | Cob. 95 voto T−(D) | Cob. 95 escaños T−(a) | Cob. 95 escaños T−(D) |
 |---|---|---|---|---|---|---|---|---|
@@ -201,24 +201,25 @@ A horizonte (la ejecución `_h`, con la deriva hasta la elección), los cambios 
 | 60 | **+3,8 %** | +1,7 % | −6,8 % | −7,1 % | = | = | = | = |
 | 90 | −1,2 % | −1,7 % | −2,7 % | −3,1 % | = | = | = | = |
 | 180 | **+5,6 %** | **+5,4 %** | **+8,6 %** | **+8,6 %** | = | = | = | = |
+| Todos | −0,3 % | +0,2 % | −0,7 % | −1,4 % | = | = | = | = |
 
-Casos mejores / peores, comparando cada caso (elección × horizonte) de `metrics.csv` con el mismo caso de la referencia:
+Casos mejores / peores / iguales, comparando cada caso (elección × horizonte) de `metrics.csv` con el mismo caso de la referencia (en las coberturas, «igual» es que ningún partido entra ni sale de la banda):
 
 | Métrica | Casos | T frente a (a) | T frente a (D) | P frente a (D) | T frente a (P) | D frente a (a) |
 |---|---|---|---|---|---|---|
-| MAE de voto | 28 | 18 / 10 | 16 / 12 | 17 / 11 | 14 / 14 | 16 / 12 |
-| RMSE de voto | 28 | 16 / 12 | 14 / 14 | 19 / 9 | 12 / 16 | 14 / 14 |
-| CRPS de escaños | 22 | 9 / 13 | 12 / 10 | 14 / 8 | 11 / 11 | 8 / 14 |
-| Brier | 22 | 12 / 10 | 13 / 9 | 13 / 7 | 5 / 14 | 9 / 10 |
-| CRPS de escaños, a horizonte | 22 | 9 / 13 | 13 / 9 | 14 / 8 | 9 / 12 | 9 / 13 |
-| Brier, a horizonte | 22 | 14 / 8 | 13 / 8 | 14 / 7 | 6 / 11 | 10 / 9 |
-| Cobertura 95 del voto | 28 | 3 / 2 | 2 / 1 | 2 / 1 | 0 / 0 | 1 / 1 |
-| Cobertura 95 de los escaños | 22 | 0 / 1 | 0 / 1 | 0 / 1 | 0 / 0 | 0 / 0 |
+| MAE de voto | 28 | 18 / 10 / 0 | 16 / 12 / 0 | 17 / 11 / 0 | 14 / 14 / 0 | 16 / 12 / 0 |
+| RMSE de voto | 28 | 16 / 12 / 0 | 14 / 14 / 0 | 19 / 9 / 0 | 12 / 16 / 0 | 14 / 14 / 0 |
+| CRPS de escaños | 22 | 9 / 13 / 0 | 12 / 10 / 0 | 14 / 8 / 0 | 11 / 11 / 0 | 8 / 14 / 0 |
+| Brier | 22 | 12 / 10 / 0 | 13 / 9 / 0 | 13 / 7 / 2 | 5 / 14 / 3 | 9 / 10 / 3 |
+| CRPS de escaños, a horizonte | 22 | 9 / 13 / 0 | 13 / 9 / 0 | 14 / 8 / 0 | 9 / 12 / 1 | 9 / 13 / 0 |
+| Brier, a horizonte | 22 | 14 / 8 / 0 | 13 / 8 / 1 | 14 / 7 / 1 | 6 / 11 / 5 | 10 / 9 / 3 |
+| Cobertura 95 del voto | 28 | 3 / 2 / 23 | 2 / 1 / 25 | 2 / 1 / 25 | 0 / 0 / 28 | 1 / 1 / 26 |
+| Cobertura 95 de los escaños | 22 | 0 / 1 / 21 | 0 / 1 / 21 | 0 / 1 / 21 | 0 / 0 / 22 | 0 / 0 / 22 |
 
 Lo que dicen las tablas:
 
 - **El afinado mejora el voto a corto plazo y en conjunto.**
-  - Frente a (a), el MAE de voto baja en 5 de 6 horizontes: −1,8 % en todos los casos, con 18 casos mejores y 10 peores.
+  - Frente a (a), el MAE de voto baja en 5 de 6 horizontes (a 60 días sube un 2,01 %, justo por encima del límite): −1,8 % en todos los casos, con 18 casos mejores y 10 peores.
   - Frente a (D), el MAE de voto baja −0,2 %.
   - De 6 a 30 días el MAE de voto y el CRPS de escaños mejoran frente a las dos referencias, y el Brier a 30 días también.
 - **Los incumplimientos se concentran en 60 y 180 días.** Son los mismos en T y en P, así que vienen de la fase 1.
@@ -241,17 +242,21 @@ Lo que dicen las tablas:
 
 - **Frente a (a)**, la referencia publicada y el «antes» de A8, horizonte a horizonte:
   - a 14 días el Brier empeora un 12,8 % y la cobertura del voto baja 0,040;
-  - a 60 días el MAE de voto empeora un 2,0 %, el CRPS de escaños un 4,1 % y bajan las dos coberturas del 95 %;
+  - a 60 días el MAE de voto empeora un 2,01 %, el CRPS de escaños un 4,1 % y bajan las dos coberturas del 95 %;
   - a 180 días el CRPS empeora un 6,3 % y el Brier un 9,4 %.
-  - Ni siquiera en todos los casos juntos se cumple: el MAE (−1,8 %), el CRPS (−0,3 %) y el Brier (−1,1 %) mejoran, pero la cobertura del 95 % de los escaños baja (0,889 → 0,878, un caso).
-- **Frente a (D)**, que aísla el afinado, quedan los incumplimientos de 60 días (coberturas) y de 180 días (CRPS +6,1 %, Brier +9,1 %), los mismos que trae (P) sola.
+  - Horizonte a horizonte falla en los dos modos: a horizonte (`_h`), a 180 días el CRPS empeora un 5,6 % y el Brier un 8,6 %; a 14 días el Brier un 11,0 % y la cobertura del voto baja 0,040.
+  - **Leída sobre todos los casos juntos, A8 depende del modo.**
+    - En el nowcast falla sólo por la cobertura del 95 % de los escaños (0,889 → 0,878), por un partido en un caso: Sumar en 2023 a 60 días. El MAE (−1,8 %), el CRPS (−0,3 %) y el Brier (−1,1 %) mejoran.
+    - En la ejecución a horizonte **se cumple** frente a las dos referencias: CRPS −0,3 % frente a (a) y +0,2 % frente a (D); Brier −0,7 % y −1,4 %; las coberturas del 95 % del voto y de los escaños, iguales.
+    - El modelo publicado está hoy en modo Elección (horizonte de 60 días o menos), que es esa ejecución a horizonte.
+- **Frente a (D)**, que aísla el afinado, quedan los incumplimientos de 60 días (coberturas) y de 180 días (CRPS +6,1 %, Brier +9,1 %; a horizonte +5,4 % y +8,6 %), los mismos que trae (P) sola. Sobre todos los casos juntos, lo mismo que frente a (a): falla en el nowcast por la cobertura de escaños de ese caso y se cumple a horizonte.
 
 Recomendación para Luis: no cambiar los valores por defecto antes del 29-N. `backtest/tuning/best.json` queda como opción documentada: se puede evaluar con `--config` en cualquier backtest. Ninguno de los dos candidatos (T ni P) cumple A8, y el que se adopte debería ser el de la fase 1 sola, porque los dos ajustes de la fase 2 no se distinguen del ruido.
 
 **Siguiente revisión: tras el 29-11-2026.** El resultado añadirá una sexta general al backtest y cerrará el ciclo en curso, que hoy sólo cuenta como comprobación hasta el 25-10. Antes de esa revisión merece la pena una búsqueda que no premie sólo 7 días:
 
 - `max_fc` entre 0 y 10, o sólo en horizontes cortos;
-- o la regla de A8 aplicada a todos los casos juntos en vez de horizonte a horizonte, con 3 casos a 180 días.
+- o la regla de A8 aplicada a todos los casos juntos en vez de horizonte a horizonte, con 3 casos a 180 días. Con esa lectura la candidata ya se cumple en la ejecución a horizonte y falla en el nowcast por un partido en un caso. Habría que fijar también el modo que decide.
 
 Las dos son decisiones de Luis.
 

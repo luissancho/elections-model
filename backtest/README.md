@@ -188,4 +188,8 @@ Resultado del 03-11-2026 (tablas en el método 14):
 
 - La configuración afinada (`bw_cap=1.0; max_fc=0; he_n_iter=1; herd_prior=2.0`) mejora el voto de 6 a 30 días.
 - Empeora el CRPS de escaños y las coberturas del 95 % a 60 días, y el CRPS y el Brier a 180 días: **no cumple A8**.
+- Sobre todos los casos juntos, el resultado depende del modo.
+  - En la ejecución a horizonte (`_h`) se cumple frente a las dos referencias.
+  - En el nowcast falla sólo por la cobertura del 95 % de los escaños: un partido en un caso, Sumar en 2023 a 60 días.
+  - La regla y el modo que deciden son de Luis.
 - Los valores por defecto no cambian. `best.json` queda como opción, con la siguiente revisión tras el 29-11-2026.
