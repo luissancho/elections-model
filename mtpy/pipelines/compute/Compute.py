@@ -1,3 +1,4 @@
+from ...core.worker import PipelineEnd
 from ...jobs.progress import counted, notes_suffix
 from ...lib import compute
 from ..base import ScopePipeline
@@ -7,7 +8,8 @@ STEPS = {'weights': 'pesos', 'featured': 'eventos destacados', 'errors': 'errore
          'drift': 'deriva', 'house_effects': 'efectos de casa', 'herding': 'rebaño',
          'average_errors': 'errores del promedio', 'ratings': 'ratings'}
 # Public name of each action, in the headers and the summary lines
-ACTIONS = {'catalogues': 'catálogos', 'compute': 'series', 'ratings': 'ratings'}
+ACTIONS = {'catalogues': 'catálogos', 'compute': 'series', 'ratings': 'ratings',
+           'average_errors': 'errores del promedio'}
 # Key of the result of the global `catalogues` action (the others are keyed by scope)
 CATALOGUES = 'catalogues'
 # Reason of the skipped result of a scope with nothing to compute
@@ -16,16 +18,20 @@ NOTHING_PENDING = 'nothing loaded since the last compute'
 
 class Compute(ScopePipeline):
     """
-    Compute the poll series of a scope into the database: weights, featured events, errors, deviations, drift,
-    house effects, herding and the errors of the poll average (`compute.compute_scope`).
+    Compute the poll series of a scope into the database (`compute.compute_scope`) in the mode the pending work
+    asks for: ``light`` (weights and herding, what the polls of the current cycle can change) or ``full`` (weights,
+    featured events, errors, deviations, drift, house effects and herding).
 
     The chunk is the scope; every outcome is a result dict (see `compute_task`) and a failure never raises. The
-    subclass `Ratings` changes the action and the unit of work; this class also formats the lines of all the
-    actions of the group (`line_of`).
+    subclasses `Ratings` and `AverageErrors` change the action and the unit of work; this class also formats the
+    lines of all the actions of the group (`line_of`).
 
     The `compute` action skips a scope with nothing loaded since its last compute (`compute.pending_events`)
-    with a ``skipped`` result, unless ``overwrite`` is set; ``pending`` replaces that query (for tests) with a
-    callable ``scope -> list of dates``. `Ratings` never skips.
+    with a ``skipped`` result, unless ``overwrite`` is set, whatever the ``mode``. Then it picks the mode
+    (`compute.resolve_mode`): a requested ``light`` or ``full`` stands; with ``auto`` (the default), ``full`` with
+    ``overwrite`` or when a pending election has an official result (`compute.result_dates`), ``light`` otherwise.
+    ``pending`` and ``results`` replace those two queries (for tests) with callables ``scope -> list of dates``.
+    `Ratings` and `AverageErrors` never skip nor pick a mode.
     """
 
     label = 'series'
@@ -33,35 +39,57 @@ class Compute(ScopePipeline):
     ACTION = 'compute'
     pipes = {'update': {'Setup': ['prepare'], 'Load': ['compute']}}
 
-    def start(self, dry_run=False, overwrite=False, **kwargs) -> None:
-        """Set the run and print the header ``compute <action>: n ámbitos[ · overwrite][ · dry run]``."""
+    def start(self, dry_run=False, overwrite=False, mode=compute.AUTO, **kwargs) -> None:
+        """
+        Set the run and print the header ``compute <action>: n ámbitos[ · overwrite][ · light | · full][ · dry run]``
+        (the first two flags only for the series; the mode only when requested).
+        """
         super().start(**kwargs)
-        flags = (' · overwrite' if overwrite and self.ACTION == 'compute' else '') + (' · dry run' if dry_run else '')
+        self.mode = self.mode_reason = None
+        series = self.ACTION == 'compute'
+        flags = ((' · overwrite' if overwrite and series else '')
+                 + (' · ' + mode if series and mode != compute.AUTO else '')
+                 + (' · dry run' if dry_run else ''))
         self._say('compute {}: {}{}'.format(ACTIONS[self.ACTION], counted(self.total, 'ámbito', 'ámbitos'), flags))
 
-    def prepare_task(self, chunk=None, position=(1, 1), overwrite=False, pending=None, **kwargs):
+    def prepare_task(self, chunk=None, position=(1, 1), overwrite=False, mode=compute.AUTO, pending=None,
+                     results=None, **kwargs):
         """
-        Create and start the progress of the scope and end the run as skipped when there is nothing to compute.
+        Create and start the progress of the scope, end the run as skipped when there is nothing to compute and
+        pick the mode of the series (``self.mode`` and ``self.mode_reason``).
 
         Parameters
         ----------
         overwrite : bool
-            Compute even with nothing pending.
+            Compute even with nothing pending (and, with ``auto``, in ``full`` mode).
+        mode : str
+            ``auto``, ``light`` or ``full`` (see `compute.resolve_mode`).
         pending : callable, optional
             Replacement of `compute.pending_events` (for tests).
+        results : callable, optional
+            Replacement of `compute.result_dates` (for tests); only consulted with ``auto``, without ``overwrite``
+            and with pending elections.
+
+        Notes
+        -----
+        A failure of either query, or an unknown mode, ends the scope as ``failed`` with its reason.
         """
         self.start_progress(chunk, position)
-        if self.ACTION != 'compute' or overwrite:
+        if self.ACTION != 'compute':
             return
 
         try:
-            has_pending = bool((pending or compute.pending_events)(chunk))
+            dates = None if overwrite else (pending or compute.pending_events)(chunk)
+            if dates is not None and len(dates) == 0:
+                self.end({'status': 'skipped', 'action': ACTIONS[self.ACTION], 'reason': NOTHING_PENDING,
+                          'warnings': []})
+            needs_results = mode == compute.AUTO and not overwrite
+            with_results = (results or compute.result_dates)(chunk) if needs_results else None
+            self.mode, self.mode_reason = compute.resolve_mode(mode, overwrite, dates, with_results)
+        except PipelineEnd:  # the skip is not a failure
+            raise
         except Exception as e:
             self.end(self.failed(chunk, e, action=ACTIONS[self.ACTION], warnings=[]))
-
-        if not has_pending:
-            self.end({'status': 'skipped', 'action': ACTIONS[self.ACTION], 'reason': NOTHING_PENDING,
-                      'warnings': []})
 
     def compute_task(self, chunk=None, dry_run=False, computer=None, featured=None, **kwargs):
         """
@@ -86,9 +114,10 @@ class Compute(ScopePipeline):
                                                    **self.unit(chunk, dry_run, computer, featured)}, action=name)
 
     def unit(self, chunk, dry_run, computer, featured) -> dict:
-        """Run `compute.compute_scope` on the scope and return its figures."""
-        return compute.compute_scope(chunk, save=not dry_run, verbose=self.model_verbose, progress=self.progress,
-                                     computer=computer, featured=featured)
+        """Run `compute.compute_scope` on the scope in ``self.mode`` and return its figures, with the reason."""
+        return {'dry_run': dry_run, 'mode_reason': self.mode_reason,
+                **compute.compute_scope(chunk, save=not dry_run, verbose=self.model_verbose, progress=self.progress,
+                                        computer=computer, featured=featured, mode=self.mode)}
 
     def line_of(self, chunk, result, **kwargs):
         """Format the summary line of one result of any action, with the count of its model warnings."""
@@ -104,8 +133,16 @@ class Compute(ScopePipeline):
         elif result['action'] == 'ratings':
             line = '{}: ratings computed ({} pollsters, {} events) in {:.0f} s'.format(
                 chunk, result['n_pollsters'], result['n_events'], result['seconds']['total'])
+        elif result['action'] == ACTIONS['average_errors']:
+            line = '{}: average errors computed ({} rows, {} events{}) in {:.0f} s'.format(
+                chunk, result['n_rows'], result['n_events'], ', dry run' if result['dry_run'] else '',
+                result['seconds']['total'])
         else:
-            featured = 'dry run' if result['featured'] is None else '{} featured'.format(result['featured'])
-            line = '{}: series computed ({} polls, {} events, {}) in {:.0f} s'.format(
-                chunk, result['n_polls'], result['n_events'], featured, result['seconds']['total'])
+            parts = ['{} polls'.format(result['n_polls']), '{} events'.format(result['n_events'])]
+            if result['featured'] is not None:
+                parts.append('{} featured'.format(result['featured']))
+            if result['dry_run']:
+                parts.append('dry run')
+            line = '{}: series computed ({}, {}: {}) in {:.0f} s'.format(
+                chunk, result['mode'], result['mode_reason'], ', '.join(parts), result['seconds']['total'])
         return line + notes_suffix(result)
