@@ -268,13 +268,14 @@ def test_backtest_scope_writes_the_tables_and_the_run_record(tmp_path):
     run = json.load(open(folder / 'run.json', encoding='utf-8'))
     assert set(run) == {'run_at', 'commit', 'scope', 'n_sim', 'seed', 'max_fc', 'nowcast_only', 'house_effects',
                         'industry_bias', 'dispersion', 'herding', 'composition', 'regional_noise', 'min_events',
-                        'error_model', 'drift_scale', 'tail_dof', 'recompute_ratings', 'events', 'horizons',
-                        'db_polls', 'db_last_poll'}
+                        'error_model', 'drift_scale', 'tail_dof', 'config', 'recompute_ratings', 'events',
+                        'horizons', 'db_polls', 'db_last_poll'}
     assert run['scope'] == 'es-md' and run['commit'] == 'abc1234' and run['run_at'].startswith('20')
     assert run['n_sim'] == 20 and run['seed'] == 42 and run['composition'] == 0.25 and run['min_events'] == 1
     assert run['error_model'] == 'polls' and seen['error_model'] == 'polls'
     assert run['drift_scale'] is None and seen['drift_scale'] is None
     assert run['tail_dof'] is None and seen['tail_dof'] is None
+    assert run['config'] is None and seen['config'] is None
     assert run['events'] == ['2019-11-10', '2023-07-23'] and run['horizons'] == [6, 30]
     assert run['db_polls'] == 12 and run['db_last_poll'] == '2026-10-03'
     assert seen['scope'] == 'es-md' and seen['events'] == ['2019-11-10', '2023-07-23'] and seen['horizons'] == [30, 6]
@@ -462,8 +463,8 @@ def test_run_backtest_script_delegates_to_the_job(fresh_app, monkeypatch, capsys
     assert seen == {'scopes': ['es-md', 'es-cl'], 'events': None, 'horizons': [6, 30], 'n_sim': 20, 'seed': 42, 'max_fc': 10,
                     'nowcast_only': False, 'house_effects': True, 'industry_bias': False, 'dispersion': True,
                     'herding': False, 'composition': 'auto', 'regional_noise': True, 'min_events': None,
-                    'error_model': 'average', 'drift_scale': 'auto', 'tail_dof': 5, 'recompute_ratings': False,
-                    'out': 'x'}
+                    'error_model': 'average', 'drift_scale': 'auto', 'tail_dof': 5, 'config': None,
+                    'recompute_ratings': False, 'out': 'x'}
     hint = capsys.readouterr().out
     assert hint.startswith('Tables written to x. publish backtest/event read the app file system: run python job.py backtest ')
     assert '\'{"action":"push","scopes":["es-md","es-cl"],"out":"x"}\' (with S3_BUCKET set)' in hint
@@ -655,3 +656,200 @@ def test_summarize_calibration_keeps_only_the_main_parties_of_the_national_kinds
     every = summarize_calibration(cal, main_only=False)
     assert every.query("population == 'generales'")['n_cells'].eq(2).all()
     assert every.query("population == 'generales' and bin == 9")['observed'].tolist() == pytest.approx([0.5, 0.5])
+
+
+TUNED = {'reg_params': {'bw_type': 'fixed', 'bw': 45}, 'house_effects': False, 'he_params': {'tau': 0.16},
+         'dispersion': False, 'herding': False, 'disp_params': {'herd_prior': 10.},
+         'weights': {'wspan': 7, 'ol_max': 900}, 'max_fc': 3, 'label': 'best'}
+
+
+class StopCase(Exception):
+    """Detiene `run_case` en cuanto el `Simulator` falso ha recibido sus argumentos y el ajuste."""
+
+
+class RecordingSimulator:
+    """`Simulator` sin modelo: registra los argumentos de la construcción y de `fit_forecast` y detiene el caso al
+    simular."""
+
+    calls = []
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.params = {'names': ['A', 'B']}
+        self.model = object()
+        self.event_params = {'bmaps': {'vs': {}}}
+        RecordingSimulator.calls.append({'init': kwargs})
+        RecordingSimulator.instances.append(self)
+
+    def fit_forecast(self, **kwargs):
+        RecordingSimulator.calls[-1]['fit'] = kwargs
+
+    def run(self, **kwargs):
+        raise StopCase()
+
+
+@pytest.fixture
+def recording(monkeypatch):
+    """`run_case` con el `Simulator`, la lectura de sondeos y el recálculo de pesos sustituidos (sin base)."""
+    from mtpy.lib import backtest, tuning
+    RecordingSimulator.calls = []
+    RecordingSimulator.instances = []
+    seen = {'polls': [], 'reweighted': []}
+    polls, overrides = pd.DataFrame({'date': ['2023-06-01']}), pd.DataFrame({'weight_over': [1.]})
+    monkeypatch.setattr(backtest, 'Simulator', RecordingSimulator)
+
+    def get_poll_series(*args, **kwargs):
+        seen['polls'].append((args, kwargs))
+        return polls
+
+    def reweighted_overrides(frame, weights):
+        seen['reweighted'].append((frame, weights))
+        return overrides
+
+    def matched_overrides(model, frame):
+        seen['matched'].append((model, frame))
+        return 0
+
+    seen['matched'] = []
+    monkeypatch.setattr(backtest, 'get_poll_series', get_poll_series)
+    monkeypatch.setattr(tuning, 'reweighted_overrides', reweighted_overrides)
+    monkeypatch.setattr(backtest, 'matched_overrides', matched_overrides)
+    return {**seen, 'polls_frame': polls, 'overrides': overrides}
+
+
+def test_run_case_without_a_config_builds_the_simulator_as_before(recording):
+    """Sin configuración el `Simulator` se construye como siempre: sin `reg_params`, `he_params` ni pesos recalculados,
+    con `disp_params` sólo con el rebaño, y `fit_forecast` con el `max_fc` del caso; no se leen sondeos aparte."""
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30, max_fc=7, herding=False, dispersion=False)
+    init, fit = RecordingSimulator.calls[0]['init'], RecordingSimulator.calls[0]['fit']
+    assert not {'reg_params', 'he_params', 'weight_overrides'} & set(init)
+    assert init['disp_params'] == {'herding': False} and init['dispersion'] is False and init['house_effects'] is True
+    assert init['drange'] == 30 and fit['max_fc'] == 7
+    assert recording['polls'] == [] and recording['reweighted'] == []
+
+
+def test_run_case_builds_the_simulator_with_the_config_and_the_recomputed_weights(recording):
+    """Con configuración, el `Simulator` recibe sus `reg_params`, `he_params`, `disp_params` (con su rebaño) e
+    interruptores, `fit_forecast` su `max_fc` (la configuración manda sobre los argumentos sueltos) y los pesos se
+    recalculan sobre los sondeos del corte (`get_poll_series` a `horizon` días, sin los tipos excluidos), con
+    `tuning.reweighted_overrides`."""
+    from mtpy.lib import backtest
+    from mtpy.lib.mtypes import DROP_MTYPES
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30, max_fc=10, house_effects=True, dispersion=True, herding=True,
+                          config=TUNED)
+    init, fit = RecordingSimulator.calls[0]['init'], RecordingSimulator.calls[0]['fit']
+    assert init['reg_params'] == {'bw_type': 'fixed', 'bw': 45} and init['he_params'] == {'tau': 0.16}
+    assert init['disp_params'] == {'herd_prior': 10., 'herding': False}
+    assert (init['house_effects'], init['dispersion']) == (False, False)
+    assert init['weight_overrides'] is recording['overrides'] and fit['max_fc'] == 3
+    (args, kwargs), = recording['polls']
+    assert args == ('es', ['2023-07-23']) and tuple(kwargs['drange']) == (30, None)
+    assert kwargs['drop_mtypes'] == list(DROP_MTYPES)
+    (frame, weights), = recording['reweighted']
+    assert frame is recording['polls_frame'] and weights == {'wspan': 7, 'ol_max': 900}
+    assert TUNED['disp_params'] == {'herd_prior': 10.} and TUNED['reg_params'] == {'bw_type': 'fixed', 'bw': 45}
+
+
+def test_run_case_keeps_the_stored_weights_with_a_config_without_weights(recording):
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30, config={**TUNED, 'weights': None})
+    assert RecordingSimulator.calls[0]['init']['weight_overrides'] is None
+    assert recording['polls'] == [] and recording['reweighted'] == []
+
+
+def test_run_case_counts_the_overrides_matched_on_the_fitted_model(recording):
+    """`meta.n_overrides` (como en `tuning.run_cut`) cuenta los sondeos del promedio cuyos pesos ha recalculado la
+    configuración, sobre el modelo ya ajustado; sin configuración no se cuenta."""
+    from mtpy.lib import backtest
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30, config=TUNED)
+    (model, frame), = recording['matched']
+    assert model is RecordingSimulator.instances[-1].model and frame is recording['overrides']
+    recording['matched'].clear()
+    with pytest.raises(StopCase):
+        backtest.run_case('es', '2023-07-23', 30)
+    assert recording['matched'] == []
+
+
+def test_matched_overrides_counts_the_polls_of_the_series_with_an_override():
+    """Cuenta las filas de sondeo (con `pollster`) de la serie cruda del modelo cuyo índice tiene peso recalculado;
+    las filas sin encuestadora (resultados) y los recálculos de sondeos que no están en la serie no cuentan; sin
+    recálculo, 0."""
+    from types import SimpleNamespace
+    from mtpy.lib.backtest import matched_overrides
+    names = ['date', 'pollster_id', 'sponsor_id']
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-06-01'), 1, 1), (pd.Timestamp('2023-06-02'), 2, 1),
+                                       (pd.Timestamp('2023-06-03'), 3, 1), (pd.Timestamp('2019-11-10'), 0, 0)],
+                                      names=names)
+    raw = pd.DataFrame({'pollster': ['a', 'b', 'c', None], 'A': [30., 31., 29., 28.]}, index=index)
+    overrides = pd.DataFrame({'weight_over': [1., 1., 1.], 'weight_sample': [1., 1., 1.]}, index=pd.MultiIndex.from_tuples(
+        [(pd.Timestamp('2023-06-01'), 1, 1), (pd.Timestamp('2023-06-03'), 3, 1), (pd.Timestamp('2023-07-01'), 4, 1)],
+        names=names))
+    assert matched_overrides(SimpleNamespace(series_raw=raw, series=None), overrides) == 2
+    assert matched_overrides(SimpleNamespace(series_raw=None, series=raw), overrides) == 2
+    assert matched_overrides(SimpleNamespace(series_raw=raw, series=None), None) == 0
+    # The result row's index is overridden too: it does not count, it is not a poll
+    overrides.loc[(pd.Timestamp('2019-11-10'), 0, 0), :] = 1.
+    assert matched_overrides(SimpleNamespace(series_raw=raw, series=None), overrides) == 2
+
+
+def test_run_backtest_passes_the_config_to_every_case(monkeypatch):
+    import warnings
+    from mtpy.lib import backtest
+    seen = []
+
+    def failing_case(*args, **kwargs):
+        seen.append(kwargs.get('config'))
+        raise ValueError('no usable polls')
+
+    monkeypatch.setattr(backtest, 'run_case', failing_case)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        backtest.run_backtest(scope='es', events=['2023-07-23'], horizons=[6, 30], config=TUNED)
+    assert seen == [TUNED, TUNED]
+
+
+def test_backtest_scope_takes_the_switches_of_the_config_and_records_it(tmp_path):
+    """Con configuración, `backtest_scope` pasa al ejecutor los interruptores y el `max_fc` de la configuración y
+    `run.json` registra la configuración entera (etiqueta y ajustes)."""
+    import json
+    from mtpy.lib import backtest
+    seen = {}
+
+    def runner(**kwargs):
+        seen.update(kwargs)
+        return fake_results()
+
+    backtest.backtest_scope('es', out=str(tmp_path), events=['2023-07-23'], config=TUNED, runner=runner,
+                            stats=lambda scope: {'db_polls': 1, 'db_last_poll': None},
+                            prov=lambda: {'commit': None, 'dirty': False, 'versions': {}})
+    assert seen['config'] is TUNED
+    assert (seen['house_effects'], seen['dispersion'], seen['herding'], seen['max_fc']) == (False, False, False, 3)
+    run = json.load(open(tmp_path / 'run.json', encoding='utf-8'))
+    assert run['config'] == TUNED and (run['house_effects'], run['herding'], run['max_fc']) == (False, False, 3)
+
+
+def test_run_backtest_script_passes_the_config_path_to_the_job(fresh_app, monkeypatch, capsys):
+    """`--config PATH` llega al job como ruta (el job la lee y la valida); sin la opción, `None`."""
+    import importlib
+    import importlib.util
+    import os
+    import sys
+    from mtpy import mtpy as app
+    job_module = importlib.import_module('mtpy.jobs.Backtest')
+    seen = {}
+    monkeypatch.setattr(app, 'run', lambda *args, **kwargs: None)
+    monkeypatch.setattr(job_module.Backtest, 'run', lambda self, **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(sys, 'argv', ['run_backtest.py', '--config', 'backtest/tuning/best.json', '--out', 'x'])
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    spec = importlib.util.spec_from_file_location('run_backtest', os.path.join(root, 'backtest', 'run_backtest.py'))
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    script.main()
+    assert seen['config'] == 'backtest/tuning/best.json' and seen['scopes'] == ['es']
+    text = open(os.path.join(root, 'backtest', 'run_backtest.py'), encoding='utf-8').read()
+    assert '[--config backtest/tuning/best.json]' in text

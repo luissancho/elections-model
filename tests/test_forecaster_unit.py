@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from mtpy.core.utils.stat import LocalKernelEstimator
 from mtpy.lib.forecaster import Forecaster, NoPollsError
 from mtpy.lib.utils import build_blocks
 
@@ -513,9 +514,9 @@ def test_weights_at_window_covers_every_poll_of_the_regression():
 
 # --- Backtest: ratings recalculados en memoria ---
 
-def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
-    """`weight_ratings` sustituye al `weight_rating` guardado en los sondeos de las casas del índice (el de su elección);
-    las ausentes quedan con el relleno por calidad y los resultados oficiales no se tocan."""
+def _weights_builder(monkeypatch):
+    """`build(weight_ratings, weight_overrides=None)`: `build_series` sin base sobre tres sondeos de dos casas (A, B) y
+    dos resultados, con los pesos guardados `weight_over` 1, 1, 2, `weight_sample` 0,5, 0,5, 1,5 y `weight_rating` 9."""
     from mtpy.lib import forecaster as fc_module
     event_date = pd.Timestamp('2023-07-23')
     polls = pd.DataFrame({
@@ -538,15 +539,24 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
     monkeypatch.setattr(fc_module, 'get_parties', lambda: parties)
     monkeypatch.setattr(fc_module, 'get_pollsters', lambda: pollsters)
 
-    def build(weight_ratings):
+    def build(weight_ratings, weight_overrides=None):
         fc = Forecaster.__new__(Forecaster)
         fc.scope, fc.event_date, fc.verbose, fc.weight_ratings = 'es', '2023-07-23', 0, weight_ratings
+        fc.weight_overrides = weight_overrides
         fc.date_start, fc.date_end = pd.Timestamp('2019-11-10'), event_date
         fc.bmap = None
         fc.load_events = lambda: events
         fc.load_polls = lambda: polls
         return fc.build_series()
 
+    return build, pollsters
+
+
+def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
+    """`weight_ratings` sustituye al `weight_rating` guardado en los sondeos de las casas del índice (el de su elección);
+    las ausentes quedan con el relleno por calidad y los resultados oficiales no se tocan."""
+    build, pollsters = _weights_builder(monkeypatch)
+    event_date = pd.Timestamp('2023-07-23')
     index = pd.MultiIndex.from_tuples([(event_date, 1)], names=['event_date', 'pollster_id'])
     series = build(pd.Series([2.0], index=index)).series_raw
     house_a = series.loc[series.pollster == 'A']
@@ -560,3 +570,83 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
     # Sin la serie, el valor guardado manda
     stored = build(None).series_raw
     assert (stored.loc[stored.pollster.notnull(), 'weight_rating'] == 9.0).all()
+
+
+# --- Sondeos futuros (parte A): pesos recalculados en memoria (`weight_overrides`) ---
+
+def test_apply_weight_overrides_replaces_only_the_given_cells_of_polls():
+    idx = pd.MultiIndex.from_tuples([(pd.Timestamp('2026-01-08'), 1, 0), (pd.Timestamp('2026-01-09'), 2, 0), (pd.Timestamp('2026-02-01'), np.nan, np.nan)],
+                                    names=['date', 'pollster_id', 'sponsor_id'])
+    series = pd.DataFrame({'pollster': ['A', 'B', None], 'weight_over': [1., 1., np.nan], 'weight_sample': [1.2, 0.8, np.nan], 'weight_rating': [1., 1., np.nan]}, index=idx)
+    over = pd.DataFrame({'weight_over': [0.25]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp('2026-01-08'), 1, 0)], names=idx.names))
+    out = Forecaster.apply_weight_overrides(series, over)
+    assert out.loc[(pd.Timestamp('2026-01-08'), 1, 0), 'weight_over'] == 0.25
+    assert out.loc[(pd.Timestamp('2026-01-09'), 2, 0), 'weight_over'] == 1.0 and out['weight_sample'].tolist()[:2] == [1.2, 0.8]
+    assert series.loc[(pd.Timestamp('2026-01-08'), 1, 0), 'weight_over'] == 1.0   # copia, no in situ
+
+
+def test_weight_overrides_enter_the_weight_of_the_matching_polls_only(monkeypatch):
+    """`build_series` toma de `weight_overrides` las columnas que trae, en los sondeos que casan con su índice, antes de
+    calcular `weight`; los demás sondeos y los resultados oficiales quedan como estaban."""
+    build, _ = _weights_builder(monkeypatch)
+    stored = build(None).series_raw
+    keys = pd.MultiIndex.from_tuples([(pd.Timestamp('2023-07-12'), 2, 0)], names=['date', 'pollster_id', 'sponsor_id'])
+    over = pd.DataFrame({'weight_over': [0.25], 'weight_sample': [2.0]}, index=keys)
+    series = build(None, weight_overrides=over).series_raw
+    b = series.loc[series.pollster == 'B'].iloc[0]
+    assert b['weight_over'] == 0.25 and b['weight_sample'] == 2.0
+    assert b['weight'] == pytest.approx(0.25 * 2.0 * b['weight_rating'])
+    others = series.pollster != 'B'
+    pd.testing.assert_frame_equal(series.loc[others], stored.loc[stored.pollster != 'B'])
+
+
+# --- Sondeos futuros (parte A): tope del ancho de frontera (`bw_cap`) y prior del rebaño (`herd_prior`) ---
+
+def test_bw_cap_defaults_to_none_and_reaches_the_kernel_of_the_average():
+    fc = Forecaster.__new__(Forecaster)
+    assert Forecaster.set_reg_params(fc, None)['bw_cap'] is None
+    params = Forecaster.set_reg_params(fc, {'bw_cap': 1.5})
+    assert params['bw_cap'] == 1.5
+    x = pd.Series(np.linspace(30., 32., 40), index=pd.date_range('2026-01-01', periods=40, freq='3D'))
+    kernel = LocalKernelEstimator(x, weights=np.ones(40), groups=np.arange(40) % 4, **params).get_kernel()
+    assert kernel.bw_cap == 1.5
+
+
+def test_herd_prior_defaults_to_n_prior_and_shrinks_the_herding_ratio_alone():
+    fc = Forecaster.__new__(Forecaster)
+    assert fc.set_disp_params({'n_prior': 7.})['herd_prior'] == 7.
+    assert fc.set_disp_params({'n_prior': 5., 'herd_prior': 2.})['herd_prior'] == 2.
+    # ratio 0,5 medido con n = 10: con herd_prior 2 se contrae a 1 − (1 − 0,5) · 10 / 12; con n_prior 5 (muestra efectiva) no cambia
+    # (`shrink_ratio` trabaja sobre series: una por casa)
+    assert Forecaster.shrink_ratio(pd.Series([0.5]), pd.Series([10]), 2.).iloc[0] == pytest.approx(1 - 0.5 * 10 / 12)
+
+
+def test_fit_dispersion_shrinks_the_herding_ratio_with_herd_prior_and_the_dispersion_with_n_prior():
+    """El rebaño lee `herd_prior`; la muestra efectiva (`ratio`), `n_prior`: un `herd_prior` enorme lleva el rebaño a 1
+    sin tocar la dispersión."""
+    noise = {1: 1.45, 2: 1.45, 3: 1.45, 4: 0.3}
+    base, _, _ = _synthetic_forecaster(noise=noise)
+    base.disp_enabled = True
+    ref = base.fit_dispersion()
+    fc, _, _ = _synthetic_forecaster(noise=noise)
+    fc.disp_enabled = True
+    fc.disp_params = fc.set_disp_params({'herd_prior': 1e9})
+    disp = fc.fit_dispersion()
+    assert ref.loc[4, 'herd_ratio'] < 0.75 and disp.loc[4, 'herd_ratio'] == pytest.approx(1., abs=1e-6)
+    pd.testing.assert_series_equal(disp['ratio'], ref['ratio'])
+
+
+def test_event_params_given_to_the_constructor_replace_the_derivation(monkeypatch):
+    from mtpy.lib import forecaster as forecaster_module
+
+    calls = []
+    derived = {'parties': {'polls': ['PP', 'PSOE']}, 'bmaps': {'main': ['PP']}}
+    monkeypatch.setattr(forecaster_module, 'get_event_params',
+                        lambda scope, event_date, path=None: calls.append((scope, event_date, path)) or derived)
+
+    fc = Forecaster('es', '2023-07-23')
+    assert calls == [('es', '2023-07-23', '.')] and fc.event_params is derived and fc.bmap == ['PP', 'PSOE']
+
+    given = {'parties': {'polls': ['PP', 'VOX']}, 'bmaps': {'main': ['VOX']}}
+    fc = Forecaster('es', '2023-07-23', event_params=given)
+    assert len(calls) == 1 and fc.event_params is given and fc.bmap == ['PP', 'VOX']

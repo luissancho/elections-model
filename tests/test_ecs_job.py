@@ -132,6 +132,19 @@ def test_run_job_value_refuses_laptop_only_backtest_actions():
     assert ecs_job.run_job_value('pipeline', '{"select":"backtest.backtest","chunks":"es"}').startswith('pipeline ')
 
 
+def test_run_job_value_refuses_laptop_only_tune_actions():
+    """`push`/`pull`/`out` del tune usan la copia del repositorio (`backtest/tuning`), directo o por `pipeline`."""
+    for params in ('{"action":"pull","scopes":"all"}', '{"action":"push"}', '{"out":"backtest/tuning"}'):
+        with pytest.raises(ecs_job.UsageError, match='tune push/pull/out run on the laptop'):
+            ecs_job.run_job_value('tune', params)
+    for params in ('{"select":"tune.tune","action":"push"}', '{"select":"tune.tune","out":"x"}'):
+        with pytest.raises(ecs_job.UsageError, match='this pipeline runs on the laptop'):
+            ecs_job.run_job_value('pipeline', params)
+    assert ecs_job.run_job_value('tune', '{"mode":"smoothing","scopes":["es"]}') == (
+        'tune {"mode":"smoothing","scopes":["es"]}')
+    assert ecs_job.run_job_value('pipeline', '{"select":"tune.tune","chunks":"es"}').startswith('pipeline ')
+
+
 def test_usage_errors_exit_2_without_launching(env_file):
     ecs = FakeEcs()
     assert run([], ecs)[0] == 2 and 'usage' in run([], ecs)[2].lower()

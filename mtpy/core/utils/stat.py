@@ -263,6 +263,7 @@ class Kernel(object):
         bw: list | int | float | Literal['scott', 'silverman', 'isj'] = 'isj',
         n_iter: int = 1,
         min_delta: Optional[float] = None,
+        bw_cap: Optional[float] = None,
         verbose: int = 0
     ) -> None:
         self.verbose = verbose  # Print progress
@@ -274,6 +275,9 @@ class Kernel(object):
         self.bw = bw
         self.n_iter = n_iter
         self.min_delta = min_delta
+        # Cap of the adaptive bandwidth of each point, in pilot (fixed) bandwidths: where the density of the data
+        # falls (the edges of the series) the adaptive bandwidth widens without limit; `None` leaves it free
+        self.bw_cap = bw_cap
 
         self.nobs, self.kvar = array_shape(self.data)
         self.data = array_adjust(self.data, self.kvar)
@@ -502,6 +506,11 @@ class Kernel(object):
         if self.verbose > 1:
             print('Iterations performed: {}'.format(n))
 
+        # Cap of the final bandwidth of each point at `bw_cap` times the pilot, once, after the last iteration: only
+        # the points beyond the cap (the edges, where the data thins out) change; the iterations stay uncapped
+        if self.bw_cap is not None:
+            kbw = np.minimum(kbw, self.bw_cap * np.asarray(bw, dtype=float))
+
         if ret_iter:
             return kbw, kbws[:n + 1]
 
@@ -713,6 +722,8 @@ class LeastSquaresEstimator(Estimator):
         self.wexog = None
         self.wendog = None
         self.wresid = None
+        self.xvars = None  # Variables of the observations, before the polynomial design (`exog`)
+        self.points = None  # Prediction points, before the polynomial design (`pred`): the index of the result
 
         self.dof = None  # Degrees of freedom
         self.dof_t = None  # Degrees of freedom of the t reference of the bands (`G - 1` with cluster covariance)
@@ -749,10 +760,11 @@ class LeastSquaresEstimator(Estimator):
             self.neff = np.square(np.sum(self.weights)) / np.sum(np.square(self.weights))
             self.weights *= self.neff / self.weights.sum()
 
+        self.xvars = self.exog
         if self.poly_deg == 1:
             exog = np.column_stack([np.ones(self.exog.shape[0]), self.exog])
         else:
-            exog = np.ones(self.exog.shape[0])
+            exog = np.ones((self.exog.shape[0], 1))  # a column also with poly_deg 0 (the weighted mean)
             for p in np.arange(1, self.poly_deg + 1):
                 for combination in itertools.combinations_with_replacement(np.arange(self.exog.shape[1]), p):
                     term = np.prod(self.exog[:, combination], axis=1)
@@ -777,11 +789,19 @@ class LeastSquaresEstimator(Estimator):
     ) -> Self:
         super().build_pred(p)
 
-        if self.pred.shape[1] <= self.kvar:
+        # Without points the prediction is on the observations, whose design matrix `exog` already is; points given
+        # as a design matrix keep their linear terms
+        if p is None:
+            self.points = self.xvars
+        elif self.pred.shape[1] > self.kvar:
+            self.points = self.pred[:, 1:(self.kvar + 1)]
+        else:
+            self.points = self.pred
+        if p is not None and self.pred.shape[1] <= self.kvar:
             if self.poly_deg == 1:
                 pred = np.column_stack([np.ones(self.pred.shape[0]), self.pred])
             else:
-                pred = np.ones(self.pred.shape[0])
+                pred = np.ones((self.pred.shape[0], 1))
                 for p in np.arange(1, self.poly_deg + 1):
                     for combination in itertools.combinations_with_replacement(np.arange(self.pred.shape[1]), p):
                         term = np.prod(self.pred[:, combination], axis=1)
@@ -891,7 +911,7 @@ class LeastSquaresEstimator(Estimator):
 
         y_hat = np.dot(self.pred, self.coef).squeeze()
 
-        result = pd.Series(y_hat, index=pd.MultiIndex.from_arrays(self.pred[:, 1:(self.kvar + 1)].T), name='mean')
+        result = pd.Series(y_hat, index=pd.MultiIndex.from_arrays(self.points.T), name='mean')
 
         if alpha is not None:
             # self.perr = np.sqrt(np.diag(self.pred @ self.mcov @ self.pred.T))
@@ -936,6 +956,7 @@ class LocalKernelEstimator(Estimator):
         bw_type: Literal['fixed', 'adaptive'] = 'adaptive',
         bw: int | float | tuple[int | float] | Literal['scott', 'silverman', 'isj'] = 'isj',
         bw_kwargs: Optional[dict[str, Any]] = None,
+        bw_cap: Optional[float] = None,
         poly_deg: int = 1,
         cov_type: Optional[Literal['hac', 'hc1', 'cluster']] = 'hac',
         cov_kwargs: Optional[dict[str, Any]] = None,
@@ -945,12 +966,14 @@ class LocalKernelEstimator(Estimator):
         Local polynomial regression with kernel weights (`Kernel`): at each prediction point a
         `LeastSquaresEstimator` is fitted on the observations with a non-negligible kernel weight, with the
         robust covariance `cov_type` (`'cluster'` needs `groups`, one per observation; the local fit gets
-        the groups of its window).
+        the groups of its window). `bw_cap` caps the adaptive bandwidth of each point at `bw_cap` times the
+        pilot bandwidth (see `Kernel`); `None` leaves it free.
         """
         self.kernel = kernel
         self.bw_type = bw_type
         self.bw = bw
         self.bw_kwargs = bw_kwargs if bw_kwargs is not None else dict()
+        self.bw_cap = bw_cap
 
         self.poly_deg = poly_deg
         self.cov_type = cov_type
@@ -980,6 +1003,7 @@ class LocalKernelEstimator(Estimator):
             kernel=self.kernel,
             bw_type=self.bw_type,
             bw=self.bw,
+            bw_cap=self.bw_cap,
             **self.bw_kwargs
         )
 

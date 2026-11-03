@@ -6,6 +6,8 @@ from mtpy.core.dal.MySQL import MySQL
 from mtpy.core.dal.PostgreSQL import PostgreSQL
 
 PARAMS = {'host': 'db.test', 'port': '5432', 'username': 'u', 'password': 'p', 'stage_dir': None}
+# TCP keepalives of every PostgreSQL connection: a dead link fails in 60 + 5 × 10 s instead of hanging forever
+KEEPALIVES = {'keepalives': 1, 'keepalives_idle': 60, 'keepalives_interval': 10, 'keepalives_count': 5}
 
 
 @pytest.fixture
@@ -25,12 +27,13 @@ def test_postgresql_engine_has_a_connect_timeout_and_unbounded_statements(engine
     PostgreSQL({**PARAMS, 'statement_timeout': timeout}, 'elections')._build_client()
     url, kwargs = engines[0]
     assert url == 'postgresql+psycopg2://u:p@db.test:5432/elections'
-    assert kwargs == {'pool_pre_ping': True, 'connect_args': {'connect_timeout': 5}}
+    assert kwargs == {'pool_pre_ping': True, 'connect_args': {'connect_timeout': 5, **KEEPALIVES}}
 
 
 def test_postgresql_engine_bounds_statements_when_configured(engines):
     PostgreSQL({**PARAMS, 'statement_timeout': '10000'}, 'elections')._build_client()
-    assert engines[0][1]['connect_args'] == {'connect_timeout': 5, 'options': '-c statement_timeout=10000'}
+    assert engines[0][1]['connect_args'] == {'connect_timeout': 5, **KEEPALIVES,
+                                             'options': '-c statement_timeout=10000'}
     with pytest.raises(ValueError, match='statement_timeout'):
         PostgreSQL({**PARAMS, 'statement_timeout': '10s'}, 'elections')._build_client()
 

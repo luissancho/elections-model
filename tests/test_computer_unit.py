@@ -576,9 +576,7 @@ def test_compute_ratings_builds_the_prior_from_the_national_events(monkeypatch):
 
 def overweights(rows, wspan=4):
     """`poll_overweights` sobre (inicio, fin) en días relativos a la elección."""
-    c = bare_computer()
-    c.wspan = wspan
-    return c.poll_overweights(np.array(rows, dtype=float))
+    return Computer.poll_overweights(np.array(rows, dtype=float), wspan)
 
 
 def test_overlapping_polls_keep_only_the_last_delivery():
@@ -1049,3 +1047,31 @@ def test_get_drift_estimator_auto_keeps_the_parties_polled_since_the_start_of_th
     auto = c.get_drift_estimator(scale='auto')
     # O (2 años en 2003, desde el inicio) y A; Y fuera
     assert auto.scale == pytest.approx(2.) and auto.scale_rows == 2
+
+
+# --- Sondeos futuros (parte A): pesos de muestra y sobrepublicación recalculados sin base (`Computer.reweight`) ---
+
+def _polls_frame():
+    """Cuatro sondeos de dos casas para una elección: muestras 1000, 4000, NaN y 9000. Los dos de la casa 1 (1000 y
+    NaN) terminan con dos días de diferencia y no se solapan; los de la casa 2 están separados un mes."""
+    event = pd.Timestamp('2026-11-29')
+    return pd.DataFrame({
+        'event_date': event, 'date': pd.to_datetime(['2026-10-08', '2026-09-10', '2026-10-10', '2026-10-12']),
+        'pollster_id': [1, 2, 1, 2], 'sponsor_id': 0, 'pollster': ['A', 'B', 'A', 'B'],
+        'start_date': pd.to_datetime(['2026-10-06', '2026-09-07', '2026-10-09', '2026-10-09']),
+        'end_date': pd.to_datetime(['2026-10-08', '2026-09-10', '2026-10-10', '2026-10-12']),
+        'sample_size': [1000., 4000., np.nan, 9000.], 'mtype': 'cati', 'ctype': None,
+    }, index=pd.Index([10, 11, 12, 13]))
+
+
+def test_reweight_recomputes_sample_and_overlap_weights():
+    polls = _polls_frame()  # 4 sondeos de 2 casas, muestras 1000, 4000, NaN, 9000; dos de la misma casa con 2 días entre fechas
+    w = Computer.reweight(polls, wspan=4, ol_max=5000, ol_dev=3)
+    assert list(w.columns) == ['proc_sample', 'weight_sample', 'weight_over']
+    assert w.index.equals(polls.index)
+    assert w['proc_sample'].max() <= 5000                      # tope
+    assert w.loc[polls['sample_size'].isna(), 'proc_sample'].iloc[0] == 1000  # mediana de la casa
+    assert w['weight_sample'].between(0, 3).all()
+    assert w.loc[polls.pollster_id == 1, 'weight_over'].tolist() == [0.5, 0.5]  # dos en 4 días: 1/2 cada uno
+    w2 = Computer.reweight(polls, wspan=1, ol_max=5000)
+    assert w2.loc[polls.pollster_id == 1, 'weight_over'].tolist() == [1.0, 1.0]

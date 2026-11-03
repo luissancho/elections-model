@@ -87,3 +87,109 @@ Desde el método 11 el backtest vale para cualquier ámbito del catálogo (`data
 La deriva se lee de la tabla `elections.drift`; si está vacía, cada `Simulator` la calcula al vuelo (más lento). Se rellena con `Computer.compute_drift(save=True)` (notebook `data-load/PollsCompute`).
 
 Escribe en `backtest/results/` (la copia del repositorio con el script; el sistema de ficheros de la app con el job sin `out`): `shares.csv`, `seats.csv`, `blocks.csv` (una fila por partido o bloque y caso; desde el 2026-10-24 `blocks.csv` lleva también los intervalos de escaños de cada bloque, `lo50`…`hi95` y sus `_h`, cuantiles de la suma de sus partidos simulación a simulación, que el detalle de la elección enseña como «Rango 95%»), `provinces.csv` (una fila por provincia, partido y caso), `series.csv` (una fila por día y partido: la serie diaria del promedio, con su banda, del ajuste del horizonte más corto de cada elección, hasta el día en que se congeló el modelo; fuera de git por tamaño, la lee `publish event` para la curva del detalle de la elección: vive con las demás tablas en el sistema de ficheros de la app, así que ya no ata `publish event` a la máquina que corrió el backtest), `meta.csv` (cortes, encuestas usadas, tiempos), `metrics.csv` (una fila por caso), `by_horizon.csv`, `calibration.csv` (el PIT de cada celda, ver «Calibración») y `run.json` (commit, fecha, estado de la base de datos). La lógica está en `mtpy/lib/backtest.py` (`run_case`, `summarize_case`, `run_backtest` y `backtest_scope`, que ejecuta un ámbito y escribe su carpeta), reutilizable desde los notebooks.
+
+## Sondeos futuros (afinado del promedio, método 14)
+
+El backtest de elecciones sólo tiene cinco generales, pocas para elegir entre configuraciones del promedio que difieren en décimas. El afinado usa como prueba fuera de muestra los sondeos publicados después de cada fecha. Lógica en `mtpy/lib/tuning.py`, job `tune` (`mtpy/jobs/Tune.py`) y envoltorio `backtest/run_tuning.py`. Método, resultados y decisión en `docs/analisis-2026-09/metodo-14-sondeos-futuros.md`; spec en `docs/superpowers/specs/2026-11-01-sondeos-futuros-y-calibracion-design.md`, parte A.
+
+### Protocolo (spec A2-A7)
+
+- **Cortes.**
+  - Hay uno cada 7 días (14 en la fase 2) en los 365 días anteriores a cada elección, y en el ciclo en curso hasta hoy.
+  - Cada corte necesita al menos 5 sondeos útiles en los 90 días anteriores.
+  - En cada corte el `Forecaster` se congela como en el backtest (`drange` = días hasta la elección), con sólo los sondeos publicados hasta el corte.
+  - Los pesos de sobrepublicación se recalculan con esos sondeos (`tuning.reweighted_overrides`), sin los guardados en la base, que miran al futuro.
+- **Predicción y puntuación.**
+  - Cada sondeo publicado en los `k` días siguientes que entraría en el promedio se predice: promedio del corte en su fecha más el efecto de casa de su encuestadora.
+  - Se puntúa el RMSE a `k` = 7 y 28 días, con todas las celdas (sondeo × partido) iguales y todos los ciclos iguales.
+- **Particiones.**
+  - Búsqueda: las generales de 2008 a 2019-11.
+  - Comprobación: 2023-07-23 y el ciclo en curso (2026-11-29).
+- **Búsqueda.**
+  - Es un descenso por coordenadas sobre una rejilla fija (`tuning.GRID`).
+  - Se elige por RMSE a 7 días, siempre que el de 28 no empeore más de un 2 % y la rugosidad no pase de 1,5 veces la del punto de partida de la fase.
+  - Fase 1, `smoothing` (`bw`, `bw_cap`, `poly_deg`, `max_fc`, `wspan`): efectos de casa, muestra efectiva y rebaño apagados.
+  - Fase 2, `shrinkage` (`tau`, `he_n_iter`, `herd_prior`): todo encendido, desde el `best.json` de la fase 1.
+- **Comprobación** (`check`): el `best.json` frente a la configuración vigente en los ciclos reservados.
+- **Criterio A8**: los valores por defecto sólo cambian si se cumplen las dos condiciones.
+  - El RMSE a 7 días mejora en la comprobación.
+  - El backtest de elecciones (`--config`, abajo) no empeora MAE de voto, CRPS de escaños ni Brier más de un 2 % ni baja la cobertura del 95 %.
+
+### Tablas (`backtest/tuning/`, `es` en la raíz, los demás ámbitos en `{ámbito}/`)
+
+| Fichero | Qué tiene |
+|---|---|
+| `cuts.csv`, `scores.csv`, `trials.csv`, `run.json` | La última ejecución (cada modo los reescribe): un corte por fila con sus segundos, las puntuaciones por configuración, ciclo y horizonte, las pruebas del descenso y el registro (commit, estado de la base) |
+| `trials-{modo}.csv`, `scores-{modo}.csv` | Las pruebas y puntuaciones de cada modo de búsqueda (`smoothing`, `shrinkage`) y de la comprobación (`check`), que no se pisan |
+| `best.json` | La configuración elegida, etiquetada con los ajustes que difieren de la vigente; la escriben `smoothing`, `shrinkage` y `merge` |
+| `cuts-`, `scores-`, `trials-shrinkage-{ciclos}.csv`, `run-shrinkage-{ciclos}.json` | Las partes de la fase 2 repartida por ciclos (abajo) |
+| `polls.csv` | Una fila por sondeo futuro y partido; no se versiona |
+
+### Ejecutar
+
+```
+python backtest/run_tuning.py --mode smoothing --workers 8      # fase 1 (es)
+python backtest/run_tuning.py --mode shrinkage --workers 8      # fase 2, desde el best.json de la fase 1
+python backtest/run_tuning.py --mode check --workers 8          # best.json frente a la vigente en 2023 y 2026
+python backtest/run_tuning.py --config default --config bw=fixed,45 bw_cap=1.5   # evaluar configuraciones (modo evaluate)
+python backtest/run_tuning.py --mode shrinkage --cycles 2019-11-10              # una parte de la fase 2
+python backtest/run_tuning.py --mode merge                                       # unir las partes
+```
+
+El job `tune` hace el trabajo con los mismos parámetros en JSON:
+
+```
+python job.py tune '{"scopes":["es"],"mode":"smoothing","workers":8}'
+python job.py tune '{"scopes":["es"],"mode":"evaluate","configs":["default",{"bw":["fixed",45]}]}'
+python job.py tune '{"action":"push","scopes":["es"]}'
+python job.py tune '{"action":"pull","scopes":["es"]}'
+```
+
+- **Modos**:
+  - `smoothing`, `shrinkage` y `check`: las fases y la comprobación;
+  - `evaluate`: puntúa las configuraciones dadas. Su `"default"` es `default_config()` tal cual, con los pesos guardados en la base (que miran al futuro), mientras que la fila `default` de `check` es el default normalizado, con los pesos recalculados en el corte: las dos filas se llaman igual y no coinciden;
+  - `merge`: une las partes.
+- **Dónde escribe**:
+  - `backtest/run_tuning.py` escribe en la copia del repositorio.
+  - El job sin `out` escribe en el sistema de ficheros de la app (S3 con `S3_BUCKET`).
+  - `push` copia las tablas de la copia del repositorio a la app y `pull` las trae de vuelta.
+- **`--workers`** reparte los cortes de cada evaluación entre procesos. Cada proceso tiene su app y su motor de base de datos, y un vigilante de 15 minutos por corte. Las tablas son las de la ejecución secuencial.
+- **Fase 2 por ciclos.**
+  - `shrinkage` con `cycles` es una parte: evalúa el producto entero de `tau` × `he_n_iter` × `herd_prior` (18 configuraciones) desde el punto de partida y nunca escribe `best.json`.
+  - `merge` repite el descenso sobre la tabla junta y da exactamente el resultado de la fase entera.
+  - Cuesta el triple de CPU que la fase de una vez, porque cada parte evalúa las 18 configuraciones en vez de las 6 del descenso.
+
+**Coste medido** en el portátil, con un pool de 8 procesos y la base de AWS:
+
+- Medida previa, sólo en `es`:
+  - 6,6 s por corte con efectos, muestra efectiva y rebaño apagados;
+  - 43,5 s con todo encendido.
+- Ejecución real de `es`:
+  - fase 1: 8.514 cortes a 6,1 s;
+  - fase 2: 462 a 29,6 s;
+  - comprobación: 204 a 53,4 s;
+  - en total, 21,3 h de CPU en 2,7 h de reloj.
+
+### Backtest con una configuración
+
+`--config PATH` (`config` en el job `backtest`) corre el backtest de elecciones con una configuración del promedio, la del `best.json` u otra con las mismas claves:
+
+- Sus `reg_params`, `he_params` y `disp_params` van al `Simulator`.
+- Sus interruptores y su `max_fc` mandan sobre los indicadores sueltos; el job rechaza uno que la contradiga.
+- Con `weights`, los pesos se recalculan sobre los sondeos de cada corte.
+
+`run.json` guarda la configuración entera, y `meta.csv` su etiqueta (`config`) y los sondeos del promedio con peso recalculado (`n_overrides`; 0 sin `weights`, vacío sin configuración). Hay que escribirlo siempre en otra carpeta:
+
+```
+python backtest/run_backtest.py --config backtest/tuning/best.json --out backtest/results_tuned
+```
+
+Resultado del 03-11-2026 (tablas en el método 14):
+
+- La configuración afinada (`bw_cap=1.0; max_fc=0; he_n_iter=1; herd_prior=2.0`) mejora el voto de 6 a 30 días.
+- Empeora el CRPS de escaños y las coberturas del 95 % a 60 días, y el CRPS y el Brier a 180 días: **no cumple A8**.
+- Sobre todos los casos juntos, el resultado depende del modo.
+  - En la ejecución a horizonte (`_h`) se cumple frente a las dos referencias.
+  - En el nowcast falla sólo por la cobertura del 95 % de los escaños: un partido en un caso, Sumar en 2023 a 60 días.
+  - La regla y el modo que deciden son de Luis.
+- Los valores por defecto no cambian. `best.json` queda como opción, con la siguiente revisión tras el 29-11-2026.

@@ -1,7 +1,30 @@
+import copy
+import json
 import math
 
 from ..core.worker import SequenceJob
 from ..lib.publish import resolve_scopes
+
+# Keys of a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search) and the type
+# of each: dicts of parameters, switches, `weights` (checked apart), the prolongation and the label
+CONFIG_TYPES = {'reg_params': dict, 'house_effects': bool, 'he_params': dict, 'dispersion': bool, 'herding': bool,
+                'disp_params': dict, 'weights': None, 'max_fc': int, 'label': str}
+
+# Keys each dict of parameters of a configuration may hold: the keywords the Forecaster's `set_reg_params`,
+# `set_he_params` and `set_disp_params` read (anything else would be ignored, running the live value under a tuned
+# label); `herding` is left out of `disp_params` because the switch of the configuration overrides it
+CONFIG_PARAMS = {
+    'reg_params': ('kernel', 'bw_type', 'bw', 'bw_kwargs', 'bw_cap', 'poly_deg', 'cov_type', 'cov_kwargs'),
+    'he_params': ('n_iter', 'min_polls', 'tau', 'prior_events', 'n_cap', 'year_decay', 'n_days', 'level_floor',
+                  'rel_cap', 'err_floor', 'prior'),
+    'disp_params': ('min_polls', 'n_prior', 'max_ratio', 'herd_series', 'herd_prior')
+}
+# Keys of `reg_params['bw_kwargs']`, the parameters of the adaptive bandwidth
+BW_KWARGS = ('n_iter', 'min_delta')
+
+# Loose arguments of the job a configuration also sets, with their defaults: a flag left at its default yields to
+# the configuration, a flag set to anything else must agree with it
+CONFIG_SWITCHES = {'house_effects': True, 'dispersion': True, 'herding': True, 'max_fc': 10}
 
 
 class Backtest(SequenceJob):
@@ -37,6 +60,7 @@ class Backtest(SequenceJob):
         python job.py backtest '{"scopes":["es"],"error_model":"average","out":"backtest/results_avg"}'
         python job.py backtest '{"scopes":["es"],"drift_scale":"auto","out":"backtest/results_scale"}'
         python job.py backtest '{"scopes":["es"],"tail_dof":5,"out":"backtest/results_dof5"}'
+        python job.py backtest '{"scopes":["es"],"config":"backtest/tuning/best.json","out":"backtest/results_tuned"}'
 
     Copy the tables between the repository and the app file system (S3 in ECS)::
 
@@ -59,7 +83,7 @@ class Backtest(SequenceJob):
 
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
-            regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None,
+            regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None, config=None,
             recompute_ratings=False, out=None, verbose=1, runner=None, stats=None, stop_on_error=None, action='run',
             **kwargs):
         """
@@ -111,6 +135,18 @@ class Backtest(SequenceJob):
             Degrees of freedom of the Student t of the draw, the same for every party: an integer of at least 2
             (also as an integer string); ``None`` takes ``nobs - 2`` of each party, at least 3 (``meta.csv``
             records it).
+        config : dict, str or None, default None
+            Tuned configuration of the average (``tuning.default_config``, the ``best.json`` of the ``tune`` job), or
+            the path of a JSON file with it (a relative path is taken from the working directory): the keys
+            ``reg_params``, ``he_params`` and ``disp_params`` (dicts with only the keys the Forecaster's
+            ``set_*_params`` read, ``CONFIG_PARAMS``; ``bw_kwargs`` with ``n_iter`` and ``min_delta``; ``herding``
+            never in ``disp_params``), ``house_effects``, ``dispersion`` and
+            ``herding`` (booleans), ``weights`` (``None`` or ``{"wspan": n}`` with an optional ``"ol_max"``,
+            positive integers), ``max_fc`` (an integer of at least 0) and ``label`` (a string), no other. Every case
+            builds its model with it (``backtest.run_case``): the configuration wins over ``house_effects``,
+            ``dispersion``, ``herding`` and ``max_fc``, which take its values; one of them set to something other
+            than its default and than the configuration is rejected. ``run.json`` records the configuration and
+            ``meta.csv`` its label. ``None`` runs the model as it is.
         recompute_ratings : bool, default False
             Recompute the pollster ratings in memory with the current code (once per scope) and use them in
             every case instead of the stored ones; nothing is saved to the database.
@@ -144,7 +180,9 @@ class Backtest(SequenceJob):
         ValueError
             If ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
             or ``'average'``, ``drift_scale`` is not ``'auto'``, a positive number or ``None``, ``tail_dof`` is not
-            an integer of at least 2 or ``None``, there are no scopes to run
+            an integer of at least 2 or ``None``, ``config`` is not a valid configuration nor the path of a JSON file
+            with one (``backtest: config ...``) or one of ``house_effects``, ``dispersion``, ``herding`` and
+            ``max_fc`` contradicts it (``backtest: <flag> contradicts the config ...``), there are no scopes to run
             (``backtest: no scopes to run``), ``action`` is not ``run``, ``push`` or ``pull`` or ``stop_on_error`` is not true or false
             (``stop_on_error must be true or false``).
         RuntimeError
@@ -156,6 +194,10 @@ class Backtest(SequenceJob):
         error_model = self._error_model(error_model)
         drift_scale = self._drift_scale(drift_scale)
         tail_dof = self._tail_dof(tail_dof)
+        config = self._config(config)
+        if config is not None:
+            house_effects, dispersion, herding, max_fc = self._config_switches(
+                config, house_effects=house_effects, dispersion=dispersion, herding=herding, max_fc=max_fc)
         targets = resolve_scopes(scopes)
         if not targets:
             raise ValueError('backtest: no scopes to run')
@@ -164,8 +206,8 @@ class Backtest(SequenceJob):
                     n_sim=n_sim, seed=seed, max_fc=max_fc, nowcast_only=nowcast_only, house_effects=house_effects,
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
-                    drift_scale=drift_scale, tail_dof=tail_dof, recompute_ratings=recompute_ratings, out=out,
-                    verbose=verbose, runner=runner, stats=stats)
+                    drift_scale=drift_scale, tail_dof=tail_dof, config=config, recompute_ratings=recompute_ratings,
+                    out=out, verbose=verbose, runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 
@@ -280,3 +322,98 @@ class Backtest(SequenceJob):
         if isinstance(value, bool) or not isinstance(value, int) or value < 2:
             raise ValueError('backtest: tail_dof must be an integer of at least 2 or null (got {!r})'.format(value))
         return value
+
+    @staticmethod
+    def _config(value):
+        """
+        Read and validate the ``config`` argument.
+
+        Parameters
+        ----------
+        value : dict, str or None
+            ``None`` (kept), a configuration of the average or the path of a JSON file with one.
+
+        Returns
+        -------
+        dict or None
+            ``None`` or a copy of the configuration.
+
+        Raises
+        ------
+        ValueError
+            The file cannot be read or is not JSON, the value is not a dict, a key is missing or unknown, a
+            value has the wrong type, or ``reg_params``, ``he_params``, ``disp_params`` or ``bw_kwargs`` hold a
+            key the Forecaster does not read (``CONFIG_PARAMS``, ``BW_KWARGS``; see ``run``).
+        """
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                with open(value, encoding='utf-8') as handle:
+                    value = json.load(handle)
+            except OSError as e:
+                raise ValueError('backtest: config file {} cannot be read ({})'.format(value, e)) from e
+            except json.JSONDecodeError as e:
+                raise ValueError('backtest: config file {} is not valid JSON ({})'.format(value, e)) from e
+        if not isinstance(value, dict):
+            raise ValueError('backtest: config must be a dict or the path of a JSON file with one (got {!r})'.format(
+                value))
+        missing, unknown = set(CONFIG_TYPES) - set(value), set(value) - set(CONFIG_TYPES)
+        if missing or unknown:
+            raise ValueError('backtest: config keys must be {} (missing {}, unknown {})'.format(
+                ', '.join(CONFIG_TYPES), sorted(missing), sorted(unknown)))
+        for key, kind in CONFIG_TYPES.items():
+            if kind is None:
+                continue
+            item = value[key]
+            wrong = not isinstance(item, kind) or (kind is int and isinstance(item, bool))
+            if wrong or (key == 'max_fc' and item < 0):
+                raise ValueError('backtest: config {} must be {} (got {!r})'.format(
+                    key, 'an integer of at least 0' if kind is int else 'a ' + kind.__name__, item))
+        for key, names in CONFIG_PARAMS.items():
+            unknown = sorted(set(value[key]) - set(names))
+            if unknown:
+                raise ValueError('backtest: config {} has unknown keys {} (expected some of {})'.format(
+                    key, unknown, ', '.join(names)))
+        bw_kwargs = value['reg_params'].get('bw_kwargs')
+        if bw_kwargs is not None:
+            if not isinstance(bw_kwargs, dict) or set(bw_kwargs) - set(BW_KWARGS):
+                raise ValueError('backtest: config reg_params bw_kwargs must be a dict with some of {} (got {!r})'
+                                 .format(', '.join(BW_KWARGS), bw_kwargs))
+        weights = value['weights']
+        if weights is not None:
+            valid = isinstance(weights, dict) and 'wspan' in weights and set(weights) <= {'wspan', 'ol_max'} and all(
+                isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in weights.values())
+            if not valid:
+                raise ValueError('backtest: config weights must be null or {{"wspan": n}} with an optional "ol_max", '
+                                 'positive integers (got {!r})'.format(weights))
+        return copy.deepcopy(value)
+
+    @staticmethod
+    def _config_switches(config, **flags):
+        """
+        Align the loose flags with a configuration, which wins.
+
+        Parameters
+        ----------
+        config : dict
+            A configuration validated by ``_config``.
+        **flags
+            ``house_effects``, ``dispersion``, ``herding`` and ``max_fc`` as given to ``run``.
+
+        Returns
+        -------
+        tuple
+            The values of the configuration, in the order of ``CONFIG_SWITCHES``.
+
+        Raises
+        ------
+        ValueError
+            A flag set to something other than its default and than the configuration.
+        """
+        for key, default in CONFIG_SWITCHES.items():
+            given = flags[key]
+            if given != default and given != config[key]:
+                raise ValueError('backtest: {} contradicts the config ({!r} given, {!r} in the config "{}")'.format(
+                    key, given, config[key], config['label']))
+        return tuple(config[key] for key in CONFIG_SWITCHES)

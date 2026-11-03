@@ -7,9 +7,14 @@ Usage (from the repository root):
                                     [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 1000] [--seed 42] [--nowcast-only]
                                     [--no-house-effects] [--recompute-ratings] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
                                     [--error-model polls|average] [--drift-scale auto|1.5] [--tail-dof 5]
+                                    [--config backtest/tuning/best.json]
 
 The national scope (`es`) writes to `backtest/results/`; every other scope to `backtest/results/{scope}/`.
 Without `--events`, a regional scope evaluates its featured elections held since 2019.
+
+`--config` runs every case with a tuned configuration of the average (the `best.json` of the `tune` job, see
+`mtpy/lib/tuning.py`): its values win over `--no-house-effects`, `--no-dispersion`, `--no-herding` and `--max-fc`,
+and the job rejects one of them that contradicts it. Write such a run to its own `--out` folder.
 
 This script is a thin wrapper of the `backtest` job (`python job.py backtest '{...}'`, `mtpy/jobs/Backtest.py`),
 which does the work through `mtpy.lib.backtest.backtest_scope`; it only translates the command line options. Note
@@ -56,6 +61,9 @@ def main():
     parser.add_argument('--tail-dof', type=int, default=None,
                         help='degrees of freedom of the Student t of the draw, the same for every party (an integer '
                              'of at least 2); by default `nobs - 2` of each party, at least 3')
+    parser.add_argument('--config', default=None,
+                        help='JSON file with a tuned configuration of the average (the `best.json` of the `tune` job); '
+                             'every case builds its model with it; the model as it is by default')
     parser.add_argument('--recompute-ratings', action='store_true', help='recompute the pollster ratings in memory with the current code (nothing is saved) instead of using the stored ones')
     default_out = os.path.join(ROOT, 'backtest', 'results')
     parser.add_argument('--out', default=default_out)
@@ -81,7 +89,8 @@ def main():
         nowcast_only=args.nowcast_only, house_effects=args.house_effects, industry_bias=args.industry_bias,
         dispersion=args.dispersion, herding=args.herding, composition=args.composition,
         regional_noise=args.regional_noise, min_events=args.min_events, error_model=args.error_model,
-        drift_scale=args.drift_scale, tail_dof=args.tail_dof, recompute_ratings=args.recompute_ratings, out=args.out
+        drift_scale=args.drift_scale, tail_dof=args.tail_dof, config=args.config,
+        recompute_ratings=args.recompute_ratings, out=args.out
     )
     print(push_hint(args.out, scopes, default_out))
 

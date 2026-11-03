@@ -20,6 +20,9 @@ from typing import Optional
 
 CONTAINER = 'Main'
 STREAM_PREFIX = 'job'
+# Jobs whose `push`, `pull` and `out` read or write the repository copy of their tables (`backtest/results`,
+# `backtest/tuning`): the disk of a task is ephemeral, so they run on the laptop
+LAPTOP_COPIES = ('backtest', 'tune')
 
 
 class UsageError(Exception):
@@ -89,8 +92,8 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
     ------
     UsageError
         For an empty job, invalid JSON or what must run on the laptop: ``load`` with the ``params`` target,
-        ``backtest`` with ``action`` ``push``/``pull`` or an ``out`` folder (they use the repository copy) and
-        the ``pipeline`` job selecting ``load.params`` or such a ``backtest.backtest``.
+        ``backtest`` or ``tune`` with ``action`` ``push``/``pull`` or an ``out`` folder (they use the repository
+        copy) and the ``pipeline`` job selecting ``load.params`` or such a ``backtest.backtest`` or ``tune.tune``.
     """
     if not job:
         raise UsageError('job name is required')
@@ -107,17 +110,18 @@ def run_job_value(job: Optional[str], params: Optional[str]) -> str:
         targets = what if isinstance(what, list) else [what]
         if 'params' in targets:
             raise UsageError('load params runs on the laptop (it rewrites data/params.json)')
-    if job == 'backtest' and laptop_backtest(parsed):
-        raise UsageError('backtest push/pull/out run on the laptop (they use the repository copy)')
+    if job in LAPTOP_COPIES and laptop_backtest(parsed):
+        raise UsageError(f'{job} push/pull/out run on the laptop (they use the repository copy)')
     if job == 'pipeline' and isinstance(parsed, dict):
         select = parsed.get('select')
-        if select == 'load.params' or (select == 'backtest.backtest' and laptop_backtest(parsed)):
+        copies = select in (f'{name}.{name}' for name in LAPTOP_COPIES)
+        if select == 'load.params' or (copies and laptop_backtest(parsed)):
             raise UsageError('this pipeline runs on the laptop')
     return f'{job} {params}'
 
 
 def laptop_backtest(parsed) -> bool:
-    """Tell whether backtest parameters copy tables or write to a folder (``push``, ``pull`` or ``out``)."""
+    """Tell whether backtest or tune parameters copy tables or write to a folder (``push``, ``pull`` or ``out``)."""
     return isinstance(parsed, dict) and (parsed.get('action') in ('push', 'pull') or 'out' in parsed)
 
 

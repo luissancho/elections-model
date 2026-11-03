@@ -1,0 +1,26 @@
+{
+ "reg_params": {
+  "bw_cap": 1.0,
+  "poly_deg": 1,
+  "bw_type": "adaptive",
+  "bw_kwargs": {
+   "n_iter": 3,
+   "min_delta": null
+  }
+ },
+ "house_effects": true,
+ "he_params": {
+  "tau": 0.08,
+  "n_iter": 1
+ },
+ "dispersion": true,
+ "herding": true,
+ "disp_params": {
+  "herd_prior": 2.0
+ },
+ "weights": {
+  "wspan": 4
+ },
+ "max_fc": 0,
+ "label": "bw_cap=1.0; max_fc=0; he_n_iter=1; herd_prior=2.0"
+}

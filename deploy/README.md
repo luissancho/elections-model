@@ -15,7 +15,8 @@ conserva. El estado de cada fase está en `docs/superpowers/specs/2026-10-07-web
    parámetros, estados y resumen). Es el primer paso de la cadena `load`, `compute`, `publish`.
 6. "Calcular las series y los ratings": el job `compute` (qué hace cada acción y cuándo lanzarla, ejemplos,
    parámetros, estados y resumen).
-7. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen).
+7. "Backtest del modelo": el job `backtest` (qué hace y cuándo lanzarlo, ejemplos, parámetros, estados y resumen),
+   y "Afinar el promedio": el job `tune` (modos, acciones, ejemplos y la ruta de `config` en ECS).
 8. "Publicar": qué hace cada acción y cuándo lanzarla (tabla y rutina por situación), ejemplos, parámetros,
    estados, relleno retroactivo, análisis de casas, elecciones pasadas, backtest, estudios (el del voto CERA y su
    registro), publicar en local, en S3 y "Jobs desde ECS", "Veda" (runbook del 23 de noviembre y ensayo), leer el
@@ -264,7 +265,12 @@ con las variables `DB_*` de `deploy/elections.env` (`DB_ADAPTER`, `DB_HOST`, `DB
 `DB_PASSWORD`, `DB_DATABASE`; ver `.env.example`): sin ellas (basta con `DB_HOST` vacío), esas rutas dan 503
 `no database configured` y `/casas` un 503 en HTML ("La base de datos no está disponible."); el resto del sitio
 funciona igual. Con las variables pero sin base alcanzable, 503 `database unavailable` (con la traza en el
-log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`); las consultas no tienen límite
+log). Cada conexión a PostgreSQL se abandona a los 5 s (`connect_timeout`), y una conexión abierta cuyo enlace
+muere falla en unos 2 minutos en vez de quedarse colgada: keepalives de TCP (`keepalives_idle` 60 s, sondas cada
+10 s, 5 sondas), en todo lo que use la base (web, jobs, cuadernos) e inertes con el enlace sano (enmienda
+2026-11-02, tras un `tune` colgado más de una hora en un enlace móvil). En los procesos del pool de `tune`
+(`workers`) psycopg2 espera con `wait_select` y conecta en asíncrono, así que libpq no aplica allí `connect_timeout`:
+lo que acota una conexión colgada es el vigilante de 15 minutos de cada corte. Las consultas no tienen límite
 salvo que se fije `DB_STATEMENT_TIMEOUT` (milisegundos). Para el contenedor de la web, pon
 `DB_STATEMENT_TIMEOUT=10000` en `deploy/elections.env`: una consulta colgada da 503 `database unavailable` a los
 10 s en vez de bloquear el worker; las cargas y los notebooks lo dejan vacío (enmienda 2026-10-13: en ECS va en
@@ -786,6 +792,7 @@ python job.py backtest
 python job.py backtest '{"scopes":"all","horizons":[6,30]}'
 python job.py backtest '{"scopes":["es-md"],"events":["2023-05-28"],"n_sim":200,"verbose":2}'
 python job.py backtest '{"scopes":["es"],"composition":"auto","out":"backtest/results_comp"}'
+python job.py backtest '{"scopes":["es"],"config":"backtest/tuning/best.json","out":"backtest/results_tuned"}'
 python job.py backtest '{"action":"push","scopes":"all"}'
 python job.py backtest '{"action":"pull","scopes":"all"}'
 ```
@@ -794,6 +801,7 @@ python job.py backtest '{"action":"pull","scopes":"all"}'
 2. `es` y todos los autonómicos a 6 y 30 días, cada uno en su carpeta.
 3. Una elección de `es-md` con pocas simulaciones y la línea de cada caso: un ensayo.
 4. Una variante del método (sorteo conjunto, M7) en otra carpeta local, para compararla sin pisar las tablas de la app.
+   La siguiente línea hace lo mismo con la configuración afinada del promedio (método 14, ver "Afinar el promedio").
 5. `push`: copia las diez tablas y ficheros de cada ámbito de la copia del repositorio (`backtest/results`) al
    sistema de ficheros de la app, y borra en el destino los que la copia no tiene; siembra S3. No ejecuta el modelo
    ni necesita la base.
@@ -821,6 +829,7 @@ python job.py backtest '{"action":"pull","scopes":"all"}'
 | `error_model` | `"polls"` | El error terminal `e` (método 15): `"polls"`, el de los sondeos sueltos, o `"average"`, el del propio promedio (lee la tabla `average_errors`, que rellena el paso del mismo nombre de `compute`; sin ella avisa y usa `"polls"`); otro valor falla con `ValueError` antes de empezar |
 | `drift_scale` | `null` | Factor de la varianza de la deriva (método 15): `null` (1), `"auto"` (ajustado sobre `average_errors` con las elecciones anteriores) o un número positivo |
 | `tail_dof` | `null` | Grados de libertad fijos de la t del sorteo y del abanico (método 15): `null` (los de la regresión) o un entero de al menos 2 |
+| `config` | `null` | Configuración del promedio (método 14): un diccionario o la ruta de un JSON (el `best.json` del job `tune`), validada antes de empezar. Sus parámetros van al `Simulator`, y sus `house_effects`, `dispersion`, `herding` y `max_fc` mandan (un indicador que la contradiga falla con `ValueError`); con `weights`, los pesos se recalculan en cada corte. `run.json` la guarda y `meta.csv` registra `config` (la etiqueta) y `n_overrides`. La ruta se lee del disco de quien corre el job (ver "Afinar el promedio") |
 | `action` | `run` | `run` evalúa y escribe las tablas; `push` las copia de `out` (la copia del repositorio) al sistema de ficheros de la app; `pull`, al revés; otro valor falla con `ValueError` antes de empezar |
 | `out` | sistema de ficheros de la app (`backtest/results`) | Carpeta local de resultados (`es` en la raíz, los demás en `out/{ámbito}`); con `push` y `pull` es la copia del repositorio y por defecto `backtest/results` |
 | `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
@@ -882,6 +891,66 @@ que lee `backtest/results` del repositorio y escribe en S3 (el `.env` de la raí
 igual si tiene `S3_BUCKET`). Sin ella S3 no tiene tablas: `publish event` rehúsa (`refused`, «run backtest push (or
 force)») las fechas publicadas con modelo o serie en vez de republicarlas sin ellos; con `force` las publicaría con
 `has_model: false`.
+
+## Afinar el promedio
+
+`python job.py tune '{...}'` (`mtpy/jobs/Tune.py`) afina la configuración del promedio con los sondeos publicados después de cada corte (método 14, `docs/analisis-2026-09/metodo-14-sondeos-futuros.md`). Es la forma job de `backtest/run_tuning.py`. Protocolo, tablas y coste en `backtest/README.md`, "Sondeos futuros"; lógica en `mtpy/lib/tuning.py`. Lee la base y no escribe en ella.
+
+### Modos y acciones
+
+| `mode` | Qué hace |
+| --- | --- |
+| `smoothing` | Fase 1: descenso sobre `bw`, `bw_cap`, `poly_deg`, `max_fc` y `wspan`, con efectos de casa, muestra efectiva y rebaño apagados. Escribe `best.json` |
+| `shrinkage` | Fase 2: descenso sobre `tau`, `he_n_iter` y `herd_prior`, con todo encendido y desde el `best.json` de la fase 1. Con `cycles` es una parte de la fase: evalúa las 18 configuraciones del producto y no escribe `best.json` |
+| `merge` | Une las partes de la fase 2 de la carpeta y repite el descenso: el mismo `best.json` que la fase de una vez |
+| `check` | El `best.json` frente a la configuración vigente en los ciclos reservados (2023 y el ciclo en curso) |
+| `evaluate` | Puntúa las configuraciones de `configs` (`"default"` o ajustes de la rejilla). Su `"default"` es `default_config()` tal cual, con los pesos guardados (miran al futuro); la fila `default` de `check` es el default normalizado, con los pesos recalculados en el corte: se llaman igual y no coinciden |
+
+Acciones:
+
+- `run` (por defecto) ejecuta el modo y escribe en el sistema de ficheros de la app (S3 con `S3_BUCKET`; `files/` sin él) bajo `backtest/tuning/` (`es` en la raíz, los demás en `{ámbito}/`), o en la carpeta local `out`.
+- `push` copia las tablas de la copia del repositorio (`backtest/tuning`) a la app.
+- `pull` las trae de la app a la copia del repositorio.
+
+Otros parámetros:
+
+- `scopes` (`["es"]` o `"all"`);
+- `cycles`, `cut_days`, `horizons` (`[7, 28]`), `rounds` y `grid` (un subconjunto de `tuning.GRID`, sólo en los modos de búsqueda);
+- `workers` (procesos para los cortes de cada evaluación; 1 por defecto);
+- `stop_on_error` y `verbose` (0-2, los niveles de `backtest`).
+
+Los ámbitos están aislados como en `backtest`. Un ámbito sin nada que afinar, o sin el `best.json` del que parten `shrinkage`, `check` y `merge`, queda `skipped`.
+
+```
+python job.py tune '{"scopes":["es"],"mode":"smoothing","workers":8}'
+python job.py tune '{"scopes":["es"],"mode":"shrinkage","cycles":["2019-11-10"]}'
+python job.py tune '{"scopes":["es"],"mode":"merge"}'
+python job.py tune '{"scopes":["es"],"mode":"check","workers":8}'
+python job.py tune '{"scopes":["es"],"mode":"evaluate","configs":["default",{"bw":["fixed",45]}]}'
+python job.py tune '{"action":"pull","scopes":["es"]}'
+```
+
+Duraciones de `es` en el portátil con `"workers":8`: la fase 1 tardó 1,85 h, la fase 2 0,5 h y la comprobación 0,4 h. Cada corte tarda 6-7 s con los efectos apagados y 30-55 s con todo encendido. Repartir la fase 2 por ciclos en tareas de ECS cuesta el triple de CPU (18 configuraciones por parte en vez de 6).
+
+### `config` en ECS
+
+El job `backtest` lee la ruta de `config` del disco de quien lo corre:
+
+- **En el portátil**, es la copia del repositorio.
+- **En una tarea de ECS**, es la copia que lleva la imagen (`COPY . .`). No es el sistema de ficheros de la app, que es donde `tune` escribe `best.json` en S3.
+
+Para correr en ECS el backtest de una configuración recién afinada, elige una de estas dos vías:
+
+1. Tráela con `tune` `pull`, commitea `backtest/tuning/best.json` y reconstruye la imagen.
+2. Pasa la configuración como diccionario en el JSON del job:
+
+```
+python deploy/ecs/job.py backtest '{"scopes":["es"],"config":{"reg_params":{"bw_cap":1.0},"house_effects":true,"he_params":{},"dispersion":true,"herding":true,"disp_params":{},"weights":{"wspan":4},"max_fc":0,"label":"bw_cap=1.0; max_fc=0"},"out":"backtest/results_phase1"}'
+```
+
+Ojo: con `out` la tarea escribe en su disco efímero, y al terminar no queda nada. No quites `out` para conservarlas: sin `out` el job escribe en S3 bajo `backtest/results` y pisa la referencia publicada. Los backtests con `config` se corren en el portátil, con `backtest/run_backtest.py --config ... --out backtest/results_<nombre>` (unos 50 minutos en `es`), y sus tablas se quedan en esa carpeta. El ejemplo de ECS sólo sirve para comprobar que la configuración corre.
+
+Estado del 03-11-2026: la configuración afinada no cumple el criterio A8 y los valores por defecto no cambian. La siguiente revisión es tras el 29-N (método 14, «Decisión»).
 
 ## Publicar
 
