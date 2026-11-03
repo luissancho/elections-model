@@ -124,7 +124,8 @@ class Backtest(SequenceJob):
             (M11); by default always ``es``, 1 forces its own.
         error_model : {'polls', 'average'}, default 'polls'
             Terminal error of the simulation: the error of a single poll or that of the poll average itself in
-            the past elections (table ``average_errors``, filled by the ``compute`` job); ``average`` falls back to
+            the past elections (table ``average_errors``, filled by the ``average_errors`` action of the ``compute``
+            job); ``average`` falls back to
             ``polls`` with a warning when the table has too few rows (``meta.csv`` records the one used).
         drift_scale : str, float or None, default None
             Multiplier of the drift variance: ``'auto'`` fits it in each case on the errors of the poll average of

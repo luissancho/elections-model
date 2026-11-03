@@ -1,4 +1,5 @@
 from ..core.worker import SequenceJob
+from ..lib.compute import AUTO, check_mode
 from ..lib.load import YEARS_WITH_OVERWRITE
 from ..lib.publish import resolve_scopes
 
@@ -14,10 +15,15 @@ class Update(SequenceJob):
     line, status and level of ``verbose`` is the one of the job it comes from. The compute is skipped on the scopes with
     nothing loaded since their last compute, read from the marks ``loaded_at`` and ``computed_at`` of ``events``
     (``compute.pending_events``): a scope whose load found no new poll ends ``skipped`` in the compute and goes on to
-    the publication. ``overwrite`` is the only switch that redoes everything: it replaces the whole cycle of polls
-    (``load.rebulk``) and computes the series whether or not anything was loaded; use it after a change of code or
-    parameters. Right after the ``ALTER TABLE`` that adds the marks every election counts as pending, so the first
-    ``update`` without ``overwrite`` computes everything once.
+    the publication. Where it runs, the series goes in the mode the pending work asks for (``mode`` ``auto``, the
+    default): ``light`` (weights and herding, what the polls of the current cycle can change: the daily routine) or
+    ``full`` (every phase) with ``overwrite`` or when a pending election has an official result (one loaded with
+    ``load`` or from the notebook). ``"mode": "full"`` forces the whole series on a day with new polls; with nothing
+    pending the compute is skipped all the same. ``overwrite`` is the only switch that redoes everything: it replaces
+    the whole cycle of polls (``load.rebulk``) and computes the series, in ``full``, whether or not anything was
+    loaded; use it after a change of code or parameters. Right after the ``ALTER TABLE`` that adds the marks every
+    election counts as pending, so the first ``update`` without ``overwrite`` computes everything once, in ``full``.
+    The errors of the poll average (``average_errors``) are not part of ``update``: see ``compute``.
 
     Unlike ``load``, ``compute`` and ``publish``, ``update`` stops at the first failure by default: a scope that fails
     stops the job in that very scope: neither the remaining scopes of that group nor the next groups run, so a
@@ -40,6 +46,7 @@ class Update(SequenceJob):
         python job.py update '{"scopes":["es"],"n_sim":10000,"verbose":3}'
         python job.py update '{"scopes":"all"}'
         python job.py update '{"scopes":["es"],"overwrite":true}'
+        python job.py update '{"scopes":["es"],"mode":"full"}'
         python job.py update '{"scopes":["es"],"n_sim":20,"dry_run":true}'
 
     In Docker (JSON without spaces)::
@@ -52,7 +59,8 @@ class Update(SequenceJob):
     stop_on_error = True
     chunk_noun = 'scopes'
 
-    def run(self, scopes=('es',), overwrite=False, dry_run=False, verbose=1, fs=None, stop_on_error=None, **kwargs):
+    def run(self, scopes=('es',), overwrite=False, mode=AUTO, dry_run=False, verbose=1, fs=None, stop_on_error=None,
+            **kwargs):
         """
         Run the chain load, compute and publish.
 
@@ -61,7 +69,10 @@ class Update(SequenceJob):
         scopes : str or list of str, default ('es',)
             Scopes to update, or ``'all'`` (see ``publish.resolve_scopes``).
         overwrite : bool, default False
-            Replace the whole cycle of polls and compute the series even where nothing was loaded.
+            Replace the whole cycle of polls and compute the series (in ``full``) even where nothing was loaded.
+        mode : {'auto', 'light', 'full'}, default 'auto'
+            Phases of the series where the compute runs: ``auto`` picks from what is pending (see the class),
+            ``light`` or ``full`` forces them.
         dry_run : bool, default False
             Write nothing: the load only reads and checks and the publication goes under ``site-dry/``.
         verbose : int, default 1
@@ -84,8 +95,8 @@ class Update(SequenceJob):
         Raises
         ------
         ValueError
-            If ``event_date`` or ``what`` is given, ``years`` is combined with ``overwrite`` or there are no scopes to
-            run.
+            If ``event_date`` or ``what`` is given, ``mode`` is not ``auto``, ``light`` or ``full``, ``years`` is
+            combined with ``overwrite`` or there are no scopes to run.
         RuntimeError
             If there is no file system, or if any scope failed (raised after the summary and the alert).
         """
@@ -93,6 +104,7 @@ class Update(SequenceJob):
             raise ValueError('update: "event_date" is not accepted (use load)')
         if 'what' in kwargs:
             raise ValueError('update: "what" is not accepted (use load, compute or publish)')
+        check_mode(mode)
 
         years = kwargs.get('years')
         if years:
@@ -109,7 +121,7 @@ class Update(SequenceJob):
             raise ValueError('update: no scopes to run')
 
         super().run(select=None, action='rebulk' if overwrite else 'update', chunks=targets,
-                    stop_on_error=stop_on_error, overwrite=overwrite, dry_run=dry_run, verbose=verbose, fs=fs,
+                    stop_on_error=stop_on_error, overwrite=overwrite, mode=mode, dry_run=dry_run, verbose=verbose, fs=fs,
                     skip_missing=scopes == 'all', **kwargs)
 
         results = {}

@@ -43,23 +43,26 @@ def alerts(monkeypatch):
     return seen
 
 
-def run(tmp_path, loader=None, computer=None, pending=None, **kwargs):
+def run(tmp_path, loader=None, computer=None, pending=None, results=None, **kwargs):
+    """Por defecto, la rutina diaria: una elección pendiente sin resultado (compute `light`)."""
     computer = computer or FakeComputer()
-    results = Update().run(fs=FileSystem(str(tmp_path)), loader=loader or FakeLoader(), computer=computer,
+    outcome = Update().run(fs=FileSystem(str(tmp_path)), loader=loader or FakeLoader(), computer=computer,
                            catalogues=FakeCatalogues(), featured=lambda scope: 7,
-                           pending=pending or (lambda scope: ['2026-11-29']), **{'verbose': 0, 'n_sim': 20, **kwargs})
-    return results, computer
+                           pending=pending or (lambda scope: ['2026-11-29']),
+                           results=results or (lambda scope: ['2023-07-23']), **{'verbose': 0, 'n_sim': 20, **kwargs})
+    return outcome, computer
 
 
 def test_update_runs_the_three_groups_on_es_with_one_alert(fresh_app, tmp_path, scopes, events, patched, alerts, capsys):
     results, computer = run(tmp_path, scopes=['es'])
     out = capsys.readouterr().out
     assert 'load polls: 1 ámbito' in out and 'es: polls loaded (5 read, 2 saved, 2026-11-29) in 0 s' in out
-    assert 'compute series: 1 ámbito' in out and 'es: series computed (2 polls, 2 events, 7 featured) in 0 s' in out
+    assert 'compute series: 1 ámbito' in out
+    assert 'es: series computed (light, polls pending: 2 polls, 2 events) in 0 s' in out
     assert 'publish forecast: 1 ámbito' in out and 'es: published' in out and 'es: analysis published' in out
     assert 'parties: ' in out and 'manifest: 1 scopes, freeze off' in out
-    # un Computer de los pesos de la carga (2 sondeos guardados) y tres del compute
-    assert [scope for scope, _ in computer.inits] == ['es'] * 4
+    # un Computer de los pesos de la carga (2 sondeos guardados) y dos del compute light (pesos y rebaño)
+    assert [scope for scope, _ in computer.inits] == ['es'] * 3
     assert set(results) == {'es', 'parties'} and set(results['es']) == {'polls', 'compute', 'forecast', 'analysis'}
     assert results['es']['forecast']['status'] == 'published' and results['parties']['status'] == 'published'
     assert len(alerts) == 1 and alerts[0].startswith('Update job executed in')
@@ -132,3 +135,22 @@ def test_update_fails_early_without_a_file_system_or_scopes(fresh_app, scopes, e
         Update().run(scopes=['es'])
     with pytest.raises(ValueError, match='update: no scopes to run'):
         Update().run(scopes=[], fs=object())
+
+
+def test_update_computes_full_when_a_pending_election_has_results(fresh_app, tmp_path, scopes, events, patched, alerts, capsys):
+    results, computer = run(tmp_path, scopes=['es'], pending=lambda scope: ['2023-07-23', '2026-11-29'])
+    assert [scope for scope, _ in computer.inits] == ['es'] * 4 and results['es']['compute']['mode'] == 'full'
+    assert 'es: series computed (full, results pending: 2 polls, 2 events, 7 featured) in 0 s' in capsys.readouterr().out
+
+
+def test_update_passes_a_forced_mode_to_the_compute(fresh_app, tmp_path, scopes, events, patched, alerts, capsys):
+    results, computer = run(tmp_path, scopes=['es'], mode='full')
+    out = capsys.readouterr().out
+    assert 'compute series: 1 ámbito · full' in out and results['es']['compute']['mode_reason'] == 'requested'
+
+
+def test_update_rejects_an_unknown_mode_before_loading(fresh_app, tmp_path, scopes, events):
+    loader = FakeLoader()
+    with pytest.raises(ValueError, match='compute: unknown mode "x" \\(expected auto, light or full\\)'):
+        run(tmp_path, loader=loader, scopes=['es'], mode='x')
+    assert loader.calls == []
