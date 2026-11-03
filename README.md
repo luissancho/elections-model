@@ -37,11 +37,14 @@ para al primer fallo por defecto (`"stop_on_error": false` para seguir). Al fina
 
 Encadena `load.polls`, `compute.compute` y `publish.forecast`, `analysis` y `parties` de los ámbitos pedidos en una
 sola tarea. La serie sólo se computa en los ámbitos con algo cargado desde su último compute (`overwrite` recarga el
-ciclo y lo computa todo), y para al primer fallo. Parámetros y pasos en "Actualizar" de `deploy/README.md`.
+ciclo y lo computa todo), a diario en modo `light` (pesos y rebaño) y en `full` con `overwrite` o cuando una elección
+con resultado quedó pendiente (`"mode": "full"` fuerza la serie entera cuando hay algo pendiente), y para al primer
+fallo. Parámetros y pasos en "Actualizar" de `deploy/README.md`.
 
 ```bash
 python job.py update '{"scopes":["es"],"n_sim":10000}'
 python job.py update '{"scopes":["es"],"overwrite":true}'
+python job.py update '{"scopes":["es"],"mode":"full"}'
 ```
 
 ### `compute`: series de sondeos y ratings
@@ -51,21 +54,26 @@ Calcula en la base de datos las tablas del modelo de cada ámbito (la secuencia 
 
 | Parámetro | Valores | Por defecto |
 |---|---|---|
-| `what` | `compute` (pesos, eventos destacados, errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio de cada ámbito; el último, `average_errors`, sólo lo leen las opciones del método 15 y tarda unos 37 minutos en `es`) y/o `ratings` (los ratings de las encuestadoras de cada ámbito, con los sondeos de todos los ámbitos). Con los dos, primero la serie de todos los ámbitos y después los ratings de todos | `["compute", "ratings"]` |
+| `what` | `compute` (la serie de cada ámbito, en modo `light`, pesos y rebaño, o `full`, pesos, eventos destacados, errores, desviaciones, deriva, efectos de casa y rebaño), `ratings` (los ratings de las encuestadoras de cada ámbito, con los sondeos de todos los ámbitos) y/o `average_errors` (los errores del promedio en las elecciones pasadas, la tabla que sólo leen las opciones del método 15; unos 37 minutos en `es`, tras un compute `full`). Siempre en este orden: la serie de todos los ámbitos, los ratings de todos y los errores del promedio de todos | `["compute", "ratings"]` |
 | `scopes` | Lista de ámbitos (`es`, `es-md`, …) o `"all"`: `es` y todos los autonómicos | `["es"]` |
-| `overwrite` | `true` computa la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros) | `false` |
-| `dry_run` | `true` calcula sin escribir nada; la serie se detiene tras las desviaciones (deriva, efectos y rebaño leen los errores guardados) | `false` |
+| `overwrite` | `true` computa la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros), en modo `full` | `false` |
+| `mode` | `auto` elige el modo de la serie según lo pendiente: `full` con `overwrite` o cuando una elección pendiente tiene resultado oficial; `light` cuando lo pendiente son sólo sondeos del ciclo en curso (la rutina diaria). `light` o `full` fuerzan las fases, pero no evitan el salto de un ámbito sin nada pendiente | `auto` |
+| `dry_run` | `true` calcula sin escribir nada; la serie `full` se detiene tras las desviaciones y la `light` tras los pesos (deriva, efectos y rebaño leen lo guardado); `ratings` y `average_errors` calculan sin guardar | `false` |
 | `verbose` | 0 cabecera de cada acción y resumen final; 1 además `[i/n] ámbito: empezando`, la línea de resultado y los avisos del modelo de cada ámbito; 2 además una línea por fase con sus segundos; 3 además la salida propia del `Computer` | 1 |
 
 Un ámbito que falla no detiene a los demás: queda `failed` con su motivo en el resumen y el job termina con error.
 Sin `overwrite`, la serie sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y
-`computed_at` de `events`); el resto termina `skipped`. Tras un cambio de código o de parámetros, `"overwrite": true`.
+`computed_at` de `events`); el resto termina `skipped`, sea cual sea `mode`. Tras un cambio de código o de
+parámetros, `"overwrite": true`. La línea de cada ámbito dice el modo y su razón:
+`es: series computed (light, polls pending: 4010 polls, 15 events) in 180 s`.
 
 ```bash
 python job.py compute '{"what":["ratings"],"scopes":"all"}'
 python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'
 python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
 python job.py compute '{"what":["compute"],"scopes":"all","overwrite":true}'
+python job.py compute '{"what":["compute"],"scopes":["es"],"mode":"full"}'
+python job.py compute '{"what":["average_errors"],"scopes":"all"}'
 ```
 
 ### `publish`: el paquete de la web

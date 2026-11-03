@@ -2,6 +2,13 @@
 
 Fecha: 2026-11-03. Estado: aprobada por Luis el 2026-11-03; construida el 2026-11-03 (plan docs/superpowers/plans/2026-11-03-job-update.md).
 
+Enmienda 2026-11-03 (misma tarde): el compute de la serie tiene dos modos, `light` (pesos y rebaño, lo único que
+cambian los sondeos del ciclo en curso: el de la actualización diaria) y `full` (todas las fases), elegidos por el
+pipeline según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado oficial) o forzados
+con `mode`; y `average_errors` es una acción aparte del job `compute`, fuera de la serie y de `update`. La regla del
+salto por «nada pendiente» no cambia y sigue dependiendo sólo de `overwrite`. Ver
+`docs/superpowers/specs/2026-11-03-compute-ligero-design.md`.
+
 Pendiente de Luis: el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD COLUMN computed_at timestamp;` en el RDS y en cualquier base local, antes de desplegar la imagen y antes de usar `dev` contra cualquier base (local incluida), porque sin las columnas falla toda lectura de `events`, la web incluida (el orden inverso es inocuo); desplegar la imagen con el código nuevo; y el primer `update` o `compute` sin `overwrite`, que computa una vez todos los ámbitos pedidos porque toda elección cuenta como pendiente.
 
 Desviaciones de la construcción: ninguna en las decisiones. Dos añadidos en las pruebas: las suites de los pipelines y de los jobs que ejecutan `compute_scope` con `save=True` llevan un fixture autouse que sustituye `db_now` y `mark_computed`, de modo que ninguna prueba toca la base; y las precisiones de documentación (parada en el ámbito que falla, excepción original, «sólo»).

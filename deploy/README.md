@@ -666,13 +666,15 @@ para `es`, o para recalcular sin volver a cargar, se lanza directamente. Lógica
 | Acción | Qué escribe | Cuándo lanzarla |
 | --- | --- | --- |
 | `catalogues` | Los catálogos versionados de `data/` (`save_catalogues()`): ámbitos, distritos y la réplica de la calidad previa (`elections.pollsters_quality`), de la que sale `pollsters.quality` de cada encuestadora con el criterio «Implantación» a hoy. Es una acción global: corre una sola vez, antes que las demás, sea cual sea `scopes` | Tras editar la rúbrica (`data/pollsters-quality-criteria.json`) o las evaluaciones (`data/pollsters-quality.csv`), o el catálogo de ámbitos y distritos; y siempre antes de `ratings`, que toma la calidad de ahí. Con `dry_run` solo valida los dos ficheros de la calidad, sin escribir |
-| `compute` | Las series derivadas del ámbito, en este orden: pesos, eventos destacados (`polls.featured`), errores, desviaciones, deriva, efectos de casa, rebaño y errores del promedio (`average_errors`). Los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores. Sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y `computed_at` de `events`, que escriben los cargadores y el propio compute), salvo con `overwrite`; el resto termina `skipped` |
+| `compute` | Las series derivadas del ámbito, en uno de dos modos. `full`, en este orden: pesos, eventos destacados (`polls.featured`), pesos otra vez, errores, desviaciones, deriva, efectos de casa y rebaño (los pesos se calculan dos veces porque el destacado de cada sondeo copia el del evento, que a su vez necesita los pesos). `light`: una pasada de pesos sobre el ámbito entero y el rebaño, lo único que cambian los sondeos del ciclo en curso (el peso de solape de un sondeo depende de sus vecinos del ciclo, y el Forecaster descarta un sondeo sin pesar); los errores, las desviaciones, la deriva y los efectos de casa sólo cambian con un resultado nuevo, datos de ciclos pasados, los catálogos o el método, y quedan como estaban. Con `mode` `auto` (por defecto) el pipeline elige: `full` con `overwrite` o cuando una elección pendiente del ámbito tiene resultado oficial, `light` cuando lo pendiente son sólo ciclos sin resultado | Tras cargar sondeos nuevos del ámbito (el cuaderno de `es` y `run_load` ya lo lanzan; tras `python job.py load` hay que lanzarlo, y `update` lo encadena) y tras cargar los resultados de una elección, para que entre en los eventos destacados y en los errores (en `auto` sale `full` solo). Sólo corre en los ámbitos con algo cargado desde su último compute (marcas `loaded_at` y `computed_at` de `events`, que escriben los cargadores y el propio compute, en los dos modos), salvo con `overwrite`; el resto termina `skipped`, sea cual sea `mode` |
 | `ratings` | Los ratings de las encuestadoras de las elecciones del ámbito, calculados con los sondeos de todos los ámbitos (`Computer.compute_ratings(scopes='all')`) | Tras `compute`, cuando han cambiado los errores de algún ámbito (una elección con resultados nuevos, sondeos corregidos). La web lee los ratings de la base en vivo (`/api/v1/ratings` y el ranking de `/casas`), así que el cambio se ve sin publicar nada |
+| `average_errors` | Los errores del promedio de sondeos en las elecciones pasadas del ámbito (tabla `elections.average_errors`, ver más abajo): un ajuste del promedio por elección destacada con resultado y por horizonte (`Computer.compute_average_errors`) | Sólo para las opciones del método 15 (`error_model='average'` y `drift_scale='auto'` del `Simulator` y del backtest), que no son las de por defecto: el modelo publicado no la lee. Tras un compute `full` del ámbito, porque sus ajustes toman de la base el prior de los efectos de casa. Nunca se salta y no marca `computed_at` |
 
-`what` admite las tres acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los
-ámbitos y después los ratings de todos, porque cada rating lee los errores de todos los ámbitos y la calidad previa. Después, `publish` con `forecast` y `analysis` para que el
-paquete use las tablas nuevas (ver "Publicar", "Tras recalcular ratings"). Los ámbitos están aislados: uno que falla
-no detiene a los demás ni a la acción siguiente, y el job termina con error al final si alguno falló.
+`what` admite las cuatro acciones y las ejecuta siempre en este orden: los catálogos una vez, la serie de todos los
+ámbitos, los ratings de todos (cada rating lee los errores de todos los ámbitos y la calidad previa) y los errores
+del promedio de todos. Después, `publish` con `forecast` y `analysis` para que el paquete use las tablas nuevas (ver
+"Publicar", "Tras recalcular ratings"). Los ámbitos están aislados: uno que falla no detiene a los demás ni a la
+acción siguiente, y el job termina con error al final si alguno falló.
 
 ### Ejemplos
 
@@ -683,25 +685,32 @@ python job.py compute '{"what":["catalogues","ratings"],"scopes":"all"}'
 python job.py compute '{"what":["catalogues"],"dry_run":true}'
 python job.py compute '{"what":["compute"],"scopes":["es-md"],"dry_run":true,"verbose":2}'
 python job.py compute '{"what":["compute"],"scopes":"all","overwrite":true}'
+python job.py compute '{"what":["compute"],"scopes":["es"],"mode":"full"}'
+python job.py compute '{"what":["average_errors"],"scopes":"all"}'
 ```
 
-1. Series y ratings de `es` y de todos los ámbitos autonómicos: la rutina completa tras una carga.
+1. Series y ratings de `es` y de todos los ámbitos autonómicos: la rutina completa tras una carga (la serie en el
+   modo que pida lo pendiente: `light` si sólo hay sondeos nuevos).
 2. Solo los ratings, con las series ya calculadas.
 3. Tras reevaluar la calidad previa (rúbrica o evaluaciones): los catálogos y después los ratings de todos los
    ámbitos con la calidad nueva. Luego, `publish` con `analysis`, `event` y `forecast`, y reiniciar la web.
 4. Comprobar que la rúbrica y las evaluaciones son válidas sin escribir nada.
 5. Ensayo: la serie de `es-md` sin escribir nada, con una línea por fase.
 6. Recalcular las series de todos los ámbitos aunque no tengan nada cargado desde su último compute: tras un cambio
-   de código o de `params.json`.
+   de código o de `params.json` (en modo `full`).
+7. La serie entera de `es` un día con sondeos nuevos en el que no basta el `light`; sin nada pendiente se salta igual
+   (para eso, el ejemplo 6).
+8. Rellenar la tabla de los errores del promedio de todos los ámbitos, tras un compute `full` de cada uno.
 
 ### Parámetros
 
 | Parámetro | Por defecto | Significado |
 | --- | --- | --- |
-| `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute` y/o `ratings`; una desconocida falla con `ValueError` antes de empezar |
+| `what` | `["compute", "ratings"]` | Acciones a ejecutar, `catalogues`, `compute`, `ratings` y/o `average_errors`; una desconocida falla con `ValueError` antes de empezar |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
-| `overwrite` | `false` | Computar la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros); sin él, el ámbito termina skipped |
-| `dry_run` | `false` | Calcular sin escribir nada: `catalogues` solo valida los ficheros de la calidad y la serie se detiene tras las desviaciones, porque deriva, efectos de casa y rebaño leen los errores guardados |
+| `overwrite` | `false` | Computar la serie de todos los ámbitos aunque no tengan nada cargado desde su último compute (tras un cambio de código o de parámetros), en modo `full` con `mode` `auto`; sin él, el ámbito termina skipped |
+| `mode` | `auto` | Fases de la serie: `auto` deja elegir al pipeline según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado oficial; `light` si no); `light` o `full` las fuerzan. No evita el salto de un ámbito sin nada pendiente; un valor desconocido falla con `ValueError` antes de empezar |
+| `dry_run` | `false` | Calcular sin escribir nada: `catalogues` sólo valida los ficheros de la calidad, la serie `full` se detiene tras las desviaciones y la `light` tras los pesos (deriva, efectos de casa y rebaño leen lo que guardan las fases anteriores), y `ratings` y `average_errors` calculan sin guardar |
 | `stop_on_error` | `false` | Parar al primer ámbito (o acción) que falla en vez de seguir con todos e informar al final |
 | `verbose` | `1` | Detalle de la salida por consola (niveles abajo) |
 
@@ -709,9 +718,9 @@ Niveles de `verbose`:
 
 | Nivel | Qué sale |
 | --- | --- |
-| 0 | Sólo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`; con `overwrite`, `· overwrite`; con `dry_run`, `· dry run`) y el resumen final |
-| 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento y los avisos del modelo en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") |
-| 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño`, `errores del promedio`, `ratings`) |
+| 0 | Sólo la cabecera de cada acción (`compute catálogos`, `compute series: 18 ámbitos`, `compute ratings: 18 ámbitos`, `compute errores del promedio: 18 ámbitos`; con `overwrite`, `· overwrite`; con `mode` forzado, `· light` o `· full`; con `dry_run`, `· dry run`) y el resumen final |
+| 1 (por defecto) | Lo anterior más, por ámbito, `[i/n] ámbito: empezando`, la línea de resultado en el momento (con el modo de la serie y su razón) y los avisos del modelo en vivo (`· aviso:`, contados en la línea de resumen como "· n avisos") |
+| 2 | Lo anterior más una línea por fase con sus segundos (`pesos`, `eventos destacados`, `errores`, `desviaciones`, `deriva`, `efectos de casa`, `rebaño` en `full`; `pesos` y `rebaño` en `light`; `ratings`; `errores del promedio`) |
 | 3 | Lo anterior más la salida propia del `Computer` (que recibe `verbose - 2`) |
 
 ### Estados y resumen
@@ -723,17 +732,23 @@ corrió sobre él (`status`, `action`, las cifras y los `warnings`); el de los c
 ```
 catalogues: saved (<ámbitos> scopes, <distritos> districts, <evaluaciones> quality evaluations, <encuestadoras> pollsters) in <s> s
 catalogues: checked (<evaluaciones> quality evaluations, dry run) in <s> s
-es: series computed (<sondeos> polls, <elecciones> events, <destacadas> featured) in <s> s
+es: series computed (light, polls pending: <sondeos> polls, <elecciones> events) in <s> s
+es: series computed (full, results pending: <sondeos> polls, <elecciones> events, <destacadas> featured) in <s> s
+es: series computed (full, overwrite: <sondeos> polls, <elecciones> events, <destacadas> featured) in <s> s
 es: ratings computed (<encuestadoras> pollsters, <elecciones> events) in <s> s
-es-md: series computed (<sondeos> polls, <elecciones> events, dry run) in <s> s
+es: average errors computed (<filas> rows, <elecciones> events) in <s> s
+es-md: series computed (light, requested: <sondeos> polls, <elecciones> events, dry run) in <s> s
 es-ar: series failed (RuntimeError: ...)
 es-md: series skipped (nothing loaded since the last compute)
 ```
 
-La última línea es la serie de un ámbito sin nada cargado desde su último compute y sin `overwrite`: no se computa y
-no es un fallo. `ratings` nunca se salta. Tras el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp, ADD
-COLUMN computed_at timestamp;` que crea las marcas, todas las elecciones cuentan como pendientes: el primer `compute`
-sin `overwrite` computa todos los ámbitos una vez.
+La serie dice su modo y la razón: `polls pending` (sólo hay pendientes ciclos sin resultado), `results pending`
+(alguna elección pendiente tiene resultado oficial), `overwrite` o `requested` (`mode` forzado); las elecciones
+destacadas sólo salen en `full`, que es la única que las recalcula. La última línea es la serie de un ámbito sin
+nada cargado desde su último compute y sin `overwrite`: no se computa y no es un fallo, sea cual sea `mode`.
+`ratings` y `average_errors` nunca se saltan. Tras el `ALTER TABLE elections.events ADD COLUMN loaded_at timestamp,
+ADD COLUMN computed_at timestamp;` que crea las marcas, todas las elecciones cuentan como pendientes, las que tienen
+resultado incluidas: el primer `compute` sin `overwrite` computa todos los ámbitos una vez, en `full`.
 
 Un ámbito fallido no detiene a los demás ni a la acción siguiente (sus ratings se calculan igual); al final el job
 termina con `RuntimeError: compute: failed scopes: es-ar (series)` (o `catalogues (catálogos)` si fallan los
@@ -741,16 +756,17 @@ catálogos, por ejemplo con un CSV de la calidad mal formado).
 El aviso final, el recorte de Pushover y el código de salida son los de "Aviso final y código de salida"
 en "Publicar".
 
-El paso `average_errors` (método 15, desde 2026-11-01) rellena la tabla `elections.average_errors` (la crea al guardar
-por primera vez, `save_average_errors_data` con `create(replace=False)`, así que no hay paso de migración que lanzar
-antes): para cada elección destacada del ámbito y cada horizonte del backtest, el error del promedio (modelo menos
-resultado) de cada partido principal, con su nivel y el error estándar `s` de la regresión local, ajustado sin simular
-con la configuración del `Simulator` (`Computer.compute_average_errors`). Va el último, después de los efectos de casa,
-porque el promedio lee su prior, y sólo con escritura (con `dry_run` no corre). Es lento: unos 37 minutos en `es` (14
-generales desde 1982 por seis horizontes). Sólo la leen `error_model='average'` y `drift_scale='auto'` del `Simulator` y
-del backtest; el modelo publicado no la usa mientras sus valores por defecto sean `'polls'` y `None` (decisión del
-02-11-2026, ver `docs/analisis-2026-09/metodo-15-calibracion.md`), así que hasta entonces su tiempo es el único efecto
-del paso.
+La acción `average_errors` (método 15, desde 2026-11-01; acción aparte de `compute` desde 2026-11-03) rellena la
+tabla `elections.average_errors` (la crea al guardar por primera vez, `save_average_errors_data` con
+`create(replace=False)`, así que no hay paso de migración que lanzar antes): para cada elección destacada del ámbito y
+cada horizonte del backtest, el error del promedio (modelo menos resultado) de cada partido principal, con su nivel y
+el error estándar `s` de la regresión local, ajustado sin simular con la configuración del `Simulator`
+(`Computer.compute_average_errors`). Se lanza después de un compute `full` del ámbito, porque el promedio toma de la
+base el prior de los efectos de casa; con `dry_run` calcula sin guardar. Es lenta: unos 37 minutos en `es` (14
+generales desde 1982 por seis horizontes), por eso ya no forma parte de la serie. Sólo la leen `error_model='average'`
+y `drift_scale='auto'` del `Simulator` y del backtest; el modelo publicado no la usa mientras sus valores por defecto
+sean `'polls'` y `None` (decisión del 02-11-2026, ver `docs/analisis-2026-09/metodo-15-calibracion.md`), así que hasta
+entonces no hace falta lanzarla en la rutina.
 
 En Docker: `RUN_JOB='compute {"what":["compute","ratings"],"scopes":"all"}'`.
 
@@ -1587,14 +1603,20 @@ Tres grupos, en este orden y cada uno sobre todos los ámbitos antes de empezar 
 1. `load.polls`: carga los sondeos nuevos de Wikipedia (o, con `overwrite`, reemplaza el ciclo entero: `rebulk`).
 2. `compute.compute`: calcula las series del modelo. Sin `overwrite` se salta los ámbitos sin nada cargado desde su
    último compute, que se lee de las marcas `loaded_at` y `computed_at` de `events` (las escriben los cargadores y el
-   propio compute); esos ámbitos terminan `skipped` y siguen a la publicación.
+   propio compute); esos ámbitos terminan `skipped` y siguen a la publicación. Donde corre, va en el modo que pide lo
+   pendiente (`mode` `auto`): `light`, pesos y rebaño, lo único que cambian los sondeos del ciclo en curso (la rutina
+   diaria, unos minutos), o `full`, todas las fases, con `overwrite` o cuando una elección pendiente tiene resultado
+   oficial (uno cargado con `load` o desde el cuaderno). Los errores del promedio (`average_errors`) no entran: se
+   lanzan con `compute`.
 3. `publish.forecast` y `publish.analysis` por ámbito, y `publish.parties` una vez al final (el catálogo de partidos).
 
 Son los mismos pipelines de los jobs `load`, `compute` y `publish`: cada línea, estado y nivel de `verbose` es el de
 su job. Los `ratings` y los catálogos no entran (se lanzan con `compute`).
 
-`overwrite` es el único interruptor de rehacerlo todo: reemplaza el ciclo de sondeos y computa la serie aunque no haya
-nada nuevo; se usa tras un cambio de código o de parámetros. `update` para en el primer fallo, a diferencia de los
+`overwrite` es el único interruptor de rehacerlo todo: reemplaza el ciclo de sondeos y computa la serie, en `full`,
+aunque no haya nada nuevo; se usa tras un cambio de código o de parámetros. `"mode": "full"` fuerza la serie entera un
+día con sondeos nuevos; sin nada pendiente el compute se salta igual (para recalcular sin recargar el ciclo,
+`compute` con `overwrite`). `update` para en el primer fallo, a diferencia de los
 otros tres jobs: si un ámbito falla, el job se detiene en ese ámbito: ni los ámbitos que faltan de ese grupo ni los
 grupos siguientes corren (con `"scopes":"all"`, una casa sin mapear en un autonómico deja también sin publicar a
 `es`). Así nunca se publica un pronóstico sobre sondeos que no se cargaron o series que no se calcularon. Con
@@ -1613,21 +1635,25 @@ también (usa `load`, `compute` o `publish`) y `years` no se combina con `overwr
 python job.py update '{"scopes":["es"],"n_sim":10000,"verbose":3}'
 python job.py update '{"scopes":"all"}'
 python job.py update '{"scopes":["es"],"overwrite":true}'
+python job.py update '{"scopes":["es"],"mode":"full"}'
 python job.py update '{"scopes":["es"],"n_sim":20,"dry_run":true}'
 ```
 
-1. La actualización diaria de `es` con 10.000 simulaciones y toda la salida.
+1. La actualización diaria de `es` con 10.000 simulaciones y toda la salida (la serie en `light` si sólo hay sondeos
+   nuevos).
 2. Todos los ámbitos; los que no tienen artículo de sondeos terminan `skipped` en la carga y no cuentan como fallo.
-3. Tras un cambio de código o de parámetros: recarga el ciclo y recalcula la serie aunque no haya nada nuevo.
-4. Ensayo: la carga lee y comprueba sin escribir y la publicación va a `site-dry/`.
+3. Tras un cambio de código o de parámetros: recarga el ciclo y recalcula la serie entera aunque no haya nada nuevo.
+4. La serie entera de `es` un día con sondeos nuevos; sin nada pendiente, el compute se salta.
+5. Ensayo: la carga lee y comprueba sin escribir y la publicación va a `site-dry/`.
 
 ### Parámetros
 
 | Parámetro | Por defecto | Significado |
 | --- | --- | --- |
 | `scopes` | `["es"]` | Ámbitos, o `"all"` (`es` más los ámbitos con padre) |
-| `overwrite` | `false` | Reemplazar el ciclo de sondeos y computar la serie aunque no haya nada cargado desde el último compute |
-| `dry_run` | `false` | No escribir nada: la carga lee y comprueba, la serie se detiene tras las desviaciones y la publicación va a `site-dry/v1` |
+| `overwrite` | `false` | Reemplazar el ciclo de sondeos y computar la serie (en `full`) aunque no haya nada cargado desde el último compute |
+| `mode` | `auto` | Fases de la serie donde corre el compute: `auto` elige según lo pendiente (`full` con `overwrite` o con una elección pendiente con resultado; `light` si no); `light` o `full` las fuerzan, sin evitar el salto de un ámbito sin nada pendiente |
+| `dry_run` | `false` | No escribir nada: la carga lee y comprueba, la serie se detiene tras las desviaciones (`full`) o tras los pesos (`light`) y la publicación va a `site-dry/v1` |
 | `verbose` | `1` | Detalle de la salida por consola (los niveles de `publish`: 0 cabeceras y resumen, 1 líneas por ámbito, 2 fases, 3 salida del modelo) |
 | `stop_on_error` | `true` | Parar al primer fallo; `false` sigue con todo, publica lo que haya e informa al final |
 | `force` | `false` | Publicar dentro de la veda y dar de alta las encuestadoras y los medios nuevos en la carga |
@@ -1647,7 +1673,8 @@ python job.py update '{"scopes":["es"],"n_sim":20,"dry_run":true}'
 
 ```
 es: polls loaded (5 read, 2 saved, 2026-11-29) in 38 s
-es: series computed (4010 polls, 15 events, 7 featured) in 1500 s
+es: series computed (light, polls pending: 4010 polls, 15 events) in 180 s
+es: series computed (full, results pending: 4010 polls, 15 events, 7 featured) in 900 s
 es: series skipped (nothing loaded since the last compute)
 es: published 20261104-101500 (...)
 es: analysis published (event 2026-11-29, 31 pollsters) in 12 s
@@ -1740,6 +1767,12 @@ tardó 44 s en el test de integración contra la RDS (2026-10-10).
 `es` con `n_sim=10000` (2026-10-30, contra la RDS, portátil): 673 s en total (init 17,6; ajuste 57,4; nowcast
 276; forecast 310; exportaciones 11). Las dos fases de simulación escalan lineales con `n_sim` (22 s cada una con
 1.000); `dist.json` pasa de 34 a 336 KB por modo (87 KB comprimido en la página Escaños).
+
+Compute de `es` (2026-11-03, contra la RDS, portátil): la serie entera con los errores del promedio como última fase,
+unos 45 minutos (`average_errors` ≈ 37, las otras fases ≈ 8-13). Desde ese día la serie tiene dos modos y los errores
+del promedio son una acción aparte: el `light` (una pasada de pesos sobre el ámbito entero y un Forecaster por ciclo
+para el rebaño) debería estar en el orden de cinco minutos desde el portátil, pendiente de medir por Luis con
+`"verbose": 2` (una línea por fase con sus segundos); el `full` sin `average_errors`, en los 8-13 minutos de antes.
 
 Carga de sondeos (2026-10-26, contra la RDS, sólo lectura): `python job.py load '{"scopes":["es"],"dry_run":true}'`
 tarda 3 s (descarga del artículo, 521 sondeos leídos, nombres y selección); con `scopes: "all"` el ensayo de los
