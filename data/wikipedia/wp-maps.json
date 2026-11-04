@@ -90,8 +90,7 @@
             "Animalist_Party_with_the_Environment"
         ],
         "COMPROMIS": [
-            "Coalici%C3%B3_Comprom%C3%ADs",
-            "Valencian_Front"
+            "Coalici%C3%B3_Comprom%C3%ADs"
         ],
         "IU": [
             "Popular_Unity_(Spain)",
@@ -194,8 +193,11 @@
         "AC": [
             "Catalan_Alliance"
         ],
-        "ADELANTE": [
+        "AA": [
             "Adelante_Andalucía_(2021)"
+        ],
+        "FV": [
+            "Valencian_Front"
         ]
     },
     "pollsters": {
@@ -352,7 +354,7 @@
                     "Por_Andalucía",
                     "PorA"
                 ],
-                "ADELANTE": [
+                "AA": [
                     "Andaluces_Levantaos"
                 ],
                 "JM+": [
