@@ -648,6 +648,145 @@ def test_the_rating_pool_keeps_the_polls_of_the_excluded_pollsters():
     assert out.index.get_level_values('event_scope').unique().tolist() == ['es']
 
 
+# --- Fase C (2026-11-04): datos de la validación del rating (`rating_check_data`) ---
+
+PAIRS_COLUMNS = ['event_scope', 'event_date', 'population', 'pollster_id', 'pollster', 'd_obs', 'error_avg', 'n_polls',
+                 'n_event_polls', 'rating', 'rating_adj', 'd_prev', 'num_events_w', 'quality', 'weight_rating']
+POLLS_COLUMNS = ['event_scope', 'event_date', 'population', 'pollster_id', 'pollster', 'party', 'error',
+                 'weight_over', 'weight_sample', 'weight_rating']
+STORED_COLUMNS = ['event_date', 'pollster_id', 'pollster', 'mtype', 'rating', 'rating_adj', 'bias_dev_adj',
+                  'num_events_w', 'quality', 'weight_rating', 'num_national_events']
+
+
+def stored_ratings(rows):
+    """Filas de `pollsters_ratings` como las lee `data.get_ratings`, en las escalas guardadas: una por tupla (fecha,
+    casa, rating 0-100, `bias_dev_adj` en escala bias, `num_events_w`[, mtype]); `rating_adj` es el rating menos 1,
+    `quality` 56 y `weight_rating` el rating entre 60."""
+    ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
+    data = [{
+        'event_date': pd.Timestamp(row[0]), 'pollster_id': ids[row[1]], 'pollster': row[1],
+        'mtype': row[5] if len(row) > 5 else None, 'rating': row[2], 'rating_adj': row[2] - 1,
+        'bias_dev_adj': row[3], 'num_events_w': row[4], 'quality': 56., 'weight_rating': row[2] / 60,
+        'num_national_events': 2
+    } for row in rows]
+    return pd.DataFrame(data, columns=STORED_COLUMNS)
+
+
+RATINGS = {
+    'es': stored_ratings([('2019-11-10', 'A', 77.1, -.84, 3.), ('2019-11-10', 'B', 40., 1., 0.),
+                          ('2019-11-10', 'D', np.nan, .2, 1., 'online')]),
+    'es-md': stored_ratings([('2021-05-04', 'A', 70., .3, 2.), ('2021-05-04', 'B', 50., .5, 1.)]),
+    'es-cl': stored_ratings([('2021-05-04', 'A', 64., .3, 1.)]),
+}
+
+
+def campaign_computer():
+    """Computer de `es` sin base de datos con la última campaña de 2019 (ventana de 30 días) y una de 2016 sin filas
+    de rating. En 2019: A a 10 días y a 45 (fuera de la ventana), B a 5 y un sondeo a pie de urna a 3, C a 20 (sin
+    PSOE) y a 12 con `weight_over` 0, y D (panel online) a 8. Calidad previa del catálogo: A 80, B 50, C 60, D 70."""
+    c = bare_computer()
+    c.drop_mtypes, c.drop_ctypes, c.drange, c.n_last = ['aggr', 'online'], ['wban', 'exit'], None, None
+    c.names = ['PP', 'PSOE', 'VOX']
+    c.pollsters = pd.DataFrame({'id': [1, 2, 3, 4], 'name': ['A', 'B', 'C', 'D'], 'quality': [80., 50., 60., 70.]})
+    c.event_params = {dt: {'bmaps': {'main': ['PP', 'PSOE']}} for dt in ('2016-06-26', '2019-11-10')}
+    e19, e16 = pd.Timestamp('2019-11-10'), pd.Timestamp('2016-06-26')
+    polls = [  # (evento, días, casa, mtype, ctype, weight_over, PP, PSOE, VOX)
+        (e19, 10, 'A', None, None, 1., 1.5, -1., .5),
+        (e19, 45, 'A', None, None, 1., 9., 9., 9.),
+        (e19, 5, 'B', None, None, 1., -.5, 2., np.nan),
+        (e19, 3, 'B', None, 'exit', 1., 9., 9., 9.),
+        (e19, 20, 'C', None, None, 1., 2., np.nan, 1.),
+        (e19, 12, 'C', None, None, 0., 9., 9., 9.),
+        (e19, 8, 'D', 'online', None, 1., 9., 9., 9.),
+        (e16, 10, 'A', None, None, 1., 1., 1., 1.),
+    ]
+    ids = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
+    index = pd.MultiIndex.from_tuples(
+        [(ev, ev - pd.Timedelta(days=d), ids[p], 0) for ev, d, p, *_ in polls] + [(e19, e19, np.nan, np.nan),
+                                                                                 (e16, e16, np.nan, np.nan)],
+        names=c.keys)
+    n = len(polls)
+    c.series = pd.DataFrame({
+        'pollster': [p for _, _, p, *_ in polls] + [None, None], 'mtype': [r[3] for r in polls] + [None, None],
+        'ctype': [r[4] for r in polls] + [None, None], 'featured': True, 'computed': True,
+        'days': [r[1] for r in polls] + [0, 0], 'sample_size': [800] * n + [1000, 900],
+        'weight_over': [r[5] for r in polls] + [np.nan, np.nan], 'weight_sample': 1., 'error_avg': [1.] * n + [np.nan] * 2,
+    }, index=index)
+    c.errors = pd.DataFrame({'PP': [r[6] for r in polls], 'PSOE': [r[7] for r in polls],
+                             'VOX': [r[8] for r in polls]}, index=index[:n])
+    return c
+
+
+def test_rating_check_data_keeps_same_day_elections_apart(monkeypatch):
+    """es-md y es-cl el 2021-05-04: dos pares por casa; el rating de cada par es el de su propio ámbito."""
+    c = bare_computer()
+    rows = [('es-md', '2021-05-04', 'A'), ('es-cl', '2021-05-04', 'A'), ('es-md', '2021-05-04', 'B')]
+    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: pool(rows))
+    monkeypatch.setattr(c, 'scope_computers', lambda scopes: {})
+    read = []
+    out = c.rating_check_data(scopes=['es-md', 'es-cl'], rating_weights={'es-md': .5, 'es-cl': .5},
+                              ratings=lambda scope: read.append(scope) or RATINGS[scope])
+    assert sorted(read) == ['es-cl', 'es-md']  # `es` no tiene sondeos: no se lee
+    assert list(out['pairs'].columns) == PAIRS_COLUMNS and out['pairs'].index.equals(pd.RangeIndex(3))
+    assert list(out['polls'].columns) == POLLS_COLUMNS and out['polls'].shape[0] == 0
+    assert out['n_scopes'] == 2 and out['seconds'] >= 0
+    pairs = out['pairs'].set_index(['event_scope', 'pollster'])
+    assert len(pairs) == 3 and pairs.loc[('es-md', 'A'), 'rating'] != pairs.loc[('es-cl', 'A'), 'rating']
+    assert pairs.loc[('es-md', 'A'), 'rating'] == pytest.approx(.70)
+    assert pairs.loc[('es-cl', 'A'), 'rating'] == pytest.approx(.64)
+    assert pairs['population'].unique().tolist() == ['autonomicas']
+    # A en Madrid: su desviación (`bias_dev`, LOR), el error medio de sus sondeos en puntos y los recuentos
+    md_a = pairs.loc[('es-md', 'A')]
+    assert md_a['d_obs'] == pytest.approx(.01) and md_a['error_avg'] == pytest.approx(3.)
+    assert md_a['n_polls'] == 1 and md_a['n_event_polls'] == 2
+    assert pairs.loc[('es-cl', 'A'), 'n_event_polls'] == 1
+    assert pairs.loc[('es-md', 'B'), 'd_obs'] == pytest.approx(-.01)
+
+
+def test_rating_check_data_keeps_a_new_house_out_of_the_pairs_and_in_the_polls(monkeypatch):
+    """La casa C sondea 2019 sin fila de rating: no es un par; en `polls` lleva la calidad previa normalizada. Los
+    sondeos son los útiles de los 30 días anteriores, por partido principal, en las elecciones valoradas."""
+    c = campaign_computer()
+    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: pool(ES19 + [('es', '2019-11-10', 'C')]))
+    monkeypatch.setattr(c, 'scope_computers', lambda scopes: {'es': c})
+    out = c.rating_check_data(scopes=['es'], rating_weights={'es': 1.}, ratings=lambda scope: RATINGS[scope])
+    assert 'C' not in out['pairs']['pollster'].tolist()
+    assert sorted(out['pairs']['pollster']) == ['A', 'B']
+    polls = out['polls']
+    assert list(polls.columns) == POLLS_COLUMNS and polls.index.equals(pd.RangeIndex(len(polls)))
+    # Fuera: el panel online (D), el sondeo a pie de urna, el de `weight_over` 0, el de 45 días, VOX (no es principal),
+    # el PSOE sin dato de C y 2016 (sin filas de rating)
+    assert sorted(zip(polls['pollster'], polls['party'])) == [('A', 'PP'), ('A', 'PSOE'), ('B', 'PP'), ('B', 'PSOE'),
+                                                              ('C', 'PP')]
+    assert polls['event_date'].unique().tolist() == [pd.Timestamp('2019-11-10')]
+    assert polls['population'].unique().tolist() == ['generales']
+    assert polls['weight_rating'].notna().all()
+    a_pp = polls.loc[(polls['pollster'] == 'A') & (polls['party'] == 'PP')].iloc[0]
+    assert a_pp['error'] == pytest.approx(1.5) and a_pp['weight_rating'] == pytest.approx(77.1 / 60)
+    assert a_pp['weight_over'] == 1. and a_pp['weight_sample'] == 1. and a_pp['pollster_id'] == 1
+    c_rows = polls.loc[polls['pollster'] == 'C']
+    quality_mean = np.mean([.8, .5, .6])  # las casas de la elección tras los filtros: A, B y C (D fuera)
+    assert c_rows['weight_rating'].iloc[0] == pytest.approx(np.log1p(.6) / np.log1p(quality_mean))
+
+
+def test_rating_check_data_undoes_the_stored_scales(monkeypatch):
+    """`rating` 77,1 → 0,771; `bias_dev_adj` −0,84 (escala bias) → `bias_to_lor`; `d_prev` NaN con `num_events_w` 0.
+    D, panel online sin rating, no es un par."""
+    c = bare_computer()
+    c.drop_mtypes = ['aggr', 'online']
+    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: pool(ES19 + [('es', '2019-11-10', 'D')]))
+    monkeypatch.setattr(c, 'scope_computers', lambda scopes: {})
+    out = c.rating_check_data(scopes=['es'], rating_weights={'es': 1.}, ratings=lambda scope: RATINGS[scope])
+    pairs = out['pairs'].set_index('pollster')
+    assert sorted(pairs.index) == ['A', 'B']
+    a, b = pairs.loc['A'], pairs.loc['B']
+    assert a['rating'] == pytest.approx(.771) and a['rating_adj'] == pytest.approx(.761)
+    assert a['quality'] == pytest.approx(.56) and a['weight_rating'] == pytest.approx(77.1 / 60)
+    assert a['d_prev'] == pytest.approx(np.log(1 - .0084)) and a['num_events_w'] == pytest.approx(3.)
+    assert b['num_events_w'] == 0 and np.isnan(b['d_prev'])
+    assert a['population'] == 'generales' and a['pollster_id'] == 1
+
+
 def test_the_sample_median_of_an_event_ignores_the_excluded_pollsters():
     """El peso por muestra se mide contra la mediana de las casas que cuentan: un panel enorme no lo mueve."""
     c = bare_computer()

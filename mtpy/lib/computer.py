@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 from scipy.stats import norm
+import time
 from tqdm import tqdm
 import warnings
 
@@ -28,6 +29,7 @@ from .data import (
 )
 from .mtypes import DROP_MTYPES
 from .quality import count_national_events, load_criteria, prior_quality, read_quality
+from .rating_check import WINDOW_DAYS, population_of
 from .utils import (
     build_blocks, group_results, norm_range, partial_parties, REGIONAL_LIST_ID
 )
@@ -1515,14 +1517,7 @@ class Computer(Core):
         ]
         rkeys = ['event_date', 'pollster_id']
 
-        if scopes is None:
-            weights = {self.scope: 1.}
-        else:
-            weights = rating_weights if rating_weights is not None else get_scopes()['rating_weight'].to_dict()
-            names = list(weights) if scopes == 'all' else list(scopes)
-            weights = {s: float(weights.get(s, 0.)) for s in names}
-            weights.setdefault(self.scope, 1.)
-        weights = {s: w for s, w in weights.items() if w > 0 or s == self.scope}
+        weights = self._rating_scope_weights(scopes, rating_weights)
 
         if self.verbose > 0:
             print('Compute ratings...')
@@ -1615,9 +1610,384 @@ class Computer(Core):
 
         return df
 
-    def rating_pool(
+    def rating_check_data(
+        self,
+        scopes: list[str] | str = 'all',
+        rating_weights: Optional[dict[str, float]] = None,
+        ratings: Optional[Callable[[str], pd.DataFrame]] = None,
+        window_days: int = WINDOW_DAYS
+    ) -> dict:
+        """
+        Gather the data of the out-of-sample validation of the pollster rating (`rating_check`): the pairs
+        (house, election) that compare the rating a house had before an election with its deviation in it, and the
+        polls of the last campaign of each rated election with their two weights. Read only: nothing is saved and
+        the live model is not touched.
+
+        `pairs` comes from the rating pool (`rating_pool`, the featured elections with a result of every scope of
+        `scopes`): `d_obs` is the deviation `bias_dev` of the house in the election (`_event_deviations`, log odds
+        ratio), the evidence the rating itself uses. Each election is weighed alone, so its polls keep a year
+        weight of 1 and the deviation does not depend on the age of the election. Each pair is joined (inner) by
+        (`event_scope`, `event_date`, `pollster_id`) with the row of the stored ratings of that election: a house
+        without a row, or without a rating (the `drop_mtypes` types), is not a pair. Two elections held on the same
+        day in different scopes are different pairs, each with the rating of its own scope.
+
+        `polls` holds the useful polls of the `window_days` days before each rated election (an election of a scope
+        with an official result, its errors computed and a row in the stored ratings), from the computers of
+        `scope_computers`: `computed`, without the `drop_mtypes` and `drop_ctypes` of the computer and with
+        `weight_over > 0`. One row per poll and main party of the election (`bmaps.main`; a main party made of
+        several parties sums their errors, as `poll_errors` groups them). `weight_rating` is the one of the row
+        of the house in the stored ratings or, without it, the prior quality of the catalogue normalised by the
+        mean of the houses of that election, `log1p(q) / log1p(mean q)`, as `Forecaster.build_series` does; a house
+        without a quality in the catalogue gets the neutral weight 1.
+
+        The stored ratings (`data.get_ratings`) keep `rating`, `rating_adj` and `quality` in the range [0, 100]
+        and `bias_dev_adj` in the bias scale (`lor_to_bias`); here they are divided by 100 and converted back to
+        log odds ratio (`bias_to_lor`). `num_events_w` and `weight_rating` are kept as stored. The errors of the
+        polls are stored in percentage points (`compute_errors`) and kept so.
+
+        Parameters
+        ----------
+        scopes : list of str or 'all', optional
+            Scopes of the elections checked, as in `compute_ratings` (`'all'`: every scope of the catalogue with a
+            positive `rating_weight`).
+        rating_weights : dict, optional
+            Weight of the polls of each scope, replacing those of the catalogue; scopes with weight 0 are left out.
+        ratings : callable, optional
+            `ratings(scope)` returns the stored ratings of a scope (`event_date`, `pollster_id`, `rating`,
+            `rating_adj`, `bias_dev_adj`, `num_events_w`, `quality`, `weight_rating` and, optionally, `mtype`);
+            `data.get_ratings` by default. Only the scopes with polls are read.
+        window_days : int, optional
+            Days before the election of the polls of `polls`.
+
+        Returns
+        -------
+        dict
+            `pairs`: one row per house and election with `event_scope`, `event_date`, `population`
+            (`rating_check.population_of`), `pollster_id`, `pollster`, `d_obs` (log odds ratio), `error_avg`
+            (percentage points, the mean `error_avg` of its polls weighted by `weight_over * weight_sample *
+            weight_pos`), `n_polls` (its polls in the election), `n_event_polls` (every poll of the election in
+            the pool), `rating`, `rating_adj` (0 to 1), `d_prev` (the stored `bias_dev_adj` in log odds ratio,
+            NaN when `num_events_w` is 0), `num_events_w`, `quality` (0 to 1) and `weight_rating`.
+            `polls`: one row per poll and main party with `event_scope`, `event_date`, `population`,
+            `pollster_id`, `pollster`, `party`, `error` (percentage points, poll minus result), `weight_over`,
+            `weight_sample` and `weight_rating` (never null).
+            `n_scopes`: scopes with polls in the pool; `seconds`: time spent.
+        """
+        start = time.perf_counter()
+        ratings = ratings if ratings is not None else get_ratings
+        weights = self._rating_scope_weights(scopes, rating_weights)
+        names = list(weights)
+        keys = ['event_scope', 'event_date', 'pollster_id']
+
+        computers = self.scope_computers(names)
+        pool = self.rating_pool(names, computers=computers)
+        pairs = self._rating_check_pairs(pool, weights)
+
+        frames = [comp._rating_check_polls(window_days).assign(event_scope=scope) for scope, comp in computers.items()]
+        frames = [f for f in frames if f.shape[0] > 0]
+        polls = pd.concat(frames, ignore_index=True) if len(frames) > 0 else pd.DataFrame(
+            columns=['event_scope', 'event_date', 'pollster_id', 'pollster', 'party', 'error', 'weight_over',
+                     'weight_sample', 'quality'])
+
+        read = list(dict.fromkeys(pairs['event_scope'].tolist() + polls['event_scope'].tolist()))
+        stored = self._stored_ratings({scope: ratings(scope) for scope in read})
+
+        # Pairs: only the houses with a rating before the election
+        pairs = pairs.merge(stored, on=keys, how='inner')
+        pairs = pairs.loc[pairs['rating'].notna() & ~pairs['mtype'].isin(self.drop_mtypes or [])].copy()
+        pairs['population'] = pairs['event_scope'].map(population_of)
+
+        # Polls: only the rated elections, with the weight of the row of the house or its prior quality
+        rated = stored[['event_scope', 'event_date']].drop_duplicates()
+        polls = polls.merge(rated, on=['event_scope', 'event_date'], how='inner')
+        polls = polls.merge(stored[keys + ['weight_rating']], on=keys, how='left')
+        houses = polls.drop_duplicates(keys)
+        mean_quality = houses.groupby(['event_scope', 'event_date'])['quality'].mean().rename('mean_quality')
+        polls = polls.join(mean_quality, on=['event_scope', 'event_date'])
+        fallback = np.log1p(polls['quality'].astype(float)) / np.log1p(polls['mean_quality'].astype(float))
+        polls['weight_rating'] = polls['weight_rating'].astype(float).fillna(fallback).fillna(1.)
+        polls['population'] = polls['event_scope'].map(population_of)
+
+        pairs_columns = [
+            'event_scope', 'event_date', 'population', 'pollster_id', 'pollster', 'd_obs', 'error_avg', 'n_polls',
+            'n_event_polls', 'rating', 'rating_adj', 'd_prev', 'num_events_w', 'quality', 'weight_rating'
+        ]
+        polls_columns = [
+            'event_scope', 'event_date', 'population', 'pollster_id', 'pollster', 'party', 'error', 'weight_over',
+            'weight_sample', 'weight_rating'
+        ]
+        pairs = pairs[pairs_columns].sort_values(
+            ['event_date', 'event_scope', 'pollster_id'], kind='stable'
+        ).reset_index(drop=True)
+        polls = polls[polls_columns].sort_values(
+            ['event_date', 'event_scope', 'pollster_id'], kind='stable'
+        ).reset_index(drop=True)
+
+        return {
+            'pairs': pairs,
+            'polls': polls,
+            'n_scopes': int(pool.index.get_level_values('event_scope').nunique()),
+            'seconds': time.perf_counter() - start
+        }
+
+    def _rating_check_pairs(
+        self,
+        pool: pd.DataFrame,
+        rating_weights: dict[str, float]
+    ) -> pd.DataFrame:
+        """
+        Deviation of each house in each election of the rating pool, with the mean error of its polls and the
+        counts of `rating_check_data`. Each election goes through `_rating_polls` alone, so the year weight of its
+        polls is 1 and the polls kept do not depend on the most recent election of the pool.
+
+        Parameters
+        ----------
+        pool : pd.DataFrame
+            Polls of the rating, indexed by `event_scope` plus the keys of the series (see `rating_pool`).
+        rating_weights : dict
+            Weight of the polls of each scope.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per house and election: `event_scope`, `event_date`, `pollster_id`, `pollster`, `d_obs` (log
+            odds ratio), `error_avg` (percentage points), `n_polls` and `n_event_polls`.
+        """
+        columns = ['event_scope', 'event_date', 'pollster_id', 'pollster', 'd_obs', 'error_avg', 'n_polls',
+                   'n_event_polls']
+        frames = [
+            self._rating_polls(group, rating_weights)
+            for _, group in pool.groupby(level=['event_scope', 'event_date'], sort=True)
+            if group['bias'].notnull().any()
+        ]
+        frames = [f for f in frames if f.shape[0] > 0]
+        if len(frames) == 0:
+            return pd.DataFrame(columns=columns)
+
+        df = pd.concat(frames, ignore_index=True)
+        deviations = self._event_deviations(df).rename(columns={'bias_dev': 'd_obs'})
+
+        # Mean error of the polls of the house in the election, weighted as its deviation (`_event_deviations`)
+        weight = df['weight_over'] * df['weight_sample'] * df['weight_pos']
+        measured = df['error_avg'].notna()
+        df['weighted_error'] = (weight * df['error_avg']).where(measured, 0.)
+        df['weight_error'] = weight.where(measured, 0.)
+        df['n_event_polls'] = df.groupby('event_key')['event_key'].transform('size')
+
+        stats = df.groupby(['pollster', 'event_key'], observed=True).agg(
+            event_scope=('event_scope', 'first'),
+            event_date=('event_date', 'first'),
+            pollster_id=('pollster_id', 'first'),
+            n_polls=('event_key', 'size'),
+            n_event_polls=('n_event_polls', 'first'),
+            weighted_error=('weighted_error', 'sum'),
+            weight_error=('weight_error', 'sum')
+        ).reset_index()
+        # The error of the pool is in the internal scale ([0, 1], see `rating_pool`): back to percentage points
+        stats['error_avg'] = (stats['weighted_error'] / stats['weight_error'].where(stats['weight_error'] > 0)).mul(100)
+
+        out = stats.merge(deviations[['pollster', 'event_key', 'd_obs']], on=['pollster', 'event_key'], how='left')
+        out['event_date'] = pd.to_datetime(out['event_date']).astype('datetime64[ns]')
+        out['pollster_id'] = out['pollster_id'].astype('int64')
+        out['pollster'] = out['pollster'].astype(str)
+
+        return out[columns]
+
+    def _rating_check_polls(
+        self,
+        window_days: int
+    ) -> pd.DataFrame:
+        """
+        Useful polls of the last `window_days` days of each election of this computer with an official result
+        (`filter_polls('results')`: `computed`, without the `drop_mtypes` and `drop_ctypes` of the computer and with
+        `weight_over > 0`), one row per poll and main party of the election (`bmaps.main`). The error of a main
+        party made of several parties is the sum of theirs, as `poll_errors` groups them. Rows without an error are
+        left out.
+
+        Parameters
+        ----------
+        window_days : int
+            Days before the election of the polls kept.
+
+        Returns
+        -------
+        pd.DataFrame
+            `event_date`, `pollster_id`, `pollster`, `party`, `error` (percentage points, as stored), `weight_over`,
+            `weight_sample` and `quality` (the prior quality of the catalogue, 0 to 1).
+        """
+        columns = ['event_date', 'pollster_id', 'pollster', 'party', 'error', 'weight_over', 'weight_sample',
+                   'quality']
+        df = self.filter_polls('results', drange=(0, window_days))
+        if df.shape[0] == 0:
+            return pd.DataFrame(columns=columns)
+
+        base = ['event_date', 'pollster_id', 'pollster', 'weight_over', 'weight_sample']
+        df = df[['pollster', 'weight_over', 'weight_sample']].merge(
+            self.errors, left_index=True, right_index=True, how='left'
+        ).reset_index()
+
+        frames = []
+        for event_date, group in df.groupby('event_date', sort=True):
+            params = self.event_params.get(pd.Timestamp(event_date).strftime('%Y-%m-%d'), {})
+            main = params.get('bmaps', {}).get('main')
+            if not main:
+                continue
+            for party, members in self._main_members(main).items():
+                present = [m for m in members if m in group.columns]
+                if len(present) == 0:
+                    continue
+                frames.append(group[base].assign(party=party, error=group[present].sum(axis=1, min_count=1)))
+
+        if len(frames) == 0:
+            return pd.DataFrame(columns=columns)
+
+        out = pd.concat(frames, ignore_index=True).dropna(subset=['error'])
+        out['event_date'] = pd.to_datetime(out['event_date']).astype('datetime64[ns]')
+        out['pollster_id'] = out['pollster_id'].astype('int64')
+        out['quality'] = out['pollster_id'].map(self.pollsters.set_index('id')['quality'].astype(float).div(100))
+
+        return out[columns]
+
+    @staticmethod
+    def _main_members(main: list[str] | dict[str, Any]) -> dict[str, list[str]]:
+        """
+        Parties of each main party of an election (`bmaps.main`): a list names single parties; a mapping gives the
+        parties summed into each main party (`merge_bmaps`).
+
+        Parameters
+        ----------
+        main : list of str or dict
+            The `main` map of the election.
+
+        Returns
+        -------
+        dict
+            Main party: list of the parties it gathers.
+        """
+        if isinstance(main, (list, tuple)):
+            return {name: [name] for name in main}
+
+        return {
+            name: [block] if isinstance(block, str) else (list(block) if block else [name])
+            for name, block in main.items()
+        }
+
+    def _stored_ratings(
+        self,
+        frames: dict[str, pd.DataFrame]
+    ) -> pd.DataFrame:
+        """
+        Stored ratings of several scopes in the scale of `rating_check_data`: `rating`, `rating_adj` and `quality`
+        divided by 100, `bias_dev_adj` back to log odds ratio as `d_prev` (NaN when `num_events_w` is 0).
+
+        Parameters
+        ----------
+        frames : dict
+            Scope: its stored ratings (see `data.get_ratings`).
+
+        Returns
+        -------
+        pd.DataFrame
+            `event_scope`, `event_date`, `pollster_id`, `mtype`, `rating`, `rating_adj`, `d_prev`,
+            `num_events_w`, `quality` and `weight_rating`.
+        """
+        columns = ['event_scope', 'event_date', 'pollster_id', 'mtype', 'rating', 'rating_adj', 'd_prev',
+                   'num_events_w', 'quality', 'weight_rating']
+        parts = []
+        for scope, frame in frames.items():
+            if 'event_date' not in frame.columns:
+                frame = frame.reset_index()
+            if frame.shape[0] == 0:
+                continue
+            part = pd.DataFrame({
+                'event_scope': scope,
+                'event_date': pd.to_datetime(frame['event_date']).astype('datetime64[ns]'),
+                'pollster_id': frame['pollster_id'].astype('int64'),
+                'mtype': frame['mtype'] if 'mtype' in frame.columns else None,
+                'rating': frame['rating'].astype(float).div(100),
+                'rating_adj': frame['rating_adj'].astype(float).div(100),
+                'd_prev': self.bias_to_lor(frame['bias_dev_adj'].astype(float).to_numpy()),
+                'num_events_w': frame['num_events_w'].astype(float),
+                'quality': frame['quality'].astype(float).div(100),
+                'weight_rating': frame['weight_rating'].astype(float)
+            }, index=frame.index)
+            part.loc[part['num_events_w'] == 0, 'd_prev'] = np.nan
+            parts.append(part)
+
+        if len(parts) == 0:
+            dtypes = {'event_scope': object, 'event_date': 'datetime64[ns]', 'pollster_id': 'int64', 'mtype': object}
+            return pd.DataFrame({c: pd.Series(dtype=dtypes.get(c, float)) for c in columns})
+
+        return pd.concat(parts, ignore_index=True)[columns]
+
+    def _rating_scope_weights(
+        self,
+        scopes: Optional[list[str] | str],
+        rating_weights: Optional[dict[str, float]] = None
+    ) -> dict[str, float]:
+        """
+        Weight of the polls of each scope feeding the ratings (see `compute_ratings`).
+
+        Parameters
+        ----------
+        scopes : list of str or 'all', optional
+            `None` takes only the scope of this computer (weight 1); `'all'` every scope of the catalogue
+            (`data/es-scopes.csv`).
+        rating_weights : dict, optional
+            Weight of the polls of each scope, replacing those of the catalogue.
+
+        Returns
+        -------
+        dict
+            Scope: weight, without the scopes of weight 0 (the one of this computer always stays, with weight 1
+            unless given).
+        """
+        if scopes is None:
+            weights = {self.scope: 1.}
+        else:
+            weights = rating_weights if rating_weights is not None else get_scopes()['rating_weight'].to_dict()
+            names = list(weights) if scopes == 'all' else list(scopes)
+            weights = {s: float(weights.get(s, 0.)) for s in names}
+            weights.setdefault(self.scope, 1.)
+
+        return {s: w for s, w in weights.items() if w > 0 or s == self.scope}
+
+    def scope_computers(
         self,
         scopes: list[str]
+    ) -> dict[str, 'Computer']:
+        """
+        Computers of the scopes feeding the ratings: this computer for its own scope and, for each other scope, a
+        computer of that scope with the same filters and its series built. Scopes without polls are skipped.
+
+        Parameters
+        ----------
+        scopes : list of str
+            Scopes to gather.
+
+        Returns
+        -------
+        dict
+            Scope: computer, in the order of `scopes`.
+        """
+        computers = {}
+        for scope in scopes:
+            if scope == self.scope:
+                computers[scope] = self
+                continue
+            if len(get_event_dates(scope=scope, min_polls=1)) == 0:
+                continue
+            computers[scope] = Computer(
+                scope=scope, drop_mtypes=self.drop_mtypes, drop_ctypes=self.drop_ctypes, drange=self.drange,
+                n_last=self.n_last, verbose=0, path=self.path
+            ).build_series()
+
+        return computers
+
+    def rating_pool(
+        self,
+        scopes: list[str],
+        computers: Optional[dict[str, 'Computer']] = None
     ) -> pd.DataFrame:
         """
         Polls that feed the ratings: the filtered polls (`filter_polls`, the dropped methodology types included,
@@ -1629,23 +1999,17 @@ class Computer(Core):
         ----------
         scopes : list of str
             Scopes to gather; the one of this computer uses its own series, the others a computer of that
-            scope with the same filters. Scopes without polls are skipped.
+            scope with the same filters (`scope_computers`). Scopes without polls are skipped.
+        computers : dict, optional
+            The computers of `scopes` already built (`scope_computers`), so that a caller that also needs them
+            does not build them twice.
         """
         columns = ['rating', 'weight_rating']
         bias_cols = ['bias_avg', 'bias_blocks', 'bias_within', 'bias', 'bias_dev_adj', 'bias_dev_err']
         frames = {}
+        computers = computers if computers is not None else self.scope_computers(scopes)
 
-        for scope in scopes:
-            if scope == self.scope:
-                comp = self
-            else:
-                if len(get_event_dates(scope=scope, min_polls=1)) == 0:
-                    continue
-                comp = Computer(
-                    scope=scope, drop_mtypes=self.drop_mtypes, drop_ctypes=self.drop_ctypes, drange=self.drange,
-                    n_last=self.n_last, verbose=0, path=self.path
-                ).build_series()
-
+        for scope, comp in computers.items():
             # The polls of the dropped methodology types too: they get their means, but no rating (`pollster_ratings`)
             polls = comp.filter_polls(drop_mtypes=[]).drop(columns=columns + comp.names + ['-'], errors='ignore')
             # Scale absolute percentage errors to the range [0, 1]
