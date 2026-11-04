@@ -735,6 +735,7 @@ def test_rating_check_data_keeps_same_day_elections_apart(monkeypatch):
     assert pairs.loc[('es-md', 'A'), 'rating'] == pytest.approx(.70)
     assert pairs.loc[('es-cl', 'A'), 'rating'] == pytest.approx(.64)
     assert pairs['population'].unique().tolist() == ['autonomicas']
+    assert out['pairs']['event_date'].tolist() == ['2021-05-04'] * 3  # fecha ISO, serializable en JSON
     # A en Madrid: su desviación (`bias_dev`, LOR), el error medio de sus sondeos en puntos y los recuentos
     md_a = pairs.loc[('es-md', 'A')]
     assert md_a['d_obs'] == pytest.approx(.01) and md_a['error_avg'] == pytest.approx(3.)
@@ -758,7 +759,8 @@ def test_rating_check_data_keeps_a_new_house_out_of_the_pairs_and_in_the_polls(m
     # el PSOE sin dato de C y 2016 (sin filas de rating)
     assert sorted(zip(polls['pollster'], polls['party'])) == [('A', 'PP'), ('A', 'PSOE'), ('B', 'PP'), ('B', 'PSOE'),
                                                               ('C', 'PP')]
-    assert polls['event_date'].unique().tolist() == [pd.Timestamp('2019-11-10')]
+    assert polls['event_date'].unique().tolist() == ['2019-11-10']
+    assert all(isinstance(d, str) for d in polls['event_date']) and all(isinstance(d, str) for d in out['pairs']['event_date'])
     assert polls['population'].unique().tolist() == ['generales']
     assert polls['weight_rating'].notna().all()
     a_pp = polls.loc[(polls['pollster'] == 'A') & (polls['party'] == 'PP')].iloc[0]
@@ -771,10 +773,12 @@ def test_rating_check_data_keeps_a_new_house_out_of_the_pairs_and_in_the_polls(m
 
 def test_rating_check_data_undoes_the_stored_scales(monkeypatch):
     """`rating` 77,1 → 0,771; `bias_dev_adj` −0,84 (escala bias) → `bias_to_lor`; `d_prev` NaN con `num_events_w` 0.
-    D, panel online sin rating, no es un par."""
+    D, panel online sin rating, no es un par ni cuenta en `n_event_polls`."""
     c = bare_computer()
     c.drop_mtypes = ['aggr', 'online']
-    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: pool(ES19 + [('es', '2019-11-10', 'D')]))
+    data = pool(ES19 + [('es', '2019-11-10', 'D')])
+    data['mtype'] = np.where(data['pollster'] == 'D', 'online', None)
+    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: data)
     monkeypatch.setattr(c, 'scope_computers', lambda scopes: {})
     out = c.rating_check_data(scopes=['es'], rating_weights={'es': 1.}, ratings=lambda scope: RATINGS[scope])
     pairs = out['pairs'].set_index('pollster')
@@ -785,6 +789,23 @@ def test_rating_check_data_undoes_the_stored_scales(monkeypatch):
     assert a['d_prev'] == pytest.approx(np.log(1 - .0084)) and a['num_events_w'] == pytest.approx(3.)
     assert b['num_events_w'] == 0 and np.isnan(b['d_prev'])
     assert a['population'] == 'generales' and a['pollster_id'] == 1
+    assert a['n_event_polls'] == 2 and b['n_event_polls'] == 2  # el sondeo del panel online no cuenta
+
+
+def test_rating_check_data_without_pairs_nor_polls_returns_empty_frames(monkeypatch):
+    """Sin sondeos en la bolsa ni en la ventana no se lee ningún rating y salen los dos frames vacíos con sus
+    columnas; con pares pero sin sondeos en la ventana, `polls` sale vacío igual."""
+    c = bare_computer()
+    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: pool(ES19).iloc[:0])
+    monkeypatch.setattr(c, 'scope_computers', lambda scopes: {})
+    out = c.rating_check_data(scopes=['es'], rating_weights={'es': 1.}, ratings=lambda scope: pytest.fail(scope))
+    assert list(out['pairs'].columns) == PAIRS_COLUMNS and out['pairs'].shape[0] == 0
+    assert list(out['polls'].columns) == POLLS_COLUMNS and out['polls'].shape[0] == 0
+    assert out['n_scopes'] == 0 and out['seconds'] >= 0
+    monkeypatch.setattr(c, 'rating_pool', lambda scopes, computers=None: pool(ES19))
+    out = c.rating_check_data(scopes=['es'], rating_weights={'es': 1.}, ratings=lambda scope: RATINGS[scope])
+    assert out['pairs'].shape[0] == 2 and out['polls'].shape[0] == 0
+    assert list(out['polls'].columns) == POLLS_COLUMNS
 
 
 def test_the_sample_median_of_an_event_ignores_the_excluded_pollsters():
