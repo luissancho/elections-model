@@ -1,8 +1,9 @@
 <div id="event-bar" class="evbar">
   <h2>{{ event_bar.title }}<small>{{ event_bar.date|date }}{% if event_bar.days_text %} · {{ event_bar.days_text[:1]|lower ~ event_bar.days_text[1:] }}{% endif %}{% if event_bar.chamber %} · {{ event_bar.chamber }}{% endif %}</small></h2>
-  <nav class="seg lg event-tabs" aria-label="Secciones del evento">
-    {% for tab in event_bar.tabs %}
-    <a{% if tab.active %} class="on"{% endif %} href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}><svg aria-hidden="true"><use href="#i-{{ 'hemi' if loop.index0 else 'line' }}"/></svg>{{ tab.label }}</a>
+  {#- the index of the sections of the event page: anchors on the same page, without a current entry -#}
+  <nav class="seg lg event-index" aria-label="Secciones de la página">
+    {% for section in event_bar.sections %}
+    <a href="{{ section.href }}">{{ section.label }}</a>
     {% endfor %}
   </nav>
   <div class="run">

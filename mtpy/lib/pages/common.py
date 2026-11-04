@@ -25,7 +25,7 @@ SITE_TAGLINE = 'Promedio de encuestas, previsión de escaños y ranking de encue
 # The author, linked from the footer next to the model attribution
 AUTHOR_HANDLE = '@luis_sancho'
 AUTHOR_URL = 'https://x.com/luis_sancho'
-# Main menu: the global pages. Promedios and Escaños are the tabs of the event bar (``EVENT_TABS``).
+# Main menu: the global pages. The event page is reached from the home and from the bottom bar.
 PAGES = (
     {'href': '/', 'label': 'Inicio'},
     {'href': '/elecciones', 'label': 'Histórico Errores'},
@@ -33,9 +33,18 @@ PAGES = (
     {'href': '/analisis', 'label': 'Análisis'},
     {'href': '/metodo', 'label': 'Método'},
 )
+# Tabs of the old event bar (Promedios and Escaños); only the bottom bar still reads them until Escaños goes
 EVENT_TABS = (
     {'suffix': '', 'label': 'Promedios'},
     {'suffix': '/escanos', 'label': 'Escaños'},
+)
+# Index of the event page (2026-11-04): ``(id, label)`` of each section, in page order; the ids are the public anchors
+EVENT_SECTIONS = (
+    ('promedio', 'Promedio'),
+    ('escanos', 'Escaños'),
+    ('evolucion', 'Evolución'),
+    ('territorio', 'Territorio'),
+    ('tabla', 'Tabla'),
 )
 # Bottom tab bar of the phones: five entries with an icon of the sprite (``_svg.html``); the method goes in the
 # round button of the header
@@ -617,9 +626,10 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
     meta : dict
         Data of the meta part of the run shown (``event_date``).
     active_suffix : str
-        Suffix of the current tab in ``EVENT_TABS`` (``''`` or ``'/escanos'``).
+        Suffix of the current tab of the bottom bar (``''`` or ``'/escanos'``); unused by the index of sections, kept
+        for the callers until the Escaños page goes.
     state : dict
-        Resolved page state (``mode``, ``run``, ``pinned``).
+        Resolved page state (``mode``, ``run``, ``pinned``); unused by the index of sections, kept for the callers.
     today : datetime.date, optional
         Reference day for ``days_left``.
     scopes : list of dict, optional
@@ -630,15 +640,14 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
     dict
         ``title`` (``event_title``), ``date`` (``event_date``), ``days_left``, ``days_text``
         (``days_text``), ``chamber`` (``chamber_text``), ``run_at`` and ``n_polls`` (of the run), ``href``
-        (``'/{scope}'``) and ``tabs``: ``{'href', 'label', 'active'}`` per entry of ``EVENT_TABS``, the links
-        keeping the state (``event_query``).
+        (``'/{scope}'``) and ``sections``: ``{'id', 'label', 'href'}`` per entry of ``EVENT_SECTIONS``, ``href``
+        being the anchor ``'#' + id`` on the same page (the event page drops the ones it does not render).
     """
     if scopes is None:
         scopes = published_scopes()
 
     event_date = meta.get('event_date')
     days = days_left(event_date, today)
-    query = event_query(state)
 
     return {
         'title': event_title(scope, scopes),
@@ -649,8 +658,7 @@ def event_info(scope: str, meta: dict, active_suffix: str, state: dict, today: O
         'run_at': meta.get('run_at'),
         'n_polls': meta.get('n_polls'),
         'href': '/' + scope,
-        'tabs': [{'href': '/' + scope + tab['suffix'] + query, 'label': tab['label'],
-                  'active': tab['suffix'] == active_suffix} for tab in EVENT_TABS],
+        'sections': [{'id': key, 'label': label, 'href': '#' + key} for key, label in EVENT_SECTIONS],
     }
 
 

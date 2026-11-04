@@ -1,5 +1,6 @@
 """
-Seats page context.
+The seats of an event: ``seats_context``, the seats part of the event page (``/{scope}``), its pieces (tables,
+calculator, districts, downloads) and ``escanos_context``, the old seats page (``/{scope}/escanos``) until it redirects.
 """
 import unicodedata
 from typing import Optional
@@ -299,10 +300,77 @@ def region_rows(districts: dict, region_id: int) -> list:
     return sorted(rows, key=lambda item: (-(item['seats'] or 0), -(item['pct'] or 0)))
 
 
+def seats_context(context: dict, region=None) -> dict:
+    """
+    The seats part of an event page, read over its resolved common context: the summary, the coalition calculator,
+    the downloads and the districts of the run and mode shown.
+
+    Parameters
+    ----------
+    context : dict
+        ``common_context`` of the event page (``state``, ``meta``, ``catalog``).
+    region : str, optional
+        ``region`` query parameter: id of the district the detail table shows (the largest by default).
+
+    Returns
+    -------
+    dict
+        The keys the seats add to the page: ``summary``, ``calculator`` (``name``, ``fullname``, ``color`` and
+        ``checked`` per party of the ``dist`` part, the pills the server renders), ``csv_links``, the districts keys
+        (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels``
+        (``has_communities``), ``inherited`` (whom each party is compared with in the last election, for the
+        tooltip of its arrow, ``inherited_results``) and ``initial_extra``, the members the seats add to the
+        initial data: ``dist_href`` (the JSON route of the ``dist`` part of the run and mode shown, which the
+        browser asks for after the first drawing: the simulations are too heavy for the page, Luis 2026-11-04),
+        ``fan``, ``districts`` and ``scenario``.
+
+    Raises
+    ------
+    HttpError
+        404 for a missing part or an unknown district; 400 for an invalid ``region``.
+    """
+    region_id = check_region(region)
+    full, meta, parties = context['state'], context['meta'], context['catalog']
+    scope, mode, run = full['scope'], full['mode'], full['run']
+    summary = part(scope, run, 'summary', mode=mode)
+    # the simulations stay out of the page: only the names of the calculator are read from them
+    names = list(part(scope, run, 'dist', mode=mode).get('parties') or [])
+    districts = part(scope, run, 'districts', mode=mode)
+    scenario = part(scope, run, 'scenario', mode=mode)
+    regions = districts.get('regions') or []
+    current = resolve_region(region_id, regions)
+    checked = default_coalition(meta, summary, names)
+    results = inherited_results(last_results(scope, parties), meta)
+
+    return {
+        'summary': summary,
+        'calculator': [
+            {'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
+             'checked': name in checked}
+            for name in names
+        ],
+        'csv_links': csv_links(scope, mode, run),
+        'district_table': district_table(districts, scenario, summary),
+        'regions': regions,
+        'territory_levels': has_communities(regions),
+        'region': current,
+        'region_rows': region_rows(districts, current['id']) if current else [],
+        'inherited': {name: entry['inherited'] for name, entry in ((results or {}).get('parties') or {}).items()
+                      if entry.get('inherited')},
+        'initial_extra': {
+            'dist_href': api_url(scope, 'dist', mode=mode, run=run),
+            'fan': part(scope, run, 'fan'),
+            'districts': districts,
+            'scenario': scenario,
+        },
+    }
+
+
 def escanos_context(state: dict, region=None, active: Optional[str] = None, event: bool = False,
                     active_suffix: str = '') -> dict:
     """
-    Template context of the seats page.
+    Template context of the seats page (``/{scope}/escanos``), a thin wrapper over ``seats_context`` until the page
+    redirects to the event page.
 
     Parameters
     ----------
@@ -316,19 +384,17 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
     event : bool, optional
         Whether it is rendered as an event page (see ``common_context``).
     active_suffix : str, optional
-        Suffix of the current tab of the event bar (``'/escanos'`` on the event page).
+        Suffix of the current tab of the bottom bar (``'/escanos'`` on the event page).
 
     Returns
     -------
     dict
-        The common context plus ``summary``, ``party_rows`` (``seat_rows``), ``block_rows``, ``calculator`` (``name``,
-        ``fullname``, ``color`` and ``checked`` per party of ``dist``), ``csv_links``, ``subtitle``, the districts keys
-        (``district_table``, ``regions``, ``region`` and ``region_rows``), ``territory_levels`` (``has_communities``),
-        ``deltas`` (``seat_deltas`` against the last published election, for the «vs {year}» column of the tables),
-        ``results_year`` and ``results_date`` (of that election; ``None`` without one), ``blocks`` (the names of
-        ``meta['bmaps']['blocks']``, the Bloques view of the evolution; ``[]`` without a block map) and ``initial``
-        (``state``, ``meta``, ``summary``, ``dist``, ``fan``, ``districts``, ``scenario``, ``runs``, ``deltas``
-        (``seat_deltas`` against the last published election, for the seats bar) and ``inks`` (the text colour over
+        The common context plus the keys of ``seats_context`` (but ``initial_extra``), ``party_rows``
+        (``seat_rows``), ``block_rows``, ``subtitle``, ``deltas`` (``seat_deltas`` against the last published
+        election, for the «vs {year}» column of the tables), ``results_year`` and ``results_date`` (of that election;
+        ``None`` without one), ``blocks`` (the names of ``meta['bmaps']['blocks']``, the Bloques view of the
+        evolution; ``[]`` without a block map) and ``initial`` (``state``, ``meta``, ``summary``, ``dist``, ``fan``,
+        ``districts``, ``scenario``, ``runs``, ``deltas`` (for the seats bar) and ``inks`` (the text colour over
         the colour of each party and block, for the pills of the evolution legend), the data the charts, the
         calculator and the territory table are drawn from).
 
@@ -338,40 +404,20 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         503 without a bundle; 404 for an unpublished scope, a missing run, a missing part or an
         unknown district; 400 for an invalid ``region``.
     """
-    region_id = check_region(region)
     context = common_context(state, active, event=event, active_suffix=active_suffix)
+    seats = seats_context(context, region)
+    extra = seats.pop('initial_extra')
+    context.update(seats)
     full, meta, parties = context['state'], context['meta'], context['catalog']
     scope, mode, run = full['scope'], full['mode'], full['run']
-    summary = part(scope, run, 'summary', mode=mode)
-    dist = part(scope, run, 'dist', mode=mode)
-    names = list(dist.get('parties') or [])
-    districts = part(scope, run, 'districts', mode=mode)
-    scenario = part(scope, run, 'scenario', mode=mode)
-    current = resolve_region(region_id, districts.get('regions') or [])
-    checked = default_coalition(meta, summary, names)
+    summary = seats['summary']
     suffix = context['title_suffix']
     results = inherited_results(last_results(scope, parties), meta)
     deltas = seat_deltas(summary, meta, parties, results)
-    # whom each party is compared with, for the tooltip of its arrow (``inherited_results``)
-    inherited = {name: entry['inherited'] for name, entry in ((results or {}).get('parties') or {}).items()
-                 if entry.get('inherited')}
 
-    context['summary'] = summary
-    context['inherited'] = inherited
     context['party_rows'] = seat_rows(summary.get('parties') or [])
     context['block_rows'] = block_rows(summary.get('blocks') or [], meta, parties)
-    context['calculator'] = [
-        {'name': name, 'fullname': parties[name]['fullname'], 'color': parties[name]['color'],
-         'checked': name in checked}
-        for name in names
-    ]
-    context['csv_links'] = csv_links(scope, mode, run)
     context['subtitle'] = '· ' + suffix[:1].lower() + suffix[1:]
-    context['district_table'] = district_table(districts, scenario, summary)
-    context['regions'] = districts.get('regions') or []
-    context['territory_levels'] = has_communities(context['regions'])
-    context['region'] = current
-    context['region_rows'] = region_rows(districts, current['id']) if current else []
     context['deltas'] = deltas
     context['results_year'] = results['year'] if results else None
     context['results_date'] = results['date'] if results else None
@@ -382,10 +428,10 @@ def escanos_context(state: dict, region=None, active: Optional[str] = None, even
         'state': full,
         'meta': meta,
         'summary': summary,
-        'dist': dist,
-        'fan': part(scope, run, 'fan'),
-        'districts': districts,
-        'scenario': scenario,
+        'dist': part(scope, run, 'dist', mode=mode),
+        'fan': extra['fan'],
+        'districts': extra['districts'],
+        'scenario': extra['scenario'],
         'runs': bundle.loads(site().history(scope))['data'],
         'deltas': deltas,
         # ink of every party and block of the evolution, for the pills of its legend when they are on
