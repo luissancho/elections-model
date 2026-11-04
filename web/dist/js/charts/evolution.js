@@ -15,9 +15,13 @@ export const SEATS_STEP = 20;
 /** Decimals of the figure shown of each field: the vote to one decimal, whole seats. */
 export const FIELD_DIGITS = {pct: 1, seats: 0};
 
+/** Formats that round as the site's figures do (Intl rounds the shortest decimal form of the number). */
+const roundFormats = new Map();
+
 /**
- * The figure shown of a value: rounded to the decimals of its field (`FIELD_DIGITS`), as the tooltip and the table
- * write it. The donuts, the arrows and the table of changes compare these, so a drift below the rounding is no change.
+ * The figure shown of a value: rounded to the decimals of its field (`FIELD_DIGITS`) the way `fmtPct`/`fmtInt` write
+ * it (Intl, not `Math.round`: block sums carry float noise such as 7.1499999999999995, written 7,1). The donuts, the
+ * arrows and the table of changes compare these, so a drift below the rounding is no change.
  *
  * @param {(number|null|undefined)} value the value
  * @param {string} field party field (`pct` or `seats`)
@@ -27,8 +31,13 @@ export function shownValue(value, field) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return null;
   }
-  const scale = 10 ** (FIELD_DIGITS[field] ?? 0);
-  return Math.round(value * scale) / scale;
+  const digits = FIELD_DIGITS[field] ?? 0;
+  if (!roundFormats.has(digits)) {
+    roundFormats.set(digits, new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false,
+    }));
+  }
+  return Number(roundFormats.get(digits).format(value));
 }
 
 /**

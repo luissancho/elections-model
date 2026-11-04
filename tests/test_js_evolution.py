@@ -224,7 +224,7 @@ def test_changes_missing_name_gives_a_dash():
 
 
 def test_changes_label_the_last_day_when_it_is_not_today():
-    assert changes(today='2026-10-16')['todayLabel'] == '15 oct'
+    assert changes(today='2026-10-16')['todayLabel'] == '1 día'
 
 
 def test_changes_with_a_single_day():
@@ -267,3 +267,20 @@ def test_changes_default_today_is_the_local_day_in_the_evening():
     label = run_js('(() => { const now = new Date(2026, 9, 15, 23, 0).getTime(); Date.now = () => now; '
                    'return ch.evolutionChanges(%s, ["PP"], "pct").todayLabel; })()' % json.dumps(change_runs()))
     assert label == 'Hoy'
+
+
+def test_shown_value_rounds_like_the_formatter_on_block_sums():
+    # a block sum carries float noise: 7.1499999999999995 is written 7,1 by `fmtPct`, so it is 7,1 and no change
+    assert run_js('e.shownValue(7.1499999999999995, "pct")') == 7.1
+    assert donuts('pct', [7.1, 7.1499999999999995], name='Izquierda') == [False, False]
+    rows = run_js('ch.evolutionChanges(%s, ["Izquierda"], "pct", "2026-10-06").rows' % json.dumps(day_runs('pct', [7.1, 7.1499999999999995], 'Izquierda')))
+    assert rows == [{'name': 'Izquierda', 'value': 7.1, 'day': 0, 'week': None, 'start': 0}]
+
+
+def test_changes_headers_are_unique_when_the_last_day_is_not_today():
+    # final review, 2026-11-04: «Hoy» only today; otherwise «1 día», never the date of the figure column again
+    import re
+    assert changes(today='2026-10-16')['todayLabel'] == '1 día'
+    html = run_js('ch.changesTableHtml(ch.evolutionChanges(%s, ["PP"], "pct", "2026-10-16"), {colors: {}, fullnames: {}})' % json.dumps(change_runs()))
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', html)
+    assert heads == ['Partido', '15 oct', '1 día', '7 días', 'Desde 5 oct'] and len(set(heads)) == len(heads)

@@ -28,7 +28,8 @@ function valueOf(run, name, field) {
  * @param {object[]} runs daily runs of the view (`dailyRuns`), ascending by day
  * @param {string[]} names party or block names, in legend order
  * @param {string} [field='pct'] party field (`pct` or `seats`)
- * @param {string} [today] ISO date of today (the browser's local day), to title the first column «Hoy»
+ * @param {string} [today] ISO date of today (the browser's local day), to title the first change column «Hoy» (else
+ *   «1 día»)
  * @returns {object|null} `{days: {last, previous, week, start}, todayLabel, rows: [{name, value, day, week, start}]}`
  *   (`week` null without a day a week back; a change null without a value on either day), or null with fewer than
  *   two days
@@ -37,14 +38,12 @@ export function evolutionChanges(runs, names, field = 'pct', today = localToday(
   if (!runs || runs.length < 2) {
     return null;
   }
-  const digits = FIELD_DIGITS[field] ?? 0;
   const lastRun = runs[runs.length - 1];
   const last = runDay(lastRun);
   const weekBack = isoDay(dayTime(last) - WEEK_DAYS * DAY_MS);
   const weekRun = [...runs].reverse().find((run) => runDay(run) <= weekBack) || null;
   const startRun = runs[0];
-  const round = (x) => Math.round(x * 10 ** digits) / 10 ** digits;
-  const change = (now, then) => (now === null || then === null ? null : round(now - then));
+  const change = (now, then) => (now === null || then === null ? null : shownValue(now - then, field));
 
   const rows = names.map((name) => {
     const value = shownValue(valueOf(lastRun, name, field), field);
@@ -60,7 +59,8 @@ export function evolutionChanges(runs, names, field = 'pct', today = localToday(
   });
   return {
     days: {last, previous: runDay(runs[runs.length - 2]), week: weekRun ? runDay(weekRun) : null, start: runDay(startRun)},
-    todayLabel: last === today ? 'Hoy' : fmtDateShort(last),
+    // «Hoy» only when the last day is today; otherwise «1 día», not the date already heading the figure column
+    todayLabel: last === today ? 'Hoy' : '1 día',
     rows,
   };
 }
