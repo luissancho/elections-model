@@ -3,6 +3,8 @@
 import {fmtCount, fmtInt, fmtProb, fmtRange} from './format.js';
 
 const COALITION_KEY = 'coalition=';
+/** Keys of the URL fragment owned by the coalition calculator, to merge them with the other state of the page. */
+export const COALITION_KEYS = ['coalition'];
 
 /**
  * Seats of one party in every simulation.

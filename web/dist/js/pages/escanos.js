@@ -12,9 +12,10 @@ import {renderStacked, stackedOption} from '../charts/stacked.js';
 import {canGroup, sortTerritory, territoryRows} from '../territory.js';
 import {renderBody, renderHead} from './territory-dom.js';
 import {wireEvolution} from './evolution-wire.js';
-import {coalitionCaption, coalitionHash, coalitionSeats, coalitionText, parseCoalition, summarize} from '../seats.js';
+import {COALITION_KEYS, coalitionCaption, coalitionHash, coalitionSeats, coalitionText, parseCoalition, summarize} from '../seats.js';
 import {mapNames, markPills, markSegments, mountWhenReady, readInitial, showError, tryDraw, wireControls, wireForm} from './common.js';
 import {fileSlug, tableImage, wireDownload} from '../share.js';
+import {mergeHash} from '../url-state.js';
 
 const EMPTY_COALITION = 'Marca partidos para calcular su mayoría.';
 /** Heights of the charts in the images: the bar as on the page (`#seats-bar`), the histogram a little shorter. */
@@ -127,7 +128,7 @@ function wireCoalition(dist, majority, bar, nSeats) {
   fieldset.addEventListener('change', () => {
     const names = update();
     const {pathname, search} = window.location;
-    window.history.replaceState(null, '', pathname + search + coalitionHash(names));
+    window.history.replaceState(null, '', pathname + search + mergeHash(window.location.hash, coalitionHash(names), COALITION_KEYS));
   });
   update();
   wireDownload(download, null, showError, {
