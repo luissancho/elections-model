@@ -918,7 +918,7 @@ def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
             assert 'id="evolution-legend"' in card and '<div class="chart chart-tall" id="evolution-chart"' in page
             text = re.sub(r'\s+', ' ', page[page.index('id="evolution-chart"'):])
             text = text[:text.index('</section>')]
-            assert 'retrospectiva' not in text and 'cambió' in text and 'vs ayer' in text and 'vs -7d' in text
+            assert 'retrospectiva' not in text and 'cambió' in text and 'hace una semana' in text and 'su fecha' in text
             assert 'todos los partidos' in text and 'marcados en la leyenda' in text and 'Sólo muestra' not in text
             assert 'revisa el pasado' in text and 'no se revisan' in text and 'id="evolution-changes"' in text
             assert 'Si un día hubo varias actualizaciones, se muestra la última' in text

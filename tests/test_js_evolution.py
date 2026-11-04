@@ -231,7 +231,9 @@ def test_changes_with_a_single_day():
 def test_changes_week_is_null_without_a_day_a_week_back():
     out = changes(runs=change_runs()[:3])  # 05, 06, 07: nothing on or before the 30-09
     assert out['days']['week'] is None and all(row['week'] is None for row in out['rows'])
-    assert 'vs -7d' not in table_html(runs=change_runs()[:3])
+    import re
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', table_html(runs=change_runs()[:3]))
+    assert heads == ['Partido', '7-oct', 'vs 6-oct', 'vs 5-oct']  # no column a week back
 
 
 def table_html(runs=None, field='pct', formatter='fmtPct'):
@@ -244,8 +246,9 @@ def table_html(runs=None, field='pct', formatter='fmtPct'):
 def test_changes_table_html():
     import re
     html = table_html()
-    # Luis, 2026-11-04: fixed headers «vs ayer», «vs -7d» and «vs 5-oct», whatever the day of the visit
-    assert re.findall(r'<th[^>]*>([^<]*)</th>', html) == ['Partido', '15 oct', 'vs ayer', 'vs -7d', 'vs 5-oct']
+    # Luis, 2026-11-04: the dates as headers, «d-mes», «vs» before those of the changes: the last run, the day
+    # before, a week back (the 07: no run on the 08) and the first run
+    assert re.findall(r'<th[^>]*>([^<]*)</th>', html) == ['Partido', '15-oct', 'vs 14-oct', 'vs 7-oct', 'vs 5-oct']
     assert 'title="Frente al 14 oct 2026"' in html and 'title="Frente al 7 oct 2026"' in html and 'title="Frente al 5 oct 2026"' in html
     # every name of the view, whatever the legend shows (Luis, 2026-11-04)
     assert re.findall(r'data-name="([^"]+)"', html) == ['PP', 'PSOE', 'SUMAR'] and 'hidden' not in html

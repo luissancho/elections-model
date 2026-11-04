@@ -9,6 +9,9 @@ import {fmtBadge, fmtDate, fmtDateShort, fmtPct} from './format.js';
 const DAY_MS = 24 * 3600 * 1000;
 const WEEK_DAYS = 7;
 
+/** Header date of a column: «4-nov» (Luis, 2026-11-04). */
+const headDate = (iso) => fmtDateShort(iso).replace(' ', '-');
+
 /** The value of `name` in the `nowcast` headline of `run`, null when missing. */
 function valueOf(run, name, field) {
   const party = ((run.nowcast || {}).parties || []).find((row) => row.name === name);
@@ -58,9 +61,10 @@ export function evolutionChanges(runs, names, field = 'pct') {
 
 /**
  * HTML of the table of changes (`evolutionChanges`): a site table with the name (dot and full name in the title),
- * the figure of the last day in bold and the arrows of the changes (`.dlt`) under the fixed headers «vs ayer», «vs -7d»
- * and «vs 5-oct» (Luis, 2026-11-04), one row per name with `data-name`: every name of the view, whatever the legend
- * shows. Without a day a week back the «vs -7d» column is left out.
+ * the figure of the last day in bold and the arrows of the changes (`.dlt`), each column headed by its date
+ * (`headDate`: the last run, then «vs» the day before, a week back and the first run; Luis, 2026-11-04), one row
+ * per name with `data-name`: every name of the view, whatever the legend shows. Without a day a week back that
+ * column is left out.
  *
  * @param {object} changes `evolutionChanges` result
  * @param {object} view `colors` and `fullnames` by name
@@ -71,12 +75,12 @@ export function changesTableHtml(changes, view, {field = 'pct', formatter = fmtP
   const digits = FIELD_DIGITS[field] ?? 0;
   const {days} = changes;
   const columns = [
-    {key: 'day', label: 'vs ayer', day: days.previous},
-    ...(days.week ? [{key: 'week', label: `vs -${WEEK_DAYS}d`, day: days.week}] : []),
-    {key: 'start', label: `vs ${fmtDateShort(days.start).replace(' ', '-')}`, day: days.start},
+    {key: 'day', day: days.previous},
+    ...(days.week ? [{key: 'week', day: days.week}] : []),
+    {key: 'start', day: days.start},
   ];
-  const head = ['<th scope="col">Partido</th>', `<th scope="col">${escapeHtml(fmtDateShort(days.last))}</th>`,
-    ...columns.map((col) => `<th scope="col" title="Frente al ${escapeHtml(fmtDate(col.day))}">${escapeHtml(col.label)}</th>`)];
+  const head = ['<th scope="col">Partido</th>', `<th scope="col">${escapeHtml(headDate(days.last))}</th>`,
+    ...columns.map((col) => `<th scope="col" title="Frente al ${escapeHtml(fmtDate(col.day))}">vs ${escapeHtml(headDate(col.day))}</th>`)];
   const body = changes.rows.map((row) => {
     const color = (view.colors || {})[row.name] || '';
     const fullname = (view.fullnames || {})[row.name] || row.name;
