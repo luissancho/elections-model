@@ -2752,7 +2752,7 @@ def test_metodo_escanos_text(api):
 
 def test_metodo_rating_text(api):
     """/metodo/rating in the style of /metodo/promedio (2026-10-27): the title as h1, the cards of the method in
-    order, the dated tables of the snapshot of 20 October, the six technical notes linked both ways and the
+    order, the dated tables of the snapshot of 20 October, the seven technical notes linked both ways and the
     sentences the other pages of the site rely on."""
     page = html(call(api, '/metodo/rating')[2])
     cards = ('resumen', 'que-se-mide', 'diferencial', 'calidad-previa', 'evidencia', 'rating-final', 'ranking-global',
@@ -2797,18 +2797,33 @@ def test_metodo_rating_text(api):
                 '<td class="f l">CIS</td><td>17,2</td><td>0,65</td>', '<td class="f l">GAD3</td><td>77,1</td><td>2,35</td>'):
         assert row in page, row
     assert 'id="herding-table"' in page and 'análisis del 7 de octubre de 2026' in text
-    assert 'id="rating-backtest-table"' in page and '<td class="f l">Error de los escaños (CRPS)</td><td>7,23</td><td>7,27</td>' in page
     # the shrink and the scale tables derive from the parameters: 1 election keeps 34%, −τ gives 84
     assert '<td class="f l">Diferencial conservado</td><td>34%</td><td>51%</td><td>72%</td><td>84%</td><td>90%</td>' in page
     assert '<td class="f l">Rating ajustado</td><td>2</td><td>16</td><td>50</td><td>69</td><td>84</td><td>93</td><td>98</td>' in page
-    # the six notes, numbered by their order and linked both ways
-    keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano']
+    # the seven notes, numbered by their order and linked both ways
+    keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano', 'comprobacion']
     assert re.findall(r'<li id="nota-([a-z]+)">', page) == keys
     assert re.findall(r'id="llamada-([a-z]+)"', page) == keys
-    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 7)]
+    assert re.findall(r'id="llamada-[a-z]+"[^>]*>(\d+)<', page) == [str(n) for n in range(1, 8)]
     for target in re.findall(r'href="#(nota-[a-z]+)"', page):
         assert 'id="{}"'.format(target) in page, target
     assert page.index('id="notas"') < page.index('id="closing"')
+    assert_public_wording(page, '/metodo/rating')
+
+
+def test_metodo_rating_check_card_shows_the_live_figures(api, fresh_app):
+    """Sin la parte, la tarjeta anuncia la comprobación; con ella, KPIs, nube, cuartos, promedio y los dos CSV."""
+    page = html(call(api, '/metodo/rating')[2])
+    assert 'id="comprobacion"' in page and 'no pronostica nada' not in page and 'rating-backtest-table' not in page
+    write_analysis(fresh_app.fs)            # con la parte rating-check del fixture
+    webapi.site().manifest_cache_clear()
+    page = html(call(api, '/metodo/rating')[2])
+    text = visible_text(page)
+    assert 'id="rating-check-chart"' in page and 'id="rating-check-quarters"' in page and 'id="rating-check-average"' in page
+    assert 'Correlación de rango' in text and 'Pendiente' in text
+    assert '/api/v1/analysis/es/rating-check?format=csv' in page and 'table=elections' in page
+    initial = json.loads(re.search(r'id="initial-data">(.*?)</script>', page).group(1))
+    assert initial['rating_check']['scatter'][0]['pollster'] and initial['rating_check']['axes']['xMin'] <= 0
     assert_public_wording(page, '/metodo/rating')
 
 

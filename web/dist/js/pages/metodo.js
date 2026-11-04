@@ -2,18 +2,21 @@
 // backtest by horizon and the reliability of its bands (the PIT by population and group of horizons, and the
 // probabilities of majority against how often there was one); on the average subpage, the live examples: the
 // weights of the polls (`charts/weights.js`) and the bullseye of the last polls of one house before every election
-// since a date (`charts/bullseye.js`), all drawn from the data embedded by the server; on every page, the footnotes
-// that unfold in place (`notes.js`). The landing page has no data and draws nothing.
+// since a date (`charts/bullseye.js`); on the rating subpage, the cloud of the rating check (the differential the
+// rating gave each pollster before an election against the one it had, `charts/scatter.js`) with its download, all
+// drawn from the data embedded by the server; on every page, the footnotes that unfold in place (`notes.js`). The
+// landing page has no data and draws nothing.
 import {fmtNum} from '../format.js';
 import {THEME} from '../charts/base.js';
 import {renderBullseye} from '../charts/bullseye.js';
 import {renderGrouped} from '../charts/grouped.js';
 import {renderLines} from '../charts/line.js';
-import {renderScatter} from '../charts/scatter.js';
+import {renderScatter, scatterOption} from '../charts/scatter.js';
 import {renderWeights} from '../charts/weights.js';
 import {wireNotes} from '../notes.js';
+import {IMAGE, wireDownload} from '../share.js';
 import {wireBullseye} from './bullseye-wire.js';
-import {mountWhenReady, readInitial, tryDraw, wireControls} from './common.js';
+import {mountWhenReady, readInitial, showError, tryDraw, wireControls} from './common.js';
 
 // Series colours: the model stands out, the baselines are lighter.
 const COLORS = {model: '#1f4e79', last_poll: '#c0504d', mean_4w: '#e69f00', prev_result: '#009e73'};
@@ -96,6 +99,46 @@ function paintReliability({pit = {}, majority = []} = {}) {
   }
 }
 
+/** An axis tick (a whole number) without decimals, any other value of the cloud with two. */
+function differentialText(value) {
+  return fmtNum(value, Number.isInteger(value) ? 0 : 2);
+}
+
+/**
+ * The options of the cloud of the rating check: one point per pollster and election (its name and the election in
+ * the tooltip), the diagonal of an exact forecast and the fitted line, over the symmetric axes of the server.
+ *
+ * @param {object} check the `rating_check` of the page's initial data (`scatter`, `fit`, `axes`)
+ * @returns {object} the options of `scatterOption`
+ */
+function ratingCheckOptions({fit = null, axes = null} = {}) {
+  return {
+    x: 'd_prev', y: 'd_obs', name: 'label', fit, diagonal: true, axes,
+    xFormatter: differentialText, yFormatter: differentialText,
+    xName: 'Diferencial previsto', xLabel: 'Previsto', yLabel: 'observado',
+  };
+}
+
+/**
+ * Draw the cloud of the rating check and wire its download button.
+ *
+ * @param {object} check the `rating_check` of the page's initial data
+ */
+function paintRatingCheck(check) {
+  const el = document.getElementById('rating-check-chart');
+  const rows = check.scatter || [];
+  if (!el || !rows.length) {
+    return;
+  }
+  const options = ratingCheckOptions(check);
+  if (tryDraw(() => renderScatter(el, rows, options), 'the rating check')) {
+    // square, as on the page, so the diagonal keeps its 45 degrees in the image
+    wireDownload(document.getElementById('rating-check-download'), () => scatterOption(rows, options), showError, {
+      chartHeight: IMAGE.width - 2 * IMAGE.pad,
+    });
+  }
+}
+
 /**
  * Draw the charts whose container is present. A scope without a published backtest renders no `#initial-data`
  * island (and no charts), so there is nothing to draw and `readInitial` must not be called.
@@ -170,6 +213,10 @@ function paint() {
 
   if (reliability) {
     paintReliability(reliability);
+  }
+
+  if (data.rating_check) {
+    paintRatingCheck(data.rating_check);
   }
 }
 

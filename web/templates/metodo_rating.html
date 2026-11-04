@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}¿Cómo calculamos el rating de las encuestadoras?{% endblock %}
-{% block description %}Cómo calculamos el rating de cada encuestadora: qué sondeos y qué error medimos, la comparación con los demás sondeos de la misma elección en las mismas fechas, la calidad previa de una rúbrica pública, por qué la evidencia se cuenta por elecciones, del diferencial al rating y a su peso en el promedio, el ranking global, el rebaño y cómo lo comprobamos, con las fórmulas y los supuestos en seis notas técnicas.{% endblock %}
+{% block description %}Cómo calculamos el rating de cada encuestadora: qué sondeos y qué error medimos, la comparación con los demás sondeos de la misma elección en las mismas fechas, la calidad previa de una rúbrica pública, por qué la evidencia se cuenta por elecciones, del diferencial al rating y a su peso en el promedio, el ranking global, el rebaño y cómo lo comprobamos, con las fórmulas y los supuestos en siete notas técnicas.{% endblock %}
 {% block scripts %}
   <script type="module" src="/dist/js/pages/metodo.js"></script>
 {% endblock %}
 {% block content %}
 {% import '_macros.html' as m %}
-{#- The six technical notes, in order of appearance: their calls are numbered by their position here. -#}
-{% set note_keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano'] %}
+{#- The seven technical notes, in order of appearance: their calls are numbered by their position here. -#}
+{% set note_keys = ['error', 'consenso', 'calidad', 'evidencia', 'rating', 'rebano', 'comprobacion'] %}
 {#- How much a regional election weighs in the ratings against a general election: the ratio of the
     `rating_weight` of the regional scopes of the catalogue to the national one, in words. -#}
 {% set national = (thresholds|selectattr('code', 'equalto', 'es')|list or [none])[0] %}
@@ -609,48 +609,110 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           <a href="{{ method_href('promedio') }}#peso">Cuánto pesa cada sondeo</a>.
         </p>
       {{ m.card_end() }}
-      {{ m.card_start('comprobacion', 'Cómo lo comprobamos', 'El rating de cada elección se calcula sólo con las elecciones anteriores a ella, y se juzga por lo que hace: si el promedio que pondera con él acierta más.') }}
+      {#- With the `rating-check` part, live figures: KPIs, the cloud (`metodo.js`), the quarters, the average with and
+          without the rating; the sentences whose meaning depends on a sign read the summary of all the pairs. -#}
+      {{ m.card_start('comprobacion', 'Cómo lo comprobamos', 'El rating de cada elección se calcula sólo con las elecciones anteriores a ella, y lo comprobamos por lo que hace: si anticipa qué casas se acercarán más al resultado y si el promedio que pondera con él acierta más.',
+                      tools=m.download_button('rating-check-download', 'Cómo lo comprobamos', 'Diferencial previsto frente a observado', site_host ~ ' · ' ~ author_handle,
+                                              site_title|lower ~ '-rating-comprobacion.png') if rating_check and rating_check.initial.scatter else none) }}
         <p>
-          El rating no se comprueba por sí solo, porque no pronostica nada: es un peso. Lo que se comprueba es el
-          promedio que pondera con él. Para que la prueba sea válida hay que utilizar lo que se conocía en cada
-          fecha: el rating con el que se pesan los sondeos de una elección se calcula sólo con las elecciones
-          anteriores, también en las pruebas históricas, de modo que el promedio de 2019 no puede aprender de los
-          resultados de 2023.
+          Para que la prueba sea válida hay que utilizar lo que se conocía en cada fecha: el rating con el que se
+          pesan los sondeos de una elección se calcula sólo con las elecciones anteriores, también en las pruebas
+          históricas, de modo que el promedio de 2019 no puede aprender de los resultados de 2023. Con esa regla
+          hacemos dos preguntas: si las encuestadoras con más rating antes de una elección se desviaron menos en
+          ella, y si el promedio de su última campaña acierta más con el rating que sin él.{{ m.note('comprobacion', note_keys) }}
         </p>
+        {% if rating_check %}
+        {% set every = rating_check.summary.all %}
+        {% set rho, average = every.spearman, every.average %}
+        {{ m.kpis(rating_check.kpis) }}
         <p>
-          Cuando cambiamos el cálculo, repetimos esas pruebas antes y después. Al pasar a contar la evidencia por
-          elecciones, en octubre de 2026, el promedio de las cinco elecciones generales de 2015 a 2023 apenas se
-          movió:
+          {% if rho.hi is number and rho.hi < 0 %}
+          Las encuestadoras con más rating antes de una elección se desviaron menos en ella: la correlación de rango
+          es negativa y su intervalo no llega a 0.
+          {% elif rho.lo is number and rho.lo > 0 %}
+          Las encuestadoras con más rating antes de una elección se desviaron más en ella: la correlación de rango
+          es positiva y su intervalo no llega a 0.
+          {% else %}
+          Con estas elecciones no se distingue si las encuestadoras con más rating se desvían menos: el intervalo de
+          la correlación de rango incluye el 0.
+          {% endif %}
+          {% if rating_check.initial.scatter %}
+          Cada punto de la nube es una encuestadora en una elección: en horizontal, el diferencial que le atribuía su
+          rating antes de ella; en vertical, el que tuvo.
+          {% endif %}
         </p>
+        {% if rating_check.initial.scatter %}
+        <div class="chart square wide" id="rating-check-chart" role="img" aria-label="Diferencial previsto de cada encuestadora antes de cada elección frente al observado en ella, con la diagonal de una previsión exacta y la recta ajustada"></div>
+        {% endif %}
+        {% if rating_check.quarters %}
         <div class="table-wrap">
-          <table class="et et-fit" id="rating-backtest-table">
-            <caption>Pruebas históricas de las cinco elecciones generales de 2015 a 2023, con los ratings recalculados con cada versión del cálculo y sólo con las elecciones anteriores a cada fecha, el 20 de octubre de 2026. Media de los seis horizontes salvo donde se indica.</caption>
-            <thead><tr><th scope="col" class="f l">Medida</th><th scope="col">Por sondeos</th><th scope="col">Por elecciones</th></tr></thead>
+          <table class="et et-fit" id="rating-check-quarters">
+            <caption>Las encuestadoras de cada elección con cuatro o más, ordenadas por su rating antes de ella y partidas en cuartos: error medio por partido, en puntos de voto, del cuarto con más rating y del cuarto con menos.</caption>
+            <thead><tr><th scope="col" class="f l">Elecciones</th><th scope="col">Cuarto con más rating</th><th scope="col">Pares</th><th scope="col">Cuarto con menos rating</th><th scope="col">Pares</th></tr></thead>
             <tbody>
-              <tr><td class="f l">Error medio del voto a 6 días, en puntos</td><td>1,70</td><td>1,70</td></tr>
-              <tr><td class="f l">Error medio del voto a 30 días, en puntos</td><td>2,18</td><td>2,18</td></tr>
-              <tr><td class="f l">Error medio del voto, media de los horizontes</td><td>2,42</td><td>2,42</td></tr>
-              <tr><td class="f l">Error de los escaños (CRPS)</td><td>7,23</td><td>7,27</td></tr>
-              <tr><td class="f l">Probabilidades de mayoría (Brier)</td><td>0,075</td><td>0,077</td></tr>
-              <tr><td class="f l">Cobertura del intervalo del 95% del voto</td><td>88%</td><td>89%</td></tr>
+              {% for row in rating_check.quarters %}
+              <tr><td class="f l">{{ row.name }}</td><td>{{ row.first }}</td><td>{{ row.n_first }}</td><td>{{ row.last }}</td><td>{{ row.n_last }}</td></tr>
+              {% endfor %}
             </tbody>
           </table>
         </div>
+        {% endif %}
+        {% if rating_check.average %}
         <p>
-          El voto no cambia; los escaños y las probabilidades empeoran una pizca, dentro de lo que pueden mover
-          cinco elecciones. El cambio no buscaba mejorar esas cifras, sino corregir lo que contaba el ejemplo de
-          arriba: una encuestadora primera del ranking con dos autonómicas. Es una lección sobre lo que el rating
-          puede y no puede demostrar: con pocas elecciones, los pesos de las encuestadoras mueven poco el promedio, y
-          lo que se les pide es sobre todo que no premien la suerte.
+          {% if average.hi is number and average.hi < 0 %}
+          El promedio de la última campaña acierta más con el rating que sin él: la diferencia es negativa y su
+          intervalo no llega a 0.
+          {% elif average.lo is number and average.lo > 0 %}
+          El promedio de la última campaña acierta menos con el rating que sin él: la diferencia es positiva y su
+          intervalo no llega a 0.
+          {% else %}
+          El promedio de la última campaña acierta lo mismo con el rating que sin él, dentro del margen: el
+          intervalo de la diferencia incluye el 0.
+          {% endif %}
+        </p>
+        <div class="table-wrap">
+          <table class="et et-fit" id="rating-check-average">
+            <caption>El promedio de los sondeos de los {{ rating_check.params.window_days|default(30) }} días anteriores a cada elección, de al menos {{ rating_check.params.min_pollsters|default(3) }} encuestadoras, con y sin el rating en los pesos: error medio por partido principal, en puntos de voto. La diferencia es con rating menos sin él.</caption>
+            <thead><tr><th scope="col" class="f l">Elecciones</th><th scope="col">Número</th><th scope="col">Sin rating</th><th scope="col">Con rating</th><th scope="col">Diferencia</th><th scope="col">Mejor con rating</th><th scope="col">Peor con rating</th></tr></thead>
+            <tbody>
+              {% for row in rating_check.average %}
+              <tr><td class="f l">{{ row.name }}</td><td>{{ row.n }}</td><td>{{ row.mae_flat }}</td><td>{{ row.mae_rated }}</td><td>{{ row.diff }}{% if row.interval %} <span class="muted">({{ row.interval }})</span>{% endif %}</td><td>{{ row.better }}</td><td>{{ row.worse }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        <p>
+          También repetimos las pruebas históricas del modelo completo, el {fecha}, con el rating y con todas las
+          encuestadoras pesando lo mismo, con el mismo código y los mismos datos. Los periodos, las métricas y los
+          cortes de evaluación se detallan en <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
+        </p>
+        {% call m.how() %}
+        <p>
+          La correlación de rango va de −1 a 1: negativa si las encuestadoras con más rating antes de una elección
+          se desviaron menos en ella, cerca de 0 si el rating no las ordena. Dice si ordena, no cuánto acierta. La
+          pendiente compara lo previsto con lo observado: 1 si el rating prevé la desviación en su justa medida, 0 si
+          no prevé nada. Una pendiente menor que 1 dice que lo previsto exagera las diferencias, es decir, que la
+          contracción hacia la media se queda corta; no dice que el rating sea falso. En la nube, la diagonal es la
+          previsión exacta y la recta roja, la que mejor ajusta los puntos.
         </p>
         <p>
-          También hemos comprobado si acertar en unas elecciones predice acertar en otras. Entre las encuestadoras
-          con tres o más autonómicas y tres o más generales, la correlación entre su error medio en unas y en otras
-          es de 0,04; y entre dos mitades de las generales, de 0,02. Con 14 generales los datos no deciden ni a favor
-          ni en contra: el acierto de una encuestadora se repite menos de lo que uno esperaría, y por eso el rating
-          contrae tanto hacia la media. Los periodos, las métricas y los cortes de evaluación se detallan en
-          <a href="{{ method_href('backtest') }}">¿Cuánto acierta el modelo?</a>.
+          El skill es cuánto menor es el error cuadrático de prever la desviación de cada encuestadora con su rating
+          que de prever que nadie se desvía: 0% si no aporta nada, negativo si lo hace peor. Los cuartos hacen la
+          misma pregunta en puntos de voto, dentro de cada elección. Un rating que no mejora el promedio puede seguir
+          ordenando a las encuestadoras: con pocas casas por campaña y pesos parecidos, el promedio cambia poco.
         </p>
+        {% endcall %}
+        <p>
+          <a href="{{ rating_check.csv.pairs }}">Los pares encuestadora-elección</a> <span class="muted">CSV</span> ·
+          <a href="{{ rating_check.csv.elections }}">El promedio de cada elección, con y sin rating</a> <span class="muted">CSV</span>
+        </p>
+        {% else %}
+        <p>
+          La comprobación con las cifras de todas las elecciones se publica con la siguiente actualización del
+          análisis de las encuestadoras.
+        </p>
+        {% endif %}
       {{ m.card_end() }}
       {{ m.card_start('limites', 'Qué límites tiene el rating', 'Comparar a las encuestadoras entre sí ayuda a repartir el peso del promedio, pero con pocas elecciones distingue poco, y varias de sus reglas son convenciones.') }}
         <p>
@@ -863,6 +925,41 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
             error medio del voto en 2,40 puntos frente a 2,40 sin ella, y mejoró las probabilidades de mayoría un 2%:
             neutro, dentro del ruido. Los umbrales (cinco sondeos, cinco de contracción, el suelo de 0,1, las cuatro
             series) son elecciones razonables que no hemos comparado con otras.
+          </p>
+        {% endcall %}
+        {% call m.note_item('comprobacion') %}<strong>Las medidas de la comprobación.</strong>
+          {% set rc = rating_check.params if rating_check else {} %}
+          <p>
+            Para cada elección valorada <var>e</var>, con resultado y con ratings calculados antes de ella, y cada
+            encuestadora con sondeos evaluables en <var>e</var>, se forma un par. Su desviación observada
+            <var>d</var><sub><var>e</var></sub> es la evidencia con la que se alimenta el propio rating: la media, con
+            los pesos de posición, de las desviaciones de sus sondeos en <var>e</var> frente al consenso de sus fechas,
+            contraídas sondeo a sondeo. La prevista, <var>d</var><sub>prev</sub>, es su diferencial contraído antes de
+            <var>e</var>, sin valor si no tenía elecciones anteriores. En la nube las dos van en log odds ratio por
+            100, muy cerca del «Diferencial» publicado para desviaciones de este tamaño. Los agregadores y los paneles
+            en línea abiertos quedan fuera, porque no tienen rating.
+          </p>
+          <p>
+            La correlación de rango es la de Spearman entre el rating antes de <var>e</var> y
+            <var>d</var><sub><var>e</var></sub>. La pendiente β es la de la regresión por mínimos cuadrados de
+            <var>d</var><sub><var>e</var></sub> sobre <var>d</var><sub>prev</sub>, en los pares con
+            <var>d</var><sub>prev</sub>. Una salvedad: la contracción por sondeo es mayor en las fechas con pocos
+            sondeos, lo que achica <var>d</var><sub><var>e</var></sub> y atenúa β en las elecciones poco sondeadas;
+            por eso la parte publica también β sólo con las elecciones de {{ rc.min_event_polls|default(10) }} o más
+            sondeos. El skill es 1 − ECM(<var>R</var>)/ECM(0), con ECM el error cuadrático medio de prever
+            <var>d</var><sub><var>e</var></sub> con −τ·Φ<sup>−1</sup>(<var>R</var>), la desviación que implica el
+            rating antes de <var>e</var>, frente a prever 0; el de la calidad previa sola usa
+            −τ·Φ<sup>−1</sup>(<var>Q</var>).
+          </p>
+          <p>
+            Los cuartos ordenan a las encuestadoras de cada elección con cuatro o más por su rating antes de ella; el
+            error de cada par es su error medio por partido en <var>e</var>. El promedio con y sin rating toma, en
+            cada elección, los sondeos evaluables de los {{ rc.window_days|default(30) }} días anteriores, con al menos
+            {{ rc.min_pollsters|default(3) }} encuestadoras distintas, y promedia la cifra publicada de cada partido
+            principal con el peso de sobrepublicación por el de muestra, con y sin multiplicarlo por el peso del
+            rating (la calidad previa para las encuestadoras sin rating). Los intervalos son del 95% por bootstrap:
+            por encuestadora en las medidas de los pares y por elección en las del promedio, con
+            {{ rc.replicas|default(2000)|int }} réplicas y semilla fija.
           </p>
         {% endcall %}
       {% endcall %}

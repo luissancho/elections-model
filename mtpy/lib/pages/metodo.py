@@ -6,6 +6,7 @@ house effects (the last poll of one pollster before every analysed election sinc
 analyses) and, on the ``rating`` subpage, the public rubric of the prior quality
 (``data/pollsters-quality-criteria.json``).
 """
+import math
 from typing import Optional
 
 from ...core.api import HttpError
@@ -16,7 +17,7 @@ from .backtest import backtest_context, backtest_part
 from .casas import election_label
 from .common import analysis_part, api_url, bundle_part, catalog, common_context, part
 from .elecciones import error_blocks, history_events, history_rows, history_scopes, poll_error_parts
-from .filters import _is_missing
+from .filters import DASH, _is_missing, delta_text, fmt_int, fmt_num
 from .slugs import PROFILE_PATH, slugify
 
 # Scope whose figures the method texts quote ("en las generales"): the texts have no scope filter.
@@ -33,6 +34,15 @@ HOUSE_EXAMPLE = {'pollster': 'CIS', 'since': '2018-09-01', 'left': 'Izquierda', 
 YOUNG_PARTY_YEARS = 4
 # Keys of a row of the house effects example that its bullseye needs, plus the two blocks.
 HOUSE_ROW_KEYS = ('event', 'event_date', 'days', 'scope', 'name')
+# The rating check of the ``rating`` subpage: its part (published only for ``NATIONAL_SCOPE``), the populations of its
+# tables in order with their public names, the step the limits of the cloud round to and the number of ticks of a
+# half axis.
+RATING_CHECK_PART = 'rating-check'
+RATING_CHECK_POPULATIONS = (('all', 'Todas'), ('generales', 'Generales'), ('autonomicas', 'Autonómicas'))
+RATING_CHECK_AXIS_STEP = 5
+RATING_CHECK_AXIS_TICKS = 5
+# Keys of a point of the cloud that its chart needs, plus its ``label`` (pollster and election, for the tooltip).
+RATING_CHECK_ROW_KEYS = ('pollster', 'd_prev', 'd_obs')
 # Cross-cutting sections of the landing page, which belong to no question of the method (the cards of the data
 # and of the publication were removed on 2026-10-28).
 SECTIONS = (
@@ -405,6 +415,214 @@ def house_effects_example() -> Optional[dict]:
     }
 
 
+def interval_text(entry: Optional[dict], digits: int = 2, signed: bool = False) -> str:
+    """
+    The 95% interval of a measure of the rating check, as the support line of a KPI or a cell writes it.
+
+    Parameters
+    ----------
+    entry : dict or None
+        ``{'value', 'lo', 'hi', ...}`` of the part.
+    digits : int, optional
+        Decimals of both bounds.
+    signed : bool, optional
+        Whether the bounds carry their sign (``+0,05``), as a difference does.
+
+    Returns
+    -------
+    str
+        ``'IC 95%: −0,24 a −0,08'``, or ``''`` without both bounds.
+    """
+    entry = entry or {}
+
+    if _is_missing(entry.get('lo')) or _is_missing(entry.get('hi')):
+        return ''
+
+    write = delta_text if signed else signed_num
+
+    return 'IC 95%: {} a {}'.format(write(entry['lo'], digits), write(entry['hi'], digits))
+
+
+def signed_num(x, digits: int = 2) -> str:
+    """
+    A number with a typographic minus when negative and no sign otherwise (``−0,18``, ``0,44``).
+
+    Parameters
+    ----------
+    x : float or None
+        The number.
+    digits : int, optional
+        Decimals.
+
+    Returns
+    -------
+    str
+        The formatted number, or the dash of ``fmt_num`` when missing.
+    """
+    text = delta_text(x, digits)
+
+    return text[1:] if text.startswith('+') else text
+
+
+def rating_check_kpis(summary: dict) -> list:
+    """
+    The KPIs of the card «Cómo lo comprobamos», for ``_macros.kpis``.
+
+    Parameters
+    ----------
+    summary : dict
+        The ``summary`` of the ``rating-check`` part (``{population: {...}}``).
+
+    Returns
+    -------
+    list of dict
+        ``{'label', 'value', 'unit', 'support', 'ok', 'color'}``: the pollster-election pairs (with the pollsters),
+        the elections as «generales + autonómicas», the rank correlation and the calibration slope with their 95%
+        intervals and the skill of the rating against predicting nothing, in percent.
+    """
+    every = summary.get('all') or {}
+    general = (summary.get('generales') or {}).get('n_events')
+    regional = (summary.get('autonomicas') or {}).get('n_events')
+    spearman, slope, skill = every.get('spearman') or {}, every.get('slope') or {}, every.get('skill') or {}
+    skill_rating = skill.get('skill_rating')
+    skill_text = DASH if _is_missing(skill_rating) else signed_num(skill_rating * 100, 1) + '%'
+
+    return [
+        {'label': 'Pares encuestadora-elección', 'value': fmt_int(every.get('n_pairs')), 'unit': '',
+         'support': '{} encuestadoras'.format(fmt_int(every.get('n_pollsters'))), 'ok': False, 'color': None},
+        {'label': 'Elecciones', 'value': '{} + {}'.format(fmt_int(general), fmt_int(regional)), 'unit': '',
+         'support': 'generales + autonómicas', 'ok': False, 'color': None},
+        {'label': 'Correlación de rango', 'value': signed_num(spearman.get('value')), 'unit': '',
+         'support': interval_text(spearman), 'ok': False, 'color': None},
+        {'label': 'Pendiente de calibración', 'value': signed_num(slope.get('value')), 'unit': '',
+         'support': interval_text(slope), 'ok': False, 'color': None},
+        {'label': 'Skill del rating', 'value': skill_text, 'unit': '',
+         'support': 'frente a prever una desviación nula', 'ok': False, 'color': None},
+    ]
+
+
+def rating_check_axes(rows: list) -> dict:
+    """
+    Limits of the cloud of the rating check: the same on both axes, symmetric around 0 and rounded up to a multiple
+    of ``RATING_CHECK_AXIS_STEP``, so the diagonal is the 45° line and both differentials read on one scale.
+
+    Parameters
+    ----------
+    rows : list of dict
+        The points, with ``d_prev`` and ``d_obs``.
+
+    Returns
+    -------
+    dict
+        ``{'xMin', 'xMax', 'yMin', 'yMax', 'interval'}`` for ``scatterOption``; the bound is at least one step and
+        the interval leaves ``RATING_CHECK_AXIS_TICKS`` ticks on each half axis.
+    """
+    largest = max([abs(row[key]) for row in rows for key in ('d_prev', 'd_obs')] or [0])
+    bound = max(1, math.ceil(largest / RATING_CHECK_AXIS_STEP)) * RATING_CHECK_AXIS_STEP
+
+    return {'xMin': -bound, 'xMax': bound, 'yMin': -bound, 'yMax': bound, 'interval': bound / RATING_CHECK_AXIS_TICKS}
+
+
+def rating_check_summary() -> Optional[dict]:
+    """
+    The value of ``rating_check_context``, read from the bundle without the cache.
+
+    Returns
+    -------
+    dict or None
+        See ``rating_check_context``.
+    """
+    data = analysis_part(NATIONAL_SCOPE, RATING_CHECK_PART)
+
+    if data is None:
+        return None
+
+    summary = data.get('summary') or {}
+    scope_names = {code: row['name'] for code, row in catalogue().iterrows()}
+
+    def election(row):
+        """Public name of the election of a point: «Generales 2023», «Andalucía 2022»."""
+        scope, year = row.get('scope'), (row.get('event_date') or '')[:4]
+        name = 'Generales' if scope == NATIONAL_SCOPE else scope_names.get(scope, scope)
+        return '{} {}'.format(name, year).strip()
+
+    def finite(x):
+        """Whether ``x`` is a finite number."""
+        return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+    rows = [dict({key: row.get(key) for key in RATING_CHECK_ROW_KEYS},
+                 label='{} · {}'.format(row.get('pollster'), election(row)))
+            for row in data.get('scatter') or [] if finite(row.get('d_prev')) and finite(row.get('d_obs'))]
+    quarters = {}
+    for row in data.get('quarters') or []:
+        quarters.setdefault(row.get('population'), {})[row.get('quarter')] = row
+    last = (data.get('params') or {}).get('quarters') or max(
+        [row.get('quarter') or 0 for row in data.get('quarters') or []] or [0])
+    quarter_rows, average_rows = [], []
+    for population, name in RATING_CHECK_POPULATIONS:
+        entry = summary.get(population)
+        if not entry:
+            continue
+        first, bottom = quarters.get(population, {}).get(1), quarters.get(population, {}).get(last)
+        if first or bottom:
+            quarter_rows.append({
+                'population': population, 'name': name,
+                'first': fmt_num((first or {}).get('error_avg'), 2), 'n_first': fmt_int((first or {}).get('n')),
+                'last': fmt_num((bottom or {}).get('error_avg'), 2), 'n_last': fmt_int((bottom or {}).get('n')),
+            })
+        average = entry.get('average') or {}
+        if average.get('n'):
+            average_rows.append({
+                'population': population, 'name': name, 'n': fmt_int(average.get('n')),
+                'mae_flat': fmt_num(average.get('mae_flat'), 2), 'mae_rated': fmt_num(average.get('mae_rated'), 2),
+                'diff': delta_text(average.get('diff'), 3), 'interval': interval_text(average, 3, signed=True),
+                'better': fmt_int(average.get('better')), 'worse': fmt_int(average.get('worse')),
+            })
+
+    return {
+        'kpis': rating_check_kpis(summary),
+        'summary': summary,
+        'quarters': quarter_rows,
+        'average': average_rows,
+        'dates': data.get('dates') or {},
+        'params': data.get('params') or {},
+        'csv': {'pairs': api_url(NATIONAL_SCOPE, RATING_CHECK_PART, fmt='csv', kind='analysis'),
+                'elections': api_url(NATIONAL_SCOPE, RATING_CHECK_PART, fmt='csv', kind='analysis', table='elections')},
+        'initial': {'scatter': rows, 'fit': data.get('fit'), 'axes': rating_check_axes(rows)},
+    }
+
+
+def rating_check_context() -> Optional[dict]:
+    """
+    The live figures of the card «Cómo lo comprobamos» of the ``rating`` subpage: the ``rating-check`` part of the
+    analysis of ``NATIONAL_SCOPE`` (the rating before each election against the deviation of each pollster in it,
+    and the simple average of the last campaign with and without the rating).
+
+    The value is computed once and cached under the TTL of the site (``Site.cached``), as ``reliability_context``:
+    the part is read at most once per TTL, also when it is missing.
+
+    Returns
+    -------
+    dict or None
+        ``None`` without the part. Otherwise ``kpis`` (``rating_check_kpis``), ``summary`` (the one of the part, by
+        population), ``quarters`` (one row per population with quarters: ``population``, ``name``, ``first`` and
+        ``last``, the mean error per party in points of the first and the last quarter of the rating formatted with
+        two decimals, and their pairs ``n_first`` and ``n_last``), ``average`` (one row per population with
+        elections: ``population``, ``name``, ``n``, ``mae_flat``, ``mae_rated``, ``diff`` (with rating minus flat,
+        signed), ``interval`` and the elections ``better`` and ``worse`` with the rating, all formatted), ``dates``,
+        ``params``, ``csv`` (``{'pairs': url, 'elections': url}``) and ``initial`` (the slice of the island the cloud
+        draws: ``scatter``, the points with finite ``d_prev`` and ``d_obs`` with ``RATING_CHECK_ROW_KEYS`` and
+        ``label``; ``fit``, the ends of the fitted line or ``None``; ``axes``, ``rating_check_axes``). The cached
+        value is shared by the requests: do not modify it.
+
+    Raises
+    ------
+    HttpError
+        Any error of the bundle other than a 404.
+    """
+    return site().cached(('rating-check',), rating_check_summary)
+
+
 def metodo_context(state: dict) -> dict:
     """
     Template context of the method landing page.
@@ -485,7 +703,9 @@ def metodo_section_context(state: dict, section: str) -> dict:
     dict
         The common context (for ``backtest``, the whole ``backtest_context``) plus ``subpages``
         (``subpages(section)``), ``figures`` (``national_figures``), ``thresholds`` (``thresholds_rows``) and
-        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``). The ``escanos`` subpage adds
+        ``section``. The ``rating`` subpage adds ``rubric`` (``quality_rubric``) and ``rating_check``
+        (``rating_check_context``, ``None`` without the part) and, with it, the ``initial`` island (``state`` and the
+        ``rating_check`` slice the cloud draws). The ``escanos`` subpage adds
         ``errors`` (``error_example``, ``None`` without one). The ``promedio`` subpage adds
         ``example`` (``weights_example``, ``None`` without one), ``example_csv`` (the CSV of the ``weights`` part),
         ``house_example`` (``house_effects_example``, ``None`` without one), ``cycle`` (``cycle_counts``), ``lean_published`` (whether the ``sesgo-cis`` study is published, so
@@ -514,6 +734,11 @@ def metodo_section_context(state: dict, section: str) -> dict:
 
     if section == 'rating':
         context['rubric'] = quality_rubric()
+        check = rating_check_context()
+        context['rating_check'] = check
+
+        if check is not None:
+            context['initial'] = {'state': context['state'], 'rating_check': check['initial']}
 
     if section == 'escanos':
         context['errors'] = error_example()

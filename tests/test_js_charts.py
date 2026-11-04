@@ -869,6 +869,21 @@ def test_scatter_diagonal_and_fixed_axes():
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
 
 
+def test_scatter_with_fit_and_diagonal_draws_two_dashed_lines_over_fixed_axes():
+    """The cloud of the rating check (/metodo/rating): the points, the fitted line and the diagonal of the axes."""
+    rows = [{'pollster': 'GAD3', 'd_prev': -0.35, 'd_obs': -0.41}, {'pollster': 'CIS', 'd_prev': 1.2, 'd_obs': 2.5}]
+    option = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster", diagonal: true, '
+                    'fit: [[-1.29, -0.53], [1.3, 0.61]], axes: {xMin: -5, xMax: 5, yMin: -5, yMax: 5, interval: 1}, '
+                    'xName: "Diferencial previsto"})', rows=rows)
+    points, fit, diagonal = option['series']
+    assert points['type'] == 'scatter' and [item['name'] for item in points['data']] == ['GAD3', 'CIS']
+    assert fit['type'] == 'line' and fit['data'] == [[-1.29, -0.53], [1.3, 0.61]]
+    assert fit['lineStyle']['type'] == 'dashed'
+    assert diagonal['type'] == 'line' and diagonal['data'] == [[-5, -5], [5, 5]] and diagonal['silent'] is True
+    assert option['xAxis']['min'] == -5 and option['yAxis']['max'] == 5
+    assert option['xAxis']['name'] == 'Diferencial previsto'
+
+
 def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():
     cat = 'new c.Catalog({parties: [{name: "PNV", color: "#00ff00"}], bmaps: {blocks: {Otros: ["PNV"]}}})'
     assert run_js('%s.orderBlocks(["Derecha", "Otros", "Izquierda", "Separatista"])' % cat) == [
