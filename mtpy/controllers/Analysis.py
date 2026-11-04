@@ -2,6 +2,9 @@ from ..core.api import HttpError
 from ..lib.webapi import ANALYSIS_PARTS, check_format, check_part, check_scope, site
 from .Base import Base
 
+# the `table` of the second CSV twin of each part that has two
+CSV_TABLES = {'herding': 'events', 'rating-check': 'elections'}
+
 
 class Analysis(Base):
     """
@@ -13,8 +16,9 @@ class Analysis(Base):
         A part of the analysis of a scope, as JSON or, with ``?format=csv``, as its CSV twin.
 
         ``meta`` has no CSV twin; ``herding`` has two: ``herding`` and, with ``&table=events``,
-        ``herding-events``. The analysis is overwritten on every publication, so it is never
-        served as immutable.
+        ``herding-events``; ``rating-check`` has two: ``rating-check`` (the pollster-election pairs) and, with
+        ``&table=elections``, ``rating-check-elections`` (the simple average of each election). The
+        analysis is overwritten on every publication, so it is never served as immutable.
 
         Parameters
         ----------
@@ -31,8 +35,9 @@ class Analysis(Base):
         Raises
         ------
         HttpError
-            404 ``no csv for this part`` for ``meta`` or an unknown ``table``; 404 ``analysis
-            not published`` when the file is missing.
+            404 ``no csv for this part`` for ``meta`` or a ``table`` that is not one of the part
+            (``events`` of ``herding``, ``elections`` of ``rating-check``); 404 ``analysis not
+            published`` when the file is missing.
         """
         check_scope(scope)
         check_part(part, ANALYSIS_PARTS)
@@ -41,7 +46,7 @@ class Analysis(Base):
         self.notice_freeze()
 
         if fmt == 'csv':
-            if part == 'meta' or table not in (None, 'events') or (table == 'events' and part != 'herding'):
+            if part == 'meta' or (table is not None and CSV_TABLES.get(part) != table):
                 raise HttpError(404, 'no csv for this part')
 
             name = part if table is None else part + '-' + table

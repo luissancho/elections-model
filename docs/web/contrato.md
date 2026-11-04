@@ -291,7 +291,8 @@ y no lo tiene. La fuente de verdad en código es `bundle.ANALYSIS_PARTS`, `ANALY
 (`path_analysis`, `path_analysis_csv`) y `publish.publish_analysis`.
 
 Mismo sobre que el resto de ficheros, con `scope` informado y `run_id`, `mode` a `null`; `schema` es
-`{nombre}@1` y las claves obligatorias de `data` están en `SCHEMAS`. Cinco partes:
+`{nombre}@1` y las claves obligatorias de `data` están en `SCHEMAS`. Cinco partes, más una sexta (`rating-check`)
+sólo en `es`:
 
 | Parte | `schema` | `data` (claves obligatorias) |
 |---|---|---|
@@ -300,6 +301,7 @@ Mismo sobre que el resto de ficheros, con `scope` informado y `run_id`, `mode` a
 | `herding` | `analysis-herding@1` | `rows`, `events` |
 | `poll-errors` | `poll-errors@1` | `blocks`, `rows` |
 | `error-data` | `error-data@1` | `rows` |
+| `rating-check` | `analysis-rating-check@1` | `summary`, `quarters`, `scatter`, `fit` (lista o `null`), `dates`, `params` |
 
 - `house-effects.rows`: una fila por casa y partido o bloque (`pollster`, `name`, `n_events`, `hist`, `trend`,
   `cycle`, `n_cycle`; fuente `Computer.print_house_effects()`). `parties` son los partidos `main` del evento y
@@ -313,12 +315,31 @@ Mismo sobre que el resto de ficheros, con `scope` informado y `run_id`, `mode` a
   `error_blocks`, `bias_blocks` y `bias`; `blocks` son los bloques presentes en las filas.
 - `error-data.rows`: los datos del estimador de error (`get_error_estimator_data()`): `date`, `pollster`,
   `party`, `regional`, `weeks`, `weight`, `pct`, `error`.
+- `rating-check` (enmienda 2026-11-04): la validación del rating de las encuestadoras sobre las elecciones de todos
+  los ámbitos (fuente `Computer.rating_check_data('all')` y `rating_check.rating_check_summary`). Existe **sólo en
+  `es`** y sólo cuando se publica con `rating_check` (`python job.py publish
+  '{"what":["analysis"],"scopes":["es"],"rating_check":true}'`); con `rating_check` en otro ámbito no se escribe ni
+  falla, y una publicación sin `rating_check` deja la parte anterior (JSON y CSV) como estaba. `summary` tiene una
+  entrada por población (`all`, `generales`, `autonomicas`) con las medidas (`spearman`, `spearman_evidence`,
+  `slope`, `slope_polled`, `skill`) y `average` (el promedio simple con y sin rating); `quarters`, una fila por
+  población y cuarto de rating; `scatter`, un punto por casa y elección (`d_prev` y `d_obs` ×100); `fit`, los dos
+  extremos de la recta o `null` sin pares suficientes; `dates`, la primera y la última elección; `params`, los
+  parámetros del cálculo (`n_scopes`, `tau`, `sigma`, `k`, …). Las medidas sin datos van a `null`.
+- `meta.params.rating_check` es `true` sólo si esa publicación escribió `rating-check` (y entonces `meta.seconds`
+  tiene `rating_check`); `false` en el resto, también cuando la parte sigue publicada de una vez anterior.
 
 `meta.json` se escribe el último: un análisis sin él está incompleto y la API lo trata como no publicado
 (404 `analysis not published`). Si una publicación falla a medias, quedan partes nuevas junto a partes
 viejas y manda `meta.json`. Los CSV (`csv/{nombre}.csv`) son los gemelos de `house-effects`, `herding`,
 `poll-errors` y `error-data`, más `herding-events.csv` (las filas de `herding.events`); `meta` no tiene
-gemelo.
+gemelo. `rating-check` tiene dos:
+
+- `rating-check.csv`: los pares casa-elección, columnas `event_scope`, `event_date`, `population`, `pollster`,
+  `rating`, `rating_adj`, `d_prev`, `d_obs`, `error_avg`, `num_events_w`, `quality`, `n_polls`, `n_event_polls`;
+  diferenciales (`d_prev`, `d_obs`) y ratings (`rating`, `rating_adj`, `quality`) ×100, a 2 decimales.
+- `rating-check-elections.csv`: el promedio simple de cada elección (`simple_average_errors`), columnas
+  `event_scope`, `event_date`, `population`, `n_polls`, `n_pollsters`, `mae_flat`, `mae_rated`, `diff`, a 3
+  decimales.
 
 ## Backtest
 
@@ -701,7 +722,7 @@ Enmienda 2026-10-10. Solo `GET`. Las nueve primeras leen la base de datos en viv
 | `/api/v1/house-effects` | `scope` | `{contract, scope, rows}` | `house-effects-{scope}.csv` |
 | `/api/v1/herding` | `scope` | `{contract, scope, rows}` | `herding-{scope}.csv` |
 | `/api/v1/drift` | `scope` | `{contract, scope, rows}` | `drift-{scope}.csv` |
-| `/api/v1/analysis/{scope}/{part}` | `part` ∈ `meta`, `house-effects`, `herding`, `poll-errors`, `error-data`; `table=events` (solo CSV de `herding`) | el fichero del análisis tal cual (sobre completo) | `{scope}-{nombre}.csv`, con `nombre` ∈ `house-effects`, `herding`, `herding-events`, `poll-errors`, `error-data` |
+| `/api/v1/analysis/{scope}/{part}` | `part` ∈ `meta`, `house-effects`, `herding`, `poll-errors`, `error-data`, `rating-check` (sólo `es`); `table=events` (sólo CSV de `herding`), `table=elections` (sólo CSV de `rating-check`) | el fichero del análisis tal cual (sobre completo) | `{scope}-{nombre}.csv`, con `nombre` ∈ `house-effects`, `herding`, `herding-events`, `poll-errors`, `error-data`, `rating-check`, `rating-check-elections` |
 
 - `rows` son registros JSON de la tabla de la base (`NaN` a `null`, fechas ISO). `scope` se valida contra el
   catálogo; `event` y `{date}` han de ser una fecha real `YYYY-MM-DD` y además una elección del ámbito

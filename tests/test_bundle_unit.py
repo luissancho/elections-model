@@ -54,12 +54,14 @@ def test_paths_follow_the_published_layout():
 
 
 def test_analysis_paths_follow_the_published_layout_and_reject_bad_input():
-    assert bundle.ANALYSIS_PARTS == ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data')
+    assert bundle.ANALYSIS_PARTS == ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data', 'rating-check')
     assert set(bundle.ANALYSIS_SCHEMAS) == set(bundle.ANALYSIS_PARTS)
     assert all(name in bundle.SCHEMAS for name in bundle.ANALYSIS_SCHEMAS.values())
     assert bundle.path_analysis('es', 'meta') == 'analysis/es/meta.json'
     assert bundle.path_analysis('es-md', 'poll-errors') == 'analysis/es-md/poll-errors.json'
     assert bundle.path_analysis_csv('es', 'herding-events') == 'analysis/es/csv/herding-events.csv'
+    assert bundle.path_analysis('es', 'rating-check') == 'analysis/es/rating-check.json'
+    assert bundle.path_analysis_csv('es', 'rating-check-elections') == 'analysis/es/csv/rating-check-elections.csv'
     with pytest.raises(ValueError):
         bundle.path_analysis('es', 'nope')
     with pytest.raises(ValueError):

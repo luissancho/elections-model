@@ -1,0 +1,212 @@
+{
+  "schema": "analysis-rating-check@1",
+  "contract": 1,
+  "scope": "es",
+  "run_id": null,
+  "mode": null,
+  "generated_at": "2026-11-04T12:00:00Z",
+  "data": {
+    "summary": {
+      "all": {
+        "n_pairs": 412,
+        "n_pollsters": 61,
+        "n_events": 98,
+        "spearman": {
+          "value": -0.2214,
+          "lo": -0.34140000000000004,
+          "hi": -0.11140000000000001,
+          "n": 412
+        },
+        "spearman_evidence": {
+          "high": {
+            "value": -0.27140000000000003,
+            "lo": -0.4214,
+            "hi": -0.12140000000000001,
+            "n": 206
+          },
+          "low": {
+            "value": -0.1814,
+            "lo": -0.3714,
+            "hi": -0.021400000000000002,
+            "n": 206
+          }
+        },
+        "slope": {
+          "value": 0.4123,
+          "lo": 0.2011,
+          "hi": 0.6235,
+          "n": 402
+        },
+        "slope_polled": {
+          "value": 0.4518,
+          "lo": 0.2104,
+          "hi": 0.6932,
+          "n": 392
+        },
+        "skill": {
+          "mse_none": 0.0004,
+          "mse_prior": 0.0003,
+          "mse_rating": 0.0003,
+          "skill_prior": 0.0812,
+          "skill_rating": 0.1245,
+          "n": 412
+        },
+        "average": {
+          "n": 74,
+          "mae_flat": 1.6021,
+          "mae_rated": 1.5512,
+          "diff": -0.0509,
+          "lo": -0.1412,
+          "hi": 0.0123,
+          "better": 44,
+          "worse": 30
+        }
+      },
+      "generales": {
+        "n_pairs": 96,
+        "n_pollsters": 22,
+        "n_events": 12,
+        "spearman": {
+          "value": -0.2731,
+          "lo": -0.3931,
+          "hi": -0.16310000000000002,
+          "n": 96
+        },
+        "spearman_evidence": {
+          "high": {
+            "value": -0.3231,
+            "lo": -0.4731,
+            "hi": -0.1731,
+            "n": 48
+          },
+          "low": {
+            "value": -0.2331,
+            "lo": -0.42310000000000003,
+            "hi": -0.0731,
+            "n": 48
+          }
+        },
+        "slope": {
+          "value": 0.4123,
+          "lo": 0.2011,
+          "hi": 0.6235,
+          "n": 86
+        },
+        "slope_polled": {
+          "value": 0.4518,
+          "lo": 0.2104,
+          "hi": 0.6932,
+          "n": 76
+        },
+        "skill": {
+          "mse_none": 0.0004,
+          "mse_prior": 0.0003,
+          "mse_rating": 0.0003,
+          "skill_prior": 0.0812,
+          "skill_rating": 0.1245,
+          "n": 96
+        },
+        "average": {
+          "n": 11,
+          "mae_flat": 1.4122,
+          "mae_rated": 1.3577,
+          "diff": -0.0545,
+          "lo": -0.1412,
+          "hi": 0.0123,
+          "better": 7,
+          "worse": 4
+        }
+      },
+      "autonomicas": {
+        "n_pairs": 316,
+        "n_pollsters": 58,
+        "n_events": 86,
+        "spearman": {
+          "value": -0.2051,
+          "lo": -0.3251,
+          "hi": -0.0951,
+          "n": 316
+        },
+        "spearman_evidence": {
+          "high": {
+            "value": -0.2551,
+            "lo": -0.4051,
+            "hi": -0.1051,
+            "n": 158
+          },
+          "low": {
+            "value": -0.1651,
+            "lo": -0.35509999999999997,
+            "hi": -0.005099999999999993,
+            "n": 158
+          }
+        },
+        "slope": {
+          "value": 0.4123,
+          "lo": 0.2011,
+          "hi": 0.6235,
+          "n": 306
+        },
+        "slope_polled": {
+          "value": 0.4518,
+          "lo": 0.2104,
+          "hi": 0.6932,
+          "n": 296
+        },
+        "skill": {
+          "mse_none": 0.0004,
+          "mse_prior": 0.0003,
+          "mse_rating": 0.0003,
+          "skill_prior": 0.0812,
+          "skill_rating": 0.1245,
+          "n": 316
+        },
+        "average": {
+          "n": 63,
+          "mae_flat": 1.6352,
+          "mae_rated": 1.5832,
+          "diff": -0.052,
+          "lo": -0.1412,
+          "hi": 0.0123,
+          "better": 37,
+          "worse": 26
+        }
+      }
+    },
+    "quarters": [
+      {
+        "population": "all",
+        "quarter": 1,
+        "error_avg": 1.3412,
+        "n": 103
+      }
+    ],
+    "scatter": [
+      {
+        "scope": "es",
+        "event_date": "2023-07-23",
+        "pollster": "GAD3",
+        "d_prev": -0.35,
+        "d_obs": -0.41
+      }
+    ],
+    "fit": null,
+    "dates": {
+      "first": "2008-03-09",
+      "last": "2026-05-17"
+    },
+    "params": {
+      "n_scopes": 18,
+      "tau": 0.01,
+      "sigma": 0.014,
+      "k": 1.96,
+      "window_days": 30,
+      "min_pollsters": 3,
+      "min_event_polls": 10,
+      "evidence_split": 2.0,
+      "replicas": 2000,
+      "seed": 0,
+      "quarters": 4
+    }
+  }
+}

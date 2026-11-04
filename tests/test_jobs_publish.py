@@ -71,7 +71,7 @@ def test_analysis_of_a_scope_without_upcoming_event_is_published_unless_in_the_n
     fs = FileSystem(str(tmp_path))
     result = Publish().run(what=['analysis'], scopes=['es-md'], fs=fs, today='2026-10-13')
     assert result['es-md'] == {'status': 'published', 'event_date': '2023-05-28', 'n_pollsters': 4,
-                               'seconds': {'total': 0.1}, 'house_effects': True}
+                               'seconds': {'total': 0.1}, 'house_effects': True, 'rating_check': False}
     assert calls == ['es-md']
     result = Publish().run(what=['analysis'], scopes=['es-md'], fs=fs, today='2026-11-25')
     assert result['es-md']['status'] == 'refused' and 'of es 2026-11-29' in result['es-md']['reason']
@@ -114,6 +114,19 @@ def test_analysis_action_publishes_each_scope(fresh_app, tmp_path, patched, caps
     assert 'es: analysis published (event 2026-11-29, 3 pollsters)' in capsys.readouterr().out
 
 
+def test_analysis_rating_check_is_threaded_to_the_publication(fresh_app, tmp_path, patched, capsys):
+    from mtpy.jobs.Publish import Publish
+
+    fs = FileSystem(str(tmp_path))
+    Publish().run(what=['analysis'], scopes=['es'], fs=fs)
+    assert [c[2] for c in patched if c[1] == 'analysis'][-1]['rating_check'] is False
+    result = Publish().run(what=['analysis'], scopes=['es'], rating_check=True, fs=fs)
+    assert [c[2] for c in patched if c[1] == 'analysis'][-1]['rating_check'] is True
+    assert result['es']['status'] == 'published' and result['es']['rating_check'] is True
+    assert bundle.BundleReader(fs).exists(bundle.path_analysis('es', 'rating-check'))
+    assert '; rating-check' in capsys.readouterr().out
+
+
 def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, patched, capsys):
     """Con `dry_run`, el análisis va a `site-dry/v1/analysis/`; un ámbito sin sondeos en el ciclo actual se publica sin
     efectos de casa, uno que rompe falla sin detener a los demás, y el manifest no se toca."""
@@ -127,7 +140,7 @@ def test_analysis_isolates_scopes_and_dry_run_writes_apart(fresh_app, tmp_path, 
     assert 'es: analysis published (event 2026-11-29, 3 pollsters) in ' in out and 'manifest' not in out
     assert bundle.BundleReader(fs, prefix=bundle.DRY_PREFIX).analysis_exists('es')
     assert not (tmp_path / 'site').exists()
-    assert [c[2] for c in patched] == [{'verbose': 0}] * 3
+    assert [c[2] for c in patched] == [{'verbose': 0, 'rating_check': False}] * 3
 
 
 def test_analysis_of_a_scope_without_polls_in_its_current_event_is_published_without_effects(fresh_app, tmp_path, patched, capsys):
@@ -377,7 +390,7 @@ def test_the_model_gets_verbose_minus_two(fresh_app, tmp_path, patched):
         assert patched[0][3]['verbose'] == expected
     patched.clear()
     Publish().run(what=['analysis'], scopes=['es'], fs=FileSystem(str(tmp_path / 'analysis')), verbose=3)
-    assert patched[0][2] == {'verbose': 1}
+    assert patched[0][2] == {'verbose': 1, 'rating_check': False}
 
 
 def test_analysis_prints_its_scope_lines_live_at_verbose_1(fresh_app, tmp_path, patched, capsys):

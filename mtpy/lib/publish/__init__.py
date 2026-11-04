@@ -5,8 +5,9 @@ Two layers live here:
 - Pure exporters. Every ``export_*`` function takes an already executed ``Simulator`` (or its
   ``Forecaster``) and returns ``(data, frame)``: ``data`` follows the bundle schema of the same name
   and ``frame`` is its tabular twin for the CSV. They keep no state and touch no storage. The
-  ``export_analysis_*``, ``export_poll_errors`` and ``export_error_data`` exporters take the summaries
-  of a ``Computer`` instead (``export_analysis_herding`` returns two frames).
+  ``export_analysis_*``, ``export_poll_errors``, ``export_error_data`` and ``export_rating_check`` exporters take the
+  summaries of a ``Computer`` instead (``export_analysis_herding`` returns two frames, ``export_rating_check`` a dict
+  of them).
   ``export_backtest_table`` and ``export_backtest_meta`` convert the tables of ``backtest/results``.
 - Orchestration. ``publish_forecast`` runs the model of a scope and writes an immutable run through a
   ``BundleWriter``; ``publish_analysis`` computes the houses analysis of a scope and overwrites it;
@@ -27,7 +28,8 @@ The package has eight submodules: ``common`` (constants, provenance, the publica
 from .analysis import (
     ANALYSIS_EVENTS_COLUMNS, ANALYSIS_HE_COLUMNS, ANALYSIS_HERDING_COLUMNS, ERROR_DATA_COLUMNS,
     export_analysis_herding, export_analysis_house_effects, export_analysis_meta, export_error_data,
-    export_poll_errors, POLL_ERRORS_COLUMNS, POLL_ERRORS_PARAMS, publish_analysis
+    export_poll_errors, export_rating_check, NATIONAL_SCOPE, POLL_ERRORS_COLUMNS, POLL_ERRORS_PARAMS, publish_analysis,
+    RATING_CHECK_COLUMNS, RATING_CHECK_ELECTIONS_COLUMNS
 )
 from .backtest import (
     BACKTEST_BOOL_COLS, BACKTEST_FILES, BACKTEST_RUN_EXCLUDED, backtest_source, export_backtest_meta,

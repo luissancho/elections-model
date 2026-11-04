@@ -45,7 +45,7 @@ class Analysis(PublishPipeline):
         """Start the live progress of the scope."""
         self.start_progress(chunk, position)
 
-    def publish_task(self, chunk=None, today=None, force=False, **kwargs):
+    def publish_task(self, chunk=None, today=None, force=False, rating_check=False, **kwargs):
         """
         Publish the houses analysis of one scope, converting every outcome into a result dict (``self.result``).
 
@@ -57,20 +57,24 @@ class Analysis(PublishPipeline):
             Date taken as today by the LOREG guard.
         force : bool
             Publish inside the LOREG window anyway; the analysis carries no mark of it.
+        rating_check : bool
+            Write the ``rating-check`` part of the national analysis too (ignored on any other scope; see
+            ``publish.publish_analysis``).
 
         Notes
         -----
-        The result has a ``status``: ``published`` with ``event_date``, ``n_pollsters``, ``seconds`` and
-        ``house_effects`` (whether they were published), ``skipped`` for ``publish.NothingToPublish``, ``refused``
-        for the LOREG guard and ``failed`` for any other exception, all but ``published`` with a ``reason``.
-        A scope without an upcoming event is still published (the analysis then works from its last election) and
-        only the national window guards it. A scope whose current cycle has no polls is published without house
+        The result has a ``status``: ``published`` with ``event_date``, ``n_pollsters``, ``seconds``,
+        ``house_effects`` (whether they were published) and ``rating_check`` (whether the ``rating-check`` part was
+        written, which the result line ends with ``; rating-check``), ``skipped`` for ``publish.NothingToPublish``,
+        ``refused`` for the LOREG guard and ``failed`` for any other exception, all but ``published`` with a
+        ``reason``. A scope without an upcoming event is still published (the analysis then works from its last
+        election) and only the national window guards it. A scope whose current cycle has no polls is published without house
         effects (``meta.house_effects`` false).
         """
         scope = chunk
         try:
             publish.loreg_guard(scope, publish.next_event_date(scope), today, force, self.national)
-            out = publish.publish_analysis(scope, self.writer, verbose=self.model_verbose)
+            out = publish.publish_analysis(scope, self.writer, verbose=self.model_verbose, rating_check=rating_check)
         except publish.PublishRefused as e:
             self.result = {'status': 'refused', 'reason': str(e)}
         except publish.NothingToPublish as e:
@@ -80,12 +84,15 @@ class Analysis(PublishPipeline):
         else:
             self.result = {'status': 'published', 'event_date': out['event_date'],
                            'n_pollsters': out['n_pollsters'], 'seconds': out['seconds'],
-                           'house_effects': out.get('house_effects', True)}
+                           'house_effects': out.get('house_effects', True),
+                           'rating_check': out.get('rating_check', False)}
 
     def line_of(self, chunk, result, **kwargs):
         """Format the summary line of one scope result."""
         if result['status'] == 'published':
             line = '{}: analysis published (event {}, {} pollsters) in {:.0f} s'.format(
                 chunk, result['event_date'], result['n_pollsters'], result['seconds']['total'])
-            return line if result.get('house_effects', True) else line + '; sin efectos de casa'
+            if not result.get('house_effects', True):
+                line += '; sin efectos de casa'
+            return line + '; rating-check' if result.get('rating_check') else line
         return '{}: analysis {} ({})'.format(chunk, result['status'], result['reason'])

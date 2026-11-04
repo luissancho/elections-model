@@ -391,7 +391,18 @@ def test_analysis_statuses_and_lines(fresh_app, tmp_path, patched):
     assert analysis(fs, 'es-cb').line.endswith('; sin efectos de casa')
     p = analysis(fs, 'es-ar')
     assert p.line == "es-ar: analysis failed (KeyError: 'x')" and p.failure_name('es-ar') == 'es-ar (analysis)'
-    assert [c[2] for c in patched if c[1] == 'analysis'][0] == {'verbose': 0}
+    assert [c[2] for c in patched if c[1] == 'analysis'][0] == {'verbose': 0, 'rating_check': False}
+    assert not p.line.endswith('; rating-check')
+
+
+def test_analysis_rating_check_reaches_the_publication_and_the_line(fresh_app, tmp_path, patched):
+    fs = FileSystem(str(tmp_path))
+    p = analysis(fs, 'es', rating_check=True)
+    assert [c[2] for c in patched if c[1] == 'analysis'][0] == {'verbose': 0, 'rating_check': True}
+    assert p.result['rating_check'] is True and p.line.endswith('; rating-check')
+    assert bundle.BundleReader(fs).exists(bundle.path_analysis('es', 'rating-check'))
+    p = analysis(fs, 'es-md', rating_check=True)
+    assert p.result['rating_check'] is False and not p.line.endswith('; rating-check')
 
 
 def test_analysis_national_window_refuses_a_regional_scope_unless_forced(fresh_app, tmp_path, patched):

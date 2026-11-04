@@ -347,12 +347,22 @@ def test_analysis_parts_and_csv(api, fresh_app, tmp_path):
     assert body.startswith(b'event_date,pollster,ratio\n') and headers['cache-control'] == 'public, max-age=60'
     status, headers, body = call(api, '/api/v1/analysis/es/meta')
     assert status == 200 and json.loads(body)['schema'] == 'analysis-meta@1'
+    status, headers, body = call(api, '/api/v1/analysis/es/rating-check')
+    assert status == 200 and json.loads(body)['schema'] == 'analysis-rating-check@1'
+    status, headers, body = call(api, '/api/v1/analysis/es/rating-check', query='format=csv')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="es-rating-check.csv"'
+    assert body.startswith(b'event_scope,event_date,pollster,rating,d_obs\n')
+    status, headers, body = call(api, '/api/v1/analysis/es/rating-check', query='format=csv&table=elections')
+    assert status == 200 and headers['content-disposition'] == 'attachment; filename="es-rating-check-elections.csv"'
+    assert body.startswith(b'event_scope,event_date,mae_flat,mae_rated\n')
 
 
 @pytest.mark.parametrize('path, query, status, message', [
     ('/api/v1/analysis/es/meta', 'format=csv', 404, 'no csv for this part'),
     ('/api/v1/analysis/es/house-effects', 'format=csv&table=events', 404, 'no csv for this part'),
     ('/api/v1/analysis/es/herding', 'format=csv&table=nope', 404, 'no csv for this part'),
+    ('/api/v1/analysis/es/rating-check', 'format=csv&table=events', 404, 'no csv for this part'),
+    ('/api/v1/analysis/es/herding', 'format=csv&table=elections', 404, 'no csv for this part'),
     ('/api/v1/analysis/es/nope', '', 404, 'unknown part'),
     ('/api/v1/analysis/es-xx/herding', '', 400, 'invalid scope'),
     ('/api/v1/analysis/es/herding', 'format=xml', 400, 'invalid format'),
