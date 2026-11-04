@@ -348,16 +348,17 @@ def house_effects_example() -> Optional[dict]:
     dict or None
         ``pollster``, ``since``, ``href`` (its profile), ``blocks`` (the pair of the bullseye axes, the first two
         of ``error_blocks``), ``left`` and ``right`` (the blocks the text counts, ``HOUSE_EXAMPLE``), ``rows``
-        (its ``history_rows`` since the date, newest first and, on the same date, in catalogue order, each with
-        ``name``, the name of its election, ``election_label``), ``n`` (their number), ``over`` and ``under``
-        (``{block: n}`` for ``left`` and ``right``: the elections in which the poll gave the block more, or less,
-        vote than the result), ``chance`` (the ``sign_chance`` of ``over`` for ``left`` and of ``under`` for
-        ``right``, ``{block: dict or None}``), ``first`` and ``last`` (the dates of the oldest and the newest rows),
-        ``cycle``
+        (its ``history_rows`` since the date with an error in both blocks, newest first and, on the same date, in
+        catalogue order, each with ``name``, the name of its election, ``election_label``; the rows of a scope
+        whose ``poll-errors`` part has no blocks lack their columns and stay out, as in the bullseye), ``n``
+        (their number), ``over`` and ``under`` (``{block: n}`` for ``left`` and ``right``: the elections in which
+        the poll gave the block more, or less, vote than the result), ``chance`` (the ``sign_chance`` of ``over``
+        for ``left`` and of ``under`` for ``right``, ``{block: dict or None}``), ``first`` and ``last`` (the dates
+        of the oldest and the newest rows), ``cycle``
         (``{name: effect}``, the ``cycle`` effect of the parties and blocks of the ``house-effects`` analysis of
         ``NATIONAL_SCOPE``; ``None`` without one or without a row of the pollster) and ``n_cycle`` (its polls in
         that cycle, ``None`` without ``cycle``). ``None`` without an analysed scope, when the axes are not the two
-        blocks of the example or when the pollster has no row since the date.
+        blocks of the example or when the pollster has no row with both block errors since the date.
 
     Raises
     ------
@@ -379,7 +380,8 @@ def house_effects_example() -> Optional[dict]:
     order = {scope['code']: index for index, scope in enumerate(scopes)}
     rows = [dict(row, name=election_label(row['scope'], row['event_date'], names, scope_names))
             for row in history_rows(scopes, events, parts)
-            if row.get('pollster') == name and (row.get('event_date') or '') >= since]
+            if row.get('pollster') == name and (row.get('event_date') or '') >= since
+            and all(row.get(block) is not None for block in (left, right))]
     rows.sort(key=lambda row: order[row['scope']])
     rows.sort(key=lambda row: row['event_date'], reverse=True)
 
@@ -388,11 +390,11 @@ def house_effects_example() -> Optional[dict]:
 
     def count(block, sign):
         """Elections in which the poll erred in the direction of `sign` (1 over, -1 under) in `block`."""
-        return sum(1 for row in rows if row.get(block) is not None and sign * row[block] > 0)
+        return sum(1 for row in rows if sign * row[block] > 0)
 
     def chance(block, sign):
-        """`sign_chance` of the elections with an error in `block` erring in the direction of `sign`."""
-        return sign_chance(sum(1 for row in rows if row.get(block) is not None), count(block, sign))
+        """`sign_chance` of the elections erring in the direction of `sign` in `block`."""
+        return sign_chance(len(rows), count(block, sign))
 
     effects = analysis_part(NATIONAL_SCOPE, 'house-effects') or {}
     mine = [row for row in effects.get('rows') or [] if row.get('pollster') == name]
