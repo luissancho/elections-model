@@ -250,3 +250,18 @@ def test_backtest_config_accepts_the_tuned_best_and_the_default():
     path = os.path.join(os.path.dirname(__file__), '..', 'backtest', 'tuning', 'best.json')
     assert module.Backtest._config(path) == json.load(open(path, encoding='utf-8'))
     assert module.Backtest._config(default_config()) == default_config()
+
+
+def test_job_backtest_rejects_flat_with_recompute_ratings(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    with pytest.raises(ValueError, match='backtest: flat_ratings and recompute_ratings are exclusive'):
+        Backtest().run(scopes=['es'], out=str(tmp_path), flat_ratings=True, recompute_ratings=True, runner=runner,
+                       stats=stats)
+    assert runner.calls == [] and not (tmp_path / 'run.json').exists()
+
+
+def test_job_backtest_passes_flat_ratings(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    Backtest().run(scopes=['es'], out=str(tmp_path), flat_ratings=True, verbose=0, runner=runner, stats=stats)
+    assert runner.calls[0]['weight_ratings'] == 'flat'
+    assert json.load(open(tmp_path / 'run.json', encoding='utf-8'))['flat_ratings'] is True

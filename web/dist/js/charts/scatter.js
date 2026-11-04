@@ -15,13 +15,15 @@ const FIT_COLOR = '#ce3b3b';
  *   to write beside their point), `axes` (`{xMin, xMax, yMin, yMax, interval}`: fixed limits and tick step of
  *   both axes instead of fitting the data), `diagonal` (a dashed line from `[min, min]` to `[max, max]` of
  *   those axes; needs `axes`), `colorOf` (`row => colour` of each point), `fit` (`[[x0, y0], [x1, y1]]`: the ends of the fitted line, or null),
- *   `xFormatter` and `yFormatter` (number → text of each axis and of the tooltip), `xName` (title of the x axis)
- *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip)
+ *   `xFormatter` and `yFormatter` (number → text of each axis and of the tooltip), `xName` and `yName` (titles of
+ *   the x and y axes; the y one is written upright beside the ticks, with room made for it on the left)
+ *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip), and `symbolSize` (the diameter of
+ *   the points in pixels, smaller for a cloud of hundreds)
  * @returns {object} the option
  */
 export function scatterOption(rows, {
   x, y, name, labelled = [], fit = null, xFormatter = (v) => fmtNum(v, 1), yFormatter = (v) => fmtNum(v, 1),
-  xName = '', xLabel = '', yLabel = '', diagonal = false, axes = null, colorOf = null,
+  xName = '', yName = '', xLabel = '', yLabel = '', diagonal = false, axes = null, colorOf = null, symbolSize = 9,
 } = {}) {
   const named = new Set(labelled);
   const xs = rows.map((row) => row[x]).filter(Number.isFinite);
@@ -29,7 +31,7 @@ export function scatterOption(rows, {
   const points = {
     type: 'scatter',
     name: '',
-    symbolSize: 9,
+    symbolSize,
     color: THEME.accentColor,
     itemStyle: {opacity: 0.75},
     label: {position: 'right', fontSize: 10, color: THEME.mutedColor, formatter: '{b}'},
@@ -69,7 +71,7 @@ export function scatterOption(rows, {
   const fixed = (min, max) => (axes ? {min, max, interval: axes.interval} : {});
   return {
     ...baseOption(),
-    grid: {left: 8, right: 16, top: 16, bottom: xName ? 32 : 8, containLabel: true},
+    grid: {left: yName ? 26 : 8, right: 16, top: 16, bottom: xName ? 32 : 8, containLabel: true},
     xAxis: {
       type: 'value',
       scale: !axes,
@@ -85,6 +87,8 @@ export function scatterOption(rows, {
       type: 'value',
       scale: !axes,
       ...fixed(axes && axes.yMin, axes && axes.yMax),
+      ...(yName ? {name: yName, nameLocation: 'middle', nameRotate: 90, nameGap: 36,
+        nameTextStyle: {color: THEME.mutedColor, fontSize: 11}} : {}),
       splitLine: {lineStyle: {color: THEME.gridColor}},
       axisLabel: {...axisLabelStyle(), formatter: (value) => yFormatter(value)},
     },

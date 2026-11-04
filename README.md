@@ -91,6 +91,18 @@ python job.py publish '{"what":["event"],"scopes":["es"],"event_date":"all"}'
 python job.py publish '{"what":["forecast"],"scopes":["es"],"n_sim":20,"dry_run":true}'
 ```
 
+Con `"rating_check": true`, `analysis` escribe además en `es` la parte `rating-check`: la validación del rating de las
+encuestadoras sobre las elecciones de todos los ámbitos (¿predice el rating que tenía una casa antes de una elección su
+desviación en ella?, ¿mejora el rating un promedio simple?). Es cara y sólo cambia cuando cambian los ratings, así que
+se pide aparte: sin el parámetro (y en el job `update`, que nunca lo pone) la parte publicada se queda como estaba, y
+en otro ámbito se ignora. Tras una elección, cuando ya están cargados sus resultados, se recalculan los ratings de
+todos los ámbitos y se republica la validación:
+
+```bash
+python job.py compute '{"what":["compute","ratings"],"scopes":"all"}'
+python job.py publish '{"what":["analysis"],"scopes":["es"],"rating_check":true}'
+```
+
 ### `backtest`: el backtest del modelo
 
 Ejecuta el backtest del modelo sobre las elecciones pasadas y escribe sus tablas en `backtest/results/` (`es`) o
@@ -106,7 +118,7 @@ python job.py backtest '{"scopes":["es"],"config":"backtest/tuning/best.json","o
 ```
 
 `config` corre el backtest con una configuración del promedio, como el `best.json` de `tune`, y conviene escribirlo
-en otra carpeta (`out`).
+en otra carpeta (`out`). `flat_ratings` (`--flat-ratings` en `backtest/run_backtest.py`) corre el modelo con el rating plano (todos los sondeos con peso por rating 1, fase C); ver `backtest/README.md`.
 
 ### `tune`: afinar el promedio con los sondeos futuros
 

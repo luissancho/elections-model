@@ -16,6 +16,7 @@ EVOLUTION_JS = pathlib.Path(DIST, 'js', 'charts', 'evolution.js').as_uri()
 BLOCKS_JS = pathlib.Path(DIST, 'js', 'blocks.js').as_uri()
 WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'evolution-wire.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
+CHANGES_JS = pathlib.Path(DIST, 'js', 'evolution-changes.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -41,16 +42,16 @@ DATA = {'runs': None, 'parties': PARTIES, 'selected': ['PP', 'PSOE'], 'colors': 
 
 
 def run_js(expr):
-    """Evalúa `expr` con `e` (la evolución), `b` (los bloques), `ew` (el cableado), `c` (el catálogo) y `runs` (el
-    fijo) definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
+    """Evalúa `expr` con `e` (la evolución), `b` (los bloques), `ew` (el cableado), `c` (el catálogo), `ch` (la tabla
+    de cambios) y `runs` (el fijo) definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
     `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const e = await import("{}"); const b = await import("{}"); const ew = await import("{}"); '
-        'const c = await import("{}"); const runs = {}; '
+        'const c = await import("{}"); const ch = await import("{}"); const runs = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
-    ).format(json.dumps(ECHARTS), EVOLUTION_JS, BLOCKS_JS, WIRE_JS, CATALOG_JS, json.dumps(RUNS), expr)
+    ).format(json.dumps(ECHARTS), EVOLUTION_JS, BLOCKS_JS, WIRE_JS, CATALOG_JS, CHANGES_JS, json.dumps(RUNS), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -60,8 +61,9 @@ def option(**over):
     return run_js('e.evolutionOption({...%s, runs: e.dailyRuns(runs), ...%s})' % (json.dumps(DATA), json.dumps(over)))
 
 
-def test_daily_runs_keep_one_run_per_day_live_over_backfill_and_the_last_live():
-    assert run_js('e.dailyRuns(runs).map((run) => run.run_id)') == ['b05', 'l06', 'l07b', 'x08']
+def test_daily_runs_keep_the_last_run_of_each_day():
+    # Luis, 2026-11-04: live and retrospective runs alike, the last `run_at` of the day (b06 at 12:00 over l06 at 09:30)
+    assert run_js('e.dailyRuns(runs).map((run) => run.run_id)') == ['b05', 'b06', 'l07b', 'x08']
     assert run_js('e.runDay(runs[5])') == '2026-10-08'  # without `as_of`: the day of `run_at`
     assert run_js('e.dailyRuns([])') == []
 
@@ -69,8 +71,8 @@ def test_daily_runs_keep_one_run_per_day_live_over_backfill_and_the_last_live():
 def test_evolution_points_skip_the_runs_without_the_party_and_carry_the_run_index():
     points = run_js('e.evolutionPoints(e.dailyRuns(runs), %s, "pct")' % json.dumps(PARTIES))
     assert [p['name'] for p in points] == PARTIES
-    assert [p[1] for p in points[0]['points']] == [32.71, 32.6, 32.4, 32.3] and [p[2] for p in points[0]['points']] == [0, 1, 2, 3]
-    assert [p[1] for p in points[2]['points']] == [17.93, 17.95, 18.1]  # VOX: null in the last run
+    assert [p[1] for p in points[0]['points']] == [32.71, 32.64, 32.4, 32.3] and [p[2] for p in points[0]['points']] == [0, 1, 2, 3]
+    assert [p[1] for p in points[2]['points']] == [17.93, 18.1]  # VOX: missing in b06, null in the last run
     assert run_js('e.evolutionPoints(e.dailyRuns(runs), ["PP"], "seats")[0].points.map((p) => p[1])') == [140, 139, 138, 137]
 
 
@@ -88,14 +90,17 @@ def test_evolution_axis_follows_the_rule_of_the_average_multiples_of_five():
     assert option()['yAxis']['interval'] == 5 and option(field='seats')['yAxis']['interval'] == 20
 
 
-def test_evolution_option_draws_a_line_per_party_with_hollow_retrospective_points():
+def test_evolution_option_draws_a_line_per_party_with_solid_points_and_donuts_on_change():
     opt = option()
     assert [s['name'] for s in opt['series']] == PARTIES and all(s['type'] == 'line' for s in opt['series'])
     # a filled circle: ECharts' default `emptyCircle` strokes with `color`, so a white hollow point would vanish
     assert all(s['symbol'] == 'circle' for s in opt['series'])
-    first = opt['series'][0]['data'][0]
-    assert first['value'][1] == 32.71 and first['itemStyle'] == {'color': '#fff', 'borderColor': '#1e5aa8', 'borderWidth': 2}
-    assert opt['series'][0]['data'][1][1:] == [32.6, 1]  # a live point is a plain `[time, value, index]`
+    pp = opt['series'][0]['data']
+    assert pp[0][1:] == [32.71, 0]  # the first day: a plain `[time, value, index]`, retrospective or not
+    # 32,7 → 32,6 → 32,4 → 32,3: every later day changes the figure shown, so every later point is a donut
+    for index, value in ((1, 32.64), (2, 32.4), (3, 32.3)):
+        assert pp[index]['value'][1:] == [value, index] and pp[index]['symbolSize'] == 8
+        assert pp[index]['itemStyle'] == {'color': '#fff', 'borderColor': '#1e5aa8', 'borderWidth': 2}
     assert opt['legend'] == {'show': False, 'selectedMode': True, 'type': 'scroll', 'top': 0, 'data': PARTIES,
                              'selected': {'PP': True, 'PSOE': True, 'VOX': False}}
     assert opt['dataZoom'][0]['type'] == 'slider' and opt['xAxis']['type'] == 'time'
@@ -118,7 +123,7 @@ def test_evolution_views_take_the_parties_given_in_their_order_with_the_main_one
     # without a list: the parties of the last run with a value, in the order of the run (VOX is null there)
     views = run_js('ew.evolutionViews(runs, new c.Catalog(%s))' % json.dumps(META))
     assert views['partidos']['parties'] == ['PP', 'PSOE'] and views['partidos']['defaults'] == ['PP', 'PSOE']
-    assert [r['run_id'] for r in views['partidos']['runs']] == ['b05', 'l06', 'l07b', 'x08']
+    assert [r['run_id'] for r in views['partidos']['runs']] == ['b05', 'b06', 'l07b', 'x08']
     assert views['bloques']['parties'] == ['Izquierda', 'Otros', 'Derecha'] and views['bloques']['defaults'] is None
     assert views['bloques']['colors'] == {'Izquierda': '#e3001b', 'Otros': '#9e9e9e', 'Derecha': '#1e5aa8'}
     assert views['bloques']['runs'][0]['nowcast']['parties'][0] == {'name': 'Derecha', 'pct': pytest.approx(50.64)}
@@ -130,3 +135,135 @@ def test_evolution_views_without_blocks_or_main_parties():
     assert views['bloques'] is None and views['partidos']['defaults'] is None
     seats = run_js('ew.evolutionViews(runs, new c.Catalog(%s), {field: "seats", total: 350}).bloques.runs[0].nowcast.parties' % json.dumps(META))
     assert seats == [{'name': 'Derecha', 'seats': 203}, {'name': 'Izquierda', 'seats': 107}, {'name': 'Otros', 'seats': 40}]
+
+
+def day_runs(field, values, name='VOX'):
+    """Runs of consecutive days from 2026-10-05 with `values` of `name` in `field` (None: the party missing)."""
+    return [{'run_id': 'r%d' % i, 'run_at': '2026-10-%02dT12:00:00Z' % (5 + i), 'as_of': '2026-10-%02d' % (5 + i),
+             'nowcast': {'parties': [] if value is None else [{'name': name, field: value}]}} for i, value in enumerate(values)]
+
+
+def donuts(field, values, name='VOX'):
+    """Which points of `name` the option draws as donuts (objects) for the daily `values`."""
+    data = run_js('e.evolutionOption({runs: %s, parties: ["%s"], field: "%s"}).series[0].data'
+                  % (json.dumps(day_runs(field, values, name)), name, field))
+    return [isinstance(point, dict) for point in data]
+
+
+def test_donut_only_when_the_shown_figure_changes():
+    # the daily drift of 0,01 without new polls keeps the figure at 18,9 until it reaches 19,0
+    assert donuts('pct', [18.86, 18.87, 18.88, 18.96]) == [False, False, False, True]
+    assert donuts('seats', [63, 63, 64]) == [False, False, True]
+
+
+def test_donut_compares_with_the_last_day_of_the_same_name():
+    # the day without VOX gives no point, so 18,1 compares with 18,0 (and 18,0 with nothing: the first point)
+    assert donuts('pct', [17.95, None, 18.1]) == [False, True]
+    assert donuts('pct', [17.95, None, 17.96]) == [False, False]
+
+
+def test_shown_value_rounds_as_the_figure():
+    assert run_js('[e.shownValue(18.25, "pct"), e.shownValue(63.4, "seats"), e.shownValue(null, "pct"), e.FIELD_DIGITS]') == \
+        [18.3, 63, None, {'pct': 1, 'seats': 0}]
+
+
+def test_tooltip_heads_with_the_day_and_marks_the_changes():
+    script = ('const o = e.evolutionOption({runs: %s, parties: ["VOX"], field: "pct"}); '
+              'o.series[0].data.map((point) => o.tooltip.formatter([{value: Array.isArray(point) ? point : point.value, '
+              'seriesName: "VOX", marker: ""}]))')
+    boxes = run_js('(() => { %s })()' % (script.replace('o.series[0].data.map', 'return o.series[0].data.map')
+                                         % json.dumps(day_runs('pct', [18.86, 18.87, 18.96]))))
+    assert [box.split('<br>')[0] for box in boxes] == ['<strong>5 oct 2026</strong>', '<strong>6 oct 2026</strong>',
+                                                       '<strong>7 oct 2026</strong>']
+    assert 'dlt' not in boxes[0] and 'dlt' not in boxes[1]
+    assert boxes[2].endswith('VOX: 19,0% <span class="dlt up">▲ 0,1</span>')
+
+
+# 05-10 to 15-10 without the 08: PP falls, PSOE drifts below the rounding today, SUMAR starts on the 06
+CHANGE_DAYS = [5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
+CHANGE_VALUES = {'PP': {5: 32.71, 7: 32.44, 14: 32.04, 15: 31.93}, 'PSOE': {5: 26.37, 7: 26.5, 14: 26.55, 15: 26.58},
+                 'SUMAR': {7: 7.0, 14: 7.2, 15: 7.24}}
+
+
+def change_runs():
+    """Daily runs of `CHANGE_DAYS`: the values of `CHANGE_VALUES`, else PP 32.3, PSOE 26.5 and SUMAR 7.1 (none on the 05)."""
+    default = {'PP': 32.3, 'PSOE': 26.5, 'SUMAR': 7.1}
+    runs = []
+    for day in CHANGE_DAYS:
+        parties = [{'name': name, 'pct': CHANGE_VALUES[name].get(day, default[name]), 'seats': 100}
+                   for name in ('PP', 'PSOE', 'SUMAR') if name != 'SUMAR' or day > 5]
+        runs.append({'run_id': 'd%02d' % day, 'run_at': '2026-10-%02dT12:00:00Z' % day, 'as_of': '2026-10-%02d' % day,
+                     'nowcast': {'parties': parties}})
+    return runs
+
+
+def changes(today='2026-10-15', runs=None, names=('PP', 'PSOE', 'SUMAR')):
+    return run_js('ch.evolutionChanges(%s, %s, "pct", "%s")' % (json.dumps(change_runs() if runs is None else runs), json.dumps(list(names)), today))
+
+
+def test_changes_compare_today_a_week_and_the_start():
+    out = changes()
+    # the day ≤ 15 − 7 is the 07: the 08 has no run
+    assert out['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'week': '2026-10-07', 'start': '2026-10-05'}
+    assert out['todayLabel'] == 'Hoy'
+    rows = {row['name']: row for row in out['rows']}
+    assert [row['name'] for row in out['rows']] == ['PP', 'PSOE', 'SUMAR']
+    # PP 31,9 against 32,0 / 32,4 / 32,7
+    assert rows['PP'] == {'name': 'PP', 'value': 31.9, 'day': -0.1, 'week': -0.5, 'start': -0.8}
+    # PSOE 26,6 against 26,6 (26.55 → 26.58: a drift below the rounding) / 26,5 / 26,4
+    assert rows['PSOE'] == {'name': 'PSOE', 'value': 26.6, 'day': 0, 'week': 0.1, 'start': 0.2}
+
+
+def test_changes_missing_name_gives_a_dash():
+    rows = {row['name']: row for row in changes()['rows']}
+    assert rows['SUMAR'] == {'name': 'SUMAR', 'value': 7.2, 'day': 0, 'week': 0.2, 'start': None}  # no SUMAR on the 05
+    assert run_js('ch.evolutionChanges([], ["PP"], "pct", "2026-10-15")') is None
+    html = table_html()
+    sumar = html[html.index('data-name="SUMAR"'):]
+    assert sumar[:sumar.index('</tr>')].endswith('<td><span class="dlt flat">–</span></td>')
+
+
+def test_changes_label_the_last_day_when_it_is_not_today():
+    assert changes(today='2026-10-16')['todayLabel'] == '15 oct'
+
+
+def test_changes_with_a_single_day():
+    assert changes(runs=change_runs()[:1]) is None
+    assert changes(runs=[]) is None
+
+
+def test_changes_week_is_null_without_a_day_a_week_back():
+    out = changes(runs=change_runs()[:3])  # 05, 06, 07: nothing on or before the 30-09
+    assert out['days']['week'] is None and all(row['week'] is None for row in out['rows'])
+    assert '7 días' not in table_html(runs=change_runs()[:3])
+
+
+def table_html(runs=None, shown=None, field='pct', formatter='fmtPct'):
+    view = {'colors': {'PP': '#1e5aa8', 'PSOE': '#e3001b', 'SUMAR': '#e5007d'}, 'fullnames': {'PP': 'Partido Popular', 'PSOE': 'PSOE', 'SUMAR': 'Sumar'}}
+    return run_js('await (async () => { const f = await import("%s"); return ch.changesTableHtml(ch.evolutionChanges(%s, ["PP", "PSOE", "SUMAR"], "%s", "2026-10-15"), %s, {field: "%s", formatter: f.%s, shown: %s}); })()'
+                  % (pathlib.Path(DIST, 'js', 'format.js').as_uri(), json.dumps(change_runs() if runs is None else runs), field,
+                     json.dumps(view), field, formatter, json.dumps(shown)))
+
+
+def test_changes_table_html():
+    html = table_html(shown=['PP', 'PSOE'])
+    import re
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', html)
+    assert heads == ['Partido', '15 oct', 'Hoy', '7 días', 'Desde 5 oct']
+    assert 'title="Frente al 14 oct 2026"' in html and 'title="Frente al 7 oct 2026"' in html and 'title="Frente al 5 oct 2026"' in html
+    assert [m for m in re.findall(r'data-name="([^"]+)"', html)] == ['PP', 'PSOE', 'SUMAR']
+    assert re.search(r'<tr data-name="SUMAR" hidden>', html) and not re.search(r'<tr data-name="PP" hidden>', html)
+    pp = html[html.index('data-name="PP"'):]
+    pp = pp[:pp.index('</tr>')]
+    assert 'title="Partido Popular"' in pp and '<span class="dot" style="background-color: #1e5aa8"></span>PP</span>' in pp
+    assert '<strong>31,9%</strong>' in pp and '<span class="dlt down">▼ 0,5</span>' in pp and '<span class="dlt down">▼ 0,1</span>' in pp
+    # whole seats, every row shown without a selection
+    seats = table_html(field='seats', formatter='fmtInt')
+    assert '<strong>100</strong>' in seats and 'hidden' not in seats
+
+
+def test_changes_default_today_is_the_local_day_in_the_evening():
+    # `isoDay` rounds to the nearest midnight, so a plain isoDay(Date.now()) after noon would be tomorrow
+    label = run_js('(() => { const now = new Date(2026, 9, 15, 23, 0).getTime(); Date.now = () => now; '
+                   'return ch.evolutionChanges(%s, ["PP"], "pct").todayLabel; })()' % json.dumps(change_runs()))
+    assert label == 'Hoy'

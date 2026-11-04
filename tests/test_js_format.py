@@ -57,6 +57,15 @@ def test_fmt_delta_follows_the_badge_filter():
     assert run_js('f.fmtDelta(null)') == run_js('f.fmtDelta(undefined)') == run_js('f.fmtDelta(NaN)') == '–'
 
 
+def test_fmt_badge_follows_the_python_filter():
+    """`fmtBadge` da la dirección y el texto de una diferencia, el `delta_badge` de Python entero."""
+    import json
+    for x in (6, -1, 0.04, -0.06, 1.0, -2.56, 0):
+        for digits in (0, 1):
+            assert json.loads(run_js(f'f.fmtBadge({x}, {digits})')) == pages.delta_badge(x, digits), (x, digits)
+    assert json.loads(run_js('f.fmtBadge(null)')) == {'dir': 'flat', 'text': '–'}
+
+
 def test_gradient_follows_the_python_filter():
     """`gradient` mezcla los colores de una escala de varios tramos como el filtro `gradient` de Python (el badge del
     rating de «Todas las encuestas»)."""

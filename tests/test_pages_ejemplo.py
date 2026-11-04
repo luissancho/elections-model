@@ -310,6 +310,32 @@ def test_house_example_without_the_cycle_or_the_blocks(house_site, monkeypatch):
     assert metodo.house_effects_example() is None
 
 
+def test_house_example_leaves_out_the_elections_without_the_block_errors(house_site, fresh_app):
+    """Un ámbito cuya parte `poll-errors` se publicó sin bloques (es-an, es-ar, es-cl y es-ex el 2026-11-04) tiene filas
+    sin las columnas Izquierda/Derecha: esas elecciones no cuentan en el ejemplo del CIS ni salen en su tabla, como en
+    la diana, y la página se sirve en vez de fallar al indexarlas."""
+    write_event(fresh_app.fs, scope='es-an', date='2022-06-19', model=False)
+    write_analysis(fresh_app.fs, scope='es-an')
+    errors = fixture_data('poll-errors')
+    errors['blocks'] = []
+    errors['rows'] = [{key: value for key, value in dict(HOUSE_ROWS[0], event_date='2022-06-19', event='2022-19J').items()
+                       if key not in ('Derecha', 'Izquierda')}]
+    bundle.BundleWriter(fresh_app.fs).write_json(bundle.path_analysis('es-an', 'poll-errors'),
+                                                 bundle.ANALYSIS_SCHEMAS['poll-errors'], errors, 'es-an')
+    webapi.site().manifest_cache_clear()
+    webapi.site().files.clear()
+    example = metodo.house_effects_example()
+    assert [(row['scope'], row['event_date']) for row in example['rows']] == [('es', '2023-07-23'), ('es', '2019-11-10')]
+    assert example['n'] == 2 and example['over'] == {'Izquierda': 2, 'Derecha': 0} and example['chance']['Izquierda']['n'] == 2
+    status, _, body = call(house_site, '/metodo/promedio')
+    page = html(body)
+    assert status == 200 and 'El CIS: 2 de 2 elecciones en la misma dirección' in page
+    table = page[page.index('id="house-table"'):]
+    table = table[:table.index('</table>')]
+    assert len(re.findall(r'<tr>\s*<td class="f l">', table)) == 2
+    assert all(row['scope'] == 'es' for row in initial(body)['house']['rows'])
+
+
 def test_promedio_page_shows_the_house_example_card(house_site):
     status, _, body = call(house_site, '/metodo/promedio')
     page = html(body)

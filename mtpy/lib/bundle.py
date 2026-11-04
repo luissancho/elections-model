@@ -17,8 +17,10 @@ lives under ``PREFIX`` (``DRY_PREFIX`` for dry runs) of ``app.fs`` and is immuta
                 series.csv ...                  {mode}-{name}.csv for the per-mode files
         analysis/{scope}/                       houses analysis of a scope, overwritten on each publication
             meta.json house-effects.json herding.json poll-errors.json error-data.json
+            rating-check.json                   only for es, only when published with rating_check
             csv/
                 house-effects.csv herding.csv herding-events.csv poll-errors.csv error-data.csv
+                rating-check.csv rating-check-elections.csv
         backtest/{scope}/                       model backtest of a scope, overwritten on each publication
             meta.json metrics.json by-horizon.json blocks.json shares.json seats.json
             csv/
@@ -63,10 +65,11 @@ CONTRACT = 1
 MODES = ('nowcast', 'forecast')
 RUN_PARTS = ('meta', 'headline', 'series', 'polls', 'fan', 'house-effects', 'dispersion', 'weights')
 MODE_PARTS = ('vote', 'summary', 'dist', 'districts', 'scenario', 'projection')
-ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data')
+ANALYSIS_PARTS = ('meta', 'house-effects', 'herding', 'poll-errors', 'error-data', 'rating-check')
 ANALYSIS_SCHEMAS = {'meta': 'analysis-meta', 'house-effects': 'analysis-house-effects', 'herding': 'analysis-herding',
-                    'poll-errors': 'poll-errors', 'error-data': 'error-data'}
-ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data')
+                    'poll-errors': 'poll-errors', 'error-data': 'error-data', 'rating-check': 'analysis-rating-check'}
+ANALYSIS_CSV = ('house-effects', 'herding', 'herding-events', 'poll-errors', 'error-data', 'rating-check',
+                'rating-check-elections')
 BACKTEST_PARTS = ('meta', 'metrics', 'by-horizon', 'blocks', 'shares', 'seats', 'calibration')
 BACKTEST_SCHEMAS = {part: 'backtest-' + part for part in BACKTEST_PARTS}
 BACKTEST_CSV = BACKTEST_PARTS[1:]
@@ -94,6 +97,7 @@ ROUTE_ALIAS_RE = re.compile(r'^[0-9a-z_\-]+$')
 
 NULLABLE_STR = (str, type(None))
 NULLABLE_INT = (int, type(None))
+NULLABLE_LIST = (list, type(None))
 SCHEMAS = {
     'manifest': {'contract': int, 'updated_at': NULLABLE_STR, 'scopes': dict, 'studies': dict, 'freeze': dict,
                  'attribution': dict},
@@ -128,6 +132,8 @@ SCHEMAS = {
     'analysis-herding': {'rows': list, 'events': list},
     'poll-errors': {'blocks': list, 'rows': list},
     'error-data': {'rows': list},
+    'analysis-rating-check': {'summary': dict, 'quarters': list, 'scatter': list, 'fit': NULLABLE_LIST, 'dates': dict,
+                              'params': dict},
     'backtest-meta': {'scope': str, 'run_at': NULLABLE_STR, 'commit': NULLABLE_STR, 'params': dict, 'events': list,
                       'horizons': list, 'n_cases': int, 'n_seats_cases': int, 'source': str, 'published': dict,
                       'seconds': dict},

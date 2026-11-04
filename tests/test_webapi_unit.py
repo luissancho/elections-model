@@ -39,7 +39,7 @@ def write_bundle(fs, scope='es', run_id=RUN, manifest=True):
 
 
 def write_analysis(fs, scope='es'):
-    """Análisis publicado de un ámbito a partir de los fixtures: las cinco partes y sus gemelos CSV."""
+    """Análisis publicado de un ámbito a partir de los fixtures: las seis partes y sus gemelos CSV."""
     writer = bundle.BundleWriter(fs)
     tables = {
         'house-effects': pd.DataFrame({'pollster': ['CIS'], 'name': ['PP'], 'cycle': [-3.02]}),
@@ -47,6 +47,10 @@ def write_analysis(fs, scope='es'):
         'herding-events': pd.DataFrame({'event_date': ['2023-07-23'], 'pollster': ['GAD3'], 'ratio': [0.781]}),
         'poll-errors': pd.DataFrame({'event_date': ['2023-07-23'], 'pollster': ['GAD3'], 'Derecha': [2.81]}),
         'error-data': pd.DataFrame({'date': ['2023-07-16'], 'pollster': ['GAD3'], 'error': [1.67]}),
+        'rating-check': pd.DataFrame({'event_scope': ['es'], 'event_date': ['2023-07-23'], 'pollster': ['GAD3'],
+                                      'rating': [72.5], 'd_obs': [-0.41]}),
+        'rating-check-elections': pd.DataFrame({'event_scope': ['es'], 'event_date': ['2023-07-23'],
+                                                'mae_flat': [1.234], 'mae_rated': [1.118]}),
     }
     for name, frame in tables.items():
         writer.write_csv(bundle.path_analysis_csv(scope, name), frame)

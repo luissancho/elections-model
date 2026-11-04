@@ -610,7 +610,7 @@ def test_scatter_option_labels_only_the_named_provinces_and_draws_the_fit():
     option = run_js('sc.scatterOption(rows, {x: "latam_share", y: "left_share", name: "name", '
                     'labelled: ["Ourense", "Girona"], fit: [[20, 66], [80, 44]]})', rows=rows)
     points, fit = option['series']
-    assert points['type'] == 'scatter' and points['color'] == '#1d4f86'
+    assert points['type'] == 'scatter' and points['color'] == '#1d4f86' and points['symbolSize'] == 9
     assert [item['value'] for item in points['data']] == [[74.0, 29.7], [40.0, 50.0], [23.0, 69.6]]
     assert [item['name'] for item in points['data']] == ['Ourense', 'Madrid', 'Girona']
     assert [item['label']['show'] for item in points['data']] == [True, False, True]
@@ -867,6 +867,34 @@ def test_bullseye_draws_only_the_rings_asked_for():
 def test_scatter_diagonal_and_fixed_axes():
     option = run_js('sc.scatterOption([{x: 1, y: 2, name: "a"}], {x: "x", y: "y", name: "name", diagonal: true, axes: {xMin: -10, xMax: 15, yMin: -5, yMax: 15, interval: 5}})')
     assert option['xAxis']['min'] == -10 and option['yAxis']['interval'] == 5 and option['series'][-1]['data'] == [[-10, -10], [15, 15]]
+
+
+def test_scatter_with_fit_and_diagonal_draws_two_dashed_lines_over_fixed_axes():
+    """The cloud of the rating check (/metodo/rating): the points, the fitted line and the diagonal of the axes."""
+    rows = [{'pollster': 'GAD3', 'd_prev': -0.35, 'd_obs': -0.41}, {'pollster': 'CIS', 'd_prev': 1.2, 'd_obs': 2.5}]
+    option = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster", diagonal: true, '
+                    'fit: [[-1.29, -0.53], [1.3, 0.61]], axes: {xMin: -5, xMax: 5, yMin: -5, yMax: 5, interval: 1}, '
+                    'xName: "Diferencial previsto", symbolSize: 5})', rows=rows)
+    points, fit, diagonal = option['series']
+    assert points['type'] == 'scatter' and [item['name'] for item in points['data']] == ['GAD3', 'CIS']
+    assert points['symbolSize'] == 5  # hundreds of points: smaller than the default
+    assert fit['type'] == 'line' and fit['data'] == [[-1.29, -0.53], [1.3, 0.61]]
+    assert fit['lineStyle']['type'] == 'dashed'
+    assert diagonal['type'] == 'line' and diagonal['data'] == [[-5, -5], [5, 5]] and diagonal['silent'] is True
+    assert option['xAxis']['min'] == -5 and option['yAxis']['max'] == 5
+    assert option['xAxis']['name'] == 'Diferencial previsto'
+
+
+def test_scatter_y_name_titles_the_vertical_axis_and_makes_room_for_it():
+    """`yName` titles the y axis (rotated, beside the ticks) and widens the left margin; without it (the CERA
+    study) the axis has no name and the margin stays as it was."""
+    rows = [{'pollster': 'GAD3', 'd_prev': -0.35, 'd_obs': -0.41}]
+    named = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster", '
+                   'xName: "Diferencial previsto", yName: "Diferencial observado"})', rows=rows)
+    assert named['yAxis']['name'] == 'Diferencial observado' and named['yAxis']['nameLocation'] == 'middle'
+    assert named['yAxis']['nameRotate'] == 90
+    plain = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster"})', rows=rows)
+    assert plain['yAxis'].get('name', '') == '' and named['grid']['left'] > plain['grid']['left'] == 8
 
 
 def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():

@@ -1,12 +1,13 @@
 // Wiring of the evolution of the publications, shared by Promedios and Escaños: the party and block views of the
 // daily runs (`evolutionViews`), the pill legend that drives the hidden ECharts legend, the Partidos/Bloques
-// selector and the download button (`wireEvolution`). The selection lives in the chart alone, never in the URL
+// selector, the table of changes under the chart and the download button (`wireEvolution`). The selection lives in the chart alone, never in the URL
 // hash, like the house chart of Promedios.
 import {blockRuns} from '../blocks.js';
 import {dailyRuns, evolutionImageOption, renderEvolution} from '../charts/evolution.js';
 import {chartZoom} from '../charts/series.js';
+import {changesTableHtml, evolutionChanges} from '../evolution-changes.js';
 import {fmtPct} from '../format.js';
-import {wireDownload} from '../share.js';
+import {tableImage, wireDownload} from '../share.js';
 import {mapNames, markSegments, showError, tryDraw} from './common.js';
 import {markLegend} from './legend-dom.js';
 import {chosenNames, fillLegend} from './series-wire.js';
@@ -57,8 +58,9 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
 /**
  * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the Partidos/Bloques radios
  * (`#evolution-view`, shown only when the scope has blocks), the pill legend (`#evolution-legend`), which selects
- * the names through the hidden ECharts legend, and the download button (`#evolution-download`), which saves the
- * chart as shown as a signed image (`share.js`). Changing the view resets the selection.
+ * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`, hidden with fewer than
+ * two days), whose rows follow the selection, and the download button (`#evolution-download`), which saves the
+ * chart as shown, with the table under it, as a signed image (`share.js`). Changing the view resets the selection.
  *
  * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
  *   the colour of each name for the pills)
@@ -72,6 +74,7 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     return;
   }
   const legendEl = document.getElementById('evolution-legend');
+  const changesEl = document.getElementById('evolution-changes');
   const viewSet = document.getElementById('evolution-view');
   const views = evolutionViews((initial.runs || {}).runs || [], catalog, {parties, field, total});
   const state = {view: 'partidos', selected: null};
@@ -92,7 +95,32 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     };
   }
 
-  /** Draw the chart, fill its pill legend and, the first time, listen to the legend selection. */
+  /** Names shown in the current view and selection. */
+  const shownNames = () => state.selected ?? views[state.view].defaults ?? views[state.view].parties;
+
+  /** Fill the table of changes of the current view (empty and hidden with fewer than two days). */
+  function fillChanges() {
+    if (!changesEl) {
+      return;
+    }
+    const current = views[state.view];
+    const changes = evolutionChanges(current.runs, current.parties, field);
+    changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter, shown: shownNames()}) : '';
+    changesEl.hidden = !changes;
+  }
+
+  /** Show only the rows of the table of the names shown. */
+  function markChanges() {
+    if (!changesEl) {
+      return;
+    }
+    const shown = shownNames();
+    for (const row of changesEl.querySelectorAll('tr[data-name]')) {
+      row.hidden = !shown.includes(row.dataset.name);
+    }
+  }
+
+  /** Draw the chart, fill its pill legend and its table and, the first time, listen to the legend selection. */
   function draw() {
     const drawn = renderEvolution(chartEl, dataOf(state));
     if (!chart) {
@@ -102,9 +130,11 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
         if (legendEl) {
           markLegend(legendEl, event.selected);
         }
+        markChanges();
       });
     }
     fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});
+    fillChanges();
   }
 
   for (const input of document.querySelectorAll('#evolution-view input[name=evview]')) {
@@ -112,7 +142,9 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
   }
   markSegments();
   tryDraw(draw, 'the evolution');
-  wireDownload(document.getElementById('evolution-download'), () => evolutionImageOption(dataOf(state), chartZoom(chart)), showError);
+  wireDownload(document.getElementById('evolution-download'), () => evolutionImageOption(dataOf(state), chartZoom(chart)), showError, {
+    bottom: changesEl ? () => (changesEl.hidden ? null : tableImage(changesEl.querySelector('table'))) : null,
+  });
 
   // The selector only works with JavaScript, so the server renders it hidden.
   if (viewSet && views.bloques) {

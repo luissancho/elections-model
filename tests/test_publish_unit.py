@@ -14,7 +14,8 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from mtpy.lib.forecaster import NoPollsError
 from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS)
+                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
+                         synthetic_rating_check)
 
 
 def valid(name, data, mode='nowcast'):
@@ -934,10 +935,106 @@ def test_publish_analysis_records_its_parameters_and_the_database(tmp_path):
     assert meta['house_effects'] is True
     assert meta['params'] == {'bmap': 'vs', 'drange': [6, 42], 'n_last': 1, 'main': NAMES,
                               'blocks': {'Derecha': ['PP', 'VOX'], 'Izquierda': ['PSOE']}, 'db_polls': 7,
-                              'db_last_poll': '2026-10-01'}
+                              'db_last_poll': '2026-10-01', 'rating_check': False}
     assert set(meta['seconds']) == {'build', 'house_effects', 'herding', 'poll_errors', 'error_data', 'total'}
-    assert out['seconds'] == meta['seconds'] and out['event_date'] == '2026-11-29'
+    assert out['seconds'] == meta['seconds'] and out['event_date'] == '2026-11-29' and out['rating_check'] is False
     assert (tmp_path / 'site' / 'v1' / 'analysis' / 'es' / 'csv' / 'herding-events.csv').exists()
+    assert 'rating_check_data' not in [c[0] for c in factory.calls]
+    assert not writer.exists(bundle.path_analysis('es', 'rating-check'))
+
+
+def test_publish_analysis_writes_rating_check_only_when_asked_and_only_nationally(tmp_path):
+    factory = FakeComputer()
+    writer = make_writer(tmp_path)
+    out = publish.publish_analysis('es', writer, computer=factory, stats=fake_stats, prov=fake_prov, rating_check=True)
+    assert out['rating_check'] is True and ('rating_check_data', 'all') in [c[:2] for c in factory.calls]
+    part = writer.read_json(bundle.path_analysis('es', 'rating-check'))
+    assert part['schema'] == 'analysis-rating-check@1' and set(part['data']) == {'summary', 'quarters', 'scatter', 'fit', 'dates', 'params'}
+    assert (tmp_path / 'site/v1/analysis/es/csv/rating-check.csv').exists() and (tmp_path / 'site/v1/analysis/es/csv/rating-check-elections.csv').exists()
+    meta = writer.read_json(bundle.path_analysis('es', 'meta'))['data']
+    assert meta['params']['rating_check'] is True and 'rating_check' in meta['seconds']
+    assert part['data']['params']['n_scopes'] == 2 and part['data']['params']['tau'] == 0.01
+    out = publish.publish_analysis('es-md', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov, rating_check=True)
+    assert out['rating_check'] is False and not writer.exists(bundle.path_analysis('es-md', 'rating-check'))
+    meta = writer.read_json(bundle.path_analysis('es-md', 'meta'))['data']
+    assert meta['params']['rating_check'] is False and 'rating_check' not in meta['seconds']
+
+
+def test_publish_analysis_keeps_the_previous_rating_check_when_not_requested(tmp_path):
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov, rating_check=True)
+    before = writer.read_json(bundle.path_analysis('es', 'rating-check'))
+    csvs = [(tmp_path / 'site/v1/analysis/es/csv' / f'{name}.csv').read_bytes()
+            for name in ('rating-check', 'rating-check-elections')]
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov)
+    assert writer.read_json(bundle.path_analysis('es', 'rating-check')) == before
+    assert csvs == [(tmp_path / 'site/v1/analysis/es/csv' / f'{name}.csv').read_bytes()
+                    for name in ('rating-check', 'rating-check-elections')]
+    assert writer.read_json(bundle.path_analysis('es', 'meta'))['data']['params']['rating_check'] is False
+
+
+def test_publish_analysis_failing_rating_check_leaves_the_published_analysis_untouched(tmp_path):
+    """La validación del rating se calcula antes de la primera escritura: si `rating_check_data` falla, todas las
+    partes publicadas antes (JSON y CSV) y `meta.json` quedan byte a byte como estaban."""
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov, rating_check=True)
+    root = tmp_path / 'site/v1/analysis/es'
+    before = {p.relative_to(root): p.read_bytes() for p in sorted(root.rglob('*')) if p.is_file()}
+    assert {'meta.json', 'rating-check.json', 'house-effects.json'} <= {str(p) for p in before}
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)  # una reescritura cambiaría `generated_at`
+    broken = FakeComputer(fail_rating_check=RuntimeError('server closed the connection'))
+    with pytest.raises(RuntimeError, match='server closed'):
+        publish.publish_analysis('es', writer, computer=broken, stats=fake_stats, prov=fake_prov, rating_check=True)
+    assert {p.relative_to(root): p.read_bytes() for p in sorted(root.rglob('*')) if p.is_file()} == before
+
+
+def test_publish_analysis_computes_the_simple_average_once(tmp_path, monkeypatch):
+    """El promedio simple por elección se calcula una vez y sirve al resumen y al CSV `rating-check-elections`."""
+    calls = []
+    real = publish.analysis.simple_average_errors
+
+    def counted(polls, *args, **kwargs):
+        calls.append(len(polls))
+        return real(polls, *args, **kwargs)
+
+    monkeypatch.setattr(publish.analysis, 'simple_average_errors', counted)
+    monkeypatch.setattr('mtpy.lib.rating_check.simple_average_errors', counted)
+    publish.publish_analysis('es', make_writer(tmp_path), computer=FakeComputer(), stats=fake_stats, prov=fake_prov,
+                             rating_check=True)
+    assert len(calls) == 1
+
+
+def test_publish_analysis_rating_check_publishes_the_skills_without_the_mses(tmp_path):
+    """Los MSE (del orden de 1e-4 en LOR²) no se publican: `skill` lleva sólo `skill_prior`, `skill_rating` y `n`."""
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov, rating_check=True)
+    summary = writer.read_json(bundle.path_analysis('es', 'rating-check'))['data']['summary']
+    assert all(set(summary[p]['skill']) == {'skill_prior', 'skill_rating', 'n'} for p in summary)
+
+
+def test_export_rating_check_scales_the_pairs_and_turns_nan_into_null():
+    """Los pares van al CSV con los diferenciales y los ratings ×100 a 2 decimales; las elecciones a 3 decimales; el
+    `data` sale sin NaN ni infinitos (null en el JSON), también dentro de dicts y listas."""
+    source = synthetic_rating_check()
+    elections = pd.DataFrame({'event_scope': ['es'], 'event_date': ['2019-11-10'], 'population': ['generales'],
+                              'n_polls': [3], 'n_pollsters': [3], 'mae_flat': [1.23456], 'mae_rated': [1.11111],
+                              'diff': [-0.12345]})
+    data = {'summary': {'all': {'spearman': {'value': float('nan'), 'lo': float('inf'), 'n': 0}}},
+            'quarters': [{'q': 1, 'mean': float('nan')}], 'scatter': [], 'fit': None, 'dates': {}, 'params': {}}
+    out, tables = publish.export_rating_check(data, source['pairs'], elections)
+    assert out['summary']['all']['spearman'] == {'value': None, 'lo': None, 'n': 0}
+    assert out['quarters'] == [{'q': 1, 'mean': None}] and out['fit'] is None
+    pairs = tables['rating-check']
+    assert list(pairs.columns) == ['event_scope', 'event_date', 'population', 'pollster', 'rating', 'rating_adj',
+                                   'd_prev', 'd_obs', 'error_avg', 'num_events_w', 'quality', 'n_polls',
+                                   'n_event_polls']
+    first = pairs.iloc[0]
+    assert first['rating'] == 80.0 and first['rating_adj'] == 79.0 and first['quality'] == 75.0
+    assert first['d_obs'] == -1.0 and first['d_prev'] == -1.2 and first['error_avg'] == 2.0
+    assert pairs['d_prev'].isna().sum() == 2
+    assert tables['rating-check-elections'].to_dict(orient='records') == [
+        {'event_scope': 'es', 'event_date': '2019-11-10', 'population': 'generales', 'n_polls': 3, 'n_pollsters': 3,
+         'mae_flat': 1.235, 'mae_rated': 1.111, 'diff': -0.123}]
 
 
 def test_publish_analysis_overwrites_and_keeps_the_old_meta_on_failure(tmp_path, monkeypatch):

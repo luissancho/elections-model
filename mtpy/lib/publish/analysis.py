@@ -8,7 +8,11 @@ from .. import bundle
 from ..bundle import BundleWriter
 from ..computer import Computer
 from ..forecaster import NoPollsError
+from ..rating_check import rating_check_summary, simple_average_errors
 from .common import db_stats, NothingToPublish, provenance, REPO_ROOT, round_cols, _iso_dates
+
+
+NATIONAL_SCOPE = 'es'
 
 
 ANALYSIS_HE_COLUMNS = ['pollster', 'name', 'n_events', 'hist', 'trend', 'cycle', 'n_cycle']
@@ -28,6 +32,14 @@ ERROR_DATA_COLUMNS = ['date', 'pollster', 'party', 'regional', 'weeks', 'weight'
 
 
 POLL_ERRORS_PARAMS = {'bmap': 'vs', 'drange': (6, 42), 'n_last': 1}
+
+
+RATING_CHECK_COLUMNS = ['event_scope', 'event_date', 'population', 'pollster', 'rating', 'rating_adj', 'd_prev',
+                        'd_obs', 'error_avg', 'num_events_w', 'quality', 'n_polls', 'n_event_polls']
+
+
+RATING_CHECK_ELECTIONS_COLUMNS = ['event_scope', 'event_date', 'population', 'n_polls', 'n_pollsters', 'mae_flat',
+                                  'mae_rated', 'diff']
 
 
 def export_analysis_house_effects(table: pd.DataFrame, parties: Sequence[str], blocks: Sequence[str]) -> tuple:
@@ -139,8 +151,46 @@ def export_error_data(frame: pd.DataFrame) -> tuple:
     return {'rows': table.to_dict(orient='records')}, table
 
 
+def export_rating_check(data: dict, pairs: pd.DataFrame,
+                        elections: pd.DataFrame) -> tuple[dict, dict[str, pd.DataFrame]]:
+    """Export the validation of the pollster rating (``rating_check.rating_check_summary``) and its two tables.
+
+    Parameters
+    ----------
+    data : dict
+        Result of ``rating_check_summary``: ``summary``, ``quarters``, ``scatter``, ``fit``, ``dates`` and
+        ``params``. It may hold NaN or infinite floats (an empty population, a measure without enough pairs).
+    pairs : pandas.DataFrame
+        The ``pairs`` frame of ``Computer.rating_check_data`` (one row per pollster and election, differentials
+        in LOR and ratings in 0-1).
+    elections : pandas.DataFrame
+        Result of ``rating_check.simple_average_errors`` (one row per election with the simple average).
+
+    Returns
+    -------
+    tuple of (dict, dict of str to pandas.DataFrame)
+        Data for the ``analysis-rating-check`` schema, with every NaN or infinite float turned into ``None`` at
+        any depth (``bundle.jsonable``), and the CSV twins by name: ``rating-check`` (the pairs, columns
+        ``RATING_CHECK_COLUMNS``; the differentials ``d_prev`` and ``d_obs`` and the ratings ``rating``,
+        ``rating_adj`` and ``quality`` ×100, rounded like ``error_avg`` and ``num_events_w`` to ``PCT_DECIMALS``;
+        counts are integers) and
+        ``rating-check-elections`` (columns ``RATING_CHECK_ELECTIONS_COLUMNS``; errors rounded to
+        ``PROB_DECIMALS``). Missing values stay as empty cells in the CSV.
+    """
+    table = pairs.reindex(columns=RATING_CHECK_COLUMNS).copy()
+    scaled = ['rating', 'rating_adj', 'd_prev', 'd_obs', 'quality']
+    table[scaled] = table[scaled].astype(float) * 100
+    table = round_cols(table, pct=scaled + ['error_avg', 'num_events_w'])
+    table[['n_polls', 'n_event_polls']] = table[['n_polls', 'n_event_polls']].astype('Int64')
+    averages = elections.reindex(columns=RATING_CHECK_ELECTIONS_COLUMNS).copy()
+    averages = round_cols(averages, prob=('mae_flat', 'mae_rated', 'diff'))
+    averages[['n_polls', 'n_pollsters']] = averages[['n_polls', 'n_pollsters']].astype('Int64')
+    return bundle.jsonable(data), {'rating-check': table, 'rating-check-elections': averages}
+
+
 def export_analysis_meta(scope: str, event_date: str, events: Sequence[str], n_pollsters: int, params: dict,
-                         prov: dict, seconds: dict, house_effects: bool = True) -> dict:
+                         prov: dict, seconds: dict, house_effects: bool = True,
+                         rating_check: Optional[bool] = None) -> dict:
     """Build the ``analysis-meta`` document describing how and when the analysis of a scope was produced.
 
     Parameters
@@ -161,27 +211,37 @@ def export_analysis_meta(scope: str, event_date: str, events: Sequence[str], n_p
         Seconds spent in each step.
     house_effects : bool
         Whether the analysis includes the house effects (false when the current cycle has no polls).
+    rating_check : bool, optional
+        Whether this publication wrote the ``rating-check`` part; recorded as ``params.rating_check`` (a copy of
+        ``params``) when given, and ``params`` is left as is otherwise.
 
     Returns
     -------
     dict
         Data for the ``analysis-meta`` schema.
     """
+    if rating_check is not None:
+        params = {**params, 'rating_check': bool(rating_check)}
     return {'scope': scope, 'event_date': event_date, 'events': list(events), 'n_pollsters': int(n_pollsters),
             'params': params, 'commit': prov['commit'], 'dirty': bool(prov['dirty']), 'versions': prov['versions'],
             'seconds': seconds, 'house_effects': bool(house_effects)}
 
 
 def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callable] = None,
-                     stats: Optional[Callable] = None, prov: Optional[Callable] = None, verbose: int = 0) -> dict:
+                     stats: Optional[Callable] = None, prov: Optional[Callable] = None, verbose: int = 0,
+                     rating_check: bool = False) -> dict:
     """Compute the houses analysis of a scope and write it into the bundle, overwriting the previous one.
 
-    The parts are written in the order ``house-effects``, ``herding``, ``poll-errors`` and ``error-data``
-    (each JSON with its CSV twins) and ``meta`` last. When the current event has no polls the house effects
-    cannot be fitted: the other parts, which describe past elections, are still published, a stale
-    ``house-effects`` of the scope is removed and ``meta.house_effects`` is false. A failure halfway leaves
-    the previous ``meta.json`` in place, (and the analysis it describes, partly overwritten). Neither the manifest nor the runs are
-    touched.
+    The parts are written in the order ``house-effects``, ``herding``, ``poll-errors``, ``error-data`` and, only
+    with ``rating_check`` and the national scope, ``rating-check`` (each JSON with its CSV twins) and ``meta`` last.
+    The ``rating-check`` part validates the pollster rating over the elections of every scope
+    (``Computer.rating_check_data('all')`` and ``rating_check.rating_check_summary``); a publication that does not
+    write it leaves a previous one in place, and ``meta.params.rating_check`` says whether this one wrote it. When
+    the current event has no polls the house effects cannot be fitted: the other parts, which describe past
+    elections, are still published, a stale ``house-effects`` of the scope is removed and ``meta.house_effects`` is
+    false. The ``rating-check`` part is computed before the first write, so a failure there leaves the published
+    analysis untouched; a later failure halfway leaves the previous ``meta.json`` in place (and the analysis it
+    describes, partly overwritten). Neither the manifest nor the runs are touched.
 
     The current event is the last election of the computer (``event_dates[-1]``, the next event when the
     scope has one, as in ``Computer.print_house_effects``), and its ``vs`` blocks and ``main`` parties
@@ -198,12 +258,15 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
         ``meta.params`` the polls of the current event in the database and the date of the latest one.
     verbose : int
         Computer verbosity.
+    rating_check : bool, default False
+        Write the ``rating-check`` part too. Only the national scope (``NATIONAL_SCOPE``) has it: on any other
+        scope the flag is ignored, without error.
 
     Returns
     -------
     dict
-        ``{'scope', 'event_date', 'n_pollsters', 'seconds', 'house_effects'}`` (the last, whether the house effects
-        were published).
+        ``{'scope', 'event_date', 'n_pollsters', 'seconds', 'house_effects', 'rating_check'}`` (the last two,
+        whether the house effects and the ``rating-check`` part were published).
 
     Raises
     ------
@@ -229,6 +292,17 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
+    checked = bool(rating_check) and scope == NATIONAL_SCOPE
+    if checked:
+        # The slowest step, against the database: computed before the first write, so that a failure here
+        # leaves the published analysis untouched
+        source = comp.rating_check_data('all')
+        elections = simple_average_errors(source['polls'])
+        summary_check = rating_check_summary(source['pairs'], source['polls'], comp.bias_dev_tau,
+                                             comp.bias_dev_sigma, {'n_scopes': source['n_scopes']},
+                                             elections=elections)
+        check_data, check_frames = export_rating_check(summary_check, source['pairs'], elections)
+        seconds['rating_check'] = lap()
     try:
         table = comp.print_house_effects()  # fits an average of the current event: no polls is a NoPollsError
     except NoPollsError:
@@ -261,6 +335,8 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     data, frame = export_error_data(comp.get_error_estimator_data())
     write('error-data', data, {'error-data': frame})
     seconds['error_data'] = lap()
+    if checked:
+        write('rating-check', check_data, check_frames)
 
     db_polls, db_last_poll = (stats or db_stats)(scope, event_date)
     params = {**POLL_ERRORS_PARAMS, 'drange': list(POLL_ERRORS_PARAMS['drange']), 'main': main,
@@ -273,7 +349,7 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     seconds = {step: round(value, 1) for step, value in seconds.items()}
     prov = prov or (lambda: provenance(cwd=REPO_ROOT))
     meta = export_analysis_meta(scope, event_date, comp.event_dates, n_pollsters, params, prov(), seconds,
-                                 house_effects=effects is not None)
+                                 house_effects=effects is not None, rating_check=checked)
     write('meta', meta, {})
     return {'scope': scope, 'event_date': event_date, 'n_pollsters': n_pollsters, 'seconds': seconds,
-            'house_effects': effects is not None}
+            'house_effects': effects is not None, 'rating_check': checked}

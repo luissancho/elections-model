@@ -96,7 +96,8 @@ class Publish(SequenceJob):
 
     def run(self, what=('forecast',), scopes=('es',), event_date=None, n_sim=1000, seed=42, drange=6, max_fc=10,
             alpha=0.05, correctors=None, freeze=None, run=None, dry_run=False, force=False, fs=None, today=None,
-            backfill=None, source=None, study=None, register=False, verbose=1, stop_on_error=None, **kwargs):
+            backfill=None, source=None, study=None, register=False, rating_check=False, verbose=1,
+            stop_on_error=None, **kwargs):
         """
         Run the requested publication actions.
 
@@ -160,6 +161,10 @@ class Publish(SequenceJob):
         register : bool, default False
             Register the prediction of the study (``publish.publish_study``); with ``force``, replace an existing
             registration.
+        rating_check : bool, default False
+            With ``analysis``, also write the ``rating-check`` part of the national analysis (the validation of the
+            pollster rating over the elections of every scope; ``publish.publish_analysis``); ignored on the other
+            scopes. Without it a previous ``rating-check`` part is left in place.
         verbose : int, default 1
             Verbosity of the console output: 0, only the header of the action and the final summary; 1, also
             ``[i/n] scope: empezando``, the result line and the model warnings of each scope as they happen;
@@ -228,7 +233,7 @@ class Publish(SequenceJob):
         super().run(select=select, chunks=targets, stop_on_error=stop_on_error, fs=fs, dry_run=dry_run, today=today,
                     days=days, replace=replace, event_date=event_date, force=force, n_sim=n_sim, seed=seed,
                     drange=drange, max_fc=max_fc, alpha=alpha, correctors=correctors, freeze=freeze, run=run,
-                    source=source, study=study, register=register, verbose=verbose)
+                    source=source, study=study, register=register, rating_check=rating_check, verbose=verbose)
 
         results = {}
         for (key, chunk), result in self.results.items():

@@ -86,6 +86,9 @@ def test_publish_analysis_against_the_database(app, tmp_path):
     out = publish.publish_analysis('es', writer)
     parts = {}
     for part in bundle.ANALYSIS_PARTS:
+        if part == 'rating-check':  # only with rating_check
+            assert not out['rating_check'] and not writer.exists(bundle.path_analysis('es', part))
+            continue
         env = writer.read_json(bundle.path_analysis('es', part))
         bundle.validate(bundle.ANALYSIS_SCHEMAS[part], env)
         parts[part] = env['data']

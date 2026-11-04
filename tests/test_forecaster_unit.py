@@ -572,6 +572,26 @@ def test_weight_ratings_override_replaces_the_stored_weight(monkeypatch):
     assert (stored.loc[stored.pollster.notnull(), 'weight_rating'] == 9.0).all()
 
 
+def test_flat_weight_ratings_sets_every_poll_to_one(monkeypatch):
+    """`weight_ratings='flat'`: 1 en todos los sondeos (también en la casa B, que sin él llevaría su calidad previa);
+    los resultados oficiales no se tocan y `weight` = over · sample."""
+    build, _ = _weights_builder(monkeypatch)
+    series = build('flat').series_raw
+    polls = series.loc[series.pollster.notnull()]
+    assert polls['weight_rating'].tolist() == [1.0, 1.0, 1.0]
+    assert polls['weight'].tolist() == pytest.approx([0.5, 0.5, 3.0])
+    flat_results = series.loc[series.pollster.isnull(), 'weight_rating']
+    none_results = build(None).series_raw.loc[lambda s: s.pollster.isnull(), 'weight_rating']
+    pd.testing.assert_series_equal(flat_results, none_results)
+
+
+def test_unknown_weight_ratings_string_is_rejected(monkeypatch):
+    """Una cadena distinta de 'flat' no es un valor válido de `weight_ratings`."""
+    build, _ = _weights_builder(monkeypatch)
+    with pytest.raises(ValueError, match="weight_ratings"):
+        build('other')
+
+
 # --- Sondeos futuros (parte A): pesos recalculados en memoria (`weight_overrides`) ---
 
 def test_apply_weight_overrides_replaces_only_the_given_cells_of_polls():

@@ -71,7 +71,7 @@ class Simulator(Core):
         composition: Optional[float | str] = None,
         regional_noise: bool = True,
         min_events: Optional[int] = None,
-        weight_ratings: Optional[pd.Series] = None,
+        weight_ratings: Optional[pd.Series | str] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
         seed: Optional[int] = None,
         verbose: int = 0,
@@ -180,9 +180,10 @@ class Simulator(Core):
             scope (`es`). `None` (default) always uses the parent: the own estimators of the regional scopes
             did not improve the backtest (M11 validation). A scope without parent always uses its own
             elections. See `estimator_scope`.
-        weight_ratings : pd.Series, optional
+        weight_ratings : pd.Series or str, optional
             For the backtest: ratings recomputed in memory, indexed by (`event_date`, `pollster_id`), that
-            replace the stored `weight_rating` of the polls (see `Forecaster`). `None` (default) uses the stored ones.
+            replace the stored `weight_rating` of the polls (see `Forecaster`); the string `'flat'` weighs every poll with
+            rating 1. `None` (default) uses the stored ones.
         weight_overrides : pd.DataFrame, optional
             Weights of the polls recomputed in memory, indexed by (`date`, `pollster_id`, `sponsor_id`), that
             replace the stored `weight_over`, `weight_sample` or `weight_rating` of the matching polls (see

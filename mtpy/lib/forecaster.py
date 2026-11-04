@@ -9,7 +9,7 @@ import warnings
 from scipy.stats import chi2
 from tqdm import tqdm
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from typing_extensions import Self
 
 from ..core.app import Core
@@ -109,7 +109,7 @@ class Forecaster(Core):
         he_params: Optional[dict[str, Any]] = None,
         dispersion: bool = True,
         disp_params: Optional[dict[str, Any]] = None,
-        weight_ratings: Optional[pd.Series] = None,
+        weight_ratings: Optional[Union[pd.Series, str]] = None,
         weight_overrides: Optional[pd.DataFrame] = None,
         verbose: int = 0,
         path: Optional[str] = None,
@@ -171,8 +171,10 @@ class Forecaster(Core):
             samples allow (herding) also counts less (M13, `disp_params['herding']`). See `fit_dispersion`.
         disp_params : dict, optional
             Parameters of the dispersion measure, see `set_disp_params`.
-        weight_ratings : pd.Series, optional
-            For the backtest: the `weight_rating` of each pollster in each election, indexed by
+        weight_ratings : pd.Series or 'flat', optional
+            For the backtest. `'flat'` gives every poll `weight_rating = 1` (no rating at all: the reference
+            of the rating validation); the official results are not touched.
+            Otherwise, the `weight_rating` of each pollster in each election, indexed by
             (`event_date`, `pollster_id`), recomputed in memory (`backtest.rating_overrides`). It replaces the
             `weight_rating` stored with the polls: the rating of each poll is the one of its own `event_date`,
             computed with previous elections only (it does not look into the future). Polls of a pollster
@@ -552,7 +554,11 @@ class Forecaster(Core):
         # same scale as `weight_rating` (see `Computer.pollster_ratings`)
         quality = self.pollsters.set_index('id').quality.astype(float).div(100)
         weight_quality = np.log1p(quality) / np.log1p(quality.mean())
-        if self.weight_ratings is not None:
+        if isinstance(self.weight_ratings, str):
+            if self.weight_ratings != 'flat':
+                raise ValueError("weight_ratings: expected a Series, None or 'flat'")
+            series.loc[series.pollster.notnull(), 'weight_rating'] = 1.0
+        elif self.weight_ratings is not None:
             series.loc[series.pollster.notnull(), 'weight_rating'] = self.override_weight_rating(series)
         series['weight_rating'] = series.weight_rating.fillna(series.pollster_id.map(weight_quality))
         if self.weight_overrides is not None:

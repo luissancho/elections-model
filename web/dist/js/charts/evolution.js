@@ -1,16 +1,35 @@
 // Evolution of the publications: what the model published each day (the vote or the seats of each party, or of
-// each block), one point per day joined by a line, the retrospective runs hollow. A sibling of the poll average
+// each block), one point per day joined by a line, hollow where the figure shown changed from the day before (Luis,
+// 2026-11-04: live and retrospective runs alike). A sibling of the poll average
 // (`series.js`): same height on the page, a hidden legend driven by the pill legend (`pages/evolution-wire.js`)
 // and a vertical axis fitted to the names shown with the rule of the average (ticks every `AXIS_STEP` points on
 // multiples of it; every `SEATS_STEP` seats, Luis 2026-10-30), so marking a single party zooms on its changes.
 import {axisLabelStyle, baseOption, escapeHtml, mountChart, THEME, tooltipStyle} from './base.js';
 import {AXIS_STEP, axisBounds, axisPctLabel, dayTime, isoDay} from './series.js';
 import {OTHERS_COLOR} from '../catalog.js';
-import {fmtDate, fmtDateShort, fmtDateTime, fmtPct} from '../format.js';
+import {fmtBadge, fmtDate, fmtDateShort, fmtPct} from '../format.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 /** Tick step of the seats axis: the whole chamber keeps about as many lines as the vote axis (Luis, 2026-10-30). */
 export const SEATS_STEP = 20;
+/** Decimals of the figure shown of each field: the vote to one decimal, whole seats. */
+export const FIELD_DIGITS = {pct: 1, seats: 0};
+
+/**
+ * The figure shown of a value: rounded to the decimals of its field (`FIELD_DIGITS`), as the tooltip and the table
+ * write it. The donuts, the arrows and the table of changes compare these, so a drift below the rounding is no change.
+ *
+ * @param {(number|null|undefined)} value the value
+ * @param {string} field party field (`pct` or `seats`)
+ * @returns {(number|null)} the rounded value, null when missing
+ */
+export function shownValue(value, field) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null;
+  }
+  const scale = 10 ** (FIELD_DIGITS[field] ?? 0);
+  return Math.round(value * scale) / scale;
+}
 
 /**
  * Day of a run: `as_of` (the day the model read) or, for headlines without it, the day of `run_at`.
@@ -22,18 +41,14 @@ export function runDay(run) {
   return run.as_of || String(run.run_at).slice(0, 10);
 }
 
-/** Whether `run` replaces `kept` on the same day: a live run beats a retrospective one, then the later `run_at`. */
+/** Whether `run` replaces `kept` on the same day: the later `run_at`, live or retrospective (Luis, 2026-11-04). */
 function beats(run, kept) {
-  const live = !run.backfill;
-  if (live !== !kept.backfill) {
-    return live;
-  }
   return String(run.run_at) > String(kept.run_at);
 }
 
 /**
- * One run per day, ascending by day: the live run over the retrospective one (`backfill`) and, among several of
- * the same kind, the last `run_at`. The original objects, not copies.
+ * One run per day, ascending by day: the last `run_at` of the day, whether live or retrospective (`backfill`).
+ * The original objects, not copies.
  *
  * @param {object[]} runs `runs` list of the history part
  * @returns {object[]} the runs kept
@@ -72,8 +87,9 @@ export function evolutionPoints(runs, parties, field = 'pct') {
 }
 
 /**
- * ECharts option of the evolution: a line per name over the daily runs, the retrospective points hollow, an
- * axis tooltip per day and the slider of the zoom under the chart.
+ * ECharts option of the evolution: a line per name over the daily runs, hollow where the figure shown
+ * (`shownValue`) changed from the previous point of the name, an axis tooltip per day with the arrow of each change
+ * and the slider of the zoom under the chart.
  *
  * @param {object} data `runs` (daily runs, `dailyRuns`), `parties` (names, legend order), `selected` (names shown
  *   at first; all when null), `colors` ({name: colour}), `fullnames` ({name: full name}, for the tooltip),
@@ -87,14 +103,23 @@ export function evolutionOption({
   legend = 'hidden',
 } = {}) {
   const colorOf = (name) => colors[name] || OTHERS_COLOR;
+  const digits = FIELD_DIGITS[field] ?? 0;
+  // change of the figure shown from the previous point of the name, by `name|run index` (the tooltip reads it)
+  const changes = new Map();
   const series = evolutionPoints(runs, parties, field).map((entry) => ({
     type: 'line',
     name: entry.name,
-    data: entry.points.map((point) => (runs[point[2]].backfill ? {
-      value: point,
-      symbolSize: 8,
-      itemStyle: {color: '#fff', borderColor: colorOf(entry.name), borderWidth: 2},
-    } : point)),
+    data: entry.points.map((point, i) => {
+      if (i === 0) {
+        return point;
+      }
+      const delta = shownValue(point[1], field) - shownValue(entry.points[i - 1][1], field);
+      if (Math.abs(delta) < 0.5 * 10 ** -digits) {
+        return point;
+      }
+      changes.set(`${entry.name}|${point[2]}`, delta);
+      return {value: point, symbolSize: 8, itemStyle: {color: '#fff', borderColor: colorOf(entry.name), borderWidth: 2}};
+    }),
     // a filled circle: the default `emptyCircle` strokes with `color`, so a white hollow point would vanish
     symbol: 'circle',
     showSymbol: true,
@@ -106,18 +131,20 @@ export function evolutionOption({
   const hidden = legend === 'hidden';
   const step = field === 'seats' ? SEATS_STEP : AXIS_STEP;
 
-  /** Box of a day: the run (its time, or its day with the retrospective tag) and every name shown, highest first. */
+  /** Box of a day: its date and every name shown, highest first, with the arrow of its change when it changed. */
   function tooltip(params) {
     const items = (Array.isArray(params) ? params : [params]).filter((item) => Array.isArray(item.value));
     if (!items.length) {
       return '';
     }
     const run = runs[items[0].value[2]];
-    const head = run.backfill ? `${fmtDate(runDay(run))} · estimación retrospectiva` : fmtDateTime(run.run_at);
-    const lines = [`<strong>${escapeHtml(head)}</strong>`];
+    const lines = [`<strong>${escapeHtml(fmtDate(runDay(run)))}</strong>`];
     for (const item of [...items].sort((a, b) => b.value[1] - a.value[1])) {
       const name = fullnames[item.seriesName] || item.seriesName;
-      lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}`);
+      const delta = changes.get(`${item.seriesName}|${item.value[2]}`);
+      const badge = delta === undefined ? null : fmtBadge(delta, digits);
+      const arrow = badge ? ` <span class="dlt ${badge.dir}">${escapeHtml(badge.text)}</span>` : '';
+      lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}${arrow}`);
     }
     return lines.join('<br>');
   }

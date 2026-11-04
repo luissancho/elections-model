@@ -353,6 +353,31 @@ def synthetic_cycle():
     return frame.set_index(['event_date', 'date', 'pollster_id', 'sponsor_id']).sort_index()
 
 
+RATING_HOUSES = {'CIS': (1, .8), 'GAD3': (2, .6), '40dB': (3, .4)}  # casa -> (pollster_id, rating)
+RATING_ELECTIONS = [('es', '2019-11-10', 'generales'), ('es-md', '2021-05-04', 'autonomicas')]
+
+
+def synthetic_rating_check():
+    """Lo que devuelve `Computer.rating_check_data`: pares casa-elección y sondeos de la última campaña de tres casas
+    en dos elecciones (una general y una autonómica), con los diferenciales en LOR y los ratings en 0-1; el
+    diferencial crece al bajar el rating y `40dB` no tiene rating previo (`d_prev` NaN)."""
+    pairs, polls = [], []
+    for e, (scope, date, population) in enumerate(RATING_ELECTIONS):
+        for name, (pid, rating) in RATING_HOUSES.items():
+            pairs.append({
+                'event_scope': scope, 'event_date': date, 'population': population, 'pollster_id': pid,
+                'pollster': name, 'd_obs': (pid - 2) * .01 + e * .001, 'error_avg': 1. + pid + e, 'n_polls': 4,
+                'n_event_polls': 12, 'rating': rating, 'rating_adj': rating - .01,
+                'd_prev': np.nan if name == '40dB' else (pid - 2) * .012, 'num_events_w': 2. + e,
+                'quality': rating - .05, 'weight_rating': rating,
+            })
+            for party, error in (('X', pid - 2. + e), ('Y', 2. - pid)):
+                polls.append({'event_scope': scope, 'event_date': date, 'population': population, 'pollster_id': pid,
+                              'pollster': name, 'party': party, 'error': error, 'weight_over': 1.,
+                              'weight_sample': float(pid), 'weight_rating': rating})
+    return {'pairs': pd.DataFrame(pairs), 'polls': pd.DataFrame(polls), 'n_scopes': 2, 'seconds': 0.1}
+
+
 CYCLE_SEATS = {('2023-07-16', 2, 0): {'PP': [135, 140], 'PSOE': [120, 120]}}
 
 
@@ -360,11 +385,13 @@ class FakeComputer:
     """Fábrica con la firma `Computer(scope=..., path=...)`: devuelve un Computer sintético con `scope`,
     `event_dates`, `event_params` (bloques `vs` y partidos `main` del ciclo, como los lee el real) y `names`,
     `build_series` (devuelve el propio objeto), `filter_polls` (`synthetic_cycle`) y los cuatro resúmenes de
-    `synthetic_analysis`; anota las llamadas y, con `fail`, lanza esa excepción al construir; con
-    `fail_effects`, la lanza `print_house_effects` (como el real cuando el evento en curso no tiene sondeos)."""
+    `synthetic_analysis`, `rating_check_data` (`synthetic_rating_check`) con `bias_dev_tau` y `bias_dev_sigma`; anota
+    las llamadas y, con `fail`, lanza esa excepción al construir; con `fail_effects`, la lanza `print_house_effects`
+    (como el real cuando el evento en curso no tiene sondeos); con `fail_rating_check`, la lanza `rating_check_data`
+    (como un corte de la conexión con la base en el paso más lento)."""
 
-    def __init__(self, fail=None, fail_effects=None):
-        self.calls, self.fail, self.fail_effects = [], fail, fail_effects
+    def __init__(self, fail=None, fail_effects=None, fail_rating_check=None):
+        self.calls, self.fail, self.fail_effects, self.fail_rating_check = [], fail, fail_effects, fail_rating_check
 
     def __call__(self, scope, path=None, **kwargs):
         if self.fail is not None:
@@ -404,8 +431,15 @@ class FakeComputer:
                 raise self.fail_effects
             return frames.house_effects.copy()
 
+        def rating_check_data(scopes='all', **kw):
+            self.calls.append(('rating_check_data', scopes, kw))
+            if self.fail_rating_check is not None:
+                raise self.fail_rating_check
+            return synthetic_rating_check()
+
         comp.print_house_effects = print_house_effects
         comp.get_error_estimator_data = lambda **kw: frames.error_data.copy()
+        comp.rating_check_data, comp.bias_dev_tau, comp.bias_dev_sigma = rating_check_data, .01, .014
         return comp
 
 
