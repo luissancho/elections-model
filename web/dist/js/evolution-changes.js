@@ -9,11 +9,6 @@ import {fmtBadge, fmtDate, fmtDateShort, fmtPct} from './format.js';
 const DAY_MS = 24 * 3600 * 1000;
 const WEEK_DAYS = 7;
 
-/** ISO date of the browser's local day now (`isoDay` rounds to the nearest midnight, so it gets the day's own). */
-function localToday() {
-  return isoDay(new Date(Date.now()).setHours(0, 0, 0, 0));
-}
-
 /** The value of `name` in the `nowcast` headline of `run`, null when missing. */
 function valueOf(run, name, field) {
   const party = ((run.nowcast || {}).parties || []).find((row) => row.name === name);
@@ -28,13 +23,11 @@ function valueOf(run, name, field) {
  * @param {object[]} runs daily runs of the view (`dailyRuns`), ascending by day
  * @param {string[]} names party or block names, in legend order
  * @param {string} [field='pct'] party field (`pct` or `seats`)
- * @param {string} [today] ISO date of today (the browser's local day), to title the first change column «Hoy» (else
- *   «1 día»)
- * @returns {object|null} `{days: {last, previous, week, start}, todayLabel, rows: [{name, value, day, week, start}]}`
+ * @returns {object|null} `{days: {last, previous, week, start}, rows: [{name, value, day, week, start}]}`
  *   (`week` null without a day a week back; a change null without a value on either day), or null with fewer than
  *   two days
  */
-export function evolutionChanges(runs, names, field = 'pct', today = localToday()) {
+export function evolutionChanges(runs, names, field = 'pct') {
   if (!runs || runs.length < 2) {
     return null;
   }
@@ -59,35 +52,32 @@ export function evolutionChanges(runs, names, field = 'pct', today = localToday(
   });
   return {
     days: {last, previous: runDay(runs[runs.length - 2]), week: weekRun ? runDay(weekRun) : null, start: runDay(startRun)},
-    // «Hoy» only when the last day is today; otherwise «1 día», not the date already heading the figure column
-    todayLabel: last === today ? 'Hoy' : '1 día',
     rows,
   };
 }
 
 /**
  * HTML of the table of changes (`evolutionChanges`): a site table with the name (dot and full name in the title),
- * the figure of the last day in bold and the arrows of the changes (`.dlt`), one row per name with `data-name`,
- * hidden when not in `shown`. Without a day a week back the «7 días» column is left out.
+ * the figure of the last day in bold and the arrows of the changes (`.dlt`) under the fixed headers «vs ayer», «vs -7d»
+ * and «vs 5-oct» (Luis, 2026-11-04), one row per name with `data-name`: every name of the view, whatever the legend
+ * shows. Without a day a week back the «vs -7d» column is left out.
  *
  * @param {object} changes `evolutionChanges` result
  * @param {object} view `colors` and `fullnames` by name
- * @param {object} [options] `field` (`pct` or `seats`), `formatter` (value → text) and `shown` (names shown; all
- *   when null)
+ * @param {object} [options] `field` (`pct` or `seats`) and `formatter` (value → text)
  * @returns {string} the `<table>` markup
  */
-export function changesTableHtml(changes, view, {field = 'pct', formatter = fmtPct, shown = null} = {}) {
+export function changesTableHtml(changes, view, {field = 'pct', formatter = fmtPct} = {}) {
   const digits = FIELD_DIGITS[field] ?? 0;
   const {days} = changes;
   const columns = [
-    {key: 'day', label: changes.todayLabel, day: days.previous},
-    ...(days.week ? [{key: 'week', label: `${WEEK_DAYS} días`, day: days.week}] : []),
-    {key: 'start', label: `Desde ${fmtDateShort(days.start)}`, day: days.start},
+    {key: 'day', label: 'vs ayer', day: days.previous},
+    ...(days.week ? [{key: 'week', label: `vs -${WEEK_DAYS}d`, day: days.week}] : []),
+    {key: 'start', label: `vs ${fmtDateShort(days.start).replace(' ', '-')}`, day: days.start},
   ];
   const head = ['<th scope="col">Partido</th>', `<th scope="col">${escapeHtml(fmtDateShort(days.last))}</th>`,
     ...columns.map((col) => `<th scope="col" title="Frente al ${escapeHtml(fmtDate(col.day))}">${escapeHtml(col.label)}</th>`)];
   const body = changes.rows.map((row) => {
-    const hidden = shown && !shown.includes(row.name) ? ' hidden' : '';
     const color = (view.colors || {})[row.name] || '';
     const fullname = (view.fullnames || {})[row.name] || row.name;
     const cells = [
@@ -98,7 +88,7 @@ export function changesTableHtml(changes, view, {field = 'pct', formatter = fmtP
         return `<td><span class="dlt ${badge.dir}">${escapeHtml(badge.text)}</span></td>`;
       }),
     ];
-    return `<tr data-name="${escapeHtml(row.name)}"${hidden}>${cells.join('')}</tr>`;
+    return `<tr data-name="${escapeHtml(row.name)}">${cells.join('')}</tr>`;
   });
   return `<table><thead><tr>${head.join('')}</tr></thead><tbody>${body.join('')}</tbody></table>`;
 }

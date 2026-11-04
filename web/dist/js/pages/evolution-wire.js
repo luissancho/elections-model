@@ -59,7 +59,7 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
  * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the Partidos/Bloques radios
  * (`#evolution-view`, shown only when the scope has blocks), the pill legend (`#evolution-legend`), which selects
  * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`, hidden with fewer than
- * two days), whose rows follow the selection, and the download button (`#evolution-download`), which saves the
+ * two days), with every name of the view whatever the legend shows (Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the
  * chart as shown, with the table under it, as a signed image (`share.js`). Changing the view resets the selection.
  *
  * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
@@ -95,9 +95,6 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     };
   }
 
-  /** Names shown in the current view and selection. */
-  const shownNames = () => state.selected ?? views[state.view].defaults ?? views[state.view].parties;
-
   /** Fill the table of changes of the current view (empty and hidden with fewer than two days). */
   function fillChanges() {
     if (!changesEl) {
@@ -105,19 +102,8 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     }
     const current = views[state.view];
     const changes = evolutionChanges(current.runs, current.parties, field);
-    changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter, shown: shownNames()}) : '';
+    changesEl.innerHTML = changes ? changesTableHtml(changes, current, {field, formatter}) : '';
     changesEl.hidden = !changes;
-  }
-
-  /** Show only the rows of the table of the names shown. */
-  function markChanges() {
-    if (!changesEl) {
-      return;
-    }
-    const shown = shownNames();
-    for (const row of changesEl.querySelectorAll('tr[data-name]')) {
-      row.hidden = !shown.includes(row.dataset.name);
-    }
   }
 
   /** Draw the chart, fill its pill legend and its table and, the first time, listen to the legend selection. */
@@ -130,7 +116,6 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
         if (legendEl) {
           markLegend(legendEl, event.selected);
         }
-        markChanges();
       });
     }
     fillLegend(legendEl, views[state.view], state.selected, chart, initial.inks || {});

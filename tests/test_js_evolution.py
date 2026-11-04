@@ -197,15 +197,15 @@ def change_runs():
     return runs
 
 
-def changes(today='2026-10-15', runs=None, names=('PP', 'PSOE', 'SUMAR')):
-    return run_js('ch.evolutionChanges(%s, %s, "pct", "%s")' % (json.dumps(change_runs() if runs is None else runs), json.dumps(list(names)), today))
+def changes(runs=None, names=('PP', 'PSOE', 'SUMAR')):
+    return run_js('ch.evolutionChanges(%s, %s, "pct")' % (json.dumps(change_runs() if runs is None else runs), json.dumps(list(names))))
 
 
-def test_changes_compare_today_a_week_and_the_start():
+def test_changes_compare_yesterday_a_week_and_the_start():
     out = changes()
     # the day ≤ 15 − 7 is the 07: the 08 has no run
     assert out['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'week': '2026-10-07', 'start': '2026-10-05'}
-    assert out['todayLabel'] == 'Hoy'
+    assert set(out) == {'days', 'rows'}  # fixed headers (Luis, 2026-11-04): nothing depends on today
     rows = {row['name']: row for row in out['rows']}
     assert [row['name'] for row in out['rows']] == ['PP', 'PSOE', 'SUMAR']
     # PP 31,9 against 32,0 / 32,4 / 32,7
@@ -217,14 +217,10 @@ def test_changes_compare_today_a_week_and_the_start():
 def test_changes_missing_name_gives_a_dash():
     rows = {row['name']: row for row in changes()['rows']}
     assert rows['SUMAR'] == {'name': 'SUMAR', 'value': 7.2, 'day': 0, 'week': 0.2, 'start': None}  # no SUMAR on the 05
-    assert run_js('ch.evolutionChanges([], ["PP"], "pct", "2026-10-15")') is None
+    assert run_js('ch.evolutionChanges([], ["PP"], "pct")') is None
     html = table_html()
     sumar = html[html.index('data-name="SUMAR"'):]
     assert sumar[:sumar.index('</tr>')].endswith('<td><span class="dlt flat">–</span></td>')
-
-
-def test_changes_label_the_last_day_when_it_is_not_today():
-    assert changes(today='2026-10-16')['todayLabel'] == '1 día'
 
 
 def test_changes_with_a_single_day():
@@ -235,52 +231,35 @@ def test_changes_with_a_single_day():
 def test_changes_week_is_null_without_a_day_a_week_back():
     out = changes(runs=change_runs()[:3])  # 05, 06, 07: nothing on or before the 30-09
     assert out['days']['week'] is None and all(row['week'] is None for row in out['rows'])
-    assert '7 días' not in table_html(runs=change_runs()[:3])
+    assert 'vs -7d' not in table_html(runs=change_runs()[:3])
 
 
-def table_html(runs=None, shown=None, field='pct', formatter='fmtPct'):
+def table_html(runs=None, field='pct', formatter='fmtPct'):
     view = {'colors': {'PP': '#1e5aa8', 'PSOE': '#e3001b', 'SUMAR': '#e5007d'}, 'fullnames': {'PP': 'Partido Popular', 'PSOE': 'PSOE', 'SUMAR': 'Sumar'}}
-    return run_js('await (async () => { const f = await import("%s"); return ch.changesTableHtml(ch.evolutionChanges(%s, ["PP", "PSOE", "SUMAR"], "%s", "2026-10-15"), %s, {field: "%s", formatter: f.%s, shown: %s}); })()'
+    return run_js('await (async () => { const f = await import("%s"); return ch.changesTableHtml(ch.evolutionChanges(%s, ["PP", "PSOE", "SUMAR"], "%s"), %s, {field: "%s", formatter: f.%s}); })()'
                   % (pathlib.Path(DIST, 'js', 'format.js').as_uri(), json.dumps(change_runs() if runs is None else runs), field,
-                     json.dumps(view), field, formatter, json.dumps(shown)))
+                     json.dumps(view), field, formatter))
 
 
 def test_changes_table_html():
-    html = table_html(shown=['PP', 'PSOE'])
     import re
-    heads = re.findall(r'<th[^>]*>([^<]*)</th>', html)
-    assert heads == ['Partido', '15 oct', 'Hoy', '7 días', 'Desde 5 oct']
+    html = table_html()
+    # Luis, 2026-11-04: fixed headers «vs ayer», «vs -7d» and «vs 5-oct», whatever the day of the visit
+    assert re.findall(r'<th[^>]*>([^<]*)</th>', html) == ['Partido', '15 oct', 'vs ayer', 'vs -7d', 'vs 5-oct']
     assert 'title="Frente al 14 oct 2026"' in html and 'title="Frente al 7 oct 2026"' in html and 'title="Frente al 5 oct 2026"' in html
-    assert [m for m in re.findall(r'data-name="([^"]+)"', html)] == ['PP', 'PSOE', 'SUMAR']
-    assert re.search(r'<tr data-name="SUMAR" hidden>', html) and not re.search(r'<tr data-name="PP" hidden>', html)
+    # every name of the view, whatever the legend shows (Luis, 2026-11-04)
+    assert re.findall(r'data-name="([^"]+)"', html) == ['PP', 'PSOE', 'SUMAR'] and 'hidden' not in html
     pp = html[html.index('data-name="PP"'):]
     pp = pp[:pp.index('</tr>')]
     assert 'title="Partido Popular"' in pp and '<span class="dot" style="background-color: #1e5aa8"></span>PP</span>' in pp
     assert '<strong>31,9%</strong>' in pp and '<span class="dlt down">▼ 0,5</span>' in pp and '<span class="dlt down">▼ 0,1</span>' in pp
-    # whole seats, every row shown without a selection
-    seats = table_html(field='seats', formatter='fmtInt')
-    assert '<strong>100</strong>' in seats and 'hidden' not in seats
-
-
-def test_changes_default_today_is_the_local_day_in_the_evening():
-    # `isoDay` rounds to the nearest midnight, so a plain isoDay(Date.now()) after noon would be tomorrow
-    label = run_js('(() => { const now = new Date(2026, 9, 15, 23, 0).getTime(); Date.now = () => now; '
-                   'return ch.evolutionChanges(%s, ["PP"], "pct").todayLabel; })()' % json.dumps(change_runs()))
-    assert label == 'Hoy'
+    seats = table_html(field='seats', formatter='fmtInt')  # whole seats
+    assert '<strong>100</strong>' in seats
 
 
 def test_shown_value_rounds_like_the_formatter_on_block_sums():
     # a block sum carries float noise: 7.1499999999999995 is written 7,1 by `fmtPct`, so it is 7,1 and no change
     assert run_js('e.shownValue(7.1499999999999995, "pct")') == 7.1
     assert donuts('pct', [7.1, 7.1499999999999995], name='Izquierda') == [False, False]
-    rows = run_js('ch.evolutionChanges(%s, ["Izquierda"], "pct", "2026-10-06").rows' % json.dumps(day_runs('pct', [7.1, 7.1499999999999995], 'Izquierda')))
+    rows = run_js('ch.evolutionChanges(%s, ["Izquierda"], "pct").rows' % json.dumps(day_runs('pct', [7.1, 7.1499999999999995], 'Izquierda')))
     assert rows == [{'name': 'Izquierda', 'value': 7.1, 'day': 0, 'week': None, 'start': 0}]
-
-
-def test_changes_headers_are_unique_when_the_last_day_is_not_today():
-    # final review, 2026-11-04: «Hoy» only today; otherwise «1 día», never the date of the figure column again
-    import re
-    assert changes(today='2026-10-16')['todayLabel'] == '1 día'
-    html = run_js('ch.changesTableHtml(ch.evolutionChanges(%s, ["PP"], "pct", "2026-10-16"), {colors: {}, fullnames: {}})' % json.dumps(change_runs()))
-    heads = re.findall(r'<th[^>]*>([^<]*)</th>', html)
-    assert heads == ['Partido', '15 oct', '1 día', '7 días', 'Desde 5 oct'] and len(set(heads)) == len(heads)
