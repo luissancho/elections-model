@@ -661,6 +661,8 @@ ol.notes > li:target { color: var(--color-text); }
 .pills .pill input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
 .pills .pill.is-on { background: var(--pill-color, var(--color-text)); color: var(--pill-ink, #fff); }
 .pills .pill:has(input:checked) { background: var(--pill-color, var(--color-text)); color: var(--pill-ink, #fff); }
+/* the calculator's pills while the simulations load, or after they failed to load: shown, but they do nothing */
+.pills:disabled .pill { opacity: .45; cursor: default; }
 .pills .pill:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 @supports not selector(:has(*)) {
   .pills .pill:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
@@ -703,6 +705,9 @@ ol.notes > li:target { color: var(--color-text); }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }
 .split > * { min-width: 0; }
 .more { margin-top: var(--space-3); }
+/* `button` is inline-flex, which beats the `hidden` attribute: the «Ver las distribuciones» / «Ver los datos» buttons
+   stay hidden until their script reveals them */
+.more[hidden] { display: none; }
 #effects-table td[title] { cursor: help; }
 
 /* Footer */
