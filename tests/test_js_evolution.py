@@ -16,6 +16,7 @@ EVOLUTION_JS = pathlib.Path(DIST, 'js', 'charts', 'evolution.js').as_uri()
 BLOCKS_JS = pathlib.Path(DIST, 'js', 'blocks.js').as_uri()
 WIRE_JS = pathlib.Path(DIST, 'js', 'pages', 'evolution-wire.js').as_uri()
 CATALOG_JS = pathlib.Path(DIST, 'js', 'catalog.js').as_uri()
+CHANGES_JS = pathlib.Path(DIST, 'js', 'evolution-changes.js').as_uri()
 
 pytestmark = pytest.mark.skipif(shutil.which('node') is None, reason='node no disponible')
 
@@ -41,16 +42,16 @@ DATA = {'runs': None, 'parties': PARTIES, 'selected': ['PP', 'PSOE'], 'colors': 
 
 
 def run_js(expr):
-    """Evalúa `expr` con `e` (la evolución), `b` (los bloques), `ew` (el cableado), `c` (el catálogo) y `runs` (el
-    fijo) definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
+    """Evalúa `expr` con `e` (la evolución), `b` (los bloques), `ew` (el cableado), `c` (el catálogo), `ch` (la tabla
+    de cambios) y `runs` (el fijo) definidos y devuelve su JSON (las funciones de la opción se pierden en la serialización, como en
     `JSON.stringify`)."""
     script = (
         'import {{createRequire}} from "node:module"; '
         'const echarts = createRequire(import.meta.url)({}); globalThis.window = {{echarts}}; '
         'const e = await import("{}"); const b = await import("{}"); const ew = await import("{}"); '
-        'const c = await import("{}"); const runs = {}; '
+        'const c = await import("{}"); const ch = await import("{}"); const runs = {}; '
         'console.log(JSON.stringify({})); process.exit(0);'
-    ).format(json.dumps(ECHARTS), EVOLUTION_JS, BLOCKS_JS, WIRE_JS, CATALOG_JS, json.dumps(RUNS), expr)
+    ).format(json.dumps(ECHARTS), EVOLUTION_JS, BLOCKS_JS, WIRE_JS, CATALOG_JS, CHANGES_JS, json.dumps(RUNS), expr)
     out = subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True, check=True, cwd=ROOT)
     return json.loads(out.stdout)
 
@@ -176,3 +177,93 @@ def test_tooltip_heads_with_the_day_and_marks_the_changes():
                                                        '<strong>7 oct 2026</strong>']
     assert 'dlt' not in boxes[0] and 'dlt' not in boxes[1]
     assert boxes[2].endswith('VOX: 19,0% <span class="dlt up">▲ 0,1</span>')
+
+
+# 05-10 to 15-10 without the 08: PP falls, PSOE drifts below the rounding today, SUMAR starts on the 06
+CHANGE_DAYS = [5, 6, 7, 9, 10, 11, 12, 13, 14, 15]
+CHANGE_VALUES = {'PP': {5: 32.71, 7: 32.44, 14: 32.04, 15: 31.93}, 'PSOE': {5: 26.37, 7: 26.5, 14: 26.55, 15: 26.58},
+                 'SUMAR': {7: 7.0, 14: 7.2, 15: 7.24}}
+
+
+def change_runs():
+    """Daily runs of `CHANGE_DAYS`: the values of `CHANGE_VALUES`, else PP 32.3, PSOE 26.5 and SUMAR 7.1 (none on the 05)."""
+    default = {'PP': 32.3, 'PSOE': 26.5, 'SUMAR': 7.1}
+    runs = []
+    for day in CHANGE_DAYS:
+        parties = [{'name': name, 'pct': CHANGE_VALUES[name].get(day, default[name]), 'seats': 100}
+                   for name in ('PP', 'PSOE', 'SUMAR') if name != 'SUMAR' or day > 5]
+        runs.append({'run_id': 'd%02d' % day, 'run_at': '2026-10-%02dT12:00:00Z' % day, 'as_of': '2026-10-%02d' % day,
+                     'nowcast': {'parties': parties}})
+    return runs
+
+
+def changes(today='2026-10-15', runs=None, names=('PP', 'PSOE', 'SUMAR')):
+    return run_js('ch.evolutionChanges(%s, %s, "pct", "%s")' % (json.dumps(change_runs() if runs is None else runs), json.dumps(list(names)), today))
+
+
+def test_changes_compare_today_a_week_and_the_start():
+    out = changes()
+    # the day ≤ 15 − 7 is the 07: the 08 has no run
+    assert out['days'] == {'last': '2026-10-15', 'previous': '2026-10-14', 'week': '2026-10-07', 'start': '2026-10-05'}
+    assert out['todayLabel'] == 'Hoy'
+    rows = {row['name']: row for row in out['rows']}
+    assert [row['name'] for row in out['rows']] == ['PP', 'PSOE', 'SUMAR']
+    # PP 31,9 against 32,0 / 32,4 / 32,7
+    assert rows['PP'] == {'name': 'PP', 'value': 31.9, 'day': -0.1, 'week': -0.5, 'start': -0.8}
+    # PSOE 26,6 against 26,6 (26.55 → 26.58: a drift below the rounding) / 26,5 / 26,4
+    assert rows['PSOE'] == {'name': 'PSOE', 'value': 26.6, 'day': 0, 'week': 0.1, 'start': 0.2}
+
+
+def test_changes_missing_name_gives_a_dash():
+    rows = {row['name']: row for row in changes()['rows']}
+    assert rows['SUMAR'] == {'name': 'SUMAR', 'value': 7.2, 'day': 0, 'week': 0.2, 'start': None}  # no SUMAR on the 05
+    assert run_js('ch.evolutionChanges([], ["PP"], "pct", "2026-10-15")') is None
+    html = table_html()
+    sumar = html[html.index('data-name="SUMAR"'):]
+    assert sumar[:sumar.index('</tr>')].endswith('<td><span class="dlt flat">–</span></td>')
+
+
+def test_changes_label_the_last_day_when_it_is_not_today():
+    assert changes(today='2026-10-16')['todayLabel'] == '15 oct'
+
+
+def test_changes_with_a_single_day():
+    assert changes(runs=change_runs()[:1]) is None
+    assert changes(runs=[]) is None
+
+
+def test_changes_week_is_null_without_a_day_a_week_back():
+    out = changes(runs=change_runs()[:3])  # 05, 06, 07: nothing on or before the 30-09
+    assert out['days']['week'] is None and all(row['week'] is None for row in out['rows'])
+    assert '7 días' not in table_html(runs=change_runs()[:3])
+
+
+def table_html(runs=None, shown=None, field='pct', formatter='fmtPct'):
+    view = {'colors': {'PP': '#1e5aa8', 'PSOE': '#e3001b', 'SUMAR': '#e5007d'}, 'fullnames': {'PP': 'Partido Popular', 'PSOE': 'PSOE', 'SUMAR': 'Sumar'}}
+    return run_js('await (async () => { const f = await import("%s"); return ch.changesTableHtml(ch.evolutionChanges(%s, ["PP", "PSOE", "SUMAR"], "%s", "2026-10-15"), %s, {field: "%s", formatter: f.%s, shown: %s}); })()'
+                  % (pathlib.Path(DIST, 'js', 'format.js').as_uri(), json.dumps(change_runs() if runs is None else runs), field,
+                     json.dumps(view), field, formatter, json.dumps(shown)))
+
+
+def test_changes_table_html():
+    html = table_html(shown=['PP', 'PSOE'])
+    import re
+    heads = re.findall(r'<th[^>]*>([^<]*)</th>', html)
+    assert heads == ['Partido', '15 oct', 'Hoy', '7 días', 'Desde 5 oct']
+    assert 'title="Frente al 14 oct 2026"' in html and 'title="Frente al 7 oct 2026"' in html and 'title="Frente al 5 oct 2026"' in html
+    assert [m for m in re.findall(r'data-name="([^"]+)"', html)] == ['PP', 'PSOE', 'SUMAR']
+    assert re.search(r'<tr data-name="SUMAR" hidden>', html) and not re.search(r'<tr data-name="PP" hidden>', html)
+    pp = html[html.index('data-name="PP"'):]
+    pp = pp[:pp.index('</tr>')]
+    assert 'title="Partido Popular"' in pp and '<span class="dot" style="background-color: #1e5aa8"></span>PP</span>' in pp
+    assert '<strong>31,9%</strong>' in pp and '<span class="dlt down">▼ 0,5</span>' in pp and '<span class="dlt down">▼ 0,1</span>' in pp
+    # whole seats, every row shown without a selection
+    seats = table_html(field='seats', formatter='fmtInt')
+    assert '<strong>100</strong>' in seats and 'hidden' not in seats
+
+
+def test_changes_default_today_is_the_local_day_in_the_evening():
+    # `isoDay` rounds to the nearest midnight, so a plain isoDay(Date.now()) after noon would be tomorrow
+    label = run_js('(() => { const now = new Date(2026, 9, 15, 23, 0).getTime(); Date.now = () => now; '
+                   'return ch.evolutionChanges(%s, ["PP"], "pct").todayLabel; })()' % json.dumps(change_runs()))
+    assert label == 'Hoy'
