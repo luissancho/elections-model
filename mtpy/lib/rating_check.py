@@ -14,7 +14,7 @@ Columnas de ``pairs``: ``event_scope``, ``event_date``, ``population``, ``pollst
 Columnas de ``polls``: ``event_scope``, ``event_date``, ``population``, ``pollster_id``, ``pollster``, ``party``,
 ``error`` (puntos), ``weight_over``, ``weight_sample``, ``weight_rating``.
 """
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -613,11 +613,14 @@ def _rounded(value, digits: int = 4):
     return value
 
 
-def rating_check_summary(pairs: pd.DataFrame, polls: pd.DataFrame, tau: float, sigma: float, params: dict) -> dict:
+def rating_check_summary(pairs: pd.DataFrame, polls: pd.DataFrame, tau: float, sigma: float, params: dict,
+                         elections: Optional[pd.DataFrame] = None) -> dict:
     """Construye el ``data`` de la parte ``rating-check``.
 
     Devuelve ``{'summary', 'quarters', 'scatter', 'fit', 'dates', 'params'}`` con los floats a 4 decimales; cada
-    población de ``summary`` lleva la clave ``average`` con el resumen del promedio simple.
+    población de ``summary`` lleva la clave ``average`` con el resumen del promedio simple. De ``skill`` se
+    publican sólo ``skill_prior``, ``skill_rating`` y ``n``: los MSE (del orden de 1e-4 en LOR²) se quedarían en
+    0,0002-0,0003 a 4 decimales y no dicen nada (``skill`` los sigue devolviendo).
 
     Parameters
     ----------
@@ -631,6 +634,9 @@ def rating_check_summary(pairs: pd.DataFrame, polls: pd.DataFrame, tau: float, s
         Desviación de la medida.
     params : dict
         Parámetros del llamador que se publican junto a los del módulo.
+    elections : pd.DataFrame, optional
+        Salida de ``simple_average_errors(polls)`` si el llamador ya la tiene (para no calcularla dos veces); si
+        falta, se calcula aquí.
 
     Returns
     -------
@@ -639,8 +645,12 @@ def rating_check_summary(pairs: pd.DataFrame, polls: pd.DataFrame, tau: float, s
     """
     summary = discrimination(pairs, tau)
     dates = summary.pop('dates')
-    average = summarize_simple_average(simple_average_errors(polls))
+    if elections is None:
+        elections = simple_average_errors(polls)
+    average = summarize_simple_average(elections)
     for population in POPULATIONS:
+        summary[population]['skill'] = {key: summary[population]['skill'][key]
+                                        for key in ('skill_prior', 'skill_rating', 'n')}
         summary[population]['average'] = average[population]
     full_params = {**params, 'tau': tau, 'sigma': sigma, 'k': (sigma / tau) ** 2, 'window_days': WINDOW_DAYS,
                    'min_pollsters': MIN_POLLSTERS, 'min_event_polls': MIN_EVENT_POLLS,

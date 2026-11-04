@@ -691,7 +691,7 @@ def test_escanos_explains_the_fan_and_the_evolution_and_closes_with_the_method(a
     fan = page[page.index('id="fan"'):page.index('id="downloads"')]
     assert 'deriva' in fan and 'horizonte 0' in fan and 'no es una predicción de trayectoria' in fan
     evolution = page[page.index('id="evolution"'):page.index('id="districts"')]
-    assert 'run' in evolution and 'huecos' in evolution and 'no es una serie de sondeos' in evolution
+    assert 'run' in evolution and 'hueco' in evolution and 'id="evolution-changes"' in evolution and 'no es una serie de sondeos' in evolution
     assert '¿Cómo simulamos los escaños?' in page and 'href="/elecciones?scope=es"' in page
     assert 'href="/casas?scope=es"' in page
     coalition = re.sub(r'\s+', ' ', page[page.index('id="coalition-result"'):page.index('id="districts"')])
@@ -918,7 +918,8 @@ def test_evolution_cards_share_the_markup_and_explain_the_revision(api):
             assert 'id="evolution-legend"' in card and '<div class="chart chart-tall" id="evolution-chart"' in page
             text = re.sub(r'\s+', ' ', page[page.index('id="evolution-chart"'):])
             text = text[:text.index('</section>')]
-            assert 'estimaciones retrospectivas' in text and 'revisa el pasado' in text and 'no se revisan' in text
+            assert 'retrospectiva' not in text and 'cambió' in text and '7 días' in text and 'Desde' in text
+            assert 'revisa el pasado' in text and 'no se revisan' in text and 'id="evolution-changes"' in text
             assert 'Si un día hubo varias actualizaciones, se muestra la última' in text
             assert_public_wording(page, path)
     assert 'hasta completar la cámara' in html(call(api, '/es/escanos')[2]) and 'hasta 100' in html(call(api, '/es')[2])
@@ -2876,7 +2877,23 @@ def test_metodo_rating_check_card_without_intervals_says_nothing_about_the_sign(
     assert '<div class="l">Correlación de rango</div><div class="v">−0,22<small></small></div></div>' in page
     fit = initial(body)['rating_check']['fit']
     assert fit == [[-1.29, -0.53], [1.3, 0.61]]
+    assert 'En la nube, la diagonal es la previsión exacta y la recta roja, la que mejor ajusta los puntos.' in text
+    assert 'con la diagonal de una previsión exacta y la recta ajustada"' in page
     assert_public_wording(page, '/metodo/rating')
+
+
+def test_metodo_rating_check_card_without_fit_does_not_mention_the_red_line(api, fresh_app):
+    """Sin recta ajustada (`fit` nulo, pocos pares) «Cómo leerlo» y la etiqueta del gráfico hablan sólo de la
+    diagonal."""
+    data = rating_check_fixture()
+    data['fit'] = None
+    write_rating_check(fresh_app.fs, data)
+    status, _, body = call(api, '/metodo/rating')
+    page = html(body)
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert status == 200 and 'En la nube, la diagonal es la previsión exacta.' in text
+    assert 'recta roja' not in text and 'y la recta ajustada' not in page
+    assert 'con la diagonal de una previsión exacta"' in page
 
 
 def test_metodo_rating_check_card_with_a_degenerate_part(api, fresh_app):
@@ -2887,7 +2904,9 @@ def test_metodo_rating_check_card_with_a_degenerate_part(api, fresh_app):
     write_rating_check(fresh_app.fs, data)
     status, _, body = call(api, '/metodo/rating')
     page = html(body)
-    assert status == 200 and 'se publica con la siguiente actualización' in page
+    text = re.sub(r'\s+', ' ', visible_text(page))
+    assert status == 200 and 'se publica cuando recalculamos los ratings, tras cada elección.' in text
+    assert 'siguiente actualización' not in text
     assert 'rating-check-chart' not in page and 'id="initial-data"' not in page
     data = rating_check_fixture()
     data['scatter'] = []

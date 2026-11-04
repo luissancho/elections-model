@@ -118,7 +118,7 @@ function ratingCheckOptions({fit = null, axes = null} = {}) {
   return {
     x: 'd_prev', y: 'd_obs', name: 'label', fit, diagonal: true, axes, symbolSize: RATING_CHECK_POINT,
     xFormatter: differentialText, yFormatter: differentialText,
-    xName: 'Diferencial previsto', xLabel: 'Previsto', yLabel: 'observado',
+    xName: 'Diferencial previsto', yName: 'Diferencial observado', xLabel: 'Previsto', yLabel: 'observado',
   };
 }
 

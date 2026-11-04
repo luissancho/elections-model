@@ -239,8 +239,9 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     write it leaves a previous one in place, and ``meta.params.rating_check`` says whether this one wrote it. When
     the current event has no polls the house effects cannot be fitted: the other parts, which describe past
     elections, are still published, a stale ``house-effects`` of the scope is removed and ``meta.house_effects`` is
-    false. A failure halfway leaves the previous ``meta.json`` in place, (and the analysis it describes, partly
-    overwritten). Neither the manifest nor the runs are touched.
+    false. The ``rating-check`` part is computed before the first write, so a failure there leaves the published
+    analysis untouched; a later failure halfway leaves the previous ``meta.json`` in place (and the analysis it
+    describes, partly overwritten). Neither the manifest nor the runs are touched.
 
     The current event is the last election of the computer (``event_dates[-1]``, the next event when the
     scope has one, as in ``Computer.print_house_effects``), and its ``vs`` blocks and ``main`` parties
@@ -291,6 +292,17 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
         blocks, main = bmaps['vs'], list(bmaps.get('main', []))
     except ValueError as e:
         raise NothingToPublish(str(e)) from e
+    checked = bool(rating_check) and scope == NATIONAL_SCOPE
+    if checked:
+        # The slowest step, against the database: computed before the first write, so that a failure here
+        # leaves the published analysis untouched
+        source = comp.rating_check_data('all')
+        elections = simple_average_errors(source['polls'])
+        summary_check = rating_check_summary(source['pairs'], source['polls'], comp.bias_dev_tau,
+                                             comp.bias_dev_sigma, {'n_scopes': source['n_scopes']},
+                                             elections=elections)
+        check_data, check_frames = export_rating_check(summary_check, source['pairs'], elections)
+        seconds['rating_check'] = lap()
     try:
         table = comp.print_house_effects()  # fits an average of the current event: no polls is a NoPollsError
     except NoPollsError:
@@ -323,14 +335,8 @@ def publish_analysis(scope: str, writer: BundleWriter, computer: Optional[Callab
     data, frame = export_error_data(comp.get_error_estimator_data())
     write('error-data', data, {'error-data': frame})
     seconds['error_data'] = lap()
-    checked = bool(rating_check) and scope == NATIONAL_SCOPE
     if checked:
-        source = comp.rating_check_data('all')
-        summary_check = rating_check_summary(source['pairs'], source['polls'], comp.bias_dev_tau,
-                                             comp.bias_dev_sigma, {'n_scopes': source['n_scopes']})
-        data, frames = export_rating_check(summary_check, source['pairs'], simple_average_errors(source['polls']))
-        write('rating-check', data, frames)
-        seconds['rating_check'] = lap()
+        write('rating-check', check_data, check_frames)
 
     db_polls, db_last_poll = (stats or db_stats)(scope, event_date)
     params = {**POLL_ERRORS_PARAMS, 'drange': list(POLL_ERRORS_PARAMS['drange']), 'main': main,

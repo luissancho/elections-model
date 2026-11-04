@@ -696,7 +696,7 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           {% endif %}
         </p>
         {% if rating_check.initial.scatter %}
-        <div class="chart square wide" id="rating-check-chart" role="img" aria-label="Diferencial previsto de cada encuestadora antes de cada elección frente al observado en ella, con la diagonal de una previsión exacta y la recta ajustada"></div>
+        <div class="chart square wide" id="rating-check-chart" role="img" aria-label="Diferencial previsto de cada encuestadora antes de cada elección frente al observado en ella, con la diagonal de una previsión exacta{% if rating_check.initial.fit %} y la recta ajustada{% endif %}"></div>
         {% endif %}
         {% if rating_check.quarters %}
         <div class="table-wrap">
@@ -764,8 +764,11 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
           se desviaron menos en ella, cerca de 0 si el rating no las ordena. Dice si ordena, no cuánto acierta. La
           pendiente compara lo previsto con lo observado: 1 si el rating prevé la desviación en su justa medida, 0 si
           no prevé nada. Una pendiente menor que 1 dice que lo previsto exagera las diferencias, es decir, que la
-          contracción hacia la media se queda corta; no dice que el rating sea falso. En la nube, la diagonal es la
-          previsión exacta y la recta roja, la que mejor ajusta los puntos.
+          contracción hacia la media se queda corta; no dice que el rating sea falso.
+          {% if rating_check.initial.scatter %}
+          En la nube, la diagonal es la previsión exacta{% if rating_check.initial.fit %} y la recta roja, la que
+          mejor ajusta los puntos{% endif %}.
+          {% endif %}
         </p>
         <p>
           El acierto relativo es cuánto menor es el error cuadrático de prever la desviación de cada encuestadora
@@ -787,8 +790,8 @@ pesa menos que unas generales, según el peso que el catálogo da a su comunidad
         </p>
         {% else %}
         <p>
-          La comprobación con las cifras de todas las elecciones se publica con la siguiente actualización del
-          análisis de las encuestadoras.
+          La comprobación con las cifras de todas las elecciones se publica cuando recalculamos los ratings, tras
+          cada elección.
         </p>
         {% endif %}
       {{ m.card_end() }}

@@ -885,6 +885,18 @@ def test_scatter_with_fit_and_diagonal_draws_two_dashed_lines_over_fixed_axes():
     assert option['xAxis']['name'] == 'Diferencial previsto'
 
 
+def test_scatter_y_name_titles_the_vertical_axis_and_makes_room_for_it():
+    """`yName` titles the y axis (rotated, beside the ticks) and widens the left margin; without it (the CERA
+    study) the axis has no name and the margin stays as it was."""
+    rows = [{'pollster': 'GAD3', 'd_prev': -0.35, 'd_obs': -0.41}]
+    named = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster", '
+                   'xName: "Diferencial previsto", yName: "Diferencial observado"})', rows=rows)
+    assert named['yAxis']['name'] == 'Diferencial observado' and named['yAxis']['nameLocation'] == 'middle'
+    assert named['yAxis']['nameRotate'] == 90
+    plain = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster"})', rows=rows)
+    assert plain['yAxis'].get('name', '') == '' and named['grid']['left'] > plain['grid']['left'] == 8
+
+
 def test_catalog_orders_the_block_view_left_rest_right_and_paints_otros_grey():
     cat = 'new c.Catalog({parties: [{name: "PNV", color: "#00ff00"}], bmaps: {blocks: {Otros: ["PNV"]}}})'
     assert run_js('%s.orderBlocks(["Derecha", "Otros", "Izquierda", "Separatista"])' % cat) == [

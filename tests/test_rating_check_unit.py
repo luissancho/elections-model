@@ -1,4 +1,6 @@
 """Tests de las medidas puras de la validación del rating (frames construidos a mano, sin base de datos)."""
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -158,6 +160,19 @@ def test_rating_check_summary_has_the_part_shape_and_scaled_scatter():
     assert data['params']['k'] == pytest.approx(1.96) and data['scatter'][0]['d_prev'] == pytest.approx(PAIRS['d_prev'].dropna().iloc[0] * 100, abs=.01)
     assert all('average' in data['summary'][p] for p in POPULATIONS)
     assert data['params']['replicas'] == 2000 and data['params']['quarters'] == 4
+
+
+def test_rating_check_summary_accepts_the_precomputed_simple_average():
+    """Con `elections` (la salida de `simple_average_errors`) el resumen es idéntico al que la calcula él."""
+    data = rating_check_summary(PAIRS, POLLS, tau=.01, sigma=.014, params={})
+    same = rating_check_summary(PAIRS, POLLS, tau=.01, sigma=.014, params={}, elections=simple_average_errors(POLLS))
+    assert json.dumps(same, sort_keys=True) == json.dumps(data, sort_keys=True)  # NaN != NaN en un `==`
+
+
+def test_rating_check_summary_drops_the_mses_but_skill_keeps_them():
+    data = rating_check_summary(PAIRS, POLLS, tau=.01, sigma=.014, params={})
+    assert all(set(data['summary'][p]['skill']) == {'skill_prior', 'skill_rating', 'n'} for p in POPULATIONS)
+    assert {'mse_none', 'mse_prior', 'mse_rating'} <= set(skill(PAIRS, tau=.01))
 
 
 def _two_party_polls(index=None, error=None):

@@ -387,10 +387,11 @@ class FakeComputer:
     `build_series` (devuelve el propio objeto), `filter_polls` (`synthetic_cycle`) y los cuatro resúmenes de
     `synthetic_analysis`, `rating_check_data` (`synthetic_rating_check`) con `bias_dev_tau` y `bias_dev_sigma`; anota
     las llamadas y, con `fail`, lanza esa excepción al construir; con `fail_effects`, la lanza `print_house_effects`
-    (como el real cuando el evento en curso no tiene sondeos)."""
+    (como el real cuando el evento en curso no tiene sondeos); con `fail_rating_check`, la lanza `rating_check_data`
+    (como un corte de la conexión con la base en el paso más lento)."""
 
-    def __init__(self, fail=None, fail_effects=None):
-        self.calls, self.fail, self.fail_effects = [], fail, fail_effects
+    def __init__(self, fail=None, fail_effects=None, fail_rating_check=None):
+        self.calls, self.fail, self.fail_effects, self.fail_rating_check = [], fail, fail_effects, fail_rating_check
 
     def __call__(self, scope, path=None, **kwargs):
         if self.fail is not None:
@@ -432,6 +433,8 @@ class FakeComputer:
 
         def rating_check_data(scopes='all', **kw):
             self.calls.append(('rating_check_data', scopes, kw))
+            if self.fail_rating_check is not None:
+                raise self.fail_rating_check
             return synthetic_rating_check()
 
         comp.print_house_effects = print_house_effects

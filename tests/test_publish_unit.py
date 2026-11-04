@@ -14,8 +14,8 @@ from mtpy.core.io import FileSystem
 from mtpy.lib import bundle, data, publish
 from mtpy.lib.forecaster import NoPollsError
 from tests.fakes import (BMAPS, NAMES, REGIONS, FakeComputer, FakeSimulator, RecordingFileSystem, synthetic_analysis,
-                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS)
-from tests.fakes import synthetic_rating_check
+                         synthetic_backtest, synthetic_cycle, synthetic_event, synthetic_simulator, write_backtest_source, CYCLE_SEATS,
+                         synthetic_rating_check)
 
 
 def valid(name, data, mode='nowcast'):
@@ -971,6 +971,45 @@ def test_publish_analysis_keeps_the_previous_rating_check_when_not_requested(tmp
     assert csvs == [(tmp_path / 'site/v1/analysis/es/csv' / f'{name}.csv').read_bytes()
                     for name in ('rating-check', 'rating-check-elections')]
     assert writer.read_json(bundle.path_analysis('es', 'meta'))['data']['params']['rating_check'] is False
+
+
+def test_publish_analysis_failing_rating_check_leaves_the_published_analysis_untouched(tmp_path):
+    """La validación del rating se calcula antes de la primera escritura: si `rating_check_data` falla, todas las
+    partes publicadas antes (JSON y CSV) y `meta.json` quedan byte a byte como estaban."""
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov, rating_check=True)
+    root = tmp_path / 'site/v1/analysis/es'
+    before = {p.relative_to(root): p.read_bytes() for p in sorted(root.rglob('*')) if p.is_file()}
+    assert {'meta.json', 'rating-check.json', 'house-effects.json'} <= {str(p) for p in before}
+    writer.clock = lambda: datetime(2030, 1, 1, tzinfo=timezone.utc)  # una reescritura cambiaría `generated_at`
+    broken = FakeComputer(fail_rating_check=RuntimeError('server closed the connection'))
+    with pytest.raises(RuntimeError, match='server closed'):
+        publish.publish_analysis('es', writer, computer=broken, stats=fake_stats, prov=fake_prov, rating_check=True)
+    assert {p.relative_to(root): p.read_bytes() for p in sorted(root.rglob('*')) if p.is_file()} == before
+
+
+def test_publish_analysis_computes_the_simple_average_once(tmp_path, monkeypatch):
+    """El promedio simple por elección se calcula una vez y sirve al resumen y al CSV `rating-check-elections`."""
+    calls = []
+    real = publish.analysis.simple_average_errors
+
+    def counted(polls, *args, **kwargs):
+        calls.append(len(polls))
+        return real(polls, *args, **kwargs)
+
+    monkeypatch.setattr(publish.analysis, 'simple_average_errors', counted)
+    monkeypatch.setattr('mtpy.lib.rating_check.simple_average_errors', counted)
+    publish.publish_analysis('es', make_writer(tmp_path), computer=FakeComputer(), stats=fake_stats, prov=fake_prov,
+                             rating_check=True)
+    assert len(calls) == 1
+
+
+def test_publish_analysis_rating_check_publishes_the_skills_without_the_mses(tmp_path):
+    """Los MSE (del orden de 1e-4 en LOR²) no se publican: `skill` lleva sólo `skill_prior`, `skill_rating` y `n`."""
+    writer = make_writer(tmp_path)
+    publish.publish_analysis('es', writer, computer=FakeComputer(), stats=fake_stats, prov=fake_prov, rating_check=True)
+    summary = writer.read_json(bundle.path_analysis('es', 'rating-check'))['data']['summary']
+    assert all(set(summary[p]['skill']) == {'skill_prior', 'skill_rating', 'n'} for p in summary)
 
 
 def test_export_rating_check_scales_the_pairs_and_turns_nan_into_null():

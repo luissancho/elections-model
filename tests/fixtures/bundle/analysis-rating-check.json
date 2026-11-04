@@ -44,9 +44,6 @@
           "n": 392
         },
         "skill": {
-          "mse_none": 0.0004,
-          "mse_prior": 0.0003,
-          "mse_rating": 0.0003,
           "skill_prior": 0.0812,
           "skill_rating": 0.1245,
           "n": 412
@@ -99,9 +96,6 @@
           "n": 76
         },
         "skill": {
-          "mse_none": 0.0004,
-          "mse_prior": 0.0003,
-          "mse_rating": 0.0003,
           "skill_prior": 0.0812,
           "skill_rating": 0.1245,
           "n": 96
@@ -154,9 +148,6 @@
           "n": 296
         },
         "skill": {
-          "mse_none": 0.0004,
-          "mse_prior": 0.0003,
-          "mse_rating": 0.0003,
           "skill_prior": 0.0812,
           "skill_rating": 0.1245,
           "n": 316
