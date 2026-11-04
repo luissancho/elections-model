@@ -610,7 +610,7 @@ def test_scatter_option_labels_only_the_named_provinces_and_draws_the_fit():
     option = run_js('sc.scatterOption(rows, {x: "latam_share", y: "left_share", name: "name", '
                     'labelled: ["Ourense", "Girona"], fit: [[20, 66], [80, 44]]})', rows=rows)
     points, fit = option['series']
-    assert points['type'] == 'scatter' and points['color'] == '#1d4f86'
+    assert points['type'] == 'scatter' and points['color'] == '#1d4f86' and points['symbolSize'] == 9
     assert [item['value'] for item in points['data']] == [[74.0, 29.7], [40.0, 50.0], [23.0, 69.6]]
     assert [item['name'] for item in points['data']] == ['Ourense', 'Madrid', 'Girona']
     assert [item['label']['show'] for item in points['data']] == [True, False, True]
@@ -874,9 +874,10 @@ def test_scatter_with_fit_and_diagonal_draws_two_dashed_lines_over_fixed_axes():
     rows = [{'pollster': 'GAD3', 'd_prev': -0.35, 'd_obs': -0.41}, {'pollster': 'CIS', 'd_prev': 1.2, 'd_obs': 2.5}]
     option = run_js('sc.scatterOption(rows, {x: "d_prev", y: "d_obs", name: "pollster", diagonal: true, '
                     'fit: [[-1.29, -0.53], [1.3, 0.61]], axes: {xMin: -5, xMax: 5, yMin: -5, yMax: 5, interval: 1}, '
-                    'xName: "Diferencial previsto"})', rows=rows)
+                    'xName: "Diferencial previsto", symbolSize: 5})', rows=rows)
     points, fit, diagonal = option['series']
     assert points['type'] == 'scatter' and [item['name'] for item in points['data']] == ['GAD3', 'CIS']
+    assert points['symbolSize'] == 5  # hundreds of points: smaller than the default
     assert fit['type'] == 'line' and fit['data'] == [[-1.29, -0.53], [1.3, 0.61]]
     assert fit['lineStyle']['type'] == 'dashed'
     assert diagonal['type'] == 'line' and diagonal['data'] == [[-5, -5], [5, 5]] and diagonal['silent'] is True

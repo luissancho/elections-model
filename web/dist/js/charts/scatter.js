@@ -16,12 +16,13 @@ const FIT_COLOR = '#ce3b3b';
  *   both axes instead of fitting the data), `diagonal` (a dashed line from `[min, min]` to `[max, max]` of
  *   those axes; needs `axes`), `colorOf` (`row => colour` of each point), `fit` (`[[x0, y0], [x1, y1]]`: the ends of the fitted line, or null),
  *   `xFormatter` and `yFormatter` (number → text of each axis and of the tooltip), `xName` (title of the x axis)
- *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip)
+ *   and `xLabel` and `yLabel` (short names of the coordinates in the tooltip), and `symbolSize` (the diameter of
+ *   the points in pixels, smaller for a cloud of hundreds)
  * @returns {object} the option
  */
 export function scatterOption(rows, {
   x, y, name, labelled = [], fit = null, xFormatter = (v) => fmtNum(v, 1), yFormatter = (v) => fmtNum(v, 1),
-  xName = '', xLabel = '', yLabel = '', diagonal = false, axes = null, colorOf = null,
+  xName = '', xLabel = '', yLabel = '', diagonal = false, axes = null, colorOf = null, symbolSize = 9,
 } = {}) {
   const named = new Set(labelled);
   const xs = rows.map((row) => row[x]).filter(Number.isFinite);
@@ -29,7 +30,7 @@ export function scatterOption(rows, {
   const points = {
     type: 'scatter',
     name: '',
-    symbolSize: 9,
+    symbolSize,
     color: THEME.accentColor,
     itemStyle: {opacity: 0.75},
     label: {position: 'right', fontSize: 10, color: THEME.mutedColor, formatter: '{b}'},

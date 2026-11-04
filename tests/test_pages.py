@@ -2911,7 +2911,20 @@ def test_rating_check_helpers_write_the_minus_the_percent_and_round_the_axes():
     assert kpis['Correlación de rango']['support'] == 'IC 95%: −0,24 a −0,08'
     assert kpis['Pendiente de calibración']['value'] == '0,44' and kpis['Pendiente de calibración']['support'] == 'IC 95%: −0,02 a 0,72'
     assert kpis['Acierto relativo']['value'] == '−3,7%'
-    assert metodo.rating_check_kpis({'all': {}})[4]['value'] == '–'
+    assert kpis['Acierto relativo']['support'] == 'frente a prever una desviación nula'
+    summary['all']['skill']['skill_prior'] = -0.1609
+    kpis = {kpi['label']: kpi for kpi in metodo.rating_check_kpis(summary)}
+    assert kpis['Acierto relativo']['support'] == 'frente a prever una desviación nula; con la calidad previa sola, −16,1%'
+    # the elections only when both populations have them
+    empty = metodo.rating_check_kpis({'all': {}})
+    assert empty[-1]['value'] == '–' and 'Elecciones' not in [kpi['label'] for kpi in empty]
+    summary['generales'] = {'n_events': 0}
+    assert 'Elecciones' not in [kpi['label'] for kpi in metodo.rating_check_kpis(summary)]
+    # small counts in words; the check of the slope on the well-polled elections
+    assert metodo.number_word(4) == 'cuatro' and metodo.number_word(12) == '12' and metodo.number_word(None) == '–'
+    same = {'slope': {'value': 0.4408, 'n': 832}, 'slope_polled': {'value': 0.4408, 'lo': -0.0474, 'hi': 0.7251, 'n': 832}}
+    assert metodo.rating_check_polled(same) == {'same': True, 'value': '0,44', 'interval': 'IC 95%: −0,05 a 0,73'}
+    assert metodo.rating_check_polled({'slope': {'n': 3}, 'slope_polled': {'value': None, 'n': 0}})['same'] is False
     # the larger of both differentials, up to the next multiple of 5, on both axes; five ticks per half axis
     assert metodo.rating_check_axes([{'d_prev': 1.3, 'd_obs': -4.8}]) == {
         'xMin': -5, 'xMax': 5, 'yMin': -5, 'yMax': 5, 'interval': 1.0}
@@ -2919,6 +2932,50 @@ def test_rating_check_helpers_write_the_minus_the_percent_and_round_the_axes():
         'xMin': -10, 'xMax': 10, 'yMin': -10, 'yMax': 10, 'interval': 2.0}
     assert metodo.rating_check_axes([{'d_prev': 0.0, 'd_obs': 5.0}])['xMax'] == 5
     assert metodo.rating_check_axes([])['yMin'] == -5
+
+
+def test_metodo_rating_check_card_writes_the_sentence_of_each_sign(api, fresh_app, monkeypatch):
+    """Las frases que dependen del signo leen el intervalo del 95%: con la correlación negativa (las cifras reales del
+    2026-11-04) y con una que cruza el 0, cada frase es la de su caso y no la del otro."""
+    import copy
+    write_analysis(fresh_app.fs)
+    webapi.site().manifest_cache_clear()
+    base = pages.metodo.rating_check_summary()
+    negative = copy.deepcopy(base)
+    every = negative['summary']['all']
+    every['spearman'] = {'value': -0.1848, 'lo': -0.2406, 'hi': -0.0785, 'n': 942}
+    every['slope'] = {'value': 0.4408, 'lo': -0.0238, 'hi': 0.7204, 'n': 832}
+    every['average'] = {'n': 71, 'mae_flat': 1.9292, 'mae_rated': 1.9398, 'diff': 0.0106, 'lo': -0.0197, 'hi': 0.0478,
+                        'better': 37, 'worse': 34}
+    negative['summary']['generales'].update(n_events=13, spearman={'value': -0.1178, 'lo': -0.2346, 'hi': 0.0189, 'n': 238})
+    across = copy.deepcopy(negative)
+    every = across['summary']['all']
+    every['spearman'] = {'value': -0.03, 'lo': -0.12, 'hi': 0.05, 'n': 942}
+    every['slope'] = {'value': 0.6, 'lo': -0.3, 'hi': 1.4, 'n': 832}
+    every['average'] = {'n': 71, 'mae_flat': 1.6, 'mae_rated': 1.65, 'diff': 0.05, 'lo': 0.01, 'hi': 0.09,
+                        'better': 20, 'worse': 51}
+    texts = {}
+    for name, context in (('negative', negative), ('across', across)):
+        monkeypatch.setattr(pages.metodo, 'rating_check_context', lambda context=context: context)
+        page = html(call(api, '/metodo/rating')[2])
+        assert_public_wording(page, '/metodo/rating')
+        texts[name] = re.sub(r'\s+', ' ', visible_text(page))
+    text = texts['negative']
+    assert ('se desviaron, en conjunto, menos en ella: la correlación de rango es negativa y su intervalo no llega a 0, '
+            'aunque es débil') in text
+    assert 'En las generales solas, 13 elecciones, el intervalo de la correlación incluye el 0' in text
+    assert ('La pendiente de calibración queda por debajo de 1 con todo su intervalo, que llega a 0: lo previsto '
+            'exagera las diferencias') in text
+    assert ('acierta lo mismo con el rating que sin él, dentro del margen: el intervalo de la diferencia incluye el 0, '
+            'y la diferencia media es de menos del 2% del error') in text
+    assert 'no se distingue si las encuestadoras con más rating se desvían menos' not in text
+    text = texts['across']
+    assert ('Con estas elecciones no se distingue si las encuestadoras con más rating se desvían menos: el intervalo de '
+            'la correlación de rango incluye el 0') in text
+    assert 'la correlación de rango es negativa' not in text and 'aunque es débil' not in text
+    assert 'El intervalo de la pendiente de calibración incluye el 0 y el 1' in text
+    assert 'acierta menos con el rating que sin él: la diferencia es positiva y su intervalo no llega a 0.' in text
+    assert 'dentro del margen' not in text
 
 
 def test_metodo_rating_explains_evidence_by_election(api):

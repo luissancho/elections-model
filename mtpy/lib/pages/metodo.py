@@ -43,6 +43,8 @@ RATING_CHECK_AXIS_STEP = 5
 RATING_CHECK_AXIS_TICKS = 5
 # Keys of a point of the cloud that its chart needs, plus its ``label`` (pollster and election, for the tooltip).
 RATING_CHECK_ROW_KEYS = ('pollster', 'd_prev', 'd_obs')
+# Small whole numbers as the texts of the method write them (``number_word``).
+NUMBER_WORDS = ('cero', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez')
 # Cross-cutting sections of the landing page, which belong to no question of the method (the cards of the data
 # and of the publication were removed on 2026-10-28).
 SECTIONS = (
@@ -465,6 +467,27 @@ def fmt_without_plus(x, digits: int = 2) -> str:
     return text[1:] if text.startswith('+') else text
 
 
+def number_word(n) -> str:
+    """
+    A small whole number in words, as the method writes counts below eleven («cuatro o más»); larger numbers,
+    and anything that is not a whole number, as ``fmt_int`` writes them.
+
+    Parameters
+    ----------
+    n : int or None
+        The number.
+
+    Returns
+    -------
+    str
+        ``'cuatro'`` for 4 (``'una'`` for 1: the texts count elections and pollsters), ``'12'`` for 12.
+    """
+    if isinstance(n, int) and not isinstance(n, bool) and 0 <= n < len(NUMBER_WORDS):
+        return NUMBER_WORDS[n]
+
+    return fmt_int(n)
+
+
 def rating_check_kpis(summary: dict) -> list:
     """
     The KPIs of the card «Cómo lo comprobamos», for ``_macros.kpis``.
@@ -478,27 +501,33 @@ def rating_check_kpis(summary: dict) -> list:
     -------
     list of dict
         ``{'label', 'value', 'unit', 'support', 'ok', 'color'}``: the pollster-election pairs (with the pollsters),
-        the elections as «generales + autonómicas», the rank correlation and the calibration slope with their 95%
-        intervals and the skill of the rating against predicting nothing, in percent.
+        the elections as «generales + autonómicas» (only when both populations have elections), the rank
+        correlation and the calibration slope with their 95% intervals and the skill of the rating against
+        predicting nothing, in percent (its support line adds the skill of the prior quality alone, when present).
     """
     every = summary.get('all') or {}
     general = (summary.get('generales') or {}).get('n_events')
     regional = (summary.get('autonomicas') or {}).get('n_events')
     spearman, slope, skill = every.get('spearman') or {}, every.get('slope') or {}, every.get('skill') or {}
-    skill_rating = skill.get('skill_rating')
+    skill_rating, skill_prior = skill.get('skill_rating'), skill.get('skill_prior')
     skill_text = DASH if _is_missing(skill_rating) else fmt_without_plus(skill_rating * 100, 1) + '%'
+    skill_support = 'frente a prever una desviación nula'
+    if not _is_missing(skill_prior):
+        skill_support += '; con la calidad previa sola, {}%'.format(fmt_without_plus(skill_prior * 100, 1))
+    elections = [] if any(_is_missing(n) or not n for n in (general, regional)) else [
+        {'label': 'Elecciones', 'value': '{} + {}'.format(fmt_int(general), fmt_int(regional)), 'unit': '',
+         'support': 'generales + autonómicas', 'ok': False, 'color': None}]
 
     return [
         {'label': 'Pares encuestadora-elección', 'value': fmt_int(every.get('n_pairs')), 'unit': '',
          'support': '{} encuestadoras'.format(fmt_int(every.get('n_pollsters'))), 'ok': False, 'color': None},
-        {'label': 'Elecciones', 'value': '{} + {}'.format(fmt_int(general), fmt_int(regional)), 'unit': '',
-         'support': 'generales + autonómicas', 'ok': False, 'color': None},
+        *elections,
         {'label': 'Correlación de rango', 'value': fmt_without_plus(spearman.get('value')), 'unit': '',
          'support': interval_text(spearman), 'ok': False, 'color': None},
         {'label': 'Pendiente de calibración', 'value': fmt_without_plus(slope.get('value')), 'unit': '',
          'support': interval_text(slope), 'ok': False, 'color': None},
         {'label': 'Acierto relativo', 'value': skill_text, 'unit': '',
-         'support': 'frente a prever una desviación nula', 'ok': False, 'color': None},
+         'support': skill_support, 'ok': False, 'color': None},
     ]
 
 
@@ -522,6 +551,32 @@ def rating_check_axes(rows: list) -> dict:
     bound = max(1, math.ceil(largest / RATING_CHECK_AXIS_STEP)) * RATING_CHECK_AXIS_STEP
 
     return {'xMin': -bound, 'xMax': bound, 'yMin': -bound, 'yMax': bound, 'interval': bound / RATING_CHECK_AXIS_TICKS}
+
+
+def rating_check_polled(every: dict) -> dict:
+    """
+    The check of the calibration slope on the elections with ``min_event_polls`` polls or more, as the note of the
+    card writes it.
+
+    Parameters
+    ----------
+    every : dict
+        The ``all`` population of the ``summary`` of the part.
+
+    Returns
+    -------
+    dict
+        ``same`` (whether the check holds exactly the pairs of the slope, so it separates nothing), ``value`` (the
+        slope written without the plus, or ``None``) and ``interval`` (``interval_text``).
+    """
+    polled, fitted = every.get('slope_polled') or {}, every.get('slope') or {}
+    value = polled.get('value')
+
+    return {
+        'same': bool(polled.get('n')) and polled.get('n') == fitted.get('n'),
+        'value': None if _is_missing(value) else fmt_without_plus(value),
+        'interval': interval_text(polled),
+    }
 
 
 def rating_check_summary() -> Optional[dict]:
@@ -591,6 +646,8 @@ def rating_check_summary() -> Optional[dict]:
         'average': average_rows,
         'dates': data.get('dates') or {},
         'params': data.get('params') or {},
+        'quarters_min': number_word(last or None),
+        'slope_polled': rating_check_polled(summary['all']),
         'csv': {'pairs': api_url(NATIONAL_SCOPE, RATING_CHECK_PART, fmt='csv', kind='analysis'),
                 'elections': api_url(NATIONAL_SCOPE, RATING_CHECK_PART, fmt='csv', kind='analysis', table='elections')},
         'initial': {'scatter': rows, 'fit': data.get('fit'), 'axes': rating_check_axes(rows)},
@@ -616,7 +673,8 @@ def rating_check_context() -> Optional[dict]:
         two decimals, and their pairs ``n_first`` and ``n_last``), ``average`` (one row per population with
         elections: ``population``, ``name``, ``n``, ``mae_flat``, ``mae_rated``, ``diff`` (with rating minus flat,
         signed), ``interval`` and the elections ``better`` and ``worse`` with the rating, all formatted), ``dates``,
-        ``params``, ``csv`` (``{'pairs': url, 'elections': url}``) and ``initial`` (the slice of the island the cloud
+        ``params``, ``quarters_min`` (the pollsters an election needs to be split in quarters, in words: «cuatro»),
+        ``slope_polled`` (``rating_check_polled``), ``csv`` (``{'pairs': url, 'elections': url}``) and ``initial`` (the slice of the island the cloud
         draws: ``scatter``, the points with finite ``d_prev`` and ``d_obs`` with ``RATING_CHECK_ROW_KEYS`` and
         ``label``; ``fit``, the ends of the fitted line or ``None``; ``axes``, ``rating_check_axes``). The cached
         value is shared by the requests: do not modify it.

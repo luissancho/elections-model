@@ -371,3 +371,7 @@ Lo que falta para muestras no probabilísticas (paneles online, redes): **post-e
 ## Apéndice B. Informes detallados
 
 `docs/analisis-2026-09/`: `computer-weights.md`, `computer-ratings.md`, `computer-estimators.md`, `forecaster.md`, `simulator.md`, `stat.md`, `data.md`, `infra.md`, `notebooks.md`, `research.md` (dosier con URLs), `smoke.md` (prueba de ejecución con tiempos y tablas). Lista completa de los 194 hallazgos brutos en `docs/analisis-2026-09/findings.json`.
+
+## Apéndice C. Métodos
+
+Los cambios de método posteriores a este análisis tienen cada uno su documento en `docs/analisis-2026-09/metodo-*.md` (problema, método, resultados, decisión y salvedades), del `metodo-1-otros-barrera.md` en adelante. El último: [`metodo-16-rating.md`](metodo-16-rating.md), la validación fuera de muestra del rating de encuestadoras (fase C, 04-11-2026).

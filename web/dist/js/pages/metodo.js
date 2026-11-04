@@ -99,6 +99,9 @@ function paintReliability({pit = {}, majority = []} = {}) {
   }
 }
 
+// The diameter of the points of the rating check, in pixels: smaller than the default, the cloud has hundreds
+const RATING_CHECK_POINT = 5;
+
 /** An axis tick (a whole number) without decimals, any other value of the cloud with two. */
 function differentialText(value) {
   return fmtNum(value, Number.isInteger(value) ? 0 : 2);
@@ -113,7 +116,7 @@ function differentialText(value) {
  */
 function ratingCheckOptions({fit = null, axes = null} = {}) {
   return {
-    x: 'd_prev', y: 'd_obs', name: 'label', fit, diagonal: true, axes,
+    x: 'd_prev', y: 'd_obs', name: 'label', fit, diagonal: true, axes, symbolSize: RATING_CHECK_POINT,
     xFormatter: differentialText, yFormatter: differentialText,
     xName: 'Diferencial previsto', xLabel: 'Previsto', yLabel: 'observado',
   };
