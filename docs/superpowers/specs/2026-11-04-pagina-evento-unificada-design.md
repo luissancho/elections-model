@@ -178,8 +178,8 @@ aba9edd web: la página del evento junta Promedios y Escaños por secciones (pla
 | `/es` ahora (unificada) | 904.624 B | 84.132 B |
 | `dist` pedido aparte (`dist_href`) | 338.156 B | 85.755 B |
 
-La página unificada pesa 1,24 veces la Promedios de partida (el límite era 2 veces) y 31 % menos en gzip que las dos
-páginas por separado. La petición diferida de `dist` añade 85,8 KB tras el primer pintado (total 169,9 KB si se
+La página unificada pesa 1,24 veces la Promedios de partida (el límite era 2 veces) y 31 % menos en gzip que la antigua
+Escaños (84,1 KB frente a 121,5 KB); frente a las dos páginas por separado (189,4 KB) es un 56 % menos. La petición diferida de `dist` añade 85,8 KB tras el primer pintado (total 169,9 KB si se
 consume todo, frente a los 121,5 KB de Escaños: ese coste extra sólo lo paga quien abre la calculadora o las
 distribuciones, y la primera pintura no lo espera).
 
