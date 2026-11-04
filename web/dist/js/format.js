@@ -225,6 +225,19 @@ export function fmtDelta(x, digits = 0) {
 }
 
 /**
+ * Direction and text of the badge of a difference, the mirror of `delta_badge` of `pages/filters.py`: the class of
+ * the `.dlt` span (`up`, `down` or `flat`) and `fmtDelta`'s text.
+ *
+ * @param {(number|null|undefined)} x the difference
+ * @param {number} [digits=0] decimals of the magnitude
+ * @returns {{dir: string, text: string}} the badge
+ */
+export function fmtBadge(x, digits = 0) {
+  const text = fmtDelta(x, digits);
+  return {dir: text === DASH ? 'flat' : (x > 0 ? 'up' : 'down'), text};
+}
+
+/**
  * A text as a piece of a file name: without accents, in lower case and with dashes between its words.
  *
  * @param {string} text the text («Sigma Dos / El Mundo»)
