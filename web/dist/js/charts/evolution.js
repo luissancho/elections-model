@@ -153,7 +153,9 @@ export function evolutionOption({
       const delta = changes.get(`${item.seriesName}|${item.value[2]}`);
       const badge = delta === undefined ? null : fmtBadge(delta, digits);
       const arrow = badge ? ` <span class="dlt ${badge.dir}">${escapeHtml(badge.text)}</span>` : '';
-      lines.push(`${item.marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}${arrow}`);
+      // the marker of the series colour: ECharts builds it from the point's fill, white on a donut
+      const marker = window.echarts.format.getTooltipMarker(colorOf(item.seriesName));
+      lines.push(`${marker}${escapeHtml(name)}: ${escapeHtml(formatter(item.value[1]))}${arrow}`);
     }
     return lines.join('<br>');
   }

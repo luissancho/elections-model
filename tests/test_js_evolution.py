@@ -266,3 +266,13 @@ def test_shown_value_rounds_like_the_formatter_on_block_sums():
     assert donuts('pct', [7.1, 7.1499999999999995], name='Izquierda') == [False, False]
     rows = run_js('ch.evolutionChanges(%s, ["Izquierda"], "pct").rows' % json.dumps(day_runs('pct', [7.1, 7.1499999999999995], 'Izquierda')))
     assert rows == [{'name': 'Izquierda', 'value': 7.1, 'day': 0, 'week': None, 'start': 0}]
+
+
+def test_tooltip_marker_keeps_the_party_colour_on_donuts():
+    # ECharts builds the marker from the point's fill, white on a donut: the box draws it with the series colour
+    script = ('(() => { const o = e.evolutionOption({runs: %s, parties: ["VOX"], colors: {VOX: "#63be21"}}); '
+              'const white = window.echarts.format.getTooltipMarker("#fff"); '
+              'return o.series[0].data.map((point) => o.tooltip.formatter([{value: Array.isArray(point) ? point : point.value, '
+              'seriesName: "VOX", color: Array.isArray(point) ? "#63be21" : "#fff", marker: Array.isArray(point) ? "" : white}])); })()')
+    boxes = run_js(script % json.dumps(day_runs('pct', [18.86, 18.87, 18.96])))
+    assert all('background-color:#63be21' in box and 'background-color:#fff' not in box for box in boxes)
