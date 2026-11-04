@@ -84,7 +84,7 @@ class Backtest(SequenceJob):
     def run(self, scopes=('es',), events=None, horizons=None, n_sim=1000, seed=42, max_fc=10, nowcast_only=False,
             house_effects=True, industry_bias=False, dispersion=True, herding=True, composition=None,
             regional_noise=True, min_events=None, error_model='polls', drift_scale=None, tail_dof=None, config=None,
-            recompute_ratings=False, out=None, verbose=1, runner=None, stats=None, stop_on_error=None, action='run',
+            recompute_ratings=False, flat_ratings=False, out=None, verbose=1, runner=None, stats=None, stop_on_error=None, action='run',
             **kwargs):
         """
         Run the backtest of the requested scopes.
@@ -151,6 +151,9 @@ class Backtest(SequenceJob):
         recompute_ratings : bool, default False
             Recompute the pollster ratings in memory with the current code (once per scope) and use them in
             every case instead of the stored ones; nothing is saved to the database.
+        flat_ratings : bool, default False
+            Weigh every poll with rating 1 (the average without the rating, phase C); exclusive with
+            ``recompute_ratings``.
         out : str, optional
             Local results folder (a relative path is taken from the working directory). For ``run`` the app
             file system (``backtest/results``, S3 in ECS) by default; for ``push`` (its origin) and ``pull`` (its
@@ -179,7 +182,8 @@ class Backtest(SequenceJob):
         Raises
         ------
         ValueError
-            If ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
+            If ``flat_ratings`` and ``recompute_ratings`` are both true (``backtest: flat_ratings and recompute_ratings
+            are exclusive``), ``composition`` is not ``'auto'``, a ratio in (0, 1] or ``None``, ``error_model`` is not ``'polls'``
             or ``'average'``, ``drift_scale`` is not ``'auto'``, a positive number or ``None``, ``tail_dof`` is not
             an integer of at least 2 or ``None``, ``config`` is not a valid configuration nor the path of a JSON file
             with one (``backtest: config ...``) or one of ``house_effects``, ``dispersion``, ``herding`` and
@@ -191,6 +195,8 @@ class Backtest(SequenceJob):
         """
         if action not in ('run', 'push', 'pull'):
             raise ValueError('backtest: unknown action "{}" (expected run, push or pull)'.format(action))
+        if flat_ratings and recompute_ratings:
+            raise ValueError('backtest: flat_ratings and recompute_ratings are exclusive')
         composition = self._composition(composition)
         error_model = self._error_model(error_model)
         drift_scale = self._drift_scale(drift_scale)
@@ -208,7 +214,7 @@ class Backtest(SequenceJob):
                     industry_bias=industry_bias, dispersion=dispersion, herding=herding, composition=composition,
                     regional_noise=regional_noise, min_events=min_events, error_model=error_model,
                     drift_scale=drift_scale, tail_dof=tail_dof, config=config, recompute_ratings=recompute_ratings,
-                    out=out, verbose=verbose, runner=runner, stats=stats)
+                    flat_ratings=flat_ratings, out=out, verbose=verbose, runner=runner, stats=stats)
 
         return {chunk: result for (key, chunk), result in self.results.items()}
 

@@ -168,3 +168,16 @@ def test_backtest_passes_the_config_through(fresh_app, patched, tmp_path):
     evaluate(runner, tmp_path=tmp_path, config=config)
     assert runner.calls[0]['config'] is config and (runner.calls[0]['herding'], runner.calls[0]['max_fc']) == (False, 3)
     assert json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))['config'] == config
+
+
+def test_backtest_flat_ratings_passes_flat_and_records_it(fresh_app, patched, tmp_path):
+    runner = FakeRunner()
+    evaluate(runner, tmp_path=tmp_path, events=['2023-05-28'], horizons=[6], flat_ratings=True)
+    assert runner.calls[0]['weight_ratings'] == 'flat'
+    run = json.load(open(tmp_path / 'es-md' / 'run.json', encoding='utf-8'))
+    assert run['flat_ratings'] is True and run['recompute_ratings'] is False
+
+
+def test_backtest_flat_and_recompute_ratings_are_exclusive(fresh_app, patched, tmp_path):
+    with pytest.raises(ValueError, match='flat_ratings and recompute_ratings are exclusive'):
+        evaluate(FakeRunner(), tmp_path=tmp_path, flat_ratings=True, recompute_ratings=True)

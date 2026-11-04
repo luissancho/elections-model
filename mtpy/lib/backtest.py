@@ -382,7 +382,7 @@ def run_case(
     error_model: str = 'polls',
     drift_scale: Optional[str | float] = None,
     tail_dof: Optional[int] = None,
-    weight_ratings: Optional[pd.Series] = None,
+    weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
@@ -413,7 +413,7 @@ def run_case(
     (`drift_scale_rows`, 0 when not fitted). `tail_dof` fixes the degrees of freedom of the Student t of the draw
     of the `Simulator` for every party (`None`, the default, `nobs - 2` per party, at least 3); `meta` records it
     (`tail_dof`, NaN when unset). `weight_ratings` (see `rating_overrides`) replaces the stored ratings of the
-    polls with ratings recomputed in memory.
+    polls with ratings recomputed in memory (the string `'flat'` weighs every poll with rating 1).
 
     `config` is a tuned configuration of the average (`tuning.default_config`, the `best.json` of the search,
     validated by the backtest job): its `reg_params`, `he_params` and `disp_params` (with its `herding`) go to the
@@ -586,7 +586,8 @@ def run_case(
         'he_max_abs': float(he_active['effect'].abs().max()) if he_active is not None and len(he_active) else np.nan,
         'n_polls': int(polls.shape[0]), 'last_poll': str(last_date.date()), 'n_parties': len(names),
         'orphans': '+'.join(orphans), 'n_sim': n_sim, 'seed': seed, 'seconds': round(time.time() - t0, 1),
-        'config': config['label'] if config is not None else np.nan, 'n_overrides': n_overrides
+        'config': config['label'] if config is not None else np.nan, 'n_overrides': n_overrides,
+        'flat_ratings': isinstance(weight_ratings, str)
     }])
 
     calibration = _calibration(scope, event_date, horizon, names, main, official, now, fwd, provinces_df,
@@ -830,13 +831,14 @@ def run_backtest(
     error_model: str = 'polls',
     drift_scale: Optional[str | float] = None,
     tail_dof: Optional[int] = None,
-    weight_ratings: Optional[pd.Series] = None,
+    weight_ratings: Optional[pd.Series | str] = None,
     config: Optional[dict[str, Any]] = None,
     verbose: int = 0
 ) -> dict[str, pd.DataFrame]:
     """
     Run every (event, horizon) case and aggregate the metrics (see `run_case` for the two runs per case).
-    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings` and `config` are passed to every case.
+    `error_model`, `drift_scale`, `tail_dof`, `weight_ratings` and `config` are passed to every case
+    (`weight_ratings` may be the string `'flat'`: every poll weighs with rating 1).
 
     Returns
     -------
@@ -1129,6 +1131,7 @@ def backtest_scope(
     tail_dof: Optional[int] = None,
     config: Optional[dict[str, Any]] = None,
     recompute_ratings: bool = False,
+    flat_ratings: bool = False,
     verbose: int = 0,
     runner=None,
     stats=None,
@@ -1160,6 +1163,9 @@ min_events, error_model, drift_scale, tail_dof
     recompute_ratings : bool, default False
         Recompute the ratings of the scope in memory once (`rating_overrides`) and use them in every case
         instead of the stored ones; recorded in `run.json`.
+    flat_ratings : bool, default False
+        Weigh every poll with rating 1 (`weight_ratings='flat'`, the average without the rating, phase C); recorded
+        in `run.json` and in the `meta.csv` of every case. Exclusive with `recompute_ratings`.
     verbose : int, default 0
         Verbosity of `run_backtest` (1 prints one line per case).
     runner : callable, optional
@@ -1177,9 +1183,13 @@ min_events, error_model, drift_scale, tail_dof
 
     Raises
     ------
+    ValueError
+        If `flat_ratings` and `recompute_ratings` are both true (nothing is evaluated).
     NothingToEvaluate
         The scope has no election to evaluate or no case could be evaluated; nothing is written.
     """
+    if flat_ratings and recompute_ratings:
+        raise ValueError('backtest: flat_ratings and recompute_ratings are exclusive')
     start = time.perf_counter()
     events = events or default_events(scope)
     if len(events) == 0:
@@ -1191,7 +1201,7 @@ min_events, error_model, drift_scale, tail_dof
                   drift_scale=drift_scale, tail_dof=tail_dof, config=config)
     if config is not None:
         params.update({key: config[key] for key in CONFIG_SWITCHES})
-    weight_ratings = rating_overrides(scope) if recompute_ratings else None
+    weight_ratings = 'flat' if flat_ratings else (rating_overrides(scope) if recompute_ratings else None)
     results = (runner or run_backtest)(scope=scope, events=events, horizons=horizons, verbose=verbose,
                                        weight_ratings=weight_ratings, **params)
     if results['metrics'].shape[0] == 0:
@@ -1206,7 +1216,7 @@ min_events, error_model, drift_scale, tail_dof
     evaluated = results['metrics']['event_date'].unique().tolist()
     spans = sorted(results['metrics']['horizon'].unique().tolist())
     record = {'run_at': datetime.now().isoformat(timespec='seconds'), 'commit': prov()['commit'], 'scope': scope,
-              **params, 'recompute_ratings': recompute_ratings, 'events': evaluated, 'horizons': spans, **(stats or poll_stats)(scope)}
+              **params, 'recompute_ratings': recompute_ratings, 'flat_ratings': flat_ratings, 'events': evaluated, 'horizons': spans, **(stats or poll_stats)(scope)}
     fs.write_bytes(json.dumps(record, indent=1).encode('utf-8'), results_path(folder, 'run.json'))
     seconds['write'] = time.perf_counter() - start - seconds['run']
     seconds['total'] = time.perf_counter() - start

@@ -106,7 +106,7 @@ python job.py backtest '{"scopes":["es"],"config":"backtest/tuning/best.json","o
 ```
 
 `config` corre el backtest con una configuración del promedio, como el `best.json` de `tune`, y conviene escribirlo
-en otra carpeta (`out`).
+en otra carpeta (`out`). `flat_ratings` (`--flat-ratings` en `backtest/run_backtest.py`) corre el modelo con el rating plano (todos los sondeos con peso por rating 1, fase C); ver `backtest/README.md`.
 
 ### `tune`: afinar el promedio con los sondeos futuros
 

@@ -5,7 +5,7 @@ Run the model backtest on past elections and write the results to `backtest/resu
 Usage (from the repository root):
     python backtest/run_backtest.py [--scope es | --scopes es-md es-cl ... | --scopes all]
                                     [--events 2019-04-28 2023-07-23] [--horizons 6 30] [--n-sim 1000] [--seed 42] [--nowcast-only]
-                                    [--no-house-effects] [--recompute-ratings] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
+                                    [--no-house-effects] [--recompute-ratings | --flat-ratings] [--industry-bias] [--no-dispersion] [--no-herding] [--composition auto|0.25|1]
                                     [--error-model polls|average] [--drift-scale auto|1.5] [--tail-dof 5]
                                     [--config backtest/tuning/best.json]
 
@@ -65,6 +65,7 @@ def main():
                         help='JSON file with a tuned configuration of the average (the `best.json` of the `tune` job); '
                              'every case builds its model with it; the model as it is by default')
     parser.add_argument('--recompute-ratings', action='store_true', help='recompute the pollster ratings in memory with the current code (nothing is saved) instead of using the stored ones')
+    parser.add_argument('--flat-ratings', action='store_true', help='weigh every poll with rating 1 (the average without the rating, phase C); exclusive with --recompute-ratings')
     default_out = os.path.join(ROOT, 'backtest', 'results')
     parser.add_argument('--out', default=default_out)
     args = parser.parse_args()
@@ -90,7 +91,7 @@ def main():
         dispersion=args.dispersion, herding=args.herding, composition=args.composition,
         regional_noise=args.regional_noise, min_events=args.min_events, error_model=args.error_model,
         drift_scale=args.drift_scale, tail_dof=args.tail_dof, config=args.config,
-        recompute_ratings=args.recompute_ratings, out=args.out
+        recompute_ratings=args.recompute_ratings, flat_ratings=args.flat_ratings, out=args.out
     )
     print(push_hint(args.out, scopes, default_out))
 
