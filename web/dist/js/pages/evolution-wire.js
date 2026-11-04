@@ -59,8 +59,8 @@ export function evolutionViews(runs, catalog, {parties = null, field = 'pct', to
  * Draw the evolution (`#evolution-chart`; nothing without it) and wire its controls: the Partidos/Bloques radios
  * (`#evolution-view`, shown only when the scope has blocks), the pill legend (`#evolution-legend`), which selects
  * the names through the hidden ECharts legend, the table of changes (`#evolution-changes`), with every name of the
- * view whatever the legend shows, shown only on demand by its button (`#evolution-changes-toggle`, «Ver listado» /
- * «Ocultar listado», hidden with fewer than two days; Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the
+ * view whatever the legend shows, shown only on demand by its button (`#evolution-changes-toggle`, «Ver los datos» /
+ * «Ocultar los datos», hidden with fewer than two days; Luis, 2026-11-04), and the download button (`#evolution-download`), which saves the
  * chart as shown, with the table under it, as a signed image (`share.js`). Changing the view resets the selection.
  *
  * @param {object} initial the page's initial data (`runs`, the history part, and `inks`, the text colour over
@@ -108,7 +108,7 @@ export function wireEvolution(initial, catalog, {parties = null, field = 'pct', 
     changesEl.hidden = !changes || !state.listOpen;
     if (toggleEl) {
       toggleEl.hidden = !changes;
-      toggleEl.textContent = state.listOpen ? 'Ocultar listado' : 'Ver listado';
+      toggleEl.textContent = state.listOpen ? 'Ocultar los datos' : 'Ver los datos';
       toggleEl.setAttribute('aria-expanded', String(state.listOpen));
     }
   }
