@@ -250,9 +250,10 @@ tarea (`rating_pool` de 18 ámbitos ya lo paga `compute ratings`; estimación: 1
 - La escribe `publish analysis` **sólo para `NATIONAL_SCOPE`** (el ranking es nacional y la prueba reúne todos
   los ámbitos), tras `error-data` y antes de `meta`, y **sólo cuando se pide**: parámetro `rating_check`
   (`false` por defecto) del job `publish` (`{"what":["analysis"],"scopes":["es"],"rating_check":true}`) y del
-  pipeline, que el job `update` pone a `true` cuando su `compute` fue `full` (los ratings cambian sólo entonces:
-  tras un resultado o con `overwrite`). Así la publicación diaria no paga la bolsa de 18 ámbitos y «se actualiza
-  sola con cada elección» se cumple por el `update` full que sigue al 29-N. Cuando no se pide, la parte anterior
+  pipeline. El job `update` no la pide nunca: ni su modo `full` recalcula los ratings (son la acción aparte
+  `ratings` del job `compute`, que Luis lanza tras un resultado), así que el procedimiento tras una elección es
+  `compute '{"what":["compute","ratings"],"scopes":"all"}'` y después `publish analysis` de `es` con
+  `rating_check`. Así la publicación diaria no paga la bolsa de 18 ámbitos. Cuando no se pide, la parte anterior
   **se conserva** (no se borra como la `house-effects` rancia: sus cifras no caducan con el ciclo); `meta.params`
   registra `rating_check` (true cuando se recalculó en esa publicación) y `meta.seconds` su coste. En los
   ámbitos autonómicos la parte no existe (404 `analysis part not published`, como hoy una parte ausente).
@@ -330,7 +331,7 @@ tarea (`rating_pool` de 18 ámbitos ya lo paga `compute ratings`; estimación: 1
 | 4-6 nov | Tarea 1: datos y pruebas 1b y 2 en scratch + `rating_check.py` con tests; backtests plano y con rating de `es` y los cinco autonómicos en el portátil (≈ 2 h `es`, 2-4 h los cinco, en segundo plano), en paralelo a la tarea de `average_errors` de Luis |
 | 6-8 nov | Parte del bundle, tarjeta, documento 16, textos a partir de las cifras |
 | antes del 17-11 (opcional) | Luis publica `analysis` de `es` y despliega; o se espera al 29-N |
-| tras el 29-N | el `update` full (o `publish analysis` con `rating_check`): la tarjeta suma la sexta general; decisión sobre C2 |
+| tras el 29-N | `compute ratings` + `publish analysis` con `rating_check`: la tarjeta suma la sexta general; decisión sobre C2 |
 
 ## Lo que queda al constructor
 
@@ -346,7 +347,8 @@ tarea (`rating_pool` de 18 ámbitos ya lo paga `compute ratings`; estimación: 1
 - Prueba 1a sólo en `es` y los cinco autonómicos de la parte B, en dos carpetas hermanas (`results_flat` y
   `results_rated`, misma base y mismo código), sin usar `backtest/results` como par.
 - `d_e` es la evidencia contraída por sondeo que usa el propio rating; β se lee en esa escala con su salvedad.
-- La parte se recalcula sólo con `rating_check: true` (y en el `update` full); si no, se conserva la anterior.
+- La parte se recalcula sólo con `rating_check: true` de `publish analysis` (nunca desde `update`); si no, se
+  conserva la anterior.
 - CSV gemelos nombrados como en `herding` (`rating-check` y `rating-check-elections`, `table=elections`).
 - Rating plano = `weight_rating = 1` para todas las casas, también las que hoy llevan su calidad previa.
 - Ventana de 30 días y mínimo de 3 casas en la prueba 1b; pares con el mismo peso en la prueba 2.
